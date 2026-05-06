@@ -1841,14 +1841,26 @@
        (when s5-3
          (format #t "vehicle::event-handler: pilot-on (pid ~d) from pid ~d~%" (-> this pid) (-> arg0 pid))
          (logior! (-> this flags) (rigid-body-object-flag riding))
-         ;; og:preserve-this added for Daxter hijack: Don't displace existing NPC rider if we are Daxter
-         (let ((is-dax-rider? (or (and (mp-is-daxter?) (= s5-3 *target*))
-                                  (and (mp-is-jak?) (= s5-3 *mp-puppet*)))))
-           (if (not (and is-dax-rider? (zero? s3-2) (get-rider-in-seat this 0)))
-               (put-rider-in-seat this (the-as int s3-2) (the-as process-focusable s5-3))
+         (let ((seat-idx (if (and (logtest? (-> s5-3 mask) (process-mask target))
+                                  (focus-test? (the-as target s5-3) indax)
+                                  )
+                             0
+                             (the-as int s3-2)
+                             )
+                         )
                )
-           )         (if (logtest? (-> s5-3 mask) (process-mask target))
-             (logior! (-> this flags) (rigid-body-object-flag player-driving))
+           (put-rider-in-seat this seat-idx (the-as process-focusable s5-3))
+           )
+         (if (logtest? (-> s5-3 mask) (process-mask target))
+             (begin
+               (logior! (-> this flags) (rigid-body-object-flag player-driving))
+               (logclear! (-> this flags) (rigid-body-object-flag ai-driving))
+               (set! (-> this pad-index) (the-as uint (-> (the-as target s5-3) control cpad number)))
+               (vehicle-controller-method-11 (-> this controller))
+               (when (or (= s5-3 *target*) (and (= s5-3 *mp-puppet*) *local-riding?*))
+                 (vehicle-method-87 this)
+                 )
+               )
              )
          #t
          )

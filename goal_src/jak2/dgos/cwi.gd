@@ -45,6 +45,7 @@
   "ctyport-obs.o"
   "target-pilot.o"
   "pilot-states.o"
+  "indax-pilot-states.o"
   "jak-pilot+0-ag.go"
   "searchlight.o"
   "tpage-1264.go"

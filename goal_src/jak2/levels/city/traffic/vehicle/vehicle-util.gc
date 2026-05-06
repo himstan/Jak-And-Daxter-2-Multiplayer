@@ -352,24 +352,9 @@
                             (when (cpad-pressed? pad-idx triangle)
                               (cond
                                 (s4-1
-                                  (let ((old-rider (handle->process (-> this rider-array 0))))
-                                    ;; Use 'pilot-daxter mode if the target is currently in Daxter mode
-                                    (let ((mode (if (focus-test? tgt indax) 'pilot-daxter 'pilot)))
-                                      (when (send-event tgt 'change-mode mode this 0 #f)
-                                        (logior! (-> this flags) (rigid-body-object-flag player-driving))
-                                        (logclear! (-> this flags) (rigid-body-object-flag ai-driving))
-                                        ;; Set the vehicle's pad-index to the boarding player's pad
-                                        (set! (-> this pad-index) (the-as uint pad-idx))
-                                        (when (or (= tgt *target*) (and (= tgt *mp-puppet*) *local-riding?*))
-                                          (vehicle-method-87 this)
-                                          )
-                                        
-                                        ;; Daxter hijack: Restore NPC driver to seat 0 so Daxter sits on him
-                                        (when (and (mp-is-daxter?) old-rider (nonzero? old-rider))
-                                          (put-rider-in-seat this 0 (the-as process-focusable old-rider))
-                                          )
-                                        )
-                                      )
+                                  ;; Use 'pilot-daxter mode if the target is currently in Daxter mode.
+                                  (let ((mode (if (focus-test? tgt indax) 'pilot-daxter 'pilot)))
+                                    (send-event tgt 'change-mode mode this 0 #f)
                                     )
                                   )
                                 (else

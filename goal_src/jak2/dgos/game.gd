@@ -423,6 +423,7 @@
   "hud-ring-ag.go"
   "jakb-ag.go"
   "daxter-ag.go"
+  "jak-pidax+0-ag.go"
   "daxter-h.o"
   "daxter.o"
   "daxter-stance.o"

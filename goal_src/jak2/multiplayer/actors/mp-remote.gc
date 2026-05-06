@@ -54,7 +54,7 @@
              (quaternion-identity! (the-as quaternion *multi-remote-render-quat*))
              (quaternion-rotate-y! (the-as quaternion *multi-remote-render-quat*) (the-as quaternion *multi-remote-render-quat*) *multi-remote-interp-angle*))))
       ((and (= (-> *remote-info* role) 1) (nonzero? (-> *remote-info* veh-state net-id)))
-       ;; Case: Remote Daxter is riding a remote vehicle passenger. Offset his position to the shoulder.
+       ;; Case: Remote Daxter is driving a synced vehicle. Render him in seat 0.
        (let ((v-proc (mp-vehicle-find-by-net-id (-> *remote-info* veh-state net-id))))
          (if (and v-proc (nonzero? v-proc))
              (begin
@@ -71,19 +71,6 @@
                (set! (-> (the-as quaternion *multi-remote-render-quat*) w) (-> *remote-info* veh-state quat-w))
                )
              )
-         )
-       
-       (let ((offset-vec (new 'stack-no-clear 'vector))
-             (off-idx (the int (-> *remote-info* veh-state vehicle-type))))
-         (if (and (>= off-idx 0) (< off-idx 32))
-             (begin
-               (vector-copy! offset-vec (-> *mp-daxter-veh-offsets* off-idx))
-               ;; (format 0 "Daxter Offset Index ~D: ~m ~m ~m~%" off-idx (-> offset-vec x) (-> offset-vec y) (-> offset-vec z))
-               )
-             (set-vector! offset-vec (meters 0.15) (meters 0.85) (meters -0.15) 1.0)
-             )
-         (vector-orient-by-quat! offset-vec offset-vec (the-as quaternion *multi-remote-render-quat*))
-         (vector+! *multi-remote-render-pos* *multi-remote-render-pos* offset-vec)
          )
        )
       (else

@@ -727,9 +727,10 @@
     )
     ;; MP Broadcast: inform others that we grabbed an edge.
     ;; Only send if we are NOT in the pilot-edge-grab state (which sends its own event).
-    (if (and (!= (-> self tobot?) 'mp-puppet) 
-             *multi-sync-enabled?* 
-             (!= (-> self state name) 'target-pilot-edge-grab))
+    (if (and (!= (-> self tobot?) 'mp-puppet)
+             *multi-sync-enabled?*
+             (!= (-> self state name) 'target-pilot-edge-grab)
+             (!= (-> self state name) 'target-indax-pilot-edge-grab))
         (mp-send-edge-grab-event #f)
         )
     (set! (-> self control unknown-handle000) (the-as handle #f))

@@ -53,6 +53,17 @@
 (define-extern target-indax-edge-grab-jump (state float float target))
 (define-extern target-indax-edge-grab-off (state target))
 
+(define-extern target-indax-pilot-start (state handle symbol symbol target))
+(define-extern target-indax-pilot-stance (state target))
+(define-extern target-indax-pilot-get-on (state target))
+(define-extern target-indax-pilot-get-off (state target))
+(define-extern target-indax-pilot-impact (state target))
+(define-extern target-indax-pilot-grab (state target))
+(define-extern target-indax-pilot-clone-anim (state handle target))
+(define-extern target-indax-pilot-edge-grab (state pilot-edge-grab-info target))
+(define-extern target-indax-pilot-hit (state symbol attack-info target))
+(define-extern target-indax-pilot-death (state symbol target))
+
 (define-extern skel-sidekick skeleton-group)
 
 (deftype indax-info (basic)

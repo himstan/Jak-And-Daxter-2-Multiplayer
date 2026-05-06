@@ -335,6 +335,13 @@
   "Update the ghost record for a vehicle from the latest remote data."
   (if (not (and proc (nonzero? proc))) (return #f))
 
+  ;; Protect the local player's vehicle from remote state syncing!
+  ;; This prevents random pedestrians from spawning in the driver seat
+  ;; during the hijack get-on animation window when player-driving is false.
+  (when (= (-> proc net-id) (-> *local-info* veh-state net-id))
+    (return #f)
+    )
+
   (let ((rec (mp-get-traffic-ghost (-> slot net-id))))
     (when (not rec)
       (set! rec (mp-get-free-traffic-ghost))

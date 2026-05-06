@@ -34,20 +34,27 @@
 
 (defbehavior target-indax-compute-edge target ()
   (let ((s5-0 (if (= (-> self tobot?) 'mp-puppet) *remote-edge-grab-info* *edge-grab-info*)))
-    (if (= (-> self tobot?) 'mp-puppet)
-        (set! (-> *collide-edge-work* cshape) (-> self control))
+    (cond
+      ((-> s5-0 pilot-edge-grab?)
+       (set! (-> self control ground-pat) (new 'static 'pat-surface :material (pat-material metal)))
+       )
+      (else
+        (if (= (-> self tobot?) 'mp-puppet)
+            (set! (-> *collide-edge-work* cshape) (-> self control))
+            )
+        (if (not (edge-grab-info-method-9 s5-0))
+            (send-event self 'end-mode)
+            )
+        (set! (-> self control ground-pat) (the-as pat-surface (-> s5-0 edge-tri-pat)))
+        (vector-normalize!
+          (vector-!
+            (-> self control edge-grab-edge-dir)
+            (the-as vector (-> s5-0 world-vertex))
+            (-> s5-0 world-vertex 1)
+            )
+          1.0
+          )
         )
-    (if (not (edge-grab-info-method-9 s5-0))
-        (send-event self 'end-mode)
-        )
-    (set! (-> self control ground-pat) (the-as pat-surface (-> s5-0 edge-tri-pat)))
-    (vector-normalize!
-      (vector-!
-        (-> self control edge-grab-edge-dir)
-        (the-as vector (-> s5-0 world-vertex))
-        (-> s5-0 world-vertex 1)
-        )
-      1.0
       )
     (let ((gp-2 (vector-cross!
                   (-> self control edge-grab-across-edge-dir)
