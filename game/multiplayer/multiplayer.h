@@ -18,3 +18,6 @@ void pc_multi_send_state(u32 local_ptr);
 void pc_multi_receive_state(u32 remote_ptr);
 void pc_multi_send_events(u32 event_ptr);
 void pc_multi_receive_events(u32 event_ptr);
+u64 pc_multi_get_ticks();
+int pc_multi_get_ping();
+int pc_multi_get_packet_loss();

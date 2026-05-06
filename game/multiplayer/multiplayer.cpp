@@ -473,6 +473,42 @@ u64 pc_multi_get_found_ip() { using namespace jak2; return make_string_from_c(gM
 void pc_multi_debug_stop_receive(u32 val) { g_multi_debug_stop_receive = (val != 0); }
 u64 pc_multi_get_ticks() { return enet_time_get(); }
 
+int pc_multi_get_ping() {
+  if (!gMultiplayerData.host)
+    return 0;
+  if (gMultiplayerData.server_peer) {
+    return gMultiplayerData.server_peer->roundTripTime;
+  }
+
+  u32 total = 0;
+  u32 count = 0;
+  for (size_t i = 0; i < gMultiplayerData.host->peerCount; i++) {
+    if (gMultiplayerData.host->peers[i].state == ENET_PEER_STATE_CONNECTED) {
+      total += gMultiplayerData.host->peers[i].roundTripTime;
+      count++;
+    }
+  }
+  return count > 0 ? (total / count) : 0;
+}
+
+int pc_multi_get_packet_loss() {
+  if (!gMultiplayerData.host)
+    return 0;
+  if (gMultiplayerData.server_peer) {
+    return (gMultiplayerData.server_peer->packetLoss * 100) / 65536;
+  }
+
+  u32 total = 0;
+  u32 count = 0;
+  for (size_t i = 0; i < gMultiplayerData.host->peerCount; i++) {
+    if (gMultiplayerData.host->peers[i].state == ENET_PEER_STATE_CONNECTED) {
+      total += (gMultiplayerData.host->peers[i].packetLoss * 100) / 65536;
+      count++;
+    }
+  }
+  return count > 0 ? (total / count) : 0;
+}
+
 void init_multiplayer_pc_port() {
   using namespace jak2;
   make_function_symbol_from_c("pc-multi-setup-host", (void*)pc_multi_setup_host);
@@ -497,4 +533,6 @@ void init_multiplayer_pc_port() {
   make_function_symbol_from_c("pc-multi-get-command-line-arg", (void*)pc_multi_get_command_line_arg);
   make_function_symbol_from_c("pc-multi-debug-stop-receive", (void*)pc_multi_debug_stop_receive);
   make_function_symbol_from_c("pc-multi-get-ticks", (void*)pc_multi_get_ticks);
+  make_function_symbol_from_c("pc-multi-get-ping", (void*)pc_multi_get_ping);
+  make_function_symbol_from_c("pc-multi-get-packet-loss", (void*)pc_multi_get_packet_loss);
 }

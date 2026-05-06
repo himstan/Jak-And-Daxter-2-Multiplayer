@@ -14,7 +14,7 @@
 (define-perm *mp-pedestrian-net-id-counter* uint (the uint 1))
 (define-perm *mp-vehicle-net-id-counter* uint (the uint 32768))
 (define-perm *mp-last-local-state-id* uint (the uint 0))
-(define *multi-sync-tps* 20)
+(define *multi-sync-tps* 30)
 
 (define-perm *remote-player-is-dying* symbol #f)
 (define-perm *remote-player-is-dead* symbol #f)
@@ -739,6 +739,10 @@
 (define *mp-continue-name* (new 'global 'string 32 (the-as string #f)))
 (define *mp-pending-scene-name* (new 'global 'string 32 (the-as string #f)))
 (define-perm *mp-debug-draw* symbol #f)
+(define-perm *mp-debug-network* symbol #f)
+(define-perm *mp-tps-counter* uint (the uint 0))
+(define-perm *mp-actual-tps* uint (the uint 0))
+(define-perm *mp-tps-timer* time-frame 0)
 (define-perm *mp-puppet-debug?* symbol #f)
 (define-perm *mp-traffic-debug?* symbol #f)
 (define-perm *mp-traffic-ped-debug?* symbol #f)
@@ -751,6 +755,7 @@
 (define-extern *mp-waypoint-pending-count* int)
 
 (define-extern mp-draw-puppet-debug (function none))
+(define-extern mp-draw-network-debug (function none))
 (define *mp-daxter-veh-offsets* (new 'static 'inline-array vector 32))
 
 (defun mp-init-daxter-offsets ()
@@ -807,6 +812,8 @@
 
 (define-extern pc-multi-debug-stop-receive (function uint none))
 (define-extern pc-multi-get-ticks (function uint64))
+(define-extern pc-multi-get-ping (function uint))
+(define-extern pc-multi-get-packet-loss (function uint))
 (define-extern pc-multi-get-command-line-arg (function string string))
 (define-extern pc-multi-get-role (function int))
 (define-extern pc-multi-poll (function uint uint none))

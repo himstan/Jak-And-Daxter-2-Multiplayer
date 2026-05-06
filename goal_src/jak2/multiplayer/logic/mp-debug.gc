@@ -56,3 +56,18 @@
     )
   (none))
 
+(defun mp-draw-network-debug ()
+  "Display network health stats (Ping, Loss, TPS)."
+  (when *mp-debug-network*
+    (let ((ping (pc-multi-get-ping))
+          (loss (pc-multi-get-packet-loss)))
+      (format *stdcon* "~0k--- MP NETWORK DEBUG ---~%")
+      (format *stdcon* "PING: ~D ms~%" ping)
+      (format *stdcon* "LOSS: ~D%~%" loss)
+      (format *stdcon* "TPS:  ~D / ~D (Actual / Target)~%" *mp-actual-tps* *multi-sync-tps*)
+      (format *stdcon* "-------------------------~%~%")
+      )
+    )
+  (none))
+
+

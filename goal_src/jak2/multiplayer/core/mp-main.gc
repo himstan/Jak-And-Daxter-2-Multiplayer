@@ -180,7 +180,22 @@
       (when (and (not *mp-debug-simulate-loss?*) 
                  (>= (- current-ticks (the uint64 *multi-last-send-time*)) 
                      (the uint64 (/ 1000 *multi-sync-tps*))))
-        (set! *multi-last-send-time* (the-as time-frame current-ticks))
+        (let ((interval (the uint64 (/ 1000 *multi-sync-tps*))))
+          ;; Prevent burst packets if we lagged significantly, but keep tight pacing otherwise
+          (if (> (- current-ticks (the uint64 *multi-last-send-time*)) (* 2 interval))
+              (set! *multi-last-send-time* (the-as time-frame current-ticks))
+              (+! *multi-last-send-time* (the-as time-frame interval))
+              )
+          )
+        
+        ;; TPS Tracking
+        (+! *mp-tps-counter* 1)
+        (when (>= (- (current-time) *mp-tps-timer*) (seconds 1))
+          (set! *mp-actual-tps* *mp-tps-counter*)
+          (set! *mp-tps-counter* (the uint 0))
+          (+! *mp-tps-timer* (seconds 1))
+          )
+        
         (multiplayer-network-tick))
       )
 
@@ -214,5 +229,6 @@
     (mp-draw-task-debug)
     (mp-draw-traffic-debug)
     (mp-draw-puppet-debug)
+    (mp-draw-network-debug)
 
     (none)))
