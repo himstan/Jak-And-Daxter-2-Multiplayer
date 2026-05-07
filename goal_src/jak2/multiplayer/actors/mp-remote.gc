@@ -26,59 +26,12 @@
     (let ((interp-factor (* 15.0 (seconds-per-frame))))
       (vector-lerp! *multi-remote-interp-pos* *multi-remote-interp-pos* remote-pos interp-factor))
     (set! *multi-remote-interp-angle* (deg-seek *multi-remote-interp-angle* (-> *remote-info* angle) (* (degrees 1080) (seconds-per-frame))))
-
-    ;; 2. Final Transform Calculation (Logic for Ride-Along vs Independent)
-    (cond
-      ((and (= (-> *remote-info* role) 1) (= (-> *remote-info* riding?) 1))
-       ;; Case: Remote Daxter is riding local Jak. Snap to shoulder SAFELY.
-       (if (and (mp-is-jak?)
-                *target*
-                (nonzero? (-> *target* control))
-                (nonzero? (-> *target* node-list))
-                (-> *target* control sidekick-root)
-                (-> *target* control sidekick-root parent)
-                (-> *target* control sidekick-root parent bone)
-                (nonzero? (-> *target* upper-body)))
-           (begin
-             (vector-copy! *multi-remote-render-pos* (-> *target* control sidekick-root parent bone transform trans))
-             (quaternion-copy! (the-as quaternion *multi-remote-render-quat*) (-> *target* control quat))
-             (quaternion-rotate-y! (the-as quaternion *multi-remote-render-quat*) (the-as quaternion *multi-remote-render-quat*) (-> *target* upper-body twist z))
-             
-             ;; SNAP INTERPOLATION: Ensure that when he jumps off, he starts from the shoulder!
-             (vector-copy! *multi-remote-interp-pos* *multi-remote-render-pos*)
-             (set! *multi-remote-interp-angle* (quaternion-y-angle (the-as quaternion *multi-remote-render-quat*)))
-             )
-           (begin
-             ;; Fallback to received coords if host isn't ready
-             (vector-copy! *multi-remote-render-pos* *multi-remote-interp-pos*)
-             (quaternion-identity! (the-as quaternion *multi-remote-render-quat*))
-             (quaternion-rotate-y! (the-as quaternion *multi-remote-render-quat*) (the-as quaternion *multi-remote-render-quat*) *multi-remote-interp-angle*))))
-      ((and (= (-> *remote-info* role) 1) (nonzero? (-> *remote-info* veh-state net-id)))
-       ;; Case: Remote Daxter is driving a synced vehicle. Render him in seat 0.
-       (let ((v-proc (mp-vehicle-find-by-net-id (-> *remote-info* veh-state net-id))))
-         (if (and v-proc (nonzero? v-proc))
-             (begin
-               ;; LOCK TO VEHICLE SEAT: Use seat 0 (the driver/hijack seat)
-               (compute-seat-position v-proc *multi-remote-render-pos* 0)
-               (quaternion-copy! (the-as quaternion *multi-remote-render-quat*) (-> v-proc root quat))
-               )
-             (begin
-               ;; FALLBACK: Use synced coordinates if vehicle isn't in range locally
-               (vector-copy! *multi-remote-render-pos* *multi-remote-interp-pos*)
-               (set! (-> (the-as quaternion *multi-remote-render-quat*) x) (-> *remote-info* veh-state quat-x))
-               (set! (-> (the-as quaternion *multi-remote-render-quat*) y) (-> *remote-info* veh-state quat-y))
-               (set! (-> (the-as quaternion *multi-remote-render-quat*) z) (-> *remote-info* veh-state quat-z))
-               (set! (-> (the-as quaternion *multi-remote-render-quat*) w) (-> *remote-info* veh-state quat-w))
-               )
-             )
-         )
-       )
-      (else
-        ;; Case: Standard independent position
-        (vector-copy! *multi-remote-render-pos* *multi-remote-interp-pos*)
-        (quaternion-identity! (the-as quaternion *multi-remote-render-quat*))
-        (quaternion-rotate-y! (the-as quaternion *multi-remote-render-quat*) (the-as quaternion *multi-remote-render-quat*) *multi-remote-interp-angle*))))
-  (none))
+    (vector-copy! *multi-remote-render-pos* *multi-remote-interp-pos*)
+    (quaternion-identity! (the-as quaternion *multi-remote-render-quat*))
+    (quaternion-rotate-y! (the-as quaternion *multi-remote-render-quat*) (the-as quaternion *multi-remote-render-quat*) *multi-remote-interp-angle*)
+  )
+  (none)
+)
 
 (defun mp-manage-remote-puppet ()
   "Spawn, update, or deactivate the remote player puppet using the actual target process"
@@ -103,13 +56,49 @@
            (set! (-> ghost active?) #t)
            )
 
+         ;; 2.5 Distance check for force respawn
+         ;; If the remote player was far away (> 300m), we force a fresh respawn when they return (< 250m).
+         ;; This ensures the puppet process correctly re-attaches to the local BSP/levels.
+         (let* ((puppet (mp-puppet-get-proc))
+                (dist (if *target* 
+                          (vector-vector-distance (-> *target* control trans) *multi-remote-render-pos*)
+                          (meters 0.0))))
+           (when puppet
+             (if (> dist (meters 300.0))
+                 (set! *mp-puppet-was-far?* #t)
+                 )
+             (when (and (< dist (meters 250.0)) *mp-puppet-was-far?*)
+                 (format 0 "[MP-Puppet] Remote player returned to proximity (~m). Forcing respawn...~%" dist)
+
+                 ;; 1. Deactivate their Vehicle (if any)
+                 (let ((v-net-id (-> *remote-info* veh-state net-id)))
+                   (when (nonzero? v-net-id)
+                     (let ((v-proc (mp-vehicle-find-by-net-id v-net-id)))
+                       (when (and v-proc (nonzero? v-proc))
+                         (format 0 "[MP-Puppet] Forcing vehicle respawn for net-id ~D~%" v-net-id)
+                         (deactivate v-proc)
+                         )
+                       )
+                     )
+                   )
+
+                 ;; 2. Deactivate the Puppet
+                 (deactivate puppet)
+                 (set! *mp-puppet* (the-as target #f))
+                 (set! *mp-puppet-was-far?* #f)
+                 )
+             )
+           )
+
          ;; 3. Manage process lifecycle
          (let ((proc (mp-puppet-get-proc)))
            (if (not proc)
                (begin
+                (when (not *mp-puppet-was-far?*)
                  (format 0 "[MP-Puppet] Spawning new target puppet for Status ~D...~%" remote-status)
                  (mp-puppet-spawn (the-as uint (-> *remote-info* id)))
-                 )
+                )
+               )
                (begin
                  ;; 4. Apply correction & sync
                  (mp-puppet-apply-ghost-correction! proc)

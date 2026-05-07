@@ -128,7 +128,7 @@
     (mp-handle-scene-transition)
 
     ;; 3. Check for Continue Point Changes
-    (when *multi-sync-enabled?*
+    (when #f
       (let ((cont (-> *game-info* current-continue)))
         (when cont
           (let ((cont-name (-> cont name)))

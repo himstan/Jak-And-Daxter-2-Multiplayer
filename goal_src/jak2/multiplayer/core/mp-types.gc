@@ -702,6 +702,7 @@
 (define-perm *local-info* local-player-info (new 'static 'local-player-info))
 (define-perm *remote-info* remote-player-info (new 'static 'remote-player-info))
 (define-extern *mp-puppet* target)
+(define-perm *mp-puppet-was-far?* symbol #f)
 (define-extern *mp-puppet-ghost* mp-target-ghost-record)
 (define-perm *mp-event-buffer* mp-event-buffer (new 'static 'mp-event-buffer))
 (define-perm *mp-enemy-buffer* mp-enemy-sync-buffer (new 'static 'mp-enemy-sync-buffer))
