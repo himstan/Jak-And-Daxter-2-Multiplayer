@@ -286,6 +286,7 @@
     (set! (-> self control ctrl-xz-vel) 0.0)
   )
   (logior! (-> self focus-status) (focus-status indax))
+  (set! *local-riding?* #f)
   (set! (-> self control bend-target) 0.0)
   (target-collide-set! 'indax 0.0)
   (if (not (and *multi-sync-enabled?*
