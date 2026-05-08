@@ -579,11 +579,17 @@
                                                         (= (-> *target* next-state name) 'target-demo)))
                       (and (-> *target* state) (or (= (-> *target* state name) 'target-title)
                                                    (= (-> *target* state name) 'target-demo))))))
-    (format 0 "[MP-Puppet] Spawning new target puppet for Status ~D...~%" id)
+    (format 0 "[MP-Puppet] Spawning new target puppet with ID ~D...~%" id)
     (let ((p (process-spawn target :init mp-puppet-init (-> *game-info* current-continue) :from *target-dead-pool* :to *target-pool* :stack *kernel-dram-stack*)))
       (when p
         (set! *mp-puppet* (-> p 0))
         (set! (-> *mp-puppet* name) "mp-puppet")
+        (set! *has-ridden-before?* #f)
+        (set! *local-riding?* #f)
+        (set! *mp-puppet-state-mismatch-count* 0)
+        (set! *remote-player-is-dying* #f)
+        (set! *remote-player-is-dead* #f)
+        (set! *mp-local-player-is-respawning* #f)
         
         ;; Assign the second pad in the global list to the puppet
         ;; We use pad 1 (controller 2) as the dedicated puppet pad

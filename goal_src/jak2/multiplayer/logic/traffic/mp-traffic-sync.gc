@@ -27,8 +27,6 @@
          (when (and (nonzero? (-> v-proc net-id))
                     (!= (-> v-proc net-id) (-> *remote-info* veh-state net-id))
                     (not (focus-test? v-proc inactive))
-                    (not (logtest? (-> v-proc focus-status) (focus-status dead)))
-                    (logtest? (-> v-proc flags) (rigid-body-object-flag traffic-managed))
                     (< (-> *mp-traffic-buffer* veh-count) (the uint MP_MAX_SYNC_VEHICLES))
                     )
 

@@ -232,3 +232,84 @@
     (mp-draw-network-debug)
 
     (none)))
+
+(defun mp-reset-state ()
+  "Reset all multiplayer flags, buffers, and singletons to their default state."
+  (set! *multi-sync-enabled?* #f)
+  (set! *mp-reconnect-menu-active?* #f)
+  (set! *mp-host-left-menu-active?* #f)
+  (set! *mp-processing-remote-event* #f)
+  (set! *mp-remote-wants-skip* #f)
+  (set! *mp-local-wants-skip* #f)
+  (set! *local-riding?* #f)
+  (set! *multi-last-in-event-seq* (the-as uint 0))
+  (set! *mp-event-queue-write-ptr* 0)
+  (set! *mp-event-queue-read-ptr* 0)
+  (set! *mp-last-remote-scene-active* (the-as uint 0))
+  (set! *mp-puppet-was-far?* #f)
+  (set! *multi-remote-first-seen?* #t)
+  (set! *mp-reconnect-process* (the-as handle #f))
+  (set! *has-ridden-before?* #f)
+  
+  (set! *multi-last-send-time* (the-as time-frame 0))
+  (set! *multi-remote-spawn-time* (the-as time-frame 0))
+  (set! *mp-last-scene-player* #f)
+  (set! *mp-was-riding-before-scene* #f)
+  (if (nonzero? (the-as uint *mp-last-scene-name*))
+      (set! (-> *mp-last-scene-name* data 0) (the uint 0)))
+  (set! *mp-traffic-suppressed* #f)
+  (set! *mp-traffic-sync-active* #f)
+  (set! *mp-traffic-host-spawning-active* #f)
+  (set! *mp-pedestrian-net-id-counter* (the uint 1))
+  (set! *mp-vehicle-net-id-counter* (the uint 32768))
+  (set! *mp-last-local-state-id* (the uint 0))
+  (set! *remote-player-is-dying* #f)
+  (set! *remote-player-is-dead* #f)
+  (set! *mp-local-player-is-respawning* #f)
+  (if (nonzero? (the-as uint *mp-last-local-continue-name*))
+      (set! (-> *mp-last-local-continue-name* data 0) (the uint 0)))
+  (set! *mp-puppet-state-mismatch-count* 0)
+
+  ;; Buffers
+  (if (nonzero? (the-as uint *mp-event-buffer*))
+      (mem-set32! (the-as pointer *mp-event-buffer*) (/ (size-of mp-event-buffer) 4) 0))
+  (if (nonzero? (the-as uint *mp-enemy-buffer*))
+      (mem-set32! (the-as pointer *mp-enemy-buffer*) (/ (size-of mp-enemy-sync-buffer) 4) 0))
+  (if (nonzero? (the-as uint *mp-traffic-buffer*))
+      (mem-set32! (the-as pointer *mp-traffic-buffer*) (/ (size-of mp-traffic-sync-buffer) 4) 0))
+  (if (nonzero? (the-as uint *mp-event-queue*))
+      (mem-set32! (the-as pointer *mp-event-queue*) (/ (* 32 (size-of mp-event)) 4) 0))
+  (if (nonzero? (the-as uint *mp-enemy-auth*))
+      (mem-set32! (the-as pointer *mp-enemy-auth*) (/ (* 128 (size-of mp-enemy-auth-record)) 4) 0))
+      
+  ;; Traffic Ghosts
+  (mp-cleanup-traffic-ghosts)
+  
+  ;; Waypoints
+  (mp-waypoint-clear-transition-buffers!)
+  (set! *mp-waypoint-last-snapshot-time* (the-as time-frame 0))
+  (set! *mp-waypoint-applying-remote?* #f)
+  (set! *mp-waypoint-sync-local-level-hash* (the uint 0))
+  (set! *mp-waypoint-sync-remote-level-hash* (the uint 0))
+
+  ;; Info
+  (if (nonzero? (the-as uint *local-info*))
+      (mem-set32! (the-as pointer *local-info*) (/ (size-of local-player-info) 4) 0))
+  (if (nonzero? (the-as uint *remote-info*))
+      (mem-set32! (the-as pointer *remote-info*) (/ (size-of remote-player-info) 4) 0))
+      
+  ;; Reset role to uninitialized
+  (if (nonzero? (the-as uint *local-info*))
+      (set! (-> *local-info* role) -1))
+      
+  ;; Puppet
+  (when *mp-puppet*
+    (deactivate *mp-puppet*)
+    (set! *mp-puppet* (the-as target #f))
+    )
+  (if (nonzero? (the-as uint *mp-puppet-ghost*))
+      (mem-set32! (the-as pointer *mp-puppet-ghost*) (/ (size-of mp-target-ghost-record) 4) 0))
+
+  (format 0 "[MP] State has been fully reset.~%")
+  (none)
+  )

@@ -6128,7 +6128,9 @@
 
 (defmethod draw-option ((this menu-restart-mission-qr-option) (arg0 progress) (arg1 font-context) (arg2 int) (arg3 symbol))
   (local-vars (a0-11 string))
-  (let ((f0-1 (* 2.0 (- 0.5 (-> arg0 menu-transition)))))
+  (let ((f0-1 (* 2.0 (- 0.5 (-> arg0 menu-transition))))
+        (name (if (= (pc-multi-get-role) 1) (text-id progress-reconnect-button) (-> this name)))
+        )
     (if (< f0-1 0.0)
         (set! f0-1 0.0)
         )
@@ -6146,7 +6148,7 @@
                  (set! (-> a0-2 color) (font-color progress-force-selected))
                  )
                (draw-highlight (the int (+ -2.0 (-> arg1 origin y))) 50 f0-1)
-               (print-game-text (lookup-text! *common-text* (-> this name) #f) arg1 #f 44 (bucket-id progress))
+               (print-game-text (lookup-text! *common-text* name #f) arg1 #f 44 (bucket-id progress))
                (+! (-> arg1 origin y) 25.0)
                (let ((v1-17 arg1))
                  (set! (-> v1-17 scale) 0.6)
@@ -6177,7 +6179,7 @@
                 (if (and (= (-> arg0 option-index) arg2) (zero? (-> *progress-state* qr-options-item-selected)))
                     (draw-highlight (the int (+ -2.0 (-> arg1 origin y))) 26 f0-1)
                     )
-                (format (clear *temp-string*) "~S" (lookup-text! *common-text* (-> this name) #f))
+                (format (clear *temp-string*) "~S" (lookup-text! *common-text* name #f))
                 *temp-string*
                 )
               )
