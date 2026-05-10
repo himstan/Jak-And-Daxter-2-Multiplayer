@@ -3,20 +3,20 @@
 
 (let ((v1-2 (copy *walk-mods* 'loading-level)))
   (set! (-> v1-2 flags) (surface-flag gun-off gun-fast-exit))
-  (set! (-> v1-2 target-speed) 32768.0)
-  (set! (-> v1-2 transv-max) 32768.0)
+  (set! (-> v1-2 target-speed) 40960.0)
+  (set! (-> v1-2 transv-max) 40960.0)
   (set! *indax-walk-mods* v1-2)
   )
 
 (let ((v1-4 (copy *jump-mods* 'loading-level)))
-  (set! (-> v1-4 target-speed) 32768.0)
-  (set! (-> v1-4 transv-max) 32768.0)
+  (set! (-> v1-4 target-speed) 40960.0)
+  (set! (-> v1-4 transv-max) 40960.0)
   (set! *indax-jump-mods* v1-4)
   )
 
 (let ((v1-6 (copy *double-jump-mods* 'loading-level)))
-  (set! (-> v1-6 target-speed) 32768.0)
-  (set! (-> v1-6 transv-max) 32768.0)
+  (set! (-> v1-6 target-speed) 40960.0)
+  (set! (-> v1-6 transv-max) 40960.0)
   (set! *indax-double-jump-mods* v1-6)
   )
 
