@@ -385,12 +385,18 @@
                             (set! (-> s3-1 flags) (font-flags shadow kerning large))
                             ;; Only display prompt for local player
                             (when (= tgt *target*)
-                              (print-game-text
-                                (lookup-text! *common-text* (text-id press-triangle-to-use) #f)
-                                s3-1
-                                #f
-                                44
-                                (bucket-id progress)
+                              (let ((msg (cond
+                                           ((zero? boarding-seat) (text-id press-triangle-to-drive))
+                                           ((> boarding-seat 0) (text-id press-triangle-to-ride))
+                                           (else (text-id press-triangle-to-use))
+                                           )))
+                                (print-game-text
+                                  (lookup-text! *common-text* msg #f)
+                                  s3-1
+                                  #f
+                                  44
+                                  (bucket-id progress)
+                                  )
                                 )
                               )
                             )
