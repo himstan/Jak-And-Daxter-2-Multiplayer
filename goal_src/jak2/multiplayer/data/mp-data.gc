@@ -103,10 +103,23 @@
 
     ;; --- Vehicle Piggy-back Extraction ---
     (set! (-> *local-info* veh-state net-id) (the-as uint 0)) ;; Default: no vehicle
-    (when (and *target* (logtest? (focus-status pilot) (-> *target* focus-status)))
+    (set! (-> *local-info* riding-veh-id) (the uint 0))
+    (set! (-> *local-info* riding-seat-index) (the uint8 0))
+
+    (when (and *target* 
+               (logtest? (focus-status pilot pilot-riding) (-> *target* focus-status))
+               (nonzero? (-> *target* pilot))
+               (nonzero? (-> *target* pilot vehicle)))
       (let ((v-proc (the-as vehicle (handle->process (-> *target* pilot vehicle)))))
         (when (and v-proc (nonzero? v-proc) (nonzero? (-> v-proc net-id)))
-          (mp-vehicle-pack v-proc (-> *local-info* veh-state))
+          ;; Set occupancy info for everyone
+          (set! (-> *local-info* riding-veh-id) (-> v-proc net-id))
+          (set! (-> *local-info* riding-seat-index) (the uint8 (-> *target* pilot seat-index)))
+
+          ;; ONLY broadcast vehicle physics if we are the driver (seat 0)
+          (when (zero? (-> *target* pilot seat-index))
+            (mp-vehicle-pack v-proc (-> *local-info* veh-state))
+            )
           )
         )
       )

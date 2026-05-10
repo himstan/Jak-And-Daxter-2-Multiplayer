@@ -511,6 +511,45 @@
             )
           )
 
+        ;; --- 3.5. Occupancy Sync (Direct Attachment) ---
+        (let ((info *remote-info*))
+          (let ((riding-veh-id (-> info riding-veh-id))
+                (riding-seat-index (-> info riding-seat-index)))
+            (cond
+              ((nonzero? riding-veh-id)
+               ;; Remote player is in a vehicle.
+               (let ((v-proc (mp-vehicle-find-by-net-id riding-veh-id)))
+                 (when (and v-proc (nonzero? v-proc))
+                   (let ((is-already-synced? (and (focus-test? proc pilot) 
+                                                  (nonzero? (-> proc pilot))
+                                                  (nonzero? (-> proc pilot vehicle))
+                                                  (= (handle->process (-> proc pilot vehicle)) v-proc)
+                                                  (= (-> proc pilot seat-index) (the int riding-seat-index)))))
+                     
+                     (when (not is-already-synced?)
+                       ;; Puppet is not in the correct seat/vehicle. Attach them.
+                       (remove-rider v-proc proc)
+                       (put-rider-in-seat v-proc (the int riding-seat-index) proc)
+                       
+                       ;; Trigger animation mode change (animation sync)
+                       (if (mp-is-jak?)
+                           (send-event proc 'change-mode 'pilot-daxter v-proc 0 #t)
+                           (send-event proc 'change-mode 'pilot v-proc 0 #t)
+                           )
+                       )
+                     )
+                   )
+                 )
+               )
+              ((and (focus-test? proc pilot) (nonzero? (-> proc pilot vehicle)))
+               ;; Remote player is NOT in a vehicle, but puppet still is. Detach.
+               (send-event proc 'change-mode (if (mp-is-jak?) 'indax 'normal) #f)
+               (set! (-> (the-as vehicle (handle->process (-> proc pilot vehicle))) rider-array (-> proc pilot seat-index)) (the-as handle #f))
+               )
+              )
+            )
+          )
+
         ;; 4. Input Sync (Injected into puppet's dedicated pad)
         (when (-> proc control cpad)
           (mp-puppet-update-pad (-> proc control cpad) 

@@ -95,6 +95,8 @@ void handle_packet_receive(LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* rem
               entity.leftx = state->leftx; entity.lefty = state->lefty;
               entity.rightx = state->rightx; entity.righty = state->righty;
               entity.cam_angle_y = state->cam_angle_y;
+              entity.riding_veh_id = state->riding_veh_id;
+              entity.riding_seat_index = state->riding_seat_index;
               entity.last_sequence_num = state->header.sequenceNum;
               memcpy(&entity.veh_state, &state->veh_state, sizeof(MPVehicleState));
 
@@ -236,6 +238,8 @@ void handle_packet_send(LocalPlayerInfoGOAL* local, MPEventBufferGOAL* events) {
   local_state.leftx = local->leftx; local_state.lefty = local->lefty;
   local_state.rightx = local->rightx; local_state.righty = local->righty;
   local_state.cam_angle_y = local->cam_angle_y;
+  local_state.riding_veh_id = local->riding_veh_id;
+  local_state.riding_seat_index = local->riding_seat_index;
   local_state.money = local->money;
  local_state.gems = local->gems; local_state.skill = local->skill;
   memcpy(local_state.task_mask, local->task_mask, 64);
@@ -280,6 +284,8 @@ void sync_to_goal(RemotePlayerInfoGOAL* remote_goal) {
     remote_goal->leftx = remote_state.leftx; remote_goal->lefty = remote_state.lefty;
     remote_goal->rightx = remote_state.rightx; remote_goal->righty = remote_state.righty;
     remote_goal->cam_angle_y = remote_state.cam_angle_y;
+    remote_goal->riding_veh_id = remote_state.riding_veh_id;
+    remote_goal->riding_seat_index = remote_state.riding_seat_index;
     memcpy(&remote_goal->veh_state, &remote_state.veh_state, sizeof(MPVehicleState));
   } else { remote_goal->status = 0; }
 }

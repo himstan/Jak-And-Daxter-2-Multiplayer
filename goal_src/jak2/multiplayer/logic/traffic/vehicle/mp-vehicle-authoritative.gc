@@ -58,15 +58,39 @@
 
 ;; --- Vehicle Packing (Authoritative Side) ---
 
+(defun mp-vehicle-color-option-matches? ((v-proc vehicle) (color-index int))
+  (and (= (-> v-proc draw color-mult x) (-> v-proc info color-option-array color-index x))
+       (= (-> v-proc draw color-mult y) (-> v-proc info color-option-array color-index y))
+       (= (-> v-proc draw color-mult z) (-> v-proc info color-option-array color-index z))
+       (= (-> v-proc draw color-mult w) (-> v-proc info color-option-array color-index w))
+       )
+  )
+
+(defun mp-vehicle-get-color-index ((v-proc vehicle))
+  (let ((result (the uint8 0))
+        (found? #f))
+    (when (and (-> v-proc info) (> (-> v-proc info color-option-count) 0))
+      (dotimes (i (-> v-proc info color-option-count))
+        (when (and (not found?) (mp-vehicle-color-option-matches? v-proc i))
+          (set! result (the uint8 i))
+          (set! found? #t)
+          )
+        )
+      )
+    result
+    )
+  )
+
 (defun mp-vehicle-pack ((v-proc vehicle) (slot mp-vehicle-state))
   ;; ADDED: pointer guards
   (if (not (and v-proc (nonzero? v-proc) (-> v-proc root) (-> v-proc rbody))) (return #f))
 
   (set! (-> slot net-id) (-> v-proc net-id))
   (set! (-> slot vehicle-type) (the uint8 (-> v-proc traffic-type)))
-  (set! (-> slot color-index) (the uint8 0))
+  (set! (-> slot color-index) (mp-vehicle-get-color-index v-proc))
   (set! (-> slot state-id) (the uint8 (mp-veh-get-state-id v-proc)))
-  (set! (-> slot target-aid) (the uint8 0)) ;; Placeholder
+  (set! (-> slot target-aid) (the uint8 0))
+
   (set! (-> slot x) (-> v-proc root trans x))
   (set! (-> slot y) (-> v-proc root trans y))
   (set! (-> slot z) (-> v-proc root trans z))
@@ -93,13 +117,29 @@
     (if (nonzero? (-> v-proc flight-level-index)) (set! flags (logior flags (the uint 2))))
     (set! (-> slot state-flags) (the uint8 flags))
     )
-  
+
   (dotimes (i 4)
     (let ((rider-proc (handle->process (-> v-proc rider-array i))))
-      (if (and rider-proc (nonzero? rider-proc) (or (type? rider-proc vehicle-rider) (type? rider-proc target)))
-          (set! (-> slot rider-aids i) (the uint 1))
-          (set! (-> slot rider-aids i) (the uint 0))
-          )
+      (cond
+        ((and rider-proc (nonzero? rider-proc) (type? rider-proc target))
+         ;; Player (Jak or Daxter)
+         (let ((aid (the uint 0)))
+           (if (= rider-proc *target*)
+               (set! aid (the uint (+ 1 (-> *local-info* role))))
+               (set! aid (the uint (if (= (-> *local-info* role) 0) 2 1)))
+               )
+           (set! (-> slot rider-aids i) aid)
+           (if (zero? i) (set! (-> slot target-aid) (the uint8 aid)))
+           )
+         )
+        ((and rider-proc (nonzero? rider-proc) (type? rider-proc vehicle-rider))
+         ;; Civilian
+         (set! (-> slot rider-aids i) (the uint 3))
+         )
+        (else
+         (set! (-> slot rider-aids i) (the uint 0))
+         )
+        )
       )
     )
   (none)

@@ -64,6 +64,65 @@
 
 ;; --- Vehicle Debug ---
 
+(define *mp-veh-debug-seat-str* (new 'global 'string 256 (the-as string #f)))
+(define *mp-veh-debug-text-str* (new 'global 'string 512 (the-as string #f)))
+
+(defun mp-debug-get-seat-occupier-str ((proc vehicle) (seat-idx int))
+  (let ((rider (get-rider-in-seat proc seat-idx)))
+    (cond
+      ((not rider) "E")
+      ((type? rider target)
+       (let ((is-local (= rider *target*)))
+         (if (= (-> *local-info* role) 0) ;; Local is Jak
+             (if is-local "JAK" "DAX")
+             (if is-local "DAX" "JAK") ;; Local is Daxter
+             )
+         )
+       )
+      (else "PED")
+      )
+    )
+  )
+
+(defun mp-debug-get-net-seat-occupier-str ((aid uint))
+  (case aid
+    ((1) "JAK")
+    ((2) "DAX")
+    ((3) "PED")
+    (else "E")
+    )
+  )
+
+(define *mp-veh-debug-tmp-str* (new 'global 'string 128 (the-as string #f)))
+
+(defun mp-debug-append-seat-info ((proc vehicle) (seat-str string) (is-local-driven symbol) (is-remote-driven symbol))
+  (let ((tmp *mp-veh-debug-tmp-str*))
+    (dotimes (i (-> proc info seat-count))
+      (let ((local-occupant (mp-debug-get-seat-occupier-str proc i)))
+        (clear tmp)
+        (if (or is-local-driven is-remote-driven)
+            (let ((net-aid (if is-local-driven (-> *local-info* veh-state rider-aids i) (-> *remote-info* veh-state rider-aids i))))
+              (format tmp " S~D:L:~S/N:~S" i local-occupant (mp-debug-get-net-seat-occupier-str net-aid))
+              )
+            (format tmp " S~D:L:~S" i local-occupant)
+            )
+        (cat-string<-string seat-str tmp)
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-draw-traffic-veh-ghost-debug ((proc vehicle) (rec mp-traffic-ghost-record))
+  (when rec
+    ;; Draw ghost sphere at authoritative target position
+    (add-debug-sphere #t (bucket-id debug-no-zbuf1) (-> rec ghost-trans) (meters 1.5) (static-rgba 255 255 0 128))
+    ;; Draw line connecting vehicle to ghost
+    (add-debug-line #t (bucket-id debug-no-zbuf1) (-> proc root trans) (-> rec ghost-trans) (static-rgba 255 255 0 128) #f (the-as rgba 0))
+    )
+  (none)
+)
+
 (defun mp-draw-traffic-veh-debug ((proc vehicle))
   (when (and *mp-traffic-veh-debug?* *target*)
     (let ((dist (vector-vector-distance (-> proc root trans) (-> *target* root trans))))
@@ -90,40 +149,51 @@
                         (set! status-str "REMOTE-DRIVEN")
                         )
 
-                    (let ((nudged-status (-> proc pad-bytes 0)))
+                    (let ((nudged-status (-> proc pad-bytes 0))
+                          (seat-str *mp-veh-debug-seat-str*)
+                          (text-str *mp-veh-debug-text-str*)
+                          (tmp *mp-veh-debug-tmp-str*))
+                      (clear seat-str)
+                      (clear text-str)
+                      (mp-debug-append-seat-info proc seat-str is-local-driven is-remote-driven)
                       (if is-owner
-                          (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
-                                            (the-as string (format #f "VEH-ID: ~D (~S)~%STATE: ~S(~D)~%TYPE: ~S~%PAD: ~D" 
-                                                    net-id 
-                                                    status-str
-                                                    cur-state
-                                                    (the uint8 (mp-veh-get-state-id proc))
-                                                    type-str
-                                                    pad-idx))
-                                            draw-pos 
-                                            color 
-                                            (the-as vector2h #f))
+                          (begin
+                            (format text-str "VEH-ID: ~D (~S)~%STATE: ~S(~D)~%" 
+                                    net-id 
+                                    status-str
+                                    cur-state
+                                    (the uint8 (mp-veh-get-state-id proc)))
+                            (format tmp "TYPE: ~S~%PAD: ~D~%SEATS:~S" 
+                                    type-str 
+                                    pad-idx
+                                    seat-str)
+                            (cat-string<-string text-str tmp)
+                            (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
+                                              text-str
+                                              draw-pos 
+                                              color 
+                                              (the-as vector2h #f))
+                            )
                           (let ((rec (mp-get-traffic-ghost net-id)))
                             (let ((nudged-str (cond ((= nudged-status 1) "Y") ((= nudged-status 2) "SNAP") (else "N"))))
+                              (format text-str "ID: ~D (~S) G:~S~%TYPE: ~S PAD: ~D~%" 
+                                      net-id 
+                                      status-str
+                                      (if rec (mp-veh-get-state-from-id (the uint (-> rec ghost-state-id))) 'none)
+                                      type-str
+                                      pad-idx)
+                              (format tmp "NUDGED: ~S~%SEATS:~S" 
+                                      nudged-str
+                                      seat-str)
+                              (cat-string<-string text-str tmp)
                               (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
-                                                (the-as string (format #f "ID: ~D (~S) G:~S~%TYPE: ~S PAD: ~D~%NUDGED: ~S" 
-                                                        net-id 
-                                                        status-str
-                                                        (if rec (mp-veh-get-state-from-id (the uint (-> rec ghost-state-id))) 'none)
-                                                        type-str
-                                                        pad-idx
-                                                        nudged-str))
+                                                text-str
                                                 draw-pos 
                                                 color 
                                                 (the-as vector2h #f))
                               )
                             
-                            (when rec
-                              ;; Draw ghost sphere at authoritative target position
-                              (add-debug-sphere #t (bucket-id debug-no-zbuf1) (-> rec ghost-trans) (meters 1.5) (static-rgba 255 255 0 128))
-                              ;; Draw line connecting puppet to ghost
-                              (add-debug-line #t (bucket-id debug-no-zbuf1) (-> proc root trans) (-> rec ghost-trans) (static-rgba 255 255 0 128) #f (the-as rgba 0))
-                              )
+                            (mp-draw-traffic-veh-ghost-debug proc rec)
                             )
                           )
                       )

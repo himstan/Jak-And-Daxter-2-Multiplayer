@@ -189,7 +189,9 @@
         (let ((gp-0 (handle->process (-> v1-11 vehicle))))
           (when gp-0
             (remove-rider (the-as vehicle gp-0) self)
-            (send-event gp-0 'player-get-off)
+            (when (zero? (-> v1-11 seat-index))
+              (send-event gp-0 'player-get-off)
+              )
             )
           )
         )
@@ -259,37 +261,57 @@
           (the-as vehicle s4-1)
           )
         (set! (-> s5-0 stance) (vehicle-method-72 (the-as vehicle s4-1)))
-        (let ((s3-0 (get-seat-count (the-as vehicle s4-1))))
-          (dotimes (s2-0 s3-0)
-            (let ((a0-20 (get-rider-in-seat (the-as vehicle s4-1) s2-0)))
-              ;; og:preserve-this added for hijack lines cheat
-              (when (and a0-20 (or (type-type? (-> a0-20 type) citizen-norm-rider) (type-type? (-> a0-20 type) crimson-guard-rider)))
-                (let ((cheat? (pc-cheats? (-> *pc-settings* cheats) hijack-lines))
-                      (chance? (rand-vu-percent? (-> *pc-cheat-state* hijack-speech-chance))))
-                  (when (and cheat? chance?)
-                    (add-process *gui-control* self (gui-channel jak) (gui-action play)
-                      (-> *jak-hijack-speeches* (rand-vu-int-range 0 (1- (-> *jak-hijack-speeches* length)))) -99.0 0)
-                    (if (type-type? (-> a0-20 type) citizen-norm-rider)
-                      (add-process *gui-control* self (gui-channel jak) (gui-action play)
-                        (-> *civ-hijack-speeches* (rand-vu-int-range 0 (1- (-> *civ-hijack-speeches* length)))) -99.0 0)
-                      )
-                    )
+        
+        ;; 1. Determine seat index FIRST (og:preserve-this modified for MP)
+        (cond
+          ((!= self *target*)
+           ;; Puppet boarding: ALWAYS use the authoritative network seat index.
+           ;; This prevents the puppet from locally choosing Seat 0 if the driver seat is empty.
+           (set! (-> s5-0 seat-index) (the int (-> *remote-info* riding-seat-index)))
+           )
+          (else
+            ;; Local player boarding: Use proximity/occupancy logic.
+            (let* ((force-passenger? (cpad-hold? (-> self control cpad number) l1))
+                   (driver-seat-rider (get-rider-in-seat (the-as vehicle s4-1) 0))
+                   (driver-seat-player? (and driver-seat-rider (type? driver-seat-rider target)))
+                   (passenger-seat (vehicle-find-empty-passenger-seat (the-as vehicle s4-1) (-> self control trans)))
+                   )
+              (cond
+                ((and (or force-passenger? driver-seat-player?) (!= passenger-seat -1))
+                 (set! (-> s5-0 seat-index) passenger-seat)
+                 )
+                (else
+                  ;; Normal: driver seat. The prompt path prevents local boarding when
+                  ;; a player driver has no empty passenger seat.
+                  (set! (-> s5-0 seat-index) 0)
                   )
                 )
-              (when a0-20
-                (send-event a0-20 'knocked-off)
-                (put-rider-in-seat (the-as vehicle s4-1) s2-0 (the-as process-focusable #f))
-                  )
               )
             )
           )
-        ;; og:preserve-this cast
-        (if (-> s5-0 as-daxter?)
-            (set! (-> s5-0 seat-index) 0)
-            (let ((v1-43 (get-best-seat-for-vehicle (the-as vehicle s4-1) (-> self control trans) 1 1)))
-              (set! (-> s5-0 seat-index) (max 0 v1-43))
+
+        ;; 2. Kick out ONLY the occupant of the chosen seat (and protect MP targets)
+        (let ((a0-20 (get-rider-in-seat (the-as vehicle s4-1) (-> s5-0 seat-index))))
+          ;; og:preserve-this added for hijack lines cheat
+          (when (and a0-20 (or (type-type? (-> a0-20 type) citizen-norm-rider) (type-type? (-> a0-20 type) crimson-guard-rider)))
+            (let ((cheat? (pc-cheats? (-> *pc-settings* cheats) hijack-lines))
+                  (chance? (rand-vu-percent? (-> *pc-cheat-state* hijack-speech-chance))))
+              (when (and cheat? chance?)
+                (add-process *gui-control* self (gui-channel jak) (gui-action play)
+                  (-> *jak-hijack-speeches* (rand-vu-int-range 0 (1- (-> *jak-hijack-speeches* length)))) -99.0 0)
+                (if (type-type? (-> a0-20 type) citizen-norm-rider)
+                  (add-process *gui-control* self (gui-channel jak) (gui-action play)
+                    (-> *civ-hijack-speeches* (rand-vu-int-range 0 (1- (-> *civ-hijack-speeches* length)))) -99.0 0)
+                  )
+                )
               )
             )
+          (when (and a0-20 (not (type? a0-20 target)))
+            (send-event a0-20 'knocked-off)
+            (put-rider-in-seat (the-as vehicle s4-1) (-> s5-0 seat-index) (the-as process-focusable #f))
+            )
+          )
+        
         (cond
           ((-> s5-0 as-daxter?)
            (set! (-> s5-0 left-right-accel-factor) 0.0000012207031)

@@ -19,8 +19,9 @@ struct RemoteEntityState {
   uint16_t buttons;
   uint8_t leftx, lefty, rightx, righty;
   float cam_angle_y;
+  uint32_t riding_veh_id;
+  uint8_t riding_seat_index;
   uint32_t last_sequence_num = 0;
-  uint8_t pad_reserved[10];
   MPVehicleState veh_state;
 };
 
@@ -48,11 +49,15 @@ struct RemotePlayerInfoGOAL {
   int32_t status;
   uint32_t packet_id;
   uint32_t riding;
+  uint32_t pad_clock;
   uint64_t clock;
   uint16_t buttons;
   uint8_t leftx, lefty, rightx, righty;
+  uint16_t pad_cam;
   float cam_angle_y;
-  uint8_t pad_reserved[6];
+  uint32_t riding_veh_id;
+  uint8_t riding_seat_index;
+  uint8_t pad_reserved[3];
   // World Sync Fields (Mirrored from local-player-info)
   float money;
   float gems;
@@ -68,22 +73,28 @@ struct RemotePlayerInfoGOAL {
   uint8_t active_task_mask[64];
   uint32_t sync_aids_count;
   uint32_t sync_aids[128];
-  uint8_t pad_align[12];
+  uint64_t player_procs[2];
   MPVehicleState veh_state;
 };
 
 struct LocalPlayerInfoGOAL {
   float x, y, z, angle;
+  uint32_t id; // Placeholder
   int32_t role;
   uint32_t state_id;
   uint32_t level;
+  int32_t status; // Placeholder
   uint32_t packet_id;
   uint32_t riding;
+  uint32_t pad_clock;
   uint64_t clock;
   uint16_t buttons;
   uint8_t leftx, lefty, rightx, righty;
+  uint16_t pad_cam;
   float cam_angle_y;
-  uint8_t pad_reserved[6];
+  uint32_t riding_veh_id;
+  uint8_t riding_seat_index;
+  uint8_t pad_reserved[3];
   // Global World Sync (Outgoing)
   float money;
   float gems;

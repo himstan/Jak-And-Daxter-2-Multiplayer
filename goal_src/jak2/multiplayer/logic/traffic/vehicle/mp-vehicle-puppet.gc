@@ -85,6 +85,32 @@
     found-proc)
 )
 
+(defun mp-clear-traffic-ghost-by-net-id! ((net-id uint))
+  "Clear a traffic ghost record immediately when local authority takes over."
+  (when (nonzero? net-id)
+    (let ((rec (mp-get-traffic-ghost net-id)))
+      (when rec
+        (set! (-> rec net-id) (the uint 0))
+        (set! (-> rec entity-kind) (the uint8 0))
+        (set! (-> rec ghost-state-id) (the uint8 0))
+        (set! (-> rec ghost-target-aid) (the uint8 0))
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-vehicle-apply-authoritative-flight-level! ((veh vehicle) (state-flags uint))
+  "Force synced high/low flight level without running local transition logic."
+  (if (logtest? state-flags 2)
+      (set! (-> veh flight-level-index) 1)
+      (set! (-> veh flight-level-index) 0)
+      )
+  (logclear! (-> veh flags) (rigid-body-object-flag flight-level-transition flight-level-transition-ending camera-rapid-track-mode))
+  (disable-rapid-camera-tracking veh)
+  (none)
+  )
+
 ;; --- Hijack Implementations ---
 
 (defbehavior mp-vehicle-event-handler-hijack vehicle ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
@@ -139,6 +165,9 @@
     ;; State sync: read desired state from ghost record, transition if desynced.
     (let ((rec (mp-get-traffic-ghost (-> this net-id))))
       (when rec
+        (when (= (-> rec entity-kind) (the uint8 1))
+          (mp-vehicle-apply-authoritative-flight-level! this (-> rec ghost-target-aid))
+          )
         (let ((target-sym (mp-veh-get-state-from-id (the uint (-> rec ghost-state-id)))))
           
           (when (and target-sym (-> this state) (!= (-> this state name) target-sym))
@@ -206,9 +235,6 @@
             (set! (-> s5-0 y) (fmin 1.0 (* 0.023529412 (the float (-> pad abutton (abutton-idx x))))))
             (set! (-> s5-0 z) (fmin 1.0 (* 0.023529412 (the float (-> pad abutton (abutton-idx square))))))
             (vehicle-method-95 this (the-as vector (&-> s5-0 x)))
-            )
-          (when (and (cpad-pressed? 1 r2) (not *pause-lock*))
-            (if (zero? (-> this flight-level-index)) (switch-zone-high! this) (switch-zone-low! this))
             )
           (if (or (cpad-hold? 1 l1) (and (logtest? (-> this info flags) 512) (cpad-hold? 1 r1)))
               (start-jump this)
@@ -288,40 +314,56 @@
 
 ;; --- Sync Application ---
 
+(defun mp-vehicle-apply-color-index! ((proc vehicle) (slot mp-vehicle-state))
+  (when (and proc (nonzero? proc) (-> proc info) (> (-> proc info color-option-count) 0))
+    (let ((color-index (mod (the-as int (-> slot color-index)) (-> proc info color-option-count))))
+      (set! (-> proc draw color-mult quad) (-> proc info color-option-array color-index quad))
+      )
+    )
+  (none)
+  )
+
 (defun mp-vehicle-update-riders ((proc vehicle) (slot mp-vehicle-state))
-  "Spawn or despawn riders on a puppet vehicle to match the host's state."
+  "Spawn or despawn civilian riders on a puppet vehicle to match the host's state."
   (dotimes (i 4)
     (let ((client-rider-proc (handle->process (-> proc rider-array i)))
-          (host-has-rider (nonzero? (-> slot rider-aids i))))
+          (host-rider-type (-> slot rider-aids i)))
       (cond
-        ((and host-has-rider (not client-rider-proc))
+        ((and (= host-rider-type 3) (not client-rider-proc))
+         ;; Host has a civilian rider, client does not.
          (when (and (= i 0) (mp-traffic-type-loaded? (the-as traffic-type (-> slot vehicle-type))))
-           (let ((params (new 'stack 'traffic-object-spawn-params)))
-             (set! (-> params object-type) (the-as traffic-type (-> slot vehicle-type)))
-             (set! (-> params behavior) (the uint64 0))
-             (set! (-> params id) (the uint32 0))
-             (set! (-> params nav-mesh) #f)
-             (set! (-> params nav-branch) #f)
-             (set! (-> params proc) #f)
-             (set! (-> params handle) (the-as handle #f))
-             (set! (-> params user-data) (the uint 0))
-             (set! (-> params flags) (traffic-spawn-flags trsflags-00 trsflags-01))
-             (set! (-> params guard-type) (the uint8 0))
-             (set-vector! (-> params position) (-> slot x) (-> slot y) (-> slot z) 1.0)
-             (quaternion-set! (-> params rotation) (-> slot quat-x) (-> slot quat-y) (-> slot quat-z) (-> slot quat-w))
-             (set-vector! (-> params velocity) 0.0 0.0 0.0 1.0)
-             (vehicle-method-137 proc params)
+           ;; HIJACK GUARD: Don't spawn if local player is currently hijacking this vehicle.
+           (let ((is-local-hijacking? (and *target* 
+                                          (nonzero? (-> *target* pilot vehicle))
+                                          (= (handle->process (-> *target* pilot vehicle)) proc))))
+             (when (not is-local-hijacking?)
+               (let ((params (new 'stack 'traffic-object-spawn-params)))
+                 (set! (-> params object-type) (the-as traffic-type (-> slot vehicle-type)))
+                 (set! (-> params behavior) (the uint64 0))
+                 (set! (-> params id) (the uint32 0))
+                 (set! (-> params nav-mesh) #f)
+                 (set! (-> params nav-branch) #f)
+                 (set! (-> params proc) #f)
+                 (set! (-> params handle) (the-as handle #f))
+                 (set! (-> params user-data) (the uint 0))
+                 (set! (-> params flags) (traffic-spawn-flags trsflags-00 trsflags-01))
+                 (set! (-> params guard-type) (the uint8 0))
+                 (set-vector! (-> params position) (-> slot x) (-> slot y) (-> slot z) 1.0)
+                 (quaternion-set! (-> params rotation) (-> slot quat-x) (-> slot quat-y) (-> slot quat-z) (-> slot quat-w))
+                 (set-vector! (-> params velocity) 0.0 0.0 0.0 1.0)
+                 (vehicle-method-137 proc params)
+                 )
+               )
              )
            )
          )
-        ((and (not host-has-rider) client-rider-proc)
+        ((and (zero? host-rider-type) client-rider-proc (type? client-rider-proc vehicle-rider))
+         ;; Seat is empty on host, but has a civilian locally. Kill them.
          (when (and client-rider-proc (nonzero? client-rider-proc) 
                     (not (logtest? (-> client-rider-proc mask) (process-mask sleep)))
                     (!= (-> client-rider-proc status) 'dead))
             (send-event client-rider-proc 'rider-off)
-            (if (type? client-rider-proc vehicle-rider)
-                (deactivate client-rider-proc)
-                )
+            (deactivate client-rider-proc)
             )
          (set! (-> proc rider-array i) (the-as handle #f))
          )
@@ -335,11 +377,12 @@
   "Update the ghost record for a vehicle from the latest remote data."
   (if (not (and proc (nonzero? proc))) (return #f))
 
-  ;; Protect the local player's vehicle from remote state syncing!
-  ;; This prevents random pedestrians from spawning in the driver seat
-  ;; during the hijack get-on animation window when player-driving is false.
-  (when (= (-> proc net-id) (-> *local-info* veh-state net-id))
-    (return #f)
+  ;; Protect the local player's vehicle from remote state syncing if they are the pilot.
+  ;; We allow syncing if the local player is just a passenger.
+  (let ((local-pilot (get-rider-in-seat proc 0)))
+    (when (and local-pilot (= local-pilot *target*))
+      (return #f)
+      )
     )
 
   (let ((rec (mp-get-traffic-ghost (-> slot net-id))))
@@ -351,61 +394,19 @@
         )
       )
     (when rec
+      (set! (-> rec entity-kind) (the uint8 1))
       (set-vector! (-> rec ghost-trans) (-> slot x) (-> slot y) (-> slot z) 1.0)
       (quaternion-set! (-> rec ghost-quat) (-> slot quat-x) (-> slot quat-y) (-> slot quat-z) (-> slot quat-w))
       (set-vector! (-> rec ghost-linvel) (-> slot lin-vel-x) (-> slot lin-vel-y) (-> slot lin-vel-z) 0.0)
       (set-vector! (-> rec ghost-angvel) (-> slot ang-vel-x) (-> slot ang-vel-y) (-> slot ang-vel-z) 0.0)
       (set! (-> rec ghost-state-id) (-> slot state-id))
+      (set! (-> rec ghost-target-aid) (-> slot state-flags))
       (set! (-> rec last-seen) (current-time))
+      (mp-vehicle-apply-authoritative-flight-level! proc (-> rec ghost-target-aid))
       )
     )
 
-  (if (logtest? (-> slot state-flags) 2) (switch-zone-high! proc) (switch-zone-low! proc))
-
-  (cond
-    ((= (-> slot state-id) (the uint (mp-veh-state-id player-control)))
-     (let ((pilot (get-rider-in-seat proc 0)))
-       (when (and pilot (!= pilot *mp-puppet*) (!= pilot *target*))
-         (if (not (mp-is-jak?))
-             (begin
-               (send-event pilot 'rider-off)
-               (if (type? pilot vehicle-rider) (deactivate pilot))
-               (set! (-> proc rider-array 0) (the-as handle #f))
-               )
-             )
-         )
-
-       (let ((is-already-pilot? (and (focus-test? *mp-puppet* pilot) 
-                                     (nonzero? (-> *mp-puppet* pilot))
-                                     (= (handle->process (-> *mp-puppet* pilot vehicle)) proc))))
-         (when (and *mp-puppet* (not (focus-test? *mp-puppet* dead inactive)) (not is-already-pilot?))
-           (when (not (let ((local-pilot (get-rider-in-seat proc 0))) (and local-pilot (= local-pilot *target*))))
-             (if (mp-is-jak?)
-                 (send-event *mp-puppet* 'change-mode 'pilot-daxter proc 0 #t)
-                 (send-event *mp-puppet* 'change-mode 'pilot proc 0 #t)
-                 )
-             )
-           )
-         )
-
-       (when (not (get-rider-in-seat proc 0))
-         (put-rider-in-seat proc 0 *mp-puppet*)
-         )
-       )
-     (logior! (-> proc flags) (rigid-body-object-flag persistent))
-     (logclear! (-> proc mask) (process-mask pause sleep actor-pause))
-     )
-    (else
-     (let ((pilot (get-rider-in-seat proc 0)))
-       (when (and pilot (= pilot *mp-puppet*))
-         (send-event pilot 'change-mode 'normal)
-         (set! (-> proc rider-array 0) (the-as handle #f))
-         (logclear! (-> proc flags) (rigid-body-object-flag persistent))
-         )
-       )
-     )
-    )
-
+  (mp-vehicle-apply-color-index! proc slot)
   (mp-vehicle-update-riders proc slot)
   (none)
 )
@@ -443,7 +444,11 @@
             (set! (-> params flags) (traffic-spawn-flags trsflags-01))
             (set! (-> params flags) (the-as traffic-spawn-flags 0))
             )
-        (traffic-object-spawn (the-as process *traffic-manager*) params)
+        (let ((proc (traffic-object-spawn (the-as process *traffic-manager*) params)))
+          (when (and proc (nonzero? proc) (type? proc vehicle))
+            (mp-vehicle-apply-color-index! (the-as vehicle proc) slot)
+            )
+          )
         )
       )
     )
@@ -528,7 +533,12 @@
                 (let ((found-in-buffer? #f)
                       (v-net-id (-> (the-as vehicle proc) net-id)))
                   (if (or (= v-net-id driven-net-id) (= v-net-id local-driven-net-id))
-                      (set! found-in-buffer? #t)
+                      (begin 
+                        (when (mp-is-daxter?)
+                          (mp-clear-traffic-ghost-by-net-id! local-driven-net-id)
+                        )
+                        (set! found-in-buffer? #t)
+                      )
                       (dotimes (i (the int MP_MAX_SYNC_VEHICLES))
                         (if (= (-> *mp-traffic-buffer* veh-enemies i net-id) v-net-id) (set! found-in-buffer? #t))
                         )

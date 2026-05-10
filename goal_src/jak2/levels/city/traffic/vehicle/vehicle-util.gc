@@ -176,13 +176,50 @@
   (none)
   )
 
+(defun vehicle-driver-seat-has-player? ((veh vehicle))
+  (let ((driver (get-rider-in-seat veh 0)))
+    (and driver (type? driver target))
+    )
+  )
+
+(defun vehicle-remote-driven-by-puppet? ((veh vehicle))
+  (let ((driver (get-rider-in-seat veh 0)))
+    (or (and driver (= driver *mp-puppet*))
+        (and (nonzero? (-> veh net-id))
+             (= (-> veh net-id) (-> *remote-info* veh-state net-id))
+             )
+        )
+    )
+  )
+
+(defun vehicle-find-empty-passenger-seat ((veh vehicle) (pos vector))
+  (let ((best-seat -1)
+        (best-dist (the float #x7f800000))
+        (seat-pos (new 'stack-no-clear 'vector))
+        )
+    (dotimes (seat-offset (- (get-seat-count veh) 1))
+      (let ((seat-idx (+ seat-offset 1)))
+        (when (and (logtest? 1 (-> veh info seat-array seat-idx flags))
+                   (not (get-rider-in-seat veh seat-idx))
+                   )
+          (compute-seat-position veh seat-pos seat-idx)
+          (let ((seat-dist (vector-vector-distance-squared pos seat-pos)))
+            (when (< seat-dist best-dist)
+              (set! best-dist seat-dist)
+              (set! best-seat seat-idx)
+              )
+            )
+          )
+        )
+      )
+    best-seat
+    )
+  )
+
 (defmethod check-player-get-on ((this vehicle))
   (with-pp
-    (dotimes (tgt-idx 2)
-      (let ((tgt (cond ((= tgt-idx 0) *target*)
-                       ((and (= tgt-idx 1) *mp-puppet* (nonzero? *mp-puppet*)) *mp-puppet*)
-                       (else (the-as target #f)))))
-        (when (and tgt (nonzero? tgt) (not (focus-test? tgt pilot)))
+     (let ((tgt *target*))
+        (when (and tgt (nonzero? tgt) (-> tgt control) (not (focus-test? tgt pilot teleporting)))
           (let ((f0-0 (vector-vector-distance-squared (-> this root trans) (-> tgt control trans)))
                 (f1-0 102400.0)
                 )
@@ -236,16 +273,22 @@
                     (let ((s2-0 #f)
                           (s4-1 #f)
                           (s3-0 #f)
+                          (driver-seat-player? (vehicle-driver-seat-has-player? this))
+                          (boarding-seat -1)
                           )
-                      (let ((a2-2 (get-best-seat-for-vehicle this (-> s5-0 matrices 0 vector 1) 1 0)))
-                        (when (!= a2-2 -1)
-                          (compute-seat-position this (-> s5-0 matrices 0 vector 2) a2-2)
-                          (vector+float*!
-                            (-> s5-0 matrices 0 vector 2)
-                            (-> s5-0 matrices 0 vector 2)
-                            (-> s5-0 matrices 1 vector 1)
-                            4096.0
+                      (set! boarding-seat
+                            (if driver-seat-player?
+                                (vehicle-find-empty-passenger-seat this (-> s5-0 matrices 0 vector 1))
+                                (get-best-seat-for-vehicle this (-> s5-0 matrices 0 vector 1) 1 0)
+                                )
                             )
+                      (when (!= boarding-seat -1)
+                        (compute-seat-position this (-> s5-0 matrices 0 vector 2) boarding-seat)
+                        (vector+float*!
+                          (-> s5-0 matrices 0 vector 2)
+                          (-> s5-0 matrices 0 vector 2)
+                          (-> s5-0 matrices 1 vector 1)
+                          4096.0
                           )
                         )
                       (set! (-> s5-0 floats 1)
@@ -254,27 +297,29 @@
                       (let ((f0-14 (-> s5-0 floats 1))
                             (f1-12 81920.0)
                             )
-                        (when (< f0-14 (* f1-12 f1-12))
+                        (when (and (< f0-14 (* f1-12 f1-12))
+                                   (or (not driver-seat-player?) (!= boarding-seat -1))
+                                   )
                           (set! (-> s5-0 cquery start-pos quad) (-> s5-0 matrices 0 vector 1 quad))
                           (vector-! (-> s5-0 cquery move-dist) (-> s5-0 matrices 0 vector 2) (-> s5-0 matrices 0 vector 1))
                           (let ((v1-54 (-> s5-0 cquery)))
                             (set! (-> v1-54 radius) 4096.0)
                             (set! (-> v1-54 collide-with) (collide-spec
-                                                            backgnd
-                                                            crate
-                                                            civilian
-                                                            enemy
-                                                            obstacle
-                                                            hit-by-player-list
-                                                            hit-by-others-list
-                                                            player-list
-                                                            collectable
-                                                            blocking-plane
-                                                            tobot
-                                                            pusher
-                                                            vehicle-mesh
-                                                            obstacle-for-jak
-                                                            )
+                                                                 backgnd
+                                                                 crate
+                                                                 civilian
+                                                                 enemy
+                                                                 obstacle
+                                                                 hit-by-player-list
+                                                                 hit-by-others-list
+                                                                 player-list
+                                                                 collectable
+                                                                 blocking-plane
+                                                                 tobot
+                                                                 pusher
+                                                                 vehicle-mesh
+                                                                 obstacle-for-jak
+                                                                 )
                                   )
                             (set! (-> v1-54 ignore-process0) this)
                             (set! (-> v1-54 ignore-process1) #f)
@@ -288,6 +333,7 @@
                       (when s2-0
                         (when (and (or (< -14336.0 (-> s5-0 floats 2)) (logtest? (-> this flags) (rigid-body-object-flag player-edge-grabbing)))
                                    (not (logtest? (rigid-body-object-flag no-hijack) (-> this flags)))
+                                   (or (not driver-seat-player?) (!= boarding-seat -1))
                                    )
                           (set! s4-1 #t)
                           (set! (-> s5-0 floats 3) (* (-> this hit-points) (/ 40960.0 (sqrtf (-> s5-0 floats 1)))))
@@ -322,9 +368,9 @@
                                 )
                               )
                             0
-                            )
                           )
-                        (set! s3-0 (or s4-1 s3-0))
+                        )
+                        (set! s3-0 (if driver-seat-player? s4-1 (or s4-1 s3-0)))
                         (when (and s3-0 (and (vehicle-hud-chooser-method-9 *vehicle-hud-chooser* (process->handle this) (-> s5-0 floats 3))
                                              (can-display-query? this (the-as string #f) (/ 1.0 (-> s5-0 floats 3)))
                                              )
@@ -362,7 +408,6 @@
                                   (mem-copy! (the-as pointer *pilot-edge-grab-info*) (the-as pointer (-> s5-0 vectors)) 40)
                                   (if (send-event tgt 'pilot-edge-grab *pilot-edge-grab-info*)
                                       (format 0 "vehicle::check-player-get-on: (send-event tgt 'pilot-edge-grab self)~%")
-                                      )
                                   )
                                 )
                               )
