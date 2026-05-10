@@ -61,6 +61,8 @@
     (((mp-target-state-id indax-attack-air)) 'target-indax-attack-air)
     (((mp-target-state-id indax-flop-hit-ground)) 'target-indax-flop-hit-ground)
     (((mp-target-state-id indax-running-attack)) 'target-indax-running-attack)
+    (((mp-target-state-id indax-attack-uppercut)) 'target-indax-attack-uppercut)
+    (((mp-target-state-id indax-attack-uppercut-jump)) 'target-indax-attack-uppercut-jump)
     (((mp-target-state-id ride-along))    'target-ride-along)
     (((mp-target-state-id pilot-stance))  'target-pilot-stance)
     (((mp-target-state-id pilot-get-on))  'target-pilot-get-on)
@@ -189,6 +191,8 @@
     (('target-indax-attack-air)  (the uint (mp-target-state-id indax-attack-air)))
     (('target-indax-flop-hit-ground) (the uint (mp-target-state-id indax-flop-hit-ground)))
     (('target-indax-running-attack) (the uint (mp-target-state-id indax-running-attack)))
+    (('target-indax-attack-uppercut) (the uint (mp-target-state-id indax-attack-uppercut)))
+    (('target-indax-attack-uppercut-jump) (the uint (mp-target-state-id indax-attack-uppercut-jump)))
     (('target-ride-along)        (the uint (mp-target-state-id ride-along)))
     (('target-pilot-stance)      (the uint (mp-target-state-id pilot-stance)))
     (('target-pilot-get-on)      (the uint (mp-target-state-id pilot-get-on)))
@@ -394,6 +398,8 @@
       'target-indax-attack
       'target-indax-attack-air
       'target-indax-running-attack
+      'target-indax-attack-uppercut
+      'target-indax-attack-uppercut-jump
       )
      #t
      )
