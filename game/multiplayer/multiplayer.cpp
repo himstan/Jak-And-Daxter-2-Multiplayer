@@ -97,6 +97,7 @@ void handle_packet_receive(LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* rem
               entity.cam_angle_y = state->cam_angle_y;
               entity.riding_veh_id = state->riding_veh_id;
               entity.riding_seat_index = state->riding_seat_index;
+              entity.scene_active = state->scene_active;
               entity.last_sequence_num = state->header.sequenceNum;
               memcpy(&entity.veh_state, &state->veh_state, sizeof(MPVehicleState));
 
@@ -240,6 +241,7 @@ void handle_packet_send(LocalPlayerInfoGOAL* local, MPEventBufferGOAL* events) {
   local_state.cam_angle_y = local->cam_angle_y;
   local_state.riding_veh_id = local->riding_veh_id;
   local_state.riding_seat_index = local->riding_seat_index;
+  local_state.scene_active = local->scene_active;
   local_state.money = local->money;
  local_state.gems = local->gems; local_state.skill = local->skill;
   memcpy(local_state.task_mask, local->task_mask, 64);
@@ -286,8 +288,12 @@ void sync_to_goal(RemotePlayerInfoGOAL* remote_goal) {
     remote_goal->cam_angle_y = remote_state.cam_angle_y;
     remote_goal->riding_veh_id = remote_state.riding_veh_id;
     remote_goal->riding_seat_index = remote_state.riding_seat_index;
+    remote_goal->scene_active = remote_state.scene_active;
     memcpy(&remote_goal->veh_state, &remote_state.veh_state, sizeof(MPVehicleState));
-  } else { remote_goal->status = 0; }
+  } else {
+    remote_goal->status = 0;
+    remote_goal->scene_active = 0;
+  }
 }
 }  // namespace
 

@@ -245,6 +245,20 @@
   (none)
   )
 
+(defun mp-remote-scene-active? ()
+  (and *multi-sync-enabled?*
+       (= (pc-multi-get-status) 6)
+       *remote-info*
+       (nonzero? (-> *remote-info* status))
+       (nonzero? (-> *remote-info* scene-active)))
+  )
+
+(defun mp-abort-local-scene! ((scene-proc scene-player))
+  (set! (-> scene-proc aborted?) #t)
+  (set-blackout-frames 0)
+  (none)
+  )
+
 ;; WARN: Return type mismatch process-drawable vs scene-player.
 (defmethod relocate ((this scene-player) (offset int))
   (let ((v1-0 *kernel-context*))
@@ -1238,13 +1252,20 @@
               (lambda :behavior scene-player ()
                 (when (cpad-pressed? 0 triangle)
                   (cond
-                    ((or *mp-remote-wants-skip* (not *multi-sync-enabled?*))
-                     ;; Both want to skip or single player
-                     (set! (-> self aborted?) #t)
+                    ((not *multi-sync-enabled?*)
+                     (mp-abort-local-scene! self)
+                     )
+                    (*mp-remote-wants-skip*
+                     ;; Both want to skip.
+                     (mp-abort-local-scene! self)
                      (when *multi-sync-enabled?*
                        (mp-send-scene-event (mp-scene-state skipped) (-> self scene name))
-                       (set-blackout-frames 0)
-                       )                     )
+                       )
+                     )
+                    ((not (mp-remote-scene-active?))
+                     (format 0 "[MP-Scene] Remote scene inactive. Skipping locally without vote.~%")
+                     (mp-abort-local-scene! self)
+                     )
                     (else
                       ;; Local player wants to skip, but remote hasn't yet
                       (set! *mp-local-wants-skip* #t)

@@ -100,6 +100,7 @@
     (set! (-> *local-info* y) (-> *target* control trans y))
     (set! (-> *local-info* z) (-> *target* control trans z))
     (set! (-> *local-info* angle) (quaternion-y-angle (-> *target* control quat)) )
+    (set! (-> *local-info* scene-active) (if *scene-player* (the uint8 1) (the uint8 0)))
 
     ;; --- Vehicle Piggy-back Extraction ---
     (set! (-> *local-info* veh-state net-id) (the-as uint 0)) ;; Default: no vehicle
