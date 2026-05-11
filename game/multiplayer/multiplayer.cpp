@@ -91,6 +91,11 @@ void handle_packet_receive(LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* rem
               entity.level_hash = state->level_hash;
               entity.riding = state->riding;
               entity.clock = state->clock;
+              entity.tod_frame = state->tod_frame;
+              entity.tod_ratio = state->tod_ratio;
+              entity.weather_cloud = state->weather_cloud;
+              entity.weather_fog = state->weather_fog;
+              entity.weather_rain = state->weather_rain;
               entity.buttons = state->buttons;
               entity.leftx = state->leftx; entity.lefty = state->lefty;
               entity.rightx = state->rightx; entity.righty = state->righty;
@@ -188,6 +193,11 @@ void handle_packet_receive(LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* rem
             local->riding = full_sync->riding;
             memcpy(local->sync_aids, full_sync->sync_aids, sizeof(uint32_t) * 128);
             local->clock = full_sync->clock;
+            remote->tod_frame = full_sync->tod_frame;
+            remote->tod_ratio = full_sync->tod_ratio;
+            remote->weather_cloud = full_sync->weather_cloud;
+            remote->weather_fog = full_sync->weather_fog;
+            remote->weather_rain = full_sync->weather_rain;
             local->sync_flag = 1;
           }
         }
@@ -235,6 +245,11 @@ void handle_packet_send(LocalPlayerInfoGOAL* local, MPEventBufferGOAL* events) {
   local_state.level_hash = local->level;
   local_state.riding = local->riding;
   local_state.clock = local->clock;
+  local_state.tod_frame = local->tod_frame;
+  local_state.tod_ratio = local->tod_ratio;
+  local_state.weather_cloud = local->weather_cloud;
+  local_state.weather_fog = local->weather_fog;
+  local_state.weather_rain = local->weather_rain;
   local_state.buttons = local->buttons;
   local_state.leftx = local->leftx; local_state.lefty = local->lefty;
   local_state.rightx = local->rightx; local_state.righty = local->righty;
@@ -264,6 +279,11 @@ void handle_packet_send(LocalPlayerInfoGOAL* local, MPEventBufferGOAL* events) {
     sync.riding = local->riding;
     memcpy(sync.sync_aids, local->sync_aids, sizeof(uint32_t) * 128);
     sync.clock = local->clock;
+    sync.tod_frame = local->tod_frame;
+    sync.tod_ratio = local->tod_ratio;
+    sync.weather_cloud = local->weather_cloud;
+    sync.weather_fog = local->weather_fog;
+    sync.weather_rain = local->weather_rain;
     MultiplayerManager::broadcast(gMultiplayerData, 1, sync, ENET_PACKET_FLAG_RELIABLE);
   }
 }
@@ -282,6 +302,11 @@ void sync_to_goal(RemotePlayerInfoGOAL* remote_goal) {
     remote_goal->packet_id = remote_state.last_sequence_num;
     remote_goal->riding = remote_state.riding;
     remote_goal->clock = remote_state.clock;
+    remote_goal->tod_frame = remote_state.tod_frame;
+    remote_goal->tod_ratio = remote_state.tod_ratio;
+    remote_goal->weather_cloud = remote_state.weather_cloud;
+    remote_goal->weather_fog = remote_state.weather_fog;
+    remote_goal->weather_rain = remote_state.weather_rain;
     remote_goal->buttons = remote_state.buttons;
     remote_goal->leftx = remote_state.leftx; remote_goal->lefty = remote_state.lefty;
     remote_goal->rightx = remote_state.rightx; remote_goal->righty = remote_state.righty;

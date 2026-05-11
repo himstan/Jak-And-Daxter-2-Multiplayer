@@ -1,0 +1,130 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defun mp-env-clamp01 ((value float))
+  (fmax 0.0 (fmin 1.0 value))
+  )
+
+(defun mp-env-approach ((current float) (target float) (scale float))
+  (+ current (* (- target current) scale))
+  )
+
+(defun mp-env-valid? ()
+  (and *display*
+       *time-of-day*
+       *mood-control*
+       *setting-control*)
+  )
+
+(defun mp-extract-environment-state ()
+  "Copy host time-of-day and weather into the outgoing multiplayer info."
+  (when (and (mp-is-jak?) (mp-env-valid?))
+    (set! (-> *local-info* tod-frame) (-> *display* bg-clock frame-counter))
+    (set! (-> *local-info* tod-ratio) (-> *time-of-day* 0 time-ratio))
+    (set! (-> *local-info* weather-cloud) (mp-env-clamp01 (-> *mood-control* current-interp cloud)))
+    (set! (-> *local-info* weather-fog) (mp-env-clamp01 (-> *mood-control* current-interp fog)))
+    (set! (-> *local-info* weather-rain) (mp-env-clamp01 (-> *setting-control* user-current rain)))
+    )
+  (none)
+  )
+
+(defun mp-snap-remote-time-of-day! ()
+  (when (mp-env-valid?)
+    (set! (-> *display* bg-clock frame-counter) (-> *remote-info* tod-frame))
+    (set! (-> *display* bg-clock old-frame-counter) (+ (-> *remote-info* tod-frame) -1))
+    (send-event (ppointer->process *time-of-day*) 'change 'ratio (-> *remote-info* tod-ratio))
+    )
+  (none)
+  )
+
+(defun mp-smooth-remote-time-of-day! ()
+  (when (mp-env-valid?)
+    (let* ((host-frame (-> *remote-info* tod-frame))
+           (local-frame (-> *display* bg-clock frame-counter))
+           (diff (- host-frame local-frame)))
+      (cond
+        ((or (> diff #x4650) (< diff -18000))
+         (mp-snap-remote-time-of-day!)
+         )
+        (else
+          (let ((adjust (/ diff 4)))
+            (when (nonzero? adjust)
+              (+! (-> *display* bg-clock frame-counter) adjust)
+              (set! (-> *display* bg-clock old-frame-counter)
+                    (+ (-> *display* bg-clock frame-counter) -1))
+              )
+            )
+          (send-event (ppointer->process *time-of-day*) 'change 'ratio (-> *remote-info* tod-ratio))
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-snap-remote-weather! ()
+  (when (mp-env-valid?)
+    (set! (-> *mood-control* overide-weather-flag) #t)
+    (set! (-> *mood-control* overide cloud) (mp-env-clamp01 (-> *remote-info* weather-cloud)))
+    (set! (-> *mood-control* overide fog) (mp-env-clamp01 (-> *remote-info* weather-fog)))
+    (set! (-> *setting-control* user-default rain) (mp-env-clamp01 (-> *remote-info* weather-rain)))
+    (set! (-> *setting-control* user-current rain) (mp-env-clamp01 (-> *remote-info* weather-rain)))
+    )
+  (none)
+  )
+
+(defun mp-smooth-remote-weather! ()
+  (when (mp-env-valid?)
+    (when (not (-> *mood-control* overide-weather-flag))
+      (set! (-> *mood-control* overide cloud) (mp-env-clamp01 (-> *mood-control* current-interp cloud)))
+      (set! (-> *mood-control* overide fog) (mp-env-clamp01 (-> *mood-control* current-interp fog)))
+      )
+    (set! (-> *mood-control* overide-weather-flag) #t)
+    (set! (-> *mood-control* overide cloud)
+          (mp-env-clamp01
+            (mp-env-approach (-> *mood-control* overide cloud) (-> *remote-info* weather-cloud) 0.2)))
+    (set! (-> *mood-control* overide fog)
+          (mp-env-clamp01
+            (mp-env-approach (-> *mood-control* overide fog) (-> *remote-info* weather-fog) 0.2)))
+    (let ((rain (mp-env-clamp01
+                  (mp-env-approach
+                    (-> *setting-control* user-current rain)
+                    (-> *remote-info* weather-rain)
+                    0.2))))
+      (set! (-> *setting-control* user-default rain) rain)
+      (set! (-> *setting-control* user-current rain) rain)
+      )
+    )
+  (none)
+  )
+
+(defun mp-force-apply-remote-environment-state ()
+  "Snap the client to the host environment, used after full-sync loads."
+  (when (and (mp-is-daxter?) (mp-env-valid?))
+    (mp-snap-remote-time-of-day!)
+    (mp-snap-remote-weather!)
+    )
+  (none)
+  )
+
+(defun mp-apply-remote-environment-state ()
+  "Smoothly converge the client environment to the host."
+  (when (and (mp-is-daxter?)
+             *multi-sync-enabled?*
+             (zero? (-> *local-info* sync-flag))
+             *target*
+             (-> *target* control)
+             (not (focus-test? *target* teleporting))
+             (mp-env-valid?))
+    (mp-smooth-remote-time-of-day!)
+    (mp-smooth-remote-weather!)
+    )
+  (none)
+  )
+
+(defun mp-reset-environment-sync ()
+  (when (mp-env-valid?)
+    (set! (-> *mood-control* overide-weather-flag) #f)
+    )
+  (none)
+  )

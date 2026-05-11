@@ -518,6 +518,7 @@
   "mp-puppet-debug.o" ;; added
 
   "mp-clock.o" ;; added
+  "mp-environment.o" ;; added
   "mp-sync-state.o" ;; added
   "mp-event-handlers.o" ;; added
   "mp-waypoint-sync.o" ;; added

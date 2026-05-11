@@ -60,6 +60,11 @@ struct PacketPlayerState {
   uint32_t level_hash;
   uint32_t riding;
   uint64_t clock;
+  uint64_t tod_frame;
+  float tod_ratio;
+  float weather_cloud;
+  float weather_fog;
+  float weather_rain;
   uint16_t buttons;
   uint8_t leftx, lefty, rightx, righty;
   float cam_angle_y;
@@ -207,6 +212,11 @@ struct PacketFullSync {
   uint32_t riding;
   uint32_t sync_aids[128];
   uint64_t clock;
+  uint64_t tod_frame;
+  float tod_ratio;
+  float weather_cloud;
+  float weather_fog;
+  float weather_rain;
   float cam_angle_y;
   uint8_t pad_reserved[16];
 };

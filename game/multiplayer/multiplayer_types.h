@@ -16,6 +16,11 @@ struct RemoteEntityState {
   uint32_t level_hash;
   uint32_t riding;
   uint64_t clock;
+  uint64_t tod_frame;
+  float tod_ratio;
+  float weather_cloud;
+  float weather_fog;
+  float weather_rain;
   uint16_t buttons;
   uint8_t leftx, lefty, rightx, righty;
   float cam_angle_y;
@@ -52,6 +57,11 @@ struct RemotePlayerInfoGOAL {
   uint32_t riding;
   uint32_t pad_clock;
   uint64_t clock;
+  uint64_t tod_frame;
+  float tod_ratio;
+  float weather_cloud;
+  float weather_fog;
+  float weather_rain;
   uint16_t buttons;
   uint8_t leftx, lefty, rightx, righty;
   uint16_t pad_cam;
@@ -75,9 +85,11 @@ struct RemotePlayerInfoGOAL {
   uint8_t active_task_mask[64];
   uint32_t sync_aids_count;
   uint32_t sync_aids[128];
+  uint8_t pad_env[16];
   uint64_t player_procs[2];
   MPVehicleState veh_state;
 };
+static_assert(sizeof(RemotePlayerInfoGOAL) == 928, "RemotePlayerInfoGOAL must match remote-player-info");
 
 struct LocalPlayerInfoGOAL {
   float x, y, z, angle;
@@ -90,6 +102,11 @@ struct LocalPlayerInfoGOAL {
   uint32_t riding;
   uint32_t pad_clock;
   uint64_t clock;
+  uint64_t tod_frame;
+  float tod_ratio;
+  float weather_cloud;
+  float weather_fog;
+  float weather_rain;
   uint16_t buttons;
   uint8_t leftx, lefty, rightx, righty;
   uint16_t pad_cam;
@@ -114,9 +131,11 @@ struct LocalPlayerInfoGOAL {
   uint8_t active_task_mask[64];
   uint32_t sync_aids_count;
   uint32_t sync_aids[128];
+  uint8_t pad_env[16];
   uint64_t player_procs[2];
   MPVehicleState veh_state;
 };
+static_assert(sizeof(LocalPlayerInfoGOAL) == 928, "LocalPlayerInfoGOAL must match local-player-info");
 
 struct MPEnemySyncBufferGOAL {
   uint32_t local_count;

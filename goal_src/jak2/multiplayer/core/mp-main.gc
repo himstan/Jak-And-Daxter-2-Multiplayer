@@ -34,6 +34,7 @@
                     status role (-> *local-info* sync-flag))
             (set! *multi-last-sync-frame* (current-time)))
           (mp-extract-local-data)
+          (mp-extract-environment-state)
           (mp-push-local-events)
           )
         )
@@ -213,6 +214,7 @@
     (mp-manage-remote-puppet)
     (mp-extract-local-stats)
     (mp-apply-remote-world-state)
+    (mp-apply-remote-environment-state)
     
     ;; Process inbound events AFTER receiving them from bridge
     (mp-process-inbound-events)
@@ -284,6 +286,7 @@
       
   ;; Traffic Ghosts
   (mp-cleanup-traffic-ghosts)
+  (mp-reset-environment-sync)
   
   ;; Waypoints
   (mp-waypoint-clear-transition-buffers!)

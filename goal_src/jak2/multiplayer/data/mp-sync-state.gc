@@ -84,6 +84,7 @@
          (set! (-> *target* control camera-pos quad) (-> *target* control trans quad))
          (send-event *camera* 'teleport)
          (set-setting! 'allow-recharge #f 0.0 0)
+         (mp-force-apply-remote-environment-state)
 
          (set! (-> *local-info* sync-flag) (the-as uint 0))
          (set! *multi-sync-enabled?* #t)
