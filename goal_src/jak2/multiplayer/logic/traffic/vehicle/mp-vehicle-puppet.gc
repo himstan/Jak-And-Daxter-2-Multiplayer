@@ -323,6 +323,32 @@
   (none)
   )
 
+(defun mp-vehicle-clear-seat-occupant! ((proc vehicle) (seat-index int) (replacement object))
+  "Remove stale civilian occupants before a synced player claims a vehicle seat."
+  (let ((client-rider-proc (get-rider-in-seat proc seat-index)))
+    (when (and client-rider-proc
+               (nonzero? client-rider-proc)
+               (!= client-rider-proc replacement)
+               (!= client-rider-proc *target*)
+               (!= client-rider-proc *mp-puppet*))
+      (cond
+        ((type? client-rider-proc vehicle-rider)
+         (send-event client-rider-proc 'rider-off)
+         (deactivate client-rider-proc)
+         )
+        ((type? client-rider-proc citizen)
+         (send-event client-rider-proc 'traffic-off-force)
+         )
+        (else
+         (remove-rider proc client-rider-proc)
+         )
+        )
+      (set! (-> proc rider-array seat-index) (the-as handle #f))
+      )
+    )
+  (none)
+  )
+
 (defun mp-vehicle-update-riders ((proc vehicle) (slot mp-vehicle-state))
   "Spawn or despawn civilian riders on a puppet vehicle to match the host's state."
   (dotimes (i 4)
@@ -366,6 +392,12 @@
             (deactivate client-rider-proc)
             )
          (set! (-> proc rider-array i) (the-as handle #f))
+         )
+        ((and (or (= host-rider-type 1) (= host-rider-type 2))
+              client-rider-proc
+              (type? client-rider-proc vehicle-rider))
+         ;; Host has a player here. Remove any stale civilian rider before the puppet attaches.
+         (mp-vehicle-clear-seat-occupant! proc i (the-as object #f))
          )
         )
       )

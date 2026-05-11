@@ -46,6 +46,7 @@
 (define-extern mp-vehicle-apply-remote (function none))
 (define-extern mp-vehicle-apply-hijacks (function none))
 (define-extern mp-vehicle-apply-ghost-state (function vehicle mp-vehicle-state none))
+(define-extern mp-vehicle-clear-seat-occupant! (function vehicle int object none))
 
 ;; Common Traffic
 (define-extern mp-sync-traffic-update (function none))
