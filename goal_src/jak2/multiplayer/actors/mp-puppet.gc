@@ -407,6 +407,34 @@
     )
   )
 
+(defun mp-target-board-state? ((state symbol))
+  "Check if a target state is any jetboard state."
+  (case state
+    (('target-board-start
+      'target-board-stance
+      'target-board-walk
+      'target-board-duck-stance
+      'target-board-jump
+      'target-board-falling
+      'target-board-jump-kick
+      'target-board-halfpipe
+      'target-board-get-on
+      'target-board-get-off
+      'target-board-hit
+      )
+     #t
+     )
+    (else #f)
+    )
+  )
+
+(defun mp-puppet-in-board-state? ((proc target) (cur-state symbol))
+  "Check if the local puppet already has board focus or is transitioning through board setup."
+  (or (focus-test? proc board)
+      (mp-target-board-state? cur-state)
+      )
+  )
+
 (defun mp-puppet-apply-ghost-correction! ((proc target))
   "Smoothly nudge the puppet target's root towards the ghost position and inject inputs."
   (let ((ghost *mp-puppet-ghost*))
@@ -417,7 +445,7 @@
       (let ((cur-state (if (-> proc state) (-> proc state name) #f)))
         ;; 1. Position/Rotation Sync (P-Controller)
         ;; SKIP if in a state that handles its own anchoring (pilot, board, etc.)
-        (when (not (focus-test? proc pilot board tube flut mech pole))
+        (when (not (focus-test? proc pilot tube flut mech pole))
           (let ((dist (vector-vector-distance (-> proc control trans) (-> ghost trans))))
             (cond
               ((> dist (meters 15.0))
@@ -447,6 +475,7 @@
         ;; 3. State Bumping (Reconciliation Fallback)
         (let ((ghost-state (mp-target-get-state-from-id (-> ghost state-id))))
           (when (and ghost-state (!= cur-state ghost-state))
+            (+! *mp-puppet-state-mismatch-count* 1)
             (cond
               ((or (= ghost-state 'target-death) (= ghost-state 'target-indax-death))
                (format 0 "[MP-Puppet] Authoritative Death! Bumping ~A -> ~A~%" cur-state ghost-state)
@@ -467,25 +496,36 @@
                (go-process proc target-ride-along)
                (set! *mp-puppet-state-mismatch-count* 0)
                )
+              ((and (mp-target-board-state? ghost-state)
+                    (not (mp-puppet-in-board-state? proc cur-state)))
+               (format 0 "[MP-Puppet] Authoritative Board! Bumping ~A -> ~A~%" cur-state ghost-state)
+               ;; Use the native mode change so target-board-init spawns and opens the board model.
+               (send-event proc 'change-mode 'board #f)
+               (set! *mp-puppet-state-mismatch-count* 0)
+               )
+              ((and (not (mp-target-board-state? ghost-state))
+                    (mp-puppet-in-board-state? proc cur-state))
+               (when (>= *mp-puppet-state-mismatch-count* 10)
+                 (format 0 "[MP-Puppet] Authoritative Non-Board! Bumping ~A -> ~A~%" cur-state ghost-state)
+                 (send-event proc 'change-mode 'normal)
+                 (set! *mp-puppet-state-mismatch-count* 0)
+                 )
+               )
               ((= cur-state 'process-drawable-art-error)
-                (+! *mp-puppet-state-mismatch-count* 1)
                 (when (>= *mp-puppet-state-mismatch-count* 10)
                   (format 0 "[MP-Puppet] Stuck in drawable art error! Forcing exit...~%")
-                  (if (mp-is-jak?)
-                    (send-event *mp-puppet* 'change-mode 'indax #f)
-                    (send-event *mp-puppet* 'change-mode 'normal #f)
-                  )
+                  (deactivate proc)
+                  (set! *mp-puppet* (the-as target #f))
                   (set! *mp-puppet-state-mismatch-count* 0)
                   )
               )
               ((= cur-state 'target-ride-along)
                ;; Puppet thinks it's riding, but ghost is NOT.
                (when (!= ghost-state 'target-ride-along)
-                 (+! *mp-puppet-state-mismatch-count* 1)
                  (when (>= *mp-puppet-state-mismatch-count* 10)
                    (format 0 "[MP-Puppet] Stuck in ride-along! Forcing exit to ~A~%" ghost-state)
                    ;; Transition directly to the authoritative state via event; :exit handles cleanup
-                   (send-event *mp-puppet* 'change-mode 'indax #f)
+                   (send-event proc 'change-mode 'indax #f)
                    (set! *mp-puppet-state-mismatch-count* 0)
                    )
                  )
@@ -502,7 +542,6 @@
                               (= ghost-state 'target-indax-pilot-edge-grab)
                               )
                           )
-                 (+! *mp-puppet-state-mismatch-count* 1)
                  (when (>= *mp-puppet-state-mismatch-count* 10)
                    (format 0 "[MP-Puppet] Stuck in hang! Forcing exit via 'end-mode...~%")
                    (send-event proc 'end-mode 'edge-grab)

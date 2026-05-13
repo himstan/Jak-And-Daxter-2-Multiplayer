@@ -82,6 +82,11 @@
               )
              ((= v1-5 'tube)
               (go target-tube-start (process->handle (the-as process (-> arg3 param 1)))))
+             ((= v1-5 'board)
+              (if (logtest? (-> self game features) (game-feature board))
+                  (go target-board-start (process->handle (the-as process (-> arg3 param 1))))
+                  )
+              )
              ((or (= v1-5 'pilot) (= v1-5 'pilot-daxter) (= v1-5 'pilot-race) (= v1-5 'pilot-race-daxter))
               (let ((vehicle-proc (the-as object (-> arg3 param 1))))
                 (when (the-as uint vehicle-proc)
@@ -106,7 +111,7 @@
         (('edge-grab)
          (go target-indax-edge-grab)
          )
-        (('swim 'slide 'vehicle-mount 'board-mount)
+        (('swim 'slide 'vehicle-mount)
          #f
          )
         (('pole-grab)
@@ -269,6 +274,15 @@
   )
 
 ;; WARN: Return type mismatch object vs none.
+(defbehavior target-indax-update-art-group-backup! target ()
+  (when (or (not (and (-> self sidekick) (!= (the-as uint (-> self sidekick)) 0)))
+            (!= (-> self draw art-group) (-> self sidekick 0 draw art-group))
+            )
+    (set! (-> self indax art-group-backup) (-> self draw art-group))
+    )
+  (none)
+  )
+
 (defbehavior target-indax-init target ((reset-velocity? symbol))
   (let ((surf (-> self control current-surface)))
     (if (and surf (not (zero? (the-as uint surf))) (not (logtest? (the-as uint surf) 3)) (< (the-as uint surf) #x70000000))
@@ -296,7 +310,7 @@
       )
   (set! *mp-local-player-is-respawning* #f)
   (set-time! (-> self indax indax-start-time))
-  (set! (-> self indax art-group-backup) (-> self draw art-group))
+  (target-indax-update-art-group-backup!)
   ;; 1. Sidekick draws Daxter
   (if (and (-> self sidekick) (!= (the-as uint (-> self sidekick)) 0))
       (set! (-> self draw art-group) (-> self sidekick 0 draw art-group)))

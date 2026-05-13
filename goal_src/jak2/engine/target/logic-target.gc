@@ -2463,14 +2463,8 @@
     )
   (target-calc-camera-pos)
   (set! (-> self control tongue-counter) 0)
-  (cond
-    ((focus-test? self indax)
-     )
-    (else
-      (target-gun-joint-points)
-      (target-board-joint-points)
-      )
-    )
+  (target-gun-joint-points)
+  (target-board-joint-points)
   0
   (none)
   )

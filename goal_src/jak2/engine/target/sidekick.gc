@@ -117,6 +117,10 @@
     )
   )
 
+(define *sidekick-board-local-offset*
+  (new 'static 'vector :x (meters -0.5) :y (meters 0.0) :z (meters -1.0) :w 0.0)
+  )
+
 (defun cspace<-cspace+transformq! ((arg0 cspace) (arg1 cspace) (arg2 transformq))
   (rlet ((acc :class vf)
          (Q :class vf)
@@ -173,6 +177,28 @@
       (.svf (&-> s4-0 quad 2) vf5)
       s4-0
       )
+    )
+  )
+
+(defun cspace<-board-transformq+local-offset-normalized! ((arg0 cspace) (arg1 transformq) (arg2 vector))
+  ;; MULTIPLAYER GUARD: Keep the board attachment from dereferencing stale board transforms.
+  (if (or (not arg0) (zero? (the-as uint arg0)) (logtest? (the-as uint arg0) 15) (>= (the-as uint arg0) #x70000000)
+          (not arg1) (zero? (the-as uint arg1)) (logtest? (the-as uint arg1) 15) (>= (the-as uint arg1) #x70000000)
+          (not arg2) (zero? (the-as uint arg2)) (logtest? (the-as uint arg2) 15) (>= (the-as uint arg2) #x70000000))
+      (return (the-as matrix #f)))
+
+  (let ((b0 (-> arg0 bone)))
+    (if (or (not b0) (zero? (the-as uint b0)) (logtest? (the-as uint b0) 15) (>= (the-as uint b0) #x70000000))
+        (return (the-as matrix #f)))
+    )
+
+  (let ((ret (matrix<-transformq+trans! (-> arg0 bone transform) arg1 arg2)))
+    (when ret
+      (vector-normalize! (the-as vector (-> ret vector)) 1.0)
+      (vector-normalize! (-> ret vector 1) 1.0)
+      (vector-normalize! (-> ret vector 2) 1.0)
+      )
+    ret
     )
   )
 
@@ -238,10 +264,12 @@
          (('board)
           (set! v0-0 (-> self node-list data))
           (set! (-> (the-as (inline-array cspace) v0-0) 0 param0)
-                (the-as (function cspace transformq none) cspace<-cspace-normalized!)
+                (the-as (function cspace transformq none) cspace<-board-transformq+local-offset-normalized!)
                 )
-          (set! (-> (the-as (inline-array cspace) v0-0) 0 param1) (the-as basic (-> self parent 0 node-list data 25)))
-          (set! (-> (the-as (inline-array cspace) v0-0) 0 param2) #f)
+          (set! (-> (the-as (inline-array cspace) v0-0) 0 param1)
+                (the-as basic (the-as transformq (-> self parent 0 board board-trans)))
+                )
+          (set! (-> (the-as (inline-array cspace) v0-0) 0 param2) (the-as basic *sidekick-board-local-offset*))
           )
          (('manipy)
           (let ((mp (the-as manipy (-> block param 1))))
