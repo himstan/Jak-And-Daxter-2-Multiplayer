@@ -12,6 +12,7 @@
 (declare-type citizen-norm civilian)
 (declare-type citizen-fat civilian)
 (declare-type citizen-chick civilian)
+(declare-type crimson-guard citizen)
 
 ;; Forward-declare vehicle subtypes (defined in cwi.gd).
 (declare-type bikea vehicle)
@@ -53,7 +54,8 @@
 (define-extern pc-multi-send-traffic (function uint none))
 (define-extern pc-multi-receive-traffic (function uint none))
 
-;; Safe cross-module hook for guard target assignment
+;; Safe cross-module hooks for guard target assignment
 (define *mp-set-guard-target* (the-as (function citizen handle none) #f))
+(define *mp-get-guard-target* (the-as (function citizen handle) #f))
 
 (none)

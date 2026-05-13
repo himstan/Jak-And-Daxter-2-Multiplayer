@@ -696,11 +696,176 @@
       )
   )
 
+(defun mp-pedestrian-terminal-state? ((target-sym symbol))
+  (or (= target-sym 'knocked)
+      (= target-sym 'knocked-off-vehicle)
+      (= target-sym 'die)
+      (= target-sym 'die-falling)
+      (= target-sym 'die-fast))
+  )
+
+(defun mp-pedestrian-state-current-or-pending? ((this citizen) (target-sym symbol))
+  (or (and (-> this state) (= (-> this state name) target-sym))
+      (and (-> this next-state) (= (-> this next-state name) target-sym)))
+  )
+
+(defun mp-pedestrian-state-retry-ready? ((rec mp-traffic-ghost-record))
+  (time-elapsed? (-> rec last-state-bump-time) (seconds 0.35))
+  )
+
+(defun mp-pedestrian-puppet-locked? ((this citizen))
+  "True when this pedestrian is a non-authoritative ghost-driven puppet."
+  (and (not (mp-is-traffic-authoritative?))
+       (nonzero? (-> this net-id))
+       (mp-get-traffic-ghost (-> this net-id)))
+  )
+
+(defun mp-pedestrian-authorize-remote-trans! ((rec mp-traffic-ghost-record) (target-state-id uint))
+  "Mark the next state entry as coming from the ghost controller, not local AI."
+  (set! (-> rec authorized-trans-state-id) (the-as uint32 target-state-id))
+  (set! (-> rec authorized-trans-frame) (current-time))
+  (none)
+  )
+
+(defun mp-pedestrian-lock-local-state-manager! ((this citizen) (rec mp-traffic-ghost-record))
+  "Disable local transition ticks for puppet pedestrians after ghost sync."
+  (when (and rec (mp-pedestrian-puppet-locked? this))
+    (set! (-> this trans-hook) #f)
+    )
+  (none)
+  )
+
+(defun mp-pedestrian-prepare-wait-state! ((this citizen))
+  "Mirror active's setup before entering wait from remote state sync."
+  (let ((active-st (method-state (-> this type) (the-as basic 'active))))
+    (when (and active-st (nonzero? active-st))
+      (set! (-> this wait-return-state) (the-as (state citizen) active-st))
+      (set! (-> this wait-time) (the-as time-frame (rnd-int-range this 300 1500)))
+      )
+    )
+  (none)
+  )
+
+(defun mp-pedestrian-enter-remote-state! ((this citizen) (rec mp-traffic-ghost-record) (target-state-id uint) (target-sym symbol))
+  "Enter a replicated pedestrian state once per authoritative state-id edge."
+  (let ((st (method-state (-> this type) (the-as basic target-sym))))
+    (when (and st (nonzero? st))
+      (when (= target-sym 'wait)
+        (mp-pedestrian-prepare-wait-state! this)
+        )
+      (mp-pedestrian-authorize-remote-trans! rec target-state-id)
+      (set! (-> this next-state) (the-as state st))
+      (enter-state (the-as object st) (the-as object #f) (the-as object #f) (the-as object #f) (the-as object #f) (the-as object #f))
+      (mp-pedestrian-lock-local-state-manager! this rec)
+      (set! (-> rec last-applied-state-id) (the-as uint32 target-state-id))
+      (set! (-> rec last-state-bump-time) (current-time))
+      )
+    )
+  (none)
+  )
+
+(defun mp-pedestrian-sync-remote-state! ((this citizen) (rec mp-traffic-ghost-record))
+  "Edge-trigger remote state entry so locomotion anims start once, then keep looping."
+  (let ((target-state-id (the uint (-> rec ghost-state-id))))
+    (when (nonzero? target-state-id)
+      (let ((target-sym (mp-ped-get-state-from-id target-state-id)))
+        (when (and target-sym
+                   (or (not (mp-pedestrian-death-started? this))
+                       (mp-pedestrian-terminal-state? target-sym)))
+          (if (mp-pedestrian-state-current-or-pending? this target-sym)
+              (set! (-> rec last-applied-state-id) (the-as uint32 target-state-id))
+              (when (or (!= (the-as uint32 target-state-id) (-> rec last-applied-state-id))
+                        (mp-pedestrian-state-retry-ready? rec))
+                (mp-pedestrian-enter-remote-state! this rec target-state-id target-sym)
+                )
+              )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-pedestrian-ghost-focus-proc ((rec mp-traffic-ghost-record))
+  "Resolve a synced pedestrian target role to the local process that represents it."
+  (when (nonzero? (-> rec ghost-target-aid))
+    (let ((target-role (the-as uint8 (+ -1 (-> rec ghost-target-aid)))))
+      (if (= target-role (-> *local-info* role))
+          (return (the-as process-focusable *target*))
+          (return (the-as process-focusable (mp-get-remote-target-process)))
+          )
+      )
+    )
+  (the-as process-focusable #f)
+  )
+
+(defun mp-pedestrian-sync-guard-target! ((this citizen) (rec mp-traffic-ghost-record))
+  "Mirror authoritative crimson-guard targeting before local AI chooses a target."
+  (when (and *mp-set-guard-target* (nonzero? (-> rec ghost-target-aid)))
+    (let ((focus-proc (mp-pedestrian-ghost-focus-proc rec)))
+      (when (mp-guard-target-debug-ready? (-> rec net-id))
+        (format 0
+                "[MP-GuardTarget] nid=~D phase=set state=pre aid=~D focus=~S focus-type=~S "
+                (-> rec net-id)
+                (-> rec ghost-target-aid)
+                (mp-guard-target-debug-handle-label (-> this focus handle))
+                (mp-guard-target-debug-handle-type (-> this focus handle))
+                )
+        (let ((target-handle (if *mp-get-guard-target*
+                                 (*mp-get-guard-target* this)
+                                 (-> this focus handle)
+                                 )))
+          (format 0
+                  "traffic=~S traffic-type=~S resolved=~S resolved-type=~S lock=0~%"
+                  (mp-guard-target-debug-handle-label target-handle)
+                  (mp-guard-target-debug-handle-type target-handle)
+                (mp-guard-target-debug-process-label focus-proc)
+                (mp-guard-target-debug-process-type focus-proc)
+                )
+          )
+        )
+      (when (and focus-proc (nonzero? focus-proc))
+        (*mp-set-guard-target* this (process->handle focus-proc))
+        (when (mp-guard-target-debug-ready? (-> rec net-id))
+          (format 0
+                  "[MP-GuardTarget] nid=~D phase=set state=post aid=~D focus=~S focus-type=~S "
+                  (-> rec net-id)
+                  (-> rec ghost-target-aid)
+                  (mp-guard-target-debug-handle-label (-> this focus handle))
+                  (mp-guard-target-debug-handle-type (-> this focus handle))
+                  )
+          (let ((target-handle (if *mp-get-guard-target*
+                                   (*mp-get-guard-target* this)
+                                   (-> this focus handle)
+                                   )))
+            (format 0
+                    "traffic=~S traffic-type=~S lock=1~%"
+                    (mp-guard-target-debug-handle-label target-handle)
+                    (mp-guard-target-debug-handle-type target-handle)
+                  )
+            )
+          (mp-guard-target-debug-bump!)
+          )
+        )
+      )
+    )
+  (none)
+  )
+
 (defun mp-citizen-common-post-hijack ((this citizen))
   "Run original citizen common-post first, then state sync and position correction.
    Both run here (not via send-event) because pp == this == *current-process* in
    common-post context, making enter-state safe. send-event context is unreliable
    for enter-state since pp may differ from the target citizen."
+  (when (and (not (mp-is-traffic-authoritative?))
+             (nonzero? (-> this net-id)))
+    (let ((rec (mp-get-traffic-ghost (-> this net-id))))
+      (when rec
+        (mp-pedestrian-sync-guard-target! this rec)
+        (mp-pedestrian-lock-local-state-manager! this rec)
+        )
+      )
+    )
   (if *old-citizen-common-post*
       (*old-citizen-common-post* this)
       )
@@ -743,49 +908,11 @@
           )
 
         ;; 2. State Sync
-        (let ((target-sym (mp-ped-get-state-from-id (the uint (-> rec ghost-state-id)))))
-          (when (and target-sym
-                     (!= (if (-> this state) (-> this state name) #f) target-sym)
-                     ;; Allow sync if not dead yet, OR if we are transitioning INTO a terminal state
-                     (or (not (mp-pedestrian-death-started? this))
-                         (= target-sym 'knocked)
-                         (= target-sym 'knocked-off-vehicle)
-                         (= target-sym 'die)
-                         (= target-sym 'die-falling)
-                         (= target-sym 'die-fast)))
-            (let ((st (method-state (-> this type) (the-as basic target-sym))))
-              (when (and st (nonzero? st))
-                ;; For 'wait: mirror what active's :trans does before go-virtual wait.
-                ;; enter-state immediately calls the new state's :trans, which checks
-                ;; wait-return-state. If it is 0 (never set), go(0) crashes.
-                ;; We set it to the 'active state and reset wait-time, exactly as vanilla does.
-                (when (= target-sym 'wait)
-                  (let ((active-st (method-state (-> this type) (the-as basic 'active))))
-                    (when (and active-st (nonzero? active-st))
-                      (set! (-> this wait-return-state) (the-as (state citizen) active-st))
-                      (set! (-> this wait-time) (the-as time-frame (rnd-int-range this 300 1500)))
-                      )
-                    )
-                  )
-                (set! (-> this next-state) (the-as state st))
-                (enter-state (the-as object st) (the-as object #f) (the-as object #f) (the-as object #f) (the-as object #f) (the-as object #f))
-                )
-              )
-            )
-          )
+        (mp-pedestrian-sync-remote-state! this rec)
 
-        ;; Sync guard target
-        (when (and (nonzero? (-> rec ghost-target-aid)) *mp-set-guard-target*)
-          (let ((target-role (the-as uint8 (+ -1 (-> rec ghost-target-aid)))))
-            (let ((focus-proc (if (= target-role (-> *local-info* role))
-                                  (the-as process-focusable *target*)
-                                  (the-as process-focusable (mp-get-remote-target-process)))))
-              (when (and focus-proc (nonzero? focus-proc))
-                (*mp-set-guard-target* this (process->handle focus-proc))
-                )
-              )
-            )
-          )
+        ;; Keep the target pinned after vanilla logic as well.
+        (mp-pedestrian-sync-guard-target! this rec)
+        (mp-pedestrian-lock-local-state-manager! this rec)
 
         )
       )

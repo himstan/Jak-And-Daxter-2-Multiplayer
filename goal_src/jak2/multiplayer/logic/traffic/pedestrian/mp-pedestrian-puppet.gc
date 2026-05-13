@@ -104,6 +104,10 @@
       (when rec
         (set! (-> rec net-id) (-> slot net-id))
         (set! (-> rec entity-kind) (the uint8 0))  ;; 0 = pedestrian
+        (set! (-> rec last-applied-state-id) (the uint32 0))
+        (set! (-> rec last-state-bump-time) 0)
+        (set! (-> rec authorized-trans-state-id) (the uint32 0))
+        (set! (-> rec authorized-trans-frame) 0)
         )
       )
     (when rec
@@ -113,6 +117,21 @@
       (set! (-> rec ghost-state-id) (-> slot state-id))
       (set! (-> rec ghost-hp) (-> slot hp))
       (set! (-> rec ghost-target-aid) (-> slot target-aid))
+      (when (mp-guard-target-debug-ready? (-> slot net-id))
+        (format 0
+                "[MP-GuardTarget] nid=~D phase=recv state=~S aid=~D "
+                (-> slot net-id)
+                (mp-ped-get-state-from-id (the uint (-> slot state-id)))
+                (-> rec ghost-target-aid)
+                )
+        (format 0
+                "focus=~S focus-type=~S traffic=~S traffic-type=~S lock=0~%"
+                'NONE
+                'none
+                'NONE
+                'none
+                )
+        )
       (set! (-> rec last-seen) (current-time))
       )
     )

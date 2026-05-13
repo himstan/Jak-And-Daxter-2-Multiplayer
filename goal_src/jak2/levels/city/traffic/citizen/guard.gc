@@ -1436,6 +1436,123 @@
     )
   )
 
+(defun mp-crimson-guard-debug-lock? ((guard crimson-guard))
+  (if (logtest? (enemy-flag lock-focus) (-> guard enemy-flags)) 1 0)
+  )
+
+(defun mp-crimson-guard-debug-sight? ((guard crimson-guard))
+  (if (logtest? (-> guard flags) (citizen-flag target-in-sight)) 1 0)
+  )
+
+(defun mp-crimson-guard-debug-log! ((guard crimson-guard) (phase symbol) (state symbol) (target-pos-source symbol))
+  (when (mp-guard-target-debug-ready? (-> guard net-id))
+    (format 0
+            "[MP-GuardTarget] nid=~D phase=~S state=~S aid=0 focus=~S focus-type=~S "
+            (-> guard net-id)
+            phase
+            state
+            (mp-guard-target-debug-handle-label (-> guard focus handle))
+            (mp-guard-target-debug-handle-type (-> guard focus handle))
+            )
+    (format 0
+            "traffic=~S traffic-type=~S lock=~D dist=~F "
+            (mp-guard-target-debug-handle-label (-> guard traffic-target-status handle))
+            (mp-guard-target-debug-handle-type (-> guard traffic-target-status handle))
+            (mp-crimson-guard-debug-lock? guard)
+            (-> guard target-self-xz-dist)
+            )
+    (format 0
+            "angle=~F sight=~D target-pos-src=~S~%"
+            (-> guard target-y-angle)
+            (mp-crimson-guard-debug-sight? guard)
+            target-pos-source
+            )
+    (when (or (= phase 'm220-post) (= phase 'state))
+      (mp-guard-target-debug-bump!)
+      )
+    )
+  (none)
+  )
+
+(defun mp-crimson-guard-debug-log-traffic-change! ((guard crimson-guard) (phase symbol) (reason symbol) (new-target handle))
+  (when (mp-guard-target-debug-ready? (-> guard net-id))
+    (format 0
+            "[MP-GuardTarget] nid=~D phase=~S state=~S aid=0 focus=~S focus-type=~S "
+            (-> guard net-id)
+            phase
+            reason
+            (mp-guard-target-debug-handle-label (-> guard focus handle))
+            (mp-guard-target-debug-handle-type (-> guard focus handle))
+            )
+    (format 0
+            "traffic=~S traffic-type=~S new-traffic=~S new-traffic-type=~S lock=~D~%"
+            (mp-guard-target-debug-handle-label (-> guard traffic-target-status handle))
+            (mp-guard-target-debug-handle-type (-> guard traffic-target-status handle))
+            (mp-guard-target-debug-handle-label new-target)
+            (mp-guard-target-debug-handle-type new-target)
+            (mp-crimson-guard-debug-lock? guard)
+            )
+    )
+  (none)
+  )
+
+(defun mp-crimson-guard-debug-log-state! ((guard crimson-guard) (state symbol))
+  (when (mp-guard-target-debug-allowed? (-> guard net-id))
+    (format 0
+            "[MP-GuardTarget] nid=~D phase=state state=~S aid=0 focus=~S focus-type=~S "
+            (-> guard net-id)
+            state
+            (mp-guard-target-debug-handle-label (-> guard focus handle))
+            (mp-guard-target-debug-handle-type (-> guard focus handle))
+            )
+    (format 0
+            "traffic=~S traffic-type=~S lock=~D dist=~F "
+            (mp-guard-target-debug-handle-label (-> guard traffic-target-status handle))
+            (mp-guard-target-debug-handle-type (-> guard traffic-target-status handle))
+            (mp-crimson-guard-debug-lock? guard)
+            (-> guard target-self-xz-dist)
+            )
+    (format 0
+            "angle=~F sight=~D~%"
+            (-> guard target-y-angle)
+            (mp-crimson-guard-debug-sight? guard)
+            )
+    )
+  (none)
+  )
+
+(defun mp-crimson-guard-puppet-remote-target ((guard crimson-guard))
+  "Return the synced remote player target that puppet guards must keep pinned through local traffic refresh."
+  (when (and (not (mp-is-traffic-authoritative?))
+             (nonzero? (-> guard net-id))
+             (and (-> guard traffic-target-status handle)
+                  (nonzero? (-> guard traffic-target-status handle)))
+             )
+    (let ((target-proc (handle->process-safe (-> guard traffic-target-status handle))))
+      (when (and target-proc
+                 (= (-> target-proc type) target)
+                 (= (mp-guard-target-debug-process-label target-proc) 'REMOTE-PUPPET)
+                 )
+        (return (the-as process-focusable target-proc))
+        )
+      )
+    )
+  (the-as process-focusable #f)
+  )
+
+(defun mp-crimson-guard-restore-puppet-target! ((guard crimson-guard) (target-proc process-focusable))
+  (when (and target-proc (nonzero? target-proc))
+    (let ((target-handle (process->handle target-proc)))
+      (set! (-> guard focus handle) target-handle)
+      (set! (-> guard traffic-target-status handle) target-handle)
+      (set! (-> guard traffic-target-status position quad) (-> (get-trans target-proc 3) quad))
+      (set! (-> guard traffic-target-status velocity quad) (-> (get-transv target-proc) quad))
+      (mp-crimson-guard-debug-log-traffic-change! guard 'm220-pin-restore 'remote-puppet target-handle)
+      )
+    )
+  (none)
+  )
+
 (defmethod crimson-guard-method-220 ((this crimson-guard))
   (rlet ((acc :class vf)
          (vf0 :class vf)
@@ -1445,11 +1562,18 @@
          (vf7 :class vf)
          )
     (init-vf0-vector)
+    (mp-crimson-guard-debug-log! this 'm220-pre (if (-> this state) (-> this state name) 'none) 'pre)
     (cond
       ((logtest? (-> this controller traffic alert-state flags) (traffic-alert-flag guard-multi-focus))
        (logior! (-> this enemy-flags) (enemy-flag multi-focus))
        (when (not (logtest? (enemy-flag lock-focus) (-> this enemy-flags)))
          (let ((a0-4 (find-closest-to-with-collide-lists (-> this controller traffic) this (-> this focus collide-with))))
+           (mp-crimson-guard-debug-log-traffic-change!
+             this
+             'm220-change
+             (if a0-4 'replace-multi-focus 'clear-multi-focus)
+             (if a0-4 (process->handle a0-4) (the-as handle #f))
+             )
            (if a0-4
                (set! (-> this traffic-target-status handle) (process->handle a0-4))
                (set! (-> this traffic-target-status handle) (the-as handle #f))
@@ -1462,8 +1586,9 @@
           (logclear! (-> this enemy-flags) (enemy-flag multi-focus))
           (let ((v1-21 (the-as process (as-type (handle->process (-> this traffic-target-status handle)) process-focusable)))
                 )
-            (if (and v1-21 (!= (-> v1-21 type) target))
-                (set! (-> this traffic-target-status handle) (the-as handle #f))
+            (when (and v1-21 (!= (-> v1-21 type) target))
+              (mp-crimson-guard-debug-log-traffic-change! this 'm220-change 'clear-non-target (the-as handle #f))
+              (set! (-> this traffic-target-status handle) (the-as handle #f))
                 )
             )
           )
@@ -1472,7 +1597,8 @@
     (let ((a1-3 (new 'stack-no-clear 'vector)))
       (set! (-> a1-3 quad) (-> this root trans quad))
       (+! (-> a1-3 y) 8192.0)
-      (let ((s5-1 (traffic-engine-method-49
+      (let ((remote-puppet-target (mp-crimson-guard-puppet-remote-target this))
+            (s5-1 (traffic-engine-method-49
                     (-> this controller traffic)
                     a1-3
                     (-> this traffic-id)
@@ -1480,6 +1606,7 @@
                     )
                   )
             )
+        (mp-crimson-guard-restore-puppet-target! this remote-puppet-target)
         (enemy-method-63
           this
           (the-as
@@ -1540,6 +1667,7 @@
                    )
              )
             (else
+              (mp-crimson-guard-debug-log-traffic-change! this 'm220-change 'clear-invalid-focus (the-as handle #f))
               (set! (-> this traffic-target-status handle) (the-as handle #f))
               (logclear! (-> this flags) (citizen-flag persistent in-pursuit hostile))
               (citizen-method-195 this (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> this root quat)))
@@ -1550,6 +1678,7 @@
         )
       )
     0
+    (mp-crimson-guard-debug-log! this 'm220-post (if (-> this state) (-> this state name) 'none) 'focus)
     (none)
     )
   )
@@ -1769,6 +1898,7 @@
       )
     (logior! (-> self flags) (citizen-flag persistent in-pursuit))
     (set! (-> self root nav-radius) 6144.0)
+    (mp-crimson-guard-debug-log-state! self 'hostile)
     )
   :exit (behavior ()
     (when (-> self nav)
@@ -1961,6 +2091,7 @@
       (set! (-> v1-10 target-speed) 0.0)
       )
     0
+    (mp-crimson-guard-debug-log-state! self 'close-attack)
     )
   :exit (behavior ()
     (let ((v1-3 (-> (the-as collide-shape-prim-group (-> self root root-prim)) child 3)))
@@ -2030,6 +2161,7 @@
     (set-time! (-> self state-time))
     (set-time! (-> self last-time-see-target))
     (crimson-guard-method-220 self)
+    (mp-crimson-guard-debug-log-state! self 'gun-shoot)
     (set! (-> self miss-amount) (lerp-scale 0.0 16384.0 (-> self target-self-dist) 40960.0 122880.0))
     (set! (-> self miss-amount) 16384.0)
     (let ((v1-27 (handle->process (-> self focus handle))))
@@ -2850,6 +2982,7 @@
     (set-time! (-> self state-time))
     (set! (-> self lazer-sound) (new 'static 'sound-id))
     0
+    (mp-crimson-guard-debug-log-state! self 'attack)
     )
   :exit (behavior ()
     (if (nonzero? (-> self lazer-sound))
@@ -3692,8 +3825,47 @@
     (let ((guard (the-as crimson-guard proc)))
       (set! (-> guard focus handle) target)
       (set! (-> guard traffic-target-status handle) target)
+      (when (and target (nonzero? target))
+        (logior! (-> guard enemy-flags) (enemy-flag lock-focus))
+        )
+      (when (mp-guard-target-debug-ready? (-> guard net-id))
+        (format 0
+                "[MP-GuardTarget] nid=~D phase=set-impl state=~S aid=0 target=~S target-type=~S "
+                (-> guard net-id)
+                (if (-> guard state) (-> guard state name) 'none)
+                (mp-guard-target-debug-handle-label target)
+                (mp-guard-target-debug-handle-type target)
+                )
+        (format 0
+                "focus=~S focus-type=~S traffic=~S traffic-type=~S lock=~D~%"
+                (mp-guard-target-debug-handle-label (-> guard focus handle))
+                (mp-guard-target-debug-handle-type (-> guard focus handle))
+                (mp-guard-target-debug-handle-label (-> guard traffic-target-status handle))
+                (mp-guard-target-debug-handle-type (-> guard traffic-target-status handle))
+                (mp-crimson-guard-debug-lock? guard)
+                )
+        )
       )
     )
   (none)
   )
 (set! *mp-set-guard-target* mp-set-guard-target-impl)
+
+(defun mp-get-guard-target-impl ((proc citizen))
+  (when (type? proc crimson-guard)
+    (let* ((guard (the-as crimson-guard proc))
+           (status-target (-> guard traffic-target-status handle))
+           )
+      (when (and status-target (nonzero? status-target))
+        (return status-target)
+        )
+      (let ((focus-target (-> guard focus handle)))
+        (when (and focus-target (nonzero? focus-target))
+          (return focus-target)
+          )
+        )
+      )
+    )
+  (the-as handle #f)
+  )
+(set! *mp-get-guard-target* mp-get-guard-target-impl)

@@ -109,6 +109,54 @@
 
 ;; --- Pedestrian Packing (Authoritative Side) ---
 
+(defun mp-pedestrian-target-aid-from-process ((focus process))
+  "Encode the focused player role as 1=Host, 2=Client, or 0 if it is not a player target."
+  (when (and focus (nonzero? focus))
+    (if (= focus *target*)
+        (return (the uint8 (+ 1 (-> *local-info* role))))
+        )
+    (let ((remote (mp-get-remote-target-process)))
+      (when (and remote (= focus remote))
+        (return (the uint8 (+ 1 (if (= (-> *local-info* role) 0) 1 0))))
+        )
+      )
+    )
+  (the uint8 0)
+  )
+
+(defun mp-pedestrian-guard-target-aid ((e-proc citizen))
+  "Read a pedestrian guard's synced player target from guard combat state."
+  (let ((target-handle (if *mp-get-guard-target*
+                           (*mp-get-guard-target* e-proc)
+                           (-> e-proc focus handle)
+                           )))
+    (mp-pedestrian-target-aid-from-process (handle->process-safe target-handle))
+    )
+  )
+
+(defun mp-pedestrian-debug-pack-guard-target! ((e-proc citizen) (slot mp-pedestrian-state) (target-handle handle))
+  (when (mp-guard-target-debug-ready? (-> slot net-id))
+    (format 0
+            "[MP-GuardTarget] nid=~D phase=pack state=~S aid=~D src=~S src-type=~S "
+            (-> slot net-id)
+            (mp-ped-get-state-from-id (the uint (-> slot state-id)))
+            (-> slot target-aid)
+            (mp-guard-target-debug-handle-label target-handle)
+            (mp-guard-target-debug-handle-type target-handle)
+            )
+    (format 0
+            "focus=~S focus-type=~S traffic=~S traffic-type=~S lock=~D~%"
+            (mp-guard-target-debug-handle-label (-> e-proc focus handle))
+            (mp-guard-target-debug-handle-type (-> e-proc focus handle))
+            (mp-guard-target-debug-handle-label target-handle)
+            (mp-guard-target-debug-handle-type target-handle)
+            0
+            )
+    (mp-guard-target-debug-bump!)
+    )
+  (none)
+  )
+
 (defun mp-pedestrian-pack ((e-proc citizen) (slot mp-pedestrian-state))
   (set! (-> slot net-id) (-> e-proc net-id))
   (set! (-> slot object-type) (the uint8 (-> e-proc traffic-type)))
@@ -132,18 +180,12 @@
     )
 
   ;; Sync target for Crimson Guards
-  (set! (-> slot target-aid) (the uint8 0))
-  (let ((focus (handle->process (-> e-proc focus handle))))
-    (when focus
-      (if (= focus *target*)
-          (set! (-> slot target-aid) (the uint8 (+ 1 (-> *local-info* role))))
-          (let ((remote (mp-get-remote-target-process)))
-             (if (and remote (= focus remote))
-                 (set! (-> slot target-aid) (the uint8 (+ 1 (if (= (-> *local-info* role) 0) 1 0))))
-                 )
-             )
-          )
-      )
+  (let ((target-handle (if *mp-get-guard-target*
+                           (*mp-get-guard-target* e-proc)
+                           (-> e-proc focus handle)
+                           )))
+    (set! (-> slot target-aid) (mp-pedestrian-target-aid-from-process (handle->process-safe target-handle)))
+    (mp-pedestrian-debug-pack-guard-target! e-proc slot target-handle)
     )
 
   (none)

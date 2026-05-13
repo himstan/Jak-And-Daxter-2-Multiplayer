@@ -128,6 +128,61 @@
                 (the-as process-focusable #f)))
           (the-as process-focusable #f)))))
 
+(defun mp-guard-target-debug-allowed? ((net-id uint))
+  (and *mp-guard-target-debug?*
+       (nonzero? net-id)
+       (or (zero? *mp-guard-target-debug-net-id*)
+           (= net-id *mp-guard-target-debug-net-id*))
+       )
+  )
+
+(defun mp-guard-target-debug-ready? ((net-id uint))
+  (and (mp-guard-target-debug-allowed? net-id)
+       (>= (current-time) *mp-guard-target-debug-next-time*)
+       )
+  )
+
+(defun mp-guard-target-debug-bump! ()
+  (set! *mp-guard-target-debug-next-time* (+ (current-time) (seconds 0.35)))
+  (none)
+  )
+
+(defun mp-guard-target-debug-process-label ((proc process))
+  (cond
+    ((or (not proc) (zero? proc)) 'NONE)
+    ((= proc *target*) 'LOCAL)
+    (else
+      (let ((remote (mp-get-remote-target-process)))
+        (if (and remote (= proc remote))
+            'REMOTE-PUPPET
+            'OTHER
+            )
+        )
+      )
+    )
+  )
+
+(defun mp-guard-target-debug-handle-label ((target-handle handle))
+  (if (and target-handle (nonzero? target-handle))
+      (mp-guard-target-debug-process-label (handle->process-safe target-handle))
+      'NONE
+      )
+  )
+
+(defun mp-guard-target-debug-process-type ((proc process))
+  (if (and proc (nonzero? proc))
+      (-> proc type symbol)
+      'none
+      )
+  )
+
+(defun mp-guard-target-debug-handle-type ((target-handle handle))
+  (if (and target-handle (nonzero? target-handle))
+      (mp-guard-target-debug-process-type (handle->process-safe target-handle))
+      'none
+      )
+  )
+
 (define *old-process-entity-status* (the-as (function process entity-perm-status symbol entity-perm-status) #f))
 
 (defbehavior mp-traffic-event-handler-hijack citizen ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))

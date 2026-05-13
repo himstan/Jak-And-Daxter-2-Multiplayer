@@ -4252,10 +4252,13 @@
              (flag "Pedestrian Debug Draw" *mp-traffic-ped-debug?* dm-boolean-toggle-pick-func)
              (flag "Vehicle Debug Draw" *mp-traffic-veh-debug?* dm-boolean-toggle-pick-func)
              (float-var "Debug Draw Dist" *mp-traffic-debug-dist* dm-float-toggle-pick-func 10 1 #t 0 200 1)
-             )          (menu
+             (flag "Guard Target Debug?" *mp-guard-target-debug?* dm-boolean-toggle-pick-func)
+             (int-var "Guard Target Net ID" *mp-guard-target-debug-net-id* dm-int-toggle-pick-func 1 10 #t 0 1000)
+             )          
+           (menu
             "Tasks"
             (flag "Task Debug Draw" *mp-debug-task-sync* dm-boolean-toggle-pick-func)
-            )
+             )
            )
         )
       )

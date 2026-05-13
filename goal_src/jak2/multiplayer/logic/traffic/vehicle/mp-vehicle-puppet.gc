@@ -94,6 +94,10 @@
         (set! (-> rec entity-kind) (the uint8 0))
         (set! (-> rec ghost-state-id) (the uint8 0))
         (set! (-> rec ghost-target-aid) (the uint8 0))
+        (set! (-> rec last-applied-state-id) (the uint32 0))
+        (set! (-> rec last-state-bump-time) 0)
+        (set! (-> rec authorized-trans-state-id) (the uint32 0))
+        (set! (-> rec authorized-trans-frame) 0)
         )
       )
     )
@@ -423,6 +427,10 @@
       (when rec
         (set! (-> rec net-id) (-> slot net-id))
         (set! (-> rec entity-kind) (the uint8 1))
+        (set! (-> rec last-applied-state-id) (the uint32 0))
+        (set! (-> rec last-state-bump-time) 0)
+        (set! (-> rec authorized-trans-state-id) (the uint32 0))
+        (set! (-> rec authorized-trans-frame) 0)
         )
       )
     (when rec
