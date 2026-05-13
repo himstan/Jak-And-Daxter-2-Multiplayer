@@ -86,7 +86,7 @@
                    )
                  (set! prev-frame curr-frame)
                  )
-               (let ((f26-1 (lerp-scale 0.0 1.0 (-> self control ctrl-xz-vel) 16384.0 32768.0)))
+               (let ((f26-1 (lerp-scale 0.0 1.0 (-> self control ctrl-xz-vel) 16384.0 40960.0)))
                  (set! f30-0 (seek f30-0 f26-1 (* 4.0 (seconds-per-frame)))))
                (let ((v1-98 (-> self skel root-channel 1))
                      (f0-23 (- 1.0 f30-0)))
@@ -94,7 +94,7 @@
                  (set! (-> v1-98 frame-interp 0) f0-23))
                0
                (let* ((f0-27 (* (current-cycle-distance (-> self skel)) (-> self control scale x)))
-                      (f0-29 (/ (* 60.0 (-> self control ctrl-xz-vel)) (* 60.0 f0-27))))
+                      (f0-29 (* (/ (* 60.0 (-> self control ctrl-xz-vel)) (* 60.0 f0-27)) *indax-walk-anim-speed*)))
                  (ja :num! (loop! f0-29)))
                (ja :chan 1 :frame-interp0 0.0 :frame-interp1 0.0)
                (ja :chan 1 :num! (chan 0))

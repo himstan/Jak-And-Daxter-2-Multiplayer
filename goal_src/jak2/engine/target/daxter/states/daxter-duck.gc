@@ -167,7 +167,7 @@
     (until #f
       (suspend)
       (let* ((f0-7 (* (current-cycle-distance (-> self skel)) (-> self control scale x)))
-             (f0-9 (/ (* 60.0 (-> self control ctrl-xz-vel)) (* 60.0 f0-7)))
+             (f0-9 (* (/ (* 60.0 (-> self control ctrl-xz-vel)) (* 60.0 f0-7)) *indax-walk-anim-speed*))
              )
         (ja :num! (loop! f0-9))
         )
