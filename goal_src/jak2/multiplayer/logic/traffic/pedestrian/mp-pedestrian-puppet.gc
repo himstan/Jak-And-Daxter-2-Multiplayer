@@ -21,6 +21,32 @@
     found-proc)
 )
 
+(defun mp-pedestrian-find-spawn-branch ((params traffic-object-spawn-params))
+  "Find the traffic branch needed by vanilla citizen active/walk states."
+  (let ((branch (the-as nav-branch #f)))
+    (when (and *traffic-engine* (nonzero? (the-as uint *traffic-engine*)))
+      (let ((facing-dir (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> params rotation))))
+        (let ((seg (find-best-segment *traffic-engine* (-> params position) facing-dir 1)))
+          (when (and seg (nonzero? seg))
+            (set! branch (-> seg branch))
+            )
+          )
+        )
+      )
+    branch)
+)
+
+(defun mp-pedestrian-ensure-controller-branch! ((proc citizen))
+  "Best-effort branch init for puppet citizens spawned outside normal traffic segments."
+  (when (and proc
+             (nonzero? proc)
+             (-> proc nav)
+             (zero? (-> proc controller branch)))
+    (citizen-method-195 proc (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> proc root quat)))
+    )
+  (none)
+)
+
 (defun mp-pedestrian-spawn-puppet ((slot mp-pedestrian-state))
   (when (mp-is-traffic-ready?)
     ;; BUDGET/SAFETY: Only spawn if art is loaded to avoid linking crash
@@ -41,11 +67,13 @@
         (set-vector! (-> params velocity) 0.0 0.0 0.0 1.0)
         (set! (-> params flags) (the-as traffic-spawn-flags 0))
         (set! (-> params nav-mesh) (find-nearest-nav-mesh (-> params position) (the-as float #x7f800000)))
+        (set! (-> params nav-branch) (mp-pedestrian-find-spawn-branch params))
 
         (let ((proc (traffic-object-spawn (the-as process *traffic-manager*) params)))
           (when (and proc (nonzero? proc))
             (let ((c-proc (the-as citizen proc)))
               (send-event proc 'traffic-activate params *traffic-engine*) 
+              (mp-pedestrian-ensure-controller-branch! c-proc)
               (when (and (-> c-proc draw) (nonzero? (-> c-proc draw)))
                 (logclear! (-> c-proc draw status) (draw-control-status no-draw))
                 )
@@ -91,6 +119,8 @@
 
   ;; 3. Sync Process State & Visibility
   (when (and proc (nonzero? proc))
+    (mp-pedestrian-ensure-controller-branch! proc)
+
     ;; Keep alive: prevent traffic-manager culling
     (logior! (-> proc flags) (citizen-flag persistent))
 
