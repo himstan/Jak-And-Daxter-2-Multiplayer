@@ -201,14 +201,118 @@
     )
   )
 
+(defun swingpole-target-on-pole? ((target-handle handle))
+  (let ((proc (the-as process (as-type (handle->process target-handle) process-focusable))))
+    (and proc (focus-test? (the-as process-focusable proc) pole))
+    )
+  )
+
+(defun swingpole-remember-release! ((pole swingpole) (target-handle handle))
+  (when (handle->process target-handle)
+    (set! (-> pole released1) (-> pole released0))
+    (set! (-> pole release-time1) (-> pole release-time0))
+    (set! (-> pole released0) target-handle)
+    (set! (-> pole release-time0) (current-time))
+    )
+  (none)
+  )
+
+(defun swingpole-clear-stale-targets! ((pole swingpole))
+  (when (and (handle->process (-> pole target0))
+             (not (swingpole-target-on-pole? (-> pole target0))))
+    (swingpole-remember-release! pole (-> pole target0))
+    (set! (-> pole target0) (the-as handle #f))
+    )
+  (when (and (handle->process (-> pole target1))
+             (not (swingpole-target-on-pole? (-> pole target1))))
+    (swingpole-remember-release! pole (-> pole target1))
+    (set! (-> pole target1) (the-as handle #f))
+    )
+  (none)
+  )
+
+(defun swingpole-target-tracked? ((pole swingpole) (target-handle handle))
+  (and (or (= (-> pole target0) target-handle)
+           (= (-> pole target1) target-handle))
+       (swingpole-target-on-pole? target-handle)
+       )
+  )
+
+(defun swingpole-regrab-blocked? ((pole swingpole) (target-handle handle))
+  (or (and (= (-> pole released0) target-handle)
+           (not (time-elapsed? (-> pole release-time0) (seconds 0.5))))
+      (and (= (-> pole released1) target-handle)
+           (not (time-elapsed? (-> pole release-time1) (seconds 0.5))))
+      )
+  )
+
+(defun swingpole-add-target! ((pole swingpole) (target-handle handle))
+  (swingpole-clear-stale-targets! pole)
+  (cond
+    ((= (-> pole target0) target-handle)
+     #t
+     )
+    ((= (-> pole target1) target-handle)
+     #t
+     )
+    ((not (handle->process (-> pole target0)))
+     (set! (-> pole target0) target-handle)
+     #t
+     )
+    ((not (handle->process (-> pole target1)))
+     (set! (-> pole target1) target-handle)
+     #t
+     )
+    (else
+      #f
+      )
+    )
+  )
+
+(defun swingpole-any-target-on-pole? ((pole swingpole))
+  (swingpole-clear-stale-targets! pole)
+  (or (swingpole-target-on-pole? (-> pole target0))
+      (swingpole-target-on-pole? (-> pole target1))
+      )
+  )
+
+(defun swingpole-handle-grab! ((pole swingpole) (proc process) (touch-entry touching-shapes-entry))
+  (let ((target-handle (process->handle proc)))
+    (swingpole-clear-stale-targets! pole)
+    (cond
+      ((swingpole-target-tracked? pole target-handle)
+       #f
+       )
+      ((swingpole-regrab-blocked? pole target-handle)
+       #f
+       )
+      ((send-event proc 'pole-grab touch-entry)
+       (swingpole-add-target! pole target-handle)
+       )
+      (else
+        #f
+        )
+      )
+      )
+  )
+
 (defstate idle (swingpole)
   :virtual #t
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
     (case message
       (('touch 'attack)
-       (if (send-event proc 'pole-grab (-> block param 0))
+       (if (swingpole-handle-grab! self proc (the-as touching-shapes-entry (-> block param 0)))
            (go-virtual active (process->handle proc))
            )
+       #f
+       )
+      (('mp-pole-grab)
+       (let ((target-proc (the-as process (as-type (handle->process (the-as handle (-> block param 0))) process-focusable))))
+         (when target-proc
+           (swingpole-add-target! self (process->handle target-proc))
+           (go-virtual active (process->handle target-proc))
+           )
+         )
        #f
        )
       )
@@ -237,12 +341,27 @@
 
 (defstate active (swingpole)
   :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('touch 'attack)
+       (swingpole-handle-grab! self proc (the-as touching-shapes-entry (-> block param 0)))
+       #f
+       )
+      (('mp-pole-grab)
+       (let ((target-proc (the-as process (as-type (handle->process (the-as handle (-> block param 0))) process-focusable))))
+         (when target-proc
+           (swingpole-add-target! self (process->handle target-proc))
+           )
+         )
+       #f
+       )
+      )
+    )
   :code (behavior ((arg0 handle))
+    (swingpole-add-target! self arg0)
     (move-along-path self)
     (suspend)
-    (while (let ((a0-7 (the-as process (as-type (handle->process arg0) process-focusable))))
-             (and a0-7 (focus-test? (the-as process-focusable a0-7) pole))
-             )
+    (while (swingpole-any-target-on-pole? self)
       (move-along-path self)
       (suspend)
       )
@@ -291,6 +410,12 @@
   (set! (-> this dir y) 0.0)
   (vector-normalize! (-> this dir) 1.0)
   (set! (-> this edge-length) 8192.0)
+  (set! (-> this target0) (the-as handle #f))
+  (set! (-> this target1) (the-as handle #f))
+  (set! (-> this released0) (the-as handle #f))
+  (set! (-> this released1) (the-as handle #f))
+  (set! (-> this release-time0) 0)
+  (set! (-> this release-time1) 0)
   (let ((s4-1 (new 'stack-no-clear 'sync-info-params)))
     (let ((a0-19 (res-lump-value arg0 'options uint128 :time -1000000000.0))
           (v1-22 0)
@@ -342,6 +467,12 @@
   (set! (-> self joint-track) arg0)
   (set-vector! (-> self dir) 0.0 0.0 1.0 1.0)
   (set! (-> self edge-length) 8192.0)
+  (set! (-> self target0) (the-as handle #f))
+  (set! (-> self target1) (the-as handle #f))
+  (set! (-> self released0) (the-as handle #f))
+  (set! (-> self released1) (the-as handle #f))
+  (set! (-> self release-time0) 0)
+  (set! (-> self release-time1) 0)
   (go-virtual idle)
   )
 

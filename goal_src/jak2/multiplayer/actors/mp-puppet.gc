@@ -530,6 +530,33 @@
       )
   )
 
+(defun mp-target-pole-state? ((state symbol))
+  "Check if a target state is any swingpole state."
+  (case state
+    (('target-pole-cycle
+      'target-pole-flip-up
+      'target-pole-flip-up-jump
+      'target-pole-flip-forward
+      'target-pole-flip-forward-jump
+      'target-indax-pole-cycle
+      'target-indax-pole-flip-up
+      'target-indax-pole-flip-up-jump
+      'target-indax-pole-flip-forward
+      'target-indax-pole-flip-forward-jump
+      )
+     #t
+     )
+    (else #f)
+    )
+  )
+
+(defun mp-puppet-in-pole-state? ((proc target) (cur-state symbol))
+  "Check if the local puppet is attached to or transitioning through a swingpole."
+  (or (focus-test? proc pole)
+      (mp-target-pole-state? cur-state)
+      )
+  )
+
 (defun mp-puppet-apply-ghost-correction! ((proc target))
   "Smoothly nudge the puppet target's root towards the ghost position and inject inputs."
   (let ((ghost *mp-puppet-ghost*))
@@ -577,6 +604,14 @@
                (when (>= *mp-puppet-state-mismatch-count* 10)
                  (format 0 "[MP-Puppet] Authoritative Non-Board! Bumping ~A -> ~A~%" cur-state ghost-state)
                  (send-event proc 'change-mode 'normal)
+                 (set! *mp-puppet-state-mismatch-count* 0)
+                 )
+               )
+              ((and (not (mp-target-pole-state? ghost-state))
+                    (mp-puppet-in-pole-state? proc cur-state))
+               (when (>= *mp-puppet-state-mismatch-count* 10)
+                 (format 0 "[MP-Puppet] Authoritative Non-Pole! Bumping ~A -> ~A~%" cur-state ghost-state)
+                 (send-event proc 'end-mode 'pole)
                  (set! *mp-puppet-state-mismatch-count* 0)
                  )
                )

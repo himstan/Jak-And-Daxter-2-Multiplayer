@@ -9,6 +9,7 @@
 (define-extern type-from-vehicle-type (function vehicle-type type))
 (define-extern vehicle-spawn (function process type traffic-object-spawn-params process-drawable))
 (define-extern target-indax-edge-grab (state target))
+(define-extern target-indax-pole-cycle (state handle target))
 
 ;; DECOMP BEGINS
 
@@ -1093,6 +1094,17 @@
              (go target-indax-pilot-edge-grab (-> gp-0 pilot-edge-grab))
              (go target-pilot-edge-grab (-> gp-0 pilot-edge-grab))
              )
+       )
+      (return #t)
+      )
+      (('mp-pole-grab-synced)
+       (let ((pole-handle (the-as handle (-> arg3 param 0))))
+         (when (handle->process pole-handle)
+           (if (focus-test? self indax)
+               (go target-indax-pole-cycle pole-handle)
+               (go target-pole-cycle pole-handle)
+               )
+           )
          )
        (return #t)
        )

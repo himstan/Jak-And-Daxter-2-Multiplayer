@@ -46,6 +46,7 @@
 (defconstant MP_EVENT_WAYPOINT_BUMP (the-as uint 24))
 (defconstant MP_EVENT_WAYPOINT_SNAPSHOT (the-as uint 25))
 (defconstant MP_EVENT_WAYPOINT_REQUEST (the-as uint 26))
+(defconstant MP_EVENT_POLE_GRAB (the-as uint 27))
 
 ;; --- Helper functions for handle resolution ---
 
@@ -751,6 +752,8 @@
 (define *daxter-pole-y-offset* 950.0)
 (define *local-riding?* #f)
 (define *mp-processing-remote-event* #f)
+(define-perm *mp-last-pole-grab-handle* handle (the-as handle #f))
+(define-perm *mp-pole-grab-latched?* symbol #f)
 (define-perm *mp-last-remote-scene-active* uint (the uint 0))
 (define *mp-remote-wants-skip* #f)
 (define *mp-local-wants-skip* #f)
@@ -925,6 +928,8 @@
 
 ;; --- Authoritative Sync Functions ---
 (define-extern mp-send-edge-grab-event (function symbol none))
+(define-extern mp-send-pole-grab-event (function handle none))
+(define-extern mp-clear-pole-grab-event-latch (function handle none))
 (define-extern mp-receive-waypoint-event (function mp-waypoint-event symbol none))
 (define-extern mp-waypoint-event-same-target? (function mp-waypoint-event mp-waypoint-event symbol))
 (define-extern mp-waypoint-sync-tick (function none))
