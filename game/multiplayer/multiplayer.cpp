@@ -38,6 +38,19 @@ bool packet_has_counted_payload(const ENetPacket* packet, uint32_t count, size_t
   return packet && packet->dataLength >= counted_packet_size(count, element_size);
 }
 
+bool has_host_continue(const LocalPlayerInfoGOAL* local) {
+  if (!local) {
+    return false;
+  }
+
+  for (size_t i = 0; i < sizeof(local->host_continue); ++i) {
+    if (local->host_continue[i] != 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void reset_remote_traffic_buffers() {
   memset(&gMultiplayerData.traffic_buffer, 0, sizeof(gMultiplayerData.traffic_buffer));
   memset(gMultiplayerData.ped_last_updated, 0, sizeof(gMultiplayerData.ped_last_updated));
@@ -108,6 +121,13 @@ void handle_packet_receive(LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* rem
               entity.scene_active = state->scene_active;
               entity.last_sequence_num = state->header.sequenceNum;
               memcpy(&entity.veh_state, &state->veh_state, sizeof(MPVehicleState));
+
+              if (gMultiplayerData.local_role == 0 && state->netId == 1 &&
+                  state->status == (uint8_t)MultiplayerStatus::IN_GAME &&
+                  gMultiplayerData.pending_full_sync) {
+                gMultiplayerData.pending_full_sync = false;
+                lg::info("[Multiplayer] Client entered game. Full sync acknowledged.");
+              }
 
               if (state->netId == 0) { // If this is the Host
                 remote->money = state->money;
@@ -201,7 +221,9 @@ void handle_packet_receive(LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* rem
             remote->weather_cloud = full_sync->weather_cloud;
             remote->weather_fog = full_sync->weather_fog;
             remote->weather_rain = full_sync->weather_rain;
-            local->sync_flag = 1;
+            if (local->sync_flag <= 1) {
+              local->sync_flag = 1;
+            }
           }
         }
         enet_packet_destroy(event.packet);
@@ -218,6 +240,7 @@ void handle_packet_receive(LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* rem
             gMultiplayerData.join_status = (int)MultiplayerStatus::CONNECTED_LOBBY;
           } else {
             gMultiplayerData.pending_full_sync = true;
+            gMultiplayerData.last_full_sync_send_time = 0;
           }
         }
         break;
@@ -266,14 +289,28 @@ void handle_packet_send(LocalPlayerInfoGOAL* local, MPEventBufferGOAL* events) {
   local_state.riding_seat_index = local->riding_seat_index;
   local_state.scene_active = local->scene_active;
   local_state.money = local->money;
- local_state.gems = local->gems; local_state.skill = local->skill;
+  local_state.gems = local->gems; local_state.skill = local->skill;
   memcpy(local_state.task_mask, local->task_mask, 64);
   memcpy(local_state.active_task_mask, local->active_task_mask, 64);
   memcpy(&local_state.veh_state, &local->veh_state, sizeof(MPVehicleState));
   MultiplayerManager::broadcast(gMultiplayerData, 0, local_state, ENET_PACKET_FLAG_UNSEQUENCED);
 
   if (gMultiplayerData.local_role == 0 && gMultiplayerData.pending_full_sync) {
-    gMultiplayerData.pending_full_sync = false;
+    uint32_t current_time = enet_time_get();
+    if (!gMultiplayerData.host || gMultiplayerData.host->connectedPeers == 0) {
+      return;
+    }
+
+    if (gMultiplayerData.join_status != (int)MultiplayerStatus::IN_GAME || !has_host_continue(local)) {
+      return;
+    }
+
+    if (gMultiplayerData.last_full_sync_send_time != 0 &&
+        current_time - gMultiplayerData.last_full_sync_send_time < 500) {
+      return;
+    }
+    gMultiplayerData.last_full_sync_send_time = current_time;
+
     PacketFullSync sync; memset(&sync, 0, sizeof(PacketFullSync));
     sync.header.type = PacketType::FULL_SYNC;
     sync.header.sequenceNum = ++gMultiplayerData.sequence_num;
@@ -293,6 +330,7 @@ void handle_packet_send(LocalPlayerInfoGOAL* local, MPEventBufferGOAL* events) {
     sync.weather_fog = local->weather_fog;
     sync.weather_rain = local->weather_rain;
     MultiplayerManager::broadcast(gMultiplayerData, 1, sync, ENET_PACKET_FLAG_RELIABLE);
+    lg::info("[Multiplayer] Sent full sync to joining client.");
   }
 }
 
@@ -526,7 +564,10 @@ int pc_multi_get_status() { return MultiplayerScanner::get_status(gMultiplayerDa
 void pc_multi_set_status(int status) {
   int old_status = gMultiplayerData.join_status; gMultiplayerData.join_status = status;
   if (old_status != status) lg::info("[Multiplayer] Status transition: {} -> {}", old_status, status);
-  if (gMultiplayerData.local_role == 0 && status == 6 && old_status != 6) gMultiplayerData.pending_full_sync = true;
+  if (gMultiplayerData.local_role == 0 && status == 6 && old_status != 6) {
+    gMultiplayerData.pending_full_sync = true;
+    gMultiplayerData.last_full_sync_send_time = 0;
+  }
 }
 void pc_multi_stop_search() { MultiplayerScanner::stop_search(gMultiplayerData); }
 void pc_multi_start_search() { MultiplayerScanner::start_search(gMultiplayerData); }

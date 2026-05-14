@@ -1,19 +1,53 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-perm *mp-full-sync-wait-log-time* time-frame 0)
+
+(defun mp-log-full-sync-wait! ((reason symbol))
+  (when (>= (- (current-time) *mp-full-sync-wait-log-time*) (seconds 2))
+    (format 0 "[MP-Client] Waiting for full sync: ~A.~%" reason)
+    (set! *mp-full-sync-wait-log-time* (current-time))
+    )
+  (none))
+
+(defun mp-copy-host-continue-name! ()
+  "Copy the host continue bytes into the client string and refresh string length metadata."
+  (let ((dst (-> *mp-continue-name* data))
+        (src (-> *local-info* host-continue))
+        (len 0))
+    (dotimes (i 32)
+      (set! (-> dst i) (the uint 0))
+      )
+    (while (and (< len 31) (nonzero? (-> src len)))
+      (set! (-> dst len) (-> src len))
+      (+! len 1)
+      )
+    (set! (-> dst len) (the uint 0))
+    (set! (-> dst -4) (the-as uint len))
+    len
+    )
+  )
+
 (defun mp-handle-full-sync-state ()
   "Handle Full Sync State Machine (MUST BE ABOVE GUARDS)"
   (when (and (mp-is-daxter?) (nonzero? (-> *local-info* sync-flag)))
     (case (-> *local-info* sync-flag)
       ((1) ;; Phase 1: Request Hard Load
-       (format 0 "[MP-Client] Starting Full Sync Hard Load...~%")
-       (let ((dst (-> *mp-continue-name* data))
-             (src (-> *local-info* host-continue)))
-         (dotimes (i 32) (set! (-> dst i) (-> src i))))
-       (when (nonzero? (length *mp-continue-name*))
-         (set-continue! *game-info* *mp-continue-name* #t)
-         (initialize! *game-info* 'game (the-as game-save #f) *mp-continue-name*)
-         (set! (-> *local-info* sync-flag) (the-as uint 2))
+       (let ((name-len (mp-copy-host-continue-name!)))
+         (cond
+           ((zero? name-len)
+            (mp-log-full-sync-wait! 'empty-continue)
+            )
+           ((not (get-continue-by-name *game-info* *mp-continue-name*))
+            (mp-log-full-sync-wait! 'unknown-continue)
+            )
+           (else
+            (format 0 "[MP-Client] Starting Full Sync Hard Load for ~S...~%" *mp-continue-name*)
+            (set-continue! *game-info* *mp-continue-name* #t)
+            (initialize! *game-info* 'game (the-as game-save #f) *mp-continue-name*)
+            (set! (-> *local-info* sync-flag) (the-as uint 2))
+            )
+           )
          )
        )
       ((2) ;; Phase 2: Wait for Load & Level Paging
@@ -85,6 +119,10 @@
          (send-event *camera* 'teleport)
          (set-setting! 'allow-recharge #f 0.0 0)
          (mp-force-apply-remote-environment-state)
+         (set-blackout-frames 0)
+         (when *progress-process*
+           (set-next-state (-> *progress-process* 0) 'go-away 0)
+           )
 
          (set! (-> *local-info* sync-flag) (the-as uint 0))
          (set! *multi-sync-enabled?* #t)
