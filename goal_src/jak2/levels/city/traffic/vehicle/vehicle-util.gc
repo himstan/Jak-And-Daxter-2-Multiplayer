@@ -199,7 +199,7 @@
         )
     (dotimes (seat-offset (- (get-seat-count veh) 1))
       (let ((seat-idx (+ seat-offset 1)))
-        (when (and (logtest? 1 (-> veh info seat-array seat-idx flags))
+        (when (and (nonzero? (-> veh info seat-array seat-idx flags))
                    (not (get-rider-in-seat veh seat-idx))
                    )
           (compute-seat-position veh seat-pos seat-idx)
@@ -279,7 +279,7 @@
                       (set! boarding-seat
                             (if driver-seat-player?
                                 (vehicle-find-empty-passenger-seat this (-> s5-0 matrices 0 vector 1))
-                                (get-best-seat-for-vehicle this (-> s5-0 matrices 0 vector 1) 1 0)
+                                (get-best-seat-for-vehicle this (-> s5-0 matrices 0 vector 1) #xff 0)
                                 )
                             )
                       (when (!= boarding-seat -1)
@@ -406,7 +406,7 @@
                                 (s4-1
                                   ;; Use 'pilot-daxter mode if the target is currently in Daxter mode.
                                   (let ((mode (if (focus-test? tgt indax) 'pilot-daxter 'pilot)))
-                                    (send-event tgt 'change-mode mode this 0 #f)
+                                    (send-event tgt 'change-mode mode this boarding-seat #f)
                                     )
                                   )
                                 (else
