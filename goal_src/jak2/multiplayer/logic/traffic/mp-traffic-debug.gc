@@ -176,9 +176,10 @@
                             )
                           (let ((rec (mp-get-traffic-ghost net-id)))
                             (let ((nudged-str (cond ((= nudged-status 1) "Y") ((= nudged-status 2) "SNAP") (else "N"))))
-                              (format text-str "ID: ~D (~S) G:~S~%TYPE: ~S PAD: ~D~%" 
+                              (format text-str "ID: ~D (~S) S:~S G:~S~%TYPE: ~S PAD: ~D~%" 
                                       net-id 
                                       status-str
+                                      cur-state
                                       (if rec (mp-veh-get-state-from-id (the uint (-> rec ghost-state-id))) 'none)
                                       type-str
                                       pad-idx)
