@@ -194,7 +194,9 @@
       (set! (-> a3-7 w) 1.0)
       (t9-14 a0-43 (the-as vector a1-11) (the-as quaternion a2-8) a3-7)
       )
-    (set-darkjak-texture-morph! f30-0)
+    (when (not (focus-test? self indax))
+      (set-darkjak-texture-morph! f30-0)
+      )
     (cond
       ((and (= f30-0 0.0) (not (time-elapsed? (-> self teleport-time) (seconds 0.5))))
        (set! (-> self skel override 0) 0.00001)
