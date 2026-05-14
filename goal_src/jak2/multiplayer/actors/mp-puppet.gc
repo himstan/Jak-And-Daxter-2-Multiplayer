@@ -11,6 +11,9 @@
 (define *mp-puppet* (the-as target #f))
 (define *mp-puppet-ghost* (new 'static 'mp-target-ghost-record))
 (define-perm *mp-puppet-state-mismatch-count* int 0)
+(define-perm *mp-puppet-last-packet-id* uint (the uint 0))
+(define-perm *mp-puppet-last-fresh-input-time* time-frame (the-as time-frame 0))
+(define *mp-puppet-input-stale-time* (seconds 0.2))
 
 ;; --- Puppet Sync Logic ---
 
@@ -278,7 +281,7 @@
   "Update the ghost record from incoming remote player info."
   (set-vector! (-> ghost trans) (-> info x) (-> info y) (-> info z) 1.0)
   (quaternion-axis-angle! (-> ghost quat) 0.0 1.0 0.0 (-> info angle)) ;; Using y-axis angle
-  ;; (vector-copy! (-> ghost velocity) ...)
+  (vector-copy! (-> ghost velocity) (-> info velocity))
   (set! (-> ghost state-id) (-> info state-id))
   (set! (-> ghost buttons) (-> info buttons))
   (set! (-> ghost leftx) (-> info leftx))
@@ -386,6 +389,45 @@
   (none)
   )
 
+(defun mp-puppet-note-remote-packet! ((info remote-player-info))
+  "Track the last fresh remote player packet so input cannot replay forever."
+  (let ((packet-id (-> info packet-id)))
+    (when (!= packet-id *mp-puppet-last-packet-id*)
+      (set! *mp-puppet-last-packet-id* packet-id)
+      (set! *mp-puppet-last-fresh-input-time* (current-time))
+      )
+    )
+  (none)
+  )
+
+(defun mp-puppet-remote-input-stale? ()
+  "Has remote input gone stale long enough that replaying it is unsafe?"
+  (or (zero? *mp-puppet-last-fresh-input-time*)
+      (> (- (current-time) *mp-puppet-last-fresh-input-time*) *mp-puppet-input-stale-time*)
+      )
+  )
+
+(defun mp-puppet-neutralize-pad! ((pad cpad-info))
+  "Clear remote movement intent while preserving normal pad history bookkeeping."
+  (mp-puppet-update-pad pad (the-as uint16 0) (the uint8 128) (the uint8 128) (the uint8 128) (the uint8 128))
+  )
+
+(defun mp-puppet-apply-input! ((proc target) (ghost mp-target-ghost-record))
+  "Inject fresh remote input, or neutral input if packets have stopped arriving."
+  (when (-> proc control cpad)
+    (if (mp-puppet-remote-input-stale?)
+        (mp-puppet-neutralize-pad! (-> proc control cpad))
+        (mp-puppet-update-pad (-> proc control cpad)
+                              (the-as uint16 (-> ghost buttons))
+                              (-> ghost leftx)
+                              (-> ghost lefty)
+                              (-> ghost rightx)
+                              (-> ghost righty))
+        )
+    )
+  (none)
+  )
+
 (defun mp-target-state-attacking? ((state symbol))
   "Check if a target state is an attacking state where rotation tracking should be disabled."
   (case state
@@ -405,6 +447,59 @@
      )
     (else #f)
     )
+  )
+
+(defun mp-puppet-apply-transform-correction! ((proc target) (ghost mp-target-ghost-record) (cur-state symbol))
+  "Correct puppet drift without pulling vertical position through local collision."
+  (when (not (focus-test? proc pilot tube flut mech pole))
+    (let ((dist (vector-vector-distance (-> proc control trans) (-> ghost trans))))
+      (cond
+        ((> dist (meters 15.0))
+         (vector-copy! (-> proc control trans) (-> ghost trans))
+         (vector-copy! (-> proc control transv) (-> ghost velocity))
+         )
+        (else
+         (let ((cur-pos (-> proc control trans))
+               (ghost-pos (-> ghost trans))
+               (xz-factor 0.2)
+               (up-factor 0.15)
+               (down-factor 0.05))
+           (set! (-> cur-pos x) (+ (-> cur-pos x) (* (- (-> ghost-pos x) (-> cur-pos x)) xz-factor)))
+           (set! (-> cur-pos z) (+ (-> cur-pos z) (* (- (-> ghost-pos z) (-> cur-pos z)) xz-factor)))
+           (if (> (-> ghost-pos y) (-> cur-pos y))
+               (set! (-> cur-pos y) (+ (-> cur-pos y) (* (- (-> ghost-pos y) (-> cur-pos y)) up-factor)))
+               (when (not (or (= cur-state 'target-falling)
+                              (= cur-state 'target-indax-falling)
+                              (= cur-state 'target-board-falling)
+                              (= cur-state 'target-mech-falling)
+                              (= cur-state 'target-carry-falling)))
+                 (set! (-> cur-pos y) (+ (-> cur-pos y) (* (- (-> ghost-pos y) (-> cur-pos y)) down-factor)))
+                 )
+               )
+           )
+         )
+        )
+      )
+
+    (when (not (mp-puppet-remote-input-stale?))
+      (let ((cur-vel (-> proc control transv))
+            (ghost-vel (-> ghost velocity))
+            (vel-factor 0.35))
+        (set! (-> cur-vel x) (+ (-> cur-vel x) (* (- (-> ghost-vel x) (-> cur-vel x)) vel-factor)))
+        (set! (-> cur-vel y) (+ (-> cur-vel y) (* (- (-> ghost-vel y) (-> cur-vel y)) vel-factor)))
+        (set! (-> cur-vel z) (+ (-> cur-vel z) (* (- (-> ghost-vel z) (-> cur-vel z)) vel-factor)))
+        )
+      )
+
+    (when (not (mp-target-state-attacking? cur-state))
+      (let ((slerp-factor 0.25))
+        (quaternion-slerp! (-> proc control quat) (-> proc control quat) (-> ghost quat) slerp-factor)
+        (quaternion-slerp! (-> proc control quat-for-control) (-> proc control quat-for-control) (-> ghost quat) slerp-factor)
+        (quaternion-slerp! (-> proc control dir-targ) (-> proc control dir-targ) (-> ghost quat) slerp-factor)
+        )
+      )
+    )
+  (none)
   )
 
 (defun mp-target-board-state? ((state symbol))
@@ -444,33 +539,7 @@
 
       (let ((cur-state (if (-> proc state) (-> proc state name) #f)))
         ;; 1. Position/Rotation Sync (P-Controller)
-        ;; SKIP if in a state that handles its own anchoring (pilot, board, etc.)
-        (when (not (focus-test? proc pilot tube flut mech pole))
-          (let ((dist (vector-vector-distance (-> proc control trans) (-> ghost trans))))
-            (cond
-              ((> dist (meters 15.0))
-               ;; Hard snap if too far
-               (vector-copy! (-> proc control trans) (-> ghost trans))
-               (vector-reset! (-> proc control transv))
-               )
-              (else
-               ;; Smoothly nudge towards ghost to correct drift
-               (let ((lerp-factor 0.2))
-                 (vector-lerp! (-> proc control trans) (-> proc control trans) (-> ghost trans) lerp-factor)
-                 )
-               )
-              )
-            )
-          
-          ;; 2. Rotation Sync (Slerp for smoothness)
-          (when (not (mp-target-state-attacking? cur-state))
-            (let ((slerp-factor 0.25)) ;; Tweak for "smooth but responsive" feel
-              (quaternion-slerp! (-> proc control quat) (-> proc control quat) (-> ghost quat) slerp-factor)
-              (quaternion-slerp! (-> proc control quat-for-control) (-> proc control quat-for-control) (-> ghost quat) slerp-factor)
-              (quaternion-slerp! (-> proc control dir-targ) (-> proc control dir-targ) (-> ghost quat) slerp-factor)
-              )
-            )
-          )
+        (mp-puppet-apply-transform-correction! proc ghost cur-state)
 
         ;; 3. State Bumping (Reconciliation Fallback)
         (let ((ghost-state (mp-target-get-state-from-id (-> ghost state-id))))
@@ -597,12 +666,7 @@
           )
 
         ;; 4. Input Sync (Injected into puppet's dedicated pad)
-        (when (-> proc control cpad)
-          (mp-puppet-update-pad (-> proc control cpad) 
-                                (the-as uint16 (-> ghost buttons)) 
-                                (-> ghost leftx) (-> ghost lefty) 
-                                (-> ghost rightx) (-> ghost righty))
-        )
+        (mp-puppet-apply-input! proc ghost)
       )
 
       ;; 5. Camera Orientation Sync

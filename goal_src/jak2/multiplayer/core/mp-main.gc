@@ -268,6 +268,8 @@
   (set! *remote-player-is-dying* #f)
   (set! *remote-player-is-dead* #f)
   (set! *mp-local-player-is-respawning* #f)
+  (set! *mp-puppet-last-packet-id* (the uint 0))
+  (set! *mp-puppet-last-fresh-input-time* (the-as time-frame 0))
   (if (nonzero? (the-as uint *mp-last-local-continue-name*))
       (set! (-> *mp-last-local-continue-name* data 0) (the uint 0)))
   (set! *mp-puppet-state-mismatch-count* 0)

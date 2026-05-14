@@ -87,6 +87,9 @@ void handle_packet_receive(LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* rem
               entity.status = state->status;
               entity.x = state->x; entity.y = state->y; entity.z = state->z;
               entity.angle = state->angle;
+              entity.vel_x = state->vel_x; entity.vel_y = state->vel_y; entity.vel_z = state->vel_z;
+              entity.send_tick = state->send_tick;
+              entity.receive_tick = current_time;
               entity.state_id = state->state_id; // Repurposed as state_id
               entity.level_hash = state->level_hash;
               entity.riding = state->riding;
@@ -241,6 +244,11 @@ void handle_packet_send(LocalPlayerInfoGOAL* local, MPEventBufferGOAL* events) {
   local_state.status = (uint8_t)gMultiplayerData.join_status;
   local_state.x = local->x; local_state.y = local->y; local_state.z = local->z;
   local_state.angle = local->angle;
+  local_state.vel_x = local->velocity[0];
+  local_state.vel_y = local->velocity[1];
+  local_state.vel_z = local->velocity[2];
+  local_state.send_tick = enet_time_get();
+  local->send_tick = local_state.send_tick;
   local_state.state_id = (uint32_t)local->state_id;
   local_state.level_hash = local->level;
   local_state.riding = local->riding;
@@ -292,8 +300,23 @@ void sync_to_goal(RemotePlayerInfoGOAL* remote_goal) {
   uint32_t other_net_id = (gMultiplayerData.local_role == 0) ? 1 : 0;
   if (gMultiplayerData.remote_entities.count(other_net_id)) {
     auto& remote_state = gMultiplayerData.remote_entities[other_net_id];
-    remote_goal->x = remote_state.x; remote_goal->y = remote_state.y; remote_goal->z = remote_state.z;
+    uint64_t age_ms = 0;
+    uint32_t current_time = enet_time_get();
+    if (remote_state.receive_tick != 0 && current_time >= remote_state.receive_tick) {
+      age_ms = current_time - remote_state.receive_tick;
+      if (age_ms > 100) age_ms = 100;
+    }
+    float predict_dt = (float)age_ms * 0.001f;
+    remote_goal->x = remote_state.x + remote_state.vel_x * predict_dt;
+    remote_goal->y = remote_state.y + remote_state.vel_y * predict_dt;
+    remote_goal->z = remote_state.z + remote_state.vel_z * predict_dt;
     remote_goal->angle = remote_state.angle;
+    remote_goal->velocity[0] = remote_state.vel_x;
+    remote_goal->velocity[1] = remote_state.vel_y;
+    remote_goal->velocity[2] = remote_state.vel_z;
+    remote_goal->velocity[3] = 0.0f;
+    remote_goal->send_tick = remote_state.send_tick;
+    remote_goal->receive_tick = remote_state.receive_tick;
     remote_goal->id = other_net_id;
     remote_goal->role = (int32_t)other_net_id;
     remote_goal->state_id = (int32_t)remote_state.state_id; // state_id
@@ -318,6 +341,12 @@ void sync_to_goal(RemotePlayerInfoGOAL* remote_goal) {
   } else {
     remote_goal->status = 0;
     remote_goal->scene_active = 0;
+    remote_goal->velocity[0] = 0.0f;
+    remote_goal->velocity[1] = 0.0f;
+    remote_goal->velocity[2] = 0.0f;
+    remote_goal->velocity[3] = 0.0f;
+    remote_goal->send_tick = 0;
+    remote_goal->receive_tick = 0;
   }
 }
 }  // namespace

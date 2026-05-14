@@ -12,6 +12,9 @@
 struct RemoteEntityState {
   uint8_t status;
   float x, y, z, angle;
+  float vel_x, vel_y, vel_z;
+  uint64_t send_tick;
+  uint64_t receive_tick;
   uint32_t state_id;
   uint32_t level_hash;
   uint32_t riding;
@@ -48,6 +51,9 @@ struct MPEventBufferGOAL {
 
 struct RemotePlayerInfoGOAL {
   float x, y, z, angle;
+  float velocity[4];
+  uint64_t send_tick;
+  uint64_t receive_tick;
   uint32_t id;
   int32_t role;
   uint32_t state_id;
@@ -89,10 +95,13 @@ struct RemotePlayerInfoGOAL {
   uint64_t player_procs[2];
   MPVehicleState veh_state;
 };
-static_assert(sizeof(RemotePlayerInfoGOAL) == 928, "RemotePlayerInfoGOAL must match remote-player-info");
+static_assert(sizeof(RemotePlayerInfoGOAL) == 960, "RemotePlayerInfoGOAL must match remote-player-info");
 
 struct LocalPlayerInfoGOAL {
   float x, y, z, angle;
+  float velocity[4];
+  uint64_t send_tick;
+  uint64_t receive_tick;
   uint32_t id; // Placeholder
   int32_t role;
   uint32_t state_id;
@@ -135,7 +144,7 @@ struct LocalPlayerInfoGOAL {
   uint64_t player_procs[2];
   MPVehicleState veh_state;
 };
-static_assert(sizeof(LocalPlayerInfoGOAL) == 928, "LocalPlayerInfoGOAL must match local-player-info");
+static_assert(sizeof(LocalPlayerInfoGOAL) == 960, "LocalPlayerInfoGOAL must match local-player-info");
 
 struct MPEnemySyncBufferGOAL {
   uint32_t local_count;

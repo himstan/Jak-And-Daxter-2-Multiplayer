@@ -41,11 +41,13 @@
        (begin
          ;; 1. Calculate current transform once
          (mp-update-remote-transform)
+         (mp-puppet-note-remote-packet! *remote-info*)
 
          ;; 2. Update the Ghost Record for the Target Puppet
          (let ((ghost *mp-puppet-ghost*))
            (vector-copy! (-> ghost trans) *multi-remote-render-pos*)
            (quaternion-copy! (-> ghost quat) (the-as quaternion *multi-remote-render-quat*))
+           (vector-copy! (-> ghost velocity) (-> *remote-info* velocity))
            (set! (-> ghost state-id) (-> *remote-info* state-id))
            (set! (-> ghost buttons) (-> *remote-info* buttons))
            (set! (-> ghost leftx) (-> *remote-info* leftx))
@@ -114,6 +116,7 @@
              (format 0 "[MP-Puppet] Deactivating puppet (Remote Status ~D)~%" remote-status)
              (deactivate proc)
              (set! *mp-puppet* (the-as target #f))
+             (set! *mp-puppet-last-fresh-input-time* (the-as time-frame 0))
              )
            )
          (set! *multi-remote-first-seen?* #t)

@@ -56,6 +56,8 @@ struct PacketPlayerState {
   uint32_t netId;
   uint8_t status;
   float x, y, z, angle;
+  float vel_x, vel_y, vel_z;
+  uint64_t send_tick;
   uint32_t state_id;
   uint32_t level_hash;
   uint32_t riding;
