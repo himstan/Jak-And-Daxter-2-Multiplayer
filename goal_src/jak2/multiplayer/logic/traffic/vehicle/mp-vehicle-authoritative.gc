@@ -115,6 +115,8 @@
     (if (logtest? (-> v-proc focus-status) (focus-status dead)) (set! flags (logior flags (the uint 1))))
     ;; Bit 1: Flight Level Index (0 = low, 1 = high)
     (if (nonzero? (-> v-proc flight-level-index)) (set! flags (logior flags (the uint 2))))
+    ;; Bit 2: Physics Enabled
+    (if (logtest? (-> v-proc rbody state flags) (rigid-body-flag enable-physics)) (set! flags (logior flags (the uint 4))))
     (set! (-> slot state-flags) (the uint8 flags))
     )
 
