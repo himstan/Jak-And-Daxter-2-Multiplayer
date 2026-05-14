@@ -196,6 +196,7 @@ struct MultiplayerData {
   std::thread discovery_thread;
   std::atomic<bool> host_discovery_active{false};
   std::atomic<bool> pending_full_sync{false};
+  bool pending_full_sync_sent_once = false;
   uint32_t last_full_sync_send_time = 0;
 
   // Reconnection tracking

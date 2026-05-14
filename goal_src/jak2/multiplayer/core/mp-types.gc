@@ -20,6 +20,10 @@
 (define-perm *remote-player-is-dead* symbol #f)
 (define-perm *mp-local-player-is-respawning* symbol #f)
 (define-perm *mp-last-local-continue-name* string (new 'global 'string 32 ""))
+(define-perm *mp-mission-failed-full-sync-pending?* symbol #f)
+(define-perm *mp-mission-failed-full-sync-await-spawn?* symbol #f)
+(define-perm *mp-mission-failed-full-sync-ready-time* time-frame 0)
+(define-perm *mp-mission-failed-full-sync-next-log-time* time-frame 0)
 
 (defconstant MP_EVENT_ORB (the-as uint 1))
 (defconstant MP_EVENT_GEM (the-as uint 2))
@@ -47,6 +51,11 @@
 (defconstant MP_EVENT_WAYPOINT_SNAPSHOT (the-as uint 25))
 (defconstant MP_EVENT_WAYPOINT_REQUEST (the-as uint 26))
 (defconstant MP_EVENT_POLE_GRAB (the-as uint 27))
+
+(defconstant MP_MISSION_EVT_LEAVE (the-as uint 1))
+(defconstant MP_MISSION_EVT_PLAY_SCENE (the-as uint 2))
+(defconstant MP_MISSION_EVT_FAILED_RETRY_YES (the-as uint 3))
+(defconstant MP_MISSION_EVT_FAILED_RETRY_NO (the-as uint 4))
 
 ;; --- Helper functions for handle resolution ---
 
@@ -866,6 +875,7 @@
 (define-extern pc-multi-setup-client (function string int none))
 (define-extern pc-multi-get-status (function int))
 (define-extern pc-multi-set-status (function int none))
+(define-extern pc-multi-request-full-sync (function none))
 (define-extern pc-multi-get-found-ip (function string))
 (define-extern pc-multi-stop-search (function none))
 (define-extern pc-multi-start-search (function none))
@@ -901,6 +911,9 @@
 (define-extern mp-sync-enemies-update (function none))
 (define-extern mp-enemy-authoritative? (function enemy symbol))
 (define-extern mp-send-world-event (function uint uint none))
+(define-extern mp-send-mission-failed-choice (function uint none))
+(define-extern mp-arm-mission-failed-full-sync-after-spawn (function none))
+(define-extern mp-request-mission-failed-full-sync-when-ready (function none))
 (define-extern mp-send-enemy-attack-event (function uint uint none))
 (define-extern mp-send-enemy-death-event (function enemy none))
 (define-extern mp-receive-world-event (function mp-world-event none))
@@ -908,6 +921,7 @@
 (define-extern mp-clear-local-vehicle-occupancy! (function target none))
 (define-extern mp-respawn-local-target! (function target none))
 (define-extern mp-airlock-remote-ready? (function vector symbol))
+(define-extern mp-any-player-near-and-piloting? (function process-drawable float symbol))
 (define-extern mp-event-handler-authority-request (function uint none))
 (define-extern mp-event-handler-authority-ack (function uint none))
 (define-extern mp-event-handler-attack-ped (function mp-ped-attack-event none))

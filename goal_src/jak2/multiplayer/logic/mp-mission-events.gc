@@ -26,6 +26,16 @@
   (none)
   )
 
+(defun mp-send-mission-failed-choice ((m-evt-id uint))
+  "Broadcast the host's mission-failed prompt choice."
+  (when (and *multi-sync-enabled?*
+             (mp-is-jak?)
+             (= (pc-multi-get-status) 6))
+    (mp-send-mission-event "" m-evt-id)
+    )
+  (none)
+  )
+
 (defun mp-send-event-function-hijack ((proc process-tree) (msg event-message-block))
   "Global hijack for send-event-function to sync mission critical events."
   (with-pp
@@ -51,13 +61,13 @@
                 (('leave)
                  (when (and p-name (!= p-name ""))
                    (format 0 "[MP-MissionEvent] Host triggered 'leave' for actor ~S. Syncing...~%" p-name)
-                   (mp-send-mission-event p-name (the uint 1))
+                   (mp-send-mission-event p-name MP_MISSION_EVT_LEAVE)
                    )
                  )
                 (('play-scene)
                  (when (and p-name (!= p-name ""))
                    (format 0 "[MP-MissionEvent] Host triggered 'play-scene' for actor ~S. Syncing...~%" p-name)
-                   (mp-send-mission-event p-name (the uint 2))
+                   (mp-send-mission-event p-name MP_MISSION_EVT_PLAY_SCENE)
                    )
                  )
                 )

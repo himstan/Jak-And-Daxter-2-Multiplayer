@@ -82,6 +82,9 @@
           )
         )
       )
+    (when (and (not found-proc) (mp-mission-vehicle-id? net-id))
+      (set! found-proc (mp-mission-vehicle-find-by-net-id net-id))
+      )
     found-proc)
 )
 
@@ -379,6 +382,7 @@
          (when (and (= i 0) (mp-traffic-type-loaded? (the-as traffic-type (-> slot vehicle-type))))
            ;; HIJACK GUARD: Don't spawn if local player is currently hijacking this vehicle.
            (let ((is-local-hijacking? (and *target* 
+                                          (nonzero? (-> *target* pilot))
                                           (nonzero? (-> *target* pilot vehicle))
                                           (= (handle->process (-> *target* pilot vehicle)) proc))))
              (when (not is-local-hijacking?)

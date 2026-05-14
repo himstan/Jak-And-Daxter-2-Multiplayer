@@ -395,6 +395,13 @@
                   (set! closest-proc (the-as process-focusable remote))))))))
     closest-proc))
 
+(defun mp-any-player-near-and-piloting? ((veh process-drawable) (dist-sq float))
+  "Check if any player (local or puppet) is near the vehicle (within dist-sq) and is a pilot."
+  (the symbol (or (and *target* (focus-test? *target* pilot) (< (vector-vector-distance-squared (-> veh root trans) (target-pos 0)) dist-sq))
+                  (let ((puppet (mp-puppet-get-proc)))
+                    (and puppet (focus-test? puppet pilot) (< (vector-vector-distance-squared (-> veh root trans) (-> puppet root trans)) dist-sq)))))
+  )
+
 (defun mp-is-mission-active? ()
   "Is there an active task-manager in the active pool?"
   (the symbol (nonzero? (process-by-type task-manager *active-pool*)))

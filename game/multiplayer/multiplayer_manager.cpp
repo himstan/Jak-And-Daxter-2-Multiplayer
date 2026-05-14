@@ -91,6 +91,7 @@ void MultiplayerManager::disconnect(MultiplayerData& data) {
   data.initialized = false;
   data.join_status = (int)MultiplayerStatus::IDLE;
   data.pending_full_sync = false;
+  data.pending_full_sync_sent_once = false;
   data.last_full_sync_send_time = 0;
   data.inbound_events.clear();
   data.remote_entities.clear();

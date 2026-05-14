@@ -69,7 +69,9 @@
     ;; 1. Poll and Receive (Always 60fps/144fps for lowest latency)
     (let ((status (pc-multi-get-status)))
       ;; Auto-Enable Sync in game
-      (when (and (= status 6) (not *multi-sync-enabled?*))
+      (when (and (= status 6)
+                 (not *multi-sync-enabled?*)
+                 (not (and (mp-is-daxter?) (nonzero? (-> *local-info* sync-flag)))))
         (if (mp-is-jak?)
             (format 0 "[MP-Host] Auto-enabling sync as Host in game...~%")
             (format 0 "[MP-Client] Auto-enabling sync as Client in game...~%")
@@ -174,6 +176,8 @@
     
     (pc-multi-debug-stop-receive (if *mp-debug-simulate-loss?* (the uint 1) (the uint 0)))
 
+    (mp-request-mission-failed-full-sync-when-ready)
+
     ;; 4. NETWORK SEND (Throttled)
     ;; We send even if *multi-sync-enabled?* is #f to provide heartbeat/status to peer
     ;; Use millisecond ticks from C++ for perfectly consistent TPS regardless of pause
@@ -268,6 +272,10 @@
   (set! *remote-player-is-dying* #f)
   (set! *remote-player-is-dead* #f)
   (set! *mp-local-player-is-respawning* #f)
+  (set! *mp-mission-failed-full-sync-pending?* #f)
+  (set! *mp-mission-failed-full-sync-await-spawn?* #f)
+  (set! *mp-mission-failed-full-sync-ready-time* (the-as time-frame 0))
+  (set! *mp-mission-failed-full-sync-next-log-time* (the-as time-frame 0))
   (set! *mp-puppet-last-packet-id* (the uint 0))
   (set! *mp-puppet-last-fresh-input-time* (the-as time-frame 0))
   (if (nonzero? (the-as uint *mp-last-local-continue-name*))

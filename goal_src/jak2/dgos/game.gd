@@ -506,6 +506,7 @@
   "mp-pedestrian-authoritative.o" ;; added
   "mp-pedestrian-puppet.o" ;; added
   "mp-vehicle-authoritative.o" ;; added
+  "mp-mission-vehicles.o" ;; added
   "mp-vehicle-puppet.o" ;; added
   "mp-traffic-hijacks.o" ;; added
   "mp-traffic-sync.o" ;; added

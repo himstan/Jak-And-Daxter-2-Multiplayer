@@ -1,0 +1,67 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; --- Mission Vehicle Sync Helpers ---
+;; Reserved IDs sit outside the ambient traffic vehicle counter range.
+
+(defconstant MP_MISSION_VEHICLE_ID_BASE (the uint #x70000000))
+(defconstant MP_MISSION_VEHICLE_KREW_DELIVERY (the uint #x70000001))
+
+(defun mp-mission-vehicle-id? ((net-id uint))
+  (>= net-id MP_MISSION_VEHICLE_ID_BASE)
+  )
+
+(defun mp-mission-vehicle-matches-net-id? ((proc process) (net-id uint))
+  (and proc
+       (nonzero? proc)
+       (type? proc vehicle)
+       (= (-> (the-as vehicle proc) net-id) net-id))
+  )
+
+(defun mp-mission-vehicle-assign-net-id! ((proc process) (mission-net-id uint))
+  "Give a mission-owned vehicle a deterministic multiplayer identity."
+  (when (and proc
+             (nonzero? proc)
+             (type? proc vehicle)
+             (mp-mission-vehicle-id? mission-net-id))
+    (set! (-> (the-as vehicle proc) net-id) mission-net-id)
+    )
+  (none)
+  )
+
+(defun mp-mission-vehicle-find-in-task-manager ((task-proc task-manager) (net-id uint))
+  (let ((found-proc (the-as vehicle #f)))
+    (dotimes (slot-idx 32)
+      (when (not found-proc)
+        (let ((slave-proc (handle->process-safe (-> task-proc slave slot-idx))))
+          (when (mp-mission-vehicle-matches-net-id? slave-proc net-id)
+            (set! found-proc (the-as vehicle slave-proc))
+            )
+          )
+        )
+      )
+    found-proc
+    )
+  )
+
+(defun mp-mission-vehicle-find-by-net-id ((net-id uint))
+  "Find mission-owned vehicles that are stored as task-manager slaves."
+  (let ((found-proc (the-as vehicle #f)))
+    (when (and *task-manager-engine*
+               (mp-mission-vehicle-id? net-id))
+      (let ((task-link (the-as connection (-> *task-manager-engine* alive-list next0))))
+        *task-manager-engine*
+        (while (and (not found-proc)
+                    (!= task-link (-> *task-manager-engine* alive-list-end)))
+          (let ((task-proc (the-as task-manager (-> task-link param1))))
+            (when (and task-proc (nonzero? task-proc))
+              (set! found-proc (mp-mission-vehicle-find-in-task-manager task-proc net-id))
+              )
+            )
+          (set! task-link (the-as connection (-> task-link next0)))
+          )
+        )
+      )
+    found-proc
+    )
+  )

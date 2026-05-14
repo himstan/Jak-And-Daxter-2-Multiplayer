@@ -124,8 +124,10 @@ void handle_packet_receive(LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* rem
 
               if (gMultiplayerData.local_role == 0 && state->netId == 1 &&
                   state->status == (uint8_t)MultiplayerStatus::IN_GAME &&
-                  gMultiplayerData.pending_full_sync) {
+                  gMultiplayerData.pending_full_sync &&
+                  gMultiplayerData.pending_full_sync_sent_once) {
                 gMultiplayerData.pending_full_sync = false;
+                gMultiplayerData.pending_full_sync_sent_once = false;
                 lg::info("[Multiplayer] Client entered game. Full sync acknowledged.");
               }
 
@@ -240,6 +242,7 @@ void handle_packet_receive(LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* rem
             gMultiplayerData.join_status = (int)MultiplayerStatus::CONNECTED_LOBBY;
           } else {
             gMultiplayerData.pending_full_sync = true;
+            gMultiplayerData.pending_full_sync_sent_once = false;
             gMultiplayerData.last_full_sync_send_time = 0;
           }
         }
@@ -330,7 +333,8 @@ void handle_packet_send(LocalPlayerInfoGOAL* local, MPEventBufferGOAL* events) {
     sync.weather_fog = local->weather_fog;
     sync.weather_rain = local->weather_rain;
     MultiplayerManager::broadcast(gMultiplayerData, 1, sync, ENET_PACKET_FLAG_RELIABLE);
-    lg::info("[Multiplayer] Sent full sync to joining client.");
+    gMultiplayerData.pending_full_sync_sent_once = true;
+    lg::info("[Multiplayer] Sent full sync to client.");
   }
 }
 
@@ -566,7 +570,17 @@ void pc_multi_set_status(int status) {
   if (old_status != status) lg::info("[Multiplayer] Status transition: {} -> {}", old_status, status);
   if (gMultiplayerData.local_role == 0 && status == 6 && old_status != 6) {
     gMultiplayerData.pending_full_sync = true;
+    gMultiplayerData.pending_full_sync_sent_once = false;
     gMultiplayerData.last_full_sync_send_time = 0;
+  }
+}
+void pc_multi_request_full_sync() {
+  if (gMultiplayerData.local_role == 0 &&
+      gMultiplayerData.join_status == (int)MultiplayerStatus::IN_GAME) {
+    gMultiplayerData.pending_full_sync = true;
+    gMultiplayerData.pending_full_sync_sent_once = false;
+    gMultiplayerData.last_full_sync_send_time = 0;
+    lg::info("[Multiplayer] Full sync requested by GOAL.");
   }
 }
 void pc_multi_stop_search() { MultiplayerScanner::stop_search(gMultiplayerData); }
@@ -622,6 +636,7 @@ void init_multiplayer_pc_port() {
   make_function_symbol_from_c("pc-multi-setup-client", (void*)pc_multi_setup_client);
   make_function_symbol_from_c("pc-multi-get-status", (void*)pc_multi_get_status);
   make_function_symbol_from_c("pc-multi-set-status", (void*)pc_multi_set_status);
+  make_function_symbol_from_c("pc-multi-request-full-sync", (void*)pc_multi_request_full_sync);
   make_function_symbol_from_c("pc-multi-stop-search", (void*)pc_multi_stop_search);
   make_function_symbol_from_c("pc-multi-start-search", (void*)pc_multi_start_search);
   make_function_symbol_from_c("pc-multi-get-found-ip", (void*)pc_multi_get_found_ip);

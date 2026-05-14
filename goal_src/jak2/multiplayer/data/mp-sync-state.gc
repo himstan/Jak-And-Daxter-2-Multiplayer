@@ -43,9 +43,10 @@
             )
            (else
             (format 0 "[MP-Client] Starting Full Sync Hard Load for ~S...~%" *mp-continue-name*)
+            (set! *multi-sync-enabled?* #f)
+            (set! (-> *local-info* sync-flag) (the-as uint 2))
             (set-continue! *game-info* *mp-continue-name* #t)
             (initialize! *game-info* 'game (the-as game-save #f) *mp-continue-name*)
-            (set! (-> *local-info* sync-flag) (the-as uint 2))
             )
            )
          )

@@ -79,8 +79,19 @@ an orb |#
 
 (defun runs-on-jak-spawn ()
   ;; Code here runs every time jak spawns (loading a file new game or death)
-  (set! *multi-sync-enabled?* #t)
-  (format 0 "[GOAL] Jak spawned! Enabling multiplayer sync.~%")
+  (if (and *local-info*
+           (nonzero? (the-as uint *local-info*))
+           (= (-> *local-info* role) 1)
+           (nonzero? (-> *local-info* sync-flag)))
+      (begin
+        (set! *multi-sync-enabled?* #f)
+        (format 0 "[GOAL] Jak spawned during full sync. Keeping multiplayer sync disabled.~%")
+        )
+      (begin
+        (set! *multi-sync-enabled?* #t)
+        (format 0 "[GOAL] Jak spawned! Enabling multiplayer sync.~%")
+        )
+      )
 
   ;; Update status to IN_GAME (6) if we are connected
   (let ((status (pc-multi-get-status)))
@@ -88,6 +99,7 @@ an orb |#
         (begin
           (pc-multi-set-status 6)
           (set! *multi-last-send-time* 0)
+          (mp-arm-mission-failed-full-sync-after-spawn)
           )
         )
 
