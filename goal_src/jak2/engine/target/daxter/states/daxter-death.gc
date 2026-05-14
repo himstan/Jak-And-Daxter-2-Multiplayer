@@ -102,11 +102,7 @@
       (loop
         (let ((ghost-state (mp-target-get-state-from-id (-> *mp-puppet-ghost* state-id))))
           ;; If the remote ghost is no longer in a death state, we are done!
-          (when (not (or (= ghost-state 'target-death)
-                         (= ghost-state 'target-indax-death)
-                         (= ghost-state 'target-tube-death)
-                         (= ghost-state 'target-pilot-death)
-                         (= ghost-state 'target-mech-death)))
+          (when (not (mp-target-death-state? ghost-state))
             (format 0 "[MP-Puppet] Ghost respawned (State: ~A). Exiting death reset.~%" ghost-state)
             (if (mp-is-jak?)
                 (go target-indax-start (the handle #f))
@@ -121,6 +117,7 @@
     ;; 2. Handle Local Player
     (when (and (= self *target*) (not (= (-> self tobot?) 'mp-puppet)))
       (mp-send-world-event MP_EVENT_PLAYER_DIED (the-as uint 0))
+      (mp-clear-local-vehicle-occupancy! self)
       (cond
         ((mp-is-open-world?)
          ;; OPEN WORLD DEATH
@@ -135,7 +132,7 @@
          (set! (-> *game-info* life) (-> *game-info* life-max))
          (send-event *traffic-manager* 'set-alert-level 0)
          (send-event *camera* 'change-target self)
-         (go target-indax-start (the handle #f))
+         (mp-respawn-local-target! self)
          )
         (else
          ;; MISSION / LEVEL DEATH
@@ -193,7 +190,7 @@
                      (send-event *camera* 'change-target self)
                      (set! (-> self fact health) (/ (-> self fact health-max) 2.0))
                      (set! *mp-local-player-is-respawning* #t)
-                     (go target-indax-start (the handle #f))
+                     (mp-respawn-local-target! self)
                      )
                    )
                  )

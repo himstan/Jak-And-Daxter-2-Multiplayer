@@ -115,7 +115,9 @@
     (when (and *target* 
                (logtest? (focus-status pilot pilot-riding) (-> *target* focus-status))
                (nonzero? (-> *target* pilot))
-               (nonzero? (-> *target* pilot vehicle)))
+               (nonzero? (-> *target* pilot vehicle))
+               (-> *target* state)
+               (not (mp-target-death-state? (-> *target* state name))))
       (let ((v-proc (the-as vehicle (handle->process (-> *target* pilot vehicle)))))
         (when (and v-proc (nonzero? v-proc) (nonzero? (-> v-proc net-id)))
           ;; Set occupancy info for everyone
