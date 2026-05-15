@@ -2274,6 +2274,22 @@
       (if (>= -100.0 (-> self score))
           (sound-play "score-bad")
           )
+      (when (and *multi-sync-enabled?*
+                 (mp-is-jak?)
+                 (= (pc-multi-get-status) 6)
+                 (not *mp-processing-remote-event*)
+                 (or (task-node-open? (game-task-node city-red-gun-training-try-once))
+                     (task-node-open? (game-task-node city-red-gun-training-resolution))))
+        (mp-send-gungame-event
+          MP_MISSION_EVT_GUNGAME_TARGET_BROKEN
+          MP_GUNGAME_COURSE_RED
+          (the uint (-> self info num))
+          0
+          (the uint 0)
+          (the uint 0)
+          (the uint 1)
+          (the uint 1))
+        )
       (send-event (handle->process (-> self train-man)) 'score (the int (-> self score)))
       (break-dummy self)
       (set! (-> self hit-points) -1)
@@ -2351,6 +2367,23 @@
   (none)
   )
 
+(defun mp-gungame-red-dummy-rand ((target-info tpath-info))
+  (let ((seed (the uint 0)))
+    (when target-info
+      (set! seed (the-as uint (+ (-> target-info num) (* (-> target-info ref-time-num) 3) (-> target-info score))))
+      )
+    (logand seed (the uint 15))
+    )
+  )
+
+(defun mp-gungame-red-dummy-sync-active? ()
+  (and *multi-sync-enabled?*
+       (= (pc-multi-get-status) 6)
+       (or (task-node-open? (game-task-node city-red-gun-training-try-once))
+           (task-node-open? (game-task-node city-red-gun-training-resolution)))
+       )
+  )
+
 (defmethod init-tpath-info! ((this gun-dummy) (arg0 tpath-info))
   "Given a [[tpath-info]] use it to initialize the dummy with any relevant data or flags"
   (logior! (-> this mask) (process-mask enemy))
@@ -2358,8 +2391,11 @@
   (vector-identity! (-> this root scale))
   (quaternion-copy! (-> this quat) (-> this root quat))
   (+! (-> this root trans y) -16384.0)
-  (if (not (logtest? (-> arg0 flags) (tpath-flags tpath-rand)))
-      (set! *tpath-rand* (the-as uint (rand-vu-int-count 16)))
+  (if (mp-gungame-red-dummy-sync-active?)
+      (set! *tpath-rand* (mp-gungame-red-dummy-rand arg0))
+      (if (not (logtest? (-> arg0 flags) (tpath-flags tpath-rand)))
+          (set! *tpath-rand* (the-as uint (rand-vu-int-count 16)))
+          )
       )
   (set! (-> this current)
         (the-as

@@ -36,6 +36,37 @@
   (none)
   )
 
+(defun mp-send-gungame-event ((m-evt-id uint)
+                              (course-id uint)
+                              (step uint)
+                              (score int)
+                              (elapsed-time uint)
+                              (broken-mask uint)
+                              (open-end? uint)
+                              (end-door uint))
+  "Broadcast host-authoritative gungame mission progress."
+  (when (and *multi-sync-enabled?*
+             (mp-is-jak?)
+             (= (pc-multi-get-status) 6))
+    (let ((q-idx *mp-event-queue-write-ptr*))
+      (let ((evt (the-as mp-gungame-event (-> *mp-event-queue* q-idx))))
+        (set! (-> evt etype) MP_EVENT_MISSION_EVENT)
+        (set! (-> evt mission-evt) m-evt-id)
+        (set! (-> evt course-id) course-id)
+        (set! (-> evt step) step)
+        (set! (-> evt score) score)
+        (set! (-> evt elapsed-time) elapsed-time)
+        (set! (-> evt broken-mask) broken-mask)
+        (set! (-> evt open-end?) open-end?)
+        (set! (-> evt end-door) end-door)
+        (set! (-> evt target-num) step)
+        )
+      (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
+      )
+    )
+  (none)
+  )
+
 (defun mp-send-event-function-hijack ((proc process-tree) (msg event-message-block))
   "Global hijack for send-event-function to sync mission critical events."
   (with-pp
