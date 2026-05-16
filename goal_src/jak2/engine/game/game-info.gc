@@ -532,7 +532,9 @@
                                       (set! (-> self mask) (process-mask))
                                       (stop arg0)
                                       (reset-actors arg1)
-                                      (close! (-> *game-info* sub-task-list (game-task-node fortress-escape-start)) 'event)
+                                      (when (not *kernel-boot-snapshot*)
+                                        (close! (-> *game-info* sub-task-list (game-task-node fortress-escape-start)) 'event)
+                                        )
                                       (set-continue! *game-info* arg2 #f)
                                       (when arg3
                                         (load-game *game-info* arg3)

@@ -898,7 +898,7 @@
         :to self
         )
       )
-    (activate! *camera-smush-control* 409.6 18 210 1.0 0.995 (-> self clock))
+    (activate! *camera-smush-control* 409.6 18 210 1.0 0.995 (-> *display* camera-clock))
     (sound-play "turret-explode")
     (suspend)
     (ja-channel-set! 0)

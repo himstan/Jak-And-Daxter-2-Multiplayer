@@ -302,7 +302,7 @@
         :to self
         )
       )
-    (activate! *camera-smush-control* 819.2 37 210 1.0 0.995 (-> self clock))
+    (activate! *camera-smush-control* 819.2 37 210 1.0 0.995 (-> *display* camera-clock))
     (sound-play "fort-target")
     (suspend)
     (part-tracker-spawn :to *entity-pool* :group group-missile-target-explosion :mat-joint (-> self root trans))

@@ -821,7 +821,7 @@
             )
           )
       )
-    (activate! *camera-smush-control* 819.2 37 210 1.0 0.995 (-> self clock))
+    (activate! *camera-smush-control* 819.2 37 210 1.0 0.995 (-> *display* camera-clock))
     (ja-channel-set! 0)
     (let ((v1-12 (-> self root root-prim)))
       (set! (-> v1-12 prim-core collide-as) (collide-spec))
@@ -1435,7 +1435,7 @@
          )
         (else
           (ja :group! tomb-boss-pillar-break-ja :num! min)
-          (activate! *camera-smush-control* 819.2 37 210 1.0 0.995 (-> self clock))
+          (activate! *camera-smush-control* 819.2 37 210 1.0 0.995 (-> *display* camera-clock))
           )
         )
       )

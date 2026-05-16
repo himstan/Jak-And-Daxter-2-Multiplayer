@@ -117,6 +117,7 @@
              (deactivate proc)
              (set! *mp-puppet* (the-as target #f))
              (set! *mp-puppet-last-fresh-input-time* (the-as time-frame 0))
+             (set! *mp-puppet-was-far?* #f)
              )
            )
          (set! *multi-remote-first-seen?* #t)

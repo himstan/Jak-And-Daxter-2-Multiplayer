@@ -79,7 +79,7 @@
       (explosion-spawn self explosion gp-0)
       )
     (if (-> self shake-screen?)
-        (activate! *camera-smush-control* 4096.0 37 510 1.0 0.8 (-> self clock))
+        (activate! *camera-smush-control* 4096.0 37 510 1.0 0.8 (-> *display* camera-clock))
         )
     (let ((t9-3 (-> self explode-func)))
       (if t9-3

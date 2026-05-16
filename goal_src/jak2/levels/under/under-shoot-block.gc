@@ -1209,7 +1209,7 @@
         )
       )
     (if (>= 204800.0 (vector-vector-distance (target-pos 0) (-> this root trans)))
-        (activate! *camera-smush-control* 409.6 37 210 1.0 0.995 (-> pp clock))
+        (activate! *camera-smush-control* 409.6 37 210 1.0 0.995 (-> *display* camera-clock))
         )
     (let ((s5-2 (new 'stack-no-clear 'explosion-init-params)))
       (set! (-> s5-2 spawn-point quad) (-> this root trans quad))

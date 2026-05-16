@@ -2097,7 +2097,7 @@
       (ja :num! (seek!))
       (when (and (< f30-0 40.0) (>= (ja-aframe-num 0) 40.0))
         (send-event (ppointer->process (-> self parent)) 'exploding)
-        (activate! *camera-smush-control* 1638.4 37 210 1.0 0.995 (-> self clock))
+        (activate! *camera-smush-control* 1638.4 37 210 1.0 0.995 (-> *display* camera-clock))
         (let ((gp-0 (get-process *default-dead-pool* part-tracker #x4000)))
           (when gp-0
             (let ((t9-6 (method-of-type part-tracker activate)))

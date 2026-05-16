@@ -1024,7 +1024,7 @@
                                    (f30-1 (s0-1 sv-896 sv-912 a2-23 a3-2 t0-1))
                                    )
                               (when (and (!= f30-1 0.0) (< 16384.0 (vector-length (-> s1-0 speed))))
-                                (activate! *camera-smush-control* f30-1 37 600 1.0 0.1 (-> pp clock))
+                                (activate! *camera-smush-control* f30-1 37 600 1.0 0.1 (-> *display* camera-clock))
                                 (part-tracker-spawn :to this :group group-land-poof-stn :mat-joint (-> s1-0 position))
                                 (when (or (zero? s4-0) (= s4-0 1))
                                   (let ((s0-3 sound-play-by-name))
@@ -2065,7 +2065,7 @@
       (set! (-> gp-1 quad) (-> self node-list data 3 bone transform trans quad))
       (new 'stack-no-clear 'vector)
       4.0
-      (activate! *camera-smush-control* 1024.0 37 210 1.0 0.995 (-> self clock))
+      (activate! *camera-smush-control* 1024.0 37 210 1.0 0.995 (-> *display* camera-clock))
       (let ((s5-1 (new 'stack-no-clear 'explosion-init-params)))
         (set! (-> s5-1 spawn-point quad) (-> gp-1 quad))
         (quaternion-copy! (-> s5-1 spawn-quat) (-> self root quat))

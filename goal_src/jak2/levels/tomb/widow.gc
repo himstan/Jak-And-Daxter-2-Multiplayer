@@ -1272,7 +1272,7 @@
            (the-as process #f)
            )
          (set-falloff! *gui-control* (-> self catwalk-sound) #t -1 200 2)
-         (activate! *camera-smush-control* 1228.8 75 270 1.0 0.5 (-> self clock))
+         (activate! *camera-smush-control* 1228.8 75 270 1.0 0.5 (-> *display* camera-clock))
          (send-event (handle->process (-> self catwalk (-> self targetted-catwalk))) 'green-hit)
          (go-virtual hover-launch-bombs-stage-3)
          )
