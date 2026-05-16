@@ -12117,3 +12117,282 @@ For example `20` would mean 4 red gun pickups, or 2 yellow gun pickups"
       )
     )
   )
+(defun mp-gungame-sync-active? ()
+  (and *multi-sync-enabled?*
+       (= (pc-multi-get-status) 6)
+       )
+  )
+
+(defun mp-gungame-local-authority? ()
+  (or (not (mp-gungame-sync-active?))
+      (mp-is-jak?)
+      )
+  )
+
+(defun mp-gungame-red-intro-step-reached? ((step uint))
+  (and (mp-gungame-sync-active?)
+       (mp-is-daxter?)
+       (>= *mp-gungame-red-intro-step* step)
+       )
+  )
+
+(defun mp-gungame-red-gun-away-done? ()
+  (if (and (mp-gungame-sync-active?) (mp-is-daxter?))
+      (mp-gungame-red-intro-step-reached? (the uint 2))
+      (and *target*
+           (nonzero? *target*)
+           (not (focus-test? *target* gun))
+           )
+      )
+  )
+
+(defun mp-gungame-red-gun-out-done? ()
+  (if (and (mp-gungame-sync-active?) (mp-is-daxter?))
+      (mp-gungame-red-intro-step-reached? (the uint 3))
+      (and *target*
+           (nonzero? *target*)
+           (logtest? (focus-status gun) (-> *target* focus-status))
+           )
+      )
+  )
+
+(defun mp-gungame-send-red-intro-step! ((step uint))
+  (when (and (mp-gungame-sync-active?) (mp-is-jak?))
+    (set! *mp-gungame-red-intro-step* step)
+    (mp-send-gungame-event
+      MP_MISSION_EVT_GUNGAME_TUTORIAL_STEP
+      MP_GUNGAME_COURSE_RED
+      step
+      0
+      (the uint 0)
+      (the uint 0)
+      (the uint 0)
+      (the uint 1))
+    )
+  (none)
+  )
+
+(defun mp-gungame-yellow-intro-step-reached? ((step uint))
+  (and (mp-gungame-sync-active?)
+       (mp-is-daxter?)
+       (>= *mp-gungame-yellow-intro-step* step)
+       )
+  )
+
+(defun mp-gungame-yellow-gun-away-done? ()
+  (if (and (mp-gungame-sync-active?) (mp-is-daxter?))
+      (mp-gungame-yellow-intro-step-reached? (the uint 2))
+      (and *target*
+           (nonzero? *target*)
+           (not (focus-test? *target* gun))
+           )
+      )
+  )
+
+(defun mp-gungame-yellow-gun-out-done? ()
+  (if (and (mp-gungame-sync-active?) (mp-is-daxter?))
+      (mp-gungame-yellow-intro-step-reached? (the uint 3))
+      (and *target*
+           (nonzero? *target*)
+           (logtest? (focus-status gun) (-> *target* focus-status))
+           )
+      )
+  )
+
+(defun mp-gungame-send-yellow-intro-step! ((step uint))
+  (when (and (mp-gungame-sync-active?) (mp-is-jak?))
+    (set! *mp-gungame-yellow-intro-step* step)
+    (mp-send-gungame-event
+      MP_MISSION_EVT_GUNGAME_TUTORIAL_STEP
+      MP_GUNGAME_COURSE_YELLOW
+      step
+      0
+      (the uint 0)
+      (the uint 0)
+      (the uint 0)
+      (the uint 1))
+    )
+  (none)
+  )
+
+(defun mp-gungame-course-id ((course (array tpath-info)))
+  "Return the network course ID for a given course data array."
+  (cond
+    ((= course *red-training-path-global-info*)    MP_GUNGAME_COURSE_RED)
+    ((= course *yellow-training-path-global-info*) MP_GUNGAME_COURSE_YELLOW)
+    ((= course *blue-training-path-global-info*)   MP_GUNGAME_COURSE_BLUE)
+    ((= course *peace-training-path-global-info*)  MP_GUNGAME_COURSE_PEACE)
+    (else (the-as uint32 0))
+    )
+  )
+
+(defun mp-gungame-course-by-id ((id uint))
+  "Return the course data array for a given network course ID."
+  (cond
+    ((= id MP_GUNGAME_COURSE_RED)    *red-training-path-global-info*)
+    ((= id MP_GUNGAME_COURSE_YELLOW) *yellow-training-path-global-info*)
+    ((= id MP_GUNGAME_COURSE_BLUE)   *blue-training-path-global-info*)
+    ((= id MP_GUNGAME_COURSE_PEACE)  *peace-training-path-global-info*)
+    (else (the-as (array tpath-info) #f))
+    )
+  )
+
+(defun mp-gungame-crates-by-id ((id uint))
+  "Return the crate position array for a given network course ID."
+  (cond
+    ((= id MP_GUNGAME_COURSE_RED)    *gungame-red-crates-pos*)
+    ((= id MP_GUNGAME_COURSE_YELLOW) *gungame-yellow-crates-pos*)
+    ((= id MP_GUNGAME_COURSE_BLUE)   *gungame-blue-crates-pos*)
+    ((= id MP_GUNGAME_COURSE_PEACE)  *gungame-peace-crates-pos*)
+    (else (the-as (array gungame-crate) #f))
+    )
+  )
+
+(defun mp-gungame-default-door-by-id ((id uint))
+  "Return the default end-door index for a given course ID."
+  (cond
+    ((= id MP_GUNGAME_COURSE_RED)    (the-as uint 1))
+    ((= id MP_GUNGAME_COURSE_YELLOW) (the-as uint 0))
+    ((= id MP_GUNGAME_COURSE_BLUE)   (the-as uint 1))
+    ((= id MP_GUNGAME_COURSE_PEACE)  (the-as uint 0))
+    (else (the-as uint 0))
+    )
+  )
+
+(defun mp-gungame-any-course? ((course (array tpath-info)))
+  "Check if the course is any synced gun course."
+  (nonzero? (mp-gungame-course-id course))
+  )
+
+(defun mp-gungame-course-index-mask ((idx int))
+  (the-as uint (ash 1 (mod idx 32)))
+  )
+
+(defun mp-gungame-index-chunk ((idx int))
+  (the-as uint (/ idx 32))
+  )
+
+(defun mp-gungame-target-index ((course (array tpath-info)) (target-num uint))
+  (let ((result -1))
+    (when course
+      (dotimes (i (length course))
+        (let ((info (-> course i)))
+          (when (and info (= (the-as uint (-> info num)) target-num))
+            (set! result i)
+            )
+          )
+        )
+      )
+    result
+    )
+  )
+
+(defun mp-gungame-info-index ((course (array tpath-info)) (target-info tpath-info))
+  (let ((result -1))
+    (when (and course target-info)
+      (dotimes (i (length course))
+        (when (= target-info (-> course i))
+          (set! result i)
+          )
+        )
+      )
+    result
+    )
+  )
+
+(defun mp-gungame-chunk-mask ((course (array tpath-info)) (chunk uint) (flag tpath-flags))
+  (let ((mask (the uint 0)))
+    (when course
+      (dotimes (bit 32)
+        (let ((idx (+ (* (the-as int chunk) 32) bit)))
+          (when (< idx (length course))
+            (let ((info (-> course idx)))
+              (when (and info (logtest? (-> info flags) flag))
+                (logior! mask (mp-gungame-course-index-mask idx))
+                )
+              )
+            )
+          )
+        )
+      )
+    mask
+    )
+  )
+
+(defun mp-gungame-spawned-mask ((course (array tpath-info)) (chunk uint))
+  (let ((mask (the uint 0)))
+    (when course
+      (dotimes (bit 32)
+        (let ((idx (+ (* (the-as int chunk) 32) bit)))
+          (when (< idx (length course))
+            (let ((info (-> course idx)))
+              (when (and info
+                         (not (logtest? (-> info flags) (tpath-flags need-to-spawn))))
+                (logior! mask (mp-gungame-course-index-mask idx))
+                )
+              )
+            )
+          )
+        )
+      )
+    mask
+    )
+  )
+
+(defun mp-gungame-broken-mask ((course (array tpath-info)))
+  (mp-gungame-chunk-mask course (the uint 0) (tpath-flags broken))
+  )
+
+(defun mp-gungame-mask-for-target-num ((course (array tpath-info)) (target-num uint))
+  (let ((mask (the uint 0)))
+    (let ((idx (mp-gungame-target-index course target-num)))
+      (when (>= idx 0)
+        (set! mask (mp-gungame-course-index-mask idx))
+        )
+      )
+    mask
+    )
+  )
+
+(defun mp-gungame-deterministic-rand ((target-info tpath-info))
+  (let ((seed (the uint 0)))
+    (when target-info
+      (set! seed (the-as uint (+ (-> target-info num) (* (-> target-info ref-time-num) 3) (-> target-info score))))
+      )
+    (logand seed (the uint 15))
+    )
+  )
+
+(defun mp-gungame-deterministic-spawn-kind ((course (array tpath-info)) (target-info tpath-info))
+  (let ((idx (mp-gungame-info-index course target-info)))
+    (cond
+      ((not target-info)
+       0
+       )
+      ((logtest? (-> target-info flags) (tpath-flags bonus))
+       MP_GUNGAME_SPAWN_DUMMY_GOLD
+       )
+      ((logtest? (-> target-info flags) (tpath-flags citizen))
+       (+ MP_GUNGAME_SPAWN_CIT_A (mod (+ idx (the-as int (mp-gungame-deterministic-rand target-info))) 4))
+       )
+      ((logtest? (-> target-info flags) (tpath-flags big))
+       MP_GUNGAME_SPAWN_DUMMY_BIG
+       )
+      ((logtest? (-> target-info flags) (tpath-flags peace))
+       MP_GUNGAME_SPAWN_DUMMY_PEACE
+       )
+      (else
+       (+ MP_GUNGAME_SPAWN_DUMMY_A (mod (+ idx (the-as int (mp-gungame-deterministic-rand target-info))) 3))
+       )
+      )
+    )
+  )
+
+(defun mp-gungame-set-deterministic-rand! ((target-info tpath-info))
+  (when (and *multi-sync-enabled?*
+             (= (pc-multi-get-status) 6)
+             target-info)
+    (set! *tpath-rand* (mp-gungame-deterministic-rand target-info))
+    )
+  (none)
+  )
