@@ -62,7 +62,7 @@
     (else
       (case arg2
         (('end-mode)
-         (go target-stance)
+         (go target-indax-start (the handle #f))
          )
         (('tube)
          (go target-tube-start (process->handle (the-as process (-> arg3 param 1)))))
@@ -73,12 +73,12 @@
               (when (not (focus-test? self dead))
                 (if (not (-> arg3 param 1))
                     #t
-                    (go target-grab 'stance)
+                    (go target-indax-grab 'stance)
                     )
                 )
               )
              ((= v1-5 'normal)
-              (go target-stance)
+              (go target-indax-start (the handle #f))
               )
              ((= v1-5 'tube)
               (go target-tube-start (process->handle (the-as process (-> arg3 param 1)))))
@@ -320,11 +320,10 @@
   (set! (-> self control rhand-cspace) (-> self node-list data 23))
 
   (ja-channel-set! 1)
-  ;; 2. Hide Jak shell
-  (logior! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
   ;; 3. Signal sidekick to follow
   (if (and (-> self sidekick) (!= (the-as uint (-> self sidekick)) 0))
       (send-event (ppointer->process (-> self sidekick)) 'matrix 'indax))
+  (logclear! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
   (when reset-velocity?
     (remove-exit)
     (go target-indax-stance)
@@ -392,24 +391,35 @@
                                              (= v1-3 'target-indax-pilot-edge-grab)
                                              (= v1-3 'target-indax-pilot-hit)
                                              (= v1-3 'target-indax-pilot-death)))))
-    (format 0 "[MP] Triggered target-indax-exit. Next state: ~A ~%" (-> self next-state))
-    (logclear! (-> self focus-status) (focus-status indax))
-    (logclear! (-> self control root-prim prim-core action) (collide-action stuck-wall-escape))
-    (set! (-> self control mod-surface) *walk-mods*)
-    (logclear! (-> self state-flags) (state-flags sf6))
-    (target-collide-set! 'normal 0.0)
+      (if (= (-> self next-state name) 'process-drawable-art-error)
+        (begin
+          (format 0 "Trying to recover from drawable art error by going to target-indax-start~%")
+          (go target-indax-start (the handle #f))
+        )
+        (begin
+          (format 0 "[MP] Triggered target-indax-exit. Next state: ~A ~%" (-> self next-state name))
+          (logclear! (-> self focus-status) (focus-status indax))
+          (logclear! (-> self control root-prim prim-core action) (collide-action stuck-wall-escape))
+          (set! (-> self control mod-surface) *walk-mods*)
+          (logclear! (-> self state-flags) (state-flags sf6))
+          (target-collide-set! 'normal 0.0)
 
-    ;; Restore hand cspaces to Jak defaults
-    (set! (-> self control lhand-cspace) (-> self node-list data 45))
-    (set! (-> self control rhand-cspace) (-> self node-list data 46))
+          ;; Restore hand cspaces to Jak defaults
+          (when (mp-is-jak?)
+            (set! (-> self control lhand-cspace) (-> self node-list data 45))
+            (set! (-> self control rhand-cspace) (-> self node-list data 46))
+            )
 
-    (set! (-> self draw art-group) (-> self indax art-group-backup))
-    (logclear! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
-    (if (and (-> self sidekick) (!= (the-as uint (-> self sidekick)) 0))
-        (send-event (ppointer->process (-> self sidekick)) 'matrix #f))
-    (if (not (focus-test? self dead))
-        (set! (-> self fact health) (-> self fact health-max)))
-    (target-exit))
+          (set! (-> self draw art-group) (-> self indax art-group-backup))
+          (logclear! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
+          (if (and (-> self sidekick) (!= (the-as uint (-> self sidekick)) 0))
+              (send-event (ppointer->process (-> self sidekick)) 'matrix #f))
+          (if (not (focus-test? self dead))
+              (set! (-> self fact health) (-> self fact health-max)))
+          (target-exit)
+        )
+      )
+    )
   (none))
 
 (defbehavior target-indax-real-post target ()
@@ -585,17 +595,6 @@
      (the-as object #t))
     (('tube)
       (set! *has-ridden-before?* #f)
-      (target-standard-event-handler arg0 arg1 arg2 arg3))
-    (('change-mode)
-     (let ((mode (-> arg3 param 0)))
-      (format 0 "Handling change-mode for mode: ~A ~%" mode)
-      (if (= mode 'grab)
-          (begin
-            (format 0 "[MP] Grabbed while riding! Dismounting...~%")
-            (logclear! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
-            (set! *local-riding?* #f)
-            )
-          )
-      (target-standard-event-handler arg0 arg1 arg2 arg3)))
+      (target-indax-handler arg0 arg1 arg2 arg3))
     (else
-     (target-standard-event-handler arg0 arg1 arg2 arg3))))
+     (target-indax-handler arg0 arg1 arg2 arg3))))

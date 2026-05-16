@@ -124,7 +124,7 @@
 (defun mp-enemy-broadcast-death ((e-proc enemy))
   "Broadcast death start from Owner to Non-Owners."
   (let ((aid (mp-get-enemy-aid e-proc)))
-    (when (and (nonzero? aid) (mp-enemy-authoritative? e-proc) (not *mp-processing-remote-event*))
+    (when (and (nonzero? aid) (not (type? e-proc bot)) (mp-enemy-authoritative? e-proc) (not *mp-processing-remote-event*))
       (format 0 "[MP-Hit-Debug]   >> [OWNER] Queueing MP_EVENT_ENEMY_DEATH for AID ~D~%" aid)
       (mp-send-enemy-death-event e-proc)
       (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death)))
@@ -172,16 +172,27 @@
   (logior! (-> this enemy-flags) (enemy-flag mp-synced-death death-start))
   (send-event this 'death-start)
   (set! (-> this hit-points) 0)
-  (cond
-    ((= death-mode 'mp-death-fast)
-     (go (method-of-object this die-fast))
-     )
-    ((= death-mode 'mp-death-falling)
-     (go (method-of-object this die-falling))
-     )
-    (else
-     (kill-prefer-falling this)
-     )
+  (let ((st (the-as state #f)))
+    (cond
+      ((= death-mode 'mp-death-fast)
+       (set! st (method-of-object this die-fast))
+       )
+      ((= death-mode 'mp-death-falling)
+       (set! st (method-of-object this die-falling))
+       )
+      (else
+       (if (-> this enemy-info use-die-falling)
+           (set! st (method-of-object this die-falling))
+           (set! st (method-of-object this die))
+           )
+       )
+      )
+    (when st
+      (set! (-> this next-state) st)
+      (enter-state (the-as object st) (the-as object #f) (the-as object #f) (the-as object #f) (the-as object #f) (the-as object #f))
+      ;; Ensure we only throw to the new state if we are actually executing inside the enemy's own thread
+      (with-pp (if (and (= (-> *kernel-context* current-process) pp) (= (-> pp main-thread) (-> pp top-thread)) (= (-> pp state) (-> pp next-state))) (throw 'go #t)))
+      )
     )
   (none)
   )
@@ -248,7 +259,9 @@
                                      (the-as process-focusable *target*)
                                      (the-as process-focusable (mp-get-remote-target-process)))))
                  (if (and focus-proc (nonzero? focus-proc))
-                     (set! (-> this focus handle) (process->handle focus-proc))
+                     (if (and (-> this focus) (nonzero? (-> this focus)))
+                         (set! (-> this focus handle) (process->handle focus-proc))
+                         )
                      )
                  )
                )
@@ -309,8 +322,8 @@
                      ;; Bypass the 'go' macro's compile-time typechecker for dynamic state lookups
                      (set! (-> self next-state) (the-as state st))
                      (enter-state (the-as object st) (the-as object #f) (the-as object #f) (the-as object #f) (the-as object #f) (the-as object #f))
-                     ;; Ensure we throw to the new state if we are in the right thread context
-                     (with-pp (if (and (= (-> pp main-thread) (-> pp top-thread)) (= (-> pp state) (-> pp next-state))) (throw 'go #t)))
+                     ;; Ensure we throw to the new state if we are actually executing inside the enemy's own thread
+                     (with-pp (if (and (= (-> *kernel-context* current-process) pp) (= (-> pp main-thread) (-> pp top-thread)) (= (-> pp state) (-> pp next-state))) (throw 'go #t)))
                      )
                  )
                )

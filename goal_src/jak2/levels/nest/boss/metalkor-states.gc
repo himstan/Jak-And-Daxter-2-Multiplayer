@@ -2486,6 +2486,7 @@
                       (set! (-> s5-0 entity) s4-0)
                       (set! (-> s5-0 directed?) #f)
                       (set! (-> s5-0 no-initial-move-to-ground?) #f)
+                      (set! (-> s5-0 battle-enemy?) #f)
                       (let ((s4-1 (get-process *default-dead-pool* metalkor-wasp #x4000)))
                         (set! (-> self wasps gp-0)
                               (ppointer->handle (when s4-1

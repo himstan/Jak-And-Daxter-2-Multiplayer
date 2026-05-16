@@ -1,0 +1,72 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defun mp-draw-battle-debug ()
+  "Overlay real-time sync data for battle processes."
+  (when *mp-debug-battle*
+    (format *stdcon* "~0k--- MP BATTLE DEBUG ---~%")
+    
+    (iterate-process-tree *active-pool* (lambda ((p process-tree))
+      (let ((proc (the-as process p)))
+        (when (and proc (type? proc battle))
+          (let ((b-proc (the-as battle proc)))
+            (let ((draw-pos (new 'stack-no-clear 'vector)))
+              (vector-copy! draw-pos (-> b-proc root trans))
+              
+              ;; Draw battle origin
+              (add-debug-x #t (bucket-id debug-no-zbuf1) draw-pos (new 'static 'rgba :r #xff :g #x80 :b #x0 :a #x80))
+              
+              ;; Draw battle stats
+              (let ((s5-0 (the-as int (-> b-proc max-count))))
+                (if (= (the-as uint s5-0) #x20000000)
+                    (set! s5-0 0)
+                    )
+                (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
+                                  (the-as string 
+                                  (format #f "BATTLE: ~S~%STATE: ~S~%COUNT: ~D / ~D~%CHILDREN: ~D~%ALLIES: ~D" 
+                                          (-> b-proc name)
+                                          (if (-> b-proc state) (-> b-proc state name) "NONE")
+                                          (-> b-proc count)
+                                          s5-0
+                                          (-> b-proc stat-child-count)
+                                          (-> b-proc allies length)
+                                          )
+                                  )
+                                  draw-pos 
+                                  (font-color orange) 
+                                  (the-as vector2h #f))
+                )
+              
+              ;; Draw spawners
+              (dotimes (s5-1 (-> b-proc spawners length))
+                (let ((s4-1 (-> b-proc spawners data s5-1)))
+                  (let ((spawner-pos (-> s4-1 entity extra trans)))
+                    (add-debug-x #t (bucket-id debug-no-zbuf1) spawner-pos (new 'static 'rgba :g #xff :b #xff :a #x80))
+                    
+                    (let ((creature-proc (handle->process (-> s4-1 creature))))
+                      (add-debug-text-3d #t (bucket-id debug-no-zbuf1)
+                                        (the-as string
+                                        (format #f "SPAWNER ~D~%MODE: ~D~%INDEX: ~D~%CREATURE: ~S"
+                                                s5-1
+                                                (-> s4-1 mode)
+                                                (-> s4-1 creature-index)
+                                                (if creature-proc (-> creature-proc name) "NONE")
+                                                )
+                                        )
+                                        spawner-pos
+                                        (font-color yellow)
+                                        (the-as vector2h #f))
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+        #t)
+      *kernel-context*)
+    
+    (format *stdcon* "~%-------------------------~%~%")
+    )
+  (none))

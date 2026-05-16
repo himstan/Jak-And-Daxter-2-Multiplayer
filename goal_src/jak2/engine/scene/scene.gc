@@ -1606,10 +1606,18 @@
 ;; WARN: Using new Jak 2 rtype-of
 (defbehavior scene-player-init scene-player ((scene-obj object) (wait-sym symbol) (continue-name string))
   "`object` arg can be an `(array scene)`, `pair of scene` or a `scene`"
-  ;; Force dismount if we are in target-ride-along (Daxter on Jak)
-  (when (and *target* (-> *target* next-state) (= (-> *target* next-state name) 'target-ride-along))
-    (format 0 "[MP-Scene] Force dismounting from target-ride-along...~%")
-    (send-event *target* 'change-mode 'normal #f)
+  ;; Snapshot whether the local target is already riding before any scene-triggered
+  ;; dismount logic gets a chance to clear the riding state.
+  (when (and *target*
+             (nonzero? *target*))
+    (set! *mp-was-riding-before-scene*
+          (the-as symbol
+                  (or (and (-> *target* next-state)
+                           (nonzero? (-> *target* next-state))
+                           (= (-> *target* next-state name) 'target-ride-along))
+                      (and (-> *target* state)
+                           (nonzero? (-> *target* state))
+                           (= (-> *target* state name) 'target-ride-along)))))
     )
   (process-entity-set! self (the-as entity #f))
   ;; og:preserve-this changed from 512

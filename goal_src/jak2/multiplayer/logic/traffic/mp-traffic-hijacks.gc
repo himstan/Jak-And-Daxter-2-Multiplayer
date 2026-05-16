@@ -804,45 +804,59 @@
   (when (and *mp-set-guard-target* (nonzero? (-> rec ghost-target-aid)))
     (let ((focus-proc (mp-pedestrian-ghost-focus-proc rec)))
       (when (mp-guard-target-debug-ready? (-> rec net-id))
-        (format 0
-                "[MP-GuardTarget] nid=~D phase=set state=pre aid=~D focus=~S focus-type=~S "
-                (-> rec net-id)
-                (-> rec ghost-target-aid)
-                (mp-guard-target-debug-handle-label (-> this focus handle))
-                (mp-guard-target-debug-handle-type (-> this focus handle))
-                )
-        (let ((target-handle (if *mp-get-guard-target*
-                                 (*mp-get-guard-target* this)
-                                 (-> this focus handle)
-                                 )))
+        (let ((focus-handle (the-as handle #f)))
+          (if (and (-> this focus) (nonzero? (-> this focus)))
+              (set! focus-handle (-> this focus handle))
+              )
           (format 0
-                  "traffic=~S traffic-type=~S resolved=~S resolved-type=~S lock=0~%"
-                  (mp-guard-target-debug-handle-label target-handle)
-                  (mp-guard-target-debug-handle-type target-handle)
-                (mp-guard-target-debug-process-label focus-proc)
-                (mp-guard-target-debug-process-type focus-proc)
-                )
+                  "[MP-GuardTarget] nid=~D phase=set state=pre aid=~D focus=~S focus-type=~S "
+                  (-> rec net-id)
+                  (-> rec ghost-target-aid)
+                  (mp-guard-target-debug-handle-label focus-handle)
+                  (mp-guard-target-debug-handle-type focus-handle)
+                  )
+          (let ((target-handle (if *mp-get-guard-target*
+                                  (*mp-get-guard-target* this)
+                                  (if (and (-> this focus) (nonzero? (-> this focus)))
+                                      (-> this focus handle)
+                                      (the-as handle #f))
+                                  )))
+            (format 0
+                    "traffic=~S traffic-type=~S resolved=~S resolved-type=~S lock=0~%"
+                    (mp-guard-target-debug-handle-label target-handle)
+                    (mp-guard-target-debug-handle-type target-handle)
+                  (mp-guard-target-debug-process-label focus-proc)
+                  (mp-guard-target-debug-process-type focus-proc)
+                  )
+            )
           )
         )
       (when (and focus-proc (nonzero? focus-proc))
         (*mp-set-guard-target* this (process->handle focus-proc))
         (when (mp-guard-target-debug-ready? (-> rec net-id))
-          (format 0
-                  "[MP-GuardTarget] nid=~D phase=set state=post aid=~D focus=~S focus-type=~S "
-                  (-> rec net-id)
-                  (-> rec ghost-target-aid)
-                  (mp-guard-target-debug-handle-label (-> this focus handle))
-                  (mp-guard-target-debug-handle-type (-> this focus handle))
-                  )
-          (let ((target-handle (if *mp-get-guard-target*
-                                   (*mp-get-guard-target* this)
-                                   (-> this focus handle)
-                                   )))
+          (let ((focus-handle (the-as handle #f)))
+            (if (and (-> this focus) (nonzero? (-> this focus)))
+                (set! focus-handle (-> this focus handle))
+                )
             (format 0
-                    "traffic=~S traffic-type=~S lock=1~%"
-                    (mp-guard-target-debug-handle-label target-handle)
-                    (mp-guard-target-debug-handle-type target-handle)
-                  )
+                    "[MP-GuardTarget] nid=~D phase=set state=post aid=~D focus=~S focus-type=~S "
+                    (-> rec net-id)
+                    (-> rec ghost-target-aid)
+                    (mp-guard-target-debug-handle-label focus-handle)
+                    (mp-guard-target-debug-handle-type focus-handle)
+                    )
+            (let ((target-handle (if *mp-get-guard-target*
+                                    (*mp-get-guard-target* this)
+                                    (if (and (-> this focus) (nonzero? (-> this focus)))
+                                        (-> this focus handle)
+                                        (the-as handle #f))
+                                    )))
+              (format 0
+                      "traffic=~S traffic-type=~S lock=1~%"
+                      (mp-guard-target-debug-handle-label target-handle)
+                      (mp-guard-target-debug-handle-type target-handle)
+                    )
+              )
             )
           (mp-guard-target-debug-bump!)
           )

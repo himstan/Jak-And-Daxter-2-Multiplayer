@@ -634,7 +634,8 @@
                  (when (>= *mp-puppet-state-mismatch-count* 10)
                    (format 0 "[MP-Puppet] Stuck in ride-along! Forcing exit to ~A~%" ghost-state)
                    ;; Transition directly to the authoritative state via event; :exit handles cleanup
-                   (send-event proc 'change-mode 'indax #f)
+                   (set! *local-riding?* #f)
+                   (send-event proc 'change-mode 'normal #f)
                    (set! *mp-puppet-state-mismatch-count* 0)
                    )
                  )

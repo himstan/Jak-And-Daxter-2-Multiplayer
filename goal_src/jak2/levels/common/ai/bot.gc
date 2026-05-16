@@ -877,7 +877,7 @@
     (('change-mode)
      (when (= (-> arg3 param 0) 'grab)
        (set! v0-0 (alive? this))
-       (if (and (the-as symbol v0-0) (-> arg3 param 1))
+       (when (and (the-as symbol v0-0) (-> arg3 param 1))
            (logior! (-> this focus-status) (focus-status grabbed))
            )
        v0-0
@@ -1177,20 +1177,24 @@ If the player is too far, play a warning speech."
   (if (logtest? (-> this bot-flags) (bot-flags bf02))
       (bot-method-192 this)
       )
+  (when (or (-> this has-been-grabbed-by-scene) (handle->process (-> this scene-player-handle)))
+    (scene-release? this)
+    )
   (if (logtest? *display-bot-marks* (bot-marks-controls bmc08))
       (bot-debug-draw-spot-id this)
       )
   (none)
   )
 
-(defmethod scene-play ((this bot) (scene string) (arg2 symbol))
+(defmethod scene-play ((this bot) (scene string) (grab? symbol))
   (cond
-    ((handle->process (-> this scene-player-handle))
+    ((or (mp-is-jak?) (handle->process (-> this scene-player-handle)))
      #f
      )
     ((and *scene-player* (type? (ppointer->process *scene-player*) scene-player))
      ;; Link to the existing global scene player if it's already running!
      (set! (-> this scene-player-handle) (ppointer->handle *scene-player*))
+     (set! (-> this has-been-grabbed-by-scene) #t)
      #t
      )
     (else
@@ -1198,15 +1202,23 @@ If the player is too far, play a warning speech."
       (set! (-> this scene-player-handle)
             (ppointer->handle (process-spawn scene-player :init scene-player-init scene #t #f))
             )
+      (set! (-> this has-been-grabbed-by-scene) #t)
       #t
       )
     )
   )
 
 (defmethod scene-release? ((this bot))
-  (when (not (handle->process (-> this scene-player-handle)))
-    (process-release? this)
-    #t
+  (let ((scene-proc (handle->process (-> this scene-player-handle))))
+    (when (or (not scene-proc)
+              (not *scene-player*)
+              (!= scene-proc (ppointer->process *scene-player*))
+              )
+      (set! (-> this scene-player-handle) (the-as handle #f))
+      (set! (-> this has-been-grabbed-by-scene) #f)
+      (process-release? this)
+      #t
+      )
     )
   )
 

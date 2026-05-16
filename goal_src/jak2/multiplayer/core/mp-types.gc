@@ -72,6 +72,7 @@
 (defconstant MP_EVENT_WAYPOINT_SNAPSHOT (the-as uint 25))
 (defconstant MP_EVENT_WAYPOINT_REQUEST (the-as uint 26))
 (defconstant MP_EVENT_POLE_GRAB (the-as uint 27))
+(defconstant MP_EVENT_BATTLE_EVENT (the-as uint 28))
 
 (defconstant MP_MISSION_EVT_LEAVE (the-as uint 1))
 (defconstant MP_MISSION_EVT_PLAY_SCENE (the-as uint 2))
@@ -82,6 +83,10 @@
 (defconstant MP_MISSION_EVT_GUNGAME_TARGET_BROKEN (the-as uint 22))
 (defconstant MP_MISSION_EVT_GUNGAME_TARGET_SPAWNED (the-as uint 23))
 (defconstant MP_MISSION_EVT_GUNGAME_COURSE_END (the-as uint 24))
+
+(defconstant MP_BATTLE_EVT_START (the-as uint 1))
+(defconstant MP_BATTLE_EVT_END (the-as uint 2))
+(defconstant MP_BATTLE_EVT_SPAWN (the-as uint 3))
 
 (defconstant MP_GUNGAME_COURSE_RED (the-as uint32 1))
 (defconstant MP_GUNGAME_SPAWN_DUMMY_A (the-as int 1))
@@ -269,6 +274,15 @@
    (open-end?    uint32 :overlay-at (-> data 24))
    (end-door     uint32 :overlay-at (-> data 28))
    (target-num   uint32 :overlay-at (-> data 32))
+   )
+  )
+
+(deftype mp-battle-event (mp-event)
+  ((battle-evt   uint32 :overlay-at (-> data 0))
+   (battle-name  uint8 32 :overlay-at (-> data 4))
+   (spawner-index uint32 :overlay-at (-> data 36))
+   (breed-index  uint32 :overlay-at (-> data 40))
+   (initial?     uint32 :overlay-at (-> data 44))
    )
   )
 
@@ -770,6 +784,37 @@
   (jumping-ambush-cont 38)
   (wait-for-focus 39)
   (spin-attack 40)
+  ;; Bot Specific States
+  (traveling 41)
+  (traveling-blocked 42)
+  (waiting-far 43)
+  (waiting-close 44)
+  (waiting-turn 45)
+  (waiting-crouched 46)
+  (die-falling 47)
+  (failed 48)
+  (hidden 49)
+  ;; Sig Specific States
+  (sig-path-run 50)
+  (sig-path-jump 51)
+  (sig-path-jump-land 52)
+  (sig-path-shoot-jump 53)
+  (sig-path-shoot-jump-land 54)
+  (sig-path-idle 55)
+  (charge-plasma 56)
+  (gun-jam 57)
+  (repair-gun 58)
+  (clean-gun 59)
+  (whip 60)
+  (blast 61)
+  (chase-attack 62)
+  ;; Amphibian Specific States
+  (stare-idle 63)
+  (attack-forward 64)
+  (attack-forward-lunge 65)
+  (attack-forward-end 66)
+  (attack-spin 67)
+  (tongue-attack 68)
   )
 
 (deftype mp-enemy-auth-record (structure)
@@ -811,6 +856,7 @@
 
 (define *daxter-pole-y-offset* 950.0)
 (define *local-riding?* #f)
+(define *local-riding-before-grabbed?* #f)
 (define *mp-processing-remote-event* #f)
 (define-perm *mp-last-pole-grab-handle* handle (the-as handle #f))
 (define-perm *mp-pole-grab-latched?* symbol #f)
@@ -850,6 +896,7 @@
 (define-perm *mp-guard-target-debug-net-id* uint (the uint 0))
 (define-perm *mp-guard-target-debug-next-time* time-frame 0)
 (define-perm *mp-debug-task-sync* symbol #f)
+(define-perm *mp-debug-battle* symbol #f)
 (define-perm *mp-debug-simulate-loss?* symbol #f)
 (define-perm *mp-debug-simulate-loss-time* time-frame 0)
 (define-perm *mp-hijacks-applied?* symbol #f)
@@ -857,24 +904,7 @@
 
 (define-extern mp-draw-puppet-debug (function none))
 (define-extern mp-draw-network-debug (function none))
-(define *mp-daxter-veh-offsets* (new 'static 'inline-array vector 32))
-
-(defun mp-init-daxter-offsets ()
-  (dotimes (i 32)
-    (set-vector! (-> *mp-daxter-veh-offsets* i) (meters 0.15) (meters 0.85) (meters -0.15) 1.0)
-    )
-  ;; BIKE DEFAULTS (Verified by user)
-  (let ((bike-offset (meters 0.05))
-        (bike-height (meters 0.85))
-        (bike-forward (meters 0.35)))
-    (set-vector! (-> *mp-daxter-veh-offsets* 11) bike-offset bike-height bike-forward 1.0) ;; Bike A
-    (set-vector! (-> *mp-daxter-veh-offsets* 12) bike-offset bike-height bike-forward 1.0) ;; Bike B
-    (set-vector! (-> *mp-daxter-veh-offsets* 13) bike-offset bike-height bike-forward 1.0) ;; Bike C
-    (set-vector! (-> *mp-daxter-veh-offsets* 18) bike-offset bike-height bike-forward 1.0) ;; Guard Bike
-    )
-  (none)
-  )
-(mp-init-daxter-offsets)
+(define-extern mp-draw-battle-debug (function none))
 (define *mp-daxter-damage-mult* 2.0)
 
 ;; --- Enemy Hijack Variables ---
@@ -927,6 +957,7 @@
 (define-extern pc-multi-get-status (function int))
 (define-extern pc-multi-set-status (function int none))
 (define-extern pc-multi-request-full-sync (function none))
+(define-extern mp-close-local-fail-mission! (function none))
 (define-extern pc-multi-get-found-ip (function string))
 (define-extern pc-multi-stop-search (function none))
 (define-extern pc-multi-start-search (function none))
@@ -964,11 +995,15 @@
 (define-extern mp-send-world-event (function uint uint none))
 (define-extern mp-send-mission-failed-choice (function uint none))
 (define-extern mp-send-gungame-event (function uint uint uint int uint uint uint uint none))
+(define-extern mp-send-battle-start-event (function process-tree none))
+(define-extern mp-send-battle-end-event (function process-tree none))
+(define-extern mp-send-battle-spawn-event (function process-tree int int symbol none))
 (define-extern mp-arm-mission-failed-full-sync-after-spawn (function none))
 (define-extern mp-request-mission-failed-full-sync-when-ready (function none))
 (define-extern mp-send-enemy-attack-event (function uint uint none))
 (define-extern mp-send-enemy-death-event (function enemy none))
 (define-extern mp-receive-world-event (function mp-world-event none))
+(define-extern mp-receive-battle-event (function mp-battle-event none))
 (define-extern mp-target-death-state? (function symbol symbol))
 (define-extern mp-clear-local-vehicle-occupancy! (function target none))
 (define-extern mp-respawn-local-target! (function target none))

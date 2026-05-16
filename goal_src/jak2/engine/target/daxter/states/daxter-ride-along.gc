@@ -22,6 +22,10 @@
         (set! *has-ridden-before?* #f))
       (set! *local-riding?* #f)
       (set! (-> self control root-prim prim-core action) (collide-action solid can-ride stuck-wall-escape))
+      ;; log next state as well
+      (when (= (if (-> self next-state) (-> self next-state name) 'none) 'target-indax-grab)
+        (set! *local-riding-before-grabbed?* #t)
+      )
       (target-indax-init #f)
     )
 
@@ -33,19 +37,11 @@
                 (quaternion-copy! (-> self control dir-targ) (-> jak-proc control quat))
                 )
             )
-    (if (or (cpad-pressed? (-> self control cpad number) x)
-            *scene-player*) ;; Force dismount if a scene starts
+    (if (or (cpad-pressed? (-> self control cpad number) x))
         (begin
-          (if *scene-player*
-              (format 0 "[MP] Scene player detected! Dismounting automatically...~%")
-              (format 0 "[MP] Jumping off Jak...~%")
-              )
-          (when (not *scene-player*)
-            (sound-play "jump")
-          )
+          (sound-play "jump")
           (format 0 "[MP] Exiting ride along state...~%")
           (logclear! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
-          (format 0 "[MP] Setting riding flag to false ~%")
           (set! *local-riding?* #f)
           (go target-indax-jump
                (-> *TARGET-bank* indax-jump-height-min)

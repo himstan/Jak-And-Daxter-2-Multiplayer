@@ -517,7 +517,7 @@
   "mp-task-debug.o" ;; added
   "mp-puppet.o" ;; added
   "mp-puppet-debug.o" ;; added
-
+  "mp-battle-debug.o" ;; added
   "mp-clock.o" ;; added
   "mp-environment.o" ;; added
   "mp-sync-state.o" ;; added

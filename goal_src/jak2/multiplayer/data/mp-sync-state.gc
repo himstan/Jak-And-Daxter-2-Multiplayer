@@ -42,6 +42,7 @@
             (mp-log-full-sync-wait! 'unknown-continue)
             )
            (else
+            (mp-close-local-fail-mission!)
             (format 0 "[MP-Client] Starting Full Sync Hard Load for ~S...~%" *mp-continue-name*)
             (set! *multi-sync-enabled?* #f)
             (set! (-> *local-info* sync-flag) (the-as uint 2))

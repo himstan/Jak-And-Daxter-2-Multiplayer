@@ -2149,6 +2149,7 @@
           (set! (-> gp-2 entity) (the-as entity (-> self spawner-actor)))
           (set! (-> gp-2 directed?) #f)
           (set! (-> gp-2 no-initial-move-to-ground?) #f)
+          (set! (-> gp-2 battle-enemy?) #f)
           (let* ((s5-1 (get-process *default-dead-pool* roboguard-level #x4000))
                  (v1-52 (when s5-1
                           (let ((t9-8 (method-of-type process activate)))

@@ -2,6 +2,7 @@
 (in-package goal)
 
 (declare-type mp-mission-event mp-event)
+(declare-type mp-battle-event mp-event)
 (define-extern mp-receive-world-event (function mp-world-event none))
 
 (defun mp-inbound-waypoint-command? ((evt mp-event))
@@ -62,6 +63,46 @@
        )
       )
     )
+  (none)
+  )
+
+(defun mp-receive-battle-event ((evt mp-battle-event))
+  (set! *mp-processing-remote-event* #t)
+  (let ((battle-evt (-> evt battle-evt))
+        (name-str *mp-mission-event-name-scratch*))
+    (dotimes (i 32)
+      (set! (-> name-str data i) (-> evt battle-name i))
+      )
+    (let ((len 0))
+      (while (and (< len 31) (nonzero? (-> name-str data len)))
+        (1+! len))
+      (set! (-> name-str data -4) (the-as uint len)))
+
+    (format 0 "[MP-BattleEvent] Received Event ~D for Battle ~S~%" battle-evt name-str)
+
+    (let ((proc (process-by-name name-str *active-pool*)))
+      (when (and proc (type? proc battle))
+        (case battle-evt
+          ((MP_BATTLE_EVT_START)
+           (send-event proc 'mp-battle-start)
+           )
+          ((MP_BATTLE_EVT_END)
+           (send-event proc 'mp-battle-end)
+           )
+          ((MP_BATTLE_EVT_SPAWN)
+           (send-event
+             proc
+             'mp-battle-spawn
+             (the-as int (-> evt spawner-index))
+             (the-as int (-> evt breed-index))
+             (if (zero? (-> evt initial?)) #f #t)
+             )
+           )
+          )
+        )
+      )
+    )
+  (set! *mp-processing-remote-event* #f)
   (none)
   )
 
@@ -569,6 +610,7 @@
       ((MP_EVENT_WAYPOINT_SNAPSHOT)       (mp-receive-waypoint-event (the-as mp-waypoint-event evt) #t))
       ((MP_EVENT_WAYPOINT_REQUEST)        (mp-receive-waypoint-event (the-as mp-waypoint-event evt) #f))
       ((MP_EVENT_POLE_GRAB)               (mp-receive-pole-grab-event evt))
+      ((MP_EVENT_BATTLE_EVENT)            (mp-receive-battle-event (the-as mp-battle-event evt)))
       )
     )
   (set! *mp-processing-remote-event* #f)

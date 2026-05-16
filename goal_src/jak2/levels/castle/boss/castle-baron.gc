@@ -2506,6 +2506,7 @@
                   (set! (-> s4-2 entity) #f)
                   (set! (-> s4-2 directed?) #f)
                   (set! (-> s4-2 no-initial-move-to-ground?) #f)
+                  (set! (-> s4-2 battle-enemy?) #f)
                   (+! (-> self num-clones-to-spawn) -1)
                   (set! (-> self clones gp-2)
                         (ppointer->handle (process-spawn krew-boss-clone :init enemy-init-by-other self s4-2 :to self))

@@ -128,7 +128,9 @@
   "Read a pedestrian guard's synced player target from guard combat state."
   (let ((target-handle (if *mp-get-guard-target*
                            (*mp-get-guard-target* e-proc)
-                           (-> e-proc focus handle)
+                           (if (and (-> e-proc focus) (nonzero? (-> e-proc focus)))
+                               (-> e-proc focus handle)
+                               (the-as handle #f))
                            )))
     (mp-pedestrian-target-aid-from-process (handle->process-safe target-handle))
     )
@@ -144,14 +146,19 @@
             (mp-guard-target-debug-handle-label target-handle)
             (mp-guard-target-debug-handle-type target-handle)
             )
-    (format 0
-            "focus=~S focus-type=~S traffic=~S traffic-type=~S lock=~D~%"
-            (mp-guard-target-debug-handle-label (-> e-proc focus handle))
-            (mp-guard-target-debug-handle-type (-> e-proc focus handle))
-            (mp-guard-target-debug-handle-label target-handle)
-            (mp-guard-target-debug-handle-type target-handle)
-            0
-            )
+    (let ((focus-handle (the-as handle #f)))
+      (if (and (-> e-proc focus) (nonzero? (-> e-proc focus)))
+          (set! focus-handle (-> e-proc focus handle))
+          )
+      (format 0
+              "focus=~S focus-type=~S traffic=~S traffic-type=~S lock=~D~%"
+              (mp-guard-target-debug-handle-label focus-handle)
+              (mp-guard-target-debug-handle-type focus-handle)
+              (mp-guard-target-debug-handle-label target-handle)
+              (mp-guard-target-debug-handle-type target-handle)
+              0
+              )
+      )
     (mp-guard-target-debug-bump!)
     )
   (none)
@@ -182,7 +189,9 @@
   ;; Sync target for Crimson Guards
   (let ((target-handle (if *mp-get-guard-target*
                            (*mp-get-guard-target* e-proc)
-                           (-> e-proc focus handle)
+                           (if (and (-> e-proc focus) (nonzero? (-> e-proc focus)))
+                               (-> e-proc focus handle)
+                               (the-as handle #f))
                            )))
     (set! (-> slot target-aid) (mp-pedestrian-target-aid-from-process (handle->process-safe target-handle)))
     (mp-pedestrian-debug-pack-guard-target! e-proc slot target-handle)

@@ -41,30 +41,30 @@
         (remove-setting! 'target-height)))
   (none))
 
+(defun mp-restore-local-target-after-scene! ()
+  "Restore the local target's role-specific base state after a scene ends."
+  (when (and *target* (nonzero? *target*))
+    (if *mp-was-riding-before-scene*
+        (begin
+          (format 0 "[MP] Scene ended. Restoring ride-along state...~%")
+          (set! *has-ridden-before?* #f)
+          )
+        (begin
+          (format 0 "[MP] Scene ended. Restoring base Daxter state...~%")
+          (set! *has-ridden-before?* #t)
+          )
+        )
+    )
+  (none))
+
 (defun mp-handle-scene-transition ()
   "Handle state changes when entering/exiting scenes"
   (let ((in-scene? (not (not *scene-player*))))
-    ;; 1. Handle Entering Scene
-    (when (and (mp-is-daxter?)
-               (not *mp-last-scene-player*)
-               in-scene?)
-      (format 0 "[MP] Scene started. Tracking ride-along state: ~A~%" *local-riding?*)
-      (set! *mp-was-riding-before-scene* *local-riding?*))
-
-    ;; 2. Handle Exiting Scene
+    ;; 1. Handle Exiting Scene
     (when (and (mp-is-daxter?)
                *mp-last-scene-player*
                (not in-scene?))
-      (if *mp-was-riding-before-scene*
-          (begin
-            (format 0 "[MP] Scene ended. Daxter was riding, re-entering ride-along...~%")
-            (set! *has-ridden-before?* #f)
-            )
-          (begin
-            (format 0 "[MP] Scene ended. Daxter was independent, staying independent.~%")
-            (set! *has-ridden-before?* #t)
-            )
-          )
+      (mp-restore-local-target-after-scene!)
       )
     
     (when (not in-scene?)
@@ -79,7 +79,8 @@
           )
       )
 
-    (set! *mp-last-scene-player* in-scene?))
+    (set! *mp-last-scene-player* in-scene?)
+    )
   (none))
 
 (defun mp-update-player-visibility ()
@@ -89,12 +90,12 @@
         (begin
           (mp-sync-enemies-update)
           ;; 1. Local Player Visibility
-          (when (and *target* (-> *target* draw))
+          (when (and *target* (nonzero? *target*) (-> *target* draw) (nonzero? (-> *target* draw)))
               (logclear! (-> *target* draw status) (if (mp-is-jak?) (draw-control-status no-draw no-draw-bounds2) (draw-control-status no-draw no-draw-bounds))))
               
           ;; 2. Remote Puppet Visibility (Clearing no-draw stuck from target-continue)
           (let ((puppet (mp-puppet-get-proc)))
-            (when (and puppet (-> puppet draw))
+            (when (and puppet (nonzero? puppet) (-> puppet draw) (nonzero? (-> puppet draw)))
               ;; Always ensure the puppet's Jak model is drawn if it exists
               (logclear! (-> puppet draw status) (if (mp-is-jak?) (draw-control-status no-draw no-draw-bounds) (draw-control-status no-draw no-draw-bounds2)))
               )
@@ -113,9 +114,9 @@
     ;; 3. Sidekick visibility management (Hide if not riding or in movie)
     (when (nonzero? (pc-multi-get-status))
       ;; Local Sidekick (The Daxter on your shoulder)
-      (when (and *target* (-> *target* sidekick))
+      (when (and *target* (nonzero? *target*) (-> *target* sidekick) (nonzero? (-> *target* sidekick)))
         (let ((sk (the-as sidekick (ppointer->process (-> *target* sidekick)))))
-          (when (and sk (nonzero? sk) (-> sk draw))
+          (when (and sk (nonzero? sk) (-> sk draw) (nonzero? (-> sk draw)))
             ;; HIDE if in movie, or if the remote counterpart is NOT riding.
             (if (or in-movie? (or (and (zero? (-> *remote-info* riding?)) (mp-is-jak?)) (and (mp-is-daxter?) *local-riding?*)))
                 (logior! (-> sk draw status) (draw-control-status no-draw))
@@ -126,9 +127,9 @@
         
       ;; Puppet Sidekick (The Daxter on the remote Jak puppet's shoulder)
       (let ((puppet (mp-puppet-get-proc)))
-        (when (and puppet (-> puppet sidekick))
+        (when (and puppet (nonzero? puppet) (-> puppet sidekick) (nonzero? (-> puppet sidekick)))
           (let ((sk (the-as sidekick (ppointer->process (-> puppet sidekick)))))
-            (when (and sk (nonzero? sk) (-> sk draw))
+            (when (and sk (nonzero? sk) (-> sk draw) (nonzero? (-> sk draw)))
               ;; Puppet Jak's sidekick visibility depends on the counterpart (Local Daxter)'s riding state.
               ;; HIDE if in movie, or if counterpart isn't riding.
               (if (or in-movie? (not (or (and (mp-is-jak?) (zero? (-> *remote-info* riding?))) (and (mp-is-daxter?) *local-riding?*))))

@@ -56,6 +56,7 @@
       (set! (-> s5-0 entity) (-> self entity))
       (set! (-> s5-0 directed?) #f)
       (set! (-> s5-0 no-initial-move-to-ground?) #f)
+      (set! (-> s5-0 battle-enemy?) #f)
       (let ((gp-0 (new 'stack-no-clear 'event-message-block)))
         (set! (-> gp-0 from) (process->ppointer self))
         (set! (-> gp-0 num-params) 2)

@@ -1695,6 +1695,7 @@
                   (set! (-> s2-1 entity) (-> this actor-group 1 data s5-2 actor))
                   (set! (-> s2-1 directed?) #f)
                   (set! (-> s2-1 no-initial-move-to-ground?) #f)
+                  (set! (-> s2-1 battle-enemy?) #f)
                   (let* ((s1-2 (ppointer->process (process-spawn predator :init enemy-init-by-other this s2-1 :to this)))
                          (s2-2 (if (type? s1-2 process-focusable)
                                    s1-2
