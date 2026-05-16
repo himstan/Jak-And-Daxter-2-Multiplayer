@@ -974,7 +974,11 @@
                      (or (and (-> *setting-control* user-current movie)
                               (!= (-> *setting-control* user-current movie) (process->ppointer self))
                               )
-                         (!= (get-status *gui-control* (-> self gui-id)) 3)
+                         ;; In MP mode the scene-player is spawned directly without a task-manager,
+                         ;; so nothing drives the GUI movie-channel connection to status 3.
+                         ;; Skip this gate in MP; spooling/talking/movie-other still guard us.
+                         (and (not *multi-sync-enabled?*)
+                              (!= (get-status *gui-control* (-> self gui-id)) 3))
                          )
                      )
             (suspend)
@@ -1041,17 +1045,19 @@
                   (nonzero? (-> self anim anim-name))
                   (let ((v1-161 (file-status *art-control* (-> self anim name) 0)))
                     (or (not (or (= v1-161 'active) (= v1-161 'locked)))
-                        (let* ((a1-26 (lookup-gui-connection-id
-                                        *gui-control*
-                                        (the-as string (-> self anim anim-name))
-                                        (gui-channel none)
-                                        (gui-action none)
-                                        )
-                                      )
-                               (v1-167 (get-status *gui-control* a1-26))
+                        (and (not *multi-sync-enabled?*)
+                             (let* ((a1-26 (lookup-gui-connection-id
+                                             *gui-control*
+                                             (the-as string (-> self anim anim-name))
+                                             (gui-channel none)
+                                             (gui-action none)
+                                             )
+                                           )
+                                    (v1-167 (get-status *gui-control* a1-26))
+                                    )
+                               (not (or (= v1-167 (gui-status ready)) (= v1-167 (gui-status active))))
                                )
-                          (not (or (= v1-167 (gui-status ready)) (= v1-167 (gui-status active))))
-                          )
+                             )
                         )
                     )
                   )

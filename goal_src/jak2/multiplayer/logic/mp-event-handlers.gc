@@ -176,10 +176,23 @@
           (format 0 "[MP-WorldEvent] Local player hit ignored (Riding along).~%"))))
   (none))
 
+(defun handle-weapon-pickup-scenes ((scene-name string))
+  (case (string->symbol scene-name)
+    (('city-get-yellow-gun)
+      (when (and *target* (not (logtest? (-> *game-info* features) (game-feature gun-yellow))))
+         (format 0 "[MP] Received Gun Yellow sync! Giving to player.~%")
+         (pickup-collectable! (-> *target* fact) (pickup-type gun-yellow) 1.0 (the-as handle #f))
+         (task-close! "sewer-enemy-resolution")
+    ))
+  )
+)
+
 (defun mp-event-handler-scene-start ((ev mp-scene-event))
   (let ((s* *mp-scene-name-scratch*))
     (when (and s* (nonzero? (length s*)))
       (format 0 "[MP-WorldEvent] Remote started scene: ~S. Starting locally via NPC-sync.~%" s*)
+
+      (handle-weapon-pickup-scenes s*)
       
       ;; 1. Snap-Teleport to Host's area (Ensures level is loaded/NPCs birthed)
       (when (and *target* (-> *target* control))
@@ -189,15 +202,17 @@
         (set! (-> *target* control trans z) (-> *remote-info* z))
         )
       
-      ;; 2. Spawn Scene-Player MANUALLY first
-      ;; This ensures the scene is active globally even if the NPC logic fails or is delayed.
-      (when (not *scene-player*)
-        (format 0 "[MP-WorldEvent] Spawning authoritative scene-player for ~S~%" s*)
-        (process-spawn scene-player :init scene-player-init s* #t #f)
-        )
-      
-      ;; 3. Logic Delegation (Signal NPC to link up and advance its AI/Waypoints)
+      ;; 2. Spawn Scene-Player with the scene's load-point-obj as the continue-name.
       (let ((scene-obj (scene-lookup s*)))
+        (when (not *scene-player*)
+          (let ((load-pt (if (and scene-obj (nonzero? scene-obj))
+                             (the-as string (-> scene-obj load-point-obj))
+                             #f
+                             )))
+            (format 0 "[MP-WorldEvent] Spawning authoritative scene-player for ~S (continue: ~S)~%" s* load-pt)
+            (process-spawn scene-player :init scene-player-init s* #t load-pt)
+            )
+          )
         (if scene-obj
             (let ((entity-name (-> scene-obj entity)))
               (if entity-name
