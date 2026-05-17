@@ -117,6 +117,30 @@ This commonly includes things such as:
   (process-spawn krew-package arg1 :to arg0)
   )
 
+(defun delivery-task-find-or-spawn-vehicle! ((traffic-mgr process) (spawn-params traffic-object-spawn-params))
+  "Reuse the reserved mission vehicle if it already exists locally."
+  (let ((vehicle-proc (the-as process (mp-mission-vehicle-find-by-net-id MP_MISSION_VEHICLE_KREW_DELIVERY))))
+    (if (and vehicle-proc (nonzero? vehicle-proc))
+        (set! (-> spawn-params proc) vehicle-proc)
+        (when (and traffic-mgr (nonzero? traffic-mgr))
+          (send-event traffic-mgr 'spawn-object spawn-params)
+          )
+        )
+    (-> spawn-params proc)
+    )
+  )
+
+(defun delivery-task-setup-vehicle! ((task task-manager) (vehicle-proc process))
+  (when (and task (nonzero? task) vehicle-proc (nonzero? vehicle-proc))
+    (set! (-> task slave 0) (process->handle vehicle-proc))
+    (mp-mission-vehicle-assign-net-id! vehicle-proc MP_MISSION_VEHICLE_KREW_DELIVERY)
+    (when (type? vehicle-proc vehicle)
+      (set! (-> (the-as vehicle vehicle-proc) damage-factor) 2.0)
+      )
+    )
+  (none)
+  )
+
 (set-subtask-hook!
   *game-info*
   (game-task-node city-krew-delivery-delivery)
@@ -142,13 +166,9 @@ This commonly includes things such as:
         (set! (-> s5-0 id) (the-as uint 0))
         (set! (-> s5-0 net-id) MP_MISSION_VEHICLE_KREW_DELIVERY)
         (set! (-> s5-0 proc) #f)
-        (send-event gp-1 'spawn-object s5-0)
+        (delivery-task-find-or-spawn-vehicle! gp-1 s5-0)
         (when (-> s5-0 proc)
-          (set! (-> self slave 0) (process->handle (-> s5-0 proc)))
-          (let ((v1-20 (-> s5-0 proc)))
-            (mp-mission-vehicle-assign-net-id! v1-20 MP_MISSION_VEHICLE_KREW_DELIVERY)
-            (set! (-> (the-as vehicle v1-20) damage-factor) 2.0)
-            )
+          (delivery-task-setup-vehicle! self (-> s5-0 proc))
           (let ((v1-22 (krew-package-spawn (-> s5-0 proc) (-> s5-0 proc))))
             (if v1-22
                 (set! (-> self slave 1) (process->handle (-> v1-22 0)))
@@ -348,8 +368,9 @@ This commonly includes things such as:
            )
       (init-vf0-vector)
       (let ((gp-0 (handle->process (-> self slave 0))))
+        (when (and gp-0 (nonzero? gp-0))
         (cond
-          ((and gp-0 (not (logtest? (-> (the-as process-focusable gp-0) focus-status) (focus-status dead))))
+          ((not (logtest? (-> (the-as process-focusable gp-0) focus-status) (focus-status dead)))
            (cond
              ((zero? (-> self data-int8 0))
               (when (= (level-status *level* 'ctyindb) 'active)
@@ -426,7 +447,7 @@ This commonly includes things such as:
           (else
             (go-virtual fail)
             )
-          )
+          ))
         )
       (none)
       )
