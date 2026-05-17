@@ -1,5 +1,22 @@
 (in-package goal)
 
+(defun mp-ride-along-sync-camera-target! ((local-target target) (ride-target target))
+  "Client-side ride-along camera handoff between local Daxter and the remote Jak puppet."
+  (when (and (mp-is-daxter?) *camera* (nonzero? *camera*) local-target (nonzero? local-target))
+    (let ((current-target (handle->process (-> *camera* focus handle))))
+      (if (and ride-target (nonzero? ride-target))
+          (when (!= current-target ride-target)
+            (send-event *camera* 'change-target ride-target)
+            )
+          (when (!= current-target local-target)
+            (send-event *camera* 'change-target local-target)
+            )
+          )
+      )
+    )
+  (none)
+  )
+
 (defstate target-ride-along (target)
   :event target-ride-along-handler
 
@@ -11,6 +28,11 @@
     (set! (-> self control root-prim prim-core action) (collide-action))
     (logior! (-> self focus-status) (focus-status indax))
     (logior! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
+    (when (mp-is-daxter?)
+      (let ((jak-proc (mp-puppet-get-proc)))
+        (mp-ride-along-sync-camera-target! self jak-proc)
+        )
+      )
     (if (and (-> self sidekick) (nonzero? (-> self sidekick)))
         (begin
           (logclear! (-> self sidekick 0 draw status) (draw-control-status no-draw))
@@ -26,6 +48,7 @@
       (when (= (if (-> self next-state) (-> self next-state name) 'none) 'target-indax-grab)
         (set! *local-riding-before-grabbed?* #t)
       )
+      (mp-ride-along-sync-camera-target! self (the-as target #f))
       (target-indax-init #f)
     )
 
@@ -63,6 +86,9 @@
     (do-joint-math (-> self draw) (-> self node-list) (-> self skel))
     
     (let ((jak-proc (if (mp-is-jak?) *target* (mp-puppet-get-proc))))
+      (when (mp-is-daxter?)
+        (mp-ride-along-sync-camera-target! self jak-proc)
+        )
       (if jak-proc
           (begin
             ;; Precise: Snapping to Jak's shoulder joint if available

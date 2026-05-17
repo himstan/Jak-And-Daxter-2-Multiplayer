@@ -13,13 +13,6 @@
           (vector-copy! *multi-remote-interp-pos* remote-pos)
           (set! *multi-remote-interp-angle* (-> *remote-info* angle))
           (set! *multi-remote-first-seen?* #f)
-          ;; If we are riding this remote puppet, snap the camera too!
-          (if (and (mp-is-daxter?) (= (-> *remote-info* riding?) (the-as uint 1)))
-              (begin
-                (set! (-> *target* control camera-pos quad) (-> *target* control trans quad))
-                (send-event *camera* 'teleport)
-                )
-              )
           )
         )
 
