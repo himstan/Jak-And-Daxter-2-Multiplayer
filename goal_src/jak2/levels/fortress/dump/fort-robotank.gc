@@ -446,6 +446,16 @@
   (case arg2
     (('trigger)
      (when (and *target* (< (-> self continue-index) (the-as int (-> arg3 param 0))))
+       (when (and (not *mp-processing-remote-event*)
+                  (nonzero? *target*)
+                  (-> *target* control)
+                  (nonzero? (-> *target* control)))
+         (mp-send-fortress-robotank-trigger-event
+           (-> self name)
+           (the-as int (-> arg3 param 0))
+           (-> *target* control trans)
+           )
+         )
        (if (< (-> self continue-index) 0)
            (add-process *gui-control* self (gui-channel alert) (gui-action play) "cityv107" -99.0 0)
            )

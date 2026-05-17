@@ -103,6 +103,33 @@
   (none)
   )
 
+(defun mp-send-fortress-robotank-trigger-event ((proc-name string) (trigger-id int) (source-pos vector))
+  "Broadcast a fortress robotank trigger so the remote player can snap in and replay it locally."
+  (when (and *multi-sync-enabled?*
+             (= (pc-multi-get-status) 6)
+             proc-name
+             (not *mp-processing-remote-event*))
+    (let ((q-idx *mp-event-queue-write-ptr*))
+      (let ((evt (the-as mp-robotank-trigger-event (-> *mp-event-queue* q-idx))))
+        (set! (-> evt etype) MP_EVENT_MISSION_EVENT)
+        (set! (-> evt mission-evt) MP_MISSION_EVT_FORTRESS_ROBOTANK_TRIGGER)
+        (set! (-> evt trigger-id) (the-as uint32 trigger-id))
+        (dotimes (i 32)
+          (set! (-> evt target-name i) (the uint 0))
+          )
+        (let ((len (min 31 (length proc-name))))
+          (dotimes (i len)
+            (set! (-> evt target-name i) (-> proc-name data i))
+            )
+          )
+        (vector-copy! (-> evt source-pos) source-pos)
+        )
+      (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
+      )
+    )
+  (none)
+  )
+
 (defun mp-send-gungame-event ((m-evt-id uint)
                               (course-id uint)
                               (step uint)

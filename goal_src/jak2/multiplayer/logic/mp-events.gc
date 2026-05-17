@@ -306,6 +306,26 @@
   (none)
   )
 
+(defun mp-receive-fortress-robotank-trigger-event ((evt mp-robotank-trigger-event) (proc-name string))
+  "Snap the local player to the remote activator and replay the robotank trigger once."
+  (format 0 "[MP-MissionEvent] Replaying fortress robotank trigger ~D for ~S~%"
+          (the-as int (-> evt trigger-id))
+          proc-name)
+  (when (and *target* (nonzero? *target*))
+    (let ((target-control (-> *target* control)))
+      (when (and target-control (nonzero? target-control))
+        (vector-copy! (-> target-control trans) (-> evt source-pos))
+        )
+      )
+    )
+  (let ((proc (process-by-name proc-name *active-pool*)))
+    (when proc
+      (send-event proc 'trigger (the-as int (-> evt trigger-id)))
+      )
+    )
+  (none)
+  )
+
 (defun mp-receive-mission-event ((evt mp-mission-event))
   (set! *mp-processing-remote-event* #t)
   (let ((m-evt (-> evt mission-evt))
@@ -327,6 +347,9 @@
        )
       ((MP_MISSION_EVT_FAILED_RETRY_NO)
        (mp-receive-mission-failed-choice m-evt)
+       )
+      ((MP_MISSION_EVT_FORTRESS_ROBOTANK_TRIGGER)
+       (mp-receive-fortress-robotank-trigger-event (the-as mp-robotank-trigger-event evt) name-str)
        )
       ((MP_MISSION_EVT_GUNGAME_TUTORIAL_STEP)
        (mp-store-gungame-event (the-as mp-gungame-event evt))
