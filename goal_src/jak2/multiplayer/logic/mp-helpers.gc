@@ -24,6 +24,39 @@
     )
   )
 
+(defun mp-pickup-type->equipped-weapon ((gun-type uint))
+  "Map a gameplay gun type to the compact network weapon enum."
+  (case (the-as pickup-type gun-type)
+    (((pickup-type eco-yellow)) (mp-equipped-weapon yellow))
+    (((pickup-type eco-red))    (mp-equipped-weapon red))
+    (((pickup-type eco-blue))   (mp-equipped-weapon blue))
+    (((pickup-type eco-dark))   (mp-equipped-weapon dark))
+    (else                       (mp-equipped-weapon none))
+    )
+  )
+
+(defun mp-equipped-weapon->pickup-type ((weapon uint))
+  "Map the compact network weapon enum back to a gameplay gun type."
+  (the uint
+       (case (the-as mp-equipped-weapon (the int weapon))
+         (((mp-equipped-weapon yellow)) (the uint (pickup-type eco-yellow)))
+         (((mp-equipped-weapon red))    (the uint (pickup-type eco-red)))
+         (((mp-equipped-weapon blue))   (the uint (pickup-type eco-blue)))
+         (((mp-equipped-weapon dark))   (the uint (pickup-type eco-dark)))
+         (else                          (the uint (pickup-type none)))
+         ))
+  )
+
+(defun mp-current-camera-angle-y ()
+  "Read the current camera yaw for weapon-shot replication."
+  (if (and *target* (nonzero? *target*) (-> *target* control))
+      (let ((cam-mat (-> *math-camera* inv-camera-rot)))
+        (atan (-> cam-mat vector 2 x) (-> cam-mat vector 2 z))
+        )
+      0.0
+      )
+  )
+
 (defun mp-should-block-break-sync? ((proc process))
   "BREAK events are for simple destructibles, not traffic, enemies, or actors."
   (and proc
@@ -303,6 +336,29 @@
       (set! (-> evt aid) (the-as uint32 aid))
       )
     (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
+    )
+  (none))
+
+(defun mp-send-player-gun-shot-event ((gun-type uint))
+  "Send a reliable gun-shot replay event for the local authoritative player."
+  (if (or (not *multi-sync-enabled?*)
+          (!= (pc-multi-get-status) 6)
+          *mp-processing-remote-event*)
+      (return #f))
+
+  (let ((weapon (mp-pickup-type->equipped-weapon gun-type)))
+    (when (not (zero? weapon))
+      (let ((q-idx *mp-event-queue-write-ptr*))
+        (let ((evt (the-as mp-player-gun-shot-event (-> *mp-event-queue* q-idx))))
+          (set! (-> evt etype) MP_EVENT_PLAYER_GUN_SHOT)
+          (set! (-> evt weapon-type) (the-as uint32 weapon))
+          (+! *mp-local-gun-shot-seq* 1)
+          (set! (-> evt shot-seq) *mp-local-gun-shot-seq*)
+          (set! (-> evt cam-angle-y) (mp-current-camera-angle-y))
+          )
+        (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
+        )
+      )
     )
   (none))
 

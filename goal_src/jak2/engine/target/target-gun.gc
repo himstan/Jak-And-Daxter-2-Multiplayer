@@ -360,8 +360,27 @@
   #f
   )
 
+(defun mp-puppet-weapon-authoritative? ((proc target))
+  "Is this target the active remote puppet whose gun state is network-authoritative?"
+  (if (and proc
+           (nonzero? proc)
+           *mp-puppet*
+           (nonzero? *mp-puppet*)
+           (= proc *mp-puppet*)
+           (nonzero? (the-as uint *mp-puppet-ghost*))
+           (-> *mp-puppet-ghost* active?)
+           )
+      #t
+      #f)
+  )
+
+(defun is-allowed-to-put-gun-away? ((proc target))
+  (let ((weapon (the-as uint (-> *mp-puppet-ghost* equipped-weapon))))
+    (or (not (mp-puppet-weapon-authoritative? proc)) (= weapon 0))
+  ))
+
 (defbehavior target-gun-end-mode target ((arg0 symbol))
-  (when (using-gun? self)
+  (when (and (using-gun? self) (is-allowed-to-put-gun-away? self))
     (set! (-> self gun fire-pending) 0)
     (mode-set! (-> self gun hips) (joint-mod-mode flex-blend))
     (send-event *camera* 'clear-slave-option (cam-slave-options STICKY_ANGLE BLOCK_RIGHT_STICK GUN_CAM))
@@ -2517,7 +2536,10 @@
             (target-gun-fire-dark)
             )
            )
-         #t
+        (when (not *mp-processing-remote-event*)
+          (mp-send-player-gun-shot-event (the-as uint arg0))
+          )
+        #t
          )
         (else
           (let ((v1-149 (target-gun-ammo-out-pick)))

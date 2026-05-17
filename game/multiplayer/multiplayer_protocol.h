@@ -73,6 +73,8 @@ struct PacketPlayerState {
   uint32_t riding_veh_id;
   uint8_t riding_seat_index;
   uint8_t scene_active;
+  uint8_t equipped_weapon;
+  uint8_t pad_reserved;
   // World Sync Fields (Continuous Sync)
   float money;
   float gems;

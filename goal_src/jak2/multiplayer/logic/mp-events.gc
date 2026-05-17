@@ -3,6 +3,7 @@
 
 (declare-type mp-mission-event mp-event)
 (declare-type mp-battle-event mp-event)
+(declare-type mp-player-gun-shot-event mp-event)
 (define-extern mp-receive-world-event (function mp-world-event none))
 
 (defun mp-inbound-waypoint-command? ((evt mp-event))
@@ -102,6 +103,14 @@
         )
       )
     )
+  (set! *mp-processing-remote-event* #f)
+  (none)
+  )
+
+(defun mp-receive-player-gun-shot-event ((evt mp-player-gun-shot-event))
+  "Reapply a remote gun shot using the authoritative shot event."
+  (set! *mp-processing-remote-event* #t)
+  (mp-puppet-receive-gun-shot! evt)
   (set! *mp-processing-remote-event* #f)
   (none)
   )
@@ -634,6 +643,7 @@
       ((MP_EVENT_WAYPOINT_REQUEST)        (mp-receive-waypoint-event (the-as mp-waypoint-event evt) #f))
       ((MP_EVENT_POLE_GRAB)               (mp-receive-pole-grab-event evt))
       ((MP_EVENT_BATTLE_EVENT)            (mp-receive-battle-event (the-as mp-battle-event evt)))
+      ((MP_EVENT_PLAYER_GUN_SHOT)         (mp-receive-player-gun-shot-event (the-as mp-player-gun-shot-event evt)))
       )
     )
   (set! *mp-processing-remote-event* #f)

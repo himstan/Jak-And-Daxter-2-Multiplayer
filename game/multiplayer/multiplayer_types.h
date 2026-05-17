@@ -30,6 +30,7 @@ struct RemoteEntityState {
   uint32_t riding_veh_id;
   uint8_t riding_seat_index;
   uint8_t scene_active;
+  uint8_t equipped_weapon;
   uint32_t last_sequence_num = 0;
   MPVehicleState veh_state;
 };
@@ -75,7 +76,8 @@ struct RemotePlayerInfoGOAL {
   uint32_t riding_veh_id;
   uint8_t riding_seat_index;
   uint8_t scene_active;
-  uint8_t pad_reserved[2];
+  uint8_t equipped_weapon;
+  uint8_t pad_reserved[1];
   // World Sync Fields (Mirrored from local-player-info)
   float money;
   float gems;
@@ -123,7 +125,8 @@ struct LocalPlayerInfoGOAL {
   uint32_t riding_veh_id;
   uint8_t riding_seat_index;
   uint8_t scene_active;
-  uint8_t pad_reserved[2];
+  uint8_t equipped_weapon;
+  uint8_t pad_reserved[1];
   // Global World Sync (Outgoing)
   float money;
   float gems;

@@ -119,6 +119,7 @@ void handle_packet_receive(LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* rem
               entity.riding_veh_id = state->riding_veh_id;
               entity.riding_seat_index = state->riding_seat_index;
               entity.scene_active = state->scene_active;
+              entity.equipped_weapon = state->equipped_weapon;
               entity.last_sequence_num = state->header.sequenceNum;
               memcpy(&entity.veh_state, &state->veh_state, sizeof(MPVehicleState));
 
@@ -291,6 +292,7 @@ void handle_packet_send(LocalPlayerInfoGOAL* local, MPEventBufferGOAL* events) {
   local_state.riding_veh_id = local->riding_veh_id;
   local_state.riding_seat_index = local->riding_seat_index;
   local_state.scene_active = local->scene_active;
+  local_state.equipped_weapon = local->equipped_weapon;
   local_state.money = local->money;
   local_state.gems = local->gems; local_state.skill = local->skill;
   memcpy(local_state.task_mask, local->task_mask, 64);
@@ -379,6 +381,7 @@ void sync_to_goal(RemotePlayerInfoGOAL* remote_goal) {
     remote_goal->riding_veh_id = remote_state.riding_veh_id;
     remote_goal->riding_seat_index = remote_state.riding_seat_index;
     remote_goal->scene_active = remote_state.scene_active;
+    remote_goal->equipped_weapon = remote_state.equipped_weapon;
     memcpy(&remote_goal->veh_state, &remote_state.veh_state, sizeof(MPVehicleState));
   } else {
     remote_goal->status = 0;
