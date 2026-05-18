@@ -1041,27 +1041,26 @@
           )
         (set! (-> self score) -1.0)
         )
-      (let ((gp-1
-              (ppointer->handle
-                (judge-spawn self (new 'static 'vector :x 190382.08 :y -47063.04 :z -2148475.0 :w 1.0) (the-as uint 10))
-                )
+      (let ((judge-param
+              (judge-spawn self (new 'static 'vector :x 190382.08 :y -47063.04 :z -2148475.0 :w 1.0) (the-as uint 10))
               )
             )
         (format 0 "Setting board judge~%")
-        (set! *stadium-board1-judge-process* (handle->process gp-1))
-        (suspend)
-        (while (send-event (handle->process gp-1) 'waiting)
-          (when (-> self text)
-            (cond
-              ((not (task-node-closed? (game-task-node stadium-board1-resolution)))
-               (cond
-                 ((and (mp-stadium-board1-both-tutorials-done?) (task-node-open? (game-task-node stadium-board1-training-judge)))
-                  (cond
-                    ((< (-> self score) 0.0)
-                     (render-text self (text-id board-score-activate-judge))
-                     )
-                    ((< (-> self score) 15000.0)
-                     (render-text self (text-id board-score-try-again))
+        (set! *stadium-board1-judge* judge-param)
+        (let ((gp-1 (ppointer->handle judge-param)))
+          (suspend)
+          (while (send-event (handle->process gp-1) 'waiting)
+            (when (-> self text)
+              (cond
+                ((not (task-node-closed? (game-task-node stadium-board1-resolution)))
+                 (cond
+                   ((and (mp-stadium-board1-both-tutorials-done?) (task-node-open? (game-task-node stadium-board1-training-judge)))
+                    (cond
+                      ((< (-> self score) 0.0)
+                       (render-text self (text-id board-score-activate-judge))
+                       )
+                      ((< (-> self score) 15000.0)
+                       (render-text self (text-id board-score-try-again))
                      )
                     )
                  )
@@ -1099,7 +1098,7 @@
           (suspend)
           )
         (send-event (handle->process gp-1) 'die)
-        )
+        ))
       (when (-> self challenge-done)
         (hoverboard-training-manager-method-30 self)
         (when (> (-> self egg-count) 0)

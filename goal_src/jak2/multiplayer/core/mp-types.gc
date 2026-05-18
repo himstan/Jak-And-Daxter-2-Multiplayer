@@ -226,7 +226,7 @@
 (declare-type remote process-drawable)
 (declare-type judge remote)
 
-(define-perm *stadium-board1-judge-process* process (the-as process #f))
+(define-perm *stadium-board1-judge* (pointer judge) (the-as (pointer judge) #f))
 
 (deftype mp-world-event (mp-event)
   ((aid uint32 :overlay-at (-> data 0))

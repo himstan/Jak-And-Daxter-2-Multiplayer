@@ -166,12 +166,12 @@
 (defun mp-stadium-board1-try-remote-start-judge! ()
   (when *mp-stadium-board1-pending-remote-start?*
     (cond
-      ((and *stadium-board1-judge-process* (nonzero? *stadium-board1-judge-process*) *target* (nonzero? *target*))
-        (format 0 "[MP-StadiumBoard1] Delivering pending challenge start to judge ~A.~%" *stadium-board1-judge-process*)
+      ((and *stadium-board1-judge* (nonzero? *stadium-board1-judge*) *target* (nonzero? *target*))
+        (format 0 "[MP-StadiumBoard1] Delivering pending challenge start to judge ~A.~%" *stadium-board1-judge*)
         (set! *mp-stadium-board1-pending-remote-start?* #f)
-        (send-event *stadium-board1-judge-process* 'mp-start :from *target*)
+        (send-event (handle->process (ppointer->handle *stadium-board1-judge*)) 'mp-start :from *target*)
         )
-      ((and (not *stadium-board1-judge-process*))
+      ((and (not *stadium-board1-judge*))
         (format 0 "[MP-StadiumBoard1] Judge handle is stale; waiting for next judge spawn.~%")
         )
       (else
