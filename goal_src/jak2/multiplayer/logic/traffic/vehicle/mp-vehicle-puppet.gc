@@ -30,29 +30,93 @@
     )
   )
 
-(defun mp-vehicle-is-local-authoritative? ((veh vehicle))
-  "Check if the local machine has authority over this vehicle's physics."
-  (let ((flags (-> veh flags)))
-    (cond
-      ;; 1. Is a remote puppet in the driver seat?
-      ((or (= veh (handle->process *mp-remote-driven-vehicle*))
-           (let ((pilot (get-rider-in-seat veh 0)))
-             (and pilot (= pilot *mp-puppet*))
-             )
-           (and (nonzero? (-> veh net-id)) (= (-> veh net-id) (-> *remote-info* veh-state net-id)))
-           )
-       #f)
+(defun mp-vehicle-local-target-driving? ((veh vehicle))
+  "True only while the local player is actually attached to driver seat 0."
+  (if (and veh
+           (nonzero? veh)
+           *target*
+           (nonzero? *target*)
+           (focus-test? *target* pilot)
+           (-> *target* pilot)
+           (nonzero? (-> *target* pilot)))
+      (let* ((pilot-info (-> *target* pilot))
+             (vehicle-proc (the-as vehicle (handle->process-safe (-> pilot-info vehicle)))))
+        (and vehicle-proc
+             (nonzero? vehicle-proc)
+             (= vehicle-proc veh)
+             (zero? (-> pilot-info seat-index)))
+        )
+      #f
+      )
+  )
 
-      ;; 2. Local machine is driving: We ARE authoritative.
-      ((logtest? flags (rigid-body-object-flag player-driving))
-       #t)
-       
-      ;; 3. Ambient traffic: Only the Host (Jak) is authoritative.
-      (else
-       (mp-is-traffic-authoritative?))
+(defun mp-vehicle-sync-owned? ((veh vehicle))
+  "True when a vehicle is currently claimed by either player's driver sync slot."
+  (if (and veh (nonzero? veh) (nonzero? (-> veh net-id)))
+      (let ((net-id (-> veh net-id)))
+        (or (and *remote-info*
+                 (nonzero? *remote-info*)
+                 (= net-id (-> *remote-info* veh-state net-id)))
+            (and *local-info*
+                 (nonzero? *local-info*)
+                 (= net-id (-> *local-info* veh-state net-id)))
+            )
+        )
+      #f
+      )
+  )
+
+(defun mp-vehicle-release-stale-player-control! ((veh vehicle))
+  "Leave player-control when no real local or puppet driver owns the vehicle."
+  (when (and veh
+             (nonzero? veh)
+             (-> veh state)
+             (= (-> veh state name) 'player-control)
+             (not (mp-vehicle-sync-owned? veh))
+             (not (mp-vehicle-local-target-driving? veh)))
+    (let ((current-pilot (get-rider-in-seat veh 0)))
+      (if current-pilot
+          (send-event veh 'change-state 'active)
+          (send-event veh 'change-state 'waiting)
+          )
+      (when (and (-> veh next-state) (= (-> veh next-state name) 'player-control))
+        (set! (-> veh next-state) (the-as state #f))
+        )
       )
     )
-)
+  (none)
+  )
+
+(defun mp-vehicle-is-local-authoritative? ((veh vehicle))
+  "Check if the local machine has authority over this vehicle's physics."
+  (if (and veh (nonzero? veh))
+      (let ((flags (-> veh flags)))
+        (cond
+          ;; 1. Is a remote puppet in the driver seat?
+          ((or (= veh (handle->process *mp-remote-driven-vehicle*))
+               (let ((pilot (get-rider-in-seat veh 0)))
+                 (and pilot (= pilot *mp-puppet*))
+                 )
+               (and *remote-info*
+                    (nonzero? *remote-info*)
+                    (nonzero? (-> veh net-id))
+                    (= (-> veh net-id) (-> *remote-info* veh-state net-id)))
+               )
+           #f)
+
+          ;; 2. Local machine is driving: We ARE authoritative.
+          ((and (logtest? flags (rigid-body-object-flag player-driving))
+                (mp-vehicle-local-target-driving? veh))
+           #t)
+
+          ;; 3. Ambient traffic: Only the Host (Jak) is authoritative.
+          (else
+           (mp-is-traffic-authoritative?))
+          )
+        )
+      #f
+      )
+  )
 
 (defun mp-should-apply-vehicle-camera? ((veh vehicle))
   "Returns #t if the local camera should follow this vehicle."
@@ -165,6 +229,7 @@
 
   ;; RESET NUDGE FLAG (for debug visualization)
   (set! (-> this pad-bytes 0) (the uint8 0))
+  (mp-vehicle-release-stale-player-control! this)
 
   (when (and (not (mp-vehicle-is-local-authoritative? this))
              (nonzero? (-> this net-id)))
@@ -526,18 +591,7 @@
     (when (and (nonzero? *mp-remote-driven-vehicle*) 
                (or (not old-veh) (!= driven-net-id (-> (the-as vehicle old-veh) net-id))))
       (when (and old-veh (nonzero? old-veh))
-        (let ((v-proc (the-as vehicle old-veh)))
-          (when (and (-> v-proc state) (= (-> v-proc state name) 'player-control))
-            (let ((current-pilot (get-rider-in-seat v-proc 0)))
-              (when (!= current-pilot *target*)
-                (if current-pilot
-                    (send-event v-proc 'change-state 'active)
-                    (send-event v-proc 'change-state 'waiting)
-                    )
-                )
-              )
-            )
-          )
+        (mp-vehicle-release-stale-player-control! (the-as vehicle old-veh))
         )
       (set! *mp-remote-driven-vehicle* (the-as handle #f))
       )
@@ -567,6 +621,9 @@
       )
     (when (zero? driven-net-id)
       (set! *mp-remote-driven-vehicle* (the-as handle #f))
+      )
+    (when old-veh
+      (mp-vehicle-release-stale-player-control! (the-as vehicle old-veh))
       )
     )
   (none)

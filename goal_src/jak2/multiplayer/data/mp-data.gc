@@ -112,20 +112,24 @@
     (set! (-> *local-info* riding-veh-id) (the uint 0))
     (set! (-> *local-info* riding-seat-index) (the uint8 0))
 
-    (when (and *target* 
-               (logtest? (focus-status pilot pilot-riding) (-> *target* focus-status))
+    (when (and *target*
+               (nonzero? *target*)
+               (focus-test? *target* pilot)
                (nonzero? (-> *target* pilot))
                (nonzero? (-> *target* pilot vehicle))
                (-> *target* state)
-               (not (mp-target-death-state? (-> *target* state name))))
-      (let ((v-proc (the-as vehicle (handle->process (-> *target* pilot vehicle)))))
+               (not (mp-target-death-state? (-> *target* state name)))
+               (!= (-> *target* state name) 'target-pilot-get-off)
+               (!= (-> *target* state name) 'target-indax-pilot-get-off))
+      (let* ((pilot-info (-> *target* pilot))
+             (v-proc (the-as vehicle (handle->process-safe (-> pilot-info vehicle)))))
         (when (and v-proc (nonzero? v-proc) (nonzero? (-> v-proc net-id)))
-          ;; Set occupancy info for everyone
+          ;; Set occupancy info before pilot-riding so remote puppets can play get-on.
           (set! (-> *local-info* riding-veh-id) (-> v-proc net-id))
-          (set! (-> *local-info* riding-seat-index) (the uint8 (-> *target* pilot seat-index)))
+          (set! (-> *local-info* riding-seat-index) (the uint8 (-> pilot-info seat-index)))
 
           ;; ONLY broadcast vehicle physics if we are the driver (seat 0)
-          (when (zero? (-> *target* pilot seat-index))
+          (when (zero? (-> pilot-info seat-index))
             (mp-vehicle-pack v-proc (-> *local-info* veh-state))
             )
           )

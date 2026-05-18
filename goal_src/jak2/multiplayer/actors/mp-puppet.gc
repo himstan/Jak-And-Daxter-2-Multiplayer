@@ -640,6 +640,42 @@
       )
   )
 
+(defun mp-puppet-pilot-entry-mode ()
+  (if (mp-is-jak?)
+      'pilot-daxter
+      'pilot
+      )
+  )
+
+(defun mp-puppet-synced-to-vehicle-seat? ((proc target) (v-proc vehicle) (seat-index int))
+  (and proc
+       (nonzero? proc)
+       v-proc
+       (nonzero? v-proc)
+       (focus-test? proc pilot)
+       (nonzero? (-> proc pilot))
+       (nonzero? (-> proc pilot vehicle))
+       (= (handle->process-safe (-> proc pilot vehicle)) v-proc)
+       (= (-> proc pilot seat-index) seat-index)
+       )
+  )
+
+(defun mp-puppet-start-vehicle-entry! ((proc target) (v-proc vehicle) (seat-index int))
+  "Start native pilot get-on for the puppet without pre-snapping into the seat."
+  (when (and proc
+             (nonzero? proc)
+             (-> proc control)
+             v-proc
+             (nonzero? v-proc)
+             (>= seat-index 0)
+             (< seat-index 4))
+    (mp-vehicle-clear-seat-occupant! v-proc seat-index proc)
+    (remove-rider v-proc proc)
+    (send-event proc 'change-mode (mp-puppet-pilot-entry-mode) v-proc seat-index #f)
+    )
+  (none)
+  )
+
 (defun mp-puppet-apply-ghost-correction! ((proc target))
   "Smoothly nudge the puppet target's root towards the ghost position and inject inputs."
   (let ((ghost *mp-puppet-ghost*))
@@ -777,23 +813,10 @@
                ;; Remote player is in a vehicle.
                (let ((v-proc (mp-vehicle-find-by-net-id riding-veh-id)))
                  (when (and v-proc (nonzero? v-proc))
-                   (let ((is-already-synced? (and (focus-test? proc pilot) 
-                                                  (nonzero? (-> proc pilot))
-                                                  (nonzero? (-> proc pilot vehicle))
-                                                  (= (handle->process (-> proc pilot vehicle)) v-proc)
-                                                  (= (-> proc pilot seat-index) (the int riding-seat-index)))))
-                     
-                     (when (not is-already-synced?)
-                       ;; Puppet is not in the correct seat/vehicle. Attach them.
-                       (mp-vehicle-clear-seat-occupant! v-proc (the int riding-seat-index) proc)
-                       (remove-rider v-proc proc)
-                       (put-rider-in-seat v-proc (the int riding-seat-index) proc)
-                       
-                       ;; Trigger animation mode change (animation sync)
-                       (if (mp-is-jak?)
-                           (send-event proc 'change-mode 'pilot-daxter v-proc 0 #t)
-                           (send-event proc 'change-mode 'pilot v-proc 0 #t)
-                           )
+                   (let ((seat-index (the int riding-seat-index)))
+                     (when (not (mp-puppet-synced-to-vehicle-seat? proc v-proc seat-index))
+                       ;; Native pilot get-on attaches the rider at the animation-ready frame.
+                       (mp-puppet-start-vehicle-entry! proc v-proc seat-index)
                        )
                      )
                    )
