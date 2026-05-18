@@ -1,6 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern mp-is-fail-mission-pending? (function symbol))
+
 (defstate target-indax-death (target)
   :event (-> target-death event)
   :exit (behavior ()
@@ -199,13 +201,22 @@
                (let ((remote (mp-get-remote-target-process)))
                  (when *remote-player-is-dead*
                      (begin
-                       (format 0 "[MP-Death] Double Death or remote disconnected. Triggering full reset.~%")
-                       (set! *remote-player-is-dying* #f)
-                       (set! *remote-player-is-dead* #f)
-                       (remove-setting! 'mode-name)
-                       (send-event *camera* 'change-target self)
-                       (goto cfg-reset-init)
-                       (mp-send-world-event MP_EVENT_PLAYER_RESPAWNED (the-as uint 0))
+                       (format 0 "[MP-Death] Double Death or remote disconnected.~%")
+                       (if (not (mp-is-fail-mission-pending?))
+                           (begin
+                             (format 0 "[MP-Death] Triggering full reset.~%")
+                             (set! *remote-player-is-dying* #f)
+                             (set! *remote-player-is-dead* #f)
+                             (remove-setting! 'mode-name)
+                             (send-event *camera* 'change-target self)
+                             (goto cfg-reset-init)
+                             (mp-send-world-event MP_EVENT_PLAYER_RESPAWNED (the-as uint 0))
+                             )
+                           (begin
+                             (format 0 "[MP-Death] Yielding to task-manager fail mission.~%")
+                             (suspend)
+                             )
+                           )
                        )
                      )
                  )

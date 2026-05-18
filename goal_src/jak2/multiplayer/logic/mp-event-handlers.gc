@@ -176,7 +176,7 @@
           (format 0 "[MP-WorldEvent] Local player hit ignored (Riding along).~%"))))
   (none))
 
-(defun handle-weapon-pickup-scenes ((scene-name string))
+(defun mp-handle-remote-scene-hacks ((scene-name string))
   (case (string->symbol scene-name)
     (('city-get-yellow-gun)
       (when (and *target* (not (logtest? (-> *game-info* features) (game-feature gun-yellow))))
@@ -184,6 +184,10 @@
          (pickup-collectable! (-> *target* fact) (pickup-type gun-yellow) 1.0 (the-as handle #f))
          (task-close! "sewer-enemy-resolution")
     ))
+    (('city-keira-hover-challenge-intro)
+      (format 0 "[MP] Received Keira Delivery Scene. Forcing task close.~%")
+      (task-close! "city-keira-delivery-delivery")
+    )
   )
 )
 
@@ -192,7 +196,7 @@
     (when (and s* (nonzero? (length s*)))
       (format 0 "[MP-WorldEvent] Remote started scene: ~S. Starting locally via NPC-sync.~%" s*)
 
-      (handle-weapon-pickup-scenes s*)
+      (mp-handle-remote-scene-hacks s*)
       
       ;; 1. Snap-Teleport to Host's area (Ensures level is loaded/NPCs birthed)
       (when (and *target* (-> *target* control))

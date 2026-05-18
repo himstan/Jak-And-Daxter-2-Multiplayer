@@ -13,6 +13,7 @@
 ;; --- MULTIPLAYER EXTERNALS ---
 (define-extern mp-is-mission-active? (function symbol))
 (define-extern mp-is-open-world? (function symbol))
+(define-extern mp-is-fail-mission-pending? (function symbol))
 (define-extern mp-get-remote-target-process (function process-focusable))
 (define-extern mp-target-get-state-from-id (function uint symbol))
 (define-extern *mp-puppet-ghost* mp-target-ghost-record)
@@ -1510,12 +1511,21 @@
                (let ((remote (mp-get-remote-target-process)))
                  (when *remote-player-is-dead*
                      (begin
-                       (format 0 "[MP-Death] Double Death or remote disconnected. Triggering full reset.~%")
-                       (set! *remote-player-is-dying* #f)
-                       (set! *remote-player-is-dead* #f)
-                       (remove-setting! 'mode-name)
-                       (send-event *camera* 'change-target self)
-                       (goto cfg-reset-init)
+                       (format 0 "[MP-Death] Double Death or remote disconnected.~%")
+                       (if (not (mp-is-fail-mission-pending?))
+                           (begin
+                             (format 0 "[MP-Death] Triggering full reset.~%")
+                             (set! *remote-player-is-dying* #f)
+                             (set! *remote-player-is-dead* #f)
+                             (remove-setting! 'mode-name)
+                             (send-event *camera* 'change-target self)
+                             (goto cfg-reset-init)
+                             )
+                           (begin
+                             (format 0 "[MP-Death] Yielding to task-manager fail mission.~%")
+                             (suspend)
+                             )
+                           )
                        )
                      )
                  )
