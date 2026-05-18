@@ -483,3 +483,11 @@
                    )
                )
   )
+
+  (defun mp-teleport-to-remote ()
+    (set! (-> *target* control trans x) (-> *remote-info* x))
+    (set! (-> *target* control trans y) (-> *remote-info* y))
+    (set! (-> *target* control trans z) (-> *remote-info* z))
+    (set! (-> *target* control camera-pos quad) (-> *target* control trans quad))
+    (send-event *camera* 'teleport)
+  )

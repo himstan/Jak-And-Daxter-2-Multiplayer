@@ -217,6 +217,7 @@
     ;; 4. High-Frequency Local Updates
     (mp-manage-remote-puppet)
     (mp-extract-local-stats)
+    (mp-stadium-board1-tick)
     (mp-apply-remote-world-state)
     (mp-apply-remote-environment-state)
     
@@ -307,6 +308,7 @@
   (set! *mp-puppet-pending-gun-shot-cam-angle-y* 0.0)
   (set! *mp-puppet-last-packet-id* (the uint 0))
   (set! *mp-puppet-last-fresh-input-time* (the-as time-frame 0))
+  (mp-stadium-board1-reset)
   (if (nonzero? (the-as uint *mp-last-local-continue-name*))
       (set! (-> *mp-last-local-continue-name* data 0) (the uint 0)))
   (set! *mp-puppet-state-mismatch-count* 0)

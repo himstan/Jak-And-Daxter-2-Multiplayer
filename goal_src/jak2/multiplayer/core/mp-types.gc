@@ -92,6 +92,10 @@
 (defconstant MP_MISSION_EVT_GUNGAME_TARGET_BROKEN (the-as uint 22))
 (defconstant MP_MISSION_EVT_GUNGAME_TARGET_SPAWNED (the-as uint 23))
 (defconstant MP_MISSION_EVT_GUNGAME_COURSE_END (the-as uint 24))
+(defconstant MP_MISSION_EVT_STADIUM_BOARD1_TUTORIAL_DONE (the-as uint 30))
+(defconstant MP_MISSION_EVT_STADIUM_BOARD1_CHALLENGE_START (the-as uint 31))
+(defconstant MP_MISSION_EVT_STADIUM_BOARD1_SCORE_UPDATE (the-as uint 32))
+(defconstant MP_MISSION_EVT_STADIUM_BOARD1_CHALLENGE_END (the-as uint 33))
 
 (defconstant MP_BATTLE_EVT_START (the-as uint 1))
 (defconstant MP_BATTLE_EVT_END (the-as uint 2))
@@ -113,6 +117,8 @@
 (defconstant MP_GUNGAME_SPAWN_CIT_D (the-as int 13))
 
 ;; --- Helper functions for handle resolution ---
+
+(define-extern mp-teleport-to-remote (function object))
 
 (defun handle->process-safe ((h handle))
   (if (and (nonzero? (the-as int h))
@@ -209,6 +215,18 @@
 (define-extern mp-vehicle-find-by-net-id (function uint vehicle))
 (define-extern mp-pedestrian-find-by-net-id (function uint citizen))
 (define-extern entity-by-aid (function uint entity))
+
+
+;; stadium
+(define-extern mp-stadium-board1-reset-scores (function none))
+(define-extern mp-stadium-board1-mark-local-judge-started! (function none))
+(define-extern mp-stadium-board1-local-judge-activated! (function symbol none))
+(define-extern mp-stadium-board1-try-remote-start-judge! (function none))
+
+(declare-type remote process-drawable)
+(declare-type judge remote)
+
+(define-perm *stadium-board1-judge-process* process (the-as process #f))
 
 (deftype mp-world-event (mp-event)
   ((aid uint32 :overlay-at (-> data 0))

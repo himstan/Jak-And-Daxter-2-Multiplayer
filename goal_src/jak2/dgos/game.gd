@@ -522,6 +522,7 @@
   "mp-environment.o" ;; added
   "mp-sync-state.o" ;; added
   "mp-event-handlers.o" ;; added
+  "mp-stadium-board1.o" ;; added
   "mp-waypoint-sync.o" ;; added
   "mp-events.o" ;; added
   "mp-mission-events.o" ;; added

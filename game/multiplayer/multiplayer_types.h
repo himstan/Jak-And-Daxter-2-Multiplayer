@@ -37,9 +37,10 @@ struct RemoteEntityState {
 
 struct MPEvent {
   uint32_t etype;
-  uint32_t pad;
-  uint8_t data[488];
+  uint8_t pad[12];
+  uint8_t data[480];
 };
+static_assert(sizeof(MPEvent) == 496, "MPEvent must match GOAL mp-event");
 
 struct MPEventBufferGOAL {
   uint32_t out_count;
