@@ -91,6 +91,70 @@
       )
   )
 
+(defun hoverboard-training-manager-get-ride-target ()
+  (if (and *multi-sync-enabled?* (mp-is-daxter?) *local-riding?*)
+      (let ((ride-target (mp-puppet-get-proc)))
+        (if (and ride-target (nonzero? ride-target))
+            ride-target
+            (the-as target #f)
+            )
+        )
+      (the-as target #f)
+      )
+  )
+
+(defun hoverboard-training-manager-board-ready? ()
+  (or (and *target*
+           (nonzero? *target*)
+           (logtest? (focus-status board) (-> *target* focus-status)))
+      (let ((ride-target (hoverboard-training-manager-get-ride-target)))
+        (and ride-target
+             (nonzero? ride-target)
+             (logtest? (focus-status board) (-> ride-target focus-status)))
+        )
+      )
+  )
+
+(defun hoverboard-training-manager-set-notify! ((listener object))
+  (when (and *target* (nonzero? *target*))
+    (send-event *target* 'get-notify listener)
+    )
+  (let ((ride-target (hoverboard-training-manager-get-ride-target)))
+    (when (and ride-target
+               (nonzero? ride-target)
+               (!= ride-target *target*))
+      (send-event ride-target 'get-notify listener)
+      )
+    )
+  (none)
+  )
+
+(defun hoverboard-training-manager-ride-focus-test? ((status focus-status))
+  (let ((ride-target (hoverboard-training-manager-get-ride-target)))
+    (and ride-target
+         (nonzero? ride-target)
+         (logtest? status (-> ride-target focus-status))
+         )
+    )
+  )
+
+(defun hoverboard-training-manager-boost-step-done? ((this hoverboard-training-manager) (quick-jump-seen? symbol))
+  (and quick-jump-seen?
+       (or (-> this boost)
+           (= (-> this trick-type) (board-tricks board-boost))
+           )
+       )
+  )
+
+(defun hoverboard-training-manager-grind-step-done? ((this hoverboard-training-manager) (rail-jump-seen? symbol))
+  (and rail-jump-seen?
+       (or (-> this grind)
+           (= (-> this trick-type) (board-tricks board-rail))
+           (hoverboard-training-manager-ride-focus-test? (focus-status rail))
+           )
+       )
+  )
+
 ;; WARN: Return type mismatch object vs hoverboard-training-manager.
 (defbehavior hoverboard-training-manager-event-handler hoverboard-training-manager ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   (local-vars (v0-0 object))
@@ -296,7 +360,7 @@
     (set! (-> self last-sound-id)
           (add-process *gui-control* self (gui-channel sig) (gui-action play) "kei001" -99.0 0)
           )
-    (while (or (not *target*) (not (logtest? (focus-status board) (-> *target* focus-status))))
+    (while (not (hoverboard-training-manager-board-ready?))
       (if (= (get-status *gui-control* (-> self last-sound-id)) (gui-status unknown))
           (send-event (handle->process (-> self voicebox)) 'speak-effect #f)
           )
@@ -311,7 +375,7 @@
       (suspend)
       )
     (send-event (handle->process (-> self voicebox)) 'speak-effect #f)
-    (send-event *target* 'get-notify self)
+    (hoverboard-training-manager-set-notify! self)
     (set! (-> self trick-type) (board-tricks none))
     (until #f
       (render-text self (text-id board-tutorial-jump))
@@ -322,7 +386,7 @@
       )
     #f
     (label cfg-51)
-    (send-event *target* 'get-notify #f)
+    (hoverboard-training-manager-set-notify! #f)
     (go-virtual duck-jump)
     )
   )
@@ -345,7 +409,7 @@
       (suspend)
       )
     (send-event (handle->process (-> self voicebox)) 'speak-effect #f)
-    (send-event *target* 'get-notify self)
+    (hoverboard-training-manager-set-notify! self)
     (set! (-> self trick-type) (board-tricks none))
     (until #f
       (render-text self (text-id board-tutorial-duck-jump))
@@ -356,7 +420,7 @@
       )
     #f
     (label cfg-36)
-    (send-event *target* 'get-notify #f)
+    (hoverboard-training-manager-set-notify! #f)
     (go-virtual boost-jump)
     )
   )
@@ -388,7 +452,7 @@
       (set! (-> gp-1 map-icon) (the-as uint 15))
       (set! (-> self arrow) (process->handle (task-arrow-spawn gp-1 self)))
       )
-    (send-event *target* 'get-notify self)
+    (hoverboard-training-manager-set-notify! self)
     (set! (-> self trick-type) (board-tricks none))
     (let ((gp-2 #f)
           (s5-0 (+ (current-time) (seconds 15)))
@@ -420,14 +484,14 @@
         (if (= (-> self trick-type) (board-tricks board-quick-jump))
             (set! gp-2 #t)
             )
-        (if (and gp-2 (-> self boost))
+        (if (hoverboard-training-manager-boost-step-done? self gp-2)
             (goto cfg-42)
             )
         )
       )
     #f
     (label cfg-42)
-    (send-event *target* 'get-notify #f)
+    (hoverboard-training-manager-set-notify! #f)
     (go-virtual grind)
     )
   )
@@ -457,7 +521,7 @@
       (set! (-> gp-1 map-icon) (the-as uint 15))
       (set! (-> self arrow) (process->handle (task-arrow-spawn gp-1 self)))
       )
-    (send-event *target* 'get-notify self)
+    (hoverboard-training-manager-set-notify! self)
     (set! (-> self trick-type) (board-tricks none))
     (let ((gp-2 #f))
       (until #f
@@ -484,14 +548,14 @@
         (if (= (get-status *gui-control* (-> self last-sound-id)) (gui-status unknown))
             (send-event (handle->process (-> self voicebox)) 'speak-effect #f)
             )
-        (if (and gp-2 (-> self grind))
+        (if (hoverboard-training-manager-grind-step-done? self gp-2)
             (goto cfg-35)
             )
         )
       )
     #f
     (label cfg-35)
-    (send-event *target* 'get-notify #f)
+    (hoverboard-training-manager-set-notify! #f)
     (go-virtual spin)
     )
   )
@@ -517,7 +581,7 @@
       (suspend)
       )
     (send-event (handle->process (-> self voicebox)) 'speak-effect #f)
-    (send-event *target* 'get-notify self)
+    (hoverboard-training-manager-set-notify! self)
     (set! (-> self trick-type) (board-tricks none))
     (until #f
       (render-text self (text-id board-tutorial-spin))
@@ -528,7 +592,7 @@
       )
     #f
     (label cfg-36)
-    (send-event *target* 'get-notify #f)
+    (hoverboard-training-manager-set-notify! #f)
     (go-virtual flip)
     )
   )
@@ -551,7 +615,7 @@
       (suspend)
       )
     (send-event (handle->process (-> self voicebox)) 'speak-effect #f)
-    (send-event *target* 'get-notify self)
+    (hoverboard-training-manager-set-notify! self)
     (set! (-> self trick-type) (board-tricks none))
     (until #f
       (render-text self (text-id board-tutorial-flip))
@@ -562,7 +626,7 @@
       )
     #f
     (label cfg-36)
-    (send-event *target* 'get-notify #f)
+    (hoverboard-training-manager-set-notify! #f)
     (go-virtual trick)
     )
   )
@@ -585,7 +649,7 @@
       (suspend)
       )
     (send-event (handle->process (-> self voicebox)) 'speak-effect #f)
-    (send-event *target* 'get-notify self)
+    (hoverboard-training-manager-set-notify! self)
     (set! (-> self trick-type) (board-tricks none))
     (until #f
       (render-text self (text-id board-tutorial-trick))
@@ -604,7 +668,7 @@
       )
     #f
     (label cfg-47)
-    (send-event *target* 'get-notify #f)
+    (hoverboard-training-manager-set-notify! #f)
     (go-virtual game)
     )
   )
@@ -955,7 +1019,7 @@
         )
     )
   :exit (behavior ()
-    (send-event *target* 'get-notify #f)
+    (hoverboard-training-manager-set-notify! #f)
     )
   :trans (behavior ()
     (hoverboard-training-manager-ensure-mp-huds! self)
@@ -997,7 +1061,7 @@
         (hoverboard-training-manager-show-mp-huds! self)
         )
       )
-    (send-event *target* 'get-notify self)
+    (hoverboard-training-manager-set-notify! self)
     (hoverboard-training-manager-method-29 self)
     (mp-stadium-board1-render-result-text)
     (mp-stadium-board1-render-waiting-text)
@@ -1217,7 +1281,7 @@
         )
     )
   :exit (behavior ()
-    (send-event *target* 'get-notify #f)
+    (hoverboard-training-manager-set-notify! #f)
     )
   :trans (behavior ()
     (hoverboard-training-manager-ensure-mp-huds! self)
@@ -1263,7 +1327,7 @@
     (hoverboard-training-manager-method-29 self)
     )
   :code (behavior ()
-    (send-event *target* 'get-notify self)
+    (hoverboard-training-manager-set-notify! self)
     (until #f
       (let ((gp-0
               (ppointer->handle
