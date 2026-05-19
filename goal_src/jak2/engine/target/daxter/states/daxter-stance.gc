@@ -11,6 +11,7 @@
 (defstate target-indax-stance (target)
   :event target-indax-handler
   :enter (behavior ()
+          (target-indax-init #f)
           ((-> target-stance enter))
           (set! (-> self control mod-surface) *indax-walk-mods*))
   :exit (behavior ()

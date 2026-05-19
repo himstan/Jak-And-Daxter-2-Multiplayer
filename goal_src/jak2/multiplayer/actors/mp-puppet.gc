@@ -907,7 +907,6 @@
       (when p
         (set! *mp-puppet* (-> p 0))
         (set! (-> *mp-puppet* name) "mp-puppet")
-        (set! *has-ridden-before?* #f)
         (set! *local-riding?* #f)
         (set! *mp-puppet-state-mismatch-count* 0)
         (set! *remote-player-is-dying* #f)

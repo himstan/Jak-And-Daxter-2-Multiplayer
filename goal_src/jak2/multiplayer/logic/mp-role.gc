@@ -90,7 +90,7 @@
         (begin
           (mp-sync-enemies-update)
           ;; 1. Local Player Visibility
-          (when (and *target* (nonzero? *target*) (-> *target* draw) (nonzero? (-> *target* draw)))
+          (when (and (not *visibility-overriden?*) *target* (nonzero? *target*) (-> *target* draw) (nonzero? (-> *target* draw)))
               (logclear! (-> *target* draw status) (if (mp-is-jak?) (draw-control-status no-draw no-draw-bounds2) (draw-control-status no-draw no-draw-bounds))))
               
           ;; 2. Remote Puppet Visibility (Clearing no-draw stuck from target-continue)

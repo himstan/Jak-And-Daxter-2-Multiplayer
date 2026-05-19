@@ -706,6 +706,7 @@
       ((MP_EVENT_POLE_GRAB)               (mp-receive-pole-grab-event evt))
       ((MP_EVENT_BATTLE_EVENT)            (mp-receive-battle-event (the-as mp-battle-event evt)))
       ((MP_EVENT_PLAYER_GUN_SHOT)         (mp-receive-player-gun-shot-event (the-as mp-player-gun-shot-event evt)))
+      ((MP_EVENT_WARP_GATE)               (mp-receive-warp-gate-event (the-as mp-warp-gate-event evt)))
       )
     )
   (set! *mp-processing-remote-event* #f)

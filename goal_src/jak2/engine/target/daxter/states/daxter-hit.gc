@@ -88,6 +88,7 @@
 (defstate target-indax-hit-ground (target)
   :event target-indax-handler
   :enter (behavior ((arg0 symbol))
+          (target-indax-init #f)
           ((-> target-hit-ground enter) arg0)
           (set! (-> self control mod-surface) *indax-walk-mods*))
 

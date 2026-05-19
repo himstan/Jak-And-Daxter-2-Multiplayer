@@ -524,6 +524,7 @@
   "mp-event-handlers.o" ;; added
   "mp-stadium-board1.o" ;; added
   "mp-waypoint-sync.o" ;; added
+  "mp-warp-gate-sync.o" ;; added
   "mp-events.o" ;; added
   "mp-mission-events.o" ;; added
   "mp-data.o" ;; added

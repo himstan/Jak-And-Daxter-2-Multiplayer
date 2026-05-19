@@ -23,6 +23,7 @@
   :enter (behavior ()
     (set! (-> self control transv quad) (the-as uint128 0))
     (set! (-> self control ctrl-xz-vel) 0.0)
+    (set! *has-ridden-before?* #t)
     (if (mp-is-daxter?)
         (set! *local-riding?* #t))
     (set! (-> self control root-prim prim-core action) (collide-action))
@@ -53,7 +54,6 @@
     )
 
   :trans (behavior ()
-    (set! *has-ridden-before?* #t)
     (let ((jak-proc (if (mp-is-jak?) *target* (mp-puppet-get-proc))))
             (when jak-proc
                 (quaternion-copy! (-> self control quat) (-> jak-proc control quat))

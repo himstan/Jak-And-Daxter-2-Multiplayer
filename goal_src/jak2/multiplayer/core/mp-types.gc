@@ -81,6 +81,11 @@
 (defconstant MP_EVENT_POLE_GRAB (the-as uint 27))
 (defconstant MP_EVENT_BATTLE_EVENT (the-as uint 28))
 (defconstant MP_EVENT_PLAYER_GUN_SHOT (the-as uint 29))
+(defconstant MP_EVENT_WARP_GATE (the-as uint 30))
+
+(defconstant MP_WARP_GATE_PHASE_BEGIN (the-as uint 1))
+(defconstant MP_WARP_GATE_PHASE_ARRIVE (the-as uint 2))
+(defconstant MP_WARP_GATE_FLAG_INDAX (the-as uint 1))
 
 (defconstant MP_MISSION_EVT_LEAVE (the-as uint 1))
 (defconstant MP_MISSION_EVT_PLAY_SCENE (the-as uint 2))
@@ -333,6 +338,20 @@
 
 (deftype mp-continue-event (mp-event)
   ((continue-name uint8 32 :overlay-at (-> data 0))
+   )
+  )
+
+(deftype mp-warp-gate-event (mp-event)
+  ((gate-aid       uint32 :overlay-at (-> data 0))
+   (phase          uint32 :overlay-at (-> data 4))
+   (flags          uint32 :overlay-at (-> data 8))
+   (continue-name  uint8 32 :overlay-at (-> data 12))
+   (start-x        float  :overlay-at (-> data 44))
+   (start-y        float  :overlay-at (-> data 48))
+   (start-z        float  :overlay-at (-> data 52))
+   (end-x          float  :overlay-at (-> data 56))
+   (end-y          float  :overlay-at (-> data 60))
+   (end-z          float  :overlay-at (-> data 64))
    )
   )
 
@@ -900,6 +919,7 @@
 (define-perm *remote-info* remote-player-info (new 'static 'remote-player-info))
 (define-extern *mp-puppet* target)
 (define-perm *mp-puppet-was-far?* symbol #f)
+(define-perm *mp-puppet-is-warping?* symbol #f)
 (define-extern *mp-puppet-ghost* mp-target-ghost-record)
 (define-perm *mp-event-buffer* mp-event-buffer (new 'static 'mp-event-buffer))
 (define-perm *mp-enemy-buffer* mp-enemy-sync-buffer (new 'static 'mp-enemy-sync-buffer))
@@ -913,6 +933,7 @@
 
 (define *daxter-pole-y-offset* 950.0)
 (define *local-riding?* #f)
+(define *visibility-overriden?* #f)
 (define *local-riding-before-grabbed?* #f)
 (define *mp-processing-remote-event* #f)
 (define-perm *mp-last-pole-grab-handle* handle (the-as handle #f))
@@ -1096,8 +1117,10 @@
 
 ;; --- Authoritative Sync Functions ---
 (define-extern mp-send-edge-grab-event (function symbol none))
+(define-extern mp-send-warp-gate-event (function process-drawable uint symbol vector vector none))
 (define-extern mp-send-pole-grab-event (function handle none))
 (define-extern mp-clear-pole-grab-event-latch (function handle none))
+(define-extern mp-receive-warp-gate-event (function mp-warp-gate-event none))
 (define-extern mp-receive-waypoint-event (function mp-waypoint-event symbol none))
 (define-extern mp-waypoint-event-same-target? (function mp-waypoint-event mp-waypoint-event symbol))
 (define-extern mp-waypoint-sync-tick (function none))
