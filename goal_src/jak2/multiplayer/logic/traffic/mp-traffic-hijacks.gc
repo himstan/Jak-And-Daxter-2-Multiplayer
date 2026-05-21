@@ -764,6 +764,38 @@
   (none)
   )
 
+(defun mp-pedestrian-schedule-remote-state! ((this citizen) (rec mp-traffic-ghost-record) (target-state-id uint) (target-sym symbol))
+  "Queue remote state entry on the citizen's own main thread.
+   This is the stack-safe path for vehicle/passenger fallback sync."
+  (when (and this
+             (nonzero? this)
+             rec
+             (-> this main-thread)
+             (nonzero? (-> this main-thread)))
+    (let ((st (method-state (-> this type) (the-as basic target-sym))))
+      (when (and st (nonzero? st))
+        (when (= target-sym 'wait)
+          (mp-pedestrian-prepare-wait-state! this)
+          )
+        (mp-pedestrian-authorize-remote-trans! rec target-state-id)
+        (set! (-> this next-state) (the-as state st))
+        (process-mask-clear! (-> this mask) sleep sleep-code)
+        (set-to-run (-> this main-thread)
+                    enter-state
+                    (the-as object #f)
+                    (the-as object #f)
+                    (the-as object #f)
+                    (the-as object #f)
+                    (the-as object #f)
+                    (the-as object #f))
+        (set! (-> rec last-applied-state-id) (the-as uint32 target-state-id))
+        (set! (-> rec last-state-bump-time) (current-time))
+        )
+      )
+    )
+  (none)
+  )
+
 (defun mp-pedestrian-sync-remote-state! ((this citizen) (rec mp-traffic-ghost-record))
   "Edge-trigger remote state entry so locomotion anims start once, then keep looping."
   (let ((target-state-id (the uint (-> rec ghost-state-id))))
@@ -777,6 +809,28 @@
               (when (or (!= (the-as uint32 target-state-id) (-> rec last-applied-state-id))
                         (mp-pedestrian-state-retry-ready? rec))
                 (mp-pedestrian-enter-remote-state! this rec target-state-id target-sym)
+                )
+              )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-pedestrian-sync-remote-state-deferred! ((this citizen) (rec mp-traffic-ghost-record))
+  "Vehicle/passenger fallback: schedule state entry on the citizen's main thread."
+  (let ((target-state-id (the uint (-> rec ghost-state-id))))
+    (when (nonzero? target-state-id)
+      (let ((target-sym (mp-ped-get-state-from-id target-state-id)))
+        (when (and target-sym
+                   (or (not (mp-pedestrian-death-started? this))
+                       (mp-pedestrian-terminal-state? target-sym)))
+          (if (mp-pedestrian-state-current-or-pending? this target-sym)
+              (set! (-> rec last-applied-state-id) (the-as uint32 target-state-id))
+              (when (or (!= (the-as uint32 target-state-id) (-> rec last-applied-state-id))
+                        (mp-pedestrian-state-retry-ready? rec))
+                (mp-pedestrian-schedule-remote-state! this rec target-state-id target-sym)
                 )
               )
           )
@@ -866,6 +920,114 @@
   (none)
   )
 
+(defun mp-pedestrian-run-puppet-sync! ((this citizen) (rec mp-traffic-ghost-record))
+  "Apply authoritative ghost state to a puppet citizen after vanilla post-processing."
+  (when (and this
+             (nonzero? this)
+             rec)
+    ;; 1. HP Sync (Puppet side)
+    (let ((old-hp (the int32 (-> this hit-points)))
+          (new-hp (-> rec ghost-hp))
+          (ghost-state-id (the uint (-> rec ghost-state-id))))
+
+      ;; Sync HP normally if not dead yet
+      (when (and (> new-hp 0) (not (mp-pedestrian-death-started? this)))
+        (when (!= old-hp new-hp)
+          (if (and (< new-hp old-hp) (> new-hp 0))
+              (send-event this 'attack #f (static-attack-info ((id (new-attack-id)) (mode 'mp-hp-sync) (damage (the float (- old-hp new-hp))))))
+              (set! (-> this hit-points) new-hp)
+              )
+          )
+        )
+
+      ;; Remote Death Fallback: If host says HP 0, but we haven't started death yet.
+      (when (and (<= new-hp 0) (not (mp-pedestrian-death-started? this)))
+        (let ((target-sym (mp-ped-get-state-from-id ghost-state-id)))
+          (cond
+            ;; CASE A: Host is in a visible terminal/knock state.
+            ;; DO NOT start remote death yet; let the state sync below handle it.
+            ((or (= target-sym 'knocked) (= target-sym 'knocked-off-vehicle) (= target-sym 'die) (= target-sym 'die-falling) (= target-sym 'die-fast))
+             (set! (-> this hit-points) 0) ;; Ensure HP is 0 locally
+             )
+            ;; CASE B: Fallback to synthesized remote death effect.
+            (else
+             (mp-pedestrian-start-remote-death! this (the-as mp-ped-death-event #f))
+             )
+            )
+          )
+        )
+      )
+
+    ;; 2. State Sync
+    (mp-pedestrian-sync-remote-state! this rec)
+
+    ;; 3. Keep the target pinned after vanilla logic as well.
+    (mp-pedestrian-sync-guard-target! this rec)
+    (mp-pedestrian-lock-local-state-manager! this rec)
+
+    ;; 4. Position correction: applied last so it overrides the nav/AI result.
+    (mp-ped-predictive-move this)
+    )
+  (none)
+  )
+
+(defun mp-pedestrian-external-sync-needed? ()
+  "Use the multiplayer-owned fallback only while the local player is riding in a vehicle."
+  (and *target*
+       (nonzero? *target*)
+       (focus-test? *target* pilot)
+       (-> *target* pilot)
+       (nonzero? (-> *target* pilot)))
+  )
+
+(defun mp-pedestrian-run-external-post-sync! ((this citizen))
+  "Lightweight fallback when vanilla civilian ticks stall in vehicles.
+   Keep this limited to multiplayer-owned ghost sync work; do not invoke vanilla
+   common-post from the multiplayer tick context."
+  (when (and this
+             (nonzero? this)
+             (not (type? this crimson-guard))
+             (not (logtest? (-> this mask) (process-mask sleep)))
+             (!= (-> this status) 'dead)
+             (nonzero? (-> this net-id)))
+    (let ((rec (mp-get-traffic-ghost (-> this net-id))))
+      (when rec
+        (when (and (-> this root)
+                   (nonzero? (-> this root)))
+          ;; Queue state bumps on the citizen's own main thread so ambient civilians
+          ;; can keep following authoritative active/wait edges even while the local
+          ;; player is riding in a vehicle.
+          (mp-pedestrian-sync-remote-state-deferred! this rec)
+          (mp-ped-predictive-move this)
+          (when (type? (-> this root) collide-shape)
+            (update-transforms (-> this root))
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-pedestrian-run-external-sync-pass ()
+  "Fallback civilian sync pass for vehicle/passenger contexts where ambient common-post stops ticking."
+  (when (and (not (mp-is-traffic-authoritative?))
+             (mp-pedestrian-external-sync-needed?))
+    (dotimes (i (the int MP_MAX_SYNC_PEDESTRIANS))
+      (let ((slot (-> *mp-traffic-buffer* ped-enemies i)))
+        (when (nonzero? (-> slot net-id))
+          (let ((proc (mp-pedestrian-find-by-net-id (-> slot net-id))))
+            (when (and proc (nonzero? proc))
+              (mp-pedestrian-run-external-post-sync! proc)
+              )
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
 (defun mp-citizen-common-post-hijack ((this citizen))
   "Run original citizen common-post first, then state sync and position correction.
    Both run here (not via send-event) because pp == this == *current-process* in
@@ -888,50 +1050,9 @@
     ;; State sync: read desired state from ghost record, transition if desynced.
     (let ((rec (mp-get-traffic-ghost (-> this net-id))))
       (when rec
-        ;; 1. HP Sync (Puppet side)
-        (let ((old-hp (the int32 (-> this hit-points)))
-              (new-hp (-> rec ghost-hp))
-              (ghost-state-id (the uint (-> rec ghost-state-id))))
-          
-          ;; Sync HP normally if not dead yet
-          (when (and (> new-hp 0) (not (mp-pedestrian-death-started? this)))
-            (when (!= old-hp new-hp)
-              (if (and (< new-hp old-hp) (> new-hp 0))
-                  (send-event this 'attack #f (static-attack-info ((id (new-attack-id)) (mode 'mp-hp-sync) (damage (the float (- old-hp new-hp))))))
-                  (set! (-> this hit-points) new-hp)
-                  )
-              )
-            )
-          
-          ;; Remote Death Fallback: If host says HP 0, but we haven't started death yet.
-          (when (and (<= new-hp 0) (not (mp-pedestrian-death-started? this)))
-            (let ((target-sym (mp-ped-get-state-from-id ghost-state-id)))
-              (cond
-                ;; CASE A: Host is in a visible terminal/knock state. 
-                ;; DO NOT start remote death yet; let the state sync below handle it.
-                ((or (= target-sym 'knocked) (= target-sym 'knocked-off-vehicle) (= target-sym 'die) (= target-sym 'die-falling) (= target-sym 'die-fast))
-                 (set! (-> this hit-points) 0) ;; Ensure HP is 0 locally
-                 )
-                ;; CASE B: Fallback to synthesized remote death effect.
-                (else
-                 (mp-pedestrian-start-remote-death! this (the-as mp-ped-death-event #f))
-                 )
-                )
-              )
-            )
-          )
-
-        ;; 2. State Sync
-        (mp-pedestrian-sync-remote-state! this rec)
-
-        ;; Keep the target pinned after vanilla logic as well.
-        (mp-pedestrian-sync-guard-target! this rec)
-        (mp-pedestrian-lock-local-state-manager! this rec)
-
+        (mp-pedestrian-run-puppet-sync! this rec)
         )
       )
-    ;; Position correction: applied last so it overrides the nav/AI result.
-    (mp-ped-predictive-move this)
     )
   (none)
   )

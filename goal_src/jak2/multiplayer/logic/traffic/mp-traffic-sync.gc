@@ -95,6 +95,7 @@
                     )
                   (when (or (nonzero? (-> *mp-traffic-buffer* ped-count)) (nonzero? (-> *mp-traffic-buffer* veh-count)))
                     (mp-pedestrian-apply-remote)
+                    (mp-pedestrian-run-external-sync-pass)
                     (mp-vehicle-apply-remote)
                     )
                   ;; Periodically clear stale ghost records for despawned traffic

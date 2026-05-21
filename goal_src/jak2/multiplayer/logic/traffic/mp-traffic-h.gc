@@ -36,6 +36,7 @@
 ;; Pedestrian
 (define-extern mp-pedestrian-pack (function citizen mp-pedestrian-state none))
 (define-extern mp-pedestrian-apply-remote (function none))
+(define-extern mp-pedestrian-run-external-sync-pass (function none))
 (define-extern mp-ped-get-state-id (function citizen uint))
 (define-extern mp-ped-get-state-from-id (function uint symbol))
 (define-extern mp-pedestrian-apply-ghost-state (function citizen mp-pedestrian-state none))

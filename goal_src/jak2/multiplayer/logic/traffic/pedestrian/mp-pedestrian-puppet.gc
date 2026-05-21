@@ -47,13 +47,33 @@
   (none)
 )
 
+(defun mp-pedestrian-spawn-behavior-from-state-id ((state-id uint))
+  "Choose a safer initial vanilla behavior for a newly spawned puppet civilian.
+   Civilians that spawn while the local player is in a vehicle may not get an
+   immediate vanilla state promotion out of idle, so prefer active for any
+   locomotion-style ghost state."
+  (let ((target-sym (mp-ped-get-state-from-id state-id)))
+    (cond
+      ((or (= target-sym 'none)
+           (= target-sym 'inactive)
+           (= target-sym 'idle)
+           (= target-sym 'dormant))
+       (the uint64 0)
+       )
+      (else
+       (the uint64 2)
+       )
+      )
+    )
+)
+
 (defun mp-pedestrian-spawn-puppet ((slot mp-pedestrian-state))
   (when (mp-is-traffic-ready?)
     ;; BUDGET/SAFETY: Only spawn if art is loaded to avoid linking crash
     (when (mp-traffic-type-loaded? (the-as traffic-type (-> slot object-type)))
      (let ((params (new 'stack 'traffic-object-spawn-params)))
         (set! (-> params object-type) (the-as traffic-type (-> slot object-type)))
-        (set! (-> params behavior) (the uint64 0))
+        (set! (-> params behavior) (mp-pedestrian-spawn-behavior-from-state-id (the uint (-> slot state-id))))
         (set! (-> params id) (the uint32 0))
         (set! (-> params net-id) (-> slot net-id))
         (set! (-> params nav-mesh) #f)
