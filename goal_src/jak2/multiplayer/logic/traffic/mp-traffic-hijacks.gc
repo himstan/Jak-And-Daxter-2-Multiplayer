@@ -605,6 +605,11 @@
    :trans does (decelerate, set wait-return-state) and causes enter-state to immediately
    call wait's :trans with wait-return-state == 0, crashing with pp->next-state == 0."
   (case arg2
+    (('event-death)
+     (when (zero? (-> this hit-points))
+         (do-effect (-> this skel effect) 'death-default 0.0 -1)
+         )
+     )
     (('attack)
      (let ((info (if (and arg3 (nonzero? arg3) (nonzero? (-> arg3 param 1))) (the-as attack-info (-> arg3 param 1)) (the-as attack-info #f))))
        (let ((is-remote-replay? (or *mp-processing-remote-event* (mp-pedestrian-remote-attack-info? info))))
