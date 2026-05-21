@@ -267,6 +267,7 @@
       (set! (-> *mp-last-scene-name* data 0) (the uint 0)))
   (set! *mp-traffic-suppressed* #f)
   (set! *mp-traffic-sync-active* #f)
+  (set! *mp-traffic-drain-active* #f)
   (set! *mp-traffic-host-spawning-active* #f)
   (set! *mp-pedestrian-net-id-counter* (the uint 1))
   (set! *mp-vehicle-net-id-counter* (the uint 32768))

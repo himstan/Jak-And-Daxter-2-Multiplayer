@@ -10,6 +10,7 @@
 (define-extern *has-ridden-before?* symbol)
 (define-perm *mp-traffic-suppressed* symbol #f)
 (define-perm *mp-traffic-sync-active* symbol #f)
+(define-perm *mp-traffic-drain-active* symbol #f)
 (define-perm *mp-traffic-host-spawning-active* symbol #f)
 (define-perm *mp-pedestrian-net-id-counter* uint (the uint 1))
 (define-perm *mp-vehicle-net-id-counter* uint (the uint 32768))
@@ -969,7 +970,10 @@
 (define-perm *mp-traffic-debug?* symbol #f)
 (define-perm *mp-traffic-ped-debug?* symbol #f)
 (define-perm *mp-traffic-veh-debug?* symbol #f)
+(define-perm *mp-traffic-bubble-debug?* symbol #f)
 (define-perm *mp-traffic-debug-dist* float (meters 100.0))
+(define-perm *mp-traffic-ped-density-scale* float 0.75)
+(define-perm *mp-traffic-veh-density-scale* float 0.60)
 (define-perm *mp-guard-target-debug?* symbol #f)
 (define-perm *mp-guard-target-debug-net-id* uint (the uint 0))
 (define-perm *mp-guard-target-debug-next-time* time-frame 0)
@@ -1013,8 +1017,8 @@
   )
 
 (defmacro mp-is-traffic-authoritative? ()
-  "Is the local player authoritative over traffic? (Current: Host-only)"
-  `(mp-is-jak?)
+  "Is the local player authoritative over traffic? (Host-only OR Client outside bubble)"
+  `(or (mp-is-jak?) (not *mp-traffic-suppressed*))
   )
 
 ;; --- Extern Declarations ---
@@ -1114,6 +1118,8 @@
 (define-extern mp-pedestrian-start-remote-death! (function citizen mp-ped-death-event none))
 (define-extern mp-vehicle-apply-ghost-correction (function vehicle none))
 (define-extern mp-cleanup-traffic-ghosts (function none))
+(define-extern mp-traffic-cleanup-after-sync-exit! (function none))
+(define-extern mp-traffic-refill-local-active-cells! (function none))
 
 ;; --- Authoritative Sync Functions ---
 (define-extern mp-send-edge-grab-event (function symbol none))

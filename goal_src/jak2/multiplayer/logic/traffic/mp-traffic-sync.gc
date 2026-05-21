@@ -44,6 +44,35 @@
 
 ;; --- Main Sync Orchestration ---
 
+(defun mp-traffic-clear-buffer! ()
+  (when (nonzero? (the-as uint *mp-traffic-buffer*))
+    (mem-set32! (the-as pointer *mp-traffic-buffer*) (/ (size-of mp-traffic-sync-buffer) 4) 0)
+    )
+  (none)
+  )
+
+(defun mp-traffic-clear-ghosts! ()
+  (dotimes (i MP_MAX_TRAFFIC_GHOST_RECORDS)
+    (let ((rec (-> *mp-traffic-ghosts* i)))
+      (set! (-> rec net-id) (the uint 0))
+      )
+    )
+  (none)
+  )
+
+(defun mp-traffic-cleanup-after-sync-exit! ()
+  "Client-side cleanup for host-owned traffic after leaving the traffic authority bubble."
+  (when (mp-is-daxter?)
+    (mp-traffic-clear-buffer!)
+    (when (and *traffic-manager* (nonzero? *traffic-manager*))
+      (mp-pedestrian-apply-remote)
+      (mp-vehicle-apply-remote)
+      )
+    (mp-traffic-clear-ghosts!)
+    )
+  (none)
+  )
+
 (defun mp-sync-traffic-update ()
   (let ((status (pc-multi-get-status)))
     (when (and (nonzero? status) *mp-traffic-sync-active*)
@@ -104,6 +133,52 @@
                 )
             )
           )
+      )
+    )
+  (none)
+  )
+
+(defun mp-traffic-force-clear-local-vehicles! ()
+  "Forcefully deactivate/kill all local vehicles on the Client to clean up traffic."
+  (when (and *traffic-manager* (nonzero? *traffic-manager*))
+    ;; 1. Deactivate all active and inactive processes tracked by the traffic engine
+    (send-event *traffic-manager* 'kill-all)
+    
+    ;; 2. Also forcefully deactivate any vehicle child processes of *traffic-manager* 
+    ;; to clean up any untracked or synced/puppet vehicles.
+    (let ((curr (-> *traffic-manager* child)))
+      (while (and curr (nonzero? curr))
+        (let ((proc (ppointer->process curr)))
+          (let ((next-ptr (-> curr 0 brother)))
+            (when (and proc (nonzero? proc) (type? proc vehicle))
+              (let ((v-proc (the-as vehicle proc)))
+                (let ((v-net-id (-> v-proc net-id))
+                      (local-driven-id (if (and *local-info* (nonzero? *local-info*)) (-> *local-info* veh-state net-id) (the uint 0)))
+                      (remote-driven-id (if (and *remote-info* (nonzero? *remote-info*)) (-> *remote-info* veh-state net-id) (the uint 0))))
+                  ;; Do not deactivate the local or remote player's currently driven vehicle!
+                  (when (not (or (and (nonzero? local-driven-id) (= v-net-id local-driven-id))
+                                 (and (nonzero? remote-driven-id) (= v-net-id remote-driven-id))
+                                 (and *target* 
+                                      (nonzero? *target*)
+                                      (focus-test? *target* pilot)
+                                      (let ((pilot-info (-> *target* pilot)))
+                                        (and pilot-info 
+                                             (nonzero? pilot-info)
+                                             (= proc (handle->process (-> pilot-info vehicle)))
+                                             )
+                                        )
+                                      )
+                                 ))
+                    (logclear! (-> v-proc flags) (rigid-body-object-flag persistent))
+                    (deactivate v-proc)
+                    )
+                  )
+                )
+              )
+            (set! curr next-ptr)
+            )
+          )
+        )
       )
     )
   (none)

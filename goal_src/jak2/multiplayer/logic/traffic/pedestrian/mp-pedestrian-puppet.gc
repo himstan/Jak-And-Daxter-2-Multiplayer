@@ -212,6 +212,7 @@
                       )
                   )
                 (when (not found-in-buffer?)
+                  (logclear! (-> (the-as citizen proc) flags) (citizen-flag persistent))
                   (send-event proc 'traffic-off-force)
                   )
                 )

@@ -59,4 +59,6 @@
 (define *mp-set-guard-target* (the-as (function citizen handle none) #f))
 (define *mp-get-guard-target* (the-as (function citizen handle) #f))
 
+(define-extern mp-traffic-force-clear-local-vehicles! (function none))
+
 (none)

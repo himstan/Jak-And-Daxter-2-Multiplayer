@@ -210,6 +210,43 @@
   (none)
   )
 
+;; --- Authority Bubble Debug ---
+
+(defun mp-draw-traffic-bubble-ring ((center vector) (radius meters) (color rgba) (label string))
+  (add-debug-circle #t (bucket-id debug-no-zbuf1) center radius color (the-as matrix #f))
+  (let ((label-pos (new 'stack-no-clear 'vector)))
+    (vector-copy! label-pos center)
+    (set! (-> label-pos x) (+ (-> label-pos x) radius))
+    (set! (-> label-pos y) (+ (-> label-pos y) (meters 3.0)))
+    (add-debug-text-3d #t (bucket-id debug-no-zbuf1) label label-pos (font-color white) (the-as vector2h #f))
+    )
+  (none)
+  )
+
+(defun mp-draw-traffic-authority-bubbles ()
+  (when (and *mp-traffic-bubble-debug?*
+             (nonzero? (pc-multi-get-status))
+             *target*
+             (nonzero? *target*)
+             (-> *target* control)
+             (nonzero? (-> *target* control)))
+    (let ((local-pos (-> *target* control trans))
+          (remote-pos *multi-remote-render-pos*))
+      (let ((host-pos (if (mp-is-jak?) local-pos remote-pos))
+            (client-pos (if (mp-is-jak?) remote-pos local-pos)))
+        (mp-draw-traffic-bubble-ring host-pos (meters 350.0) (static-rgba 0 255 0 160) "SYNC ENTER 350m")
+        (mp-draw-traffic-bubble-ring host-pos (meters 400.0) (static-rgba 255 255 0 160) "SYNC EXIT 400m")
+        (mp-draw-traffic-bubble-ring host-pos (meters 500.0) (static-rgba 255 128 0 160) "CLIENT DRAIN 500m")
+        (mp-draw-traffic-bubble-ring host-pos (meters 550.0) (static-rgba 255 0 0 160) "CLIENT RESUME 550m")
+        (add-debug-sphere #t (bucket-id debug-no-zbuf1) host-pos (meters 2.0) (static-rgba 0 128 255 180))
+        (add-debug-sphere #t (bucket-id debug-no-zbuf1) client-pos (meters 2.0) (static-rgba 255 255 255 180))
+        (add-debug-line #t (bucket-id debug-no-zbuf1) host-pos client-pos (static-rgba 255 255 255 128) #f (the-as rgba 0))
+        )
+      )
+    )
+  (none)
+  )
+
 ;; --- Master High-Level Call ---
 
 (defun mp-draw-traffic-debug ()
@@ -223,15 +260,19 @@
     (format *stdcon* "AUTHORITATIVE: ~S~%" (if (mp-is-traffic-authoritative?) "YES" "NO"))
     (format *stdcon* "-------------------------~%")
 
-    (let ((dist (if (and *target* (nonzero? *target*) (-> *target* control)) (vector-vector-distance (-> *target* control trans) *multi-remote-render-pos*) 0.0)))
+    (let ((dist (if (and *target* (nonzero? *target*) (-> *target* control) (nonzero? (-> *target* control))) (vector-vector-distance (-> *target* control trans) *multi-remote-render-pos*) 0.0)))
     (format *stdcon* "~0k--- MP TRAFFIC STATUS ---~%")
-    (format *stdcon* "SUPPRESSED: ~S  SPAWNING: ~S~%" 
-            (if *mp-traffic-suppressed* "YES" "NO") 
+    (format *stdcon* "SYNC: ~S  SUPPRESSED: ~S~%"
+            (if *mp-traffic-sync-active* "YES" "NO")
+            (if *mp-traffic-suppressed* "YES" "NO"))
+    (format *stdcon* "SPAWNING: ~S~%"
             (if *mp-traffic-host-spawning-active* "YES" "NO"))
     (format *stdcon* "REMOTE DIST: ~m~%" dist)
     (format *stdcon* "-------------------------~%")
     )
   )
+
+  (mp-draw-traffic-authority-bubbles)
 
   ;; World overlays (independent toggles)
   (when (or *mp-traffic-ped-debug?* *mp-traffic-veh-debug?*)

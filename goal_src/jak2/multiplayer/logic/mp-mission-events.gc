@@ -27,14 +27,15 @@
   )
 
 (defun mp-copy-process-name-to-string ((proc process-tree))
-  (let ((p-name (new 'global 'string 32 "")))
+  (let ((p-name *mp-mission-event-name-scratch*))
+    (clear p-name)
     (when (nonzero? proc)
       (let ((name-ptr (-> proc name)))
         (when (nonzero? name-ptr)
           (let ((raw-name (the-as basic name-ptr)))
             (cond
-              ((type? raw-name string) (set! p-name (the-as string raw-name)))
-              ((type? raw-name symbol) (set! p-name (symbol->string (the-as symbol raw-name))))
+              ((type? raw-name string) (copy-string<-string p-name (the-as string raw-name)))
+              ((type? raw-name symbol) (copy-string<-string p-name (symbol->string (the-as symbol raw-name))))
               )
             )
           )
