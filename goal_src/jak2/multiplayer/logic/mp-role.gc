@@ -30,7 +30,7 @@
 
 (defun mp-update-camera-settings ()
   "Apply or remove role-specific camera settings"
-  (if (mp-is-daxter?)
+  (if (and (mp-is-daxter?) (not *local-riding?*))
       (begin
         (set-setting! 'string-min-length 'abs (meters 3.0) 0)
         (set-setting! 'string-max-length 'abs (meters 7.0) 0)
