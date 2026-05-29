@@ -169,9 +169,12 @@ void OpenGlDebugGui::draw(const DmaStats& dma_stats) {
           for (int i = 0; i < num_controllers; i++) {
             const auto controller_name =
                 Display::GetMainDisplay()->get_input_manager()->get_controller_name(i);
+            const auto controller_label =
+                fmt::format("Controller {}: {}##controller-{}-port-{}", i, controller_name, i,
+                            port);
             auto is_controller_active =
                 Display::GetMainDisplay()->get_input_manager()->get_controller_index(port) == i;
-            if (ImGui::RadioButton(controller_name.c_str(), is_controller_active)) {
+            if (ImGui::RadioButton(controller_label.c_str(), is_controller_active)) {
               Display::GetMainDisplay()->get_input_manager()->set_controller_for_port(i, port);
             }
           }
