@@ -434,6 +434,99 @@
   (none)
   )
 
+(defun draw-bigmap-remote-player-marker ((this bigmap) (arg0 dma-buffer) (arg1 connection-minimap) (arg2 vector) (arg3 float))
+  (let* ((remote-proc (handle->process (-> arg1 handle)))
+         (remote-target (if (type? remote-proc target)
+                            (the-as target remote-proc)
+                            )
+                        )
+         (remote-marker-tex (get-texture map-target-marker common))
+         )
+    (when (and remote-target
+               (nonzero? remote-target)
+               remote-marker-tex
+               (nonzero? (-> remote-target root))
+               (-> remote-target control)
+               (nonzero? (-> remote-target control))
+               )
+      (let ((remote-dir (new 'stack-no-clear 'vector))
+            (marker-mat (new 'stack-no-clear 'matrix))
+            )
+        (vector-z-quaternion! remote-dir (-> remote-target control quat))
+        (vector-xz-normalize! remote-dir -1.0)
+        (set! (-> remote-dir y) 0.0)
+        (set! (-> remote-dir w) 0.0)
+        (set-vector! (-> marker-mat vector 0) (* (-> remote-dir z) arg3) 0.0 (- (-> remote-dir x)) 0.0)
+        (set-vector! (-> marker-mat vector 1) 0.0 1.0 0.0 0.0)
+        (set-vector! (-> marker-mat vector 2) (* (-> remote-dir x) arg3) 0.0 (-> remote-dir z) 1.0)
+        (set-vector! (-> marker-mat trans) (-> arg2 x) 0.0 (-> arg2 y) 1.0)
+        (set-vector! (-> this corner 0) 0.0 0.0 -7.0 1.0)
+        (set-vector! (-> this corner 1) 7.0 0.0 0.0 1.0)
+        (set-vector! (-> this corner 2) -7.0 0.0 0.0 1.0)
+        (set-vector! (-> this corner 3) 0.0 0.0 7.0 1.0)
+        (vector-matrix*! (the-as vector (-> this corner)) (the-as vector (-> this corner)) marker-mat)
+        (vector-matrix*! (-> this corner 1) (-> this corner 1) marker-mat)
+        (vector-matrix*! (-> this corner 2) (-> this corner 2) marker-mat)
+        (vector-matrix*! (-> this corner 3) (-> this corner 3) marker-mat)
+        (let* ((s3-0 (-> arg0 base))
+               (a1-0 (-> arg1 class color))
+               )
+          (set! (-> (the-as (pointer uint128) s3-0)) (-> this adgif-tmpl dma-vif quad))
+          (set! (-> (the-as (pointer uint128) s3-0) 1) (-> this adgif-tmpl quad 1))
+          (adgif-shader<-texture-simple! (the-as adgif-shader (&+ s3-0 32)) remote-marker-tex)
+          (set! (-> (the-as (pointer uint128) s3-0) 7) (-> this draw-tmpl dma-vif quad))
+          (set! (-> (the-as (pointer uint128) s3-0) 8) (-> this draw-tmpl quad 1))
+          (set-vector! (the-as vector4w (&+ s3-0 144)) (the-as int (-> a1-0 r)) (the-as int (-> a1-0 g)) (the-as int (-> a1-0 b)) 128)
+          (set-vector! (the-as vector4w (&+ s3-0 160)) 0 0 0 0)
+          (set-vector!
+            (the-as vector4w (&+ s3-0 176))
+            (the int (* 16.0 (-> this corner 0 x)))
+            (the int (* 16.0 (-> this corner 0 z)))
+            #xffffff
+            0
+            )
+          (set-vector! (the-as vector4w (&+ s3-0 192)) 256 0 0 0)
+          (set-vector!
+            (the-as vector4w (&+ s3-0 208))
+            (the int (* 16.0 (-> this corner 1 x)))
+            (the int (* 16.0 (-> this corner 1 z)))
+            #xffffff
+            0
+            )
+          (set-vector! (the-as vector4w (&+ s3-0 224)) 0 256 0 0)
+          (set-vector!
+            (the-as vector4w (&+ s3-0 240))
+            (the int (* 16.0 (-> this corner 2 x)))
+            (the int (* 16.0 (-> this corner 2 z)))
+            #xffffff
+            0
+            )
+          (set-vector! (the-as vector4w (&+ s3-0 256)) 256 256 0 0)
+          (set-vector!
+            (the-as vector4w (&+ s3-0 272))
+            (the int (* 16.0 (-> this corner 3 x)))
+            (the int (* 16.0 (-> this corner 3 z)))
+            #xffffff
+            0
+            )
+          (&+! (-> arg0 base) 288)
+          )
+        (let ((s3-1 (-> arg0 base))
+              (icon-tex (lookup-texture-by-id-fast (new 'static 'texture-id :index #x15 :page #xc93)))
+              )
+          (when icon-tex
+            (set! (-> (the-as (pointer uint128) s3-1) 0) (-> this adgif-tmpl dma-vif quad))
+            (set! (-> (the-as (pointer uint128) s3-1) 1) (-> this adgif-tmpl quad 1))
+            (adgif-shader<-texture-simple! (the-as adgif-shader (&+ s3-1 32)) icon-tex)
+            (&+! (-> arg0 base) 112)
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
 (defmethod draw-from-minimap ((this bigmap) (arg0 dma-buffer) (arg1 connection-minimap))
   "Read data from a minimap connection and draw it on the bigmap."
   (rlet ((vf0 :class vf)
@@ -510,41 +603,57 @@
           (set! (-> v1-21 y) (+ (-> a0-23 y) f0-1))
           )
         )
-      ;; og:preserve-this cast
-      (let* ((t1-2 (the-as int (+ (* (the-as uint 320) (-> arg1 class icon-xy x)) 8)))
-             (t2-0 (the-as int (+ (* (the-as uint 320) (-> arg1 class icon-xy y)) 8)))
-             (a2-8 (+ t1-2 312))
-             (a3-11 (+ t2-0 312))
-             (t0-15 (-> arg0 base))
-             )
-        (set! (-> (the-as (pointer uint128) t0-15) 0) (-> this sprite-tmpl dma-vif quad))
-        (set! (-> (the-as (pointer uint128) t0-15) 1) (-> this sprite-tmpl quad 1))
-        (set-vector!
-          (the-as vector4w (&+ t0-15 32))
-          (the-as int (-> a1-5 r))
-          (the-as int (-> a1-5 g))
-          (the-as int (-> a1-5 b))
-          128
+      (if (string= (the-as string (-> arg1 class name)) "remote-player")
+          (when (not (and (mp-is-jak?) *local-riding?*))
+            (draw-bigmap-remote-player-marker
+              this
+              arg0
+              arg1
+              a2-1
+              (if (-> *blit-displays-work* horizontal-flip-flag)
+                  (- (-> *video-params* relative-x-scale))
+                  (-> *video-params* relative-x-scale)
+              )
+            )
           )
-        (set-vector! (the-as vector4w (&+ t0-15 48)) t1-2 t2-0 0 0)
-        (set-vector!
-          (the-as vector4w (&+ t0-15 64))
-          (the int (* 16.0 (-> a0-23 x)))
-          (the int (* 16.0 (-> a0-23 y)))
-          #xffffff
-          0
+          (begin
+            ;; og:preserve-this cast
+            (let* ((t1-2 (the-as int (+ (* (the-as uint 320) (-> arg1 class icon-xy x)) 8)))
+                   (t2-0 (the-as int (+ (* (the-as uint 320) (-> arg1 class icon-xy y)) 8)))
+                   (a2-8 (+ t1-2 312))
+                   (a3-11 (+ t2-0 312))
+                   (t0-15 (-> arg0 base))
+                   )
+              (set! (-> (the-as (pointer uint128) t0-15) 0) (-> this sprite-tmpl dma-vif quad))
+              (set! (-> (the-as (pointer uint128) t0-15) 1) (-> this sprite-tmpl quad 1))
+              (set-vector!
+                (the-as vector4w (&+ t0-15 32))
+                (the-as int (-> a1-5 r))
+                (the-as int (-> a1-5 g))
+                (the-as int (-> a1-5 b))
+                128
+                )
+              (set-vector! (the-as vector4w (&+ t0-15 48)) t1-2 t2-0 0 0)
+              (set-vector!
+                (the-as vector4w (&+ t0-15 64))
+                (the int (* 16.0 (-> a0-23 x)))
+                (the int (* 16.0 (-> a0-23 y)))
+                #xffffff
+                0
+                )
+              (set-vector! (the-as vector4w (&+ t0-15 80)) a2-8 a3-11 0 0)
+              (set-vector!
+                (the-as vector4w (&+ t0-15 96))
+                (the int (* 16.0 (-> v1-21 x)))
+                (the int (* 16.0 (-> v1-21 y)))
+                #xffffff
+                0
+                )
+              )
+            (&+! (-> arg0 base) 112)
+            )
           )
-        (set-vector! (the-as vector4w (&+ t0-15 80)) a2-8 a3-11 0 0)
-        (set-vector!
-          (the-as vector4w (&+ t0-15 96))
-          (the int (* 16.0 (-> v1-21 x)))
-          (the int (* 16.0 (-> v1-21 y)))
-          #xffffff
-          0
-          )
-        )
       )
-    (&+! (-> arg0 base) 112)
     0
     )
   )

@@ -830,7 +830,7 @@
                                  :name "remote-player"
                                  :icon-xy (new 'static 'vector2ub :data (new 'static 'array uint8 2 #x0 #x1))
                                  :scale 1.0
-                                 :color (new 'static 'rgba :r #x00 :g #xa0 :b #xff :a #x80)
+                                 :color (new 'static 'rgba :r #xff :g #x00 :b #xff :a #x80)
                                  )
                                )
         )
@@ -2261,6 +2261,112 @@
   )
 
 ;; WARN: Return type mismatch pointer vs none.
+(defun draw-minimap-remote-player-marker ((this minimap) (arg0 minimap-draw-work) (arg1 connection-minimap) (arg2 vector))
+  (let* ((remote-proc (handle->process (-> arg1 handle)))
+         (remote-target (if (type? remote-proc target)
+                            (the-as target remote-proc)
+                            )
+                        )
+         (remote-marker-tex (get-texture map-target-marker common))
+         )
+    (when (and remote-target
+               (nonzero? remote-target)
+               remote-marker-tex
+               (nonzero? (-> remote-target root))
+               (-> remote-target control)
+               (nonzero? (-> remote-target control))
+               )
+      (let ((remote-dir (new 'stack-no-clear 'vector))
+            (marker-mat (new 'stack-no-clear 'matrix))
+            (f30-0 (-> *video-params* relative-x-scale))
+            )
+        (vector-z-quaternion! remote-dir (-> remote-target control quat))
+        (vector-xz-normalize! remote-dir 1.0)
+        (set! (-> remote-dir y) 0.0)
+        (set! (-> remote-dir w) 0.0)
+        (vector-matrix*! remote-dir remote-dir (-> arg0 mat))
+        (set-vector! (-> marker-mat vector 0) (* (-> remote-dir z) f30-0) 0.0 (- (-> remote-dir x)) 0.0)
+        (set-vector! (-> marker-mat vector 1) 0.0 1.0 0.0 0.0)
+        (set-vector! (-> marker-mat vector 2) (* (-> remote-dir x) f30-0) 0.0 (-> remote-dir z) 1.0)
+        (set-vector! (-> marker-mat trans) (-> arg2 x) 0.0 (-> arg2 z) 1.0)
+        (let ((f0-0 7.0))
+          (set-vector! (-> arg0 corner 0) 0.0 0.0 (- f0-0) 1.0)
+          (set-vector! (-> arg0 corner 1) f0-0 0.0 0.0 1.0)
+          (set-vector! (-> arg0 corner 2) (- f0-0) 0.0 0.0 1.0)
+          (set-vector! (-> arg0 corner 3) 0.0 0.0 f0-0 1.0)
+          )
+        (vector-matrix*! (the-as vector (-> arg0 corner)) (the-as vector (-> arg0 corner)) marker-mat)
+        (vector-matrix*! (-> arg0 corner 1) (-> arg0 corner 1) marker-mat)
+        (vector-matrix*! (-> arg0 corner 2) (-> arg0 corner 2) marker-mat)
+        (vector-matrix*! (-> arg0 corner 3) (-> arg0 corner 3) marker-mat)
+        (let* ((s3-0 (the-as object (-> arg0 buf base)))
+               (a1-0 (-> arg1 class color))
+               (a1-1 (copy-and-set-field a1-0 r (shr (* (-> a1-0 r) (the-as uint (-> this color x))) 7)))
+               (a1-2 (copy-and-set-field a1-1 g (shr (* (-> a1-1 g) (the-as uint (-> this color y))) 7)))
+               (a1-3
+                 (copy-and-set-field
+                   (copy-and-set-field a1-2 b (shr (* (-> a1-2 b) (the-as uint (-> this color z))) 7))
+                   a
+                   (the int (* 128.0 (-> arg1 alpha)))
+                   )
+                 )
+               )
+          (set! (-> (the-as (pointer uint128) s3-0)) (-> this adgif-tmpl dma-vif quad))
+          (set! (-> (the-as (pointer uint128) s3-0) 1) (-> this adgif-tmpl quad 1))
+          (adgif-shader<-texture-simple! (the-as adgif-shader (&-> (the-as (pointer uint128) s3-0) 2)) remote-marker-tex)
+          (set! (-> (the-as (pointer uint128) s3-0) 7) (-> this draw-tmpl dma-vif quad))
+          (set! (-> (the-as (pointer uint128) s3-0) 8) (-> this draw-tmpl quad 1))
+          (set-vector! (-> (the-as (inline-array vector4w) s3-0) 9) (the-as int (-> a1-3 r)) (the-as int (-> a1-3 g)) (the-as int (-> a1-3 b)) (the-as int (-> a1-3 a)))
+          (set-vector! (-> (the-as (inline-array vector4w) s3-0) 10) 0 0 #xffffff 0)
+          (set-vector!
+            (-> (the-as (inline-array vector4w) s3-0) 11)
+            (the int (* 16.0 (-> arg0 corner 0 x)))
+            (the int (* 16.0 (-> arg0 corner 0 z)))
+            0
+            0
+            )
+          (set-vector! (-> (the-as (inline-array vector4w) s3-0) 12) 256 0 #xffffff 0)
+          (set-vector!
+            (-> (the-as (inline-array vector4w) s3-0) 13)
+            (the int (* 16.0 (-> arg0 corner 1 x)))
+            (the int (* 16.0 (-> arg0 corner 1 z)))
+            0
+            0
+            )
+          (set-vector! (-> (the-as (inline-array vector4w) s3-0) 14) 0 256 #xffffff 0)
+          (set-vector!
+            (-> (the-as (inline-array vector4w) s3-0) 15)
+            (the int (* 16.0 (-> arg0 corner 2 x)))
+            (the int (* 16.0 (-> arg0 corner 2 z)))
+            0
+            0
+            )
+          (set-vector! (-> (the-as (inline-array vector4w) s3-0) 16) 256 256 #xffffff 0)
+          (set-vector!
+            (-> (the-as (inline-array vector4w) s3-0) 17)
+            (the int (* 16.0 (-> arg0 corner 3 x)))
+            (the int (* 16.0 (-> arg0 corner 3 z)))
+            0
+            0
+            )
+          (&+! (-> arg0 buf base) 288)
+          )
+        (let ((s3-1 (-> arg0 buf base))
+              (icon-tex (get-texture mini-map-icons ctywide-minimap))
+              )
+          (when icon-tex
+            (set! (-> (the-as (pointer uint128) s3-1)) (-> this adgif-tmpl dma-vif quad))
+            (set! (-> (the-as (pointer uint128) s3-1) 1) (-> this adgif-tmpl quad 1))
+            (adgif-shader<-texture-simple! (the-as adgif-shader (&+ s3-1 32)) icon-tex)
+            (&+! (-> arg0 buf base) 112)
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
 (defmethod draw-connection ((this minimap) (arg0 minimap-draw-work) (arg1 connection-minimap))
   (let ((s1-0 (target-pos 0)))
     (cond
@@ -2451,6 +2557,13 @@
       (if (logtest? (-> arg1 class flags) (minimap-flag goal))
           (set! (-> arg1 class icon-xy x) (the-as uint (mod (the int (-> this goal-time)) 6)))
           )
+      (when (not (and (mp-is-jak?) *local-riding?*))
+        (when (and (not s2-0) (string= (the-as string (-> arg1 class name)) "remote-player"))
+          (vector-matrix*! s3-2 s3-2 (-> arg0 mat))
+          (draw-minimap-remote-player-marker this arg0 arg1 s3-2)
+          (set! s2-0 #t)
+        )
+      )
       (when (not s2-0)
         (vector-matrix*! s3-2 s3-2 (-> arg0 mat))
         (let ((v1-115 (the-as object (-> arg0 buf base))))
