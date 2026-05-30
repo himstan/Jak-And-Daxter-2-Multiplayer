@@ -430,6 +430,36 @@
     )
   )
 
+(defun update-progress-camera-facing-quat! ((arg0 progress))
+  (when (and arg0 (nonzero? arg0) *math-camera* (nonzero? *math-camera*))
+    (let ((progress-root (-> arg0 root)))
+      (when (and progress-root (nonzero? progress-root))
+        (matrix->quaternion (-> arg0 init-quat) (-> *math-camera* inv-camera-rot))
+        (let ((cam-flip (quaternion-vector-angle! (new 'stack-no-clear 'quaternion) *y-vector* 32768.0))
+              (swing-x (quaternion-vector-angle!
+                         (new 'stack-no-clear 'quaternion)
+                         *x-vector*
+                         (* 182.04445 (* (-> arg0 swing) (sin (the float (* 40 (current-time))))))
+                         )
+                       )
+              (swing-y (quaternion-vector-angle!
+                         (new 'stack-no-clear 'quaternion)
+                         *y-vector*
+                         (* 182.04445 (* (-> arg0 swing) (sin (the float (* 0 (current-time))))))
+                         )
+                       )
+              )
+          (quaternion*! (-> arg0 init-quat) (-> arg0 init-quat) cam-flip)
+          (quaternion-normalize! (-> arg0 init-quat))
+          (quaternion*! (-> progress-root quat) (-> arg0 init-quat) swing-x)
+          (quaternion*! (-> progress-root quat) (-> progress-root quat) swing-y)
+          )
+        (quaternion-normalize! (-> progress-root quat))
+        )
+      )
+    )
+  )
+
 (defun activate-progress ((arg0 process) (arg1 symbol))
   (when *target*
     (when (progress-allowed?)
@@ -1266,23 +1296,7 @@
       )
     (seek! (-> self ring-angle) (-> self ring-want-angle) (* speed-mod 455.1111 (-> self clock time-adjust-ratio)))
     )
-  (let ((gp-4 (quaternion-vector-angle!
-                (new 'stack-no-clear 'quaternion)
-                *x-vector*
-                (* 182.04445 (* (-> self swing) (sin (the float (* 40 (current-time))))))
-                )
-              )
-        (s5-4 (quaternion-vector-angle!
-                (new 'stack-no-clear 'quaternion)
-                *y-vector*
-                (* 182.04445 (* (-> self swing) (sin (the float (* 0 (current-time))))))
-                )
-              )
-        )
-    (quaternion*! (-> self root quat) (-> self init-quat) gp-4)
-    (quaternion*! (-> self root quat) (-> self root quat) s5-4)
-    )
-  (quaternion-normalize! (-> self root quat))
+  (update-progress-camera-facing-quat! self)
   (if (= (-> self ring-angle) (-> self ring-want-angle))
       (set! (-> self graphic-index) (-> self option-index))
       )
@@ -1465,6 +1479,7 @@
               )
         )
       (set-ring-position self)
+      (update-progress-camera-facing-quat! self)
       (if (= (-> self pos-transition) f30-0)
           (go-virtual idle)
           )
@@ -1731,6 +1746,7 @@
         )
       )
     (set-ring-position self)
+    (update-progress-camera-facing-quat! self)
     ))
   :code (behavior ()
     (let ((gp-0 #f))
