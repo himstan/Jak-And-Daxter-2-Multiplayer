@@ -5,6 +5,7 @@
 ;; name in dgo: traffic-engine
 ;; dgos: CWI
 (declare-type crimson-guard citizen)
+(define-extern mp-get-remote-target-process (function process-focusable))
 ;; DECOMP BEGINS
 
 (define *traffic-suppress-activation* #f)
@@ -1090,6 +1091,112 @@
       (fmax 0.0 (fmin 1.0 (if (< object-type 11) *mp-traffic-veh-density-scale* *mp-traffic-ped-density-scale*)))
       1.0
       )
+  )
+
+(defun mp-traffic-valid-player-target? ((target-proc process-focusable))
+  "True when a player target can be used by wanted guard traffic."
+  (and target-proc
+       (nonzero? target-proc)
+       (not (focus-test? target-proc disable dead inactive))
+       (not (logtest? (-> target-proc mask) (process-mask sleep)))
+       (-> target-proc root)
+       (nonzero? (-> target-proc root))
+       )
+  )
+
+(defun mp-traffic-valid-local-target? ()
+  (and *target*
+       (nonzero? *target*)
+       (-> *target* control)
+       (nonzero? (-> *target* control))
+       (mp-traffic-valid-player-target? *target*)
+       )
+  )
+
+(defun mp-traffic-valid-remote-target ()
+  (when (and *multi-sync-enabled?*
+             (= (pc-multi-get-status) 6))
+    (let ((remote (mp-get-remote-target-process)))
+      (when (and remote
+                 (mp-traffic-valid-player-target? remote))
+        (return remote)
+        )
+      )
+    )
+  (the-as process-focusable #f)
+  )
+
+(defun mp-traffic-clear-target-status! ((target-status traffic-target-status))
+  (logclear! (-> target-status flags) (traffic-target-flag visible-now visible-recently visible-ever updated))
+  (set! (-> target-status handle) (the-as handle #f))
+  (none)
+  )
+
+(defun mp-traffic-find-target-status ((this traffic-engine) (target-handle handle))
+  "Find the shared target-status slot for a player handle."
+  (when (and target-handle
+             (nonzero? target-handle))
+    (dotimes (idx 3)
+      (let ((target-status (-> this alert-state target-status-array idx)))
+        (when (= (-> target-status handle) target-handle)
+          (return target-status)
+          )
+        )
+      )
+    )
+  (the-as traffic-target-status #f)
+  )
+
+(defun mp-traffic-sync-player-target-handles! ((this traffic-engine))
+  "Publish local and remote player handles to wanted guard target-status slots."
+  (let ((local-status (-> this alert-state target-status-array 0))
+        (remote-status (-> this alert-state target-status-array 1))
+        )
+    (if (and (logtest? (-> this alert-state flags) (traffic-alert-flag target-jak))
+             (mp-traffic-valid-local-target?))
+        (set! (-> local-status handle) (process->handle *target*))
+        (mp-traffic-clear-target-status! local-status)
+        )
+    (let ((remote (mp-traffic-valid-remote-target)))
+      (if (and (logtest? (-> this alert-state flags) (traffic-alert-flag target-jak))
+               remote
+               (nonzero? remote))
+          (set! (-> remote-status handle) (process->handle remote))
+          (mp-traffic-clear-target-status! remote-status)
+          )
+      )
+    )
+  (none)
+  )
+
+(defun mp-traffic-closest-alert-target ((source process-focusable))
+  "Pick the closest valid player target for a guard alert."
+  (let ((closest (the-as process-focusable #f))
+        (closest-dist 1000000000.0)
+        )
+    (when (and source
+               (nonzero? source)
+               (-> source root)
+               (nonzero? (-> source root)))
+      (when (mp-traffic-valid-local-target?)
+        (set! closest *target*)
+        (set! closest-dist (vector-vector-distance (-> source root trans) (-> *target* root trans)))
+        )
+      (let ((remote (mp-traffic-valid-remote-target)))
+        (when (and remote
+                   (nonzero? remote))
+          (let ((remote-dist (vector-vector-distance (-> source root trans) (-> remote root trans))))
+            (when (or (not closest)
+                      (< remote-dist closest-dist))
+              (set! closest remote)
+              (set! closest-dist remote-dist)
+              )
+            )
+          )
+        )
+      )
+    closest
+    )
   )
 
 (defun mp-traffic-density-scale-for-tracker ((tracker-id int))
@@ -2252,19 +2359,22 @@
          (set! (-> target-pos quad) (-> (get-trans (the-as process-focusable target-proc) 3) quad))
          (cond
            ((= (-> (the-as process-focusable target-proc) type) target)
-            (let ((s1-1 (-> this alert-state target-status-array)))
-              (logclear! (-> s1-1 0 flags) (traffic-target-flag visible-now updated))
-              (logior! (-> s1-1 0 flags) (traffic-target-flag updated))
+            (let ((s1-1 (mp-traffic-find-target-status this (-> target-status handle))))
+              (when (not s1-1)
+                (set! s1-1 target-status)
+                )
+              (logclear! (-> s1-1 flags) (traffic-target-flag visible-now updated))
+              (logior! (-> s1-1 flags) (traffic-target-flag updated))
               (cond
-                ((or (logtest? (-> s1-1 0 flags) (traffic-target-flag force-visible)) (traffic-los-clear? los target-pos))
-                 (logior! (-> s1-1 0 flags) (traffic-target-flag visible-now visible-recently visible-ever))
-                 (set-time! (-> s1-1 0 last-seen-time))
-                 (set! (-> s1-1 0 position quad) (-> target-pos quad))
-                 (set! (-> s1-1 0 velocity quad) (-> (get-transv (the-as process-focusable target-proc)) quad))
+                ((or (logtest? (-> s1-1 flags) (traffic-target-flag force-visible)) (traffic-los-clear? los target-pos))
+                 (logior! (-> s1-1 flags) (traffic-target-flag visible-now visible-recently visible-ever))
+                 (set-time! (-> s1-1 last-seen-time))
+                 (set! (-> s1-1 position quad) (-> target-pos quad))
+                 (set! (-> s1-1 velocity quad) (-> (get-transv (the-as process-focusable target-proc)) quad))
                  )
                 (else
-                  (if (time-elapsed? (-> s1-1 0 last-seen-time) (seconds 2))
-                      (logclear! (-> s1-1 0 flags) (traffic-target-flag visible-recently))
+                  (if (time-elapsed? (-> s1-1 last-seen-time) (seconds 2))
+                      (logclear! (-> s1-1 flags) (traffic-target-flag visible-recently))
                       )
                   )
                 )
@@ -2365,7 +2475,11 @@
           (set! (-> s3-3 quad) (-> (get-trans (the-as process-focusable s5-1) 3) quad))
           (cond
             ((= (-> s5-1 type) target)
-             (mem-copy! (the-as pointer target-status) (the-as pointer (-> this alert-state target-status-array)) 80)
+             (let ((shared-status (mp-traffic-find-target-status this (-> target-status handle))))
+               (when shared-status
+                 (mem-copy! (the-as pointer target-status) (the-as pointer shared-status) 80)
+                 )
+               )
              )
             (else
               )
@@ -2824,9 +2938,7 @@
   )
 
 (defmethod update-alert-state ((this traffic-engine))
-  (if (and (logtest? (-> this alert-state flags) (traffic-alert-flag target-jak)) *target*)
-      (set! (-> this alert-state target-status-array 0 handle) (process->handle *target*))
-      )
+  (mp-traffic-sync-player-target-handles! this)
   (when #t
     (mem-copy!
       (the-as pointer (-> this alert-state settings))
@@ -2972,8 +3084,8 @@
           (remove-setting! 'sound-mode)
           (sound-stop (-> this alert-state alarm-sound-id))
           (send-alert-events this)
-          (let ((v1-84 (-> this alert-state target-status-array)))
-            (logclear! (-> v1-84 0 flags) (traffic-target-flag visible-now visible-recently visible-ever))
+          (dotimes (v1-84 3)
+            (logclear! (-> this alert-state target-status-array v1-84 flags) (traffic-target-flag visible-now visible-recently visible-ever))
             )
           (dotimes (v1-85 21)
             (set! (-> this object-type-info-array v1-85 killed-count) (the-as uint 0))
@@ -2993,11 +3105,16 @@
     ((> (-> this alert-state level) 0)
      (if (and (logtest? (-> this alert-state flags) (traffic-alert-flag target-jak))
               (not (logtest? (-> this alert-state flags) (traffic-alert-flag alert-ending)))
-              *target*
+              (mp-traffic-valid-local-target?)
               )
          (for-all-active-processes this (lambda ((arg0 process-focusable) (arg1 traffic-object-type-info))
                                           (if (logtest? (-> arg1 flags) (traffic-type-flags trtflags-0))
-                                              (send-event arg0 'alert-begin *target*)
+                                              (let ((alert-target (mp-traffic-closest-alert-target arg0)))
+                                                (when (and alert-target
+                                                           (nonzero? alert-target))
+                                                  (send-event arg0 'alert-begin alert-target)
+                                                  )
+                                                )
                                               )
                                           (none)
                                           )
@@ -3029,7 +3146,9 @@
       (set! (-> this inv-density-factor) 1.25)
       )
   (let ((v1-6 (-> this alert-state target-status-array)))
-    (logclear! (-> v1-6 0 flags) (traffic-target-flag force-visible))
+    (dotimes (idx 3)
+      (logclear! (-> v1-6 idx flags) (traffic-target-flag force-visible))
+      )
     )
   (set-target-level this 1.0)
   (set-alert-duration this (seconds 30))

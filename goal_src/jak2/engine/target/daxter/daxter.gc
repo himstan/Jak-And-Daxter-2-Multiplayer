@@ -283,6 +283,18 @@
   (none)
   )
 
+(defun target-indax-should-refill-health? ((tgt target) (reset-velocity? symbol))
+  (if (and tgt
+           (nonzero? tgt)
+           *multi-sync-enabled?*
+           (> (-> tgt fact health) 0.0)
+           (or *mp-local-player-is-respawning* (not reset-velocity?))
+           )
+      #f
+      #t
+      )
+  )
+
 (defbehavior target-indax-init target ((reset-velocity? symbol))
   (let ((surf (-> self control current-surface)))
     (if (and surf (not (zero? (the-as uint surf))) (not (logtest? (the-as uint surf) 3)) (< (the-as uint surf) #x70000000))
@@ -303,9 +315,7 @@
   (set! *local-riding?* #f)
   (set! (-> self control bend-target) 0.0)
   (target-collide-set! 'indax 0.0)
-  (if (not (and *multi-sync-enabled?*
-                *mp-local-player-is-respawning*
-                (> (-> self fact health) 0.0)))
+  (if (target-indax-should-refill-health? self reset-velocity?)
       (set! (-> self fact health) (-> self fact health-max))
       )
   (set! *mp-local-player-is-respawning* #f)

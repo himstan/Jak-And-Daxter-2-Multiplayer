@@ -255,6 +255,7 @@
    (joint                    joint-mod)
    (joint-enable             symbol)
    (already-shot             symbol)
+   (mp-last-puppet-zap-attack-id uint32)
    (miss-amount              float)
    (l-control                lightning-control)
    (next-shot                int64)
@@ -2832,6 +2833,33 @@
     )
   )
 
+(defun mp-crimson-guard-remote-daxter-puppet? ((proc process))
+  (and proc
+       (nonzero? proc)
+       (type? proc target)
+       (= (-> (the-as target proc) tobot?) 'mp-puppet)
+       )
+  )
+
+(defun mp-crimson-guard-send-remote-zap-hit! ((guard crimson-guard) (proc process))
+  (when (and guard
+             (nonzero? guard)
+             proc
+             (nonzero? proc)
+             *local-info*
+             (nonzero? *local-info*)
+             *multi-sync-enabled?*
+             (= (pc-multi-get-status) 6)
+             (= (-> *local-info* role) 0)
+             (mp-crimson-guard-remote-daxter-puppet? proc)
+             (!= (-> guard mp-last-puppet-zap-attack-id) (-> guard attack-id))
+             )
+    (set! (-> guard mp-last-puppet-zap-attack-id) (-> guard attack-id))
+    (mp-send-world-event MP_EVENT_PLAYER_HIT (the uint 2))
+    )
+  (none)
+  )
+
 ;; WARN: Return type mismatch object vs none.
 (defmethod crimson-guard-method-222 ((this crimson-guard))
   (local-vars (sv-800 vector))
@@ -2914,15 +2942,9 @@
            (let ((v1-43 (the-as collide-shape-prim (as-type (-> s3-0 best-other-tri collide-ptr) collide-shape-prim)))
                  (s1-5 #t)
                  )
-             (when v1-43
+             (when (and v1-43 (nonzero? v1-43))
                (set! s1-5 #f)
-               (if (and (-> v1-43 cshape process) (type? (-> v1-43 cshape process) target) (= (-> (the-as target (-> v1-43 cshape process)) tobot?) 'mp-puppet))
-
-                   (begin
-                     (format 0 "MP-LOG: Guard lightning probe hit Daxter! (Proxy: ~A)~%" (-> v1-43 cshape process name))
-                     (send-event (-> v1-43 cshape process) 'attack #f (static-attack-info ((id (-> this attack-id)) (mode 'shock))))
-                     )
-                   )
+               (mp-crimson-guard-send-remote-zap-hit! this (-> v1-43 cshape process))
                (let ((s0-1 (new 'stack-no-clear 'projectile-init-by-other-params)))
                  (set! (-> s0-1 ent) (-> this entity))
                  (set! (-> s0-1 charge) 1.0)
@@ -3772,6 +3794,7 @@
     )
   0
   (set! (-> this joint-enable) #f)
+  (set! (-> this mp-last-puppet-zap-attack-id) (the uint32 0))
   (logclear! (-> this mask) (process-mask enemy))
   (logior! (-> this mask) (process-mask guard))
   (set! (-> this fact pickup-type) (pickup-type ammo-random))
