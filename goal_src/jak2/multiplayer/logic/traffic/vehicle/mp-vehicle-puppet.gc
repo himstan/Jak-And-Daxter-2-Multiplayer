@@ -121,9 +121,16 @@
 (defun mp-should-apply-vehicle-camera? ((veh vehicle))
   "Returns #t if the local camera should follow this vehicle."
   (cond
-    ;; 1. Local player is driving (target is in seat 0)
-    ((let ((pilot (get-rider-in-seat veh 0)))
-       (and pilot (= pilot *target*)))
+    ;; 1. Local player is riding this vehicle (as driver or passenger)
+    ((and *target*
+          (nonzero? *target*)
+          (focus-test? *target* pilot)
+          (let ((pilot-info (-> *target* pilot)))
+            (and (nonzero? pilot-info)
+                 (= veh (handle->process (-> pilot-info vehicle)))
+                 )
+            )
+          )
      #t)
     ;; Default fallback to physics authority (ambient traffic)
     (else

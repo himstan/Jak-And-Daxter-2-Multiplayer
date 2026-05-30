@@ -102,6 +102,7 @@
 (defconstant MP_MISSION_EVT_STADIUM_BOARD1_CHALLENGE_START (the-as uint 31))
 (defconstant MP_MISSION_EVT_STADIUM_BOARD1_SCORE_UPDATE (the-as uint 32))
 (defconstant MP_MISSION_EVT_STADIUM_BOARD1_CHALLENGE_END (the-as uint 33))
+(defconstant MP_MISSION_EVT_KREW_COLLECTION_PICKUP (the-as uint 40))
 
 (defconstant MP_BATTLE_EVT_START (the-as uint 1))
 (defconstant MP_BATTLE_EVT_END (the-as uint 2))
@@ -297,6 +298,12 @@
 (deftype mp-mission-event (mp-event)
   ((mission-evt uint32   :overlay-at (-> data 0))  ;; 1='leave, 2='play-scene
    (target-name uint8 32 :overlay-at (-> data 4))  ;; 32-byte string buffer for actor name
+   )
+  )
+
+(deftype mp-krew-collection-event (mp-event)
+  ((mission-evt uint32 :overlay-at (-> data 0))
+   (bag-index   uint32 :overlay-at (-> data 4))
    )
   )
 
@@ -931,6 +938,8 @@
 (define-perm *mp-event-queue* (inline-array mp-event) (new 'static 'inline-array mp-event 32))
 (define-perm *mp-event-queue-write-ptr* int 0)
 (define-perm *mp-event-queue-read-ptr* int 0)
+(define-perm *mp-krew-collection-picked-mask* uint (the uint 0))
+(define-perm *mp-krew-collection-consumed-mask* uint (the uint 0))
 
 (define *daxter-pole-y-offset* 950.0)
 (define *local-riding?* #f)
@@ -1078,6 +1087,7 @@
 (define-extern mp-send-mission-failed-choice (function uint none))
 (define-extern mp-send-fortress-robotank-trigger-event (function string int vector none))
 (define-extern mp-send-gungame-event (function uint uint uint int uint uint uint uint none))
+(define-extern mp-send-krew-collection-pickup-event (function int none))
 (define-extern mp-send-player-gun-shot-event (function uint none))
 (define-extern mp-send-battle-start-event (function process-tree none))
 (define-extern mp-send-battle-end-event (function process-tree none))

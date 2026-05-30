@@ -162,6 +162,25 @@
   (none)
   )
 
+(defun mp-send-krew-collection-pickup-event ((bag-index int))
+  "Broadcast the collected Krew moneybag index."
+  (when (and *multi-sync-enabled?*
+             (= (pc-multi-get-status) 6)
+             (not *mp-processing-remote-event*)
+             (>= bag-index 0)
+             (< bag-index 32))
+    (let ((q-idx *mp-event-queue-write-ptr*))
+      (let ((evt (the-as mp-krew-collection-event (-> *mp-event-queue* q-idx))))
+        (set! (-> evt etype) MP_EVENT_MISSION_EVENT)
+        (set! (-> evt mission-evt) MP_MISSION_EVT_KREW_COLLECTION_PICKUP)
+        (set! (-> evt bag-index) (the-as uint32 bag-index))
+        )
+      (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
+      )
+    )
+  (none)
+  )
+
 (defun mp-send-event-function-hijack ((proc process-tree) (msg event-message-block))
   "Global hijack for send-event-function to sync mission critical events."
   (with-pp

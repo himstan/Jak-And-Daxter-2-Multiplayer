@@ -787,6 +787,7 @@ Ptr<Type> alloc_and_init_type(Ptr<Symbol4<Ptr<Type>>> sym,
   sym->value() = the_type;
   the_type->allocated_size = type_size;
   the_type->padded_size = ((type_size + 0xf) & 0xfff0);
+  the_type->num_methods = method_count;
   return the_type;
 }
 
@@ -830,6 +831,9 @@ Ptr<Type> intern_type_from_c(const char* name, u64 methods) {
     // the type exists.
     auto type = Ptr<Type>(sym_value);
     // note - flags of 0 or 1 will pass through here without triggering the error.
+    if (type->num_methods == 0) {
+      type->num_methods = methods;
+    }
     if (size_of_type(type->num_methods) < size_of_type(methods)) {
       MsgErr(
           "dkernel: trying to redefine a type '%s' with %d methods when it had %d, try "
