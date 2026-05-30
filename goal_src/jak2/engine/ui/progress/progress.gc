@@ -386,6 +386,7 @@
   (set! (-> self graphic-index) 0)
   (set! (-> self swing) 0.0)
   (set! (-> self main-menu) #f)
+  (bigmap-request-progress-minimap!)
   (set-menu-options self (-> self current))
   (logior! (-> self draw status) (draw-control-status hud))
   (let ((f30-0 -6571.804))

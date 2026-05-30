@@ -673,7 +673,60 @@
   (none)
   )
 
+(defun bigmap-update-progress-minimap! ()
+  (when (and *bigmap*
+             (nonzero? *bigmap*)
+             *bigmap-progress-minimap-requested?*
+             (not (-> *bigmap* progress-minimap))
+             *level*
+             (nonzero? *level*)
+             *texture-pool*
+             (nonzero? *texture-pool*)
+             *texture-relocate-later*
+             (nonzero? *texture-relocate-later*)
+             (not (load-in-progress? *level*))
+             )
+    (let ((map *bigmap*))
+      (when (and (-> map tpage) (nonzero? (-> map tpage)))
+        (let ((tpage-buffer (-> map tpage)))
+          (when (not (file-status tpage-buffer "progress-minimap" 0))
+            (set-pending-file tpage-buffer "progress-minimap" 0 (process->handle *dproc*) 0.0)
+            )
+          (update tpage-buffer)
+          (when (= (file-status tpage-buffer "progress-minimap" 0) 'active)
+            (let ((old-loading-level (-> *level* loading-level))
+                  (old-allocate-func (-> *texture-pool* allocate-func))
+                  (old-relocate-memcpy (-> *texture-relocate-later* memcpy))
+                  )
+              (set! (-> *texture-pool* allocate-func) texture-page-common-boot-allocate)
+              (set! (-> *level* loading-level) #f)
+              (set! (-> *texture-relocate-later* memcpy) #f)
+              (set! (-> map progress-minimap)
+                    (the-as
+                      texture-page
+                      (link (-> tpage-buffer buf) (-> tpage-buffer load-file data) (-> tpage-buffer len) (-> tpage-buffer heap) 4)
+                      )
+                    )
+              (set! (-> *level* loading-level) old-loading-level)
+              (set! (-> *texture-pool* allocate-func) old-allocate-func)
+              (set! (-> *texture-relocate-later* memcpy) old-relocate-memcpy)
+              )
+            )
+          )
+        )
+      )
+    )
+  0
+  )
+
+(defun bigmap-request-progress-minimap! ()
+  (set! *bigmap-progress-minimap-requested?* #t)
+  (bigmap-update-progress-minimap!)
+  0
+  )
+
 (defmethod update ((this bigmap))
+  (bigmap-update-progress-minimap!)
   (let ((v1-1 (level-get-target-inside *level*)))
     (if v1-1
         (set! (-> this bigmap-index) (the-as uint (-> v1-1 info bigmap-id)))
@@ -749,7 +802,12 @@
   (when (-> this drawing-flag)
     (cond
        ((or (= (-> *blit-displays-work* count-down) 1)
-            (and (not (-> this loading-flag)) (not (-> this progress-minimap)) (not (load-in-progress? *level*)))
+            (and (not (-> this loading-flag))
+                 (not (load-in-progress? *level*))
+                 (or (not (-> this progress-minimap))
+                     (!= (file-status (-> this bigmap-image) "world-map" (the-as int (-> this load-index))) 'active)
+                     )
+                 )
             )
         (set-pending-file
           (-> this bigmap-image)
@@ -758,7 +816,9 @@
           (process->handle *dproc*)
           0.0
           )
-        (set-pending-file (-> this tpage) "progress-minimap" 0 (process->handle *dproc*) 0.0)
+        (when (not (-> this progress-minimap))
+          (set-pending-file (-> this tpage) "progress-minimap" 0 (process->handle *dproc*) 0.0)
+          )
         (set! (-> this loading-flag) #t)
         )
        (else
@@ -766,7 +826,9 @@
          (update (-> this tpage))
          (when (and (-> this loading-flag)
                     (= (file-status (-> this bigmap-image) "world-map" (the-as int (-> this load-index))) 'active)
-                    (= (file-status (-> this tpage) "progress-minimap" 0) 'active)
+                    (or (-> this progress-minimap)
+                        (= (file-status (-> this tpage) "progress-minimap" 0) 'active)
+                        )
                     (not (load-in-progress? *level*))
                     )
            (if (!= (-> this bigmap-index) 20)
@@ -779,12 +841,14 @@
              (set! (-> *texture-pool* allocate-func) texture-page-common-boot-allocate)
              (set! (-> *level* loading-level) #f)
              (set! (-> *texture-relocate-later* memcpy) #f)
-             (set! (-> this progress-minimap)
-                   (the-as
-                     texture-page
-                     (link (-> this tpage buf) (-> this tpage load-file data) (-> this tpage len) (-> this tpage heap) 4)
+             (when (not (-> this progress-minimap))
+               (set! (-> this progress-minimap)
+                     (the-as
+                       texture-page
+                       (link (-> this tpage buf) (-> this tpage load-file data) (-> this tpage len) (-> this tpage heap) 4)
+                       )
                      )
-                   )
+               )
              (set! (-> *level* loading-level) s5-0)
              (set! (-> *texture-pool* allocate-func) s4-0)
              (set! (-> *texture-relocate-later* memcpy) s3-0)
@@ -1045,6 +1109,7 @@
     (set! (-> *level* default-level texture-page 3) (the-as texture-page 0))
     (set! (-> this progress-minimap) #f)
     )
+  (set! *bigmap-progress-minimap-requested?* #f)
   (set! (-> this drawing-flag) #f)
   (set! (-> this loading-flag) #f)
   0

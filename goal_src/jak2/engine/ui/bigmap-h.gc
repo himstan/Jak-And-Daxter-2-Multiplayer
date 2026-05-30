@@ -11,6 +11,10 @@
 (declare-type bigmap basic)
 (define-extern *bigmap* bigmap)
 
+(define-perm *bigmap-progress-minimap-requested?* symbol #f)
+(define-extern bigmap-update-progress-minimap! (function int))
+(define-extern bigmap-request-progress-minimap! (function int))
+
 ;; DECOMP BEGINS
 
 (deftype bigmap-bit-mask (structure)
@@ -137,7 +141,6 @@
     (draw-from-minimap (_type_ dma-buffer connection-minimap) int)
     )
   )
-
 
 (defmethod new bigmap ((allocation symbol) (type-to-make type))
   (let ((gp-0 (object-new allocation type-to-make (the-as int (-> type-to-make size)))))
