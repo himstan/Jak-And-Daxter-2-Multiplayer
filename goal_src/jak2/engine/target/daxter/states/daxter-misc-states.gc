@@ -1,6 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern *mp-puppet-ghost* mp-target-ghost-record)
+
 (defstate target-indax-trip (target)
   :event target-indax-jump-event-handler
   :enter (behavior ()
@@ -164,3 +166,42 @@
     (target-indax-post)
     )
   )
+
+(defstate target-indax-spawn-reset (target)
+  :event target-indax-dangerous-event-handler
+  :enter (-> target-attack enter)
+  :exit (behavior ()
+         ((-> target-attack exit))
+         (target-indax-exit))
+
+  :code (behavior ()
+          (let ((gp-0 daxter-indax-stance-ja))
+            (quaternion-rotate-y! (-> self control quat-for-control) (-> self control quat-for-control) -1365.3334)
+            (ja-channel-push! 1 (seconds 0.05))
+            (ja-no-eval :group! gp-0 :num! (seek! max (-> self control current-surface align-speed)) :frame-num 0.0)
+            )
+          (dotimes (gp-1 5)
+            (let ((ctrl (-> self control)))
+              (when (and ctrl (nonzero? ctrl))
+                (vector-reset! (-> ctrl transv))
+                (set! (-> ctrl ctrl-xz-vel) 0.0)
+                
+                (let ((ghost *mp-puppet-ghost*))
+                  (when (and ghost (nonzero? ghost) (-> ghost active?))
+                    (let ((dist (vector-vector-distance (-> ctrl trans) (-> ghost trans))))
+                      (when (or (< 1638400.0 dist) (< 1638400.0 (vector-length (-> ctrl trans))))
+                        (vector-copy! (-> ctrl trans) (-> ghost trans))
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            (compute-alignment! (-> self align))
+            (align! (-> self align) (align-opts adjust-quat) 1.0 1.0 1.0)
+            (suspend)
+            (ja :num! (seek! max (-> self control current-surface align-speed)))
+            )
+          (align! (-> self align) (align-opts adjust-quat) 1.0 1.0 1.0)
+          (go target-indax-stance))
+  :post target-indax-post)

@@ -405,7 +405,8 @@
                                              (= v1-3 'target-indax-pilot-clone-anim)
                                              (= v1-3 'target-indax-pilot-edge-grab)
                                              (= v1-3 'target-indax-pilot-hit)
-                                             (= v1-3 'target-indax-pilot-death)))))
+                                             (= v1-3 'target-indax-pilot-death)
+                                             (= v1-3 'target-indax-spawn-reset)))))
       (if (= (-> self next-state name) 'process-drawable-art-error)
         (begin
           (format 0 "Trying to recover from drawable art error by going to target-indax-start~%")

@@ -362,6 +362,7 @@
       ((logtest? (-> arg0 flags) (continue-flags warp-gate))
        (suspend-for (seconds 0.05)
          )
+       (runs-on-jak-spawn)
        (if (and (= self *target*) *local-riding?* (mp-is-daxter?))
            (go target-ride-along)
            (let ((s5-8 (new 'static 'vector))

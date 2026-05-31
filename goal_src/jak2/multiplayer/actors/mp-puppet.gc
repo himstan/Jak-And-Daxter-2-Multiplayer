@@ -921,10 +921,16 @@
         ;; If we are the Host (Jak), the remote player is Daxter. 
         ;; Send native change-mode event to initialize Indax (Daxter) states and skeletons.
         (if (mp-is-jak?)
+          (begin
             (send-event *mp-puppet* 'change-mode 'indax #f)
+            (when *mp-puppet-is-recovering?*
+              (set! *mp-puppet-is-recovering?* #f)
+              (go-process *mp-puppet* target-indax-spawn-reset)
             )
+          )
         )
       )
     )
-  *mp-puppet*
   )
+  *mp-puppet*
+)

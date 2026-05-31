@@ -89,17 +89,33 @@
       (when (mp-is-daxter?)
         (mp-ride-along-sync-camera-target! self jak-proc)
         )
-      (if jak-proc
+      (if (and jak-proc (nonzero? jak-proc))
           (begin
             ;; Precise: Snapping to Jak's shoulder joint if available
             (if (and (nonzero? (-> jak-proc node-list)) (> (-> jak-proc node-list length) 23) (nonzero? (-> jak-proc node-list data 23 bone)))
                 (vector-copy! (-> self control trans) (-> jak-proc node-list data 23 bone transform trans))
-                (vector-copy! (-> self control trans) (-> jak-proc control trans)))
-            (quaternion-copy! (-> self control quat) (-> jak-proc control quat)))
+                (when (and (-> jak-proc control) (nonzero? (-> jak-proc control)))
+                  (vector-copy! (-> self control trans) (-> jak-proc control trans))
+                  )
+                )
+            (when (and (-> self control) (nonzero? (-> self control)))
+              (when (and (-> jak-proc control) (nonzero? (-> jak-proc control)))
+                (quaternion-copy! (-> self control quat) (-> jak-proc control quat))
+                (vector-copy! (-> self control transv) (-> jak-proc control transv))
+                )
+              )
+            )
           (begin
             ;; Fallback: Network position if Jak is missing
             (if (mp-is-daxter?)
-                (vector-copy! (-> self control trans) *multi-remote-interp-pos*)))))
+                (vector-copy! (-> self control trans) *multi-remote-interp-pos*)
+                )
+            (when (and (-> self control) (nonzero? (-> self control)))
+              (vector-reset! (-> self control transv))
+              )
+            )
+          )
+        )
     )
   )
 

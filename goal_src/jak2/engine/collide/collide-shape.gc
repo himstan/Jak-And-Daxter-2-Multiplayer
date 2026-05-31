@@ -1,6 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern target-indax-spawn-reset (state target))
+
 ;; name: collide-shape.gc
 ;; name in dgo: collide-shape
 ;; dgos: ENGINE, GAME
@@ -1305,9 +1307,26 @@ it returns a triangle and normal direction to push in.
 
     ;; hack: prevent crazy velocities.
     (when (< 1638400.0 (vector-length arg0))
-      (format 0 "WARNING: target vel is ~M m/s, reseting to zero.~%" (vector-length arg0))
-      (vector-reset! arg0)
+      (if (= (-> this process) *mp-puppet*)
+        (let ((puppet (mp-puppet-get-proc)))
+          (when (and puppet (nonzero? puppet))
+            (set! *mp-puppet-is-recovering?* #t)
+            (deactivate puppet)
+            (set! *mp-puppet* (the-as target #f)) 
+          )
+          (set! *mp-puppet-pending-gun-shot?* #f)
+          (set! *mp-puppet-pending-gun-shot-weapon* (the uint 0))
+          (set! *mp-puppet-pending-gun-shot-seq* (the uint 0))
+          (set! *mp-puppet-pending-gun-shot-cam-angle-y* 0.0)
+          (set! *mp-puppet-was-far?* #f)
+          (set! *mp-puppet-is-warping?* #f)
+        )
+        (begin
+          (format 0 "WARNING: target vel is ~M m/s, reseting to zero.~%" (vector-length arg0))
+          (vector-reset! arg0)
+        )
       )
+    )
 
     ;; the jump and double jump animations have a collide-offset trick applied to them.
     ;; (todo: move part of this comment to target.gc)

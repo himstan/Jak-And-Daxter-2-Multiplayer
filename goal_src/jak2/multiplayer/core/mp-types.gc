@@ -928,6 +928,7 @@
 (define-extern *mp-puppet* target)
 (define-perm *mp-puppet-was-far?* symbol #f)
 (define-perm *mp-puppet-is-warping?* symbol #f)
+(define-perm *mp-puppet-is-recovering?* symbol #f)
 (define-extern *mp-puppet-ghost* mp-target-ghost-record)
 (define-perm *mp-event-buffer* mp-event-buffer (new 'static 'mp-event-buffer))
 (define-perm *mp-enemy-buffer* mp-enemy-sync-buffer (new 'static 'mp-enemy-sync-buffer))
