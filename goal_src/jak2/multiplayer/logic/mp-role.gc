@@ -147,8 +147,8 @@
 (defun mp-update-traffic-authority ()
   "Determine who owns the open-world traffic and suppress local spawning if needed"
   (let ((is-active? (nonzero? (pc-multi-get-status))))
-    (if (not is-active?)
-        (begin ;; Offline or fallback
+    (if (or (not is-active?) (not *traffic-manager*) (zero? *traffic-manager*))
+        (begin ;; Offline, fallback, or no active traffic manager
           (set! *mp-traffic-suppressed* #f)
           (set! *mp-traffic-sync-active* #f)
           (set! *mp-traffic-host-spawning-active* #f)

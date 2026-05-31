@@ -1266,6 +1266,8 @@
   "Seed local traffic for cells that became active while MP host traffic suppressed local spawning."
   (when (and (nonzero? (pc-multi-get-status))
              (not *mp-traffic-suppressed*)
+             *traffic-manager*
+             (nonzero? *traffic-manager*)
              *traffic-engine*
              (nonzero? *traffic-engine*))
     (let ((engine *traffic-engine*))
