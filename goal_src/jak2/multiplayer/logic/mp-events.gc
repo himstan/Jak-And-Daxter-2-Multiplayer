@@ -721,6 +721,7 @@
       ((MP_EVENT_ENEMY_GEM)               (mp-event-handler-enemy-gem (the-as mp-enemy-gem-event evt)))
       ((MP_EVENT_MTN_PLAT_SHOOT)          (mp-event-handler-mtn-plat-shoot (the-as mp-mtn-plat-shoot-event evt)))
       ((MP_EVENT_MTN_DICE)                (mp-event-handler-mtn-dice (the-as mp-mtn-dice-event evt)))
+      ((MP_EVENT_PALACE_SQUID)            (mp-receive-palace-squid-event (the-as mp-palace-squid-event evt)))
       )
     )
   (set! *mp-processing-remote-event* #f)

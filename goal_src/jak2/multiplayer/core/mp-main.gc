@@ -321,6 +321,8 @@
       (mem-set32! (the-as pointer *mp-enemy-buffer*) (/ (size-of mp-enemy-sync-buffer) 4) 0))
   (if (nonzero? (the-as uint *mp-traffic-buffer*))
       (mem-set32! (the-as pointer *mp-traffic-buffer*) (/ (size-of mp-traffic-sync-buffer) 4) 0))
+  (if (nonzero? (the-as uint *mp-palace-squid-buffer*))
+      (mem-set32! (the-as pointer *mp-palace-squid-buffer*) (/ (size-of mp-palace-squid-sync-buffer) 4) 0))
   (if (nonzero? (the-as uint *mp-event-queue*))
       (mem-set32! (the-as pointer *mp-event-queue*) (/ (* 32 (size-of mp-event)) 4) 0))
   (if (nonzero? (the-as uint *mp-enemy-auth*))

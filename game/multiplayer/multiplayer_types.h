@@ -178,6 +178,16 @@ struct MPTrafficSyncBufferGOAL {
   uint64_t last_sync_time;
 };
 
+struct MPPalaceSquidSyncBufferGOAL {
+  MPPalaceSquidState local_state;
+  uint8_t pad_after_local[12];
+  MPPalaceSquidState remote_state;
+  uint8_t pad_before_last_sync[4];
+  uint64_t last_sync_time;
+  uint8_t pad[8];
+};
+static_assert(sizeof(MPPalaceSquidSyncBufferGOAL) == 264, "MPPalaceSquidSyncBufferGOAL must match GOAL");
+
 struct MultiplayerData {
   bool initialized = false;
   bool enet_initialized = false;
@@ -198,6 +208,9 @@ struct MultiplayerData {
   uint32_t last_remote_traffic_level_hash = 0;
   uint64_t ped_last_updated[MAX_PEDESTRIAN_SYNC_COUNT] = {0};
   uint64_t veh_last_updated[MAX_VEHICLE_SYNC_COUNT] = {0};
+
+  MPPalaceSquidState remote_palace_squid_state = {};
+  uint32_t last_palace_squid_sync_time = 0;
 
   // New fields for joining/searching
   std::atomic<int> join_status{0}; // 0: idle, 1: searching, 2: found, 3: connecting, 4: connected, -1: failed

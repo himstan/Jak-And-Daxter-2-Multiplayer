@@ -29,7 +29,8 @@ enum class PacketType : uint8_t {
   ENEMY_SYNC = 5,
   PEDESTRIAN_SYNC = 6,
   VEHICLE_SYNC = 7,
-  TURRET_SYNC = 8
+  TURRET_SYNC = 8,
+  PALACE_SQUID_SYNC = 9
 };
 
 struct PacketHeader {
@@ -208,6 +209,33 @@ struct PacketVehicleSync {
   uint32_t count;
   uint64_t timestamp;
   MPVehicleStatePacked vehs[MAX_VEHICLES_PER_PACKET];
+};
+
+struct MPPalaceSquidState {
+  uint32_t active;
+  uint32_t state_id;
+  int32_t stage;
+  int32_t hit_points;
+  float shield_hit_points;
+  int32_t target_role;
+  uint32_t draw_force_fade;
+  uint32_t action_seq;
+  float x, y, z;
+  float quat_x, quat_y, quat_z, quat_w;
+  float traj_src_x, traj_src_y, traj_src_z;
+  float traj_dest_x, traj_dest_y, traj_dest_z;
+  float traj_duration;
+  int32_t traj_age;
+  uint32_t pad_last_updated;
+  uint64_t last_updated;
+  uint8_t pad[12];
+};
+static_assert(sizeof(MPPalaceSquidState) == 116, "MPPalaceSquidState must be 116 bytes");
+
+struct PacketPalaceSquidSync {
+  PacketHeader header;
+  uint64_t timestamp;
+  MPPalaceSquidState state;
 };
 
 struct PacketFullSync {

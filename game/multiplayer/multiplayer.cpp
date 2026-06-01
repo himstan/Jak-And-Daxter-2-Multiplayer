@@ -58,6 +58,11 @@ void reset_remote_traffic_buffers() {
   gMultiplayerData.last_traffic_sync_time = 0;
 }
 
+void reset_remote_palace_squid_state() {
+  memset(&gMultiplayerData.remote_palace_squid_state, 0, sizeof(gMultiplayerData.remote_palace_squid_state));
+  gMultiplayerData.last_palace_squid_sync_time = 0;
+}
+
 void handle_packet_receive(LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* remote) {
   ENetEvent event;
   uint32_t current_time = enet_time_get();
@@ -92,6 +97,7 @@ void handle_packet_receive(LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* rem
                   gMultiplayerData.last_remote_traffic_level_hash != 0 &&
                   state->level_hash != gMultiplayerData.last_remote_traffic_level_hash) {
                 reset_remote_traffic_buffers();
+                reset_remote_palace_squid_state();
                 lg::info("[Multiplayer] Remote level changed. Cleared traffic sync buffers.");
               }
               if (state->netId != gMultiplayerData.local_net_id && state->level_hash != 0) {
@@ -216,6 +222,14 @@ void handle_packet_receive(LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* rem
                 entity.turret_roty = state->roty;
                 entity.turret_rotx = state->rotx;
               }
+            }
+          } else if (header->type == PacketType::PALACE_SQUID_SYNC &&
+                     event.packet->dataLength == sizeof(PacketPalaceSquidSync)) {
+            PacketPalaceSquidSync* sync = (PacketPalaceSquidSync*)event.packet->data;
+            if (gMultiplayerData.local_role != 0) {
+              memcpy(&gMultiplayerData.remote_palace_squid_state, &sync->state, sizeof(MPPalaceSquidState));
+              gMultiplayerData.remote_palace_squid_state.last_updated = current_time;
+              gMultiplayerData.last_palace_squid_sync_time = current_time;
             }
           } else if (header->type == PacketType::FULL_SYNC &&
 
@@ -593,6 +607,35 @@ void pc_multi_receive_traffic(u32 buffer_ptr) {
   } catch (...) { lg::error("[Multiplayer] Exception in pc_multi_receive_traffic"); }
 }
 
+void pc_multi_send_palace_squid(u32 buffer_ptr) {
+  using namespace jak2;
+  try {
+    if (!gMultiplayerData.initialized || gMultiplayerData.local_role != 0 || buffer_ptr < 0x1000) return;
+    MPPalaceSquidSyncBufferGOAL* buffer = (MPPalaceSquidSyncBufferGOAL*)Ptr<u8>(buffer_ptr).c();
+    if (!buffer || buffer->local_state.active == 0) return;
+
+    PacketPalaceSquidSync packet;
+    packet.header.type = PacketType::PALACE_SQUID_SYNC;
+    packet.header.sequenceNum = ++gMultiplayerData.sequence_num;
+    packet.timestamp = enet_time_get();
+    memcpy(&packet.state, &buffer->local_state, sizeof(MPPalaceSquidState));
+    packet.state.last_updated = packet.timestamp;
+    MultiplayerManager::broadcast(gMultiplayerData, gMultiplayerData.local_role, packet, ENET_PACKET_FLAG_UNSEQUENCED);
+  } catch (...) { lg::error("[Multiplayer] Exception in pc_multi_send_palace_squid"); }
+}
+
+void pc_multi_receive_palace_squid(u32 buffer_ptr) {
+  using namespace jak2;
+  try {
+    if (!gMultiplayerData.initialized || buffer_ptr < 0x1000) return;
+    MPPalaceSquidSyncBufferGOAL* buffer = (MPPalaceSquidSyncBufferGOAL*)Ptr<u8>(buffer_ptr).c();
+    if (!buffer) return;
+
+    memcpy(&buffer->remote_state, &gMultiplayerData.remote_palace_squid_state, sizeof(MPPalaceSquidState));
+    buffer->last_sync_time = gMultiplayerData.last_palace_squid_sync_time;
+  } catch (...) { lg::error("[Multiplayer] Exception in pc_multi_receive_palace_squid"); }
+}
+
 u64 pc_multi_get_enemy_sync_time() { return gMultiplayerData.last_enemy_sync_time; }
 void pc_multi_disconnect() { MultiplayerManager::disconnect(gMultiplayerData); }
 void pc_multi_setup_host() { MultiplayerManager::setup_host(gMultiplayerData); }
@@ -682,6 +725,8 @@ void init_multiplayer_pc_port() {
   make_function_symbol_from_c("pc-multi-receive-enemies", (void*)pc_multi_receive_enemies);
   make_function_symbol_from_c("pc-multi-send-traffic", (void*)pc_multi_send_traffic);
   make_function_symbol_from_c("pc-multi-receive-traffic", (void*)pc_multi_receive_traffic);
+  make_function_symbol_from_c("pc-multi-send-palace-squid", (void*)pc_multi_send_palace_squid);
+  make_function_symbol_from_c("pc-multi-receive-palace-squid", (void*)pc_multi_receive_palace_squid);
   make_function_symbol_from_c("pc-multi-get-enemy-sync-time", (void*)pc_multi_get_enemy_sync_time);
   make_function_symbol_from_c("pc-multi-get-role", (void*)pc_multi_get_role);
   make_function_symbol_from_c("pc-multi-disconnect", (void*)pc_multi_disconnect);

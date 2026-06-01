@@ -1381,6 +1381,9 @@
     (('attack)
      (let ((s4-0 (the-as object (-> arg3 param 1))))
        (cond
+         ((mp-palace-squid-should-swallow-attack? self arg0 arg3)
+          #t
+          )
          ((and (-> self next-state) (let ((v1-25 (-> self next-state name)))
                                       (or (= v1-25 'flee)
                                           (= v1-25 'pre-flee)
@@ -1823,14 +1826,7 @@
   )
 
 (defmethod squid-method-42 ((this squid) (arg0 vector))
-  (set! (-> arg0 quad) (-> (if *target*
-                               (get-trans *target* 3)
-                               (-> this nav state mesh bounds)
-                               )
-                           quad
-                           )
-        )
-  arg0
+  (mp-palace-squid-target-pos! this arg0)
   )
 
 (defmethod squid-method-43 ((this squid) (arg0 vector) (arg1 float) (arg2 float))
@@ -2643,12 +2639,16 @@
         )
       )
     (set! (-> this allowed-rotate-to-vector-angle) (fabs (-> this desired-rotate-to-vector-angle)))
+    (mp-palace-squid-tick this)
     (none)
     )
   )
 
 ;; WARN: Return type mismatch (pointer process) vs (pointer squid-whirlwind).
 (defmethod spawn-whirlwind ((this squid))
+  (if (not (mp-palace-squid-local-action-authorized?))
+      (return (the-as (pointer squid-whirlwind) #f))
+      )
   (let ((gp-0 (new 'stack-no-clear 'vector))
         (s4-0 (squid-method-42 this (new 'stack-no-clear 'vector)))
         )
@@ -2658,6 +2658,9 @@
       (set! (-> s4-0 y) 0.0)
       (vector-normalize! s4-0 1.0)
       (vector+float*! s3-0 (-> this root trans) s4-0 16384.0)
+      )
+    (when (and (mp-is-jak?) (not *mp-processing-remote-event*))
+      (mp-palace-squid-note-whirlwind-spawn! this)
       )
     (process-spawn squid-whirlwind gp-0 (-> this root trans) (-> this nav state mesh) s4-0 :to this)
     )
@@ -2679,6 +2682,9 @@
 
 ;; WARN: Return type mismatch symbol vs none.
 (defmethod spawn-grenade ((this squid) (arg0 int) (arg1 squid-grenade-holder) (arg2 float))
+  (if (not (mp-palace-squid-local-action-authorized?))
+      (return #f)
+      )
   (squid-increment-shield (+ -0.001 (/ -1.0 (* 2.0 (the float (* (squid-num-grenades-to-shoot) 2))))))
   (let ((s4-1 (new 'stack-no-clear 'projectile-init-by-other-params)))
     (let ((a0-3 (vector<-cspace! (new 'stack-no-clear 'vector) (-> this node-list data arg0)))
