@@ -718,6 +718,7 @@
       ((MP_EVENT_BATTLE_EVENT)            (mp-receive-battle-event (the-as mp-battle-event evt)))
       ((MP_EVENT_PLAYER_GUN_SHOT)         (mp-receive-player-gun-shot-event (the-as mp-player-gun-shot-event evt)))
       ((MP_EVENT_WARP_GATE)               (mp-receive-warp-gate-event (the-as mp-warp-gate-event evt)))
+      ((MP_EVENT_ENEMY_GEM)               (mp-event-handler-enemy-gem (the-as mp-enemy-gem-event evt)))
       )
     )
   (set! *mp-processing-remote-event* #f)

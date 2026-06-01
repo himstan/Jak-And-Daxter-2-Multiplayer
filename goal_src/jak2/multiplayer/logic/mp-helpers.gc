@@ -339,6 +339,23 @@
     )
   (none))
 
+(defun mp-send-enemy-gem-pickup-event ((source-id uint) (gem-index uint))
+  "Send pickup for a skull gem spawned by an enemy."
+  (if (or (not *multi-sync-enabled?*)
+          (!= (pc-multi-get-status) 6)
+          *mp-processing-remote-event*
+          (zero? source-id))
+      (return #f))
+  (let ((q-idx *mp-event-queue-write-ptr*))
+    (let ((evt (the-as mp-enemy-gem-event (-> *mp-event-queue* q-idx))))
+      (set! (-> evt etype) MP_EVENT_ENEMY_GEM)
+      (set! (-> evt source-id) (the-as uint32 source-id))
+      (set! (-> evt gem-index) (the-as uint32 gem-index))
+      )
+    (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
+    )
+  (none))
+
 (defun mp-send-player-gun-shot-event ((gun-type uint))
   "Send a reliable gun-shot replay event for the local authoritative player."
   (if (or (not *multi-sync-enabled?*)

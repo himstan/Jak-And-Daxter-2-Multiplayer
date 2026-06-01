@@ -583,7 +583,14 @@
 (defbehavior collectable-standard-event-handler collectable ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   (local-vars (v0-4 object))
   (when (and (or (= arg2 'touch) (= arg2 'attack))
-             (and (logtest? (-> self flags) (collectable-flag pickup))
+             (and (= arg0 *target*)  ;; ONLY allow collection by the local target!
+                  (not (and arg0
+                            (nonzero? arg0)
+                            (type-type? (-> arg0 type) target)
+                            (= (-> (the-as target arg0) tobot?) 'mp-puppet)
+                            )
+                       )
+                  (logtest? (-> self flags) (collectable-flag pickup))
                   (time-elapsed? (the-as int (-> self birth-time)) (the-as time-frame (-> self collect-timeout)))
                   (not (and (-> self next-state) (= (-> self next-state name) 'pickup)))
                   (send-event arg0 'get-pickup (-> self fact pickup-type) (-> self fact pickup-amount))
@@ -963,7 +970,14 @@
   :virtual #t
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
     (when (and (or (= message 'touch) (= message 'attack))
-               (and (logtest? (-> self flags) (collectable-flag pickup))
+               (and (= proc *target*) ;; ONLY allow collection by the local target!
+                    (not (and proc
+                              (nonzero? proc)
+                              (type-type? (-> proc type) target)
+                              (= (-> (the-as target proc) tobot?) 'mp-puppet)
+                              )
+                         )
+                    (logtest? (-> self flags) (collectable-flag pickup))
                     (time-elapsed? (the-as int (-> self birth-time)) (the-as time-frame (-> self collect-timeout)))
                     (not (and (-> self next-state) (= (-> self next-state name) 'pickup)))
                     (send-event proc 'get-pickup (-> self fact pickup-type) (-> self fact pickup-amount))
@@ -1320,7 +1334,9 @@
   )
 
 (deftype money (collectable)
-  ()
+  ((enemy-gem-source-id uint32)
+   (enemy-gem-index     uint32)
+   )
   )
 
 
@@ -1422,11 +1438,15 @@
   :code (behavior ((arg0 symbol) (arg1 handle))
     (let ((p-type (if (-> self fact) (-> self fact pickup-type) (pickup-type none))))
       (format 0 "[MP] Money pickup: type ~D, entity ~A, handle-proc ~A~%" p-type (-> self entity) (handle->process arg1))
-      (if (and (-> self entity) (nonzero? (-> self entity)) (handle->process arg1))
+      (if (handle->process arg1)
           (cond
-            ((= p-type (pickup-type skill))
+            ((and (= p-type (pickup-type skill)) (-> self entity) (nonzero? (-> self entity)))
              (mp-send-world-event MP_EVENT_ORB (the-as uint (-> self entity aid))))
-            ((= p-type (pickup-type gem))
+            ((and (= p-type (pickup-type gem)) (nonzero? (-> self enemy-gem-source-id)))
+             (mp-send-enemy-gem-pickup-event
+               (the-as uint (-> self enemy-gem-source-id))
+               (the-as uint (-> self enemy-gem-index))))
+            ((and (= p-type (pickup-type gem)) (-> self entity) (nonzero? (-> self entity)))
              (mp-send-world-event MP_EVENT_GEM (the-as uint (-> self entity aid))))))
       )
     (process-entity-status! self (entity-perm-status dead) #t)
@@ -1512,6 +1532,8 @@
     (process-entity-set! self arg3)
     (set! (-> self pickup-type) s3-0)
     (set! (-> self pickup-amount) f30-0)
+    (set! (-> self enemy-gem-source-id) (the-as uint32 0))
+    (set! (-> self enemy-gem-index) (the-as uint32 0))
     (initialize-allocations self)
     (set! (-> self fact pickup-type) s3-0)
     (set! (-> self fact pickup-amount) f30-0)
@@ -1546,6 +1568,8 @@
   (process-entity-set! self arg4)
   (set! (-> self pickup-type) (the-as pickup-type arg2))
   (set! (-> self pickup-amount) arg3)
+  (set! (-> self enemy-gem-source-id) (the-as uint32 0))
+  (set! (-> self enemy-gem-index) (the-as uint32 0))
   (initialize-allocations self)
   (set! (-> self fact pickup-type) (the-as pickup-type arg2))
   (set! (-> self fact pickup-amount) arg3)
@@ -2394,6 +2418,14 @@
                      :to arg4
                      )
              )
+       (when sv-40
+         (let ((gem-proc (the-as gem (ppointer->process sv-40))))
+           (when (and gem-proc (nonzero? gem-proc) (type? gem-proc gem))
+             (set! (-> gem-proc enemy-gem-source-id) (the-as uint32 0))
+             (set! (-> gem-proc enemy-gem-index) (the-as uint32 0))
+             )
+           )
+         )
        )
       (((pickup-type skill))
        (when (>= arg2 (-> *FACT-bank* super-skill-inc))

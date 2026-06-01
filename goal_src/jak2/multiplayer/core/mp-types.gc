@@ -83,6 +83,7 @@
 (defconstant MP_EVENT_BATTLE_EVENT (the-as uint 28))
 (defconstant MP_EVENT_PLAYER_GUN_SHOT (the-as uint 29))
 (defconstant MP_EVENT_WARP_GATE (the-as uint 30))
+(defconstant MP_EVENT_ENEMY_GEM (the-as uint 31))
 
 (defconstant MP_WARP_GATE_PHASE_BEGIN (the-as uint 1))
 (defconstant MP_WARP_GATE_PHASE_ARRIVE (the-as uint 2))
@@ -258,6 +259,12 @@
    (state        uint32 :overlay-at (-> data 8))
    (knocked-type uint32 :overlay-at (-> data 12))
    (hit-face     uint32 :overlay-at (-> data 16))
+   )
+  )
+
+(deftype mp-enemy-gem-event (mp-event)
+  ((source-id uint32 :overlay-at (-> data 0))
+   (gem-index uint32 :overlay-at (-> data 4))
    )
   )
 
@@ -1058,6 +1065,7 @@
 (define-extern pc-multi-disconnect (function none))
 (define-extern find-enemy-by-aid (function uint enemy))
 (define-extern mp-get-enemy-aid (function enemy uint))
+(define-extern mp-send-enemy-gem-pickup-event (function uint uint none))
 (define-extern mp-enemy-broadcast-attack (function enemy process event-message-block symbol))
 (define-extern mp-enemy-broadcast-death (function enemy none))
 (define-extern mp-enemy-get-state-id (function enemy uint))
