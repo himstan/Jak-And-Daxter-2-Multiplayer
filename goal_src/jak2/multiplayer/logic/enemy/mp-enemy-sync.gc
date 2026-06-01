@@ -3,6 +3,7 @@
 
 (define-extern mp-get-enemy-auth (function uint mp-enemy-auth-record))
 (define-extern mp-get-free-enemy-auth (function mp-enemy-auth-record))
+(define-extern mp-enemy-predictive-move (function enemy none))
 
 ;; --- State ID Mapping ---
 
@@ -597,6 +598,9 @@
                             (when (and remote-slot (nonzero? (-> e-proc root)))
                               ;; Apply the remote state data (Updates ghost position/rotation/state)
                               (mp-enemy-apply-state e-proc remote-slot)
+                              ;; Apply a correction immediately too. Some nav enemies, notably rhino,
+                              ;; can spend most frames in travel posts where local navigation otherwise wins.
+                              (mp-enemy-predictive-move e-proc)
                               )
                             )
                           (begin

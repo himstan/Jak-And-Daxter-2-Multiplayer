@@ -85,6 +85,7 @@
 (defconstant MP_EVENT_WARP_GATE (the-as uint 30))
 (defconstant MP_EVENT_ENEMY_GEM (the-as uint 31))
 (defconstant MP_EVENT_MTN_PLAT_SHOOT (the-as uint 32))
+(defconstant MP_EVENT_MTN_DICE (the-as uint 33))
 
 (defconstant MP_WARP_GATE_PHASE_BEGIN (the-as uint 1))
 (defconstant MP_WARP_GATE_PHASE_ARRIVE (the-as uint 2))
@@ -163,6 +164,7 @@
 (declare-type vehicle process-focusable)
 (declare-type target process-focusable)
 (declare-type mtn-plat-shoot process-drawable)
+(declare-type mtn-dice process-drawable)
 
 (deftype mp-enemy-state (structure)
   ((actor-id    uint32)
@@ -273,6 +275,14 @@
 (deftype mp-mtn-plat-shoot-event (mp-event)
   ((aid      uint32 :overlay-at (-> data 0))
    (axe-flip vector :inline :overlay-at (-> data 16))
+   )
+  )
+
+(deftype mp-mtn-dice-event (mp-event)
+  ((aid      uint32 :overlay-at (-> data 0))
+   (prim-id  uint32 :overlay-at (-> data 4))
+   (rot-axis vector :inline :overlay-at (-> data 16))
+   (rot-org  vector :inline :overlay-at (-> data 32))
    )
   )
 
@@ -1162,6 +1172,8 @@
 (define-extern mp-receive-warp-gate-event (function mp-warp-gate-event none))
 (define-extern mp-send-mtn-plat-shoot-event (function mtn-plat-shoot none))
 (define-extern mp-event-handler-mtn-plat-shoot (function mp-mtn-plat-shoot-event none))
+(define-extern mp-send-mtn-dice-event (function mtn-dice int none))
+(define-extern mp-event-handler-mtn-dice (function mp-mtn-dice-event none))
 (define-extern mp-receive-waypoint-event (function mp-waypoint-event symbol none))
 (define-extern mp-waypoint-event-same-target? (function mp-waypoint-event mp-waypoint-event symbol))
 (define-extern mp-waypoint-sync-tick (function none))

@@ -320,6 +320,22 @@
 
 (set! (-> *rhino-nav-enemy-info* fact-defaults) *fact-info-enemy-defaults*)
 
+(defun rhino-mp-attack-info ((msg event-message-block))
+  (if (and msg (nonzero? msg) (nonzero? (-> msg param 1)))
+      (the-as attack-info (-> msg param 1))
+      (the-as attack-info #f)
+      )
+  )
+
+(defun rhino-mp-damage-info? ((info attack-info))
+  (and info
+       (nonzero? info)
+       (logtest? (attack-mask damage) (-> info mask))
+       (or (= (-> info mode) 'mp-hit-remote)
+           (= (-> info mode) 'mp-hp-sync))
+       )
+  )
+
 (defmethod hit-stomach? ((this rhino) (arg0 process) (arg1 event-message-block))
   (let ((gp-0 (-> arg1 param 0))
         (s2-0 (the-as process (as-type arg0 process-drawable)))
@@ -382,6 +398,17 @@
     (sv-272 matrix)
     )
   (case arg2
+    (('attack)
+     (let ((info (rhino-mp-attack-info arg3)))
+       (if (and (rhino-mp-damage-info? info) (= (-> info mode) 'mp-hp-sync))
+           (begin
+             (set! (-> this hit-points) (max 0 (the int (- (the float (-> this hit-points)) (-> info damage)))))
+             #t
+             )
+           ((method-of-type nav-enemy general-event-handler) this arg0 arg1 arg2 arg3)
+           )
+       )
+     )
     (('charge)
      (if (-> this wall)
          (go (method-of-object this charge))
@@ -705,7 +732,11 @@
 
 (defmethod damage-amount-from-attack ((this rhino) (arg0 process) (arg1 event-message-block))
   "@returns the amount of damage taken from an attack.  This can come straight off the [[attack-info]] or via [[penetrate-using->damage]]"
-  (-> arg1 param 1)
+  (let ((info (rhino-mp-attack-info arg1)))
+    (when (rhino-mp-damage-info? info)
+      (return (the int (-> info damage)))
+      )
+    )
   (let ((f30-0 (the float (penetrate-using->damage (-> this incoming penetrate-using)))))
     (cond
       ((hit-stomach? this arg0 arg1)

@@ -63,8 +63,8 @@
         )
 
     ;; BLOCK: Remote puppets should not trigger physical hits or reactions locally.
-    ;; The remote client will handle the hit on their machine and sync it over.
-    (if (mp-is-remote-attacker? arg0)
+    ;; Authoritative replays are allowed through so owner-approved damage can apply.
+    (if (and (not *mp-processing-remote-event*) (mp-is-remote-attacker? arg0))
         (return #t)
         )
 
@@ -76,12 +76,18 @@
         (let ((info (if (and arg3 (nonzero? arg3) (nonzero? (-> arg3 param 1))) (the-as attack-info (-> arg3 param 1)) (the-as attack-info #f))))
           
           ;; 1. Global Hit Throttling (Block repeated frames of the same attack ID)
-          (when (and info (nonzero? (-> info id)) (= (-> info id) (-> rec last-attack-id)))
+          (when (and (not (and *mp-processing-remote-event* (not (mp-enemy-authoritative? e-proc))))
+                     info
+                     (nonzero? (-> info id))
+                     (= (-> info id) (-> rec last-attack-id)))
             (return #t) ;; Block the engine handler
             )
           
           ;; 2. Local Hit Throttling (Block repeated frames of the same local hitbox)
-          (when (and info (nonzero? (-> info id)) (= (-> info id) (-> rec last-local-attack-id)))
+          (when (and (not (and *mp-processing-remote-event* (not (mp-enemy-authoritative? e-proc))))
+                     info
+                     (nonzero? (-> info id))
+                     (= (-> info id) (-> rec last-local-attack-id)))
             (return #t) ;; Block the engine handler
             )
           
@@ -338,7 +344,7 @@
     (('attack)
      ;; --- TOP LEVEL THROTTLING ---
      (let ((puppet (mp-puppet-get-proc)))
-      (when (= arg0 puppet)
+      (when (and (not *mp-processing-remote-event*) (= arg0 puppet))
         (return #f)
       )
      )
@@ -349,7 +355,7 @@
                (info (if (and arg3 (nonzero? arg3) (nonzero? (-> arg3 param 1))) (the-as attack-info (-> arg3 param 1)) (the-as attack-info #f))))
            (when rec
              ;; 1. DUPLICATE CHECK (Global & Local)
-             (when (and info (nonzero? (-> info id)))
+             (when (and (not *mp-processing-remote-event*) info (nonzero? (-> info id)))
                (if (or (= (-> info id) (-> rec last-attack-id))
                        (= (-> info id) (-> rec last-local-attack-id)))
                    ;; Return #f to Jak so he stops triggering 'hit' effects/sounds locally
