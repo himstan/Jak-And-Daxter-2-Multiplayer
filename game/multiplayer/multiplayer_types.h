@@ -31,7 +31,11 @@ struct RemoteEntityState {
   uint8_t riding_seat_index;
   uint8_t scene_active;
   uint8_t equipped_weapon;
+  uint8_t turret_active;
+  float turret_roty;
+  float turret_rotx;
   uint32_t last_sequence_num = 0;
+  uint32_t last_turret_sequence_num = 0;
   MPVehicleState veh_state;
 };
 
@@ -78,7 +82,7 @@ struct RemotePlayerInfoGOAL {
   uint8_t riding_seat_index;
   uint8_t scene_active;
   uint8_t equipped_weapon;
-  uint8_t pad_reserved[1];
+  uint8_t turret_active;
   // World Sync Fields (Mirrored from local-player-info)
   float money;
   float gems;
@@ -94,7 +98,9 @@ struct RemotePlayerInfoGOAL {
   uint8_t active_task_mask[64];
   uint32_t sync_aids_count;
   uint32_t sync_aids[128];
-  uint8_t pad_env[16];
+  float turret_roty;
+  float turret_rotx;
+  uint8_t pad_env[8];
   uint64_t player_procs[2];
   MPVehicleState veh_state;
 };
@@ -127,7 +133,7 @@ struct LocalPlayerInfoGOAL {
   uint8_t riding_seat_index;
   uint8_t scene_active;
   uint8_t equipped_weapon;
-  uint8_t pad_reserved[1];
+  uint8_t turret_active;
   // Global World Sync (Outgoing)
   float money;
   float gems;
@@ -144,7 +150,9 @@ struct LocalPlayerInfoGOAL {
   uint8_t active_task_mask[64];
   uint32_t sync_aids_count;
   uint32_t sync_aids[128];
-  uint8_t pad_env[16];
+  float turret_roty;
+  float turret_rotx;
+  uint8_t pad_env[8];
   uint64_t player_procs[2];
   MPVehicleState veh_state;
 };

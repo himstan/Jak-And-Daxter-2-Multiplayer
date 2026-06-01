@@ -658,10 +658,12 @@
              (gp-0 (the-as object (-> block param 1)))
              (v1-1 (the-as process (as-type proc process-drawable)))
              )
-         (when (and s5-0
-                    v1-1
-                    (or (= (-> (the-as attack-info gp-0) mode) 'turret) (= (-> (the-as attack-info gp-0) mode) 'explode))
-                    )
+         (when (or (and s5-0
+                        v1-1
+                        (and gp-0 (nonzero? gp-0) (or (= (-> (the-as attack-info gp-0) mode) 'turret) (= (-> (the-as attack-info gp-0) mode) 'explode)))
+                        )
+                   (and gp-0 (nonzero? gp-0) (= (-> (the-as attack-info gp-0) mode) 'mp-break))
+                   )
            (logclear! (-> self mask) (process-mask actor-pause))
            (go-virtual die)
            )
@@ -991,15 +993,20 @@
              (s5-0 (the-as object (-> block param 1)))
              (v1-1 (the-as process (as-type proc process-drawable)))
              )
-         (if (and gp-0 v1-1 (case (-> (the-as attack-info s5-0) mode)
-                              (('turret 'explode 'wasp-shot)
-                               #t
-                               )
-                              (else
-                                #f
-                                )
-                              )
-                  )
+         (if (or (and gp-0
+                      v1-1
+                      (and s5-0 (nonzero? s5-0) (case (-> (the-as attack-info s5-0) mode)
+                                                  (('turret 'explode 'wasp-shot)
+                                                   #t
+                                                   )
+                                                  (else
+                                                    #f
+                                                    )
+                                                  )
+                                   )
+                      )
+                 (and s5-0 (nonzero? s5-0) (= (-> (the-as attack-info s5-0) mode) 'mp-break))
+                 )
              (go-virtual die #f)
              )
          )

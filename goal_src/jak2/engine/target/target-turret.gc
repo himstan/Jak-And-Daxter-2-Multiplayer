@@ -729,7 +729,9 @@
   )
 
 (defmethod base-turret-method-35 ((this base-turret))
-  (send-event (handle->process (-> this hud)) 'force-show)
+  (when (nonzero? (-> this hud))
+    (send-event (handle->process (-> this hud)) 'force-show)
+    )
   0
   (none)
   )
@@ -758,6 +760,37 @@
     )
   0
   (none)
+  )
+
+(defun base-turret-rider-pad ((this base-turret))
+  (let ((rider-proc (the-as target (handle->process-safe (-> this rider)))))
+    (if (and rider-proc
+             (nonzero? rider-proc)
+             (-> rider-proc control)
+             (-> rider-proc control cpad))
+        (-> rider-proc control cpad)
+        (-> *cpad-list* cpads 0)
+        )
+    )
+  )
+
+(defun base-turret-local-target-pad-number ()
+  (if (and *target*
+           (nonzero? *target*)
+           (-> *target* control)
+           (-> *target* control cpad))
+      (-> *target* control cpad number)
+      0
+      )
+  )
+
+(defun base-turret-local-rider? ((rider-proc process))
+  (and rider-proc
+       (nonzero? rider-proc)
+       *target*
+       (nonzero? *target*)
+       (= rider-proc *target*)
+       )
   )
 
 (defmethod base-turret-method-37 ((this base-turret))
@@ -883,6 +916,12 @@
       (('exit)
        #t
        )
+      (('change-mode)
+       (when (nonzero? (-> self rider))
+         (go-virtual active)
+         )
+       #t
+       )
       (else
         (turret-handler proc argc message block)
         )
@@ -937,7 +976,7 @@
               (bucket-id progress)
               )
             )
-          (when (and (cpad-pressed? 0 triangle) (send-event *target* 'change-mode 'turret self))
+          (when (and (cpad-pressed? (base-turret-local-target-pad-number) triangle) (send-event *target* 'change-mode 'turret self))
             (set! (-> self rider) (process->handle *target*))
             (let ((gp-2 (res-lump-struct (-> self entity) 'on-exit structure)))
               (if (and gp-2 (not *scene-player*))
@@ -1240,9 +1279,11 @@
         )
       )
     (when (and (-> self enable-controls) (>= (-> *camera-combiner* interp-val) 1.0))
-      ;; og:preserve-this respect the camera settings
-      (set! (-> self rotyvv) (analog-input-horizontal-first (the-as int (-> *cpad-list* cpads 0 leftx)) 128.0 32.0 110.0 -98304.0))
-      (set! (-> self rotxvv) (analog-input-vertical-first (the-as int (-> *cpad-list* cpads 0 lefty)) 128.0 32.0 110.0 -65536.0))
+      ;; Use the current rider's pad so multiplayer puppets can drive turret aim.
+      (let ((turret-pad (base-turret-rider-pad self)))
+        (set! (-> self rotyvv) (analog-input-horizontal-first (the-as int (-> turret-pad leftx)) 128.0 32.0 110.0 -98304.0))
+        (set! (-> self rotxvv) (analog-input-vertical-first (the-as int (-> turret-pad lefty)) 128.0 32.0 110.0 -65536.0))
+        )
       )
     (+! (-> self rotyv) (* (-> self rotyvv) (seconds-per-frame)))
     (seek! (-> self rotyv) 0.0 (* 32768.0 (seconds-per-frame)))

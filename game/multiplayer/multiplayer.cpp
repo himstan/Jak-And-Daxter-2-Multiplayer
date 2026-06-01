@@ -120,6 +120,7 @@ void handle_packet_receive(LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* rem
               entity.riding_seat_index = state->riding_seat_index;
               entity.scene_active = state->scene_active;
               entity.equipped_weapon = state->equipped_weapon;
+              entity.turret_active = state->turret_active;
               entity.last_sequence_num = state->header.sequenceNum;
               memcpy(&entity.veh_state, &state->veh_state, sizeof(MPVehicleState));
 
@@ -205,6 +206,17 @@ void handle_packet_receive(LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* rem
           } else if (header->type == PacketType::VEHICLE_SYNC &&
                      event.packet->dataLength >= (sizeof(PacketHeader) + sizeof(uint32_t) + sizeof(uint64_t))) {
             handle_vehicle_sync_packet(event, gMultiplayerData);
+          } else if (header->type == PacketType::TURRET_SYNC &&
+                     event.packet->dataLength == sizeof(PacketTurretState)) {
+            PacketTurretState* state = (PacketTurretState*)event.packet->data;
+            auto& entity = gMultiplayerData.remote_entities[state->netId];
+            if (state->header.sequenceNum > entity.last_turret_sequence_num) {
+              entity.last_turret_sequence_num = state->header.sequenceNum;
+              if (state->turret_aid != 0) {
+                entity.turret_roty = state->roty;
+                entity.turret_rotx = state->rotx;
+              }
+            }
           } else if (header->type == PacketType::FULL_SYNC &&
 
                      event.packet->dataLength == sizeof(PacketFullSync)) {
@@ -293,12 +305,24 @@ void handle_packet_send(LocalPlayerInfoGOAL* local, MPEventBufferGOAL* events) {
   local_state.riding_seat_index = local->riding_seat_index;
   local_state.scene_active = local->scene_active;
   local_state.equipped_weapon = local->equipped_weapon;
+  local_state.turret_active = local->turret_active;
   local_state.money = local->money;
   local_state.gems = local->gems; local_state.skill = local->skill;
   memcpy(local_state.task_mask, local->task_mask, 64);
   memcpy(local_state.active_task_mask, local->active_task_mask, 64);
   memcpy(&local_state.veh_state, &local->veh_state, sizeof(MPVehicleState));
   MultiplayerManager::broadcast(gMultiplayerData, 0, local_state, ENET_PACKET_FLAG_UNSEQUENCED);
+
+  if (local->turret_active && local->riding_veh_id != 0) {
+    PacketTurretState turret_state;
+    turret_state.header.type = PacketType::TURRET_SYNC;
+    turret_state.header.sequenceNum = ++gMultiplayerData.sequence_num;
+    turret_state.netId = gMultiplayerData.local_net_id;
+    turret_state.turret_aid = local->riding_veh_id;
+    turret_state.roty = local->turret_roty;
+    turret_state.rotx = local->turret_rotx;
+    MultiplayerManager::broadcast(gMultiplayerData, 0, turret_state, ENET_PACKET_FLAG_UNSEQUENCED);
+  }
 
   if (gMultiplayerData.local_role == 0 && gMultiplayerData.pending_full_sync) {
     uint32_t current_time = enet_time_get();
@@ -382,10 +406,16 @@ void sync_to_goal(RemotePlayerInfoGOAL* remote_goal) {
     remote_goal->riding_seat_index = remote_state.riding_seat_index;
     remote_goal->scene_active = remote_state.scene_active;
     remote_goal->equipped_weapon = remote_state.equipped_weapon;
+    remote_goal->turret_active = remote_state.turret_active;
+    remote_goal->turret_roty = remote_state.turret_roty;
+    remote_goal->turret_rotx = remote_state.turret_rotx;
     memcpy(&remote_goal->veh_state, &remote_state.veh_state, sizeof(MPVehicleState));
   } else {
     remote_goal->status = 0;
     remote_goal->scene_active = 0;
+    remote_goal->turret_active = 0;
+    remote_goal->turret_roty = 0.0f;
+    remote_goal->turret_rotx = 0.0f;
     remote_goal->velocity[0] = 0.0f;
     remote_goal->velocity[1] = 0.0f;
     remote_goal->velocity[2] = 0.0f;

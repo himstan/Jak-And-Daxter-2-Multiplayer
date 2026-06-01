@@ -28,7 +28,8 @@ enum class PacketType : uint8_t {
   FULL_SYNC = 4,
   ENEMY_SYNC = 5,
   PEDESTRIAN_SYNC = 6,
-  VEHICLE_SYNC = 7
+  VEHICLE_SYNC = 7,
+  TURRET_SYNC = 8
 };
 
 struct PacketHeader {
@@ -74,7 +75,7 @@ struct PacketPlayerState {
   uint8_t riding_seat_index;
   uint8_t scene_active;
   uint8_t equipped_weapon;
-  uint8_t pad_reserved;
+  uint8_t turret_active;
   // World Sync Fields (Continuous Sync)
   float money;
   float gems;
@@ -82,6 +83,14 @@ struct PacketPlayerState {
   uint8_t task_mask[64];
   uint8_t active_task_mask[64];
   MPVehicleState veh_state;
+};
+
+struct PacketTurretState {
+  PacketHeader header;
+  uint32_t netId;
+  uint32_t turret_aid;
+  float roty;
+  float rotx;
 };
 
 struct PacketGameEvent {
