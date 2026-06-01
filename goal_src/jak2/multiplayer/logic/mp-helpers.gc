@@ -62,6 +62,7 @@
   (and proc
        (nonzero? proc)
        (not (type? proc crate))
+       (not (= (-> proc type symbol) 'rhino-wall))
        (or (type? proc citizen)
            (type? proc vehicle)
            (type? proc enemy)
