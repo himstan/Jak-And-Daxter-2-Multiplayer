@@ -7,6 +7,8 @@
 
 ;; DECOMP BEGINS
 
+(define-extern mp-send-mtn-plat-shoot-event (function mtn-plat-shoot none))
+
 (deftype mtn-iris-door (process-drawable)
   ((root  collide-shape :override)
    )
@@ -182,6 +184,23 @@ For example for an elevator pre-compute the distance between the first and last 
       (('bonk)
        (start-bouncing! self)
        )
+      (('mp-flip)
+        (when *mp-puppet*
+          (let* ((cshape (if (type? (-> *mp-puppet* root) collide-shape) (the-as collide-shape (-> *mp-puppet* root)))))
+            (when (zero? (-> self state-flip))
+              (sound-play "mtn-plat-flip1")
+              (set! (-> self state-flip) (the-as uint 1))
+            )
+            (set! (-> self hint-count) -1.0)
+            (vector-! (-> self axe-flip) (-> cshape trans) (-> self root trans))
+            (set! (-> self axe-flip y) 0.0)
+            (vector-normalize! (-> self axe-flip) 1.0)
+            (vector-rotate90-around-y! (-> self axe-flip) (-> self axe-flip))
+            (set! (-> self angle-flip-vel) -10.0)
+            (set-time! (-> self state-time))
+          )
+        )
+       )
       (('attack)
        (when (zero? (-> self state-flip))
          (let ((attack-info (the-as object (-> block param 1))))
@@ -193,7 +212,7 @@ For example for an elevator pre-compute the distance between the first and last 
                                   )
                               )
                     )
-               (when attacker
+               (when (and attacker (!= attacker *mp-puppet*))
                  (let* ((attacker-root (-> attacker root))
                         (cshape (if (type? attacker-root collide-shape)
                                     (the-as collide-shape attacker-root)
@@ -213,6 +232,9 @@ For example for an elevator pre-compute the distance between the first and last 
                        (vector-rotate90-around-y! (-> self axe-flip) (-> self axe-flip))
                        (set! (-> self angle-flip-vel) -10.0)
                        (set-time! (-> self state-time))
+                       (when (and *multi-sync-enabled?* (not *mp-processing-remote-event*))
+                         (mp-send-mtn-plat-shoot-event self)
+                         )
                        )
                      )
                    )
