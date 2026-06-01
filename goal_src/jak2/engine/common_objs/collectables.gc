@@ -2230,6 +2230,13 @@
 
 (defbehavior birth-pickup-at-point process ((arg0 vector) (arg1 pickup-type) (arg2 float) (arg3 symbol) (arg4 process-tree) (arg5 fact-info))
   (local-vars (sv-32 vector) (sv-36 float) (sv-40 (pointer process)) (sv-48 int) (sv-56 fact-info) (sv-64 int))
+  (when (and (= arg1 (pickup-type eco-pill-dark))
+             (or (and *local-info* (nonzero? *local-info*) (mp-is-daxter?))
+                 (and *target* (nonzero? *target*) (focus-test? *target* indax))
+                 )
+             )
+    (return (the-as (pointer process) #f))
+    )
   (set! sv-32 (new-stack-vector0))
   (set! sv-36 (res-lump-float
                 (if (and arg5 (nonzero? (-> arg5 process)))
