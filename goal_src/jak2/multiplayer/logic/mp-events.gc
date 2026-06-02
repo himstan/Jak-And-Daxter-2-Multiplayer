@@ -4,6 +4,7 @@
 (declare-type mp-mission-event mp-event)
 (declare-type mp-battle-event mp-event)
 (declare-type mp-player-gun-shot-event mp-event)
+(declare-type mp-shuttle-event mp-event)
 (define-extern mp-receive-world-event (function mp-world-event none))
 
 (defun mp-inbound-waypoint-command? ((evt mp-event))
@@ -220,6 +221,22 @@
   (none)
   )
 
+(defun mp-store-city-shuttle-event ((evt mp-shuttle-event))
+  "Store the latest remote shuttle state for the shuttle task to consume when loaded."
+  (when (> (-> evt sequence) *mp-shuttle-last-received-sequence*)
+    (set! *mp-shuttle-pending?* #t)
+    (set! *mp-shuttle-task-node* (-> evt task-node))
+    (set! *mp-shuttle-sub-state* (-> evt sub-state))
+    (set! *mp-shuttle-started?* (-> evt started?))
+    (set! *mp-shuttle-time-limit* (-> evt time-limit))
+    (set! *mp-shuttle-remaining-time* (-> evt remaining-time))
+    (set! *mp-shuttle-counter* (-> evt counter))
+    (set! *mp-shuttle-sequence* (-> evt sequence))
+    (set! *mp-shuttle-last-received-sequence* (-> evt sequence))
+    )
+  (none)
+  )
+
 (defun mp-log-mission-failed-full-sync-wait ((reason string))
   "Throttle host retry full-sync readiness diagnostics."
   (when (time-elapsed? *mp-mission-failed-full-sync-next-log-time* (seconds 2))
@@ -402,6 +419,16 @@
                  (logior *mp-krew-collection-picked-mask* (the-as uint (ash 1 bag-index)))
                  )
            )
+         )
+       )
+      ((MP_MISSION_EVT_CITY_SHUTTLE_STATE)
+       (let ((shuttle-evt (the-as mp-shuttle-event evt)))
+         (format 0 "[MP-MissionEvent] Received City Shuttle state task=~D sub=~D remaining=~D seq=~D~%"
+                 (-> shuttle-evt task-node)
+                 (-> shuttle-evt sub-state)
+                 (-> shuttle-evt remaining-time)
+                 (-> shuttle-evt sequence))
+         (mp-store-city-shuttle-event shuttle-evt)
          )
        )
       (else

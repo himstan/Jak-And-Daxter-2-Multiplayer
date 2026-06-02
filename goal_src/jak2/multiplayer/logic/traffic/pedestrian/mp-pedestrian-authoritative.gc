@@ -164,6 +164,42 @@
   (none)
   )
 
+(defun mp-pedestrian-clear-vehicle-context! ((slot mp-pedestrian-state))
+  (when (and slot (nonzero? slot))
+    (set! (-> slot pad 0) (the uint8 0))
+    (set! (-> slot pad 1) (the uint8 0))
+    (set! (-> slot pad 2) (the uint8 0))
+    (set! (-> slot pad 3) (the uint8 0))
+    (set! (-> slot pad 4) (the uint8 0))
+    )
+  (none)
+  )
+
+(defun mp-pedestrian-pack-vehicle-context! ((e-proc citizen) (slot mp-pedestrian-state))
+  "Encode civilian vehicle/seat context into spare pad bytes for ride-state sync."
+  (mp-pedestrian-clear-vehicle-context! slot)
+  (when (and e-proc
+             (nonzero? e-proc)
+             slot
+             (nonzero? slot)
+             (type? e-proc civilian))
+    (let* ((civilian-proc (the-as civilian e-proc))
+           (vehicle-proc (the-as vehicle (handle->process-safe (-> civilian-proc vehicle)))))
+      (when (and vehicle-proc
+                 (nonzero? vehicle-proc)
+                 (nonzero? (-> vehicle-proc net-id)))
+        (let ((vehicle-net-id (-> vehicle-proc net-id)))
+          (set! (-> slot pad 0) (the uint8 (logand vehicle-net-id #xff)))
+          (set! (-> slot pad 1) (the uint8 (logand (shr vehicle-net-id 8) #xff)))
+          (set! (-> slot pad 2) (the uint8 (logand (shr vehicle-net-id 16) #xff)))
+          (set! (-> slot pad 3) (the uint8 (logand (shr vehicle-net-id 24) #xff)))
+          )
+        )
+      )
+    )
+  (none)
+  )
+
 (defun mp-pedestrian-pack ((e-proc citizen) (slot mp-pedestrian-state))
   (set! (-> slot net-id) (-> e-proc net-id))
   (set! (-> slot object-type) (the uint8 (-> e-proc traffic-type)))
@@ -196,6 +232,8 @@
     (set! (-> slot target-aid) (mp-pedestrian-target-aid-from-process (handle->process-safe target-handle)))
     (mp-pedestrian-debug-pack-guard-target! e-proc slot target-handle)
     )
+
+  (mp-pedestrian-pack-vehicle-context! e-proc slot)
 
   (none)
   )

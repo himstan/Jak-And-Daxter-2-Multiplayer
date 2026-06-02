@@ -1867,6 +1867,11 @@
       )
     )
   :code (behavior ()
+    (when (and (-> self info) (nonzero? (-> self info)) (-> self draw) (nonzero? (-> self draw)) (-> self draw art-group) (nonzero? (-> self draw art-group)))
+      (ja-channel-push! 1 (seconds 0.05))
+      (ja :group! (-> self draw art-group data (-> self info get-in-car-anim)))
+      (ja :num-func num-func-identity :frame-num (ja-aframe 12.0 0))
+      )
     (until #f
       (suspend)
       )

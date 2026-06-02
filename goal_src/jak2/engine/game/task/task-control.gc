@@ -1947,6 +1947,8 @@
         (set! (-> a0-15 timer-flash) (< v1-15 (seconds 10)))
         )
       (when (< v1-15 0)
+        (format 0 "[MP-Debug] check-time FAILED: task=~A time-limit=~D start-time=~D current-time=~D v1-15=~D~%"
+                (game-task->string (-> this node-info task)) (-> this time-limit) (-> this start-time) (current-time) v1-15)
         (if *debug-segment*
             (format #t "task failed:  ran out of time~%")
             )

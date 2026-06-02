@@ -10,6 +10,7 @@
 ;; after cwi.gd has loaded and these types exist.
 (declare-type civilian citizen)
 (declare-type citizen-norm civilian)
+(declare-type citizen-rebel citizen-norm)
 (declare-type citizen-fat civilian)
 (declare-type citizen-chick civilian)
 (declare-type crimson-guard citizen)
@@ -54,6 +55,7 @@
 (define-extern mp-sync-traffic-update (function none))
 (define-extern pc-multi-send-traffic (function uint none))
 (define-extern pc-multi-receive-traffic (function uint none))
+(define-extern citizen-spawn (function process type traffic-object-spawn-params process-drawable))
 
 ;; Safe cross-module hooks for guard target assignment
 (define *mp-set-guard-target* (the-as (function citizen handle none) #f))

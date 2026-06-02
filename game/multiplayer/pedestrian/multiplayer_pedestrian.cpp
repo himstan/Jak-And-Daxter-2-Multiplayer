@@ -16,6 +16,20 @@ inline float unpack_float_q(int16_t v) {
   return (float)v / 32767.0f;
 }
 
+inline uint32_t pedestrian_vehicle_net_id(const MPPedestrianState* state) {
+  return ((uint32_t)state->pad[0]) |
+         ((uint32_t)state->pad[1] << 8) |
+         ((uint32_t)state->pad[2] << 16) |
+         ((uint32_t)state->pad[3] << 24);
+}
+
+inline void set_pedestrian_vehicle_net_id(MPPedestrianState& state, uint32_t vehicle_net_id) {
+  state.pad[0] = (uint8_t)(vehicle_net_id & 0xff);
+  state.pad[1] = (uint8_t)((vehicle_net_id >> 8) & 0xff);
+  state.pad[2] = (uint8_t)((vehicle_net_id >> 16) & 0xff);
+  state.pad[3] = (uint8_t)((vehicle_net_id >> 24) & 0xff);
+}
+
 size_t pedestrian_packet_size(uint32_t count) {
   return sizeof(PacketHeader) + sizeof(uint32_t) + sizeof(uint64_t) +
          (sizeof(MPPedestrianStatePacked) * count);
@@ -53,6 +67,7 @@ void handle_pedestrian_sync_packet(const _ENetEvent& event, MultiplayerData& dat
         state.hp = incoming->hp;
         state.state_id = incoming->state_id;
         state.target_aid = incoming->target_aid;
+        set_pedestrian_vehicle_net_id(state, incoming->vehicle_net_id);
         data.ped_last_updated[j] = current_time;
         found = true; break;
       }
@@ -72,6 +87,7 @@ void handle_pedestrian_sync_packet(const _ENetEvent& event, MultiplayerData& dat
           state.hp = incoming->hp;
           state.state_id = incoming->state_id;
           state.target_aid = incoming->target_aid;
+          set_pedestrian_vehicle_net_id(state, incoming->vehicle_net_id);
           data.ped_last_updated[j] = current_time;
           found = true; break;
         }
@@ -97,6 +113,9 @@ void send_pedestrian_sync_packets(MultiplayerData& data, MPTrafficSyncBufferGOAL
       dst->hp = src->hp;
       dst->state_id = src->state_id;
       dst->target_aid = src->target_aid;
+      dst->vehicle_net_id = pedestrian_vehicle_net_id(src);
+      dst->pad[0] = 0;
+      dst->pad[1] = 0;
     }
     size_t packet_size = sizeof(PacketHeader) + sizeof(uint32_t) + sizeof(uint64_t) + (sizeof(MPPedestrianStatePacked) * chunk_size);
     MultiplayerManager::broadcast(data, exclude_peer, &packet, packet_size, ENET_PACKET_FLAG_UNSEQUENCED);

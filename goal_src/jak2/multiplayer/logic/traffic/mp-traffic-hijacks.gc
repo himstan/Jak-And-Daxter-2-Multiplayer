@@ -42,52 +42,79 @@
 
 ;; --- Pedestrian P-Controller ---
 
+(defun mp-pedestrian-riding-vehicle? ((ped citizen))
+  "True once the citizen is really present in its vehicle's rider array."
+  (when (and ped
+             (nonzero? ped)
+             (type? ped civilian))
+    (let ((veh (the-as vehicle (handle->process-safe (-> (the-as civilian ped) vehicle)))))
+      (when (and veh
+                 (nonzero? veh)
+                 (-> veh info)
+                 (nonzero? (-> veh info)))
+        (dotimes (seat-idx (-> veh info seat-count))
+          (when (= (get-rider-in-seat veh seat-idx) ped)
+            (return #t)
+            )
+          )
+        )
+      )
+    )
+  #f
+  )
+
 (defun mp-ped-predictive-move ((ped citizen))
   "Smoothly nudge a citizen's velocity and position toward the authoritative ghost position.
    Called from the citizen common-post hijack each frame on the non-authoritative side."
-  (let ((net-id (-> ped net-id)))
-    (when (and (nonzero? net-id) (-> ped root))
-      (let ((rec (mp-get-traffic-ghost net-id)))
-        (when rec
-          ;; 1. Position correction
-          (let ((dist (vector-vector-distance (-> ped root trans) (-> rec ghost-trans))))
-            (cond
-              ((> dist (meters 15))
-               ;; Hard snap only for massive desyncs
-               (vector-copy! (-> ped root trans) (-> rec ghost-trans))
-               (vector-reset! (-> ped root transv))
-               )
-              ((> dist (meters 0.01))
-               ;; DIRECT POSITION LERP: Move the root directly toward the ghost
-               ;; Scales up if distance is large to avoid snapping
-               (let ((lerp-factor 0.05)
-                     (pull-factor 5.0))
-                 (when (> dist (meters 2))
-                   (set! lerp-factor 0.15)
-                   (set! pull-factor 10.0)
-                   )
-                 (when (> dist (meters 5))
-                   (set! lerp-factor 0.30)
-                   (set! pull-factor 20.0)
-                   )
-                 (vector-lerp! (-> ped root trans) (-> ped root trans) (-> rec ghost-trans) lerp-factor)
+  (when (and ped
+             (nonzero? ped)
+             (not (mp-pedestrian-riding-vehicle? ped)))
+    (let ((net-id (-> ped net-id)))
+      (when (and (nonzero? net-id)
+                 (-> ped root)
+                 (nonzero? (-> ped root)))
+        (let ((rec (mp-get-traffic-ghost net-id)))
+          (when rec
+            ;; 1. Position correction
+            (let ((dist (vector-vector-distance (-> ped root trans) (-> rec ghost-trans))))
+              (cond
+                ((> dist (meters 15))
+                 ;; Hard snap only for massive desyncs
+                 (vector-copy! (-> ped root trans) (-> rec ghost-trans))
+                 (vector-reset! (-> ped root transv))
+                 )
+                ((> dist (meters 0.01))
+                 ;; DIRECT POSITION LERP: Move the root directly toward the ghost
+                 ;; Scales up if distance is large to avoid snapping
+                 (let ((lerp-factor 0.05)
+                       (pull-factor 5.0))
+                   (when (> dist (meters 2))
+                     (set! lerp-factor 0.15)
+                     (set! pull-factor 10.0)
+                     )
+                   (when (> dist (meters 5))
+                     (set! lerp-factor 0.30)
+                     (set! pull-factor 20.0)
+                     )
+                   (vector-lerp! (-> ped root trans) (-> ped root trans) (-> rec ghost-trans) lerp-factor)
 
-                 ;; Soft P-controller on velocity: dampen local velocity and add ghost pull for smoothness
-                 (let ((nudge (new 'stack-no-clear 'vector)))
-                   (vector-! nudge (-> rec ghost-trans) (-> ped root trans))
-                   (set! (-> ped root transv x) (* (-> ped root transv x) 0.85))
-                   (set! (-> ped root transv z) (* (-> ped root transv z) 0.85))
-                   (vector-float*! nudge nudge pull-factor)
-                   (vector+! (-> ped root transv) (-> ped root transv) nudge)
+                   ;; Soft P-controller on velocity: dampen local velocity and add ghost pull for smoothness
+                   (let ((nudge (new 'stack-no-clear 'vector)))
+                     (vector-! nudge (-> rec ghost-trans) (-> ped root trans))
+                     (set! (-> ped root transv x) (* (-> ped root transv x) 0.85))
+                     (set! (-> ped root transv z) (* (-> ped root transv z) 0.85))
+                     (vector-float*! nudge nudge pull-factor)
+                     (vector+! (-> ped root transv) (-> ped root transv) nudge)
+                     )
                    )
                  )
                )
-              )
+             )
+            ;; 2. Rotation copy: Overcome engine velocity-aligned turning by forcing ghost rotation.
+            ;; The velocity P-controller can cause the velocity vector to point backward when pulling the ghost,
+            ;; which causes the vanilla engine to turn the guard backward. Forcing the quat fixes this.
+            (quaternion-copy! (-> ped root quat) (-> rec ghost-quat))
             )
-          ;; 2. Rotation copy: Overcome engine velocity-aligned turning by forcing ghost rotation.
-          ;; The velocity P-controller can cause the velocity vector to point backward when pulling the ghost,
-          ;; which causes the vanilla engine to turn the guard backward. Forcing the quat fixes this.
-          (quaternion-copy! (-> ped root quat) (-> rec ghost-quat))
           )
         )
       )

@@ -8,6 +8,7 @@
 (defconstant MP_MISSION_VEHICLE_KREW_DELIVERY (the uint #x70000001))
 (defconstant MP_MISSION_VEHICLE_KEIRA_DELIVERY (the uint #x70000002))
 (defconstant MP_MISSION_VEHICLE_KREW_COLLECTION (the uint #x70000003))
+(defconstant MP_MISSION_VEHICLE_CITY_SHUTTLE (the uint #x70000004))
 
 (defun mp-mission-vehicle-id? ((net-id uint))
   (>= net-id MP_MISSION_VEHICLE_ID_BASE)

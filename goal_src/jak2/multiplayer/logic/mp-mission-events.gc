@@ -181,6 +181,38 @@
   (none)
   )
 
+(defun mp-send-city-shuttle-state-event ((task-node uint)
+                                         (sub-state uint)
+                                         (started? uint)
+                                         (time-limit time-frame)
+                                         (remaining-time time-frame)
+                                         (counter int))
+  "Broadcast shuttle timer/progress so either player can advance the mission remotely."
+  (when (and *multi-sync-enabled?*
+             (= (pc-multi-get-status) 6)
+             (not *mp-processing-remote-event*))
+    (+! *mp-shuttle-local-sequence* (the uint 1))
+    (let ((q-idx *mp-event-queue-write-ptr*))
+      (let ((evt (the-as mp-shuttle-event (-> *mp-event-queue* q-idx))))
+        (set! (-> evt etype) MP_EVENT_MISSION_EVENT)
+        (dotimes (i 480)
+          (set! (-> evt data i) (the-as uint8 0))
+          )
+        (set! (-> evt mission-evt) MP_MISSION_EVT_CITY_SHUTTLE_STATE)
+        (set! (-> evt task-node) task-node)
+        (set! (-> evt sub-state) sub-state)
+        (set! (-> evt started?) started?)
+        (set! (-> evt time-limit) time-limit)
+        (set! (-> evt remaining-time) remaining-time)
+        (set! (-> evt counter) counter)
+        (set! (-> evt sequence) *mp-shuttle-local-sequence*)
+        )
+      (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
+      )
+    )
+  (none)
+  )
+
 (defun mp-send-event-function-hijack ((proc process-tree) (msg event-message-block))
   "Global hijack for send-event-function to sync mission critical events."
   (with-pp

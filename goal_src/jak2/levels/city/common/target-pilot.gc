@@ -269,6 +269,11 @@
            ;; This prevents the puppet from locally choosing Seat 0 if the driver seat is empty.
            (set! (-> s5-0 seat-index) (the int (-> *remote-info* riding-seat-index)))
            )
+          ((!= *mp-shuttle-override-seat-index* -1)
+           ;; Teleport-boarding override for shuttle mission
+           (set! (-> s5-0 seat-index) *mp-shuttle-override-seat-index*)
+           (set! *mp-shuttle-override-seat-index* -1)
+           )
           (else
             ;; Local player boarding: Use proximity/occupancy logic.
             (let* ((force-passenger? (cpad-hold? (-> self control cpad number) l1))

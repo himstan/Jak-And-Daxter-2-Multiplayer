@@ -179,6 +179,7 @@ struct MPPedestrianStatePacked {
   int32_t hp;
   uint8_t state_id;   // Replaces int16_t anim_index
   uint8_t target_aid; // Replaces int16_t anim_speed
+  uint32_t vehicle_net_id;
   uint8_t pad[2];
 };
 

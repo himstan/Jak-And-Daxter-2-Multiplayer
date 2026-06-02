@@ -587,9 +587,10 @@
 )
 
 (defun mp-vehicle-can-spawn-puppet? ((net-id uint))
-  "Mission vehicles are task-owned locally and must not be cloned by the generic puppet path."
+  "Most mission vehicles are task-owned locally; city-shuttle needs a puppet if the client has no task copy."
   (and (nonzero? net-id)
-       (not (mp-mission-vehicle-id? net-id)))
+       (or (= net-id MP_MISSION_VEHICLE_CITY_SHUTTLE)
+           (not (mp-mission-vehicle-id? net-id))))
   )
 
 (defun mp-vehicle-apply-piggyback ()
