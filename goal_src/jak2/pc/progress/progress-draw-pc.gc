@@ -2455,6 +2455,61 @@
   (none)
   )
 
+(defmethod draw-option ((obj menu-demo-end-option) (p progress) (arg1 font-context) (arg2 int) (arg3 symbol))
+  (when (and p (nonzero? p) arg1 (nonzero? arg1))
+    (set! (-> arg1 alpha) (- 1.0 (-> p menu-transition)))
+    (set-color! arg1 (font-color progress))
+    (set-scale! arg1 0.6)
+    (set-flags! arg1 (font-flags kerning middle middle-vert large))
+    (set! (-> arg1 origin x) 90.0)
+    (set! (-> arg1 origin y) 70.0)
+    (set-width! arg1 330)
+    (set-height! arg1 85)
+    (when (and *pc-settings* (nonzero? *pc-settings*))
+      (when (not (-> *pc-settings* use-vis?))
+        (set! (-> arg1 origin x) (the float (adjust-game-x (-> arg1 origin x))))
+        (*! (-> arg1 width) (-> *pc-settings* aspect-ratio-reciprocal))
+        )
+      )
+    ;; TITLE: PHASE 1 COMPLETE!
+    (print-game-text
+      "Act I Complete!"
+      arg1
+      #f
+      44
+      (bucket-id progress)
+      )
+      
+    (+! (-> arg1 origin y) 80.0)
+    (set-height! arg1 120)
+    (set-scale! arg1 0.45)
+    ;; DESCRIPTION
+    (print-game-text
+      "Thanks for playing! Story progression is locked, but you are free to roam! Watch for updates on Discord, and see you in Act II!"
+      arg1
+      #f
+      44
+      (bucket-id progress)
+      )
+    
+    (+! (-> arg1 origin y) 120.0)
+    (set-height! arg1 50)
+    (set-color! arg1 (progress-selected 0))
+    (draw-highlight (the int (+ 12.0 (-> arg1 origin y))) 24 (-> arg1 alpha))
+    ;; CONFIRM PROMPT
+    (print-game-text
+      "PRESS <X> TO CONTINUE"
+      arg1
+      #f
+      44
+      (bucket-id progress)
+      )
+    )
+  0
+  (none)
+  )
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;

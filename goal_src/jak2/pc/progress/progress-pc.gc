@@ -29,6 +29,37 @@
 
 (define-extern *reconnect-options* menu-option-list)
 (define-extern *host-left-options* menu-option-list)
+(define-extern *demo-end-options* menu-option-list)
+
+(deftype menu-demo-end-option (menu-icon-info-option)
+  ()
+  )
+
+(define *demo-end-options*
+  (new 'static 'menu-option-list
+    :y-center #xc6
+    :y-space 30
+    :scale 0.82
+    :options (new 'static 'boxed-array :type menu-option (new 'static 'menu-demo-end-option))
+    )
+  )
+
+(defmethod respond-progress ((this menu-demo-end-option) (arg0 progress) (arg1 symbol))
+  "Handle progress menu navigation logic for the demo-end screen."
+  ;; ONLY handle 'confirm (X) to resume. Do not allow 'start' or 'back' to exit.
+  (when (and *cpad-list* (nonzero? *cpad-list*))
+    (when (cpad-pressed? 0 confirm)
+      (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons confirm))
+      (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons confirm))
+      (sound-play "generic-beep")
+      (when (and arg0 (nonzero? arg0))
+        (set-next-state arg0 'go-away 0)
+        )
+      )
+    )
+  0
+  )
+
 
 (defmacro when-not-drawn-decoration (&rest body)
   `(when (> (-> *display* real-clock integral-frame-counter) (-> *progress-state-pc* decoration-draw-time))
@@ -234,6 +265,9 @@
      )
     (('host-left)
      (set! (-> obj current-options) *host-left-options*)
+     )
+    (('demo-end)
+     (set! (-> obj current-options) *demo-end-options*)
      )
     (('format-card)
      (set! (-> obj current-options) *format-card-options*)
