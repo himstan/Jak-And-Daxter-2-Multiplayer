@@ -64,17 +64,21 @@
              (when (and (< dist (meters 250.0)) *mp-puppet-was-far?* (not *mp-puppet-is-warping?*))
                 (format 0 "[MP-Puppet] Remote player returned to proximity (~m). Forcing respawn...~%" dist)
 
-                ;; 1. Deactivate their Vehicle (if any)
+                ;; 1. Keep their vehicle alive if any.
+                ;; Deactivating it here causes the traffic layer to respawn the remote-driven
+                ;; vehicle, which can rebuild seats and knock out mission passengers.
                 (let ((v-net-id (-> *remote-info* veh-state net-id)))
                   (when (nonzero? v-net-id)
                     (let ((v-proc (mp-vehicle-find-by-net-id v-net-id)))
                       (when (and v-proc (nonzero? v-proc))
-                        (format 0 "[MP-Puppet] Forcing vehicle respawn for net-id ~D~%" v-net-id)
-                        (deactivate v-proc)
+                        (format 0 "[MP-Puppet] Preserving remote vehicle ~D during puppet respawn.~%" v-net-id)
+                        (set! *mp-remote-driven-vehicle* (process->handle v-proc))
+                        (logior! (-> v-proc flags) (rigid-body-object-flag persistent))
+                        (logclear! (-> v-proc mask) (process-mask pause sleep actor-pause))
+                        )
                       )
                     )
                   )
-                )
 
                 ;; 2. Deactivate the Puppet (if any)
                 (let ((puppet (mp-puppet-get-proc)))

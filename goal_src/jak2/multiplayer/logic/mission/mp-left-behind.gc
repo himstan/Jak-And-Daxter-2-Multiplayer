@@ -1,0 +1,272 @@
+;-*-Lisp-*-
+(in-package goal)
+
+(defun mp-left-behind-find-last-empty-seat ((veh vehicle))
+  "Find the empty seat with the highest index."
+  (let ((best-seat -1))
+    (when (and veh (nonzero? veh) (-> veh info) (nonzero? (-> veh info)))
+      (countdown (seat-idx (the int (-> veh info seat-count)))
+        (when (and (nonzero? (-> veh info seat-array seat-idx flags))
+                   (not (get-rider-in-seat veh seat-idx)))
+          (set! best-seat seat-idx)
+          (return best-seat)
+          )
+        )
+      )
+    best-seat
+    )
+  )
+
+(defun mp-left-behind-find-last-empty-passenger-seat ((veh vehicle))
+  "Find the empty passenger seat with the highest index."
+  (let ((best-seat -1))
+    (when (and veh (nonzero? veh) (-> veh info) (nonzero? (-> veh info)))
+      (countdown (seat-idx (the int (-> veh info seat-count)))
+        (when (and (> seat-idx 0)
+                   (nonzero? (-> veh info seat-array seat-idx flags))
+                   (not (get-rider-in-seat veh seat-idx)))
+          (set! best-seat seat-idx)
+          (return best-seat)
+          )
+        )
+      )
+    best-seat
+    )
+  )
+
+(defun mp-respawn-local-target-at-remote! ((player target))
+  "Respawn the local player at the remote player, boarding only if a safe passenger seat is empty."
+  (when (and player
+             (nonzero? player)
+             (-> player control)
+             (nonzero? (-> player control))
+             *remote-info*
+             (nonzero? *remote-info*))
+    (mp-clear-local-vehicle-occupancy! player)
+    (let ((riding-veh-id (-> *remote-info* riding-veh-id)))
+      (cond
+        ((nonzero? riding-veh-id)
+         (let ((veh (mp-vehicle-find-by-net-id riding-veh-id)))
+           (cond
+             ((and veh (nonzero? veh) (-> veh root) (nonzero? (-> veh root)))
+              (format 0 "[MP-Death] Remote player is in vehicle ~D. Respawning beside it.~%" riding-veh-id)
+              (vector-copy! (-> player control trans) (-> veh root trans))
+              (+! (-> player control trans x) (meters 8.0))
+              (+! (-> player control trans y) 4096.0)
+              (+! (-> player control trans z) (meters 8.0))
+              (set! (-> player control transv quad) (the-as uint128 0))
+              (vector-copy! (-> player control camera-pos) (-> player control trans))
+              (when (and *camera* (nonzero? *camera*))
+                (send-event *camera* 'teleport)
+                )
+              (let ((best-seat (mp-left-behind-find-last-empty-passenger-seat veh)))
+                (cond
+                  ((!= best-seat -1)
+                   (format 0 "[MP-Death] Respawning player into safe passenger seat ~D~%" best-seat)
+                   (set! *mp-shuttle-override-seat-index* best-seat)
+                   (if (focus-test? player indax)
+                       (go-process player target-indax-pilot-start (process->handle veh) #t #t)
+                       (go-process player target-pilot-start (process->handle veh) #t #f)
+                       )
+                   )
+                  (else
+                   (mp-respawn-local-target! player)
+                   )
+                  )
+                )
+              )
+             (else
+              (format 0 "[MP-Death] Remote vehicle ~D not found. Respawning at remote coords.~%" riding-veh-id)
+              (set-vector! (-> player control trans) (-> *remote-info* x) (-> *remote-info* y) (-> *remote-info* z) 1.0)
+              (+! (-> player control trans y) 4096.0)
+              (vector-copy! (-> player control camera-pos) (-> player control trans))
+              (when (and *camera* (nonzero? *camera*))
+                (send-event *camera* 'teleport)
+                )
+              (mp-respawn-local-target! player)
+              )
+             )
+           )
+         )
+        (else
+         (format 0 "[MP-Death] Remote player on foot. Respawning at remote coords.~%")
+         (set-vector! (-> player control trans) (-> *remote-info* x) (-> *remote-info* y) (-> *remote-info* z) 1.0)
+         (+! (-> player control trans y) 4096.0)
+         (vector-copy! (-> player control camera-pos) (-> player control trans))
+         (when (and *camera* (nonzero? *camera*))
+           (send-event *camera* 'teleport)
+           )
+         (mp-respawn-local-target! player)
+         )
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-left-behind-teleport-player! ((ride-along? symbol))
+  "Smoothly teleports the local player to the remote player. If the local player is Daxter (indax) and ride-along? is true, hops onto Jak. Otherwise, if the remote player is in a vehicle, boards it, otherwise teleports to their coordinate."
+  (when (and *target*
+             (nonzero? *target*)
+             (-> *target* control)
+             (nonzero? (-> *target* control))
+             *remote-info*
+             (nonzero? *remote-info*))
+    ;; Smoothly eject from vehicle if the local player is currently riding
+    (when (focus-test? *target* pilot)
+      (mp-clear-local-vehicle-occupancy! *target*)
+      )
+    
+    (cond
+      ((and ride-along? (focus-test? *target* indax))
+       ;; Local Daxter hops on Jak
+       (format 0 "[MP-LeftBehind] Daxter player hopping onto Jak (ride-along)~%")
+       (set-vector! (-> *target* control trans) (-> *remote-info* x) (-> *remote-info* y) (-> *remote-info* z) 1.0)
+       (+! (-> *target* control trans y) 4096.0)
+       (vector-copy! (-> *target* control camera-pos) (-> *target* control trans))
+       (when (and *camera* (nonzero? *camera*))
+         (send-event *camera* 'teleport)
+         )
+       (go-process *target* target-indax-jump-on)
+       )
+      (else
+       ;; Standard teleport (Jak player, or Daxter without ride-along)
+       (let ((riding-veh-id (-> *remote-info* riding-veh-id)))
+         (cond
+           ((nonzero? riding-veh-id)
+            ;; Remote player is in a vehicle! Board it if possible.
+            (let ((veh (mp-vehicle-find-by-net-id riding-veh-id)))
+              (cond
+                ((and veh (nonzero? veh) (-> veh root) (nonzero? (-> veh root)))
+                 ;; Teleport to vehicle position
+                 (vector-copy! (-> *target* control trans) (-> veh root trans))
+                 (+! (-> *target* control trans y) 4096.0)
+                 (vector-copy! (-> *target* control camera-pos) (-> *target* control trans))
+                 (when (and *camera* (nonzero? *camera*))
+                   (send-event *camera* 'teleport)
+                   )
+                 ;; Search for empty seat
+                 (let ((best-seat (mp-left-behind-find-last-empty-seat veh)))
+                   (cond
+                     ((!= best-seat -1)
+                      (format 0 "[MP-LeftBehind] Teleporting player into vehicle seat ~D~%" best-seat)
+                      (set! *mp-shuttle-override-seat-index* best-seat)
+                      (if (focus-test? *target* indax)
+                          (go-process *target* target-indax-pilot-start (process->handle veh) #t #t)
+                          (go-process *target* target-pilot-start (process->handle veh) #t #f)
+                          )
+                      )
+                     (else
+                      (format 0 "[MP-LeftBehind] Vehicle full! Teleporting next to vehicle.~%")
+                      (if (focus-test? *target* indax)
+                          (go-process *target* target-indax-start (the handle #f))
+                          (go-process *target* target-stance)
+                          )
+                      )
+                     )
+                   )
+                 )
+                (else
+                 ;; Fallback to coordinate teleport if vehicle not found locally
+                 (format 0 "[MP-LeftBehind] Vehicle ~D not found. Teleporting to remote player coords.~%" riding-veh-id)
+                 (set-vector! (-> *target* control trans) (-> *remote-info* x) (-> *remote-info* y) (-> *remote-info* z) 1.0)
+                 (+! (-> *target* control trans y) 4096.0)
+                 (vector-copy! (-> *target* control camera-pos) (-> *target* control trans))
+                 (when (and *camera* (nonzero? *camera*))
+                   (send-event *camera* 'teleport)
+                   )
+                 (if (focus-test? *target* indax)
+                     (go-process *target* target-indax-start (the handle #f))
+                     (go-process *target* target-stance)
+                     )
+                 )
+                )
+              )
+            )
+           (else
+            ;; Remote player is on foot! Teleport directly to their coordinates.
+            (format 0 "[MP-LeftBehind] Remote player on foot. Teleporting to remote player coords.~%")
+            (set-vector! (-> *target* control trans) (-> *remote-info* x) (-> *remote-info* y) (-> *remote-info* z) 1.0)
+            (+! (-> *target* control trans y) 4096.0)
+            (vector-copy! (-> *target* control camera-pos) (-> *target* control trans))
+            (when (and *camera* (nonzero? *camera*))
+              (send-event *camera* 'teleport)
+              )
+            (if (focus-test? *target* indax)
+                (go-process *target* target-indax-start (the handle #f))
+                (go-process *target* target-stance)
+                )
+            )
+           )
+         )
+       )
+      )
+    )
+  (none)
+  )
+
+(defun mp-left-behind-draw-teleport-text! ((elapsed time-frame) (loading? symbol))
+  (let ((font-ctx (new 'stack 'font-context *font-default-matrix* 32 320 0.0 (font-color default) (font-flags shadow kerning))))
+    (set-width! font-ctx 350)
+    (set-height! font-ctx 80)
+    (set-scale! font-ctx 0.5)
+    (set! (-> font-ctx flags) (font-flags shadow kerning large))
+    (clear *temp-string*)
+    (if loading?
+        (format *temp-string* "WAITING FOR AREA...")
+        (let ((sec-left (- 3 (/ (the int elapsed) 300))))
+          (format *temp-string* (lookup-text! *common-text* (text-id left-behind-teleport-countdown) #f) sec-left)
+          )
+        )
+    (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
+    )
+  (none)
+  )
+
+(defun mp-update-left-behind-teleport! ((condition symbol) (ride-along? symbol))
+  "Manages the countdown timer and text warning for the left-behind state, executing the generic teleportation logic upon countdown completion."
+  (when (and *multi-sync-enabled?*
+             (= (pc-multi-get-status) 6)
+             *target*
+             (nonzero? *target*)
+             (-> *target* control)
+             (nonzero? (-> *target* control))
+             *remote-info*
+             (nonzero? *remote-info*)
+             (not (focus-test? *target* dead teleporting)))
+    (cond
+      (condition
+       (mp-ensure-remote-level-wanted!)
+       ;; Countdown start or progress
+       (when (= *mp-left-behind-start-time* 0)
+         (set! *mp-left-behind-start-time* (current-time))
+         )
+       (let* ((elapsed (- (current-time) *mp-left-behind-start-time*))
+              (time-limit (seconds 3)))
+         (cond
+           ((>= elapsed time-limit)
+            (if (mp-remote-level-ready?)
+                (begin
+                  ;; Reset timer
+                  (set! *mp-left-behind-start-time* (the-as time-frame 0))
+                  ;; Execute generic teleportation
+                  (mp-left-behind-teleport-player! ride-along?)
+                  )
+                (mp-left-behind-draw-teleport-text! elapsed #t)
+                )
+            )
+           (else
+            ;; Draw countdown warning overlay (bottom left, scale 0.5, default font color)
+            (mp-left-behind-draw-teleport-text! elapsed #f)
+            )
+           )
+         )
+       )
+      (else
+       ;; Within range, reset countdown
+       (set! *mp-left-behind-start-time* (the-as time-frame 0))
+       )
+      )
+    )
+  (none)
+  )

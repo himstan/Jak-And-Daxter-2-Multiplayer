@@ -211,13 +211,9 @@
        )
       )
 
-    ;; Hash the level name
+    ;; Send a reversible MP level id so the peer can request this level before direct teleports.
     (set! (-> *local-info* level) (the-as uint 0))
-    (let ((lev (-> *level* level 0)))
-      (if (and lev (nonzero? lev) (= (-> lev status) 'active))
-          (let ((lev-name (-> lev name)))
-            (if (and lev-name (nonzero? lev-name))
-                (set! (-> *local-info* level) (string-crc32 (symbol->string lev-name)))))))
+    (set! (-> *local-info* level) (mp-current-level-packed-id))
 
     (let ((local-state 0))
       (if (and *target* (nonzero? *target*) (-> *target* state))

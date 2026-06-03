@@ -17,6 +17,9 @@
 (define-extern mp-get-remote-target-process (function process-focusable))
 (define-extern mp-target-get-state-from-id (function uint symbol))
 (define-extern *mp-puppet-ghost* mp-target-ghost-record)
+(define-extern *mp-spectator-countdown-active?* symbol)
+(define-extern mp-ensure-remote-level-wanted! (function none))
+(define-extern mp-remote-level-ready? (function symbol))
 
 ;; DECOMP BEGINS
 
@@ -1453,6 +1456,7 @@
         (else
          ;; MISSION / LEVEL DEATH
          (format 0 "[MP-Death] Mission Death. Spectating and waiting 20s...~%")
+         (set! *mp-spectator-countdown-active?* #t)
          ;; Unfreeze enemies
          (remove-setting! 'process-mask)
          (remove-setting! 'mode-name)
@@ -1467,8 +1471,11 @@
                (let ((remote (mp-get-remote-target-process)))
                  (let ((current-target (handle->process (-> *camera* focus handle))))
                    (if (and remote (nonzero? remote))
-                       (when (!= remote current-target)
-                         (send-event *camera* 'change-target remote)
+                       (begin
+                         (mp-ensure-remote-level-wanted!)
+                         (when (!= remote current-target)
+                           (send-event *camera* 'change-target remote)
+                           )
                          )
                        (when (!= self current-target)
                          (send-event *camera* 'change-target self)
@@ -1500,15 +1507,18 @@
                (when (and (or (>= elapsed (seconds 20)) *scene-player*) (not (or *remote-player-is-dead* *remote-player-is-dying*)))
                  (let ((remote (mp-get-remote-target-process)))
                    (when (and remote (nonzero? remote))
-                     (mp-send-world-event MP_EVENT_PLAYER_RESPAWNED (the-as uint 0))
-                     (set! (-> self control trans quad) (-> (the-as process-drawable remote) root trans quad))
-                     (set! (-> self fact health) (/ (-> self fact health-max) 2.0))
-                     (set! *mp-local-player-is-respawning* #t)
-                     (remove-setting! 'mode-name)
-                     (send-event *camera* 'change-target self)
-                     (mp-respawn-local-target! self)
-                     )
-                   )
+                     (mp-ensure-remote-level-wanted!)
+                      (when (mp-remote-level-ready?)
+                        (mp-send-world-event MP_EVENT_PLAYER_RESPAWNED (the-as uint 0))
+                        (set! (-> self fact health) (/ (-> self fact health-max) 2.0))
+                        (set! *mp-local-player-is-respawning* #t)
+                        (remove-setting! 'mode-name)
+                        (send-event *camera* 'change-target self)
+                        (set! *mp-spectator-countdown-active?* #f)
+                        (mp-respawn-local-target-at-remote! self)
+                        )
+                      )
+                    )
                  )
 
                ;; Check if remote player also died (Double Death)
@@ -1521,6 +1531,7 @@
                              (format 0 "[MP-Death] Triggering full reset.~%")
                              (set! *remote-player-is-dying* #f)
                              (set! *remote-player-is-dead* #f)
+                             (set! *mp-spectator-countdown-active?* #f)
                              (remove-setting! 'mode-name)
                              (send-event *camera* 'change-target self)
                              (goto cfg-reset-init)

@@ -1,0 +1,280 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(define-perm *mp-level-sync-next-unknown-log-time* time-frame 0)
+
+(define *mp-level-id-table* (new 'static 'boxed-array :type symbol
+                              'default-level 'intro 'demo 'ctywide 'ctysluma 'hideout 'title 'vinroom
+                              'ctyinda 'drillmid 'drill 'drillmtn 'drillb 'sewer 'sewerb 'sewesc
+                              'sewescb 'tomba 'tombb 'tombc 'tombe 'tombd 'tombext 'tombboss
+                              'under 'underb 'palcab 'palroof 'palshaft 'throne 'palent 'palboss
+                              'palout 'outrocst 'lbrnermk 'lashthrn 'lthrnout 'prison 'forexita
+                              'introcst 'ldjakbrn 'lprsncst 'forexitb 'ctyslumb 'forresca 'forrescb
+                              'fordumpa 'fordumpb 'fordumpc 'fordumpd 'strip 'ruins 'sagehut 'atoll
+                              'atollext 'mountain 'mtnext 'mincan 'forest 'forestb 'lwidea 'lwideb
+                              'lwidec 'ctykora 'ctyasha 'ctygena 'ctyfarma 'ctygenb 'ctygenc 'ctypal
+                              'ctyindb 'ltrntess 'lyskdcd 'ctyslumc 'ljakdax 'ctyport 'hiphog
+                              'gungame 'ljkdxash 'ctyfarmb 'ctymarka 'consiteb 'consite 'ctymarkb
+                              'kiosk 'stadium 'stadiumd 'stadblmp 'stadiumb 'stadiumc 'skatea 'garage
+                              'lwidesta 'lerrol 'lkeirift 'lracelit 'lracebb 'lracebf 'lracecb
+                              'lracecf 'lracedb 'lracedf 'lgarcsta 'lsamergd 'lerbrngd 'lsmysbrt
+                              'lashgrd 'onintent 'ltentout 'ltentob 'oracle 'ltrnkrkd 'ltrnysam
+                              'lysamsam 'lkiddoge 'lhelldog 'lpackage 'lsack 'lportrun 'lshuttle
+                              'lmeetbrt 'lpower 'lerlchal 'lprtrace 'lbombbot 'lbbush 'lprotect
+                              'ltess 'lhipout 'lwhack 'lguard 'lcguard 'lerltess 'dig1 'caspad
+                              'dig3a 'dig3b 'castle 'casboss 'cascity 'casext 'village1 'lcitylow
+                              'lintcstb 'nest 'nestb 'portwall 'loutcstb 'island1 'skatepark
+                              'halfpipe 'vistest 'woodstest 'tobytest 'chartest 'dptest 'ctyfence
+                              '4aaron '4pal01 'andrew01 'bsbs 'eitest 'miketest 'tatetest 'teststdc
+                              'teststdd 'wasall 'stadocc 'test-zone
+                              )
+  )
+
+(defun mp-level-symbol->id ((level-name symbol))
+  "Return the reversible MP level id for a level symbol. 0 is reserved for unknown."
+  (when (and level-name
+             *mp-level-id-table*
+             (nonzero? *mp-level-id-table*))
+    (dotimes (idx (-> *mp-level-id-table* length))
+      (when (= (-> *mp-level-id-table* idx) level-name)
+        (return (the-as uint (+ idx 1)))
+        )
+      )
+    )
+  (the uint 0)
+  )
+
+(defun mp-level-id->symbol ((level-id uint))
+  "Resolve a reversible MP level id back to its level symbol."
+  (let ((idx (- (the int (logand level-id #xffff)) 1)))
+    (if (and *mp-level-id-table*
+             (nonzero? *mp-level-id-table*)
+             (>= idx 0)
+             (< idx (-> *mp-level-id-table* length)))
+        (-> *mp-level-id-table* idx)
+        #f
+        )
+    )
+  )
+
+(defun mp-level-pack-ids ((primary-id uint) (extra-id uint))
+  "Pack the primary level id plus one extra loaded city level into the existing uint32 field."
+  (the-as uint (logior (logand primary-id #xffff) (shl (logand extra-id #xffff) 16)))
+  )
+
+(defun mp-level-packed-primary-id ((packed-level uint))
+  (the-as uint (logand packed-level #xffff))
+  )
+
+(defun mp-level-packed-extra-id ((packed-level uint))
+  (the-as uint (logand (shr packed-level 16) #xffff))
+  )
+
+(defun mp-city-level? ((level-name symbol))
+  (case level-name
+    (('ctywide 'ctysluma 'ctyslumb 'ctyslumc 'ctyinda 'ctyindb
+      'ctygena 'ctygenb 'ctygenc 'ctyfarma 'ctyfarmb 'ctymarka
+      'ctymarkb 'ctyport 'ctypal 'ctykora 'ctyasha 'stadium)
+     #t
+     )
+    (else #f)
+    )
+  )
+
+(defun mp-current-active-level-symbol ()
+  "Prefer the local target's actual region, falling back to the first active level slot."
+  (when (and *target*
+             (nonzero? *target*)
+             (-> *target* current-level)
+             (nonzero? (-> *target* current-level)))
+    (let ((target-level (-> *target* current-level)))
+      (when (-> target-level name)
+        (return (-> target-level name))
+        )
+      )
+    )
+  (when (and *level* (nonzero? *level*))
+    (let ((lev (-> *level* level 0)))
+      (when (and lev
+                 (nonzero? lev)
+                 (= (-> lev status) 'active))
+        (let ((level-name (-> lev name)))
+          (when level-name
+            (return level-name)
+            )
+          )
+        )
+      )
+    )
+  #f
+  )
+
+(defun mp-current-extra-loaded-city-level-symbol ((primary-level symbol))
+  "Find another city partition that should remain loaded near the remote player."
+  (when (and primary-level
+             *load-state*
+             (nonzero? *load-state*))
+    (dotimes (idx 6)
+      (let ((level-name (-> *load-state* want idx name)))
+        (when (and level-name
+                   (mp-city-level? level-name)
+                   (!= level-name 'ctywide)
+                   (!= level-name primary-level))
+          (return level-name)
+          )
+        )
+      )
+    )
+  (when (and primary-level
+             *level*
+             (nonzero? *level*))
+    (dotimes (idx 7)
+      (let ((lev (-> *level* level idx)))
+        (when (and lev
+                   (nonzero? lev)
+                   (or (= (-> lev status) 'active)
+                       (= (-> lev status) 'alive)
+                       (= (-> lev status) 'loaded)))
+          (let ((level-name (-> lev name)))
+            (when (and level-name
+                       (mp-city-level? level-name)
+                       (!= level-name 'ctywide)
+                       (!= level-name primary-level))
+              (return level-name)
+              )
+            )
+          )
+        )
+      )
+    )
+  #f
+  )
+
+(defun mp-current-active-level-id ()
+  "Return the reversible MP level id for the local player's current level."
+  (let ((level-name (mp-current-active-level-symbol)))
+    (if level-name
+        (mp-level-symbol->id level-name)
+        (the uint 0)
+        )
+    )
+  )
+
+(defun mp-current-level-packed-id ()
+  "Return the primary local level id with one extra loaded city partition packed in."
+  (let ((primary-level (mp-current-active-level-symbol)))
+    (if primary-level
+        (mp-level-pack-ids
+          (mp-level-symbol->id primary-level)
+          (let ((extra-level (mp-current-extra-loaded-city-level-symbol primary-level)))
+            (if extra-level
+                (mp-level-symbol->id extra-level)
+                (the uint 0)
+                )
+            )
+          )
+        (the uint 0)
+        )
+    )
+  )
+
+(defun mp-remote-level-symbol ()
+  "Resolve the remote player's advertised level id."
+  (if (and *remote-info* (nonzero? *remote-info*))
+      (mp-level-id->symbol (mp-level-packed-primary-id (-> *remote-info* level)))
+      #f
+      )
+  )
+
+(defun mp-remote-extra-loaded-level-symbol ()
+  "Resolve the remote player's extra advertised loaded city partition, if any."
+  (if (and *remote-info* (nonzero? *remote-info*))
+      (mp-level-id->symbol (mp-level-packed-extra-id (-> *remote-info* level)))
+      #f
+      )
+  )
+
+(defun mp-level-active? ((level-name symbol))
+  (if (and level-name
+           *level*
+           (nonzero? *level*)
+           (= (level-status *level* level-name) 'active))
+      #t
+      #f
+      )
+  )
+
+(defun mp-level-sync-log-unknown! ()
+  (when (>= (current-time) *mp-level-sync-next-unknown-log-time*)
+    (format 0 "[MP-LevelSync] Remote level id ~D is unknown. Falling back to current teleport behavior.~%"
+            (if (and *remote-info* (nonzero? *remote-info*)) (-> *remote-info* level) (the uint 0)))
+    (set! *mp-level-sync-next-unknown-log-time* (+ (current-time) (seconds 2)))
+    )
+  (none)
+  )
+
+(defun mp-want-levels-for-remote-teleport! ((level-name symbol) (extra-level symbol))
+  (when (and level-name
+             *load-state*
+             (nonzero? *load-state*))
+    (let ((desired-levels (new 'stack-no-clear 'array 'symbol 6)))
+      (dotimes (idx 6)
+        (set! (-> desired-levels idx) #f)
+        )
+      (set! (-> desired-levels 0) level-name)
+      (when (and (mp-city-level? level-name) (!= level-name 'ctywide))
+        (set! (-> desired-levels 1) 'ctywide)
+        )
+      (when (and extra-level
+                 (mp-city-level? extra-level)
+                 (!= extra-level 'ctywide)
+                 (!= extra-level level-name))
+        (set! (-> desired-levels 2) extra-level)
+        )
+      (want-levels *load-state* desired-levels)
+      (want-display-level *load-state* level-name 'display)
+      (when (mp-city-level? level-name)
+        (want-display-level *load-state* 'ctywide 'display)
+        )
+      (when (and extra-level
+                 (mp-city-level? extra-level)
+                 (!= extra-level 'ctywide)
+                 (!= extra-level level-name))
+        (want-display-level *load-state* extra-level 'display)
+        )
+      (want-vis-level *load-state* level-name)
+      )
+    )
+  (none)
+  )
+
+(defun mp-want-level-for-remote-teleport! ((level-name symbol))
+  (mp-want-levels-for-remote-teleport! level-name #f)
+  )
+
+(defun mp-ensure-remote-level-wanted! ()
+  "Request the remote player's level before direct MP teleports/respawns."
+  (let ((remote-level (mp-remote-level-symbol)))
+    (if remote-level
+        (mp-want-levels-for-remote-teleport! remote-level (mp-remote-extra-loaded-level-symbol))
+        (mp-level-sync-log-unknown!)
+        )
+    )
+  (none)
+  )
+
+(defun mp-remote-level-ready? ()
+  "Unknown remote levels are treated as ready so old behavior remains the fallback."
+  (let ((remote-level (mp-remote-level-symbol)))
+    (if remote-level
+        (let ((extra-level (mp-remote-extra-loaded-level-symbol)))
+          (if (and (mp-level-active? remote-level)
+                   (or (not extra-level) (mp-level-active? extra-level)))
+              #t
+              #f
+              )
+          )
+        #t
+        )
+    )
+  )

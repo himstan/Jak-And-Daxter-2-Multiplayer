@@ -226,6 +226,7 @@
     (mp-waypoint-sync-tick)
 
     (mp-update-role-transformation)
+    (mp-update-death-spectate)
     (mp-update-ai-targeting)
     (mp-update-player-visibility)
     (mp-update-camera-settings)
@@ -347,8 +348,8 @@
   (mp-waypoint-clear-transition-buffers!)
   (set! *mp-waypoint-last-snapshot-time* (the-as time-frame 0))
   (set! *mp-waypoint-applying-remote?* #f)
-  (set! *mp-waypoint-sync-local-level-hash* (the uint 0))
-  (set! *mp-waypoint-sync-remote-level-hash* (the uint 0))
+  (set! *mp-waypoint-sync-local-level-id* (the uint 0))
+  (set! *mp-waypoint-sync-remote-level-id* (the uint 0))
 
   ;; Info
   (if (nonzero? (the-as uint *local-info*))

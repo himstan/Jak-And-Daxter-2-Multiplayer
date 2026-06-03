@@ -500,6 +500,8 @@
   "mod-common-functions.o" ;; added
   "orb-placer.o"  ;; added
   "mp-helpers.o" ;; added
+  "mp-level-sync.o" ;; added
+  "mp-left-behind.o" ;; added
   "mp-enemy-h.o" ;; added
   "mp-enemy-sync.o" ;; added
   "mp-traffic-h.o" ;; added

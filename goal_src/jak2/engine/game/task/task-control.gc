@@ -2049,7 +2049,7 @@
     (('target)
      (case (-> arg3 param 0)
        (('die)
-        (when (and (-> self fail-on-death?) (or (not *multi-sync-enabled?*) *remote-player-is-dead*))
+        (when (and (= arg0 *target*) (-> self fail-on-death?) (or (not *multi-sync-enabled?*) *remote-player-is-dead*))
           (if (and (-> self next-state) (= (-> self next-state name) 'active))
               (go-virtual fail)
               )

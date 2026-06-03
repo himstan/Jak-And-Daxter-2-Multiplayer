@@ -144,6 +144,69 @@
 
   (none))
 
+(define *mp-spectating?* #f)
+(define *mp-spectator-countdown-active?* #f)
+
+(defun mp-region-target-pos ()
+  "Return the target-region position, following the remote puppet while death-spectating."
+  (when *mp-spectator-countdown-active?*
+    (let ((puppet (mp-puppet-get-proc)))
+      (when (and puppet
+                 (nonzero? puppet)
+                 (-> puppet root)
+                 (nonzero? (-> puppet root)))
+        (return (-> puppet root trans))
+        )
+      )
+    (when (and *multi-remote-render-pos*
+               (nonzero? *multi-remote-render-pos*))
+      (return *multi-remote-render-pos*)
+      )
+    )
+  (target-pos 0)
+  )
+
+(defun mp-traffic-local-interest-pos ()
+  "Return the local position traffic authority should reason about."
+  (when *mp-spectator-countdown-active?*
+    (let ((puppet (mp-puppet-get-proc)))
+      (when (and puppet
+                 (nonzero? puppet)
+                 (-> puppet root)
+                 (nonzero? (-> puppet root)))
+        (return (-> puppet root trans))
+        )
+      )
+    (when (and *multi-remote-render-pos*
+               (nonzero? *multi-remote-render-pos*))
+      (return *multi-remote-render-pos*)
+      )
+    )
+  (when (and *target*
+             (nonzero? *target*)
+             (-> *target* control)
+             (nonzero? (-> *target* control)))
+    (return (-> *target* control trans))
+    )
+  #f
+  )
+
+(defun mp-traffic-authority-distance ()
+  "Distance between the local traffic interest point and remote player."
+  (when (or *remote-player-is-dead* *remote-player-is-dying*)
+    (return 0.0)
+    )
+  (let ((local-pos (mp-traffic-local-interest-pos)))
+    (if (and local-pos
+             (nonzero? local-pos)
+             *multi-remote-render-pos*
+             (nonzero? *multi-remote-render-pos*))
+        (vector-vector-distance (the-as vector local-pos) *multi-remote-render-pos*)
+        1000000000.0
+        )
+    )
+  )
+
 (defun mp-update-traffic-authority ()
   "Determine who owns the open-world traffic and suppress local spawning if needed"
   (let ((is-active? (nonzero? (pc-multi-get-status))))
@@ -164,53 +227,51 @@
                   (set! *mp-traffic-suppressed* #t)
                   )
                 )
-            (when (and *target* (nonzero? *target*) (-> *target* control) (nonzero? (-> *target* control)))
-              (let ((dist (vector-vector-distance (-> *target* control trans) *multi-remote-render-pos*)))
+            (let ((dist (mp-traffic-authority-distance)))
 
-                (if (mp-is-daxter?) ;; Client Side
-                    (begin
-                      (if *mp-traffic-sync-active*
-                          (when (> dist (meters 400.0))
-                            (set! *mp-traffic-sync-active* #f)
-                            (mp-traffic-cleanup-after-sync-exit!)
-                            )
-                          (begin
-                            (when (< dist (meters 400.0))
-                            (set! *mp-traffic-sync-active* #t)
-                            )
-                            (when (< dist (meters 450.0))
-                              (mp-traffic-force-clear-local-vehicles!)
-                            )
+              (if (mp-is-daxter?) ;; Client Side
+                  (begin
+                    (if *mp-traffic-sync-active*
+                        (when (> dist (meters 400.0))
+                          (set! *mp-traffic-sync-active* #f)
+                          (mp-traffic-cleanup-after-sync-exit!)
                           )
-                        )
-                      (cond
-                        (*mp-traffic-sync-active*
-                         (set! *mp-traffic-suppressed* #t)
-                         (set! *mp-traffic-drain-active* #t)
-                         )
-                        ((< dist (meters 500.0))
-                         (set! *mp-traffic-drain-active* #t)
-                         (set! *mp-traffic-suppressed* #t)
-                         )
-                        ((> dist (meters 550.0))
-                         (set! *mp-traffic-drain-active* #f)
-                         (set! *mp-traffic-suppressed* #f)
-                         )
-                        )
-                      )
-                    (begin ;; Host Side (mp-is-jak? was handled above for suppression)
-                      (set! *mp-traffic-host-spawning-active* #f)
-                      (if *mp-traffic-sync-active*
-                          (when (> dist (meters 400.0))
-                            (set! *mp-traffic-sync-active* #f)
-                            )
+                        (begin
                           (when (< dist (meters 400.0))
                             (set! *mp-traffic-sync-active* #t)
                             )
+                          (when (< dist (meters 450.0))
+                            (mp-traffic-force-clear-local-vehicles!)
+                            )
                           )
+                        )
+                    (cond
+                      (*mp-traffic-sync-active*
+                       (set! *mp-traffic-suppressed* #t)
+                       (set! *mp-traffic-drain-active* #t)
+                       )
+                      ((< dist (meters 500.0))
+                       (set! *mp-traffic-drain-active* #t)
+                       (set! *mp-traffic-suppressed* #t)
+                       )
+                      ((> dist (meters 550.0))
+                       (set! *mp-traffic-drain-active* #f)
+                       (set! *mp-traffic-suppressed* #f)
+                       )
                       )
                     )
-                )
+                  (begin ;; Host Side (mp-is-jak? was handled above for suppression)
+                    (set! *mp-traffic-host-spawning-active* #f)
+                    (if *mp-traffic-sync-active*
+                        (when (> dist (meters 400.0))
+                          (set! *mp-traffic-sync-active* #f)
+                          )
+                        (when (< dist (meters 400.0))
+                          (set! *mp-traffic-sync-active* #t)
+                          )
+                        )
+                    )
+                  )
               )
             (when (and was-suppressed? (not *mp-traffic-suppressed*) (not *mp-traffic-sync-active*))
               (mp-traffic-refill-local-active-cells!)
@@ -220,3 +281,72 @@
         )
     )
   (none))
+
+;; --- Spectator Mode / Death Logic ---
+(defun mp-update-death-spectate ()
+  "Update spectator camera targets and snap positioning when dead."
+  (let ((dead? (and *target*
+                    (nonzero? *target*)
+                    (-> *target* state)
+                    (nonzero? (-> *target* state))
+                    (mp-target-death-state? (-> *target* state name)))))
+    (cond
+      ((and dead? *mp-spectator-countdown-active?*)
+       (when (not *mp-spectating?*)
+         ;; Just died & countdown started! Set camera target to the remote player puppet
+         (let ((rem-proc (mp-puppet-get-proc)))
+           (when (and rem-proc (nonzero? rem-proc) (-> rem-proc root) (nonzero? (-> rem-proc root)))
+             (format 0 "[MP] Player died & countdown started. Switching camera focus to remote puppet.~%")
+             (mp-ensure-remote-level-wanted!)
+             (send-event *camera* 'change-target rem-proc)
+             ;; Teleport camera to remote puppet to snap instantly
+             (when (and (-> *target* control) (nonzero? (-> *target* control)))
+               (vector-copy! (-> *target* control camera-pos) (-> rem-proc root trans))
+               )
+             (when (and *camera* (nonzero? *camera*))
+               (send-event *camera* 'teleport)
+               )
+             (set! *mp-spectating?* #t)
+             )
+           )
+         )
+       ;; While spectating, snap the camera if it gets too far away
+       (when *mp-spectating?*
+         (let ((rem-proc (mp-puppet-get-proc)))
+           (when (and rem-proc (nonzero? rem-proc) (-> rem-proc root) (nonzero? (-> rem-proc root)))
+             (mp-ensure-remote-level-wanted!)
+             (let ((cam-dist (vector-vector-distance (-> *math-camera* trans) (-> rem-proc root trans))))
+               (when (> cam-dist (meters 100.0))
+                 (format 0 "[MP] Spectator camera too far (~F meters). Snapping to remote player.~%" (/ cam-dist (meters 1.0)))
+                 (when (and (-> *target* control) (nonzero? (-> *target* control)))
+                   (vector-copy! (-> *target* control camera-pos) (-> rem-proc root trans))
+                   )
+                 (when (and *camera* (nonzero? *camera*))
+                   (send-event *camera* 'teleport)
+                   )
+                 )
+               )
+             )
+           )
+         )
+       )
+      (else
+       (when *mp-spectating?*
+         ;; Just respawned! Restore camera target to local target
+         (format 0 "[MP] Player respawned. Restoring camera focus to local target.~%")
+         (send-event *camera* 'change-target *target*)
+         ;; Teleport camera back to local target instantly
+         (when (and (-> *target* control) (nonzero? (-> *target* control)))
+           (vector-copy! (-> *target* control camera-pos) (-> *target* control trans))
+           )
+         (when (and *camera* (nonzero? *camera*))
+           (send-event *camera* 'teleport)
+           )
+         (set! *mp-spectating?* #f)
+         )
+       (set! *mp-spectator-countdown-active?* #f)
+       )
+      )
+    )
+  (none)
+  )

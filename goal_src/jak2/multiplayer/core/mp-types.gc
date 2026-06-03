@@ -66,7 +66,7 @@
 (define-perm *mp-puppet-pending-gun-shot-cam-angle-y* float 0.0)
 (define-perm *mp-shuttle-override-seat-index* int -1)
 (define-perm *mp-shuttle-teleport-distance* float (meters 150.0))
-(define-perm *mp-shuttle-left-behind-start-time* time-frame 0)
+(define-perm *mp-left-behind-start-time* time-frame 0)
 
 
 (defconstant MP_EVENT_ORB (the-as uint 1))
@@ -1246,6 +1246,7 @@
 (define-extern mp-target-death-state? (function symbol symbol))
 (define-extern mp-clear-local-vehicle-occupancy! (function target none))
 (define-extern mp-respawn-local-target! (function target none))
+(define-extern mp-respawn-local-target-at-remote! (function target none))
 (define-extern mp-airlock-remote-ready? (function vector symbol))
 (define-extern mp-any-player-near-and-piloting? (function process-drawable float symbol))
 (define-extern mp-event-handler-authority-request (function uint none))
