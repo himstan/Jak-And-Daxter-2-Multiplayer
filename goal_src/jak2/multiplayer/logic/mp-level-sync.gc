@@ -59,15 +59,15 @@
 
 (defun mp-level-pack-ids ((primary-id uint) (extra-id uint))
   "Pack the primary level id plus one extra loaded city level into the existing uint32 field."
-  (the-as uint (logior (logand primary-id #xffff) (shl (logand extra-id #xffff) 16)))
+  (the-as uint (logior (logand primary-id #xff) (shl (logand extra-id #xff) 8)))
   )
 
 (defun mp-level-packed-primary-id ((packed-level uint))
-  (the-as uint (logand packed-level #xffff))
+  (the-as uint (logand packed-level #xff))
   )
 
 (defun mp-level-packed-extra-id ((packed-level uint))
-  (the-as uint (logand (shr packed-level 16) #xffff))
+  (the-as uint (logand (shr packed-level 8) #xff))
   )
 
 (defun mp-city-level? ((level-name symbol))
@@ -109,122 +109,11 @@
   #f
   )
 
-(defun mp-levels-in-same-zone? ((lvl1 symbol) (lvl2 symbol))
-  "Check if two levels belong to the same zone/area."
-  (cond
-    ((or (not lvl1) (not lvl2))
-     #f
-     )
-    ((= lvl1 lvl2)
-     #t
-     )
-    ;; City Zone
-    ((and (mp-city-level? lvl1) (mp-city-level? lvl2))
-     #t
-     )
-    ;; Mountain Zone
-    ((and (or (= lvl1 'mountain) (= lvl1 'mtnext) (= lvl1 'mincan))
-          (or (= lvl2 'mountain) (= lvl2 'mtnext) (= lvl2 'mincan)))
-     #t
-     )
-    ;; Sewer Zone
-    ((and (or (= lvl1 'sewer) (= lvl1 'sewerb) (= lvl1 'sewesc) (= lvl1 'sewescb))
-          (or (= lvl2 'sewer) (= lvl2 'sewerb) (= lvl2 'sewesc) (= lvl2 'sewescb)))
-     #t
-     )
-    ;; Tomb Zone
-    ((and (or (= lvl1 'tomba) (= lvl1 'tombb) (= lvl1 'tombc) (= lvl1 'tombd) (= lvl1 'tombe) (= lvl1 'tombext) (= lvl1 'tombboss))
-          (or (= lvl2 'tomba) (= lvl2 'tombb) (= lvl2 'tombc) (= lvl2 'tombd) (= lvl2 'tombe) (= lvl2 'tombext) (= lvl2 'tombboss)))
-     #t
-     )
-    ;; Palace Zone
-    ((and (or (= lvl1 'palcab) (= lvl1 'palroof) (= lvl1 'palshaft) (= lvl1 'throne) (= lvl1 'palent) (= lvl1 'palboss) (= lvl1 'palout))
-          (or (= lvl2 'palcab) (= lvl2 'palroof) (= lvl2 'palshaft) (= lvl2 'throne) (= lvl2 'palent) (= lvl2 'palboss) (= lvl2 'palout)))
-     #t
-     )
-    ;; Underport Zone
-    ((and (or (= lvl1 'under) (= lvl1 'underb))
-          (or (= lvl2 'under) (= lvl2 'underb)))
-     #t
-     )
-    ;; Drill Zone
-    ((and (or (= lvl1 'drill) (= lvl1 'drillmid) (= lvl1 'drillmtn) (= lvl1 'drillb))
-          (or (= lvl2 'drill) (= lvl2 'drillmid) (= lvl2 'drillmtn) (= lvl2 'drillb)))
-     #t
-     )
-    ;; Nest Zone
-    ((and (or (= lvl1 'nest) (= lvl1 'nestb))
-          (or (= lvl2 'nest) (= lvl2 'nestb)))
-     #t
-     )
-    ;; Dig Zone
-    ((and (or (= lvl1 'dig1) (= lvl1 'dig3a) (= lvl1 'dig3b))
-          (or (= lvl2 'dig1) (= lvl2 'dig3a) (= lvl2 'dig3b)))
-     #t
-     )
-    ;; Castle Zone
-    ((and (or (= lvl1 'castle) (= lvl1 'casboss) (= lvl1 'casext))
-          (or (= lvl2 'castle) (= lvl2 'casboss) (= lvl2 'casext)))
-     #t
-     )
-    ;; Forest Zone
-    ((and (or (= lvl1 'forest) (= lvl1 'forestb))
-          (or (= lvl2 'forest) (= lvl2 'forestb)))
-     #t
-     )
-    ;; Atoll Zone
-    ((and (or (= lvl1 'atoll) (= lvl1 'atollext))
-          (or (= lvl2 'atoll) (= lvl2 'atollext)))
-     #t
-     )
-    ;; Stadium Zone
-    ((and (or (= lvl1 'stadium) (= lvl1 'stadiumd) (= lvl1 'stadblmp) (= lvl1 'stadiumb) (= lvl1 'stadiumc))
-          (or (= lvl2 'stadium) (= lvl2 'stadiumd) (= lvl2 'stadblmp) (= lvl2 'stadiumb) (= lvl2 'stadiumc)))
-     #t
-     )
-    (else
-      #f
-      )
-    )
-  )
-
-(defun mp-current-extra-loaded-city-level-symbol ((primary-level symbol))
-  "Find another partition/level in the same zone that should remain loaded near the remote player."
-  (when (and primary-level
-             *load-state*
-             (nonzero? *load-state*))
-    (dotimes (idx 6)
-      (let ((level-name (-> *load-state* want idx name)))
-        (when (and level-name
-                   (mp-levels-in-same-zone? primary-level level-name)
-                   (!= level-name 'ctywide)
-                   (!= level-name primary-level))
-          (return level-name)
-          )
+(defun mp-array-has-uint8? ((arr (pointer uint8)) (len int) (val uint))
+  (dotimes (idx len)
+    (if (= (the-as uint (-> arr idx)) val)
+        (return #t)
         )
-      )
-    )
-  (when (and primary-level
-             *level*
-             (nonzero? *level*))
-    (dotimes (idx 7)
-      (let ((lev (-> *level* level idx)))
-        (when (and lev
-                   (nonzero? lev)
-                   (or (= (-> lev status) 'active)
-                       (= (-> lev status) 'alive)
-                       (= (-> lev status) 'loaded)))
-          (let ((level-name (-> lev name)))
-            (when (and level-name
-                       (mp-levels-in-same-zone? primary-level level-name)
-                       (!= level-name 'ctywide)
-                       (!= level-name primary-level))
-              (return level-name)
-              )
-            )
-          )
-        )
-      )
     )
   #f
   )
@@ -240,45 +129,104 @@
   )
 
 (defun mp-current-level-packed-id ()
-  "Return the primary local level id with one extra loaded city partition packed in."
+  "Collect all currently active/loaded levels and pack them into a single uint32 (up to 4 levels)."
   (let ((primary-level (mp-current-active-level-symbol)))
     (if primary-level
-        (mp-level-pack-ids
-          (mp-level-symbol->id primary-level)
-          (let ((extra-level (mp-current-extra-loaded-city-level-symbol primary-level)))
-            (if extra-level
-                (mp-level-symbol->id extra-level)
-                (the uint 0)
+        (let ((ids (new 'stack-no-clear 'array 'uint8 4)))
+          (set! (-> ids 0) (the uint8 (mp-level-symbol->id primary-level)))
+          (set! (-> ids 1) (the uint8 0))
+          (set! (-> ids 2) (the uint8 0))
+          (set! (-> ids 3) (the uint8 0))
+          (let ((next-idx 1))
+            ;; 1. Check *load-state* want levels first to align with loading intentions
+            (when (and *load-state* (nonzero? *load-state*))
+              (dotimes (idx 6)
+                (let ((level-name (-> *load-state* want idx name)))
+                  (when (and level-name
+                             (!= level-name primary-level)
+                             (< next-idx 4))
+                    (let ((lid (mp-level-symbol->id level-name)))
+                      (when (and (> lid 0) (not (mp-array-has-uint8? ids next-idx lid)))
+                        (set! (-> ids next-idx) (the uint8 lid))
+                        (+! next-idx 1)
+                        )
+                      )
+                    )
+                  )
                 )
+              )
+            ;; 2. Fall back/supplement with actual active levels from *level*
+            (when (and *level* (nonzero? *level*))
+              (dotimes (idx 7)
+                (let ((lev (-> *level* level idx)))
+                  (when (and lev
+                             (nonzero? lev)
+                             (or (= (-> lev status) 'active)
+                                 (= (-> lev status) 'alive)
+                                 (= (-> lev status) 'loaded)))
+                    (let ((level-name (-> lev name)))
+                      (when (and level-name
+                                 (!= level-name primary-level)
+                                 (< next-idx 4))
+                        (let ((lid (mp-level-symbol->id level-name)))
+                          (when (and (> lid 0) (not (mp-array-has-uint8? ids next-idx lid)))
+                            (set! (-> ids next-idx) (the uint8 lid))
+                            (+! next-idx 1)
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              )
             )
+          ;; Pack the 4 uint8 IDs into a single uint32
+          (the-as uint (logior (the-as uint (-> ids 0))
+                               (shl (the-as uint (-> ids 1)) 8)
+                               (shl (the-as uint (-> ids 2)) 16)
+                               (shl (the-as uint (-> ids 3)) 24)))
           )
         (the uint 0)
         )
     )
   )
 
-(defun mp-remote-level-symbol ()
-  "Resolve the remote player's advertised level id."
-  (if (and *remote-info* (nonzero? *remote-info*))
-      (mp-level-id->symbol (mp-level-packed-primary-id (-> *remote-info* level)))
-      #f
+(defun mp-remote-level-symbols-for-teleport! ((packed-level uint) (out-symbols (pointer symbol)))
+  "Extract up to 4 loaded levels from the packed uint32 into a preallocated array."
+  (dotimes (idx 4)
+    (set! (-> out-symbols idx) #f)
+    )
+  (let ((id0 (logand packed-level #xff))
+        (id1 (logand (shr packed-level 8) #xff))
+        (id2 (logand (shr packed-level 16) #xff))
+        (id3 (logand (shr packed-level 24) #xff)))
+    (when (> id0 0)
+      (set! (-> out-symbols 0) (mp-level-id->symbol id0))
       )
-  )
-
-(defun mp-remote-extra-loaded-level-symbol ()
-  "Resolve the remote player's extra advertised loaded city partition, if any."
-  (if (and *remote-info* (nonzero? *remote-info*))
-      (mp-level-id->symbol (mp-level-packed-extra-id (-> *remote-info* level)))
-      #f
+    (when (> id1 0)
+      (set! (-> out-symbols 1) (mp-level-id->symbol id1))
       )
+    (when (> id2 0)
+      (set! (-> out-symbols 2) (mp-level-id->symbol id2))
+      )
+    (when (> id3 0)
+      (set! (-> out-symbols 3) (mp-level-id->symbol id3))
+      )
+    )
+  (none)
   )
 
 (defun mp-level-active? ((level-name symbol))
   (if (and level-name
            *level*
-           (nonzero? *level*)
-           (= (level-status *level* level-name) 'active))
-      #t
+           (nonzero? *level*))
+      (let ((status (level-status *level* level-name)))
+        (or (= status 'active)
+            (= status 'alive)
+            (= status 'loaded)
+            )
+        )
       #f
       )
   )
@@ -292,68 +240,99 @@
   (none)
   )
 
-(defun mp-want-levels-for-remote-teleport! ((level-name symbol) (extra-level symbol))
-  (when (and level-name
-             *load-state*
-             (nonzero? *load-state*))
+(defun mp-want-multiple-levels-for-remote-teleport! ((levels (pointer symbol)))
+  "Request and load multiple level symbols for spectating/teleporting."
+  (when (and *load-state* (nonzero? *load-state*))
     (let ((desired-levels (new 'stack-no-clear 'array 'symbol 6)))
       (dotimes (idx 6)
         (set! (-> desired-levels idx) #f)
         )
-      (set! (-> desired-levels 0) level-name)
-      (when (and (mp-city-level? level-name) (!= level-name 'ctywide))
-        (set! (-> desired-levels 1) 'ctywide)
+      ;; Copy the synced levels into desired-levels
+      (let ((dest-idx 0))
+        (dotimes (src-idx 4)
+          (let ((lvl (-> levels src-idx)))
+            (when (and lvl (!= lvl 'ctywide))
+              (set! (-> desired-levels dest-idx) lvl)
+              (+! dest-idx 1)
+              )
+            )
+          )
+        ;; Always make sure ctywide is in slot 1 or 2 if any level is a city level
+        (let ((has-city? #f))
+          (dotimes (src-idx 4)
+            (let ((lvl (-> levels src-idx)))
+              (when (and lvl (mp-city-level? lvl) (!= lvl 'ctywide))
+                (set! has-city? #t)
+                )
+              )
+            )
+          (when has-city?
+            ;; Insert ctywide at the first empty slot
+            (when (< dest-idx 6)
+              (set! (-> desired-levels dest-idx) 'ctywide)
+              (+! dest-idx 1)
+              )
+            )
+          )
         )
-      (when (and extra-level
-                 (mp-levels-in-same-zone? level-name extra-level)
-                 (!= extra-level 'ctywide)
-                 (!= extra-level level-name))
-        (set! (-> desired-levels 2) extra-level)
-        )
+      
       (want-levels *load-state* desired-levels)
-      (want-display-level *load-state* level-name 'display)
-      (when (mp-city-level? level-name)
-        (want-display-level *load-state* 'ctywide 'display)
+      
+      ;; Set display for each desired level
+      (dotimes (idx 6)
+        (let ((lvl (-> desired-levels idx)))
+          (when lvl
+            (want-display-level *load-state* lvl 'display)
+            )
+          )
         )
-      (when (and extra-level
-                 (mp-levels-in-same-zone? level-name extra-level)
-                 (!= extra-level 'ctywide)
-                 (!= extra-level level-name))
-        (want-display-level *load-state* extra-level 'display)
+      
+      ;; Set visibility level to the primary level (first element of levels)
+      (let ((primary (-> levels 0)))
+        (when primary
+          (want-vis-level *load-state* primary)
+          )
         )
-      (want-vis-level *load-state* level-name)
       )
     )
   (none)
   )
 
-(defun mp-want-level-for-remote-teleport! ((level-name symbol))
-  (mp-want-levels-for-remote-teleport! level-name #f)
-  )
-
 (defun mp-ensure-remote-level-wanted! ()
-  "Request the remote player's level before direct MP teleports/respawns."
-  (let ((remote-level (mp-remote-level-symbol)))
-    (if remote-level
-        (mp-want-levels-for-remote-teleport! remote-level (mp-remote-extra-loaded-level-symbol))
-        (mp-level-sync-log-unknown!)
-        )
+  "Request the remote player's levels before direct MP teleports/respawns."
+  (when (and *remote-info* (nonzero? *remote-info*))
+    (let ((packed (-> *remote-info* level)))
+      (if (> packed 0)
+          (let ((symbols (new 'stack-no-clear 'array 'symbol 4)))
+            (mp-remote-level-symbols-for-teleport! packed symbols)
+            (mp-want-multiple-levels-for-remote-teleport! symbols)
+            )
+          (mp-level-sync-log-unknown!)
+          )
+      )
     )
   (none)
   )
 
 (defun mp-remote-level-ready? ()
-  "Unknown remote levels are treated as ready so old behavior remains the fallback."
-  (let ((remote-level (mp-remote-level-symbol)))
-    (if remote-level
-        (let ((extra-level (mp-remote-extra-loaded-level-symbol)))
-          (if (and (mp-level-active? remote-level)
-                   (or (not extra-level) (mp-level-active? extra-level)))
-              #t
-              #f
+  "Check if all remote loaded levels are currently active on our side."
+  (when (and *remote-info* (nonzero? *remote-info*))
+    (let ((packed (-> *remote-info* level)))
+      (if (> packed 0)
+          (let ((symbols (new 'stack-no-clear 'array 'symbol 4)))
+            (mp-remote-level-symbols-for-teleport! packed symbols)
+            (dotimes (idx 4)
+              (let ((lvl (-> symbols idx)))
+                (when (and lvl (not (mp-level-active? lvl)))
+                  (return #f)
+                  )
+                )
               )
+            )
+          #t
           )
-        #t
-        )
+      )
     )
+  #t
   )
+
