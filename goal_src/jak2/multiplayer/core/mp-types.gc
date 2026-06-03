@@ -1244,6 +1244,8 @@
 (define-extern mp-pickup-type->equipped-weapon (function uint mp-equipped-weapon))
 (define-extern mp-equipped-weapon->pickup-type (function uint uint))
 (define-extern mp-target-death-state? (function symbol symbol))
+(define-extern mp-play-remote-death-vo (function none))
+(define-extern mp-play-local-death-vo (function none))
 (define-extern mp-clear-local-vehicle-occupancy! (function target none))
 (define-extern mp-respawn-local-target! (function target none))
 (define-extern mp-respawn-local-target-at-remote! (function target none))

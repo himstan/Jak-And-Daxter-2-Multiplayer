@@ -109,15 +109,94 @@
   #f
   )
 
+(defun mp-levels-in-same-zone? ((lvl1 symbol) (lvl2 symbol))
+  "Check if two levels belong to the same zone/area."
+  (cond
+    ((or (not lvl1) (not lvl2))
+     #f
+     )
+    ((= lvl1 lvl2)
+     #t
+     )
+    ;; City Zone
+    ((and (mp-city-level? lvl1) (mp-city-level? lvl2))
+     #t
+     )
+    ;; Mountain Zone
+    ((and (or (= lvl1 'mountain) (= lvl1 'mtnext) (= lvl1 'mincan))
+          (or (= lvl2 'mountain) (= lvl2 'mtnext) (= lvl2 'mincan)))
+     #t
+     )
+    ;; Sewer Zone
+    ((and (or (= lvl1 'sewer) (= lvl1 'sewerb) (= lvl1 'sewesc) (= lvl1 'sewescb))
+          (or (= lvl2 'sewer) (= lvl2 'sewerb) (= lvl2 'sewesc) (= lvl2 'sewescb)))
+     #t
+     )
+    ;; Tomb Zone
+    ((and (or (= lvl1 'tomba) (= lvl1 'tombb) (= lvl1 'tombc) (= lvl1 'tombd) (= lvl1 'tombe) (= lvl1 'tombext) (= lvl1 'tombboss))
+          (or (= lvl2 'tomba) (= lvl2 'tombb) (= lvl2 'tombc) (= lvl2 'tombd) (= lvl2 'tombe) (= lvl2 'tombext) (= lvl2 'tombboss)))
+     #t
+     )
+    ;; Palace Zone
+    ((and (or (= lvl1 'palcab) (= lvl1 'palroof) (= lvl1 'palshaft) (= lvl1 'throne) (= lvl1 'palent) (= lvl1 'palboss) (= lvl1 'palout))
+          (or (= lvl2 'palcab) (= lvl2 'palroof) (= lvl2 'palshaft) (= lvl2 'throne) (= lvl2 'palent) (= lvl2 'palboss) (= lvl2 'palout)))
+     #t
+     )
+    ;; Underport Zone
+    ((and (or (= lvl1 'under) (= lvl1 'underb))
+          (or (= lvl2 'under) (= lvl2 'underb)))
+     #t
+     )
+    ;; Drill Zone
+    ((and (or (= lvl1 'drill) (= lvl1 'drillmid) (= lvl1 'drillmtn) (= lvl1 'drillb))
+          (or (= lvl2 'drill) (= lvl2 'drillmid) (= lvl2 'drillmtn) (= lvl2 'drillb)))
+     #t
+     )
+    ;; Nest Zone
+    ((and (or (= lvl1 'nest) (= lvl1 'nestb))
+          (or (= lvl2 'nest) (= lvl2 'nestb)))
+     #t
+     )
+    ;; Dig Zone
+    ((and (or (= lvl1 'dig1) (= lvl1 'dig3a) (= lvl1 'dig3b))
+          (or (= lvl2 'dig1) (= lvl2 'dig3a) (= lvl2 'dig3b)))
+     #t
+     )
+    ;; Castle Zone
+    ((and (or (= lvl1 'castle) (= lvl1 'casboss) (= lvl1 'casext))
+          (or (= lvl2 'castle) (= lvl2 'casboss) (= lvl2 'casext)))
+     #t
+     )
+    ;; Forest Zone
+    ((and (or (= lvl1 'forest) (= lvl1 'forestb))
+          (or (= lvl2 'forest) (= lvl2 'forestb)))
+     #t
+     )
+    ;; Atoll Zone
+    ((and (or (= lvl1 'atoll) (= lvl1 'atollext))
+          (or (= lvl2 'atoll) (= lvl2 'atollext)))
+     #t
+     )
+    ;; Stadium Zone
+    ((and (or (= lvl1 'stadium) (= lvl1 'stadiumd) (= lvl1 'stadblmp) (= lvl1 'stadiumb) (= lvl1 'stadiumc))
+          (or (= lvl2 'stadium) (= lvl2 'stadiumd) (= lvl2 'stadblmp) (= lvl2 'stadiumb) (= lvl2 'stadiumc)))
+     #t
+     )
+    (else
+      #f
+      )
+    )
+  )
+
 (defun mp-current-extra-loaded-city-level-symbol ((primary-level symbol))
-  "Find another city partition that should remain loaded near the remote player."
+  "Find another partition/level in the same zone that should remain loaded near the remote player."
   (when (and primary-level
              *load-state*
              (nonzero? *load-state*))
     (dotimes (idx 6)
       (let ((level-name (-> *load-state* want idx name)))
         (when (and level-name
-                   (mp-city-level? level-name)
+                   (mp-levels-in-same-zone? primary-level level-name)
                    (!= level-name 'ctywide)
                    (!= level-name primary-level))
           (return level-name)
@@ -137,7 +216,7 @@
                        (= (-> lev status) 'loaded)))
           (let ((level-name (-> lev name)))
             (when (and level-name
-                       (mp-city-level? level-name)
+                       (mp-levels-in-same-zone? primary-level level-name)
                        (!= level-name 'ctywide)
                        (!= level-name primary-level))
               (return level-name)
@@ -226,7 +305,7 @@
         (set! (-> desired-levels 1) 'ctywide)
         )
       (when (and extra-level
-                 (mp-city-level? extra-level)
+                 (mp-levels-in-same-zone? level-name extra-level)
                  (!= extra-level 'ctywide)
                  (!= extra-level level-name))
         (set! (-> desired-levels 2) extra-level)
@@ -237,7 +316,7 @@
         (want-display-level *load-state* 'ctywide 'display)
         )
       (when (and extra-level
-                 (mp-city-level? extra-level)
+                 (mp-levels-in-same-zone? level-name extra-level)
                  (!= extra-level 'ctywide)
                  (!= extra-level level-name))
         (want-display-level *load-state* extra-level 'display)

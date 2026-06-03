@@ -760,6 +760,52 @@
   (none)
   )
 
+(define *mp-jak-death-vo* (new 'static 'boxed-array :type string "jak065" "jak034" "jak076" "jak077" "jak042" "jak078"))
+(define *mp-daxter-death-vo* (new 'static 'boxed-array :type string "ds199" "ds285" "ds490" "ds489" "dsek008" "dsek007"))
+
+(defun mp-play-random-vo ((speaker process) (channel gui-channel) (vo-keys (array string)))
+  "Play a random voice line from an array of vo-keys using the specified speaker and channel."
+  (when (and speaker (nonzero? speaker) vo-keys (nonzero? vo-keys) (> (-> vo-keys length) 0))
+    (let* ((idx (rand-vu-int-range 0 (+ (-> vo-keys length) -1)))
+           (vo-key (-> vo-keys idx))
+           )
+      (when (and *gui-control* (nonzero? *gui-control*))
+        (add-process *gui-control* speaker channel (gui-action play) vo-key -99.0 0)
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-play-remote-death-vo ()
+  "Play a funny voice line when the remote player dies."
+  (when (and *target*
+             (nonzero? *target*)
+             (-> *target* state)
+             (nonzero? (-> *target* state))
+             (not (mp-target-death-state? (-> *target* state name))))
+    (if (mp-is-jak?)
+        (mp-play-random-vo *target* (gui-channel jak) *mp-jak-death-vo*)
+        (mp-play-random-vo *target* (gui-channel daxter) *mp-daxter-death-vo*)
+        )
+    )
+  (none)
+  )
+
+(defun mp-play-local-death-vo ()
+  "Play a funny voice line from the remote player when the local player dies."
+  (when (and *mp-puppet*
+             (nonzero? *mp-puppet*)
+             (not *remote-player-is-dead*)
+             (not *remote-player-is-dying*))
+    (if (mp-is-jak?)
+        (mp-play-random-vo *mp-puppet* (gui-channel daxter) *mp-daxter-death-vo*)
+        (mp-play-random-vo *mp-puppet* (gui-channel jak) *mp-jak-death-vo*)
+        )
+    )
+  (none)
+  )
+
 (defun mp-puppet-apply-ghost-correction! ((proc target))
   "Smoothly nudge the puppet target's root towards the ghost position and inject inputs."
   (let ((ghost *mp-puppet-ghost*))
@@ -781,6 +827,7 @@
                (format 0 "[MP-Puppet] Authoritative Death! Bumping ~A -> ~A~%" cur-state ghost-state)
                (set! *remote-player-is-dying* #t)
                (send-event proc 'mp-die)
+               (mp-play-remote-death-vo)
                (set! *mp-puppet-state-mismatch-count* 0)
                )
               ((and (mp-target-death-state? ghost-state)
