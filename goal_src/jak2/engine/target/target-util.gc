@@ -1093,6 +1093,20 @@
   )
 
 (defbehavior can-play-stance-amibent? target ()
+  (when (= (-> self tobot?) 'mp-puppet)
+    (return #f)
+    )
+  (when *multi-sync-enabled?*
+    (if (not (and *mp-puppet*
+                  (nonzero? *mp-puppet*)
+                  (-> *mp-puppet* state)
+                  (nonzero? (-> *mp-puppet* state))
+                  (= (-> *mp-puppet* state name) 'target-ride-along)
+                  )
+             )
+        (return #f)
+        )
+    )
   (and (or (and (= *kernel-boot-message* 'kiosk)
                 (>= (+ -300000 (-> *display* real-clock frame-counter)) (seconds 60))
                 (>= (- (-> *display* base-clock frame-counter) (-> self control cpad change-time)) (seconds 60))
