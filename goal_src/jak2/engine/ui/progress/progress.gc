@@ -477,12 +477,12 @@
       (cond
         (*progress-process*
           (deactivate (-> *progress-process* 0))
-          (set! (-> *blit-displays-work* menu-mode) (or (= arg1 'reconnect) (= arg1 'host-left) (= arg1 'title)))
+          (set! (-> *blit-displays-work* menu-mode) (or (= arg1 'reconnect) (= arg1 'host-left) (= arg1 'demo-end) (= arg1 'title)))
           (set! *progress-process* (process-spawn progress arg1 :to arg0 :stack (&-> *progress-stack* DPROCESS_STACK_SIZE)))
           (set-master-mode 'progress)
           )
         (else
-          (set! (-> *blit-displays-work* menu-mode) (or (= arg1 'reconnect) (= arg1 'host-left) (= arg1 'title)))
+          (set! (-> *blit-displays-work* menu-mode) (or (= arg1 'reconnect) (= arg1 'host-left) (= arg1 'demo-end) (= arg1 'title)))
           (set! *progress-process* (process-spawn progress arg1 :to arg0 :stack (&-> *progress-stack* DPROCESS_STACK_SIZE)))
           (set-master-mode 'progress)
           )
@@ -501,7 +501,7 @@
   (enable-level-text-file-loading)
   (persist-with-delay *setting-control* 'allow-progress (seconds 0.1) 'allow-progress #f 0.0 0)
   (persist-with-delay *setting-control* 'allow-pause (seconds 0.1) 'allow-pause #f 0.0 0)
-  (when *target*
+  (when (and *target* (nonzero? *target*) (-> *target* control) (nonzero? (-> *target* control)))
     (set! (-> *target* control cpad) (-> *cpad-list* cpads 0))
     )
   (call-parent-method this)

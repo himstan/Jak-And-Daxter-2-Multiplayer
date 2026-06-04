@@ -4224,6 +4224,10 @@
         '(menu
            "Multiplayer"
            (menu
+            "General"
+            (flag "Open Demo End Progress" *mp-open-demo-end-progress* dm-boolean-toggle-pick-func)
+           )
+           (menu
              "Animation"
              (flag "Animation Debug Draw" *mp-debug-draw* dm-boolean-toggle-pick-func)
              (flag "Smooth Sync?" *mp-anim-smooth-sync?* dm-boolean-toggle-pick-func)

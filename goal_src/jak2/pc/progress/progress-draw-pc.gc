@@ -2471,9 +2471,8 @@
         (*! (-> arg1 width) (-> *pc-settings* aspect-ratio-reciprocal))
         )
       )
-    ;; TITLE: PHASE 1 COMPLETE!
     (print-game-text
-      "Act I Complete!"
+      (lookup-text! *common-text* (text-id progress-multi-demo-end-title) #f)
       arg1
       #f
       44
@@ -2485,7 +2484,7 @@
     (set-scale! arg1 0.45)
     ;; DESCRIPTION
     (print-game-text
-      "Thanks for playing! Story progression is locked, but you are free to roam! Watch for updates on Discord, and see you in Act II!"
+      (lookup-text! *common-text* (text-id progress-multi-demo-end-msg) #f)
       arg1
       #f
       44
@@ -2498,7 +2497,7 @@
     (draw-highlight (the int (+ 12.0 (-> arg1 origin y))) 24 (-> arg1 alpha))
     ;; CONFIRM PROMPT
     (print-game-text
-      "PRESS <X> TO CONTINUE"
+      (lookup-text! *common-text* (text-id progress-multi-demo-end-close) #f)
       arg1
       #f
       44

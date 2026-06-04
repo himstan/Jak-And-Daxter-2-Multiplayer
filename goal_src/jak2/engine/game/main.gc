@@ -105,6 +105,7 @@
                   (and (= *master-mode* 'progress) *progress-process*
                        (or (= (-> *progress-process* 0 current) 'reconnect)
                            (= (-> *progress-process* 0 current) 'host-left)
+                           (= (-> *progress-process* 0 current) 'demo-end)
                            (= (-> *progress-process* 0 current) 'title)
                            )
                        )
@@ -142,7 +143,7 @@
       (('pause)
        ;; entering pause, set pause bit in masks
        (logclear! (-> *setting-control* user-default process-mask) (process-mask freeze pause menu))
-       (when *target*
+       (when (and *target* (nonzero? *target*) (-> *target* control) (nonzero? (-> *target* control)))
          (set! (-> *target* control cpad) (-> *cpad-list* cpads 2))
          )
        (set! *pause-lock* #f)
@@ -150,14 +151,14 @@
        )
       (('freeze)
        (logclear! (-> *setting-control* user-default process-mask) (process-mask freeze pause menu))
-       (when *target*
+       (when (and *target* (nonzero? *target*) (-> *target* control) (nonzero? (-> *target* control)))
          (set! (-> *target* control cpad) (-> *cpad-list* cpads 2))
          )
        (set! (-> *game-info* pause-start-time) (-> *display* real-clock frame-counter))
        )
       (('menu)
        (logclear! (-> *setting-control* user-default process-mask) (process-mask freeze pause progress menu))
-       (when *target*
+       (when (and *target* (nonzero? *target*) (-> *target* control) (nonzero? (-> *target* control)))
          (set! (-> *target* control cpad) (-> *cpad-list* cpads 2))
          )
        (set! *pause-lock* #f)
@@ -181,23 +182,38 @@
          (if (not *progress-process*) ;; process didn't start, back to game.
              (set-master-mode 'game)
              (begin
-               (when (or (= (-> *progress-process* 0 current) 'reconnect)
+              (when (or (= (-> *progress-process* 0 current) 'reconnect)
                          (= (-> *progress-process* 0 current) 'host-left)
+                         (= (-> *progress-process* 0 current) 'demo-end)
                          (-> *progress-process* 0 main-menu)
                          )
                  (sound-group-pause (sound-group sfx music dialog sog3 ambient dialog2 sog6 sog7))
                  )
-               (when *target*
+               (when (and *target* (nonzero? *target*) (-> *target* control) (nonzero? (-> *target* control)))
                  (set! (-> *target* control cpad) (-> *cpad-list* cpads 2))
                  )
                )
              )
          )
+       (when (and *progress-process*
+                  (or (= (-> *progress-process* 0 current) 'reconnect)
+                      (= (-> *progress-process* 0 current) 'host-left)
+                      (= (-> *progress-process* 0 current) 'demo-end)
+                      (= (-> *progress-process* 0 current) 'title)
+                      (-> *progress-process* 0 main-menu)
+                      )
+                  *target*
+                  (nonzero? *target*)
+                  (-> *target* control)
+                  (nonzero? (-> *target* control))
+                  )
+         (set! (-> *target* control cpad) (-> *cpad-list* cpads 2))
+         )
        (set! (-> *game-info* pause-start-time) (-> *display* real-clock frame-counter))
        )
       (('game)
        (logclear! (-> *setting-control* user-default process-mask) (process-mask freeze pause menu))
-       (when *target*
+       (when (and *target* (nonzero? *target*) (-> *target* control) (nonzero? (-> *target* control)))
          (set! (-> *target* control cpad) (-> *cpad-list* cpads 0))
          )
        (sound-group-continue (sound-group sfx music dialog sog3 ambient dialog2 sog6 sog7))

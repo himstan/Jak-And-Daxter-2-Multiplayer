@@ -11,8 +11,47 @@
 (define-extern *dproc* process)
 (define-extern activate-progress (function process symbol none))
 
+(define *mp-open-demo-end-progress* #f)
 (define *mp-demo-end-menu-active?* #f)
 (define *mp-palace-exited-waiting?* #f)
+
+(defun open-demo-end-progress ()
+  (when (and *dproc* (nonzero? *dproc*))
+    (activate-progress *dproc* 'demo-end)
+    (set! *mp-demo-end-menu-active?* #t)
+    (set! *mp-palace-exited-waiting?* #f)
+  )
+)
+
+(defun demo-guard-tick ()
+  (when *mp-open-demo-end-progress*
+     (open-demo-end-progress)
+     (set! *mp-open-demo-end-progress* #f)
+  )
+
+  (when (and 
+             (not *debug-segment*)
+             *target*
+             (nonzero? *target*)
+             (task-node-closed? (game-task-node palace-boss-resolution)))
+    (let ((current-level (level-get-target-inside *level*)))
+      (when (and current-level (nonzero? current-level))
+        (let ((level-name (-> current-level name)))
+          (cond
+            ((member level-name '(palboss palroof palcab palshaft throne palent palout lbrnermk lashthrn lthrnout))
+              (set! *mp-palace-exited-waiting?* #t)
+            )
+            (else
+              (when (and *mp-palace-exited-waiting?* (not *mp-demo-end-menu-active?*))
+                (open-demo-end-progress)
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; What is this file for.
@@ -33,37 +72,7 @@ an orb |#
   ;; --- Multiplayer Tick ---
   ;; Runs Polling, Interpolation, and high-frequency state logic
   (multiplayer-client-tick)
-
-  ;; Check for Phase 1 Demo End gating
-  (when (and 
-             (not *debug-segment*)
-             *target*
-             (nonzero? *target*)
-             (task-node-closed? (game-task-node palace-boss-resolution)))
-    (let ((current-level (level-get-target-inside *level*)))
-      (when (and current-level (nonzero? current-level))
-        (let ((level-name (-> current-level name)))
-          (cond
-            ((member level-name '(palboss palroof palcab palshaft throne palent palout lbrnermk lashthrn lthrnout))
-             ;; We are inside the palace, set the waiting flag to true so we trigger when we exit
-             (set! *mp-palace-exited-waiting?* #t)
-             )
-            (else
-             ;; We are outside the palace. If we were waiting, trigger the demo end screen!
-             (when (and *mp-palace-exited-waiting?* (not *mp-demo-end-menu-active?*))
-               (when (and *dproc* (nonzero? *dproc*))
-                 (activate-progress *dproc* 'demo-end)
-                 (set! *mp-demo-end-menu-active?* #t)
-                 (set! *mp-palace-exited-waiting?* #f)
-                 )
-               )
-             )
-            )
-          )
-        )
-      )
-    )
-
+  (demo-guard-tick)
   (none)
   )
 
