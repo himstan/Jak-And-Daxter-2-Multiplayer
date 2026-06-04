@@ -23,9 +23,9 @@
 
 (when (zero? (-> *common-text-heap* base))
   (let ((gp-0 *common-text-heap*))
-    (set! (-> gp-0 base) (kmalloc global #x10000 (kmalloc-flags) "heap"))
+    (set! (-> gp-0 base) (kmalloc global *game-text-heap-size* (kmalloc-flags) "heap"))
     (set! (-> gp-0 current) (-> gp-0 base))
-    (set! (-> gp-0 top-base) (&+ (-> gp-0 base) #x10000))
+    (set! (-> gp-0 top-base) (&+ (-> gp-0 base) *game-text-heap-size*))
     (set! (-> gp-0 top) (-> gp-0 top-base))
     )
   )

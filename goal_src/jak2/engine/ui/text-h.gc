@@ -38,6 +38,8 @@
 
 (define *text-group-names* (new 'static 'boxed-array :type string "common"))
 
+(define *game-text-heap-size* #x20000)
+
 (define *common-text-heap* (new 'global 'kheap))
 
 (define *common-text* (the-as game-text-info #f))
@@ -54,5 +56,5 @@
 ;; One of the reasons we didn't do this is because it makes it obvious which strings are remaining,
 ;; but there are better ways to keep track or check if strings are missing.
 (#when PC_PORT
-  (kheap-alloc (define *fallback-text-heap* (new 'global 'kheap)) (* 48 1024)) ;; 48K heap, should be plenty
+  (kheap-alloc (define *fallback-text-heap* (new 'global 'kheap)) *game-text-heap-size*)
   (define *fallback-text* (the-as game-text-info #f)))

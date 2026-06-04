@@ -214,11 +214,6 @@ This gives us more freedom to write code how we want.
         :next-state 'join-game
         )
       (new 'static 'menu-sub-menu-option
-        :name (text-id progress-username)
-        :scale #t
-        :next-state 'username
-        )
-      (new 'static 'menu-sub-menu-option
         :name (text-id progress-title-options)
         :scale #t
         :next-state 'title-options

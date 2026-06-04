@@ -30,6 +30,7 @@
 (define-extern *reconnect-options* menu-option-list)
 (define-extern *host-left-options* menu-option-list)
 (define-extern *demo-end-options* menu-option-list)
+(define-extern *demo-disclaimer-options* menu-option-list)
 
 (deftype menu-demo-end-option (menu-icon-info-option)
   ()
@@ -60,6 +61,34 @@
   0
   )
 
+(deftype menu-demo-disclaimer-option (menu-icon-info-option)
+  ()
+  )
+
+(define *demo-disclaimer-options*
+  (new 'static 'menu-option-list
+    :y-center #xc6
+    :y-space 30
+    :scale 0.82
+    :options (new 'static 'boxed-array :type menu-option
+               (new 'static 'menu-demo-disclaimer-option))
+    )
+  )
+
+(defmethod respond-progress ((this menu-demo-disclaimer-option) (arg0 progress) (arg1 symbol))
+  "Handle progress menu navigation for the startup disclaimer: X to continue."
+  (when (and *cpad-list* (nonzero? *cpad-list*))
+    (when (cpad-pressed? 0 confirm)
+      (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons confirm))
+      (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons confirm))
+      (sound-play "generic-beep")
+      (when (and arg0 (nonzero? arg0))
+        (set-next-state arg0 'title 0)
+        )
+      )
+    )
+  0
+  )
 
 (defmacro when-not-drawn-decoration (&rest body)
   `(when (> (-> *display* real-clock integral-frame-counter) (-> *progress-state-pc* decoration-draw-time))
@@ -268,6 +297,9 @@
      )
     (('demo-end)
      (set! (-> obj current-options) *demo-end-options*)
+     )
+    (('demo-disclaimer)
+     (set! (-> obj current-options) *demo-disclaimer-options*)
      )
     (('format-card)
      (set! (-> obj current-options) *format-card-options*)
