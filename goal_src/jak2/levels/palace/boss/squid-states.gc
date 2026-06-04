@@ -367,6 +367,9 @@
       )
     )
   :code sleep-code
+  :post (behavior ()
+    (squid-post self)
+    )
   )
 
 (defstate wait-beside-building (squid)
@@ -382,6 +385,9 @@
         )
     )
   :code sleep-code
+  :post (behavior ()
+    (squid-post self)
+    )
   )
 
 (defstate flee (squid)
@@ -499,6 +505,7 @@
     (set-time! (-> self state-time))
     (set! (-> self traj-timer) (+ (current-time) (the int (* 300.0 (rand-vu-float-range 0.25 0.5)))))
     (set! (-> self traj initial-position quad) (-> self trans quad))
+    (set! (-> self traj-src quad) (-> self trans quad))
     (let ((v1-7 (-> self stage)))
       (cond
         ((zero? v1-7)
@@ -1375,6 +1382,16 @@
     )
   )
 
+(defbehavior mp-palace-squid-start-shooting-local! squid ()
+  (ja-channel-push! 1 (seconds 0.2))
+  (ja :group! squid-fire-guns-start-ja :num! min)
+  (when (and self (nonzero? self))
+    (set-time! (-> self state-time))
+    (set! (-> self next-gun) 1)
+    )
+  (none)
+  )
+
 (defstate fire (squid)
   :virtual #t
   :event squid-handler
@@ -1490,11 +1507,19 @@
             0
             )
            )
-         (if (and (or (time-elapsed? (-> self state-time) (seconds 3))
+         (when (and (or (time-elapsed? (-> self state-time) (seconds 3))
                       (or (= (-> self shield-hit-points) 0.0) (zero? (-> self hit-points)) (-> self stop-shooting))
                       )
                   (ja-done? 0)
                   )
+             ;; log all conditions that are in the when block
+             (format 0 "Squid: done firing guns 1, going to idle conditions: time-elapsed=~S, shield-hit-points=~S, hit-points=~S, stop-shooting=~S~%"
+                     (time-elapsed? (-> self state-time) (seconds 3))
+                     (= (-> self shield-hit-points) 0.0)
+                     (zero? (-> self hit-points))
+                     (-> self stop-shooting)
+                     )
+             (format 0 "Time remaining: ~A~%" (- (current-time) (-> self state-time)))
              (ja :group! squid-fire-guns-end-ja :num! min)
              )
          )
@@ -1507,7 +1532,8 @@
            (squid-method-53 self 49)
            (set! (-> self next-gun) 1)
            )
-         (if (ja-done? 0)
+         (when (ja-done? 0)
+             (format 0 "Squid: done firing guns 2, going to idle~%")
              (ja :group! squid-fire-guns-release-ja :num! min)
              )
          )
@@ -1531,10 +1557,7 @@
                  )
                )
               (else
-                (ja-channel-push! 1 (seconds 0.2))
-                (ja :group! squid-fire-guns-start-ja :num! min)
-                (set-time! (-> self state-time))
-                (set! (-> self next-gun) 1)
+                  (mp-palace-squid-start-shooting-local!)
                 )
               )
             )
@@ -1685,4 +1708,7 @@
       )
     )
   :code sleep-code
+  :post (behavior ()
+    (squid-post self)
+    )
   )

@@ -70,4 +70,172 @@
     )
   (none))
 
+(defun mp-find-squid-process ()
+  "Search the active process pool for any process of type squid."
+  (let ((found-proc (the-as process #f)))
+    (iterate-process-tree
+      *active-pool*
+      (lambda ((p process-tree))
+        (let ((proc (the-as process p)))
+          (when (and proc (nonzero? proc) (= (-> proc type symbol) 'squid))
+            (set! found-proc proc)
+            )
+          )
+        #t
+        )
+      *kernel-context*
+      )
+    found-proc
+    )
+  )
+
+(defun mp-draw-boss-debug ()
+  "Overlay real-time boss synchronization state."
+  (when *mp-debug-boss*
+    (format *stdcon* "~0k--- MP BOSS DEBUG ---~%")
+    (let ((role "UNKNOWN"))
+      (when (and *local-info* (nonzero? *local-info*))
+        (cond
+          ((= (-> *local-info* role) 0) (set! role "HOST (JAK)"))
+          ((= (-> *local-info* role) 1) (set! role "CLIENT (DAXTER)"))
+          )
+        )
+      (format *stdcon* "ROLE: ~S~%" role)
+      )
+    (let ((squid-ready? (and *multi-sync-enabled?*
+                             (= (pc-multi-get-status) 6)
+                             *mp-palace-squid-buffer*
+                             (nonzero? (the-as uint *mp-palace-squid-buffer*))
+                             )))
+      (format *stdcon* "READY?: ~A~%" (if squid-ready? "YES" "NO"))
+      )
+    
+    (let ((proc-handle-valid? (and *mp-palace-squid-proc* (nonzero? *mp-palace-squid-proc*))))
+      (format *stdcon* "PROC HANDLE: ~A (addr: ~D)~%" (if proc-handle-valid? "VALID" "NULL") *mp-palace-squid-proc*)
+      )
+      
+    (let ((tree-proc (mp-find-squid-process)))
+      (if (and tree-proc (nonzero? tree-proc))
+          (begin
+            (format *stdcon* "TREE SQUID: FOUND (addr: ~D)~%" tree-proc)
+            (format *stdcon* "STATE: ~S~%" (if (-> tree-proc state) (-> tree-proc state name) "NONE"))
+            (format *stdcon* "NEXT-STATE: ~S~%" (if (-> tree-proc next-state) (-> tree-proc next-state name) "NONE"))
+            )
+          (format *stdcon* "TREE SQUID: NOT FOUND~%")
+          )
+      )
+      
+    (when (and *mp-palace-squid-buffer* (nonzero? (the-as uint *mp-palace-squid-buffer*)))
+      (let ((local-state (-> *mp-palace-squid-buffer* local-state))
+            (remote-state (-> *mp-palace-squid-buffer* remote-state)))
+        (when (and local-state (nonzero? local-state))
+          (format *stdcon* "LOCAL BUFFER: Active: ~D, Stage: ~D, HP: ~D, ShieldHP: ~f, Seq: ~D~%"
+                  (-> local-state active)
+                  (-> local-state stage)
+                  (-> local-state hit-points)
+                  (-> local-state shield-hit-points)
+                  (-> local-state action-seq)
+                  )
+          )
+        (when (and remote-state (nonzero? remote-state))
+          (format *stdcon* "REMOTE BUFFER: Active: ~D, Stage: ~D, HP: ~D, ShieldHP: ~f, Seq: ~D~%"
+                  (-> remote-state active)
+                  (-> remote-state stage)
+                  (-> remote-state hit-points)
+                  (-> remote-state shield-hit-points)
+                  (-> remote-state action-seq)
+                  )
+          )
+        (format *stdcon* "LAST SYNC TIME: ~D~%" (-> *mp-palace-squid-buffer* last-sync-time))
+        )
+      )
+    (format *stdcon* "-------------------------~%~%")
+    )
+  (none))
+
+(defun mp-draw-boss-debug-overlay ()
+  "Draw real-time sync stats above the squid boss's head in 3D world-space.
+   Mirrors the pattern used by mp-enemy/ped/vehicle debug overlays.
+   Toggled independently by *mp-debug-boss-overlay?*."
+  (when *mp-debug-boss*
+    (let ((proc *mp-palace-squid-proc*))
+      (when (and proc (nonzero? proc)
+                 (-> proc root)
+                 (nonzero? (-> proc root)))
+        ;; Position the label a good distance above the boss body
+        (let ((draw-pos (new 'stack-no-clear 'vector)))
+          (vector-copy! draw-pos (-> proc root trans))
+          (+! (-> draw-pos y) (meters 8.0))
+
+          (let ((is-jak? (mp-is-jak?)))
+            (let ((color (if is-jak? (font-color green) (font-color yellow)))
+                  (role-str (if is-jak? "JAK(AUTH)" "DAX(PUPPET)")))
+
+              ;; ---- AID-less slot: just read live buffer fields ----
+              (if (and *mp-palace-squid-buffer*
+                       (nonzero? (the-as uint *mp-palace-squid-buffer*)))
+                  (let ((local-state  (-> *mp-palace-squid-buffer* local-state))
+                        (remote-state (-> *mp-palace-squid-buffer* remote-state)))
+                    (when (and local-state (nonzero? local-state)
+                               remote-state (nonzero? remote-state))
+                      ;; Decode the state-id to a human-readable symbol
+                      (let ((local-state-name
+                              (if (-> proc state) (-> proc state name) 'none)))
+                        ;; -- Local state label (green tint) --
+                        (add-debug-text-3d
+                          #t
+                          (bucket-id debug-no-zbuf1)
+                          (the-as string
+                            (format #f
+                              "BOSS (~S)~%LC state:~S HP:~D~%   stg:~D trg:~D sq:~D"
+                              role-str
+                              local-state-name
+                              (-> local-state hit-points)
+                              (-> local-state stage)
+                              (-> local-state target-role)
+                              (-> local-state action-seq)
+                              ))
+                          draw-pos
+                          color
+                          (the-as vector2h #f))
+                        ;; -- Remote state label (slightly below) --
+                        (let ((remote-pos (new 'stack-no-clear 'vector)))
+                          (vector-copy! remote-pos draw-pos)
+                          (+! (-> remote-pos y) (meters -2.5))
+                          (add-debug-text-3d
+                            #t
+                            (bucket-id debug-no-zbuf1)
+                            (the-as string
+                              (format #f
+                                "RM id:~D HP:~D~%   stg:~D trg:~D sq:~D"
+                                (-> remote-state state-id)
+                                (-> remote-state hit-points)
+                                (-> remote-state stage)
+                                (-> remote-state target-role)
+                                (-> remote-state action-seq)
+                                ))
+                            remote-pos
+                            (font-color cyan)
+                            (the-as vector2h #f))
+                          )
+                        )
+                      )
+                    )
+                  ;; No buffer yet
+                  (add-debug-text-3d
+                    #t
+                    (bucket-id debug-no-zbuf1)
+                    (the-as string (format #f "BOSS (~S)~%BUFFER: NOT READY" role-str))
+                    draw-pos
+                    (font-color orange)
+                    (the-as vector2h #f))
+                  )
+              )
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
 

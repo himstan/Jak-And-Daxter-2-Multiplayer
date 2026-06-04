@@ -1104,7 +1104,7 @@
   (set! (-> this heights) #f)
   (set! (-> this verts) #f)
   (let ((s5-0 *mood-control*))
-    (set! (-> this constant w) (if (and (-> s5-0 overide-weather-flag) (not (movie?)))
+    (set! (-> this constant w) (if (and (-> s5-0 overide-weather-flag) (or (not (movie?)) *multi-sync-enabled?*))
                                    (-> s5-0 overide cloud)
                                    (-> s5-0 current-interp cloud)
                                    )

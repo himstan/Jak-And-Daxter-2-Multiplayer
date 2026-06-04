@@ -25,6 +25,7 @@
     ;; Client (Role 1) only extracts once fully synced.
     (let ((role (-> *local-info* role)))
       (when (and (= status 6) (or (zero? role) *multi-sync-enabled?*))
+        (mp-extract-environment-state)
         (when (and *target* 
                    (-> *target* control) 
                    (not (focus-test? *target* teleporting)))
@@ -34,7 +35,6 @@
                     status role (-> *local-info* sync-flag))
             (set! *multi-last-sync-frame* (current-time)))
           (mp-extract-local-data)
-          (mp-extract-environment-state)
           (mp-push-local-events)
           )
         )
@@ -239,6 +239,8 @@
     (mp-draw-traffic-debug)
     (mp-draw-puppet-debug)
     (mp-draw-network-debug)
+    (mp-draw-boss-debug)
+    (mp-draw-boss-debug-overlay)
 
     (none)))
 

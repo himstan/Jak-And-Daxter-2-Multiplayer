@@ -1069,6 +1069,7 @@
 (define-perm *mp-enemy-buffer* mp-enemy-sync-buffer (new 'static 'mp-enemy-sync-buffer))
 (define-perm *mp-traffic-buffer* mp-traffic-sync-buffer (new 'static 'mp-traffic-sync-buffer))
 (define-perm *mp-palace-squid-buffer* mp-palace-squid-sync-buffer (new 'static 'mp-palace-squid-sync-buffer))
+(define-extern *mp-palace-squid-proc* squid)
 (define-perm *mp-enemy-auth* (inline-array mp-enemy-auth-record) (new 'static 'inline-array mp-enemy-auth-record 128))
 
 ;; Queue for outbound events to prevent overwriting when multiple things happen in 1 frame
@@ -1125,6 +1126,7 @@
 (define-perm *mp-guard-target-debug-next-time* time-frame 0)
 (define-perm *mp-debug-task-sync* symbol #f)
 (define-perm *mp-debug-battle* symbol #f)
+(define-perm *mp-debug-boss* symbol #f)
 (define-perm *mp-debug-simulate-loss?* symbol #f)
 (define-perm *mp-debug-simulate-loss-time* time-frame 0)
 (define-perm *mp-hijacks-applied?* symbol #f)
@@ -1133,6 +1135,8 @@
 (define-extern mp-draw-puppet-debug (function none))
 (define-extern mp-draw-network-debug (function none))
 (define-extern mp-draw-battle-debug (function none))
+(define-extern mp-draw-boss-debug (function none))
+(define-extern mp-draw-boss-debug-overlay (function none))
 (define *mp-daxter-damage-mult* 2.0)
 
 ;; --- Enemy Hijack Variables ---
@@ -1291,6 +1295,7 @@
 (define-extern mp-palace-squid-note-grenade-spawn! (function squid int int float squid-grenade-holder none))
 (define-extern mp-palace-squid-note-whirlwind-spawn! (function squid none))
 (define-extern mp-palace-squid-note-resolution! (function squid none))
+(define-extern mp-palace-squid-start-shooting-local! (function none :behavior squid))
 (define-extern mp-receive-palace-squid-event (function mp-palace-squid-event none))
 (define-extern mp-receive-waypoint-event (function mp-waypoint-event symbol none))
 (define-extern mp-waypoint-event-same-target? (function mp-waypoint-event mp-waypoint-event symbol))

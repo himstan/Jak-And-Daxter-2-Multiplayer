@@ -112,12 +112,16 @@
   (when (and (mp-is-daxter?)
              *multi-sync-enabled?*
              (zero? (-> *local-info* sync-flag))
-             *target*
-             (-> *target* control)
-             (not (focus-test? *target* teleporting))
              (mp-env-valid?))
-    (mp-smooth-remote-time-of-day!)
-    (mp-smooth-remote-weather!)
+    (when (or (not *target*)
+              (and *target*
+                   (-> *target* control)
+                   (not (focus-test? *target* teleporting))
+                   )
+              )
+      (mp-smooth-remote-time-of-day!)
+      (mp-smooth-remote-weather!)
+      )
     )
   (none)
   )

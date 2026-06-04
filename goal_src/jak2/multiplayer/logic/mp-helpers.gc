@@ -6,6 +6,8 @@
 (define-extern num-func-seek! (function joint-control-channel float float float float :behavior process))
 (define-extern num-func-none (function joint-control-channel float float float float :behavior process))
 
+(declare-type squid-grenade projectile)
+
 (defun mp-current-active-level-hash ()
   "Return a stable hash for the currently active local level."
   (let ((hash (the-as uint 0)))
@@ -69,6 +71,9 @@
            (type? proc bot)
            (type? proc process-focusable)
            (type? proc com-airlock)
+           (type? proc squid)
+           (type? proc squid-grenade)
+           (type? proc guard-shot)
            )
        )
   )
@@ -311,6 +316,7 @@
              (-> arg0 entity)
              (not (mp-should-block-break-sync? arg0))
              )
+    (format 0 "[MP-WorldEvent] Sending BREAK for process ~A~%" arg0)
     (mp-send-world-event MP_EVENT_BREAK (-> arg0 entity aid)))
 
   (if *old-process-entity-status*

@@ -1331,6 +1331,9 @@
 (defbehavior squid-handler squid ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   (local-vars (sv-16 res-tag))
   (case arg2
+    (('mp-fire-start)
+      (mp-palace-squid-start-shooting-local!)
+    )
     (('plane)
      (set! (-> self max-plane) (max (-> self max-plane) (the-as int (-> arg3 param 0))))
      (let ((s5-1 0))
@@ -2662,7 +2665,11 @@
     (when (and (mp-is-jak?) (not *mp-processing-remote-event*))
       (mp-palace-squid-note-whirlwind-spawn! this)
       )
-    (process-spawn squid-whirlwind gp-0 (-> this root trans) (-> this nav state mesh) s4-0 :to this)
+    (let ((trans (-> this root trans)) (mesh (-> this nav state mesh)))
+      (when (and trans mesh)
+        (process-spawn squid-whirlwind gp-0 trans mesh s4-0 :to this)
+      )
+    )
     )
   )
 

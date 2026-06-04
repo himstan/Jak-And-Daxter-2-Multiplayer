@@ -12,6 +12,8 @@
 (define *mp-palace-squid-pending-resolution-seq* (the uint 0))
 (define *mp-palace-squid-applying-action* #f)
 (define *mp-palace-squid-target-role* -1)
+;; Tracks the last known squid state name for local vs remote change detection
+(define *mp-palace-squid-last-state-name* (the-as symbol 'none))
 
 (defun mp-palace-squid-ready? ()
   (and *multi-sync-enabled?*
@@ -172,6 +174,7 @@
 (defun mp-palace-squid-apply-trajectory! ((proc squid) (slot mp-palace-squid-state))
   (let ((height 49152.0))
     (set-vector! (-> proc traj-src) (-> slot traj-src-x) (-> slot traj-src-y) (-> slot traj-src-z) 1.0)
+    (set! (-> proc traj initial-position quad) (-> proc traj-src quad))
     (set-vector! (-> proc traj-dest) (-> slot traj-dest-x) (-> slot traj-dest-y) (-> slot traj-dest-z) 1.0)
     (set! (-> proc traj-duration) (fmax 1.0 (-> slot traj-duration)))
     (set! (-> proc traj-timer) (- (current-time) (-> slot traj-age)))
@@ -199,9 +202,16 @@
     (when (and (-> proc draw) (nonzero? (-> proc draw)))
       (set! (-> proc draw force-fade) (-> slot draw-force-fade))
       )
-    (when (!= *mp-palace-squid-last-applied-state* (-> slot state-id))
-      (set! *mp-palace-squid-last-applied-state* (-> slot state-id))
-      (mp-palace-squid-go-state! proc (-> slot state-id))
+    (when (and (!= *mp-palace-squid-last-applied-state* (-> slot state-id))
+               (!= (-> slot state-id) (mp-palace-squid-state-id fire)))
+      (let ((old-name (mp-palace-squid-current-state-name proc)))
+        (set! *mp-palace-squid-last-applied-state* (-> slot state-id))
+        (mp-palace-squid-go-state! proc (-> slot state-id))
+        (let ((new-name (mp-palace-squid-current-state-name proc)))
+          (format 0 "[MP-BOSS] State change (REMOTE SYNC): ~S -> ~S~%" old-name new-name)
+          (set! *mp-palace-squid-last-state-name* new-name)
+          )
+        )
       )
     (mp-palace-squid-apply-trajectory! proc slot)
     )
@@ -447,6 +457,16 @@
           (pc-multi-receive-palace-squid (the-as uint *mp-palace-squid-buffer*))
           (mp-palace-squid-apply-state! proc (-> *mp-palace-squid-buffer* remote-state))
           (mp-palace-squid-poll-resolution!)
+          ;; Detect local state changes: if the proc state changed but was NOT caused
+          ;; by the remote sync above (which updates *mp-palace-squid-last-state-name*),
+          ;; then the squid changed state for a local reason (e.g. an internal go).
+          (let ((cur-name (mp-palace-squid-current-state-name proc)))
+            (when (and cur-name (!= cur-name *mp-palace-squid-last-state-name*))
+              (format 0 "[MP-BOSS] State change (LOCAL): ~S -> ~S~%"
+                      *mp-palace-squid-last-state-name* cur-name)
+              (set! *mp-palace-squid-last-state-name* cur-name)
+              )
+            )
           )
         )
     )
