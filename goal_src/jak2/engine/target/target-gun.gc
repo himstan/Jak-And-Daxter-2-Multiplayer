@@ -2328,11 +2328,14 @@
            (f0-0 (-> self game gun-ammo (+ a1-0 -13)))
            )
       (cond
-        ((or (< 0.0 f0-0)
+        ((or (and *mp-puppet* (= self *mp-puppet*))
+             (< 0.0 f0-0)
              (logtest? (state-flags sf16) (-> self state-flags))
              (logtest? (-> self game secrets) (game-secrets endless-ammo))
              )
-         (pickup-collectable! (-> self fact) (the-as pickup-type a1-0) -1.0 (the-as handle #f))
+         (when (not (and *mp-puppet* (= self *mp-puppet*)))
+           (pickup-collectable! (-> self fact) (the-as pickup-type a1-0) -1.0 (the-as handle #f))
+           )
          (case (-> gp-0 gun-type)
            (((pickup-type eco-blue))
             (cond
