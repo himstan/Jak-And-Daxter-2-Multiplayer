@@ -1,6 +1,11 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern traffic-node-loaded? (function nav-node symbol))
+(define-extern traffic-branch-loaded? (function nav-branch symbol))
+(define-extern traffic-next-branch-risk? (function nav-branch symbol))
+(define-extern traffic-path-risk? (function vehicle symbol))
+
 ;; --- Pedestrian Debug ---
 
 (defun mp-draw-traffic-ped-debug ((proc citizen))
@@ -65,7 +70,8 @@
 ;; --- Vehicle Debug ---
 
 (define *mp-veh-debug-seat-str* (new 'global 'string 256 (the-as string #f)))
-(define *mp-veh-debug-text-str* (new 'global 'string 512 (the-as string #f)))
+(define *mp-veh-debug-text-str* (new 'global 'string 768 (the-as string #f)))
+(define *mp-veh-debug-tmp-str* (new 'global 'string 256 (the-as string #f)))
 
 (defun mp-debug-get-seat-occupier-str ((proc vehicle) (seat-idx int))
   (let ((rider (get-rider-in-seat proc seat-idx)))
@@ -92,8 +98,6 @@
     (else "E")
     )
   )
-
-(define *mp-veh-debug-tmp-str* (new 'global 'string 128 (the-as string #f)))
 
 (defun mp-debug-append-seat-info ((proc vehicle) (seat-str string) (is-local-driven symbol) (is-remote-driven symbol))
   (let ((tmp *mp-veh-debug-tmp-str*))
@@ -168,6 +172,8 @@
                                     pad-idx
                                     seat-str)
                             (cat-string<-string text-str tmp)
+                            (clear tmp)
+                            (format tmp "~%ZONE: ~S" (if (traffic-path-risk? proc) "UNLOADED-TOUCH" "LOADED"))                            (cat-string<-string text-str tmp)
                             (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
                                               text-str
                                               draw-pos 
@@ -186,6 +192,9 @@
                               (format tmp "NUDGED: ~S~%SEATS:~S" 
                                       nudged-str
                                       seat-str)
+                              (cat-string<-string text-str tmp)
+                              (clear tmp)
+                              (format tmp "~%ZONE: ~S" (if (traffic-path-risk? proc) "UNLOADED-TOUCH" "LOADED"))
                               (cat-string<-string text-str tmp)
                               (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
                                                 text-str

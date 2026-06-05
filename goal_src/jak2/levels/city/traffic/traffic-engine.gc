@@ -14,6 +14,67 @@
 
 (define *traffic-rigid-body-queue* (new 'static 'rigid-body-queue))
 
+(defun traffic-node-loaded? ((node nav-node))
+  (if (and node
+           (nonzero? node)
+           (-> node level))
+      (and (mp-level-active? (-> node level))
+           (!= (-> node id) 65535)
+           )
+      #f
+      )
+  )
+
+(defun traffic-branch-loaded? ((branch nav-branch))
+  (if (and branch
+           (nonzero? branch)
+           (-> branch src-node)
+           (nonzero? (-> branch src-node))
+           (-> branch dest-node)
+           (nonzero? (-> branch dest-node)))
+      (and (traffic-node-loaded? (-> branch src-node))
+           (traffic-node-loaded? (-> branch dest-node)))
+      #f
+      )
+  )
+
+(defun traffic-next-branch-risk? ((branch nav-branch))
+  (let ((risk? #f))
+    (when (and branch
+               (nonzero? branch)
+               (-> branch dest-node)
+               (nonzero? (-> branch dest-node)))
+      (let ((dest-node (-> branch dest-node)))
+        (dotimes (branch-idx (the-as int (-> dest-node branch-count)))
+          (let ((next-branch (-> dest-node branch-array branch-idx)))
+            (when (not (traffic-branch-loaded? next-branch))
+              (set! risk? #t)
+              )
+            )
+          )
+        )
+      )
+    risk?
+    )
+  )
+
+(defun traffic-path-risk? ((proc vehicle))
+  (if (and proc
+           (nonzero? proc)
+           (type? proc vehicle))
+      (if (and (logtest? (-> proc controller flags) (vehicle-controller-flag attached))
+               (-> proc controller branch)
+               (nonzero? (-> proc controller branch)))
+          (let ((branch (-> proc controller branch)))
+            (or (not (traffic-branch-loaded? branch))
+                (traffic-next-branch-risk? branch))
+            )
+          #f
+          )
+      #t
+      )
+  )
+
 (defun get-level-nav-graph-by-id ((arg0 int))
   "Get the nav-graph with the given ID from any of the currently loaded levels"
   (dotimes (v1-0 (-> *level* length))
@@ -1821,6 +1882,13 @@
           (s3-0
             (cond
               ((focus-test? (the-as vehicle s3-0) inactive)
+               (deactivate-object (-> this citizen-tracker-array) (the-as int s4-0) #f)
+               )
+              ((and (type? s3-0 vehicle)
+                    (not (logtest? (-> this flags) (rigid-body-object-flag player-driving)))
+                    (mp-is-traffic-authoritative?)
+                    (traffic-path-risk? (the-as vehicle s3-0))
+                    )
                (deactivate-object (-> this citizen-tracker-array) (the-as int s4-0) #f)
                )
               ((begin
