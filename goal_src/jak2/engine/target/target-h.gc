@@ -189,6 +189,7 @@
    (turret                   turret-info)
    (darkjak                  darkjak-info)
    (indax                    indax-info)
+   (gun-type                pickup-type)
    )
   (:methods
     (do-edge-grabs (_type_ collide-cache collide-edge-spec) none)
@@ -378,6 +379,7 @@
    (special-anim-frame   float)
    (offset               transformq        :inline)
    (mirror               (pointer process-drawable))
+   (upper-body           joint-mod)
    )
   (:states
     sidekick-clone

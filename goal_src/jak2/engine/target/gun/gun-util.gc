@@ -269,7 +269,7 @@
       (let ((s5-1 (new 'stack-no-clear 'vector))
             (s4-0 (new 'stack-no-clear 'vector))
             )
-        (matrix->scale (-> (the-as target gp-0) node-list data 24 bone transform) s5-1)
+        (matrix->scale (-> (the-as target gp-0) node-list data (if (focus-test? (the-as target gp-0) indax) 23 24) bone transform) s5-1)
         (vector-float*! s5-1 s5-1 0.71428573)
         (if (< 0.0 (-> (the-as target gp-0) gun gun-daxter))
             (matrix->scale (-> (the-as target gp-0) sidekick 0 node-list data 28 bone transform) s4-0)
@@ -294,7 +294,7 @@
       (set! (-> self draw shadow-ctrl settings shadow-dir quad) v1-55)
       )
     (twist-set! (-> self barrel) (the-as float #f) (the-as float #f) (-> (the-as target gp-0) gun fire-spin))
-    (if (or (logtest? (-> (the-as target gp-0) draw status)
+    (if (or (focus-test? (the-as target gp-0) indax) (logtest? (-> (the-as target gp-0) draw status)
                       (draw-control-status no-draw no-draw-temp no-draw-bounds no-draw-bounds2)
                       )
             (zero? (-> (the-as target gp-0) skel active-channels))
@@ -302,7 +302,7 @@
         (logior! (-> self draw status) (draw-control-status no-draw))
         (logclear! (-> self draw status) (draw-control-status no-draw))
         )
-    (if (logtest? (-> (the-as target gp-0) draw status) (draw-control-status force-fade))
+    (if (or (focus-test? (the-as target gp-0) indax) (logtest? (-> (the-as target gp-0) draw status) (draw-control-status force-fade)))
         (logior! (-> self draw status) (draw-control-status force-fade))
         (logclear! (-> self draw status) (draw-control-status force-fade))
         )
@@ -487,7 +487,7 @@
          (go-virtual idle)
          )
         ((begin
-           (set! a0-14 (!= (-> (the-as target (-> self parent 0)) game gun-type) (-> self gun-type)))
+           (set! a0-14 (!= (-> (the-as target (-> self parent 0)) gun-type) (-> self gun-type)))
            (and (the-as symbol a0-14) (let ((v1-16 (-> self state-time)))
                                         (set! a0-14 (current-time))
                                         (!= v1-16 (the-as time-frame a0-14))
@@ -502,7 +502,7 @@
   :code (behavior ((arg0 symbol))
     (ja-channel-push! 1 (seconds 0.05))
     (let ((v1-0 (-> self gun-type))
-          (a0-5 (-> (the-as target (-> self parent 0)) game gun-type))
+          (a0-5 (-> (the-as target (-> self parent 0)) gun-type))
           )
       (set! (-> self gun-type) a0-5)
       (cond
@@ -733,11 +733,27 @@
                        )
                   )
             )
-        (vector<-cspace! (-> (the-as target gp-0) gun fire-point) (joint-node gun-lod0-jg muzzle))
+        (cond
+          ((focus-test? (the-as target gp-0) indax)
+           (set! (-> (the-as target gp-0) gun fire-point quad) (-> (the-as target gp-0) root trans quad))
+           (+! (-> (the-as target gp-0) gun fire-point y) 4915.2)
+           (vector+float*!
+             (-> (the-as target gp-0) gun fire-point)
+             (-> (the-as target gp-0) gun fire-point)
+             (-> (the-as target gp-0) node-list data 0 bone transform vector 2)
+             4096.0
+             )
+           )
+          (else
+            (vector<-cspace! (-> (the-as target gp-0) gun fire-point) (joint-node gun-lod0-jg muzzle))
+            )
+          )
         (set! (-> (the-as target gp-0) gun fire-dir 1 quad) (-> (the-as target gp-0) gun fire-dir 0 quad))
         (cond
           ((and (handle->process (-> (the-as target gp-0) gun track-target 0 handle))
-                (logtest? (surface-flag gun-direct) (-> (the-as target gp-0) control current-surface flags))
+                (or (logtest? (surface-flag gun-direct) (-> (the-as target gp-0) control current-surface flags))
+                    (focus-test? (the-as target gp-0) indax)
+                    )
                 )
            (vector-!
              (the-as vector (-> (the-as target gp-0) gun fire-dir))
@@ -746,14 +762,24 @@
              )
            (vector-normalize! (the-as vector (-> (the-as target gp-0) gun fire-dir)) 1.0)
            (set! (-> (the-as target gp-0) gun fire-dir-out quad) (-> (the-as target gp-0) gun fire-dir 0 quad))
+           (when *gun-marks*
+            (add-debug-line #t (bucket-id debug-no-zbuf1) (-> (the-as target gp-0) gun fire-point) (-> (the-as target gp-0) gun track-trans) (new 'static 'rgba :r 255 :a 128) #f (the-as rgba -1))
+           )
            )
           (else
-            (vector-normalize-copy!
-              (the-as vector (-> (the-as target gp-0) gun fire-dir))
-              (-> (the-as gun self) node-list data 13 bone transform vector 2)
-              1.0
+            (cond
+              ((focus-test? (the-as target gp-0) indax)
+               (vector-copy! (the-as vector (-> (the-as target gp-0) gun fire-dir)) (-> (the-as target gp-0) node-list data 0 bone transform vector 2))
+               )
+              (else
+                (vector-normalize-copy!
+                  (the-as vector (-> (the-as target gp-0) gun fire-dir))
+                  (-> (the-as gun self) node-list data 13 bone transform vector 2)
+                  1.0
+                  )
+                )
               )
-            (if s5-0
+            (if (and s5-0 (not (focus-test? (the-as target gp-0) indax)))
                 (set! (-> (the-as target gp-0) gun fire-dir-out quad)
                       (-> (the-as vector (-> (the-as target gp-0) node-list data 4 bone transform vector 2)) quad)
                       )
@@ -765,7 +791,14 @@
               )
             )
           )
-        (vector<-cspace! (-> (the-as target gp-0) gun laser-point) (joint-node gun-lod0-jg laser))
+        (cond
+          ((focus-test? (the-as target gp-0) indax)
+           (set! (-> (the-as target gp-0) gun laser-point quad) (-> (the-as target gp-0) gun fire-point quad))
+           )
+          (else
+            (vector<-cspace! (-> (the-as target gp-0) gun laser-point) (joint-node gun-lod0-jg laser))
+            )
+          )
         (set! (-> (the-as target gp-0) gun laser-dir 1 quad) (-> (the-as target gp-0) gun laser-dir 0 quad))
         (set! (-> (the-as target gp-0) gun laser-dir 0 quad) (-> (the-as target gp-0) gun fire-dir-out quad))
         (if s5-0

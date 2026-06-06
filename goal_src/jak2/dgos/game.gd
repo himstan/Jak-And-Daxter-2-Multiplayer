@@ -310,6 +310,7 @@
   "find-nearest.o"
   "task-arrow.o"
   "projectile.o"
+  "daxter-h.o"
   "target-handler.o"
   "target-anim.o"
   "target.o"
@@ -423,9 +424,8 @@
   "hud-ring-ag.go"
   "jakb-ag.go"
   "daxter-ag.go"
-  "jak-pidax+0-ag.go"
-  "daxter-h.o"
   "daxter.o"
+  "daxter-aura.o"
   "daxter-stance.o"
   "daxter-walk.o"
   "daxter-duck.o"
@@ -440,6 +440,8 @@
   "daxter-pole.o"
   "daxter-edge-grab.o"
   "jak-indax+0-ag.go"
+  "jak-pilot+0-ag.go"
+  "jak-pidax+0-ag.go"
   "board-ag.go"
   "gun-ag.go"
   "jak-gun+0-ag.go"
@@ -519,6 +521,7 @@
   "mp-task-debug.o" ;; added
   "mp-puppet.o" ;; added
   "mp-puppet-debug.o" ;; added
+  "mp-gun-debug.o" ;; added
   "mp-battle-debug.o" ;; added
   "mp-clock.o" ;; added
   "mp-environment.o" ;; added

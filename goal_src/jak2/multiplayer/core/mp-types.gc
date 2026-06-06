@@ -1121,6 +1121,7 @@
 (define-perm *mp-traffic-debug-dist* float (meters 100.0))
 (define-perm *mp-traffic-ped-density-scale* float 0.5)
 (define-perm *mp-traffic-veh-density-scale* float 0.3)
+(define-perm *mp-gun-debug?* symbol #f)
 (define-perm *mp-guard-target-debug?* symbol #f)
 (define-perm *mp-guard-target-debug-net-id* uint (the uint 0))
 (define-perm *mp-guard-target-debug-next-time* time-frame 0)
@@ -1170,6 +1171,10 @@
   "Is the local player authoritative over traffic? (Host-only OR Client outside bubble)"
   `(or (mp-is-jak?) (not *mp-traffic-suppressed*))
   )
+
+(defun not-puppet? ((proc target))
+  (or (not *mp-puppet*) (!= proc *mp-puppet*))
+)
 
 ;; --- Extern Declarations ---
 

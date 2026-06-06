@@ -64,7 +64,7 @@
         (begin
           (sound-play "jump")
           (format 0 "[MP] Exiting ride along state...~%")
-          (logclear! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
+          (logclear! (-> self draw status) (draw-control-status no-draw))
           (set! *local-riding?* #f)
           (go target-indax-jump
                (-> *TARGET-bank* indax-jump-height-min)

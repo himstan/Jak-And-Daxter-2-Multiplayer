@@ -1,0 +1,120 @@
+(define *daxter-eco-aura-offset-x* (meters 0.0))
+(define *daxter-eco-aura-offset-y* (meters 0.0))
+(define *daxter-eco-aura-offset-z* (meters 0.0))
+(define *daxter-eco-aura-spawn-chance* 1.0)
+
+(defun daxter-eco-aura-group ((gun-type pickup-type))
+  (case gun-type
+    (((pickup-type eco-yellow))
+     group-eco-yellow
+     )
+    (((pickup-type eco-red))
+     group-eco-red
+     )
+    (((pickup-type eco-blue))
+     group-eco-blue
+     )
+    (((pickup-type eco-dark))
+     group-eco-dark-pill
+     )
+    (else
+      (the-as sparticle-launch-group #f)
+      )
+    )
+  )
+
+(defun daxter-gun-clear-eco-aura-proc! ((proc target))
+  (when (and proc
+             (nonzero? proc)
+             (-> proc part)
+             (nonzero? (-> proc part))
+             )
+    (kill-and-free-particles (-> proc part))
+    (set! (-> proc part) (the-as sparticle-launch-control #f))
+    )
+  (none)
+  )
+
+(defbehavior daxter-gun-clear-eco-aura! target ()
+  (daxter-gun-clear-eco-aura-proc! self)
+  )
+
+(defun daxter-gun-ensure-eco-aura-proc! ((proc target) (aura-group sparticle-launch-group))
+  (when (and proc
+             (nonzero? proc)
+             )
+    (let ((current-part (-> proc part)))
+      (when (and current-part
+               (nonzero? current-part)
+               (!= (-> current-part group) aura-group)
+               )
+      (daxter-gun-clear-eco-aura-proc! proc)
+      (set! current-part (the-as sparticle-launch-control #f))
+      )
+      (when (and aura-group
+               (nonzero? aura-group)
+               (or (not current-part)
+                   (zero? (the-as uint current-part))
+                   )
+               )
+      (set! current-part (create-launch-control aura-group proc))
+      (set! (-> proc part) current-part)
+      )
+      (when (and current-part
+               (nonzero? current-part)
+               (-> proc control)
+               (nonzero? (-> proc control))
+               (rand-vu-percent? *daxter-eco-aura-spawn-chance*)
+               )
+      (let ((spawn-pos (new 'stack-no-clear 'vector))
+            (spawn-offset (new 'stack-no-clear 'vector))
+            )
+        (set-vector! spawn-offset
+                     *daxter-eco-aura-offset-x*
+                     *daxter-eco-aura-offset-y*
+                     *daxter-eco-aura-offset-z*
+                     1.0)
+        (vector+! spawn-pos (-> proc control trans) spawn-offset)
+        (spawn current-part spawn-pos)
+        )
+      )
+      )
+    )
+  (none)
+  )
+
+
+(defbehavior daxter-gun-ensure-eco-aura! target ((aura-group sparticle-launch-group))
+  (daxter-gun-ensure-eco-aura-proc! self aura-group)
+  )
+
+(defun daxter-gun-update-eco-aura-proc! ((proc target))
+  (if (and proc
+           (nonzero? proc)
+           (focus-test? proc indax gun)
+           (-> proc gun)
+           (nonzero? (-> proc gun))
+           )
+      (begin
+        (let ((aura-group (daxter-eco-aura-group (-> proc gun gun-type))))
+          (if (nonzero? aura-group)
+              (daxter-gun-ensure-eco-aura-proc! proc aura-group)
+              (daxter-gun-clear-eco-aura-proc! proc)
+              )
+          )
+        )
+      (when (and proc
+                 (nonzero? proc)
+                 )
+        (daxter-gun-clear-eco-aura-proc! proc)
+        )
+      )
+  (none)
+  )
+
+(defbehavior daxter-gun-update-eco-aura! target ()
+  (when (focus-test? self indax gun)
+    (daxter-gun-update-eco-aura-proc! self)
+    )
+  (none)
+  )

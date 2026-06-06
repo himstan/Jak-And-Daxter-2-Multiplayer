@@ -2,7 +2,7 @@
 (in-package goal)
 
 (let ((v1-2 (copy *walk-mods* 'loading-level)))
-  (set! (-> v1-2 flags) (surface-flag gun-off gun-fast-exit))
+  (set! (-> v1-2 flags) (surface-flag gun-fast-exit))
   (set! (-> v1-2 target-speed) 40960.0)
   (set! (-> v1-2 transv-max) 40960.0)
   (set! *indax-walk-mods* v1-2)
@@ -47,7 +47,7 @@
   (set! (-> v1-34 name) 'edge-grab)
   (set! (-> v1-34 target-speed) 0.0)
   (set! (-> v1-34 transv-max) 0.0)
-  (set! (-> v1-34 flags) (surface-flag gun-inactive gun-no-twist))
+  (set! (-> v1-34 flags) (surface-flag gun-no-twist))
   (define *indax-edge-grab-mods* v1-34)
   )
 
@@ -66,6 +66,14 @@
          )
         (('tube)
          (go target-tube-start (process->handle (the-as process (-> arg3 param 1)))))
+        (('gun-type)
+         (when (-> arg3 param 0)
+           (target-gun-type-set! (the-as pickup-type (-> arg3 param 0)))
+           )
+         )
+        (('gun)
+         (target-gun-fire (the-as pickup-type (-> arg3 param 0)))
+         )
         (('change-mode)
          (let ((v1-5 (-> arg3 param 0)))
            (cond
@@ -75,6 +83,11 @@
                     #t
                     (go target-indax-grab 'stance)
                     )
+                )
+              )
+             ((= v1-5 'gun)
+                (if (logtest? (-> self game features) (game-feature gun))
+                  (target-gun-init (the-as pickup-type (-> arg3 param 2)))
                 )
               )
              ((= v1-5 'normal)
@@ -305,7 +318,6 @@
   (let ((surf (-> self control current-surface)))
     (if (and surf (not (zero? (the-as uint surf))) (not (logtest? (the-as uint surf) 3)) (< (the-as uint surf) #x70000000))
         (logior! (-> surf flags) (surface-flag gun-fast-exit))))
-  (target-gun-end-mode #t)
   (target-exit)
   (logior! (-> self game features) (game-feature sidekick))
   (target-sidekick-setup #t)
@@ -339,7 +351,7 @@
   ;; 3. Signal sidekick to follow
   (if (and (-> self sidekick) (!= (the-as uint (-> self sidekick)) 0))
       (send-event (ppointer->process (-> self sidekick)) 'matrix 'indax))
-  (logclear! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
+  (logclear! (-> self draw status) (draw-control-status no-draw))
   (when reset-velocity?
     (remove-exit)
     (go target-indax-stance)
@@ -410,6 +422,8 @@
                                              (= v1-3 'target-indax-pilot-grab)
                                              (= v1-3 'target-indax-pilot-clone-anim)
                                              (= v1-3 'target-indax-pilot-edge-grab)
+                                             (= v1-3 'target-gun-stance)
+                                             (= v1-3 'target-gun-walk)
                                              (= v1-3 'target-indax-pilot-hit)
                                              (= v1-3 'target-indax-pilot-death)
                                              (= v1-3 'target-indax-spawn-reset)))))
@@ -542,6 +556,8 @@
   (evaluate-joint-control self)
   (joint-points)
   (target-calc-camera-pos) ;; Added: Allows pole-specific camera overrides to work
+  (target-gun-joint-pre0)
+  (target-gun-check)
   (do-joint-math (-> self draw) (-> self node-list) (-> self skel))
   (do-target-gspot)
   (logior! (-> self draw status) (draw-control-status no-draw-bounds2))
@@ -556,6 +572,7 @@
 
 (defbehavior target-indax-post target ()
   (target-indax-real-post)
+  (daxter-gun-update-eco-aura!)
   (none))
 
 (defbehavior target-indax-ride-along-check target ()

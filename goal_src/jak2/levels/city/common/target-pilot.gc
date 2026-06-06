@@ -140,7 +140,9 @@
 (defbehavior target-pilot-pidax-exit target ()
   (ja-channel-set! 0)
   (set! (-> self draw art-group) (the-as art-group (-> self pilot art-group-backup)))
-  (logclear! (-> self draw status) (draw-control-status no-draw-bounds2))
+  (when (not (focus-test? self indax))
+    (logclear! (-> self draw status) (draw-control-status no-draw-bounds2))
+  )
   (send-event (ppointer->process (-> self sidekick)) 'matrix #f)
   )
 

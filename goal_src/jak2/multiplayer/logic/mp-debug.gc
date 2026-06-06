@@ -239,3 +239,49 @@
   (none)
   )
 
+(defun mp-debug-append-draw-flag ((flags-text string) (flag-name string) (enabled? symbol))
+  "Append a draw-control-status flag name to a comma-separated list."
+  (if enabled?
+      (if (string= flags-text "")
+          flag-name
+          (the-as string (format #f "~A, ~A" flags-text flag-name)))
+      flags-text))
+
+(defun mp-debug-get-draw-status-flags ((draw draw-control))
+  "Return a readable list of the active draw-control-status flags."
+  (let ((status (if (and draw (nonzero? draw)) (the-as uint32 (-> draw status)) (the-as uint32 0)))
+        (flags-text ""))
+    (set! flags-text
+          (mp-debug-append-draw-flag flags-text "close-to-screen" (logtest? status (draw-control-status close-to-screen))))
+    (set! flags-text
+          (mp-debug-append-draw-flag flags-text "no-draw" (logtest? status (draw-control-status no-draw))))
+    (set! flags-text
+          (mp-debug-append-draw-flag flags-text "no-draw-temp" (logtest? status (draw-control-status no-draw-temp))))
+    (set! flags-text
+          (mp-debug-append-draw-flag flags-text "on-screen" (logtest? status (draw-control-status on-screen))))
+    (set! flags-text
+          (mp-debug-append-draw-flag flags-text "uninited" (logtest? status (draw-control-status uninited))))
+    (set! flags-text
+          (mp-debug-append-draw-flag flags-text "no-draw-bounds" (logtest? status (draw-control-status no-draw-bounds))))
+    (set! flags-text
+          (mp-debug-append-draw-flag flags-text "no-closest-distance" (logtest? status (draw-control-status no-closest-distance))))
+    (set! flags-text
+          (mp-debug-append-draw-flag flags-text "math-skel" (logtest? status (draw-control-status math-skel))))
+    (set! flags-text
+          (mp-debug-append-draw-flag flags-text "force-vu1" (logtest? status (draw-control-status force-vu1))))
+    (set! flags-text
+          (mp-debug-append-draw-flag flags-text "no-draw-bounds2" (logtest? status (draw-control-status no-draw-bounds2))))
+    (set! flags-text
+          (mp-debug-append-draw-flag flags-text "force-fade" (logtest? status (draw-control-status force-fade))))
+    (set! flags-text
+          (mp-debug-append-draw-flag flags-text "warp-cross-fade" (logtest? status (draw-control-status warp-cross-fade))))
+    (set! flags-text
+          (mp-debug-append-draw-flag flags-text "lod-set" (logtest? status (draw-control-status lod-set))))
+    (set! flags-text
+          (mp-debug-append-draw-flag flags-text "disable-fog" (logtest? status (draw-control-status disable-fog))))
+    (set! flags-text
+          (mp-debug-append-draw-flag flags-text "hud" (logtest? status (draw-control-status hud))))
+    (if (string= flags-text "")
+        "none"
+        (the-as string flags-text))))
+

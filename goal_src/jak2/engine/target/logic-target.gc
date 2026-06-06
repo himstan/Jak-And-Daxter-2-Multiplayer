@@ -6,6 +6,7 @@
 ;; dgos: ENGINE, GAME
 
 (define-extern history-draw (function history-iterator none))
+(define-extern mp-debug-get-draw-status-flags (function draw-control string))
 (define-extern target-sidekick-setup (function symbol none :behavior target))
 (define-extern target-board-setup (function symbol none :behavior target))
 (define-extern target-float (state target))
@@ -346,6 +347,10 @@
             (format arg1 "rleg-no-ik ")
             )
         (format arg1 "~%")
+        (format arg1 "draw: ~S~%" (mp-debug-get-draw-status-flags (-> arg0 draw)))
+        (when (and (-> arg0 sidekick) (nonzero? (-> arg0 sidekick)) (-> arg0 sidekick 0))
+          (format arg1 "sidekick-draw: ~S~%" (mp-debug-get-draw-status-flags (-> arg0 sidekick 0 draw)))
+          )
         (format
           arg1
           "~0k~9S ~9S ~9S ~9S ~9S ~9S~%"
@@ -3337,9 +3342,11 @@
 (defmethod deactivate ((this target))
   "Make a process dead, clean it up, remove it from the active pool, and return to dead pool."
   (kill-persister *setting-control* (the-as engine-pers 'bg-a-speed) 'bg-a-speed)
-  (if (nonzero? (-> this darkjak))
-      (sound-stop (-> this darkjak tone))
-      )
+  (let ((darkjak (-> this darkjak)))
+    (if (and darkjak (nonzero? darkjak))
+        (sound-stop (-> darkjak tone))
+        )
+    )
   (when (not (or (= (-> this tobot?) 'tobot) (= (-> this tobot?) 'mp-puppet)))
     (set! (-> *setting-control* cam-default mode-name) #f)
     (set-zero! *camera-smush-control*)

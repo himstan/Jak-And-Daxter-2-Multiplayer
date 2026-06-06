@@ -1,0 +1,103 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defun mp-debug-get-local-gun-proc ()
+  "Return the local target's gun process when it exists."
+  (if (and *target*
+           (nonzero? *target*)
+           (-> *target* gun)
+           (nonzero? (-> *target* gun)))
+      (let ((gun-proc (the-as gun (-> *target* gun gun 0))))
+        (if (and gun-proc (nonzero? gun-proc))
+            gun-proc
+            (the-as gun #f)))
+      (the-as gun #f)))
+
+(defun mp-debug-get-gun-skeleton-name ((gun-proc gun-info))
+  "Return a readable skeleton name for the gun's current drawable."
+  (if (and gun-proc
+           (nonzero? gun-proc)
+           (-> gun-proc process 0)
+           (nonzero? (-> gun-proc process 0))
+           (-> gun-proc process 0 draw)
+           (nonzero? (-> gun-proc process 0 draw))
+           (-> gun-proc process 0 draw art-group)
+           (nonzero? (-> gun-proc process 0 draw art-group)))
+      (the-as string (format #f "skel-~A" (-> (-> gun-proc process 0 draw art-group) name)))
+      "unknown"))
+
+(defun mp-debug-get-gun-attachment-joint-name ((gun-info gun-info))
+  "Return the target joint that the gun is anchored to."
+  (if (and gun-info
+           (nonzero? gun-info)
+           (-> gun-info hips)
+           (nonzero? (-> gun-info hips))
+           (-> gun-info hips joint)
+           (nonzero? (-> gun-info hips joint)))
+      (the-as string (format #f "~S (~D)"
+                      (-> (-> (-> gun-info hips joint) joint) name)
+                      (-> (-> (-> gun-info hips joint) joint) number)))
+      "none"))
+
+      (defun mp-debug-draw-gun-barrel-line ((gun-proc gun))
+
+  "Draw a line that follows the gun barrel's aim axis."
+  (when (and gun-proc
+             (nonzero? gun-proc)
+             (-> gun-proc node-list)
+             (nonzero? (-> gun-proc node-list)))
+    (let ((muzzle-idx (joint-node-index gun-lod0-jg muzzle))
+          (laser-idx (joint-node-index gun-lod0-jg laser)))
+      (when (and (>= muzzle-idx 0) (>= laser-idx 0))
+        (let ((muzzle-pos (new 'stack-no-clear 'vector))
+              (laser-pos (new 'stack-no-clear 'vector)))
+          (vector<-cspace! muzzle-pos (-> gun-proc node-list data muzzle-idx))
+          (vector<-cspace! laser-pos (-> gun-proc node-list data laser-idx))
+          (add-debug-line
+            #t
+            (bucket-id debug-no-zbuf1)
+            muzzle-pos
+            laser-pos
+            (static-rgba 0 255 255 160)
+            #f
+            (the-as rgba 0))
+          )
+        )
+      )
+    )
+  (none))
+
+(defun mp-draw-gun-debug ()
+  "Overlay gun-specific runtime information for the local player."
+  (when *mp-gun-debug?*
+    (let ((gun-info (if (and *target* (nonzero? *target*)) (-> *target* gun) (the-as gun-info #f)))
+          (gun-proc (mp-debug-get-local-gun-proc)))
+      (when (and gun-info
+                 (nonzero? gun-info)
+                 gun-proc
+                 (nonzero? gun-proc)
+                 (-> gun-proc root)
+                 (nonzero? (-> gun-proc root)))
+        (let ((draw-pos (new 'stack-no-clear 'vector)))
+          (vector-copy! draw-pos (-> gun-proc root trans))
+          (+! (-> draw-pos y) (meters 2.5))
+          (add-debug-text-3d
+            #t
+            (bucket-id debug-no-zbuf1)
+            (the-as string
+                    (format #f
+                            "ACTIVE: ~A~%SKELETON: ~A~%ATTACHMENT JOINT: ~A~%DRAW FLAGS: ~A"
+                            (if (-> gun-info active?) "YES" "NO")
+                            (mp-debug-get-gun-skeleton-name gun-info)
+                            (mp-debug-get-gun-attachment-joint-name gun-info)
+                            (mp-debug-get-draw-status-flags (-> gun-info process 0 draw))))
+            draw-pos
+            (font-color cyan)
+            (the-as vector2h #f))
+          (when (-> gun-info active?)
+            (mp-debug-draw-gun-barrel-line gun-proc))
+          )
+        )
+      )
+    )
+  (none))
