@@ -35,6 +35,19 @@ struct OGGlobalIndex {
   std::unordered_map<std::string, Docs::FileDocumentation> per_file_symbols = {};
 };
 
+struct LexicalBinding {
+  std::string name;
+  std::string kind; // "parameter", "local"
+  std::string type; // e.g. "mp-battle-event", empty if unknown
+  TSNode decl_node;
+};
+
+class Workspace;
+class WorkspaceOGFile;
+std::optional<LexicalBinding> find_lexical_binding(const WorkspaceOGFile& file, TSNode query_node, Workspace& workspace);
+std::string infer_type(const WorkspaceOGFile& file, TSNode node, Workspace& workspace);
+bool is_under_arrow_field_pos(TSNode node, const WorkspaceOGFile& file);
+
 class WorkspaceOGFile {
  public:
   WorkspaceOGFile(){};
@@ -55,6 +68,7 @@ class WorkspaceOGFile {
   TSNode get_node_at_position(const LSPSpec::Position position) const;
   std::vector<OpenGOALFormResult> search_for_forms_that_begin_with(
       std::vector<std::string> prefix) const;
+  const std::shared_ptr<TSTree>& get_ast() const { return m_ast; }
 
  private:
   int32_t version;
@@ -108,14 +122,22 @@ class Workspace {
   void start_tracking_file(const LSPSpec::DocumentUri& file_uri,
                            const std::string& language_id,
                            const std::string& content);
+  void ensure_file_tracked(const LSPSpec::DocumentUri& file_uri,
+                           const std::optional<std::string>& language_id = {},
+                           const std::optional<std::string>& content = {});
   void update_tracked_file(const LSPSpec::DocumentUri& file_uri, const std::string& content);
-  void tracked_file_will_save(const LSPSpec::DocumentUri& file_uri);
+  void handle_file_save(const LSPSpec::DocumentUri& file_uri);
   void update_global_index(const GameVersion game_version);
   void stop_tracking_file(const LSPSpec::DocumentUri& file_uri);
+  int track_file_count() const {
+    return m_tracked_og_files.size() + m_tracked_ir_files.size();
+  }
   std::optional<std::reference_wrapper<WorkspaceOGFile>> get_tracked_og_file(
       const LSPSpec::URI& file_uri);
   std::optional<std::reference_wrapper<WorkspaceIRFile>> get_tracked_ir_file(
       const LSPSpec::URI& file_uri);
+
+  static LSPSpec::DocumentUri normalize_uri(const LSPSpec::DocumentUri& uri);
   std::vector<symbol_info::SymbolInfo*> get_symbols_starting_with(const GameVersion game_version,
                                                                   const std::string& symbol_prefix);
   std::optional<symbol_info::SymbolInfo*> get_global_symbol_info(const WorkspaceOGFile& file,
@@ -140,10 +162,38 @@ class Workspace {
       const GameVersion game_version);
   std::unordered_map<std::string, s64> get_enum_entries(const std::string& enum_name,
                                                         const GameVersion game_version);
+  bool is_compiler_ready(const GameVersion game_version) const;
+
+  void set_client_capabilities(const json& caps) {
+    m_client_capabilities = caps;
+    if (caps.contains("window") && caps["window"].contains("workDoneProgress")) {
+      m_work_done_progress_supported = caps["window"]["workDoneProgress"].get<bool>();
+    }
+  }
+  bool work_done_progress_supported() const { return m_work_done_progress_supported; }
+
+  void scan_file_for_defines(const WorkspaceOGFile& file);
+
+  void inject_compiler(GameVersion version, std::unique_ptr<Compiler> compiler) {
+    m_compiler_instances[version] = std::move(compiler);
+  }
+  Compiler* get_compiler(GameVersion version) {
+    if (m_compiler_instances.find(version) != m_compiler_instances.end()) {
+      return m_compiler_instances.at(version).get();
+    }
+    return nullptr;
+  }
+  void inject_tracked_og_file(const LSPSpec::DocumentUri& file_uri, WorkspaceOGFile file) {
+    auto norm_uri = normalize_uri(file_uri);
+    m_tracked_og_files[norm_uri] = std::move(file);
+    scan_file_for_defines(m_tracked_og_files[norm_uri]);
+  }
 
  private:
   LSPRequester m_requester;
   bool m_initialized = false;
+  json m_client_capabilities;
+  bool m_work_done_progress_supported = false;
   std::unordered_map<LSPSpec::DocumentUri, WorkspaceOGFile> m_tracked_og_files = {};
   std::unordered_map<LSPSpec::DocumentUri, WorkspaceIRFile> m_tracked_ir_files = {};
 
@@ -157,4 +207,6 @@ class Workspace {
   // TODO - change this to a shared_ptr so it can more easily be passed around functions
   std::unordered_map<GameVersion, std::unique_ptr<Compiler>> m_compiler_instances;
   std::unordered_map<GameVersion, OGGlobalIndex> m_global_indicies;
+ public:
+  std::unordered_map<GameVersion, std::unordered_map<std::string, std::string>> m_inferred_global_types;
 };

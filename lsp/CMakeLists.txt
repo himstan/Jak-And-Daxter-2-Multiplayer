@@ -19,6 +19,7 @@ add_executable(lsp
   protocol/document_synchronization.cpp
   protocol/formatting.cpp
   protocol/hover.cpp
+  protocol/hover_formatting.cpp
   protocol/progress_report.cpp
   protocol/type_hierarchy.cpp
   state/data/mips_instruction.cpp

@@ -36,8 +36,9 @@ std::optional<json> og_symbols(Workspace& workspace, LSPSpec::DocumentSymbolPara
 
 namespace lsp_handlers {
 
-std::optional<json> document_symbols(Workspace& workspace, int /*id*/, json params) {
+std::optional<json> document_symbols(Workspace& workspace, json /*id*/, json params) {
   auto converted_params = params.get<LSPSpec::DocumentSymbolParams>();
+  workspace.ensure_file_tracked(converted_params.m_textDocument.m_uri);
   const auto file_type =
       workspace.determine_filetype_from_uri(converted_params.m_textDocument.m_uri);
 

@@ -4,5 +4,5 @@
 #include "lsp/state/workspace.h"
 
 namespace lsp_handlers {
-std::optional<json> references(Workspace& workspace, int id, json raw_params);
+std::optional<json> references(Workspace& workspace, json id, json raw_params);
 }  // namespace lsp_handlers

@@ -8,6 +8,6 @@
 
 namespace lsp_handlers {
 
-std::optional<json> formatting(Workspace& workspace, int id, json raw_params);
+std::optional<json> formatting(Workspace& workspace, json id, json raw_params);
 
 }  // namespace lsp_handlers

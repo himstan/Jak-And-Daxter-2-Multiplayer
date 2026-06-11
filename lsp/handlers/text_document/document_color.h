@@ -10,6 +10,6 @@
 
 namespace lsp_handlers {
 
-std::optional<json> document_color(Workspace& workspace, int id, json raw_params);
+std::optional<json> document_color(Workspace& workspace, json id, json raw_params);
 
 }  // namespace lsp_handlers

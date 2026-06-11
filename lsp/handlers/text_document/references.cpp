@@ -2,8 +2,9 @@
 #include "lsp/lsp_util.h"
 
 namespace lsp_handlers {
-std::optional<json> references(Workspace& workspace, int /*id*/, json raw_params) {
+std::optional<json> references(Workspace& workspace, json /*id*/, json raw_params) {
   auto params = raw_params.get<LSPSpec::ReferenceParams>();
+  workspace.ensure_file_tracked(params.m_textDocument.m_uri);
   const auto file = workspace.get_tracked_og_file(params.m_textDocument.m_uri);
   if (!file) {
     return std::vector<LSPSpec::Location>{};

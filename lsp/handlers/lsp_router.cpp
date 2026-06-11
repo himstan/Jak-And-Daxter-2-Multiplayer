@@ -24,18 +24,23 @@ json error_resp(ErrorCodes error_code, const std::string& error_message) {
   return json{{"error", error}};
 }
 
+bool is_valid_json_rpc_id(const json& id) {
+  return id.is_string() || id.is_number_integer() || id.is_null();
+}
+
 LSPRoute::LSPRoute() : m_route_type(LSPRouteType::NOOP) {}
 
 LSPRoute::LSPRoute(std::function<void(Workspace&, json)> notification_handler)
     : m_route_type(LSPRouteType::NOTIFICATION), m_notification_handler(notification_handler) {}
 
 LSPRoute::LSPRoute(std::function<void(Workspace&, json)> notification_handler,
-                   std::function<std::optional<json>(Workspace&, json)> post_notification_publish)
+                   std::function<std::optional<std::vector<json>>(Workspace&, json)>
+                       post_notification_publish)
     : m_route_type(LSPRouteType::NOTIFICATION),
       m_notification_handler(notification_handler),
       m_post_notification_publish(post_notification_publish) {}
 
-LSPRoute::LSPRoute(std::function<std::optional<json>(Workspace&, int, json)> request_handler)
+LSPRoute::LSPRoute(std::function<std::optional<json>(Workspace&, json, json)> request_handler)
     : m_route_type(LSPRouteType::REQUEST_RESPONSE), m_request_handler(request_handler) {}
 
 void LSPRouter::init_routes() {
@@ -44,7 +49,7 @@ void LSPRouter::init_routes() {
     exit(0);
   });
   m_routes["shutdown"] = LSPRoute(
-      [](Workspace& /*workspace*/, int /*id*/, nlohmann::json /*params*/) -> std::optional<json> {
+      [](Workspace& /*workspace*/, json /*id*/, nlohmann::json /*params*/) -> std::optional<json> {
         lg::info("Received shutdown request");
         return error_resp(ErrorCodes::UnknownErrorCode, "Problem occurred while existing");
       });
@@ -60,6 +65,8 @@ void LSPRouter::init_routes() {
       LSPRoute(lsp_handlers::did_change, lsp_handlers::did_change_push_diagnostics);
   m_routes["textDocument/didClose"] = LSPRoute(lsp_handlers::did_close);
   m_routes["textDocument/willSave"] = LSPRoute(lsp_handlers::will_save);
+  m_routes["textDocument/didSave"] =
+      LSPRoute(lsp_handlers::did_save, lsp_handlers::did_save_push_diagnostics);
   m_routes["textDocument/hover"] = LSPRoute(lsp_handlers::hover);
   m_routes["textDocument/definition"] = LSPRoute(lsp_handlers::go_to_definition);
   m_routes["textDocument/references"] = LSPRoute(lsp_handlers::references);
@@ -69,12 +76,21 @@ void LSPRouter::init_routes() {
   m_routes["textDocument/prepareTypeHierarchy"] = LSPRoute(lsp_handlers::prepare_type_hierarchy);
   m_routes["typeHierarchy/supertypes"] = LSPRoute(lsp_handlers::supertypes_type_hierarchy);
   m_routes["typeHierarchy/subtypes"] = LSPRoute(lsp_handlers::subtypes_type_hierarchy);
-  // TODO - m_routes["textDocument/signatureHelp"] = LSPRoute(get_completions_handler);
+
+  // Advertised Capabilities that are not yet implemented, return safe empty results
+  m_routes["textDocument/signatureHelp"] =
+      LSPRoute([](Workspace&, json, json) -> std::optional<json> { return nullptr; });
+  m_routes["textDocument/documentLink"] =
+      LSPRoute([](Workspace&, json, json) -> std::optional<json> { return json::array(); });
+  m_routes["textDocument/colorPresentation"] =
+      LSPRoute([](Workspace&, json, json) -> std::optional<json> { return json::array(); });
+  m_routes["textDocument/onTypeFormatting"] =
+      LSPRoute([](Workspace&, json, json) -> std::optional<json> { return json::array(); });
+  m_routes["workspace/executeCommand"] =
+      LSPRoute([](Workspace&, json, json) -> std::optional<json> { return nullptr; });
+
   // Not Supported Routes, noops
   m_routes["$/cancelRequest"] = LSPRoute();
-  m_routes["textDocument/documentLink"] = LSPRoute();
-  m_routes["textDocument/codeLens"] = LSPRoute();
-  m_routes["textDocument/colorPresentation"] = LSPRoute();
 }
 
 std::string LSPRouter::make_response(const json& result) {
@@ -106,9 +122,12 @@ std::optional<std::vector<std::string>> LSPRouter::route_message(
   // Exit early if we can't handle the route
   if (m_routes.find(method) == m_routes.end()) {
     lg::warn("Method not supported '{}'", method);
-    auto error = {make_response(
-        error_resp(ErrorCodes::MethodNotFound, fmt::format("Method '{}' not supported", method)))};
-    return std::make_optional(error);
+    if (body.contains("id") && is_valid_json_rpc_id(body["id"])) {
+      auto error = {make_response(
+          error_resp(ErrorCodes::MethodNotFound, fmt::format("Method '{}' not supported", method)))};
+      return std::make_optional(error);
+    }
+    return {};
   }
 
   try {
@@ -121,7 +140,13 @@ std::optional<std::vector<std::string>> LSPRouter::route_message(
       case LSPRouteType::NOTIFICATION:
         route.m_notification_handler(appstate.workspace, body["params"]);
         break;
-      case LSPRouteType::REQUEST_RESPONSE:
+      case LSPRouteType::REQUEST_RESPONSE: {
+        if (!is_valid_json_rpc_id(body["id"])) {
+          lg::error("Invalid JSON-RPC ID type: {}", body["id"].dump());
+          auto error = {make_response(
+              error_resp(ErrorCodes::InvalidRequest, "Invalid JSON-RPC ID type"))};
+          return std::make_optional(error);
+        }
         auto resp_body = route.m_request_handler(appstate.workspace, body["id"], body["params"]);
         json resp;
         resp["id"] = body["id"];
@@ -131,14 +156,16 @@ std::optional<std::vector<std::string>> LSPRouter::route_message(
           resp["result"] = nullptr;
         }
         resp_bodies.push_back(resp);
-        break;
+      } break;
     }
 
     // Run any publish we need to do after the fact
     if (route.m_post_notification_publish) {
-      auto resp = route.m_post_notification_publish.value()(appstate.workspace, body["params"]);
-      if (resp) {
-        resp_bodies.push_back(resp.value());
+      auto resps = route.m_post_notification_publish.value()(appstate.workspace, body["params"]);
+      if (resps) {
+        for (const auto& resp : resps.value()) {
+          resp_bodies.push_back(resp);
+        }
       }
     }
 

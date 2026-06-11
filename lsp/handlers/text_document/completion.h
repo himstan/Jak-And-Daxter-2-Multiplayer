@@ -10,5 +10,5 @@
 #include "lsp/state/workspace.h"
 
 namespace lsp_handlers {
-std::optional<json> get_completions(Workspace& workspace, int id, json params);
+std::optional<json> get_completions(Workspace& workspace, json id, json params);
 }

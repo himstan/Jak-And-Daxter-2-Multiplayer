@@ -1,7 +1,11 @@
 #include "initialize.h"
 
 namespace lsp_handlers {
-std::optional<json> initialize(Workspace& /*workspace*/, int /*id*/, json /*params*/) {
+std::optional<json> initialize(Workspace& workspace, json /*id*/, json params) {
+  if (params.contains("capabilities")) {
+    workspace.set_client_capabilities(params["capabilities"]);
+  }
+
   json text_document_sync{
       {"openClose", true},
       {"change", 1},  // Full sync
@@ -14,42 +18,20 @@ std::optional<json> initialize(Workspace& /*workspace*/, int /*id*/, json /*para
       {"resolveProvider", false},
       {"triggerCharacters", {" "}},
   };
-  json signature_help_provider{{"triggerCharacters", ""}};
-  json code_lens_provider{{"resolveProvider", false}};
-  json document_on_type_formatting_provider{
-      {"firstTriggerCharacter", ""},
-      {"moreTriggerCharacter", ""},
-  };
-  json document_link_provider{{"resolveProvider", false}};
-  json execute_command_provider{{"commands", {}}};
-
-  json document_symbol_provder{{"label", "OpenGOAL"}};
 
   json result{{"capabilities",
                {
                    {"textDocumentSync", text_document_sync},
                    {"hoverProvider", true},
                    {"completionProvider", completion_provider},
-                   {"signatureHelpProvider", signature_help_provider},
                    {"definitionProvider", true},
                    {"colorProvider", true},
                    {"referencesProvider", true},
-                   {"documentHighlightProvider", false},
-                   {"documentSymbolProvider",
-                    document_symbol_provder},  // TODO - there is another selectionRangeProvider i
-                                               // think i need, or word boundaries need to change!
-                   {"workspaceSymbolProvider", false},
-                   {"codeActionProvider", false},
-                   // {"codeLensProvider", code_lens_provider},
+                   {"documentSymbolProvider", true},
                    {"documentFormattingProvider", true},
-                   {"documentRangeFormattingProvider", false},
-                   {"documentOnTypeFormattingProvider", document_on_type_formatting_provider},
-                   {"renameProvider", false},
-                   {"documentLinkProvider", document_link_provider},
-                   {"executeCommandProvider", execute_command_provider},
                    {"typeHierarchyProvider", true},
-                   {"experimental", {}},
-               }}};
+               }},
+              {"serverInfo", {{"name", "OpenGOAL LSP"}}}};
   return result;
 }
 }  // namespace lsp_handlers

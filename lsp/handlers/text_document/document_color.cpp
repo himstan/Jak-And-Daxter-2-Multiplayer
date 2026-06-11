@@ -61,8 +61,9 @@ std::unordered_map<GameVersion, std::unordered_map<int, std::tuple<float, float,
 
 namespace lsp_handlers {
 
-std::optional<json> document_color(Workspace& workspace, int /*id*/, json raw_params) {
+std::optional<json> document_color(Workspace& workspace, json /*id*/, json raw_params) {
   auto params = raw_params.get<LSPSpec::DocumentColorParams>();
+  workspace.ensure_file_tracked(params.textDocument.m_uri);
   auto file_type = workspace.determine_filetype_from_uri(params.textDocument.m_uri);
   const auto game_version = workspace.determine_game_version_from_uri(params.textDocument.m_uri);
 

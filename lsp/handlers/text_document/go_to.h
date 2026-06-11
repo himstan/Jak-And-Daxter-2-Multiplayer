@@ -8,5 +8,5 @@
 #include "lsp/state/workspace.h"
 
 namespace lsp_handlers {
-std::optional<json> go_to_definition(Workspace& workspace, int id, json raw_params);
+std::optional<json> go_to_definition(Workspace& workspace, json id, json raw_params);
 }

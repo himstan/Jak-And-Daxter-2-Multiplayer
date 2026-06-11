@@ -42,3 +42,17 @@ void LSPSpec::from_json(const json& j, WillSaveTextDocumentParams& obj) {
   json_deserialize_if_exists(textDocument);
   json_deserialize_if_exists(reason);
 }
+
+void LSPSpec::to_json(json& j, const DidSaveTextDocumentParams& obj) {
+  json_serialize(textDocument);
+  if (obj.text) {
+    j["text"] = obj.text.value();
+  }
+}
+
+void LSPSpec::from_json(const json& j, DidSaveTextDocumentParams& obj) {
+  json_deserialize_if_exists(textDocument);
+  if (j.contains("text")) {
+    obj.text = j.at("text").get<std::string>();
+  }
+}

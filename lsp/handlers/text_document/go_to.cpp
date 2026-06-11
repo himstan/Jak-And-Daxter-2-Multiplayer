@@ -4,8 +4,9 @@
 #include "lsp/lsp_util.h"
 
 namespace lsp_handlers {
-std::optional<json> go_to_definition(Workspace& workspace, int /*id*/, json raw_params) {
+std::optional<json> go_to_definition(Workspace& workspace, json /*id*/, json raw_params) {
   auto params = raw_params.get<LSPSpec::TextDocumentPositionParams>();
+  workspace.ensure_file_tracked(params.m_textDocument.m_uri);
   const auto file_type = workspace.determine_filetype_from_uri(params.m_textDocument.m_uri);
 
   json locations = json::array();
@@ -28,6 +29,19 @@ std::optional<json> go_to_definition(Workspace& workspace, int /*id*/, json raw_
       TSNode parent = ts_node_parent(node);
       if (!ts_node_is_null(parent) && std::string(ts_node_type(parent)) == "sym_lit") {
         node = parent;
+      }
+    }
+
+    if (!is_under_arrow_field_pos(node, tracked_file)) {
+      auto lex_binding = find_lexical_binding(tracked_file, node, workspace);
+      if (lex_binding) {
+        auto decl_point = ts_node_start_point(lex_binding->decl_node);
+        LSPSpec::Location location;
+        location.m_uri = params.m_textDocument.m_uri;
+        location.m_range.m_start = {decl_point.row, decl_point.column};
+        location.m_range.m_end = {decl_point.row, decl_point.column + (uint32_t)lex_binding->name.length()};
+        locations.push_back(location);
+        return locations;
       }
     }
 
@@ -69,34 +83,30 @@ std::optional<json> go_to_definition(Workspace& workspace, int /*id*/, json raw_
 
             if (my_sym_idx >= 2) { // 0 is ->, 1 is obj, 2+ are fields
               std::string parent_type_name;
-              if (my_sym_idx == 2) {
-                TSNode obj_node = sym_nodes[1];
-                std::string obj_name = ast_util::get_source_code(tracked_file.m_content, obj_node);
-                lg::debug("go_to_definition - resolving root object: {}", obj_name);
+              TSNode obj_node = sym_nodes[1];
+              std::string obj_name = ast_util::get_source_code(tracked_file.m_content, obj_node);
+              lg::debug("go_to_definition - resolving root object: {}", obj_name);
+              parent_type_name = infer_type(tracked_file, obj_node, workspace);
+              if (parent_type_name.empty()) {
                 auto type_info = workspace.get_symbol_typeinfo(tracked_file, obj_name);
                 if (type_info) {
                   parent_type_name = type_info->first.base_type();
-                  lg::debug("go_to_definition - root object type: {}", parent_type_name);
                 }
-              } else {
-                TSNode obj_node = sym_nodes[1];
-                std::string obj_name = ast_util::get_source_code(tracked_file.m_content, obj_node);
-                lg::debug("go_to_definition - resolving nested chain starting at: {}", obj_name);
-                auto type_info = workspace.get_symbol_typeinfo(tracked_file, obj_name);
-                if (type_info) {
-                  parent_type_name = type_info->first.base_type();
-                  for (int i = 2; i < my_sym_idx; i++) {
-                    std::string step_name = ast_util::get_source_code(tracked_file.m_content, sym_nodes[i]);
-                    lg::debug("go_to_definition - resolving step {}: {} in type {}", i-1, step_name, parent_type_name);
-                    auto step_field = workspace.get_field_info(tracked_file, parent_type_name, step_name);
-                    if (step_field) {
-                      parent_type_name = step_field->type;
-                      lg::debug("go_to_definition - step {} resolved to type: {}", i-1, parent_type_name);
-                    } else {
-                      lg::debug("go_to_definition - step {} FAILED", i-1);
-                      parent_type_name = "";
-                      break;
-                    }
+              }
+              lg::debug("go_to_definition - root object type: {}", parent_type_name);
+
+              if (!parent_type_name.empty() && my_sym_idx > 2) {
+                for (int i = 2; i < my_sym_idx; i++) {
+                  std::string step_name = ast_util::get_source_code(tracked_file.m_content, sym_nodes[i]);
+                  lg::debug("go_to_definition - resolving step {}: {} in type {}", i-1, step_name, parent_type_name);
+                  auto step_field = workspace.get_field_info(tracked_file, parent_type_name, step_name);
+                  if (step_field) {
+                    parent_type_name = step_field->type;
+                    lg::debug("go_to_definition - step {} resolved to type: {}", i-1, parent_type_name);
+                  } else {
+                    lg::debug("go_to_definition - step {} FAILED", i-1);
+                    parent_type_name = "";
+                    break;
                   }
                 }
               }

@@ -31,6 +31,37 @@ add_executable(goalc-test
         ${CMAKE_CURRENT_LIST_DIR}/decompiler/test_DisasmVifDecompile.cpp
         ${CMAKE_CURRENT_LIST_DIR}/decompiler/test_VuDisasm.cpp
         ${CMAKE_CURRENT_LIST_DIR}/common/formatter/test_formatter.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/handlers/lsp_router.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/handlers/initialize.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/handlers/text_document/completion.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/handlers/text_document/document_color.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/handlers/text_document/document_symbol.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/handlers/text_document/document_synchronization.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/handlers/text_document/formatting.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/handlers/text_document/go_to.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/handlers/text_document/hover.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/handlers/text_document/references.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/handlers/text_document/type_hierarchy.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/protocol/completion.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/protocol/document_color.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/protocol/document_symbols.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/protocol/document_synchronization.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/protocol/formatting.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/protocol/hover.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/protocol/hover_formatting.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/protocol/progress_report.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/protocol/type_hierarchy.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/state/data/mips_instruction.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/state/lsp_requester.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/state/workspace.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/transport/stdio.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/lsp_util.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/protocol/common_types.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/protocol/document_diagnostics.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/lsp/test_lsp_progress.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/lsp/test_lsp_completion.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/lsp/test_lsp_hover_formatting.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/lsp/test_lsp_hover_definition.cpp
         ${GOALC_TEST_FRAMEWORK_SOURCES}
         ${GOALC_TEST_CASES}
         )

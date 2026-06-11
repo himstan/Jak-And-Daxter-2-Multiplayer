@@ -3,8 +3,9 @@
 #include "lsp/lsp_util.h"
 
 namespace lsp_handlers {
-std::optional<json> prepare_type_hierarchy(Workspace& workspace, int /*id*/, json raw_params) {
+std::optional<json> prepare_type_hierarchy(Workspace& workspace, json /*id*/, json raw_params) {
   auto params = raw_params.get<LSPSpec::TypeHierarchyPrepareParams>();
+  workspace.ensure_file_tracked(params.m_textDocument.m_uri);
   const auto file_type = workspace.determine_filetype_from_uri(params.m_textDocument.m_uri);
 
   if (file_type != Workspace::FileType::OpenGOAL) {
@@ -59,8 +60,9 @@ std::optional<json> prepare_type_hierarchy(Workspace& workspace, int /*id*/, jso
   return items;
 }
 
-std::optional<json> supertypes_type_hierarchy(Workspace& workspace, int /*id*/, json raw_params) {
+std::optional<json> supertypes_type_hierarchy(Workspace& workspace, json /*id*/, json raw_params) {
   auto params = raw_params.get<LSPSpec::TypeHierarchySupertypesParams>();
+  workspace.ensure_file_tracked(params.item.uri);
   const std::optional<GameVersion> game_version =
       workspace.determine_game_version_from_uri(params.item.uri);
   if (!game_version) {
@@ -102,8 +104,9 @@ std::optional<json> supertypes_type_hierarchy(Workspace& workspace, int /*id*/, 
   return items;
 }
 
-std::optional<json> subtypes_type_hierarchy(Workspace& workspace, int /*id*/, json raw_params) {
+std::optional<json> subtypes_type_hierarchy(Workspace& workspace, json /*id*/, json raw_params) {
   auto params = raw_params.get<LSPSpec::TypeHierarchySupertypesParams>();
+  workspace.ensure_file_tracked(params.item.uri);
   const std::optional<GameVersion> game_version =
       workspace.determine_game_version_from_uri(params.item.uri);
   if (!game_version) {

@@ -9,6 +9,6 @@
 
 namespace lsp_handlers {
 
-std::optional<json> document_symbols(Workspace& workspace, int id, json params);
+std::optional<json> document_symbols(Workspace& workspace, json id, json params);
 
 }  // namespace lsp_handlers

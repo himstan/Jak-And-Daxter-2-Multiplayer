@@ -5,6 +5,7 @@
 #ifdef __linux__
 #include <sys/time.h>
 #endif
+#include <functional>
 #include <string>
 
 #include "fmt/color.h"
@@ -50,6 +51,11 @@ void set_file_level(level log_level);
 void set_stdout_level(level log_level);
 void set_max_debug_levels();
 void disable_ansi_colors();
+
+using LogCallback = std::function<void(const std::string&)>;
+void add_print_callback(LogCallback cb);
+void clear_print_callbacks();
+
 void initialize();
 void finish();
 

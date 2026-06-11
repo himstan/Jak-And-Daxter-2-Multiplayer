@@ -8,8 +8,9 @@
 #include "lsp/state/workspace.h"
 
 namespace lsp_handlers {
-std::optional<json> formatting(Workspace& workspace, int /*id*/, json raw_params) {
+std::optional<json> formatting(Workspace& workspace, json /*id*/, json raw_params) {
   auto params = raw_params.get<LSPSpec::DocumentFormattingParams>();
+  workspace.ensure_file_tracked(params.textDocument.m_uri);
   const auto file_type = workspace.determine_filetype_from_uri(params.textDocument.m_uri);
 
   if (file_type == Workspace::FileType::OpenGOALIR) {

@@ -195,59 +195,69 @@ Val* Compiler::compile_error_guard(const goos::Object& code, Env* env) {
   try {
     return compile(code, env);
   } catch (CompilerException& ce) {
+    std::string err_str = ce.what();
     if (ce.print_err_stack) {
       bool term;
       auto loc_info = m_goos.reader.db.get_info_for(code, &term);
       if (term) {
+        err_str += fmt::format("Function:\n{}\nLocation:\n{}\n", env->function_env()->name(), loc_info);
         lg::print(fg(fmt::color::yellow) | fmt::emphasis::bold, "Function:\n");
         lg::print("{}\n", env->function_env()->name());
         lg::print(fg(fmt::color::yellow) | fmt::emphasis::bold, "Location:\n");
         lg::print("{}", loc_info);
       }
 
+      err_str += "Code:\n";
       lg::print(fg(fmt::color::yellow) | fmt::emphasis::bold, "Code:\n");
       auto code_str = pretty_print::to_string(code, 120);
       if (code_str.size() > 120 * 30) {
         code_str = code_str.substr(0, 120 * 30) + "...";
       }
+      err_str += code_str + "\n";
       lg::print("{}\n", code_str);
 
-      if (term) {
-        ce.print_err_stack = false;
-      }
       std::string line(80, '-');
       line.push_back('\n');
+      err_str += line;
       lg::print("{}", line);
+      
+      CompilerException new_ce(err_str);
+      new_ce.print_err_stack = !term;
+      throw new_ce;
     }
     throw ce;
   }
 
   catch (std::runtime_error& e) {
+    std::string err_str = fmt::format("-- Compilation Error! --\n{}\n", e.what());
     lg::print(fg(fmt::color::crimson) | fmt::emphasis::bold, "-- Compilation Error! --\n");
     lg::print(fmt::emphasis::bold, "{}\n", e.what());
     bool term;
     auto loc_info = m_goos.reader.db.get_info_for(code, &term);
     if (term) {
+      err_str += fmt::format("Function:\n{}\nLocation:\n{}\n", env->function_env()->name(), loc_info);
       lg::print(fg(fmt::color::yellow) | fmt::emphasis::bold, "Function:\n");
       lg::print("{}\n", env->function_env()->name());
       lg::print(fg(fmt::color::yellow) | fmt::emphasis::bold, "Location:\n");
       lg::print("{}", loc_info);
     }
 
+    err_str += "Code:\n";
     lg::print(fg(fmt::color::yellow) | fmt::emphasis::bold, "Code:\n");
     auto code_str = pretty_print::to_string(code, 120);
     if (code_str.size() > 120 * 30) {
       code_str = code_str.substr(0, 120 * 30) + "...";
     }
+    err_str += code_str + "\n";
     lg::print("{}\n", code_str);
 
-    CompilerException ce("Compiler Exception");
-    if (term) {
-      ce.print_err_stack = false;
-    }
     std::string line(80, '-');
     line.push_back('\n');
+    err_str += line;
     lg::print("{}", line);
+
+    CompilerException ce(err_str);
+    ce.print_err_stack = !term;
     throw ce;
   }
 }

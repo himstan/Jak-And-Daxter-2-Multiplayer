@@ -48,10 +48,31 @@ Workspace::FileType Workspace::determine_filetype_from_uri(const LSPSpec::Docume
   return FileType::Unsupported;
 }
 
+LSPSpec::DocumentUri Workspace::normalize_uri(const LSPSpec::DocumentUri& uri) {
+  auto path = lsp_util::uri_to_path(uri);
+  // Normalize path separators and casing on Windows
+  auto fs_path = fs::path(path);
+#ifdef _WIN32
+  // On Windows, normalize to lowercase drive letter and consistent separators
+  std::string path_str = file_util::convert_to_unix_path_separators(fs_path.string());
+  if (path_str.length() >= 2 && path_str[1] == ':') {
+    path_str[0] = std::tolower(path_str[0]);
+  }
+  return lsp_util::uri_from_path(fs::path(path_str));
+#else
+  return lsp_util::uri_from_path(fs_path);
+#endif
+}
+
 std::optional<std::reference_wrapper<WorkspaceOGFile>> Workspace::get_tracked_og_file(
     const LSPSpec::URI& file_uri) {
-  auto it = m_tracked_og_files.find(file_uri);
+  auto norm_uri = normalize_uri(file_uri);
+  auto it = m_tracked_og_files.find(norm_uri);
   if (it == m_tracked_og_files.end()) {
+    lg::debug("get_tracked_og_file lookup miss - raw: {}, norm: {}", file_uri, norm_uri);
+    for (const auto& [key, _] : m_tracked_og_files) {
+      lg::debug("  known tracked og key: {}", key);
+    }
     return std::nullopt;
   }
   return std::ref(it->second);
@@ -59,8 +80,13 @@ std::optional<std::reference_wrapper<WorkspaceOGFile>> Workspace::get_tracked_og
 
 std::optional<std::reference_wrapper<WorkspaceIRFile>> Workspace::get_tracked_ir_file(
     const LSPSpec::URI& file_uri) {
-  auto it = m_tracked_ir_files.find(file_uri);
+  auto norm_uri = normalize_uri(file_uri);
+  auto it = m_tracked_ir_files.find(norm_uri);
   if (it == m_tracked_ir_files.end()) {
+    lg::debug("get_tracked_ir_file lookup miss - raw: {}, norm: {}", file_uri, norm_uri);
+    for (const auto& [key, _] : m_tracked_ir_files) {
+      lg::debug("  known tracked ir key: {}", key);
+    }
     return std::nullopt;
   }
   return std::ref(it->second);
@@ -74,13 +100,18 @@ std::optional<std::reference_wrapper<WorkspaceIRFile>> Workspace::get_tracked_ir
 std::optional<GameVersion> Workspace::determine_game_version_from_uri(
     const LSPSpec::DocumentUri& uri) {
   const auto path = lsp_util::uri_to_path(uri);
-  if (str_util::contains(path, "goal_src/jak1")) {
+  lg::debug("determine_game_version_from_uri - path: {}", path);
+  if (str_util::contains(path, "goal_src/jak1") || str_util::contains(path, "test/lsp/fixtures/jak1")) {
+    lg::debug("detected game version: jak1");
     return GameVersion::Jak1;
   } else if (str_util::contains(path, "goal_src/jak2")) {
+    lg::debug("detected game version: jak2");
     return GameVersion::Jak2;
   } else if (str_util::contains(path, "goal_src/jak3")) {
+    lg::debug("detected game version: jak3");
     return GameVersion::Jak3;
   }
+  lg::warn("could not detect game version from path: {}", path);
   return {};
 }
 
@@ -109,15 +140,34 @@ std::optional<symbol_info::SymbolInfo*> Workspace::get_global_symbol_info(
   if (symbol_infos.empty()) {
     return {};
   } else if (symbol_infos.size() > 1) {
-    // TODO - handle this (overriden methods is the main issue here)
     lg::debug("Found symbol info, but found multiple infos - {}", symbol_infos.size());
-    return {};
+    // 1. Prefer non-fwd-dec (real definitions like defbehavior)
+    for (auto* info : symbol_infos) {
+      if (info->m_kind != symbol_info::Kind::FWD_DECLARED_SYM) {
+        return info;
+      }
+    }
+    // 2. Prefer current file
+    std::string current_file_path =
+        file_util::convert_to_unix_path_separators(lsp_util::uri_to_path(file.m_uri));
+    for (auto* info : symbol_infos) {
+      if (info->m_def_location) {
+        std::string def_path =
+            file_util::convert_to_unix_path_separators(info->m_def_location->file_path);
+        if (def_path == current_file_path) {
+          return info;
+        }
+      }
+    }
+    return symbol_infos.at(0);
   }
   const auto& symbol = symbol_infos.at(0);
   return symbol;
 }
 
 // TODO - consolidate what is needed into `SymbolInfo`
+std::string infer_global_define_type(const WorkspaceOGFile& file, const symbol_info::SymbolInfo* sym_info, Workspace& workspace);
+
 std::optional<std::pair<TypeSpec, Type*>> Workspace::get_symbol_typeinfo(
     const WorkspaceOGFile& file,
     const std::string& symbol_name) {
@@ -127,7 +177,49 @@ std::optional<std::pair<TypeSpec, Type*>> Workspace::get_symbol_typeinfo(
     return {};
   }
   const auto& compiler = m_compiler_instances[file.m_game_version].get();
-  const auto typespec = compiler->lookup_typespec(symbol_name);
+
+  // 1. Explicit compiler type first
+  auto typespec = compiler->lookup_typespec(symbol_name);
+  bool has_explicit_type = (typespec && typespec->base_type() != "none" && typespec->base_type() != "object");
+
+  if (has_explicit_type) {
+    const auto full_type_info = compiler->type_system().lookup_type_no_throw(typespec->base_type());
+    if (full_type_info != nullptr) {
+      return std::make_pair(typespec.value(), full_type_info);
+    }
+  }
+
+  // 2. Existing sym_info->m_type if valid
+  const auto symbol_infos = compiler->lookup_exact_name_info(symbol_name);
+  if (!symbol_infos.empty()) {
+    auto* sym_info = symbol_infos.at(0);
+    if (sym_info->m_kind == symbol_info::Kind::GLOBAL_VAR) {
+      if (!sym_info->m_type.empty()) {
+        auto ts = TypeSpec(sym_info->m_type);
+        const auto full_type_info = compiler->type_system().lookup_type_no_throw(ts.base_type());
+        if (full_type_info != nullptr) {
+          return std::make_pair(ts, full_type_info);
+        }
+      }
+    }
+  }
+
+  // 3. Inferred define type map fallback
+  if (m_inferred_global_types.count(file.m_game_version) > 0) {
+    const auto& inner_map = m_inferred_global_types.at(file.m_game_version);
+    if (inner_map.count(symbol_name) > 0) {
+      const auto& inferred_type = inner_map.at(symbol_name);
+      if (!inferred_type.empty()) {
+        auto ts = TypeSpec(inferred_type);
+        const auto full_type_info = compiler->type_system().lookup_type_no_throw(ts.base_type());
+        if (full_type_info != nullptr) {
+          return std::make_pair(ts, full_type_info);
+        }
+      }
+    }
+  }
+
+  // 4. Unknown (generic/fallback typespec lookup if it was none or object)
   if (typespec) {
     const auto full_type_info = compiler->type_system().lookup_type_no_throw(typespec->base_type());
     if (full_type_info != nullptr) {
@@ -167,6 +259,7 @@ std::vector<symbol_info::FieldInfo> Workspace::get_field_suggestions(
       symbol_info::FieldInfo field_info;
       field_info.name = field.name();
       field_info.type = field.type().print();
+      field_info.description = "field of " + type_name;
       field_info.is_array = field.is_array();
       field_info.is_dynamic = field.is_dynamic();
       field_info.is_inline = field.is_inline();
@@ -340,75 +433,168 @@ std::unordered_map<std::string, s64> Workspace::get_enum_entries(const std::stri
   return enum_info->entries();
 }
 
+bool Workspace::is_compiler_ready(const GameVersion game_version) const {
+  return m_compiler_instances.find(game_version) != m_compiler_instances.end();
+}
+
 void Workspace::start_tracking_file(const LSPSpec::DocumentUri& file_uri,
                                     const std::string& language_id,
                                     const std::string& content) {
+  auto norm_uri = normalize_uri(file_uri);
+  lg::debug("start_tracking_file: raw URI: {}", file_uri);
+  lg::debug("start_tracking_file: decoded path: {}", lsp_util::uri_to_path(file_uri));
+  lg::debug("start_tracking_file: normalized key: {}", norm_uri);
+
   if (language_id == "opengoal-ir") {
-    lg::debug("new ir file - {}", file_uri);
+    lg::debug("new ir file - {}", norm_uri);
     WorkspaceIRFile file(content);
-    m_tracked_ir_files[file_uri] = file;
+    m_tracked_ir_files[norm_uri] = file;
   } else if (language_id == "opengoal") {
-    if (m_tracked_og_files.find(file_uri) != m_tracked_og_files.end()) {
-      lg::debug("Already tracking - {}", file_uri);
+    if (m_tracked_og_files.find(norm_uri) != m_tracked_og_files.end()) {
+      lg::debug("Already tracking - {}", norm_uri);
       return;
     }
-    auto game_version = determine_game_version_from_uri(file_uri);
+    auto game_version = determine_game_version_from_uri(norm_uri);
     if (!game_version) {
-      lg::debug("Could not determine game version from path - {}", file_uri);
+      lg::debug("Could not determine game version from path - {}", norm_uri);
       return;
     }
 
     if (m_compiler_instances.find(*game_version) == m_compiler_instances.end()) {
+      const auto game_name = version_to_game_name(*game_version);
+      lg::info("indexing started for {}", game_name);
       lg::debug(
           "first time encountering a OpenGOAL file for game version - {}, initializing a compiler",
-          version_to_game_name(*game_version));
+          game_name);
+      const auto path = lsp_util::uri_to_path(norm_uri);
       const auto project_path =
-          file_util::try_get_project_path_from_path(lsp_util::uri_to_path(file_uri));
+          file_util::try_get_project_path_from_path(path);
       if (!project_path) {
-        lg::debug("unable to find project path, not initializing a compiler");
+        lg::warn("unable to find project path from {}, not initializing a compiler", path);
         return;
       }
-      lg::debug("Detected project path - {}", project_path.value());
+      lg::info("Detected project root: {}", project_path.value());
       if (!file_util::setup_project_path(project_path)) {
         lg::debug("unable to setup project path, not initializing a compiler");
         return;
       }
+      if (!work_done_progress_supported()) {
+        lg::info("LSP workDoneProgress capability is disabled/unsupported");
+      }
       const std::string progress_title =
           fmt::format("Compiling {}", version_to_game_name_external(game_version.value()));
-      m_requester.send_progress_create_request(progress_title, "compiling project", -1);
+      
+      auto tracker = std::make_shared<lsp_util::CompileProgressTracker>(
+          progress_title,
+          [this, progress_title](const lsp_util::CompileProgressTracker::ProgressEvent& event) {
+            if (event.kind == "create") {
+              m_requester.send_progress_create_request(event.token, progress_title, event.message, event.percentage);
+            } else if (event.kind == "report") {
+              m_requester.send_progress_update_request(event.token, event.message, event.percentage);
+            } else if (event.kind == "end") {
+              m_requester.send_progress_finish_request(event.token, event.message);
+            }
+          },
+          work_done_progress_supported());
+
+      tracker->start("Starting OpenGOAL indexing");
+      lg::add_print_callback([tracker](const std::string& line) {
+        tracker->handle_chunk(line);
+      });
+
       m_compiler_instances.emplace(
           game_version.value(),
           std::make_unique<Compiler>(game_version.value(), emitter::InstructionSet::X86));
       try {
+        lg::info("starting initial indexing: make-group all-code");
         m_compiler_instances.at(*game_version)
             ->run_front_end_on_string("(make-group \"all-code\")");
-        m_requester.send_progress_finish_request(progress_title, "indexed");
+        lg::info("indexing finished for {}", game_name);
+        lg::clear_print_callbacks();
+        tracker->finish("OpenGOAL indexing complete");
       } catch (std::exception& e) {
-        m_requester.send_progress_finish_request(progress_title, "failed");
+        lg::error("indexing failed for {}: {}", game_name, e.what());
+        lg::clear_print_callbacks();
+        tracker->finish("OpenGOAL indexing failed");
         lg::debug("error when {}", progress_title);
+
+        auto parse_result = lsp_util::parse_compiler_error(e.what());
+        if (parse_result.success && !parse_result.file_path.empty()) {
+          auto target_uri = normalize_uri(lsp_util::uri_from_path(parse_result.file_path));
+          // We can't easily assign it to m_tracked_og_files here if it's not THIS file
+          // but we can at least log it or try to find it if it was just added
+          if (target_uri == norm_uri) {
+            // This will be handled after we emplace the file below, 
+            // but we need a way to pass it down.
+            // For now, let's just log it and rely on the next save to show it properly,
+            // or we can store it in a temporary map if we really wanted to.
+          }
+        }
       }
     }
-    m_tracked_og_files.emplace(file_uri, WorkspaceOGFile(file_uri, content, *game_version));
-    m_tracked_og_files[file_uri].update_symbols(
+    m_tracked_og_files.emplace(norm_uri, WorkspaceOGFile(norm_uri, content, *game_version));
+    scan_file_for_defines(m_tracked_og_files[norm_uri]);
+    m_tracked_og_files[norm_uri].update_symbols(
         m_compiler_instances.at(*game_version)
-            ->lookup_symbol_info_by_file(lsp_util::uri_to_path(file_uri)));
+            ->lookup_symbol_info_by_file(lsp_util::uri_to_path(norm_uri)));
+  }
+  lg::debug("tracked file count after adding: {}", track_file_count());
+}
+
+void Workspace::ensure_file_tracked(const LSPSpec::DocumentUri& file_uri,
+                                    const std::optional<std::string>& language_id,
+                                    const std::optional<std::string>& content) {
+  auto norm_uri = normalize_uri(file_uri);
+  if (m_tracked_og_files.find(norm_uri) != m_tracked_og_files.end() ||
+      m_tracked_ir_files.find(norm_uri) != m_tracked_ir_files.end()) {
+    return;
+  }
+
+  lg::info("Lazy tracking file: {}", norm_uri);
+
+  std::string actual_content;
+  if (content) {
+    actual_content = *content;
+  } else {
+    auto path = lsp_util::uri_to_path(norm_uri);
+    actual_content = file_util::read_text_file(path);
+  }
+
+  std::string actual_lang_id;
+  if (language_id) {
+    actual_lang_id = *language_id;
+  } else {
+    auto type = determine_filetype_from_uri(norm_uri);
+    if (type == FileType::OpenGOAL) {
+      actual_lang_id = "opengoal";
+    } else if (type == FileType::OpenGOALIR) {
+      actual_lang_id = "opengoal-ir";
+    }
+  }
+
+  if (!actual_lang_id.empty()) {
+    start_tracking_file(norm_uri, actual_lang_id, actual_content);
+  } else {
+    lg::warn("Could not determine language id for lazy tracking: {}", norm_uri);
   }
 }
 
 void Workspace::update_tracked_file(const LSPSpec::DocumentUri& file_uri,
                                     const std::string& content) {
-  lg::debug("potentially updating - {}", file_uri);
+  auto norm_uri = normalize_uri(file_uri);
+  lg::debug("potentially updating - {}", norm_uri);
   // Check if the file is already tracked or not, this is done because change events don't give
   // language details it's assumed you are keeping track of that!
-  if (m_tracked_ir_files.find(file_uri) != m_tracked_ir_files.end()) {
-    lg::debug("updating tracked IR file - {}", file_uri);
+  if (m_tracked_ir_files.find(norm_uri) != m_tracked_ir_files.end()) {
+    lg::debug("updating tracked IR file - {}", norm_uri);
     WorkspaceIRFile file(content);
-    m_tracked_ir_files[file_uri] = file;
-  } else if (m_tracked_og_files.find(file_uri) != m_tracked_og_files.end()) {
-    lg::debug("updating tracked OG file - {}", file_uri);
-    m_tracked_og_files[file_uri].parse_content(content);
+    m_tracked_ir_files[norm_uri] = file;
+  } else if (m_tracked_og_files.find(norm_uri) != m_tracked_og_files.end()) {
+    lg::debug("updating tracked OG file - {}", norm_uri);
+    m_tracked_og_files[norm_uri].parse_content(content);
+    scan_file_for_defines(m_tracked_og_files[norm_uri]);
     // re-`ml` the file
-    const auto game_version = m_tracked_og_files[file_uri].m_game_version;
+    const auto game_version = m_tracked_og_files[norm_uri].m_game_version;
     if (m_compiler_instances.find(game_version) == m_compiler_instances.end()) {
       lg::debug("No compiler initialized for - {}", version_to_game_name(game_version));
       return;
@@ -416,24 +602,88 @@ void Workspace::update_tracked_file(const LSPSpec::DocumentUri& file_uri,
   }
 }
 
-void Workspace::tracked_file_will_save(const LSPSpec::DocumentUri& file_uri) {
-  lg::debug("file will be saved - {}", file_uri);
-  if (m_tracked_og_files.find(file_uri) != m_tracked_og_files.end()) {
+void Workspace::handle_file_save(const LSPSpec::DocumentUri& file_uri) {
+  auto norm_uri = normalize_uri(file_uri);
+  lg::debug("file will be saved - {}", norm_uri);
+  if (m_tracked_og_files.find(norm_uri) != m_tracked_og_files.end()) {
     // goalc is not an incremental compiler (yet) so I believe it will be a better UX
     // to re-compile on the file save, rather than as the user is typing
-    const auto game_version = m_tracked_og_files[file_uri].m_game_version;
+    const auto game_version = m_tracked_og_files[norm_uri].m_game_version;
     if (m_compiler_instances.find(game_version) == m_compiler_instances.end()) {
       lg::debug("No compiler initialized for - {}", version_to_game_name(game_version));
       return;
     }
     CompilationOptions options;
-    options.filename = lsp_util::uri_to_path(file_uri);
-    // re-compile the file
-    m_compiler_instances.at(game_version)->asm_file(options);
-    // Update symbols for this specific file
-    const auto symbol_infos =
-        m_compiler_instances.at(game_version)->lookup_symbol_info_by_file(options.filename);
-    m_tracked_og_files[file_uri].update_symbols(symbol_infos);
+    options.filename = lsp_util::uri_to_path(norm_uri);
+    lg::info("didSave recompiling file: {}", options.filename);
+
+    if (!work_done_progress_supported()) {
+      lg::info("LSP workDoneProgress capability is disabled/unsupported");
+    }
+    const std::string progress_title =
+        fmt::format("Compiling {}", fs::path(options.filename).filename().string());
+    auto tracker = std::make_shared<lsp_util::CompileProgressTracker>(
+        progress_title,
+        [this, progress_title](const lsp_util::CompileProgressTracker::ProgressEvent& event) {
+          if (event.kind == "create") {
+            m_requester.send_progress_create_request(event.token, progress_title, event.message, event.percentage);
+          } else if (event.kind == "report") {
+            m_requester.send_progress_update_request(event.token, event.message, event.percentage);
+          } else if (event.kind == "end") {
+            m_requester.send_progress_finish_request(event.token, event.message);
+          }
+        },
+        work_done_progress_supported());
+
+    tracker->start("Compiling file");
+    lg::add_print_callback([tracker](const std::string& line) {
+      tracker->handle_chunk(line);
+    });
+
+    try {
+      // re-compile the file
+      m_compiler_instances.at(game_version)->asm_file(options);
+      // Update symbols for this specific file
+      const auto symbol_infos =
+          m_compiler_instances.at(game_version)->lookup_symbol_info_by_file(options.filename);
+      m_tracked_og_files[norm_uri].update_symbols(symbol_infos);
+      m_tracked_og_files[norm_uri].m_diagnostics.clear();
+      lg::info("didSave recompile completed");
+      lg::clear_print_callbacks();
+      tracker->finish("Recompile complete");
+    } catch (std::exception& e) {
+      lg::error("didSave recompile failed: {}", e.what());
+      lg::clear_print_callbacks();
+      tracker->finish("Recompile failed");
+      auto parse_result = lsp_util::parse_compiler_error(e.what());
+      if (parse_result.success) {
+        // If we found a file path in the error, try to use it, otherwise use current file
+        auto target_uri = norm_uri;
+        if (!parse_result.file_path.empty()) {
+          auto target_path = fs::path(parse_result.file_path);
+          if (target_path.is_relative()) {
+            target_path = file_util::get_jak_project_dir() / target_path;
+          }
+          target_uri = normalize_uri(lsp_util::uri_from_path(target_path));
+        }
+
+        if (m_tracked_og_files.find(target_uri) != m_tracked_og_files.end()) {
+          m_tracked_og_files[target_uri].m_diagnostics = {parse_result.diagnostic};
+        } else {
+          lg::warn("Compiler error in untracked file: {}", target_uri);
+          // Fallback to current file if target is not tracked
+          m_tracked_og_files[norm_uri].m_diagnostics = {parse_result.diagnostic};
+        }
+      } else {
+        // Fallback: assign to current file at line 0 if parsing failed
+        LSPSpec::Diagnostic diag;
+        diag.m_message = e.what();
+        diag.m_severity = LSPSpec::DiagnosticSeverity::Error;
+        diag.m_range = LSPSpec::Range(0, 0);
+        diag.m_source = "OpenGOAL";
+        m_tracked_og_files[norm_uri].m_diagnostics = {diag};
+      }
+    }
   }
 }
 
@@ -444,8 +694,9 @@ void Workspace::update_global_index(const GameVersion game_version) {
 // clang-format on
 
 void Workspace::stop_tracking_file(const LSPSpec::DocumentUri& file_uri) {
-  m_tracked_ir_files.erase(file_uri);
-  m_tracked_og_files.erase(file_uri);
+  auto norm_uri = normalize_uri(file_uri);
+  m_tracked_ir_files.erase(norm_uri);
+  m_tracked_og_files.erase(norm_uri);
 }
 
 WorkspaceOGFile::WorkspaceOGFile(const LSPSpec::DocumentUri& uri,
@@ -803,4 +1054,329 @@ std::optional<std::string> WorkspaceIRFile::get_symbol_at_position(
   }
 
   return {};
+}
+
+std::optional<LexicalBinding> find_lexical_binding(const WorkspaceOGFile& file, TSNode query_node, Workspace& workspace) {
+  if (ts_node_is_null(query_node)) {
+    return std::nullopt;
+  }
+  std::string query_name = ast_util::get_source_code(file.m_content, query_node);
+  if (query_name.empty()) {
+    return std::nullopt;
+  }
+
+  TSNode curr = ts_node_parent(query_node);
+  while (!ts_node_is_null(curr)) {
+    std::string curr_type = ts_node_type(curr);
+    if (curr_type == "list" || curr_type == "form" || curr_type == "list_lit" || curr_type == "form_lit") {
+      uint32_t named_count = ts_node_named_child_count(curr);
+      if (named_count >= 2) {
+        TSNode first_child = ts_node_named_child(curr, 0);
+        std::string first_elt = ast_util::get_source_code(file.m_content, first_child);
+
+        if (first_elt == "defbehavior") {
+          if (query_name == "self" && named_count >= 4) {
+            TSNode owner_type_node = ts_node_named_child(curr, 2);
+            TSNode param_list = ts_node_named_child(curr, 3);
+            if (ts_node_start_byte(query_node) >= ts_node_end_byte(param_list)) {
+              std::string owner_type_str = ast_util::get_source_code(file.m_content, owner_type_node);
+              return LexicalBinding{"self", "implicit self", owner_type_str, owner_type_node};
+            }
+          }
+        } else if (first_elt == "defstate") {
+          if (query_name == "self" && named_count >= 3) {
+            TSNode type_list = ts_node_named_child(curr, 2);
+            std::string tl_type = ts_node_type(type_list);
+            if ((tl_type == "list" || tl_type == "form" || tl_type == "list_lit" || tl_type == "form_lit") &&
+                ts_node_named_child_count(type_list) >= 1) {
+              if (ts_node_start_byte(query_node) >= ts_node_end_byte(type_list)) {
+                TSNode owner_type_node = ts_node_named_child(type_list, 0);
+                std::string owner_type_str = ast_util::get_source_code(file.m_content, owner_type_node);
+                return LexicalBinding{"self", "implicit self", owner_type_str, owner_type_node};
+              }
+            }
+          }
+        }
+
+        if (first_elt == "defun" || first_elt == "defmethod" || first_elt == "defbehavior" || first_elt == "behavior") {
+          TSNode param_list = {{0, 0, 0, 0}};
+          for (uint32_t i = 1; i < named_count; i++) {
+            TSNode child = ts_node_named_child(curr, i);
+            std::string c_type = ts_node_type(child);
+            if (c_type == "list" || c_type == "form" || c_type == "list_lit" || c_type == "form_lit") {
+              param_list = child;
+              break;
+            }
+          }
+
+          if (!ts_node_is_null(param_list)) {
+            uint32_t query_start = ts_node_start_byte(query_node);
+            uint32_t param_end = ts_node_end_byte(param_list);
+            if (query_start >= param_end) {
+              uint32_t param_count = ts_node_named_child_count(param_list);
+              for (uint32_t p = 0; p < param_count; p++) {
+                TSNode param = ts_node_named_child(param_list, p);
+                std::string p_type = ts_node_type(param);
+                if (p_type == "list" || p_type == "form" || p_type == "list_lit" || p_type == "form_lit") {
+                  if (ts_node_named_child_count(param) >= 2) {
+                    TSNode p_name_node = ts_node_named_child(param, 0);
+                    std::string p_name = ast_util::get_source_code(file.m_content, p_name_node);
+                    if (p_name == query_name) {
+                      TSNode p_type_node = ts_node_named_child(param, 1);
+                      std::string p_type_str = ast_util::get_source_code(file.m_content, p_type_node);
+                      return LexicalBinding{p_name, "parameter", p_type_str, p_name_node};
+                    }
+                  }
+                } else {
+                  std::string p_name = ast_util::get_source_code(file.m_content, param);
+                  if (p_name == query_name) {
+                    return LexicalBinding{p_name, "parameter", "", param};
+                  }
+                }
+              }
+            }
+          }
+        } else if (first_elt == "let" || first_elt == "let*") {
+          TSNode bindings_list = ts_node_named_child(curr, 1);
+          if (!ts_node_is_null(bindings_list) && ts_node_named_child_count(bindings_list) > 0) {
+            uint32_t query_start = ts_node_start_byte(query_node);
+            uint32_t bindings_end = ts_node_end_byte(bindings_list);
+
+            int32_t binding_count = (int32_t)ts_node_named_child_count(bindings_list);
+            for (int32_t b = binding_count - 1; b >= 0; b--) {
+              TSNode binding = ts_node_named_child(bindings_list, b);
+              if (ts_node_named_child_count(binding) >= 2) {
+                TSNode var_node = ts_node_named_child(binding, 0);
+                std::string var_name = ast_util::get_source_code(file.m_content, var_node);
+                if (var_name == query_name) {
+                  bool is_decl = (ts_node_start_byte(query_node) >= ts_node_start_byte(var_node) &&
+                                  ts_node_end_byte(query_node) <= ts_node_end_byte(var_node));
+                  bool in_scope = false;
+                  if (is_decl) {
+                    in_scope = true;
+                  } else if (query_start >= bindings_end) {
+                    in_scope = true;
+                  } else if (first_elt == "let*" && query_start >= ts_node_end_byte(binding)) {
+                    in_scope = true;
+                  }
+
+                  if (in_scope) {
+                    TSNode init_node = ts_node_named_child(binding, 1);
+                    std::string inferred_type = infer_type(file, init_node, workspace);
+                    return LexicalBinding{var_name, "local", inferred_type, var_node};
+                  }
+                }
+              }
+            }
+          }
+        } else if (first_elt == "dotimes") {
+          TSNode header = ts_node_named_child(curr, 1);
+          if (!ts_node_is_null(header) && ts_node_named_child_count(header) >= 1) {
+            uint32_t query_start = ts_node_start_byte(query_node);
+            TSNode var_node = ts_node_named_child(header, 0);
+            std::string var_name = ast_util::get_source_code(file.m_content, var_node);
+            if (var_name == query_name && query_start >= ts_node_end_byte(var_node)) {
+              return LexicalBinding{var_name, "local", "int", var_node};
+            }
+          }
+        }
+      }
+    }
+    curr = ts_node_parent(curr);
+  }
+  return std::nullopt;
+}
+
+std::string infer_type(const WorkspaceOGFile& file, TSNode node, Workspace& workspace) {
+  if (ts_node_is_null(node)) return "";
+
+  // Normalize node: if we are on a sym_name, move up to sym_lit if it exists
+  if (std::string(ts_node_type(node)) == "sym_name") {
+    TSNode parent = ts_node_parent(node);
+    if (!ts_node_is_null(parent) && std::string(ts_node_type(parent)) == "sym_lit") {
+      node = parent;
+    }
+  }
+
+  std::string node_type = ts_node_type(node);
+  std::string text = ast_util::get_source_code(file.m_content, node);
+
+  if (node_type == "sym_name" || node_type == "sym_lit") {
+    std::string sym_name = ast_util::get_source_code(file.m_content, node);
+
+    // Check local bindings first to ensure local scope overrides global
+    auto local_binding = find_lexical_binding(file, node, workspace);
+    if (local_binding && !local_binding->type.empty()) {
+      return local_binding->type;
+    }
+
+    auto global_type = workspace.get_symbol_typeinfo(file, sym_name);
+    if (global_type) {
+      return global_type->first.base_type();
+    }
+  }
+
+  if (node_type == "str_lit" || (text.size() >= 2 && text.front() == '"' && text.back() == '"')) {
+    return "string";
+  }
+  if (text == "#t" || text == "#f") {
+    return "symbol";
+  }
+  std::regex float_regex("^-?[0-9]+\\.[0-9]+$");
+  if (node_type == "float_lit" || node_type == "float" || std::regex_match(text, float_regex)) {
+    return "float";
+  }
+  std::regex int_regex("^-?[0-9]+$");
+  if (node_type == "int_lit" || node_type == "integer" || std::regex_match(text, int_regex)) {
+    return "int";
+  }
+
+  if (node_type == "list" || node_type == "form" || node_type == "list_lit" || node_type == "form_lit") {
+    uint32_t named_count = ts_node_named_child_count(node);
+    if (named_count >= 1) {
+      TSNode first_child = ts_node_named_child(node, 0);
+      std::string first_elt = ast_util::get_source_code(file.m_content, first_child);
+
+      if ((first_elt == "the-as" || first_elt == "the") && named_count >= 3) {
+        TSNode type_node = ts_node_named_child(node, 1);
+        return ast_util::get_source_code(file.m_content, type_node);
+      }
+
+      if (first_elt == "new" && named_count >= 3) {
+        TSNode type_node = ts_node_named_child(node, 2);
+        std::string type_text = ast_util::get_source_code(file.m_content, type_node);
+        if (type_text.size() > 1 && type_text.front() == '\'') {
+          type_text = type_text.substr(1);
+        }
+        return type_text;
+      }
+
+      if (first_elt == "->") {
+        TSNode receiver_node = ts_node_named_child(node, 1);
+        std::string receiver_type = infer_type(file, receiver_node, workspace);
+        if (!receiver_type.empty()) {
+          std::string curr_type = receiver_type;
+          for (uint32_t i = 2; i < named_count; i++) {
+            TSNode step = ts_node_named_child(node, i);
+            std::string step_type = ts_node_type(step);
+            if (step_type == "sym_name" || step_type == "sym_lit") {
+              std::string step_name = ast_util::get_source_code(file.m_content, step);
+              auto field_info = workspace.get_field_info(file, curr_type, step_name);
+              if (field_info) {
+                curr_type = field_info->type;
+              }
+            }
+          }
+          return curr_type;
+        }
+      }
+
+      auto typeinfo = workspace.get_symbol_typeinfo(file, first_elt);
+      if (typeinfo) {
+        const auto& ts = typeinfo->first;
+        if (ts.base_type() == "function" && ts.arg_count() > 0) {
+          return ts.last_arg().base_type();
+        }
+      }
+    }
+  }
+
+  return "";
+}
+
+bool is_under_arrow_field_pos(TSNode node, const WorkspaceOGFile& file) {
+  TSNode curr = node;
+  if (!ts_node_is_null(curr) && std::string(ts_node_type(curr)) == "sym_name") {
+    TSNode parent = ts_node_parent(curr);
+    if (!ts_node_is_null(parent) && std::string(ts_node_type(parent)) == "sym_lit") {
+      curr = parent;
+    }
+  }
+
+  TSNode p = ts_node_parent(curr);
+  int depth = 0;
+  while (!ts_node_is_null(p) && depth < 3) {
+    std::string curr_type = ts_node_type(p);
+    if (curr_type == "list" || curr_type == "form" || curr_type == "list_lit" || curr_type == "form_lit") {
+      TSNode first_symbol = {{0, 0, 0, 0}};
+      uint32_t search_limit = std::min(ts_node_child_count(p), (uint32_t)3);
+      for (uint32_t i = 0; i < search_limit; i++) {
+        TSNode child = ts_node_child(p, i);
+        std::string c_type = ts_node_type(child);
+        if (c_type == "sym_name" || c_type == "sym_lit") {
+          first_symbol = child;
+          break;
+        }
+      }
+
+      if (!ts_node_is_null(first_symbol)) {
+        std::string first_elt = ast_util::get_source_code(file.m_content, first_symbol);
+        if (first_elt == "->") {
+          std::vector<TSNode> sym_nodes;
+          int my_sym_idx = -1;
+          for (uint32_t i = 0; i < ts_node_child_count(p); i++) {
+            TSNode child = ts_node_child(p, i);
+            std::string c_type = ts_node_type(child);
+            if (c_type == "sym_name" || c_type == "sym_lit") {
+              if (ts_node_eq(child, curr)) {
+                my_sym_idx = (int)sym_nodes.size();
+              }
+              sym_nodes.push_back(child);
+            }
+          }
+          if (my_sym_idx >= 2) {
+            return true;
+          }
+        }
+      }
+    }
+    p = ts_node_parent(p);
+    depth++;
+  }
+  return false;
+}
+
+std::string infer_global_define_type(const WorkspaceOGFile& /*file*/, const symbol_info::SymbolInfo* /*sym_info*/, Workspace& /*workspace*/) {
+  return "";
+}
+
+void scan_for_defines_rec(const WorkspaceOGFile& file, TSNode node, Workspace& workspace) {
+  if (ts_node_is_null(node)) return;
+
+  std::string node_type = ts_node_type(node);
+  if (node_type == "list" || node_type == "form" || node_type == "list_lit" || node_type == "form_lit") {
+    uint32_t named_count = ts_node_named_child_count(node);
+    if (named_count >= 3) {
+      TSNode first_child = ts_node_named_child(node, 0);
+      std::string first_elt = ast_util::get_source_code(file.m_content, first_child);
+      if (first_elt == "define") {
+        TSNode name_node = ts_node_named_child(node, 1);
+        TSNode init_node = ts_node_named_child(node, 2);
+        
+        std::string name_type = ts_node_type(name_node);
+        if (name_type == "sym_name" || name_type == "sym_lit") {
+          std::string name_str = ast_util::get_source_code(file.m_content, name_node);
+          if (name_str.size() > 1 && name_str.front() == '\'') {
+            name_str = name_str.substr(1);
+          }
+          std::string inferred = infer_type(file, init_node, workspace);
+          if (!inferred.empty()) {
+            workspace.m_inferred_global_types[file.m_game_version][name_str] = inferred;
+            lg::info("plain define inference: {} -> {}", name_str, inferred);
+          }
+        }
+      }
+    }
+  }
+
+  uint32_t child_count = ts_node_child_count(node);
+  for (uint32_t i = 0; i < child_count; i++) {
+    scan_for_defines_rec(file, ts_node_child(node, i), workspace);
+  }
+}
+
+void Workspace::scan_file_for_defines(const WorkspaceOGFile& file) {
+  if (file.get_ast()) {
+    scan_for_defines_rec(file, ts_tree_root_node(file.get_ast().get()), *this);
+  }
 }

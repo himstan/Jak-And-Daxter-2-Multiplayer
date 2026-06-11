@@ -449,29 +449,36 @@ class Compiler {
   [[noreturn]] void throw_compiler_error(const goos::Object& code,
                                          const std::string& str,
                                          Args&&... args) {
-    lg::print(fg(fmt::color::crimson) | fmt::emphasis::bold, "-- Compilation Error! --\n");
+    std::string err_msg;
     if (!str.empty() && str.back() == '\n') {
-      lg::print(fmt::emphasis::bold, str, std::forward<Args>(args)...);
+      err_msg = fmt::format(fmt::runtime(str), std::forward<Args>(args)...);
     } else {
-      lg::print(fmt::emphasis::bold, str + '\n', std::forward<Args>(args)...);
+      err_msg = fmt::format(fmt::runtime(str + '\n'), std::forward<Args>(args)...);
     }
 
+    std::string full_msg = fmt::format("-- Compilation Error! --\n{}\nForm:\n{}\n", err_msg, code.print());
+
+    lg::print(fg(fmt::color::crimson) | fmt::emphasis::bold, "-- Compilation Error! --\n");
+    lg::print(fmt::emphasis::bold, "{}", err_msg);
     lg::print(fg(fmt::color::yellow) | fmt::emphasis::bold, "Form:\n");
     lg::print("{}\n", code.print());
-    throw CompilerException("Compilation Error");
+    throw CompilerException(full_msg);
   }
 
   template <typename... Args>
   [[noreturn]] void throw_compiler_error_no_code(const std::string& str, Args&&... args) {
-    lg::print(fg(fmt::color::crimson) | fmt::emphasis::bold, "-- Compilation Error! --\n");
+    std::string err_msg;
     if (!str.empty() && str.back() == '\n') {
-      lg::print(fmt::emphasis::bold, str, std::forward<Args>(args)...);
+      err_msg = fmt::format(fmt::runtime(str), std::forward<Args>(args)...);
     } else {
-      lg::print(fmt::emphasis::bold, str + '\n', std::forward<Args>(args)...);
+      err_msg = fmt::format(fmt::runtime(str + '\n'), std::forward<Args>(args)...);
     }
 
-    lg::print(fg(fmt::color::yellow) | fmt::emphasis::bold, "Form:\n");
-    throw CompilerException("Compilation Error");
+    std::string full_msg = fmt::format("-- Compilation Error! --\n{}\n", err_msg);
+
+    lg::print(fg(fmt::color::crimson) | fmt::emphasis::bold, "-- Compilation Error! --\n");
+    lg::print(fmt::emphasis::bold, "{}", err_msg);
+    throw CompilerException(full_msg);
   }
 
   template <typename... Args>

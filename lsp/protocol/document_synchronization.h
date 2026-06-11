@@ -52,4 +52,14 @@ struct WillSaveTextDocumentParams {
 void to_json(json& j, const WillSaveTextDocumentParams& obj);
 void from_json(const json& j, WillSaveTextDocumentParams& obj);
 
+struct DidSaveTextDocumentParams {
+  // The document that was saved.
+  TextDocumentIdentifier textDocument;
+  // Optional the content when it was saved.
+  std::optional<std::string> text;
+};
+
+void to_json(json& j, const DidSaveTextDocumentParams& obj);
+void from_json(const json& j, DidSaveTextDocumentParams& obj);
+
 }  // namespace LSPSpec

@@ -26,6 +26,7 @@ struct Logger {
   level flush_level = level::trace;
   std::mutex mutex;
   bool disable_colors = false;
+  std::vector<LogCallback> print_callbacks;
 
   ~Logger() {
     // will run when program exits.
@@ -111,6 +112,10 @@ void log_print(const char* message) {
       fflush(stdout);
       fflush(stderr);
     }
+
+    for (auto& cb : gLogger.print_callbacks) {
+      cb(message);
+    }
   }
 }
 
@@ -127,14 +132,31 @@ void log_vprintf(const char* format, va_list arg_list) {
       fflush(gLogger.fp);
     }
 
+    char buffer[1024];
+    vsnprintf(buffer, sizeof(buffer), format, arg_list_2);
+
     if (gLogger.stdout_log_level < lg::level::off_unless_die) {
-      vprintf(format, arg_list_2);
+      printf("%s", buffer);
       fflush(stdout);
       fflush(stderr);
+    }
+
+    for (auto& cb : gLogger.print_callbacks) {
+      cb(buffer);
     }
   }
 }
 }  // namespace internal
+
+void add_print_callback(LogCallback cb) {
+  std::lock_guard<std::mutex> lock(gLogger.mutex);
+  gLogger.print_callbacks.push_back(cb);
+}
+
+void clear_print_callbacks() {
+  std::lock_guard<std::mutex> lock(gLogger.mutex);
+  gLogger.print_callbacks.clear();
+}
 
 void printstd(const char* format, va_list arg_list) {
   internal::log_vprintf(format, arg_list);
