@@ -1017,7 +1017,7 @@
              (quaternion-copy! (-> s4-0 params rotation) (-> *target* control quat))
              (+! (-> s4-0 params position y) 12288.0)
              (set! (-> s4-0 params behavior) (the-as uint 4))
-             (logclear! (-> s4-0 params flags) (traffic-spawn-flags trsflags-01))
+             (logclear! (-> s4-0 params flags) (traffic-spawn-flags spawn-rider))
              (let ((s5-1 (vehicle-spawn this (type-from-race-vehicle-type (-> s2-0 vehicle)) (-> s4-0 params))))
                (when s5-1
                  (init-racers! gp-0 s5-1)
@@ -1041,7 +1041,7 @@
               (set! (-> s4-0 params position quad) (-> s0-0 start-position quad))
               (set! (-> s4-0 params id) (the-as uint s2-1))
               (set! (-> s4-0 params user-data) (-> s1-0 rider))
-              (logior! (-> s4-0 params flags) (traffic-spawn-flags trsflags-01))
+              (logior! (-> s4-0 params flags) (traffic-spawn-flags spawn-rider))
               (let ((v1-48 (-> s1-0 rider)))
                 (cond
                   ((or (zero? v1-48) (= v1-48 1))
@@ -1063,7 +1063,7 @@
                      (set! (-> s4-0 params position quad) (-> gp-0 info player-intro-pos quad))
                      (+! (-> s4-0 params position y) 12288.0)
                      )
-                   (logclear! (-> s4-0 params flags) (traffic-spawn-flags trsflags-01))
+                   (logclear! (-> s4-0 params flags) (traffic-spawn-flags spawn-rider))
                    (set! sv-416 37)
                    sv-416
                    )

@@ -290,7 +290,7 @@
      (when (-> this race mesh)
        (race-control-method-9 (-> this race) (-> this traffic-priority-id) (-> this root trans))
        (cond
-         ((logtest? (-> arg0 flags) (traffic-spawn-flags trsflags-01))
+         ((logtest? (-> arg0 flags) (traffic-spawn-flags spawn-rider))
           (logior! (-> this flags) (rigid-body-object-flag riding ai-driving))
           (cond
             ((-> this race path)

@@ -1209,7 +1209,7 @@
                 (copy-rotation spawn-rotation a1-50)
                 )
               )
-            (logior! (-> s2-1 flags) (traffic-spawn-flags trsflags-00))
+            (logior! (-> s2-1 flags) (traffic-spawn-flags skip-lwide-entity-hack))
             (set! (-> s2-1 id) (the-as uint 122))
             (set! (-> s2-1 net-id) (shuttle-passenger-net-id task-node pickup-index))
             (let ((v0-58 (the-as citizen-rebel (mp-pedestrian-find-by-net-id (-> s2-1 net-id)))))

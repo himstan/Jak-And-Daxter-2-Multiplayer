@@ -59,14 +59,14 @@
 (defenum traffic-spawn-flags
   :type uint32
   :bitfield #t
-  (trsflags-00)
-  (trsflags-01)
-  (trsflags-02)
+  (skip-lwide-entity-hack)
+  (spawn-rider)
+  (reserved-02)
   (dark-guard)
-  (trsflags-04)
-  (trsflags-05)
-  (trsflags-06)
-  (trsflags-07)
+  (reserved-04)
+  (reserved-05)
+  (reserved-06)
+  (reserved-07)
   )
 ;; ---traffic-h:traffic-spawn-flags
 

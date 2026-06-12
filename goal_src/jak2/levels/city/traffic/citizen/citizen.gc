@@ -717,7 +717,7 @@
   (init-enemy-collision! self)
   (set! (-> self root trans quad) (-> arg0 position quad))
   (quaternion-copy! (-> self root quat) (-> arg0 rotation))
-  (if (not (logtest? (-> arg0 flags) (traffic-spawn-flags trsflags-00)))
+  (if (not (logtest? (-> arg0 flags) (traffic-spawn-flags skip-lwide-entity-hack)))
       (lwide-entity-hack)
       )
   (set! (-> self vehicle) (-> arg0 handle))

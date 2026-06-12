@@ -171,9 +171,12 @@
                                     type-str 
                                     pad-idx
                                     seat-str)
+                            (clear tmp)
+                            (format tmp "~%PARKED: ~S" (if (and (nonzero? (-> proc is-parked?)) (-> proc is-parked?)) "PARKED" "NOT-PARKED"))
                             (cat-string<-string text-str tmp)
                             (clear tmp)
-                            (format tmp "~%ZONE: ~S" (if (traffic-path-risk? proc) "UNLOADED-TOUCH" "LOADED"))                            (cat-string<-string text-str tmp)
+                            (format tmp "~%ZONE: ~S" (if (traffic-path-risk? proc) "UNLOADED-TOUCH" "LOADED"))
+                            (cat-string<-string text-str tmp)
                             (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
                                               text-str
                                               draw-pos 

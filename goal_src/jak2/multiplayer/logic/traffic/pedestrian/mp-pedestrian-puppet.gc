@@ -9,7 +9,7 @@
       (let ((curr (-> *traffic-manager* child)))
         (while (and curr (nonzero? curr))
           (let ((proc (ppointer->process curr)))
-            (when (and (type? proc citizen) (= (-> (the-as citizen proc) net-id) net-id))
+            (when (and proc (nonzero? proc) (type? proc citizen) (= (-> (the-as citizen proc) net-id) net-id))
               (set! found-proc (the-as citizen proc))
               (set! curr (the-as (pointer process-tree) #f))
               )

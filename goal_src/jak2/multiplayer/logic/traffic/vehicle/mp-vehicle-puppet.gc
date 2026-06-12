@@ -19,6 +19,7 @@
 ;; Global handle to the vehicle currently being driven by the remote puppet.
 ;; Using a handle is memory-safe; it resolves to #f if the vehicle is deactivated.
 (define *mp-remote-driven-vehicle* (the-as handle #f))
+(define MP_VEHICLE_PARKING_MINIMAP_ATTACHED (the uint8 173))
 
 (defun mp-vehicle-get-pad-index ((this vehicle))
   "Returns 0 for local player, 1 for remote puppet."
@@ -86,6 +87,105 @@
     )
   (none)
   )
+
+(defun mp-vehicle-ensure-guard-minimap! ((veh vehicle))
+  "Attach the vanilla guard minimap icon to a spawned or refreshed guard vehicle."
+  (when (and veh
+             (nonzero? veh)
+             (type? veh vehicle-guard)
+             *minimap*
+             (nonzero? *minimap*))
+    (vehicle-method-128 (the-as vehicle-guard veh))
+    )
+  (none)
+  )
+
+(defun mp-vehicle-remove-guard-minimap! ((veh vehicle))
+  "Fade out the vanilla guard minimap icon before the vehicle is force-culled."
+  (when (and veh
+             (nonzero? veh)
+             (type? veh vehicle-guard))
+    (vehicle-method-127 (the-as vehicle-guard veh))
+    )
+  (none)
+  )
+  
+(defun mp-vehicle-slot-parking-minimap? ((slot mp-vehicle-state))
+  "True when the host reports that this vehicle is represented by a parking spot icon."
+  (and slot
+       (nonzero? slot)
+       (logtest? (-> slot state-flags) MP_VEHICLE_STATE_FLAG_PARKING_MINIMAP))
+  )
+  
+(defun vehicle-parking-minimap? ((veh vehicle))
+  "True when the host reports that this vehicle is represented by a parking spot icon."
+  (if (and veh (nonzero? veh) (= (-> veh pad-bytes 1) MP_VEHICLE_PARKING_MINIMAP_ATTACHED))
+       #t
+       #f
+       )
+  )
+
+(defun mp-vehicle-ensure-parking-minimap! ((veh vehicle))
+  "Attach the gray parking-spot minimap icon to a remote waiting vehicle."
+  (when (and veh
+             (nonzero? veh)
+             *minimap*
+             (nonzero? *minimap*)
+             (or (not (-> veh is-parked?)) (zero? (-> veh is-parked?))))
+    (let ((conn (add-icon! *minimap* veh (the-as uint (minimap-class parking-spot)) (the-as int #f) (the-as vector #t) 0)))
+      (when (and conn (nonzero? conn))
+        (format 0 "Adding MP_VEHICLE_PARKING_MINIMAP_ATTACHED flag to vehicle with id: ~D current pad-bytes 1: ~A~%" (-> veh net-id) (-> veh pad-bytes 1))
+        (set! (-> veh is-parked?) #t)
+        (set! (-> veh pad-bytes 1) MP_VEHICLE_PARKING_MINIMAP_ATTACHED)
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-vehicle-remove-parking-minimap! ((veh vehicle))
+  "Fade out any parking-spot minimap icon attached to this remote vehicle."
+  (when (and veh
+             (nonzero? veh)
+             *minimap*
+             (nonzero? *minimap*))
+    (let ((curr (the-as connection-pers (-> *minimap* engine alive-list))))
+      (while curr
+        (let ((conn (the-as connection-minimap curr)))
+          (let ((handle (handle->process-safe (-> conn handle))))
+            (when (and handle (nonzero? handle) (type? handle vehicle))
+              (let ((minimap-veh (the-as vehicle handle)))
+                (when (= (-> veh net-id) (-> minimap-veh net-id))
+                  (logior! (-> conn flags) (minimap-flag fade-out))
+                  (set! conn #f)
+                )
+              )
+            )
+          )
+        )
+        (set! curr (-> curr next))
+      )
+    )
+    (set! (-> veh pad-bytes 1) (the uint8 0))
+    (set! (-> veh is-parked?) #f)
+  )
+  (none)
+)
+
+(defun mp-vehicle-refresh-parking-minimap! ((veh vehicle) (slot mp-vehicle-state))
+  "Mirror the host-side parking-spot minimap state without syncing parking spots."
+  (when (and veh (nonzero? veh))
+    (when (and (mp-vehicle-slot-parking-minimap? slot) (or (not (-> veh is-parked?)) (zero? (-> veh is-parked?))) (= (-> slot state-id) 4))
+      (mp-vehicle-ensure-parking-minimap! veh)
+      (format 0 "Ensuring parking spot for vehicle id: ~D state: ~A is-parked?: ~A~%" (-> veh net-id) (-> veh state name) (-> veh is-parked?))
+    )
+    (when (and (vehicle-parking-minimap? veh) (!= (-> slot state-id) 4))
+      (format 0 "Removing parking spot for vehicle id: ~D state: ~A is-parked?: ~A~%" (-> veh net-id) (-> veh state name) (-> veh is-parked?))
+      (mp-vehicle-remove-parking-minimap! veh)
+    )
+  )
+  (none)
+)
 
 (defun mp-vehicle-is-local-authoritative? ((veh vehicle))
   "Check if the local machine has authority over this vehicle's physics."
@@ -180,7 +280,7 @@
 
 (defun mp-vehicle-apply-authoritative-flight-level! ((veh vehicle) (state-flags uint))
   "Force synced high/low flight level without running local transition logic."
-  (if (logtest? state-flags 2)
+  (if (logtest? state-flags MP_VEHICLE_STATE_FLAG_HIGH_FLIGHT)
       (set! (-> veh flight-level-index) 1)
       (set! (-> veh flight-level-index) 0)
       )
@@ -355,7 +455,7 @@
       (if *old-vehicle-method-105* (*old-vehicle-method-105* this) #t)
       (let ((rec (mp-get-traffic-ghost (-> this net-id))))
         (if rec
-            (logtest? (-> rec ghost-target-aid) 4)
+            (logtest? (-> rec ghost-target-aid) MP_VEHICLE_STATE_FLAG_PHYSICS)
             (or (nonzero? (-> this net-id))
                 (and (-> this state) (= (-> this state name) 'player-control))
                 (mp-is-daxter?)
@@ -467,7 +567,7 @@
                  (set! (-> params proc) #f)
                  (set! (-> params handle) (the-as handle #f))
                  (set! (-> params user-data) (the uint 0))
-                 (set! (-> params flags) (traffic-spawn-flags trsflags-00 trsflags-01))
+                 (set! (-> params flags) (traffic-spawn-flags skip-lwide-entity-hack spawn-rider))
                  (set! (-> params guard-type) (the uint8 0))
                  (set-vector! (-> params position) (-> slot x) (-> slot y) (-> slot z) 1.0)
                  (quaternion-set! (-> params rotation) (-> slot quat-x) (-> slot quat-y) (-> slot quat-z) (-> slot quat-w))
@@ -539,6 +639,8 @@
 
   (mp-vehicle-apply-color-index! proc slot)
   (mp-vehicle-update-riders proc slot)
+  (mp-vehicle-ensure-guard-minimap! proc)
+  (mp-vehicle-refresh-parking-minimap! proc slot)
   (none)
 )
 
@@ -572,12 +674,15 @@
           )
 
         (if (nonzero? (-> slot rider-aids 0))
-            (set! (-> params flags) (traffic-spawn-flags trsflags-01))
+            (set! (-> params flags) (traffic-spawn-flags spawn-rider))
             (set! (-> params flags) (the-as traffic-spawn-flags 0))
             )
         (let ((proc (traffic-object-spawn (the-as process *traffic-manager*) params)))
           (when (and proc (nonzero? proc) (type? proc vehicle))
+            (set! (-> (the-as vehicle proc) pad-bytes 1) (the uint8 0))
             (mp-vehicle-apply-color-index! (the-as vehicle proc) slot)
+            (mp-vehicle-ensure-guard-minimap! (the-as vehicle proc))
+            (mp-vehicle-refresh-parking-minimap! (the-as vehicle proc) slot)
             )
           )
         )
@@ -614,9 +719,15 @@
               (if (<= (-> *remote-info* veh-state state-id) 2)
                   (when can-spawn-puppet?
                     (logclear! (-> proc flags) (rigid-body-object-flag persistent))
-                    (send-event proc 'traffic-off-force)
+                    (if (type? proc vehicle-guard)
+                        (mp-vehicle-remove-guard-minimap! proc)
+                        (send-event proc 'traffic-off-force)
+                        )
                     )
-                  (mp-vehicle-apply-ghost-state proc (-> *remote-info* veh-state))
+                  (begin
+                    (mp-vehicle-apply-ghost-state proc (-> *remote-info* veh-state))
+                    (mp-vehicle-ensure-guard-minimap! proc)
+                    )
                   )
             )
             (when (and can-spawn-puppet?
@@ -650,9 +761,15 @@
                 (if (<= (-> slot state-id) 2)
                     (begin
                       (logclear! (-> proc flags) (rigid-body-object-flag persistent))
-                      (send-event proc 'traffic-off-force)
+                      (if (type? proc vehicle-guard)
+                          (mp-vehicle-remove-guard-minimap! proc)
+                          (send-event proc 'traffic-off-force)
+                          )
                       )
-                    (mp-vehicle-apply-ghost-state proc slot)
+                    (begin
+                      (mp-vehicle-apply-ghost-state proc slot)
+                      (mp-vehicle-ensure-guard-minimap! proc)
+                      )
                     )
                 (when (and (> spawn-budget 0)
                            (> (-> slot state-id) 2)
@@ -683,10 +800,13 @@
                       (dotimes (i (the int MP_MAX_SYNC_VEHICLES))
                         (if (= (-> *mp-traffic-buffer* veh-enemies i net-id) v-net-id) (set! found-in-buffer? #t))
                         )
-                      )
+                  )
                   (when (not found-in-buffer?)
                     (logclear! (-> (the-as vehicle proc) flags) (rigid-body-object-flag persistent))
-                    (send-event proc 'traffic-off-force)
+                    (if (type? proc vehicle-guard)
+                        (mp-vehicle-remove-guard-minimap! (the-as vehicle proc))
+                        (send-event proc 'traffic-off-force)
+                        )
                     )
                   )
                 )

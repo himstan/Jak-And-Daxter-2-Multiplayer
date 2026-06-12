@@ -9,6 +9,9 @@
 (define-extern *race-rigid-body-queue* rigid-body-queue)
 (define-extern *traffic-rigid-body-queue* rigid-body-queue)
 
+(define-extern vehicle-parking-minimap? (function vehicle symbol))
+(define-extern mp-vehicle-remove-parking-minimap! (function vehicle none))
+
 ;; DECOMP BEGINS
 
 (defun string-word-wrap ((arg0 string) (arg1 int))
@@ -1841,6 +1844,14 @@
        (when s5-3
          (format #t "vehicle::event-handler: pilot-on (pid ~d) from pid ~d~%" (-> this pid) (-> arg0 pid))
          (logior! (-> this flags) (rigid-body-object-flag riding))
+         (logclear! (-> this flags) (rigid-body-object-flag parked))
+         (set! (-> this is-parked?) #f)
+         (when (mp-is-daxter?)
+          (when (vehicle-parking-minimap? this)
+            (format 0 "Removing parking spot for vehicle id: ~D state: ~A is-parked?: ~A~%" (-> this net-id) (-> this state name) (-> this is-parked?))
+            (mp-vehicle-remove-parking-minimap! this)
+          )
+         )
          (let ((seat-idx (the-as int s3-2))
                )
           (put-rider-in-seat this seat-idx (the-as process-focusable s5-3))
@@ -1901,7 +1912,7 @@
   (allocate-and-init-cshape self)
   (set! (-> self root trans quad) (-> arg0 position quad))
   (quaternion-copy! (-> self root quat) (-> arg0 rotation))
-  (if (not (logtest? (-> arg0 flags) (traffic-spawn-flags trsflags-00)))
+  (if (not (logtest? (-> arg0 flags) (traffic-spawn-flags skip-lwide-entity-hack)))
       (lwide-entity-hack)
       )
   (init-skel-and-rigid-body self)

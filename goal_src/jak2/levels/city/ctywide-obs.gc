@@ -2218,22 +2218,23 @@
   )
 
 (defmethod parking-spot-method-21 ((this parking-spot))
-  (let ((s5-0 (handle->process (-> this vehicle))))
+  (let ((veh (the-as vehicle (handle->process (-> this vehicle)))))
     (cond
-      (s5-0
+      (veh
         (cond
-          ((or (focus-test? (the-as vehicle s5-0) dead inactive)
-               (not (logtest? (-> (the-as vehicle s5-0) flags) (rigid-body-object-flag waiting-for-player)))
+          ((or (focus-test? veh dead inactive)
+               (not (logtest? (-> veh flags) (rigid-body-object-flag waiting-for-player)))
                (let ((f0-0 (-> this test-sphere r)))
-                 (< (* f0-0 f0-0) (vector-vector-distance-squared (-> (the-as vehicle s5-0) root trans) (-> this test-sphere)))
+                 (< (* f0-0 f0-0) (vector-vector-distance-squared (-> veh root trans) (-> this test-sphere)))
                  )
                )
-           (logclear! (-> (the-as vehicle s5-0) flags) (rigid-body-object-flag persistent))
+           (logclear! (-> veh flags) (rigid-body-object-flag persistent))
            (set! (-> this vehicle) (the-as handle #f))
            )
           (else
-            (if (not (-> this minimap))
+            (when (not (-> this minimap))
                 (set! (-> this minimap) (add-icon! *minimap* this (the-as uint 17) (the-as int #f) (the-as vector #t) 0))
+                (set! (-> veh is-parked?) #t)
                 )
             )
           )
@@ -2281,6 +2282,9 @@
         (when (-> s4-0 proc)
           (set! (-> this vehicle) (process->handle (-> s4-0 proc)))
           (set! (-> this spawned) #t)
+          (let ((veh (the-as vehicle (handle->process (-> this vehicle)))))
+            (logior! (-> veh flags) (rigid-body-object-flag parked))
+          )
           )
         )
       )

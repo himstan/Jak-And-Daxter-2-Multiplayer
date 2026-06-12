@@ -2,6 +2,7 @@
 (in-package goal)
 
 ;; --- Globals for Throttling ---
+(define-perm *log-level-warn* symbol #f)
 (define-perm *multi-last-send-time* time-frame 0)
 (define-perm *multi-remote-spawn-time* time-frame 0)
 (define-perm *mp-last-scene-player* symbol #f)
@@ -468,6 +469,11 @@
   (racing                16)
   (race-finished         17)
   )
+
+(define MP_VEHICLE_STATE_FLAG_DEAD (the uint 1))
+(define MP_VEHICLE_STATE_FLAG_HIGH_FLIGHT (the uint 2))
+(define MP_VEHICLE_STATE_FLAG_PHYSICS (the uint 4))
+(define MP_VEHICLE_STATE_FLAG_PARKING_MINIMAP (the uint 8))
 
 (deftype mp-vehicle-state (structure)
   ((net-id          uint32)

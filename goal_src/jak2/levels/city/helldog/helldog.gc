@@ -570,7 +570,7 @@
                      (set! (-> s3-0 proc) #f)
                      (set! (-> s3-0 handle) (-> self slave s5-0))
                      (set! (-> s3-0 user-data) (the-as uint 0))
-                     (set! (-> s3-0 flags) (traffic-spawn-flags trsflags-01))
+                     (set! (-> s3-0 flags) (traffic-spawn-flags spawn-rider))
                      (set! (-> s3-0 guard-type) (the-as uint 7))
                      (vector-reset! (-> s3-0 velocity))
                      (set! (-> s3-0 position quad) (-> (the-as process-drawable s4-0) root trans quad))

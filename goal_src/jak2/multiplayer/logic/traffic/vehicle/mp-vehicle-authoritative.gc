@@ -112,11 +112,16 @@
       )
 
   (let ((flags (the uint 0)))
-    (if (logtest? (-> v-proc focus-status) (focus-status dead)) (set! flags (logior flags (the uint 1))))
-    ;; Bit 1: Flight Level Index (0 = low, 1 = high)
-    (if (nonzero? (-> v-proc flight-level-index)) (set! flags (logior flags (the uint 2))))
-    ;; Bit 2: Physics Enabled
-    (if (logtest? (-> v-proc rbody state flags) (rigid-body-flag enable-physics)) (set! flags (logior flags (the uint 4))))
+    (if (logtest? (-> v-proc focus-status) (focus-status dead))
+        (set! flags (logior flags MP_VEHICLE_STATE_FLAG_DEAD)))
+    (if (nonzero? (-> v-proc flight-level-index))
+        (set! flags (logior flags MP_VEHICLE_STATE_FLAG_HIGH_FLIGHT)))
+    (if (logtest? (-> v-proc rbody state flags) (rigid-body-flag enable-physics))
+        (set! flags (logior flags MP_VEHICLE_STATE_FLAG_PHYSICS)))
+    (if (and (not (focus-test? v-proc inactive))
+             (not (logtest? (-> v-proc focus-status) (focus-status dead)))
+             (logtest? (-> v-proc flags) (rigid-body-object-flag parked)))
+        (set! flags (logior flags MP_VEHICLE_STATE_FLAG_PARKING_MINIMAP)))
     (set! (-> slot state-flags) (the uint8 flags))
     )
 
