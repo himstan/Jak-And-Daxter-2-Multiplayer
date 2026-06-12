@@ -5,6 +5,7 @@
 (define-extern traffic-branch-loaded? (function nav-branch symbol))
 (define-extern traffic-next-branch-risk? (function nav-branch symbol))
 (define-extern traffic-path-risk? (function vehicle symbol))
+(define-extern mp-draw-vehicle-guard-debug (function vehicle-guard symbol none))
 
 ;; --- Pedestrian Debug ---
 
@@ -127,8 +128,86 @@
   (none)
 )
 
+(defun mp-format-generic-veh-info ((proc vehicle) (text-str string))
+  (when (and proc (nonzero? proc))
+    (let ((net-id (-> proc net-id)))
+      (when (nonzero? net-id)
+        (let ((is-remote-driven (and (nonzero? *remote-info*) (= net-id (-> *remote-info* veh-state net-id))))
+              (is-local-driven (and (nonzero? *local-info*) (= net-id (-> *local-info* veh-state net-id))))
+              (type-str (symbol->string (-> proc type symbol)))
+              (cur-state (if (-> proc state) (-> proc state name) 'none)))
+          (let ((is-owner (or is-local-driven (and (not is-remote-driven) (mp-is-traffic-authoritative?)))))
+            (let ((status-str (if is-owner "OWNER" "PUPPET"))
+                  (pad-idx (cond (is-local-driven 0) (is-remote-driven 1) (else (-> proc pad-index)))))
+              
+              (if is-local-driven
+                  (set! status-str "LOCAL-DRIVEN")
+                  )
+              (if is-remote-driven
+                  (set! status-str "REMOTE-DRIVEN")
+                  )
+
+              (let ((nudged-status (-> proc pad-bytes 0))
+                    (seat-str *mp-veh-debug-seat-str*)
+                    (tmp *mp-veh-debug-tmp-str*))
+                (when (and text-str (type? text-str string) seat-str (type? seat-str string) tmp (type? tmp string))
+                  (clear seat-str)
+                  (mp-debug-append-seat-info proc seat-str is-local-driven is-remote-driven)
+                  (if is-owner
+                      (begin
+                        (clear text-str)
+                        (format text-str "VEH-ID: ~D (~S)~%STATE: ~S(~D)~%" 
+                                net-id 
+                                status-str
+                                cur-state
+                                (the uint8 (mp-veh-get-state-id proc)))
+                        (clear tmp)
+                        (format tmp "TYPE: ~S~%PAD: ~D~%SEATS:~S" 
+                                type-str 
+                                pad-idx
+                                seat-str)
+                        (cat-string<-string text-str tmp)
+                        (clear tmp)
+                        (format tmp "~%PARKED: ~S" (if (and (nonzero? (-> proc is-parked?)) (-> proc is-parked?)) "PARKED" "NOT-PARKED"))
+                        (cat-string<-string text-str tmp)
+                        (clear tmp)
+                        (format tmp "~%ZONE: ~S" (if (traffic-path-risk? proc) "UNLOADED-TOUCH" "LOADED"))
+                        (cat-string<-string text-str tmp)
+                        )
+                      (let ((rec (mp-get-traffic-ghost net-id)))
+                        (let ((nudged-str (cond ((= nudged-status 1) "Y") ((= nudged-status 2) "SNAP") (else "N"))))
+                          (clear text-str)
+                          (format text-str "ID: ~D (~S) S:~S G:~S~%TYPE: ~S PAD: ~D~%" 
+                                  net-id 
+                                  status-str
+                                  cur-state
+                                  (if rec (mp-veh-get-state-from-id (the uint (-> rec ghost-state-id))) 'none)
+                                  type-str
+                                  pad-idx)
+                          (clear tmp)
+                          (format tmp "NUDGED: ~S~%SEATS:~S" 
+                                  nudged-str
+                                  seat-str)
+                          (cat-string<-string text-str tmp)
+                          (clear tmp)
+                          (format tmp "~%ZONE: ~S" (if (traffic-path-risk? proc) "UNLOADED-TOUCH" "LOADED"))
+                          (cat-string<-string text-str tmp)
+                          )
+                        )
+                      )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
 (defun mp-draw-traffic-veh-debug ((proc vehicle))
-  (when (and *mp-traffic-veh-debug?* *target*)
+  (when (and *mp-traffic-veh-debug?* *target* (nonzero? *target*))
     (let ((dist (vector-vector-distance (-> proc root trans) (-> *target* root trans))))
       (when (< dist *mp-traffic-debug-dist*)
         (let ((net-id (-> proc net-id)))
@@ -137,79 +216,24 @@
               (vector-copy! draw-pos (-> proc root trans))
               (set! (-> draw-pos y) (+ (-> draw-pos y) (meters 2.0)))
 
-              (let ((is-remote-driven (and (nonzero? net-id) (= net-id (-> *remote-info* veh-state net-id))))
-                    (is-local-driven (and (nonzero? net-id) (= net-id (-> *local-info* veh-state net-id))))
-                    (type-str (symbol->string (-> proc type symbol)))
-                    (cur-state (if (-> proc state) (-> proc state name) 'none)))
-                (let ((is-owner (or is-local-driven (and (not is-remote-driven) (mp-is-traffic-authoritative?)))))
-                  (let ((color (if is-owner (font-color green) (font-color yellow)))
-                        (status-str (if is-owner "OWNER" "PUPPET"))
-                        (pad-idx (cond (is-local-driven 0) (is-remote-driven 1) (else (-> proc pad-index)))))
-                    
-                    (if is-local-driven
-                        (set! status-str "LOCAL-DRIVEN")
-                        )
-                    (if is-remote-driven
-                        (set! status-str "REMOTE-DRIVEN")
-                        )
+              (let* ((text-str *mp-veh-debug-text-str*)
+                     (is-remote-driven (and (nonzero? net-id) (nonzero? *remote-info*) (= net-id (-> *remote-info* veh-state net-id))))
+                     (is-local-driven (and (nonzero? net-id) (nonzero? *local-info*) (= net-id (-> *local-info* veh-state net-id))))
+                     (is-owner (or is-local-driven (and (not is-remote-driven) (mp-is-traffic-authoritative?)))))
+                (clear text-str)
+                (mp-format-generic-veh-info proc text-str)
+                
+                (let ((color (if is-owner (font-color green) (font-color yellow))))
+                  (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
+                                    text-str
+                                    draw-pos 
+                                    color 
+                                    (the-as vector2h #f))
+                  )
 
-                    (let ((nudged-status (-> proc pad-bytes 0))
-                          (seat-str *mp-veh-debug-seat-str*)
-                          (text-str *mp-veh-debug-text-str*)
-                          (tmp *mp-veh-debug-tmp-str*))
-                      (clear seat-str)
-                      (clear text-str)
-                      (mp-debug-append-seat-info proc seat-str is-local-driven is-remote-driven)
-                      (if is-owner
-                          (begin
-                            (format text-str "VEH-ID: ~D (~S)~%STATE: ~S(~D)~%" 
-                                    net-id 
-                                    status-str
-                                    cur-state
-                                    (the uint8 (mp-veh-get-state-id proc)))
-                            (format tmp "TYPE: ~S~%PAD: ~D~%SEATS:~S" 
-                                    type-str 
-                                    pad-idx
-                                    seat-str)
-                            (clear tmp)
-                            (format tmp "~%PARKED: ~S" (if (and (nonzero? (-> proc is-parked?)) (-> proc is-parked?)) "PARKED" "NOT-PARKED"))
-                            (cat-string<-string text-str tmp)
-                            (clear tmp)
-                            (format tmp "~%ZONE: ~S" (if (traffic-path-risk? proc) "UNLOADED-TOUCH" "LOADED"))
-                            (cat-string<-string text-str tmp)
-                            (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
-                                              text-str
-                                              draw-pos 
-                                              color 
-                                              (the-as vector2h #f))
-                            )
-                          (let ((rec (mp-get-traffic-ghost net-id)))
-                            (let ((nudged-str (cond ((= nudged-status 1) "Y") ((= nudged-status 2) "SNAP") (else "N"))))
-                              (format text-str "ID: ~D (~S) S:~S G:~S~%TYPE: ~S PAD: ~D~%" 
-                                      net-id 
-                                      status-str
-                                      cur-state
-                                      (if rec (mp-veh-get-state-from-id (the uint (-> rec ghost-state-id))) 'none)
-                                      type-str
-                                      pad-idx)
-                              (format tmp "NUDGED: ~S~%SEATS:~S" 
-                                      nudged-str
-                                      seat-str)
-                              (cat-string<-string text-str tmp)
-                              (clear tmp)
-                              (format tmp "~%ZONE: ~S" (if (traffic-path-risk? proc) "UNLOADED-TOUCH" "LOADED"))
-                              (cat-string<-string text-str tmp)
-                              (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
-                                                text-str
-                                                draw-pos 
-                                                color 
-                                                (the-as vector2h #f))
-                              )
-                            
-                            (mp-draw-traffic-veh-ghost-debug proc rec)
-                            )
-                          )
-                      )
+                (when (not is-owner)
+                  (let ((rec (mp-get-traffic-ghost net-id)))
+                    (mp-draw-traffic-veh-ghost-debug proc rec)
                     )
                   )
                 )
@@ -287,15 +311,37 @@
   (mp-draw-traffic-authority-bubbles)
 
   ;; World overlays (independent toggles)
-  (when (or *mp-traffic-ped-debug?* *mp-traffic-veh-debug?*)
+  (when (or *mp-traffic-ped-debug?* *mp-traffic-veh-debug?* *mp-vehicle-guard-debug?*)
     (iterate-process-tree *active-pool* (lambda ((p process-tree))
       (let ((proc (the-as process p)))
         (cond
           ((type? proc vehicle)
-           (mp-draw-traffic-veh-debug (the-as vehicle proc))
+           (cond
+             ((type? proc vehicle-guard)
+              (let ((draw-func mp-draw-vehicle-guard-debug))
+                (when (and draw-func (nonzero? draw-func))
+                  (cond
+                    (*mp-vehicle-guard-debug?*
+                     (draw-func (the-as vehicle-guard proc) #t)
+                     )
+                    (*mp-traffic-veh-debug?*
+                     (draw-func (the-as vehicle-guard proc) #f)
+                     )
+                    )
+                  )
+                )
+              )
+             (else
+              (when *mp-traffic-veh-debug?*
+                (mp-draw-traffic-veh-debug (the-as vehicle proc))
+                )
+              )
+             )
            )
           ((type? proc citizen)
-           (mp-draw-traffic-ped-debug (the-as citizen proc))
+           (when *mp-traffic-ped-debug?*
+             (mp-draw-traffic-ped-debug (the-as citizen proc))
+             )
            )
           )
         )

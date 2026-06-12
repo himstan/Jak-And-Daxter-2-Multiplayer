@@ -46,15 +46,20 @@
   )
 
 
-(defun mp-local-target-ride-along-block-vehicle-entry? ((tgt target))
+(defun mp-local-target-ride-along-block-vehicle-entry? ((tgt target) (veh vehicle))
   "Block local vehicle boarding while ride-along is active."
-  (and tgt
-       (nonzero? tgt)
-       (= tgt *target*)
-       *target*
-       (nonzero? *target*)
-       (and (mp-is-daxter?) *local-riding?*))
+      ;; Block if we are on the Jak's shoulder
+  (or (and tgt
+             (nonzero? tgt)
+             (= tgt *target*)
+             *target*
+             (nonzero? *target*)
+             (and (mp-is-daxter?) *local-riding?*))
+      ;; Block guard vehicles for now, they're different from regular vehicles and the player driven guard vehicle puppets are broken.
+      ;; TODO: to fix the guard vehicle handling
+      (and veh (nonzero? veh) (type? veh vehicle-guard))
   )
+)
 
 
 (defmethod vehicle-hud-requests-method-9 ((this vehicle-hud-requests))
@@ -386,7 +391,7 @@
                                              (can-display-query? this (the-as string #f) (/ 1.0 (-> s5-0 floats 3)))
                                              )
                                    )
-                          (let ((block-local-boarding? (mp-local-target-ride-along-block-vehicle-entry? tgt)))
+                          (let ((block-local-boarding? (mp-local-target-ride-along-block-vehicle-entry? tgt this)))
                           (let ((s3-1
                                   (new 'stack 'font-context *font-default-matrix* 32 320 0.0 (font-color default) (font-flags shadow kerning))
                                   )

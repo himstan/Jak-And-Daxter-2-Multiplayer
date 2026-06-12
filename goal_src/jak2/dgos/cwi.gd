@@ -17,6 +17,7 @@
   "vehicle-physics.o"
   "vehicle-states.o"
   "vehicle-guard.o"
+  "mp-vehicle-guard-debug.o"
   "transport.o"
   "bike.o"
   "car.o"
