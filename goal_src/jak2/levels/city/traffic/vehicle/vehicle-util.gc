@@ -46,6 +46,17 @@
   )
 
 
+(defun mp-local-target-ride-along-block-vehicle-entry? ((tgt target))
+  "Block local vehicle boarding while ride-along is active."
+  (and tgt
+       (nonzero? tgt)
+       (= tgt *target*)
+       *target*
+       (nonzero? *target*)
+       (and (mp-is-daxter?) *local-riding?*))
+  )
+
+
 (defmethod vehicle-hud-requests-method-9 ((this vehicle-hud-requests))
   (dotimes (v1-0 4)
     (let ((a1-2 (-> this requests v1-0)))
@@ -375,6 +386,7 @@
                                              (can-display-query? this (the-as string #f) (/ 1.0 (-> s5-0 floats 3)))
                                              )
                                    )
+                          (let ((block-local-boarding? (mp-local-target-ride-along-block-vehicle-entry? tgt)))
                           (let ((s3-1
                                   (new 'stack 'font-context *font-default-matrix* 32 320 0.0 (font-color default) (font-flags shadow kerning))
                                   )
@@ -384,7 +396,8 @@
                             (set-scale! s3-1 0.9)
                             (set! (-> s3-1 flags) (font-flags shadow kerning large))
                             ;; Only display prompt for local player
-                            (when (= tgt *target*)
+                            (when (and (= tgt *target*)
+                                       (not block-local-boarding?))
                               (let ((msg (cond
                                            ((zero? boarding-seat) (text-id press-triangle-to-drive))
                                            ((> boarding-seat 0) (text-id press-triangle-to-ride))
@@ -401,7 +414,13 @@
                               )
                             )
                           (let ((pad-idx (-> tgt control cpad number)))
-                            (when (cpad-pressed? pad-idx triangle)
+                            (when (and block-local-boarding?
+                                       (= tgt *target*)
+                                       (cpad-pressed? pad-idx triangle))
+                              (cpad-clear! pad-idx triangle)
+                              )
+                            (when (and (not block-local-boarding?)
+                                       (cpad-pressed? pad-idx triangle))
                               (cond
                                 (s4-1
                                   ;; Use 'pilot-daxter mode if the target is currently in Daxter mode.
@@ -418,6 +437,7 @@
                                 )
                               )
                             )
+                          )
                           )
                         )
                       )
