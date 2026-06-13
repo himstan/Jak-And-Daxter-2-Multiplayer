@@ -286,6 +286,7 @@
   (set! *mp-traffic-host-spawning-active* #f)
   (set! *mp-pedestrian-net-id-counter* (the uint 1))
   (set! *mp-vehicle-net-id-counter* (the uint 32768))
+  (set! *mp-client-vehicle-net-id-counter* MP_CLIENT_VEHICLE_NET_ID_BASE)
   (set! *mp-last-local-state-id* (the uint 0))
   (set! *remote-player-is-dying* #f)
   (set! *remote-player-is-dead* #f)

@@ -179,6 +179,9 @@
             (!= (-> *target* state name) 'target-indax-pilot-get-off))
        (let* ((pilot-info (-> *target* pilot))
               (v-proc (the-as vehicle (handle->process-safe (-> pilot-info vehicle)))))
+         (when (and v-proc (nonzero? v-proc))
+           (mp-vehicle-promote-local-driver! v-proc)
+           )
          (when (and v-proc (nonzero? v-proc) (nonzero? (-> v-proc net-id)))
            ;; Set occupancy info before pilot-riding so remote puppets can play get-on.
            (set! (-> *local-info* riding-veh-id) (-> v-proc net-id))

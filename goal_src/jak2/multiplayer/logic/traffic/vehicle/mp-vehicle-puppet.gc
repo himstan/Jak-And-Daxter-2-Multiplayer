@@ -396,6 +396,27 @@
 
 ;; --- Hijack Implementations ---
 
+(defun mp-vehicle-refuse-traffic-off? ((veh vehicle))
+  "True when traffic cleanup must leave a player-driven vehicle active."
+  (when (and veh (nonzero? veh))
+    (let ((v-net-id (-> veh net-id)))
+      (when (or (mp-vehicle-local-target-driving? veh)
+                (mp-vehicle-remote-puppet-driving? veh)
+                (and (nonzero? v-net-id)
+                     *remote-info*
+                     (nonzero? *remote-info*)
+                     (= v-net-id (-> *remote-info* veh-state net-id)))
+                (and (nonzero? v-net-id)
+                     *local-info*
+                     (nonzero? *local-info*)
+                     (= v-net-id (-> *local-info* veh-state net-id))))
+        (return #t)
+        )
+      )
+    )
+  #f
+  )
+
 (defbehavior mp-vehicle-event-handler-hijack vehicle ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   (let ((v-net-id (-> self net-id)))
     (when (and (nonzero? v-net-id) (= v-net-id (-> *remote-info* veh-state net-id)))
@@ -410,11 +431,8 @@
 
   (case arg2
     (('traffic-off 'traffic-off-force)
-     (let ((v-net-id (-> self net-id)))
-       (if (or (= v-net-id (-> *remote-info* veh-state net-id))
-               (= v-net-id (-> *local-info* veh-state net-id)))
-           (return #t) ;; Protect driven vehicles from being culled
-           )
+     (when (mp-vehicle-refuse-traffic-off? self)
+       (return #f)
        )
      (when (not (mp-is-traffic-authoritative?))
        (set! (-> self net-id) (the uint 0))
@@ -468,6 +486,57 @@
       (= state-sym 'stop-and-shoot)
       (= state-sym 'slow-pursuit)
       (= state-sym 'waiting-ambush))
+  )
+
+(defun mp-client-vehicle-net-id-in-range? ((net-id uint))
+  (and (>= net-id MP_CLIENT_VEHICLE_NET_ID_BASE)
+       (< net-id MP_CLIENT_VEHICLE_NET_ID_END))
+  )
+
+(defun mp-client-vehicle-next-net-id ()
+  "Allocate an ID from Daxter's client-only ambient vehicle range."
+  (let ((attempts 0)
+        (candidate *mp-client-vehicle-net-id-counter*))
+    (while (< attempts 1024)
+      (when (not (mp-client-vehicle-net-id-in-range? candidate))
+        (set! candidate MP_CLIENT_VEHICLE_NET_ID_BASE)
+        )
+      (set! *mp-client-vehicle-net-id-counter* (+ candidate 1))
+      (when (not (mp-client-vehicle-net-id-in-range? *mp-client-vehicle-net-id-counter*))
+        (set! *mp-client-vehicle-net-id-counter* MP_CLIENT_VEHICLE_NET_ID_BASE)
+        )
+      (when (not (mp-vehicle-find-by-net-id candidate))
+        (return candidate)
+        )
+      (set! candidate *mp-client-vehicle-net-id-counter*)
+      (+! attempts 1)
+      )
+    (the uint 0)
+    )
+  )
+
+(defun mp-vehicle-promote-local-driver! ((veh vehicle))
+  "Give a Daxter-owned local traffic vehicle a network identity once driven."
+  (when (and veh
+             (nonzero? veh)
+             (mp-is-daxter?)
+             *target*
+             (nonzero? *target*)
+             (-> *target* control)
+             (nonzero? (-> *target* control))
+             (zero? (-> veh net-id))
+             (mp-vehicle-local-target-driving? veh))
+    (let ((new-net-id (mp-client-vehicle-next-net-id)))
+      (when (nonzero? new-net-id)
+        (set! (-> veh net-id) new-net-id)
+        (logior! (-> veh flags) (rigid-body-object-flag persistent player-driving riding))
+        (logclear! (-> veh flags) (rigid-body-object-flag ai-driving alert in-pursuit target-in-sight rammed-target))
+        (set! (-> veh pad-index) (the-as uint (-> *target* control cpad number)))
+        (format 0 "[MP-Traffic] Promoted Daxter-driven local vehicle to NetID ~D.~%" new-net-id)
+        )
+      )
+    )
+  (none)
   )
 
 (defun mp-vehicle-claim-local-driver-sync! ((veh vehicle))
@@ -534,11 +603,8 @@
 
   (case arg2
     (('traffic-off 'traffic-off-force)
-     (let ((v-net-id (-> this net-id)))
-       (if (or (= v-net-id (-> *remote-info* veh-state net-id))
-               (= v-net-id (-> *local-info* veh-state net-id)))
-           (return #t)
-           )
+     (when (mp-vehicle-refuse-traffic-off? this)
+       (return #f)
        )
      (when (not (mp-is-traffic-authoritative?))
        (set! (-> this net-id) (the uint 0))

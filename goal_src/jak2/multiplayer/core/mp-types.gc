@@ -15,6 +15,9 @@
 (define-perm *mp-traffic-host-spawning-active* symbol #f)
 (define-perm *mp-pedestrian-net-id-counter* uint (the uint 1))
 (define-perm *mp-vehicle-net-id-counter* uint (the uint 32768))
+(defconstant MP_CLIENT_VEHICLE_NET_ID_BASE (the uint #x40000000))
+(defconstant MP_CLIENT_VEHICLE_NET_ID_END (the uint #x50000000))
+(define-perm *mp-client-vehicle-net-id-counter* uint MP_CLIENT_VEHICLE_NET_ID_BASE)
 (define-perm *mp-last-local-state-id* uint (the uint 0))
 (define *multi-sync-tps* 30)
 
@@ -1289,6 +1292,7 @@
 (define-extern mp-ped-get-state-from-id (function uint symbol))
 (define-extern mp-veh-get-state-id (function vehicle uint))
 (define-extern mp-veh-get-state-from-id (function uint symbol))
+(define-extern mp-vehicle-promote-local-driver! (function vehicle none))
 (define-extern mp-apply-traffic-hijacks (function none))
 (define-extern mp-ped-predictive-move (function citizen none))
 (define-extern mp-pedestrian-apply-remote-attack! (function mp-ped-attack-event none))
