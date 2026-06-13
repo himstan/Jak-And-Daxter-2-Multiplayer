@@ -625,10 +625,121 @@
   (none)
   )
 
+(defun mp-vehicle-guard-find-target-status ((traffic traffic-engine) (target-handle handle))
+  "Find a shared traffic target-status slot for a player handle."
+  (when (and traffic
+             (nonzero? traffic)
+             target-handle
+             (nonzero? target-handle))
+    (dotimes (idx 3)
+      (let ((target-status (-> traffic alert-state target-status-array idx)))
+        (when (= (-> target-status handle) target-handle)
+          (return target-status)
+          )
+        )
+      )
+    )
+  (the-as traffic-target-status #f)
+  )
+
+(defun mp-vehicle-guard-default-target-status ((traffic traffic-engine) (target-proc process))
+  "Pick the local or remote player slot when guard aggro has not populated one yet."
+  (when (and traffic
+             (nonzero? traffic))
+    (if (and *target*
+             (nonzero? *target*)
+             (= target-proc *target*))
+        (return (-> traffic alert-state target-status-array 0))
+        )
+    (return (-> traffic alert-state target-status-array 1))
+    )
+  (the-as traffic-target-status #f)
+  )
+
+(defun mp-vehicle-guard-target-status-slot ((this vehicle-guard) (target-proc process))
+  "Resolve the shared traffic target-status slot used by guard vehicle aggro."
+  (when (and this
+             (nonzero? this)
+             target-proc
+             (nonzero? target-proc)
+             (-> this controller)
+             (nonzero? (-> this controller))
+             (-> this controller traffic)
+             (nonzero? (-> this controller traffic)))
+    (let ((traffic (-> this controller traffic))
+          (target-handle (process->handle target-proc))
+          (target-status (the-as traffic-target-status #f))
+          )
+      (when (and target-handle
+                 (nonzero? target-handle))
+        (set! target-status (mp-vehicle-guard-find-target-status traffic target-handle))
+        (when (not target-status)
+          (set! target-status (mp-vehicle-guard-default-target-status traffic target-proc))
+          )
+        (when target-status
+          (set! (-> target-status handle) target-handle)
+          (return target-status)
+          )
+        )
+      )
+    )
+  (the-as traffic-target-status #f)
+  )
+
+(defun mp-vehicle-guard-ensure-target-status! ((this vehicle-guard) (target-proc process))
+  "Attach a guard vehicle to a valid target-status before vanilla aggro writes through it."
+  (when (and this
+             (nonzero? this)
+             target-proc
+             (nonzero? target-proc))
+    (let ((target-status (mp-vehicle-guard-target-status-slot this target-proc)))
+      (when target-status
+        (set! (-> this traffic-target-status) target-status)
+        )
+      )
+    )
+  (and this
+       (nonzero? this)
+       (-> this traffic-target-status)
+       (nonzero? (-> this traffic-target-status)))
+  )
+
+(defun mp-vehicle-guard-clear-target-status! ((this vehicle-guard))
+  "Clear guard aggro through known traffic slots without dereferencing a stale cached pointer."
+  (when (and this
+             (nonzero? this)
+             (-> this controller)
+             (nonzero? (-> this controller))
+             (-> this controller traffic)
+             (nonzero? (-> this controller traffic)))
+    (let ((traffic (-> this controller traffic))
+          (target-handle (-> this pursuit-target))
+          )
+      (when (and target-handle
+                 (nonzero? target-handle))
+        (let ((target-status (mp-vehicle-guard-find-target-status traffic target-handle)))
+          (when target-status
+            (set! (-> target-status handle) (the-as handle #f))
+            )
+          )
+        )
+      )
+    )
+  (when (and this
+             (nonzero? this))
+    (set! (-> this traffic-target-status) (the-as traffic-target-status #f))
+    )
+  (none)
+  )
+
 (defun mp-vehicle-guard-refresh-pursuit-target! ((this vehicle-guard))
   "Refresh a guard vehicle's cached player target so it can swap off ride-along or stale handles."
   (when (and this
              (nonzero? this)
+             (-> this controller)
+             (nonzero? (-> this controller))
+             (-> this controller traffic)
+             (nonzero? (-> this controller traffic))
              (logtest? (-> this controller traffic alert-state flags) (traffic-alert-flag target-jak)))
     (let* ((current-target (the-as process-focusable (handle->process-safe (-> this pursuit-target))))
            (local-target (if (and *target*
@@ -651,11 +762,13 @@
       (cond
         ((and next-target (nonzero? next-target))
          (set! (-> this pursuit-target) (process->handle next-target))
-         (set! (-> this traffic-target-status handle) (process->handle next-target))
+         (when (mp-vehicle-guard-ensure-target-status! this next-target)
+           (set! (-> this traffic-target-status handle) (process->handle next-target))
+           )
          )
         (else
+          (mp-vehicle-guard-clear-target-status! this)
           (set! (-> this pursuit-target) (the-as handle #f))
-          (set! (-> this traffic-target-status handle) (the-as handle #f))
           )
         )
       )
@@ -844,10 +957,12 @@
 
 (defmethod vehicle-method-134 ((this vehicle-guard) (arg0 process))
   "Stubbed"
-  (set! (-> this pursuit-target) (process->handle arg0))
-  (set! (-> this traffic-target-status handle) (process->handle arg0))
-  (logior! (-> this flags) (rigid-body-object-flag alert))
-  (vehicle-method-111 this 2 (the-as target arg0))
+  (when (mp-vehicle-guard-ensure-target-status! this arg0)
+    (set! (-> this pursuit-target) (process->handle arg0))
+    (set! (-> this traffic-target-status handle) (process->handle arg0))
+    (logior! (-> this flags) (rigid-body-object-flag alert))
+    (vehicle-method-111 this 2 (the-as target arg0))
+    )
   0
   (none)
   )
@@ -893,13 +1008,25 @@
      (when (and (not (focus-test? this dead))
                 (not (logtest? (rigid-body-object-flag alert) (-> this flags)))
                 (logtest? (rigid-body-object-flag ai-driving) (-> this flags))
+                arg3
+                (nonzero? arg3)
+                (-> this controller)
+                (nonzero? (-> this controller))
+                (-> this controller traffic)
+                (nonzero? (-> this controller traffic))
                 (>= (the-as uint (get-alert-level (-> this controller traffic))) (the-as uint 2))
                 )
-       (logior! (-> this flags) (rigid-body-object-flag alert))
-       (let ((v0-4 (the-as object (process->handle (the-as process (-> arg3 param 0))))))
-         (set! (-> this pursuit-target) (the-as handle v0-4))
-         (set! (-> this traffic-target-status handle) (the-as handle v0-4))
-         v0-4
+       (let ((target-proc (the-as process (-> arg3 param 0))))
+         (when (and target-proc
+                    (nonzero? target-proc)
+                    (mp-vehicle-guard-ensure-target-status! this target-proc))
+           (logior! (-> this flags) (rigid-body-object-flag alert))
+           (let ((v0-4 (the-as object (process->handle target-proc))))
+             (set! (-> this pursuit-target) (the-as handle v0-4))
+             (set! (-> this traffic-target-status handle) (the-as handle v0-4))
+             v0-4
+             )
+           )
          )
        )
      )
@@ -987,6 +1114,7 @@
     )
   (logior! (-> this mask) (process-mask enemy guard))
   (set! (-> this pursuit-target) (the-as handle #f))
+  (set! (-> this traffic-target-status) (the-as traffic-target-status #f))
   (set! (-> this minimap) #f)
   (set! (-> this lod2) (the-as symbol (-> this draw lod-set lod 2 geo)))
   (set! (-> this controller choose-branch-callback) vehicle-guard-choose-branch)
