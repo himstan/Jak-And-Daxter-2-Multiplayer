@@ -53,14 +53,21 @@
            )
 
          ;; 2.5 Distance check for force respawn
-         ;; If the remote player was far away (> 300m), we force a fresh respawn when they return (< 250m).
-         ;; This ensures the puppet process correctly re-attaches to the local BSP/levels.
-         (let* ((dist (if *target* 
-                          (vector-vector-distance (-> *target* control trans) *multi-remote-render-pos*)
-                          (meters 0.0))))
-             (if (> dist (meters 300.0))
-                 (set! *mp-puppet-was-far?* #t)
+         ;; If the remote player is far away, clear any stale puppet process so checks like
+         ;; (when *mp-puppet*) cannot pass after the engine has unloaded the process.
+         (let ((dist (if (and *target*
+                              (nonzero? *target*)
+                              (-> *target* control)
+                              (nonzero? (-> *target* control)))
+                         (vector-vector-distance (-> *target* control trans) *multi-remote-render-pos*)
+                         (meters 0.0))))
+             (when (> dist (meters 250.0))
+               (when *mp-puppet*
+                 (format 0 "[MP-Puppet] Remote player is far (~m). Deactivating puppet...~%" dist)
+                 (mp-puppet-deactivate!)
                  )
+               (set! *mp-puppet-was-far?* #t)
+               )
              (when (and (< dist (meters 250.0)) *mp-puppet-was-far?* (not *mp-puppet-is-warping?*))
                 (format 0 "[MP-Puppet] Remote player returned to proximity (~m). Forcing respawn...~%" dist)
 
@@ -81,17 +88,8 @@
                   )
 
                 ;; 2. Deactivate the Puppet (if any)
-                (let ((puppet (mp-puppet-get-proc)))
-                  (when (and puppet (nonzero? puppet))
-                    (deactivate puppet)
-                    (set! *mp-puppet* (the-as target #f)) 
-                  )
-                  (set! *mp-puppet-pending-gun-shot?* #f)
-                  (set! *mp-puppet-pending-gun-shot-weapon* (the uint 0))
-                  (set! *mp-puppet-pending-gun-shot-seq* (the uint 0))
-                  (set! *mp-puppet-pending-gun-shot-cam-angle-y* 0.0)
-                  (set! *mp-puppet-was-far?* #f)
-                )
+                (mp-puppet-deactivate!)
+                (set! *mp-puppet-was-far?* #f)
               )
            )
 
@@ -117,12 +115,7 @@
          (let ((proc (mp-puppet-get-proc)))
            (when proc
              (format 0 "[MP-Puppet] Deactivating puppet (Remote Status ~D)~%" remote-status)
-             (deactivate proc)
-             (set! *mp-puppet* (the-as target #f))
-             (set! *mp-puppet-pending-gun-shot?* #f)
-             (set! *mp-puppet-pending-gun-shot-weapon* (the uint 0))
-             (set! *mp-puppet-pending-gun-shot-seq* (the uint 0))
-             (set! *mp-puppet-pending-gun-shot-cam-angle-y* 0.0)
+             (mp-puppet-deactivate!)
              (set! *mp-puppet-last-fresh-input-time* (the-as time-frame 0))
              (set! *mp-puppet-was-far?* #f)
              )

@@ -1062,11 +1062,13 @@
 
 (defun mp-puppet-alive? ()
   "Returns true if the specified target is currently alive."
-  (not (or (= *mp-puppet* (the-as target #f))
-           (= (-> *mp-puppet* state) #f)
-           (not (nonzero? *mp-puppet*))
-           (= (-> *mp-puppet* state name) 'dead)
-           ))
+  (and *mp-puppet*
+       (nonzero? *mp-puppet*)
+       (not (focus-test? *mp-puppet* inactive))
+       (-> *mp-puppet* state)
+       (nonzero? (-> *mp-puppet* state))
+       (not (= (-> *mp-puppet* state name) 'dead))
+       )
   )
 
 (defun mp-puppet-get-proc ()
@@ -1075,6 +1077,21 @@
       *mp-puppet*
       (the-as target #f)
       )
+  )
+
+(defun mp-puppet-deactivate! ()
+  "Deactivate and clear the remote puppet singleton if the process is still valid."
+  (let ((puppet (mp-puppet-get-proc)))
+    (when (and puppet (nonzero? puppet))
+      (deactivate puppet)
+      )
+    )
+  (set! *mp-puppet* (the-as target #f))
+  (set! *mp-puppet-pending-gun-shot?* #f)
+  (set! *mp-puppet-pending-gun-shot-weapon* (the uint 0))
+  (set! *mp-puppet-pending-gun-shot-seq* (the uint 0))
+  (set! *mp-puppet-pending-gun-shot-cam-angle-y* 0.0)
+  (none)
   )
 
 (defun mp-puppet-spawn ((id uint))
