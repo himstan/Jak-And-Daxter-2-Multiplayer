@@ -117,8 +117,8 @@
       (when (and *target* (nonzero? *target*) (-> *target* sidekick) (nonzero? (-> *target* sidekick)))
         (let ((sk (the-as sidekick (ppointer->process (-> *target* sidekick)))))
           (when (and sk (nonzero? sk) (-> sk draw) (nonzero? (-> sk draw)))
-            ;; HIDE if in movie, or if the remote counterpart is NOT riding.
-            (if (or in-movie? (or (and (zero? (-> *remote-info* riding?)) (mp-is-jak?)) (and (mp-is-daxter?) *local-riding?*)))
+            ;; HIDE if in movie, or if the remote counterpart is NOT riding (or disconnected/inactive).
+            (if (or in-movie? (or (and (or (not (and *remote-info* (nonzero? *remote-info*))) (< (-> *remote-info* status) 4) (zero? (-> *remote-info* riding?))) (mp-is-jak?)) (and (mp-is-daxter?) *local-riding?*)))
                 (logior! (-> sk draw status) (draw-control-status no-draw))
                 (logclear! (-> sk draw status) (draw-control-status no-draw)))
             )

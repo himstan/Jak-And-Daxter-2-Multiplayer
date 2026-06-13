@@ -372,6 +372,15 @@
   (if (nonzero? (the-as uint *mp-puppet-ghost*))
       (mem-set32! (the-as pointer *mp-puppet-ghost*) (/ (size-of mp-target-ghost-record) 4) 0))
 
+  ;; Restore sidekick visibility if we reset (back to offline single-player default)
+  (when (and *target* (nonzero? *target*) (-> *target* sidekick) (nonzero? (-> *target* sidekick)))
+    (let ((sk (the-as sidekick (ppointer->process (-> *target* sidekick)))))
+      (when (and sk (nonzero? sk) (-> sk draw) (nonzero? (-> sk draw)))
+        (logclear! (-> sk draw status) (draw-control-status no-draw))
+        )
+      )
+    )
+
   (format 0 "[MP] State has been fully reset.~%")
   (none)
   )

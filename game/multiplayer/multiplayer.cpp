@@ -436,6 +436,9 @@ void sync_to_goal(RemotePlayerInfoGOAL* remote_goal) {
     remote_goal->velocity[3] = 0.0f;
     remote_goal->send_tick = 0;
     remote_goal->receive_tick = 0;
+    remote_goal->riding = 0;
+    remote_goal->riding_veh_id = 0;
+    remote_goal->riding_seat_index = 0;
   }
 }
 }  // namespace
