@@ -79,6 +79,7 @@
   (fo-curve 2)
   (fo-min 3)
   (fo-max 4)
+  (no-subtitle 5)
   )
 
 (defenum gui-status
@@ -112,7 +113,8 @@
    (fo-max      int16)
    (fo-curve    int8)
    (fade        uint8)
-   (pad         uint8                 2)
+   (volume      uint8)
+   (pad         uint8                 1)
    )
   )
 
@@ -144,5 +146,7 @@
     (gui-control-method-22 (_type_ gui-connection process symbol) none)
     (handle-command (_type_ gui-channel gui-channel symbol gui-connection) symbol)
     (channel-id-set! (_type_ gui-connection sound-id) int)
+    (set-volume! (_type_ sound-id float) gui-connection)
+    (set-subtitle! (_type_ sound-id symbol) gui-connection)
     )
   )

@@ -127,6 +127,7 @@
 (defconstant MP_MISSION_EVT_STADIUM_BOARD1_CHALLENGE_START (the-as uint 31))
 (defconstant MP_MISSION_EVT_STADIUM_BOARD1_SCORE_UPDATE (the-as uint 32))
 (defconstant MP_MISSION_EVT_STADIUM_BOARD1_CHALLENGE_END (the-as uint 33))
+(defconstant MP_MISSION_EVT_STADIUM_BOARD1_BOARD_PICKED_UP (the-as uint 34))
 (defconstant MP_MISSION_EVT_KREW_COLLECTION_PICKUP (the-as uint 40))
 (defconstant MP_MISSION_EVT_CITY_SHUTTLE_STATE (the-as uint 50))
 
@@ -1167,6 +1168,12 @@
 (defmacro mp-is-daxter? ()
   "Is the local player the Client (Daxter)?"
   `(= (-> *local-info* role) 1)
+  )
+
+(defmacro mp-target-is-daxter? (proc)
+  "Is this target process Daxter (either local player or remote puppet)?"
+  `(or (and (mp-is-daxter?) (not (= ,proc *mp-puppet*)))
+       (and (mp-is-jak?) (= ,proc *mp-puppet*)))
   )
 
 (defmacro mp-enemy-should-process-damage? (e-proc)

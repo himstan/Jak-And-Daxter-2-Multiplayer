@@ -1243,6 +1243,31 @@
     )
   )
 
+(defmethod set-volume! ((this gui-control) (arg0 sound-id) (arg1 float))
+  (when (nonzero? arg0)
+    (let ((v1-2 (lookup-gui-connection *gui-control* (the-as process #f) (gui-channel none) (the-as string #f) arg0)))
+      (when v1-2
+        (set! (-> v1-2 volume) (the-as uint (the int (* 100.0 arg1))))
+        v1-2
+        )
+      )
+    )
+  )
+
+(defmethod set-subtitle! ((this gui-control) (arg0 sound-id) (arg1 symbol))
+  (when (nonzero? arg0)
+    (let ((v1-2 (lookup-gui-connection *gui-control* (the-as process #f) (gui-channel none) (the-as string #f) arg0)))
+      (when v1-2
+        (if arg1
+            (logclear! (-> v1-2 flags) (gui-connection-flags no-subtitle))
+            (logior! (-> v1-2 flags) (gui-connection-flags no-subtitle))
+            )
+        v1-2
+        )
+      )
+    )
+  )
+
 ;; WARN: Return type mismatch object vs symbol.
 ;; WARN: disable def twice: 34. This may happen when a cond (no else) is nested inside of another conditional, but it should be rare.
 (defmethod gui-control-method-18 ((this gui-control) (arg0 gui-channel))
@@ -1648,6 +1673,7 @@
                        (set! (-> sv-32 hold-time) arg5)
                        (set! (-> sv-32 flags) (gui-connection-flags gcf0))
                        (set! (-> sv-32 fade) (the-as uint 0))
+                       (set! (-> sv-32 volume) (the-as uint 100))
                        (the-as int (-> (the-as gui-connection sv-32) id))
                        )
                      (else
@@ -1914,7 +1940,18 @@
           ((1 2)
            (if (#if PC_PORT (or *gui-kick-str* (not (paused?)))
                             (not (paused?)))
-               (str-play-async (-> arg0 name) (-> arg0 id))
+               (begin
+                 (str-play-async (-> arg0 name) (-> arg0 id))
+                 (let ((v1-rpc (the-as sound-rpc-set-param (get-sound-buffer-entry))))
+                   (when (nonzero? v1-rpc)
+                     (set! (-> v1-rpc command) (sound-command set-param))
+                     (set! (-> v1-rpc id) (-> arg0 id))
+                     (set! (-> v1-rpc params volume) (the int (* 10.24 (the float (-> arg0 volume)))))
+                     (set! (-> v1-rpc params mask) (the-as uint 1))
+                     (-> v1-rpc id)
+                     )
+                   )
+                 )
                )
            )
           )
@@ -1991,7 +2028,8 @@
                    (set! (-> s5-2 params fo-curve) (-> arg0 fo-curve))
                    (set! (-> s5-2 params fo-min) (-> arg0 fo-min))
                    (set! (-> s5-2 params fo-max) (-> arg0 fo-max))
-                   (set! (-> s5-2 params mask) (the-as uint 0))
+                   (set! (-> s5-2 params volume) (the int (* 10.24 (the float (-> arg0 volume)))))
+                   (set! (-> s5-2 params mask) (the-as uint 1))
                    (if (logtest? (-> arg0 flags) (gui-connection-flags gcf1))
                        (logior! (-> s5-2 params mask) 32)
                        )
@@ -2015,7 +2053,7 @@
              (let ((s5-3 (the-as sound-rpc-set-param (get-sound-buffer-entry))))
                (set! (-> s5-3 command) (sound-command set-param))
                (set! (-> s5-3 id) (-> arg0 id))
-               (set! (-> s5-3 params volume) (the int (* 1024.0 (lerp-scale 1.0 0.0 (the float (-> arg0 fade)) 0.0 30.0))))
+               (set! (-> s5-3 params volume) (the int (* 10.24 (the float (-> arg0 volume)) (lerp-scale 1.0 0.0 (the float (-> arg0 fade)) 0.0 30.0))))
                (set! (-> s5-3 params mask) (the-as uint 1))
                (-> s5-3 id)
                )

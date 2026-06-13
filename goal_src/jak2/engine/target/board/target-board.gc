@@ -34,6 +34,31 @@
 (define-extern *target-board-hold-tricks* int)
 
 
+(defun target-board-play-daxter-vo ((proc target) (chance float) (vol float) (subtitle-flag symbol))
+  "Play a random Daxter voice-over comment with a specified chance, volume, subtitle configuration, and 3D falloff."
+  (when (and (mp-target-is-daxter? proc)
+             (< (rand-vu) chance)
+             proc
+             (nonzero? proc)
+             *gui-control*
+             (nonzero? *gui-control*)
+             )
+    (let ((vo-keys (new 'static 'boxed-array :type string "ds026" "ds028" "ds174" "ds176" "ds179" "ds184" "ds185")))
+      (let* ((idx (rand-vu-int-range 0 (+ (-> vo-keys length) -1)))
+             (vo-key (-> vo-keys idx))
+             )
+        (let ((s-id (add-process *gui-control* proc (gui-channel daxter) (gui-action play) vo-key 99.0 0)))
+          (set-falloff! *gui-control* s-id #t -1 -1 -1)
+          (set-volume! *gui-control* s-id vol)
+          (set-subtitle! *gui-control* s-id subtitle-flag)
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+
 (#when PC_PORT
 
 (define *board-trick-tracker* (new 'static 'board-trick-tracker))
@@ -2917,7 +2942,12 @@
       (let* ((a0-24 (* arg1 (lerp-scale 1.0 0.1 (the float s4-0) 2.0 6.0)))
              (s3-1 (the float (* 25 (/ (+ (the int a0-24) 24) 25))))
              )
-        (sound-play "do-trick")
+        (let ((target-proc (ppointer->process (-> this process))))
+          (if (mp-target-is-daxter? target-proc)
+              (target-board-play-daxter-vo target-proc 0.35 0.3 #f)
+              (sound-play "do-trick")
+              )
+          )
         (let ((t9-4 format)
               (a0-29 #t)
               (a1-8 "trick: ~S (~D) ~,,0f")

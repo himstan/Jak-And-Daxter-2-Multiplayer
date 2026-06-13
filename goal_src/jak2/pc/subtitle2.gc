@@ -202,6 +202,7 @@
   "is this gui connection valid for checking subtitles?"
   (and gui  (nonzero? (-> gui id))
             (subtitle-channel? (-> gui channel))
+            (not (logtest? (-> gui flags) (gui-connection-flags no-subtitle)))
             (or (= (-> gui action) (gui-action playing))
                 (= (-> gui action) (gui-action play)))
             (let ((status (get-status *gui-control* (-> gui id))))
