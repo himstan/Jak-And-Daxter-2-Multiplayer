@@ -139,15 +139,24 @@ an orb |#
         )
       )
 
-  ;; Update status to IN_GAME (6) if we are connected
+  ;; Update status to IN_GAME (6) if we are connected and fully synced
   (let ((status (pc-multi-get-status)))
-    (if (>= status 3)
-        (begin
-          (pc-multi-set-status 6)
-          (set! *multi-last-send-time* 0)
-          (mp-arm-mission-failed-full-sync-after-spawn)
+    (when (>= status 3)
+      (if (mp-is-jak?)
+          (begin
+            (pc-multi-set-status 6)
+            (set! *multi-last-send-time* 0)
+            (mp-arm-mission-failed-full-sync-after-spawn)
+            )
+          (begin
+            ;; Client side: only update/arm if we are already in-game and finished full sync
+            (when (and *local-info* (nonzero? *local-info*) (= status 6) (zero? (-> *local-info* sync-flag)))
+              (set! *multi-last-send-time* 0)
+              (mp-arm-mission-failed-full-sync-after-spawn)
+              )
+            )
           )
-        )
+      )
 
     ;; Only auto-initialize if we aren't already connected/connecting
     (when (zero? status)

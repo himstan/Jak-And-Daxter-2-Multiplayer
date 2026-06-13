@@ -204,6 +204,17 @@
         (multiplayer-network-tick))
       )
 
+    ;; --- Client Connection / Loading Black Screen Screen Overlay ---
+    (let ((status (pc-multi-get-status)))
+      (when (and *local-info* (nonzero? *local-info*)
+                 (mp-is-daxter?) 
+                 (or (and (>= status 3) (< status 6)) 
+                     (nonzero? (-> *local-info* sync-flag))))
+        ;; 1. Force blackout active
+        (set-blackout-frames (seconds 0.05))
+        )
+      )
+
     ;; GLOBAL GUARD: Logic below only runs once we are actually synced and in-game
     (if (not *multi-sync-enabled?*)
         (return #f))

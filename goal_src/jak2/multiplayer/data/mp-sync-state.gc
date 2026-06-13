@@ -122,6 +122,7 @@
          (set-setting! 'allow-recharge #f 0.0 0)
          (mp-force-apply-remote-environment-state)
          (set-blackout-frames 0)
+         (pc-multi-set-status 6)
          (when *progress-process*
            (set-next-state (-> *progress-process* 0) 'go-away 0)
            )
