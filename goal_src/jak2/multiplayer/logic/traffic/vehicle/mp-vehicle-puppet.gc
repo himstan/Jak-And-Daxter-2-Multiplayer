@@ -15,6 +15,8 @@
 (define *old-vehicle-method-52* (the-as (function vehicle none) #f))
 (define *old-vehicle-method-94* (the-as (function vehicle none) #f))
 (define *old-vehicle-guard-method-94* (the-as (function vehicle-guard none) #f))
+(define *old-vehicle-method-137* (the-as (function vehicle traffic-object-spawn-params none) #f))
+(define *old-vehicle-guard-method-137* (the-as (function vehicle-guard traffic-object-spawn-params none) #f))
 (define *old-vehicle-method-87* (the-as (function vehicle none) #f))
 (define *old-vehicle-enable-bike-mode* (the-as (function vehicle none) #f))
 (define *old-vehicle-enable-rapid-camera* (the-as (function vehicle none) #f))
@@ -52,6 +54,50 @@
         )
       #f
       )
+  )
+
+(defun mp-vehicle-remote-puppet-driving? ((veh vehicle))
+  "True only while the remote puppet legitimately owns this vehicle's driver seat."
+  (and veh
+       (nonzero? veh)
+       *mp-puppet*
+       (nonzero? *mp-puppet*)
+       (= (get-rider-in-seat veh 0) *mp-puppet*)
+       (or (and (nonzero? *mp-remote-driven-vehicle*)
+                (= veh (handle->process-safe *mp-remote-driven-vehicle*)))
+           (and *remote-info*
+                (nonzero? *remote-info*)
+                (nonzero? (-> veh net-id))
+                (= (-> veh net-id) (-> *remote-info* veh-state net-id)))
+           )
+       )
+  )
+
+(defun mp-vehicle-stale-player-driver? ((veh vehicle))
+  "Detect target handles that leaked into an ambient traffic driver's seat."
+  (when (and veh
+             (nonzero? veh))
+    (let ((driver (get-rider-in-seat veh 0)))
+      (when (and driver
+                 (nonzero? driver)
+                 (or (= driver *target*)
+                     (= driver *mp-puppet*)))
+        (return (not (or (and (= driver *target*)
+                              (mp-vehicle-local-target-driving? veh))
+                         (and (= driver *mp-puppet*)
+                              (mp-vehicle-remote-puppet-driving? veh)))))
+        )
+      )
+    )
+  #f
+  )
+
+(defun mp-vehicle-clear-stale-player-driver! ((veh vehicle))
+  "Clear leaked player target handles before/after ambient rider spawning."
+  (when (mp-vehicle-stale-player-driver? veh)
+    (put-rider-in-seat veh 0 (the-as process-focusable #f))
+    )
+  (none)
   )
 
 (defun mp-vehicle-sync-owned? ((veh vehicle))
@@ -518,6 +564,7 @@
 
   ;; RESET NUDGE FLAG (for debug visualization)
   (set! (-> this pad-bytes 0) (the uint8 0))
+  (mp-vehicle-clear-stale-player-driver! this)
   (mp-vehicle-release-stale-player-control! this)
 
   (when (and (not (mp-vehicle-is-local-authoritative? this))
@@ -664,6 +711,20 @@
 
 (defun mp-vehicle-method-51-hijack ((this vehicle))
   (if *old-vehicle-method-51* (*old-vehicle-method-51* this))
+  (none)
+  )
+
+(defun mp-vehicle-method-137-hijack ((this vehicle) (params traffic-object-spawn-params))
+  "Keep ambient rider spawning from preserving stale local/puppet driver handles."
+  (mp-vehicle-clear-stale-player-driver! this)
+  (if (and (type? this vehicle-guard)
+           *old-vehicle-guard-method-137*)
+      (*old-vehicle-guard-method-137* (the-as vehicle-guard this) params)
+      (if *old-vehicle-method-137*
+          (*old-vehicle-method-137* this params)
+          )
+      )
+  (mp-vehicle-clear-stale-player-driver! this)
   (none)
   )
 
@@ -1017,6 +1078,7 @@
         (m105-id (the int 105))
         (m51-id (the int 51))
         (m52-id (the int 52))
+        (m137-id (the int 137))
         (m87-id 87)
         (ebm-id 89)
         (erc-id 91)
@@ -1052,6 +1114,9 @@
         (set! *old-vehicle-method-52* (the-as (function vehicle none) (method-of-type vehicle rigid-body-object-method-52)))
         (method-set! vehicle m52-id mp-vehicle-method-52-hijack)
 
+        (set! *old-vehicle-method-137* (the-as (function vehicle traffic-object-spawn-params none) (method-of-type vehicle vehicle-method-137)))
+        (method-set! vehicle m137-id mp-vehicle-method-137-hijack)
+
         (set! *old-vehicle-method-87* (the-as (function vehicle none) (method-of-type vehicle vehicle-method-87)))
         (method-set! vehicle m87-id mp-vehicle-method-87-hijack)
 
@@ -1075,6 +1140,12 @@
                      (!= (-> (the-as type vehicle-guard) method-table 94) mp-vehicle-guard-method-94-hijack))
             (set! *old-vehicle-guard-method-94*
                   (the-as (function vehicle-guard none) (-> (the-as type vehicle-guard) method-table 94)))
+            )
+          (when (and (nonzero? (the-as uint vehicle-guard))
+                     (!= (-> (the-as type vehicle-guard) method-table m137-id) mp-vehicle-method-137-hijack))
+            (set! *old-vehicle-guard-method-137*
+                  (the-as (function vehicle-guard traffic-object-spawn-params none)
+                          (-> (the-as type vehicle-guard) method-table m137-id)))
             )
           (when (and (nonzero? (the-as uint vehicle-guard))
                      (!= (-> (the-as type vehicle-guard) method-table m46-id) mp-vehicle-guard-event-handler-hijack))
@@ -1101,6 +1172,7 @@
                 (method-set! t m105-id mp-vehicle-method-105-hijack)
                 (method-set! t m51-id mp-vehicle-method-51-hijack)
                 (method-set! t m52-id mp-vehicle-method-52-hijack)
+                (method-set! t m137-id mp-vehicle-method-137-hijack)
                 (method-set! t m87-id mp-vehicle-method-87-hijack)
                 (method-set! t ebm-id mp-vehicle-enable-bike-mode-hijack)
                 (method-set! t erc-id mp-vehicle-enable-rapid-camera-hijack)
