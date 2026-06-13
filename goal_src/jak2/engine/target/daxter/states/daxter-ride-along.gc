@@ -27,7 +27,7 @@
     (if (mp-is-daxter?)
         (set! *local-riding?* #t))
     (set! (-> self control root-prim prim-core action) (collide-action))
-    (logior! (-> self focus-status) (focus-status indax))
+    (logior! (-> self focus-status) (focus-status indax ignore))
     (logior! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
     (when (mp-is-daxter?)
       (let ((jak-proc (mp-puppet-get-proc)))
@@ -45,6 +45,7 @@
         (set! *has-ridden-before?* #f))
       (set! *local-riding?* #f)
       (set! (-> self control root-prim prim-core action) (collide-action solid can-ride stuck-wall-escape))
+      (logclear! (-> self focus-status) (focus-status ignore))
       ;; log next state as well
       (when (= (if (-> self next-state) (-> self next-state name) 'none) 'target-indax-grab)
         (set! *local-riding-before-grabbed?* #t)

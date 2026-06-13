@@ -703,6 +703,7 @@
     (set! (-> self flash-state) #f)
     )
   :trans (behavior ()
+    (mp-enemy-refresh-player-focus! self)
     (if (and (logtest? (-> self enemy-flags) (enemy-flag victory)) (-> self enemy-info use-victory))
         (go-virtual victory)
         )
@@ -767,6 +768,7 @@
 (defstate stare (sew-gunturret)
   :virtual #t
   :trans (behavior ()
+    (mp-enemy-refresh-player-focus! self)
     (let ((func (-> (method-of-type enemy stare) trans)))
       (if func
           (func)

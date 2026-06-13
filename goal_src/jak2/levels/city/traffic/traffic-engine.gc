@@ -6,6 +6,8 @@
 ;; dgos: CWI
 (declare-type crimson-guard citizen)
 (define-extern mp-get-remote-target-process (function process-focusable))
+(define-extern mp-combat-valid-player-target? (function process-focusable symbol symbol))
+(define-extern mp-combat-best-player-target (function process-focusable process-focusable process-focusable process-focusable process-focusable))
 ;; DECOMP BEGINS
 
 (define *traffic-suppress-activation* #f)
@@ -1158,10 +1160,7 @@
   "True when a player target can be used by wanted guard traffic."
   (and target-proc
        (nonzero? target-proc)
-       (not (focus-test? target-proc disable dead inactive))
-       (not (logtest? (-> target-proc mask) (process-mask sleep)))
-       (-> target-proc root)
-       (nonzero? (-> target-proc root))
+       (mp-combat-valid-player-target? target-proc #f)
        )
   )
 
@@ -1232,31 +1231,14 @@
 
 (defun mp-traffic-closest-alert-target ((source process-focusable))
   "Pick the closest valid player target for a guard alert."
-  (let ((closest (the-as process-focusable #f))
-        (closest-dist 1000000000.0)
-        )
-    (when (and source
-               (nonzero? source)
-               (-> source root)
-               (nonzero? (-> source root)))
-      (when (mp-traffic-valid-local-target?)
-        (set! closest *target*)
-        (set! closest-dist (vector-vector-distance (-> source root trans) (-> *target* root trans)))
-        )
-      (let ((remote (mp-traffic-valid-remote-target)))
-        (when (and remote
-                   (nonzero? remote))
-          (let ((remote-dist (vector-vector-distance (-> source root trans) (-> remote root trans))))
-            (when (or (not closest)
-                      (< remote-dist closest-dist))
-              (set! closest remote)
-              (set! closest-dist remote-dist)
-              )
-            )
-          )
-        )
-      )
-    closest
+  (let ((local-target (if (mp-traffic-valid-local-target?)
+                          *target*
+                          (the-as process-focusable #f)))
+        (remote-target (mp-traffic-valid-remote-target)))
+    (mp-combat-best-player-target source
+                                  (the-as process-focusable #f)
+                                  local-target
+                                  remote-target)
     )
   )
 

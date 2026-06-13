@@ -6,6 +6,11 @@
 (define-extern mp-ensure-remote-level-wanted! (function none))
 (define-extern mp-remote-level-ready? (function symbol))
 
+(defbehavior target-indax-death-post target ()
+  (daxter-gun-update-eco-aura!)
+  (target-no-stick-post)
+  (none))
+
 (defstate target-indax-death (target)
   :event (-> target-death event)
   :exit (behavior ()
@@ -245,4 +250,4 @@
   (initialize! (-> self game) 'life (the-as game-save #f) (the-as string #f))
          (set-time! (-> self state-time))
          (sleep-code))
-  :post target-no-stick-post)
+  :post target-indax-death-post)

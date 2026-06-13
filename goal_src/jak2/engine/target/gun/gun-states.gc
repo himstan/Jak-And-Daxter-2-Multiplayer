@@ -12,7 +12,7 @@
     (case message
       (('gun)
        (let ((gp-0 (-> block param 0))
-             (v0-0 (target-standard-event-handler proc argc message block))
+             (v0-0 (if (focus-test? self indax) (target-indax-handler proc argc message block) (target-standard-event-handler proc argc message block)))
              )
          (when v0-0
            (cond
@@ -40,7 +40,7 @@
        #f
        )
       (else
-        (target-standard-event-handler proc argc message block)
+        (if (focus-test? self indax) (target-indax-handler proc argc message block) (target-standard-event-handler proc argc message block))
         )
       )
     )
@@ -300,8 +300,12 @@
   :post target-gun-post
   )
 
+(defbehavior target-gun-walk-event-handler target ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
+  (if (focus-test? self indax) (target-indax-handler arg0 arg1 arg2 arg3) (target-standard-event-handler arg0 arg1 arg2 arg3))
+  )
+
 (defstate target-gun-walk (target)
-  :event target-standard-event-handler
+  :event target-gun-walk-event-handler
   :enter (behavior ()
     (set-time! (-> self state-time))
     (set! (-> self control mod-surface) *gun-walk-mods*)

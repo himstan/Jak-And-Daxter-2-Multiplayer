@@ -5,6 +5,10 @@
 ;; name in dgo: enemy
 ;; dgos: GAME, COMMON
 
+(define-extern mp-combat-local-player-target (function symbol process-focusable))
+(define-extern mp-combat-remote-player-target (function symbol process-focusable))
+(define-extern mp-combat-best-player-target (function process-focusable process-focusable process-focusable process-focusable process-focusable))
+
 ;; DECOMP BEGINS
 
 (defmethod copy-enemy-info! ((this enemy-info) (obj-to-copy enemy-info))
@@ -22,6 +26,36 @@
                                            :top-plane (new 'static 'plane :y 1.0 :w -4096.0)
                                            )
                                )
+  )
+
+(defun mp-enemy-refresh-player-focus! ((this enemy))
+  "Refresh stale player focus handles without changing non-player focus targets."
+  (when (and this
+             (nonzero? this)
+             (-> this focus)
+             (nonzero? (-> this focus))
+             (-> this root)
+             (nonzero? (-> this root)))
+    (let ((current-target (the-as process-focusable (handle->process-safe (-> this focus handle)))))
+      (when (and current-target
+                 (nonzero? current-target)
+                 (type? current-target target))
+        (let* ((local-target (mp-combat-local-player-target #f))
+               (remote-target (mp-combat-remote-player-target #f))
+               (next-target (mp-combat-best-player-target this current-target local-target remote-target)))
+          (cond
+            ((and next-target (nonzero? next-target) (!= next-target current-target))
+             (try-update-focus (-> this focus) next-target this)
+             )
+            ((and (not next-target) current-target (nonzero? current-target))
+             (set! (-> this focus handle) (the-as handle #f))
+             )
+            )
+          )
+        )
+      )
+    )
+  (none)
   )
 
 (defmethod relocate ((this enemy) (offset int))
@@ -256,6 +290,7 @@
    - tracks when the enemy was last drawn
    - looks at the target and handles attacking
    @TODO Not extremely well understood yet"
+  (mp-enemy-refresh-player-focus! self)
   (if (and (nonzero? (-> self draw)) (logtest? (-> self draw status) (draw-control-status on-screen)))
       (set-time! (-> self last-draw-time))
       )
@@ -343,6 +378,7 @@
 ;; WARN: Return type mismatch process vs process-focusable.
 (defmethod get-enemy-target ((this enemy))
   "@returns the [[process-focusable]] that the enemy is currently focusing on, or [[#f]] otherwise"
+  (mp-enemy-refresh-player-focus! this)
   (let ((v0-0 (handle->process-safe (-> this focus handle))))
     (if (and v0-0
              (not (and v0-0
@@ -461,6 +497,7 @@
 
 (defmethod react-to-focus ((this enemy))
   "@TODO - flesh out docs"
+  (mp-enemy-refresh-player-focus! this)
   (let ((s5-0 (-> this focus aware)))
     (cond
       ((and (= s5-0 (enemy-aware enemy-aware-3)) (get-enemy-target this))
@@ -2247,9 +2284,10 @@
       (let ((gp-0 (-> self on-notice)))
         (if gp-0
             (script-eval gp-0 :vector (-> self root trans))
-            )
+          )
         )
       )
+    (mp-enemy-refresh-player-focus! self)
     (let ((gp-1 (-> self focus aware)))
       (when (logtest? (-> self enemy-flags) (enemy-flag alert))
         (cond
@@ -2307,6 +2345,7 @@
       )
     )
   :trans (behavior ()
+    (mp-enemy-refresh-player-focus! self)
     (if (and (logtest? (-> self enemy-flags) (enemy-flag victory)) (-> self enemy-info use-victory))
         (go-virtual victory)
         )
@@ -2347,6 +2386,7 @@
     (logclear! (-> self enemy-flags) (enemy-flag chase-startup))
     )
   :trans (behavior ()
+    (mp-enemy-refresh-player-focus! self)
     (when (time-elapsed? (-> self state-time) (seconds 0.1))
       (let ((gp-0 (-> self focus aware)))
         (cond
@@ -2415,6 +2455,7 @@
     (logclear! (-> self mask) (process-mask actor-pause))
     )
   :trans (behavior ()
+    (mp-enemy-refresh-player-focus! self)
     (when (time-elapsed? (-> self state-time) (-> self reaction-time))
       (if (!= (-> self focus aware) (enemy-aware unaware))
           (go-stare self)

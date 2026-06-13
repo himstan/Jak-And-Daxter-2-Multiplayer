@@ -8,6 +8,8 @@
 
 (declare-type squid-grenade projectile)
 
+(define *mp-combat-retarget-distance-bias* 8192.0)
+
 (defun mp-current-active-level-hash ()
   "Return a stable hash for the currently active local level."
   (let ((hash (the-as uint 0)))
@@ -167,6 +169,110 @@
                 proc
                 (the-as process-focusable #f)))
           (the-as process-focusable #f)))))
+
+(defun mp-target-ride-along? ((target-proc process-focusable))
+  "Return true when a target process is riding along or is transitioning into ride-along."
+  (and target-proc
+       (nonzero? target-proc)
+       (type? target-proc target)
+       (or (= (-> (the-as target target-proc) state name) 'target-ride-along)
+           (and (-> (the-as target target-proc) next-state)
+                (= (-> (the-as target target-proc) next-state name) 'target-ride-along)))
+       )
+  )
+
+(defun mp-combat-valid-player-target? ((target-proc process-focusable) (require-control? symbol))
+  "True when a player target is safe to use for combat targeting."
+  (and target-proc
+       (nonzero? target-proc)
+       (not (focus-test? target-proc disable dead inactive))
+       (not (logtest? (-> target-proc mask) (process-mask sleep)))
+       (-> target-proc root)
+       (nonzero? (-> target-proc root))
+       (not (mp-target-ride-along? target-proc))
+       (or (not require-control?)
+           (and (-> (the-as target target-proc) control)
+                (nonzero? (-> (the-as target target-proc) control))))
+       )
+  )
+
+(defun mp-combat-local-player-target ((require-control? symbol))
+  "Return the local player if they are valid for combat targeting."
+  (if (and *target*
+           (nonzero? *target*)
+           (mp-combat-valid-player-target? *target* require-control?))
+      (the-as process-focusable *target*)
+      (the-as process-focusable #f)
+      )
+  )
+
+(defun mp-combat-remote-player-target ((require-control? symbol))
+  "Return the remote player if multiplayer is live and they are valid for combat targeting."
+  (if (and *multi-sync-enabled?*
+           (= (pc-multi-get-status) 6)
+           *local-info*
+           (nonzero? *local-info*))
+      (let ((remote-proc (mp-get-remote-target-process)))
+        (if (and remote-proc
+                 (nonzero? remote-proc)
+                 (mp-combat-valid-player-target? remote-proc require-control?))
+            remote-proc
+            (the-as process-focusable #f)
+            )
+        )
+      (the-as process-focusable #f)
+      )
+  )
+
+(defun mp-combat-best-player-target ((source process-focusable)
+                                     (current-target process-focusable)
+                                     (local-target process-focusable)
+                                     (remote-target process-focusable))
+  "Pick a stable player combat target, preferring the current one unless the other is meaningfully closer."
+  (cond
+    ((and local-target
+          (nonzero? local-target)
+          remote-target
+          (nonzero? remote-target)
+          source
+          (nonzero? source)
+          (-> source root)
+          (nonzero? (-> source root)))
+     (let ((local-dist (vector-vector-distance (-> source root trans) (-> local-target root trans)))
+           (remote-dist (vector-vector-distance (-> source root trans) (-> remote-target root trans))))
+       (cond
+         ((= current-target local-target)
+          (if (< remote-dist (- local-dist *mp-combat-retarget-distance-bias*))
+              remote-target
+              local-target
+              )
+          )
+         ((= current-target remote-target)
+          (if (< local-dist (- remote-dist *mp-combat-retarget-distance-bias*))
+              local-target
+              remote-target
+              )
+          )
+         ((< remote-dist local-dist)
+          remote-target
+          )
+         (else
+           local-target
+           )
+         )
+       )
+     )
+    ((and local-target (nonzero? local-target))
+     local-target
+     )
+    ((and remote-target (nonzero? remote-target))
+     remote-target
+     )
+    (else
+      (the-as process-focusable #f)
+      )
+    )
+  )
 
 (defun mp-target-death-state? ((state-name symbol))
   "Return true for target states that should be treated as player death."

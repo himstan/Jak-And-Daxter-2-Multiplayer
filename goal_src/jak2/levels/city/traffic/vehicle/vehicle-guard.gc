@@ -5,6 +5,10 @@
 ;; name in dgo: vehicle-guard
 ;; dgos: CWI
 
+(define-extern mp-get-remote-target-process (function process-focusable))
+(define-extern mp-combat-valid-player-target? (function process-focusable symbol symbol))
+(define-extern mp-combat-best-player-target (function process-focusable process-focusable process-focusable process-focusable process-focusable))
+
 (deftype turret-unknown-stack-structure (structure)
   "TODO - sigh...another one that i cant seem to find a fit"
   ((vec-1 vector :inline :offset-assert 0)
@@ -621,6 +625,44 @@
   (none)
   )
 
+(defun mp-vehicle-guard-refresh-pursuit-target! ((this vehicle-guard))
+  "Refresh a guard vehicle's cached player target so it can swap off ride-along or stale handles."
+  (when (and this
+             (nonzero? this)
+             (logtest? (-> this controller traffic alert-state flags) (traffic-alert-flag target-jak)))
+    (let* ((current-target (the-as process-focusable (handle->process-safe (-> this pursuit-target))))
+           (local-target (if (and *target*
+                                  (nonzero? *target*)
+                                  (-> *target* control)
+                                  (nonzero? (-> *target* control))
+                                  (mp-combat-valid-player-target? *target* #f))
+                             (the-as process-focusable *target*)
+                             (the-as process-focusable #f)))
+           (remote-proc (if (and *multi-sync-enabled?*
+                                 (= (pc-multi-get-status) 6))
+                            (mp-get-remote-target-process)
+                            (the-as process-focusable #f)))
+           (remote-target (if (and remote-proc
+                                   (nonzero? remote-proc)
+                                   (mp-combat-valid-player-target? remote-proc #f))
+                              remote-proc
+                              (the-as process-focusable #f)))
+           (next-target (mp-combat-best-player-target this current-target local-target remote-target)))
+      (cond
+        ((and next-target (nonzero? next-target))
+         (set! (-> this pursuit-target) (process->handle next-target))
+         (set! (-> this traffic-target-status handle) (process->handle next-target))
+         )
+        (else
+          (set! (-> this pursuit-target) (the-as handle #f))
+          (set! (-> this traffic-target-status handle) (the-as handle #f))
+          )
+        )
+      )
+    )
+  (none)
+  )
+
 (defmethod vehicle-guard-method-152 ((this vehicle-guard) (arg0 vehicle-guard-target-data))
   (let ((s4-0 (handle->process (-> this pursuit-target))))
     (cond
@@ -675,6 +717,7 @@
   )
 
 (defmethod vehicle-guard-method-150 ((this vehicle-guard))
+  (mp-vehicle-guard-refresh-pursuit-target! this)
   (cond
     ((handle->process (-> this pursuit-target))
      (let ((v1-3 (new 'stack-no-clear 'vehicle-control-point)))
@@ -802,6 +845,7 @@
 (defmethod vehicle-method-134 ((this vehicle-guard) (arg0 process))
   "Stubbed"
   (set! (-> this pursuit-target) (process->handle arg0))
+  (set! (-> this traffic-target-status handle) (process->handle arg0))
   (logior! (-> this flags) (rigid-body-object-flag alert))
   (vehicle-method-111 this 2 (the-as target arg0))
   0
@@ -854,6 +898,7 @@
        (logior! (-> this flags) (rigid-body-object-flag alert))
        (let ((v0-4 (the-as object (process->handle (the-as process (-> arg3 param 0))))))
          (set! (-> this pursuit-target) (the-as handle v0-4))
+         (set! (-> this traffic-target-status handle) (the-as handle v0-4))
          v0-4
          )
        )
