@@ -1,6 +1,9 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern *mp-spectator-countdown-active?* symbol)
+(define-extern *mp-spectating?* symbol)
+
 (defstate target-indax-hit (target)
   :event target-indax-handler
   :exit (behavior ()
@@ -8,7 +11,17 @@
          (target-indax-exit))
   :trans (behavior ()
           (when (= *cheat-mode* 'debug)
-            (when (and (not *pause-lock*) (cpad-hold? (-> self control cpad number) r2))
+            (when (and (not *pause-lock*)
+                       (cpad-hold? (-> self control cpad number) r2)
+                       (not (focus-test? self dead))
+                       (not *mp-spectator-countdown-active?*)
+                       (not *mp-spectating?*)
+                       (let ((state-name (and (-> self state) (-> self state name))))
+                         (not (or (= state-name 'target-death)
+                                  (= state-name 'target-indax-death)
+                                  (= state-name 'target-mech-death)))
+                         )
+                       )
               (pickup-collectable! (-> self fact) (pickup-type health) 100.0 (the-as handle #f))
               (go target-indax-stance))))
   :code (behavior ((arg0 symbol) (arg1 attack-info))

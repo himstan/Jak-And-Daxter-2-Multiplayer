@@ -2416,9 +2416,19 @@
             (when (and task-proc
                        (nonzero? task-proc)
                        (-> task-proc fail-on-death?)
-                       (-> task-proc next-state)
-                       (let ((state-name (-> task-proc next-state name)))
-                         (or (= state-name 'active) (= state-name 'fail))
+                       (let ((info (-> task-proc info)))
+                         (and info
+                              (nonzero? info)
+                              (or (-> info retry-continue) (-> info fail-continue))
+                              )
+                         )
+                       (let ((next-state (-> task-proc next-state)))
+                         (and next-state
+                              (nonzero? next-state)
+                              (let ((state-name (-> next-state name)))
+                                (or (= state-name 'active) (= state-name 'fail))
+                                )
+                              )
                          )
                        )
               (set! pending? #t)
@@ -2431,4 +2441,5 @@
     )
   )
 )
+
 

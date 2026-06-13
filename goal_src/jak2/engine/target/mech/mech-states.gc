@@ -1,6 +1,9 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern *mp-spectator-countdown-active?* symbol)
+(define-extern *mp-spectating?* symbol)
+
 ;; name: mech-states.gc
 ;; name in dgo: mech-states
 ;; dgos: DRILLMTN, UNB, RUI
@@ -913,7 +916,17 @@
     )
   :trans (behavior ()
     (when (= *cheat-mode* 'debug)
-      (when (and (not *pause-lock*) (cpad-hold? (-> self control cpad number) r2))
+      (when (and (not *pause-lock*)
+                 (cpad-hold? (-> self control cpad number) r2)
+                 (not (focus-test? self dead))
+                 (not *mp-spectator-countdown-active?*)
+                 (not *mp-spectating?*)
+                 (let ((state-name (and (-> self state) (-> self state name))))
+                   (not (or (= state-name 'target-death)
+                            (= state-name 'target-indax-death)
+                            (= state-name 'target-mech-death)))
+                   )
+                 )
         (set-time! (-> self control time-of-last-debug-heal))
         (pickup-collectable! (-> self fact) (pickup-type health) 100.0 (the-as handle #f))
         (go target-mech-stance)
