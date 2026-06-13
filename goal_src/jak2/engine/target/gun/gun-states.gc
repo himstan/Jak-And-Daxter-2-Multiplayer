@@ -131,6 +131,12 @@
     (while (using-gun? self)
       (let* ((v1-33 (-> self gun gun-type))
              (gp-1 (cond
+                     ((and (focus-test? self indax)
+                           (-> self gun)
+                           (nonzero? (-> self gun))
+                           (not (time-elapsed? (-> self gun fire-time) (seconds 0.45))))
+                      daxter-indax-running-attack-ja
+                      )
                      ((focus-test? self indax)
                       daxter-indax-stance-ja
                       )

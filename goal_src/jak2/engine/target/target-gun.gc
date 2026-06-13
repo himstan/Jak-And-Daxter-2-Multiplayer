@@ -2561,24 +2561,34 @@
             (target-gun-fire-red)
             )
            (((pickup-type eco-dark))
-            (if (focus-test? self pilot-riding)
-                (push-anim-to-targ
-                  (-> self skel top-anim)
-                  (the-as art-joint-anim jakb-pilot-gun-dark-fire-ja)
-                  0.0
-                  0
-                  15
-                  1.0
-                  0.0
-                  #f
-                  )
+            (cond
+              ((focus-test? self indax))
+              ((focus-test? self pilot-riding)
+               (push-anim-to-targ
+                 (-> self skel top-anim)
+                 (the-as art-joint-anim jakb-pilot-gun-dark-fire-ja)
+                 0.0
+                 0
+                 15
+                 1.0
+                 0.0
+                 #f
+                 )
+               )
+              (else
                 (push-anim-to-targ (-> self skel top-anim) (the-as art-joint-anim jakb-gun-dark-fire-ja) 0.0 0 15 1.0 0.0 #f)
                 )
+              )
             (target-gun-fire-dark)
             )
            )
         (when (not *mp-processing-remote-event*)
           (mp-send-player-gun-shot-event (the-as uint arg0))
+          )
+        (let ((g-info (-> self gun)))
+          (when (and g-info (nonzero? g-info))
+            (set-time! (-> g-info fire-time))
+            )
           )
         #t
          )
