@@ -1,0 +1,26 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defun mp-task-hook-atoll-sig-resolution-close! ()
+  "Clear client-local side effects that the host normally removes through Sig cleanup."
+  (when (and *setting-control*
+             (nonzero? *setting-control*))
+    (remove-setting! 'airlock)
+    (apply-settings *setting-control*)
+    (format 0 "[MP-TaskSync] Cleared atoll Sig airlock setting after remote task close.~%")
+    )
+  (none))
+
+(defun mp-task-sync-after-remote-close! ((node game-task-node))
+  "Run client-side cleanup after a task node is closed by remote task sync."
+  (case node
+    (((game-task-node atoll-sig-resolution))
+     (mp-task-hook-atoll-sig-resolution-close!)
+     )
+    )
+  (none))
+
+(defun mp-task-sync-after-remote-open! ((node game-task-node))
+  "Run client-side repair after a task node is opened by remote task sync."
+  node
+  (none))

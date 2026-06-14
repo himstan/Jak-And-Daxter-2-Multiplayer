@@ -85,9 +85,9 @@
   (none))
 
 (defun mp-event-handler-break ((aid uint))
-  (format 0 "[MP-WorldEvent] Received MP_EVENT_BREAK for AID ~D.~%" aid)
   (let ((ent (entity-by-aid aid)))
     (when (and ent (nonzero? ent))
+      (format 0 "[MP-WorldEvent] Received MP_EVENT_BREAK for AID ~D Entity: ~A~%" aid ent)
       (let ((perm (-> ent extra perm)))
         (when (not (logtest? (-> perm status) (entity-perm-status dead subtask-complete)))
           (let ((proc (-> ent extra process)))

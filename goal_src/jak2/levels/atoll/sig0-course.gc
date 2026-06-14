@@ -68,70 +68,19 @@
   )
 
 (defun sig0-first-battle-too-far ((arg0 sig-atoll))
-  (let ((gp-0 (bot-simple-check-too-far arg0)))
-    (cond
-      ((and (zero? gp-0) (< 24576.0 (- (-> (get-trans *target* 1) y) (-> arg0 sig-course spots 2 center y))))
-       (set! gp-0 1)
-       )
-      ((>= (-> (target-pos 0) z) -3399680.0)
-       (set! gp-0 2)
-       )
-      )
-    gp-0
-    )
+  0
   )
 
 (defun sig0-tank-check-too-far ((arg0 sig-atoll))
-  (let ((gp-0 (bot-simple-check-too-far arg0)))
-    (if (and (zero? gp-0) (not (sig-atoll-method-259 arg0)))
-        (set! gp-0 1)
-        )
-    gp-0
-    )
+  0
   )
 
 (defun sig0-gangway-check-too-far ((arg0 sig-atoll))
-  (let ((gp-0 (bot-simple-check-too-far arg0)))
-    (when (nonzero? gp-0)
-      (let* ((s5-1 (-> arg0 sig-course spots))
-             (f0-0 (vector-segment-distance-point!
-                     (target-pos 0)
-                     (the-as vector (-> s5-1 18))
-                     (the-as vector (-> s5-1 19))
-                     (the-as vector #f)
-                     )
-                   )
-             )
-        (cond
-          ((< f0-0 45056.0)
-           (set! gp-0 0)
-           )
-          ((< f0-0 110592.0)
-           (set! gp-0 1)
-           )
-          )
-        )
-      )
-    gp-0
-    )
+  0
   )
 
 (defun sig0-final-snipers-check-too-far ((arg0 sig-atoll))
-  (let ((gp-0 (bot-simple-check-too-far arg0)))
-    (when (or (zero? gp-0) (= gp-0 1))
-      (let ((f0-1 (- (-> (get-trans *target* 1) y) (-> arg0 sig-course spots 38 center y))))
-        (cond
-          ((>= f0-1 53248.0)
-           (set! gp-0 2)
-           )
-          ((>= f0-1 34816.0)
-           (set! gp-0 1)
-           )
-          )
-        )
-      )
-    gp-0
-    )
+  0
   )
 
 (defun sig0-say-look-out-if-should ((arg0 sig-atoll))
@@ -173,6 +122,67 @@
   (none)
   )
 
+(defun sig0-final-battle-process ((arg0 sig-atoll))
+  (when (and arg0 (nonzero? arg0) (-> arg0 actor-group))
+    (let ((battle-actor (-> arg0 actor-group 0 data 21 actor)))
+      (when (and battle-actor (nonzero? battle-actor) (-> battle-actor extra))
+        (-> battle-actor extra process)
+        )
+      )
+    )
+  )
+
+(defun sig0-final-battle-query ((arg0 sig-atoll) (query symbol))
+  (let ((battle-proc (sig0-final-battle-process arg0)))
+    (when (and battle-proc (nonzero? battle-proc))
+      (let ((msg (new 'stack-no-clear 'event-message-block)))
+        (set! (-> msg from) (process->ppointer arg0))
+        (set! (-> msg num-params) 1)
+        (set! (-> msg message) 'query)
+        (set! (-> msg param 0) (the-as uint query))
+        (send-event-function battle-proc msg)
+        )
+      )
+    )
+  )
+
+(defun sig0-final-battle-die-count ((arg0 sig-atoll))
+  (let ((die-count (sig0-final-battle-query arg0 'die-count)))
+    (if die-count
+        (the-as int die-count)
+        0
+        )
+    )
+  )
+
+(defun sig0-final-battle-beaten? ((arg0 sig-atoll))
+  (if (sig0-final-battle-query arg0 'beaten)
+    (begin
+      (format 0 "Sig gun repair battle beaten!~%")
+      #t
+      )
+    #f
+    )
+  )
+
+(defun sig0-in-repair-gun? ((arg0 sig-atoll))
+  (and arg0
+       (nonzero? arg0)
+       (-> arg0 next-state)
+       (= (-> arg0 next-state name) 'repair-gun)
+       (time-elapsed? (-> arg0 state-time) (seconds 1))
+       )
+  )
+
+(defun sig0-final-repair-complete? ((arg0 sig-atoll))
+  (and (sig0-in-repair-gun? arg0)
+       (or (>= (- (sig0-final-battle-die-count arg0) (-> arg0 waypoint-int32a)) 5)
+           (sig0-final-battle-beaten? arg0)
+           (time-elapsed? (-> arg0 state-time) (seconds 12))
+           )
+      )
+  )
+
 (define *sig0-course*
   (new 'static 'sig0-course
     :speech-count #x34
@@ -192,7 +202,7 @@
       :last-local-index -1
       :speech-indexes (new 'static 'boxed-array :type int16 42 41 39 40 46 47)
       )
-    :default-check-too-far 'bot-simple-check-too-far
+    :default-check-too-far 'bot-check-too-far-always-okay
     :waypoints (new 'static 'boxed-array :type bot-waypoint
       (new 'static 'bot-waypoint
         :waypoint-id 1
@@ -2523,24 +2533,8 @@
           (with-pp
             (set! (-> arg0 too-far-warn-dist) 327680.0)
             (set! (-> arg0 too-far-fail-dist-delta) 163840.0)
-            (let ((a1-0 (new 'stack-no-clear 'event-message-block)))
-              (set! (-> a1-0 from) (process->ppointer pp))
-              (set! (-> a1-0 num-params) 1)
-              (set! (-> a1-0 message) 'query)
-              (set! (-> a1-0 param 0) (the-as uint 'die-count))
-              (let ((t9-0 send-event-function)
-                    (v1-8 (-> arg0 actor-group 0 data 21 actor))
-                    )
-                (set! (-> arg0 waypoint-int32a) (the-as int (t9-0
-                                                              (if v1-8
-                                                                  (-> v1-8 extra process)
-                                                                  )
-                                                              a1-0
-                                                              )
-                                                        )
-                      )
-                )
-              )
+            (set-time! (-> arg0 waypoint-time0))
+            (set! (-> arg0 waypoint-int32a) (sig0-final-battle-die-count arg0))
             (let ((v1-12 (get-task-by-type (-> arg0 ai-ctrl) sigt-wait-spot arg0)))
               (set! (-> v1-12 bytes 5) 1)
               (set! (-> v1-12 bytes 6) 38)
@@ -2564,6 +2558,12 @@
         :on-update (lambda ((arg0 sig-atoll))
           (with-pp
             (cond
+              ((and (not (logtest? (-> arg0 waypoint-bits) (waypoint-bits wabits-1)))
+                    (sig0-final-repair-complete? arg0)
+                    )
+               (logior! (-> arg0 bot-flags) (bot-flags bf21))
+               (logior! (-> arg0 waypoint-bits) (waypoint-bits wabits-1))
+               )
               ((not (speech-playing? arg0 27))
                (if (time-elapsed? (-> arg0 waypoint-time0) (seconds 0.5))
                    (play-speech arg0 27)
@@ -2574,45 +2574,14 @@
                  (logior! (-> arg0 waypoint-bits) (waypoint-bits wabits-0))
                  (logclear! (-> arg0 focus-status) (focus-status disable))
                  (set! (-> arg0 notice-enemy-dist) 122880.0)
-                 (set-time! (-> arg0 waypoint-time0))
                  )
                )
               ((not (logtest? (-> arg0 waypoint-bits) (waypoint-bits wabits-1)))
-               (let ((a1-3 (new 'stack-no-clear 'event-message-block)))
-                 (set! (-> a1-3 from) (process->ppointer pp))
-                 (set! (-> a1-3 num-params) 1)
-                 (set! (-> a1-3 message) 'query)
-                 (set! (-> a1-3 param 0) (the-as uint 'die-count))
-                 (let ((t9-3 send-event-function)
-                       (v1-26 (-> arg0 actor-group 0 data 21 actor))
-                       )
-                   (cond
-                     ((or (>= (- (the-as int (t9-3
-                                               (if v1-26
-                                                   (-> v1-26 extra process)
-                                                   )
-                                               a1-3
-                                               )
-                                         )
-                                 (the-as uint (-> arg0 waypoint-int32a))
-                                 )
-                              5
-                              )
-                          (time-elapsed? (-> arg0 waypoint-time0) (seconds 10))
-                          )
-                      (logior! (-> arg0 bot-flags) (bot-flags bf21))
-                      (logior! (-> arg0 waypoint-bits) (waypoint-bits wabits-1))
-                      )
-                     (else
-                       (if (and (time-elapsed? (-> arg0 waypoint-time0) (seconds 4)) (not (speech-playing? arg0 28)))
-                           (play-speech arg0 28)
-                           )
-                       )
-                     )
+               (if (and (time-elapsed? (-> arg0 waypoint-time0) (seconds 4)) (not (speech-playing? arg0 28)))
+                   (play-speech arg0 28)
                    )
                  )
                )
-              )
             (none)
             )
           )
@@ -2625,6 +2594,7 @@
         :skip-to -1
         :on-set (lambda ((arg0 sig-atoll))
           (with-pp
+            (logior! (-> arg0 bot-flags) (bot-flags bf21))
             (set! (-> arg0 too-far-warn-dist) 327680.0)
             (set! (-> arg0 too-far-fail-dist-delta) 163840.0)
             (play-speech arg0 29)
@@ -2692,6 +2662,7 @@
         :on-set (lambda ((arg0 sig-atoll))
           (set! (-> arg0 too-far-warn-dist) 327680.0)
           (set! (-> arg0 too-far-fail-dist-delta) 163840.0)
+          (logior! (-> arg0 bot-flags) (bot-flags bf21))
           (let ((v1-3 (get-task-by-type (-> arg0 ai-ctrl) sigt-wait-spot arg0)))
             (set! (-> v1-3 bytes 5) 1)
             (set! (-> v1-3 bytes 6) 39)

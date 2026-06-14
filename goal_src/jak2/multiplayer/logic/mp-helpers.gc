@@ -76,6 +76,7 @@
            (type? proc squid)
            (type? proc squid-grenade)
            (type? proc guard-shot)
+           (type? proc battle)
            )
        )
   )
@@ -569,16 +570,6 @@
   (none))
 
 (define-extern scene-lookup (function basic scene))
-
-(defun mp-airlock-remote-ready? ((airlock-pos vector))
-  (if (= (-> *remote-info* status) 0)
-      (return #t))
-  (let ((remote-pos (new 'stack-no-clear 'vector)))
-    (set! (-> remote-pos x) (-> *remote-info* x))
-    (set! (-> remote-pos y) (-> *remote-info* y))
-    (set! (-> remote-pos z) (-> *remote-info* z))
-    (set! (-> remote-pos w) 1.0)
-    (< (vector-vector-xz-distance airlock-pos remote-pos) (meters 100.0))))
 
 ;; --- Targeting Helpers ---
 

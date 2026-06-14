@@ -72,8 +72,11 @@
          (set! (-> *game-info* skill) (-> *local-info* sync-skill))
 
          (let ((h-task (-> *local-info* host-task)))
-           (if (nonzero? h-task)
-               (task-node-close! (the-as game-task-node h-task))))
+           (when (nonzero? h-task)
+             (task-node-close! (the-as game-task-node h-task))
+             (mp-task-sync-after-remote-close! (the-as game-task-node h-task))
+             )
+           )
 
          ;; Sync AIDs (Orbs, etc.)
          (let ((count (-> *local-info* sync-aids-count)))
@@ -153,6 +156,7 @@
                          (not (logtest? (-> nodes data i flags) (game-task-node-flag closed))))
                 (format 0 "[MP-Client] Remote closed task node ~D. Applying locally.~%" i)
                 (task-node-close! (the-as game-task-node i))
+                (mp-task-sync-after-remote-close! (the-as game-task-node i))
                 )
 
               ;; 2.2 Sync ACTIVE (Open) nodes
@@ -169,6 +173,7 @@
                     (format 0 "[MP-Client] Remote has active task node ~D. Opening locally.~%" i)
                     (set! *mp-processing-remote-event* #t)
                     (task-node-open! (the-as game-task-node i))
+                    (mp-task-sync-after-remote-open! (the-as game-task-node i))
                     (set! *mp-processing-remote-event* #f)
                     )
                   )
