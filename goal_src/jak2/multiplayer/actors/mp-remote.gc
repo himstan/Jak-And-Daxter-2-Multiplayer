@@ -61,12 +61,22 @@
                               (nonzero? (-> *target* control)))
                          (vector-vector-distance (-> *target* control trans) *multi-remote-render-pos*)
                          (meters 0.0))))
-             (when (> dist (meters 250.0))
+             (when (and (> dist (meters 250.0))
+                        (not *mp-force-remote-puppet-for-spectate?*))
                (when *mp-puppet*
                  (format 0 "[MP-Puppet] Remote player is far (~m). Deactivating puppet...~%" dist)
                  (mp-puppet-deactivate!)
                  )
                (set! *mp-puppet-was-far?* #t)
+               )
+             (when (and (> dist (meters 250.0))
+                        *mp-force-remote-puppet-for-spectate?*
+                        (not *mp-puppet-is-warping?*)
+                        (mp-remote-level-ready?))
+               (when *mp-puppet-was-far?*
+                 (format 0 "[MP-Puppet] Remote player is far, but spectate needs puppet. Allowing respawn...~%")
+                 )
+               (set! *mp-puppet-was-far?* #f)
                )
              (when (and (< dist (meters 250.0)) *mp-puppet-was-far?* (not *mp-puppet-is-warping?*))
                 (format 0 "[MP-Puppet] Remote player returned to proximity (~m). Forcing respawn...~%" dist)
@@ -97,7 +107,10 @@
          (let ((proc (mp-puppet-get-proc)))
            (if (not proc)
                (begin
-                (when (and (not *mp-puppet-was-far?*) (not *mp-puppet-is-warping?*))
+                (when (and (not *mp-puppet-is-warping?*)
+                           (or (not *mp-puppet-was-far?*)
+                               (and *mp-force-remote-puppet-for-spectate?*
+                                    (mp-remote-level-ready?))))
                  (format 0 "[MP-Puppet] Spawning new target puppet for Status ~D...~%" remote-status)
                  (mp-puppet-spawn (the-as uint (-> *remote-info* id)))
                 )
@@ -120,6 +133,7 @@
              (set! *mp-puppet-was-far?* #f)
              )
            )
+         (set! *mp-force-remote-puppet-for-spectate?* #f)
          (set! *multi-remote-first-seen?* #t)
          )
        )

@@ -270,6 +270,7 @@
   (set! *mp-event-queue-read-ptr* 0)
   (set! *mp-last-remote-scene-active* (the-as uint 0))
   (set! *mp-puppet-was-far?* #f)
+  (set! *mp-force-remote-puppet-for-spectate?* #f)
   (set! *multi-remote-first-seen?* #t)
   (set! *mp-reconnect-process* (the-as handle #f))
   (set! *has-ridden-before?* #f)

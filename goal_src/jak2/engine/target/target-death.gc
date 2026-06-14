@@ -19,8 +19,10 @@
 (define-extern *mp-puppet-ghost* mp-target-ghost-record)
 (define-extern *mp-spectator-countdown-active?* symbol)
 (define-extern *mp-spectating?* symbol)
+(define-extern *mp-force-remote-puppet-for-spectate?* symbol)
 (define-extern mp-ensure-remote-level-wanted! (function none))
 (define-extern mp-remote-level-ready? (function symbol))
+(define-extern mp-prepare-remote-spectate-target! (function process-focusable))
 
 ;; DECOMP BEGINS
 
@@ -1479,11 +1481,10 @@
              (let ((elapsed (- (-> *display* game-clock frame-counter) start-time)))
 
                ;; Spectate Teammate
-               (let ((remote (mp-get-remote-target-process)))
+               (let ((remote (mp-prepare-remote-spectate-target!)))
                  (let ((current-target (handle->process (-> *camera* focus handle))))
                    (if (and remote (nonzero? remote))
                        (begin
-                         (mp-ensure-remote-level-wanted!)
                          (when (!= remote current-target)
                            (send-event *camera* 'change-target remote)
                            )
@@ -1516,9 +1517,8 @@
 
                ;; Check if we should respawn (20 seconds) or scene started
                (when (and (or (>= elapsed (seconds 20)) *scene-player*) (not (or *remote-player-is-dead* *remote-player-is-dying*)))
-                 (let ((remote (mp-get-remote-target-process)))
+                 (let ((remote (mp-prepare-remote-spectate-target!)))
                    (when (and remote (nonzero? remote))
-                     (mp-ensure-remote-level-wanted!)
                       (when (mp-remote-level-ready?)
                         (mp-send-world-event MP_EVENT_PLAYER_RESPAWNED (the-as uint 0))
                         (set! (-> self fact health) (/ (-> self fact health-max) 2.0))
@@ -1526,6 +1526,7 @@
                         (remove-setting! 'mode-name)
                         (send-event *camera* 'change-target self)
                         (set! *mp-spectator-countdown-active?* #f)
+                        (set! *mp-force-remote-puppet-for-spectate?* #f)
                         (mp-respawn-local-target-at-remote! self)
                         )
                       )
@@ -1543,6 +1544,7 @@
                              (set! *remote-player-is-dying* #f)
                              (set! *remote-player-is-dead* #f)
                              (set! *mp-spectator-countdown-active?* #f)
+                             (set! *mp-force-remote-puppet-for-spectate?* #f)
                              (remove-setting! 'mode-name)
                              (send-event *camera* 'change-target self)
                              (goto cfg-reset-init)
