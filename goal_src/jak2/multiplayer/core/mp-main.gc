@@ -281,6 +281,8 @@
   (set! *multi-remote-spawn-time* (the-as time-frame 0))
   (set! *mp-last-scene-player* #f)
   (set! *mp-was-riding-before-scene* #f)
+  (set! *mp-intro-skip-full-sync-pending?* #f)
+  (set! *mp-intro-skip-blackout-pending?* #f)
   (if (nonzero? (the-as uint *mp-last-scene-name*))
       (set! (-> *mp-last-scene-name* data 0) (the uint 0)))
   (set! *mp-traffic-suppressed* #f)

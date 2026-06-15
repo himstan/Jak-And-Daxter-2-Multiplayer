@@ -9,6 +9,16 @@ This gives us more freedom to write code how we want.
 (defun-extern pc-get-last-key uint)
 (defun-extern draw-generic-highlight int int float pointer)
 
+(defun mp-progress-intro-start! ((hero-mode? symbol))
+  (set! (-> *game-info* mode) 'play)
+  (if hero-mode?
+      (initialize! *game-info* 'game (the-as game-save #f) "intro-start-hero")
+      (initialize! *game-info* 'game (the-as game-save #f) "intro-start")
+      )
+  (set-master-mode 'game)
+  0
+  )
+
 (defun is-valid-ipv4? ((ip string))
   (let ((segments 0)
         (curr-val 0)
@@ -976,8 +986,12 @@ This gives us more freedom to write code how we want.
     (format 0 "[MP-Host] Remote joined. Transitioning to engine loading flow...~%")
     (set! (-> *bigmap* drawing-flag) #t)
     (cond
-      ((-> *pc-settings* mp-is-new-game?)
+      ((and (-> *pc-settings* mp-is-new-game?)
+            (< (-> *pc-settings* mp-selected-save-slot) 4))
        (set-next-state p 'saving 0)
+       )
+      ((-> *pc-settings* mp-is-new-game?)
+       (mp-progress-intro-start! (logtest? (-> *game-info* purchase-secrets) (game-secrets hero-mode)))
        )
       (else
         (set-next-state p 'loading 0)

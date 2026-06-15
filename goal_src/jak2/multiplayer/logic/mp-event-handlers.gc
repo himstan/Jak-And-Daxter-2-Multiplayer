@@ -238,6 +238,73 @@
   )
 )
 
+(defun mp-intro-samos-hut-scene? ((scene-name string))
+  (and scene-name
+       (nonzero? scene-name)
+       (string= scene-name "intro-samos-hut"))
+  )
+
+(defun mp-arm-intro-skip-full-sync! ((scene-name string))
+  "Handle the first intro skip race with host full sync and client blackout."
+  (when (mp-intro-samos-hut-scene? scene-name)
+    (cond
+      ((mp-is-jak?)
+       (format 0 "[MP-IntroSkip] Remote skipped intro-samos-hut. Host full sync pending.~%")
+       (set! *mp-intro-skip-full-sync-pending?* #t)
+       )
+      ((mp-is-daxter?)
+       (format 0 "[MP-IntroSkip] Remote skipped intro-samos-hut. Client blackout pending.~%")
+       (set! *mp-intro-skip-blackout-pending?* #t)
+       )
+      )
+    )
+  (none)
+  )
+
+(defun mp-intro-skip-host-ready-for-full-sync? ()
+  "True once the host has landed at the prison continue after the skipped intro."
+  (and (mp-is-jak?)
+       (= (pc-multi-get-status) 6)
+       (not *scene-player*)
+       *target*
+       (nonzero? *target*)
+       (-> *target* control)
+       (nonzero? (-> *target* control))
+       (not (focus-test? *target* teleporting))
+       (not (and (-> *target* state) (= (-> *target* state name) 'target-load-wait)))
+       (not (and (-> *target* next-state) (= (-> *target* next-state name) 'target-load-wait)))
+       *level*
+       (nonzero? *level*)
+       (= (-> *level* loading-level) (-> *level* default-level))
+       *game-info*
+       (nonzero? *game-info*)
+       (-> *game-info* current-continue)
+       (nonzero? (-> *game-info* current-continue))
+       (= (-> *game-info* current-continue level) 'prison))
+  )
+
+(defun mp-request-intro-skip-full-sync-when-ready! ()
+  "Consume the pending first-intro skip sync once the host is safely in prison."
+  (when (and *mp-intro-skip-full-sync-pending?*
+             (mp-intro-skip-host-ready-for-full-sync?))
+    (format 0 "[MP-IntroSkip] Host stable in prison. Requesting full sync for client.~%")
+    (set! *mp-intro-skip-full-sync-pending?* #f)
+    (pc-multi-request-full-sync)
+    )
+  (none)
+  )
+
+(defun mp-hold-intro-skip-blackout! ()
+  "Keep the client hidden between intro scene teardown and the host's authoritative full sync."
+  (when (and *mp-intro-skip-blackout-pending?*
+             (mp-is-daxter?)
+             (= (pc-multi-get-status) 6)
+             (not *scene-player*))
+    (set-blackout-frames (seconds 0.05))
+    )
+  (none)
+  )
+
 (defun mp-event-handler-scene-start ((ev mp-scene-event))
   (let ((s* *mp-scene-name-scratch*))
     (when (and s* (nonzero? (length s*)))
@@ -295,6 +362,7 @@
 (defun mp-event-handler-scene-request-skip ((aid uint))
   (format 0 "[MP-WorldEvent] Remote player requested to skip scene.~%")
   (set! *mp-remote-wants-skip* #t)
+  (mp-arm-intro-skip-full-sync! *mp-scene-name-scratch*)
   (none))
 
 (defun mp-event-handler-scene-skipped ((aid uint))
@@ -304,6 +372,7 @@
     ;; Force blackout off immediately to prevent getting stuck
     (set-blackout-frames 0)
     )
+  (mp-arm-intro-skip-full-sync! *mp-scene-name-scratch*)
   (none))
 
 (defun mp-event-handler-authority-request ((aid uint))

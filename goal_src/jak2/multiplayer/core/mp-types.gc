@@ -8,6 +8,8 @@
 (define-perm *mp-last-scene-player* symbol #f)
 (define-perm *mp-was-riding-before-scene* symbol #f)
 (define-perm *mp-last-scene-name* string (new 'global 'string 32 ""))
+(define-perm *mp-intro-skip-full-sync-pending?* symbol #f)
+(define-perm *mp-intro-skip-blackout-pending?* symbol #f)
 (define-extern *has-ridden-before?* symbol)
 (define-perm *mp-traffic-suppressed* symbol #f)
 (define-perm *mp-traffic-sync-active* symbol #f)

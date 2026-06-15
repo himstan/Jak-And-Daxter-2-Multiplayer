@@ -131,6 +131,7 @@
            )
 
          (set! (-> *local-info* sync-flag) (the-as uint 0))
+         (set! *mp-intro-skip-blackout-pending?* #f)
          (set! *multi-sync-enabled?* #t)
          (format 0 "[MP-Client] Join Handshake & Level Alignment Successful! Enabled sync flag.~%")
          )

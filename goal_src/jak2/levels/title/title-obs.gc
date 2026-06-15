@@ -7,6 +7,7 @@
 
 (declare-type title-control process)
 (define-extern *title-control* (pointer title-control))
+(define-perm *demo-disclaimer-shown-this-startup?* symbol #f)
 
 ;; DECOMP BEGINS
 
@@ -601,6 +602,16 @@
   (none)
   )
 
+(defun title-demo-disclaimer-state ()
+  (if *demo-disclaimer-shown-this-startup?*
+      'title
+      (begin
+        (set! *demo-disclaimer-shown-this-startup?* #t)
+        'demo-disclaimer
+        )
+      )
+  )
+
 (defstate startup (title-control)
   :virtual #t
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
@@ -791,7 +802,7 @@
   :code (behavior ()
     (remove-setting! 'allow-timeout)
     (remove-setting! 'dialog-volume)
-    (title-progress 'demo-disclaimer)
+    (title-progress (title-demo-disclaimer-state))
     (if (zero? (title-menu))
         (go-virtual idle)
         )
@@ -807,7 +818,7 @@
   :exit (-> (method-of-type title-control startup) exit)
   :code (behavior ()
     (title-fade-out (* 3.0 (seconds-per-frame)))
-    (title-progress 'demo-disclaimer)
+    (title-progress (title-demo-disclaimer-state))
     (sleep-code)
     )
   :post (-> (method-of-type title-control startup) post)

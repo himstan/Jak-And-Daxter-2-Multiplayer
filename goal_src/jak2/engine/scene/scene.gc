@@ -262,6 +262,13 @@
   (none)
   )
 
+(defun mp-scene-skip-ready? ((scene-proc scene-player))
+  (and scene-proc
+       (nonzero? scene-proc)
+       (-> scene-proc scene)
+       (time-elapsed? (-> scene-proc scene-start-time) (seconds 1)))
+  )
+
 ;; WARN: Return type mismatch process-drawable vs scene-player.
 (defmethod relocate ((this scene-player) (offset int))
   (let ((v1-0 *kernel-context*))
@@ -1279,7 +1286,8 @@
           (function process-drawable symbol)
           (if (-> self scene abort)
               (lambda :behavior scene-player ()
-                (when (cpad-pressed? 0 triangle)
+                (when (and (cpad-pressed? 0 triangle)
+                           (mp-scene-skip-ready? self))
                   (cond
                     ((not *multi-sync-enabled?*)
                      (mp-abort-local-scene! self)

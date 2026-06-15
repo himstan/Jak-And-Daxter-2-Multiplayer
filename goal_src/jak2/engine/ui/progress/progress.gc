@@ -83,6 +83,19 @@
   arg0
   )
 
+(defun progress-save-slot-menu? ((arg0 progress))
+  (and arg0
+       (nonzero? arg0)
+       (let ((menu-state (-> arg0 current)))
+         (or (= menu-state 'select-load)
+             (= menu-state 'select-save)
+             (= menu-state 'select-save-title)
+             (= menu-state 'select-save-title-hero)
+             (= menu-state 'mp-select-load)
+             (= menu-state 'mp-select-save-title)))
+       )
+  )
+
 (defun progress-intro-start ((hero-mode? symbol))
   (set! (-> *game-info* mode) 'play)
   (cond
@@ -1225,7 +1238,10 @@
                  (min-max-wrap-around (+ (-> self option-index) -1) 0 (+ (length (-> self current-options options)) -1))
                  )
            (let ((itercount 0))
-             (while (and (!= (-> self current) 'bigmap) (zero? (-> (-> self current-options options (-> self option-index)) name)) (< itercount 100))
+             (while (and (not (progress-save-slot-menu? self))
+                         (!= (-> self current) 'bigmap)
+                         (zero? (-> (-> self current-options options (-> self option-index)) name))
+                         (< itercount 100))
                (set! (-> self option-index)
                      (min-max-wrap-around (+ (-> self option-index) -1) 0 (+ (length (-> self current-options options)) -1))
                      )
@@ -1250,7 +1266,10 @@
                  (min-max-wrap-around (+ (-> self option-index) 1) 0 (+ (length (-> self current-options options)) -1))
                  )
            (let ((itercount 0))
-             (while (and (!= (-> self current) 'bigmap) (zero? (-> (-> self current-options options (-> self option-index)) name)) (< itercount 100))
+             (while (and (not (progress-save-slot-menu? self))
+                         (!= (-> self current) 'bigmap)
+                         (zero? (-> (-> self current-options options (-> self option-index)) name))
+                         (< itercount 100))
                (set! (-> self option-index)
                      (min-max-wrap-around (+ (-> self option-index) 1) 0 (+ (length (-> self current-options options)) -1))
                      )
