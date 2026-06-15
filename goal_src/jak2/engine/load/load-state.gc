@@ -42,6 +42,8 @@
   )
 
 (defmethod want-levels ((this load-state) (arg0 (pointer symbol)))
+  (format #t "[Level-Load] want-levels called. Target level set: ~A, ~A, ~A, ~A, ~A, ~A~%"
+            (-> arg0 0) (-> arg0 1) (-> arg0 2) (-> arg0 3) (-> arg0 4) (-> arg0 5))
   (dotimes (v1-0 LEVEL_MAX)
     (dotimes (a2-0 6)
       (when (= (-> this want v1-0 name) (-> arg0 a2-0))

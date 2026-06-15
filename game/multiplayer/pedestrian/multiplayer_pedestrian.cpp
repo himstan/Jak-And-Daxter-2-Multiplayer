@@ -32,6 +32,7 @@ inline void set_pedestrian_vehicle_net_id(MPPedestrianState& state, uint32_t veh
 
 size_t pedestrian_packet_size(uint32_t count) {
   return sizeof(PacketHeader) + sizeof(uint32_t) + sizeof(uint64_t) +
+         sizeof(uint32_t) +
          (sizeof(MPPedestrianStatePacked) * count);
 }
 }
@@ -46,7 +47,37 @@ void handle_pedestrian_sync_packet(const _ENetEvent& event, MultiplayerData& dat
                        sync->count :
                        (uint32_t)MAX_PEDESTRIANS_PER_PACKET;
   if (event.packet->dataLength < pedestrian_packet_size(ped_count)) {
+    if (current_time - data.last_traffic_short_packet_debug_time > 2000) {
+      lg::info("[Multiplayer] Short pedestrian traffic packet. bytes={} count={} need={}",
+               event.packet->dataLength, ped_count, pedestrian_packet_size(ped_count));
+      data.last_traffic_short_packet_debug_time = current_time;
+    }
     return;
+  }
+  if (sync->level_hash != 0 && data.last_remote_traffic_level_hash != 0 &&
+      sync->level_hash != data.last_remote_traffic_level_hash) {
+    if (current_time - data.last_traffic_drop_debug_time > 1000) {
+      lg::info("[Multiplayer] Dropped pedestrian traffic for level mismatch. packetLevel={} remoteLevel={} count={}",
+               sync->level_hash, data.last_remote_traffic_level_hash, ped_count);
+      data.last_traffic_drop_debug_time = current_time;
+    }
+    return;
+  }
+  if (sync->level_hash != 0 && data.remote_traffic_buffer_level_hash != 0 &&
+      sync->level_hash != data.remote_traffic_buffer_level_hash) {
+    memset(&data.traffic_buffer, 0, sizeof(data.traffic_buffer));
+    memset(data.ped_last_updated, 0, sizeof(data.ped_last_updated));
+    memset(data.veh_last_updated, 0, sizeof(data.veh_last_updated));
+    lg::info("[Multiplayer] Reset remote traffic table for pedestrian level change. old={} new={}",
+             data.remote_traffic_buffer_level_hash, sync->level_hash);
+  }
+  if (sync->level_hash != 0) {
+    data.remote_traffic_buffer_level_hash = sync->level_hash;
+  }
+  if (current_time - data.last_ped_traffic_debug_time > 2000) {
+    lg::info("[Multiplayer] Accepted pedestrian traffic. packetLevel={} remoteLevel={} count={}",
+             sync->level_hash, data.last_remote_traffic_level_hash, ped_count);
+    data.last_ped_traffic_debug_time = current_time;
   }
   data.last_traffic_sync_time = current_time;
   for (uint32_t i = 0; i < ped_count; i++) {
@@ -104,6 +135,7 @@ void send_pedestrian_sync_packets(MultiplayerData& data, MPTrafficSyncBufferGOAL
     PacketPedestrianSync packet; packet.header.type = PacketType::PEDESTRIAN_SYNC;
     packet.header.sequenceNum = ++data.sequence_num;
     packet.count = chunk_size; packet.timestamp = enet_time_get();
+    packet.level_hash = data.local_traffic_level_hash;
     for (uint32_t i = 0; i < chunk_size; i++) {
       auto* src = &buffer->pedestrians[sent_peds + i]; auto* dst = &packet.peds[i];
       dst->net_id = src->net_id; dst->object_type = src->object_type; dst->object_variance = src->object_variance;
@@ -117,7 +149,7 @@ void send_pedestrian_sync_packets(MultiplayerData& data, MPTrafficSyncBufferGOAL
       dst->pad[0] = 0;
       dst->pad[1] = 0;
     }
-    size_t packet_size = sizeof(PacketHeader) + sizeof(uint32_t) + sizeof(uint64_t) + (sizeof(MPPedestrianStatePacked) * chunk_size);
+    size_t packet_size = pedestrian_packet_size(chunk_size);
     MultiplayerManager::broadcast(data, exclude_peer, &packet, packet_size, ENET_PACKET_FLAG_UNSEQUENCED);
     sent_peds += chunk_size;
   }

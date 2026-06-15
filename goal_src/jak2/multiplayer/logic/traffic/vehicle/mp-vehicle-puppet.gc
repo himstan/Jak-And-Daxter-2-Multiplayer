@@ -56,6 +56,25 @@
       )
   )
 
+(defun mp-vehicle-local-target-riding? ((veh vehicle))
+  "True while the local player is attached to any seat in this vehicle."
+  (if (and veh
+           (nonzero? veh)
+           *target*
+           (nonzero? *target*)
+           (focus-test? *target* pilot)
+           (-> *target* pilot)
+           (nonzero? (-> *target* pilot)))
+      (let* ((pilot-info (-> *target* pilot))
+             (vehicle-proc (the-as vehicle (handle->process-safe (-> pilot-info vehicle)))))
+        (and vehicle-proc
+             (nonzero? vehicle-proc)
+             (= vehicle-proc veh))
+        )
+      #f
+      )
+  )
+
 (defun mp-vehicle-remote-puppet-driving? ((veh vehicle))
   "True only while the remote puppet legitimately owns this vehicle's driver seat."
   (and veh
@@ -226,24 +245,28 @@
   (when (and veh (nonzero? veh))
     (dotimes (seat-index 4)
       (let ((rider-proc (handle->process-safe (-> veh rider-array seat-index))))
-        (when (and rider-proc
-                   (nonzero? rider-proc)
-                   (!= rider-proc *target*)
-                   (!= rider-proc *mp-puppet*))
-          (cond
-            ((type? rider-proc vehicle-rider)
-             (send-event rider-proc 'rider-off)
-             (deactivate rider-proc)
+        (cond
+          ((not rider-proc)
+           (set! (-> veh rider-array seat-index) (the-as handle #f))
+           )
+          ((and (nonzero? rider-proc)
+                (!= rider-proc *target*)
+                (!= rider-proc *mp-puppet*))
+           (cond
+             ((type? rider-proc vehicle-rider)
+              (send-event rider-proc 'rider-off)
+              (deactivate rider-proc)
+              )
+             ((type? rider-proc citizen)
+              (send-event rider-proc 'traffic-off-force)
+              )
+             (else
+              (remove-rider veh rider-proc)
+              )
              )
-            ((type? rider-proc citizen)
-             (send-event rider-proc 'traffic-off-force)
-             )
-            (else
-             (remove-rider veh rider-proc)
-             )
-            )
+           (set! (-> veh rider-array seat-index) (the-as handle #f))
+           )
           )
-        (set! (-> veh rider-array seat-index) (the-as handle #f))
         )
       )
     )
@@ -252,7 +275,9 @@
 
 (defun mp-vehicle-force-cull-local! ((veh vehicle))
   "Remove a stale local traffic vehicle that no longer exists on the authority."
-  (when (and veh (nonzero? veh))
+  (when (and veh
+             (nonzero? veh)
+             (not (mp-vehicle-local-target-riding? veh)))
     (when (and (nonzero? *mp-remote-driven-vehicle*)
                (= veh (handle->process *mp-remote-driven-vehicle*)))
       (set! *mp-remote-driven-vehicle* (the-as handle #f))
@@ -269,20 +294,70 @@
   (none)
   )
 
+(defun mp-vehicle-slot-state-id-safe ((slot mp-vehicle-state))
+  "Read the host vehicle state id without assuming the slot pointer is valid."
+  (if (and slot (nonzero? slot))
+      (the uint (-> slot state-id))
+      (the uint 0)
+      )
+  )
+
+(defun mp-vehicle-parking-minimap-debug! ((action symbol) (veh vehicle) (slot-state-id uint))
+  "Log parking minimap decisions without dereferencing the vehicle state object."
+  (when (and veh (nonzero? veh))
+    (format
+      0
+      "[MP-Vehicle] parking-minimap ~A nid=~D slot-state=~D veh-state=#x~X~%"
+      action
+      (-> veh net-id)
+      slot-state-id
+      (-> veh state)
+      )
+    (format
+      0
+      "[MP-Vehicle] parking-minimap parked=~A pad1=~D local-riding=~A spawn-ready=~A~%"
+      (-> veh is-parked?)
+      (-> veh pad-bytes 1)
+      (mp-vehicle-local-target-riding? veh)
+      (mp-is-traffic-spawn-ready?)
+      )
+    )
+  (none)
+  )
+
 (defun mp-vehicle-refresh-parking-minimap! ((veh vehicle) (slot mp-vehicle-state))
   "Mirror the host-side parking-spot minimap state without syncing parking spots."
   (when (and veh (nonzero? veh))
-    (when (and (mp-vehicle-slot-parking-minimap? slot) (or (not (-> veh is-parked?)) (zero? (-> veh is-parked?))) (= (-> slot state-id) 4))
-      (mp-vehicle-ensure-parking-minimap! veh)
-      (format 0 "Ensuring parking spot for vehicle id: ~D state: ~A is-parked?: ~A~%" (-> veh net-id) (-> veh state name) (-> veh is-parked?))
+    (let ((slot-state-id (mp-vehicle-slot-state-id-safe slot)))
+      (cond
+        ((mp-vehicle-local-target-riding? veh)
+         (when (vehicle-parking-minimap? veh)
+           (mp-vehicle-parking-minimap-debug! 'remove-local-riding veh slot-state-id)
+           (mp-vehicle-remove-parking-minimap! veh)
+           )
+         )
+        ((not (mp-is-traffic-spawn-ready?))
+         (when (mp-vehicle-slot-parking-minimap? slot)
+           (mp-vehicle-parking-minimap-debug! 'skip-not-spawn-ready veh slot-state-id)
+           )
+         )
+        (else
+         (when (and (mp-vehicle-slot-parking-minimap? slot)
+                    (or (not (-> veh is-parked?)) (zero? (-> veh is-parked?)))
+                    (= slot-state-id (the uint 4)))
+           (mp-vehicle-ensure-parking-minimap! veh)
+           (mp-vehicle-parking-minimap-debug! 'ensure veh slot-state-id)
+           )
+         (when (and (vehicle-parking-minimap? veh) (!= slot-state-id (the uint 4)))
+           (mp-vehicle-parking-minimap-debug! 'remove veh slot-state-id)
+           (mp-vehicle-remove-parking-minimap! veh)
+           )
+         )
+        )
+      )
     )
-    (when (and (vehicle-parking-minimap? veh) (!= (-> slot state-id) 4))
-      (format 0 "Removing parking spot for vehicle id: ~D state: ~A is-parked?: ~A~%" (-> veh net-id) (-> veh state name) (-> veh is-parked?))
-      (mp-vehicle-remove-parking-minimap! veh)
-    )
-  )
   (none)
-)
+  )
 
 (defun mp-vehicle-is-local-authoritative? ((veh vehicle))
   "Check if the local machine has authority over this vehicle's physics."
@@ -319,15 +394,7 @@
   "Returns #t if the local camera should follow this vehicle."
   (cond
     ;; 1. Local player is riding this vehicle (as driver or passenger)
-    ((and *target*
-          (nonzero? *target*)
-          (focus-test? *target* pilot)
-          (let ((pilot-info (-> *target* pilot)))
-            (and (nonzero? pilot-info)
-                 (= veh (handle->process (-> pilot-info vehicle)))
-                 )
-            )
-          )
+    ((mp-vehicle-local-target-riding? veh)
      #t)
     ;; Default fallback to physics authority (ambient traffic)
     (else
@@ -401,6 +468,7 @@
   (when (and veh (nonzero? veh))
     (let ((v-net-id (-> veh net-id)))
       (when (or (mp-vehicle-local-target-driving? veh)
+                (mp-vehicle-local-target-riding? veh)
                 (mp-vehicle-remote-puppet-driving? veh)
                 (and (nonzero? v-net-id)
                      *remote-info*
@@ -883,6 +951,11 @@
                                           (= (handle->process (-> *target* pilot vehicle)) proc))))
              (when (not is-local-hijacking?)
                (let ((params (new 'stack 'traffic-object-spawn-params)))
+                 (mp-traffic-art-context!
+                   'veh-rider-spawn
+                   (-> slot net-id)
+                   (the uint (-> slot vehicle-type))
+                   (the uint (-> slot state-id)))
                  (set! (-> params object-type) (the-as traffic-type (-> slot vehicle-type)))
                  (set! (-> params behavior) (the uint64 0))
                  (set! (-> params id) (the uint32 0))
@@ -971,6 +1044,11 @@
 (defun mp-vehicle-spawn-puppet ((slot mp-vehicle-state))
   (when (mp-is-traffic-ready?)
     (when (mp-traffic-type-loaded? (the-as traffic-type (-> slot vehicle-type)))
+      (mp-traffic-art-context!
+        'veh-spawn
+        (-> slot net-id)
+        (the uint (-> slot vehicle-type))
+        (the uint (-> slot state-id)))
       (let ((params (new 'stack 'traffic-object-spawn-params)))
         (mem-set32! (the-as pointer params) 0 (/ (size-of traffic-object-spawn-params) 4))
         (set! (-> params object-type) (the-as traffic-type (-> slot vehicle-type)))

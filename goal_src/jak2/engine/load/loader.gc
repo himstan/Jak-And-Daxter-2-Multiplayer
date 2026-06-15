@@ -6,6 +6,25 @@
 ;; dgos: ENGINE, GAME
 
 (define-extern art-group-load-check (function string kheap int art-group))
+(define-extern *mp-traffic-art-context-kind* symbol)
+(define-extern *mp-traffic-art-context-net-id* uint)
+(define-extern *mp-traffic-art-context-object-type* uint)
+(define-extern *mp-traffic-art-context-state-id* uint)
+(define-extern *mp-traffic-art-context-time* time-frame)
+(define-extern *mp-traffic-art-context-ped-count* uint)
+(define-extern *mp-traffic-art-context-veh-count* uint)
+(define-extern *mp-traffic-art-context-local-level* uint)
+(define-extern *mp-traffic-art-context-remote-level* uint)
+(define-extern *mp-traffic-art-context-spawn-ready* symbol)
+(define-extern *mp-traffic-art-context-riding* symbol)
+(define *art-group-load-debug-level* 'none)
+(define *art-group-load-debug-existing?* #f)
+(define *art-group-load-debug-can-load?* #f)
+(define *art-group-load-debug-found-index* -1)
+(define *art-group-load-debug-dir-length* 0)
+(define *art-group-load-debug-caller* 'unknown)
+(define *art-group-load-debug-context-a* (the-as object #f))
+(define *art-group-load-debug-context-b* (the-as object #f))
 
 ;; DECOMP BEGINS
 
@@ -51,9 +70,20 @@
   )
 
 (defmethod load-to-heap-by-name ((this load-dir-art-group) (arg0 string) (arg1 symbol) (arg2 kheap) (arg3 int))
+  (set! *art-group-load-debug-level* (if (and this (nonzero? this) (-> this lev) (nonzero? (-> this lev)))
+                                         (-> this lev name)
+                                         'none
+                                         )
+        )
   (let ((s5-0 (-> this string-array)))
+    (set! *art-group-load-debug-can-load?* arg1)
+    (set! *art-group-load-debug-existing?* #f)
+    (set! *art-group-load-debug-found-index* -1)
+    (set! *art-group-load-debug-dir-length* (-> s5-0 length))
     (dotimes (s3-0 (-> s5-0 length))
       (when (string= arg0 (-> s5-0 s3-0))
+        (set! *art-group-load-debug-existing?* #t)
+        (set! *art-group-load-debug-found-index* s3-0)
         (when arg1
           (let ((v1-4 (art-group-load-check arg0 arg2 arg3)))
             (if v1-4
@@ -64,6 +94,8 @@
         (return (-> this art-group-array s3-0))
         )
       )
+    (set! *art-group-load-debug-existing?* #f)
+    (set! *art-group-load-debug-found-index* -1)
     (let ((v0-2 (art-group-load-check arg0 arg2 arg3)))
       (when v0-2
         (set! (-> s5-0 (-> s5-0 length)) arg0)
@@ -128,6 +160,52 @@
     )
   )
 
+(defun art-group-load-debug-context ((arg0 string) (arg1 int))
+  (let ((current-proc (if (and *kernel-context* (nonzero? *kernel-context*))
+                          (-> *kernel-context* current-process)
+                          #f
+                          )
+        )
+        )
+    (format 0 "[load-debug] failed art-group load name=~A version=~D current-process=~A load-dir-level=~A~%" arg0 arg1 current-proc *art-group-load-debug-level*)
+    (format
+      0
+      "[load-debug] caller=~A context-a=~A context-b=~A~%"
+      *art-group-load-debug-caller*
+      *art-group-load-debug-context-a*
+      *art-group-load-debug-context-b*
+      )
+    (format
+      0
+      "[load-debug] art-dir existing=~A index=~D dir-len=~D requested-load=~A~%"
+      *art-group-load-debug-existing?*
+      *art-group-load-debug-found-index*
+      *art-group-load-debug-dir-length*
+      *art-group-load-debug-can-load?*
+      )
+  (format
+    0
+    "[load-debug] mp-traffic-context kind=~A nid=~D obj-type=~D state=~D ctx-time=~D~%"
+    *mp-traffic-art-context-kind*
+    *mp-traffic-art-context-net-id*
+    *mp-traffic-art-context-object-type*
+    *mp-traffic-art-context-state-id*
+    *mp-traffic-art-context-time*
+    )
+  (format
+    0
+    "[load-debug] mp-traffic-frame peds=~D vehs=~D local-level=~D remote-level=~D spawn-ready=~A riding=~A~%"
+    *mp-traffic-art-context-ped-count*
+    *mp-traffic-art-context-veh-count*
+    *mp-traffic-art-context-local-level*
+    *mp-traffic-art-context-remote-level*
+    *mp-traffic-art-context-spawn-ready*
+    *mp-traffic-art-context-riding*
+    )
+  )
+  (none)
+  )
+
 (defun art-group-load-check ((arg0 string) (arg1 kheap) (arg2 int))
   ; (local-vars (sp-0 pointer))
   (when *debug-segment*
@@ -138,6 +216,7 @@
     (let ((s3-1 (loado (make-file-name (file-kind art-group) arg0 arg2 #f) arg1)))
       (cond
         ((not s3-1)
+         (art-group-load-debug-context arg0 arg2)
          (format 0 "ERROR: art-group ~A is not a valid file.~%" arg0)
          (the-as art-group #f)
          )

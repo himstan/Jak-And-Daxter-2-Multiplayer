@@ -8,6 +8,9 @@
 (define-extern string-crc32 (function string uint))
 (define-extern *mp-processing-remote-event* symbol)
 (define-extern mp-send-scene-event (function mp-scene-state string none))
+(define-extern *art-group-load-debug-caller* symbol)
+(define-extern *art-group-load-debug-context-a* object)
+(define-extern *art-group-load-debug-context-b* object)
 
 ;; DECOMP BEGINS
 
@@ -439,6 +442,9 @@
           )
         )
       )
+    (set! *art-group-load-debug-caller* 'scene-main-art)
+    (set! *art-group-load-debug-context-a* (-> gp-0 name))
+    (set! *art-group-load-debug-context-b* (-> gp-0 entity))
     (let ((s3-2 (load-to-heap-by-name (-> *level* default-level art-group) (-> gp-0 art-group) #f global 0)))
       (when (not s3-2)
         (format 0 "ERROR: SCENE: scene ~A can not find art-group ~A~%" (-> gp-0 name) (-> gp-0 art-group))
@@ -512,6 +518,23 @@
                )
              )
             (else
+              (format
+                0
+                "[scene-debug] preload scene=~A actor=~A actor-art=~A~%"
+                (-> gp-0 name)
+                (-> s2-0 name)
+                (-> s2-0 art-group)
+                )
+              (format
+                0
+                "[scene-debug] preload actor-level=~A load-level=~A preload-ag=~A~%"
+                (-> s2-0 level)
+                (-> s1-0 name)
+                (the-as string (-> v1-55 data 0))
+                )
+              (set! *art-group-load-debug-caller* 'scene-actor-preload)
+              (set! *art-group-load-debug-context-a* (-> gp-0 name))
+              (set! *art-group-load-debug-context-b* (-> s2-0 name))
               (load-to-heap-by-name (-> s1-0 art-group) (the-as string (-> v1-55 data 0)) #f global 0)
               )
             )

@@ -287,6 +287,11 @@
   (when (mp-is-traffic-ready?)
     ;; BUDGET/SAFETY: Only spawn if art is loaded to avoid linking crash
     (when (mp-traffic-type-loaded? (the-as traffic-type (-> slot object-type)))
+      (mp-traffic-art-context!
+        'ped-spawn
+        (-> slot net-id)
+        (the uint (-> slot object-type))
+        (the uint (-> slot state-id)))
       (let ((params (new 'stack 'traffic-object-spawn-params)))
         (mp-pedestrian-build-spawn-params! slot params)
         (let ((proc (mp-pedestrian-spawn-proc params)))

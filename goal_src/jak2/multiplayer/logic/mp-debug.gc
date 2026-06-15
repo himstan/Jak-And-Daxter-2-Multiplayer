@@ -285,3 +285,75 @@
         "none"
         (the-as string flags-text))))
 
+(defun mp-draw-level-debug ()
+  "Draw level loading and level state debug information."
+  (when *mp-level-debug?*
+    (format *stdcon* "~0k--- LEVEL LOAD DEBUG ---~%")
+    (when (and *load-state* (nonzero? *load-state*))
+      (format *stdcon* "VIS-NICK target: ~A~%" (-> *load-state* vis-nick))
+      )
+    (when (and *level* (nonzero? *level*))
+      (format *stdcon* "PLAY?: ~A  BORDER?: ~A  VIS?: ~A~%" (-> *level* play?) (-> *level* border?) (-> *level* vis?))
+      (format *stdcon* "LOAD-LEVEL: ~A~%" (-> *level* load-level))
+      )
+    
+    (when (and *level* (nonzero? *level*))
+      (let ((loading-lev (-> *level* loading-level)))
+        (if (and loading-lev (nonzero? loading-lev) (!= loading-lev (-> *level* default-level)))
+            (format *stdcon* "LOADING LEVEL: ~A (status: ~A)~%" (-> loading-lev name) (-> loading-lev status))
+            (format *stdcon* "LOADING LEVEL: none~%")
+            )
+        )
+      )
+    
+    (when (and *load-state* (nonzero? *load-state*))
+      (format *stdcon* "WANTED LEVELS (WANT):~%")
+      (dotimes (i 6)
+        (let ((want-state (-> *load-state* want i)))
+          (when (and want-state (nonzero? want-state) (-> want-state name))
+            (format *stdcon* "  ~D: ~A [~A] (force-vis? ~A, force-inside? ~A)~%"
+                    i
+                    (-> want-state name)
+                    (-> want-state display?)
+                    (-> want-state force-vis?)
+                    (-> want-state force-inside?)
+                    )
+            )
+          )
+        )
+      )
+    
+    (when (and *level* (nonzero? *level*))
+      (format *stdcon* "ACTIVE HEAPS (draw-level-count: ~D):~%" (-> *level* draw-level-count))
+      (dotimes (i (-> *level* length))
+        (let ((lev (-> *level* level i)))
+          (when (and lev (nonzero? lev) (!= (-> lev status) 'inactive))
+            (let* ((heap (-> lev heap))
+                   (size (- (the int (-> heap top-base)) (the int (-> heap base))))
+                   (used (+ (- (the int (-> heap current)) (the int (-> heap base)))
+                            (- (the int (-> heap top-base)) (the int (-> heap top)))))
+                   (free (- (the int (-> heap top)) (the int (-> heap current)))))
+              (format *stdcon* "  ~D: ~A (status: ~A, nick: ~A, display: ~A, render: ~A)~%"
+                      i
+                      (-> lev name)
+                      (-> lev status)
+                      (-> lev nickname)
+                      (-> lev display?)
+                      (-> lev render?)
+                      )
+              (format *stdcon* "     Heap: size ~D, used ~D (~D%), free ~D~%"
+                      size
+                      used
+                      (if (> size 0) (/ (* 100 used) size) 0)
+                      free
+                      )
+              )
+            )
+          )
+        )
+      )
+    (format *stdcon* "-------------------------~%~%")
+    )
+  (none)
+  )
+

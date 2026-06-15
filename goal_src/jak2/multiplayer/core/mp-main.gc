@@ -215,6 +215,8 @@
         )
       )
 
+    (mp-draw-level-debug)
+
     ;; GLOBAL GUARD: Logic below only runs once we are actually synced and in-game
     (if (not *multi-sync-enabled?*)
         (return #f))

@@ -7,6 +7,9 @@
 
 (declare-type viewer process-drawable)
 (define-extern *viewer* viewer)
+(define-extern *art-group-load-debug-caller* symbol)
+(define-extern *art-group-load-debug-context-a* object)
+(define-extern *art-group-load-debug-context-b* object)
 
 ;; DECOMP BEGINS
 
@@ -144,6 +147,9 @@
         (else
           (actor-get-arg! viewer-ja-name "ja" arg1)
           (actor-get-arg! viewer-geo-name "geo" arg1)
+          (set! *art-group-load-debug-caller* 'viewer)
+          (set! *art-group-load-debug-context-a* self)
+          (set! *art-group-load-debug-context-b* arg0)
           (let ((s2-1 (load-to-heap-by-name (-> self level art-group) arg0 #f global 0))
                 (s5-1 (the-as int #f))
                 (s4-1 (the-as int #f))

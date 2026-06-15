@@ -156,6 +156,7 @@
 ;; --- Helper functions for handle resolution ---
 
 (define-extern mp-teleport-to-remote (function object))
+(define-extern mp-is-traffic-spawn-ready? (function object))
 
 (defun handle->process-safe ((h handle))
   (if (and (nonzero? (the-as int h))
@@ -1083,6 +1084,19 @@
 (define-extern *mp-palace-squid-proc* squid)
 (define-perm *mp-enemy-auth* (inline-array mp-enemy-auth-record) (new 'static 'inline-array mp-enemy-auth-record 128))
 
+;; Breadcrumbs printed by the art loader when a bad art-group lookup happens.
+(define-perm *mp-traffic-art-context-kind* symbol 'none)
+(define-perm *mp-traffic-art-context-net-id* uint (the uint 0))
+(define-perm *mp-traffic-art-context-object-type* uint (the uint 0))
+(define-perm *mp-traffic-art-context-state-id* uint (the uint 0))
+(define-perm *mp-traffic-art-context-time* time-frame 0)
+(define-perm *mp-traffic-art-context-ped-count* uint (the uint 0))
+(define-perm *mp-traffic-art-context-veh-count* uint (the uint 0))
+(define-perm *mp-traffic-art-context-local-level* uint (the uint 0))
+(define-perm *mp-traffic-art-context-remote-level* uint (the uint 0))
+(define-perm *mp-traffic-art-context-spawn-ready* symbol #f)
+(define-perm *mp-traffic-art-context-riding* symbol #f)
+
 ;; Queue for outbound events to prevent overwriting when multiple things happen in 1 frame
 (define-perm *mp-event-queue* (inline-array mp-event) (new 'static 'inline-array mp-event 32))
 (define-perm *mp-event-queue-write-ptr* int 0)
@@ -1121,6 +1135,7 @@
 (define *mp-pending-scene-name* (new 'global 'string 32 (the-as string #f)))
 (define-perm *mp-debug-draw* symbol #f)
 (define-perm *mp-debug-network* symbol #f)
+(define-perm *mp-level-debug?* symbol #f)
 (define-perm *mp-tps-counter* uint (the uint 0))
 (define-perm *mp-actual-tps* uint (the uint 0))
 (define-perm *mp-tps-timer* time-frame 0)
@@ -1147,6 +1162,7 @@
 
 (define-extern mp-draw-puppet-debug (function none))
 (define-extern mp-draw-network-debug (function none))
+(define-extern mp-draw-level-debug (function none))
 (define-extern mp-draw-battle-debug (function none))
 (define-extern mp-draw-boss-debug (function none))
 (define-extern mp-draw-boss-debug-overlay (function none))

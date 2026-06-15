@@ -55,6 +55,7 @@ void reset_remote_traffic_buffers() {
   memset(&gMultiplayerData.traffic_buffer, 0, sizeof(gMultiplayerData.traffic_buffer));
   memset(gMultiplayerData.ped_last_updated, 0, sizeof(gMultiplayerData.ped_last_updated));
   memset(gMultiplayerData.veh_last_updated, 0, sizeof(gMultiplayerData.veh_last_updated));
+  gMultiplayerData.remote_traffic_buffer_level_hash = 0;
   gMultiplayerData.last_traffic_sync_time = 0;
 }
 
@@ -98,7 +99,8 @@ void handle_packet_receive(LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* rem
                   state->level_hash != gMultiplayerData.last_remote_traffic_level_hash) {
                 reset_remote_traffic_buffers();
                 reset_remote_palace_squid_state();
-                lg::info("[Multiplayer] Remote level changed. Cleared traffic sync buffers.");
+                lg::info("[Multiplayer] Remote level changed. Cleared traffic sync buffers. old={} new={}",
+                         gMultiplayerData.last_remote_traffic_level_hash, state->level_hash);
               }
               if (state->netId != gMultiplayerData.local_net_id && state->level_hash != 0) {
                 gMultiplayerData.last_remote_traffic_level_hash = state->level_hash;
@@ -304,6 +306,7 @@ void handle_packet_send(LocalPlayerInfoGOAL* local, MPEventBufferGOAL* events) {
   local->send_tick = local_state.send_tick;
   local_state.state_id = (uint32_t)local->state_id;
   local_state.level_hash = local->level;
+  gMultiplayerData.local_traffic_level_hash = local_state.level_hash;
   local_state.riding = local->riding;
   local_state.clock = local->clock;
   local_state.tod_frame = local->tod_frame;

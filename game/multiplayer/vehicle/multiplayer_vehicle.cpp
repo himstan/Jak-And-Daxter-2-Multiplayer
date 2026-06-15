@@ -18,6 +18,7 @@ inline float unpack_float_q(int16_t v) {
 
 size_t vehicle_packet_size(uint32_t count) {
   return sizeof(PacketHeader) + sizeof(uint32_t) + sizeof(uint64_t) +
+         sizeof(uint32_t) +
          (sizeof(MPVehicleStatePacked) * count);
 }
 }
@@ -32,7 +33,37 @@ void handle_vehicle_sync_packet(const _ENetEvent& event, MultiplayerData& data) 
                        sync->count :
                        (uint32_t)MAX_VEHICLES_PER_PACKET;
   if (event.packet->dataLength < vehicle_packet_size(veh_count)) {
+    if (current_time - data.last_traffic_short_packet_debug_time > 2000) {
+      lg::info("[Multiplayer] Short vehicle traffic packet. bytes={} count={} need={}",
+               event.packet->dataLength, veh_count, vehicle_packet_size(veh_count));
+      data.last_traffic_short_packet_debug_time = current_time;
+    }
     return;
+  }
+  if (sync->level_hash != 0 && data.last_remote_traffic_level_hash != 0 &&
+      sync->level_hash != data.last_remote_traffic_level_hash) {
+    if (current_time - data.last_traffic_drop_debug_time > 1000) {
+      lg::info("[Multiplayer] Dropped vehicle traffic for level mismatch. packetLevel={} remoteLevel={} count={}",
+               sync->level_hash, data.last_remote_traffic_level_hash, veh_count);
+      data.last_traffic_drop_debug_time = current_time;
+    }
+    return;
+  }
+  if (sync->level_hash != 0 && data.remote_traffic_buffer_level_hash != 0 &&
+      sync->level_hash != data.remote_traffic_buffer_level_hash) {
+    memset(&data.traffic_buffer, 0, sizeof(data.traffic_buffer));
+    memset(data.ped_last_updated, 0, sizeof(data.ped_last_updated));
+    memset(data.veh_last_updated, 0, sizeof(data.veh_last_updated));
+    lg::info("[Multiplayer] Reset remote traffic table for vehicle level change. old={} new={}",
+             data.remote_traffic_buffer_level_hash, sync->level_hash);
+  }
+  if (sync->level_hash != 0) {
+    data.remote_traffic_buffer_level_hash = sync->level_hash;
+  }
+  if (current_time - data.last_veh_traffic_debug_time > 2000) {
+    lg::info("[Multiplayer] Accepted vehicle traffic. packetLevel={} remoteLevel={} count={}",
+             sync->level_hash, data.last_remote_traffic_level_hash, veh_count);
+    data.last_veh_traffic_debug_time = current_time;
   }
   data.last_traffic_sync_time = current_time;
   for (uint32_t i = 0; i < veh_count; i++) {
@@ -102,6 +133,7 @@ void send_vehicle_sync_packets(MultiplayerData& data, MPTrafficSyncBufferGOAL* b
     PacketVehicleSync packet; packet.header.type = PacketType::VEHICLE_SYNC;
     packet.header.sequenceNum = ++data.sequence_num;
     packet.count = chunk_size; packet.timestamp = enet_time_get();
+    packet.level_hash = data.local_traffic_level_hash;
     for (uint32_t i = 0; i < chunk_size; i++) {
       auto* src = &buffer->vehicles[sent_vehs + i]; auto* dst = &packet.vehs[i];
       dst->net_id = src->net_id; dst->vehicle_type = src->vehicle_type; dst->color_index = src->color_index;
@@ -113,7 +145,7 @@ void send_vehicle_sync_packets(MultiplayerData& data, MPTrafficSyncBufferGOAL* b
       dst->ang_vel[0] = pack_float_q(src->ang_vel_x / 10.0f); dst->ang_vel[1] = pack_float_q(src->ang_vel_y / 10.0f); dst->ang_vel[2] = pack_float_q(src->ang_vel_z / 10.0f);
       dst->state_flags = src->state_flags; memcpy(dst->rider_aids, src->rider_aids, 16);
     }
-    size_t packet_size = sizeof(PacketHeader) + sizeof(uint32_t) + sizeof(uint64_t) + (sizeof(MPVehicleStatePacked) * chunk_size);
+    size_t packet_size = vehicle_packet_size(chunk_size);
     MultiplayerManager::broadcast(data, exclude_peer, &packet, packet_size, ENET_PACKET_FLAG_UNSEQUENCED);
     sent_vehs += chunk_size;
   }

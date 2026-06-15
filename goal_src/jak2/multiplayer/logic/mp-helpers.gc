@@ -8,6 +8,8 @@
 
 (declare-type squid-grenade projectile)
 (declare-type parking-spot process-drawable)
+(declare-type camera-start process-hidden)
+(declare-type security-wall process-drawable)
 
 (define *mp-combat-retarget-distance-bias* 8192.0)
 
@@ -81,9 +83,13 @@
            (type? proc part-spawner)
            (type? proc parking-spot)
            (type? proc scene-stage)
+           (type? proc camera-start)
+           (type? proc security-wall)
            (type-type? (-> proc type) part-spawner)
            (type-type? (-> proc type) parking-spot)
            (type-type? (-> proc type) scene-stage)
+           (type-type? (-> proc type) camera-start)
+           (type-type? (-> proc type) security-wall)
            )
        )
   )
@@ -91,15 +97,75 @@
 (defun mp-is-traffic-ready? ()
   "Is the traffic system fully initialized and ready for sync? (Client Side)"
   (and *traffic-manager*
+       (nonzero? *traffic-manager*)
        *lwide-entity*
        (nonzero? (the-as uint *lwide-entity*))
        )
   )
 
+(defun mp-is-traffic-spawn-ready? ()
+  "True when it is safe to materialize remote traffic puppets that need level art."
+  (and (mp-is-traffic-ready?)
+       *level*
+       (nonzero? *level*)
+       (= (-> *level* loading-level) (-> *level* default-level))
+       *target*
+       (nonzero? *target*)
+       (-> *target* control)
+       (nonzero? (-> *target* control))
+       (not (focus-test? *target* teleporting))
+       )
+  )
+
+(defun mp-traffic-art-context! ((kind symbol) (net-id uint) (object-type uint) (state-id uint))
+  "Remember the latest MP traffic spawn/update path for loader error correlation."
+  (set! *mp-traffic-art-context-kind* kind)
+  (set! *mp-traffic-art-context-net-id* net-id)
+  (set! *mp-traffic-art-context-object-type* object-type)
+  (set! *mp-traffic-art-context-state-id* state-id)
+  (set! *mp-traffic-art-context-time* (current-time))
+  (none)
+  )
+
+(defun mp-traffic-debug-update-frame-context! ()
+  "Capture per-frame traffic sync context using only primitive debug fields."
+  (if (and *mp-traffic-buffer* (nonzero? (the-as uint *mp-traffic-buffer*)))
+      (begin
+        (set! *mp-traffic-art-context-ped-count* (-> *mp-traffic-buffer* ped-count))
+        (set! *mp-traffic-art-context-veh-count* (-> *mp-traffic-buffer* veh-count))
+        )
+      (begin
+        (set! *mp-traffic-art-context-ped-count* (the uint 0))
+        (set! *mp-traffic-art-context-veh-count* (the uint 0))
+        )
+      )
+  (if (and *local-info* (nonzero? *local-info*))
+      (set! *mp-traffic-art-context-local-level* (-> *local-info* level))
+      (set! *mp-traffic-art-context-local-level* (the uint 0))
+      )
+  (if (and *remote-info* (nonzero? *remote-info*))
+      (set! *mp-traffic-art-context-remote-level* (-> *remote-info* level))
+      (set! *mp-traffic-art-context-remote-level* (the uint 0))
+      )
+  (if (mp-is-traffic-spawn-ready?)
+      (set! *mp-traffic-art-context-spawn-ready* #t)
+      (set! *mp-traffic-art-context-spawn-ready* #f)
+      )
+  (set! *mp-traffic-art-context-riding* #f)
+  (when (and *target* (nonzero? *target*) (focus-test? *target* pilot))
+    (let ((pilot-info (-> *target* pilot)))
+      (when (and pilot-info (nonzero? pilot-info))
+        (set! *mp-traffic-art-context-riding* #t)
+        )
+      )
+    )
+  (none)
+  )
+
 (defun mp-traffic-type-loaded? ((t-type traffic-type))
   "Check if the art group for a given traffic type is already loaded in memory. (Client Side)"
-  ;; GLOBAL SAFETY: Traffic requires lwide-entity and traffic-manager to be stable.
-  (if (not (mp-is-traffic-ready?))
+  ;; GLOBAL SAFETY: Spawning remote traffic requires stable level art.
+  (if (not (mp-is-traffic-spawn-ready?))
       (return #f))
 
   (let ((ag-name (the-as string #f)))

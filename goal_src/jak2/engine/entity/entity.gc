@@ -17,6 +17,8 @@
 
 (define *vis-actors* #t)
 
+(define-perm *entity-birth-viewer-debug-time* time-frame 0)
+
 ;; WARN: Return type mismatch int vs drawable-actor.
 (defmethod mem-usage ((this drawable-actor) (arg0 memory-usage-block) (arg1 int))
   (set! (-> arg0 length) (max 44 (-> arg0 length)))
@@ -1614,6 +1616,112 @@
   (none)
   )
 
+(defun entity-birth-debug-level-name ((lev level))
+  (if (and lev (nonzero? lev))
+      (-> lev name)
+      'none
+      )
+  )
+
+(defun entity-birth-viewer-debug! ((etype type) (proc process) (actor entity-actor))
+  (when (time-elapsed? *entity-birth-viewer-debug-time* (seconds 0.25))
+    (let ((actor-name (if (and actor (nonzero? actor))
+                          (res-lump-struct actor 'name basic)
+                          'none
+                          )
+          )
+          (actor-level-name 'none)
+          (actor-level-status 'none)
+          (loading-level-name 'none)
+          (default-level-name 'none)
+          (load-level-name 'none)
+          (proc-type (the-as type #f))
+          (type-method-count (the-as uint 0))
+          (type-valid? (and etype (valid? etype type (the-as string #f) #f 0)))
+          (init-valid? #f)
+          )
+      (when type-valid?
+        (set! type-method-count (-> etype allocated-length))
+        )
+      (when (and proc (nonzero? proc))
+        (set! proc-type (-> proc type))
+        (when type-valid?
+          (set! init-valid?
+                (valid? (method-of-object proc init-from-entity!) function (the-as string #f) #f 0)
+                )
+          )
+        )
+      (when (and actor
+                 (nonzero? actor)
+                 (-> actor extra level)
+                 (nonzero? (-> actor extra level)))
+        (set! actor-level-name (-> actor extra level name))
+        (set! actor-level-status (-> actor extra level status))
+        )
+      (when (and *level* (nonzero? *level*))
+        (set! load-level-name (-> *level* load-level))
+        (set! loading-level-name (entity-birth-debug-level-name (-> *level* loading-level)))
+        (set! default-level-name (entity-birth-debug-level-name (-> *level* default-level)))
+        )
+      (format
+        0
+        "[entity-birth] viewer fallback etype=~A actor=~A proc-type=~A type-valid=~A init-valid=~A methods=~D~%"
+        etype
+        actor-name
+        proc-type
+        type-valid?
+        init-valid?
+        type-method-count
+        )
+      (format
+        0
+        "[entity-birth] actor-level=~A actor-status=~A load-level=~A loading-level=~A default-level=~A~%"
+        actor-level-name
+        actor-level-status
+        load-level-name
+        loading-level-name
+        default-level-name
+        )
+      (set! *entity-birth-viewer-debug-time* (current-time))
+      )
+    )
+  (none)
+  )
+
+(defun entity-birth-repair-part-spawner-init! ((etype type) (proc process) (actor entity-actor))
+  (when (and etype
+             (valid? etype type (the-as string #f) #f 0)
+             (type-type? etype part-spawner)
+             proc
+             (nonzero? proc)
+             actor
+             (nonzero? actor))
+    (let ((init-id (method-id-of-type part-spawner init-from-entity!))
+          (init-func (method-of-type part-spawner init-from-entity!))
+          )
+      (when (and (< init-id (the-as int (-> etype allocated-length)))
+                 (valid? init-func function (the-as string #f) #f 0))
+        (method-set! etype init-id init-func)
+        (when (valid? (method-of-object proc init-from-entity!) function (the-as string #f) #f 0)
+          (when (time-elapsed? *entity-birth-viewer-debug-time* (seconds 0.25))
+            (format
+              0
+              "[entity-birth] repaired part-spawner init etype=~A actor=~A methods=~D~%"
+              etype
+              (res-lump-struct actor 'name basic)
+              (-> etype allocated-length)
+              )
+            (set! *entity-birth-viewer-debug-time* (current-time))
+            )
+          (init-entity proc actor etype)
+          (return #t)
+          )
+        )
+      )
+    )
+  #f
+  )
+
 (defmethod birth! ((this entity-actor))
   (let* ((s5-0 (-> this etype))
          (v1-0 (entity-info-lookup s5-0))
@@ -1637,9 +1745,12 @@
        (init-entity s4-0 this s5-0)
        )
       (else
-        (when (not (birth-viewer s4-0 this))
-          (format 0 "ERROR: no proper process type named ~A exists in the code, could not start ~A~%" s5-0 this)
-          (logior! (-> this extra perm status) (entity-perm-status bit-0))
+        (unless (entity-birth-repair-part-spawner-init! s5-0 s4-0 this)
+          (entity-birth-viewer-debug! s5-0 s4-0 this)
+          (when (not (birth-viewer s4-0 this))
+            (format 0 "ERROR: no proper process type named ~A exists in the code, could not start ~A~%" s5-0 this)
+            (logior! (-> this extra perm status) (entity-perm-status bit-0))
+            )
           )
         )
       )

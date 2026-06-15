@@ -4224,9 +4224,13 @@
         '(menu
            "Multiplayer"
            (menu
-            "General"
-            (flag "Open Demo End Progress" *mp-open-demo-end-progress* dm-boolean-toggle-pick-func)
-           )
+             "General"
+             (flag "Open Demo End Progress" *mp-open-demo-end-progress* dm-boolean-toggle-pick-func)
+            )
+            (menu
+             "Level Loading"
+             (flag "Level Load View" *mp-level-debug?* dm-boolean-toggle-pick-func)
+            )
            (menu
              "Animation"
              (flag "Animation Debug Draw" *mp-debug-draw* dm-boolean-toggle-pick-func)

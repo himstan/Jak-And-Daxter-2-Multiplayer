@@ -5,6 +5,10 @@
 ;; name in dgo: process-drawable
 ;; dgos: ENGINE, GAME
 
+(define-extern *art-group-load-debug-caller* symbol)
+(define-extern *art-group-load-debug-context-a* object)
+(define-extern *art-group-load-debug-context-b* object)
+
 (declare-type fuel-cell basic) ;; TODO!!
 
 (#when PC_PORT
@@ -677,6 +681,48 @@
   :post ja-post
   )
 
+(defun process-drawable-art-group-load-debug ((proc process-drawable) (skelgroup skeleton-group) (load-level level))
+  (let ((proc-level (if (and proc (nonzero? proc) (-> proc level) (nonzero? (-> proc level)))
+                        (-> proc level name)
+                        'none
+                        )
+        )
+        (load-level-name (if (and load-level (nonzero? load-level))
+                             (-> load-level name)
+                             'none
+                             )
+        )
+        (active-loading-level 'none)
+        (active-default-level 'none)
+        )
+    (when (and *level* (nonzero? *level*))
+      (when (and (-> *level* loading-level) (nonzero? (-> *level* loading-level)))
+        (set! active-loading-level (-> *level* loading-level name))
+        )
+      (when (and (-> *level* default-level) (nonzero? (-> *level* default-level)))
+        (set! active-default-level (-> *level* default-level name))
+        )
+      )
+    (format
+      0
+      "[load-debug] drawable requested missing art-group=~A skel=~A proc=~A entity=~A~%"
+      (if (and skelgroup (nonzero? skelgroup)) (-> skelgroup art-group-name) #f)
+      skelgroup
+      proc
+      (if (and proc (nonzero? proc)) (-> proc entity) #f)
+      )
+    (format
+      0
+      "[load-debug] drawable levels proc-level=~A load-level=~A global-loading=~A global-default=~A~%"
+      proc-level
+      load-level-name
+      active-loading-level
+      active-default-level
+      )
+    )
+  (none)
+  )
+
 (defun skeleton-group->draw-control ((arg0 process-drawable) (arg1 skeleton-group) (arg2 (pointer cspace-array)))
   (local-vars (s2-0 draw-control) (sv-16 art-element) (sv-20 int))
   (let ((s3-0 (if (= (-> arg1 texture-level) 6)
@@ -685,8 +731,12 @@
                   )
               )
         )
+    (set! *art-group-load-debug-caller* 'process-drawable-skel)
+    (set! *art-group-load-debug-context-a* arg0)
+    (set! *art-group-load-debug-context-b* arg1)
     (let ((s1-0 (load-to-heap-by-name (-> s3-0 art-group) (-> arg1 art-group-name) #f global (-> arg1 version))))
       (when (or (zero? s1-0) (or (not s1-0) (!= (-> s1-0 type) art-group)))
+        (process-drawable-art-group-load-debug arg0 arg1 s3-0)
         (format 0 "Going to process process drawable art error beacuse of art-group~%")
         (go process-drawable-art-error "art-group")
         (set! s2-0 (the-as draw-control #f))

@@ -188,6 +188,7 @@ struct PacketPedestrianSync {
   PacketHeader header;
   uint32_t count;
   uint64_t timestamp;
+  uint32_t level_hash;
   MPPedestrianStatePacked peds[MAX_PEDESTRIANS_PER_PACKET];
 };
 
@@ -209,6 +210,7 @@ struct PacketVehicleSync {
   PacketHeader header;
   uint32_t count;
   uint64_t timestamp;
+  uint32_t level_hash;
   MPVehicleStatePacked vehs[MAX_VEHICLES_PER_PACKET];
 };
 
