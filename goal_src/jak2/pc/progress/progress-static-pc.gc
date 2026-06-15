@@ -974,6 +974,7 @@ This gives us more freedom to write code how we want.
     (set! (-> *local-info* sync-flag) (the-as uint 0))
     
     (format 0 "[MP-Host] Remote joined. Transitioning to engine loading flow...~%")
+    (set! (-> *bigmap* drawing-flag) #t)
     (cond
       ((-> *pc-settings* mp-is-new-game?)
        (set-next-state p 'saving 0)

@@ -1715,7 +1715,9 @@
 auto-save-post
 
 (defbehavior auto-save-init-by-other auto-save ((arg0 symbol) (arg1 process) (arg2 int) (arg3 int) (arg4 symbol))
+  (format 0 "[MP-Debug] auto-save-init-by-other: mode=~S notify-proc=~A card=~D slot=~D force=~A~%" arg0 arg1 arg2 arg3 arg4)
   (when (handle->process (-> *game-info* auto-save-proc))
+    (format 0 "[MP-Debug] auto-save-init-by-other ERROR: auto-save-proc already active!~%")
     (send-event arg1 'notify 'error (mc-status-code no-process))
     (return #f)
     )
@@ -1770,6 +1772,7 @@ auto-save-post
 (defstate get-heap (auto-save)
   :virtual #t
   :code (behavior ()
+    (format 0 "[MP-Debug] auto-save get-heap state entered! mode=~S~%" (-> self mode))
     (case (-> self mode)
       (('auto-save)
        (when (zero? (-> *game-info* auto-save-count))
@@ -1793,18 +1796,23 @@ auto-save-post
        (+! (-> *game-info* auto-save-count) 1)
        )
       )
+    (format 0 "[MP-Debug] get-heap: entering blackout/bg-a check loop...~%")
     (while (or (< (-> *display* base-clock frame-counter) (-> *game-info* blackout-time))
                (!= (-> *setting-control* user-current bg-a) 0.0)
                (!= (-> *setting-control* user-current bg-a-force) 0.0)
                )
+      (format 0 "[MP-Debug] get-heap: loop details: frame-counter=~D blackout-time=~D bg-a=~F bg-a-force=~F~%"
+              (-> *display* base-clock frame-counter) (-> *game-info* blackout-time) (-> *setting-control* user-current bg-a) (-> *setting-control* user-current bg-a-force))
       (suspend)
       )
+    (format 0 "[MP-Debug] get-heap: blackout/bg-a check complete!~%")
     (set! (-> self state-time) (-> *display* real-clock frame-counter))
     (let ((a0-9 (reserve-alloc *art-control*)))
       (while (not a0-9)
         (if (>= (- (-> *display* real-clock frame-counter) (-> self state-time)) (seconds 60))
             (go-virtual error (mc-status-code no-memory))
             )
+        (format 0 "[MP-Debug] trying to reserve alloc for *art-control*~%")
         (suspend)
         (set! a0-9 (reserve-alloc *art-control*))
         )
@@ -2006,6 +2014,7 @@ auto-save-post
 (defstate save (auto-save)
   :virtual #t
   :code (behavior ()
+    (format 0 "[MP-Debug] auto-save save state entered! slot=~D~%" (-> self which))
     (cond
       ((zero? (-> self info formatted))
        (go-virtual error (mc-status-code no-format))
@@ -2075,12 +2084,14 @@ auto-save-post
        #t
        )
       (('done)
+       (format 0 "[MP-Debug] auto-save restore received done event!~%")
        (go-virtual done)
        )
       )
     )
   :code (behavior ()
     (local-vars (gp-0 object))
+    (format 0 "[MP-Debug] auto-save restore state entered! slot=~D~%" (-> self which))
     (cond
       ((zero? (-> self info formatted))
        (go-virtual error (mc-status-code no-format))
@@ -2157,11 +2168,13 @@ auto-save-post
        #t
        )
       (('die)
+       (format 0 "[MP-Debug] auto-save error received die event!~%")
        (deactivate self)
        )
       )
     )
   :code (behavior ((arg0 mc-status-code))
+    (format 0 "[MP-Debug] auto-save error state entered! code=~D~%" arg0)
     (if (-> self buffer)
         (reserve-free *art-control* (-> self buffer))
         )
@@ -2262,6 +2275,7 @@ auto-save-post
 (defstate done (auto-save)
   :virtual #t
   :code (behavior ()
+    (format 0 "[MP-Debug] auto-save done state entered! mode=~S notify-proc=~A~%" (-> self mode) (-> self notify))
     (if (and (-> self buffer)
              (or (-> *art-control* reserve-buffer) (nonzero? (-> *art-control* dma-reserve-buffer-count)))
              )
