@@ -703,6 +703,9 @@
 
   (when (and (not (mp-vehicle-is-local-authoritative? this))
              (nonzero? (-> this net-id)))
+    (when (not (mp-is-traffic-spawn-ready?))
+      (return #f)
+      )
     
     ;; State sync: read desired state from ghost record, transition if desynced.
     (let ((rec (mp-get-traffic-ghost (-> this net-id))))
@@ -1000,6 +1003,7 @@
 (defun mp-vehicle-apply-ghost-state ((proc vehicle) (slot mp-vehicle-state))
   "Update the ghost record for a vehicle from the latest remote data."
   (if (not (and proc (nonzero? proc))) (return #f))
+  (if (not (mp-is-traffic-spawn-ready?)) (return #f))
 
   ;; Protect the local player's vehicle from remote state syncing if they are the pilot.
   ;; We allow syncing if the local player is just a passenger.
@@ -1101,6 +1105,12 @@
   )
 
 (defun mp-vehicle-apply-piggyback ()
+  (if (not (mp-is-traffic-spawn-ready?))
+      (begin
+        (set! *mp-remote-driven-vehicle* (the-as handle #f))
+        (return #f)
+        )
+      )
   (let ((driven-net-id (-> *remote-info* veh-state net-id))
         (old-veh (handle->process *mp-remote-driven-vehicle*)))
     (when (and (nonzero? *mp-remote-driven-vehicle*) 

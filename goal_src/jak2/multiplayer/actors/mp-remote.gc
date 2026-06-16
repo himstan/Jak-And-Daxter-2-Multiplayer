@@ -52,6 +52,12 @@
            (set! (-> ghost active?) #t)
            )
 
+         ;; During airlocks/level loads, keep receiving peer state but don't mutate local
+         ;; processes. Those state methods may live in segments that are unloading.
+         (when (not (mp-local-world-ready-for-remote-sync?))
+           (return #f)
+           )
+
          ;; 2.5 Distance check for force respawn
          ;; If the remote player is far away, clear any stale puppet process so checks like
          ;; (when *mp-puppet*) cannot pass after the engine has unloaded the process.

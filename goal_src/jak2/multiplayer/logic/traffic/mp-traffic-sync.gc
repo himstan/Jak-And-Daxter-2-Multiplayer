@@ -149,6 +149,17 @@
     )
   )
 
+(defun mp-traffic-local-city-loaded? ()
+  "True when this client has a stable local city traffic context. Otherwise ignore traffic packets."
+  (and (mp-local-world-ready-for-remote-sync?)
+       (mp-is-traffic-ready?)
+       (let ((local-primary (mp-traffic-local-primary-level-id)))
+         (and (nonzero? local-primary)
+              (mp-city-level? (mp-level-id->symbol local-primary)))
+         )
+       )
+  )
+
 (defun mp-traffic-note-level-context! ()
   "Track local/remote primary level changes and hold ambient traffic while display settles."
   (let ((local-primary (mp-traffic-local-primary-level-id))
@@ -245,8 +256,11 @@
             ;; until civilian/citizen-norm/fat/chick symbols become non-null.
             (mp-apply-traffic-hijacks)
             (mp-vehicle-apply-hijacks)
-            ;; ALWAYS apply piggybacked vehicle data from remote players
-            (mp-vehicle-apply-piggyback)
+            ;; Apply piggybacked vehicle data only when this client has a valid city traffic context.
+            (when (or (mp-is-traffic-authoritative?)
+                      (mp-traffic-local-city-loaded?))
+              (mp-vehicle-apply-piggyback)
+              )
             
             (if (or (mp-is-jak?) (mp-is-traffic-authoritative?))
                 ;; Authoritative Logic: Gather and Pack
@@ -272,28 +286,42 @@
                   )
                 ;; Puppet Logic: Receive and Apply (Client Side ONLY)
                 (begin
-                  (pc-multi-receive-traffic (the-as uint *mp-traffic-buffer*))
-                  (mp-traffic-note-level-context!)
-                  (mp-traffic-debug-update-frame-context!)
-                  (when (time-elapsed? (-> *mp-traffic-buffer* last-sync-time) (seconds 2))
-                    (format 0 "[MP-Traffic] Puppet Active: ~D peds, ~D vehs ready=~A riding=~A local-level=~D remote-level=~D~%" (-> *mp-traffic-buffer* ped-count) (-> *mp-traffic-buffer* veh-count) *mp-traffic-art-context-spawn-ready* *mp-traffic-art-context-riding* *mp-traffic-art-context-local-level* *mp-traffic-art-context-remote-level*)
-                    (set! (-> *mp-traffic-buffer* last-sync-time) (the-as uint (current-time)))
-                    )
-                  (if (mp-traffic-remote-apply-ready?)
+                  (if (mp-traffic-local-city-loaded?)
                       (begin
-                        (when (or (nonzero? (-> *mp-traffic-buffer* ped-count)) (nonzero? (-> *mp-traffic-buffer* veh-count)))
-                          (mp-pedestrian-apply-remote)
-                          (mp-pedestrian-run-external-sync-pass)
-                          (mp-vehicle-apply-remote)
+                        (pc-multi-receive-traffic (the-as uint *mp-traffic-buffer*))
+                        (mp-traffic-note-level-context!)
+                        (mp-traffic-debug-update-frame-context!)
+                        (when (time-elapsed? (-> *mp-traffic-buffer* last-sync-time) (seconds 2))
+                          (format 0 "[MP-Traffic] Puppet Active: ~D peds, ~D vehs ready=~A riding=~A local-level=~D remote-level=~D~%" (-> *mp-traffic-buffer* ped-count) (-> *mp-traffic-buffer* veh-count) *mp-traffic-art-context-spawn-ready* *mp-traffic-art-context-riding* *mp-traffic-art-context-local-level* *mp-traffic-art-context-remote-level*)
+                          (set! (-> *mp-traffic-buffer* last-sync-time) (the-as uint (current-time)))
                           )
-                        ;; Periodically clear stale ghost records for despawned traffic
-                        (mp-cleanup-traffic-ghosts)
+                        (if (mp-traffic-remote-apply-ready?)
+                            (begin
+                              (when (or (nonzero? (-> *mp-traffic-buffer* ped-count)) (nonzero? (-> *mp-traffic-buffer* veh-count)))
+                                (mp-pedestrian-apply-remote)
+                                (mp-pedestrian-run-external-sync-pass)
+                                (mp-vehicle-apply-remote)
+                                )
+                              ;; Periodically clear stale ghost records for despawned traffic
+                              (mp-cleanup-traffic-ghosts)
+                              )
+                            (begin
+                              (mp-traffic-log-level-mismatch!)
+                              (mp-traffic-log-level-settle!)
+                              )
+                            )
                         )
                       (begin
-                        (mp-traffic-log-level-mismatch!)
-                        (mp-traffic-log-level-settle!)
+                        (let ((last-log-time (-> *mp-traffic-buffer* last-sync-time)))
+                          (mp-traffic-clear-buffer!)
+                          (mp-traffic-clear-ghosts!)
+                          (when (time-elapsed? last-log-time (seconds 2))
+                            (format 0 "[MP-Traffic] Ignoring remote traffic packets until local city level is loaded.~%")
+                            (set! (-> *mp-traffic-buffer* last-sync-time) (the-as uint (current-time)))
+                            )
+                          )
                         )
-                    )
+                      )
                   )
                 )
             )

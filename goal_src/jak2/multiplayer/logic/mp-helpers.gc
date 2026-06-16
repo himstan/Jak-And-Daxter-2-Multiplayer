@@ -117,6 +117,21 @@
        )
   )
 
+(defun mp-local-world-ready-for-remote-sync? ()
+  "True when local player/world state is stable enough for remote puppet and traffic state changes."
+  (and *level*
+       (nonzero? *level*)
+       (= (-> *level* loading-level) (-> *level* default-level))
+       *target*
+       (nonzero? *target*)
+       (-> *target* control)
+       (nonzero? (-> *target* control))
+       (not (focus-test? *target* teleporting))
+       (not (and (-> *target* next-state)
+                 (= (-> *target* next-state name) 'target-load-wait)))
+       )
+  )
+
 (defun mp-traffic-art-context! ((kind symbol) (net-id uint) (object-type uint) (state-id uint))
   "Remember the latest MP traffic spawn/update path for loader error correlation."
   (set! *mp-traffic-art-context-kind* kind)
