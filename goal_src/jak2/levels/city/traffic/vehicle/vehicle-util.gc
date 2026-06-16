@@ -391,7 +391,7 @@
                                              (can-display-query? this (the-as string #f) (/ 1.0 (-> s5-0 floats 3)))
                                              )
                                    )
-                          (let ((block-local-boarding? (mp-local-target-ride-along-block-vehicle-entry? tgt this)))
+                          (let ((block-local-boarding? (mp-local-target-ride-along-block-vehicle-entry? tgt this)) (pad-idx (-> tgt control cpad number)))
                           (let ((s3-1
                                   (new 'stack 'font-context *font-default-matrix* 32 320 0.0 (font-color default) (font-flags shadow kerning))
                                   )
@@ -404,8 +404,8 @@
                             (when (and (= tgt *target*)
                                        (not block-local-boarding?))
                               (let ((msg (cond
-                                           ((zero? boarding-seat) (text-id press-triangle-to-drive))
-                                           ((> boarding-seat 0) (text-id press-triangle-to-ride))
+                                           ((and (not (cpad-hold? pad-idx l1)) (not driver-seat-player?)) (text-id press-triangle-to-drive))
+                                           ((or (cpad-hold? pad-idx l1) driver-seat-player?) (text-id press-triangle-to-ride))
                                            (else (text-id press-triangle-to-use))
                                            )))
                                 (print-game-text
@@ -418,7 +418,6 @@
                                 )
                               )
                             )
-                          (let ((pad-idx (-> tgt control cpad number)))
                             (when (and block-local-boarding?
                                        (= tgt *target*)
                                        (cpad-pressed? pad-idx triangle))
@@ -442,7 +441,6 @@
                                 )
                               )
                             )
-                          )
                           )
                         )
                       )
