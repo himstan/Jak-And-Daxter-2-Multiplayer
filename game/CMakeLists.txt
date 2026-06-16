@@ -345,6 +345,7 @@ set(RUNTIME_SOURCE
         multiplayer/multiplayer_api.cpp
         multiplayer/multiplayer_manager.cpp
         multiplayer/multiplayer_packet.cpp
+        multiplayer/multiplayer_port_mapping.cpp
         multiplayer/multiplayer_scanner.cpp
         multiplayer/multiplayer_session.cpp
         multiplayer/sync/enemy_sync.cpp
@@ -368,7 +369,7 @@ add_library(runtime STATIC ${RUNTIME_SOURCE} "../third-party/glad/src/glad.c")
 
 target_link_libraries(runtime common fmt enet SDL3::SDL3 imgui discord-rpc sound stb_image libco libcurl)
 if(WIN32)
-    target_link_libraries(runtime mman)
+    target_link_libraries(runtime mman ole32 oleaut32 iphlpapi)
 else()
     target_link_libraries(runtime pthread dl)
 endif()

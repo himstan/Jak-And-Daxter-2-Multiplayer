@@ -8,6 +8,7 @@
 #include <thread>
 
 #include "multiplayer_protocol.h"
+#include "multiplayer_port_mapping.h"
 
 struct RemoteEntityState {
   uint8_t status;
@@ -235,4 +236,11 @@ struct MultiplayerData {
   // Reconnection tracking
   uint32_t last_receive_time = 0;
   int pre_reconnect_status = 0;
+
+  // Host-side temporary router mapping. Does not store or expose public IP.
+  bool port_mapping_active = false;
+  MPPortMappingMethod port_mapping_method = MPPortMappingMethod::NONE;
+  uint16_t port_mapping_local_port = 0;
+  uint16_t port_mapping_external_port = 0;
+  uint32_t last_port_mapping_refresh_time = 0;
 };

@@ -6,6 +6,7 @@
 #include "game/multiplayer/multiplayer.h"
 #include "game/multiplayer/multiplayer_manager.h"
 #include "game/multiplayer/multiplayer_packet.h"
+#include "game/multiplayer/multiplayer_port_mapping.h"
 #include "game/multiplayer/multiplayer_protocol.h"
 #include "game/multiplayer/multiplayer_scanner.h"
 #include "game/multiplayer/multiplayer_session.h"
@@ -24,6 +25,7 @@
 
 namespace {
 constexpr u32 kMinGoalPointer = 0x1000;
+constexpr uint32_t kPortMappingRefreshIntervalMs = 60 * 60 * 1000;
 
 template <typename T>
 T* goal_ptr(u32 ptr) {
@@ -131,7 +133,7 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
         } else if (data.local_role == 0) {
           char ip[64];
           enet_address_get_host_ip(&event.peer->address, ip, sizeof(ip));
-          lg::info("[Multiplayer] Client connected from {}:{}", ip, event.peer->address.port);
+          lg::info("[Multiplayer] Client connected");
           if (data.join_status != (int)MultiplayerStatus::IN_GAME) {
             data.join_status = (int)MultiplayerStatus::CONNECTED_LOBBY;
           } else {
@@ -151,6 +153,25 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
       default:
         break;
     }
+  }
+}
+
+void refresh_host_port_mapping(MultiplayerData& data, uint32_t current_time) {
+  if (data.local_role != 0 || !data.port_mapping_active ||
+      data.port_mapping_method != MPPortMappingMethod::NAT_PMP) {
+    return;
+  }
+
+  if (current_time - data.last_port_mapping_refresh_time < kPortMappingRefreshIntervalMs) {
+    return;
+  }
+
+  if (mp_refresh_udp_port_mapping(data.port_mapping_method, data.port_mapping_local_port,
+                                  data.port_mapping_external_port)) {
+    data.last_port_mapping_refresh_time = current_time;
+  } else {
+    data.last_port_mapping_refresh_time = current_time;
+    lg::warn("[Multiplayer] Temporary UDP port mapping refresh failed.");
   }
 }
 
@@ -195,6 +216,7 @@ void pc_multi_poll(u32 local_ptr, u32 remote_ptr) {
 
     poll_network(data, local, remote);
     current_time = enet_time_get();
+    refresh_host_port_mapping(data, current_time);
     multiplayer_cleanup_stale_sync(data, current_time);
     multiplayer_update_receive_timeout(data, current_time);
   } catch (...) {

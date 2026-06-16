@@ -1,10 +1,15 @@
 #include "multiplayer_manager.h"
 #include "multiplayer_protocol.h"
 #include "multiplayer_packet.h"
+#include "multiplayer_port_mapping.h"
 #include "multiplayer_session.h"
 #include "common/log/log.h"
 #include "common/cross_sockets/XSocket.h"
 #include "enet/enet.h"
+
+namespace {
+constexpr size_t kMaxGameplayPeers = 1;
+}
 
 void MultiplayerManager::setup_host(MultiplayerData& data) {
   if (data.host)
@@ -20,9 +25,21 @@ void MultiplayerManager::setup_host(MultiplayerData& data) {
   address.host = ENET_HOST_ANY;
   address.port = 26210;
 
-  data.host = enet_host_create(&address, 32, 2, 0, 0);
+  data.host = enet_host_create(&address, kMaxGameplayPeers, 2, 0, 0);
   if (data.host) {
     lg::info("[Multiplayer] Listen server started on port {}.", address.port);
+    auto mapping = mp_open_udp_port_mapping(address.port, address.port);
+    data.port_mapping_active = mapping.success;
+    data.port_mapping_method = mapping.method;
+    data.port_mapping_local_port = address.port;
+    data.port_mapping_external_port = address.port;
+    data.last_port_mapping_refresh_time = enet_time_get();
+    if (mapping.success) {
+      lg::info("[Multiplayer] Temporary UDP port mapping active for port {}.", address.port);
+    } else {
+      lg::warn("[Multiplayer] Automatic UDP port mapping failed: {}", mapping.error);
+    }
+
     data.local_role = 0;
     data.local_net_id = 0;
     data.join_status = (int)MultiplayerStatus::CONNECTING; // Waiting for peer
@@ -52,7 +69,7 @@ void MultiplayerManager::setup_client(MultiplayerData& data, const char* ip, int
 
     data.server_peer = enet_host_connect(data.host, &server_address, 2, 0);
     if (data.server_peer) {
-      lg::info("[Multiplayer] Client connecting to {}:{}...", ip, port);
+      lg::info("[Multiplayer] Client connecting...");
       data.local_role = 1;
       data.local_net_id = 1;
       data.join_status = (int)MultiplayerStatus::CONNECTING;
@@ -78,6 +95,17 @@ void MultiplayerManager::disconnect(MultiplayerData& data) {
     return;
 
   if (data.host) {
+    if (data.port_mapping_active) {
+      mp_close_udp_port_mapping(data.port_mapping_method, data.port_mapping_local_port,
+                                data.port_mapping_external_port);
+      data.port_mapping_active = false;
+      data.port_mapping_method = MPPortMappingMethod::NONE;
+      data.port_mapping_local_port = 0;
+      data.port_mapping_external_port = 0;
+      data.last_port_mapping_refresh_time = 0;
+      lg::info("[Multiplayer] Temporary UDP port mapping removed.");
+    }
+
     if (data.local_role == 1 && data.server_peer) {
       enet_peer_disconnect_now(data.server_peer, 0);
     } else if (data.local_role == 0) {
