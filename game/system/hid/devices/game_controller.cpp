@@ -59,6 +59,16 @@ GameController::GameController(int sdl_device_id,
   } else {
     m_device_name = name;
   }
+
+  const auto path = SDL_GetJoystickPath(m_low_device_handle);
+  const auto serial = SDL_GetJoystickSerial(m_low_device_handle);
+  if (path || serial) {
+    m_claim_key = fmt::format("{}|{}|{}|{}", m_guid, path ? path : "", serial ? serial : "",
+                              m_device_name);
+  } else {
+    m_claim_key = fmt::format("{}|{}|{}", m_guid, m_device_name, m_sdl_instance_id);
+  }
+
   auto properties = SDL_GetGamepadProperties(m_device_handle);
   if (!properties) {
     sdl_util::log_error(

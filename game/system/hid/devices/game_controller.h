@@ -35,6 +35,7 @@ class GameController : public InputDevice {
   bool has_rumble() { return m_has_rumble; }
   void set_led(const u8 red, const u8 green, const u8 blue);
   std::string get_guid() { return m_guid; }
+  std::string get_claim_key() { return m_claim_key; }
   bool is_dualsense() { return m_is_dualsense; }
   bool has_trigger_rumble() { return m_has_trigger_rumble; }
   bool has_trigger_effect_support() { return has_trigger_rumble() || is_dualsense(); }
@@ -48,6 +49,7 @@ class GameController : public InputDevice {
   bool m_has_led;
   bool m_has_rumble;
   std::string m_guid = "";
+  std::string m_claim_key = "";
   bool m_has_pressure_sensitive_buttons = false;
   bool m_is_dualsense;
   bool m_has_trigger_rumble;

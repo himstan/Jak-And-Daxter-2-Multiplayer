@@ -2,6 +2,9 @@
 
 #include <atomic>
 #include <cmath>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "input_manager.h"
 #include "sdl_util.h"
@@ -15,7 +18,19 @@
 #include "game/runtime.h"
 
 #include "third-party/SDL/include/SDL3/SDL_hints.h"
+#include "fmt/format.h"
 #include "third-party/imgui/imgui.h"
+
+namespace {
+u64 stable_controller_claim_hash(const std::string& claim_key) {
+  u64 hash = 14695981039346656037ull;
+  for (const auto character : claim_key) {
+    hash ^= (u8)character;
+    hash *= 1099511628211ull;
+  }
+  return hash;
+}
+}  // namespace
 
 InputManager::InputManager(SDL_Window* window)
     : m_window(window),
@@ -73,6 +88,7 @@ InputManager::~InputManager() {
   prof().instant_event("ROOT");
   {
     auto p = scoped_prof("input_manager::destroy");
+    release_controller_claims();
     for (auto& device : m_available_controllers) {
       device->close_device();
     }
@@ -84,6 +100,7 @@ void InputManager::refresh_device_list() {
   prof().instant_event("ROOT");
   {
     auto p = scoped_prof("input_manager::refresh_device_list");
+    release_controller_claims();
     m_available_controllers.clear();
     m_controller_port_mapping.clear();
     // Enumerate devices
@@ -103,49 +120,125 @@ void InputManager::refresh_device_list() {
           continue;
         }
         m_available_controllers.push_back(controller);
-        // By default, controller port mapping is on a first-come-first-served basis
-        //
-        // However, we will use previously saved controller port mappings to take precedence
-        // For example, if you previous set your PS5 controller to be port 0, then even
-        // if another controller is detected first, the PS5 controller should be assigned as
-        // expected.
-        if (m_settings->controller_port_mapping.find(controller->get_guid()) !=
-            m_settings->controller_port_mapping.end()) {
-          // Though it's possible for a user to assign multiple controllers to the same port, so the
-          // last one wins
-          m_controller_port_mapping[m_settings->controller_port_mapping.at(
-              controller->get_guid())] = i;
-        } else {
-          m_controller_port_mapping[m_available_controllers.size() - 1] = i;
-          m_settings->controller_port_mapping[controller->get_guid()] =
-              m_available_controllers.size() - 1;
-        }
         // Allocate a PadData if this is a new port
         if (m_data.find(i) == m_data.end()) {
           m_data[i] = std::make_shared<PadData>();
         }
       }
-      // If the controller that was last selected to be port 0 is around, prioritize it
+
+      bool claimed_controller = false;
+      // If the controller that was last selected to be port 0 is around, prioritize it.
       if (!m_settings->last_selected_controller_guid.empty()) {
         for (size_t i = 0; i < m_available_controllers.size(); i++) {
           const auto& controller_guid = m_available_controllers.at(i)->get_guid();
-          if (controller_guid == m_settings->last_selected_controller_guid) {
+          if (controller_guid == m_settings->last_selected_controller_guid &&
+              try_claim_controller(i)) {
             m_controller_port_mapping[0] = i;
             m_settings->controller_port_mapping[controller_guid] = 0;
+            claimed_controller = true;
+            break;
+          }
+        }
+      }
+
+      // Otherwise, prefer any controller that was explicitly mapped to port 0.
+      if (!claimed_controller) {
+        for (size_t i = 0; i < m_available_controllers.size(); i++) {
+          const auto& controller_guid = m_available_controllers.at(i)->get_guid();
+          const auto saved_mapping = m_settings->controller_port_mapping.find(controller_guid);
+          if (saved_mapping != m_settings->controller_port_mapping.end() &&
+              saved_mapping->second == 0 && try_claim_controller(i)) {
+            m_controller_port_mapping[0] = i;
+            claimed_controller = true;
+            break;
+          }
+        }
+      }
+
+      // Finally, claim the first controller not already claimed by another local game process.
+      if (!claimed_controller) {
+        for (size_t i = 0; i < m_available_controllers.size(); i++) {
+          if (try_claim_controller(i)) {
+            const auto& controller_guid = m_available_controllers.at(i)->get_guid();
+            m_controller_port_mapping[0] = i;
+            m_settings->controller_port_mapping[controller_guid] = 0;
+            if (m_settings->last_selected_controller_guid.empty()) {
+              m_settings->last_selected_controller_guid = controller_guid;
+            }
+            claimed_controller = true;
             break;
           }
         }
       }
     }
-    if (m_available_controllers.empty()) {
+    if (m_controller_port_mapping.empty()) {
       lg::warn(
-          "No active game controllers could be found or loaded successfully - inputs will not "
-          "work!");
+          "No unclaimed game controllers could be found or loaded successfully - keyboard input "
+          "will be temporarily enabled.");
       m_settings->_keyboard_temp_enabled = true;
     } else {
-      lg::info("Found {} controllers", m_available_controllers.size());
+      lg::info("Found {} controllers, claimed controller {} for port 0",
+               m_available_controllers.size(), m_controller_port_mapping.at(0));
       m_settings->_keyboard_temp_enabled = false;
     }
+  }
+}
+
+bool InputManager::try_claim_controller(const int controller_idx) {
+  if (controller_idx < 0 || controller_idx >= (int)m_available_controllers.size()) {
+    return false;
+  }
+  if (m_controller_claims.find(controller_idx) != m_controller_claims.end()) {
+    return true;
+  }
+
+#ifdef _WIN32
+  const auto& controller = m_available_controllers.at(controller_idx);
+  const auto claim_hash = stable_controller_claim_hash(controller->get_claim_key());
+  const auto mutex_name = fmt::format("Local\\OpenGOALControllerClaim_{:016x}", claim_hash);
+  HANDLE claim_mutex = CreateMutexA(nullptr, false, mutex_name.c_str());
+  if (!claim_mutex) {
+    lg::warn("Unable to create controller claim mutex for {}; allowing controller assignment",
+             controller->get_name());
+    return true;
+  }
+
+  const auto wait_result = WaitForSingleObject(claim_mutex, 0);
+  if (wait_result == WAIT_OBJECT_0 || wait_result == WAIT_ABANDONED) {
+    m_controller_claims[controller_idx] = claim_mutex;
+    return true;
+  }
+
+  CloseHandle(claim_mutex);
+  return false;
+#else
+  m_controller_claims[controller_idx] = nullptr;
+  return true;
+#endif
+}
+
+void InputManager::release_controller_claim(const int controller_idx) {
+  const auto claim = m_controller_claims.find(controller_idx);
+  if (claim == m_controller_claims.end()) {
+    return;
+  }
+#ifdef _WIN32
+  if (claim->second) {
+    ReleaseMutex((HANDLE)claim->second);
+    CloseHandle((HANDLE)claim->second);
+  }
+#endif
+  m_controller_claims.erase(claim);
+}
+
+void InputManager::release_controller_claims() {
+  std::vector<int> claimed_controller_indices;
+  claimed_controller_indices.reserve(m_controller_claims.size());
+  for (const auto& [controller_idx, _] : m_controller_claims) {
+    claimed_controller_indices.push_back(controller_idx);
+  }
+  for (const auto controller_idx : claimed_controller_indices) {
+    release_controller_claim(controller_idx);
   }
 }
 
@@ -408,9 +501,13 @@ int InputManager::get_controller_index(const int port) {
 }
 
 void InputManager::set_controller_for_port(const int controller_id, const int port) {
-  if (controller_id < (int)m_available_controllers.size()) {
+  if (controller_id < (int)m_available_controllers.size() && try_claim_controller(controller_id)) {
     // Reset inputs as this device won't be able to be read from again!
     clear_inputs();
+    if (m_controller_port_mapping.find(port) != m_controller_port_mapping.end() &&
+        m_controller_port_mapping.at(port) != controller_id) {
+      release_controller_claim(m_controller_port_mapping.at(port));
+    }
     auto& controller = m_available_controllers.at(controller_id);
     m_controller_port_mapping[port] = controller_id;
     m_settings->controller_port_mapping[controller->get_guid()] = port;

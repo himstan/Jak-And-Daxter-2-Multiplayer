@@ -168,6 +168,9 @@ class InputManager {
   /// A mapping between port numbers and the controller index. Connect as many controllers as
   /// you want.
   std::unordered_map<int, int> m_controller_port_mapping;
+  /// Per-process claims that prevent multiple local instances from auto-driving from the same
+  /// physical controller.
+  std::unordered_map<int, void*> m_controller_claims;
   /// The port that the keyboard and mouse will be used for PadData
   int m_keyboard_and_mouse_port = 0;
   /// Collection of arbitrary commands to run on user actions
@@ -187,6 +190,9 @@ class InputManager {
 
   void refresh_device_list();
   void clear_inputs();
+  bool try_claim_controller(const int controller_idx);
+  void release_controller_claim(const int controller_idx);
+  void release_controller_claims();
 
   void ignore_background_controller_events(const bool ignore);
   void set_controller_led(const int port, const u8 red, const u8 green, const u8 blue);
