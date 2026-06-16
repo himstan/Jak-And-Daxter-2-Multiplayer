@@ -1,25 +1,15 @@
 #include "multiplayer_vehicle.h"
-#include "game/multiplayer/multiplayer_protocol.h"
 #include "game/multiplayer/multiplayer_manager.h"
+#include "game/multiplayer/multiplayer_packet.h"
+#include "game/multiplayer/multiplayer_protocol.h"
+#include "game/multiplayer/sync/traffic_sync.h"
 #include "common/log/log.h"
 #include "enet/enet.h"
 #include <cstring>
 
 namespace {
-inline int16_t pack_float_q(float v) {
-  if (v > 1.0f) v = 1.0f;
-  if (v < -1.0f) v = -1.0f;
-  return (int16_t)(v * 32767.0f);
-}
-
-inline float unpack_float_q(int16_t v) {
-  return (float)v / 32767.0f;
-}
-
 size_t vehicle_packet_size(uint32_t count) {
-  return sizeof(PacketHeader) + sizeof(uint32_t) + sizeof(uint64_t) +
-         sizeof(uint32_t) +
-         (sizeof(MPVehicleStatePacked) * count);
+  return mp_traffic_packet_size(count, sizeof(MPVehicleStatePacked));
 }
 }
 
@@ -40,25 +30,8 @@ void handle_vehicle_sync_packet(const _ENetEvent& event, MultiplayerData& data) 
     }
     return;
   }
-  if (sync->level_hash != 0 && data.last_remote_traffic_level_hash != 0 &&
-      sync->level_hash != data.last_remote_traffic_level_hash) {
-    if (current_time - data.last_traffic_drop_debug_time > 1000) {
-      lg::info("[Multiplayer] Dropped vehicle traffic for level mismatch. packetLevel={} remoteLevel={} count={}",
-               sync->level_hash, data.last_remote_traffic_level_hash, veh_count);
-      data.last_traffic_drop_debug_time = current_time;
-    }
+  if (!mp_accept_traffic_level(data, sync->level_hash, veh_count, "vehicle", current_time)) {
     return;
-  }
-  if (sync->level_hash != 0 && data.remote_traffic_buffer_level_hash != 0 &&
-      sync->level_hash != data.remote_traffic_buffer_level_hash) {
-    memset(&data.traffic_buffer, 0, sizeof(data.traffic_buffer));
-    memset(data.ped_last_updated, 0, sizeof(data.ped_last_updated));
-    memset(data.veh_last_updated, 0, sizeof(data.veh_last_updated));
-    lg::info("[Multiplayer] Reset remote traffic table for vehicle level change. old={} new={}",
-             data.remote_traffic_buffer_level_hash, sync->level_hash);
-  }
-  if (sync->level_hash != 0) {
-    data.remote_traffic_buffer_level_hash = sync->level_hash;
   }
   if (current_time - data.last_veh_traffic_debug_time > 2000) {
     lg::info("[Multiplayer] Accepted vehicle traffic. packetLevel={} remoteLevel={} count={}",
@@ -69,58 +42,32 @@ void handle_vehicle_sync_packet(const _ENetEvent& event, MultiplayerData& data) 
   for (uint32_t i = 0; i < veh_count; i++) {
     auto* incoming = &sync->vehs[i];
     if (incoming->net_id == 0) continue;
-    bool found = false;
-    for (uint32_t j = 0; j < MAX_VEHICLE_SYNC_COUNT; j++) {
-      if (data.traffic_buffer.vehicles[j].net_id == incoming->net_id) {
-        auto& state = data.traffic_buffer.vehicles[j];
-        state.net_id = incoming->net_id;
-        state.vehicle_type = incoming->vehicle_type;
-        state.color_index = incoming->color_index;
-        state.state_id = incoming->state_id;
-        state.target_aid = incoming->target_aid;
-        state.x = incoming->x; state.y = incoming->y; state.z = incoming->z;
-        state.quat_x = unpack_float_q(incoming->quat[0]);
-        state.quat_y = unpack_float_q(incoming->quat[1]);
-        state.quat_z = unpack_float_q(incoming->quat[2]);
-        state.quat_w = unpack_float_q(incoming->quat[3]);
-        state.lin_vel_x = (float)incoming->lin_vel[0] / 10.0f;
-        state.lin_vel_y = (float)incoming->lin_vel[1] / 10.0f;
-        state.lin_vel_z = (float)incoming->lin_vel[2] / 10.0f;
-        state.ang_vel_x = unpack_float_q(incoming->ang_vel[0]) * 10.0f;
-        state.ang_vel_y = unpack_float_q(incoming->ang_vel[1]) * 10.0f;
-        state.ang_vel_z = unpack_float_q(incoming->ang_vel[2]) * 10.0f;
-        state.state_flags = incoming->state_flags;
-        memcpy(state.rider_aids, incoming->rider_aids, 16);
-        data.veh_last_updated[j] = current_time;
-        found = true; break;
-      }
-    }
-    if (!found) {
-      for (uint32_t j = 0; j < MAX_VEHICLE_SYNC_COUNT; j++) {
-        if (data.traffic_buffer.vehicles[j].net_id == 0) {
-          auto& state = data.traffic_buffer.vehicles[j];
-          state.net_id = incoming->net_id;
-          state.vehicle_type = incoming->vehicle_type;
-          state.color_index = incoming->color_index;
-          state.state_id = incoming->state_id;
-          state.target_aid = incoming->target_aid;
-          state.x = incoming->x; state.y = incoming->y; state.z = incoming->z;
-          state.quat_x = unpack_float_q(incoming->quat[0]);
-          state.quat_y = unpack_float_q(incoming->quat[1]);
-          state.quat_z = unpack_float_q(incoming->quat[2]);
-          state.quat_w = unpack_float_q(incoming->quat[3]);
-          state.lin_vel_x = (float)incoming->lin_vel[0] / 10.0f;
-          state.lin_vel_y = (float)incoming->lin_vel[1] / 10.0f;
-          state.lin_vel_z = (float)incoming->lin_vel[2] / 10.0f;
-          state.ang_vel_x = unpack_float_q(incoming->ang_vel[0]) * 10.0f;
-          state.ang_vel_y = unpack_float_q(incoming->ang_vel[1]) * 10.0f;
-          state.ang_vel_z = unpack_float_q(incoming->ang_vel[2]) * 10.0f;
-          state.state_flags = incoming->state_flags;
-          memcpy(state.rider_aids, incoming->rider_aids, 16);
-          data.veh_last_updated[j] = current_time;
-          found = true; break;
-        }
-      }
+    auto* state = mp_find_matching_or_empty_slot(
+        data.traffic_buffer.vehicles,
+        MAX_VEHICLE_SYNC_COUNT,
+        incoming->net_id,
+        [](const MPVehicleState& item) { return item.net_id; });
+    if (state) {
+      uint32_t slot = (uint32_t)(state - data.traffic_buffer.vehicles);
+      state->net_id = incoming->net_id;
+      state->vehicle_type = incoming->vehicle_type;
+      state->color_index = incoming->color_index;
+      state->state_id = incoming->state_id;
+      state->target_aid = incoming->target_aid;
+      state->x = incoming->x; state->y = incoming->y; state->z = incoming->z;
+      state->quat_x = mp_unpack_float_q(incoming->quat[0]);
+      state->quat_y = mp_unpack_float_q(incoming->quat[1]);
+      state->quat_z = mp_unpack_float_q(incoming->quat[2]);
+      state->quat_w = mp_unpack_float_q(incoming->quat[3]);
+      state->lin_vel_x = (float)incoming->lin_vel[0] / 10.0f;
+      state->lin_vel_y = (float)incoming->lin_vel[1] / 10.0f;
+      state->lin_vel_z = (float)incoming->lin_vel[2] / 10.0f;
+      state->ang_vel_x = mp_unpack_float_q(incoming->ang_vel[0]) * 10.0f;
+      state->ang_vel_y = mp_unpack_float_q(incoming->ang_vel[1]) * 10.0f;
+      state->ang_vel_z = mp_unpack_float_q(incoming->ang_vel[2]) * 10.0f;
+      state->state_flags = incoming->state_flags;
+      memcpy(state->rider_aids, incoming->rider_aids, sizeof(state->rider_aids));
+      data.veh_last_updated[slot] = current_time;
     }
   }
 }
@@ -139,10 +86,10 @@ void send_vehicle_sync_packets(MultiplayerData& data, MPTrafficSyncBufferGOAL* b
       dst->net_id = src->net_id; dst->vehicle_type = src->vehicle_type; dst->color_index = src->color_index;
       dst->state_id = src->state_id; dst->target_aid = src->target_aid;
       dst->x = src->x; dst->y = src->y; dst->z = src->z;
-      dst->quat[0] = pack_float_q(src->quat_x); dst->quat[1] = pack_float_q(src->quat_y);
-      dst->quat[2] = pack_float_q(src->quat_z); dst->quat[3] = pack_float_q(src->quat_w);
+      dst->quat[0] = mp_pack_float_q(src->quat_x); dst->quat[1] = mp_pack_float_q(src->quat_y);
+      dst->quat[2] = mp_pack_float_q(src->quat_z); dst->quat[3] = mp_pack_float_q(src->quat_w);
       dst->lin_vel[0] = (int16_t)(src->lin_vel_x * 10.0f); dst->lin_vel[1] = (int16_t)(src->lin_vel_y * 10.0f); dst->lin_vel[2] = (int16_t)(src->lin_vel_z * 10.0f);
-      dst->ang_vel[0] = pack_float_q(src->ang_vel_x / 10.0f); dst->ang_vel[1] = pack_float_q(src->ang_vel_y / 10.0f); dst->ang_vel[2] = pack_float_q(src->ang_vel_z / 10.0f);
+      dst->ang_vel[0] = mp_pack_float_q(src->ang_vel_x / 10.0f); dst->ang_vel[1] = mp_pack_float_q(src->ang_vel_y / 10.0f); dst->ang_vel[2] = mp_pack_float_q(src->ang_vel_z / 10.0f);
       dst->state_flags = src->state_flags; memcpy(dst->rider_aids, src->rider_aids, 16);
     }
     size_t packet_size = vehicle_packet_size(chunk_size);

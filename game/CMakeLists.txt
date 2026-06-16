@@ -342,8 +342,16 @@ set(RUNTIME_SOURCE
         system/IOP_Kernel.cpp
         system/iop_thread.cpp
         multiplayer/multiplayer.cpp
+        multiplayer/multiplayer_api.cpp
         multiplayer/multiplayer_manager.cpp
+        multiplayer/multiplayer_packet.cpp
         multiplayer/multiplayer_scanner.cpp
+        multiplayer/multiplayer_session.cpp
+        multiplayer/sync/enemy_sync.cpp
+        multiplayer/sync/event_sync.cpp
+        multiplayer/sync/palace_squid_sync.cpp
+        multiplayer/sync/player_sync.cpp
+        multiplayer/sync/traffic_sync.cpp
         multiplayer/pedestrian/multiplayer_pedestrian.cpp
         multiplayer/vehicle/multiplayer_vehicle.cpp
         system/SystemThread.cpp

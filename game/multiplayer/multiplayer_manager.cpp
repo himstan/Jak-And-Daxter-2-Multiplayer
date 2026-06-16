@@ -1,5 +1,7 @@
 #include "multiplayer_manager.h"
 #include "multiplayer_protocol.h"
+#include "multiplayer_packet.h"
+#include "multiplayer_session.h"
 #include "common/log/log.h"
 #include "common/cross_sockets/XSocket.h"
 #include "enet/enet.h"
@@ -63,14 +65,17 @@ void MultiplayerManager::setup_client(MultiplayerData& data, const char* ip, int
 }
 
 void MultiplayerManager::disconnect(MultiplayerData& data) {
-  if (!data.initialized)
-    return;
-
-  // Stop discovery responder
+  data.stop_search = true;
   data.host_discovery_active = false;
+  if (data.scanner_thread.joinable()) {
+    data.scanner_thread.join();
+  }
   if (data.discovery_thread.joinable()) {
     data.discovery_thread.join();
   }
+
+  if (!data.initialized)
+    return;
 
   if (data.host) {
     if (data.local_role == 1 && data.server_peer) {
@@ -90,11 +95,7 @@ void MultiplayerManager::disconnect(MultiplayerData& data) {
 
   data.initialized = false;
   data.join_status = (int)MultiplayerStatus::IDLE;
-  data.pending_full_sync = false;
-  data.pending_full_sync_sent_once = false;
-  data.last_full_sync_send_time = 0;
-  data.inbound_events.clear();
-  data.remote_entities.clear();
+  multiplayer_clear_session_state(data);
   lg::info("[Multiplayer] Disconnected.");
 }
 
@@ -103,14 +104,7 @@ void MultiplayerManager::broadcast(MultiplayerData& data,
                                    const void* packet_data,
                                    size_t size,
                                    ENetPacketFlag flags) {
-  if (!data.host)
-    return;
-  ENetPacket* packet = enet_packet_create(packet_data, size, flags);
-  if (data.local_role == 0) {
-    enet_host_broadcast(data.host, channel, packet);
-  } else if (data.server_peer) {
-    enet_peer_send(data.server_peer, channel, packet);
-  }
+  mp_send_packet(data, channel, packet_data, size, flags);
 }
 
 void MultiplayerManager::send_to_peer(ENetPeer* peer,
@@ -118,8 +112,7 @@ void MultiplayerManager::send_to_peer(ENetPeer* peer,
                                       const void* packet_data,
                                       size_t size,
                                       ENetPacketFlag flags) {
-  ENetPacket* packet = enet_packet_create(packet_data, size, flags);
-  enet_peer_send(peer, channel, packet);
+  mp_send_packet_to_peer(peer, channel, packet_data, size, flags);
 }
 
 void MultiplayerManager::discovery_responder_func(MultiplayerData* data) {

@@ -10,12 +10,18 @@ void MultiplayerScanner::start_search(MultiplayerData& data) {
   if (data.join_status == (int)MultiplayerStatus::SEARCHING) return;
   
   data.stop_search = false;
-  std::thread(scan_thread_func, &data).detach();
+  if (data.scanner_thread.joinable()) {
+    data.scanner_thread.join();
+  }
+  data.scanner_thread = std::thread(scan_thread_func, &data);
 }
 
 void MultiplayerScanner::stop_search(MultiplayerData& data) {
   data.stop_search = true;
   data.join_status = (int)MultiplayerStatus::IDLE;
+  if (data.scanner_thread.joinable()) {
+    data.scanner_thread.join();
+  }
 }
 
 int MultiplayerScanner::get_status(const MultiplayerData& data) {

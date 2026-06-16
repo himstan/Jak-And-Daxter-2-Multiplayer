@@ -1,21 +1,13 @@
 #include "multiplayer_pedestrian.h"
-#include "game/multiplayer/multiplayer_protocol.h"
 #include "game/multiplayer/multiplayer_manager.h"
+#include "game/multiplayer/multiplayer_packet.h"
+#include "game/multiplayer/multiplayer_protocol.h"
+#include "game/multiplayer/sync/traffic_sync.h"
 #include "common/log/log.h"
 #include "enet/enet.h"
 #include <cstring>
 
 namespace {
-inline int16_t pack_float_q(float v) {
-  if (v > 1.0f) v = 1.0f;
-  if (v < -1.0f) v = -1.0f;
-  return (int16_t)(v * 32767.0f);
-}
-
-inline float unpack_float_q(int16_t v) {
-  return (float)v / 32767.0f;
-}
-
 inline uint32_t pedestrian_vehicle_net_id(const MPPedestrianState* state) {
   return ((uint32_t)state->pad[0]) |
          ((uint32_t)state->pad[1] << 8) |
@@ -31,9 +23,7 @@ inline void set_pedestrian_vehicle_net_id(MPPedestrianState& state, uint32_t veh
 }
 
 size_t pedestrian_packet_size(uint32_t count) {
-  return sizeof(PacketHeader) + sizeof(uint32_t) + sizeof(uint64_t) +
-         sizeof(uint32_t) +
-         (sizeof(MPPedestrianStatePacked) * count);
+  return mp_traffic_packet_size(count, sizeof(MPPedestrianStatePacked));
 }
 }
 
@@ -54,25 +44,8 @@ void handle_pedestrian_sync_packet(const _ENetEvent& event, MultiplayerData& dat
     }
     return;
   }
-  if (sync->level_hash != 0 && data.last_remote_traffic_level_hash != 0 &&
-      sync->level_hash != data.last_remote_traffic_level_hash) {
-    if (current_time - data.last_traffic_drop_debug_time > 1000) {
-      lg::info("[Multiplayer] Dropped pedestrian traffic for level mismatch. packetLevel={} remoteLevel={} count={}",
-               sync->level_hash, data.last_remote_traffic_level_hash, ped_count);
-      data.last_traffic_drop_debug_time = current_time;
-    }
+  if (!mp_accept_traffic_level(data, sync->level_hash, ped_count, "pedestrian", current_time)) {
     return;
-  }
-  if (sync->level_hash != 0 && data.remote_traffic_buffer_level_hash != 0 &&
-      sync->level_hash != data.remote_traffic_buffer_level_hash) {
-    memset(&data.traffic_buffer, 0, sizeof(data.traffic_buffer));
-    memset(data.ped_last_updated, 0, sizeof(data.ped_last_updated));
-    memset(data.veh_last_updated, 0, sizeof(data.veh_last_updated));
-    lg::info("[Multiplayer] Reset remote traffic table for pedestrian level change. old={} new={}",
-             data.remote_traffic_buffer_level_hash, sync->level_hash);
-  }
-  if (sync->level_hash != 0) {
-    data.remote_traffic_buffer_level_hash = sync->level_hash;
   }
   if (current_time - data.last_ped_traffic_debug_time > 2000) {
     lg::info("[Multiplayer] Accepted pedestrian traffic. packetLevel={} remoteLevel={} count={}",
@@ -83,46 +56,26 @@ void handle_pedestrian_sync_packet(const _ENetEvent& event, MultiplayerData& dat
   for (uint32_t i = 0; i < ped_count; i++) {
     auto* incoming = &sync->peds[i];
     if (incoming->net_id == 0) continue;
-    bool found = false;
-    for (uint32_t j = 0; j < MAX_PEDESTRIAN_SYNC_COUNT; j++) {
-      if (data.traffic_buffer.pedestrians[j].net_id == incoming->net_id) {
-        auto& state = data.traffic_buffer.pedestrians[j];
-        state.net_id = incoming->net_id;
-        state.object_type = incoming->object_type;
-        state.object_variance = incoming->object_variance;
-        state.x = incoming->x; state.y = incoming->y; state.z = incoming->z;
-        state.quat_x = unpack_float_q(incoming->quat[0]);
-        state.quat_y = unpack_float_q(incoming->quat[1]);
-        state.quat_z = unpack_float_q(incoming->quat[2]);
-        state.quat_w = unpack_float_q(incoming->quat[3]);
-        state.hp = incoming->hp;
-        state.state_id = incoming->state_id;
-        state.target_aid = incoming->target_aid;
-        set_pedestrian_vehicle_net_id(state, incoming->vehicle_net_id);
-        data.ped_last_updated[j] = current_time;
-        found = true; break;
-      }
-    }
-    if (!found) {
-      for (uint32_t j = 0; j < MAX_PEDESTRIAN_SYNC_COUNT; j++) {
-        if (data.traffic_buffer.pedestrians[j].net_id == 0) {
-          auto& state = data.traffic_buffer.pedestrians[j];
-          state.net_id = incoming->net_id;
-          state.object_type = incoming->object_type;
-          state.object_variance = incoming->object_variance;
-          state.x = incoming->x; state.y = incoming->y; state.z = incoming->z;
-          state.quat_x = unpack_float_q(incoming->quat[0]);
-          state.quat_y = unpack_float_q(incoming->quat[1]);
-          state.quat_z = unpack_float_q(incoming->quat[2]);
-          state.quat_w = unpack_float_q(incoming->quat[3]);
-          state.hp = incoming->hp;
-          state.state_id = incoming->state_id;
-          state.target_aid = incoming->target_aid;
-          set_pedestrian_vehicle_net_id(state, incoming->vehicle_net_id);
-          data.ped_last_updated[j] = current_time;
-          found = true; break;
-        }
-      }
+    auto* state = mp_find_matching_or_empty_slot(
+        data.traffic_buffer.pedestrians,
+        MAX_PEDESTRIAN_SYNC_COUNT,
+        incoming->net_id,
+        [](const MPPedestrianState& item) { return item.net_id; });
+    if (state) {
+      uint32_t slot = (uint32_t)(state - data.traffic_buffer.pedestrians);
+      state->net_id = incoming->net_id;
+      state->object_type = incoming->object_type;
+      state->object_variance = incoming->object_variance;
+      state->x = incoming->x; state->y = incoming->y; state->z = incoming->z;
+      state->quat_x = mp_unpack_float_q(incoming->quat[0]);
+      state->quat_y = mp_unpack_float_q(incoming->quat[1]);
+      state->quat_z = mp_unpack_float_q(incoming->quat[2]);
+      state->quat_w = mp_unpack_float_q(incoming->quat[3]);
+      state->hp = incoming->hp;
+      state->state_id = incoming->state_id;
+      state->target_aid = incoming->target_aid;
+      set_pedestrian_vehicle_net_id(*state, incoming->vehicle_net_id);
+      data.ped_last_updated[slot] = current_time;
     }
   }
 }
@@ -140,8 +93,8 @@ void send_pedestrian_sync_packets(MultiplayerData& data, MPTrafficSyncBufferGOAL
       auto* src = &buffer->pedestrians[sent_peds + i]; auto* dst = &packet.peds[i];
       dst->net_id = src->net_id; dst->object_type = src->object_type; dst->object_variance = src->object_variance;
       dst->x = src->x; dst->y = src->y; dst->z = src->z;
-      dst->quat[0] = pack_float_q(src->quat_x); dst->quat[1] = pack_float_q(src->quat_y);
-      dst->quat[2] = pack_float_q(src->quat_z); dst->quat[3] = pack_float_q(src->quat_w);
+      dst->quat[0] = mp_pack_float_q(src->quat_x); dst->quat[1] = mp_pack_float_q(src->quat_y);
+      dst->quat[2] = mp_pack_float_q(src->quat_z); dst->quat[3] = mp_pack_float_q(src->quat_w);
       dst->hp = src->hp;
       dst->state_id = src->state_id;
       dst->target_aid = src->target_aid;
