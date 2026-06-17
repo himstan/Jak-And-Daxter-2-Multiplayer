@@ -402,7 +402,10 @@
                             (set! (-> s3-1 flags) (font-flags shadow kerning large))
                             ;; Only display prompt for local player
                             (when (and (= tgt *target*)
-                                       (not block-local-boarding?))
+                                       (not block-local-boarding?)
+                                       (not (movie?))
+                                       (not (real-movie?))
+                                       (not (and *progress-process* (nonzero? *progress-process*))))
                               (let ((msg (cond
                                            ((and (not (cpad-hold? pad-idx l1)) (not driver-seat-player?)) (text-id press-triangle-to-drive))
                                            ((or (cpad-hold? pad-idx l1) driver-seat-player?) (text-id press-triangle-to-ride))
