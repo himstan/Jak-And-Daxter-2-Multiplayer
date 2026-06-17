@@ -509,6 +509,7 @@
              (not *mp-processing-remote-event*)
              (mp-is-jak?) ;; CRITICAL: Only the Host (Jak) should broadcast world-status changes (BREAK events)
              (-> arg0 entity)
+             (not (movie?))
              (not (mp-should-block-break-sync? arg0))
              )
     (format 0 "[MP-WorldEvent] Sending BREAK for process ~A~%" arg0)
@@ -687,6 +688,33 @@
 (defun mp-is-mission-active? ()
   "Is there an active task-manager in the active pool?"
   (the symbol (nonzero? (process-by-type task-manager *active-pool*)))
+  )
+
+(defun mp-multiplayer-scene-or-load-active? ()
+  "True while local/remote cutscene or level paging state can make gameplay death/sync unsafe."
+  (the symbol
+    (or *scene-player*
+        (movie?)
+        (real-movie?)
+        (and *level*
+             (nonzero? *level*)
+             (-> *level* loading-level)
+             (-> *level* default-level)
+             (!= (-> *level* loading-level) (-> *level* default-level)))
+        (and *remote-info*
+             (nonzero? *remote-info*)
+             (nonzero? (-> *remote-info* scene-active)))
+        )
+    )
+  )
+
+(defun mp-should-suppress-local-endlessfall? ()
+  "Suppress bogus player endlessfall while MP cutscene/level transitions own the world."
+  (the symbol
+    (and *multi-sync-enabled?*
+         (= (pc-multi-get-status) 6)
+         (mp-multiplayer-scene-or-load-active?))
+    )
   )
 
 (defun mp-is-open-world? ()

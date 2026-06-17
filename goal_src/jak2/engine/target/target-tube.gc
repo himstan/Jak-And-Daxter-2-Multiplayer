@@ -954,6 +954,7 @@
     )
   :code (behavior ((arg0 symbol))
     (local-vars (v1-42 symbol))
+    (format 0 "[Death] target-tube-death: reason is ~A~%" arg0)
     (set! (-> self neck flex-blend) 0.0)
     (target-timed-invulnerable-off self 0)
     (add-setting! 'process-mask 'set 0.0 (process-mask enemy platform projectile death))

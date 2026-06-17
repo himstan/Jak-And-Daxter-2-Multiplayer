@@ -23,6 +23,7 @@
 (define-extern mp-ensure-remote-level-wanted! (function none))
 (define-extern mp-remote-level-ready? (function symbol))
 (define-extern mp-prepare-remote-spectate-target! (function process-focusable))
+(define-extern mp-should-suppress-local-endlessfall? (function symbol))
 
 ;; DECOMP BEGINS
 
@@ -1656,6 +1657,13 @@
     )
   :trans (-> target-hit trans)
   :code (behavior ((arg0 symbol))
+    (format 0 "[Death] target-death: reason is ~A~%" arg0)
+    (when (and (= arg0 'endlessfall)
+               (mp-should-suppress-local-endlessfall?))
+      (format 0 "[MP-Death] Suppressing cutscene/loading endlessfall for Jak.~%")
+      (set! (-> self control transv quad) (the-as uint128 0))
+      (go target-stance)
+      )
     (set! (-> self control unknown-word04) (the-as uint #f))
     (set! (-> self control did-move-to-pole-or-max-jump-height)
           (the-as float (send-event (handle->process-safe (-> self attack-info attacker)) 'target 'die arg0))

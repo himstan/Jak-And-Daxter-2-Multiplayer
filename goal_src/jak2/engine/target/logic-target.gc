@@ -27,6 +27,7 @@
 (define-extern target-generic-event-handler (function process int symbol event-message-block object :behavior target))
 (define-extern target-continue (state continue-point target))
 (define-extern tobot-stance (state target))
+(define-extern mp-should-suppress-local-endlessfall? (function symbol))
 
 ;; DECOMP BEGINS
 
@@ -1766,7 +1767,9 @@
                   (not (and (= *cheat-mode* 'debug) (cpad-hold? (-> self control cpad number) r2)))
                   )
              )
-        (send-event self 'attack-invinc #f (static-attack-info ((id (new-attack-id)) (mode 'endlessfall))))
+        (when (not (mp-should-suppress-local-endlessfall?))
+          (send-event self 'attack-invinc #f (static-attack-info ((id (new-attack-id)) (mode 'endlessfall))))
+          )
         )
     )
   (set! (-> self control bend-speed) (if (logtest? (-> self control status) (collide-status on-surface))

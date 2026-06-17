@@ -1049,6 +1049,7 @@
     )
   :trans (-> target-mech-hit trans)
   :code (behavior ((arg0 symbol))
+    (format 0 "[Death] target-mech-death: reason is ~A~%" arg0)
     (set! (-> self mech stick-off) (the-as basic #t))
     (set! (-> self control unknown-word04) (the-as uint #f))
     (set! (-> self control did-move-to-pole-or-max-jump-height)
