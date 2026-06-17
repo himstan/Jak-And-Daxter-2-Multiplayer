@@ -19,6 +19,7 @@
          (target-indax-exit))
   :trans (behavior ()
           ((-> self state-hook))
+          (target-indax-align!)
           (when (move-legs?)
             (set! (-> self control bend-target) 0.0)
             (logclear! (-> self state-flags) (state-flags lleg-still rleg-still))

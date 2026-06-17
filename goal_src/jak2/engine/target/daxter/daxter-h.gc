@@ -14,6 +14,7 @@
 (define-extern target-indax-dangerous-event-handler (function process int symbol event-message-block object :behavior target))
 (define-extern target-indax-jump-event-handler (function process int symbol event-message-block object :behavior target))
 (define-extern target-indax-init (function symbol none :behavior target))
+(define-extern target-indax-align! (function symbol :behavior target))
 (define-extern target-indax-exit (function none :behavior target))
 (define-extern target-indax-real-post (function none :behavior target))
 (define-extern target-indax-post (function none :behavior target))
