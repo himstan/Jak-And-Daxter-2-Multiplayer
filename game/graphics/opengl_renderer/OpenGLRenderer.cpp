@@ -999,8 +999,12 @@ void OpenGLRenderer::render(DmaFollower dma, const RenderOptions& settings) {
   {
     g_current_renderer = "loader";
     auto prof = m_profiler.root()->make_scoped_child("loader");
-    if (m_last_pmode_alp == 0 && settings.pmode_alp_register != 0 && m_enable_fast_blackout_loads) {
-      // blackout, load everything and don't worry about frame rate
+    const bool fully_blacked_out = settings.pmode_alp_register == 0;
+    const bool leaving_blackout = m_last_pmode_alp == 0 && settings.pmode_alp_register != 0;
+    if (m_enable_fast_blackout_loads && (fully_blacked_out || leaving_blackout) &&
+        m_render_state.loader->has_pending_blocking_loads()) {
+      // While blacked out, load everything and don't worry about frame rate. Keep the old
+      // blackout-exit path as a fallback for levels requested on the final black frame.
       m_render_state.loader->update_blocking(*m_render_state.texture_pool);
 
     } else {

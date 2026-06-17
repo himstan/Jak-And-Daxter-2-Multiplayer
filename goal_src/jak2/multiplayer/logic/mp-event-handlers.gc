@@ -370,7 +370,7 @@
     (format 0 "[MP-WorldEvent] All players skipped. Aborting locally.~%")
     (send-event (ppointer->process *scene-player*) 'abort)
     ;; Force blackout off immediately to prevent getting stuck
-    (set-blackout-frames 0)
+    (mp-clear-client-presentation-blackout!)
     )
   (mp-arm-intro-skip-full-sync! *mp-scene-name-scratch*)
   (none))

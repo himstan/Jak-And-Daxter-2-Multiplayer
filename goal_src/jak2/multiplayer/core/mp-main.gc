@@ -129,6 +129,7 @@
     ;; 2. Logic & State Machine (MUST BE ABOVE GUARD for Join Handshake)
     (mp-handle-full-sync-state)
     (mp-handle-scene-transition)
+    (mp-log-client-blackout-diag!)
 
     ;; 3. Check for Continue Point Changes
     (when #f

@@ -59,13 +59,12 @@
       (mp-hold-intro-skip-blackout!)
       (set! *mp-remote-wants-skip* #f)
       (set! *mp-local-wants-skip* #f)
-      ;; SAFETY: Force blackout off if we are no longer in a scene and a blackout is active
+      ;; SAFETY: Force client-side black presentation state off once we are no longer in a scene.
       (if (and *mp-last-scene-player*
-               (not *mp-intro-skip-blackout-pending?*)
-               (>= (-> *game-info* blackout-time) (current-time)))
+               (not *mp-intro-skip-blackout-pending?*))
           (begin
             (format 0 "[MP] Forcing blackout off after scene end.~%")
-            (set-blackout-frames 0)
+            (mp-clear-client-presentation-blackout!)
             )
           )
       )

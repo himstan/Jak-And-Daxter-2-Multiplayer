@@ -89,6 +89,21 @@ void Loader::set_active_levels(const std::vector<std::string>& levels) {
   m_active_levels = levels;
 }
 
+bool Loader::has_pending_blocking_loads() {
+  std::unique_lock<std::mutex> lk(m_loader_mutex);
+  if (!m_level_to_load.empty() || !m_initializing_tfrag3_levels.empty()) {
+    return true;
+  }
+
+  for (auto& lev : m_desired_levels) {
+    if (m_loaded_tfrag3_levels.find(lev) == m_loaded_tfrag3_levels.end()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /*!
  * Get all levels that are in memory and used very recently.
  */

@@ -55,6 +55,8 @@
     )
 
   :trans (behavior ()
+    (if (mp-is-daxter?)
+            (set! *local-riding?* #t))
     (let ((jak-proc (if (mp-is-jak?) *target* (mp-puppet-get-proc))))
             (when jak-proc
                 (quaternion-copy! (-> self control quat) (-> jak-proc control quat))
