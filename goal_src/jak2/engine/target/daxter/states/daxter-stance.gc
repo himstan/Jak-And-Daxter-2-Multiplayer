@@ -1,6 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define *indax-stance-transition-speed* 1.35)
+
 (defstate target-indax-start (target)
   :event target-standard-event-handler
   :code (behavior ((arg0 handle))
@@ -11,7 +13,6 @@
 (defstate target-indax-stance (target)
   :event target-indax-handler
   :enter (behavior ()
-          (target-indax-init #f)
           ((-> target-stance enter))
           (set! (-> self control mod-surface) *indax-walk-mods*))
   :exit (behavior ()
@@ -54,29 +55,37 @@
               )
           (fall-test target-indax-falling -4096000.0))
   :code (behavior ()
-         (let ((v1-2 (ja-group)))
+         (let ((current-anim (ja-group)))
            (cond
-             ((and v1-2 (= v1-2 daxter-indax-attack-spin-ja))
-              (ja-no-eval :group! daxter-indax-attack-spin-end-ja :num! (seek!) :frame-num 0.0)
+             ((and current-anim (= current-anim daxter-indax-attack-spin-ja))
+              (ja-no-eval
+                :group! daxter-indax-attack-spin-end-ja
+                :num! (seek! max *indax-stance-transition-speed*)
+                :frame-num 0.0)
               (until (ja-done? 0)
                 (suspend)
-                (ja :num! (seek!)))
+                (ja :num! (seek! max *indax-stance-transition-speed*)))
               (ja-channel-push! 1 (seconds 0.05)))
-             ((let ((v1-32 (ja-group)))
-                (and v1-32 (= v1-32 daxter-indax-running-attack-ja)))
-              (ja-no-eval :group! daxter-indax-running-attack-end-ja :num! (seek!) :frame-num 0.0)
+             ((and current-anim (= current-anim daxter-indax-running-attack-ja))
+              (ja-no-eval
+                :group! daxter-indax-running-attack-end-ja
+                :num! (seek! max *indax-stance-transition-speed*)
+                :frame-num 0.0)
               (until (ja-done? 0)
                 (suspend)
-                (ja :num! (seek!)))
+                (ja :num! (seek! max *indax-stance-transition-speed*)))
               (ja-channel-push! 1 (seconds 0.05)))
-             ((let ((v1-62 (ja-group)))
-                (and (and v1-62 (= v1-62 daxter-indax-run-ja))
-                     (< (-> self skel root-channel 2 frame-interp (-> self skel active-frame-interp)) 0.5)))
+             ((and current-anim
+                   (= current-anim daxter-indax-run-ja)
+                   (< (-> self skel root-channel 1 frame-interp (-> self skel active-frame-interp)) 0.5))
               (ja-channel-push! 1 (seconds 0.1))
-              (ja-no-eval :group! daxter-indax-run-to-stance-ja :num! (seek!) :frame-num 0.0)
+              (ja-no-eval
+                :group! daxter-indax-run-to-stance-ja
+                :num! (seek! max *indax-stance-transition-speed*)
+                :frame-num 0.0)
               (until (ja-done? 0)
                 (suspend)
-                (ja :num! (seek!))))
+                (ja :num! (seek! max *indax-stance-transition-speed*))))
              (else
                (ja-channel-push! 1 (seconds 0.05)))))
          (ja-channel-push! 1 (seconds 0.05))

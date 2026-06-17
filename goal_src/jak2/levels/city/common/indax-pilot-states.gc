@@ -20,6 +20,7 @@
   )
 
 (defbehavior target-indax-pilot-edge-grab-enter target ((arg0 pilot-edge-grab-info))
+  (ja-channel-set! 0)
   (set-time! (-> self state-time))
   (set! (-> self control unknown-handle000) (the-as handle #f))
   (set! (-> self control mod-surface) *indax-edge-grab-mods*)
