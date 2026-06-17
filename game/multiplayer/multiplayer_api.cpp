@@ -157,19 +157,26 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
 }
 
 void refresh_host_port_mapping(MultiplayerData& data, uint32_t current_time) {
-  if (data.local_role != 0 || !data.port_mapping_active ||
-      data.port_mapping_method != MPPortMappingMethod::NAT_PMP) {
-    return;
+  MPPortMappingMethod method = MPPortMappingMethod::NONE;
+  uint16_t local_port = 0;
+  uint16_t external_port = 0;
+  {
+    std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
+    if (data.local_role != 0 || !data.port_mapping_active ||
+        data.port_mapping_method != MPPortMappingMethod::NAT_PMP ||
+        current_time - data.last_port_mapping_refresh_time < kPortMappingRefreshIntervalMs) {
+      return;
+    }
+    method = data.port_mapping_method;
+    local_port = data.port_mapping_local_port;
+    external_port = data.port_mapping_external_port;
   }
 
-  if (current_time - data.last_port_mapping_refresh_time < kPortMappingRefreshIntervalMs) {
-    return;
-  }
-
-  if (mp_refresh_udp_port_mapping(data.port_mapping_method, data.port_mapping_local_port,
-                                  data.port_mapping_external_port)) {
+  if (mp_refresh_udp_port_mapping(method, local_port, external_port)) {
+    std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
     data.last_port_mapping_refresh_time = current_time;
   } else {
+    std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
     data.last_port_mapping_refresh_time = current_time;
     lg::warn("[Multiplayer] Temporary UDP port mapping refresh failed.");
   }

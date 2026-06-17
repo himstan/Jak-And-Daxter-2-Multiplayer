@@ -6,6 +6,7 @@
 #include <atomic>
 #include <string>
 #include <thread>
+#include <mutex>
 
 #include "multiplayer_protocol.h"
 #include "multiplayer_port_mapping.h"
@@ -238,6 +239,9 @@ struct MultiplayerData {
   int pre_reconnect_status = 0;
 
   // Host-side temporary router mapping. Does not store or expose public IP.
+  std::thread port_mapping_thread;
+  std::mutex port_mapping_mutex;
+  std::atomic<bool> port_mapping_worker_stop{false};
   bool port_mapping_active = false;
   MPPortMappingMethod port_mapping_method = MPPortMappingMethod::NONE;
   uint16_t port_mapping_local_port = 0;

@@ -975,16 +975,23 @@ This gives us more freedom to write code how we want.
   ()
   )
 
+(defun mp-progress-host-peer-ready? ()
+  (= (pc-multi-get-status) 4)
+  )
+
 (defmethod respond-progress ((obj menu-waiting-for-daxter-option) (p progress) (selected? symbol))
   ;; Check if anyone joined (Status 4 = CONNECTED_LOBBY)
-  (when (and (>= (-> *remote-info* status) 4) (not *multi-sync-enabled?*))
+  (when (and (mp-progress-host-peer-ready?) (not *multi-sync-enabled?*))
     ;; Peer joined! Start game.
     (sound-play "generic-beep")
+    (pc-multi-set-status (the-as int 5))
     ;; Clear client sync flag - we will set it to 1 in runs-on-jak-spawn
     (set! (-> *local-info* sync-flag) (the-as uint 0))
     
     (format 0 "[MP-Host] Remote joined. Transitioning to engine loading flow...~%")
-    (set! (-> *bigmap* drawing-flag) #t)
+    (when (and *bigmap* (nonzero? *bigmap*))
+      (set! (-> *bigmap* drawing-flag) #t)
+      )
     (cond
       ((and (-> *pc-settings* mp-is-new-game?)
             (< (-> *pc-settings* mp-selected-save-slot) 4))
