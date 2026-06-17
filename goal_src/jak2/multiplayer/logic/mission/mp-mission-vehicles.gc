@@ -47,10 +47,36 @@
     )
   )
 
-(defun mp-mission-vehicle-find-by-net-id ((net-id uint))
-  "Find mission-owned vehicles that are stored as task-manager slaves."
+(defun mp-mission-vehicle-find-in-traffic-manager ((net-id uint))
+  "Find a reserved mission vehicle that exists as a traffic-manager child."
   (let ((found-proc (the-as vehicle #f)))
+    (when (and *traffic-manager*
+               (nonzero? *traffic-manager*)
+               (mp-mission-vehicle-id? net-id))
+      (let ((curr (-> *traffic-manager* child)))
+        (while (and curr (nonzero? curr) (not found-proc))
+          (let ((proc (the-as process (ppointer->process curr))))
+            (when (mp-mission-vehicle-matches-net-id? proc net-id)
+              (set! found-proc (the-as vehicle proc))
+              )
+            )
+          (when (not found-proc)
+            (set! curr (-> curr 0 brother))
+            )
+          )
+        )
+      )
+    found-proc
+    )
+  )
+
+(defun mp-mission-vehicle-find-by-net-id ((net-id uint))
+  "Find mission-owned vehicles that already exist locally."
+  (let ((found-proc (the-as vehicle #f)))
+    (set! found-proc (mp-mission-vehicle-find-in-traffic-manager net-id))
     (when (and *task-manager-engine*
+               (nonzero? *task-manager-engine*)
+               (not found-proc)
                (mp-mission-vehicle-id? net-id))
       (let ((task-link (the-as connection (-> *task-manager-engine* alive-list next0))))
         *task-manager-engine*
