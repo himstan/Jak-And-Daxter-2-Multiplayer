@@ -28,19 +28,6 @@
           (set! (-> *local-info* player-procs rem-role) (the-as handle #f)))))
   (none))
 
-(defun mp-update-camera-settings ()
-  "Apply or remove role-specific camera settings"
-  (if (and (mp-is-daxter?) (not *local-riding?*))
-      (begin
-        (set-setting! 'string-min-length 'abs (meters 3.0) 0)
-        (set-setting! 'string-max-length 'abs (meters 7.0) 0)
-        (set-setting! 'target-height     'abs (meters 1.0) 0))
-      (begin
-        (remove-setting! 'string-min-length)
-        (remove-setting! 'string-max-length)
-        (remove-setting! 'target-height)))
-  (none))
-
 (defun mp-restore-local-target-after-scene! ()
   "Restore the local target's role-specific base state after a scene ends."
   (when (and *target* (nonzero? *target*))
