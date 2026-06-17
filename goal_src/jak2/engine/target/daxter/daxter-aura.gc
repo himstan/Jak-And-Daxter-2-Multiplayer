@@ -113,7 +113,7 @@
   )
 
 (defbehavior daxter-gun-update-eco-aura! target ()
-  (if (or (= (-> self state name) 'target-indax-death) (= (-> self state name) 'target-death))
+  (if (or (movie?) (= (-> self state name) 'target-indax-death) (= (-> self state name) 'target-death))
       (daxter-gun-clear-eco-aura-proc! self)
       (when (focus-test? self indax gun)
           (daxter-gun-update-eco-aura-proc! self)
