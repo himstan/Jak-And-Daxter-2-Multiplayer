@@ -203,6 +203,7 @@
   :event target-pilot-handler
   :exit target-pilot-exit
   :code (behavior ((arg0 handle) (arg1 symbol) (arg2 symbol))
+    (ja-channel-set! 0)
     (target-pilot-init arg0 #t)
     (suspend)
     (remove-exit)
