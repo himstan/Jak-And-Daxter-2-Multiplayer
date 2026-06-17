@@ -19,6 +19,7 @@ void start_port_mapping_worker(MultiplayerData& data, uint16_t local_port, uint1
   }
 
   data.port_mapping_worker_stop = false;
+  const uint32_t worker_generation = ++data.port_mapping_generation;
   {
     std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
     data.port_mapping_active = false;
@@ -28,14 +29,15 @@ void start_port_mapping_worker(MultiplayerData& data, uint16_t local_port, uint1
     data.last_port_mapping_refresh_time = 0;
   }
 
-  data.port_mapping_thread = std::thread([&data, local_port, external_port]() {
+  data.port_mapping_thread = std::thread([&data, local_port, external_port, worker_generation]() {
     std::this_thread::sleep_for(std::chrono::seconds(1));
     if (data.port_mapping_worker_stop || !data.initialized || data.local_role != 0) {
       return;
     }
 
     auto mapping = mp_open_udp_port_mapping(local_port, external_port);
-    if (data.port_mapping_worker_stop || !data.initialized || data.local_role != 0) {
+    if (data.port_mapping_worker_stop || data.port_mapping_generation.load() != worker_generation ||
+        !data.initialized || data.local_role != 0) {
       if (mapping.success) {
         mp_close_udp_port_mapping(mapping.method, local_port, external_port);
       }
@@ -57,6 +59,23 @@ void start_port_mapping_worker(MultiplayerData& data, uint16_t local_port, uint1
       lg::warn("[Multiplayer] Automatic UDP port mapping failed: {}", mapping.error);
     }
   });
+}
+
+void stop_port_mapping_worker_async(MultiplayerData& data) {
+  data.port_mapping_worker_stop = true;
+  ++data.port_mapping_generation;
+  if (data.port_mapping_thread.joinable()) {
+    data.port_mapping_thread.detach();
+  }
+}
+
+void close_port_mapping_async(MPPortMappingMethod method,
+                              uint16_t local_port,
+                              uint16_t external_port) {
+  std::thread([method, local_port, external_port]() {
+    mp_close_udp_port_mapping(method, local_port, external_port);
+    lg::info("[Multiplayer] Temporary UDP port mapping removed.");
+  }).detach();
 }
 }
 
@@ -129,36 +148,32 @@ void MultiplayerManager::disconnect(MultiplayerData& data) {
   if (data.discovery_thread.joinable()) {
     data.discovery_thread.join();
   }
-  data.port_mapping_worker_stop = true;
-  if (data.port_mapping_thread.joinable()) {
-    data.port_mapping_thread.join();
+
+  MPPortMappingMethod mapping_method = MPPortMappingMethod::NONE;
+  uint16_t mapping_local_port = 0;
+  uint16_t mapping_external_port = 0;
+  bool had_mapping = false;
+  {
+    std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
+    had_mapping = data.port_mapping_active;
+    mapping_method = data.port_mapping_method;
+    mapping_local_port = data.port_mapping_local_port;
+    mapping_external_port = data.port_mapping_external_port;
+    data.port_mapping_active = false;
+    data.port_mapping_method = MPPortMappingMethod::NONE;
+    data.port_mapping_local_port = 0;
+    data.port_mapping_external_port = 0;
+    data.last_port_mapping_refresh_time = 0;
+  }
+  stop_port_mapping_worker_async(data);
+  if (had_mapping) {
+    close_port_mapping_async(mapping_method, mapping_local_port, mapping_external_port);
   }
 
   if (!data.initialized)
     return;
 
   if (data.host) {
-    MPPortMappingMethod mapping_method = MPPortMappingMethod::NONE;
-    uint16_t mapping_local_port = 0;
-    uint16_t mapping_external_port = 0;
-    bool had_mapping = false;
-    {
-      std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
-      had_mapping = data.port_mapping_active;
-      mapping_method = data.port_mapping_method;
-      mapping_local_port = data.port_mapping_local_port;
-      mapping_external_port = data.port_mapping_external_port;
-      data.port_mapping_active = false;
-      data.port_mapping_method = MPPortMappingMethod::NONE;
-      data.port_mapping_local_port = 0;
-      data.port_mapping_external_port = 0;
-      data.last_port_mapping_refresh_time = 0;
-    }
-    if (had_mapping) {
-      mp_close_udp_port_mapping(mapping_method, mapping_local_port, mapping_external_port);
-      lg::info("[Multiplayer] Temporary UDP port mapping removed.");
-    }
-
     if (data.local_role == 1 && data.server_peer) {
       enet_peer_disconnect_now(data.server_peer, 0);
     } else if (data.local_role == 0) {

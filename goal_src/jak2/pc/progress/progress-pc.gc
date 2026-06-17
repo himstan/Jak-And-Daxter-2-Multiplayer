@@ -1330,7 +1330,12 @@
          )
         ((cpad-pressed? 0 confirm)
          (if (-> choice 0)
-           (kernel-shutdown (runtime-exit-status exit))
+           (begin
+             (when (> (pc-multi-get-status) 0)
+               (pc-multi-disconnect)
+               )
+             (kernel-shutdown (runtime-exit-status exit))
+             )
            )
          )
         )

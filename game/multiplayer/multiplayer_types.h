@@ -242,6 +242,7 @@ struct MultiplayerData {
   std::thread port_mapping_thread;
   std::mutex port_mapping_mutex;
   std::atomic<bool> port_mapping_worker_stop{false};
+  std::atomic<uint32_t> port_mapping_generation{0};
   bool port_mapping_active = false;
   MPPortMappingMethod port_mapping_method = MPPortMappingMethod::NONE;
   uint16_t port_mapping_local_port = 0;
