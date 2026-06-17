@@ -309,6 +309,14 @@ void pc_multi_receive_traffic(u32 buffer_ptr) {
   });
 }
 
+void pc_multi_clear_remote_traffic() {
+  try {
+    multiplayer_reset_remote_traffic_buffers(multiplayer_data());
+  } catch (...) {
+    lg::error("[Multiplayer] Exception in pc_multi_clear_remote_traffic");
+  }
+}
+
 void pc_multi_send_palace_squid(u32 buffer_ptr) {
   with_goal_buffer<MPPalaceSquidSyncBufferGOAL>(
       buffer_ptr, "pc_multi_send_palace_squid", [](auto* buffer) {
@@ -457,6 +465,8 @@ void init_multiplayer_pc_port() {
   jak2::make_function_symbol_from_c("pc-multi-receive-enemies", (void*)pc_multi_receive_enemies);
   jak2::make_function_symbol_from_c("pc-multi-send-traffic", (void*)pc_multi_send_traffic);
   jak2::make_function_symbol_from_c("pc-multi-receive-traffic", (void*)pc_multi_receive_traffic);
+  jak2::make_function_symbol_from_c("pc-multi-clear-remote-traffic",
+                                    (void*)pc_multi_clear_remote_traffic);
   jak2::make_function_symbol_from_c("pc-multi-send-palace-squid", (void*)pc_multi_send_palace_squid);
   jak2::make_function_symbol_from_c("pc-multi-receive-palace-squid",
                                     (void*)pc_multi_receive_palace_squid);

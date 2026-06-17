@@ -274,7 +274,7 @@
   (set! *mp-force-remote-puppet-for-spectate?* #f)
   (set! *multi-remote-first-seen?* #t)
   (set! *mp-reconnect-process* (the-as handle #f))
-  (set! *has-ridden-before?* #f)
+  (set! *has-ridden-before?* #t)
   
   (set! *multi-last-send-time* (the-as time-frame 0))
   (set! *multi-remote-spawn-time* (the-as time-frame 0))

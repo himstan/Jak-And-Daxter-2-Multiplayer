@@ -57,7 +57,45 @@
 (define-extern mp-sync-traffic-update (function none))
 (define-extern pc-multi-send-traffic (function uint none))
 (define-extern pc-multi-receive-traffic (function uint none))
+(define-extern pc-multi-clear-remote-traffic (function none))
 (define-extern citizen-spawn (function process type traffic-object-spawn-params process-drawable))
+
+;; Remote traffic snapshots can land slightly off the local traffic graph during
+;; zone churn. Use a linked level branch as a last-resort non-null controller seed.
+(defun mp-traffic-fallback-spawn-branch ()
+  (let ((best-branch (the-as nav-branch #f))
+        (best-active-count (the uint 0)))
+    (when (and *traffic-engine*
+               (nonzero? (the-as uint *traffic-engine*)))
+      (dotimes (slot-idx 2)
+        (let ((level-data (-> *traffic-engine* level-data-array slot-idx)))
+          (let ((city-info (-> level-data city-info)))
+            (when (and city-info
+                       (nonzero? city-info)
+                       (-> city-info nav-graph)
+                       (nonzero? (-> city-info nav-graph)))
+              (let ((graph (-> city-info nav-graph))
+                    (active-count (the uint (-> level-data active-cell-count))))
+                (when (> (-> graph branch-count) 0)
+                  (let ((candidate-branch (-> graph branch-array 0)))
+                    (when (and candidate-branch
+                               (nonzero? candidate-branch)
+                               (or (not best-branch)
+                                   (> active-count best-active-count)))
+                      (set! best-branch candidate-branch)
+                      (set! best-active-count active-count)
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    best-branch
+    )
+  )
 
 ;; Safe cross-module hooks for guard target assignment
 (define *mp-set-guard-target* (the-as (function citizen handle none) #f))

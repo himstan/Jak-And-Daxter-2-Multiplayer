@@ -1126,9 +1126,11 @@
   (when (and this
              (nonzero? this)
              (not (type? this crimson-guard))
+             (not (focus-test? this inactive))
              (not (logtest? (-> this mask) (process-mask sleep)))
              (!= (-> this status) 'dead)
-             (nonzero? (-> this net-id)))
+             (nonzero? (-> this net-id))
+             (nonzero? (-> this controller branch)))
     (let ((rec (mp-get-traffic-ghost (-> this net-id))))
       (when rec
         (when (and (-> this root)

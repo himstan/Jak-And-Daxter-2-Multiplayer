@@ -1616,6 +1616,26 @@
   (none)
   )
 
+(defun init-part-spawner-entity! ((proc process) (actor entity-actor) (init-func (function part-spawner entity-actor object)))
+  "Initialize a part-spawner child even when its generated method table is too short for init-from-entity!."
+  (when (and proc
+             (nonzero? proc)
+             actor
+             (nonzero? actor)
+             init-func
+             (valid? init-func function (the-as string #f) #f 0)
+             (-> actor extra level)
+             (nonzero? (-> actor extra level)))
+    (activate proc *entity-pool* (res-lump-struct actor 'name basic) (the-as pointer #x70004000))
+    (set! (-> proc entity) actor)
+    (set! (-> proc level) (-> actor extra level))
+    (set! (-> actor extra process) proc)
+    (run-now-in-process proc init-func (the-as part-spawner proc) actor)
+    (return #t)
+    )
+  #f
+  )
+
 (defun entity-birth-debug-level-name ((lev level))
   (if (and lev (nonzero? lev))
       (-> lev name)
@@ -1699,21 +1719,23 @@
     (let ((init-id (method-id-of-type part-spawner init-from-entity!))
           (init-func (method-of-type part-spawner init-from-entity!))
           )
-      (when (and (< init-id (the-as int (-> etype allocated-length)))
-                 (valid? init-func function (the-as string #f) #f 0))
-        (method-set! etype init-id init-func)
-        (when (valid? (method-of-object proc init-from-entity!) function (the-as string #f) #f 0)
+      (when (valid? init-func function (the-as string #f) #f 0)
+        (when (< init-id (the-as int (-> etype allocated-length)))
+          (method-set! etype init-id init-func)
+          )
+        (when (or (valid? (method-of-object proc init-from-entity!) function (the-as string #f) #f 0)
+                  (init-part-spawner-entity! proc actor init-func))
+          (when (valid? (method-of-object proc init-from-entity!) function (the-as string #f) #f 0)
+            (init-entity proc actor etype)
+            )
           (when (time-elapsed? *entity-birth-viewer-debug-time* (seconds 0.25))
-            (format
-              0
-              "[entity-birth] repaired part-spawner init etype=~A actor=~A methods=~D~%"
-              etype
-              (res-lump-struct actor 'name basic)
-              (-> etype allocated-length)
-              )
+            (format 0
+                    "[entity-birth] repaired part-spawner init etype=~A actor=~A methods=~D~%"
+                    etype
+                    (res-lump-struct actor 'name basic)
+                    (-> etype allocated-length))
             (set! *entity-birth-viewer-debug-time* (current-time))
             )
-          (init-entity proc actor etype)
           (return #t)
           )
         )

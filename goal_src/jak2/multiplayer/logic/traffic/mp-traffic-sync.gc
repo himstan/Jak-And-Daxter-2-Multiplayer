@@ -106,6 +106,127 @@
   (none)
   )
 
+(define-perm *mp-traffic-targeted-prune-log-time* time-frame 0)
+
+(defun mp-traffic-ped-materialized-illegal? ((ped-proc citizen))
+  "True for remote pedestrian puppets that are known unsafe to keep alive."
+  (and ped-proc
+       (nonzero? ped-proc)
+       (nonzero? (-> ped-proc net-id))
+       (or (focus-test? ped-proc inactive)
+           (= (-> ped-proc status) 'dead)
+           (zero? (-> ped-proc controller branch))))
+  )
+
+(defun mp-traffic-cull-illegal-ped! ((ped-proc citizen))
+  (when (and ped-proc
+             (nonzero? ped-proc)
+             (nonzero? (-> ped-proc net-id)))
+    (if (or (focus-test? ped-proc inactive)
+            (= (-> ped-proc status) 'dead))
+        (set! (-> ped-proc net-id) (the uint 0))
+        (begin
+          (logclear! (-> ped-proc flags) (citizen-flag persistent))
+          (send-event ped-proc 'traffic-off-force)
+          (set! (-> ped-proc net-id) (the uint 0))
+          )
+        )
+    )
+  (none)
+  )
+
+(defun mp-traffic-vehicle-player-owned? ((veh-proc vehicle))
+  (let ((owned? #f))
+    (when (and veh-proc
+               (nonzero? veh-proc)
+               (nonzero? (-> veh-proc net-id)))
+      (let ((veh-net-id (-> veh-proc net-id)))
+        (when (or (and *local-info*
+                       (nonzero? *local-info*)
+                       (= veh-net-id (-> *local-info* veh-state net-id)))
+                  (and *remote-info*
+                       (nonzero? *remote-info*)
+                       (= veh-net-id (-> *remote-info* veh-state net-id))))
+          (set! owned? #t)
+          )
+        )
+      )
+    owned?
+    )
+  )
+
+(defun mp-traffic-vehicle-materialized-illegal? ((veh-proc vehicle))
+  "True for remote vehicle puppets that are known unsafe to keep alive."
+  (and veh-proc
+       (nonzero? veh-proc)
+       (nonzero? (-> veh-proc net-id))
+       (not (mp-traffic-vehicle-player-owned? veh-proc))
+       (or (focus-test? veh-proc inactive)
+           (= (-> veh-proc status) 'dead)
+           (logtest? (-> veh-proc flags) (rigid-body-object-flag dead))))
+  )
+
+(defun mp-traffic-cull-materialized-remote! ()
+  "Remove only materialized remote puppets that are already known invalid."
+  (when (and *traffic-manager*
+             (nonzero? *traffic-manager*)
+             (not (mp-is-traffic-authoritative?)))
+    (let ((curr (-> *traffic-manager* child))
+          (ped-cull-count (the uint 0))
+          (veh-cull-count (the uint 0)))
+      (while (and curr (nonzero? curr))
+        (let ((proc (ppointer->process curr)))
+          (let ((next-ptr (-> curr 0 brother)))
+            (when (and proc
+                       (nonzero? proc))
+              (cond
+                ((and (type? proc citizen)
+                      (mp-traffic-ped-materialized-illegal? (the-as citizen proc)))
+                 (mp-traffic-cull-illegal-ped! (the-as citizen proc))
+                 (+! ped-cull-count 1)
+                 )
+                ((and (type? proc vehicle)
+                      (mp-traffic-vehicle-materialized-illegal? (the-as vehicle proc)))
+                 (mp-vehicle-force-cull-local! (the-as vehicle proc))
+                 (+! veh-cull-count 1)
+                 )
+                )
+              )
+            (set! curr next-ptr)
+            )
+          )
+        )
+      (when (and (or (nonzero? ped-cull-count)
+                     (nonzero? veh-cull-count))
+                 (time-elapsed? *mp-traffic-targeted-prune-log-time* (seconds 1)))
+        (format 0
+                "[MP-TrafficGate] targeted-prune peds=~D vehs=~D~%"
+                ped-cull-count
+                veh-cull-count)
+        (set! *mp-traffic-targeted-prune-log-time* (current-time))
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-traffic-clear-pending-remote! ()
+  "Clear stale remote ambient traffic before it can materialize into the local entity system."
+  (mp-traffic-clear-buffer!)
+  (mp-traffic-cull-materialized-remote!)
+  (mp-traffic-clear-ghosts!)
+  (pc-multi-clear-remote-traffic)
+  (none)
+  )
+
+(defun mp-traffic-clear-incoming-remote! ()
+  "Drop queued remote packets while keeping live puppet ghost records moving."
+  (mp-traffic-clear-buffer!)
+  (mp-traffic-cull-materialized-remote!)
+  (pc-multi-clear-remote-traffic)
+  (none)
+  )
+
 (defun mp-traffic-cleanup-after-sync-exit! ()
   "Client-side cleanup for host-owned traffic after leaving the traffic authority bubble."
   (when (mp-is-daxter?)
@@ -124,6 +245,8 @@
 (define-perm *mp-traffic-level-context-change-time* time-frame 0)
 (define-perm *mp-traffic-last-local-primary-level-id* uint (the uint 0))
 (define-perm *mp-traffic-last-remote-primary-level-id* uint (the uint 0))
+(define-perm *mp-traffic-last-remote-apply-ready* symbol #f)
+(define-perm *mp-traffic-refresh-existing-log-time* time-frame 0)
 
 (defun mp-traffic-local-primary-level-id ()
   (if (and *local-info* (nonzero? *local-info*))
@@ -139,6 +262,41 @@
       )
   )
 
+(defun mp-traffic-local-primary-level-symbol ()
+  (mp-level-id->symbol (mp-traffic-local-primary-level-id))
+  )
+
+(defun mp-traffic-target-level-name ()
+  (let ((level-name 'none))
+    (when (and *target*
+               (nonzero? *target*)
+               (-> *target* current-level)
+               (nonzero? (-> *target* current-level))
+               (-> *target* current-level name))
+      (set! level-name (-> *target* current-level name))
+      )
+    level-name
+    )
+  )
+
+(defun mp-traffic-log-level-data-slot! ((reason symbol) (slot-idx int))
+  (when (and *traffic-engine*
+             (nonzero? (the-as uint *traffic-engine*)))
+    (let ((level-data (-> *traffic-engine* level-data-array slot-idx)))
+      (format 0
+              "[MP-TrafficGate] ~S slot=~D city-linked=~A active-cells=~D newly-active-cells=~D~%"
+              reason
+              slot-idx
+              (and (-> level-data city-info)
+                   (nonzero? (the-as uint (-> level-data city-info))))
+              (the uint (-> level-data active-cell-count))
+              (the uint (-> level-data newly-active-cell-count))
+              )
+      )
+    )
+  (none)
+  )
+
 (defun mp-traffic-primary-levels-match? ()
   "Ambient host traffic is valid only when both peers share the same primary city level."
   (let ((local-primary (mp-traffic-local-primary-level-id))
@@ -147,6 +305,120 @@
          (nonzero? remote-primary)
          (= local-primary remote-primary))
     )
+  )
+
+(defun mp-traffic-target-in-primary-level? ((level-name symbol))
+  (and level-name
+       *target*
+       (nonzero? *target*)
+       (-> *target* current-level)
+       (nonzero? (-> *target* current-level))
+       (-> *target* current-level name)
+       (= (-> *target* current-level name) level-name))
+  )
+
+(defun mp-traffic-active-level-by-name ((level-name symbol))
+  (let ((found-level (the-as level #f)))
+    (when (and level-name
+               *level*
+               (nonzero? *level*))
+      (dotimes (level-idx (-> *level* length))
+        (when (not found-level)
+          (let ((level-info (-> *level* level level-idx)))
+            (when (and level-info
+                       (nonzero? level-info)
+                       (-> level-info name)
+                       (= (-> level-info name) level-name)
+                       (or (= (-> level-info status) 'active)
+                           (= (-> level-info status) 'alive)
+                           (= (-> level-info status) 'loaded)))
+              (set! found-level level-info)
+              )
+            )
+          )
+        )
+      )
+    found-level
+    )
+  )
+
+(defun mp-traffic-level-data-ready? ((level-name symbol))
+  "True when traffic-engine has linked active cells for the local primary city level."
+  (let ((level-info (mp-traffic-active-level-by-name level-name)))
+    (when (and level-info
+               (nonzero? level-info)
+               (-> level-info bsp city-level-info)
+               (nonzero? (-> level-info bsp city-level-info))
+               *traffic-engine*
+               (nonzero? (the-as uint *traffic-engine*)))
+      (let ((city-info (-> level-info bsp city-level-info)))
+        (dotimes (level-data-idx 2)
+          (let ((level-data (-> *traffic-engine* level-data-array level-data-idx)))
+            (when (and (= (-> level-data city-info) city-info)
+                       (> (-> level-data active-cell-count) 0))
+              (return #t)
+              )
+            )
+          )
+        )
+      )
+    )
+  #f
+  )
+
+(defun mp-traffic-local-primary-level-ready? ()
+  "True when the client's current city level is resident and traffic-engine has usable cells."
+  (let ((level-name (mp-traffic-local-primary-level-symbol)))
+    (and level-name
+         (mp-city-level? level-name)
+         (mp-level-active? level-name)
+         (mp-traffic-target-in-primary-level? level-name)
+         (mp-traffic-level-data-ready? level-name))
+    )
+  )
+
+(defun mp-traffic-log-level-gate! ((reason symbol))
+  "Emit a compact snapshot of the traffic readiness inputs around zone transitions."
+  (format
+    0
+    "[MP-TrafficGate] ~S local-primary=~D local-symbol=~S remote-primary=~D "
+    reason
+    (mp-traffic-local-primary-level-id)
+    (mp-traffic-local-primary-level-symbol)
+    (mp-traffic-remote-primary-level-id)
+    )
+  (format
+    0
+    "match=~A ready=~A spawn-ready=~A riding=~A target-level=~S "
+    (mp-traffic-primary-levels-match?)
+    (mp-traffic-local-primary-level-ready?)
+    (mp-is-traffic-spawn-ready?)
+    *mp-traffic-art-context-riding*
+    (mp-traffic-target-level-name)
+    )
+  (format
+    0
+    "peds=~D vehs=~D~%"
+    (if (and *mp-traffic-buffer*
+             (nonzero? (the-as uint *mp-traffic-buffer*)))
+        (-> *mp-traffic-buffer* ped-count)
+        (the uint 0)
+        )
+    (if (and *mp-traffic-buffer*
+             (nonzero? (the-as uint *mp-traffic-buffer*)))
+        (-> *mp-traffic-buffer* veh-count)
+        (the uint 0)
+        )
+    )
+  (if (and *traffic-engine*
+           (nonzero? (the-as uint *traffic-engine*)))
+      (begin
+        (mp-traffic-log-level-data-slot! reason 0)
+        (mp-traffic-log-level-data-slot! reason 1)
+        )
+      (format 0 "[MP-TrafficGate] ~S traffic-engine=missing~%" reason)
+      )
+  (none)
   )
 
 (defun mp-traffic-local-city-loaded? ()
@@ -171,8 +443,12 @@
       (set! *mp-traffic-last-local-primary-level-id* local-primary)
       (set! *mp-traffic-last-remote-primary-level-id* remote-primary)
       (set! *mp-traffic-level-context-change-time* (current-time))
-      (mp-traffic-clear-buffer!)
-      (mp-traffic-clear-ghosts!)
+      (set! *mp-traffic-last-remote-apply-ready* #f)
+      (mp-traffic-log-level-gate! 'context-change-before-clear)
+      (if (= local-primary remote-primary)
+          (mp-traffic-clear-incoming-remote!)
+          (mp-traffic-clear-pending-remote!)
+          )
       (format 0
               "[MP-Traffic] Level context changed. Holding ambient traffic local-primary=~D remote-primary=~D~%"
               local-primary
@@ -183,9 +459,8 @@
   )
 
 (defun mp-traffic-level-context-settled? ()
-  "True once level display/entity birth has had time to finish after a level-context change."
-  (and (nonzero? *mp-traffic-level-context-change-time*)
-       (time-elapsed? *mp-traffic-level-context-change-time* (seconds 3)))
+  "Legacy gate name: true when the current primary city level is structurally ready."
+  (mp-traffic-local-primary-level-ready?)
   )
 
 (defun mp-traffic-remote-apply-ready? ()
@@ -193,6 +468,194 @@
   (and (mp-is-traffic-spawn-ready?)
        (mp-traffic-primary-levels-match?)
        (mp-traffic-level-context-settled?))
+  )
+
+(defun mp-traffic-remote-refresh-ready? ()
+  "True when same-level existing puppets may consume fresh ghost snapshots."
+  (and (mp-is-traffic-spawn-ready?)
+       (mp-traffic-primary-levels-match?))
+  )
+
+(defun mp-traffic-get-or-create-ghost! ((net-id uint) (entity-kind uint))
+  (let ((rec (the-as mp-traffic-ghost-record #f)))
+    (when (nonzero? net-id)
+      (set! rec (mp-get-traffic-ghost net-id))
+      (when (not rec)
+        (set! rec (mp-get-free-traffic-ghost))
+        (when rec
+          (set! (-> rec net-id) net-id)
+          (set! (-> rec entity-kind) (the-as uint8 entity-kind))
+          (set! (-> rec last-applied-state-id) (the uint32 0))
+          (set! (-> rec last-state-bump-time) 0)
+          (set! (-> rec authorized-trans-state-id) (the uint32 0))
+          (set! (-> rec authorized-trans-frame) 0)
+          )
+        )
+      )
+    rec
+    )
+  )
+
+(defun mp-traffic-refresh-existing-ped-slot! ((slot mp-pedestrian-state))
+  (let ((refreshed? #f))
+    (when (and slot
+               (nonzero? slot)
+               (nonzero? (-> slot net-id)))
+      (let ((proc (mp-pedestrian-find-by-net-id (-> slot net-id))))
+        (when (and proc
+                   (nonzero? proc))
+          (mp-pedestrian-apply-ghost-state proc slot)
+          (set! refreshed? #t)
+          )
+        )
+      )
+    refreshed?
+    )
+  )
+
+(defun mp-traffic-refresh-existing-peds! ()
+  (let ((refresh-count (the uint 0)))
+    (when (and *mp-traffic-buffer*
+               (nonzero? (the-as uint *mp-traffic-buffer*)))
+      (dotimes (slot-idx (the int MP_MAX_SYNC_PEDESTRIANS))
+        (when (mp-traffic-refresh-existing-ped-slot! (-> *mp-traffic-buffer* ped-enemies slot-idx))
+          (+! refresh-count 1)
+          )
+        )
+      )
+    refresh-count
+    )
+  )
+
+(defun mp-traffic-refresh-existing-vehicle-ghost! ((proc vehicle) (slot mp-vehicle-state))
+  (let ((refreshed? #f))
+    (when (and proc
+               (nonzero? proc)
+               slot
+               (nonzero? slot)
+               (> (-> slot state-id) 2))
+      (let ((local-pilot (get-rider-in-seat proc 0)))
+        (when (not (and local-pilot
+                        *target*
+                        (nonzero? *target*)
+                        (= local-pilot *target*)))
+          (let ((rec (mp-traffic-get-or-create-ghost! (-> slot net-id) (the uint 1))))
+            (when rec
+              (set! (-> rec entity-kind) (the uint8 1))
+              (set-vector! (-> rec ghost-trans) (-> slot x) (-> slot y) (-> slot z) 1.0)
+              (quaternion-set! (-> rec ghost-quat) (-> slot quat-x) (-> slot quat-y) (-> slot quat-z) (-> slot quat-w))
+              (set-vector! (-> rec ghost-linvel) (-> slot lin-vel-x) (-> slot lin-vel-y) (-> slot lin-vel-z) 0.0)
+              (set-vector! (-> rec ghost-angvel) (-> slot ang-vel-x) (-> slot ang-vel-y) (-> slot ang-vel-z) 0.0)
+              (set! (-> rec ghost-state-id) (-> slot state-id))
+              (set! (-> rec ghost-target-aid) (-> slot state-flags))
+              (set! (-> rec last-seen) (current-time))
+              (mp-vehicle-apply-authoritative-flight-level! proc (-> rec ghost-target-aid))
+              (set! refreshed? #t)
+              )
+            )
+          )
+        )
+      )
+    refreshed?
+    )
+  )
+
+(defun mp-traffic-refresh-existing-vehicle-slot! ((slot mp-vehicle-state) (remote-driven-id uint) (local-driven-id uint))
+  (let ((refreshed? #f))
+    (when (and slot
+               (nonzero? slot)
+               (nonzero? (-> slot net-id))
+               (!= (-> slot net-id) remote-driven-id)
+               (!= (-> slot net-id) local-driven-id))
+      (let ((proc (mp-vehicle-find-by-net-id (-> slot net-id))))
+        (when (and proc
+                   (nonzero? proc))
+          (set! refreshed? (mp-traffic-refresh-existing-vehicle-ghost! proc slot))
+          )
+        )
+      )
+    refreshed?
+    )
+  )
+
+(defun mp-traffic-refresh-existing-vehicles! ()
+  (let ((refresh-count (the uint 0))
+        (remote-driven-id (if (and *remote-info* (nonzero? *remote-info*))
+                              (-> *remote-info* veh-state net-id)
+                              (the uint 0)))
+        (local-driven-id (if (and *local-info* (nonzero? *local-info*))
+                             (-> *local-info* veh-state net-id)
+                             (the uint 0))))
+    (when (and *mp-traffic-buffer*
+               (nonzero? (the-as uint *mp-traffic-buffer*)))
+      (dotimes (slot-idx (the int MP_MAX_SYNC_VEHICLES))
+        (when (mp-traffic-refresh-existing-vehicle-slot!
+                (-> *mp-traffic-buffer* veh-enemies slot-idx)
+                remote-driven-id
+                local-driven-id)
+          (+! refresh-count 1)
+          )
+        )
+      )
+    refresh-count
+    )
+  )
+
+(defun mp-traffic-run-materialized-ped-external-sync-pass! ()
+  "Keep ghost-backed peds moving while packet materialization is temporarily held."
+  (when (and (not (mp-is-traffic-authoritative?))
+             (mp-pedestrian-external-sync-needed?)
+             *traffic-manager*
+             (nonzero? *traffic-manager*))
+    (let ((curr (-> *traffic-manager* child)))
+      (while (and curr
+                  (nonzero? curr))
+        (let ((proc (ppointer->process curr)))
+          (let ((next-ptr (-> curr 0 brother)))
+            (when (and proc
+                       (nonzero? proc)
+                       (type? proc citizen))
+              (let ((ped-proc (the-as citizen proc)))
+                (when (and (nonzero? (-> ped-proc net-id))
+                           (mp-get-traffic-ghost (-> ped-proc net-id)))
+                  (mp-pedestrian-run-external-post-sync! ped-proc)
+                  )
+                )
+              )
+            (set! curr next-ptr)
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-traffic-refresh-existing-remote! ()
+  "Update ghosts for already-materialized traffic without spawning or buffer-miss culling."
+  (when (and (mp-traffic-remote-refresh-ready?)
+             *mp-traffic-buffer*
+             (nonzero? (the-as uint *mp-traffic-buffer*)))
+    (pc-multi-receive-traffic (the-as uint *mp-traffic-buffer*))
+    (mp-traffic-debug-update-frame-context!)
+    (let ((ped-refresh-count (mp-traffic-refresh-existing-peds!))
+          (veh-refresh-count (mp-traffic-refresh-existing-vehicles!)))
+      (when (or (nonzero? ped-refresh-count)
+                (nonzero? veh-refresh-count))
+        (mp-cleanup-traffic-ghosts)
+        (when (time-elapsed? *mp-traffic-refresh-existing-log-time* (seconds 1))
+          (format 0
+                  "[MP-TrafficGate] refresh-existing peds=~D vehs=~D ready=~A~%"
+                  ped-refresh-count
+                  veh-refresh-count
+                  (mp-traffic-local-primary-level-ready?))
+          (set! *mp-traffic-refresh-existing-log-time* (current-time))
+          )
+        )
+      )
+    (mp-traffic-run-materialized-ped-external-sync-pass!)
+    )
+  (none)
   )
 
 (defun mp-traffic-log-level-mismatch! ()
@@ -221,16 +684,17 @@
   )
 
 (defun mp-traffic-log-level-settle! ()
-  "Throttle logs while traffic waits for the new primary level to settle."
+  "Throttle logs while traffic waits for the new primary level to become usable."
   (when (and (mp-is-traffic-spawn-ready?)
              (mp-traffic-primary-levels-match?)
-             (not (mp-traffic-level-context-settled?))
+             (not (mp-traffic-local-primary-level-ready?))
              (time-elapsed? *mp-traffic-level-settle-log-time* (seconds 1)))
     (format
       0
-      "[MP-Traffic] Hold remote ambient traffic while level settles: local-primary=~D remote-primary=~D~%"
+      "[MP-Traffic] Hold remote ambient traffic until local traffic level is resident: local-primary=~D remote-primary=~D ready-level=~A~%"
       (mp-traffic-local-primary-level-id)
       (mp-traffic-remote-primary-level-id)
+      (mp-traffic-local-primary-level-ready?)
       )
     (set! *mp-traffic-level-settle-log-time* (current-time))
     )
@@ -243,6 +707,7 @@
       (mp-traffic-debug-update-frame-context!)
       (if (not (mp-is-traffic-ready?))
           (begin
+            (set! *mp-traffic-last-remote-apply-ready* #f)
             (set! (-> *mp-traffic-buffer* ped-count) (the uint 0))
             (set! (-> *mp-traffic-buffer* veh-count) (the uint 0))
             (when (time-elapsed? (-> *mp-traffic-buffer* last-sync-time) (seconds 5))
@@ -288,15 +753,21 @@
                 (begin
                   (if (mp-traffic-local-city-loaded?)
                       (begin
-                        (pc-multi-receive-traffic (the-as uint *mp-traffic-buffer*))
                         (mp-traffic-note-level-context!)
                         (mp-traffic-debug-update-frame-context!)
-                        (when (time-elapsed? (-> *mp-traffic-buffer* last-sync-time) (seconds 2))
-                          (format 0 "[MP-Traffic] Puppet Active: ~D peds, ~D vehs ready=~A riding=~A local-level=~D remote-level=~D~%" (-> *mp-traffic-buffer* ped-count) (-> *mp-traffic-buffer* veh-count) *mp-traffic-art-context-spawn-ready* *mp-traffic-art-context-riding* *mp-traffic-art-context-local-level* *mp-traffic-art-context-remote-level*)
-                          (set! (-> *mp-traffic-buffer* last-sync-time) (the-as uint (current-time)))
-                          )
-                        (if (mp-traffic-remote-apply-ready?)
+                        (let ((remote-apply-ready? (mp-traffic-remote-apply-ready?)))
+                          (if remote-apply-ready?
                             (begin
+                              (when (not *mp-traffic-last-remote-apply-ready*)
+                                (mp-traffic-log-level-gate! 'apply-open)
+                                )
+                              (set! *mp-traffic-last-remote-apply-ready* #t)
+                              (pc-multi-receive-traffic (the-as uint *mp-traffic-buffer*))
+                              (mp-traffic-debug-update-frame-context!)
+                              (when (time-elapsed? (-> *mp-traffic-buffer* last-sync-time) (seconds 2))
+                                (format 0 "[MP-Traffic] Puppet Active: ~D peds, ~D vehs ready=~A riding=~A local-level=~D remote-level=~D~%" (-> *mp-traffic-buffer* ped-count) (-> *mp-traffic-buffer* veh-count) *mp-traffic-art-context-spawn-ready* *mp-traffic-art-context-riding* *mp-traffic-art-context-local-level* *mp-traffic-art-context-remote-level*)
+                                (set! (-> *mp-traffic-buffer* last-sync-time) (the-as uint (current-time)))
+                                )
                               (when (or (nonzero? (-> *mp-traffic-buffer* ped-count)) (nonzero? (-> *mp-traffic-buffer* veh-count)))
                                 (mp-pedestrian-apply-remote)
                                 (mp-pedestrian-run-external-sync-pass)
@@ -306,15 +777,26 @@
                               (mp-cleanup-traffic-ghosts)
                               )
                             (begin
+                              (when *mp-traffic-last-remote-apply-ready*
+                                (mp-traffic-log-level-gate! 'apply-close)
+                                )
+                              (set! *mp-traffic-last-remote-apply-ready* #f)
                               (mp-traffic-log-level-mismatch!)
                               (mp-traffic-log-level-settle!)
+                              (when (not (mp-traffic-primary-levels-match?))
+                                (mp-traffic-clear-pending-remote!)
+                                )
+                              (when (mp-traffic-primary-levels-match?)
+                                (mp-traffic-refresh-existing-remote!)
+                                )
                               )
                             )
+                          )
                         )
                       (begin
+                        (set! *mp-traffic-last-remote-apply-ready* #f)
                         (let ((last-log-time (-> *mp-traffic-buffer* last-sync-time)))
-                          (mp-traffic-clear-buffer!)
-                          (mp-traffic-clear-ghosts!)
+                          (mp-traffic-clear-pending-remote!)
                           (when (time-elapsed? last-log-time (seconds 2))
                             (format 0 "[MP-Traffic] Ignoring remote traffic packets until local city level is loaded.~%")
                             (set! (-> *mp-traffic-buffer* last-sync-time) (the-as uint (current-time)))

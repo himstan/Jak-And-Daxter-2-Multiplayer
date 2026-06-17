@@ -636,7 +636,6 @@
     (('attack 'attack-or-shove 'attack-invinc 'shove 'touched 'bonk)
      (the-as object #t))
     (('tube)
-      (set! *has-ridden-before?* #f)
       (target-indax-handler arg0 arg1 arg2 arg3))
     (else
      (target-indax-handler arg0 arg1 arg2 arg3))))

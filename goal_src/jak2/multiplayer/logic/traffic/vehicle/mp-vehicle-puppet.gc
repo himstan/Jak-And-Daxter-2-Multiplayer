@@ -25,6 +25,116 @@
 ;; Using a handle is memory-safe; it resolves to #f if the vehicle is deactivated.
 (define *mp-remote-driven-vehicle* (the-as handle #f))
 (define MP_VEHICLE_PARKING_MINIMAP_ATTACHED (the uint8 173))
+(define *mp-vehicle-missing-branch-log-time* (the-as time-frame 0))
+
+(defun mp-vehicle-param-nav-branch-ready? ((params traffic-object-spawn-params))
+  (and params
+       (nonzero? params)
+       (-> params nav-branch)
+       (nonzero? (the-as uint (-> params nav-branch))))
+  )
+
+(defun mp-vehicle-find-spawn-branch ((params traffic-object-spawn-params))
+  "Find a road branch for this vehicle spawn from the currently linked traffic levels."
+  (let ((branch (the-as nav-branch #f)))
+    (when (and params
+               (nonzero? params)
+               *traffic-engine*
+               (nonzero? (the-as uint *traffic-engine*)))
+      (let ((facing-dir (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> params rotation))))
+        (let ((seg (find-best-segment *traffic-engine* (-> params position) facing-dir 1)))
+          (when (and seg
+                     (nonzero? seg)
+                     (-> seg branch)
+                     (nonzero? (the-as uint (-> seg branch))))
+            (set! branch (-> seg branch))
+            )
+          )
+        )
+      )
+    (when (not branch)
+      (set! branch (mp-traffic-fallback-spawn-branch))
+      )
+    branch
+    )
+  )
+
+(defun mp-vehicle-debug-level-data-linked? ((slot-idx int))
+  (let ((linked? #f))
+    (when (and *traffic-engine*
+               (nonzero? (the-as uint *traffic-engine*)))
+      (let ((level-data (-> *traffic-engine* level-data-array slot-idx)))
+        (when (and (-> level-data city-info)
+                   (nonzero? (the-as uint (-> level-data city-info))))
+          (set! linked? #t)
+          )
+        )
+      )
+    linked?
+    )
+  )
+
+(defun mp-vehicle-debug-level-data-active-count ((slot-idx int))
+  (let ((active-count (the uint 0)))
+    (when (and *traffic-engine*
+               (nonzero? (the-as uint *traffic-engine*)))
+      (let ((level-data (-> *traffic-engine* level-data-array slot-idx)))
+        (set! active-count (the uint (-> level-data active-cell-count)))
+        )
+      )
+    active-count
+    )
+  )
+
+(defun mp-vehicle-log-spawn-params! ((reason symbol) (slot mp-vehicle-state) (params traffic-object-spawn-params))
+  (when (and slot
+             (nonzero? slot)
+             params
+             (nonzero? params))
+    (format
+      0
+      "[MP-VehSpawn] ~S nid=~D type=~D state=~D "
+      reason
+      (-> slot net-id)
+      (the uint (-> slot vehicle-type))
+      (the uint (-> slot state-id))
+      )
+    (format
+      0
+      "nav-branch=~A riding=~A local-level=~D remote-level=~D "
+      (mp-vehicle-param-nav-branch-ready? params)
+      *mp-traffic-art-context-riding*
+      *mp-traffic-art-context-local-level*
+      *mp-traffic-art-context-remote-level*
+      )
+    (format
+      0
+      "peds=~D vehs=~D slot0-linked=~A slot0-active=~D "
+      *mp-traffic-art-context-ped-count*
+      *mp-traffic-art-context-veh-count*
+      (mp-vehicle-debug-level-data-linked? 0)
+      (mp-vehicle-debug-level-data-active-count 0)
+      )
+    (format
+      0
+      "slot1-linked=~A slot1-active=~D pos=(~f,~f,~f)~%"
+      (mp-vehicle-debug-level-data-linked? 1)
+      (mp-vehicle-debug-level-data-active-count 1)
+      (-> params position x)
+      (-> params position y)
+      (-> params position z)
+      )
+    )
+  (none)
+  )
+
+(defun mp-vehicle-log-skipped-spawn! ((slot mp-vehicle-state) (params traffic-object-spawn-params))
+  (when (time-elapsed? *mp-vehicle-missing-branch-log-time* (seconds 1))
+    (mp-vehicle-log-spawn-params! 'skip-missing-branch slot params)
+    (set! *mp-vehicle-missing-branch-log-time* (current-time))
+    )
+  (none)
+  )
 
 (defun mp-vehicle-get-pad-index ((this vehicle))
   "Returns 0 for local player, 1 for remote puppet."
@@ -1046,55 +1156,62 @@
 )
 
 (defun mp-vehicle-spawn-puppet ((slot mp-vehicle-state))
-  (when (mp-is-traffic-ready?)
-    (when (mp-traffic-type-loaded? (the-as traffic-type (-> slot vehicle-type)))
-      (mp-traffic-art-context!
-        'veh-spawn
-        (-> slot net-id)
-        (the uint (-> slot vehicle-type))
-        (the uint (-> slot state-id)))
-      (let ((params (new 'stack 'traffic-object-spawn-params)))
-        (mem-set32! (the-as pointer params) 0 (/ (size-of traffic-object-spawn-params) 4))
-        (set! (-> params object-type) (the-as traffic-type (-> slot vehicle-type)))
-        (set! (-> params behavior) (the uint64 0))
-        (set! (-> params id) (the uint32 0))
-        (set! (-> params net-id) (-> slot net-id))
-        (set! (-> params nav-mesh) #f)
-        (set! (-> params nav-branch) #f)
-        (set! (-> params proc) #f)
-        (set! (-> params handle) (the-as handle #f))
-        (set! (-> params user-data) (the uint 0))
-        (set! (-> params guard-type) (the uint8 0))
-        (set-vector! (-> params position) (-> slot x) (-> slot y) (-> slot z) 1.0)
-        (quaternion-set! (-> params rotation) (-> slot quat-x) (-> slot quat-y) (-> slot quat-z) (-> slot quat-w))
-        (set-vector! (-> params velocity) 0.0 0.0 0.0 1.0)
+  (let ((spawned? #f))
+    (when (and slot
+               (nonzero? slot)
+               (mp-is-traffic-ready?))
+      (when (mp-traffic-type-loaded? (the-as traffic-type (-> slot vehicle-type)))
+        (mp-traffic-art-context!
+          'veh-spawn
+          (-> slot net-id)
+          (the uint (-> slot vehicle-type))
+          (the uint (-> slot state-id)))
+        (let ((params (new 'stack 'traffic-object-spawn-params)))
+          (mem-set32! (the-as pointer params) 0 (/ (size-of traffic-object-spawn-params) 4))
+          (set! (-> params object-type) (the-as traffic-type (-> slot vehicle-type)))
+          (set! (-> params behavior) (the uint64 0))
+          (set! (-> params id) (the uint32 0))
+          (set! (-> params net-id) (-> slot net-id))
+          (set! (-> params nav-mesh) #f)
+          (set! (-> params nav-branch) #f)
+          (set! (-> params proc) #f)
+          (set! (-> params handle) (the-as handle #f))
+          (set! (-> params user-data) (the uint 0))
+          (set! (-> params guard-type) (the uint8 0))
+          (set-vector! (-> params position) (-> slot x) (-> slot y) (-> slot z) 1.0)
+          (quaternion-set! (-> params rotation) (-> slot quat-x) (-> slot quat-y) (-> slot quat-z) (-> slot quat-w))
+          (set-vector! (-> params velocity) 0.0 0.0 0.0 1.0)
+          (set! (-> params nav-branch) (mp-vehicle-find-spawn-branch params))
 
-        (when (and *traffic-engine* 
-                   (nonzero? (-> *traffic-engine* level-data-array))
-                   (nonzero? (-> *traffic-engine* level-data-array 0 city-info)))
-          (let ((graph (-> *traffic-engine* level-data-array 0 city-info nav-graph)))
-            (when (and graph (nonzero? graph) (> (-> graph branch-count) 0))
-              (set! (-> params nav-branch) (-> graph branch-array 0))
+          (if (mp-vehicle-param-nav-branch-ready? params)
+              (begin
+                (when *mp-traffic-art-context-riding*
+                  (mp-vehicle-log-spawn-params! 'before-spawn slot params)
+                  )
+                (if (nonzero? (-> slot rider-aids 0))
+                    (set! (-> params flags) (traffic-spawn-flags spawn-rider))
+                    (set! (-> params flags) (the-as traffic-spawn-flags 0))
+                    )
+                (let ((proc (traffic-object-spawn (the-as process *traffic-manager*) params)))
+                  (if (and proc (nonzero? proc) (type? proc vehicle))
+                      (begin
+                        (set! (-> (the-as vehicle proc) pad-bytes 1) (the uint8 0))
+                        (mp-vehicle-apply-color-index! (the-as vehicle proc) slot)
+                        (mp-vehicle-ensure-guard-minimap! (the-as vehicle proc))
+                        (mp-vehicle-refresh-parking-minimap! (the-as vehicle proc) slot)
+                        (set! spawned? #t)
+                        )
+                      (mp-vehicle-log-spawn-params! 'spawn-failed slot params)
+                      )
+                    )
+                )
+              (mp-vehicle-log-skipped-spawn! slot params)
               )
-            )
-          )
-
-        (if (nonzero? (-> slot rider-aids 0))
-            (set! (-> params flags) (traffic-spawn-flags spawn-rider))
-            (set! (-> params flags) (the-as traffic-spawn-flags 0))
-            )
-        (let ((proc (traffic-object-spawn (the-as process *traffic-manager*) params)))
-          (when (and proc (nonzero? proc) (type? proc vehicle))
-            (set! (-> (the-as vehicle proc) pad-bytes 1) (the uint8 0))
-            (mp-vehicle-apply-color-index! (the-as vehicle proc) slot)
-            (mp-vehicle-ensure-guard-minimap! (the-as vehicle proc))
-            (mp-vehicle-refresh-parking-minimap! (the-as vehicle proc) slot)
-            )
           )
         )
       )
+    spawned?
     )
-  (none)
 )
 
 (defun mp-vehicle-can-spawn-puppet? ((net-id uint))
@@ -1178,20 +1295,26 @@
                 (when (and (> spawn-budget 0)
                            (> (-> slot state-id) 2)
                            (mp-vehicle-can-spawn-puppet? (-> slot net-id)))
-                  (mp-vehicle-spawn-puppet slot)
-                  (-! spawn-budget 1)
+                  (when (mp-vehicle-spawn-puppet slot)
+                    (-! spawn-budget 1)
+                    )
                   )
                 )
             )
           )
         )
       )
-    (when (and *traffic-manager* (not (mp-is-traffic-authoritative?)))
+    (when (and *traffic-manager*
+               (nonzero? *traffic-manager*)
+               (not (mp-is-traffic-authoritative?)))
       (let ((curr (-> *traffic-manager* child)))
         (while (and curr (nonzero? curr))
           (let ((proc (ppointer->process curr)))
             (let ((next-ptr (-> curr 0 brother)))
-              (when (and proc (type? proc vehicle) (nonzero? (-> (the-as vehicle proc) net-id)))
+              (when (and proc
+                         (nonzero? proc)
+                         (type? proc vehicle)
+                         (nonzero? (-> (the-as vehicle proc) net-id)))
                 (let ((found-in-buffer? #f)
                       (v-net-id (-> (the-as vehicle proc) net-id)))
                   (if (or (= v-net-id driven-net-id) (= v-net-id local-driven-net-id))
