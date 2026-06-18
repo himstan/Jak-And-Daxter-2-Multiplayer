@@ -1246,6 +1246,8 @@
 (define-extern mp-enemy-get-state-id (function enemy uint))
 (define-extern mp-enemy-pack-state (function enemy mp-enemy-state uint none))
 (define-extern mp-enemy-apply-state (function enemy mp-enemy-state none))
+(define-extern mp-enemy-battle-spawn-protected? (function enemy symbol))
+(define-extern mp-enemy-note-remote-battle-spawn! (function enemy none))
 (define-extern iterate-process-tree (function process-tree (function object object) kernel-context object))
 (define-extern mp-apply-enemy-hijacks (function none))
 (define-extern mp-vehicle-apply-hijacks (function none))

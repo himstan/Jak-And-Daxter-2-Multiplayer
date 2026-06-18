@@ -795,8 +795,25 @@
     (('mp-battle-spawn)
      (let ((s0-0 (get-spawner-by-index self (the-as int (-> arg3 param 0))))
            (s1-0 (the-as int (-> arg3 param 1)))
-           (s2-0 (if (zero? (the-as int (-> arg3 param 2))) #f #t))
+           (s2-0 (if (= (the-as int (-> arg3 param 2)) 1) #t #f))
            )
+       (format
+         0
+         "[MP-BattleSpawn][~A][EVENT] battle=~A spawner=~D spawner-ok=~A breed=~D~%"
+         (if (mp-is-jak?) "HOST" "CLIENT")
+         self
+         (the-as int (-> arg3 param 0))
+         s0-0
+         s1-0
+         )
+       (format
+         0
+         "[MP-BattleSpawn][~A][EVENT] initial=~A initial-raw=~D beaten=~A~%"
+         (if (mp-is-jak?) "HOST" "CLIENT")
+         s2-0
+         (the-as int (-> arg3 param 2))
+         (logtest? (-> self flags) (battle-flags beaten))
+         )
        (when (and s0-0 (not (logtest? (-> self flags) (battle-flags beaten))))
          (spawn-from-spawner-choice self s0-0 (the-as int (-> arg3 param 0)) s2-0 s1-0)
          )
@@ -1252,17 +1269,75 @@
       (set! (-> s1-1 directed?) #t)
       (set! (-> s1-1 no-initial-move-to-ground?) s2-1)
       (set! (-> s1-1 battle-enemy?) #t)
-      (when s0-1
-        (set! v0-7 (spawn-from-breed this s0-1 s1-1))
-        (when (handle->process v0-7)
-          (set! (-> arg0 creature) v0-7)
-          (set! (-> arg0 mode) (the-as uint 1))
-          (set-time! (-> arg0 last-spawn-time))
-          (when (and (mp-is-jak?) (not *mp-processing-remote-event*))
-            (mp-send-battle-spawn-event this arg1 arg3 arg2)
+      (format
+        0
+        "[MP-BattleSpawn][~A][TRY] battle=~A spawner=~D breed=~D initial=~A~%"
+        (if (mp-is-jak?) "HOST" "CLIENT")
+        this
+        arg1
+        arg3
+        arg2
+        )
+      (format
+        0
+        "[MP-BattleSpawn][~A][TRY] remote-event=~A intro-path=~A breed-ok=~A~%"
+        (if (mp-is-jak?) "HOST" "CLIENT")
+        *mp-processing-remote-event*
+        s2-0
+        s0-1
+        )
+      (if s0-1
+          (begin
+            (set! v0-7 (spawn-from-breed this s0-1 s1-1))
+            (let ((spawned-proc (the-as enemy (handle->process v0-7))))
+              (if (and spawned-proc (nonzero? spawned-proc))
+                  (begin
+                    (format
+                      0
+                      "[MP-BattleSpawn][~A][SPAWNED] battle=~A spawner=~D breed=~D handle=~A~%"
+                      (if (mp-is-jak?) "HOST" "CLIENT")
+                      this
+                      arg1
+                      arg3
+                      v0-7
+                      )
+                    (format
+                      0
+                      "[MP-BattleSpawn][~A][SPAWNED] proc=~A aid=~D remote-event=~A~%"
+                      (if (mp-is-jak?) "HOST" "CLIENT")
+                      spawned-proc
+                      (mp-get-enemy-aid spawned-proc)
+                      *mp-processing-remote-event*
+                      )
+                    (set! (-> arg0 creature) v0-7)
+                    (set! (-> arg0 mode) (the-as uint 1))
+                    (set-time! (-> arg0 last-spawn-time))
+                    (when *mp-processing-remote-event*
+                      (mp-enemy-note-remote-battle-spawn! spawned-proc)
+                      )
+                    (when (not *mp-processing-remote-event*)
+                      (mp-send-battle-spawn-event this arg1 arg3 arg2)
+                      )
+                    )
+                  (format
+                    0
+                    "[MP-BattleSpawn][~A][FAIL] spawn-from-breed returned handle=~A process=#f spawner=~D breed=~D~%"
+                    (if (mp-is-jak?) "HOST" "CLIENT")
+                    v0-7
+                    arg1
+                    arg3
+                    )
+                )
+              )
+            )
+          (format
+            0
+            "[MP-BattleSpawn][~A][FAIL] invalid breed index spawner=~D breed=~D~%"
+            (if (mp-is-jak?) "HOST" "CLIENT")
+            arg1
+            arg3
             )
           )
-        )
       )
     )
   (none)

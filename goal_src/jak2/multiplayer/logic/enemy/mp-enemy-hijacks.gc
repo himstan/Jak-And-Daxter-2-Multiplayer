@@ -179,7 +179,7 @@
 (defun mp-enemy-apply-remote-death! ((this enemy) (death-mode symbol))
   "Start the locally replicated death animation without taking ownership of death logic."
   (when (and this (nonzero? this))
-    (when (logtest? (-> this enemy-flags) (enemy-flag mp-synced-death death-start))
+    (when (logtest? (-> this enemy-flags) (enemy-flag death-start))
       (return #f)
       )
     (format 0 "[MP-Proxy] Authoritative death for ~A (AID ~D, mode ~A).~%" this (mp-get-enemy-aid this) death-mode)
@@ -295,6 +295,7 @@
 (defun mp-enemy-common-post-hijack ((this enemy))
   "Inject predictive movement before calling the original enemy common-post."
   (if (and (not (mp-enemy-authoritative? this)) 
+           (not (mp-enemy-battle-spawn-protected? this))
            (not (logtest? (-> this enemy-flags) (enemy-flag death-start))))
       (mp-enemy-predictive-move this)
       )
@@ -307,6 +308,7 @@
 (defun mp-nav-enemy-common-post-hijack ((this nav-enemy))
   "Inject predictive movement before calling the original nav-enemy common-post."
   (if (and (not (mp-enemy-authoritative? (the-as enemy this))) 
+           (not (mp-enemy-battle-spawn-protected? (the-as enemy this)))
            (not (logtest? (-> this enemy-flags) (enemy-flag death-start))))
       (mp-enemy-predictive-move (the-as enemy this))
       )

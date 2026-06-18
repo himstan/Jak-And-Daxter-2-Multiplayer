@@ -80,28 +80,55 @@
         (1+! len))
       (set! (-> name-str data -4) (the-as uint len)))
 
-    (format 0 "[MP-BattleEvent] Received Event ~D for Battle ~S~%" battle-evt name-str)
+    (format
+      0
+      "[MP-BattleEvent][~A][RECV] evt=~D battle=~S spawner=~D breed=~D initial=~D~%"
+      (if (mp-is-jak?) "HOST" "CLIENT")
+      battle-evt
+      name-str
+      (-> evt spawner-index)
+      (-> evt breed-index)
+      (-> evt initial?)
+      )
 
     (let ((proc (process-by-name name-str *active-pool*)))
-      (when (and proc (type? proc battle))
-        (case battle-evt
-          ((MP_BATTLE_EVT_START)
-           (send-event proc 'mp-battle-start)
-           )
-          ((MP_BATTLE_EVT_END)
-           (send-event proc 'mp-battle-end)
-           )
-          ((MP_BATTLE_EVT_SPAWN)
-           (send-event
-             proc
-             'mp-battle-spawn
-             (the-as int (-> evt spawner-index))
-             (the-as int (-> evt breed-index))
-             (if (zero? (-> evt initial?)) #f #t)
-             )
-           )
+      (if (and proc (type? proc battle))
+          (begin
+            (format 0 "[MP-BattleEvent][~A][RECV] dispatch battle-proc=~A~%" (if (mp-is-jak?) "HOST" "CLIENT") proc)
+            (case battle-evt
+              ((MP_BATTLE_EVT_START)
+               (send-event proc 'mp-battle-start)
+               )
+              ((MP_BATTLE_EVT_END)
+               (send-event proc 'mp-battle-end)
+               )
+              ((MP_BATTLE_EVT_SPAWN)
+               (format
+                 0
+                 "[MP-BattleEvent][~A][RECV-SPAWN] dispatch spawner=~D breed=~D initial=~D~%"
+                 (if (mp-is-jak?) "HOST" "CLIENT")
+                 (-> evt spawner-index)
+                 (-> evt breed-index)
+                 (-> evt initial?)
+                 )
+               (send-event
+                 proc
+                 'mp-battle-spawn
+                 (the-as int (-> evt spawner-index))
+                 (the-as int (-> evt breed-index))
+                 (the-as int (-> evt initial?))
+                 )
+               )
+              )
+            )
+          (format
+            0
+            "[MP-BattleEvent][~A][RECV-MISS] no active battle proc for ~S, proc=~A~%"
+            (if (mp-is-jak?) "HOST" "CLIENT")
+            name-str
+            proc
+            )
           )
-        )
       )
     )
   (set! *mp-processing-remote-event* #f)

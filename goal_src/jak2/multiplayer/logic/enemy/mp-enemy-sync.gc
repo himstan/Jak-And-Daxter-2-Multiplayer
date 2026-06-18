@@ -362,6 +362,78 @@
   (mp-is-jak?) ;; fallback to host if unknown
   )
 
+(defun mp-enemy-battle-spawn-protected? ((e-proc enemy))
+  "Should movement correction wait while this non-owned battle enemy runs its spawn intro?"
+  (if (and e-proc
+           (nonzero? e-proc)
+           (not *mp-processing-remote-event*)
+           (logtest? (-> e-proc enemy-flags) (enemy-flag mp-battle-enemy))
+           (not (logtest? (-> e-proc enemy-flags) (enemy-flag directed-ready)))
+           (not (mp-enemy-authoritative? e-proc)))
+      #t
+      #f)
+  )
+
+(defun mp-enemy-note-remote-battle-spawn! ((e-proc enemy))
+  "Seed authority for an enemy spawned by an inbound battle-spawn event."
+  (when (and e-proc (nonzero? e-proc))
+    (let ((enemy-aid (mp-get-enemy-aid e-proc)))
+      (if (nonzero? enemy-aid)
+          (let ((rec (mp-get-enemy-auth enemy-aid))
+                (remote-role (the-as uint8 (if (and *local-info* (nonzero? *local-info*) (= (-> *local-info* role) 0)) 1 0))))
+            (when (not rec)
+              (set! rec (mp-get-free-enemy-auth))
+              )
+            (if rec
+                (begin
+                  (set! (-> rec aid) (the-as uint32 enemy-aid))
+                  (set! (-> rec owner) remote-role)
+                  (set! (-> rec is-aggro) #f)
+                  (set! (-> rec last-transfer-time) (current-time))
+                  (set! (-> rec last-remote-seen) (current-time))
+                  (set! (-> rec last-attack-id) 0)
+                  (set! (-> rec last-local-attack-id) 0)
+                  (set! (-> rec last-local-attack-time) 0)
+                  (set! (-> rec just-taken-authority) #f)
+                  (set! (-> rec last-applied-remote-state) (the-as mp-enemy-state-id 0))
+                  (set! (-> rec last-remote-state-bump-time) 0)
+                  (when (and (-> e-proc root) (nonzero? (-> e-proc root)))
+                    (vector-copy! (-> rec ghost-trans) (-> e-proc root trans))
+                    (quaternion-copy! (-> rec ghost-quat) (-> e-proc root quat))
+                    )
+                  (set! (-> rec ghost-state) (the-as mp-enemy-state-id (mp-enemy-get-state-id e-proc)))
+                  (format
+                    0
+                    "[MP-BattleSpawn][~A][AUTH-SEED] proc=~A aid=~D owner=~D state=~D root=~A~%"
+                    (if (mp-is-jak?) "HOST" "CLIENT")
+                    e-proc
+                    enemy-aid
+                    remote-role
+                    (mp-enemy-get-state-id e-proc)
+                    (-> e-proc root)
+                    )
+                  )
+                (format
+                  0
+                  "[MP-BattleSpawn][~A][AUTH-SEED-FAIL] no free auth record proc=~A aid=~D~%"
+                  (if (mp-is-jak?) "HOST" "CLIENT")
+                  e-proc
+                  enemy-aid
+                  )
+                )
+              )
+          (format
+            0
+            "[MP-BattleSpawn][~A][AUTH-SEED-WAIT] spawned proc has no AID yet proc=~A~%"
+            (if (mp-is-jak?) "HOST" "CLIENT")
+            e-proc
+            )
+          )
+      )
+    )
+  (none)
+  )
+
 (defun mp-enemy-focused-on-local? ((e-proc enemy))
   "Check if the enemy is currently focused on the local player."
   (if (and (-> e-proc focus) (nonzero? (-> e-proc focus)))
@@ -464,7 +536,6 @@
             (when rec
               ;; 2. Remote Claim Processing
               (let ((is-bot (type? e-proc bot))
-                    (is-battle-spawned (logtest? (-> e-proc enemy-flags) (enemy-flag mp-battle-enemy)))
                     (is-daxter-and-riding-along (and (mp-is-daxter?) *local-riding?*))
                     (remote-slot (the-as mp-enemy-state #f)))
                 (dotimes (i MP_MAX_SYNC_ENEMIES)
@@ -479,7 +550,7 @@
                   (set! (-> rec last-remote-seen) (current-time))
 
                   ;; --- Rule: Dual Authority Resolution (Host Priority) ---
-                  (if (or is-bot is-daxter-and-riding-along is-battle-spawned)
+                  (if (or is-bot is-daxter-and-riding-along)
                       (set! (-> rec owner) (the uint8 0))
                       (when (and (= local-role 1) (= (-> remote-slot owner) 0) (= (-> rec owner) 1))
                         (if (or (and (-> rec is-aggro) (not (= (-> remote-slot is-aggro) 1)))
@@ -493,7 +564,7 @@
                         )
                       )
 
-                  (when (and (not is-bot) (not is-daxter-and-riding-along) (not is-battle-spawned))
+                  (when (and (not is-bot) (not is-daxter-and-riding-along))
                     (cond
                       ((and (= (-> remote-slot is-aggro) 1) (not (-> rec is-aggro)) (>= (- (current-time) (-> rec last-transfer-time)) (seconds 2)))
                        (set! (-> rec owner) remote-role)
@@ -517,7 +588,7 @@
                     )
                   )
 
-                (when (and (not is-bot) (not is-daxter-and-riding-along) (not is-battle-spawned))
+                (when (and (not is-bot) (not is-daxter-and-riding-along))
                   ;; 3. Local Aggro Detection
                   (when (and (not (-> rec is-aggro)) 
                              (or (and (-> e-proc focus) (nonzero? (-> e-proc focus)) (>= (the-as int (-> e-proc focus aware)) (the-as int (enemy-aware enemy-aware-3))))
@@ -539,7 +610,7 @@
                     )
 
                   ;; 4. Local Proximity Claim
-                  (when (and (not is-bot) (not is-daxter-and-riding-along) (not is-battle-spawned) (not (-> rec is-aggro)) (>= (- (current-time) (-> rec last-transfer-time)) (seconds 5)) (and *target* (nonzero? *target*)))
+                  (when (and (not is-bot) (not is-daxter-and-riding-along) (not (-> rec is-aggro)) (>= (- (current-time) (-> rec last-transfer-time)) (seconds 5)) (and *target* (nonzero? *target*)))
                     (let ((local-dist (vector-vector-distance (-> e-proc root trans) (-> *target* control trans)))
                           (rem-pos (new 'stack 'vector)))
                       (set! (-> rem-pos x) (-> *remote-info* x))
@@ -604,7 +675,9 @@
                               (mp-enemy-apply-state e-proc remote-slot)
                               ;; Apply a correction immediately too. Some nav enemies, notably rhino,
                               ;; can spend most frames in travel posts where local navigation otherwise wins.
-                              (mp-enemy-predictive-move e-proc)
+                              (when (not (mp-enemy-battle-spawn-protected? e-proc))
+                                (mp-enemy-predictive-move e-proc)
+                                )
                               )
                             )
                           (begin

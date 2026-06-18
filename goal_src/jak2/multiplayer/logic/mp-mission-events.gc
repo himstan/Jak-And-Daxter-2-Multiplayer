@@ -50,9 +50,8 @@
                              (spawner-index int)
                              (breed-index int)
                              (initial? symbol))
-  "Broadcast host-authoritative battle lifecycle and spawn sync."
+  "Broadcast battle lifecycle and spawn sync."
   (when (and *multi-sync-enabled?*
-             (mp-is-jak?)
              (= (pc-multi-get-status) 6)
              (valid? proc process (the-as string #f) #f 0))
     (let ((q-idx *mp-event-queue-write-ptr*))
@@ -72,6 +71,22 @@
         (set! (-> evt spawner-index) (the-as uint32 spawner-index))
         (set! (-> evt breed-index) (the-as uint32 breed-index))
         (set! (-> evt initial?) (if initial? (the-as uint32 1) (the-as uint32 0)))
+        (format
+          0
+          "[MP-BattleEvent][~A][SEND] evt=~D battle=~S spawner=~D breed=~D initial=~A~%"
+          (if (mp-is-jak?) "HOST" "CLIENT")
+          battle-evt
+          (mp-copy-process-name-to-string proc)
+          spawner-index
+          breed-index
+          initial?
+          )
+        (format
+          0
+          "[MP-BattleEvent][~A][SEND] queued q=~D~%"
+          (if (mp-is-jak?) "HOST" "CLIENT")
+          q-idx
+          )
         )
       (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
       )

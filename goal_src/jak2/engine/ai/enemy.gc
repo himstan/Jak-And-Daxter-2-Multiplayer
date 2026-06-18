@@ -2246,6 +2246,7 @@
       )
     )
   :trans (behavior ()
+    (mp-enemy-refresh-player-focus! self)
     (when (time-elapsed? (-> self state-time) (seconds 0.1))
       (let ((v1-3 (-> self focus aware)))
         (cond
