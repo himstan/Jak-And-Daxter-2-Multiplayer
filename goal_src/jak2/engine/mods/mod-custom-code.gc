@@ -15,6 +15,14 @@
 (define *mp-demo-end-menu-active?* #f)
 (define *mp-palace-exited-waiting?* #f)
 
+(defun mp-client-ready-to-enable-sync-on-spawn? ((status int))
+  (and *local-info*
+       (nonzero? (the-as uint *local-info*))
+       (= (-> *local-info* role) 1)
+       (= status 6)
+       (zero? (-> *local-info* sync-flag)))
+  )
+
 (defun open-demo-end-progress ()
   (when (and *dproc* (nonzero? *dproc*))
     (activate-progress *dproc* 'demo-end)
@@ -125,22 +133,28 @@ an orb |#
   ;; Code here runs every time jak spawns (loading a file new game or death)
   (set! *mp-demo-end-menu-active?* #f)
   (set! *mp-palace-exited-waiting?* #f)
-  (if (and *local-info*
-           (nonzero? (the-as uint *local-info*))
-           (= (-> *local-info* role) 1)
-           (nonzero? (-> *local-info* sync-flag)))
-      (begin
-        (set! *multi-sync-enabled?* #f)
-        (format 0 "[GOAL] Jak spawned during full sync. Keeping multiplayer sync disabled.~%")
-        )
-      (begin
-        (set! *multi-sync-enabled?* #t)
-        (format 0 "[GOAL] Jak spawned! Enabling multiplayer sync.~%")
-        )
-      )
-
   ;; Update status to IN_GAME (6) if we are connected and fully synced
   (let ((status (pc-multi-get-status)))
+    (cond
+      ((and *local-info*
+            (nonzero? (the-as uint *local-info*))
+            (= (-> *local-info* role) 1))
+       (if (mp-client-ready-to-enable-sync-on-spawn? status)
+           (begin
+             (set! *multi-sync-enabled?* #t)
+             (format 0 "[GOAL] Client spawned in-game after full sync. Enabling multiplayer sync.~%")
+             )
+           (begin
+             (set! *multi-sync-enabled?* #f)
+             (format 0 "[GOAL] Client spawned before full sync completion. Keeping multiplayer sync disabled.~%")
+             )
+           )
+       )
+      (else
+       (set! *multi-sync-enabled?* #t)
+       (format 0 "[GOAL] Jak spawned! Enabling multiplayer sync.~%")
+       )
+      )
     (when (>= status 3)
       (if (mp-is-jak?)
           (begin

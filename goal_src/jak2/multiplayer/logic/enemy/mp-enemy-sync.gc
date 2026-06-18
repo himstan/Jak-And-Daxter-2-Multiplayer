@@ -82,6 +82,8 @@
       (('run-away) (the-as uint32 69))
       (('stop-run) (the-as uint32 70))
       (('charge) (the-as uint32 71))
+      (('waiting) (the-as uint32 72))
+      (('scare) (the-as uint32 73))
       (else (the-as uint32 0))
       )
     )
@@ -161,6 +163,8 @@
     (((mp-enemy-state-id run-away)) 'run-away)
     (((mp-enemy-state-id stop-run)) 'stop-run)
     (((mp-enemy-state-id charge)) 'charge)
+    (((mp-enemy-state-id waiting)) 'waiting)
+    (((mp-enemy-state-id scare)) 'scare)
     (else 'active)
     )
   )
@@ -375,11 +379,11 @@
             (enemy-aid (mp-get-enemy-aid (the-as enemy proc))))
         (when (!= enemy-aid 0)
           ;; --- Culling Guard ---
-          ;; If enemies are culled locally (inactive/no-draw) or in an error state, release authority and skip.
+          ;; If enemies are actually inactive or errored, release authority and skip.
+          ;; Some valid ambush enemies, like sew-scare-grunt, wait in no-draw until triggered.
           (let ((cur-state (if (-> e-proc state) (-> e-proc state name) #f)))
             (let ((is-culled (or (= cur-state 'inactive) 
-                                 (= cur-state 'process-drawable-art-error)
-                                 (logtest? (-> e-proc draw status) (draw-control-status no-draw)))))
+                                 (= cur-state 'process-drawable-art-error))))
               (when is-culled
                 (let ((rec (mp-get-enemy-auth enemy-aid)))
                   (when rec

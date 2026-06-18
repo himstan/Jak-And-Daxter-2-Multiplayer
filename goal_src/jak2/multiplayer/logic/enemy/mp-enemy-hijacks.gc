@@ -130,7 +130,11 @@
 (defun mp-enemy-broadcast-death ((e-proc enemy))
   "Broadcast death start from Owner to Non-Owners."
   (let ((aid (mp-get-enemy-aid e-proc)))
-    (when (and (nonzero? aid) (not (type? e-proc bot)) (mp-enemy-authoritative? e-proc) (not *mp-processing-remote-event*))
+    (when (and (nonzero? aid)
+               (not (type? e-proc bot))
+               (mp-enemy-authoritative? e-proc)
+               (not *mp-processing-remote-event*)
+               (not (logtest? (-> e-proc enemy-flags) (enemy-flag mp-synced-death))))
       (format 0 "[MP-Hit-Debug]   >> [OWNER] Queueing MP_EVENT_ENEMY_DEATH for AID ~D~%" aid)
       (mp-send-enemy-death-event e-proc)
       (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death)))
@@ -175,6 +179,9 @@
 (defun mp-enemy-apply-remote-death! ((this enemy) (death-mode symbol))
   "Start the locally replicated death animation without taking ownership of death logic."
   (when (and this (nonzero? this))
+    (when (logtest? (-> this enemy-flags) (enemy-flag mp-synced-death death-start))
+      (return #f)
+      )
     (format 0 "[MP-Proxy] Authoritative death for ~A (AID ~D, mode ~A).~%" this (mp-get-enemy-aid this) death-mode)
     (logior! (-> this enemy-flags) (enemy-flag mp-synced-death death-start))
     (send-event this 'death-start)

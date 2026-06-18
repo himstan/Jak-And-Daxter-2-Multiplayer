@@ -11,8 +11,18 @@
   "Update Client Clock AFTER sync - GUARDED to avoid black screen during load"
   (with-pp
     (if (and (mp-is-daxter?)
+             (= (pc-multi-get-status) 6)
+             *multi-sync-enabled?*
              (zero? (-> *local-info* sync-flag))
-             *target*)
+             *target*
+             (nonzero? *target*)
+             (-> *target* control)
+             (nonzero? (-> *target* control))
+             (not (and *progress-process* (nonzero? *progress-process*)))
+             *level*
+             (nonzero? *level*)
+             (= (-> *level* loading-level) (-> *level* default-level))
+             (not (load-in-progress? *level*)))
         (let* ((host-clock (-> *remote-info* clock))
                (diff (- host-clock (current-time))))
           ;; Only sync if Host clock is AHEAD of local clock to avoid jittering/stalling
