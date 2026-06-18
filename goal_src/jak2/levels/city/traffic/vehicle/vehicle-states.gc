@@ -190,6 +190,10 @@
              (target-piloting? (and *target* (focus-test? *target* pilot) (= (handle->process (-> *target* pilot vehicle)) self)))
              )
         (when (and (cpad-pressed? 0 triangle)
+                   (not (or (= *master-mode* 'menu)
+                            (= *master-mode* 'progress)
+                            (= *master-mode* 'pause)
+                            (= *master-mode* 'freeze)))
                    target-piloting?
                    (not (logtest? (-> self info flags) 256))
                    (-> *setting-control* user-current pilot-exit)
