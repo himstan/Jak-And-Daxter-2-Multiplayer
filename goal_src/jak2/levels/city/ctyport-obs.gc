@@ -562,7 +562,7 @@
   )
 
 ;; WARN: Return type mismatch object vs none.
-(defmethod vehicle-method-113 ((this boat-base))
+(defmethod send-vehicle-inactive! ((this boat-base))
   (go (method-of-object this idle))
   (none)
   )

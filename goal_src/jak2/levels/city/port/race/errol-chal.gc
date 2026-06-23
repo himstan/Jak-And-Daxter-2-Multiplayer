@@ -478,13 +478,13 @@
   )
 
 
-(defmethod vehicle-method-117 ((this vehicle-city-racer) (arg0 vector) (arg1 int) (arg2 int))
-  ((method-of-type vehicle vehicle-method-117) this arg0 arg1 arg2)
+(defmethod compute-rider-hand-position ((this vehicle-city-racer) (arg0 vector) (arg1 int) (arg2 int))
+  ((method-of-type vehicle compute-rider-hand-position) this arg0 arg1 arg2)
   0
   (none)
   )
 
-(defmethod vehicle-method-137 ((this vehicle-city-racer) (arg0 traffic-object-spawn-params))
+(defmethod spawn-default-vehicle-rider! ((this vehicle-city-racer) (arg0 traffic-object-spawn-params))
   (let ((t9-0 vehicle-rider-spawn)
         (v1-0 (-> arg0 user-data))
         )

@@ -273,7 +273,7 @@
              (type? veh vehicle-guard)
              *minimap*
              (nonzero? *minimap*))
-    (vehicle-method-128 (the-as vehicle-guard veh))
+    (turn-traffic-vehicle-on! (the-as vehicle-guard veh))
     )
   (none)
   )
@@ -283,7 +283,7 @@
   (when (and veh
              (nonzero? veh)
              (type? veh vehicle-guard))
-    (vehicle-method-127 (the-as vehicle-guard veh))
+    (turn-traffic-vehicle-off! (the-as vehicle-guard veh))
     )
   (none)
   )
@@ -636,7 +636,7 @@
           (the-as rigid-body-object-flag
                   (logclear (-> veh flags)
                             (rigid-body-object-flag alert in-pursuit target-in-sight rammed-target))))
-    (vehicle-method-109 veh)
+    (end-vehicle-pursuit! veh)
     (when (and (-> veh next-state)
                (or (= (-> veh next-state name) 'hostile)
                    (= (-> veh next-state name) 'stop-and-shoot)
@@ -746,10 +746,10 @@
     (logior! (-> veh flags) (rigid-body-object-flag alert in-pursuit target-in-sight persistent))
     (cond
       ((and *mp-puppet* (nonzero? *mp-puppet*))
-       (vehicle-method-134 veh *mp-puppet*)
+       (handle-offending-process! veh *mp-puppet*)
        )
       ((and *target* (nonzero? *target*))
-       (vehicle-method-134 veh *target*)
+       (handle-offending-process! veh *target*)
        )
       )
     )
@@ -899,7 +899,7 @@
           (if (or (cpad-hold? 1 l1) (and (logtest? (-> this info flags) 512) (cpad-hold? 1 r1)))
               (start-jump this)
               )
-          (if (cpad-pressed? 1 circle) (vehicle-method-66 this))
+          (if (cpad-pressed? 1 circle) (activate-turbo-boost! this))
           )
         (cond
           (*old-vehicle-method-94*
@@ -1082,7 +1082,7 @@
                  (set-vector! (-> params position) (-> slot x) (-> slot y) (-> slot z) 1.0)
                  (quaternion-set! (-> params rotation) (-> slot quat-x) (-> slot quat-y) (-> slot quat-z) (-> slot quat-w))
                  (set-vector! (-> params velocity) 0.0 0.0 0.0 1.0)
-                 (vehicle-method-137 proc params)
+                 (spawn-default-vehicle-rider! proc params)
                  )
                )
              )
@@ -1362,7 +1362,7 @@
         (m46-id (method-id-of-type vehicle rigid-body-object-method-46)))
                         
     ;; Phase 1: patch base vehicle class (always available in game.gd)
-    (let ((cur-m105 (method-of-type vehicle vehicle-method-105)))
+    (let ((cur-m105 (method-of-type vehicle vehicle-needs-physics?)))
       (when (!= cur-m105 mp-vehicle-method-105-hijack)
         (set! *old-vehicle-event-handler* (the-as (function vehicle process int symbol event-message-block object) (method-of-type vehicle rigid-body-object-method-46)))
         (method-set! vehicle m46-id *mp-vehicle-event-handler-hijack-lambda*)
@@ -1382,7 +1382,7 @@
         (set! *old-vehicle-method-123* (the-as (function vehicle none) (method-of-type vehicle vehicle-method-123)))
         (method-set! vehicle m123-id mp-vehicle-method-123-hijack)
 
-        (set! *old-vehicle-method-105* (the-as (function vehicle symbol) (method-of-type vehicle vehicle-method-105)))
+        (set! *old-vehicle-method-105* (the-as (function vehicle symbol) (method-of-type vehicle vehicle-needs-physics?)))
         (method-set! vehicle m105-id mp-vehicle-method-105-hijack)
 
         (set! *old-vehicle-method-51* (the-as (function vehicle none) (method-of-type vehicle rigid-body-object-method-51)))
@@ -1391,10 +1391,10 @@
         (set! *old-vehicle-method-52* (the-as (function vehicle none) (method-of-type vehicle rigid-body-object-method-52)))
         (method-set! vehicle m52-id mp-vehicle-method-52-hijack)
 
-        (set! *old-vehicle-method-137* (the-as (function vehicle traffic-object-spawn-params none) (method-of-type vehicle vehicle-method-137)))
+        (set! *old-vehicle-method-137* (the-as (function vehicle traffic-object-spawn-params none) (method-of-type vehicle spawn-default-vehicle-rider!)))
         (method-set! vehicle m137-id mp-vehicle-method-137-hijack)
 
-        (set! *old-vehicle-method-87* (the-as (function vehicle none) (method-of-type vehicle vehicle-method-87)))
+        (set! *old-vehicle-method-87* (the-as (function vehicle none) (method-of-type vehicle enable-player-vehicle-camera!)))
         (method-set! vehicle m87-id mp-vehicle-method-87-hijack)
 
         (set! *old-vehicle-enable-bike-mode* (the-as (function vehicle none) (method-of-type vehicle enable-bike-mode)))

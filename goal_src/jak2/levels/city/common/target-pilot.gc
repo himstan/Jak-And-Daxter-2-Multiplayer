@@ -262,7 +262,7 @@
           'player-got-on-vehicle-child
           (the-as vehicle s4-1)
           )
-        (set! (-> s5-0 stance) (vehicle-method-72 (the-as vehicle s4-1)))
+        (set! (-> s5-0 stance) (get-rider-stance (the-as vehicle s4-1)))
         
         ;; 1. Determine seat index FIRST (og:preserve-this modified for MP)
         (cond
@@ -484,8 +484,8 @@
           )
         )
       (let ((s4-1 (new 'stack-no-clear 'matrix)))
-        (vehicle-method-117 (the-as vehicle s5-0) (the-as vector (-> s4-1 vector)) (-> gp-2 seat-index) 0)
-        (vehicle-method-117 (the-as vehicle s5-0) (-> s4-1 vector 1) (-> gp-2 seat-index) 1)
+        (compute-rider-hand-position (the-as vehicle s5-0) (the-as vector (-> s4-1 vector)) (-> gp-2 seat-index) 0)
+        (compute-rider-hand-position (the-as vehicle s5-0) (-> s4-1 vector 1) (-> gp-2 seat-index) 1)
         (enable-set! (-> self arm-ik 0) #t)
         (enable-set! (-> self arm-ik 1) #t)
         (handle-copy! (-> self arm-ik 0) (the-as vector (-> s4-1 vector)))

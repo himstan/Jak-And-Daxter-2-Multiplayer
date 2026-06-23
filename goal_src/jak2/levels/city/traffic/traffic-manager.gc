@@ -223,7 +223,7 @@
           )
       )
     (if (and gp-0 (logtest? (-> arg2 flags) (traffic-spawn-flags spawn-rider)))
-        (vehicle-method-137 (the-as vehicle gp-0) arg2)
+        (spawn-default-vehicle-rider! (the-as vehicle gp-0) arg2)
         )
     (the-as process-drawable gp-0)
     )

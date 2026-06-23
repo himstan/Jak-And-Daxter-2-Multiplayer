@@ -1110,7 +1110,7 @@
   )
 
 
-(defmethod vehicle-method-117 ((this car-base) (arg0 vector) (arg1 int) (arg2 int))
+(defmethod compute-rider-hand-position ((this car-base) (arg0 vector) (arg1 int) (arg2 int))
   (vector-matrix*!
     arg0
     (-> this info rider-hand-offset arg2)

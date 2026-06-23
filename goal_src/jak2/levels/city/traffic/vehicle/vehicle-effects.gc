@@ -318,12 +318,12 @@
       (cond
         ((and (logtest? (-> this flags) (rigid-body-object-flag riding)) (or (< f0-1 7.0) (< 19.0 f0-1)))
          (if (not (logtest? (rigid-body-object-flag lights-on) (-> this flags)))
-             (vehicle-method-131 this)
+             (turn-vehicle-lights-on! this)
              )
          )
         (else
           (if (logtest? (rigid-body-object-flag lights-on) (-> this flags))
-              (vehicle-method-132 this)
+              (turn-vehicle-lights-off! this)
               )
           )
         )

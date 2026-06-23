@@ -146,7 +146,7 @@
   )
 
 
-(defmethod vehicle-method-117 ((this vehicle-racer) (arg0 vector) (arg1 int) (arg2 int))
+(defmethod compute-rider-hand-position ((this vehicle-racer) (arg0 vector) (arg1 int) (arg2 int))
   (vector-matrix*!
     arg0
     (-> this info rider-hand-offset arg2)
@@ -156,7 +156,7 @@
   (none)
   )
 
-(defmethod vehicle-method-137 ((this vehicle-racer) (arg0 traffic-object-spawn-params))
+(defmethod spawn-default-vehicle-rider! ((this vehicle-racer) (arg0 traffic-object-spawn-params))
   (let ((t9-0 vehicle-rider-spawn)
         (v1-0 (-> arg0 user-data))
         )
@@ -257,7 +257,7 @@
   (none)
   )
 
-(defmethod vehicle-method-66 ((this vehicle-racer))
+(defmethod activate-turbo-boost! ((this vehicle-racer))
   (when (and (not (logtest? (rigid-body-object-flag turbo-boost) (-> this flags))) (> (-> this turbo-pickup-count) 0))
     (+! (-> this turbo-pickup-count) -1)
     (set-time! (-> this turbo-boost-time))
@@ -272,7 +272,7 @@
   (none)
   )
 
-(defmethod vehicle-method-136 ((this vehicle-racer) (arg0 traffic-object-spawn-params))
+(defmethod start-from-spawn-params! ((this vehicle-racer) (arg0 traffic-object-spawn-params))
   (set! (-> this draw lod-set lod 1 dist) 819200.0)
   (set! (-> this draw lod-set lod 2 dist) 1228800.0)
   (let* ((a1-1 *race-state*)
@@ -311,14 +311,14 @@
        )
      )
     (else
-      ((method-of-type vehicle vehicle-method-136) this arg0)
+      ((method-of-type vehicle start-from-spawn-params!) this arg0)
       )
     )
   0
   (none)
   )
 
-(defmethod vehicle-method-138 ((this vehicle-racer))
+(defmethod send-vehicle-player-control! ((this vehicle-racer))
   (if (focus-test? this grabbed)
       (go (method-of-object this waiting-for-start))
       (go (method-of-object this player-control))
@@ -418,7 +418,7 @@
                        (>= (-> this race racer-state speed-factor) (-> this race state info ai-max-speed-factor))
                        )
               (rigid-body-object-method-38 this)
-              (vehicle-method-66 this)
+              (activate-turbo-boost! this)
               )
             )
            )
@@ -640,7 +640,7 @@
           )
         )
       )
-    (vehicle-method-119 this)
+    (update-rider-seat-transforms! this)
     (vehicle-method-120 this)
     (update-transforms (-> this root))
     (let ((a1-17 (new 'stack-no-clear 'overlaps-others-params)))
@@ -892,8 +892,8 @@
     (set! (-> self controls brake) 0.0)
     (set! (-> self controls steering) 0.0)
     (set! (-> self damage-factor) 0.0)
-    (vehicle-method-83 self)
-    (vehicle-method-143 self)
+    (reset-flight-level-transition! self)
+    (update-navmesh-membership! self)
     (let ((v1-9 (find-prim-by-id-logtest (-> self root) (the-as uint 32))))
       (when v1-9
         (set! (-> v1-9 prim-core collide-with) (collide-spec))
@@ -935,7 +935,7 @@
     (vector-reset! (-> self target-acceleration))
     (vehicle-method-120 self)
     (update-transforms (-> self root))
-    (vehicle-method-119 self)
+    (update-rider-seat-transforms! self)
     (rigid-body-object-method-39 self)
     )
   )
@@ -946,7 +946,7 @@
   :enter (behavior ()
     (set-time! (-> self state-time))
     (set! (-> self damage-factor) (-> self info damage-factor))
-    (vehicle-method-143 self)
+    (update-navmesh-membership! self)
     (logior! (-> self flags) (rigid-body-object-flag ignition))
     )
   :code sleep-code
@@ -960,7 +960,7 @@
     0
     (clear-momentum! (-> self rbody state))
     (vehicle-method-120 self)
-    (vehicle-method-119 self)
+    (update-rider-seat-transforms! self)
     )
   )
 

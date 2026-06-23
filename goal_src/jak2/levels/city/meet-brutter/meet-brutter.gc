@@ -459,13 +459,13 @@
       (set! (-> this current-level) (-> this controller branch dest-node level))
       (set! (-> this current-level) #f)
       )
-  (vehicle-method-119 this)
+  (update-rider-seat-transforms! this)
   0
   (none)
   )
 
-(defmethod vehicle-method-128 ((this paddywagon))
-  (let ((t9-0 (method-of-type vehicle vehicle-method-128)))
+(defmethod turn-traffic-vehicle-on! ((this paddywagon))
+  (let ((t9-0 (method-of-type vehicle turn-traffic-vehicle-on!)))
     (t9-0 this)
     )
   (logior! (-> this flags) (rigid-body-object-flag persistent))
@@ -473,34 +473,34 @@
   (none)
   )
 
-(defmethod vehicle-method-127 ((this paddywagon))
-  ((method-of-type vehicle vehicle-method-127) this)
+(defmethod turn-traffic-vehicle-off! ((this paddywagon))
+  ((method-of-type vehicle turn-traffic-vehicle-off!) this)
   0
   (none)
   )
 
-(defmethod vehicle-method-129 ((this paddywagon))
-  ((method-of-type vehicle vehicle-method-129) this)
+(defmethod mark-vehicle-dead! ((this paddywagon))
+  ((method-of-type vehicle mark-vehicle-dead!) this)
   0
   (none)
   )
 
-(defmethod vehicle-method-134 ((this paddywagon) (arg0 process))
+(defmethod handle-offending-process! ((this paddywagon) (arg0 process))
   "Stubbed"
   (logior! (-> this controller flags) (vehicle-controller-flag ignore-others))
   (set! (-> this controller target-speed-offset) 81920.0)
   (set! (-> this pursuit-target) (process->handle arg0))
   (logior! (-> this flags) (rigid-body-object-flag alert))
   (if (task-node-open? (game-task-node city-save-lurkers-save-lurkers))
-      (vehicle-method-111 this 1 (the-as target arg0))
-      (vehicle-method-111 this 2 (the-as target arg0))
+      (increase-vehicle-alert-level! this 1 (the-as target arg0))
+      (increase-vehicle-alert-level! this 2 (the-as target arg0))
       )
   (go (method-of-object this hostile))
   0
   (none)
   )
 
-(defmethod vehicle-method-108 ((this paddywagon))
+(defmethod begin-vehicle-pursuit! ((this paddywagon))
   (set! (-> this flags)
         (the-as rigid-body-object-flag (logior (rigid-body-object-flag persistent in-pursuit) (-> this flags)))
         )
@@ -512,7 +512,7 @@
 (defstate active (paddywagon)
   :virtual #t
   :enter (behavior ()
-    (vehicle-method-107 self)
+    (reacquire-traffic-path! self)
     (let ((t9-1 (-> (method-of-type vehicle-guard active) enter)))
       (if t9-1
           (t9-1)
