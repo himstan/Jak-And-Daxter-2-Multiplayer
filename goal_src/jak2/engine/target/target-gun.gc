@@ -543,6 +543,7 @@
         )
       )
     (set! (-> self gun gun-type) (pickup-type none))
+    (set! (-> self gun-type) (pickup-type none))
     (remove-setting! 'mode-sound-bank)
     (remove-setting! 'sound-flava)
     (if (= (-> self control collide-mode) 'duck)
@@ -1130,6 +1131,7 @@
   (when (and (not (paused?))
              (not (and (focus-test? arg0 dark) (nonzero? (-> arg0 darkjak))))
              (not (logtest? (-> arg0 focus-status) (focus-status grabbed)))
+             (not-puppet? arg0)
              )
     (let ((s5-0 (the-as int (-> arg0 gun using-gun-type))))
       (cond

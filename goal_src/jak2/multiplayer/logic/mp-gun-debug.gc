@@ -72,17 +72,71 @@
     )
   (none))
 
-(defun mp-draw-target-gun-debug ((proc target))
+(defun mp-debug-bool-string ((value symbol))
+  "Return a compact yes/no string for debug text."
+  (if value "YES" "NO"))
+
+(defun mp-debug-get-sync-weapon-text ((proc target))
+  "Return network weapon fields relevant to puppet gun desync debugging."
+  (let ((local-weapon (the uint 0))
+        (remote-weapon (the uint 0))
+        (ghost-weapon (the uint 0))
+        (pending-weapon (the uint 0)))
+    (when (and *local-info* (nonzero? (the-as uint *local-info*)))
+      (set! local-weapon (the-as uint (-> *local-info* equipped-weapon)))
+      )
+    (when (and *remote-info* (nonzero? (the-as uint *remote-info*)))
+      (set! remote-weapon (the-as uint (-> *remote-info* equipped-weapon)))
+      )
+    (when (and (nonzero? (the-as uint *mp-puppet-ghost*))
+               (-> *mp-puppet-ghost* active?))
+      (set! ghost-weapon (the-as uint (-> *mp-puppet-ghost* equipped-weapon)))
+      )
+    (when *mp-puppet-pending-gun-shot?*
+      (set! pending-weapon *mp-puppet-pending-gun-shot-weapon*)
+      )
+    (if (= proc *mp-puppet*)
+        (the-as string
+                (format #f
+                        "SYNC REMOTE: info=~D ghost=~D pending=~D pending?=~A"
+                        remote-weapon
+                        ghost-weapon
+                        pending-weapon
+                        (mp-debug-bool-string *mp-puppet-pending-gun-shot?*)))
+        (the-as string
+                (format #f "SYNC LOCAL: local-info=~D" local-weapon)))
+    )
+  )
+
+(defun mp-debug-get-gun-state-text ((label string) (gun-info gun-info))
+  "Return local gun-info state relevant to equip and put-away debugging."
+  (the-as string
+          (format #f
+                  "~A GUN~%LOCAL GUN: type=~D using=~D active=~A latch=~A put-away=~A"
+                  label
+                  (the-as uint (-> gun-info gun-type))
+                  (the-as uint (-> gun-info using-gun-type))
+                  (mp-debug-bool-string (-> gun-info active?))
+                  (mp-debug-bool-string (-> gun-info latch?))
+                  (mp-debug-bool-string (-> gun-info put-away?))))
+  )
+
+(defun mp-debug-get-gun-render-text ((gun-info gun-info) (draw-ctrl draw-control))
+  "Return visual gun state relevant to stale rendered weapon debugging."
+  (the-as string
+          (format #f
+                  "SKELETON: ~A~%ATTACHMENT JOINT: ~A~%DRAW FLAGS: ~A"
+                  (mp-debug-get-gun-skeleton-name gun-info)
+                  (mp-debug-get-gun-attachment-joint-name gun-info)
+                  (if (and draw-ctrl (nonzero? draw-ctrl)) (mp-debug-get-draw-status-flags draw-ctrl) "none")))
+  )
+
+(defun mp-draw-target-gun-debug ((proc target) (label string))
   "Overlay gun-specific runtime information for the given target player."
   (when (and proc (nonzero? proc))
     (let ((gun-info (-> proc gun))
           (gun-proc (mp-debug-get-gun-proc proc)))
-      (when (and gun-info
-                 (nonzero? gun-info)
-                 gun-proc
-                 (nonzero? gun-proc)
-                 (-> gun-proc root)
-                 (nonzero? (-> gun-proc root)))
+      (when (and gun-info (nonzero? gun-info))
         (let ((draw-pos (new 'stack-no-clear 'vector)))
           (vector-copy! draw-pos (-> gun-proc root trans))
           (+! (-> draw-pos y) (meters 2.5))
@@ -101,11 +155,10 @@
               (bucket-id debug-no-zbuf1)
               (the-as string
                       (format #f
-                              "ACTIVE: ~A~%SKELETON: ~A~%ATTACHMENT JOINT: ~A~%DRAW FLAGS: ~A"
-                              (if (-> gun-info active?) "YES" "NO")
-                              (mp-debug-get-gun-skeleton-name gun-info)
-                              (mp-debug-get-gun-attachment-joint-name gun-info)
-                              (if (and draw-ctrl (nonzero? draw-ctrl)) (mp-debug-get-draw-status-flags draw-ctrl) "none")))
+                              "~A~%~A~%~A"
+                              (mp-debug-get-gun-state-text label gun-info)
+                              (mp-debug-get-sync-weapon-text proc)
+                              (mp-debug-get-gun-render-text gun-info draw-ctrl)))
               draw-pos
               (font-color cyan)
               (the-as vector2h #f))
@@ -122,9 +175,9 @@
   "Overlay gun-specific runtime information for the local player and remote puppet."
   (when *mp-gun-debug?*
     (when (and *target* (nonzero? *target*))
-      (mp-draw-target-gun-debug *target*))
+      (mp-draw-target-gun-debug *target* "LOCAL"))
     (let ((puppet (mp-puppet-get-proc)))
       (when (and puppet (nonzero? puppet))
-        (mp-draw-target-gun-debug puppet)))
+        (mp-draw-target-gun-debug puppet "PUPPET")))
     )
   (none))

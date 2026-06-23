@@ -1113,6 +1113,9 @@
        (go target-darkjak-get-on (the-as darkjak-stage (-> arg3 param 0)))
        (return #t)
        )
+      (('mp-put-gun-away)
+        (target-gun-end-mode #t)
+       )
       )
     )
   ;; --- END MP PUPPET HIJACK ---
