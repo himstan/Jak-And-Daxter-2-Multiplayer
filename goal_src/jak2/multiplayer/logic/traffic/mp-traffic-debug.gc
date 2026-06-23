@@ -162,9 +162,10 @@
                                 cur-state
                                 (the uint8 (mp-veh-get-state-id proc)))
                         (clear tmp)
-                        (format tmp "TYPE: ~S~%PAD: ~D~%SEATS:~S" 
+                        (format tmp "TYPE: ~S~%PAD: ~D~%NUM-RIDERS: ~D~%SEATS:~S" 
                                 type-str 
                                 pad-idx
+                                (-> proc root num-riders)
                                 seat-str)
                         (cat-string<-string text-str tmp)
                         (clear tmp)
@@ -185,8 +186,9 @@
                                   type-str
                                   pad-idx)
                           (clear tmp)
-                          (format tmp "NUDGED: ~S~%SEATS:~S" 
+                          (format tmp "NUDGED: ~S~%NUM-RIDERS: ~D~%SEATS:~S~%" 
                                   nudged-str
+                                  (-> proc root num-riders)
                                   seat-str)
                           (cat-string<-string text-str tmp)
                           (clear tmp)

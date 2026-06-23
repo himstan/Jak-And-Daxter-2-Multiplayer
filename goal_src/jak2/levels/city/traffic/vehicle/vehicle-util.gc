@@ -456,7 +456,7 @@
         )
       )
     (cond
-      ((and (logtest? (-> this flags) (rigid-body-object-flag player-driving)) (!= (-> this crash-level) 3))
+      ((and (logtest? (-> this flags) (rigid-body-object-flag player-driving)) (!= (-> this crash-level) 3) (not (vehicle-remote-driven-by-puppet? this)))
        (let ((r0 (handle->process (-> this rider-array 0))))
          (when (and r0 (focus-test? (the-as process-focusable r0) pilot-riding))
            (vehicle-controller-method-11 (-> this controller))
