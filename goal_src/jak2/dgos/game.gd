@@ -521,6 +521,7 @@
   "mp-task-debug.o" ;; added
   "mp-puppet.o" ;; added
   "mp-puppet-debug.o" ;; added
+  "mp-eye-debug.o" ;; added
   "mp-gun-debug.o" ;; added
   "mp-battle-debug.o" ;; added
   "mp-clock.o" ;; added

@@ -1,0 +1,219 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; --- Target Eye Debugging Module ---
+
+(defun mp-eye-debug-bool-string ((value object))
+  "Return a compact yes/no string for eye debug text."
+  (if value "YES" "NO"))
+
+(defun mp-eye-debug-get-channel ((proc target))
+  "Return the channel that merc-eye-anim will sample, when it can be inspected safely."
+  (if (and proc
+           (nonzero? proc)
+           (-> proc skel)
+           (nonzero? (-> proc skel)))
+      (let ((float-count (-> proc skel float-channels))
+            (active-count (-> proc skel active-channels)))
+        (cond
+          ((and (> float-count 0) (> active-count 0))
+           (-> proc skel channel (+ float-count -1 active-count)))
+          ((> active-count 0)
+           (-> proc skel root-channel))
+          (else
+            (the-as joint-control-channel #f))))
+      (the-as joint-control-channel #f)))
+
+(defun mp-eye-debug-get-draw-pos ((proc target) (out vector))
+  "Copy the best available target position into out."
+  (when (and proc
+             (nonzero? proc)
+             (-> proc control)
+             (nonzero? (-> proc control)))
+    (vector-copy! out (-> proc control trans))
+    (return #t))
+  (when (and proc
+             (nonzero? proc)
+             (-> proc root)
+             (nonzero? (-> proc root)))
+    (vector-copy! out (-> proc root trans))
+    (return #t))
+  #f)
+
+(defun mp-eye-debug-format-frame ((label string) (frame merc-eye-anim-frame))
+  "Format one packed eye frame."
+  (if (and frame (nonzero? frame))
+      (the-as string
+              (format #f
+                      "~A x=~D y=~D blink=~D ~A"
+                      label
+                      (the-as int (-> frame pupil-trans-x))
+                      (the-as int (-> frame pupil-trans-y))
+                      (the-as int (-> frame blink))
+                      (the-as string
+                              (format #f
+                                      "iris=~D pupil=~D lid=~D"
+                                      (the-as int (-> frame iris-scale))
+                                      (the-as int (-> frame pupil-scale))
+                                      (the-as int (-> frame lid-scale))))))
+      (the-as string (format #f "~A none" label))))
+
+(defun mp-eye-debug-format-sample ((anim art-joint-anim) (frame-num float))
+  "Format the left/right eye bytes sampled at frame-num."
+  (if (and anim
+           (nonzero? anim)
+           (-> anim eye-anim)
+           (nonzero? (-> anim eye-anim)))
+      (let ((frame-idx (min (the int frame-num) (-> anim eye-anim max-frame))))
+        (the-as string
+                (format #f
+                        "SAMPLE frame=~D/~D~%~A~%~A"
+                        frame-idx
+                        (-> anim eye-anim max-frame)
+                        (mp-eye-debug-format-frame "L" (-> anim eye-anim data (* frame-idx 2)))
+                        (mp-eye-debug-format-frame "R" (-> anim eye-anim data (+ (* frame-idx 2) 1))))))
+      "SAMPLE none"))
+
+(defun mp-eye-debug-format-status ((proc target) (label string))
+  "Format skeleton status bits."
+  (let ((skel (-> proc skel)))
+    (the-as string
+            (format #f
+                    "~A EYES~%status=#x~X eye=~A valid=~A blend=~A"
+                    label
+                    (the-as uint (-> skel status))
+                    (mp-eye-debug-bool-string (logtest? (-> skel status) (joint-control-status eye-anim)))
+                    (mp-eye-debug-bool-string (logtest? (-> skel status) (joint-control-status eye-anim-valid)))
+                    (mp-eye-debug-bool-string (logtest? (-> skel status) (joint-control-status blend-shape blend-shape-valid)))))))
+
+(defun mp-eye-debug-format-channel-stats ((proc target) (anim art-joint-anim) (frame-num float))
+  "Format channel counts and sampled animation identity."
+  (let ((skel (-> proc skel)))
+    (the-as string
+            (format #f
+                    "channels active=~D float=~D frame=~,,2f~%~A"
+                    (the-as int (-> skel active-channels))
+                    (the-as int (-> skel float-channels))
+                    frame-num
+                    (the-as string
+                            (format #f
+                                    "anim=~A eye-data=~A override=~A"
+                                    (if (and anim (nonzero? anim)) (-> anim name) "none")
+                                    (mp-eye-debug-bool-string (and anim
+                                                                  (nonzero? anim)
+                                                                  (-> anim eye-anim)
+                                                                  (nonzero? (-> anim eye-anim))))
+                                    (mp-eye-debug-bool-string (and (-> skel override)
+                                                                  (nonzero? (-> skel override))
+                                                                  (!= (-> skel override 41) 0.0)))))))))
+
+(defun mp-eye-debug-format-draw-stats ((draw draw-control) (eye-ctrl merc-eye-ctrl))
+  "Format draw/art and eye-control stats."
+  (let ((slot (if (and eye-ctrl (nonzero? eye-ctrl)) (the-as int (-> eye-ctrl eye-slot)) -1)))
+    (let ((part-1 (the-as string
+                          (format #f
+                                  "eye-ctrl=~A slot=~D sub=~D render=~A shaders=~D"
+                                  (mp-eye-debug-bool-string (and eye-ctrl (nonzero? eye-ctrl)))
+                                  slot
+                                  (if (>= slot 0) (mod slot 20) -1)
+                                  (mp-eye-debug-bool-string (and (>= slot 0) (< (mod slot 20) 16)))
+                                  (if (and eye-ctrl (nonzero? eye-ctrl)) (the-as int (-> eye-ctrl shader-count)) 0)
+                                  )
+                          )
+                  )
+          (part-2 (the-as string
+                          (format #f
+                                  "art=~A draw=#x~X level-index=~D"
+                                  (if (and draw
+                                           (nonzero? draw)
+                                           (-> draw art-group)
+                                           (nonzero? (-> draw art-group)))
+                                      (-> draw art-group name)
+                                      "none")
+                                  (if (and draw (nonzero? draw)) (the-as uint (-> draw status)) (the uint 0))
+                                  (if (and draw (nonzero? draw)) (the-as int (-> draw level-index)) -1)
+                                  )
+                          )
+                  )
+          (part-3 (the-as string
+                          (format #f
+                                  "flags=~A"
+                                  (if (and draw (nonzero? draw)) (mp-debug-get-draw-status-flags draw) "none")
+                                  )
+                          )
+                  )
+          )
+      (the-as string (format #f "~A~%~A~%~A" part-1 part-2 part-3))
+      )
+    )
+  )
+
+(defun mp-eye-debug-format-target ((proc target) (label string))
+  "Build the eye debug stats string for a target."
+  (if (and proc
+           (nonzero? proc)
+           (-> proc skel)
+           (nonzero? (-> proc skel)))
+      (let* ((skel (-> proc skel))
+             (draw (if (and (-> proc draw) (nonzero? (-> proc draw)))
+                       (-> proc draw)
+                       (the-as draw-control #f)))
+             (channel (the-as joint-control-channel (mp-eye-debug-get-channel proc)))
+             (anim (if (and channel
+                            (nonzero? channel)
+                            (-> channel frame-group)
+                            (nonzero? (-> channel frame-group)))
+                       (-> channel frame-group)
+                       (the-as art-joint-anim #f)))
+             (frame-num (if (and channel (nonzero? channel))
+                            (-> channel frame-num)
+                            0.0))
+             (eye-ctrl (if (and draw
+                                (nonzero? draw)
+                                (-> draw mgeo)
+                                (nonzero? (-> draw mgeo))
+                                (-> draw mgeo header eye-ctrl)
+                                (nonzero? (-> draw mgeo header eye-ctrl)))
+                           (-> draw mgeo header eye-ctrl)
+                           (the-as merc-eye-ctrl #f))))
+        (the-as string
+                (format #f
+                        "~A~%~A~%~A~%~A"
+                        (mp-eye-debug-format-status proc label)
+                        (mp-eye-debug-format-channel-stats proc anim frame-num)
+                        (mp-eye-debug-format-draw-stats draw eye-ctrl)
+                        (mp-eye-debug-format-sample anim frame-num))))
+      (the-as string (format #f "~A EYES~%missing target/skel" label))))
+
+(defun mp-draw-target-eye-debug ((proc target) (label string) (height-offset meters) (color font-color))
+  "Overlay eye-specific runtime information for one target."
+  (when (and proc (nonzero? proc))
+    (let ((draw-pos (new 'stack-no-clear 'vector)))
+      (when (mp-eye-debug-get-draw-pos proc draw-pos)
+        (+! (-> draw-pos y) height-offset)
+        (add-debug-text-3d
+          #t
+          (bucket-id debug-no-zbuf1)
+          (mp-eye-debug-format-target proc label)
+          draw-pos
+          color
+          (the-as vector2h #f)))))
+  (none))
+
+(defun mp-draw-eye-debug ()
+  "Overlay eye animation stats for the local target and remote target puppet."
+  (when *mp-eye-debug?*
+    (when (and *target*
+               (nonzero? *target*)
+               (-> *target* control)
+               (nonzero? (-> *target* control))
+               (not (focus-test? *target* teleporting)))
+      (mp-draw-target-eye-debug *target* "LOCAL" (meters 4.0) (font-color yellow)))
+    (let ((puppet (mp-puppet-get-proc)))
+      (when (and puppet
+                 (nonzero? puppet)
+                 (-> puppet control)
+                 (nonzero? (-> puppet control))
+                 (not (focus-test? puppet teleporting)))
+        (mp-draw-target-eye-debug puppet "PUPPET" (meters 5.5) (font-color green)))))
+  (none))

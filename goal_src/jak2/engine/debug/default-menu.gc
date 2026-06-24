@@ -4256,6 +4256,7 @@
            (menu
              "Remote Player"
              (flag "Puppet Sync View" *mp-puppet-debug?* dm-boolean-toggle-pick-func)
+             (flag "Eye Debug View" *mp-eye-debug?* dm-boolean-toggle-pick-func)
              )
            (menu
              "Gun"
@@ -4277,7 +4278,7 @@
              (float-var "Vehicle Density Scale" *mp-traffic-veh-density-scale* dm-float-toggle-pick-func 100 5 #t 0 1 2)
              (flag "Guard Target Debug?" *mp-guard-target-debug?* dm-boolean-toggle-pick-func)
              (int-var "Guard Target Net ID" *mp-guard-target-debug-net-id* dm-int-toggle-pick-func 1 10 #t 0 1000)
-             )          
+             )
            (menu
             "Tasks"
             (flag "Task Debug Draw" *mp-debug-task-sync* dm-boolean-toggle-pick-func)
