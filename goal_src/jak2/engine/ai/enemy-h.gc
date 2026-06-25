@@ -62,6 +62,7 @@
    (enemy-flag43 43)
    (mp-synced-death 44)
    (mp-battle-enemy 45)
+   (stop-syncing    46)
    )
 ;; ---enemy-flag
 
@@ -283,6 +284,7 @@
    (on-death                   pair)
    (idle-anim-player           idle-control          :inline)
    (rand-gen                   symbol)
+   (net-id                     uint32)
    )
   (:state-methods
     dormant

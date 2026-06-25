@@ -338,7 +338,7 @@
    (attack-id    uint32 :overlay-at (-> data 4))
    (flags        uint32 :overlay-at (-> data 8))
    (knocked-type uint32 :overlay-at (-> data 12))
-   (damage       float  :overlay-at (-> data 16))
+   (new-hp       uint32 :overlay-at (-> data 16))
    (shove-back   float  :overlay-at (-> data 20))
    (shove-up     float  :overlay-at (-> data 24))
    (source-pos   vector :inline :overlay-at (-> data 32))
@@ -946,8 +946,8 @@
    (last-seen       time-frame)  ;; Timestamp of last remote update
    (ghost-trans     vector :inline)
    (ghost-quat      quaternion :inline)
-   (ghost-linvel    vector :inline)   ;; Vehicles: last received linear velocity; peds: unused
-   (ghost-angvel    vector :inline)   ;; Vehicles: last received angular velocity; peds: unused
+   (ghost-linvel    vector :inline)   ;; Vehicles: remote linear velocity; peds: locally estimated velocity
+   (ghost-angvel    vector :inline)   ;; Vehicles: remote angular velocity; peds: previous authoritative position
    (ghost-hp         int32)
    (ghost-state-id  uint8)           ;; Pedestrian state ID; unused for vehicles
    (ghost-target-aid uint8)          ;; Target sync for pedestrians (e.g. crimson-guard)
@@ -1119,6 +1119,8 @@
 (define-perm *mp-last-remote-scene-active* uint (the uint 0))
 (define *mp-remote-wants-skip* #f)
 (define *mp-local-wants-skip* #f)
+
+(define-perm *traffic-hijacks-applied?* symbol #f)
 
 (define-perm *multi-sync-enabled?* symbol #f)
 (define-perm *multi-last-sync-frame* time-frame (seconds 0))

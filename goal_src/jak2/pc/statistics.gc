@@ -114,7 +114,7 @@
         (source (pu&attacker->kill-source (-> attack penetrate-using) (handle->process-safe (-> attack attacker-handle)))))
 
     (when *debug-segment*
-        (format #t "STATS : enemy ~S(~S) killed by ~S~%" enemy-name (-> enemy type symbol) (kill-source->string source)))
+        (format #t "STATS : enemy ~S(~S nid=~D) killed by ~S~%" enemy-name (-> enemy type symbol) (-> enemy net-id) (kill-source->string source)))
 
     (if (or (!= source (kill-stats-source unknown)) (-> *statistics* kill-stats allow-unknown?))
         (increment (-> *statistics* kill-stats) enemy-name source))

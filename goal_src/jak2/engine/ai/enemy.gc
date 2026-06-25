@@ -8,6 +8,8 @@
 (define-extern mp-combat-local-player-target (function symbol process-focusable))
 (define-extern mp-combat-remote-player-target (function symbol process-focusable))
 (define-extern mp-combat-best-player-target (function process-focusable process-focusable process-focusable process-focusable process-focusable))
+(define-extern mp-pedestrian-detach-from-ghost-sync! (function enemy none))
+(define-extern mp-pedestrian-broadcast-attack (function enemy process event-message-block symbol))
 
 ;; DECOMP BEGINS
 
@@ -1612,8 +1614,9 @@
        )
      )
     ((= arg2 'attack)
-     (let ((s2-0 (the-as object (-> arg3 param 1))))
-       (when (!= (-> (the-as attack-info s2-0) id) (-> this incoming attack-id))
+     (let ((info (the-as attack-info (-> arg3 param 1))))
+       (when (!= (-> info id) (-> this incoming attack-id))    
+         (format 0 "[Enemy] Got 'attack on ~A for nid=~D pid=~D info=~A citizen-incoming-attack-id=~D info-attack-id=~D~%" (-> this name) (-> this net-id) (-> this pid) (-> info mode) (-> this incoming attack-id) (-> info id))
          (cond
            ((and (logtest? (-> this enemy-flags) (enemy-flag vulnerable))
                  (not (logtest? (-> this focus-status) (focus-status grabbed)))
@@ -1624,7 +1627,7 @@
               (set! sv-432 arg0)
               (set! sv-448 arg3)
               (let ((a3-3 (get-penetrate-using-from-attack-event (the-as process-drawable arg0) arg3)))
-                (s0-0 s1-0 sv-432 sv-448 a3-3 (the-as attack-info s2-0))
+                (s0-0 s1-0 sv-432 sv-448 a3-3 info)
                 )
               )
             (send-event (ppointer->process (-> this parent)) 'child-hit)
@@ -1637,7 +1640,8 @@
                         (dmg-taken (take-damage-from-attack this arg0 arg3)))
                     (when (> dmg-taken 0)
                       (process-spawn damage-number (damage-amount-from-attack this arg0 arg3) (-> this root trans) (-> this mask))
-                      (send-damage-to-bar *health-bar-manager* this dmg-taken old-hp))
+                      (send-damage-to-bar *health-bar-manager* this dmg-taken old-hp)
+                      (mp-pedestrian-broadcast-attack this arg0 arg3))
                     (when (nonzero? (-> this fated-time))
                       (aif (get-bar-for-process *health-bar-manager* this)
                           (send-event (ppointer->process it) 'set-hit-points 0)
@@ -1668,7 +1672,7 @@
               )
             )
            (else
-             (set! (-> this incoming attack-id) (-> (the-as attack-info s2-0) id))
+             (set! (-> this incoming attack-id) (-> info id))
              (enemy-method-75 this arg0 arg3)
              )
            )
@@ -1676,6 +1680,7 @@
        )
      )
     ((= arg2 'hit-flinch)
+     (format 0 "[Enemy] Called 'hit-flinch event handler for nid=~D hit-points:~D~%" (-> this net-id) (-> this hit-points)) 
      (when (zero? (-> this hit-points))
        (logclear! (-> this mask) (process-mask actor-pause))
        (logclear! (-> this focus-status) (focus-status dangerous))
@@ -1695,6 +1700,7 @@
      #t
      )
     ((= arg2 'hit-knocked)
+     (format 0 "[Enemy] Called 'hit-knocked event handler for nid=~D~%" (-> this net-id))
      (logclear! (-> this mask) (process-mask actor-pause))
      (logclear! (-> this focus-status) (focus-status dangerous))
      (logclear! (-> this enemy-flags) (enemy-flag use-notice-distance))
@@ -1716,9 +1722,11 @@
           )
          )
        )
+     (format 0 "[Enemy] Going to knocked state for nid=~D~%" (-> this net-id))
      (go (method-of-object this knocked))
      )
     ((= arg2 'hit)
+     (format 0 "[Enemy] Called 'hit event handler for nid=~D~%" (-> this net-id))
      (logclear! (-> this mask) (process-mask actor-pause))
      (logclear! (-> this focus-status) (focus-status dangerous))
      (logclear! (-> this enemy-flags) (enemy-flag use-notice-distance))
@@ -1733,8 +1741,15 @@
      (process-contact-action arg0)
      (send-event arg0 'get-attack-count 1)
      (if (zero? (-> this hit-points))
-         (kill-prefer-falling this)
-         (go (method-of-object this hit))
+         (begin
+            (format 0 "[Enemy] Calling kill-prefer-falling for nid=~D~%" (-> this net-id))
+            (kill-prefer-falling this)
+           )
+         
+         (begin
+            (format 0 "[Enemy] Going to hit state for nid=~D~%" (-> this net-id))
+            (go (method-of-object this hit))
+           )
          )
      )
     ((= arg2 'cue-chase)
@@ -1835,6 +1850,7 @@
      )
     ((= arg2 'die-fast)
      (logior! (-> this draw status) (draw-control-status no-draw))
+     (format 0 "[Enemy] Calling dying method from 'die-fast event handler for nid=~D~%" (-> this net-id))
      (dying this)
      (send-event (ppointer->process (-> this parent)) 'child-die)
      (let ((s5-3 (-> this on-death)))
@@ -2684,6 +2700,7 @@
   :virtual #t
   :event enemy-event-handler
   :enter (behavior ()
+    (logior! (-> self enemy-flags) (enemy-flag stop-syncing))
     (set-time! (-> self state-time))
     (logclear! (-> self mask) (process-mask actor-pause))
     (logior! (-> self focus-status) (focus-status dangerous))
@@ -2700,6 +2717,7 @@
         (logior! (-> self focus-status) (focus-status dangerous))
         (logclear! (-> self focus-status) (focus-status dangerous))
         )
+    (logclear! (-> self enemy-flags) (enemy-flag stop-syncing))
     )
   :code (behavior ()
     (let ((gp-0 (new 'stack-no-clear 'enemy-jump-info)))
@@ -3228,8 +3246,12 @@
     (if (>= (-> self enemy-info knocked-seek-ry-clamp) 0.0)
         (set! (-> self desired-angle) (enemy-method-51 self))
         )
+    (format 0 "[Enemy] Checking for death in knocked state for nid=~D hit-points=~D~%" (-> self net-id) (-> self hit-points))
     (if (zero? (-> self hit-points))
-        (dying self)
+        (begin
+            (format 0 "[Enemy] Calling dying method from knocked state :enter for pid=~D~%" (-> self net-id))
+            (dying self)
+          )
         (play-damage-or-death-sound self 0)
         )
     (logclear! (-> self focus-status) (focus-status dangerous))
@@ -3365,6 +3387,7 @@
 
 (defmethod dying ((this enemy))
   "Cleans-up the enemy and any associated resources. Potentially spawns skull gems"
+  (format 0 "[Enemy] Method dying got called for nid=~D~%" (-> this net-id))
   (when (not (logtest? (enemy-flag called-dying) (-> this enemy-flags)))
     (set! (-> this enemy-flags) (the-as enemy-flag (logior (enemy-flag called-dying) (-> this enemy-flags))))
     (play-damage-or-death-sound this 1)
@@ -3411,6 +3434,7 @@
     (if (-> this skel effect)
         (logior! (-> this skel effect flags) (effect-control-flag ecf1))
         )
+    (mp-pedestrian-detach-from-ghost-sync! this)
     (stop-looking-at-target! this)
     ;; og:preserve-this
     ;; track statistics
@@ -3425,6 +3449,7 @@
   :virtual #t
   :event enemy-event-handler
   :enter (behavior ()
+    (format 0 "[Enemy] Calling dying method from die state :enter for nid=~D~%" (-> self net-id))
     (dying self)
     (let ((v1-3 (-> self root root-prim)))
       (set! (-> v1-3 prim-core collide-as) (collide-spec))
@@ -3474,6 +3499,7 @@
   :virtual #t
   :event enemy-event-handler
   :enter (behavior ()
+    (format 0 "[Enemy] Calling dying method from 'die-falling event handler for nid=~D~%" (-> self net-id))
     (dying self)
     (let ((v1-3 (-> self root root-prim)))
       (set! (-> v1-3 prim-core collide-as) (collide-spec))

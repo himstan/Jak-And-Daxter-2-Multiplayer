@@ -124,10 +124,14 @@
              (nonzero? (-> ped-proc net-id)))
     (if (or (focus-test? ped-proc inactive)
             (= (-> ped-proc status) 'dead))
-        (set! (-> ped-proc net-id) (the uint 0))
+        (begin
+          (format 0 "[MP-Traffic-Sync] Cleaning up ~A nid=~D pid=~D inactive=~A status=~A because it was dead/inactive" (-> ped-proc name) (-> ped-proc net-id) (-> ped-proc pid) (focus-test? ped-proc inactive) (-> ped-proc status))
+          (set! (-> ped-proc net-id) (the uint 0))
+        )
         (begin
           (logclear! (-> ped-proc flags) (citizen-flag persistent))
           (send-event ped-proc 'traffic-off-force)
+          (format 0 "[MP-Traffic-Sync] Cleaning up ~A nid=~D pid=~D because it was illegal" (-> ped-proc name) (-> ped-proc net-id) (-> ped-proc pid))
           (set! (-> ped-proc net-id) (the uint 0))
           )
         )

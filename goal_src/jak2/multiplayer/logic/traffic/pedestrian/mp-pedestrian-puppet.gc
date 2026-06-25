@@ -117,9 +117,7 @@
   (and proc
        (nonzero? proc)
        (nonzero? net-id)
-       (= (-> proc net-id) net-id)
-       (not (focus-test? proc inactive))
-       (!= (-> proc status) 'dead))
+       (= (-> proc net-id) net-id))
   )
 
 (defun mp-pedestrian-clear-stale-proc-id! ((proc citizen) (net-id uint))
@@ -129,6 +127,7 @@
              (= (-> proc net-id) net-id)
              (or (focus-test? proc inactive)
                  (= (-> proc status) 'dead)))
+    (format 0 "[MP-Pedestrian-Puppet] Cleaning up stale ~A nid=~D pid=~D inactive=~A status=~A because it was dead/inactive" (-> proc name) (-> proc net-id) (-> proc pid) (focus-test? proc inactive) (-> proc status))
     (set! (-> proc net-id) (the uint 0))
     )
   (none)
@@ -453,6 +452,7 @@
               (let ((proc (mp-pedestrian-spawn-proc params)))
                 (when (and proc (nonzero? proc))
                   (mp-pedestrian-finish-spawn! proc params)
+                  (format 0 "[Ped-Debug] Spawned ~A puppet with nid=~D pid=~D~%" (-> proc name) (-> proc net-id) (-> proc pid))
                   (set! spawned? #t)
                   )
                 )
@@ -479,10 +479,14 @@
         (set! (-> rec last-state-bump-time) 0)
         (set! (-> rec authorized-trans-state-id) (the uint32 0))
         (set! (-> rec authorized-trans-frame) 0)
+        (set! (-> rec last-correction-time) (the uint64 0))
+        (set-vector! (-> rec ghost-linvel) 0.0 0.0 0.0 0.0)
+        (set-vector! (-> rec ghost-angvel) (-> slot x) (-> slot y) (-> slot z) 1.0)
         )
       )
     (when rec
       ;; 2. Update ghost from slot data
+      (mp-actor-note-traffic-ghost-sample! rec (-> slot x) (-> slot y) (-> slot z))
       (set-vector! (-> rec ghost-trans) (-> slot x) (-> slot y) (-> slot z) 1.0)
       (quaternion-set! (-> rec ghost-quat) (-> slot quat-x) (-> slot quat-y) (-> slot quat-z) (-> slot quat-w))
       (set! (-> rec ghost-state-id) (mp-pedestrian-effective-remote-state-id proc slot))
@@ -510,8 +514,8 @@
   ;; 3. Sync Process State & Visibility
   (when (and proc (nonzero? proc))
     (cond
-      ((or (focus-test? proc inactive)
-           (= (-> proc status) 'dead))
+      ((and (not (logtest? (-> proc enemy-flags) (enemy-flag stop-syncing))) (or (focus-test? proc inactive) (= (-> proc status) 'dead)))
+       (format 0 "[MP-Pedestrian-Puppet] Cleaning up ~A nid=~D pid=~D inactive=~A status=~A because it was dead/inactive~%" (-> proc name) (-> proc net-id) (-> proc pid) (focus-test? proc inactive) (-> proc status))
        (set! (-> proc net-id) (the uint 0))
        )
       (else
@@ -526,6 +530,7 @@
             (mp-pedestrian-log-branchless-proc! 'ghost-update proc params)
             )
           (send-event proc 'traffic-off-force)
+          (format 0 "[MP-Pedestrian-Puppet] Force traffic off ~A nid=~D pid=~D inactive=~A status=~A because it was dead/inactive~%" (-> proc name) (-> proc net-id) (-> proc pid) (focus-test? proc inactive) (-> proc status))
           (set! (-> proc net-id) (the uint 0))
           )
 

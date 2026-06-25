@@ -505,6 +505,7 @@
   "mp-level-sync.o" ;; added
   "mp-left-behind.o" ;; added
   "mp-enemy-h.o" ;; added
+  "mp-actor-ghost-sync.o" ;; added
   "mp-enemy-sync.o" ;; added
   "mp-traffic-h.o" ;; added
   "mp-pedestrian-authoritative.o" ;; added

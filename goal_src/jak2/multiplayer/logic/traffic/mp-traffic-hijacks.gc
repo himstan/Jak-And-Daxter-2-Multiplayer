@@ -33,6 +33,7 @@
     (let ((rec (-> *mp-traffic-ghosts* i)))
       (when (and (nonzero? (-> rec net-id))
                  (time-elapsed? (-> rec last-seen) (seconds 10)))
+        (format 0 "[MP-Traffic-Hijacks] Cleaning up stale nid=~D since it hasn't been updated for 10 seconds~%" (-> rec net-id))
         (set! (-> rec net-id) (the uint 0))
         )
       )
@@ -41,6 +42,14 @@
   )
 
 ;; --- Pedestrian P-Controller ---
+
+(defun mp-pedestrian-terminal-state? ((target-sym symbol))
+  (or (= target-sym 'knocked)
+      (= target-sym 'knocked-off-vehicle)
+      (= target-sym 'die)
+      (= target-sym 'die-falling)
+      (= target-sym 'die-fast))
+  )
 
 (defun mp-pedestrian-riding-vehicle? ((ped citizen))
   "True once the citizen is really present in its vehicle's rider array."
@@ -74,46 +83,20 @@
                  (-> ped root)
                  (nonzero? (-> ped root)))
         (let ((rec (mp-get-traffic-ghost net-id)))
-          (when rec
-            ;; 1. Position correction
-            (let ((dist (vector-vector-distance (-> ped root trans) (-> rec ghost-trans))))
-              (cond
-                ((> dist (meters 15))
-                 ;; Hard snap only for massive desyncs
-                 (vector-copy! (-> ped root trans) (-> rec ghost-trans))
-                 (vector-reset! (-> ped root transv))
-                 )
-                ((> dist (meters 0.01))
-                 ;; DIRECT POSITION LERP: Move the root directly toward the ghost
-                 ;; Scales up if distance is large to avoid snapping
-                 (let ((lerp-factor 0.05)
-                       (pull-factor 5.0))
-                   (when (> dist (meters 2))
-                     (set! lerp-factor 0.15)
-                     (set! pull-factor 10.0)
-                     )
-                   (when (> dist (meters 5))
-                     (set! lerp-factor 0.30)
-                     (set! pull-factor 20.0)
-                     )
-                   (vector-lerp! (-> ped root trans) (-> ped root trans) (-> rec ghost-trans) lerp-factor)
-
-                   ;; Soft P-controller on velocity: dampen local velocity and add ghost pull for smoothness
-                   (let ((nudge (new 'stack-no-clear 'vector)))
-                     (vector-! nudge (-> rec ghost-trans) (-> ped root trans))
-                     (set! (-> ped root transv x) (* (-> ped root transv x) 0.85))
-                     (set! (-> ped root transv z) (* (-> ped root transv z) 0.85))
-                     (vector-float*! nudge nudge pull-factor)
-                     (vector+! (-> ped root transv) (-> ped root transv) nudge)
-                     )
-                   )
-                 )
-               )
-             )
-            ;; 2. Rotation copy: Overcome engine velocity-aligned turning by forcing ghost rotation.
-            ;; The velocity P-controller can cause the velocity vector to point backward when pulling the ghost,
-            ;; which causes the vanilla engine to turn the guard backward. Forcing the quat fixes this.
-            (quaternion-copy! (-> ped root quat) (-> rec ghost-quat))
+          (when (and rec (not (should-pause-sync? ped rec)))
+            (let ((predicted-trans (new 'stack-no-clear 'vector))
+                  (ghost-state (mp-ped-get-state-from-id (the uint (-> rec ghost-state-id)))))
+              (mp-actor-traffic-predicted-trans! rec predicted-trans)
+              (mp-actor-apply-ghost-correction!
+                (-> ped root trans)
+                (-> ped root transv)
+                (-> ped root quat)
+                predicted-trans
+                (-> rec ghost-quat)
+                0.85
+                0.35
+                (mp-pedestrian-terminal-state? ghost-state))
+              )
             )
           )
         )
@@ -228,7 +211,6 @@
 (define *mp-pedestrian-remote-attack-event* (the-as mp-ped-attack-event #f))
 (define *old-citizen-common-post* (the-as (function citizen none) #f))
 (define *old-citizen-event-handler* (the-as (function citizen process int symbol event-message-block object) #f))
-(define *old-citizen-dying* (the-as (function citizen none) #f))
 (define *old-citizen-take-damage* (the-as (function citizen process event-message-block int) #f))
 ;; Track whether cwi.gd subtypes have been patched yet (they load after game.gd).
 (define *mp-citizen-subtypes-patched* #f)
@@ -255,7 +237,7 @@
   (set! (-> atk mask) (attack-mask id mode damage shove-back shove-up knock vector intersection attacker-velocity penetrate-using))
   (set! (-> atk id) (if (nonzero? (-> evt attack-id)) (-> evt attack-id) (new-attack-id)))
   (set! (-> atk mode) 'mp-hit-remote)
-  (set! (-> atk damage) (-> evt damage))
+  (set! (-> atk damage) 0.0)
   (set! (-> atk shove-back) (-> evt shove-back))
   (set! (-> atk shove-up) (-> evt shove-up))
   (set! (-> atk knock) (the-as knocked-type (-> evt knocked-type)))
@@ -319,23 +301,23 @@
 (defun mp-pedestrian-apply-authoritative-remote-damage! ((e-proc citizen) (attacker process) (evt mp-ped-attack-event))
   "Apply a host-authoritative pedestrian hit without routing through citizen attack fallback."
   (when (or (not e-proc) (not (nonzero? e-proc)))
-    (format 0 "[MP-Traffic] Remote ped hit blocked: missing proc for NetID ~D AttackID ~D~%" (-> evt net-id) (-> evt attack-id))
+    (format 0 "[MP-Traffic] Remote ped hit blocked: missing proc for nid=~D attack-id=~D~%" (-> evt net-id) (-> evt attack-id))
     (return #f)
     )
   (when (or (not attacker) (not (nonzero? attacker)) (not (type? attacker process-drawable)))
-    (format 0 "[MP-Traffic] Remote ped hit blocked: missing attacker for NetID ~D AttackID ~D~%" (-> evt net-id) (-> evt attack-id))
+    (format 0 "[MP-Traffic] Remote ped hit blocked: missing attacker for nid=~D attack-id=~D~%" (-> evt net-id) (-> evt attack-id))
     (return #f)
     )
   (when (<= (-> e-proc hit-points) 0)
-    (format 0 "[MP-Traffic] Remote ped hit blocked: already dead NetID ~D AttackID ~D~%" (-> evt net-id) (-> evt attack-id))
+    (format 0 "[MP-Traffic] Remote ped hit blocked: already dead nid=~D attack-id=~D~%" (-> evt net-id) (-> evt attack-id))
     (return #f)
     )
   (when (logtest? (-> e-proc focus-status) (focus-status grabbed))
-    (format 0 "[MP-Traffic] Remote ped hit blocked: grabbed NetID ~D AttackID ~D~%" (-> evt net-id) (-> evt attack-id))
+    (format 0 "[MP-Traffic] Remote ped hit blocked: grabbed nid=~D attack-id=~D~%" (-> evt net-id) (-> evt attack-id))
     (return #f)
     )
   (when (not (logtest? (-> e-proc enemy-flags) (enemy-flag vulnerable)))
-    (format 0 "[MP-Traffic] Remote ped hit accepted despite stale vulnerability NetID ~D AttackID ~D~%" (-> evt net-id) (-> evt attack-id))
+    (format 0 "[MP-Traffic] Remote ped hit accepted despite stale vulnerability nid=~D attack-id=~D~%" (-> evt net-id) (-> evt attack-id))
     )
   (let ((atk (new 'stack-no-clear 'attack-info))
         (msg (new 'stack-no-clear 'event-message-block))
@@ -360,20 +342,19 @@
      (get-penetrate-using-from-attack-event (the-as process-drawable attacker) msg)
      atk
      )
+    (set! (-> e-proc hit-points) (max 0 (-> evt new-hp)))
     (mp-pedestrian-restore-context! e-proc (-> evt flags) (-> evt knocked-type) (-> evt source-pos) (-> evt attack-dir))
     (mp-pedestrian-send-child-hit! e-proc)
-    (let ((damage-taken (if *old-citizen-take-damage*
-                            (*old-citizen-take-damage* e-proc attacker msg)
-                            0)))
-      (format 0 "[MP-Traffic] Remote ped hit applied NetID ~D AttackID ~D damage ~D hp ~D -> ~D~%"
+    (let ((damage-taken (max 0 (- old-hp (-> evt new-hp)))))
+      (process-spawn damage-number damage-taken (-> e-proc root trans) (-> e-proc mask))
+      (send-damage-to-bar *health-bar-manager* e-proc (the-as int damage-taken) old-hp)
+      (format 0 "[MP-Traffic-Hijacks] Remote ped hit applied nid=~D attack-id=~D damage=~D hp=~D->~D~%"
               (-> evt net-id)
               (-> evt attack-id)
               damage-taken
               old-hp
               (-> e-proc hit-points))
-      (when (> damage-taken 0)
-        (mp-pedestrian-send-remote-hit-reaction! e-proc attacker msg)
-        )
+      (mp-pedestrian-send-remote-hit-reaction! e-proc attacker msg)
       )
     (set! *mp-processing-remote-event* #f)
     (set! *mp-pedestrian-remote-attack-event* (the-as mp-ped-attack-event #f))
@@ -381,7 +362,7 @@
   #t
   )
 
-(defun mp-pedestrian-capture-source-pos! ((evt mp-ped-attack-event) (e-proc citizen) (attacker process) (info attack-info))
+(defun mp-pedestrian-capture-source-pos! ((evt mp-ped-attack-event) (e-proc enemy) (attacker process) (info attack-info))
   "Capture the client-side hit source position."
   (set! (-> evt flags) (the-as uint32 0))
   (cond
@@ -400,7 +381,7 @@
   (none)
   )
 
-(defun mp-pedestrian-capture-attack-dir! ((evt mp-ped-attack-event) (e-proc citizen) (info attack-info))
+(defun mp-pedestrian-capture-attack-dir! ((evt mp-ped-attack-event) (e-proc enemy) (info attack-info))
   "Capture the client-side knock direction."
   (cond
     ((and info (logtest? (attack-mask vector) (-> info mask)))
@@ -424,22 +405,25 @@
   (none)
   )
 
-(defun mp-pedestrian-send-attack-event! ((e-proc citizen) (attacker process) (info attack-info))
+(defun mp-pedestrian-send-attack-event! ((e-proc enemy) (attacker process) (info attack-info) (event-block event-message-block))
   "Queue a pedestrian hit request with attack context for host reconstruction."
   (if (or (not *multi-sync-enabled?*) (!= (pc-multi-get-status) 6))
       (return #f))
 
   (let ((q-idx *mp-event-queue-write-ptr*))
-    (let ((evt (the-as mp-ped-attack-event (-> *mp-event-queue* q-idx))))
+    (let ((evt (the-as mp-ped-attack-event (-> *mp-event-queue* q-idx)))
+          (damage (damage-amount-from-attack e-proc attacker event-block))
+          (new-hp (-> e-proc hit-points)))
       (set! (-> evt etype) MP_EVENT_ATTACK_PED)
       (set! (-> evt net-id) (the-as uint32 (-> e-proc net-id)))
-      (set! (-> evt attack-id) (the-as uint32 (new-attack-id)))
-      (set! (-> evt damage) (mp-pedestrian-info-damage info))
+      (set! (-> evt attack-id) (-> info id))
+      (set! (-> evt new-hp) new-hp)
       (set! (-> evt shove-back) (if (and info (logtest? (attack-mask shove-back) (-> info mask))) (-> info shove-back) (meters 2)))
       (set! (-> evt shove-up) (if (and info (logtest? (attack-mask shove-up) (-> info mask))) (-> info shove-up) (meters 0.5)))
       (set! (-> evt knocked-type) (the-as uint32 (if (and info (logtest? (attack-mask knock) (-> info mask))) (-> info knock) (knocked-type knocked-type-0))))
       (mp-pedestrian-capture-source-pos! evt e-proc attacker info)
       (mp-pedestrian-capture-attack-dir! evt e-proc info)
+      (format 0 "[MP-Traffic-Hijacks] Queuing pedestrian attack event for nid=~D attack-id=~D damage=~D new-hp=~D attacker-info=~A~%" (-> e-proc net-id) (-> e-proc attack-id) damage new-hp (-> attacker name))
       )
     (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
     )
@@ -448,7 +432,57 @@
 
 (defun mp-pedestrian-death-started? ((e-proc citizen))
   "Has the replicated or local death path already started?"
-  (logtest? (-> e-proc enemy-flags) (enemy-flag mp-synced-death death-start))
+  (and e-proc
+       (nonzero? e-proc)
+       (or 
+       (mp-pedestrian-terminal-state? (-> e-proc state name))
+       (logtest? (-> e-proc enemy-flags) (enemy-flag mp-synced-death death-start))))
+  )
+
+(defun mp-pedestrian-debug-death-phase-enabled? ((phase symbol))
+  "Keep remote-death diagnostics focused on authoritative death edges."
+  (or (= phase 'broadcast-death)
+      (= phase 'start-remote-death)
+      (= phase 'fatal-remote-hit)
+      (= phase 'puppet-hp-zero))
+  )
+
+(defun mp-pedestrian-debug-death! ((phase symbol) (e-proc citizen) (evt mp-ped-death-event))
+  "Log one pedestrian death edge with enough state to identify duplicate playback."
+  (when (and (mp-pedestrian-debug-death-phase-enabled? phase)
+             e-proc
+             (nonzero? e-proc))
+    (let ((cur-state (if (-> e-proc state) (-> e-proc state name) #f))
+          (next-state (if (-> e-proc next-state) (-> e-proc next-state name) #f)))
+      (format 0
+              "[MP-PedDeath] phase=~S proc=~A nid=~D hp=~D "
+              phase
+              e-proc
+              (-> e-proc net-id)
+              (-> e-proc hit-points)
+              )
+      (format 0
+              "cur=~S next=~S flags=~A auth=~A "
+              cur-state
+              next-state
+              (-> e-proc enemy-flags)
+              (mp-is-traffic-authoritative?)
+              )
+      (format 0
+              "processing=~A started=~A evt=~A "
+              *mp-processing-remote-event*
+              (mp-pedestrian-death-started? e-proc)
+              (if evt #t #f)
+              )
+      (format 0
+              "evt-state=~D evt-hint=~D evt-knock=~D~%"
+              (if evt (-> evt state) (the-as uint32 0))
+              (if evt (-> evt death-hint) (the-as uint32 0))
+              (if evt (-> evt knocked-type) (the-as uint32 0))
+              )
+      )
+    )
+  (none)
   )
 
 (defun mp-pedestrian-remote-attack-info? ((info attack-info))
@@ -492,7 +526,7 @@
     )
   )
 
-(defun mp-pedestrian-send-hit-request! ((e-proc citizen) (attacker process) (arg3 event-message-block))
+(defun mp-pedestrian-send-hit-request! ((e-proc enemy) (attacker process) (arg3 event-message-block))
   "Send a client hit request to the host and update duplicate guards."
   (let ((net-id (-> e-proc net-id)))
     (if (zero? net-id)
@@ -502,13 +536,13 @@
       (when rec
         (if info (set! (-> rec last-local-attack-id) (-> info id)))
         (set! (-> rec last-local-attack-time) (current-time))
-        (mp-pedestrian-send-attack-event! e-proc attacker info)
-        (return #t)
-        )
       )
+      (mp-pedestrian-send-attack-event! e-proc attacker info arg3)
+      (return #t)
     )
-  #f
   )
+  #f
+)
 
 (defun mp-pedestrian-play-local-hit-prediction! ((e-proc citizen) (arg0 process) (arg3 event-message-block))
   "Request host damage while letting the vanilla handler refresh local hit reactions."
@@ -527,7 +561,7 @@
         (when (and rec
                    (nonzero? (-> evt attack-id))
                    (= (-> evt attack-id) (-> rec last-attack-id)))
-          (format 0 "[MP-Traffic] Blocking duplicate remote attack ID ~D on NetID ~D~%" (-> evt attack-id) (-> evt net-id))
+          (format 0 "[MP-Traffic] Blocking duplicate remote attack ID ~D on nid=~D~%" (-> evt attack-id) (-> evt net-id))
           (return #f)
           )
         (let ((attacker (mp-get-remote-target-process))
@@ -544,11 +578,6 @@
       )
     )
   (none)
-  )
-
-(defun mp-pedestrian-traffic-guard? ((e-proc citizen))
-  "Traffic guards have enemy-like knocked/falling death states."
-  (type? e-proc crimson-guard)
   )
 
 (defun mp-pedestrian-get-death-hint ((e-proc citizen))
@@ -586,70 +615,75 @@
       (set! (-> evt flags) (logior MP_PED_ATTACK_HAS_SOURCE_POS MP_PED_ATTACK_HAS_DIRECTION))
       (set! (-> evt source-pos quad) (-> e-proc incoming attacker-pos quad))
       (set! (-> evt attack-dir quad) (-> e-proc incoming attack-direction quad))
+      (mp-pedestrian-debug-death! 'queue-death-event e-proc evt)
       )
     (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
     )
   #t
   )
 
-(defun mp-pedestrian-prepare-remote-death! ((e-proc citizen) (evt mp-ped-death-event))
-  "Restore replicated death context and make the pedestrian visible before death starts."
-  (set! (-> e-proc hit-points) 0)
-  (when evt
-    (mp-pedestrian-restore-context! e-proc (-> evt flags) (-> evt knocked-type) (-> evt source-pos) (-> evt attack-dir))
-    )
-  (when (and (-> e-proc draw) (nonzero? (-> e-proc draw)))
-    (logclear! (-> e-proc draw status) (draw-control-status no-draw force-fade))
-    )
+(defun mp-pedestrian-fill-fatal-attack-info! ((atk attack-info) (e-proc citizen) (evt mp-ped-death-event))
+  "Build one lethal remote hit so vanilla citizen damage picks the death path."
+  (set! (-> atk mask) (attack-mask id mode damage shove-back shove-up knock vector intersection attacker-velocity penetrate-using))
+  (set! (-> atk id) (new-attack-id))
+  (set! (-> atk mode) 'mp-hit-remote)
+  (set! (-> atk damage) 1000000.0)
+  (set! (-> atk shove-back) (meters 2))
+  (set! (-> atk shove-up) (meters 0.5))
+  (set! (-> atk knock) (the-as knocked-type (if evt (-> evt knocked-type) (knocked-type knocked-type-0))))
+  (set! (-> atk penetrate-using) (penetrate generic-attack))
+  (if evt
+      (begin
+        (set! (-> atk intersection quad) (-> evt source-pos quad))
+        (set! (-> atk vector quad) (-> evt attack-dir quad))
+        (set! (-> atk attacker-velocity quad) (-> evt attack-dir quad))
+        (mp-pedestrian-restore-context! e-proc (-> evt flags) (-> evt knocked-type) (-> evt source-pos) (-> evt attack-dir))
+        )
+      (begin
+        (if (and (-> e-proc root) (nonzero? (-> e-proc root)))
+            (set! (-> atk intersection quad) (-> e-proc root trans quad))
+            (set-vector! (-> atk intersection) 0.0 0.0 0.0 1.0)
+            )
+        (set-vector! (-> atk vector) 0.0 0.0 1.0 0.0)
+        (set-vector! (-> atk attacker-velocity) 0.0 0.0 1.0 0.0)
+        )
+      )
   (none)
   )
 
-(defun mp-pedestrian-start-civilian-remote-death! ((e-proc citizen))
-  "Play the civilian death effect before marking death-start for traffic cleanup."
-  (send-event e-proc 'event-death)
-  (when (and (-> e-proc skel) (nonzero? (-> e-proc skel)) (-> e-proc skel effect))
-    (do-effect (-> e-proc skel effect) 'death-default 0.0 -1)
-    )
-  (when (not (logtest? (-> e-proc enemy-flags) (enemy-flag death-start)))
-    (send-event e-proc 'death-start)
-    (logior! (-> e-proc enemy-flags) (enemy-flag death-start))
-    )
-  (none)
-  )
-
-(defun mp-pedestrian-start-guard-remote-death! ((e-proc citizen))
-  "Start the guard's enemy-like falling death without pre-setting death-start."
-  (send-event e-proc 'event-death)
-  (kill-prefer-falling e-proc)
-  (when (not (logtest? (-> e-proc enemy-flags) (enemy-flag death-start)))
-    (send-event e-proc 'death-start)
-    (logior! (-> e-proc enemy-flags) (enemy-flag death-start))
+(defun mp-pedestrian-detach-from-ghost-sync! ((e-proc enemy))
+  "Stop puppet correction once vanilla death has taken ownership."
+  (when (and e-proc
+             (nonzero? e-proc)
+             (or (<= (-> e-proc hit-points) 0)
+                 (logtest? (-> e-proc enemy-flags) (enemy-flag death-start))))
+    (format 0 "[Ped-Debug] Stopping sync on ~A with nid=~D pid=~D~%" (-> e-proc name) (-> e-proc net-id) (-> e-proc pid))
+    (logior! (-> e-proc enemy-flags) (enemy-flag stop-syncing))
     )
   (none)
   )
 
 (defun mp-pedestrian-start-remote-death! ((e-proc citizen) (evt mp-ped-death-event))
-  "Start the replicated pedestrian death effect on the non-authoritative side."
-  (when (and e-proc (nonzero? e-proc) (not (mp-pedestrian-death-started? e-proc)))
-    (format 0 "[MP-Traffic] Starting remote pedestrian death effect for NetID ~D.~%" (-> e-proc net-id))
-    (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death))
-    (mp-pedestrian-prepare-remote-death! e-proc evt)
-    (set! *mp-processing-remote-event* #t)
-    (if (mp-pedestrian-traffic-guard? e-proc)
-        (mp-pedestrian-start-guard-remote-death! e-proc)
-        (mp-pedestrian-start-civilian-remote-death! e-proc)
+  "Replay authoritative pedestrian death as one fatal vanilla hit."
+  (when (and e-proc (nonzero? e-proc))
+    (when (not (mp-pedestrian-death-started? e-proc))
+      (mp-pedestrian-debug-death! 'start-remote-death e-proc evt)
+      (let ((atk (new 'stack-no-clear 'attack-info))
+            (attacker (mp-get-remote-target-process)))
+        (mp-pedestrian-fill-fatal-attack-info! atk e-proc evt)
+        (mp-pedestrian-debug-death! 'fatal-remote-hit e-proc evt)
+        (set! *mp-processing-remote-event* #t)
+        (send-event e-proc 'attack attacker atk)
+        (set! *mp-processing-remote-event* #f)
         )
-    (when evt
-      (mp-pedestrian-restore-context! e-proc (-> evt flags) (-> evt knocked-type) (-> evt source-pos) (-> evt attack-dir))
       )
-    (set! *mp-processing-remote-event* #f)
     )
   (none)
   )
 
-(defun mp-pedestrian-broadcast-attack ((e-proc citizen) (arg0 process) (arg3 event-message-block))
+(defun mp-pedestrian-broadcast-attack ((e-proc enemy) (arg0 process) (arg3 event-message-block))
   "Handle attack sync logic for pedestrians. Requests hits from Host."
-  (let ((net-id (-> e-proc net-id)))
+  (let ((net-id (-> e-proc net-id)) (pid (-> e-proc pid)))
     (when (nonzero? net-id)
       (let ((info (if (and arg3 (nonzero? arg3) (nonzero? (-> arg3 param 1))) (the-as attack-info (-> arg3 param 1)) (the-as attack-info #f))))
         (let ((is-remote-replay? (or *mp-processing-remote-event* (mp-pedestrian-remote-attack-info? info))))
@@ -658,46 +692,27 @@
                    (mp-is-remote-attacker? arg0))
               (return #t)
               )
-
           (let ((is-local-attacker? (mp-is-local-attacker? arg0))
                 (rec (mp-get-traffic-ghost net-id)))
             (when rec
-            
               ;; Local Hit Throttling (same source id window, or short no-id fallback)
               (when (and (not is-remote-replay?)
-                         is-local-attacker?
                          (mp-pedestrian-local-attack-blocked? rec info))
-                (format 0 "[MP-Traffic] Blocking repeated local attack on NetID ~D~%" net-id)
+                (format 0 "[MP-Traffic-Hijacks] Blocking repeated local attack on nid=~D pid=~D~%" net-id pid)
                 (return #t)
-                )
-
-              (if (mp-is-traffic-authoritative?)
-                  (begin
-                    ;; OWNER (Host): Track local hitbox IDs separately from network replay IDs.
-                    (when is-local-attacker?
-                      (when (not is-remote-replay?)
-                        (if info
-                            (set! (-> rec last-local-attack-id) (-> info id)))
-                        (set! (-> rec last-local-attack-time) (current-time))
-                        )
-                      ;; (format 0 "[MP-Traffic] Authoritative hit processed for NetID ~D~%" net-id)
-                      )
-                    )
-                  (begin
-                    ;; NON-OWNER (Client): If we hit it locally, intercept and request hit from Owner (Host)
-                    (when (mp-pedestrian-local-hit-predictable? e-proc arg0 arg3)
-                      ;; (format 0 "[MP-Traffic] Requesting pedestrian hit for NetID ~D~%" net-id)
-                      (mp-pedestrian-send-hit-request! e-proc arg0 arg3)
-                      )
-                    )
-                  )
               )
+            )
+            (when (and (or is-local-attacker? (mp-is-traffic-authoritative?)) (not is-remote-replay?))
+              (format 0 "[MP-Traffic-Hijacks] Requesting pedestrian hit for nid=~D pid=~D~%" net-id pid)
+              (mp-pedestrian-send-hit-request! e-proc arg0 arg3)
             )
           )
         )
       )
     )
-  #f)
+  )
+  #f
+)
 
 (defun mp-pedestrian-broadcast-death ((e-proc citizen))
   "Broadcast pedestrian death from Host to Clients."
@@ -712,6 +727,7 @@
                                         (-> *mp-pedestrian-remote-attack-event* source-pos)
                                         (-> *mp-pedestrian-remote-attack-event* attack-dir))
         )
+      (mp-pedestrian-debug-death! 'broadcast-death e-proc (the-as mp-ped-death-event #f))
       (send-event e-proc 'event-death)
       (mp-pedestrian-send-death-event! e-proc)
       (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death))
@@ -723,23 +739,10 @@
 
 (defun mp-citizen-dying-hijack ((this citizen))
   "Sync pedestrian death start."
+  (mp-pedestrian-debug-death! 'dying-hijack-entry this (the-as mp-ped-death-event #f))
   (mp-pedestrian-broadcast-death this)
-  (if (or (mp-is-traffic-authoritative?) (<= (-> this hit-points) 0) *mp-processing-remote-event*)
-      (if *old-citizen-dying* (*old-citizen-dying* this)))
+  (mp-pedestrian-debug-death! 'dying-hijack-exit this (the-as mp-ped-death-event #f))
   (none))
-
-(defun mp-citizen-take-damage-hijack ((this citizen) (arg0 process) (arg1 event-message-block))
-  "Authority check for citizen damage."
-  (if (or (mp-is-traffic-authoritative?) *mp-processing-remote-event*)
-      (let ((damage-taken (if *old-citizen-take-damage* (*old-citizen-take-damage* this arg0 arg1) 0)))
-        (when (and (mp-is-traffic-authoritative?) (<= (-> this hit-points) 0))
-          (mp-pedestrian-broadcast-death this)
-          )
-        damage-taken
-        )
-      0 ;; Suppress local damage on non-owners
-      )
-  )
 
 (defun mp-citizen-event-handler-hijack ((this citizen) (arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   "Handles traffic-off events for puppet peds. No state forcing — the vanilla AI owns
@@ -753,7 +756,15 @@
          )
      )
     (('attack)
-     (let ((info (if (and arg3 (nonzero? arg3) (nonzero? (-> arg3 param 1))) (the-as attack-info (-> arg3 param 1)) (the-as attack-info #f))))
+     (let ((info (if (and arg3 (nonzero? arg3) (nonzero? (-> arg3 param 1))) (the-as attack-info (-> arg3 param 1)) (the-as attack-info #f)))
+           (is-local? (mp-is-local-attacker? arg0)))
+       (if (or 
+           (= (-> this net-id) 0) 
+           (logtest? (-> this focus-status) (focus-status dead))
+           (= (-> info id) (-> this incoming attack-id))
+           (and (not is-local?) (not (mp-is-traffic-authoritative?))))
+         (return #f)
+       )
        (let ((is-remote-replay? (or *mp-processing-remote-event* (mp-pedestrian-remote-attack-info? info))))
          ;; --- TOP LEVEL THROTTLING ---
          (let ((puppet (mp-puppet-get-proc)))
@@ -762,23 +773,23 @@
             (return #f)
           )
          )
+         (format 0 "[MP-Traffic-Hijacks] Got 'attack on ~A for nid=~D pid=~D info=~A citizen-incoming-attack-id=~D info-attack-id=~D~%" (-> this name) (-> this net-id) (-> this pid) (-> info mode) (-> this incoming attack-id) (-> info id))
      
          (let ((net-id (-> this net-id)))
            (when (nonzero? net-id)
              (let ((rec (mp-get-traffic-ghost net-id)))
                (when rec
-                 (let ((is-local? (mp-is-local-attacker? arg0)))
-                   (when (and (not is-remote-replay?)
-                              is-local?
-                              (mp-pedestrian-local-attack-blocked? rec info))
-                     ;; Return #f to Jak so he stops triggering 'hit' effects/sounds locally
-                     (return #f)
-                     )
-                   )
+                 (when (and (not is-remote-replay?)
+                            is-local?
+                            (mp-pedestrian-local-attack-blocked? rec info))
+                   ;; Return #f to Jak so he stops triggering 'hit' effects/sounds locally
+                   (format 0 "[MP-Traffic-Hijacks] Returning early from 'attack for ~A for nid=~D pid=~D info=~A citizen-incoming-attack-id=~D info-attack-id=~D~%" (-> this name) (-> this net-id) (-> this pid) (-> info mode) (-> this incoming attack-id) (-> info id))
+                   (return #f)
                  )
                )
              )
            )
+         )
 
          ;; PUPPET PROTECTION: If we are already reacting, don't react again to local hits.
          ;; This prevents the "thousand hits" visual jitter and sound spam.
@@ -786,41 +797,31 @@
            (when (and (not is-remote-replay?)
                       (not (mp-is-traffic-authoritative?))
                       (or (= cur-state 'hit) (= cur-state 'knocked) (= cur-state 'knocked-off-vehicle)))
-             (let ((is-local? (mp-is-local-attacker? arg0)))
-               (when is-local?
-                 (if (mp-pedestrian-play-local-hit-prediction! this arg0 arg3)
-                     (begin
-                       (if *old-citizen-event-handler*
-                           (return (*old-citizen-event-handler* this arg0 arg1 arg2 arg3))
-                           (return #f))
-                       )
-                     (return #t))
-                 )
+             (when is-local?
+               (if (mp-pedestrian-play-local-hit-prediction! this arg0 arg3)
+                   (begin
+                     (format 0 "[MP-Traffic-Hijacks] Playing local 'attack for ~A for nid=~D pid=~D info=~A citizen-incoming-attack-id=~D info-attack-id=~D~%" (-> this name) (-> this net-id) (-> this pid) (-> info mode) (-> this incoming attack-id) (-> info id))
+                     (if *old-citizen-event-handler*
+                         (return (*old-citizen-event-handler* this arg0 arg1 arg2 arg3))
+                         (return #f))
+                     )
+                   (begin
+                      (format 0 "[MP-Traffic-Hijacks] Skipping local 'attack for ~A for nid=~D pid=~D info=~A citizen-incoming-attack-id=~D info-attack-id=~D~%" (-> this name) (-> this net-id) (-> this pid) (-> info mode) (-> this incoming attack-id) (-> info id))                         
+                      (return #t)
+                     )
                )
              )
            )
-
-         (cond
-           ((and info (= (-> info mode) 'mp-death))
-            (mp-pedestrian-start-remote-death! this (the-as mp-ped-death-event #f))
-            (return #t)
-            )
-           ((and info (= (-> info mode) 'mp-hp-sync))
-            ;; This is an internal HP sync event. Just apply health change, don't trigger engine flinch.
-            (set! (-> this hit-points) (the int (- (the float (-> this hit-points)) (-> info damage))))
-            (return #t)
-            )
-           )
-
-         (if (mp-pedestrian-broadcast-attack this arg0 arg3)
-             (return #t))
          )
+       )
+       (format 0 "[MP-Traffic-Hijacks] Reached the end of 'attack on ~A for nid=~D pid=~D info=~A citizen-incoming-attack-id=~D info-attack-id=~D~%" (-> this name) (-> this net-id) (-> this pid) (-> info mode) (-> this incoming attack-id) (-> info id))
        )
      )
     (('traffic-off 'traffic-off-force)
      ;; GRACEFUL CLEANUP: Don't immediately deactivate if we are in the middle of dying.
      ;; This allows the death animation to finish playing before the process is killed.
      (when (not (mp-pedestrian-death-started? this))
+       (format 0 "[MP-Traffic-Hijacks] Cleaning up ~A nid=~D pid=~D inactive=~A status=~A because it was dead/inactive~%" (-> this name) (-> this net-id) (-> this pid) (focus-test? this inactive) (-> this status))
        (set! (-> this net-id) (the uint 0))
        (deactivate this)
        )
@@ -829,18 +830,13 @@
   )
 
   ;; Fallback to vanilla handler
+  (if (and *old-citizen-event-handler* (= arg2 'attack))
+       (format 0 "[MP-Traffic-Hijacks] Falling back to original citizen event handler for ~A nid=~D pid=~D~%" (-> this name) (-> this net-id) (-> this pid))
+    )
   (if *old-citizen-event-handler*
       (*old-citizen-event-handler* this arg0 arg1 arg2 arg3)
       #f
       )
-  )
-
-(defun mp-pedestrian-terminal-state? ((target-sym symbol))
-  (or (= target-sym 'knocked)
-      (= target-sym 'knocked-off-vehicle)
-      (= target-sym 'die)
-      (= target-sym 'die-falling)
-      (= target-sym 'die-fast))
   )
 
 (defun mp-pedestrian-state-current-or-pending? ((this citizen) (target-sym symbol))
@@ -849,7 +845,7 @@
   )
 
 (defun mp-pedestrian-state-retry-ready? ((rec mp-traffic-ghost-record))
-  (time-elapsed? (-> rec last-state-bump-time) (seconds 0.35))
+  (mp-actor-state-retry-ready? (-> rec last-state-bump-time))
   )
 
 (defun mp-pedestrian-puppet-locked? ((this citizen))
@@ -942,7 +938,8 @@
       (let ((target-sym (mp-ped-get-state-from-id target-state-id)))
         (when (and target-sym
                    (or (not (mp-pedestrian-death-started? this))
-                       (mp-pedestrian-terminal-state? target-sym)))
+                       (mp-pedestrian-terminal-state? target-sym))
+                   (not (is-in-pausable-state? target-sym)))
           (if (mp-pedestrian-state-current-or-pending? this target-sym)
               (set! (-> rec last-applied-state-id) (the-as uint32 target-state-id))
               (when (or (!= (the-as uint32 target-state-id) (-> rec last-applied-state-id))
@@ -1066,46 +1063,32 @@
              rec)
     ;; 1. HP Sync (Puppet side)
     (let ((old-hp (the int32 (-> this hit-points)))
-          (new-hp (-> rec ghost-hp))
-          (ghost-state-id (the uint (-> rec ghost-state-id))))
+          (new-hp (-> rec ghost-hp)))
 
       ;; Sync HP normally if not dead yet
       (when (and (> new-hp 0) (not (mp-pedestrian-death-started? this)))
         (when (!= old-hp new-hp)
-          (if (and (< new-hp old-hp) (> new-hp 0))
-              (send-event this 'attack #f (static-attack-info ((id (new-attack-id)) (mode 'mp-hp-sync) (damage (the float (- old-hp new-hp))))))
+          (if (mp-actor-send-hp-sync-attack? (the-as process this) old-hp new-hp)
+              (none)
               (set! (-> this hit-points) new-hp)
               )
           )
         )
-
-      ;; Remote Death Fallback: If host says HP 0, but we haven't started death yet.
-      (when (and (<= new-hp 0) (not (mp-pedestrian-death-started? this)))
-        (let ((target-sym (mp-ped-get-state-from-id ghost-state-id)))
-          (cond
-            ;; CASE A: Host is in a visible terminal/knock state.
-            ;; DO NOT start remote death yet; let the state sync below handle it.
-            ((or (= target-sym 'knocked) (= target-sym 'knocked-off-vehicle) (= target-sym 'die) (= target-sym 'die-falling) (= target-sym 'die-fast))
-             (set! (-> this hit-points) 0) ;; Ensure HP is 0 locally
-             )
-            ;; CASE B: Fallback to synthesized remote death effect.
-            (else
-             (mp-pedestrian-start-remote-death! this (the-as mp-ped-death-event #f))
-             )
-            )
-          )
-        )
       )
 
-    ;; 2. State Sync
-    (mp-pedestrian-sync-remote-state! this rec)
+    (when (and (nonzero? (-> this net-id))
+               (not (should-pause-sync? this rec))
+               (not (mp-pedestrian-death-started? this)))
+      ;; 2. State Sync
+      (mp-pedestrian-sync-remote-state! this rec)
 
-    ;; 3. Keep the target pinned after vanilla logic as well.
-    (mp-pedestrian-sync-guard-target! this rec)
-    (mp-pedestrian-lock-local-state-manager! this rec)
+      ;; 3. Keep the target pinned after vanilla logic as well.
+      (mp-pedestrian-sync-guard-target! this rec)
+      (mp-pedestrian-lock-local-state-manager! this rec)
 
-    ;; 4. Position correction: applied last so it overrides the nav/AI result.
-    (mp-ped-predictive-move this)
+      ;; 4. Position correction: applied last so it overrides the nav/AI result.
+      (mp-ped-predictive-move this)
+      )
     )
   (none)
   )
@@ -1132,7 +1115,7 @@
              (nonzero? (-> this net-id))
              (nonzero? (-> this controller branch)))
     (let ((rec (mp-get-traffic-ghost (-> this net-id))))
-      (when rec
+      (when (and rec (not (should-pause-sync? this rec))) 
         (when (and (-> this root)
                    (nonzero? (-> this root)))
           ;; Queue state bumps on the citizen's own main thread so ambient civilians
@@ -1177,9 +1160,11 @@
   (when (and (not (mp-is-traffic-authoritative?))
              (nonzero? (-> this net-id)))
     (let ((rec (mp-get-traffic-ghost (-> this net-id))))
-      (when rec
+      (when (and rec (not (should-pause-sync? this rec)))
         (mp-pedestrian-sync-guard-target! this rec)
         (mp-pedestrian-lock-local-state-manager! this rec)
+        ;; Predict before vanilla logic so local AI/nav starts from a fresher pose.
+        (mp-ped-predictive-move this)
         )
       )
     )
@@ -1190,7 +1175,7 @@
              (nonzero? (-> this net-id)))
     ;; State sync: read desired state from ghost record, transition if desynced.
     (let ((rec (mp-get-traffic-ghost (-> this net-id))))
-      (when rec
+      (when (and rec (not (should-pause-sync? this rec)))
         (mp-pedestrian-run-puppet-sync! this rec)
         )
       )
@@ -1208,10 +1193,11 @@
    Safe to call multiple times: citizen is patched once on connect; subtypes are
    patched lazily once cwi.gd has loaded (their GOAL symbol table entries become
    non-zero after deftype runs in that DGO)."
+  (when *traffic-hijacks-applied?*
+    (return #t)
+    )
   (let ((cpost-id (method-id-of-type citizen common-post))
-        (evhnd-id (method-id-of-type citizen general-event-handler))
-        (dying-id (method-id-of-type citizen dying))
-        (damage-id (method-id-of-type citizen take-damage-from-attack)))
+        (evhnd-id (method-id-of-type citizen general-event-handler)))
 
     ;; --- Phase 1: patch citizen (always available, in game.gd) ---
     ;; Use method-set! directly so the slot holds the exact function pointer.
@@ -1232,22 +1218,6 @@
         )
       )
 
-    (let ((cur-dying (method-of-type citizen dying)))
-      (when (!= cur-dying mp-citizen-dying-hijack)
-        (format 0 "[MP-Traffic] Applying citizen dying hijack (slot ~D)~%" dying-id)
-        (set! *old-citizen-dying* (the-as (function citizen none) cur-dying))
-        (method-set! citizen dying-id mp-citizen-dying-hijack)
-        )
-      )
-
-    (let ((cur-damage (method-of-type citizen take-damage-from-attack)))
-      (when (!= cur-damage mp-citizen-take-damage-hijack)
-        (format 0 "[MP-Traffic] Applying citizen damage hijack (slot ~D)~%" damage-id)
-        (set! *old-citizen-take-damage* (the-as (function citizen process event-message-block int) cur-damage))
-        (method-set! citizen damage-id mp-citizen-take-damage-hijack)
-        )
-      )
-
     ;; Phase 2: patch cwi.gd subtypes (civilian, citizen-norm, fat, chick)
     ;; These types live in cwi.gd which loads only when the city level loads — AFTER
     ;; game.gd and after our first call on connect. Their GOAL symbol table values are
@@ -1261,25 +1231,18 @@
         (when (!= cur-cpost mp-citizen-common-post-hijack)
           (method-set! civilian      cpost-id mp-citizen-common-post-hijack)
           (method-set! civilian      evhnd-id (the-as function mp-citizen-event-handler-hijack))
-          (method-set! civilian      dying-id mp-citizen-dying-hijack)
-          (method-set! civilian      damage-id mp-citizen-take-damage-hijack)
           (method-set! citizen-norm  cpost-id mp-citizen-common-post-hijack)
           (method-set! citizen-norm  evhnd-id (the-as function mp-citizen-event-handler-hijack))
-          (method-set! citizen-norm  dying-id mp-citizen-dying-hijack)
-          (method-set! citizen-norm  damage-id mp-citizen-take-damage-hijack)
           (method-set! citizen-fat   cpost-id mp-citizen-common-post-hijack)
           (method-set! citizen-fat   evhnd-id (the-as function mp-citizen-event-handler-hijack))
-          (method-set! citizen-fat   dying-id mp-citizen-dying-hijack)
-          (method-set! citizen-fat   damage-id mp-citizen-take-damage-hijack)
           (method-set! citizen-chick cpost-id mp-citizen-common-post-hijack)
           (method-set! citizen-chick evhnd-id (the-as function mp-citizen-event-handler-hijack))
-          (method-set! citizen-chick dying-id mp-citizen-dying-hijack)
-          (method-set! citizen-chick damage-id mp-citizen-take-damage-hijack)
-          (format 0 "[MP-Traffic] All citizen subtypes patched (common-post=~D event-handler=~D dying=~D damage=~D)~%"
-                  cpost-id evhnd-id dying-id damage-id)
+          (format 0 "[MP-Traffic] All citizen subtypes patched (common-post=~D event-handler=~D)~%"
+                  cpost-id evhnd-id)
           )
         )
       )
     )
+    (set! *traffic-hijacks-applied?* #t)
   (none)
   )

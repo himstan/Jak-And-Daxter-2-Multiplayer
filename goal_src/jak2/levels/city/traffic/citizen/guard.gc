@@ -1526,6 +1526,7 @@
   "Return the synced remote player target that puppet guards must keep pinned through local traffic refresh."
   (when (and (not (mp-is-traffic-authoritative?))
              (nonzero? (-> guard net-id))
+             (not (logtest? (-> guard enemy-flags) (enemy-flag stop-syncing)))
              (and (-> guard traffic-target-status handle)
                   (nonzero? (-> guard traffic-target-status handle)))
              )
@@ -3516,6 +3517,7 @@
   :enter (behavior ()
     (set-time! (-> self state-time))
     (logior! (-> self nav flags) (nav-control-flag output-sphere-hash))
+    (logior! (-> self enemy-flags) (enemy-flag stop-syncing))
     (logclear! (-> self flags) (citizen-flag hostile))
     (nav-enemy-method-166 self)
     (let ((v1-9 (-> self nav)))
@@ -3527,6 +3529,7 @@
   :exit (behavior ()
     (set-vector! (-> self draw color-mult) 1.0 1.0 1.0 1.0)
     (logclear! (-> self nav flags) (nav-control-flag output-sphere-hash))
+    (logclear! (-> self enemy-flags) (enemy-flag stop-syncing))
     )
   :trans (behavior ()
     (rlet ((acc :class vf)

@@ -85,6 +85,7 @@
            (type? proc scene-stage)
            (type? proc camera-start)
            (type? proc security-wall)
+           (type? proc guard-lazer-shot)
            (type-type? (-> proc type) part-spawner)
            (type-type? (-> proc type) parking-spot)
            (type-type? (-> proc type) scene-stage)
@@ -224,6 +225,34 @@
         )
     )
   )
+
+(defun is-in-pausable-state? ((state-name symbol))
+  (case state-name
+        (('knocked 'get-up-front 'get-up-back 'die 'die-falling 'die-fast)
+          #t
+          )
+        (else #f)
+        )
+)
+
+(defun is-enemy-in-pausable-state? ((e enemy))
+  (let ((state-name (if (-> e state) (-> e state name) #f)))
+    (is-in-pausable-state? state-name)
+    )
+  )
+
+(defun is-ghost-in-pausable-state? ((rec mp-traffic-ghost-record))
+  (let ((state-name (if (and rec (-> rec ghost-state-id)) (mp-target-get-state-from-id (-> rec ghost-state-id)) #f)))
+    (is-in-pausable-state? state-name)
+    )
+  )
+
+(defun should-pause-sync? ((e enemy) (rec mp-traffic-ghost-record))
+  (or (logtest? (-> e enemy-flags) (enemy-flag stop-syncing))
+      (is-enemy-in-pausable-state? e)
+      (is-ghost-in-pausable-state? rec))
+  )
+
 (defun mp-is-local-attacker? ((proc process))
   "Is the process either the local target or in its parentage (e.g., projectile)?"
   (if (or (not proc) (zero? proc)) (return #f))
@@ -489,6 +518,7 @@
   "Specialized event handler for traffic puppets (Citizens/Vehicles)."
   (case arg2
     (('traffic-off 'traffic-off-force)
+     (format 0 "[MP-Helpers] Cleaning up ~A nid=~D pid=~D because of 'traffic-off or 'traffic-off-force~%" (-> self name) (-> self net-id) (-> self pid))
      (set! (-> self net-id) (the uint 0))
      (deactivate self)
      (return #t)

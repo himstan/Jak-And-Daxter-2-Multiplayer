@@ -215,73 +215,40 @@
 
 (defun mp-enemy-predictive-move ((this enemy))
   "Smoothly move the local puppet towards its authoritative ghost position."
-  (let ((aid (mp-get-enemy-aid this)))
-    (when (nonzero? aid)
-      (let ((rec (mp-get-enemy-auth aid)))
-        (when rec
-          ;; 1. Position Correction (Predictive Catch-up)
-          (let ((ghost-pos (-> rec ghost-trans))
-                (curr-pos (-> this root trans)))
-            (let ((dist (vector-vector-distance curr-pos ghost-pos)))
-              (cond
-                ((> dist (meters 15))
-                 ;; Too far, hard snap to prevent getting stuck in walls forever
-                 (vector-copy! curr-pos ghost-pos)
-                 (if (nonzero? (-> this root)) (vector-reset! (-> this root transv)))
-                 )
-                ((> dist (meters 0.01))
-                 ;; DIRECT POSITION LERP + VELOCITY NUDGE (P-controller)
-                 (let ((lerp-factor 0.05)
-                       (pull-factor 5.0))
+  (when (and this
+             (nonzero? this)
+             (-> this root)
+             (nonzero? (-> this root)))
+    (let ((aid (mp-get-enemy-aid this)))
+      (when (nonzero? aid)
+        (let ((rec (mp-get-enemy-auth aid)))
+          (when rec
+            ;; 1. Position/rotation correction.
+            (mp-actor-apply-ghost-correction!
+              (-> this root trans)
+              (-> this root transv)
+              (-> this root quat)
+              (-> rec ghost-trans)
+              (-> rec ghost-quat)
+              0.7
+              0.4
+              #f)
 
-                   ;; Scale factors based on distance to catch up faster
-                   (when (> dist (meters 2))
-                     (set! lerp-factor 0.15)
-                     (set! pull-factor 10.0)
-                     )
-                   (when (> dist (meters 5))
-                     (set! lerp-factor 0.30)
-                     (set! pull-factor 20.0)
-                     )
-
-                   ;; Direct position blend
-                   (vector-lerp! curr-pos curr-pos ghost-pos lerp-factor)
-
-                   ;; Velocity nudge
-                   (let ((nudge (new 'stack-no-clear 'vector)))
-                     (vector-! nudge ghost-pos curr-pos)
-
-                     ;; Dampen local velocity (0.7 for smoothness, letting the ghost win)
-                     (set! (-> this root transv x) (* (-> this root transv x) 0.7))
-                     (set! (-> this root transv z) (* (-> this root transv z) 0.7))
-
-                     ;; Drive towards ghost
-                     (vector-float*! nudge nudge pull-factor)
-                     (vector+! (-> this root transv) (-> this root transv) nudge)
-                     )
-                   )
-                 )
+            ;; 2. Focus Sync (Look at what the Owner is looking at)
+            (when (and (not (mp-enemy-authoritative? this)) (nonzero? (-> rec ghost-focus-aid)))
+              (let ((target-role (the-as uint8 (+ -1 (-> rec ghost-focus-aid)))))
+                (let ((focus-proc (if (= target-role (-> *local-info* role))
+                                      (the-as process-focusable *target*)
+                                      (the-as process-focusable (mp-get-remote-target-process)))))
+                  (if (and focus-proc (nonzero? focus-proc))
+                      (if (and (-> this focus) (nonzero? (-> this focus)))
+                          (set! (-> this focus handle) (process->handle focus-proc))
+                          )
+                      )
+                  )
                 )
               )
             )
-
-          ;; 2. Rotation Smoothing (Increased factor for better responsiveness)
-          (quaternion-slerp! (-> this root quat) (-> this root quat) (-> rec ghost-quat) 0.4)
-
-          ;; 3. Focus Sync (Look at what the Owner is looking at)
-          (when (and (not (mp-enemy-authoritative? this)) (nonzero? (-> rec ghost-focus-aid)))
-             (let ((target-role (the-as uint8 (+ -1 (-> rec ghost-focus-aid)))))
-               (let ((focus-proc (if (= target-role (-> *local-info* role))
-                                     (the-as process-focusable *target*)
-                                     (the-as process-focusable (mp-get-remote-target-process)))))
-                 (if (and focus-proc (nonzero? focus-proc))
-                     (if (and (-> this focus) (nonzero? (-> this focus)))
-                         (set! (-> this focus handle) (process->handle focus-proc))
-                         )
-                     )
-                 )
-               )
-             )
           )
         )
       )

@@ -175,7 +175,7 @@
   )
 
 (defun mp-enemy-state-retry-ready? ((rec mp-enemy-auth-record))
-  (time-elapsed? (-> rec last-remote-state-bump-time) (seconds 0.35))
+  (mp-actor-state-retry-ready? (-> rec last-remote-state-bump-time))
   )
 
 (defun mp-enemy-sync-remote-state! ((e-proc enemy) (rec mp-enemy-auth-record) (remote-state-id uint))
@@ -271,8 +271,8 @@
       (let ((old-hp (-> e-proc hit-points))
             (new-hp (-> slot hp)))
         (when (!= old-hp new-hp)
-          (if (and (< new-hp old-hp) (> new-hp 0))
-              (send-event e-proc 'attack #f (static-attack-info ((id (new-attack-id)) (mode 'mp-hp-sync) (damage (the float (- old-hp new-hp))))))
+          (if (mp-actor-send-hp-sync-attack? (the-as process e-proc) old-hp new-hp)
+              (none)
               (set! (-> e-proc hit-points) new-hp)
               )
           )
