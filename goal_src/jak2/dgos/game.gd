@@ -503,6 +503,7 @@
   "orb-placer.o"  ;; added
   "mp-helpers.o" ;; added
   "mp-level-sync.o" ;; added
+  "mp-teleport-utils.o" ;; added
   "mp-left-behind.o" ;; added
   "mp-enemy-h.o" ;; added
   "mp-actor-ghost-sync.o" ;; added

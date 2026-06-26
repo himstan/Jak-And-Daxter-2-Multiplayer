@@ -304,56 +304,215 @@
   (none)
   )
 
+(defun mp-copy-scene-sync-name! ((dst string) (src string))
+  (when (and dst (nonzero? dst))
+    (dotimes (idx 32)
+      (set! (-> dst data idx) (the uint 0))
+      )
+    (when (and src (nonzero? src))
+      (let ((len (min 31 (length src))))
+        (dotimes (idx len)
+          (set! (-> dst data idx) (-> src data idx))
+          )
+        (set! (-> dst data len) (the uint 0))
+        (set! (-> dst data -4) (the-as uint len))
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-copy-scene-sync-event-continue! ((dst string) (evt mp-scene-event))
+  (when (and dst (nonzero? dst) evt (nonzero? evt))
+    (let ((len 0))
+      (dotimes (idx 32)
+        (let ((val (-> evt load-continue idx)))
+          (set! (-> dst data idx) val)
+          (if (nonzero? val)
+              (set! len (+ idx 1)))
+          )
+        )
+      (set! (-> dst data 31) (the uint 0))
+      (set! (-> dst data -4) (the-as uint (min len 31)))
+      )
+    )
+  (none)
+  )
+
+(defun mp-log-pending-scene-sync-wait! ((reason string))
+  (when (>= (current-time) *mp-pending-scene-sync-next-log-time*)
+    (format 0 "[MP-SceneSync] Waiting to start remote scene ~S (continue: ~S): ~A.~%"
+            *mp-pending-scene-sync-name*
+            *mp-pending-scene-sync-continue-name*
+            reason)
+    (set! *mp-pending-scene-sync-next-log-time* (+ (current-time) (seconds 1)))
+    )
+  (none)
+  )
+
+(defun mp-arm-pending-scene-sync! ((scene-name string) (evt mp-scene-event))
+  (mp-copy-scene-sync-name! *mp-pending-scene-sync-name* scene-name)
+  (mp-copy-scene-sync-event-continue! *mp-pending-scene-sync-continue-name* evt)
+  (set! *mp-pending-scene-sync?* #t)
+  (set! *mp-pending-scene-sync-next-log-time* (the-as time-frame 0))
+  (format 0 "[MP-SceneSync] Armed remote scene sync for ~S (continue: ~S).~%"
+          *mp-pending-scene-sync-name*
+          *mp-pending-scene-sync-continue-name*)
+  (none)
+  )
+
+(defun mp-scene-sync-request-continue-levels! ((continue-name string))
+  "Apply the vanilla continue want-list so the DGO containing the scene can load."
+  (when (and continue-name
+             (nonzero? (length continue-name))
+             *load-state*
+             (nonzero? *load-state*))
+    (let ((cont (scene-decode-continue continue-name)))
+      (when (and cont (nonzero? cont))
+        (let ((vis-info (lookup-level-info (-> cont vis-nick))))
+          (set! (-> *load-state* vis-nick) (if vis-info (-> vis-info name)))
+          )
+        (dotimes (idx 6)
+          (set! (-> *load-state* want idx name) (-> cont want idx name))
+          (set! (-> *load-state* want idx display?) (-> cont want idx display?))
+          (set! (-> *load-state* want idx force-vis?) #f)
+          (set! (-> *load-state* want idx force-inside?) #f)
+          )
+        (dotimes (idx 3)
+          (set! (-> *load-state* want-sound idx) (-> cont want-sound idx))
+          )
+        (add-borrow-levels *load-state*)
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-scene-sync-continue-levels-ready? ((continue-name string))
+  (if (and continue-name (nonzero? (length continue-name)))
+      (let ((cont (scene-decode-continue continue-name)))
+        (if (and cont (nonzero? cont))
+            (begin
+              (dotimes (idx 6)
+                (let ((level-name (-> cont want idx name))
+                      (display-mode (-> cont want idx display?)))
+                  (when (and level-name
+                             display-mode
+                             (not (mp-level-active? level-name)))
+                    (return #f)
+                    )
+                  )
+                )
+              #t
+              )
+            #t
+            )
+        )
+      #t
+      )
+  )
+
+(defun mp-scene-sync-levels-ready-or-request! ()
+  (if (and *mp-pending-scene-sync-continue-name*
+           (nonzero? (length *mp-pending-scene-sync-continue-name*)))
+      (begin
+        (mp-scene-sync-request-continue-levels! *mp-pending-scene-sync-continue-name*)
+        (mp-scene-sync-continue-levels-ready? *mp-pending-scene-sync-continue-name*)
+        )
+      (mp-remote-teleport-ready-or-request!)
+      )
+  )
+
+(defun mp-pending-scene-sync-scene-ready? ()
+  (and *mp-pending-scene-sync-name*
+       (nonzero? (length *mp-pending-scene-sync-name*))
+       (let ((scene-obj (scene-lookup *mp-pending-scene-sync-name*)))
+         (and scene-obj (nonzero? scene-obj))
+         )
+       )
+  )
+
+(defun mp-scene-sync-force-npc-step! ((scene-obj scene) (scene-name string))
+  (when (and scene-obj (nonzero? scene-obj))
+    (let ((entity-name (-> scene-obj entity)))
+      (when entity-name
+        (let ((npc (process-by-ename entity-name)))
+          (if (and npc (nonzero? npc))
+              (let ((npc-proc (the-as process-drawable npc)))
+                (format 0 "[MP-WorldEvent] Found NPC ~S. Snapping and signaling force-step.~%" entity-name)
+                (when (and npc-proc
+                           (nonzero? npc-proc)
+                           (-> npc-proc root)
+                           (nonzero? (-> npc-proc root))
+                           *target*
+                           (nonzero? *target*)
+                           (-> *target* control)
+                           (nonzero? (-> *target* control)))
+                  (vector-copy! (-> npc-proc root trans) (-> *target* control trans))
+                  )
+                (send-event npc 'mp-force-scene-step scene-name)
+                )
+              (format 0 "[MP-WorldEvent] NPC ~S not birthed yet. It should link via its own logic when it does.~%" entity-name)
+              )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-finish-pending-scene-sync! ()
+  (let ((scene-name *mp-pending-scene-sync-name*))
+    (when (and scene-name (nonzero? (length scene-name)))
+      (mp-handle-remote-scene-hacks scene-name)
+      (mp-scene-sync-teleport-to-remote!)
+      (let ((scene-obj (scene-lookup scene-name)))
+        (when (and (not *scene-player*) scene-obj (nonzero? scene-obj))
+          (let ((load-pt (if (and *mp-pending-scene-sync-continue-name*
+                                  (nonzero? (length *mp-pending-scene-sync-continue-name*)))
+                             *mp-pending-scene-sync-continue-name*
+                             (the-as string (-> scene-obj load-point-obj))
+                             )))
+            (format 0 "[MP-WorldEvent] Spawning authoritative scene-player for ~S (continue: ~S)~%"
+                    scene-name
+                    load-pt)
+            (process-spawn scene-player :init scene-player-init scene-name #t load-pt)
+            )
+          )
+        (mp-scene-sync-force-npc-step! scene-obj scene-name)
+        )
+      )
+    )
+  (set! *mp-pending-scene-sync?* #f)
+  (set! *mp-pending-scene-sync-next-log-time* (the-as time-frame 0))
+  (none)
+  )
+
+(defun mp-process-pending-scene-sync! ()
+  (when *mp-pending-scene-sync?*
+    (cond
+      ((not (mp-scene-sync-levels-ready-or-request!))
+       (mp-log-pending-scene-sync-wait! "scene continue levels are not loaded")
+       )
+      ((not (mp-pending-scene-sync-scene-ready?))
+       (mp-log-pending-scene-sync-wait! "scene definition is not loaded")
+       )
+      ((not (mp-local-scene-teleport-ready?))
+       (mp-log-pending-scene-sync-wait! "local target is not ready")
+       )
+      (else
+       (mp-finish-pending-scene-sync!)
+       )
+      )
+    )
+  (none)
+  )
+
 (defun mp-event-handler-scene-start ((ev mp-scene-event))
   (let ((s* *mp-scene-name-scratch*))
     (when (and s* (nonzero? (length s*)))
-      (format 0 "[MP-WorldEvent] Remote started scene: ~S. Starting locally via NPC-sync.~%" s*)
-
-      (mp-handle-remote-scene-hacks s*)
-      
-      ;; 1. Snap-Teleport to Host's area (Ensures level is loaded/NPCs birthed)
-      (when (and *target* (-> *target* control))
-        (format 0 "[MP-WorldEvent] Snapping to remote position for scene load.~%")
-        (set! (-> *target* control trans x) (-> *remote-info* x))
-        (set! (-> *target* control trans y) (-> *remote-info* y))
-        (set! (-> *target* control trans z) (-> *remote-info* z))
-        )
-      
-      ;; 2. Spawn Scene-Player with the scene's load-point-obj as the continue-name.
-      (let ((scene-obj (scene-lookup s*)))
-        (when (not *scene-player*)
-          (let ((load-pt (if (and scene-obj (nonzero? scene-obj))
-                             (the-as string (-> scene-obj load-point-obj))
-                             #f
-                             )))
-            (format 0 "[MP-WorldEvent] Spawning authoritative scene-player for ~S (continue: ~S)~%" s* load-pt)
-            (process-spawn scene-player :init scene-player-init s* #t load-pt)
-            )
-          )
-        (if scene-obj
-            (let ((entity-name (-> scene-obj entity)))
-              (if entity-name
-                  (let ((npc (process-by-ename entity-name)))
-                    (if npc
-                        (begin
-                          (format 0 "[MP-WorldEvent] Found NPC ~S. Snapping and signaling force-step.~%" entity-name)
-                          
-                          ;; Snap NPC to player's new position to prevent "too-far" mission fails!
-                          (let ((npc-proc (the-as process-drawable npc)))
-                            (set! (-> npc-proc root trans x) (-> *target* control trans x))
-                            (set! (-> npc-proc root trans y) (-> *target* control trans y))
-                            (set! (-> npc-proc root trans z) (-> *target* control trans z))
-                            )
-                          
-                          (send-event npc 'mp-force-scene-step s*)
-                          )
-                        (format 0 "[MP-WorldEvent] NPC ~S not birthed yet. It should link via its own logic when it does.~%" entity-name)
-                        )
-                    )
-                  )
-              )
-            )
-        )
+      (format 0 "[MP-WorldEvent] Remote started scene: ~S. Waiting for level-ready NPC-sync.~%" s*)
+      (mp-arm-pending-scene-sync! s* ev)
       )
     )
   (none))

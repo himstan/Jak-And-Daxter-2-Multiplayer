@@ -129,6 +129,7 @@
     ;; 2. Logic & State Machine (MUST BE ABOVE GUARD for Join Handshake)
     (mp-handle-full-sync-state)
     (mp-handle-scene-transition)
+    (mp-process-pending-scene-sync!)
     (mp-log-client-blackout-diag!)
 
     ;; 3. Check for Continue Point Changes
@@ -271,6 +272,12 @@
   (set! *multi-remote-spawn-time* (the-as time-frame 0))
   (set! *mp-last-scene-player* #f)
   (set! *mp-was-riding-before-scene* #f)
+  (set! *mp-pending-scene-sync?* #f)
+  (set! *mp-pending-scene-sync-next-log-time* (the-as time-frame 0))
+  (if (nonzero? (the-as uint *mp-pending-scene-sync-name*))
+      (set! (-> *mp-pending-scene-sync-name* data 0) (the uint 0)))
+  (if (nonzero? (the-as uint *mp-pending-scene-sync-continue-name*))
+      (set! (-> *mp-pending-scene-sync-continue-name* data 0) (the uint 0)))
   (set! *mp-intro-skip-full-sync-pending?* #f)
   (set! *mp-intro-skip-blackout-pending?* #f)
   (if (nonzero? (the-as uint *mp-last-scene-name*))

@@ -8,6 +8,10 @@
 (define-perm *mp-last-scene-player* symbol #f)
 (define-perm *mp-was-riding-before-scene* symbol #f)
 (define-perm *mp-last-scene-name* string (new 'global 'string 32 ""))
+(define-perm *mp-pending-scene-sync?* symbol #f)
+(define-perm *mp-pending-scene-sync-name* string (new 'global 'string 32 ""))
+(define-perm *mp-pending-scene-sync-continue-name* string (new 'global 'string 32 ""))
+(define-perm *mp-pending-scene-sync-next-log-time* time-frame 0)
 (define-perm *mp-intro-skip-full-sync-pending?* symbol #f)
 (define-perm *mp-intro-skip-blackout-pending?* symbol #f)
 (define-extern *has-ridden-before?* symbol)
@@ -158,6 +162,9 @@
 ;; --- Helper functions for handle resolution ---
 
 (define-extern mp-teleport-to-remote (function object))
+(define-extern mp-remote-teleport-ready-or-request! (function symbol))
+(define-extern mp-teleport-local-target-to-remote! (function symbol none))
+(define-extern mp-scene-sync-teleport-to-remote! (function none))
 (define-extern mp-is-traffic-spawn-ready? (function object))
 
 (defun handle->process-safe ((h handle))
@@ -361,6 +368,7 @@
   ((state      mp-scene-state :overlay-at (-> data 0))
    (scene-name uint8 32      :overlay-at (-> data 4))
    (event-id   uint32        :overlay-at (-> data 36))
+   (load-continue uint8 32   :overlay-at (-> data 40))
    )
   )
 
