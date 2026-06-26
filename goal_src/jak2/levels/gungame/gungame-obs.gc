@@ -1611,7 +1611,9 @@
        (let ((a1-3 (-> block param 0))
              (v1-1 (the-as process-taskable proc))
              )
-         (+! (-> self score) a1-3)
+         (when (mp-is-jak?)
+            (+! (-> self score) a1-3)
+           )
          (cond
            ((logtest? (-> v1-1 ambient last-ambient data 6) 8)
             (set! v0-0 (+ (-> self total-bonus-destroyed) 1))
