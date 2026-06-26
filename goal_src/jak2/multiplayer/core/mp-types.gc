@@ -1132,8 +1132,6 @@
 (define *mp-remote-wants-skip* #f)
 (define *mp-local-wants-skip* #f)
 
-(define-perm *traffic-hijacks-applied?* symbol #f)
-
 (define-perm *multi-sync-enabled?* symbol #f)
 (define-perm *multi-last-sync-frame* time-frame (seconds 0))
 (define-perm *multi-last-in-event-seq* uint (the-as uint 0))

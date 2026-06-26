@@ -1191,9 +1191,6 @@
    Safe to call multiple times: citizen is patched once on connect; subtypes are
    patched lazily once cwi.gd has loaded (their GOAL symbol table entries become
    non-zero after deftype runs in that DGO)."
-  (when *traffic-hijacks-applied?*
-    (return #t)
-    )
   (let ((cpost-id (method-id-of-type citizen common-post))
         (evhnd-id (method-id-of-type citizen general-event-handler)))
 
@@ -1241,6 +1238,5 @@
         )
       )
     )
-    (set! *traffic-hijacks-applied?* #t)
   (none)
   )
