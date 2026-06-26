@@ -805,10 +805,7 @@
                          (return (*old-citizen-event-handler* this arg0 arg1 arg2 arg3))
                          (return #f))
                      )
-                   (begin
-                      (format 0 "[MP-Traffic-Hijacks] Skipping local 'attack for ~A for nid=~D pid=~D info=~A citizen-incoming-attack-id=~D info-attack-id=~D~%" (-> this name) (-> this net-id) (-> this pid) (-> info mode) (-> this incoming attack-id) (-> info id))                         
-                      (return #t)
-                     )
+                   (return #f)
                )
              )
            )
@@ -1077,15 +1074,15 @@
       )
 
     (when (and (nonzero? (-> this net-id))
-               (not (should-pause-sync? this rec))
                (not (mp-pedestrian-death-started? this)))
-      ;; 2. State Sync
-      (mp-pedestrian-sync-remote-state! this rec)
-
-      ;; 3. Keep the target pinned after vanilla logic as well.
-      (mp-pedestrian-sync-guard-target! this rec)
-      (mp-pedestrian-lock-local-state-manager! this rec)
-
+      (when (not (should-pause-sync? this rec))
+          ;; 2. State Sync
+          (mp-pedestrian-sync-remote-state! this rec)
+    
+          ;; 3. Keep the target pinned after vanilla logic as well.
+          (mp-pedestrian-sync-guard-target! this rec)
+          (mp-pedestrian-lock-local-state-manager! this rec)
+        )
       ;; 4. Position correction: applied last so it overrides the nav/AI result.
       (mp-ped-predictive-move this)
       )
@@ -1115,17 +1112,16 @@
              (nonzero? (-> this net-id))
              (nonzero? (-> this controller branch)))
     (let ((rec (mp-get-traffic-ghost (-> this net-id))))
-      (when (and rec (not (should-pause-sync? this rec))) 
-        (when (and (-> this root)
-                   (nonzero? (-> this root)))
-          ;; Queue state bumps on the citizen's own main thread so ambient civilians
-          ;; can keep following authoritative active/wait edges even while the local
-          ;; player is riding in a vehicle.
-          (mp-pedestrian-sync-remote-state-deferred! this rec)
-          (mp-ped-predictive-move this)
-          (when (type? (-> this root) collide-shape)
-            (update-transforms (-> this root))
-            )
+      (when (and rec (-> this root) (nonzero? (-> this root)))
+        ;; Queue state bumps on the citizen's own main thread so ambient civilians
+        ;; can keep following authoritative active/wait edges even while the local
+        ;; player is riding in a vehicle.
+        (when (not (should-pause-sync? this rec))
+            (mp-pedestrian-sync-remote-state-deferred! this rec)
+          )
+        (mp-ped-predictive-move this)
+        (when (type? (-> this root) collide-shape)
+          (update-transforms (-> this root))
           )
         )
       )
@@ -1160,9 +1156,11 @@
   (when (and (not (mp-is-traffic-authoritative?))
              (nonzero? (-> this net-id)))
     (let ((rec (mp-get-traffic-ghost (-> this net-id))))
-      (when (and rec (not (should-pause-sync? this rec)))
-        (mp-pedestrian-sync-guard-target! this rec)
-        (mp-pedestrian-lock-local-state-manager! this rec)
+      (when rec
+        (when (not (should-pause-sync? this rec))
+          (mp-pedestrian-sync-guard-target! this rec)
+          (mp-pedestrian-lock-local-state-manager! this rec)
+          )
         ;; Predict before vanilla logic so local AI/nav starts from a fresher pose.
         (mp-ped-predictive-move this)
         )
