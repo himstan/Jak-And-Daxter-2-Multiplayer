@@ -612,6 +612,39 @@
   (none)
   )
 
+(defun mp-traffic-direct-activate-from-params! ((tracker traffic-tracker) (object-type traffic-type) (params traffic-object-spawn-params))
+  "Create and activate a traffic object without requiring an inactive reserve."
+  (let ((spawned-proc (the-as process-drawable #f)))
+    (when (and tracker
+               (nonzero? tracker)
+               params
+               (nonzero? params))
+      (let ((traffic (-> tracker traffic)))
+        (when (and traffic
+                   (nonzero? traffic))
+          (let ((manager (handle->process-safe (-> traffic manager))))
+            (when (and manager
+                       (nonzero? manager))
+              (set! spawned-proc (traffic-object-spawn manager params))
+              (when (and spawned-proc
+                         (nonzero? spawned-proc))
+                (if (send-event spawned-proc 'traffic-activate params traffic)
+                    (begin
+                      (set! (-> params proc) spawned-proc)
+                      (add-active-process tracker object-type (process->handle spawned-proc))
+                      )
+                    (add-reserved-process tracker object-type (process->handle spawned-proc))
+                    )
+                )
+              )
+            )
+          )
+        )
+      )
+    spawned-proc
+    )
+  )
+
 (defmethod activate-from-params ((this traffic-tracker) (arg0 traffic-object-spawn-params))
   "Get a reserved process, and activate with the given params."
   (local-vars (sv-16 handle))
@@ -655,6 +688,10 @@
             )
           )
         0
+        )
+      (when (and (not (-> arg0 proc))
+                 (logtest? (-> arg0 flags) (traffic-spawn-flags mp-direct-activate)))
+        (mp-traffic-direct-activate-from-params! this gp-0 arg0)
         )
       )
     )

@@ -166,13 +166,17 @@
 
 (defun mp-pedestrian-clear-vehicle-context! ((slot mp-pedestrian-state))
   (when (and slot (nonzero? slot))
-    (set! (-> slot pad 0) (the uint8 0))
-    (set! (-> slot pad 1) (the uint8 0))
-    (set! (-> slot pad 2) (the uint8 0))
-    (set! (-> slot pad 3) (the uint8 0))
-    (set! (-> slot pad 4) (the uint8 0))
+    (set! (-> slot vehicle-net-id) (the uint32 0))
+    (set! (-> slot transport-id) (the uint32 0))
+    (set! (-> slot transport-side) (the uint8 0))
     )
   (none)
+  )
+
+(defun mp-pedestrian-pack-state-uses-vehicle-context? ((state-id uint))
+  (or (= state-id (the uint (mp-ped-state-id board-vehicle)))
+      (= state-id (the uint (mp-ped-state-id ride)))
+      (= state-id (the uint (mp-ped-state-id exit-vehicle))))
   )
 
 (defun mp-pedestrian-pack-vehicle-context! ((e-proc citizen) (slot mp-pedestrian-state))
@@ -182,18 +186,36 @@
              (nonzero? e-proc)
              slot
              (nonzero? slot)
-             (type? e-proc civilian))
-    (let* ((civilian-proc (the-as civilian e-proc))
-           (vehicle-proc (the-as vehicle (handle->process-safe (-> civilian-proc vehicle)))))
-      (when (and vehicle-proc
-                 (nonzero? vehicle-proc)
-                 (nonzero? (-> vehicle-proc net-id)))
-        (let ((vehicle-net-id (-> vehicle-proc net-id)))
-          (set! (-> slot pad 0) (the uint8 (logand vehicle-net-id #xff)))
-          (set! (-> slot pad 1) (the uint8 (logand (shr vehicle-net-id 8) #xff)))
-          (set! (-> slot pad 2) (the uint8 (logand (shr vehicle-net-id 16) #xff)))
-          (set! (-> slot pad 3) (the uint8 (logand (shr vehicle-net-id 24) #xff)))
+             (mp-pedestrian-pack-state-uses-vehicle-context? (the uint (-> slot state-id)))
+             (type? e-proc civilian)
+             (not (type? e-proc crimson-guard)))
+    (let ((civilian-proc (the-as civilian e-proc)))
+      (let ((vehicle-proc (the-as vehicle (handle->process-safe (-> civilian-proc vehicle)))))
+        (when (and vehicle-proc
+                   (nonzero? vehicle-proc)
+                   (type? vehicle-proc vehicle)
+                   (nonzero? (-> vehicle-proc net-id)))
+          (let ((vehicle-net-id (-> vehicle-proc net-id)))
+            (set! (-> slot vehicle-net-id) vehicle-net-id)
+            )
           )
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-pedestrian-pack-transport-context! ((e-proc citizen) (slot mp-pedestrian-state))
+  "Encode transport-spawned guard context."
+  (when (and e-proc
+             (nonzero? e-proc)
+             slot
+             (nonzero? slot)
+             (type? e-proc crimson-guard))
+    (let ((transport-id (mp-crimson-guard-transport-id e-proc)))
+      (when (nonzero? transport-id)
+        (mp-pedestrian-set-transport-id! slot transport-id)
+        (mp-pedestrian-set-transport-side! slot (mp-crimson-guard-transport-side e-proc))
         )
       )
     )
@@ -234,6 +256,7 @@
     )
 
   (mp-pedestrian-pack-vehicle-context! e-proc slot)
+  (mp-pedestrian-pack-transport-context! e-proc slot)
 
   (none)
   )

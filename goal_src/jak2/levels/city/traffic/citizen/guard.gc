@@ -3907,3 +3907,31 @@
   (the-as handle #f)
   )
 (set! *mp-get-guard-target* mp-get-guard-target-impl)
+
+(defun mp-crimson-guard-transport-id ((proc citizen))
+  (let ((transport-id (the uint 0)))
+    (when (and proc
+               (nonzero? proc)
+               (type? proc crimson-guard))
+      (let* ((guard (the-as crimson-guard proc))
+             (transport-proc (handle->process-safe (-> guard transport))))
+        (when (and transport-proc
+                   (nonzero? transport-proc))
+          (set! transport-id (mp-traffic-transport-id-for-process transport-proc))
+          )
+        )
+      )
+    transport-id
+    )
+  )
+
+(defun mp-crimson-guard-transport-side ((proc citizen))
+  (let ((transport-side (the uint 0)))
+    (when (and proc
+               (nonzero? proc)
+               (type? proc crimson-guard))
+      (set! transport-side (-> (the-as crimson-guard proc) transport-side))
+      )
+    transport-side
+    )
+  )

@@ -367,6 +367,8 @@
                        )
     (dotimes (gp-1 (length *city-slums-transport-info*))
       (set! (-> *city-slums-transport-info* gp-1 spawned) #f)
+      (mp-traffic-unregister-transport!
+        (+ (-> *city-slums-transport-info* gp-1 id) MP_TRAFFIC_TRANSPORT_ID_SLUMS_BASE))
       )
     (let ((gp-2 (new 'stack-no-clear 'task-arrow-params)))
       (set! (-> gp-2 pos quad) (-> (new 'static 'vector :x 1666621.9 :y 32766.771 :z -1103984.6 :w 1.0) quad))
@@ -445,7 +447,12 @@
                     (let ((a0-16 (as-type (entity-nav-mesh-by-aid (the-as actor-id 9070)) entity-nav-mesh)))
                       (when a0-16
                         (set! (-> s4-2 nav-mesh) (-> a0-16 nav-mesh))
-                        (set! (-> self slave gp-1) (ppointer->handle (process-spawn transport s4-2 :to self)))
+                        (let ((transport-handle (ppointer->handle (process-spawn transport s4-2 :to self))))
+                          (set! (-> self slave gp-1) transport-handle)
+                          (mp-traffic-register-transport!
+                            (+ (-> s5-1 id) MP_TRAFFIC_TRANSPORT_ID_SLUMS_BASE)
+                            transport-handle)
+                          )
                         )
                       )
                     )
@@ -453,7 +460,11 @@
                 )
                ((< 368640.0 f0-7)
                 (if (handle->process (-> self slave gp-1))
-                    (send-event (handle->process (-> self slave gp-1)) 'leave)
+                    (begin
+                      (mp-traffic-unregister-transport!
+                        (+ (-> s5-1 id) MP_TRAFFIC_TRANSPORT_ID_SLUMS_BASE))
+                      (send-event (handle->process (-> self slave gp-1)) 'leave)
+                      )
                     )
                 )
                )
@@ -482,6 +493,8 @@
         (let ((gp-2 0))
           (dotimes (s5-6 (length *city-slums-transport-info*))
             (when (handle->process (-> self slave s5-6))
+              (mp-traffic-unregister-transport!
+                (+ (-> *city-slums-transport-info* s5-6 id) MP_TRAFFIC_TRANSPORT_ID_SLUMS_BASE))
               (send-event (handle->process (-> self slave s5-6)) 'leave)
               (+! gp-2 1)
               )

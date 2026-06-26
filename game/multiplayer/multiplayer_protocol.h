@@ -166,7 +166,11 @@ struct MPPedestrianState {
   int32_t hp;
   uint8_t flags;
   uint8_t target_aid; // 0 = none, 1 = Host, 2 = Client
-  uint8_t pad[22];    // Reduced from 26 to compensate for target-aid and hp
+  uint8_t context_align[2];
+  uint32_t vehicle_net_id;
+  uint32_t transport_id;
+  uint8_t transport_side;
+  uint8_t pad[11];
 };
 static_assert(sizeof(MPPedestrianState) == 64, "MPPedestrianState must be 64 bytes");
 
@@ -180,7 +184,9 @@ struct MPPedestrianStatePacked {
   uint8_t state_id;   // Replaces int16_t anim_index
   uint8_t target_aid; // Replaces int16_t anim_speed
   uint32_t vehicle_net_id;
-  uint8_t pad[2];
+  uint32_t transport_id;
+  uint8_t transport_side;
+  uint8_t pad[1];
 };
 
 
