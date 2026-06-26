@@ -70,6 +70,9 @@
 (defun mp-clear-client-presentation-blackout! ()
   "Immediately clear client-owned black presentation state once the local world is ready."
   (set-blackout-frames 0)
+  (when (and *game-info* (nonzero? *game-info*))
+    (set! (-> *game-info* blackout-time) 0)
+    )
   (when (and *setting-control* (nonzero? *setting-control*))
     (kill-persister *setting-control* (the-as engine-pers 'blackout) 'bg-a-force)
     (kill-persister *setting-control* (the-as engine-pers 'bg-a) 'bg-a)
