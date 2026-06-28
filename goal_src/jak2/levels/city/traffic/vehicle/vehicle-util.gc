@@ -1158,7 +1158,11 @@
     1
     (cond
       ((< (+ 8192.0 (-> this rbody state position y)) (-> this flight-level))
-       (sound-play "bike-up")
+       (let ((veh-root (-> this root)))
+         (when (and veh-root (nonzero? veh-root))
+           (sound-play-by-spec (static-sound-spec "bike-up" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> veh-root trans))
+           )
+         )
        (prepare-zone-transition this 1)
        )
       (else
@@ -1172,7 +1176,11 @@
 
 (defmethod switch-zone-low! ((this vehicle))
   (when (and (logtest? (-> this info flags) 64) (> (-> this flight-level-index) 0))
-    (sound-play "bike-down")
+    (let ((veh-root (-> this root)))
+      (when (and veh-root (nonzero? veh-root))
+        (sound-play-by-spec (static-sound-spec "bike-down" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> veh-root trans))
+        )
+      )
     (prepare-zone-transition this 0)
     )
   0
