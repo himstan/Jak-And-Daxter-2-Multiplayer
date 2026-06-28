@@ -8,6 +8,7 @@
 #include "game/graphics/display.h"
 #include "game/graphics/gfx.h"
 #include "game/graphics/screenshot.h"
+#include "game/kernel/common/kmachine.h"
 #include "game/overlord/jak3/dma.h"
 #include "game/system/hid/sdl_util.h"
 
@@ -151,6 +152,21 @@ void OpenGlDebugGui::draw(const DmaStats& dma_stats) {
         ImGui::TreePop();
       }
       ImGui::Checkbox("Ignore Hide ImGui Bind", &Gfx::g_debug_settings.ignore_hide_imgui);
+
+      ImGui::Separator();
+      if (ImGui::TreeNode("Audio")) {
+        bool muted = GetRuntimeAudioMuted();
+        if (ImGui::Checkbox("Mute", &muted)) {
+          SetRuntimeAudioMuted(muted);
+        }
+
+        float volume_percent = GetRuntimeAudioVolume() * 100.0f;
+        if (ImGui::SliderFloat("Volume", &volume_percent, 0.0f, 100.0f, "%.0f%%")) {
+          SetRuntimeAudioVolume(volume_percent / 100.0f);
+        }
+        ImGui::TreePop();
+      }
+
       // Controller Stuff
       ImGui::Separator();
       ImGui::Checkbox("Treat Controller Port 0 as Port 1",

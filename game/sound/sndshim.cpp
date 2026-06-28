@@ -125,6 +125,12 @@ void snd_SetMasterVolume(s32 which, s32 volume) {
   }
 }
 
+void snd_SetOutputVolume(float volume) {
+  if (player) {
+    player->SetOutputVolume(volume);
+  }
+}
+
 void snd_UnloadBank(snd::BankHandle bank_handle) {
   if (player) {
     player->UnloadBank(bank_handle);

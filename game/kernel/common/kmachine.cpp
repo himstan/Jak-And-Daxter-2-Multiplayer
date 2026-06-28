@@ -1,6 +1,7 @@
 #include "kmachine.h"
 
 #include <chrono>
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <list>
@@ -54,6 +55,7 @@ namespace MiniAudioLib {
 #include "game/sce/libpad.h"
 #include "game/sce/libscf.h"
 #include "game/sce/sif_ee.h"
+#include "game/sound/sndshim.h"
 
 /*!
  * Where does OVERLORD load its data from?
@@ -79,6 +81,49 @@ MiniAudioLib::ma_engine maEngine;
 std::map<std::string, std::list<MiniAudioLib::ma_sound>> maSoundMap;
 MiniAudioLib::ma_sound* mainMusicSound;
 
+namespace {
+std::mutex runtimeAudioMutex;
+float runtimeAudioVolume = 1.0f;
+bool runtimeAudioMuted = false;
+
+float get_effective_runtime_audio_volume() {
+  return runtimeAudioMuted ? 0.0f : runtimeAudioVolume;
+}
+}  // namespace
+
+void ApplyRuntimeAudioSettings() {
+  std::lock_guard<std::mutex> lock(runtimeAudioMutex);
+  const float effective_volume = get_effective_runtime_audio_volume();
+  MiniAudioLib::ma_engine_set_volume(&maEngine, effective_volume);
+  snd_SetOutputVolume(effective_volume);
+}
+
+void SetRuntimeAudioVolume(float volume) {
+  {
+    std::lock_guard<std::mutex> lock(runtimeAudioMutex);
+    runtimeAudioVolume = std::clamp(volume, 0.0f, 1.0f);
+  }
+  ApplyRuntimeAudioSettings();
+}
+
+float GetRuntimeAudioVolume() {
+  std::lock_guard<std::mutex> lock(runtimeAudioMutex);
+  return runtimeAudioVolume;
+}
+
+void SetRuntimeAudioMuted(bool muted) {
+  {
+    std::lock_guard<std::mutex> lock(runtimeAudioMutex);
+    runtimeAudioMuted = muted;
+  }
+  ApplyRuntimeAudioSettings();
+}
+
+bool GetRuntimeAudioMuted() {
+  std::lock_guard<std::mutex> lock(runtimeAudioMutex);
+  return runtimeAudioMuted;
+}
+
 void kmachine_init_globals_common() {
   memset(pad_dma_buf, 0, sizeof(pad_dma_buf));
   isodrv = fakeiso;  // changed. fakeiso is the only one that works in opengoal.
@@ -91,6 +136,7 @@ void kmachine_init_globals_common() {
   MiniAudioLib::ma_engine_uninit(&maEngine);
 #endif
   MiniAudioLib::ma_engine_init(NULL, &maEngine);
+  ApplyRuntimeAudioSettings();
 }
 
 /*!

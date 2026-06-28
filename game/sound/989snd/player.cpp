@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: ISC
 #include "player.h"
 
+#include <algorithm>
 #include <fstream>
 
 #include "sfxblock.h"
@@ -256,6 +257,13 @@ void Player::SetMasterVolume(u32 group, s32 volume) {
   // Master volume
   if (group == 16) {
     mSynth.SetMasterVol(0x3ffff * volume / 0x400);
+  }
+}
+
+void Player::SetOutputVolume(float volume) {
+  std::scoped_lock lock(mTickLock);
+  if (mStream) {
+    cubeb_stream_set_volume(mStream, std::clamp(volume, 0.0f, 1.0f));
   }
 }
 

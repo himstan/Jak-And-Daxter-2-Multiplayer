@@ -88,6 +88,11 @@ extern CommonPCPortFunctionWrappers g_pc_port_funcs;
 
 u64 playMP3(u32 filePath, u32 volume);
 u64 bool_to_symbol(const bool);
+void SetRuntimeAudioVolume(float volume);
+float GetRuntimeAudioVolume();
+void SetRuntimeAudioMuted(bool muted);
+bool GetRuntimeAudioMuted();
+void ApplyRuntimeAudioSettings();
 
 /// Initializes all common PC Port functions for all Jak games
 void init_common_pc_port_functions(
