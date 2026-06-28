@@ -9,6 +9,7 @@ add_executable(lsp
   handlers/text_document/go_to.cpp
   handlers/text_document/hover.cpp
   handlers/text_document/references.cpp
+  handlers/text_document/signature_help.cpp
   handlers/text_document/type_hierarchy.cpp
   main.cpp
   protocol/common_types.cpp
@@ -21,6 +22,7 @@ add_executable(lsp
   protocol/hover.cpp
   protocol/hover_formatting.cpp
   protocol/progress_report.cpp
+  protocol/signature_help.cpp
   protocol/type_hierarchy.cpp
   state/data/mips_instruction.cpp
   state/lsp_requester.cpp

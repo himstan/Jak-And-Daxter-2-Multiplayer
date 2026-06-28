@@ -4,6 +4,7 @@
 
 #include "lsp/handlers/initialize.h"
 #include "lsp/handlers/text_document/references.h"
+#include "lsp/handlers/text_document/signature_help.h"
 #include "lsp/handlers/text_document/type_hierarchy.h"
 #include "lsp/protocol/error_codes.h"
 #include "text_document/completion.h"
@@ -71,6 +72,7 @@ void LSPRouter::init_routes() {
   m_routes["textDocument/definition"] = LSPRoute(lsp_handlers::go_to_definition);
   m_routes["textDocument/references"] = LSPRoute(lsp_handlers::references);
   m_routes["textDocument/completion"] = LSPRoute(lsp_handlers::get_completions);
+  m_routes["textDocument/signatureHelp"] = LSPRoute(lsp_handlers::signature_help);
   m_routes["textDocument/documentColor"] = LSPRoute(lsp_handlers::document_color);
   m_routes["textDocument/formatting"] = LSPRoute(lsp_handlers::formatting);
   m_routes["textDocument/prepareTypeHierarchy"] = LSPRoute(lsp_handlers::prepare_type_hierarchy);
@@ -78,8 +80,6 @@ void LSPRouter::init_routes() {
   m_routes["typeHierarchy/subtypes"] = LSPRoute(lsp_handlers::subtypes_type_hierarchy);
 
   // Advertised Capabilities that are not yet implemented, return safe empty results
-  m_routes["textDocument/signatureHelp"] =
-      LSPRoute([](Workspace&, json, json) -> std::optional<json> { return nullptr; });
   m_routes["textDocument/documentLink"] =
       LSPRoute([](Workspace&, json, json) -> std::optional<json> { return json::array(); });
   m_routes["textDocument/colorPresentation"] =

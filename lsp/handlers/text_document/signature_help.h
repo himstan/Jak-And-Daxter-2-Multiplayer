@@ -1,0 +1,11 @@
+#pragma once
+
+#include <optional>
+
+#include "common/util/json_util.h"
+#include "lsp/protocol/signature_help.h"
+#include "lsp/state/workspace.h"
+
+namespace lsp_handlers {
+std::optional<json> signature_help(Workspace& workspace, json id, json raw_params);
+}  // namespace lsp_handlers

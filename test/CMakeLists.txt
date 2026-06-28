@@ -41,6 +41,7 @@ add_executable(goalc-test
         ${CMAKE_CURRENT_SOURCE_DIR}/lsp/handlers/text_document/go_to.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/lsp/handlers/text_document/hover.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/lsp/handlers/text_document/references.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/handlers/text_document/signature_help.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/lsp/handlers/text_document/type_hierarchy.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/lsp/protocol/completion.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/lsp/protocol/document_color.cpp
@@ -50,6 +51,7 @@ add_executable(goalc-test
         ${CMAKE_CURRENT_SOURCE_DIR}/lsp/protocol/hover.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/lsp/protocol/hover_formatting.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/lsp/protocol/progress_report.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/protocol/signature_help.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/lsp/protocol/type_hierarchy.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/lsp/state/data/mips_instruction.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/lsp/state/lsp_requester.cpp
@@ -62,6 +64,8 @@ add_executable(goalc-test
         ${CMAKE_CURRENT_LIST_DIR}/lsp/test_lsp_completion.cpp
         ${CMAKE_CURRENT_LIST_DIR}/lsp/test_lsp_hover_formatting.cpp
         ${CMAKE_CURRENT_LIST_DIR}/lsp/test_lsp_hover_definition.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/lsp/test_lsp_references.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/lsp/test_lsp_signature_help.cpp
         ${GOALC_TEST_FRAMEWORK_SOURCES}
         ${GOALC_TEST_CASES}
         )

@@ -19,11 +19,17 @@ std::optional<json> initialize(Workspace& workspace, json /*id*/, json params) {
       {"triggerCharacters", {" "}},
   };
 
+  json signature_help_provider{
+      {"triggerCharacters", {" ", "(", ","}},
+      {"retriggerCharacters", {" "}},
+  };
+
   json result{{"capabilities",
                {
                    {"textDocumentSync", text_document_sync},
                    {"hoverProvider", true},
                    {"completionProvider", completion_provider},
+                   {"signatureHelpProvider", signature_help_provider},
                    {"definitionProvider", true},
                    {"colorProvider", true},
                    {"referencesProvider", true},
