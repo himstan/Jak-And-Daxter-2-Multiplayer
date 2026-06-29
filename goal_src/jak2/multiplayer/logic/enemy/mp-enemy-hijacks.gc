@@ -137,7 +137,7 @@
                (not (logtest? (-> e-proc enemy-flags) (enemy-flag mp-synced-death))))
       (format 0 "[MP-Hit-Debug]   >> [OWNER] Queueing MP_EVENT_ENEMY_DEATH for AID ~D~%" aid)
       (mp-send-enemy-death-event e-proc)
-      (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death)))
+      (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death stop-syncing)))
     )
   (none))
 
@@ -183,7 +183,7 @@
       (return #f)
       )
     (format 0 "[MP-Proxy] Authoritative death for ~A (AID ~D, mode ~A).~%" this (mp-get-enemy-aid this) death-mode)
-    (logior! (-> this enemy-flags) (enemy-flag mp-synced-death death-start))
+    (logior! (-> this enemy-flags) (enemy-flag mp-synced-death death-start stop-syncing))
     (send-event this 'death-start)
     (set! (-> this hit-points) 0)
     (let ((st (the-as state #f))
@@ -438,6 +438,7 @@
 
 (defun mp-enemy-dying-hijack ((this enemy))
   "Sync death start."
+  (logior! (-> this enemy-flags) (enemy-flag stop-syncing))
   (mp-enemy-broadcast-death this)
   (if (or (mp-enemy-should-process-damage? this) (<= (-> this hit-points) 0))
       (if *old-enemy-dying* (*old-enemy-dying* this)))
@@ -445,6 +446,7 @@
 
 (defun mp-enemy-dying-nav-hijack ((this nav-enemy))
   "Sync death start for nav-enemies."
+  (logior! (-> this enemy-flags) (enemy-flag stop-syncing))
   (mp-enemy-broadcast-death (the-as enemy this))
   (if (or (mp-enemy-should-process-damage? (the-as enemy this)) (<= (-> this hit-points) 0))
       (if *old-enemy-dying* (*old-enemy-dying* (the-as enemy this))))

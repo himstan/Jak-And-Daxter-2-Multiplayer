@@ -12,6 +12,81 @@
 (declare-type security-wall process-drawable)
 
 (define *mp-combat-retarget-distance-bias* 8192.0)
+(define *mp-dead-aid-perm-full-logged?* #f)
+
+(defun mp-mark-aid-dead-perm! ((aid uint))
+  "Record an actor AID as dead in the existing save perm-list."
+  (when (zero? aid)
+    (return #f)
+    )
+  (when (not (and *game-info* (nonzero? *game-info*)))
+    (return #f)
+    )
+  (let ((game-perms (-> *game-info* perm-list)))
+    (when (not (and game-perms (nonzero? game-perms)))
+      (return #f)
+      )
+    (let ((perm (actor-perm *game-info* (the-as actor-id aid))))
+      (if (and perm (nonzero? perm))
+          (begin
+            (logior! (-> perm status) (entity-perm-status dead))
+            (return #t)
+            )
+          )
+      )
+    (if (< (-> game-perms length) (-> game-perms allocated-length))
+        (let ((new-perm (-> game-perms data (-> game-perms length))))
+          (set! (-> new-perm quad) (the-as uint128 0))
+          (set! (-> new-perm aid) (the-as actor-id aid))
+          (set! (-> new-perm status) (entity-perm-status dead))
+          (+! (-> game-perms length) 1)
+          (return #t)
+          )
+        (when (not *mp-dead-aid-perm-full-logged?*)
+          (format 0 "[MP-Tombstone] Could not store dead AID ~D: perm-list is full.~%" aid)
+          (set! *mp-dead-aid-perm-full-logged?* #t)
+          )
+        )
+    )
+  #f
+  )
+
+(defun mp-aid-dead-perm? ((aid uint))
+  "True if an actor AID is already tombstoned as dead."
+  (when (or (zero? aid) (not (and *game-info* (nonzero? *game-info*))))
+    (return #f)
+    )
+  (let ((perm (actor-perm *game-info* (the-as actor-id aid))))
+    (and perm
+         (nonzero? perm)
+         (logtest? (-> perm status) (entity-perm-status dead))
+         )
+    )
+  )
+
+(defun mp-deactivate-dead-aid-if-loaded! ((aid uint))
+  "Apply a dead-AID tombstone to a loaded entity/process if it exists."
+  (when (not (mp-aid-dead-perm? aid))
+    (return #f)
+    )
+  (let ((ent (entity-by-aid aid)))
+    (when (and ent (nonzero? ent))
+      (let ((perm (-> ent extra perm)))
+        (when (and perm (nonzero? perm))
+          (logior! (-> perm status) (entity-perm-status dead))
+          )
+        )
+      (let ((proc (-> ent extra process)))
+        (when (and proc (nonzero? proc))
+          (format 0 "[MP-Tombstone] Deactivating loaded dead AID ~D proc=~A.~%" aid proc)
+          (deactivate proc)
+          (return #t)
+          )
+        )
+      )
+    )
+  #f
+  )
 
 (defun mp-current-active-level-hash ()
   "Return a stable hash for the currently active local level."
@@ -239,6 +314,15 @@
   (let ((state-name (if (-> e state) (-> e state name) #f)))
     (is-in-pausable-state? state-name)
     )
+  )
+
+(defun mp-enemy-death-presentation-active? ((e enemy))
+  "True once a loaded enemy should finish its local death presentation."
+  (and e
+       (nonzero? e)
+       (or (logtest? (-> e enemy-flags) (enemy-flag death-start mp-synced-death stop-syncing))
+           (is-enemy-in-pausable-state? e))
+       )
   )
 
 (defun is-ghost-in-pausable-state? ((rec mp-traffic-ghost-record))

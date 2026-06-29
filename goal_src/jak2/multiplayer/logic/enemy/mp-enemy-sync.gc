@@ -450,6 +450,32 @@
       (let ((e-proc (the-as enemy proc))
             (enemy-aid (mp-get-enemy-aid (the-as enemy proc))))
         (when (!= enemy-aid 0)
+          ;; --- Durable Remote Death Tombstone ---
+          ;; If a reliable death event arrived before this enemy loaded locally,
+          ;; the AID is already marked dead in the save perm-list. Suppress it
+          ;; before ownership or normal sync can resurrect it. If the enemy is
+          ;; already presenting a local death, let that vanilla flow finish.
+          (when (mp-aid-dead-perm? enemy-aid)
+            (let ((rec (mp-get-enemy-auth enemy-aid)))
+              (when rec
+                (set! (-> rec aid) (the-as uint32 0))
+                )
+              )
+            (if (mp-enemy-death-presentation-active? e-proc)
+                (begin
+                  (logior! (-> e-proc enemy-flags) (enemy-flag stop-syncing))
+                  (format 0 "[MP-Tombstone] Letting dead enemy ~A (AID ~D) finish local death presentation.~%" e-proc enemy-aid)
+                  )
+                (begin
+                  (format 0 "[MP-Tombstone] Suppressing loaded dead enemy ~A (AID ~D).~%" e-proc enemy-aid)
+                  (when (not (mp-deactivate-dead-aid-if-loaded! enemy-aid))
+                    (deactivate e-proc)
+                    )
+                  )
+              )
+            (return #t)
+            )
+
           ;; --- Culling Guard ---
           ;; If enemies are actually inactive or errored, release authority and skip.
           ;; Some valid ambush enemies, like sew-scare-grunt, wait in no-draw until triggered.
@@ -645,7 +671,10 @@
                         (if (nonzero? (-> e-proc root)) (vector-reset! (-> e-proc root transv)))
                         )
                       ;; PACK LOCAL STATE
-                      (when (and (!= (-> e-proc status) 'dead) (nonzero? (-> e-proc root)) (< (-> *mp-enemy-buffer* local-count) (the-as uint MP_MAX_SYNC_ENEMIES)))
+                      (when (and (!= (-> e-proc status) 'dead)
+                                 (not (logtest? (-> e-proc enemy-flags) (enemy-flag stop-syncing)))
+                                 (nonzero? (-> e-proc root))
+                                 (< (-> *mp-enemy-buffer* local-count) (the-as uint MP_MAX_SYNC_ENEMIES)))
                         (let ((slot (-> *mp-enemy-buffer* local-enemies (-> *mp-enemy-buffer* local-count))))
                           (mp-enemy-pack-state e-proc slot enemy-aid)
                           (set! (-> slot owner) local-role)
@@ -662,7 +691,7 @@
                       ;; Authoritative Death Detection
                       (when (and (logtest? (-> e-proc enemy-flags) (enemy-flag death-start)) (not (logtest? (-> e-proc enemy-flags) (enemy-flag mp-synced-death))))
                         (mp-send-enemy-death-event e-proc)
-                        (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death))
+                        (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death stop-syncing))
                         )
                       )
                     (begin

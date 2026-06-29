@@ -380,17 +380,9 @@
               (dotimes (i (the-as int count))
                 (let ((aid (-> *local-info* sync-aids i)))
                   ;; 1. Inject into Global Perm-List
-                  (let ((perm (actor-perm *game-info* (the-as actor-id aid))))
-                    (cond
-                      (perm (logior! (-> perm status) (entity-perm-status dead)))
-                      (else
-                        (let ((game-perms (-> *game-info* perm-list)))
-                          (when (< (-> game-perms length) (-> game-perms allocated-length))
-                            (let ((new-perm (-> game-perms data (-> game-perms length))))
-                              (set! (-> new-perm quad) (the-as uint128 0))
-                              (set! (-> new-perm aid) (the-as actor-id aid))
-                              (set! (-> new-perm status) (entity-perm-status dead))
-                              (+! (-> game-perms length) 1)))))))
+                  (when (not (mp-mark-aid-dead-perm! aid))
+                    (format 0 "[MP-Client] WARNING: Failed to store full-sync dead AID ~D.~%" aid)
+                    )
 
                ;; 2. Surgical Deactivation (Now that the level is 'active, this will actually find things)
                (dotimes (l 6)
