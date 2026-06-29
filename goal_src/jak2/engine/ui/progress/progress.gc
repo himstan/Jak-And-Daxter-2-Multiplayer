@@ -65,6 +65,8 @@
 
 (define *progress-state* (new 'static 'progress-global-state :which-slot -1 :last-slot-saved -1))
 
+(define-extern *mod-version-text* string)
+
 (kmemopen global "mc-slot-info")
 
 (define *progress-save-info* (new 'global 'mc-slot-info))
@@ -1367,6 +1369,22 @@
   0
   )
 
+(defun draw-progress-version-text ()
+  (with-dma-buffer-add-bucket ((buf (-> (current-frame) global-buf))
+                               (bucket-id progress))
+    (dma-buffer-add-gs-set-flusha buf
+                                  (alpha-1 (new 'static 'gs-alpha :b #x1 :d #x1))
+                                  (tex1-1 (new 'static 'gs-tex1 :mmag #x1 :mmin #x1)))
+    (format (clear *temp-string*) (lookup-text! *common-text* (text-id progress-mod-version) #f) *mod-version-text*)
+    (pc-encode-utf8-string *temp-string* *pc-encoded-temp-string*)
+    (let ((font-ctx (new 'stack 'font-context *font-default-matrix* 505 399 0.0 (font-color progress) (font-flags right shadow kerning large))))
+      (set! (-> font-ctx scale) 0.35)
+      (draw-string-adv *pc-encoded-temp-string* buf font-ctx)
+      )
+    )
+  (none)
+  )
+
 (defbehavior progress-post progress ()
   (local-vars (sv-144 font-context) (sv-148 int) (sv-152 hud-box) (sv-156 symbol))
   (when (or (= (-> self current) 'reconnect) (= (-> self current) 'host-left))
@@ -1465,6 +1483,7 @@
         )
       )
     )
+  (draw-progress-version-text)
   (ja-post)
   0
   (none)
