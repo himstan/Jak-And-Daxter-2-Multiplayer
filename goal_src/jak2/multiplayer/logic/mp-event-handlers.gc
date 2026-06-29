@@ -480,6 +480,15 @@
       )
   )
 
+(defun mp-scene-sync-scene-player-has-target? ()
+  (and *scene-player*
+       (nonzero? *scene-player*)
+       *target*
+       (nonzero? *target*)
+       (focus-test? *target* grabbed)
+       )
+  )
+
 (defun mp-scene-sync-pin-target-at-hold-pos! ()
   (when (and *target*
              (nonzero? *target*)
@@ -516,6 +525,9 @@
 (defun mp-process-scene-sync-target-hold! ()
   (when *mp-scene-sync-target-hold?*
     (cond
+      ((mp-scene-sync-scene-player-has-target?)
+       (set! *mp-scene-sync-target-hold?* #f)
+       )
       ((mp-scene-sync-scene-player-playing?)
        (set! *mp-scene-sync-target-hold?* #f)
        )
@@ -576,7 +588,11 @@
             (format 0 "[MP-WorldEvent] Spawning authoritative scene-player for ~S (continue: ~S)~%"
                     scene-name
                     load-pt)
-            (process-spawn scene-player :init scene-player-init scene-name #t load-pt)
+            (let ((old-remote-context *mp-processing-remote-event*))
+              (set! *mp-processing-remote-event* #t)
+              (process-spawn scene-player :init scene-player-init scene-name #t load-pt)
+              (set! *mp-processing-remote-event* old-remote-context)
+              )
             )
           )
         (mp-scene-sync-force-npc-step! scene-obj scene-name)
