@@ -30,6 +30,7 @@
 (define-perm *mp-last-local-state-id* uint (the uint 0))
 (define-perm *mp-battle-spawn-counter* uint (the uint 0))
 (define-perm *mp-incoming-battle-spawn-aid* uint (the uint 0))
+(defconstant MP_MISSION_ENEMY_ATOLL_ASHELIN (the uint #x6f000001))
 (define *multi-sync-tps* 30)
 
 (define-perm *remote-player-is-dying* symbol #f)
@@ -1087,6 +1088,14 @@
   ;; Sewer scare-grunt specific states
   (waiting 72)
   (scare 73)
+  ;; Ashelin Specific States
+  (waiting-idle 74)
+  (standing-idle 75)
+  (standing-turn 76)
+  (standing-blast 77)
+  (back-spring 78)
+  (cartwheel-left 79)
+  (tumble-right 80)
   )
 
 (deftype mp-enemy-auth-record (structure)

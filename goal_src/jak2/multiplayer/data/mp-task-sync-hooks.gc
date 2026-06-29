@@ -11,11 +11,25 @@
     )
   (none))
 
+(defun mp-task-hook-atoll-battle-battle-close! ()
+  "Clear client-local side effects that the host normally removes through Ashelin battle cleanup."
+  (when (and *setting-control*
+             (nonzero? *setting-control*))
+    (remove-setting! 'sound-mode)
+    (remove-setting! 'airlock)
+    (apply-settings *setting-control*)
+    (format 0 "[MP-TaskSync] Cleared atoll battle settings after remote task close.~%")
+    )
+  (none))
+
 (defun mp-task-sync-after-remote-close! ((node game-task-node))
   "Run client-side cleanup after a task node is closed by remote task sync."
   (case node
     (((game-task-node atoll-sig-resolution))
      (mp-task-hook-atoll-sig-resolution-close!)
+     )
+    (((game-task-node atoll-battle-battle))
+     (mp-task-hook-atoll-battle-battle-close!)
      )
     )
   (none))

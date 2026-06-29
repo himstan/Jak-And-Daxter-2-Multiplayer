@@ -28,6 +28,16 @@
   (none)
   )
 
+(defun ash1-assign-mp-net-id! ((ash ashelin-battle))
+  "Give the atoll battle Ashelin bot a stable MP enemy id."
+  (when (and ash
+             (nonzero? ash)
+             (zero? (-> ash net-id)))
+    (set! (-> ash net-id) MP_MISSION_ENEMY_ATOLL_ASHELIN)
+    )
+  (none)
+  )
+
 (define *ash1-course*
   (new 'static 'ashelin-course
     :course-id #x1
@@ -45,6 +55,7 @@
         :skip-to -1
         :on-set (lambda ((arg0 ashelin-battle))
           (clear-speech-flags! arg0)
+          (ash1-assign-mp-net-id! arg0)
           (move-to-point! (-> arg0 root) (the-as vector (-> arg0 ash-course spots 0)))
           (let ((v1-7 (get-current-task-event (-> arg0 task))))
             (if (= (-> v1-7 action) (game-task-action say))
@@ -102,6 +113,7 @@
                                      )
                                 )
                            (process-entity-status! arg1 (entity-perm-status no-kill) #t)
+                           (send-event arg1 'hide #t)
                            (when (scene-play arg1 (the-as string (-> s5-0 scene)) #f)
                              (ai-task-control-method-12 (-> arg1 ai-ctrl) arg1)
                              (go-to-waypoint! arg1 2 #f)
