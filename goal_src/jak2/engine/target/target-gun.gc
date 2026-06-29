@@ -7,6 +7,8 @@
 
 ;; DECOMP BEGINS
 
+(define-extern mp-target-ride-along? (function process-focusable object))
+
 (if (not (nmember "gunp" *kernel-packages*))
     (set! *kernel-packages* (cons "gunp" *kernel-packages*))
     )
@@ -2651,9 +2653,16 @@
           )
       (case (-> gp-0 gun-control)
         ((1)
-         (when (and (cpad-pressed? (-> self control cpad number) r1)
-                    (< (the-as time-frame (+ (-> gp-0 fire-delay) -30)) (- (current-time) (-> gp-0 fire-time)))
-                    )
+         (when (and 
+           (or 
+             (cpad-pressed? (-> self control cpad number) r1) 
+             (and 
+               (mp-is-jak?) 
+               (focus-test? self pilot-riding) 
+               *mp-puppet* 
+               (mp-target-ride-along? *mp-puppet*) 
+               (cpad-pressed? (-> *mp-puppet* control cpad number) r1)))
+            (< (the-as time-frame (+ (-> gp-0 fire-delay) -30)) (- (current-time) (-> gp-0 fire-time))))
            (set-time! (-> gp-0 fire-pending-time))
            (if (zero? (-> self gun fire-pending))
                (+! (-> self gun fire-pending) 1)

@@ -271,7 +271,12 @@
                     )
                   )
                 (when (logtest? (-> *target* state-flags) (state-flags prevent-duck))
-                  (logclear! buttons (pad-buttons l1 r1))
+                  (if (and (mp-is-daxter?)
+                           (or *local-riding?*
+                               (mp-target-ride-along? *target*)))
+                      (logclear! buttons (pad-buttons l1))
+                      (logclear! buttons (pad-buttons l1 r1))
+                      )
                   )
                 (when (logtest? (-> *target* state-flags) (state-flags prevent-board))
                   (logclear! buttons (pad-buttons r2))

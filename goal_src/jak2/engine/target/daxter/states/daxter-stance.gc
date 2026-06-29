@@ -27,7 +27,7 @@
             (remove-exit)
             (go target-indax-walk))
 
-          (if (and (recently-pressed? l1 r1)
+          (if (and (recently-pressed? l1)
                    (and (!= (-> *cpad-list* cpads (-> self control cpad number) stick0-speed) 0.0) (can-roll?)))
               (go target-indax-roll))
           (if (and (cpad-hold? (-> self control cpad number) l1)
