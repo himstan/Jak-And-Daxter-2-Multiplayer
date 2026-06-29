@@ -843,14 +843,15 @@
   (let ((state (logand (the-as uint (-> evt state)) #xffffffff)))
     ;; Copy name to scratch for logging and lookup
     (let ((len 0))
-      (dotimes (i 32)
+      (dotimes (i 64)
         (let ((val (-> evt scene-name i)))
           (set! (-> *mp-scene-name-scratch* data i) val)
           (if (nonzero? val)
               (set! len (+ i 1)))
           )
         )
-      (set! (-> *mp-scene-name-scratch* data -4) (the-as uint len))
+      (set! (-> *mp-scene-name-scratch* data 63) (the uint 0))
+      (set! (-> *mp-scene-name-scratch* data -4) (the-as uint (min len 63)))
       )
 
     (format 0 "[MP-SceneEvent] Received State: ~D, Name: ~S~%" state *mp-scene-name-scratch*)
@@ -888,14 +889,14 @@
       (set! (-> evt etype) (the uint 8)) ;; Magic number for scene event
       (set! (-> evt state) state)
       ;; copy name
-      (dotimes (i 32) (set! (-> evt scene-name i) (the uint 0)))
+      (dotimes (i 64) (set! (-> evt scene-name i) (the uint 0)))
       (if (and name (nonzero? name))
-          (let ((len (min 31 (length name))))
+          (let ((len (min 63 (length name))))
             (dotimes (i len) (set! (-> evt scene-name i) (-> name data i)))
             )
           )
       ;; copy the scene load continue so receivers can load the scene owner level first
-      (dotimes (i 32) (set! (-> evt load-continue i) (the uint 0)))
+      (dotimes (i 64) (set! (-> evt load-continue i) (the uint 0)))
       (when (and (= (the-as uint state) (the-as uint (mp-scene-state started)))
                  name
                  (nonzero? name))
@@ -905,7 +906,7 @@
                      (-> scene-obj load-point-obj)
                      (nonzero? (-> scene-obj load-point-obj)))
             (let ((load-continue (the-as string (-> scene-obj load-point-obj))))
-              (let ((len (min 31 (length load-continue))))
+              (let ((len (min 63 (length load-continue))))
                 (dotimes (i len)
                   (set! (-> evt load-continue i) (-> load-continue data i))
                   )

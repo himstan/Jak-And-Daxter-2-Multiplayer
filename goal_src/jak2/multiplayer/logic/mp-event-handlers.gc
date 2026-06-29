@@ -310,11 +310,11 @@
 
 (defun mp-copy-scene-sync-name! ((dst string) (src string))
   (when (and dst (nonzero? dst))
-    (dotimes (idx 32)
+    (dotimes (idx 64)
       (set! (-> dst data idx) (the uint 0))
       )
     (when (and src (nonzero? src))
-      (let ((len (min 31 (length src))))
+      (let ((len (min 63 (length src))))
         (dotimes (idx len)
           (set! (-> dst data idx) (-> src data idx))
           )
@@ -329,15 +329,15 @@
 (defun mp-copy-scene-sync-event-continue! ((dst string) (evt mp-scene-event))
   (when (and dst (nonzero? dst) evt (nonzero? evt))
     (let ((len 0))
-      (dotimes (idx 32)
+      (dotimes (idx 64)
         (let ((val (-> evt load-continue idx)))
           (set! (-> dst data idx) val)
           (if (nonzero? val)
               (set! len (+ idx 1)))
           )
         )
-      (set! (-> dst data 31) (the uint 0))
-      (set! (-> dst data -4) (the-as uint (min len 31)))
+      (set! (-> dst data 63) (the uint 0))
+      (set! (-> dst data -4) (the-as uint (min len 63)))
       )
     )
   (none)
@@ -392,6 +392,36 @@
   (none)
   )
 
+(defun mp-scene-sync-level-paging-idle? ()
+  (and *level*
+       (nonzero? *level*)
+       (-> *level* loading-level)
+       (nonzero? (-> *level* loading-level))
+       (-> *level* default-level)
+       (nonzero? (-> *level* default-level))
+       (= (-> *level* loading-level) (-> *level* default-level))
+       )
+  )
+
+(defun mp-scene-sync-wanted-level-ready? ((level-name symbol) (display-mode symbol))
+  "Scene teleports need terrain/display fully activated, not merely loaded."
+  (if (and level-name
+           display-mode
+           *level*
+           (nonzero? *level*))
+      (let ((lev (level-get *level* level-name)))
+        (and lev
+             (nonzero? lev)
+             (= (-> lev status) 'active)
+             (= (-> lev display?) display-mode)
+             (-> lev bsp)
+             (nonzero? (-> lev bsp))
+             )
+        )
+      #t
+      )
+  )
+
 (defun mp-scene-sync-continue-levels-ready? ((continue-name string))
   (if (and continue-name (nonzero? (length continue-name)))
       (let ((cont (scene-decode-continue continue-name)))
@@ -402,12 +432,12 @@
                       (display-mode (-> cont want idx display?)))
                   (when (and level-name
                              display-mode
-                             (not (mp-level-active? level-name)))
+                             (not (mp-scene-sync-wanted-level-ready? level-name display-mode)))
                     (return #f)
                     )
                   )
                 )
-              #t
+              (mp-scene-sync-level-paging-idle?)
               )
             #t
             )
@@ -434,6 +464,71 @@
          (and scene-obj (nonzero? scene-obj))
          )
        )
+  )
+
+(defun mp-scene-sync-scene-player-playing? ()
+  (if (and *scene-player* (nonzero? *scene-player*))
+      (let ((scene-proc (the-as scene-player (ppointer->process *scene-player*))))
+        (and scene-proc
+             (nonzero? scene-proc)
+             (-> scene-proc state)
+             (nonzero? (-> scene-proc state))
+             (= (-> scene-proc state name) 'play-anim)
+             )
+        )
+      #f
+      )
+  )
+
+(defun mp-scene-sync-pin-target-at-hold-pos! ()
+  (when (and *target*
+             (nonzero? *target*)
+             (-> *target* control)
+             (nonzero? (-> *target* control))
+             *mp-scene-sync-target-hold-pos*
+             (nonzero? *mp-scene-sync-target-hold-pos*))
+    (let ((control (-> *target* control)))
+      (vector-copy! (-> control trans) *mp-scene-sync-target-hold-pos*)
+      (set! (-> control transv quad) (the-as uint128 0))
+      (vector-copy! (-> control camera-pos) (-> control trans))
+      (set-blackout-frames (seconds 0.1))
+      )
+    )
+  (none)
+  )
+
+(defun mp-scene-sync-start-target-hold! ()
+  "Keep the target from falling while scene-player finishes its wait/preload handoff."
+  (when (and *target*
+             (nonzero? *target*)
+             (-> *target* control)
+             (nonzero? (-> *target* control))
+             *mp-scene-sync-target-hold-pos*
+             (nonzero? *mp-scene-sync-target-hold-pos*))
+    (vector-copy! *mp-scene-sync-target-hold-pos* (-> *target* control trans))
+    (set! *mp-scene-sync-target-hold?* #t)
+    (set! *mp-scene-sync-target-hold-until* (+ (current-time) (seconds 15)))
+    (mp-scene-sync-pin-target-at-hold-pos!)
+    )
+  (none)
+  )
+
+(defun mp-process-scene-sync-target-hold! ()
+  (when *mp-scene-sync-target-hold?*
+    (cond
+      ((mp-scene-sync-scene-player-playing?)
+       (set! *mp-scene-sync-target-hold?* #f)
+       )
+      ((>= (current-time) *mp-scene-sync-target-hold-until*)
+       (format 0 "[MP-SceneSync] Releasing scene target hold after timeout.~%")
+       (set! *mp-scene-sync-target-hold?* #f)
+       )
+      (else
+       (mp-scene-sync-pin-target-at-hold-pos!)
+       )
+      )
+    )
+  (none)
   )
 
 (defun mp-scene-sync-force-npc-step! ((scene-obj scene) (scene-name string))
@@ -470,6 +565,7 @@
     (when (and scene-name (nonzero? (length scene-name)))
       (mp-handle-remote-scene-hacks scene-name)
       (mp-scene-sync-teleport-to-remote!)
+      (mp-scene-sync-start-target-hold!)
       (let ((scene-obj (scene-lookup scene-name)))
         (when (and (not *scene-player*) scene-obj (nonzero? scene-obj))
           (let ((load-pt (if (and *mp-pending-scene-sync-continue-name*
