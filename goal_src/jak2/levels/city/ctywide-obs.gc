@@ -1347,6 +1347,18 @@
          #f
          )
      )
+    (('mp-city-power-killed)
+     (when (>= (-> self id) 0)
+       (go-virtual wait-for-pushing)
+       #t
+       )
+     )
+    (('mp-city-power-pushed)
+     (when (>= (-> self id) 0)
+       (go-virtual pushed)
+       #t
+       )
+     )
     )
   )
 

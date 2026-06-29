@@ -53,6 +53,83 @@
                                           )
         )
 
+(define *mp-city-power-search-id* (the uint 0))
+(define *mp-city-power-search-result* (the-as cty-guard-turret #f))
+
+(defun mp-city-power-find-turret-callback ((p process-tree))
+  (let ((proc (the-as process p)))
+    (when (and proc (type? proc cty-guard-turret))
+      (let ((turret (the-as cty-guard-turret proc)))
+        (when (= (the-as uint (-> turret id)) *mp-city-power-search-id*)
+          (set! *mp-city-power-search-result* turret)
+          (return #f)
+          )
+        )
+      )
+    )
+  #t
+  )
+
+(defun mp-city-power-find-turret-by-id ((turret-id uint))
+  (set! *mp-city-power-search-id* turret-id)
+  (set! *mp-city-power-search-result* (the-as cty-guard-turret #f))
+  (iterate-process-tree *active-pool* mp-city-power-find-turret-callback *kernel-context*)
+  *mp-city-power-search-result*
+  )
+
+(defun mp-city-power-notify-turret-process! ((turret-id uint) (state uint))
+  (let ((turret (mp-city-power-find-turret-by-id turret-id)))
+    (when (and turret (nonzero? turret))
+      (case state
+        ((1) (send-event turret 'mp-city-power-killed))
+        ((2) (send-event turret 'mp-city-power-pushed))
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-city-power-apply-remote-state! ((manager task-manager) (turret-id uint) (state uint))
+  (when (and manager
+             (nonzero? manager)
+             (< turret-id (the uint 5))
+             (> state (the uint (-> manager data-int32 turret-id))))
+    (set! (-> manager data-int32 turret-id) (the-as int32 state))
+    (when (= state (the uint 2))
+      (when (-> manager minimap turret-id)
+        (logior! (-> manager minimap turret-id flags) (minimap-flag fade-out))
+        (set! (-> manager minimap turret-id) #f)
+        )
+      )
+    (mp-city-power-notify-turret-process! turret-id state)
+    )
+  (none)
+  )
+
+(defun mp-city-power-consume-remote-state! ((manager task-manager))
+  (when (and *mp-city-power-pending?*
+             (not (task-node-closed? (game-task-node city-power-resolution))))
+    (when (logtest? *mp-city-power-pending-mask* (the uint 1))
+      (mp-city-power-apply-remote-state! manager (the uint 0) *mp-city-power-state-0*)
+      )
+    (when (logtest? *mp-city-power-pending-mask* (the uint 2))
+      (mp-city-power-apply-remote-state! manager (the uint 1) *mp-city-power-state-1*)
+      )
+    (when (logtest? *mp-city-power-pending-mask* (the uint 4))
+      (mp-city-power-apply-remote-state! manager (the uint 2) *mp-city-power-state-2*)
+      )
+    (when (logtest? *mp-city-power-pending-mask* (the uint 8))
+      (mp-city-power-apply-remote-state! manager (the uint 3) *mp-city-power-state-3*)
+      )
+    (when (logtest? *mp-city-power-pending-mask* (the uint 16))
+      (mp-city-power-apply-remote-state! manager (the uint 4) *mp-city-power-state-4*)
+      )
+    (set! *mp-city-power-pending-mask* (the uint 0))
+    (set! *mp-city-power-pending?* #f)
+    )
+  (none)
+  )
+
 (set-subtask-hook!
   *game-info*
   (game-task-node city-power-resolution)
@@ -105,6 +182,7 @@
   (lambda :behavior task-manager
     ()
     (when (not (task-node-closed? (game-task-node city-power-resolution)))
+      (mp-city-power-consume-remote-state! self)
       (check-time self)
       (set! (-> self count) 0)
       (dotimes (v1-3 (-> self max-count))
@@ -214,6 +292,7 @@
         ((= arg2 'guard-turret-killed)
          (let ((s4-1 (-> arg3 param 0)))
            (set! (-> self data-int32 s4-1) 1)
+           (mp-send-city-power-turret-state-event (the-as uint s4-1) (the uint 1) (-> arg0 root trans))
            (let ((v1-12 (process-spawn
                           cty-guard-turret-button
                           :init basebutton-init-by-other
@@ -224,10 +303,10 @@
                           #f
                           0
                           :to self
-                          )
                         )
                  )
-             (set! (-> self slave (-> self data-int32 s4-1)) (ppointer->handle v1-12))
+             )
+             (set! (-> self slave s4-1) (ppointer->handle v1-12))
              (set! (-> (the-as basebutton (-> v1-12 0)) event-down) 'button-down)
              )
            )
@@ -236,6 +315,7 @@
         ((= arg2 'guard-turret-button-pushed)
          (let ((v1-21 (-> arg3 param 0)))
            (set! (-> self data-int32 v1-21) 2)
+           (mp-send-city-power-turret-state-event (the-as uint v1-21) (the uint 2) (-> arg0 root trans))
            (set! (-> self slave 10) (process->handle arg0))
            (logior! (-> self minimap v1-21 flags) (minimap-flag fade-out))
            (set! (-> self minimap v1-21) #f)
@@ -246,7 +326,7 @@
          (let ((s4-2 (-> arg3 param 0))
                (s3-2 (-> arg3 param 1))
                )
-           (when (not (handle->process (-> self slave (-> self data-int32 s4-2))))
+           (when (not (handle->process (-> self slave s4-2)))
              (let ((v0-1 (the-as object (ppointer->handle (process-spawn
                                                             cty-guard-turret-button
                                                             :init basebutton-init-by-other
@@ -260,9 +340,9 @@
                                                             )
                                                           )
                                  )
-                         )
                    )
-               (set! (-> self slave (-> self data-int32 s4-2)) (the-as handle v0-1))
+               )
+               (set! (-> self slave s4-2) (the-as handle v0-1))
                v0-1
                )
              )

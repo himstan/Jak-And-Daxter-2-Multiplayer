@@ -236,6 +236,30 @@
   (none)
   )
 
+(defun mp-send-city-power-turret-state-event ((turret-id uint) (state uint) (source-pos vector))
+  "Broadcast city-power per-turret progress so either player can split objectives."
+  (when (and *multi-sync-enabled?*
+             (= (pc-multi-get-status) 6)
+             (not *mp-processing-remote-event*)
+             (< turret-id (the uint 5))
+             (or (= state (the uint 1))
+                 (= state (the uint 2))))
+    (let ((q-idx *mp-event-queue-write-ptr*))
+      (let ((evt (the-as mp-city-power-event (-> *mp-event-queue* q-idx))))
+        (set! (-> evt etype) MP_EVENT_MISSION_EVENT)
+        (set! (-> evt mission-evt) MP_MISSION_EVT_CITY_POWER_TURRET_STATE)
+        (set! (-> evt turret-id) (the-as uint32 turret-id))
+        (set! (-> evt state) (the-as uint32 state))
+        (when (and source-pos (nonzero? source-pos))
+          (vector-copy! (-> evt source-pos) source-pos)
+          )
+        )
+      (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
+      )
+    )
+  (none)
+  )
+
 (defun mp-send-event-function-hijack ((proc process-tree) (msg event-message-block))
   "Global hijack for send-event-function to sync mission critical events."
   (with-pp
