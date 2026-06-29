@@ -545,7 +545,6 @@
         )
       )
     (set! (-> self gun gun-type) (pickup-type none))
-    (set! (-> self gun-type) (pickup-type none))
     (remove-setting! 'mode-sound-bank)
     (remove-setting! 'sound-flava)
     (if (= (-> self control collide-mode) 'duck)

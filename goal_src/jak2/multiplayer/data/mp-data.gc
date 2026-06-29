@@ -295,7 +295,7 @@
     (set! (-> *local-info* equipped-weapon) (the uint8 0))
     (when (and *target* (nonzero? *target*) (using-gun? *target*))
       (set! (-> *local-info* equipped-weapon)
-            (the-as uint (mp-pickup-type->equipped-weapon (the-as uint (-> *target* gun-type)))))
+            (the-as uint (mp-pickup-type->equipped-weapon (the-as uint (-> *target* gun gun-type)))))
       )
     )
   (none))
