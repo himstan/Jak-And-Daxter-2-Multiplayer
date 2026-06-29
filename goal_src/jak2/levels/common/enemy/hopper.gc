@@ -624,7 +624,7 @@
           (t9-0)
           )
       )
-    (when (< *hopper-next-jump-time* (current-time))
+    (when (and (mp-enemy-authoritative? self) (< *hopper-next-jump-time* (current-time)))
       (let ((gp-0 (handle->process (-> self focus handle))))
         (when gp-0
           (let ((s4-1

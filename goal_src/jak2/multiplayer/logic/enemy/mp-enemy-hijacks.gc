@@ -305,6 +305,7 @@
                (let ((st (method-state (-> self type) (the-as basic target-state))))
                  (when st
                      ;; Bypass the 'go' macro's compile-time typechecker for dynamic state lookups
+                     (process-mask-clear! (-> self mask) sleep sleep-code)
                      (set! (-> self next-state) (the-as state st))
                      (enter-state (the-as object st) (the-as object #f) (the-as object #f) (the-as object #f) (the-as object #f) (the-as object #f))
                      ;; Ensure we throw to the new state if we are actually executing inside the enemy's own thread

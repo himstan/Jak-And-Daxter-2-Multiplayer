@@ -10,6 +10,7 @@
 (declare-type parking-spot process-drawable)
 (declare-type camera-start process-hidden)
 (declare-type security-wall process-drawable)
+(declare-type centurion nav-enemy)
 
 (define *mp-combat-retarget-distance-bias* 8192.0)
 (define *mp-dead-aid-perm-full-logged?* #f)
@@ -144,7 +145,6 @@
   (and proc
        (nonzero? proc)
        (not (type? proc crate))
-       (not (= (-> proc type symbol) 'rhino-wall))
        (or (type? proc citizen)
            (type? proc vehicle)
            (type? proc enemy)
@@ -161,6 +161,7 @@
            (type? proc camera-start)
            (type? proc security-wall)
            (type? proc guard-lazer-shot)
+           (type? proc centurion)
            (type-type? (-> proc type) part-spawner)
            (type-type? (-> proc type) parking-spot)
            (type-type? (-> proc type) scene-stage)

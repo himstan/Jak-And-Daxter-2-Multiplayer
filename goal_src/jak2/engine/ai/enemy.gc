@@ -11,6 +11,8 @@
 (define-extern mp-pedestrian-detach-from-ghost-sync! (function enemy none))
 (define-extern mp-pedestrian-broadcast-attack (function enemy process event-message-block symbol))
 
+(declare-type hopper nav-enemy)
+
 ;; DECOMP BEGINS
 
 (defmethod copy-enemy-info! ((this enemy-info) (obj-to-copy enemy-info))
@@ -2158,6 +2160,7 @@
       )
     )
   :trans (behavior ()
+    (mp-enemy-refresh-player-focus! self)
     (if (and (time-elapsed? (-> self state-time) (-> self state-timeout)) (> (the-as int (-> self focus aware)) 0))
         (go-virtual active)
         )
@@ -2213,6 +2216,7 @@
   :enter (-> (method-of-type enemy dormant) enter)
   :exit (-> (method-of-type enemy dormant) exit)
   :trans (behavior ()
+    (mp-enemy-refresh-player-focus! self)
     (when (and (time-elapsed? (-> self state-time) (-> self state-timeout)) (> (the-as int (-> self focus aware)) 0))
       (if (logtest? (enemy-option ambush) (-> self fact enemy-options))
           (go-ambush self)
@@ -2700,7 +2704,9 @@
   :virtual #t
   :event enemy-event-handler
   :enter (behavior ()
-    (logior! (-> self enemy-flags) (enemy-flag stop-syncing))
+    (when (not (type? self hopper))
+        (logior! (-> self enemy-flags) (enemy-flag stop-syncing))
+      )
     (set-time! (-> self state-time))
     (logclear! (-> self mask) (process-mask actor-pause))
     (logior! (-> self focus-status) (focus-status dangerous))

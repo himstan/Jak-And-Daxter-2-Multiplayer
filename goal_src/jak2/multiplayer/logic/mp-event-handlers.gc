@@ -543,14 +543,25 @@
   (none)
   )
 
+(defun mp-scene-sync-use-entity-trigger? ((scene-name string))
+  (and scene-name
+       (nonzero? (length scene-name))
+       (or 
+         (string= scene-name "mtn-plat-buried-rocks-a")
+         (string= scene-name "mtn-plat-buried-rocks-2")))
+  )
+
 (defun mp-scene-sync-force-npc-step! ((scene-obj scene) (scene-name string))
   (when (and scene-obj (nonzero? scene-obj))
     (let ((entity-name (-> scene-obj entity)))
-      (when entity-name
+      (when (and entity-name (nonzero? entity-name))
         (let ((npc (process-by-ename entity-name)))
           (if (and npc (nonzero? npc))
               (let ((npc-proc (the-as process-drawable npc)))
-                (format 0 "[MP-WorldEvent] Found NPC ~S. Snapping and signaling force-step.~%" entity-name)
+                (if (mp-scene-sync-use-entity-trigger? scene-name)
+                    (format 0 "[MP-WorldEvent] Found scene object ~S. Snapping and sending trigger.~%" entity-name)
+                    (format 0 "[MP-WorldEvent] Found NPC ~S. Snapping and signaling force-step.~%" entity-name)
+                    )
                 (when (and npc-proc
                            (nonzero? npc-proc)
                            (-> npc-proc root)
@@ -561,7 +572,14 @@
                            (nonzero? (-> *target* control)))
                   (vector-copy! (-> npc-proc root trans) (-> *target* control trans))
                   )
-                (send-event npc 'mp-force-scene-step scene-name)
+                (if (mp-scene-sync-use-entity-trigger? scene-name)
+                    (let ((old-remote-context *mp-processing-remote-event*))
+                      (set! *mp-processing-remote-event* #t)
+                      (send-event npc 'trigger)
+                      (set! *mp-processing-remote-event* old-remote-context)
+                      )
+                    (send-event npc 'mp-force-scene-step scene-name)
+                    )
                 )
               (format 0 "[MP-WorldEvent] NPC ~S not birthed yet. It should link via its own logic when it does.~%" entity-name)
               )
@@ -572,31 +590,45 @@
   (none)
   )
 
+(defun blocked-scene? ((scene-name string))
+  (if (or 
+      (string= scene-name "mtn-plat-buried-rocks-a")
+      (string= scene-name "mtn-plat-buried-rocks-2")
+    )
+    #t
+    #f)
+  )
+
 (defun mp-finish-pending-scene-sync! ()
   (let ((scene-name *mp-pending-scene-sync-name*))
     (when (and scene-name (nonzero? (length scene-name)))
       (mp-handle-remote-scene-hacks scene-name)
       (mp-scene-sync-teleport-to-remote!)
-      (mp-scene-sync-start-target-hold!)
-      (let ((scene-obj (scene-lookup scene-name)))
-        (when (and (not *scene-player*) scene-obj (nonzero? scene-obj))
-          (let ((load-pt (if (and *mp-pending-scene-sync-continue-name*
-                                  (nonzero? (length *mp-pending-scene-sync-continue-name*)))
-                             *mp-pending-scene-sync-continue-name*
-                             (the-as string (-> scene-obj load-point-obj))
-                             )))
-            (format 0 "[MP-WorldEvent] Spawning authoritative scene-player for ~S (continue: ~S)~%"
-                    scene-name
-                    load-pt)
-            (let ((old-remote-context *mp-processing-remote-event*))
-              (set! *mp-processing-remote-event* #t)
-              (process-spawn scene-player :init scene-player-init scene-name #t load-pt)
-              (set! *mp-processing-remote-event* old-remote-context)
-              )
-            )
-          )
-        (mp-scene-sync-force-npc-step! scene-obj scene-name)
-        )
+      ;; For now we just block these from force starting, messes up the camera in the mountain level, TODO to look into that sometime
+      (when (not (mp-scene-sync-use-entity-trigger? scene-name))
+        (mp-scene-sync-start-target-hold!)
+              (let ((scene-obj (scene-lookup scene-name)))
+                (when (and (not (mp-scene-sync-use-entity-trigger? scene-name))
+                           (not *scene-player*)
+                           scene-obj
+                           (nonzero? scene-obj))
+                  (let ((load-pt (if (and *mp-pending-scene-sync-continue-name*
+                                          (nonzero? (length *mp-pending-scene-sync-continue-name*)))
+                                     *mp-pending-scene-sync-continue-name*
+                                     (the-as string (-> scene-obj load-point-obj))
+                                     )))
+                    (format 0 "[MP-WorldEvent] Spawning authoritative scene-player for ~S (continue: ~S)~%"
+                            scene-name
+                            load-pt)
+                    (let ((old-remote-context *mp-processing-remote-event*))
+                      (set! *mp-processing-remote-event* #t)
+                      (process-spawn scene-player :init scene-player-init scene-name #t load-pt)
+                      (set! *mp-processing-remote-event* old-remote-context)
+                      )
+                    )
+                  )
+                (mp-scene-sync-force-npc-step! scene-obj scene-name)
+                ))
       )
     )
   (set! *mp-pending-scene-sync?* #f)

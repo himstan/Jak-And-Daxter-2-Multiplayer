@@ -446,6 +446,7 @@
           (set! (-> this incoming-attack-id) (-> (the-as attack-info v1-12) id))
           (cond
             ((or (-> this can-take-damage?)
+                 *mp-processing-remote-event*
                  (logtest? (penetrate dark-skin dark-punch dark-bomb) (-> (the-as attack-info v1-12) penetrate-using))
                  )
              (cond
