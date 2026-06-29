@@ -105,11 +105,12 @@
               ((MP_BATTLE_EVT_SPAWN)
                (format
                  0
-                 "[MP-BattleEvent][~A][RECV-SPAWN] dispatch spawner=~D breed=~D initial=~D~%"
+                 "[MP-BattleEvent][~A][RECV-SPAWN] dispatch spawner=~D breed=~D initial=~D aid=~D~%"
                  (if (mp-is-jak?) "HOST" "CLIENT")
                  (-> evt spawner-index)
                  (-> evt breed-index)
                  (-> evt initial?)
+                 (-> evt enemy-aid)
                  )
                (send-event
                  proc
@@ -117,6 +118,7 @@
                  (the-as int (-> evt spawner-index))
                  (the-as int (-> evt breed-index))
                  (the-as int (-> evt initial?))
+                 (the-as int (-> evt enemy-aid))
                  )
                )
               )

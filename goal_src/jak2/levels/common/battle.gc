@@ -796,15 +796,17 @@
      (let ((s0-0 (get-spawner-by-index self (the-as int (-> arg3 param 0))))
            (s1-0 (the-as int (-> arg3 param 1)))
            (s2-0 (if (= (the-as int (-> arg3 param 2)) 1) #t #f))
+           (s3-1 (the-as uint (-> arg3 param 3)))
            )
        (format
          0
-         "[MP-BattleSpawn][~A][EVENT] battle=~A spawner=~D spawner-ok=~A breed=~D~%"
+         "[MP-BattleSpawn][~A][EVENT] battle=~A spawner=~D spawner-ok=~A breed=~D aid=~D~%"
          (if (mp-is-jak?) "HOST" "CLIENT")
          self
          (the-as int (-> arg3 param 0))
          s0-0
          s1-0
+         s3-1
          )
        (format
          0
@@ -815,7 +817,9 @@
          (logtest? (-> self flags) (battle-flags beaten))
          )
        (when (and s0-0 (not (logtest? (-> self flags) (battle-flags beaten))))
+         (set! *mp-incoming-battle-spawn-aid* s3-1)
          (spawn-from-spawner-choice self s0-0 (the-as int (-> arg3 param 0)) s2-0 s1-0)
+         (set! *mp-incoming-battle-spawn-aid* (the-as uint 0))
          )
        )
      )
@@ -1288,10 +1292,16 @@
         )
       (if s0-1
           (begin
+            (when (not *mp-processing-remote-event*)
+              (set! *mp-incoming-battle-spawn-aid* (mp-generate-battle-enemy-aid))
+              )
             (set! v0-7 (spawn-from-breed this s0-1 s1-1))
             (let ((spawned-proc (the-as enemy (handle->process v0-7))))
               (if (and spawned-proc (nonzero? spawned-proc))
                   (begin
+                    (when (nonzero? *mp-incoming-battle-spawn-aid*)
+                      (set! (-> spawned-proc net-id) *mp-incoming-battle-spawn-aid*)
+                      )
                     (format
                       0
                       "[MP-BattleSpawn][~A][SPAWNED] battle=~A spawner=~D breed=~D handle=~A~%"
@@ -1316,7 +1326,7 @@
                       (mp-enemy-note-remote-battle-spawn! spawned-proc)
                       )
                     (when (not *mp-processing-remote-event*)
-                      (mp-send-battle-spawn-event this arg1 arg3 arg2)
+                      (mp-send-battle-spawn-event this arg1 arg3 arg2 *mp-incoming-battle-spawn-aid*)
                       )
                     )
                   (format
@@ -1328,6 +1338,9 @@
                     arg3
                     )
                 )
+              )
+            (when (not *mp-processing-remote-event*)
+              (set! *mp-incoming-battle-spawn-aid* (the-as uint 0))
               )
             )
           (format

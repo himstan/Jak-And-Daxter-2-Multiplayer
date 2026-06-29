@@ -49,7 +49,8 @@
                              (battle-evt uint)
                              (spawner-index int)
                              (breed-index int)
-                             (initial? symbol))
+                             (initial? symbol)
+                             (enemy-aid uint))
   "Broadcast battle lifecycle and spawn sync."
   (when (and *multi-sync-enabled?*
              (= (pc-multi-get-status) 6)
@@ -71,15 +72,22 @@
         (set! (-> evt spawner-index) (the-as uint32 spawner-index))
         (set! (-> evt breed-index) (the-as uint32 breed-index))
         (set! (-> evt initial?) (if initial? (the-as uint32 1) (the-as uint32 0)))
+        (set! (-> evt enemy-aid) (the-as uint32 enemy-aid))
         (format
           0
-          "[MP-BattleEvent][~A][SEND] evt=~D battle=~S spawner=~D breed=~D initial=~A~%"
+          "[MP-BattleEvent][~A][SEND] evt=~D battle=~S spawner=~D breed=~D~%"
           (if (mp-is-jak?) "HOST" "CLIENT")
           battle-evt
           (mp-copy-process-name-to-string proc)
           spawner-index
           breed-index
+          )
+        (format
+          0
+          "[MP-BattleEvent][~A][SEND] initial=~A aid=~D~%"
+          (if (mp-is-jak?) "HOST" "CLIENT")
           initial?
+          enemy-aid
           )
         (format
           0
@@ -95,17 +103,17 @@
   )
 
 (defun mp-send-battle-start-event ((proc process-tree))
-  (mp-send-battle-event proc MP_BATTLE_EVT_START 0 0 #f)
+  (mp-send-battle-event proc MP_BATTLE_EVT_START 0 0 #f (the-as uint 0))
   (none)
   )
 
 (defun mp-send-battle-end-event ((proc process-tree))
-  (mp-send-battle-event proc MP_BATTLE_EVT_END 0 0 #f)
+  (mp-send-battle-event proc MP_BATTLE_EVT_END 0 0 #f (the-as uint 0))
   (none)
   )
 
-(defun mp-send-battle-spawn-event ((proc process-tree) (spawner-index int) (breed-index int) (initial? symbol))
-  (mp-send-battle-event proc MP_BATTLE_EVT_SPAWN spawner-index breed-index initial?)
+(defun mp-send-battle-spawn-event ((proc process-tree) (spawner-index int) (breed-index int) (initial? symbol) (enemy-aid uint))
+  (mp-send-battle-event proc MP_BATTLE_EVT_SPAWN spawner-index breed-index initial? enemy-aid)
   (none)
   )
 

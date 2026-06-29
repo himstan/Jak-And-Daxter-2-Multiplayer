@@ -13,11 +13,16 @@
 (declare-type centurion nav-enemy)
 
 (define *mp-combat-retarget-distance-bias* 8192.0)
+(defun mp-battle-enemy-id? ((aid uint))
+  "True if the AID is a dynamic battle-spawned enemy ID."
+  (and (>= aid #x60000000) (< aid #x70000000))
+  )
+
 (define *mp-dead-aid-perm-full-logged?* #f)
 
 (defun mp-mark-aid-dead-perm! ((aid uint))
   "Record an actor AID as dead in the existing save perm-list."
-  (when (zero? aid)
+  (when (or (zero? aid) (mp-battle-enemy-id? aid))
     (return #f)
     )
   (when (not (and *game-info* (nonzero? *game-info*)))
@@ -54,7 +59,7 @@
 
 (defun mp-aid-dead-perm? ((aid uint))
   "True if an actor AID is already tombstoned as dead."
-  (when (or (zero? aid) (not (and *game-info* (nonzero? *game-info*))))
+  (when (or (zero? aid) (mp-battle-enemy-id? aid) (not (and *game-info* (nonzero? *game-info*))))
     (return #f)
     )
   (let ((perm (actor-perm *game-info* (the-as actor-id aid))))
@@ -67,7 +72,7 @@
 
 (defun mp-deactivate-dead-aid-if-loaded! ((aid uint))
   "Apply a dead-AID tombstone to a loaded entity/process if it exists."
-  (when (not (mp-aid-dead-perm? aid))
+  (when (or (not (mp-aid-dead-perm? aid)) (mp-battle-enemy-id? aid))
     (return #f)
     )
   (let ((ent (entity-by-aid aid)))

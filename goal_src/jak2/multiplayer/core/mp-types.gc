@@ -28,6 +28,8 @@
 (defconstant MP_CLIENT_VEHICLE_NET_ID_END (the uint #x50000000))
 (define-perm *mp-client-vehicle-net-id-counter* uint MP_CLIENT_VEHICLE_NET_ID_BASE)
 (define-perm *mp-last-local-state-id* uint (the uint 0))
+(define-perm *mp-battle-spawn-counter* uint (the uint 0))
+(define-perm *mp-incoming-battle-spawn-aid* uint (the uint 0))
 (define *multi-sync-tps* 30)
 
 (define-perm *remote-player-is-dying* symbol #f)
@@ -426,6 +428,7 @@
    (spawner-index uint32 :overlay-at (-> data 36))
    (breed-index  uint32 :overlay-at (-> data 40))
    (initial?     uint32 :overlay-at (-> data 44))
+   (enemy-aid    uint32 :overlay-at (-> data 48))
    )
   )
 
@@ -1232,6 +1235,11 @@
   (or (not *mp-puppet*) (!= proc *mp-puppet*))
 )
 
+(defun mp-generate-battle-enemy-aid ()
+  (+! *mp-battle-spawn-counter* 1)
+  (logior #x60000000 *mp-battle-spawn-counter*)
+  )
+
 ;; --- Extern Declarations ---
 
 (define-extern pc-multi-debug-stop-receive (function uint none))
@@ -1300,7 +1308,7 @@
 (define-extern mp-send-player-gun-shot-event (function uint none))
 (define-extern mp-send-battle-start-event (function process-tree none))
 (define-extern mp-send-battle-end-event (function process-tree none))
-(define-extern mp-send-battle-spawn-event (function process-tree int int symbol none))
+(define-extern mp-send-battle-spawn-event (function process-tree int int symbol uint none))
 (define-extern mp-arm-mission-failed-full-sync-after-spawn (function none))
 (define-extern mp-request-mission-failed-full-sync-when-ready (function none))
 (define-extern mp-send-enemy-attack-event (function uint uint none))
@@ -1367,3 +1375,6 @@
 (define-extern mp-waypoint-sync-tick (function none))
 (define-extern mp-waypoint-clear-transition-buffers! (function none))
 (define-extern mp-reset-state (function none))
+(define-extern *mp-battle-spawn-counter* uint)
+(define-extern *mp-incoming-battle-spawn-aid* uint)
+(define-extern mp-generate-battle-enemy-aid (function uint))

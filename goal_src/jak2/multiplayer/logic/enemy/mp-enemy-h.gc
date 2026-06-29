@@ -6,13 +6,22 @@
 (defun mp-get-enemy-aid ((e-proc enemy))
   "Get the unique Actor ID for an enemy, supporting both entities and traffic citizens."
   (let ((e-aid (the-as uint 0)))
-    (cond
-      ((and (type? e-proc citizen) (!= (-> (the-as citizen e-proc) traffic-id) -1))
-       (set! e-aid (the-as uint (logior #x80000000 (the-as int (-> (the-as citizen e-proc) traffic-id))))))
-      ((-> e-proc entity)
-       (set! e-aid (-> e-proc entity aid)))
+    (when (and e-proc (nonzero? e-proc))
+      (cond
+        ((nonzero? (-> e-proc net-id))
+         (set! e-aid (the-as uint (-> e-proc net-id)))
+         )
+        ((and (type? e-proc citizen) (!= (-> (the-as citizen e-proc) traffic-id) -1))
+         (set! e-aid (the-as uint (logior #x80000000 (the-as int (-> (the-as citizen e-proc) traffic-id)))))
+         )
+        ((and (-> e-proc entity) (nonzero? (-> e-proc entity)))
+         (set! e-aid (-> e-proc entity aid))
+         )
+        )
       )
-    e-aid))
+    e-aid
+    )
+  )
 
 (define *mp-search-enemy-res* (the-as enemy #f))
 (define *mp-search-enemy-aid* (the-as uint 0))
