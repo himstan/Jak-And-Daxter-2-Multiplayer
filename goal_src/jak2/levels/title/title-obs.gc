@@ -603,6 +603,10 @@
   )
 
 (defun title-demo-disclaimer-state ()
+  (format 0 "Showing starting menu: ~A~%" (if *demo-disclaimer-shown-this-startup?*
+                                                'title
+                                                'demo-disclaimer
+                                                ))
   (if *demo-disclaimer-shown-this-startup?*
       'title
       (begin
@@ -802,7 +806,6 @@
   :code (behavior ()
     (remove-setting! 'allow-timeout)
     (remove-setting! 'dialog-volume)
-    (title-progress (title-demo-disclaimer-state))
     (if (zero? (title-menu))
         (go-virtual idle)
         )
