@@ -193,16 +193,6 @@
     )
   )
 
-(defun vehicle-remote-driven-by-puppet? ((veh vehicle))
-  (let ((driver (get-rider-in-seat veh 0)))
-    (or (and driver (= driver *mp-puppet*))
-        (and (nonzero? (-> veh net-id))
-             (= (-> veh net-id) (-> *remote-info* veh-state net-id))
-             )
-        )
-    )
-  )
-
 (defun vehicle-find-empty-passenger-seat ((veh vehicle) (pos vector))
   (let ((best-seat -1)
         (best-dist (the float #x7f800000))
@@ -869,11 +859,11 @@
   (none)
   )
 
-(defmethod start-vehicle-ignition! ((this vehicle))
+(defmethod start-vehicle-ignition! ((this vehicle) (play-sound? symbol))
   (when (not (logtest? (rigid-body-object-flag ignition) (-> this flags)))
     (logior! (-> this flags) (rigid-body-object-flag ignition))
-    (when (or (mp-is-traffic-authoritative?) (= (if (-> this state) (-> this state name) "") "player-control"))
-      (sound-play "vehicl-ignition")
+    (when play-sound?
+      (sound-play-by-spec (static-sound-spec "vehicl-ignition" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> this root trans))
     )
     (let ((s5-1 (-> this node-list data 0 bone transform))
           (s4-1 (new 'stack-no-clear 'merc-matrix))
