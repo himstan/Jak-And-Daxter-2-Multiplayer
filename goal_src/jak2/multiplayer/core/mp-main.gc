@@ -391,6 +391,9 @@
       (set! (-> *local-info* role) -1))
       
   ;; Puppet
+  (when (and *minimap* (nonzero? *minimap*) (-> *minimap* engine))
+    (kill-by-key (-> *minimap* engine) MP_REMOTE_PLAYER_MARKER_KEY)
+    )
   (when *mp-puppet*
     (deactivate *mp-puppet*)
     (set! *mp-puppet* (the-as target #f))

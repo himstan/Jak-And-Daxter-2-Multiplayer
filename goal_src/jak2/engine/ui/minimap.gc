@@ -2269,18 +2269,19 @@
                         )
          (remote-marker-tex (get-texture map-target-marker common))
          )
-    (when (and remote-target
-               (nonzero? remote-target)
-               remote-marker-tex
-               (nonzero? (-> remote-target root))
-               (-> remote-target control)
-               (nonzero? (-> remote-target control))
-               )
+    (when remote-marker-tex
       (let ((remote-dir (new 'stack-no-clear 'vector))
             (marker-mat (new 'stack-no-clear 'matrix))
             (f30-0 (-> *video-params* relative-x-scale))
             )
-        (vector-z-quaternion! remote-dir (-> remote-target control quat))
+        (if (and remote-target
+                 (nonzero? remote-target)
+                 (nonzero? (-> remote-target root))
+                 (-> remote-target control)
+                 (nonzero? (-> remote-target control)))
+            (vector-z-quaternion! remote-dir (-> remote-target control quat))
+            (vector-z-quaternion! remote-dir (the-as quaternion *multi-remote-render-quat*))
+            )
         (vector-xz-normalize! remote-dir 1.0)
         (set! (-> remote-dir y) 0.0)
         (set! (-> remote-dir w) 0.0)

@@ -1,6 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(defconstant MP_REMOTE_PLAYER_MARKER_KEY (the-as int #x4d50524d))
+
 (defun mp-update-remote-transform ()
   "Consolidated logic for calculating the remote player's visual and physical transform"
   (let ((remote-pos (new 'stack-no-clear 'vector)))
@@ -25,6 +27,25 @@
   )
   (none)
 )
+
+(defun mp-remote-player-marker-kill! ()
+  "Remove the stable remote-player map marker connection."
+  (when (and *minimap* (nonzero? *minimap*) (-> *minimap* engine))
+    (kill-by-key (-> *minimap* engine) MP_REMOTE_PLAYER_MARKER_KEY)
+    )
+  (none)
+  )
+
+(defun mp-remote-player-marker-update! ((proc target))
+  "Keep one remote-player marker alive, using the puppet when active or the ghost position when far."
+  (when (and *minimap* (nonzero? *minimap*) *target* (nonzero? *target*))
+    (if (and proc (nonzero? proc))
+        (add-icon! *minimap* proc (the-as uint (minimap-class remote-player)) MP_REMOTE_PLAYER_MARKER_KEY (the-as vector #t) 0)
+        (add-icon! *minimap* *target* (the-as uint (minimap-class remote-player)) MP_REMOTE_PLAYER_MARKER_KEY *multi-remote-render-pos* 0)
+        )
+    )
+  (none)
+  )
 
 (defun mp-manage-remote-puppet ()
   "Spawn, update, or deactivate the remote player puppet using the actual target process"
@@ -126,11 +147,13 @@
                  (mp-puppet-apply-ghost-correction! proc)
                  )
                )
+           (mp-remote-player-marker-update! (mp-puppet-get-proc))
            )
          )
        )
       (else
        (begin
+         (mp-remote-player-marker-kill!)
          (let ((proc (mp-puppet-get-proc)))
            (when proc
              (format 0 "[MP-Puppet] Deactivating puppet (Remote Status ~D)~%" remote-status)

@@ -1050,9 +1050,6 @@
   (remove-setting! 'allow-pause)
   (remove-setting! 'allow-progress)
 
-  ;; Add minimap icon
-  (add-icon! *minimap* self (the-as uint (minimap-class remote-player)) (the-as int #f) (the-as vector #t) 0)
-
   ;; Directly go to the correct state based on role to avoid resets/overrides
   (if (mp-is-jak?)
       (go target-indax-start (the handle #f))
