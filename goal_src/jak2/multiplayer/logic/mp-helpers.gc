@@ -343,6 +343,69 @@
       (is-ghost-in-pausable-state? rec))
   )
 
+(define *mp-current-remote-hit-sound-id* (the-as uint32 0))
+
+(defun mp-hit-sound-id-from-attack-mode ((mode symbol))
+  "Map a target attack mode to the connect sound played by target-send-attack."
+  (cond
+    ((or (= mode 'spin) (= mode 'spin-air))
+     (the-as uint (mp-hit-sound-id spin))
+     )
+    ((or (= mode 'punch) (= mode 'flip) (= mode 'flut-attack))
+     (the-as uint (mp-hit-sound-id punch))
+     )
+    ((= mode 'uppercut)
+     (the-as uint (mp-hit-sound-id uppercut))
+     )
+    ((or (= mode 'flop) (= mode 'flop-down))
+     (the-as uint (mp-hit-sound-id flop))
+     )
+    ((= mode 'board-spin)
+     (the-as uint (mp-hit-sound-id board-spin))
+     )
+    ((= mode 'mech-punch)
+     (the-as uint (mp-hit-sound-id mech-punch))
+     )
+    (else
+     (the-as uint (mp-hit-sound-id spin))
+     )
+    )
+  )
+
+(defun mp-hit-sound-id-from-attack-info ((info attack-info))
+  (if (and info (nonzero? info))
+      (mp-hit-sound-id-from-attack-mode (-> info mode))
+      (the-as uint (mp-hit-sound-id spin))
+      )
+  )
+
+(defun mp-play-remote-hit-sound! ((e-proc enemy) (hit-sound-id uint))
+  "Play the initiator-side hit connect sound for an accepted remote-player hit."
+  (when (and e-proc (nonzero? e-proc))
+    (case hit-sound-id
+      (((the-as uint (mp-hit-sound-id punch)))
+       (sound-play-by-spec (static-sound-spec "punch-hit" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> e-proc root trans))
+       )
+      (((the-as uint (mp-hit-sound-id uppercut)))
+       (sound-play-by-spec (static-sound-spec "uppercut-hit" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> e-proc root trans))
+       )
+      (((the-as uint (mp-hit-sound-id flop)))
+       (sound-play-by-spec (static-sound-spec "flop-hit" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> e-proc root trans))
+       )
+      (((the-as uint (mp-hit-sound-id board-spin)))
+       (sound-play-by-spec (static-sound-spec "board-impact" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> e-proc root trans))
+       )
+      (((the-as uint (mp-hit-sound-id mech-punch)))
+       (sound-play-by-spec (static-sound-spec "mech-punch-hit" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> e-proc root trans))
+       )
+      (else
+       (sound-play-by-spec (static-sound-spec "spin-hit" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> e-proc root trans))
+       )
+      )
+    )
+  (none)
+  )
+
 (defun mp-is-local-attacker? ((proc process))
   "Is the process either the local target or in its parentage (e.g., projectile)?"
   (if (or (not proc) (zero? proc)) (return #f))
@@ -714,7 +777,7 @@
     )
   (none))
 
-(defun mp-send-enemy-attack-event ((aid uint) (att-id uint))
+(defun mp-send-enemy-attack-event ((aid uint) (att-id uint) (hit-sound-id uint))
   "Send a specialized enemy attack event with an attack ID."
   ;; GUARD: Only send if synced and in-game
   (if (or (not *multi-sync-enabled?*) (!= (pc-multi-get-status) 6))
@@ -726,6 +789,7 @@
       (set! (-> evt etype) MP_EVENT_ATTACK_ENEMY)
       (set! (-> evt aid) (the-as uint32 aid))
       (set! (-> evt attack-id) (the-as uint32 att-id))
+      (set! (-> evt hit-sound-id) (the-as uint32 hit-sound-id))
       )
     (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
     )

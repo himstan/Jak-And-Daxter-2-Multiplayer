@@ -36,7 +36,7 @@
         (if info (set! (-> rec last-attack-id) (-> info id)))
         (if info (set! (-> rec last-local-attack-id) (-> info id)))
         (set! (-> rec last-local-attack-time) (current-time))
-        (mp-send-enemy-attack-event aid (if info (-> info id) (the uint 0)))
+        (mp-send-enemy-attack-event aid (if info (-> info id) (the uint 0)) (mp-hit-sound-id-from-attack-info info))
         (return #t)
         )
       )
@@ -109,7 +109,12 @@
                     (if info (set! (-> rec last-attack-id) (-> info id)))
                     (if (and is-local-attacker? info) (set! (-> rec last-local-attack-id) (-> info id)))
                     (set! (-> rec last-local-attack-time) (current-time))
-                    (mp-send-enemy-attack-event aid (if info (-> info id) (the uint 0)))
+                    (mp-send-enemy-attack-event
+                      aid
+                      (if info (-> info id) (the uint 0))
+                      (if (nonzero? *mp-current-remote-hit-sound-id*)
+                          (the-as uint *mp-current-remote-hit-sound-id*)
+                          (mp-hit-sound-id-from-attack-info info)))
                     )
                   )
                 )

@@ -348,6 +348,9 @@
     (let ((damage-taken (max 0 (- old-hp (-> evt new-hp)))))
       (process-spawn damage-number damage-taken (-> e-proc root trans) (-> e-proc mask))
       (send-damage-to-bar *health-bar-manager* e-proc (the-as int damage-taken) old-hp)
+      (when (> damage-taken 0)
+        (mp-play-remote-hit-sound! (the-as enemy e-proc) (-> evt hit-sound-id))
+        )
       (format 0 "[MP-Traffic-Hijacks] Remote ped hit applied nid=~D attack-id=~D damage=~D hp=~D->~D~%"
               (-> evt net-id)
               (-> evt attack-id)
@@ -421,6 +424,7 @@
       (set! (-> evt shove-back) (if (and info (logtest? (attack-mask shove-back) (-> info mask))) (-> info shove-back) (meters 2)))
       (set! (-> evt shove-up) (if (and info (logtest? (attack-mask shove-up) (-> info mask))) (-> info shove-up) (meters 0.5)))
       (set! (-> evt knocked-type) (the-as uint32 (if (and info (logtest? (attack-mask knock) (-> info mask))) (-> info knock) (knocked-type knocked-type-0))))
+      (set! (-> evt hit-sound-id) (the-as uint32 (mp-hit-sound-id-from-attack-info info)))
       (mp-pedestrian-capture-source-pos! evt e-proc attacker info)
       (mp-pedestrian-capture-attack-dir! evt e-proc info)
       (format 0 "[MP-Traffic-Hijacks] Queuing pedestrian attack event for nid=~D attack-id=~D damage=~D new-hp=~D attacker-info=~A~%" (-> e-proc net-id) (-> e-proc attack-id) damage new-hp (-> attacker name))

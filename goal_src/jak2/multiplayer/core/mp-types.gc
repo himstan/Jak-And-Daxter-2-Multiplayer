@@ -296,6 +296,16 @@
 
 (define-perm *stadium-board1-judge* (pointer judge) (the-as (pointer judge) #f))
 
+(defenum mp-hit-sound-id (uint32)
+  (none 0)
+  (spin 1)
+  (punch 2)
+  (uppercut 3)
+  (flop 4)
+  (board-spin 5)
+  (mech-punch 6)
+  )
+
 (deftype mp-world-event (mp-event)
   ((aid uint32 :overlay-at (-> data 0))
     )
@@ -304,6 +314,7 @@
 (deftype mp-enemy-attack-event (mp-event)
   ((aid       uint32 :overlay-at (-> data 0))
    (attack-id uint32 :overlay-at (-> data 4))
+   (hit-sound-id uint32 :overlay-at (-> data 8))
    )
   )
 
@@ -365,6 +376,7 @@
    (new-hp       uint32 :overlay-at (-> data 16))
    (shove-back   float  :overlay-at (-> data 20))
    (shove-up     float  :overlay-at (-> data 24))
+   (hit-sound-id uint32 :overlay-at (-> data 28))
    (source-pos   vector :inline :overlay-at (-> data 32))
    (attack-dir   vector :inline :overlay-at (-> data 48))
    )
@@ -1340,7 +1352,7 @@
 (define-extern mp-send-battle-spawn-event (function process-tree int int symbol uint none))
 (define-extern mp-arm-mission-failed-full-sync-after-spawn (function none))
 (define-extern mp-request-mission-failed-full-sync-when-ready (function none))
-(define-extern mp-send-enemy-attack-event (function uint uint none))
+(define-extern mp-send-enemy-attack-event (function uint uint uint none))
 (define-extern mp-send-enemy-death-event (function enemy none))
 (define-extern mp-receive-world-event (function mp-world-event none))
 (define-extern mp-receive-battle-event (function mp-battle-event none))
