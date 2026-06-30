@@ -183,6 +183,7 @@
   (set! (-> obj memcard-vibration?) #t)
   (set! (-> obj memcard-subtitles?) #f)
   (set! (-> obj hinttitles?) #t)
+  (set! (-> obj subtitle-speaker?) 'auto)
 
   (when (or (zero? (the-as uint (-> obj mp-join-ip))) (= (length (-> obj mp-join-ip)) 0))
     (set! (-> obj mp-join-ip) (new 'global 'string 32 (the-as string #f)))

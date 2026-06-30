@@ -89,11 +89,11 @@
 ;; WARN: Return type mismatch entity-perm-status vs none.
 (defmethod init-from-entity! ((this krew-package) (arg0 entity-actor))
   "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
-This commonly includes things such as:
-- stack size
-- collision information
-- loading the skeleton group / bones
-- sounds"
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
   (process-entity-status! this (entity-perm-status dead) #t)
   (none)
   )
@@ -481,7 +481,7 @@ This commonly includes things such as:
            (let ((f30-0 49152.0)
                  (f0-6 (vector-vector-distance-squared (-> (the-as process-drawable gp-0) root trans) (-> self end-pos)))
                  )
-             (if (>= (* f30-0 f30-0) f0-6)
+             (if (>= (square f30-0) f0-6)
                  (go-virtual complete)
                  )
              )
@@ -507,13 +507,11 @@ This commonly includes things such as:
           )
       (while (not s5-0)
         (let ((v1-1 (handle->process (-> self slave 0))))
-          (when v1-1
-            (let ((f0-0 (vector-vector-distance-squared (-> (the-as process-drawable v1-1) root trans) gp-0))
-                  (f1-0 (-> gp-0 w))
-                  )
-              (set! s5-0 (< f0-0 (* f1-0 f1-0)))
+          (if v1-1
+              (set! s5-0
+                    (< (vector-vector-distance-squared (-> (the-as process-drawable v1-1) root trans) gp-0) (square (-> gp-0 w)))
+                    )
               )
-            )
           )
         (suspend)
         )
@@ -552,13 +550,11 @@ This commonly includes things such as:
           )
       (while (not s5-2)
         (let ((v1-48 (handle->process (-> self slave 0))))
-          (when v1-48
-            (let ((f0-1 (vector-vector-distance-squared (-> (the-as process-drawable v1-48) root trans) gp-2))
-                  (f1-3 (-> gp-2 w))
-                  )
-              (set! s5-2 (< f0-1 (* f1-3 f1-3)))
+          (if v1-48
+              (set! s5-2
+                    (< (vector-vector-distance-squared (-> (the-as process-drawable v1-48) root trans) gp-2) (square (-> gp-2 w)))
+                    )
               )
-            )
           )
         (suspend)
         )
