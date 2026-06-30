@@ -141,8 +141,6 @@ def patch_mod_timestamp_and_version_info(args, out_folder):
                 # Replace the placeholder string with the version and date string
                 version_str = (
                     args["versionName"]
-                    + " "
-                    + datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
                 )
                 file_data = file_data.replace("%MODVERSIONPLACEHOLDER%", version_str)
                 # Write the updated content back to the mod-settings
