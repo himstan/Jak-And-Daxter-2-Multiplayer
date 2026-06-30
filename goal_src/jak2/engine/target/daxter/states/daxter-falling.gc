@@ -15,6 +15,9 @@
                   (* 0.003921569 (the float (-> *cpad-list* cpads (-> self control cpad number) abutton (abutton-idx x)))))) ;; og:preserve-this abutton indexing
 
 
+          (if (logtest? (water-flags swimming) (-> self water flags))
+              (go target-swim-stance))
+
           (if (logtest? (-> self control status) (collide-status on-surface))
               (go target-indax-hit-ground #f))
 

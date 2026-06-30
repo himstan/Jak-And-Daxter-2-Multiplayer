@@ -20,6 +20,8 @@
          (target-indax-exit))
   :trans (behavior ()
           ((-> self state-hook))
+          (when (logtest? (water-flags swimming) (-> self water flags))
+            (go target-swim-stance))
           (target-indax-align!)
           (when (move-legs?)
             (set! (-> self control bend-target) 0.0)

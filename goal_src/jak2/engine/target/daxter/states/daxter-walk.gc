@@ -124,6 +124,8 @@
          (target-indax-exit))
   :trans (behavior ()
           ((-> self state-hook))
+          (when (logtest? (water-flags swimming) (-> self water flags))
+            (go target-swim-stance))
           (when (not (move-legs?))
             (target-effect-exit)
             (remove-exit)
