@@ -759,7 +759,7 @@
      (let ((info (if (and arg3 (nonzero? arg3) (nonzero? (-> arg3 param 1))) (the-as attack-info (-> arg3 param 1)) (the-as attack-info #f)))
            (is-local? (mp-is-local-attacker? arg0)))
        (if (or 
-           (= (-> this net-id) 0) 
+           (and *mp-traffic-suppressed* (= (-> this net-id) 0))
            (logtest? (-> this focus-status) (focus-status dead))
            (= (-> info id) (-> this incoming attack-id))
            (and (not is-local?) (not (mp-is-traffic-authoritative?))))
@@ -795,7 +795,7 @@
          ;; This prevents the "thousand hits" visual jitter and sound spam.
          (let ((cur-state (if (-> this state) (-> this state name) #f)))
            (when (and (not is-remote-replay?)
-                      (not (mp-is-traffic-authoritative?))
+                      (not (mp-is-jak?))
                       (or (= cur-state 'hit) (= cur-state 'knocked) (= cur-state 'knocked-off-vehicle)))
              (when is-local?
                (if (mp-pedestrian-play-local-hit-prediction! this arg0 arg3)

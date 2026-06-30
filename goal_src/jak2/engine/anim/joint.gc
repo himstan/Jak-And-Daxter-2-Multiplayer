@@ -1734,11 +1734,11 @@
 
 (defun cspace<-rot-yxy! ((dst cspace) (src transform))
   ;; MULTIPLAYER GUARD
-  (if (or (not arg0) (zero? (the-as uint arg0)) (logtest? (the-as uint arg0) 15) (>= (the-as uint arg0) #x70000000)
-          (not arg1) (zero? (the-as uint arg1)) (logtest? (the-as uint arg1) 15) (>= (the-as uint arg1) #x70000000))
+  (if (or (not dst) (zero? (the-as uint dst)) (logtest? (the-as uint dst) 15) (>= (the-as uint dst) #x70000000)
+          (not src) (zero? (the-as uint src)) (logtest? (the-as uint src) 15) (>= (the-as uint src) #x70000000))
       (return (the-as matrix #f)))
 
-  (let ((b0 (-> arg0 bone)))
+  (let ((b0 (-> dst bone)))
     (if (or (not b0) (zero? (the-as uint b0)) (logtest? (the-as uint b0) 15) (>= (the-as uint b0) #x70000000))
         (return (the-as matrix #f)))
     )
@@ -1750,11 +1750,11 @@
 
 (defun cspace<-transform-yxy! ((dst cspace) (src transform))
   ;; MULTIPLAYER GUARD
-  (if (or (not arg0) (zero? (the-as uint arg0)) (logtest? (the-as uint arg0) 15) (>= (the-as uint arg0) #x70000000)
-          (not arg1) (zero? (the-as uint arg1)) (logtest? (the-as uint arg1) 15) (>= (the-as uint arg1) #x70000000))
+  (if (or (not dst) (zero? (the-as uint dst)) (logtest? (the-as uint dst) 15) (>= (the-as uint dst) #x70000000)
+          (not src) (zero? (the-as uint src)) (logtest? (the-as uint src) 15) (>= (the-as uint src) #x70000000))
       (return (the-as matrix #f)))
 
-  (let ((b0 (-> arg0 bone)))
+  (let ((b0 (-> dst bone)))
     (if (or (not b0) (zero? (the-as uint b0)) (logtest? (the-as uint b0) 15) (>= (the-as uint b0) #x70000000))
         (return (the-as matrix #f)))
     )
@@ -1915,12 +1915,12 @@
 
 (defun cspace<-parented-matrix-mirror! ((dst cspace) (joint-mat matrix))
   ;; MULTIPLAYER GUARD
-  (if (or (not arg0) (zero? (the-as uint arg0)) (logtest? (the-as uint arg0) 15) (>= (the-as uint arg0) #x70000000)
-          (not arg1) (zero? (the-as uint arg1)) (logtest? (the-as uint arg1) 15) (>= (the-as uint arg1) #x70000000))
+  (if (or (not dst) (zero? (the-as uint dst)) (logtest? (the-as uint dst) 15) (>= (the-as uint dst) #x70000000)
+          (not joint-mat) (zero? (the-as uint joint-mat)) (logtest? (the-as uint joint-mat) 15) (>= (the-as uint joint-mat) #x70000000))
       (return (the-as matrix #f)))
 
-  (let ((b0 (-> arg0 bone))
-        (p (-> arg0 parent)))
+  (let ((b0 (-> dst bone))
+        (p (-> dst parent)))
     (if (or (not b0) (zero? (the-as uint b0)) (logtest? (the-as uint b0) 15) (>= (the-as uint b0) #x70000000)
             (not p) (zero? (the-as uint p)) (logtest? (the-as uint p) 15) (>= (the-as uint p) #x70000000))
         (return (the-as matrix #f)))
@@ -2042,9 +2042,9 @@
 
 (defun cspace<-parented-transformq-joint-flip-z! ((dst cspace) (joint-transformq transformq))
   ;; MULTIPLAYER GUARD
-  (when (and arg0 (not (zero? (the-as uint arg0))) (not (logtest? (the-as uint arg0) 15)) (< (the-as uint arg0) #x70000000)
-             arg1 (not (zero? (the-as uint arg1))) (not (logtest? (the-as uint arg1) 15)) (< (the-as uint arg1) #x70000000))
-    (let ((b0 (-> arg0 bone)))
+  (when (and dst (not (zero? (the-as uint dst))) (not (logtest? (the-as uint dst) 15)) (< (the-as uint dst) #x70000000)
+             joint-transformq (not (zero? (the-as uint joint-transformq))) (not (logtest? (the-as uint joint-transformq) 15)) (< (the-as uint joint-transformq) #x70000000))
+    (let ((b0 (-> dst bone)))
       (when (and b0 (not (zero? (the-as uint b0))) (not (logtest? (the-as uint b0) 15)) (< (the-as uint b0) #x70000000))
         (cspace<-parented-transformq-joint! dst joint-transformq)
         (cspace<-matrix-joint-flip-z! dst (-> dst bone transform))
