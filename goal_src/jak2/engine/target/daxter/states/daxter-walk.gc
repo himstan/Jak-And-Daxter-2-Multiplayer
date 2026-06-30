@@ -1,6 +1,18 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(defbehavior target-indax-footstep-effect target ((step-effect symbol))
+  (let ((ground-pat (-> self control ground-pat))
+        (poof-effect (if (< (-> self control ctrl-xz-vel) 16384.0)
+                         'effect-just-poof
+                         'effect-run-poof)))
+    (when (and ground-pat (nonzero? ground-pat))
+      (do-effect-for-surface (-> self skel effect) step-effect -1.0 -1 (the-as basic #f) ground-pat)
+      (do-effect-for-surface (-> self skel effect) poof-effect -1.0 -1 (the-as basic #f) ground-pat)
+      )
+    )
+  )
+
 (defbehavior target-indax-walk-anim target ()
   (let ((f26-0 0.0)
         (f30-0 0.0))
@@ -59,10 +71,10 @@
             (let ((f-mid (* 0.25 max-frame))
                   (f-end (* 0.75 max-frame)))
               (when (and (< prev-frame f-mid) (>= curr-frame f-mid))
-                (do-effect-for-surface (-> self skel effect) 'effect-walk-step-left -1.0 -1 (the-as basic #f) (-> self control ground-pat))
+                (target-indax-footstep-effect 'effect-walk-step-left)
                 )
               (when (and (< prev-frame f-end) (>= curr-frame f-end))
-                (do-effect-for-surface (-> self skel effect) 'effect-walk-step-right -1.0 -1 (the-as basic #f) (-> self control ground-pat))
+                (target-indax-footstep-effect 'effect-walk-step-right)
                 )
               )
             (set! prev-frame curr-frame)

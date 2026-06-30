@@ -75,7 +75,7 @@
                     (print-game-text (lookup-text! *common-text* (text-id press-x-to-hop-off) #f) s3-1 #f 44 (bucket-id progress))
                   )
                 )
-    (if (or (cpad-pressed? (-> self control cpad number) x))
+    (if (and (not (real-movie?)) (or (mp-is-daxter?) (not *remote-info*) (zero? (-> *remote-info* scene-active))) (cpad-pressed? (-> self control cpad number) x))
         (begin
           (sound-play "jump")
           (format 0 "[MP] Exiting ride along state...~%")
