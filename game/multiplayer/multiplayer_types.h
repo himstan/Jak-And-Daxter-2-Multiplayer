@@ -190,6 +190,33 @@ struct MPPalaceSquidSyncBufferGOAL {
 };
 static_assert(sizeof(MPPalaceSquidSyncBufferGOAL) == 264, "MPPalaceSquidSyncBufferGOAL must match GOAL");
 
+struct MPAirlockStateGOAL {
+  uint32_t airlock_aid;
+  uint32_t state_id;
+  uint32_t level_id;
+  uint32_t sequence;
+  uint32_t last_updated;
+  uint8_t pad[12];
+};
+static_assert(sizeof(MPAirlockStateGOAL) == 32, "MPAirlockStateGOAL must match GOAL");
+
+struct MPAirlockStateTableGOAL {
+  uint32_t count;
+  uint8_t pad[12];
+  MPAirlockStateGOAL states[MAX_AIRLOCK_SYNC_COUNT];
+};
+static_assert(sizeof(MPAirlockStateTableGOAL) == 144, "MPAirlockStateTableGOAL must match GOAL");
+
+struct MPAirlockSyncBufferGOAL {
+  MPAirlockStateTableGOAL local_table;
+  MPAirlockStateTableGOAL remote_table;
+  uint32_t sequence;
+  uint8_t pad_before_last_sync[4];
+  uint64_t last_sync_time;
+  uint8_t pad[8];
+};
+static_assert(sizeof(MPAirlockSyncBufferGOAL) == 312, "MPAirlockSyncBufferGOAL must match GOAL");
+
 struct MultiplayerData {
   bool initialized = false;
   bool enet_initialized = false;
@@ -219,6 +246,10 @@ struct MultiplayerData {
 
   MPPalaceSquidState remote_palace_squid_state = {};
   uint32_t last_palace_squid_sync_time = 0;
+
+  MPAirlockStateTableGOAL remote_airlock_table = {};
+  uint32_t last_airlock_sync_time = 0;
+  uint32_t last_remote_airlock_sequence = 0;
 
   // New fields for joining/searching
   std::atomic<int> join_status{0}; // 0: idle, 1: searching, 2: found, 3: connecting, 4: connected, -1: failed

@@ -12,6 +12,7 @@
 #include "game/multiplayer/multiplayer_session.h"
 #include "game/multiplayer/multiplayer_types.h"
 #include "game/multiplayer/pedestrian/multiplayer_pedestrian.h"
+#include "game/multiplayer/sync/airlock_sync.h"
 #include "game/multiplayer/sync/enemy_sync.h"
 #include "game/multiplayer/sync/event_sync.h"
 #include "game/multiplayer/sync/palace_squid_sync.h"
@@ -85,6 +86,9 @@ void handle_receive_packet(MultiplayerData& data,
       break;
     case PacketType::PALACE_SQUID_SYNC:
       mp_handle_palace_squid_sync_packet(data, packet, current_time);
+      break;
+    case PacketType::AIRLOCK_SYNC:
+      mp_handle_airlock_sync_packet(data, packet, current_time);
       break;
     case PacketType::FULL_SYNC:
       mp_handle_full_sync_packet(packet, local, remote);
@@ -337,6 +341,29 @@ void pc_multi_receive_palace_squid(u32 buffer_ptr) {
       });
 }
 
+void pc_multi_send_airlock_state(u32 buffer_ptr) {
+  if (multiplayer_debug_receive_stopped()) {
+    return;
+  }
+  with_goal_buffer<MPAirlockSyncBufferGOAL>(
+      buffer_ptr, "pc_multi_send_airlock_state", [](auto* buffer) {
+        auto& data = multiplayer_data();
+        if (data.initialized) {
+          mp_send_airlock_sync(data, buffer);
+        }
+      });
+}
+
+void pc_multi_receive_airlock_state(u32 buffer_ptr) {
+  with_goal_buffer<MPAirlockSyncBufferGOAL>(
+      buffer_ptr, "pc_multi_receive_airlock_state", [](auto* buffer) {
+        auto& data = multiplayer_data();
+        if (data.initialized) {
+          mp_receive_airlock_sync(data, buffer);
+        }
+      });
+}
+
 u64 pc_multi_get_enemy_sync_time() {
   return multiplayer_data().last_enemy_sync_time;
 }
@@ -470,6 +497,10 @@ void init_multiplayer_pc_port() {
   jak2::make_function_symbol_from_c("pc-multi-send-palace-squid", (void*)pc_multi_send_palace_squid);
   jak2::make_function_symbol_from_c("pc-multi-receive-palace-squid",
                                     (void*)pc_multi_receive_palace_squid);
+  jak2::make_function_symbol_from_c("pc-multi-send-airlock-state",
+                                    (void*)pc_multi_send_airlock_state);
+  jak2::make_function_symbol_from_c("pc-multi-receive-airlock-state",
+                                    (void*)pc_multi_receive_airlock_state);
   jak2::make_function_symbol_from_c("pc-multi-get-enemy-sync-time",
                                     (void*)pc_multi_get_enemy_sync_time);
   jak2::make_function_symbol_from_c("pc-multi-get-role", (void*)pc_multi_get_role);

@@ -349,6 +349,7 @@ set(RUNTIME_SOURCE
         multiplayer/multiplayer_port_mapping.cpp
         multiplayer/multiplayer_scanner.cpp
         multiplayer/multiplayer_session.cpp
+        multiplayer/sync/airlock_sync.cpp
         multiplayer/sync/enemy_sync.cpp
         multiplayer/sync/event_sync.cpp
         multiplayer/sync/palace_squid_sync.cpp

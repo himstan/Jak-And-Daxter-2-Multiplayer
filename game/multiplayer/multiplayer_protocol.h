@@ -30,7 +30,8 @@ enum class PacketType : uint8_t {
   PEDESTRIAN_SYNC = 6,
   VEHICLE_SYNC = 7,
   TURRET_SYNC = 8,
-  PALACE_SQUID_SYNC = 9
+  PALACE_SQUID_SYNC = 9,
+  AIRLOCK_SYNC = 10
 };
 
 struct PacketHeader {
@@ -246,6 +247,26 @@ struct PacketPalaceSquidSync {
   uint64_t timestamp;
   MPPalaceSquidState state;
 };
+
+struct MPAirlockState {
+  uint32_t airlock_aid;
+  uint32_t state_id;
+  uint32_t level_id;
+  uint32_t sequence;
+  uint32_t last_updated;
+  uint8_t pad[12];
+};
+static_assert(sizeof(MPAirlockState) == 32, "MPAirlockState must be 32 bytes");
+
+#define MAX_AIRLOCK_SYNC_COUNT 4
+
+struct PacketAirlockSync {
+  PacketHeader header;
+  uint32_t count;
+  MPAirlockState states[MAX_AIRLOCK_SYNC_COUNT];
+  uint32_t sequence;
+};
+static_assert(sizeof(PacketAirlockSync) == 141, "PacketAirlockSync must be packed");
 
 struct PacketFullSync {
   PacketHeader header;

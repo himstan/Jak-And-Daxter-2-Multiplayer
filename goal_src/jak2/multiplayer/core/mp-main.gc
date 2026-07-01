@@ -44,6 +44,7 @@
     ;; We always send the state packet because it contains our 'status' field
     (pc-multi-send-state (the-as uint *local-info*))
     (pc-multi-send-events (the-as uint *mp-event-buffer*))
+    (mp-airlock-sync-tick)
     (when (and *mp-enemy-buffer*
                (nonzero? (the-as uint *mp-enemy-buffer*)))
       (pc-multi-send-enemies (the-as uint *mp-enemy-buffer*))
@@ -245,6 +246,7 @@
     (mp-draw-eye-debug)
     (mp-draw-gun-debug)
     (mp-draw-network-debug)
+    (mp-draw-airlock-debug)
     (mp-draw-boss-debug)
     (mp-draw-boss-debug-overlay)
 
@@ -364,6 +366,16 @@
       (mem-set32! (the-as pointer *mp-traffic-buffer*) (/ (size-of mp-traffic-sync-buffer) 4) 0))
   (if (nonzero? (the-as uint *mp-palace-squid-buffer*))
       (mem-set32! (the-as pointer *mp-palace-squid-buffer*) (/ (size-of mp-palace-squid-sync-buffer) 4) 0))
+  (if (nonzero? (the-as uint *mp-airlock-buffer*))
+      (mem-set32! (the-as pointer *mp-airlock-buffer*) (/ (size-of mp-airlock-sync-buffer) 4) 0))
+  (if (nonzero? (the-as uint *mp-local-airlock-state*))
+      (mem-set32! (the-as pointer *mp-local-airlock-state*) (/ (size-of mp-airlock-state-table) 4) 0))
+  (if (nonzero? (the-as uint *mp-remote-airlock-state*))
+      (mem-set32! (the-as pointer *mp-remote-airlock-state*) (/ (size-of mp-airlock-state-table) 4) 0))
+  (set! *mp-airlock-local-sequence* (the uint 0))
+  (set! *mp-airlock-last-local-airlock-aid* (the uint 0))
+  (set! *mp-airlock-last-local-state-id* (the uint 0))
+  (set! *mp-airlock-last-local-level-id* (the uint 0))
   (if (nonzero? (the-as uint *mp-event-queue*))
       (mem-set32! (the-as pointer *mp-event-queue*) (/ (* 32 (size-of mp-event)) 4) 0))
   (if (nonzero? (the-as uint *mp-enemy-auth*))

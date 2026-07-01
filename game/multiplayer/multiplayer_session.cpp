@@ -37,6 +37,12 @@ void multiplayer_reset_remote_palace_squid_state(MultiplayerData& data) {
   data.last_palace_squid_sync_time = 0;
 }
 
+void multiplayer_reset_remote_airlock_state(MultiplayerData& data) {
+  memset(&data.remote_airlock_table, 0, sizeof(data.remote_airlock_table));
+  data.last_airlock_sync_time = 0;
+  data.last_remote_airlock_sequence = 0;
+}
+
 void multiplayer_clear_session_state(MultiplayerData& data) {
   data.pending_full_sync = false;
   data.pending_full_sync_sent_once = false;
@@ -52,6 +58,7 @@ void multiplayer_clear_session_state(MultiplayerData& data) {
   data.last_remote_traffic_level_hash = 0;
   multiplayer_reset_remote_traffic_buffers(data);
   multiplayer_reset_remote_palace_squid_state(data);
+  multiplayer_reset_remote_airlock_state(data);
 }
 
 void multiplayer_request_full_sync(MultiplayerData& data) {

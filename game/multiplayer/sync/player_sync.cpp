@@ -40,6 +40,7 @@ void mp_handle_player_state_packet(MultiplayerData& data,
       state->level_hash != data.last_remote_traffic_level_hash) {
     multiplayer_reset_remote_traffic_buffers(data);
     multiplayer_reset_remote_palace_squid_state(data);
+    multiplayer_reset_remote_airlock_state(data);
     lg::info("[Multiplayer] Remote level changed. Cleared traffic sync buffers. old={} new={}",
              data.last_remote_traffic_level_hash, state->level_hash);
   }

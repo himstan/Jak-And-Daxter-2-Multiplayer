@@ -1,0 +1,266 @@
+
+(defun mp-airlock-state-id->string ((state-id mp-airlock-state-id))
+  (case state-id
+    (((mp-airlock-state-id none)) "none")
+    (((mp-airlock-state-id ready)) "ready")
+    (((mp-airlock-state-id occupied)) "occupied")
+    (((mp-airlock-state-id commit)) "commit")
+    (else "unknown")
+    )
+  )
+
+(defun mp-airlock-debug-table-state-string ((table mp-airlock-state-table) (airlock-aid uint))
+  (let ((slot (mp-airlock-find-state table airlock-aid)))
+    (if (and slot (nonzero? (the-as uint slot)))
+        (mp-airlock-state-id->string (the-as mp-airlock-state-id (-> slot state-id)))
+        "none"
+        )
+    )
+  )
+
+(defun mp-airlock-debug-want-levels-string ()
+  (if (and *load-state* (nonzero? (the-as uint *load-state*)))
+      (the-as string
+        (format #f
+                "~A ~A ~A ~A ~A ~A"
+                (-> *load-state* want 0 name)
+                (-> *load-state* want 1 name)
+                (-> *load-state* want 2 name)
+                (-> *load-state* want 3 name)
+                (-> *load-state* want 4 name)
+                (-> *load-state* want 5 name)
+                ))
+      "none"
+      )
+  )
+
+(defun mp-airlock-debug-draw-ring ((center vector) (radius meters) (color rgba) (label string))
+  (add-debug-circle #t (bucket-id debug-no-zbuf1) center radius color (the-as matrix #f))
+  (let ((label-pos (new 'stack-no-clear 'vector)))
+    (vector-copy! label-pos center)
+    (set! (-> label-pos x) (+ (-> label-pos x) radius))
+    (+! (-> label-pos y) (meters 1.0))
+    (add-debug-text-3d #t (bucket-id debug-no-zbuf1) label label-pos (font-color white) (the-as vector2h #f))
+    )
+  (none)
+  )
+
+(defun mp-airlock-debug-draw-cross-plane ((airlock com-airlock) (center vector) (ready? symbol))
+  (let ((forward (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> airlock root quat)))
+        (right (vector-x-quaternion! (new 'stack-no-clear 'vector) (-> airlock root quat)))
+        (line-a (new 'stack-no-clear 'vector))
+        (line-b (new 'stack-no-clear 'vector))
+        (normal-end (new 'stack-no-clear 'vector))
+        (color (if ready?
+                   (static-rgba 0 255 0 200)
+                   (static-rgba 255 128 0 200)
+                   ))
+        )
+    (set! (-> forward y) 0.0)
+    (set! (-> right y) 0.0)
+    (vector+float*! line-a center right (- 0.0 (-> airlock door-radius)))
+    (vector+float*! line-b center right (-> airlock door-radius))
+    (vector+float*! normal-end center forward (meters 8.0))
+    (add-debug-line #t (bucket-id debug-no-zbuf1) line-a line-b color #f (the-as rgba 0))
+    (add-debug-line #t (bucket-id debug-no-zbuf1) center normal-end (static-rgba 0 255 255 180) #f (the-as rgba 0))
+    (add-debug-sphere #t (bucket-id debug-no-zbuf1) center (meters 0.75) color)
+    (add-debug-sphere #t (bucket-id debug-no-zbuf1) line-a (meters 0.4) color)
+    (add-debug-sphere #t (bucket-id debug-no-zbuf1) line-b (meters 0.4) color)
+    )
+  (none)
+  )
+
+(defun mp-airlock-debug-draw-label ((airlock com-airlock) (center vector) (airlock-aid uint) (cross-dist float))
+  (let* ((label-pos (new 'stack-no-clear 'vector))
+         (state-pos (new 'stack-no-clear 'vector))
+         (local-state (mp-airlock-debug-table-state-string *mp-local-airlock-state* airlock-aid))
+         (remote-state (mp-airlock-debug-table-state-string *mp-remote-airlock-state* airlock-aid))
+         (ready? (or (mp-is-local-state-id? airlock-aid (mp-airlock-state-id ready))
+                      (mp-is-remote-state-id? airlock-aid (mp-airlock-state-id ready))))
+         (load-conflict? (airlock-load-conflicts-with-current-want? airlock))
+         (dest-wanted? (destination-loaded? airlock #f))
+         )
+    (vector-copy! label-pos center)
+    (+! (-> label-pos y) (meters 6.0))
+    (vector-copy! state-pos label-pos)
+    (+! (-> state-pos y) (meters -2.0))
+    (add-debug-text-3d
+      #t
+      (bucket-id debug-no-zbuf1)
+      (the-as string
+        (format #f
+                "~A~%aid:~D state:~S dist:~,,2f m"
+                (-> airlock name)
+                airlock-aid
+                (if (and (-> airlock state) (nonzero? (-> airlock state)))
+                    (-> airlock state name)
+                    'none
+                    )
+                (/ cross-dist METER_LENGTH)
+                ))
+      label-pos
+      (if ready? (font-color green) (font-color orange))
+      (the-as vector2h #f))
+    (add-debug-text-3d
+      #t
+      (bucket-id debug-no-zbuf1)
+      (the-as string
+        (format #f
+                "local:~A remote:~A~%ready:~A load-conflict:~A~%dest-wanted:~A"
+                local-state
+                remote-state
+                ready?
+                load-conflict?
+                dest-wanted?
+                ))
+      state-pos
+      (if load-conflict? (font-color red) (if ready? (font-color green) (font-color orange)))
+      (the-as vector2h #f))
+    )
+  (none)
+  )
+
+(defun mp-airlock-debug-draw-one ((airlock com-airlock))
+  (when (and airlock
+             (nonzero? (the-as uint airlock))
+             (-> airlock root)
+             (nonzero? (-> airlock root))
+             (-> airlock entity)
+             (nonzero? (-> airlock entity)))
+    (let* ((center (-> airlock root trans))
+           (airlock-aid (the-as uint (-> airlock entity aid)))
+           (ready? (or (mp-is-local-state-id? airlock-aid (mp-airlock-state-id ready))
+                       (mp-is-remote-state-id? airlock-aid (mp-airlock-state-id ready))))
+           (cross-dist 0.0)
+           )
+      (when (and *target*
+                 (nonzero? *target*)
+                 (-> *target* control)
+                 (nonzero? (-> *target* control)))
+        (set! cross-dist (check-crossing-distance airlock (-> *target* control trans) #f))
+        )
+      (mp-airlock-debug-draw-cross-plane airlock center ready?)
+      (mp-airlock-debug-draw-ring center (-> airlock open-distance) (static-rgba 0 255 0 120) (the-as string (format #f "open-distance[aid: ~D]" (-> airlock entity aid))))
+      (mp-airlock-debug-draw-ring center (-> airlock active-distance) (static-rgba 255 255 0 90) (the-as string (format #f "active-distance[aid: ~D]" (-> airlock entity aid))))
+      (when (-> airlock y-height)
+        (let ((height-pos (new 'stack-no-clear 'vector)))
+          (vector-copy! height-pos center)
+          (set! (-> height-pos y) (+ (-> center y) (-> airlock y-height x)))
+          (add-debug-circle #t (bucket-id debug-no-zbuf1) height-pos (-> airlock door-radius) (static-rgba 0 128 255 80) (the-as matrix #f))
+          (set! (-> height-pos y) (- (-> center y) (-> airlock y-height y)))
+          (add-debug-circle #t (bucket-id debug-no-zbuf1) height-pos (-> airlock door-radius) (static-rgba 0 128 255 80) (the-as matrix #f))
+          )
+        )
+      (mp-airlock-debug-draw-label airlock center airlock-aid cross-dist)
+      )
+    )
+  (none)
+  )
+
+(defun mp-draw-airlock-world-debug ()
+  "Draw each loaded com-airlock's ready crossing plane and live sync state in world-space."
+  (when *mp-airlock-world-debug?*
+    (iterate-process-tree
+      *active-pool*
+      (lambda ((p process-tree))
+        (let ((proc (the-as process p)))
+          (when (and proc
+                     (nonzero? proc)
+                     (type? proc com-airlock))
+            (mp-airlock-debug-draw-one (the-as com-airlock proc))
+            )
+          )
+        #t
+        )
+      *kernel-context*
+      )
+    )
+  (none)
+  )
+
+(defun get-airlock-by-aid ((airlock-aid uint))
+  (let ((ent (entity-by-aid airlock-aid)))
+    (if (and ent
+             (nonzero? ent)
+             (-> ent extra process)
+             (nonzero? (-> ent extra process))
+             (type? (-> ent extra process) com-airlock))
+        (the-as com-airlock (-> ent extra process))
+        (the-as com-airlock #f))))
+
+(defun mp-draw-airlock-debug ()
+  "Display airlock sync states (local and remote) at the top-left of the screen."
+  (mp-draw-airlock-world-debug)
+  (when *mp-airlock-debug?*
+    (format *stdcon* "~0k--- MP AIRLOCK SYNC DEBUG ---~%")
+    (when (and *mp-local-airlock-state* (nonzero? (the-as uint *mp-local-airlock-state*)))
+      (format *stdcon* "LOCAL count=~D~%" (-> *mp-local-airlock-state* count))
+      (dotimes (i MP_AIRLOCK_STATE_COUNT)
+        (let ((slot (-> *mp-local-airlock-state* states i)))
+          (when (and (nonzero? (-> slot airlock-aid))
+                     (!= (-> slot state-id) (the-as uint32 (mp-airlock-state-id none))))
+            (format *stdcon* "  [~D] AID ~D, State ~S, Level ~A,"
+              i
+              (-> slot airlock-aid)
+              (mp-airlock-state-id->string (the-as mp-airlock-state-id (-> slot state-id)))
+              (mp-level-id->symbol (logand (-> slot level-id) #xff))
+            )
+            (let ((airlock (get-airlock-by-aid (-> slot airlock-aid))))
+              (if (and airlock (nonzero? airlock))
+                  (let* ((target-pos (target-pos 0))
+                         (cross-dist (check-crossing-distance airlock target-pos #t))
+                         (local-ready? (local-player-can-report-airlock-ready? airlock))
+                         (load-conflict? (airlock-load-conflicts-with-current-want? airlock))
+                         (dest-wanted? (destination-loaded? airlock #f)))
+                    (format *stdcon* " Loaded? #t, Name ~A, Inner? ~A, Inside-Open-Distance ~A, Local-Ready? ~A~%"
+                      (-> airlock name)
+                      (-> airlock inner?)
+                      (local-player-in-airlock-sync-distance? airlock cross-dist)
+                      local-ready?
+                    )
+                    (format *stdcon* "      Load-Conflict? ~A, Dest-Wanted? ~A, Want ~A~%"
+                      load-conflict?
+                      dest-wanted?
+                      (mp-airlock-debug-want-levels-string)
+                    )
+                    )
+                  (format *stdcon* " Loaded? #f, will clear local state on sync tick~%")
+                  )
+              )
+          )
+        )
+      )
+    )
+    (when (and *mp-remote-airlock-state* (nonzero? (the-as uint *mp-remote-airlock-state*)))
+      (format *stdcon* "REMOTE count=~D~%" (-> *mp-remote-airlock-state* count))
+      (dotimes (i MP_AIRLOCK_STATE_COUNT)
+        (let ((slot (-> *mp-remote-airlock-state* states i)))
+          (when (and (nonzero? (-> slot airlock-aid))
+                     (!= (-> slot state-id) (the-as uint32 (mp-airlock-state-id none))))
+            (let ((level-sym (mp-level-id->symbol (logand (-> slot level-id) #xff))))
+              (format *stdcon* "  [~D] AID ~D, State ~S, Level ~A, Seq ~D~%"
+                i
+                (-> slot airlock-aid)
+                (mp-airlock-state-id->string (the-as mp-airlock-state-id (-> slot state-id)))
+                level-sym
+                (-> slot sequence)
+              )
+              (let ((airlock (get-airlock-by-aid (-> slot airlock-aid))))
+                (if (and airlock (nonzero? airlock))
+                    (format *stdcon* "      Loaded? #t, Load-Conflict? ~A, Dest-Wanted? ~A, Want ~A~%"
+                      (airlock-load-conflicts-with-current-want? airlock)
+                      (destination-loaded? airlock #f)
+                      (mp-airlock-debug-want-levels-string)
+                    )
+                    (format *stdcon* "      Loaded? #f~%")
+                    )
+              )
+            )
+          )
+        )
+      )
+    )
+    (format *stdcon* "------------------------------~%~%")
+  )
+  (none)
+)
