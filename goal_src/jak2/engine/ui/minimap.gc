@@ -830,7 +830,7 @@
                                  :name "remote-player"
                                  :icon-xy (new 'static 'vector2ub :data (new 'static 'array uint8 2 #x0 #x1))
                                  :scale 1.0
-                                 :color (new 'static 'rgba :r #xff :g #x00 :b #xff :a #x80)
+                                 :color (new 'static 'rgba :r #xff :g #x80 :b #x00 :a #x80)
                                  )
                                )
         )
@@ -2211,7 +2211,10 @@
             (adgif-shader<-texture-simple! (the-as adgif-shader (&-> (the-as (pointer uint128) s3-2) 2)) s2-1)
             (set! (-> (the-as (pointer uint128) s3-2) 7) (-> this draw-tmpl dma-vif quad))
             (set! (-> (the-as (pointer uint128) s3-2) 8) (-> this draw-tmpl quad 1))
-            (set-vector! (-> (the-as (inline-array vector4w) s3-2) 9) 0 255 255 128)
+            (if (mp-is-daxter?)
+                (set-vector! (-> (the-as (inline-array vector4w) s3-2) 9) 255 128 0 128)
+                (set-vector! (-> (the-as (inline-array vector4w) s3-2) 9) 0 255 255 128)
+                )
             (set-vector! (-> (the-as (inline-array vector4w) s3-2) 10) 0 0 #xffffff 0)
             (set-vector!
               (-> (the-as (inline-array vector4w) s3-2) 11)
@@ -2301,7 +2304,11 @@
         (vector-matrix*! (-> arg0 corner 2) (-> arg0 corner 2) marker-mat)
         (vector-matrix*! (-> arg0 corner 3) (-> arg0 corner 3) marker-mat)
         (let* ((s3-0 (the-as object (-> arg0 buf base)))
-               (a1-0 (-> arg1 class color))
+               (a1-0 (if (mp-is-daxter?)
+                         (static-rgba 0 255 255 128)
+                         (-> arg1 class color)
+                         )
+                     )
                (a1-1 (copy-and-set-field a1-0 r (shr (* (-> a1-0 r) (the-as uint (-> this color x))) 7)))
                (a1-2 (copy-and-set-field a1-1 g (shr (* (-> a1-1 g) (the-as uint (-> this color y))) 7)))
                (a1-3
