@@ -1,0 +1,17 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: region-custom-h.gc
+;; name in dgo: region-custom-h
+;; dgos: ENGINE, GAME
+
+(deftype region-override (structure)
+  ((region-id   uint32)
+   (on-enter    object)
+   (on-inside   object)
+   (on-exit     object)
+   )
+  )
+
+(define-extern register-region-override! (function int object object object none))
+(define-extern region-custom-tick (function none))

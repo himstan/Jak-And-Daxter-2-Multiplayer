@@ -1,0 +1,121 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: region-custom.gc
+;; name in dgo: region-custom
+;; dgos: ENGINE, GAME
+
+(define *region-overrides-count* 0)
+(define *region-overrides* (new 'global 'boxed-array region-override 64))
+(define *patched-custom-levels* (new 'global 'boxed-array symbol 8))
+
+;; Initialize the patched levels array to 'false (which is #f)
+(dotimes (i 8)
+  (set! (-> *patched-custom-levels* i) 'false)
+  )
+
+(defun register-region-override! ((id int) (on-enter object) (on-inside object) (on-exit object))
+  "Register a custom script override for a specific region ID."
+  (let ((found #f)
+        (uid (the-as uint id)))
+    ;; Check if an override for this region ID already exists
+    (dotimes (i *region-overrides-count*)
+      (let ((over (-> *region-overrides* i)))
+        (when (and over (nonzero? over) (= (-> over region-id) uid))
+          (set! (-> over on-enter) on-enter)
+          (set! (-> over on-inside) on-inside)
+          (set! (-> over on-exit) on-exit)
+          (set! found #t)
+          )
+        )
+      )
+    ;; If not found, add a new one
+    (unless found
+      (when (< *region-overrides-count* 64)
+        (let ((over (new 'global 'region-override)))
+          (set! (-> over region-id) uid)
+          (set! (-> over on-enter) on-enter)
+          (set! (-> over on-inside) on-inside)
+          (set! (-> over on-exit) on-exit)
+          (set! (-> *region-overrides* *region-overrides-count*) over)
+          (+! *region-overrides-count* 1)
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+(defun region-custom-patch-level ((lev level))
+  "Apply all registered overrides to the regions in the given level."
+  (when (and lev (nonzero? lev) (nonzero? (-> lev bsp)) (nonzero? (-> lev bsp region-array)))
+    (dotimes (i (-> lev bsp region-array length))
+      (let ((reg (-> lev bsp region-array data i)))
+        (when (and reg (nonzero? reg))
+          ;; Look up if this region has an override
+          (dotimes (j *region-overrides-count*)
+            (let ((over (-> *region-overrides* j)))
+              (when (and over (nonzero? over) (= (-> over region-id) (-> reg id)))
+                ;; Apply the override scripts if they are defined in the override registration
+                (when (-> over on-enter)
+                  (set! (-> reg on-enter) (the-as pair (-> over on-enter)))
+                  )
+                (when (-> over on-inside)
+                  (set! (-> reg on-inside) (the-as pair (-> over on-inside)))
+                  )
+                (when (-> over on-exit)
+                  (set! (-> reg on-exit) (the-as pair (-> over on-exit)))
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+(defun region-custom-tick ()
+  "Tick function called every frame to apply region overrides to active levels."
+  (when (and *level* (nonzero? *level*))
+    (dotimes (idx (-> *level* length))
+      (let* ((lev (-> *level* level idx))
+             (level-name (if (and lev (nonzero? lev)) (-> lev name) #f)))
+        (cond
+          ((and lev (nonzero? lev) (= (-> lev status) 'active) level-name)
+           ;; If active but not marked as patched, patch it
+           (let ((patched? #f))
+             (dotimes (p-idx 8)
+               (when (= (-> *patched-custom-levels* p-idx) level-name)
+                 (set! patched? #t)
+                 )
+               )
+             (unless patched?
+               (region-custom-patch-level lev)
+               ;; Add to the patched list
+               (let ((added? #f))
+                 (dotimes (p-idx 8)
+                   (when (and (not added?) (= (-> *patched-custom-levels* p-idx) 'false))
+                     (set! (-> *patched-custom-levels* p-idx) level-name)
+                     (set! added? #t)
+                     )
+                   )
+                 )
+               )
+             )
+           )
+          ((and lev (nonzero? lev) (!= (-> lev status) 'active) level-name)
+           ;; If inactive/unloaded, remove it from the patched list
+           (dotimes (p-idx 8)
+             (when (= (-> *patched-custom-levels* p-idx) level-name)
+               (set! (-> *patched-custom-levels* p-idx) 'false)
+               )
+             )
+           )
+          )
+        )
+      )
+    )
+  (none)
+  )

@@ -1,0 +1,23 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; Format:
+;; (register-region-override!
+;;   region-id
+;;   on-enter-script   ;; or #f to leave unchanged
+;;   on-inside-script  ;; or #f to leave unchanged
+;;   on-exit-script    ;; or #f to leave unchanged
+;;   )
+
+(register-region-override!
+  864
+  '(begin
+     (format 0 "on-enter for region 864!~%")
+     )
+  '(begin
+     (format 0 "on-inside for region 864!~%")
+     )
+  '(begin
+     (format 0 "on-exit for region 864!~%")
+     )
+  )

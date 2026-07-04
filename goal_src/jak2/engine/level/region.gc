@@ -712,6 +712,7 @@
     (region-tree-execute 'camera (-> *level* camera-pos 1) (-> *level* camera-pos 0))
     (region-tree-execute 'target (-> *level* target-pos 1) (-> *level* target-pos 0))
     )
+  (region-custom-tick)
   0
   (none)
   )
