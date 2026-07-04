@@ -4193,10 +4193,11 @@
              (flag "Boss Debug Draw" *mp-debug-boss* dm-boolean-toggle-pick-func)
              )
            (menu
-              "Airlocks"
-              (flag "Airlock Sync Debug" *mp-airlock-debug?* dm-boolean-toggle-pick-func)
-              (flag "Airlock World Debug" *mp-airlock-world-debug?* dm-boolean-toggle-pick-func)
-            )
+               "Airlock/Elevator"
+               (flag "Airlock Sync Debug" *mp-airlock-debug?* dm-boolean-toggle-pick-func)
+               (flag "Airlock World Debug" *mp-airlock-world-debug?* dm-boolean-toggle-pick-func)
+               (flag "Elevator Debug" *mp-elevator-debug?* dm-boolean-toggle-pick-func)
+             )
            )
         )
       )

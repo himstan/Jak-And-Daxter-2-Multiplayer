@@ -1237,6 +1237,7 @@
 (define-perm *mp-level-debug?* symbol #f)
 (define-perm *mp-airlock-debug?* symbol #f)
 (define-perm *mp-airlock-world-debug?* symbol #f)
+(define-perm *mp-elevator-debug?* symbol #f)
 (define-perm *mp-tps-counter* uint (the uint 0))
 (define-perm *mp-actual-tps* uint (the uint 0))
 (define-perm *mp-tps-timer* time-frame 0)
@@ -1318,8 +1319,8 @@
   `(or (mp-is-jak?) (not *mp-traffic-suppressed*))
   )
 
-(defun not-puppet? ((proc target))
-  (or (not *mp-puppet*) (!= proc *mp-puppet*))
+(defun not-puppet? ((proc process))
+  (or (not (type? proc target)) (not *mp-puppet*) (!= proc *mp-puppet*))
 )
 
 (defun mp-generate-battle-enemy-aid ()
