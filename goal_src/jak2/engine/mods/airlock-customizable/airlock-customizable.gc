@@ -4,6 +4,8 @@
 (declare-type base-plat process-focusable)
 (declare-type elevator base-plat)
 
+(define *airlock-evaluating-notice?* #f)
+
 ;; added - sets the current com-airlock data array. Add more cases as needed.
 (defmethod init-airlock-data-array! ((this com-airlock))
   (set! (-> this data)
@@ -124,6 +126,35 @@
           (and (airlock-ready-for-state? this)
                script
                (not *scene-player*)
+               )
+          )
+  )
+
+(defmethod airlock-notice-level-list ((this com-airlock))
+  (when (and (airlock-ready-for-state? this)
+             (-> this on-notice))
+    (let ((old-evaluating? *airlock-evaluating-notice?*)
+          (level-list (the-as pair #f))
+          )
+      (set! *airlock-evaluating-notice?* #t)
+      (set! level-list (the-as pair (script-eval (-> this on-notice))))
+      (set! *airlock-evaluating-notice?* old-evaluating?)
+      (return level-list)
+      )
+    )
+  (the-as pair #f)
+  )
+
+(defmethod airlock-has-valid-notice-destination? ((this com-airlock))
+  (the-as symbol
+          (and (airlock-ready-for-state? this)
+               (or (not (-> this on-notice))
+                   (let ((level-list (airlock-notice-level-list this)))
+                     (and level-list
+                          (pair? level-list)
+                          )
+                     )
+                   )
                )
           )
   )
@@ -385,6 +416,7 @@
       symbol
       (and (target-in-airlock-active-range? this target-pos #f)
            (target-in-airlock-height? this target-pos #f)
+           (airlock-has-valid-notice-destination? this)
            (mark-airlock-behind-if-needed! this cross-dist)
            (begin
              (and (< (-> this latch-closed-time) (current-time))
@@ -521,7 +553,7 @@
   )
 
 (defmethod airlock-load-conflicts-with-current-want? ((this com-airlock))
-  (let ((level-list (the-as pair (script-eval (-> this on-notice)))))
+  (let ((level-list (airlock-notice-level-list this)))
     (when (and *load-state*
                (nonzero? (the-as uint *load-state*))
                (the-as object level-list)
@@ -563,7 +595,7 @@
     (when (not on-notice-data)
       (return (if display? 'unknown #f))
       )
-    (let ((level-list (script-eval on-notice-data))
+    (let ((level-list (airlock-notice-level-list this))
           (borrow-lev-name #f)
           )
       (when (or (not level-list) (not (pair? level-list)))
@@ -731,14 +763,18 @@
        (let ((f30-0 (check-crossing-distance self (target-pos 0) #f))
              (f0-3 (check-crossing-distance self (camera-pos) #f))
              )
-         (or (is-ready-for-any-players? self) (and (< 2048.0 f30-0) (>= (* f30-0 f0-3) 0.0)))
+         (or (and (not *airlock-evaluating-notice?*) (is-ready-for-any-players? self))
+             (and (< 2048.0 f30-0) (>= (* f30-0 f0-3) 0.0))
+             )
          )
        )
       (('back)
        (let ((f30-1 (check-crossing-distance self (target-pos 0) #f))
              (f0-5 (check-crossing-distance self (camera-pos) #f))
              )
-         (or (is-ready-for-any-players? self) (and (< f30-1 -2048.0) (>= (* f30-1 f0-5) 0.0)))
+         (or (and (not *airlock-evaluating-notice?*) (is-ready-for-any-players? self))
+             (and (< f30-1 -2048.0) (>= (* f30-1 f0-5) 0.0))
+             )
          )
        )
       (('sound)
@@ -807,6 +843,7 @@
       (when (and (airlock-can-start-opening? self)
                  (begin
                    (when (and (airlock-ready-for-script? self (-> self on-activate))
+                              (airlock-has-valid-notice-destination? self)
                               (or (mp-is-local-state-id? (-> self entity aid) (mp-airlock-state-id ready))
                                   (not (airlock-load-conflicts-with-current-want? self))
                                   )

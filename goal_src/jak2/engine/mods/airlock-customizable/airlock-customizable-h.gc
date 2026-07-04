@@ -118,6 +118,8 @@
     (camera-can-trigger-airlock? (_type_ float) symbol :behavior com-airlock)
     (local-player-in-airlock-sync-distance? (_type_ float) symbol :behavior com-airlock)
     (local-player-can-report-airlock-ready? (_type_) symbol :behavior com-airlock)
+    (airlock-notice-level-list (_type_) pair)
+    (airlock-has-valid-notice-destination? (_type_) symbol)
     (airlock-destination-level? (_type_ symbol pair) symbol)
     (airlock-load-conflicts-with-current-want? (_type_) symbol)
     (destination-loaded? (_type_ symbol) symbol)
