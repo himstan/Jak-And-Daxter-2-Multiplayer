@@ -4,6 +4,8 @@
 (define *palshaft-airlock-data* (new 'static 'boxed-array :type airlock-data
               (static-airlock-data
                 :airlock-name "com-airlock-inner-26"
+                :airlock-elevator "com-elevator-2"
+                :other-side-levels '(palcab palroof palboss)
                 :on-notice '(when #t '(ctypal ctywide))
                 :on-activate #f
                 :on-enter '(begin (want-display 'ctywide 'display) (want-display 'ctypal 'display))
@@ -24,6 +26,8 @@
                 )
               (static-airlock-data
                 :airlock-name "com-airlock-inner-25"
+                :airlock-elevator "com-elevator-2"
+                :other-side-levels '(ctywide)
                 :on-notice '(when #t '(palcab palroof))
                 :on-activate #f
                 :on-enter '(begin (want-display 'palroof 'display) (want-display 'palcab 'display) (want-sound 'ctywide1 'palcab1 'palcab2))
@@ -34,6 +38,8 @@
                 )
               (static-airlock-data
                 :airlock-name "com-airlock-inner-23"
+                :airlock-elevator "com-elevator-1"
+                :other-side-levels '(ctywide)
                 :on-notice '(when #t '(palcab palroof))
                 :on-activate #f
                 :on-enter '(begin (want-display 'palcab 'display) (want-display 'palroof 'display))
@@ -64,6 +70,8 @@
                 )
               (static-airlock-data
                 :airlock-name "com-airlock-inner-22"
+                :airlock-elevator "com-elevator-1"
+                :other-side-levels '(palcab palroof palboss)
                 :on-notice '(when #t '(ctygenb ctywide))
                 :on-activate #f
                 :on-enter '(begin (want-display 'ctywide 'display) (want-display 'ctygenb 'display))

@@ -90,6 +90,10 @@
    (elevator-status               elevator-status)
    (on-activate                   pair)
    (on-deactivate                 pair)
+   (level-on-top                  symbol)
+   (level-on-bottom               symbol)
+   (bottom-inner-airlock-aid      uint) 
+   (top-inner-airlock-aid         uint)
    )
   (:state-methods
     dormant
@@ -109,6 +113,9 @@
     (move-to-next-point! (_type_) none)
     (find-closest-point-in-path! (_type_ vector (pointer float) symbol symbol) symbol)
     (elevator-method-48 (_type_) none)
+    (is-at-top? (_type_) symbol)
+    (is-at-bottom? (_type_) symbol)
+    (is-standing-on-elevator? (_type_ process-focusable) symbol)
     )
   )
 
@@ -154,6 +161,36 @@
       )
     )
   (none)
+  )
+
+(defmethod is-at-top? ((this elevator))
+  (the-as symbol
+    (and this
+         (nonzero? this)
+         (let ((state-obj (-> this state)))
+           (and (= (-> this move-pos 1) (-> this bottom-top 1))
+                (or (= (-> this path-pos) 1.0)
+                    (and state-obj (nonzero? state-obj) (!= (-> state-obj name) 'running))
+                    )
+                )
+           )
+         )
+    )
+  )
+
+(defmethod is-at-bottom? ((this elevator))
+  (the-as symbol
+    (and this
+         (nonzero? this)
+         (let ((state-obj (-> this state)))
+           (and (= (-> this move-pos 1) (-> this bottom-top 0))
+                (or (= (-> this path-pos) 1.0)
+                    (and state-obj (nonzero? state-obj) (!= (-> state-obj name) 'running))
+                    )
+                )
+           )
+         )
+    )
   )
 
 (defmethod init-defaults! ((this elevator))
@@ -436,6 +473,22 @@
 (defmethod commited-to-ride? ((this elevator))
   "@returns if the target is considered within the elevator area enough to begin descending/ascending"
   #t
+  )
+
+(defmethod is-standing-on-elevator? ((this elevator) (proc process-focusable))
+    (the-as symbol (and (when (and proc (nonzero? proc) (type? proc target) (not-puppet? proc))
+         (let* ((target-pos (get-trans proc 0))
+                (dist-from-center (vector-! (new 'stack-no-clear 'vector) target-pos (-> this root trans)))
+                )
+           (vector-inv-orient-by-quat! dist-from-center dist-from-center (-> this root quat))
+           (and 
+             (< (fabs (-> dist-from-center x)) 20480.0)
+             (< 0.0 (-> dist-from-center z))
+             (< (-> dist-from-center z) 40960.0))
+           )
+         )
+       )
+    )
   )
 
 (defmethod move-to-next-point! ((this elevator))

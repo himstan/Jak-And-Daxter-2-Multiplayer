@@ -168,71 +168,10 @@
   (none)
   )
 
-(defun mp-draw-elevator-debug ()
-  "Draw 3D debug info for each active elevator."
-  (when *mp-elevator-debug?*
-    (iterate-process-tree
-      *active-pool*
-      (lambda ((p process-tree))
-        (let ((proc (the-as process p)))
-          (when (and proc (nonzero? proc) (type? proc elevator))
-            (let ((el (the-as elevator proc)))
-              (let ((root (-> el root)))
-                (when (and root (nonzero? root))
-                  (let ((ent (-> el entity)))
-                    (let ((aid (if (and ent (nonzero? ent)) (-> ent aid) (the uint 0)))
-                          (state-name 'none)
-                          (next-state-name 'none)
-                          )
-                      (let ((el-state (-> el state)))
-                        (if (and el-state (nonzero? el-state))
-                            (set! state-name (-> el-state name))
-                            )
-                        )
-                      (let ((el-next-state (-> el next-state)))
-                        (if (and el-next-state (nonzero? el-next-state))
-                            (set! next-state-name (-> el-next-state name))
-                            )
-                        )
-                      (let ((text-pos (new 'stack-no-clear 'vector)))
-                        (vector-copy! text-pos (-> root trans))
-                        (+! (-> text-pos y) (meters 2.0))
-                        (add-debug-text-3d
-                          #t
-                          (bucket-id debug-no-zbuf1)
-                          (the-as string
-                            (format #f
-                                    "Name: ~A~%AID: ~D~%State: ~S~%Next State: ~S"
-                                    (-> el name)
-                                    aid
-                                    state-name
-                                    next-state-name
-                                    )
-                            )
-                          text-pos
-                          (font-color white)
-                          (the-as vector2h #f)
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          )
-        #t
-        )
-      *kernel-context*
-      )
-    )
-  (none)
-  )
 
 (defun mp-draw-airlock-debug ()
   "Display airlock sync states (local and remote) at the top-left of the screen."
   (mp-draw-airlock-world-debug)
-  (mp-draw-elevator-debug)
   (when *mp-airlock-debug?*
     (format *stdcon* "~0k--- MP AIRLOCK SYNC DEBUG ---~%")
     (when (and *mp-local-airlock-state* (nonzero? (the-as uint *mp-local-airlock-state*)))

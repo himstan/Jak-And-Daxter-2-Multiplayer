@@ -49,27 +49,16 @@
 
 (defmethod commited-to-ride? ((this com-elevator))
   "@returns if the target is considered within the elevator area enough to begin descending/ascending"
-  (let* ((s5-0 *target*)
-         (a0-2 (if (type? s5-0 process-focusable)
-                   s5-0
-                   )
-               )
-         )
-    (and (when a0-2
-           (let* ((v1-2 (get-trans a0-2 0))
-                  (s5-2 (vector-! (new 'stack-no-clear 'vector) v1-2 (-> this root trans)))
-                  )
-             (vector-inv-orient-by-quat! s5-2 s5-2 (-> this root quat))
-             (and (< (fabs (-> s5-2 x)) 20480.0) (< 0.0 (-> s5-2 z)) (< (-> s5-2 z) 40960.0))
-             )
-           )
-         (let ((gp-1 (res-lump-struct (-> this entity) 'on-notice structure)))
-           (not (if gp-1
-                    (script-eval (the-as pair gp-1))
-                    )
+  (if (or (name= (-> this name) "com-elevator-1") (name= (-> this name) "com-elevator-2"))
+    (if (is-at-top? this)
+        (level-wanted? (-> this level-on-bottom))
+        (level-wanted? (-> this level-on-top))
+      )
+      (when (is-standing-on-elevator? this *target*)
+        (let ((gp-1 (res-lump-struct (-> this entity) 'on-notice structure)))
+                (not (if gp-1 (script-eval (the-as pair gp-1))))
                 )
-           )
-         )
+      )
     )
   )
 
@@ -176,6 +165,14 @@
 (defmethod init-plat! ((this com-elevator))
   "Does any necessary initial platform setup.
    For example for an elevator pre-compute the distance between the first and last points (both ways) and clear the sound."
+  (when (name= (-> this name) "com-elevator-1")
+    (set! (-> this level-on-top) 'palcab)
+    (set! (-> this level-on-bottom) 'ctywide)
+  )
+  (when (name= (-> this name) "com-elevator-2")
+      (set! (-> this level-on-top) 'palroof)
+      (set! (-> this level-on-bottom) 'ctywide)
+    )
   (dotimes (s5-0 (-> this path curve num-cverts))
     (let ((a1-1 (res-lump-struct (-> this entity) 'string-startup-vector structure :time (the float s5-0))))
       (cond

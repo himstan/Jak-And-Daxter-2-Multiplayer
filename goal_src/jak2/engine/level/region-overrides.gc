@@ -1,23 +1,30 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; Format:
-;; (register-region-override!
-;;   region-id
-;;   on-enter-script   ;; or #f to leave unchanged
-;;   on-inside-script  ;; or #f to leave unchanged
-;;   on-exit-script    ;; or #f to leave unchanged
-;;   )
+;; name: region-overrides.gc
+;; name in dgo: region-overrides
+;; dgos: ENGINE, GAME
 
+;; Custom functions for Region 864 overrides
+(defun on-enter-864 ((ctx script-context))
+  (format 0 "on-enter for region 864!~%")
+  (none)
+  )
+
+(defun on-inside-864 ((ctx script-context))
+  (format 0 "on-inside for region 864!~%")
+  (none)
+  )
+
+(defun on-exit-864 ((ctx script-context))
+  (format 0 "on-exit for region 864!~%")
+  (none)
+  )
+
+;; Register the overrides using the sandbox-compliant 'apply command
 (register-region-override!
   864
-  '(begin
-     (format 0 "on-enter for region 864!~%")
-     )
-  '(begin
-     (format 0 "on-inside for region 864!~%")
-     )
-  '(begin
-     (format 0 "on-exit for region 864!~%")
-     )
+  '(apply on-enter-864)
+  '(apply on-inside-864)
+  '(apply on-exit-864)
   )

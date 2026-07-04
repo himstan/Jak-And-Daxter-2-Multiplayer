@@ -1,6 +1,9 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(declare-type base-plat process-focusable)
+(declare-type elevator base-plat)
+
 ;; added - sets the current com-airlock data array. Add more cases as needed.
 (defmethod init-airlock-data-array! ((this com-airlock))
   (set! (-> this data)
@@ -78,6 +81,7 @@
     (dotimes (i list-length)
       (when (string= (-> this name) (-> data i airlock-name))
         (set! (-> this other-side-levels) (-> data i other-side-levels))
+        (set! (-> this airlock-elevator) (-> data i airlock-elevator))
         (set! (-> this on-notice) (-> data i on-notice))
         (set! (-> this on-activate) (-> data i on-activate))
         (set! (-> this on-enter) (-> data i on-enter))
@@ -536,6 +540,24 @@
     )
   )
 
+(defmethod has-elevator-and-has-state? ((this com-airlock) (expected-state symbol))
+    (when (and this (nonzero? this) (!= #f (-> this airlock-elevator)))
+      (let ((el (the-as elevator (process-by-ename (-> this airlock-elevator)))))
+          (return (the-as symbol (and el (nonzero? el) (type? el elevator) (= (-> el state name) expected-state))))
+        )
+      )
+  #f
+  )
+
+(defmethod dont-have-elevator-or-is-standing-on-it ((this com-airlock))
+    (when (and this (nonzero? this) (!= #f (-> this airlock-elevator)))
+      (let ((el (the-as elevator (process-by-ename (-> this airlock-elevator)))))
+          (return (is-standing-on-elevator? el *target*))
+        )
+      )
+  #t
+  )
+
 (defmethod destination-loaded? ((this com-airlock) (display? symbol))
   (let ((on-notice-data (-> this on-notice)))
     (when (not on-notice-data)
@@ -970,9 +992,23 @@
           (format 0 "[MP-Airlock] Setting open local airlock state to ready from ~A aid=~D name=~A level=~A~%" (mp-airlock-state-id->string (mp-get-local-airlock-state (-> self entity aid))) (-> self entity aid) (-> self name) (-> self level name))
           (mp-airlock-set-local-state! (-> self entity aid) (mp-airlock-state-id ready))
           )
-        (when (and local-in-sync-distance? (-> self inner?) (< 0.0 (check-crossing-distance self target-pos #f)) (-> self were-behind?) (not (mp-is-local-state-id? (-> self entity aid) (mp-airlock-state-id commit))) (not (want-cross-airlock? self)))
+        (when (and 
+            local-in-sync-distance? 
+            (-> self inner?) 
+            (< 0.0 (check-crossing-distance self target-pos #f)) 
+            (-> self were-behind?) 
+            (not (mp-is-local-state-id? (-> self entity aid) (mp-airlock-state-id commit))) 
+            (not (want-cross-airlock? self)) 
+            (not (has-elevator-and-has-state? self 'arrived))
+            (dont-have-elevator-or-is-standing-on-it self))
           (format 0 "[MP-Airlock] Setting open local airlock state to commit from ~A aid=~D name=~A level=~A~%" (mp-airlock-state-id->string (mp-get-local-airlock-state (-> self entity aid))) (-> self entity aid) (-> self name) (-> self level name))
           (mp-airlock-set-local-state! (-> self entity aid) (mp-airlock-state-id commit))
+          )
+        (when (and
+          (mp-is-local-state-id? (-> self entity aid) (mp-airlock-state-id commit))
+          (not (dont-have-elevator-or-is-standing-on-it self)))
+          (format 0 "[MP-Airlock] Setting open local airlock state to none from ~A aid=~D name=~A level=~A~%" (mp-airlock-state-id->string (mp-get-local-airlock-state (-> self entity aid))) (-> self entity aid) (-> self name) (-> self level name))
+          (mp-airlock-set-local-state! (-> self entity aid) (mp-airlock-state-id none))
           )
         (draw-airlock-waiting-text! self)
         (when (if (-> self inner?)

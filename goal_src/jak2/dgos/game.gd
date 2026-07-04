@@ -453,6 +453,31 @@
   "jak-swim+0-ag.go"
   "blocking-plane-ag.go"
   "los-control-h.o"
+  "water-anim.o"
+  "blocking-plane.o"
+  "idle-control.o"
+  "dark-eco-pool.o"
+  "joint-exploder.o" ;; moved up for vehicle-h
+  "enemy-h.o"
+  "nav-enemy-h.o"
+  "rigid-body-h.o"
+  "damage-number.o" ;; added
+  "statistics.o" ;; added
+  "enemy.o"
+  "nav-enemy.o"
+  "nav-graph-h.o" ;; added for traffic-engine-h
+  "traffic-engine-h.o" ;; added for vehicle-h
+  "vehicle-h.o" ;; added for citizen-h
+  "citizen-h.o" ;; added for mp-helpers
+  "base-plat.o"
+  "plat.o"
+  "basebutton.o"
+  "bouncer.o"
+  "conveyor.o"
+  "elevator.o"
+  "rigid-body.o"
+  "rigid-body-queue.o"
+  "rigid-body-plat.o"
   "airlock-customizable-h.o" ;; added
   ;; atoll
   "atoll-airlock-data.o"
@@ -512,31 +537,6 @@
   ;; mountain
   "mountain-airlock-data.o"
   "airlock-customizable.o" ;; added
-  "water-anim.o"
-  "blocking-plane.o"
-  "idle-control.o"
-  "dark-eco-pool.o"
-  "joint-exploder.o" ;; moved up for vehicle-h
-  "enemy-h.o"
-  "nav-enemy-h.o"
-  "rigid-body-h.o"
-  "damage-number.o" ;; added
-  "statistics.o" ;; added
-  "enemy.o"
-  "nav-enemy.o"
-  "nav-graph-h.o" ;; added for traffic-engine-h
-  "traffic-engine-h.o" ;; added for vehicle-h
-  "vehicle-h.o" ;; added for citizen-h
-  "citizen-h.o" ;; added for mp-helpers
-  "base-plat.o"
-  "plat.o"
-  "basebutton.o"
-  "bouncer.o"
-  "conveyor.o"
-  "elevator.o"
-  "rigid-body.o"
-  "rigid-body-queue.o"
-  "rigid-body-plat.o"
   "simple-focus.o"
   "ai-task-h.o" ;; added
   "bot-h.o" ;; added
@@ -606,4 +606,5 @@
   "mod-custom-code.o" ;; added
   "mod-debug.o" ;; added
   "mp-airlock-debug.o"
+  "mp-elevator-debug.o"
  ))

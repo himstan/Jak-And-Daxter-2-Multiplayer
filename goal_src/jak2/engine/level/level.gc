@@ -3066,3 +3066,17 @@ into 7 sections, which might explain the weird sizes in the center.
     )
   (kmemclose)
   )
+
+(defun level-wanted? ((level-name symbol))
+  "Check if the level is in the wanted level loads."
+  (and *load-state*
+       (nonzero? *load-state*)
+       (dotimes (idx 6)
+         (when (= (-> *load-state* want idx name) level-name)
+           (return #t)
+           )
+         )
+       #f
+       )
+  #f
+  )

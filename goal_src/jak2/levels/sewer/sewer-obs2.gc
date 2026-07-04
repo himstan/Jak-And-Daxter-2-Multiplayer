@@ -47,18 +47,12 @@
 
 (defmethod commited-to-ride? ((this sew-elevator))
   "@returns if the target is considered within the elevator area enough to begin descending/ascending"
-  (let ((target-proc (the-as target (as-type *target* process-focusable))))
-    (when target-proc
-      (let* ((target-pos (get-trans target-proc 0))
-             (dist-from-center (vector-! (new 'stack-no-clear 'vector) target-pos (-> this root trans)))
-             )
-        (vector-inv-orient-by-quat! dist-from-center dist-from-center (-> this root quat))
-        (and (< (fabs (-> dist-from-center x)) 20480.0)
-             (< 0.0 (-> dist-from-center z))
-             (< (-> dist-from-center z) 40960.0)
-             )
+  (if (name= (-> this name) "sew-elevator-15")
+      (if (is-at-top? this)
+          (level-wanted? (-> this level-on-bottom))
+          (level-wanted? (-> this level-on-top))
         )
-      )
+      (is-standing-on-elevator? this *target*)
     )
   )
 
@@ -151,7 +145,11 @@
     (func this)
     )
   (if (name= (-> this name) "sew-elevator-15")
-      (set! (-> this params xz-threshold) 348160.0)
+      (begin
+          (set! (-> this params xz-threshold) 348160.0)
+          (set! (-> this level-on-top) 'ctywide)
+          (set! (-> this level-on-bottom) 'sewer)
+        )
       (set! (-> this params xz-threshold) 184320.0)
       )
   (when (and (logtest? (elevator-flags elevator-flags-17) (-> this params flags))

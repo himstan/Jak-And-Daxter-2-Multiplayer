@@ -18,6 +18,7 @@
 (deftype airlock-data (structure)
   ((airlock-name   string) ;; airlock entity name (should match the entity name placed in the level)
    (other-side-levels pair) ;; levels that prove the remote player is already on the other side of this airlock
+   (airlock-elevator string)
    (on-notice      pair)   ;; evaluated on initialization to determine which levels must be loaded to open the airlock (can include task conditions)
    (on-activate    pair)   ;; actions executed when activating the airlock (e.g. load levels with 'want-load', load sound banks with 'want-sound')
    (on-enter       pair)   ;; actions executed once the airlock finishes opening (e.g. display levels using 'want-display', load sound banks with `want-sound`)
@@ -30,6 +31,7 @@
 
 (defmacro static-airlock-data (&key (airlock-name #f)
                                  &key (other-side-levels #f)
+                                 &key (airlock-elevator #f)
                                  &key (on-notice #f)
                                  &key (on-activate #f)
                                  &key (on-enter #f)
@@ -39,6 +41,7 @@
                                  &key (on-deactivate #f))
   `(new 'static 'airlock-data
      :airlock-name ,airlock-name
+     :airlock-elevator ,airlock-elevator
      :other-side-levels ,other-side-levels
      :on-notice ,on-notice
      :on-activate ,on-activate
@@ -90,6 +93,7 @@
    (spool-sound-time       time-frame)
    (door-radius            meters)
    (other-side-levels      pair) ;; added
+   (airlock-elevator       string) ;; added
    (on-notice              pair) ;; added
    (on-activate            pair) ;; added
    (on-enter               pair) ;; added
@@ -124,6 +128,8 @@
     (airlock-can-close-after-local-commit? (_type_) symbol)
     (airlock-waiting-for-remote-commit? (_type_) symbol)
     (draw-airlock-waiting-text! (_type_) none)
+    (has-elevator-and-has-state? (_type_ symbol) symbol)
+    (dont-have-elevator-or-is-standing-on-it (_type_) symbol)
     (airlock-ready-for-state? (_type_) symbol)
     (airlock-ready-for-script? (_type_ pair) symbol)
     (airlock-transitioning-to? (_type_ symbol) symbol)
@@ -144,6 +150,7 @@
               (static-airlock-data
                 :airlock-name #f
                 :other-side-levels #f
+                :airlock-elevator #f
                 :on-notice #f
                 :on-activate #f
                 :on-enter #f

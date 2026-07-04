@@ -5,6 +5,9 @@
 
 (defun mp-update-remote-transform ()
   "Consolidated logic for calculating the remote player's visual and physical transform"
+  (when (not (and *remote-info* (nonzero? *remote-info*)))
+    (return #f)
+    )
   (let ((remote-pos (new 'stack-no-clear 'vector)))
     (set-vector! remote-pos (-> *remote-info* x) (-> *remote-info* y) (-> *remote-info* z) 1.0)
 
@@ -49,6 +52,9 @@
 
 (defun mp-manage-remote-puppet ()
   "Spawn, update, or deactivate the remote player puppet using the actual target process"
+  (when (not (and *remote-info* (nonzero? *remote-info*)))
+    (return #f)
+    )
   (let ((remote-status (-> *remote-info* status)))
     (cond
       ((>= remote-status 4) ;; Connected, Starting, or In-Game
@@ -59,35 +65,33 @@
 
          ;; 2. Update the Ghost Record for the Target Puppet
          (let ((ghost *mp-puppet-ghost*))
-           (vector-copy! (-> ghost trans) *multi-remote-render-pos*)
-           (quaternion-copy! (-> ghost quat) (the-as quaternion *multi-remote-render-quat*))
-           (vector-copy! (-> ghost velocity) (-> *remote-info* velocity))
-           (set! (-> ghost state-id) (-> *remote-info* state-id))
-           (set! (-> ghost equipped-weapon) (-> *remote-info* equipped-weapon))
-           (set! (-> ghost buttons) (-> *remote-info* buttons))
-           (set! (-> ghost leftx) (-> *remote-info* leftx))
-           (set! (-> ghost lefty) (-> *remote-info* lefty))
-           (set! (-> ghost rightx) (-> *remote-info* rightx))
-           (set! (-> ghost righty) (-> *remote-info* righty))
-           (set! (-> ghost cam-angle-y) (-> *remote-info* cam-angle-y))
-           (set! (-> ghost active?) #t)
-           )
-
-         ;; During airlocks/level loads, keep receiving peer state but don't mutate local
-         ;; processes. Those state methods may live in segments that are unloading.
-         (when (not (mp-local-world-ready-for-remote-sync?))
-           (return #f)
+           (when (and ghost (nonzero? ghost))
+             (vector-copy! (-> ghost trans) *multi-remote-render-pos*)
+             (quaternion-copy! (-> ghost quat) (the-as quaternion *multi-remote-render-quat*))
+             (vector-copy! (-> ghost velocity) (-> *remote-info* velocity))
+             (set! (-> ghost state-id) (-> *remote-info* state-id))
+             (set! (-> ghost equipped-weapon) (-> *remote-info* equipped-weapon))
+             (set! (-> ghost buttons) (-> *remote-info* buttons))
+             (set! (-> ghost leftx) (-> *remote-info* leftx))
+             (set! (-> ghost lefty) (-> *remote-info* lefty))
+             (set! (-> ghost rightx) (-> *remote-info* rightx))
+             (set! (-> ghost righty) (-> *remote-info* righty))
+             (set! (-> ghost cam-angle-y) (-> *remote-info* cam-angle-y))
+             (set! (-> ghost active?) #t)
+             )
            )
 
          ;; 2.5 Distance check for force respawn
-         ;; If the remote player is far away, clear any stale puppet process so checks like
-         ;; (when *mp-puppet*) cannot pass after the engine has unloaded the process.
-         (let ((dist (if (and *target*
-                              (nonzero? *target*)
-                              (-> *target* control)
-                              (nonzero? (-> *target* control)))
-                         (vector-vector-distance (-> *target* control trans) *multi-remote-render-pos*)
-                         (meters 0.0))))
+         (let ((dist (meters 0.0)))
+           (when (and *target*
+                      (nonzero? *target*))
+             (let ((target-control (-> *target* control)))
+               (when (and target-control
+                          (nonzero? target-control))
+                 (set! dist (vector-vector-distance (-> target-control trans) *multi-remote-render-pos*))
+                 )
+               )
+             )
              (when (and (> dist (meters 250.0))
                         (not *mp-force-remote-puppet-for-spectate?*))
                (when *mp-puppet*
