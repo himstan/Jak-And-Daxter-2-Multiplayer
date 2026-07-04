@@ -6,8 +6,18 @@
    editing and customizing the behavior of existing (vanilla) airlocks.
   |#
 
+(define-extern mp-is-local-state-id? (function uint mp-airlock-state-id symbol))
+(define-extern mp-is-remote-state-id? (function uint mp-airlock-state-id symbol))
+(define-extern mp-airlock-state-id->string (function mp-airlock-state-id string))
+(define-extern mp-get-local-airlock-state (function uint mp-airlock-state-id))
+(define-extern mp-get-local-airlock-level-id (function uint int))
+(define-extern mp-get-remote-airlock-level-id (function uint int))
+(define-extern mp-level-symbol->id (function symbol uint))
+(define-extern mp-airlock-has-local-commit? (function symbol))
+
 (deftype airlock-data (structure)
   ((airlock-name   string) ;; airlock entity name (should match the entity name placed in the level)
+   (other-side-levels pair) ;; levels that prove the remote player is already on the other side of this airlock
    (on-notice      pair)   ;; evaluated on initialization to determine which levels must be loaded to open the airlock (can include task conditions)
    (on-activate    pair)   ;; actions executed when activating the airlock (e.g. load levels with 'want-load', load sound banks with 'want-sound')
    (on-enter       pair)   ;; actions executed once the airlock finishes opening (e.g. display levels using 'want-display', load sound banks with `want-sound`)
@@ -19,6 +29,7 @@
   )
 
 (defmacro static-airlock-data (&key (airlock-name #f)
+                                 &key (other-side-levels #f)
                                  &key (on-notice #f)
                                  &key (on-activate #f)
                                  &key (on-enter #f)
@@ -28,6 +39,7 @@
                                  &key (on-deactivate #f))
   `(new 'static 'airlock-data
      :airlock-name ,airlock-name
+     :other-side-levels ,other-side-levels
      :on-notice ,on-notice
      :on-activate ,on-activate
      :on-enter ,on-enter
@@ -77,6 +89,7 @@
    (sound-post-close-stop  sound-spec)
    (spool-sound-time       time-frame)
    (door-radius            meters)
+   (other-side-levels      pair) ;; added
    (on-notice              pair) ;; added
    (on-activate            pair) ;; added
    (on-enter               pair) ;; added
@@ -93,7 +106,30 @@
   (:methods
     (init-airlock! (_type_) _type_)
     (want-cross-airlock? (_type_) symbol :behavior com-airlock)
+    (target-in-airlock-active-range? (_type_ vector symbol) symbol :behavior com-airlock)
+    (target-in-airlock-height? (_type_ vector symbol) symbol :behavior com-airlock)
+    (mark-airlock-behind-if-needed! (_type_ float) none :behavior com-airlock)
+    (target-can-open-airlock? (_type_ float) symbol :behavior com-airlock)
+    (airlock-next-door-clear? (_type_ float) symbol :behavior com-airlock)
+    (camera-can-trigger-airlock? (_type_ float) symbol :behavior com-airlock)
+    (local-player-in-airlock-sync-distance? (_type_ float) symbol :behavior com-airlock)
+    (local-player-can-report-airlock-ready? (_type_) symbol :behavior com-airlock)
+    (airlock-destination-level? (_type_ symbol pair) symbol)
+    (airlock-load-conflicts-with-current-want? (_type_) symbol)
     (destination-loaded? (_type_ symbol) symbol)
+    (is-ready-for-any-players? (_type_) symbol)
+    (is-commit-for-all-players? (_type_) symbol)
+    (airlock-level-list-contains-id? (_type_ pair uint) symbol)
+    (remote-wanted-levels-contain-airlock-other-side? (_type_) symbol)
+    (airlock-can-close-after-local-commit? (_type_) symbol)
+    (airlock-waiting-for-remote-commit? (_type_) symbol)
+    (draw-airlock-waiting-text! (_type_) none)
+    (airlock-ready-for-state? (_type_) symbol)
+    (airlock-ready-for-script? (_type_ pair) symbol)
+    (airlock-transitioning-to? (_type_ symbol) symbol)
+    (airlock-in-state? (_type_ symbol) symbol)
+    (airlock-can-start-opening? (_type_) symbol)
+    (run-airlock-script! (_type_ pair symbol) none)
     (check-crossing-distance (_type_ vector symbol) float :behavior com-airlock)
     (rotate-gear! (_type_ float) degrees :behavior com-airlock)
     (play-city-voice-sound (_type_ symbol) none :behavior com-airlock)
@@ -107,6 +143,7 @@
 (define *empty-airlock-data* (new 'static 'boxed-array :type airlock-data
               (static-airlock-data
                 :airlock-name #f
+                :other-side-levels #f
                 :on-notice #f
                 :on-activate #f
                 :on-enter #f

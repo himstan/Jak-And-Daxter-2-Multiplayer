@@ -4,6 +4,7 @@
 (define *atollext-airlock-data* (new 'static 'boxed-array :type airlock-data
               (static-airlock-data
                 :airlock-name "com-airlock-inner-17"
+                :other-side-levels '(atoll caspad castle casboss cascity casext)
                 :on-notice '(when #t '(ctyslumc ctywide))
                 :on-activate #f
                 :on-enter '(begin (want-display 'ctywide 'display) (want-display 'ctyslumc 'display) (want-vis 'ctyslumc) (send-event self 'sound 'enter))
@@ -14,6 +15,7 @@
                 )
               (static-airlock-data
                 :airlock-name "com-airlock-inner-18"
+                :other-side-levels '(ctywide)
                 :on-notice '(when #t '(atoll))
                 :on-activate #f
                 :on-enter '(begin (want-display 'atoll 'display) (send-event self 'sound 'exit) (want-vis 'atoll))

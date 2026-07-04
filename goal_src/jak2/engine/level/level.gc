@@ -1521,7 +1521,12 @@ into 7 sections, which might explain the weird sizes in the center.
      (copy-perms-from-level! *game-info* this)
 
      ;; tell target
-     (send-event *target* 'level-deactivate (-> this name))
+     (when (and *target*
+                (nonzero? *target*)
+                (-> *target* control)
+                (nonzero? (-> *target* control)))
+       (send-event *target* 'level-deactivate (-> this name))
+       )
 
      ;; remove from background draw system
      (remove-by-param1 *background-draw-engine* (the-as int (-> this bsp)))

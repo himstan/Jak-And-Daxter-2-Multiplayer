@@ -1,14 +1,4 @@
 
-(defun mp-airlock-state-id->string ((state-id mp-airlock-state-id))
-  (case state-id
-    (((mp-airlock-state-id none)) "none")
-    (((mp-airlock-state-id ready)) "ready")
-    (((mp-airlock-state-id occupied)) "occupied")
-    (((mp-airlock-state-id commit)) "commit")
-    (else "unknown")
-    )
-  )
-
 (defun mp-airlock-debug-table-state-string ((table mp-airlock-state-table) (airlock-aid uint))
   (let ((slot (mp-airlock-find-state table airlock-aid)))
     (if (and slot (nonzero? (the-as uint slot)))
@@ -178,16 +168,6 @@
   (none)
   )
 
-(defun get-airlock-by-aid ((airlock-aid uint))
-  (let ((ent (entity-by-aid airlock-aid)))
-    (if (and ent
-             (nonzero? ent)
-             (-> ent extra process)
-             (nonzero? (-> ent extra process))
-             (type? (-> ent extra process) com-airlock))
-        (the-as com-airlock (-> ent extra process))
-        (the-as com-airlock #f))))
-
 (defun mp-draw-airlock-debug ()
   "Display airlock sync states (local and remote) at the top-left of the screen."
   (mp-draw-airlock-world-debug)
@@ -212,13 +192,15 @@
                          (local-ready? (local-player-can-report-airlock-ready? airlock))
                          (load-conflict? (airlock-load-conflicts-with-current-want? airlock))
                          (dest-wanted? (destination-loaded? airlock #f)))
-                    (format *stdcon* " Loaded? #t, Name ~A, Inner? ~A, Inside-Open-Distance ~A, Local-Ready? ~A~%"
+                    (format *stdcon* " Loaded? #t, Name ~A, Process-Level ~A, Inner? ~A, Inside-Open-Distance ~A, Local-Ready? ~A~%"
                       (-> airlock name)
+                      (-> airlock level name)
                       (-> airlock inner?)
                       (local-player-in-airlock-sync-distance? airlock cross-dist)
                       local-ready?
                     )
-                    (format *stdcon* "      Load-Conflict? ~A, Dest-Wanted? ~A, Want ~A~%"
+                    (format *stdcon* "      Were-Behind? ~A, Load-Conflict? ~A, Dest-Wanted? ~A, Want ~A~%"
+                      (-> airlock were-behind?)
                       load-conflict?
                       dest-wanted?
                       (mp-airlock-debug-want-levels-string)

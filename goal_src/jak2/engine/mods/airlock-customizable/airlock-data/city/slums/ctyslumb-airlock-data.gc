@@ -24,6 +24,7 @@
                 )
               (static-airlock-data
                 :airlock-name "com-airlock-inner-11"
+                :other-side-levels '(ruins)
                 :on-notice '(when #t '(ctyslumb ctywide))
                 :on-activate #f
                 :on-enter '(begin (want-display 'ctywide 'display) (want-vis 'ctyslumb) (send-event self 'sound 'enter))
@@ -34,6 +35,7 @@
                 )
               (static-airlock-data
                 :airlock-name "com-airlock-inner-12"
+                :other-side-levels '(ctywide)
                 :on-notice '(when #t '(ruins))
                 :on-activate #f
                 :on-enter '(begin (want-display 'ruins 'display) (send-event self 'sound 'exit) (want-vis 'ruins))
