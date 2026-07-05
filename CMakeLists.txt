@@ -209,6 +209,7 @@ include_directories(SYSTEM third-party/inja)
 # Enable SSL Support, most URLs now-a-days use SSL!
 # TODO - probably integrate with ZSTD since we have it already
 set(CURL_USE_LIBSSH2 OFF)
+set(CURL_USE_LIBPSL OFF CACHE BOOL "Use libPSL" FORCE)
 set(CURL_ZLIB OFF)
 # suddenly became enabled on macOS atleast, only needed for unicode URLs
 # wasn't being properly statically linked
