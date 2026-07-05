@@ -83,6 +83,12 @@
   0
   )
 
+(defun sig0-clear-metalhead-camera! ()
+  (process-release? *target*)
+  (remove-setting! 'entity-name)
+  (none)
+  )
+
 (defun sig0-say-look-out-if-should ((arg0 sig-atoll))
   (when (logtest? (-> arg0 bot-task-bits) (bot-task-bits botbits-2))
     (when (not (logtest? (-> arg0 bot-task-bits) (bot-task-bits botbits-4)))
@@ -972,7 +978,7 @@
                          )
                         (else
                           (when (time-elapsed? (-> arg1 waypoint-time0) (seconds 3))
-                            (remove-setting! 'entity-name)
+                            (sig0-clear-metalhead-camera!)
                             (logior! (-> arg1 waypoint-bits) (waypoint-bits wabits-1))
                             (set-setting! 'sound-mode #f 0.0 1)
                             )
@@ -994,6 +1000,7 @@
         :nav-mesh-index 3
         :skip-to -1
         :on-set (lambda ((arg0 sig-atoll))
+          (sig0-clear-metalhead-camera!)
           (with-pp
             (add-process *gui-control* arg0 (gui-channel art-load) (gui-action queue) "atoll-sniper-a" -99.0 0)
             (let ((a1-1 (new 'stack-no-clear 'event-message-block)))
@@ -1112,6 +1119,7 @@
         :nav-mesh-index 3
         :skip-to -1
         :on-set (lambda ((arg0 sig-atoll))
+          (sig0-clear-metalhead-camera!)
           (let ((v1-1 (get-task-by-type (-> arg0 ai-ctrl) sigt-wait-spot arg0)))
             (set! (-> v1-1 bytes 5) 2)
             (set! (-> v1-1 bytes 6) 21)
@@ -1155,6 +1163,7 @@
         :nav-mesh-index 3
         :skip-to 23
         :on-set (lambda ((arg0 sig-atoll))
+          (sig0-clear-metalhead-camera!)
           (play-speech arg0 11)
           (let ((v1-3 (get-task-by-type (-> arg0 ai-ctrl) sigt-wait-spot arg0)))
             (set! (-> v1-3 bytes 5) 1)
@@ -1269,6 +1278,7 @@
         :nav-mesh-index 3
         :skip-to 23
         :on-set (lambda ((arg0 sig-atoll))
+          (sig0-clear-metalhead-camera!)
           (let ((v1-1 (get-task-by-type (-> arg0 ai-ctrl) sigt-wait-spot arg0)))
             (set! (-> v1-1 bytes 5) 1)
             (set! (-> v1-1 bytes 6) 24)

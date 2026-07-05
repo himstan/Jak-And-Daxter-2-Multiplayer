@@ -12,6 +12,8 @@
 (define-extern mp-pedestrian-broadcast-attack (function enemy process event-message-block symbol))
 
 (declare-type hopper nav-enemy)
+(declare-type bot nav-enemy)
+(declare-type sig bot)
 
 ;; DECOMP BEGINS
 
@@ -2702,7 +2704,9 @@
   :virtual #t
   :event enemy-event-handler
   :enter (behavior ()
-    (when (not (type? self hopper))
+    (when (not (or 
+      (type? self hopper)
+      (type? self sig)))
         (logior! (-> self enemy-flags) (enemy-flag stop-syncing))
       )
     (set-time! (-> self state-time))
