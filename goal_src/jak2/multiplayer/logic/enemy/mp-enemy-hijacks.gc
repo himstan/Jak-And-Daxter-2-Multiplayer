@@ -9,7 +9,7 @@
     (if (zero? aid)
         (return #f))
     (let ((rec (mp-get-enemy-auth aid))
-          (info (if (and arg3 (nonzero? arg3) (nonzero? (-> arg3 param 1))) (the-as attack-info (-> arg3 param 1)) (the-as attack-info #f))))
+          (info (mp-actor-event-attack-info arg3)))
       (and rec
            (mp-is-local-attacker? arg0)
            (not (mp-enemy-authoritative? e-proc))
@@ -31,7 +31,7 @@
     (if (zero? aid)
         (return #f))
     (let ((rec (mp-get-enemy-auth aid))
-          (info (if (and arg3 (nonzero? arg3) (nonzero? (-> arg3 param 1))) (the-as attack-info (-> arg3 param 1)) (the-as attack-info #f))))
+          (info (mp-actor-event-attack-info arg3)))
       (when rec
         (if info (set! (-> rec last-attack-id) (-> info id)))
         (if info (set! (-> rec last-local-attack-id) (-> info id)))
@@ -73,20 +73,18 @@
           (rec (mp-get-enemy-auth aid)))
       
       (when rec
-        (let ((info (if (and arg3 (nonzero? arg3) (nonzero? (-> arg3 param 1))) (the-as attack-info (-> arg3 param 1)) (the-as attack-info #f))))
+        (let ((info (mp-actor-event-attack-info arg3)))
           
           ;; 1. Global Hit Throttling (Block repeated frames of the same attack ID)
           (when (and (not (and *mp-processing-remote-event* (not (mp-enemy-authoritative? e-proc))))
-                     info
-                     (nonzero? (-> info id))
+                     (mp-actor-attack-id-usable? info)
                      (= (-> info id) (-> rec last-attack-id)))
             (return #t) ;; Block the engine handler
             )
           
           ;; 2. Local Hit Throttling (Block repeated frames of the same local hitbox)
           (when (and (not (and *mp-processing-remote-event* (not (mp-enemy-authoritative? e-proc))))
-                     info
-                     (nonzero? (-> info id))
+                     (mp-actor-attack-id-usable? info)
                      (= (-> info id) (-> rec last-local-attack-id)))
             (return #t) ;; Block the engine handler
             )
@@ -334,10 +332,10 @@
      (let ((aid (mp-get-enemy-aid this)))
        (when (nonzero? aid)
          (let ((rec (mp-get-enemy-auth aid))
-               (info (if (and arg3 (nonzero? arg3) (nonzero? (-> arg3 param 1))) (the-as attack-info (-> arg3 param 1)) (the-as attack-info #f))))
+               (info (mp-actor-event-attack-info arg3)))
            (when rec
              ;; 1. DUPLICATE CHECK (Global & Local)
-             (when (and (not *mp-processing-remote-event*) info (nonzero? (-> info id)))
+             (when (and (not *mp-processing-remote-event*) (mp-actor-attack-id-usable? info))
                (if (or (= (-> info id) (-> rec last-attack-id))
                        (= (-> info id) (-> rec last-local-attack-id)))
                    ;; Return #f to Jak so he stops triggering 'hit' effects/sounds locally
@@ -378,7 +376,7 @@
          )
        )
 
-     (let ((info (if (and arg3 (nonzero? arg3) (nonzero? (-> arg3 param 1))) (the-as attack-info (-> arg3 param 1)) (the-as attack-info #f))))
+     (let ((info (mp-actor-event-attack-info arg3)))
        (cond
          ((and info (= (-> info mode) 'mp-death))
           (mp-enemy-apply-remote-death! this 'mp-death)
@@ -418,7 +416,7 @@
 
 (defun mp-enemy-take-damage-hijack ((this enemy) (arg0 process) (arg1 event-message-block))
   "Authority check for enemy damage."
-  (let ((info (if (and arg1 (nonzero? arg1) (nonzero? (-> arg1 param 1))) (the-as attack-info (-> arg1 param 1)) (the-as attack-info #f))))
+  (let ((info (mp-actor-event-attack-info arg1)))
     (when (and info (= (-> info mode) 'mp-death))
       (format 0 "[MP-Lifecycle] Remote-forced death for ~A via 'mp-death mode.~%" this)
       (mp-enemy-apply-remote-death! this 'mp-death)

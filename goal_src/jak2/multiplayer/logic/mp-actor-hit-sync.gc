@@ -1,0 +1,40 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; Shared hit-sync helpers used by enemy and traffic pedestrians. Keep the
+;; entity-specific authority and event-send policy in the caller modules.
+
+(defun mp-actor-event-attack-info ((msg event-message-block))
+  "Return the attack-info payload from an event-message-block, or #f."
+  (if (and msg
+           (nonzero? msg)
+           (nonzero? (-> msg param 1)))
+      (the-as attack-info (-> msg param 1))
+      (the-as attack-info #f)
+      )
+  )
+
+(defun mp-actor-attack-id ((info attack-info))
+  (if (and info
+           (nonzero? info))
+      (-> info id)
+      (the uint 0)
+      )
+  )
+
+(defun mp-actor-attack-info-mode? ((info attack-info) (mode symbol))
+  (and info
+       (nonzero? info)
+       (= (-> info mode) mode))
+  )
+
+(defun mp-actor-attack-id-usable? ((info attack-info))
+  (and info
+       (nonzero? info)
+       (nonzero? (-> info id)))
+  )
+
+(defun mp-actor-remote-attacker-blocked? ((attacker process) (remote-replay? symbol))
+  (and (not remote-replay?)
+       (mp-is-remote-attacker? attacker))
+  )

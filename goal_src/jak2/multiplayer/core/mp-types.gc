@@ -1436,6 +1436,7 @@
 (define-extern mp-vehicle-promote-local-driver! (function vehicle none))
 (define-extern mp-apply-traffic-hijacks (function none))
 (define-extern mp-ped-predictive-move (function citizen none))
+(define-extern mp-pedestrian-terminal-state? (function symbol symbol))
 (define-extern mp-pedestrian-apply-remote-attack! (function mp-ped-attack-event none))
 (define-extern mp-pedestrian-start-remote-death! (function citizen mp-ped-death-event none))
 (define-extern mp-vehicle-apply-ghost-correction (function vehicle none))

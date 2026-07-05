@@ -569,9 +569,13 @@
   "mp-left-behind.o" ;; added
   "mp-enemy-h.o" ;; added
   "mp-actor-ghost-sync.o" ;; added
+  "mp-actor-hit-sync.o" ;; added
   "mp-enemy-sync.o" ;; added
   "mp-traffic-h.o" ;; added
+  "mp-traffic-ghosts.o" ;; added
   "mp-pedestrian-authoritative.o" ;; added
+  "mp-pedestrian-state-sync.o" ;; added
+  "mp-pedestrian-hit-sync.o" ;; added
   "mp-pedestrian-puppet.o" ;; added
   "mp-vehicle-authoritative.o" ;; added
   "mp-mission-vehicles.o" ;; added

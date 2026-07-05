@@ -1,214 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; --- Traffic Ghost Record Helpers ---
-
-(defun mp-get-traffic-ghost ((net-id uint))
-  "Find an existing ghost record by net-id. Returns #f if not found."
-  (dotimes (i MP_MAX_TRAFFIC_GHOST_RECORDS)
-    (let ((rec (-> *mp-traffic-ghosts* i)))
-      (when (= (-> rec net-id) net-id)
-        (return rec)
-        )
-      )
-    )
-  (the-as mp-traffic-ghost-record #f)
-  )
-
-(defun mp-get-free-traffic-ghost ()
-  "Find an empty ghost record slot. Returns #f if array is full."
-  (dotimes (i MP_MAX_TRAFFIC_GHOST_RECORDS)
-    (let ((rec (-> *mp-traffic-ghosts* i)))
-      (when (zero? (-> rec net-id))
-        (return rec)
-        )
-      )
-    )
-  (the-as mp-traffic-ghost-record #f)
-  )
-
-(defun mp-cleanup-traffic-ghosts ()
-  "Clear ghost records not updated in the last 10 seconds."
-  (dotimes (i MP_MAX_TRAFFIC_GHOST_RECORDS)
-    (let ((rec (-> *mp-traffic-ghosts* i)))
-      (when (and (nonzero? (-> rec net-id))
-                 (time-elapsed? (-> rec last-seen) (seconds 10)))
-        (format 0 "[MP-Traffic-Hijacks] Cleaning up stale nid=~D since it hasn't been updated for 10 seconds~%" (-> rec net-id))
-        (set! (-> rec net-id) (the uint 0))
-        )
-      )
-    )
-  (none)
-  )
-
-;; --- Pedestrian P-Controller ---
-
-(defun mp-pedestrian-terminal-state? ((target-sym symbol))
-  (or (= target-sym 'knocked)
-      (= target-sym 'knocked-off-vehicle)
-      (= target-sym 'die)
-      (= target-sym 'die-falling)
-      (= target-sym 'die-fast))
-  )
-
-(defun mp-pedestrian-riding-vehicle? ((ped citizen))
-  "True once the citizen is really present in its vehicle's rider array."
-  (when (and ped
-             (nonzero? ped)
-             (type? ped civilian))
-    (let ((veh (the-as vehicle (handle->process-safe (-> (the-as civilian ped) vehicle)))))
-      (when (and veh
-                 (nonzero? veh)
-                 (-> veh info)
-                 (nonzero? (-> veh info)))
-        (dotimes (seat-idx (-> veh info seat-count))
-          (when (= (get-rider-in-seat veh seat-idx) ped)
-            (return #t)
-            )
-          )
-        )
-      )
-    )
-  #f
-  )
-
-(defun mp-ped-predictive-move ((ped citizen))
-  "Smoothly nudge a citizen's velocity and position toward the authoritative ghost position.
-   Called from the citizen common-post hijack each frame on the non-authoritative side."
-  (when (and ped
-             (nonzero? ped)
-             (not (mp-pedestrian-riding-vehicle? ped)))
-    (let ((net-id (-> ped net-id)))
-      (when (and (nonzero? net-id)
-                 (-> ped root)
-                 (nonzero? (-> ped root)))
-        (let ((rec (mp-get-traffic-ghost net-id)))
-          (when (and rec (not (should-pause-sync? ped rec)))
-            (let ((predicted-trans (new 'stack-no-clear 'vector))
-                  (ghost-state (mp-ped-get-state-from-id (the uint (-> rec ghost-state-id)))))
-              (mp-actor-traffic-predicted-trans! rec predicted-trans)
-              (mp-actor-apply-ghost-correction!
-                (-> ped root trans)
-                (-> ped root transv)
-                (-> ped root quat)
-                predicted-trans
-                (-> rec ghost-quat)
-                0.85
-                0.35
-                (mp-pedestrian-terminal-state? ghost-state))
-              )
-            )
-          )
-        )
-      )
-    )
-  (none)
-  )
-
-;; --- Vehicle Ghost Correction ---
-
-(defun mp-vehicle-apply-ghost-correction ((veh vehicle))
-  "Smooth a puppet vehicle's rbody velocity toward the authoritative ghost position.
-   Called from mp-vehicle-puppet :trans each frame on the non-authoritative side."
-  ;; ADDED: Safety guard for veh existence
-  (if (not (and veh (nonzero? veh))) (return #f))
-
-  (let ((net-id (-> veh net-id)))
-    (when (and (nonzero? net-id) (-> veh root) (-> veh rbody))
-      (let ((rec (mp-get-traffic-ghost net-id)))
-        (when rec
-          ;; Robust check: is this the driven puppet vehicle?
-          ;; Use global pointer (most reliable) OR direct pilot check OR remote info net-id
-          (let ((is-remote-driven (or (= veh *mp-remote-driven-vehicle*)
-                                     (let ((pilot (get-rider-in-seat veh 0))) (and pilot (= pilot *mp-puppet*)))
-                                     (and (nonzero? (-> veh net-id)) (= (-> veh net-id) (-> *remote-info* veh-state net-id))))))
-            
-            (let ((dist (vector-vector-distance (-> veh root trans) (-> rec ghost-trans))))
-
-              (if is-remote-driven
-                  ;; CASE 1: Driven Vehicle (Aggressive sync to follow synced inputs)
-                  (cond
-                    ((> dist (meters 15))
-                     ;; Hard snap if desync is massive
-                     (set! (-> veh pad-bytes 0) (the uint8 2)) ;; SNAP
-                     (vector-copy! (-> veh root trans) (-> rec ghost-trans))
-                     (if (-> veh rbody state) (vector-copy! (-> veh rbody state position) (-> rec ghost-trans)))
-                     (vector-copy! (-> veh root transv) (-> rec ghost-linvel))
-                     (if (-> veh rbody state) (vector-copy! (-> veh rbody state lin-velocity) (-> rec ghost-linvel)))
-                     (quaternion-copy! (-> veh root quat) (-> rec ghost-quat))
-                     (if (-> veh rbody state) (quaternion-copy! (-> veh rbody state rotation) (-> rec ghost-quat)))
-                     (if (-> veh rbody state) (vector-copy! (-> veh rbody state ang-velocity) (-> rec ghost-angvel)))
-                     )
-                    (else
-                     ;; High-frequency correction: blend local simulation toward authoritative ghost
-                     (set! (-> veh pad-bytes 0) (the uint8 1)) ;; NUDGED
-                     (let ((lerp-factor 0.2)
-                           (nudge-scale 5.0)
-                           (slerp-factor 0.4)
-                           (angvel-lerp 0.3))
-                       
-                       (vector-lerp! (-> veh root trans) (-> veh root trans) (-> rec ghost-trans) lerp-factor)
-                       
-                       (let ((nudge (new 'stack-no-clear 'vector)))
-                         (vector-! nudge (-> rec ghost-trans) (-> veh root trans))
-                         (vector-float*! nudge nudge nudge-scale)
-                         (if (-> veh rbody state) (vector+! (-> veh rbody state lin-velocity) (-> veh rbody state lin-velocity) nudge))
-                         (if (-> veh rbody state) (vector-copy! (-> veh root transv) (-> veh rbody state lin-velocity)))
-                         )
-                       
-                       (quaternion-slerp! (-> veh root quat) (-> veh root quat) (-> rec ghost-quat) slerp-factor)
-                       (if (-> veh rbody state) (vector-lerp! (-> veh rbody state ang-velocity) (-> veh rbody state ang-velocity) (-> rec ghost-angvel) angvel-lerp))
-                       )
-                     )
-                    )
-                  ;; CASE 2: Ambient traffic vehicle
-                  (begin
-                    (cond
-                      ((> dist (meters 15))
-                       (vector-copy! (-> veh root trans) (-> rec ghost-trans))
-                       (vector-copy! (-> veh rbody state position) (-> rec ghost-trans))
-                       (vector-copy! (-> veh root transv) (-> rec ghost-linvel))
-                       (vector-copy! (-> veh rbody state lin-velocity) (-> rec ghost-linvel))
-                       (quaternion-copy! (-> veh root quat) (-> rec ghost-quat))
-                       (quaternion-copy! (-> veh rbody state rotation) (-> rec ghost-quat))
-                       (vector-copy! (-> veh rbody state ang-velocity) (-> rec ghost-angvel))
-                       )
-                      ((> dist (meters 0.05))
-                       (let ((lerp-factor 0.1)
-                             (nudge-scale 2.0))
-                         (when (> dist (meters 2)) (set! lerp-factor 0.2))
-                         (when (> dist (meters 5)) (set! lerp-factor 0.5))
-                         (vector-lerp! (-> veh root trans) (-> veh root trans) (-> rec ghost-trans) lerp-factor)
-
-                         (let ((nudge (new 'stack-no-clear 'vector)))
-                           (vector-! nudge (-> rec ghost-trans) (-> veh root trans))
-                           (vector-float*! nudge nudge nudge-scale)
-                           (vector+! (-> veh rbody state lin-velocity) (-> veh rbody state lin-velocity) nudge)
-                           (vector-copy! (-> veh root transv) (-> veh rbody state lin-velocity))
-                           )
-                         )
-                       )
-                      )
-                    ;; Ambient rotation cleanup
-                    (quaternion-slerp! (-> veh root quat) (-> veh root quat) (-> rec ghost-quat) 0.1)
-                    )
-                  )
-                )
-              )
-
-          ;; CRITICAL: Ensure rbody state is kept in sync with the root transform for physics engine
-          ;; This also rebuilds the rbody state matrix, which method-52 uses for visual updates.
-          (rigid-body-method-26 (-> veh rbody state) (-> veh root trans) (-> veh root quat))
-          )
-        )
-      )
-    )
-  (none)
-  )
-
 ;; --- Damage & Death Broadcasting ---
 
-(define *mp-pedestrian-remote-attack-event* (the-as mp-ped-attack-event #f))
 (define *old-citizen-common-post* (the-as (function citizen none) #f))
 (define *old-citizen-event-handler* (the-as (function citizen process int symbol event-message-block object) #f))
 ;; Track whether cwi.gd subtypes have been patched yet (they load after game.gd).
@@ -488,36 +282,13 @@
   (none)
   )
 
-(defun mp-pedestrian-remote-attack-info? ((info attack-info))
-  "Does this attack-info represent a reconstructed remote pedestrian hit?"
-  (and info
-       (= (-> info mode) 'mp-hit-remote)
-       )
-  )
-
-(defun mp-pedestrian-local-attack-id-usable? ((info attack-info))
-  "Does this attack-info carry a local hitbox source id we can use for duplicate checks?"
-  (and info
-       (nonzero? (-> info id))
-       )
-  )
-
-(defun mp-pedestrian-local-attack-blocked? ((rec mp-traffic-ghost-record) (info attack-info))
-  "Has this local hitbox already produced a request during its anti-spam window?"
-  (if (mp-pedestrian-local-attack-id-usable? info)
-      (return (and (= (-> info id) (-> rec last-local-attack-id))
-                   (not (time-elapsed? (-> rec last-local-attack-time) (seconds 0.75)))))
-      )
-  (not (time-elapsed? (-> rec last-local-attack-time) (seconds 0.2)))
-  )
-
 (defun mp-pedestrian-local-hit-predictable? ((e-proc citizen) (arg0 process) (arg3 event-message-block))
   "Can a non-owner play a visual-only local hit reaction for this pedestrian attack?"
   (let ((net-id (-> e-proc net-id)))
     (if (zero? net-id)
         (return #f))
     (let ((rec (mp-get-traffic-ghost net-id))
-          (info (if (and arg3 (nonzero? arg3) (nonzero? (-> arg3 param 1))) (the-as attack-info (-> arg3 param 1)) (the-as attack-info #f))))
+          (info (mp-actor-event-attack-info arg3)))
       (and rec
            (mp-is-local-attacker? arg0)
            (not (mp-is-traffic-authoritative?))
@@ -535,7 +306,7 @@
     (if (zero? net-id)
         (return #f))
     (let ((rec (mp-get-traffic-ghost net-id))
-          (info (if (and arg3 (nonzero? arg3) (nonzero? (-> arg3 param 1))) (the-as attack-info (-> arg3 param 1)) (the-as attack-info #f))))
+          (info (mp-actor-event-attack-info arg3)))
       (when rec
         (if info (set! (-> rec last-local-attack-id) (-> info id)))
         (set! (-> rec last-local-attack-time) (current-time))
@@ -688,7 +459,7 @@
   "Handle attack sync logic for pedestrians. Requests hits from Host."
   (let ((net-id (-> e-proc net-id)) (pid (-> e-proc pid)))
     (when (nonzero? net-id)
-      (let ((info (if (and arg3 (nonzero? arg3) (nonzero? (-> arg3 param 1))) (the-as attack-info (-> arg3 param 1)) (the-as attack-info #f))))
+      (let ((info (mp-actor-event-attack-info arg3)))
         (let ((is-remote-replay? (or *mp-processing-remote-event* (mp-pedestrian-remote-attack-info? info))))
           ;; BLOCK: Remote puppets should not trigger physical hits or reactions locally.
           (if (and (not is-remote-replay?)
@@ -759,7 +530,7 @@
          )
      )
     (('attack)
-     (let ((info (if (and arg3 (nonzero? arg3) (nonzero? (-> arg3 param 1))) (the-as attack-info (-> arg3 param 1)) (the-as attack-info #f)))
+     (let ((info (mp-actor-event-attack-info arg3))
            (is-local? (mp-is-local-attacker? arg0)))
        (if (or 
            (and *mp-traffic-suppressed* (= (-> this net-id) 0))
@@ -776,8 +547,6 @@
             (return #f)
           )
          )
-         (format 0 "[MP-Traffic-Hijacks] Got 'attack on ~A for nid=~D pid=~D info=~A citizen-incoming-attack-id=~D info-attack-id=~D~%" (-> this name) (-> this net-id) (-> this pid) (-> info mode) (-> this incoming attack-id) (-> info id))
-     
          (let ((net-id (-> this net-id)))
            (when (nonzero? net-id)
              (let ((rec (mp-get-traffic-ghost net-id)))
@@ -786,7 +555,6 @@
                             is-local?
                             (mp-pedestrian-local-attack-blocked? rec info))
                    ;; Return #f to Jak so he stops triggering 'hit' effects/sounds locally
-                   (format 0 "[MP-Traffic-Hijacks] Returning early from 'attack for ~A for nid=~D pid=~D info=~A citizen-incoming-attack-id=~D info-attack-id=~D~%" (-> this name) (-> this net-id) (-> this pid) (-> info mode) (-> this incoming attack-id) (-> info id))
                    (return #f)
                  )
                )
@@ -803,7 +571,6 @@
              (when is-local?
                (if (mp-pedestrian-play-local-hit-prediction! this arg0 arg3)
                    (begin
-                     (format 0 "[MP-Traffic-Hijacks] Playing local 'attack for ~A for nid=~D pid=~D info=~A citizen-incoming-attack-id=~D info-attack-id=~D~%" (-> this name) (-> this net-id) (-> this pid) (-> info mode) (-> this incoming attack-id) (-> info id))
                      (if *old-citizen-event-handler*
                          (return (*old-citizen-event-handler* this arg0 arg1 arg2 arg3))
                          (return #f))
@@ -814,7 +581,6 @@
            )
          )
        )
-       (format 0 "[MP-Traffic-Hijacks] Reached the end of 'attack on ~A for nid=~D pid=~D info=~A citizen-incoming-attack-id=~D info-attack-id=~D~%" (-> this name) (-> this net-id) (-> this pid) (-> info mode) (-> this incoming attack-id) (-> info id))
        )
      )
     (('traffic-off 'traffic-off-force)

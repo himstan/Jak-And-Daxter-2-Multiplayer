@@ -1,0 +1,31 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; Pedestrian hit-sync helpers shared by the citizen event hijack and the
+;; traffic event handlers.
+
+(define *mp-pedestrian-remote-attack-event* (the-as mp-ped-attack-event #f))
+
+(defun mp-pedestrian-remote-attack-info? ((info attack-info))
+  "Does this attack-info represent a reconstructed remote pedestrian hit?"
+  (mp-actor-attack-info-mode? info 'mp-hit-remote)
+  )
+
+(defun mp-pedestrian-local-attack-id-usable? ((info attack-info))
+  "Does this attack-info carry a local hitbox source id we can use for duplicate checks?"
+  (mp-actor-attack-id-usable? info)
+  )
+
+(defun mp-pedestrian-local-attack-blocked? ((rec mp-traffic-ghost-record) (info attack-info))
+  "Has this local hitbox already produced a request during its anti-spam window?"
+  (when (and rec
+             (nonzero? rec))
+    (if (mp-pedestrian-local-attack-id-usable? info)
+        (return (and (= (-> info id) (-> rec last-local-attack-id))
+                     (not (time-elapsed? (-> rec last-local-attack-time) (seconds 0.75)))))
+        )
+    (return (not (time-elapsed? (-> rec last-local-attack-time) (seconds 0.2))))
+    )
+  #f
+  )
+
