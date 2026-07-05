@@ -211,7 +211,6 @@
 (define *mp-pedestrian-remote-attack-event* (the-as mp-ped-attack-event #f))
 (define *old-citizen-common-post* (the-as (function citizen none) #f))
 (define *old-citizen-event-handler* (the-as (function citizen process int symbol event-message-block object) #f))
-(define *old-citizen-take-damage* (the-as (function citizen process event-message-block int) #f))
 ;; Track whether cwi.gd subtypes have been patched yet (they load after game.gd).
 (define *mp-citizen-subtypes-patched* #f)
 

@@ -432,7 +432,7 @@
       (mp-enemy-apply-remote-death! this 'mp-death-fast)
       (return 0)))
 
-  (if (mp-enemy-should-process-damage? this)
+  (if (or (type? this citizen) (mp-enemy-should-process-damage? this))
       (if *old-enemy-take-damage* (*old-enemy-take-damage* this arg0 arg1) 0)
       (begin
         ;; NON-OWNER: Completely block local damage processing to prevent death-rebirth loops.
