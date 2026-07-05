@@ -76,6 +76,12 @@
   "Return a compact yes/no string for debug text."
   (if value "YES" "NO"))
 
+(defun mp-debug-art-name ((anim basic))
+  "Return a readable art-joint-anim name."
+  (if (and anim (nonzero? anim))
+      (the-as string (-> (the-as art-joint-anim anim) name))
+      "none"))
+
 (defun mp-debug-get-sync-weapon-text ((proc target))
   "Return network weapon fields relevant to puppet gun desync debugging."
   (let ((local-weapon (the uint 0))
@@ -108,6 +114,39 @@
     )
   )
 
+(defun mp-debug-get-target-anim-text ((proc target) (label string))
+  "Return target state and parent animation fields that drive held-gun rendering."
+  (let ((state-name (the-as symbol #f))
+        (root-group (the-as basic #f))
+        (top-group (the-as basic #f))
+        (top-targ (the-as basic #f))
+        (top-push (the-as basic #f)))
+    (when (and proc
+               (nonzero? proc))
+      (when (and (-> proc state)
+                 (nonzero? (-> proc state)))
+        (set! state-name (-> proc state name))
+        )
+      (when (and (-> proc skel)
+                 (nonzero? (-> proc skel)))
+        (set! root-group (the-as basic (-> proc skel root-channel 0 frame-group)))
+        (set! top-group (the-as basic (-> proc skel top-anim frame-group)))
+        (set! top-targ (the-as basic (-> proc skel top-anim frame-targ)))
+        (set! top-push (the-as basic (-> proc skel top-anim frame-group-push)))
+        )
+      )
+    (the-as string
+            (format #f
+                    "~A TARGET: state=~S root=~A top=~A targ=~A push=~A"
+                    label
+                    state-name
+                    (mp-debug-art-name root-group)
+                    (mp-debug-art-name top-group)
+                    (mp-debug-art-name top-targ)
+                    (mp-debug-art-name top-push)))
+    )
+  )
+
 (defun mp-debug-get-gun-state-text ((label string) (gun-info gun-info))
   "Return local gun-info state relevant to equip and put-away debugging."
   (the-as string
@@ -121,6 +160,28 @@
                   (mp-debug-bool-string (-> gun-info put-away?))))
   )
 
+(defun mp-debug-get-target-render-gate-text ((proc target))
+  "Return parent target render fields that can hide the spawned gun process."
+  (let ((active-channels -1))
+    (when (and proc
+               (nonzero? proc)
+               (-> proc skel)
+               (nonzero? (-> proc skel)))
+      (set! active-channels (the int (-> proc skel active-channels)))
+      )
+    (the-as string
+            (format #f
+                    "TARGET DRAW FLAGS: ~A active-channels=~D"
+                    (if (and proc
+                             (nonzero? proc)
+                             (-> proc draw)
+                             (nonzero? (-> proc draw)))
+                        (mp-debug-get-draw-status-flags (-> proc draw))
+                        "none")
+                    active-channels))
+    )
+  )
+
 (defun mp-debug-get-gun-render-text ((gun-info gun-info) (draw-ctrl draw-control))
   "Return visual gun state relevant to stale rendered weapon debugging."
   (the-as string
@@ -131,6 +192,40 @@
                   (if (and draw-ctrl (nonzero? draw-ctrl)) (mp-debug-get-draw-status-flags draw-ctrl) "none")))
   )
 
+(defun mp-debug-get-gun-root-text ((gun-proc gun))
+  "Return the gun process root transform used for culling and drawing."
+  (if (and gun-proc
+           (nonzero? gun-proc))
+      (the-as string
+              (format #f
+                      "GUN ROOT: pos=(~F ~F ~F) scale=(~F ~F ~F)"
+                      (-> gun-proc root trans x)
+                      (-> gun-proc root trans y)
+                      (-> gun-proc root trans z)
+                      (-> gun-proc root scale x)
+                      (-> gun-proc root scale y)
+                      (-> gun-proc root scale z)))
+      "GUN ROOT: none"))
+
+(defun mp-debug-get-gun-timing-text ((gun-info gun-info))
+  "Return gun timing fields that can suppress render or shots."
+  (the-as string
+          (format #f
+                  "TIMING: now=~D suppress=~D active-time=~D laser=~A"
+                  (current-time)
+                  (-> gun-info surpress-time)
+                  (-> gun-info active-time)
+                  (mp-debug-bool-string (-> gun-info laser-active?)))))
+
+(defun mp-debug-get-gun-root-and-timing-text ((gun-proc gun) (gun-info gun-info))
+  "Return compact root and timing diagnostics without exceeding format argument limits."
+  (the-as string
+          (format #f
+                  "~A~%~A"
+                  (mp-debug-get-gun-root-text gun-proc)
+                  (mp-debug-get-gun-timing-text gun-info)))
+  )
+
 (defun mp-draw-target-gun-debug ((proc target) (label string))
   "Overlay gun-specific runtime information for the given target player."
   (when (and proc (nonzero? proc))
@@ -138,7 +233,10 @@
           (gun-proc (mp-debug-get-gun-proc proc)))
       (when (and gun-info (nonzero? gun-info))
         (let ((draw-pos (new 'stack-no-clear 'vector)))
-          (vector-copy! draw-pos (-> gun-proc root trans))
+          (if (and gun-proc (nonzero? gun-proc))
+              (vector-copy! draw-pos (-> gun-proc root trans))
+              (vector-copy! draw-pos (-> proc root trans))
+              )
           (+! (-> draw-pos y) (meters 2.5))
           (let ((draw-ctrl (if (and gun-info
                                     (nonzero? gun-info)
@@ -155,10 +253,13 @@
               (bucket-id debug-no-zbuf1)
               (the-as string
                       (format #f
-                              "~A~%~A~%~A"
+                              "~A~%~A~%~A~%~A~%~A~%~A"
+                              (mp-debug-get-target-anim-text proc label)
                               (mp-debug-get-gun-state-text label gun-info)
                               (mp-debug-get-sync-weapon-text proc)
-                              (mp-debug-get-gun-render-text gun-info draw-ctrl)))
+                              (mp-debug-get-target-render-gate-text proc)
+                              (mp-debug-get-gun-render-text gun-info draw-ctrl)
+                              (mp-debug-get-gun-root-and-timing-text gun-proc gun-info)))
               draw-pos
               (font-color cyan)
               (the-as vector2h #f))

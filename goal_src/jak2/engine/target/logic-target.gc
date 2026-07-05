@@ -2641,7 +2641,7 @@
   )
 
 (defbehavior target-post target ()
-  (when (mp-is-daxter?)
+  (when (mp-target-is-daxter? self)
     (logior! (-> self draw status) (draw-control-status no-draw-bounds2))
     )
   (target-real-post)
@@ -2933,7 +2933,7 @@
       )
     (update-rates! (-> self clock) f30-0)
     )
-  (when (mp-is-daxter?)
+  (when (mp-target-is-daxter? self)
     (logior! (-> self draw status) (draw-control-status no-draw-bounds2))
     )
   (when *debug-segment*
@@ -3011,7 +3011,7 @@
     (find-overlapping-shapes (-> self control) a1-2)
     )
   (target-calc-camera-pos)
-  (when (mp-is-daxter?)
+  (when (mp-target-is-daxter? self)
     (logior! (-> self draw status) (draw-control-status no-draw-bounds2))
     )
   (do-target-gspot)

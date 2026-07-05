@@ -426,6 +426,84 @@
   (none)
   )
 
+(defun mp-puppet-gun-duck-state? ((cur-state symbol))
+  "True while the puppet is in an on-foot duck state that should keep a held gun visible."
+  (or (= cur-state 'target-duck-stance)
+      (= cur-state 'target-duck-walk)
+      )
+  )
+
+(defun mp-puppet-gun-stance-anim ((proc target) (gun-type pickup-type))
+  "Return the existing gun stance top animation for the equipped weapon."
+  (if (and proc
+           (nonzero? proc)
+           (-> proc draw)
+           (nonzero? (-> proc draw))
+           (-> proc draw art-group)
+           (nonzero? (-> proc draw art-group)))
+      (the-as art-joint-anim
+              (-> proc draw art-group data
+                  (case gun-type
+                    (((pickup-type eco-yellow))
+                     254
+                     )
+                    (((pickup-type eco-blue))
+                     255
+                     )
+                    (((pickup-type eco-dark))
+                     253
+                     )
+                    (else
+                      244
+                      )
+                    )
+                  )
+              )
+      (the-as art-joint-anim #f)
+      )
+  )
+
+(defun mp-puppet-refresh-duck-gun-visibility! ((proc target) (cur-state symbol))
+  "Keep a puppet-held gun renderable while vanilla gun stance has yielded to duck states."
+  (when (and proc
+             (nonzero? proc)
+             (-> proc control)
+             (nonzero? (-> proc control))
+             (-> proc gun)
+             (nonzero? (-> proc gun))
+             (using-gun? proc)
+             (mp-puppet-gun-duck-state? cur-state))
+    (let ((gun-info (-> proc gun)))
+      (set! (-> gun-info active?) #t)
+      (set! (-> gun-info laser-active?) #t)
+      (set-time! (-> gun-info active-time))
+      (when (< (current-time) (-> gun-info surpress-time))
+        (set! (-> gun-info surpress-time) (current-time))
+        )
+      (when (and (= cur-state 'target-duck-stance)
+                 (-> proc skel)
+                 (nonzero? (-> proc skel))
+                 (not (-> proc skel top-anim frame-group)))
+        (let ((gun-anim (mp-puppet-gun-stance-anim proc (-> gun-info gun-type))))
+          (when (and gun-anim (nonzero? gun-anim))
+            (push-anim-to-targ
+              (-> proc skel top-anim)
+              gun-anim
+              0.0
+              0
+              0
+              1.0
+              0.0
+              #f
+              )
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
 (defun mp-puppet-flush-pending-gun-shot! ((proc target) (ghost mp-target-ghost-record))
   "Replay a queued remote gun shot once the puppet has finished equipping."
   (when (and *mp-puppet-pending-gun-shot?*
@@ -1083,6 +1161,7 @@
         (mp-puppet-apply-weapon-state! proc ghost)
         (mp-puppet-apply-input! proc ghost)
         (mp-puppet-flush-pending-gun-shot! proc ghost)
+        (mp-puppet-refresh-duck-gun-visibility! proc cur-state)
       )
 
       ;; 5. Camera Orientation Sync
