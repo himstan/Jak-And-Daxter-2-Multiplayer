@@ -1,149 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; --- Damage & Death Broadcasting ---
-
-(defun mp-enemy-local-hit-predictable? ((e-proc enemy) (arg0 process) (arg3 event-message-block))
-  "Can a non-owner play a visual-only local hit reaction for this attack?"
-  (let ((aid (mp-get-enemy-aid e-proc)))
-    (if (zero? aid)
-        (return #f))
-    (let ((rec (mp-get-enemy-auth aid))
-          (info (mp-actor-event-attack-info arg3)))
-      (and rec
-           (mp-is-local-attacker? arg0)
-           (not (mp-enemy-authoritative? e-proc))
-           (not *mp-processing-remote-event*)
-           (not (logtest? (-> e-proc enemy-flags) (enemy-flag death-start)))
-           (or (not info)
-               (zero? (-> info id))
-               (and (!= (-> info id) (-> rec last-attack-id))
-                    (!= (-> info id) (-> rec last-local-attack-id))))
-           (time-elapsed? (-> rec last-local-attack-time) (seconds 0.2))
-           )
-      )
-    )
-  )
-
-(defun mp-enemy-send-hit-request! ((e-proc enemy) (arg3 event-message-block))
-  "Send a local hit request to the owner and update duplicate guards."
-  (let ((aid (mp-get-enemy-aid e-proc)))
-    (if (zero? aid)
-        (return #f))
-    (let ((rec (mp-get-enemy-auth aid))
-          (info (mp-actor-event-attack-info arg3)))
-      (when rec
-        (if info (set! (-> rec last-attack-id) (-> info id)))
-        (if info (set! (-> rec last-local-attack-id) (-> info id)))
-        (set! (-> rec last-local-attack-time) (current-time))
-        (mp-send-enemy-attack-event aid (if info (-> info id) (the uint 0)) (mp-hit-sound-id-from-attack-info info))
-        (return #t)
-        )
-      )
-    )
-  #f
-  )
-
-(defun mp-enemy-play-local-hit-prediction! ((e-proc enemy) (arg0 process) (arg3 event-message-block))
-  "Request owner damage while letting the vanilla handler refresh flinch/knockback locally."
-  (when (mp-enemy-local-hit-predictable? e-proc arg0 arg3)
-    (mp-enemy-send-hit-request! e-proc arg3)
-    (return #t)
-    )
-  #f
-  )
-
-(defun mp-enemy-broadcast-attack ((e-proc enemy) (arg0 process) (arg3 event-message-block))
-  "Handle attack sync logic for both Host and Client."
-  ;; (format 0 "[MP-Hit-Debug] Entered mp-enemy-broadcast-attack for ~A from attacker ~A~%" e-proc arg0)
-  
-  (let ((aid (mp-get-enemy-aid e-proc)))
-    (if (zero? aid)
-        (return #f)
-        )
-
-    ;; BLOCK: Remote puppets should not trigger physical hits or reactions locally.
-    ;; Authoritative replays are allowed through so owner-approved damage can apply.
-    (if (and (not *mp-processing-remote-event*) (mp-is-remote-attacker? arg0))
-        (return #t)
-        )
-
-    ;; Determine if the attacker is local (Target or one of its children/projectiles)
-    (let ((is-local-attacker? (mp-is-local-attacker? arg0))
-          (rec (mp-get-enemy-auth aid)))
-      
-      (when rec
-        (let ((info (mp-actor-event-attack-info arg3)))
-          
-          ;; 1. Global Hit Throttling (Block repeated frames of the same attack ID)
-          (when (and (not (and *mp-processing-remote-event* (not (mp-enemy-authoritative? e-proc))))
-                     (mp-actor-attack-id-usable? info)
-                     (= (-> info id) (-> rec last-attack-id)))
-            (return #t) ;; Block the engine handler
-            )
-          
-          ;; 2. Local Hit Throttling (Block repeated frames of the same local hitbox)
-          (when (and (not (and *mp-processing-remote-event* (not (mp-enemy-authoritative? e-proc))))
-                     (mp-actor-attack-id-usable? info)
-                     (= (-> info id) (-> rec last-local-attack-id)))
-            (return #t) ;; Block the engine handler
-            )
-          
-          ;; 3. Time-based Cooldown (Safety for non-owners to prevent "thousand hits" jitter)
-          (when (and is-local-attacker? (not (mp-enemy-authoritative? e-proc)) (not (time-elapsed? (-> rec last-local-attack-time) (seconds 0.2))))
-            ;; (format 0 "[MP-Hit-Debug]   >> Cooldown active for proxy AID ~D~%" aid)
-            (return #t)
-            )
-
-          (if (mp-enemy-authoritative? e-proc)
-              (begin
-                ;; OWNER: Broadcast EVERY authoritative hit to all clients
-                ;; We broadcast even if *mp-processing-remote-event* is true (hit from client)
-                ;; so that OTHER clients see the hit. The sender will throttle it via attack-id.
-                (when (or is-local-attacker? *mp-processing-remote-event*)
-                  ;; Only broadcast if it's a NEW attack ID or enough time has passed
-                  (when (or (not info) (zero? (-> info id)) (!= (-> info id) (-> rec last-attack-id)))
-                    ;; (format 0 "[MP-Hit-Debug]   >> [OWNER] Queueing MP_EVENT_ATTACK_ENEMY for AID ~D (ID ~D)~%" aid (if info (-> info id) 0))
-                    (if info (set! (-> rec last-attack-id) (-> info id)))
-                    (if (and is-local-attacker? info) (set! (-> rec last-local-attack-id) (-> info id)))
-                    (set! (-> rec last-local-attack-time) (current-time))
-                    (mp-send-enemy-attack-event
-                      aid
-                      (if info (-> info id) (the uint 0))
-                      (if (nonzero? *mp-current-remote-hit-sound-id*)
-                          (the-as uint *mp-current-remote-hit-sound-id*)
-                          (mp-hit-sound-id-from-attack-info info)))
-                    )
-                  )
-                )
-              (begin
-                ;; NON-OWNER: If we hit it locally, intercept and request hit from Owner
-                (when (mp-enemy-local-hit-predictable? e-proc arg0 arg3)
-                  ;; (format 0 "[MP-Hit-Debug]   >> [NON-OWNER] REQUESTING hit for AID ~D~%" aid)
-                  (mp-enemy-send-hit-request! e-proc arg3)
-                  )
-                )
-              )
-          )
-        )
-      )
-    )
-  #f)
-
-(defun mp-enemy-broadcast-death ((e-proc enemy))
-  "Broadcast death start from Owner to Non-Owners."
-  (let ((aid (mp-get-enemy-aid e-proc)))
-    (when (and (nonzero? aid)
-               (not (type? e-proc bot))
-               (mp-enemy-authoritative? e-proc)
-               (not *mp-processing-remote-event*)
-               (not (logtest? (-> e-proc enemy-flags) (enemy-flag mp-synced-death))))
-      (format 0 "[MP-Hit-Debug]   >> [OWNER] Queueing MP_EVENT_ENEMY_DEATH for AID ~D~%" aid)
-      (mp-send-enemy-death-event e-proc)
-      (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death stop-syncing)))
-    )
-  (none))
-
 ;; --- Method Hijack Implementations ---
 
 (define *old-enemy-go-stare* (the-as (function enemy object) #f))
@@ -177,43 +34,6 @@
   (if (or (mp-enemy-authoritative? this) *mp-processing-remote-event* (<= (-> this hit-points) 0))
       (if *old-enemy-kill-prefer-falling* (*old-enemy-kill-prefer-falling* this))
       )
-  )
-
-(defun mp-enemy-apply-remote-death! ((this enemy) (death-mode symbol))
-  "Start the locally replicated death animation without taking ownership of death logic."
-  (when (and this (nonzero? this))
-    (when (logtest? (-> this enemy-flags) (enemy-flag death-start))
-      (return #f)
-      )
-    (format 0 "[MP-Proxy] Authoritative death for ~A (AID ~D, mode ~A).~%" this (mp-get-enemy-aid this) death-mode)
-    (logior! (-> this enemy-flags) (enemy-flag mp-synced-death death-start stop-syncing))
-    (send-event this 'death-start)
-    (set! (-> this hit-points) 0)
-    (let ((st (the-as state #f))
-          (info (-> this enemy-info)))
-      (cond
-        ((= death-mode 'mp-death-fast)
-         (set! st (method-of-object this die-fast))
-         )
-        ((and (= death-mode 'mp-death-falling) info (nonzero? info) (-> info use-die-falling))
-         (set! st (method-of-object this die-falling))
-         )
-        (else
-         (if (and info (nonzero? info) (-> info use-die-falling))
-             (set! st (method-of-object this die-falling))
-             (set! st (method-of-object this die))
-             )
-         )
-        )
-      (when st
-        (set! (-> this next-state) st)
-        (enter-state (the-as object st) (the-as object #f) (the-as object #f) (the-as object #f) (the-as object #f) (the-as object #f))
-        ;; Ensure we only throw to the new state if we are actually executing inside the enemy's own thread
-        (with-pp (if (and (= (-> *kernel-context* current-process) pp) (= (-> pp main-thread) (-> pp top-thread)) (= (-> pp state) (-> pp next-state))) (throw 'go #t)))
-        )
-      )
-    )
-  (none)
   )
 
 (defun mp-enemy-predictive-move ((this enemy))
@@ -322,122 +142,15 @@
      (return #t)
      )
     (('attack)
-     ;; --- TOP LEVEL THROTTLING ---
-     (let ((puppet (mp-puppet-get-proc)))
-      (when (and (not *mp-processing-remote-event*) (= arg0 puppet))
-        (return #f)
-      )
-     )
-     
-     (let ((aid (mp-get-enemy-aid this)))
-       (when (nonzero? aid)
-         (let ((rec (mp-get-enemy-auth aid))
-               (info (mp-actor-event-attack-info arg3)))
-           (when rec
-             ;; 1. DUPLICATE CHECK (Global & Local)
-             (when (and (not *mp-processing-remote-event*) (mp-actor-attack-id-usable? info))
-               (if (or (= (-> info id) (-> rec last-attack-id))
-                       (= (-> info id) (-> rec last-local-attack-id)))
-                   ;; Return #f to Jak so he stops triggering 'hit' effects/sounds locally
-                   (return #f) 
-                   )
-               )
-             
-             ;; 2. COOLDOWN CHECK (Non-authoritative machines only)
-             (let ((is-local? (mp-is-local-attacker? arg0)))
-               (when (and (not (mp-enemy-authoritative? this))
-                          is-local?
-                          (not (time-elapsed? (-> rec last-local-attack-time) (seconds 0.2))))
-                 (return #t) ;; Handled
-                 )
-               )
-             )
-           )
-         )
+     (when (= (mp-actor-handle-attack-hijack 'enemy this arg0 arg3) 'block)
+       (return #f)
        )
-
-     ;; PUPPET PROTECTION: If we are already reacting, don't react again to local hits.
-     ;; Duplicate IDs and the short cooldown still prevent hitbox spam, but new local
-     ;; attack IDs are allowed to refresh visual flinch/knockback on non-owners.
-     (let ((cur-state (if (-> this state) (-> this state name) #f)))
-       (when (and (not (mp-enemy-authoritative? this))
-                  (or (= cur-state 'hit) (= cur-state 'knocked) (= cur-state 'knocked-vicinity)))
-         (let ((is-local? (mp-is-local-attacker? arg0)))
-           (when is-local?
-             (if (mp-enemy-play-local-hit-prediction! this arg0 arg3)
-                 (begin
-                   (if *old-general-event-handler*
-                       (return (*old-general-event-handler* this arg0 arg1 arg2 arg3))
-                       (return #f))
-                   )
-                 (return #t))
-             )
-           )
-         )
-       )
-
-     (let ((info (mp-actor-event-attack-info arg3)))
-       (cond
-         ((and info (= (-> info mode) 'mp-death))
-          (mp-enemy-apply-remote-death! this 'mp-death)
-          (return #t)
-          )
-         ((and info (= (-> info mode) 'mp-death-falling))
-          (mp-enemy-apply-remote-death! this 'mp-death-falling)
-          (return #t)
-          )
-         ((and info (= (-> info mode) 'mp-death-fast))
-          (mp-enemy-apply-remote-death! this 'mp-death-fast)
-          (return #t)
-          )
-         ((and info (= (-> info mode) 'mp-hp-sync))
-          ;; This is an internal HP sync event. Just apply health change, don't trigger engine flinch.
-          (set! (-> this hit-points) (the int (- (the float (-> this hit-points)) (-> info damage))))
-          (return #t)
-          )
-         )
-       )
-
-     ;; (format 0 "[MP-Hit-Debug] Hijack caught 'attack event for ~A from ~A~%" this arg0)
-     (if (mp-enemy-broadcast-attack this arg0 arg3)
-         (return #t) ;; Block throttled local attack from the engine
-         )
-     
-     ;; Allow the engine handler to run. 
-     ;; Non-owners will return 0 from take-damage-from-attack, meaning they won't die,
-     ;; but they WILL play their flinch/knockback state locally.
      (if *old-general-event-handler* (return (*old-general-event-handler* this arg0 arg1 arg2 arg3)))
      )
     )
   
   ;; For all other events (notice, touch, etc.)
   (if *old-general-event-handler* (*old-general-event-handler* this arg0 arg1 arg2 arg3) #f)
-  )
-
-(defun mp-enemy-take-damage-hijack ((this enemy) (arg0 process) (arg1 event-message-block))
-  "Authority check for enemy damage."
-  (let ((info (mp-actor-event-attack-info arg1)))
-    (when (and info (= (-> info mode) 'mp-death))
-      (format 0 "[MP-Lifecycle] Remote-forced death for ~A via 'mp-death mode.~%" this)
-      (mp-enemy-apply-remote-death! this 'mp-death)
-      (return 0))
-    (when (and info (= (-> info mode) 'mp-death-falling))
-      (format 0 "[MP-Lifecycle] Remote-forced death for ~A via 'mp-death-falling mode.~%" this)
-      (mp-enemy-apply-remote-death! this 'mp-death-falling)
-      (return 0))
-    (when (and info (= (-> info mode) 'mp-death-fast))
-      (format 0 "[MP-Lifecycle] Remote-forced death for ~A via 'mp-death-fast mode.~%" this)
-      (mp-enemy-apply-remote-death! this 'mp-death-fast)
-      (return 0)))
-
-  (if (or (type? this citizen) (mp-enemy-should-process-damage? this))
-      (if *old-enemy-take-damage* (*old-enemy-take-damage* this arg0 arg1) 0)
-      (begin
-        ;; NON-OWNER: Completely block local damage processing to prevent death-rebirth loops.
-        ;; The owner will broadcast the true HP and death state.
-        0
-        )
-      )
   )
 
 (defun mp-enemy-dying-hijack ((this enemy))
@@ -473,11 +186,6 @@
   (when (not *old-enemy-dying*) (set! *old-enemy-dying* (the-as (function enemy none) (method-of-type enemy dying))))
   (defmethod dying ((this enemy)) (mp-enemy-dying-hijack this))
   (defmethod dying ((this nav-enemy)) (mp-enemy-dying-nav-hijack this))
-
-  (when (not *old-enemy-take-damage*)
-    (set! *old-enemy-take-damage* (the-as (function enemy process event-message-block int) (method-of-type enemy take-damage-from-attack))))
-  (defmethod take-damage-from-attack ((this enemy) (arg0 process) (arg1 event-message-block)) (mp-enemy-take-damage-hijack this arg0 arg1))
-  (defmethod take-damage-from-attack ((this nav-enemy) (arg0 process) (arg1 event-message-block)) (mp-enemy-take-damage-hijack (the-as enemy this) arg0 arg1))
 
   (when (not *old-general-event-handler*)
     (set! *old-general-event-handler* (the-as (function enemy process int symbol event-message-block object) (method-of-type enemy general-event-handler))))

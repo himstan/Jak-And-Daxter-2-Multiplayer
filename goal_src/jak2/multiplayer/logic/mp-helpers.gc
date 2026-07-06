@@ -777,24 +777,6 @@
     )
   (none))
 
-(defun mp-send-enemy-attack-event ((aid uint) (att-id uint) (hit-sound-id uint))
-  "Send a specialized enemy attack event with an attack ID."
-  ;; GUARD: Only send if synced and in-game
-  (if (or (not *multi-sync-enabled?*) (!= (pc-multi-get-status) 6))
-      (return #f))
-
-  (let ((q-idx *mp-event-queue-write-ptr*))
-    ;; (format 0 "[MP-Queue-Debug] Queueing ATTACK for AID ~D ID ~D at index ~D~%" aid att-id q-idx)
-    (let ((evt (the-as mp-enemy-attack-event (-> *mp-event-queue* q-idx))))
-      (set! (-> evt etype) MP_EVENT_ATTACK_ENEMY)
-      (set! (-> evt aid) (the-as uint32 aid))
-      (set! (-> evt attack-id) (the-as uint32 att-id))
-      (set! (-> evt hit-sound-id) (the-as uint32 hit-sound-id))
-      )
-    (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
-    )
-  (none))
-
 (defun mp-enemy-get-death-hint ((e-proc enemy))
   "Capture the visual death path the owner is starting."
   (when (and e-proc (nonzero? e-proc))
@@ -819,28 +801,6 @@
       )
     )
   )
-
-(defun mp-send-enemy-death-event ((e-proc enemy))
-  "Send enemy death with enough context for the receiver to choose the same visual path."
-  (if (or (not *multi-sync-enabled?*) (!= (pc-multi-get-status) 6))
-      (return #f))
-
-  (let ((aid (mp-get-enemy-aid e-proc)))
-    (when (nonzero? aid)
-      (let ((q-idx *mp-event-queue-write-ptr*))
-        (let ((evt (the-as mp-enemy-death-event (-> *mp-event-queue* q-idx))))
-          (set! (-> evt etype) MP_EVENT_ENEMY_DEATH)
-          (set! (-> evt aid) (the-as uint32 aid))
-          (set! (-> evt death-hint) (the-as uint32 (mp-enemy-get-death-hint e-proc)))
-          (set! (-> evt state) (the-as uint32 (mp-enemy-get-state-id e-proc)))
-          (set! (-> evt knocked-type) (the-as uint32 (-> e-proc incoming knocked-type)))
-          (set! (-> evt hit-face) (the-as uint32 -1))
-          )
-        (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
-        )
-      )
-    )
-  (none))
 
 (define-extern scene-lookup (function basic scene))
 

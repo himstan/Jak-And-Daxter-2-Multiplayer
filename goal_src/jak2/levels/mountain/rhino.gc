@@ -331,8 +331,7 @@
   (and info
        (nonzero? info)
        (logtest? (attack-mask damage) (-> info mask))
-       (or (= (-> info mode) 'mp-hit-remote)
-           (= (-> info mode) 'mp-hp-sync))
+       (= (-> info mode) 'mp-hit-remote)
        )
   )
 
@@ -385,15 +384,7 @@
    @TODO - unsure if there is a pattern for the events and this should have a more specific name"
   (case arg2
     (('attack)
-     (let ((info (rhino-mp-attack-info arg3)))
-       (if (and (rhino-mp-damage-info? info) (= (-> info mode) 'mp-hp-sync))
-           (begin
-             (set! (-> this hit-points) (max 0 (the int (- (the float (-> this hit-points)) (-> info damage)))))
-             #t
-             )
-           ((method-of-type nav-enemy general-event-handler) this arg0 arg1 arg2 arg3)
-           )
-       )
+     ((method-of-type nav-enemy general-event-handler) this arg0 arg1 arg2 arg3)
      )
     (('charge)
      (if (-> this wall)

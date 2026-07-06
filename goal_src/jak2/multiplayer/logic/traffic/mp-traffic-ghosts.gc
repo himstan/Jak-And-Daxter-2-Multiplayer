@@ -28,6 +28,29 @@
   (the-as mp-traffic-ghost-record #f)
   )
 
+(defun mp-traffic-get-or-create-ghost! ((net-id uint) (entity-kind uint))
+  "Find or allocate a traffic ghost record for sync bookkeeping."
+  (let ((rec (the-as mp-traffic-ghost-record #f)))
+    (when (nonzero? net-id)
+      (set! rec (mp-get-traffic-ghost net-id))
+      (when (not rec)
+        (set! rec (mp-get-free-traffic-ghost))
+        (when rec
+          (set! (-> rec net-id) net-id)
+          (set! (-> rec last-applied-state-id) (the uint32 0))
+          (set! (-> rec last-state-bump-time) 0)
+          (set! (-> rec authorized-trans-state-id) (the uint32 0))
+          (set! (-> rec authorized-trans-frame) 0)
+          )
+        )
+      (when rec
+        (set! (-> rec entity-kind) (the-as uint8 entity-kind))
+        )
+      )
+    rec
+    )
+  )
+
 (defun mp-cleanup-traffic-ghosts ()
   "Clear ghost records not updated in the last 10 seconds."
   (dotimes (i MP_MAX_TRAFFIC_GHOST_RECORDS)

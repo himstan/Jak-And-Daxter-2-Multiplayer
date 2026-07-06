@@ -112,83 +112,28 @@
     )
   (none))
 
-(defun mp-event-handler-attack-enemy ((evt mp-world-event))
-  (let ((aid (-> evt aid))
-        (att-id (-> (the-as mp-enemy-attack-event evt) attack-id))
-        (hit-sound-id (-> (the-as mp-enemy-attack-event evt) hit-sound-id)))
-    (format 0 "[MP-WorldEvent] Received MP_EVENT_ATTACK_ENEMY for aid=~D attack-id=~D~%" aid att-id)
-    (let ((proc (find-enemy-by-aid aid)))
+(defun mp-event-handler-attack-enemy ((evt mp-actor-attack-event))
+  (let ((net-id (-> evt net-id)))
+    (format 0 "[MP-WorldEvent] Received MP_EVENT_ATTACK_ENEMY for nid=~D attack-id=~D~%" net-id (-> evt attack-id))
+    (let ((proc (find-enemy-by-aid net-id)))
       (if (and proc (nonzero? proc))
           (let ((attacker (mp-get-remote-target-process)))
-            (format 0 "[MP-WorldEvent] Applying Authoritative hit to ~A from remote attacker ~A aid=~D~%" proc attacker aid)
-            (set! *mp-current-remote-hit-sound-id* (the-as uint32 hit-sound-id))
-            (set! *mp-processing-remote-event* #t)
-            (send-event proc 'attack attacker (static-attack-info ((id att-id) (mode 'mp-hit-remote) (damage *mp-daxter-damage-mult*) (shove-back (meters 2)) (shove-up (meters 0.5)))))
-            (mp-play-remote-hit-sound! (the-as enemy proc) hit-sound-id)
-            
+            (format 0 "[MP-WorldEvent] Applying Authoritative hit to ~A from remote attacker ~A nid=~D~%" proc attacker net-id)
+            (mp-actor-apply-authoritative-remote-damage! (the-as enemy proc) attacker evt 'enemy)
             ;; Explicitly set focus to the remote attacker
-            (if (and attacker (nonzero? attacker))
+            (if (and attacker
+                     (nonzero? attacker)
+                     (-> (the-as enemy proc) focus)
+                     (nonzero? (-> (the-as enemy proc) focus)))
                 (set! (-> (the-as enemy proc) focus handle) (process->handle attacker))
                 )
-            (set! *mp-processing-remote-event* #f)
-            (set! *mp-current-remote-hit-sound-id* (the-as uint32 0))
             )
-          (format 0 "[MP-WorldEvent] ERROR: Could not find enemy process for aid=~D~%" aid))
+          (format 0 "[MP-WorldEvent] ERROR: Could not find enemy process for nid=~D~%" net-id))
       )
     )
   (none))
 
-(defun mp-enemy-death-mode-from-event ((evt mp-enemy-death-event))
-  "Choose the local forced-death mode from owner-supplied context."
-  (cond
-    ((= (-> evt death-hint) (the-as uint32 (mp-enemy-death-hint die-fast)))
-     'mp-death-fast
-     )
-    ((or (= (-> evt death-hint) (the-as uint32 (mp-enemy-death-hint die-falling)))
-         (= (-> evt state) (the-as uint32 (mp-enemy-state-id knocked))))
-     'mp-death-falling
-     )
-    (else
-     'mp-death
-     )
-    )
-  )
-
-(defun mp-event-handler-enemy-death ((evt mp-enemy-death-event))
-  (let ((aid (-> evt aid)))
-  (format 0 "[MP-WorldEvent] Received MP_EVENT_ENEMY_DEATH for aid=~D~%" aid)
-  (if (mp-mark-aid-dead-perm! aid)
-      (format 0 "[MP-Tombstone] Stored enemy death tombstone for aid=~D.~%" aid)
-      (format 0 "[MP-Tombstone] WARNING: Failed to store enemy death tombstone for aid=~D.~%" aid)
-      )
-  (let ((proc (find-enemy-by-aid aid))
-        (ent (entity-by-aid aid)))
-    
-    (when (and ent (nonzero? ent))
-      (format 0 "[MP-WorldEvent] Death visual will own cleanup for aid=~D~%" aid)
-      )
-
-    (if (and proc (nonzero? proc))
-        (begin
-          (format 0 "[MP-WorldEvent] Authoritative death received for spawned enemy ~A aid=~D~%" proc aid)
-          ;; Mark as already synced so we don't echo it back if we take ownership later
-          (logior! (-> (the-as enemy proc) enemy-flags) (enemy-flag mp-synced-death))
-          (set! (-> (the-as enemy proc) hit-points) 0)
-          (when (nonzero? (-> evt knocked-type))
-            (set! (-> (the-as enemy proc) incoming knocked-type) (the-as knocked-type (-> evt knocked-type)))
-            )
-          ;; Send a special attack event that our hijack will catch to force death transition
-          (set! *mp-processing-remote-event* #t)
-          (send-event proc 'attack #f (static-attack-info ((id (new-attack-id)) (mode (mp-enemy-death-mode-from-event evt)))))
-          (set! *mp-processing-remote-event* #f)
-          )
-        (format 0 "[MP-WorldEvent] Enemy aid=~D not loaded; tombstone will suppress it on later load.~%" aid)
-        )
-    )
-  )
-  (none))
-
-(defun mp-event-handler-attack-ped ((evt mp-ped-attack-event))
+(defun mp-event-handler-attack-ped ((evt mp-actor-attack-event))
   "Host receives hit request from Client for a pedestrian."
   (let ((net-id (-> evt net-id)))
     (let ((proc (mp-pedestrian-find-by-net-id net-id)))
@@ -203,20 +148,6 @@
   )
   (none)
 )
-
-(defun mp-event-handler-ped-death ((evt mp-ped-death-event))
-  "Start a pedestrian death effect locally (non-authoritative side)."
-  (let ((net-id (-> evt net-id)))
-    (let ((proc (mp-pedestrian-find-by-net-id net-id)))
-    (if (and proc (nonzero? proc))
-        (begin
-          (format 0 "[MP-WorldEvent] Authoritative death received for pedestrian ~A nid=~D~%" proc net-id)
-          (mp-pedestrian-start-remote-death! proc evt)
-          )
-        )
-    )
-    )
-  (none))
 
 (defun mp-event-handler-player-hit ((aid uint))
   (let ((local-aid (the uint (+ (-> *local-info* role) 1))))
@@ -721,10 +652,20 @@
 (defun mp-event-handler-authority-request ((aid uint))
   "Remote side wants authority over an enemy."
   (let ((rec (mp-get-enemy-auth aid))
+        (proc (find-enemy-by-aid aid))
         (local-role (the-as uint8 (-> *local-info* role)))
         (remote-role (the-as uint8 (if (= (-> *local-info* role) 0) 1 0))))
     (when rec
       (format 0 "[MP-WorldEvent] Remote (Role ~D) requested authority over aid=~D.~%" remote-role aid)
+      (when (or (mp-aid-dead-perm? aid)
+                (and proc
+                     (nonzero? proc)
+                     (mp-enemy-terminal-sync? (the-as enemy proc) aid)))
+        (format 0 "[MP-WorldEvent] Blocking authority request for terminal enemy aid=~D nid=~D~%"
+                aid
+                (if (and proc (nonzero? proc)) (-> (the-as enemy proc) net-id) (the uint 0)))
+        (return #f)
+        )
       ;; Decision Logic:
       ;; If we are Host (0), we evaluate.
       ;; If we are Client (1), we always yield to Host.
@@ -751,8 +692,19 @@
 (defun mp-event-handler-authority-ack ((aid uint))
   "Remote side granted us authority over an enemy."
   (let ((rec (mp-get-enemy-auth aid))
+        (proc (find-enemy-by-aid aid))
         (local-role (the-as uint8 (-> *local-info* role))))
     (when rec
+      (when (or (mp-aid-dead-perm? aid)
+                (and proc
+                     (nonzero? proc)
+                     (mp-enemy-terminal-sync? (the-as enemy proc) aid)))
+        (format 0 "[MP-WorldEvent] Ignoring authority ack for terminal enemy aid=~D nid=~D~%"
+                aid
+                (if (and proc (nonzero? proc)) (-> (the-as enemy proc) net-id) (the uint 0)))
+        (set! (-> rec just-taken-authority) #f)
+        (return #f)
+        )
       (format 0 "[MP-WorldEvent] Remote granted authority over aid=~D. Taking ownership.~%" aid)
       (set! (-> rec owner) local-role)
       (set! (-> rec last-transfer-time) (current-time))

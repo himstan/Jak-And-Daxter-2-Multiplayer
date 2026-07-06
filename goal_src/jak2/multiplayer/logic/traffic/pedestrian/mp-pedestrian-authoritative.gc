@@ -222,8 +222,24 @@
   (none)
   )
 
+(defun mp-pedestrian-refresh-authoritative-ghost! ((e-proc citizen))
+  "Keep a host-side traffic ghost record available."
+  (when (and e-proc
+             (nonzero? e-proc)
+             (mp-is-traffic-authoritative?)
+             (nonzero? (-> e-proc net-id)))
+    (let ((rec (mp-traffic-get-or-create-ghost! (-> e-proc net-id) (the uint 0))))
+      (when rec
+        (set! (-> rec last-seen) (current-time))
+        )
+      )
+    )
+  (none)
+  )
+
 (defun mp-pedestrian-pack ((e-proc citizen) (slot mp-pedestrian-state))
   (set! (-> slot net-id) (-> e-proc net-id))
+  (mp-pedestrian-refresh-authoritative-ghost! e-proc)
   (set! (-> slot object-type) (the uint8 (-> e-proc traffic-type)))
   (set! (-> slot object-variance) (the uint8 0))
   (set! (-> slot x) (-> e-proc root trans x))

@@ -480,26 +480,6 @@
        (mp-traffic-primary-levels-match?))
   )
 
-(defun mp-traffic-get-or-create-ghost! ((net-id uint) (entity-kind uint))
-  (let ((rec (the-as mp-traffic-ghost-record #f)))
-    (when (nonzero? net-id)
-      (set! rec (mp-get-traffic-ghost net-id))
-      (when (not rec)
-        (set! rec (mp-get-free-traffic-ghost))
-        (when rec
-          (set! (-> rec net-id) net-id)
-          (set! (-> rec entity-kind) (the-as uint8 entity-kind))
-          (set! (-> rec last-applied-state-id) (the uint32 0))
-          (set! (-> rec last-state-bump-time) 0)
-          (set! (-> rec authorized-trans-state-id) (the uint32 0))
-          (set! (-> rec authorized-trans-frame) 0)
-          )
-        )
-      )
-    rec
-    )
-  )
-
 (defun mp-traffic-refresh-existing-ped-slot! ((slot mp-pedestrian-state))
   (let ((refreshed? #f))
     (when (and slot

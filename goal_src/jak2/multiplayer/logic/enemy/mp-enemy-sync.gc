@@ -285,10 +285,7 @@
       (let ((old-hp (-> e-proc hit-points))
             (new-hp (-> slot hp)))
         (when (!= old-hp new-hp)
-          (if (mp-actor-send-hp-sync-attack? (the-as process e-proc) old-hp new-hp)
-              (none)
-              (set! (-> e-proc hit-points) new-hp)
-              )
+          (set! (-> e-proc hit-points) new-hp)
           )
         )
 
@@ -374,6 +371,18 @@
       )
     )
   (mp-is-jak?) ;; fallback to host if unknown
+  )
+
+(defun mp-enemy-terminal-sync? ((e-proc enemy) (enemy-aid uint))
+  "True once sync/authority must stop treating this enemy as alive."
+  (and e-proc
+       (nonzero? e-proc)
+       (or (<= (-> e-proc hit-points) 0)
+           (= (-> e-proc status) 'dead)
+           (logtest? (-> e-proc enemy-flags) (enemy-flag death-start stop-syncing mp-synced-death))
+           (and (nonzero? enemy-aid)
+                (mp-aid-dead-perm? enemy-aid)))
+       )
   )
 
 (defun mp-enemy-battle-spawn-protected? ((e-proc enemy))
@@ -521,10 +530,15 @@
              (-> e-proc root)
              (nonzero? (-> e-proc root)))
     (set! (-> rec just-taken-authority) #f)
-    (format 0 "[MP-Sync] Snapping ~A (AID ~D) to ghost position on authority takeover.~%" e-proc enemy-aid)
-    (vector-copy! (-> e-proc root trans) (-> rec ghost-trans))
-    (quaternion-copy! (-> e-proc root quat) (-> rec ghost-quat))
-    (vector-reset! (-> e-proc root transv))
+    (if (mp-enemy-terminal-sync? e-proc enemy-aid)
+        (format 0 "[MP-Sync] Skipping takeover snap for terminal enemy aid=~D nid=~D~%" enemy-aid (-> e-proc net-id))
+        (begin
+          (format 0 "[MP-Sync] Snapping ~A aid=~D nid=~D to ghost position on authority takeover.~%" e-proc enemy-aid (-> e-proc net-id))
+          (vector-copy! (-> e-proc root trans) (-> rec ghost-trans))
+          (quaternion-copy! (-> e-proc root quat) (-> rec ghost-quat))
+          (vector-reset! (-> e-proc root transv))
+          )
+        )
     )
   (none)
   )
@@ -533,6 +547,7 @@
   (let ((proc (the-as process p)))
     (when (and proc (logtest? (-> proc mask) (process-mask enemy collectable bot)) (type? proc enemy) (not (logtest? (-> proc mask) (process-mask civilian guard))))
       (let ((e-proc (the-as enemy proc))
+            (enemy-nid (-> (the-as enemy p) net-id))
             (enemy-aid (mp-get-enemy-aid (the-as enemy proc))))
         (when (!= enemy-aid 0)
           ;; --- Durable Remote Death Tombstone ---
@@ -564,7 +579,7 @@
               (when is-culled
                 (let ((rec (mp-get-enemy-auth enemy-aid)))
                   (when rec
-                    (format 0 "[MP-Sync] Cleaning up culled/errored enemy ~A (AID ~D) in state ~A.~%" e-proc enemy-aid cur-state)
+                    (format 0 "[MP-Sync] Cleaning up culled/errored enemy ~A aid=~D nid=~D in state ~A.~%" e-proc enemy-aid cur-state enemy-nid)
                     (set! (-> rec aid) (the-as uint32 0))
                     )
                   )
@@ -664,7 +679,9 @@
                     )
                   )
 
-                (when (and (not is-bot) (not is-daxter-and-riding-along))
+                (when (and (not is-bot)
+                           (not is-daxter-and-riding-along)
+                           (not (mp-enemy-terminal-sync? e-proc enemy-aid)))
                   ;; 3. Local Aggro Detection
                   (when (and (not (-> rec is-aggro)) 
                              (or (and (-> e-proc focus) (nonzero? (-> e-proc focus)) (>= (the-as int (-> e-proc focus aware)) (the-as int (enemy-aware enemy-aware-3))))
@@ -673,7 +690,7 @@
                     (if (!= (-> rec owner) local-role)
                         (begin
                           (when (>= (- (current-time) (-> rec last-transfer-time)) (seconds 2))
-                            (format 0 "[MP] Requesting authority over ~A (AID ~D) - Local Aggro Detected!~%" e-proc enemy-aid)
+                            (format 0 "[MP] Requesting authority over ~A aid=~D nid=~D - Local Aggro Detected!~%" e-proc enemy-aid enemy-nid)
                             (mp-send-world-event MP_EVENT_ENEMY_AUTHORITY_REQUEST enemy-aid)
                             (set! (-> rec last-transfer-time) (current-time))
                             (set! (-> rec is-aggro) #t)
@@ -694,7 +711,7 @@
                         (when (and (< local-dist (-> e-proc enemy-info notice-distance))
                                    (< local-dist (- remote-dist (meters 10))))
                           (when (!= (-> rec owner) local-role)
-                            (format 0 "[MP] Requesting authority over ~A (AID ~D) via proximity.~%" e-proc enemy-aid)
+                            (format 0 "[MP] Requesting authority over ~A aid=~D nid=~D via proximity.~%" e-proc enemy-aid enemy-nid)
                             (mp-send-world-event MP_EVENT_ENEMY_AUTHORITY_REQUEST enemy-aid)
                             (set! (-> rec last-transfer-time) (current-time))
                             )
@@ -709,7 +726,12 @@
                   )
                 
                 ;; --- Sync Execution ---
-                (if (= (-> rec owner) local-role)
+                (if (mp-enemy-terminal-sync? e-proc enemy-aid)
+                    (begin
+                      (set! (-> rec just-taken-authority) #f)
+                      (logior! (-> e-proc enemy-flags) (enemy-flag stop-syncing))
+                      )
+                    (if (= (-> rec owner) local-role)
                     (begin
                       (mp-enemy-snap-to-ghost-on-takeover! e-proc rec enemy-aid)
                       ;; PACK LOCAL STATE
@@ -728,12 +750,6 @@
                         (vector-copy! (-> rec ghost-trans) (-> e-proc root trans))
                         (quaternion-copy! (-> rec ghost-quat) (-> e-proc root quat))
                         (set! (-> rec ghost-state) (the-as mp-enemy-state-id (mp-enemy-get-state-id e-proc)))
-                        )
-
-                      ;; Authoritative Death Detection
-                      (when (and (logtest? (-> e-proc enemy-flags) (enemy-flag death-start)) (not (logtest? (-> e-proc enemy-flags) (enemy-flag mp-synced-death))))
-                        (mp-send-enemy-death-event e-proc)
-                        (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death stop-syncing))
                         )
                       )
                     (begin
@@ -757,14 +773,14 @@
                             (if (or (logtest? (-> e-proc enemy-flags) (enemy-flag death-start))
                                     (and remote-slot (= (-> remote-slot state) 2)))
                                 (begin
-                                  (format 0 "[MP] Remote sync stale for ~A (AID ~D) during DEATH. Severing sync and killing locally.~%" e-proc enemy-aid)
+                                  (format 0 "[MP] Remote sync stale for ~A aid=~D nid=~D during DEATH. Severing sync and killing locally.~%" e-proc enemy-aid enemy-nid)
                                   (set! (-> rec owner) local-role)
                                   (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death))
                                   (set! (-> e-proc hit-points) 0)
                                   (send-event e-proc 'die)
                                   )
                                 (begin
-                                  (format 0 "[MP] Remote sync stale for ~A (AID ~D). Reclaiming authority.~%" e-proc enemy-aid)
+                                  (format 0 "[MP] Remote sync stale for ~A aid=~D nid=~D. Reclaiming authority.~%" e-proc enemy-aid enemy-nid)
                                   (set! (-> rec owner) local-role)
                                   (set! (-> rec just-taken-authority) #t)
                                   )
@@ -773,6 +789,7 @@
                           )
                       )
                     )
+                  )
                 )
               )
             )
@@ -784,7 +801,7 @@
                 (let ((ent (-> e-proc entity)))
                   (if (and ent (nonzero? ent)) (logior! (-> ent extra perm status) (entity-perm-status dead)))
                   )
-                (format 0 "[MP] Deactivating enemy ~A (AID ~D) via Remote sync-aids.~%" e-proc enemy-aid)
+                (format 0 "[MP] Deactivating enemy ~A aid=~D nid=~D via Remote sync-aids.~%" e-proc enemy-aid enemy-nid)
                 (deactivate e-proc)
                 (return (the-as symbol 'dead))
                 )

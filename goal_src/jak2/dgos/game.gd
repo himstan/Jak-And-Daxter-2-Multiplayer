@@ -575,7 +575,6 @@
   "mp-traffic-ghosts.o" ;; added
   "mp-pedestrian-authoritative.o" ;; added
   "mp-pedestrian-state-sync.o" ;; added
-  "mp-pedestrian-hit-sync.o" ;; added
   "mp-pedestrian-puppet.o" ;; added
   "mp-vehicle-authoritative.o" ;; added
   "mp-mission-vehicles.o" ;; added

@@ -8,23 +8,6 @@
   (time-elapsed? last-bump (seconds 0.35))
   )
 
-(defun mp-actor-send-hp-sync-attack? ((proc process) (old-hp int) (new-hp int))
-  (when (and proc
-             (nonzero? proc)
-             (not (type? proc citizen))
-             (< new-hp old-hp)
-             (> new-hp 0))
-    (send-event proc
-                'attack
-                #f
-                (static-attack-info ((id (new-attack-id))
-                                     (mode 'mp-hp-sync)
-                                     (damage (the float (- old-hp new-hp))))))
-    (return #t)
-    )
-  #f
-  )
-
 (defun mp-actor-apply-ghost-correction! ((curr-pos vector)
                                          (curr-vel vector)
                                          (curr-quat quaternion)

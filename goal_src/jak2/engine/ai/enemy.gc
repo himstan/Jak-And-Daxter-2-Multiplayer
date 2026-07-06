@@ -8,8 +8,7 @@
 (define-extern mp-combat-local-player-target (function symbol process-focusable))
 (define-extern mp-combat-remote-player-target (function symbol process-focusable))
 (define-extern mp-combat-best-player-target (function process-focusable process-focusable process-focusable process-focusable process-focusable))
-(define-extern mp-pedestrian-detach-from-ghost-sync! (function enemy none))
-(define-extern mp-pedestrian-broadcast-attack (function enemy process event-message-block symbol))
+(define-extern mp-actor-broadcast-attack (function enemy process event-message-block symbol))
 
 (declare-type hopper nav-enemy)
 (declare-type bot nav-enemy)
@@ -60,6 +59,18 @@
           )
         )
       )
+    )
+  (none)
+  )
+
+(defun enemy-detach-from-ghost-sync! ((e-proc enemy))
+  "Stop puppet correction once vanilla death has taken ownership."
+  (when (and e-proc
+             (nonzero? e-proc)
+             (or (<= (-> e-proc hit-points) 0)
+                 (logtest? (-> e-proc enemy-flags) (enemy-flag death-start))))
+    (format 0 "[Enemy] Stopping sync on ~A with nid=~D pid=~D~%" (-> e-proc name) (-> e-proc net-id) (-> e-proc pid))
+    (logior! (-> e-proc enemy-flags) (enemy-flag stop-syncing))
     )
   (none)
   )
@@ -1150,6 +1161,10 @@
   (quaternion-copy! (-> self root quat) (-> arg1 quat))
   (vector-identity! (-> self root scale))
   (init-enemy! self)
+  (when (and (-> self entity) (nonzero? (-> self entity)) (nonzero? (-> self entity aid)))
+        (format 0 "Spawning enemy with enemy-init-by-other with aid=~D, setting net-id to aid...~%")
+        (set! (-> self net-id) (-> self entity aid))
+      )
   (when (> (-> self enemy-info gem-joint) 0)
     (cond
       ((and (or (and (-> self entity) (logtest? (-> self entity extra perm status) (entity-perm-status save)))
@@ -1212,6 +1227,10 @@
   (init-enemy-collision! this)
   (process-drawable-from-entity! this arg0)
   (init-enemy! this)
+  (when (and (-> this entity) (nonzero? (-> this entity)) (nonzero? (-> this entity aid)))
+        (format 0 "Spawning enemy with init-from-entity with aid=~D, setting net-id to aid...~%")
+        (set! (-> this net-id) (-> this entity aid))
+      )
   (when (>= (-> this enemy-info gem-joint) 0)
     (cond
       ((and (or (and (-> this entity) (logtest? (-> this entity extra perm status) (entity-perm-status save)))
@@ -1620,7 +1639,15 @@
     ((= arg2 'attack)
      (let ((info (the-as attack-info (-> arg3 param 1))))
        (when (!= (-> info id) (-> this incoming attack-id))    
-         (format 0 "[Enemy] Got 'attack on ~A for nid=~D pid=~D info=~A citizen-incoming-attack-id=~D info-attack-id=~D~%" (-> this name) (-> this net-id) (-> this pid) (-> info mode) (-> this incoming attack-id) (-> info id))
+         (format 0 "[Enemy] Got 'attack on ~A for nid=~D pid=~D info=~A citizen-incoming-attack-id=~D info-attack-id=~D" 
+                 (-> this name) 
+                 (-> this net-id) 
+                 (-> this pid) 
+                 (-> info mode) 
+                 (-> this incoming attack-id) 
+                 (-> info id))
+         (format 0 " penetrate=~A~%" 
+                          (enum->string penetrate (-> info penetrate-using)))
          (cond
            ((and (logtest? (-> this enemy-flags) (enemy-flag vulnerable))
                  (not (logtest? (-> this focus-status) (focus-status grabbed)))
@@ -1634,6 +1661,10 @@
               )
             (send-event (ppointer->process (-> this parent)) 'child-hit)
             0
+            (when (and *mp-puppet* (nonzero? *mp-puppet*) (= (-> info mode) 'mp-hit-remote))
+                (set! (-> this incoming attacker-handle) (process->handle *mp-puppet*))
+                (set! (-> this incoming penetrate-using) (-> info penetrate-using))
+              )
             (when (not *debug-unkillable*)
               ;; og:preserve-this for damage numbers cheat
               (#cond
@@ -1643,7 +1674,7 @@
                     (when (> dmg-taken 0)
                       (process-spawn damage-number (damage-amount-from-attack this arg0 arg3) (-> this root trans) (-> this mask))
                       (send-damage-to-bar *health-bar-manager* this dmg-taken old-hp)
-                      (mp-pedestrian-broadcast-attack this arg0 arg3))
+                      (mp-actor-broadcast-attack this arg0 arg3))
                     (when (nonzero? (-> this fated-time))
                       (aif (get-bar-for-process *health-bar-manager* this)
                           (send-event (ppointer->process it) 'set-hit-points 0)
@@ -3430,7 +3461,7 @@
     (if (-> this skel effect)
         (logior! (-> this skel effect flags) (effect-control-flag ecf1))
         )
-    (mp-pedestrian-detach-from-ghost-sync! this)
+    (enemy-detach-from-ghost-sync! this)
     (stop-looking-at-target! this)
     ;; og:preserve-this
     ;; track statistics
