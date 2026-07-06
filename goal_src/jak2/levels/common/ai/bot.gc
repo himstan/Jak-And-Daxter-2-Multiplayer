@@ -1119,7 +1119,7 @@
 
 (defmethod scene-play ((this bot) (scene string) (grab? symbol))
   (cond
-    ((or (mp-is-jak?) (handle->process (-> this scene-player-handle)))
+    ((handle->process (-> this scene-player-handle))
      #f
      )
     ((and *scene-player* (type? (ppointer->process *scene-player*) scene-player))
@@ -1127,6 +1127,9 @@
      (set! (-> this scene-player-handle) (ppointer->handle *scene-player*))
      (set! (-> this has-been-grabbed-by-scene) #t)
      #t
+     )
+    ((mp-is-daxter?)
+     #f
      )
     (else
       (process-grab? this #f)

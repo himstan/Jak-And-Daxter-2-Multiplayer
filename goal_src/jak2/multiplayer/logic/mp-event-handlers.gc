@@ -369,6 +369,30 @@
   (none)
   )
 
+(defun mp-scene-sync-continue-wants-aligned? ((cont continue-point))
+  "True when the local load-state already wants the scene continue levels."
+  (when (and cont
+             (nonzero? cont)
+             *load-state*
+             (nonzero? *load-state*))
+    (let ((vis-info (lookup-level-info (-> cont vis-nick))))
+      (when (and vis-info
+                 (nonzero? vis-info)
+                 (!= (-> *load-state* vis-nick) (-> vis-info name)))
+        (return #f)
+        )
+      )
+    (dotimes (idx 6)
+      (when (or (!= (-> *load-state* want idx name) (-> cont want idx name))
+                (!= (-> *load-state* want idx display?) (-> cont want idx display?)))
+        (return #f)
+        )
+      )
+    (return #t)
+    )
+  #f
+  )
+
 (defun mp-scene-sync-request-continue-levels! ((continue-name string))
   "Apply the vanilla continue want-list so the DGO containing the scene can load."
   (when (and continue-name
@@ -376,7 +400,9 @@
              *load-state*
              (nonzero? *load-state*))
     (let ((cont (scene-decode-continue continue-name)))
-      (when (and cont (nonzero? cont))
+      (when (and cont
+                 (nonzero? cont)
+                 (not (mp-scene-sync-continue-wants-aligned? cont)))
         (let ((vis-info (lookup-level-info (-> cont vis-nick))))
           (set! (-> *load-state* vis-nick) (if vis-info (-> vis-info name)))
           )
@@ -453,9 +479,12 @@
 (defun mp-scene-sync-levels-ready-or-request! ()
   (if (and *mp-pending-scene-sync-continue-name*
            (nonzero? (length *mp-pending-scene-sync-continue-name*)))
-      (begin
-        (mp-scene-sync-request-continue-levels! *mp-pending-scene-sync-continue-name*)
-        (mp-scene-sync-continue-levels-ready? *mp-pending-scene-sync-continue-name*)
+      (if (mp-scene-sync-continue-levels-ready? *mp-pending-scene-sync-continue-name*)
+          #t
+          (begin
+            (mp-scene-sync-request-continue-levels! *mp-pending-scene-sync-continue-name*)
+            (mp-scene-sync-continue-levels-ready? *mp-pending-scene-sync-continue-name*)
+            )
         )
       (mp-remote-teleport-ready-or-request!)
       )

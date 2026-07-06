@@ -869,6 +869,95 @@
                     (and puppet (focus-test? puppet pilot) (< (vector-vector-distance-squared (-> veh root trans) (-> puppet root trans)) dist-sq)))))
   )
 
+(defun mp-point-near-pos-xz? ((point vector) (pos vector) (radius float))
+  (and point
+       (nonzero? point)
+       pos
+       (nonzero? pos)
+       (< (vector-vector-xz-distance-squared point pos) (square radius))
+       )
+  )
+
+(defun mp-any-player-near-pos-xz? ((pos vector) (radius float))
+  "True if either local target or remote target representation is within radius on XZ."
+  (let ((near? #f))
+    (when (and pos (nonzero? pos))
+      (when (and *target*
+                 (nonzero? *target*)
+                 (-> *target* control)
+                 (nonzero? (-> *target* control))
+                 (mp-point-near-pos-xz? (-> *target* control trans) pos radius))
+        (set! near? #t)
+        )
+      (when (not near?)
+        (let ((puppet (mp-puppet-get-proc)))
+          (when (and puppet
+                     (nonzero? puppet)
+                     (-> puppet root)
+                     (nonzero? (-> puppet root))
+                     (mp-point-near-pos-xz? (-> puppet root trans) pos radius))
+            (set! near? #t)
+            )
+          )
+        )
+      (when (and (not near?)
+                 *multi-remote-render-pos*
+                 (nonzero? *multi-remote-render-pos*)
+                 (mp-point-near-pos-xz? *multi-remote-render-pos* pos radius))
+        (set! near? #t)
+        )
+      (when (and (not near?)
+                 *remote-info*
+                 (nonzero? *remote-info*))
+        (let ((remote-pos (new 'stack-no-clear 'vector)))
+          (set-vector! remote-pos (-> *remote-info* x) (-> *remote-info* y) (-> *remote-info* z) 1.0)
+          (when (mp-point-near-pos-xz? remote-pos pos radius)
+            (set! near? #t)
+            )
+          )
+        )
+      )
+    near?
+    )
+  )
+
+(defun mp-any-player-y-at-least? ((min-y float))
+  "True if either local target or remote target representation is at or above min-y."
+  (let ((high-enough? #f))
+    (when (and *target*
+               (nonzero? *target*)
+               (-> *target* control)
+               (nonzero? (-> *target* control))
+               (>= (-> *target* control trans y) min-y))
+      (set! high-enough? #t)
+      )
+    (when (not high-enough?)
+      (let ((puppet (mp-puppet-get-proc)))
+        (when (and puppet
+                   (nonzero? puppet)
+                   (-> puppet root)
+                   (nonzero? (-> puppet root))
+                   (>= (-> puppet root trans y) min-y))
+          (set! high-enough? #t)
+          )
+        )
+      )
+    (when (and (not high-enough?)
+               *multi-remote-render-pos*
+               (nonzero? *multi-remote-render-pos*)
+               (>= (-> *multi-remote-render-pos* y) min-y))
+      (set! high-enough? #t)
+      )
+    (when (and (not high-enough?)
+               *remote-info*
+               (nonzero? *remote-info*)
+               (>= (-> *remote-info* y) min-y))
+      (set! high-enough? #t)
+      )
+    high-enough?
+    )
+  )
+
 (defun mp-is-mission-active? ()
   "Is there an active task-manager in the active pool?"
   (the symbol (nonzero? (process-by-type task-manager *active-pool*)))
@@ -888,6 +977,15 @@
         (and *remote-info*
              (nonzero? *remote-info*)
              (nonzero? (-> *remote-info* scene-active)))
+        )
+    )
+  )
+
+(defun mp-scene-sync-active-or-pending? ()
+  "True while local or remote scene sync still owns actors, grabs, or level paging."
+  (the symbol
+    (or (mp-multiplayer-scene-or-load-active?)
+        *mp-pending-scene-sync?*
         )
     )
   )
