@@ -353,7 +353,10 @@
      (set! (-> this scene-player-handle) (ppointer->handle *scene-player*))
      #t
      )
-    ((and (process-grab? this #t) (or arg1 (process-grab? *target* #t)))
+    ((mp-is-daxter?)
+     #f
+     )
+    ((and (process-grab? this #t) (or arg1 (and *target* (nonzero? *target*) (process-grab? *target* #t))))
      (countdown (s3-0 3)
        (let ((a0-4 (handle->process (-> this slave-handle s3-0))))
          (if (and a0-4 (not (process-grab? a0-4 #t)))
@@ -362,7 +365,7 @@
          )
        )
      (process-grab? this #f)
-     (if (not arg1)
+     (if (and (not arg1) *target* (nonzero? *target*))
          (process-grab? *target* #f)
          )
      (countdown (s4-1 3)

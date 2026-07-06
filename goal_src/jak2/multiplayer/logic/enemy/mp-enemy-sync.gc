@@ -385,6 +385,16 @@
        )
   )
 
+(defun mp-enemy-retired-host-bot-proxy? ((e-proc enemy))
+  "True when a client-side host-owned bot proxy has been locally suspended/retired."
+  (and e-proc
+       (nonzero? e-proc)
+       (not (mp-is-jak?))
+       (type? e-proc bot)
+       (= (-> e-proc status) 'suspended)
+       )
+  )
+
 (defun mp-enemy-battle-spawn-protected? ((e-proc enemy))
   "Should movement correction wait while this non-owned battle enemy runs its spawn intro?"
   (if (and e-proc
@@ -770,21 +780,28 @@
                           (begin
                             ;; Stale data or remote isn't syncing it anymore
                             ;; If we were already in death state, force local death resolution
-                            (if (or (logtest? (-> e-proc enemy-flags) (enemy-flag death-start))
-                                    (and remote-slot (= (-> remote-slot state) 2)))
-                                (begin
-                                  (format 0 "[MP] Remote sync stale for ~A aid=~D nid=~D during DEATH. Severing sync and killing locally.~%" e-proc enemy-aid enemy-nid)
-                                  (set! (-> rec owner) local-role)
-                                  (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death))
-                                  (set! (-> e-proc hit-points) 0)
-                                  (send-event e-proc 'die)
-                                  )
-                                (begin
-                                  (format 0 "[MP] Remote sync stale for ~A aid=~D nid=~D. Reclaiming authority.~%" e-proc enemy-aid enemy-nid)
-                                  (set! (-> rec owner) local-role)
-                                  (set! (-> rec just-taken-authority) #t)
-                                  )
-                                )
+                            (cond
+                              ((or (logtest? (-> e-proc enemy-flags) (enemy-flag death-start))
+                                   (and remote-slot (= (-> remote-slot state) 2)))
+                               (format 0 "[MP] Remote sync stale for ~A aid=~D nid=~D during DEATH. Severing sync and killing locally.~%" e-proc enemy-aid enemy-nid)
+                               (set! (-> rec owner) local-role)
+                               (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death))
+                               (set! (-> e-proc hit-points) 0)
+                               (send-event e-proc 'die)
+                               )
+                              ((and is-bot (not (mp-is-jak?)))
+                               (set! (-> rec owner) (the uint8 0))
+                               (set! (-> rec just-taken-authority) #f)
+                               (when (mp-enemy-retired-host-bot-proxy? e-proc)
+                                 (logior! (-> e-proc enemy-flags) (enemy-flag stop-syncing))
+                                 )
+                               )
+                              (else
+                               (format 0 "[MP] Remote sync stale for ~A aid=~D nid=~D. Reclaiming authority.~%" e-proc enemy-aid enemy-nid)
+                               (set! (-> rec owner) local-role)
+                               (set! (-> rec just-taken-authority) #t)
+                               )
+                              )
                             )
                           )
                       )

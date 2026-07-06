@@ -831,6 +831,7 @@
        (not *mp-waypoint-applying-remote?*)
        course-bot
        (-> course-bot course)
+       (mp-enemy-authoritative? (the-as enemy course-bot))
        )
   )
 

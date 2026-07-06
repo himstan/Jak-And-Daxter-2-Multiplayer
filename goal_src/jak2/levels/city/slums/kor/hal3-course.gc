@@ -131,6 +131,14 @@
   (none)
   )
 
+(defun hal-help-kid-host-scene-release-ready? ((arg0 hal-help-kid))
+  (and (mp-is-jak?)
+       arg0
+       (nonzero? arg0)
+       (scene-release? arg0)
+       )
+  )
+
 (define *hal3-course*
   (new 'static 'hal3-course
     :course-id #x6
@@ -271,7 +279,7 @@
                                (v1-4 (get-current-task-event (-> arg1 task)))
                                )
                           (when (and (= (-> v1-4 action) (game-task-action say))
-                                     (and (or *scene-player* (>= 40960.0 f30-0) (>= 30515.2 f28-0)) (scene-play arg1 (the-as string (-> v1-4 scene)) #f))
+                                     (and (or *scene-player* (>= 40960.0 f30-0) (>= 30515.2 f28-0) (mp-any-player-near-pos-xz? (-> arg1 root trans) 40960.0)) (scene-play arg1 (the-as string (-> v1-4 scene)) #f))
                                      )
                             (ai-task-control-method-12 (-> arg1 ai-ctrl) arg1)
                             (go-to-waypoint! arg1 3 #f)
@@ -302,7 +310,7 @@
             (set! (-> (the-as halt-wait-spot v1-1) check-done)
                   (the-as
                     (function halt-wait-spot hal symbol)
-                    (lambda ((arg0 object) (arg1 hal-help-kid)) (when (scene-release? arg1)
+                    (lambda ((arg0 object) (arg1 hal-help-kid)) (when (hal-help-kid-host-scene-release-ready? arg1)
                                                                   (ai-task-control-method-12 (-> arg1 ai-ctrl) arg1)
                                                                   (go-to-waypoint! arg1 4 #f)
                                                                   (ai-task-control-method-10 (-> arg1 ai-ctrl) arg1)
@@ -692,7 +700,7 @@
               (set! (-> (the-as halt-wait-spot v1-23) check-done)
                     (the-as
                       (function halt-wait-spot hal symbol)
-                      (lambda ((arg0 object) (arg1 hal-help-kid)) (when (scene-release? arg1)
+                      (lambda ((arg0 object) (arg1 hal-help-kid)) (when (hal-help-kid-host-scene-release-ready? arg1)
                                                                     (ai-task-control-method-12 (-> arg1 ai-ctrl) arg1)
                                                                     (go-to-waypoint! arg1 10 #f)
                                                                     (ai-task-control-method-10 (-> arg1 ai-ctrl) arg1)
