@@ -5,6 +5,10 @@
 ;; name in dgo: nav-enemy
 ;; dgos: GAME, COMMON
 
+(define-extern mp-enemy-allow-local-state-transition? (function enemy symbol))
+(define-extern mp-enemy-should-predictive-move? (function enemy symbol))
+(define-extern mp-enemy-predictive-move (function enemy none))
+
 ;; DECOMP BEGINS
 
 (defmethod copy-nav-enemy-info! ((this nav-enemy-info) (obj-to-copy nav-enemy-info))
@@ -200,6 +204,9 @@
    - tracks when the enemy was last drawn
    - looks at the target and handles attacking
    @TODO Not extremely well understood yet"
+  (when (mp-enemy-should-predictive-move? (the-as enemy self))
+    (mp-enemy-predictive-move (the-as enemy self))
+    )
   (if (and (nonzero? (-> self draw)) (logtest? (-> self draw status) (draw-control-status on-screen)))
       (set-time! (-> self last-draw-time))
       )
@@ -1478,32 +1485,36 @@
   )
 
 (defmethod go-stare ((this nav-enemy))
-  (let ((s5-0 (-> this focus aware)))
-    (cond
-      ((or (and (-> this enemy-info use-frustration) (logtest? (enemy-flag not-frustrated) (-> this enemy-flags)))
-           (nav-enemy-method-163 this)
-           )
-       (go-stare2 this)
-       )
-      ((and (= s5-0 (enemy-aware enemy-aware-3)) (-> this enemy-info use-circling))
-       (go (method-of-object this circling))
-       )
-      ((= s5-0 (enemy-aware unaware))
-       (go (method-of-object this flee))
-       )
-      (else
-        (go-stare2 this)
+  (when (mp-enemy-allow-local-state-transition? (the-as enemy this))
+    (let ((s5-0 (-> this focus aware)))
+      (cond
+        ((or (and (-> this enemy-info use-frustration) (logtest? (enemy-flag not-frustrated) (-> this enemy-flags)))
+             (nav-enemy-method-163 this)
+             )
+         (go-stare2 this)
+         )
+        ((and (= s5-0 (enemy-aware enemy-aware-3)) (-> this enemy-info use-circling))
+         (go (method-of-object this circling))
+         )
+        ((= s5-0 (enemy-aware unaware))
+         (go (method-of-object this flee))
+         )
+        (else
+          (go-stare2 this)
+          )
         )
       )
     )
   )
 
 (defmethod go-hostile ((this nav-enemy))
-  (if (or (and (-> this enemy-info use-frustration) (logtest? (enemy-flag not-frustrated) (-> this enemy-flags)))
-          (nav-enemy-method-163 this)
-          )
-      (go-stare2 this)
-      (go (method-of-object this hostile))
+  (when (mp-enemy-allow-local-state-transition? (the-as enemy this))
+    (if (or (and (-> this enemy-info use-frustration) (logtest? (enemy-flag not-frustrated) (-> this enemy-flags)))
+            (nav-enemy-method-163 this)
+            )
+        (go-stare2 this)
+        (go (method-of-object this hostile))
+        )
       )
   )
 

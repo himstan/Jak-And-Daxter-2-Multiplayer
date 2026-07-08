@@ -583,7 +583,6 @@
   "mp-traffic-sync.o" ;; added
   "mp-traffic-debug.o" ;; added
   "mp-enemy-debug.o" ;; added  
-  "mp-enemy-hijacks.o" ;; added
   "mp-debug.o" ;; added
   "mp-task-debug.o" ;; added
   "mp-puppet.o" ;; added

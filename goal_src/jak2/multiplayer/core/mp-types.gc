@@ -1274,13 +1274,6 @@
 (define-extern mp-draw-boss-debug-overlay (function none))
 (define *mp-daxter-damage-mult* 2.0)
 
-;; --- Enemy Hijack Variables ---
-(define *old-enemy-method-97* (the-as (function enemy process) #f))
-(define *old-enemy-method-99* (the-as (function enemy process-focusable symbol) #f))
-(define *old-enemy-take-damage* (the-as (function enemy process event-message-block int) #f))
-(define *old-enemy-dying* (the-as (function enemy none) #f))
-(define *old-general-event-handler* (the-as (function enemy process int symbol event-message-block object) #f))
-
 ;; --- Function Implementations ---
 
 (defmacro mp-is-jak? ()
@@ -1355,7 +1348,6 @@
 (define-extern mp-enemy-battle-spawn-protected? (function enemy symbol))
 (define-extern mp-enemy-note-remote-battle-spawn! (function enemy none))
 (define-extern iterate-process-tree (function process-tree (function object object) kernel-context object))
-(define-extern mp-apply-enemy-hijacks (function none))
 (define-extern mp-vehicle-apply-hijacks (function none))
 (define-extern mp-enemy-sync-idle (state enemy))
 (define-extern mp-target-get-state-from-id (function uint symbol))

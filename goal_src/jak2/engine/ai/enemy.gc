@@ -9,6 +9,15 @@
 (define-extern mp-combat-remote-player-target (function symbol process-focusable))
 (define-extern mp-combat-best-player-target (function process-focusable process-focusable process-focusable process-focusable process-focusable))
 (define-extern mp-actor-broadcast-attack (function enemy process event-message-block symbol))
+(define-extern mp-actor-handle-attack-hijack (function symbol enemy process event-message-block symbol))
+(define-extern mp-enemy-authoritative? (function enemy symbol))
+(define-extern mp-enemy-allow-local-state-transition? (function enemy symbol))
+(define-extern mp-enemy-allow-kill-prefer-falling? (function enemy symbol))
+(define-extern mp-enemy-should-run-dying? (function enemy symbol))
+(define-extern mp-enemy-should-predictive-move? (function enemy symbol))
+(define-extern mp-enemy-predictive-move (function enemy none))
+(define-extern mp-enemy-handle-go-state-event! (function enemy event-message-block symbol))
+(define-extern mp-enemy-broadcast-death (function enemy none))
 
 (declare-type hopper nav-enemy)
 (declare-type bot nav-enemy)
@@ -307,6 +316,9 @@
    - tracks when the enemy was last drawn
    - looks at the target and handles attacking
    @TODO Not extremely well understood yet"
+  (when (mp-enemy-should-predictive-move? self)
+    (mp-enemy-predictive-move self)
+    )
   (mp-enemy-refresh-player-focus! self)
   (if (and (nonzero? (-> self draw)) (logtest? (-> self draw status) (draw-control-status on-screen)))
       (set-time! (-> self last-draw-time))
@@ -489,7 +501,9 @@
   )
 
 (defmethod go-stare ((this enemy))
-  (go (method-of-object this stare))
+  (when (mp-enemy-allow-local-state-transition? this)
+    (go (method-of-object this stare))
+    )
   )
 
 (defmethod go-stare2 ((this enemy))
@@ -497,7 +511,9 @@
   )
 
 (defmethod go-hostile ((this enemy))
-  (go (method-of-object this hostile))
+  (when (mp-enemy-allow-local-state-transition? this)
+    (go (method-of-object this hostile))
+    )
   )
 
 (defmethod go-ambush ((this enemy))
@@ -514,6 +530,9 @@
 
 (defmethod react-to-focus ((this enemy))
   "@TODO - flesh out docs"
+  (when (not (mp-enemy-allow-local-state-transition? this))
+    (return #f)
+    )
   (mp-enemy-refresh-player-focus! this)
   (let ((s5-0 (-> this focus aware)))
     (cond
@@ -547,9 +566,11 @@
 
 (defmethod kill-prefer-falling ((this enemy))
   "If available in `enemy-info`, [[go]] to the [[die-falling]] state, if not, [[die]]"
-  (if (-> this enemy-info use-die-falling)
-      (go (method-of-object this die-falling))
-      (go (method-of-object this die))
+  (when (mp-enemy-allow-kill-prefer-falling? this)
+    (if (-> this enemy-info use-die-falling)
+        (go (method-of-object this die-falling))
+        (go (method-of-object this die))
+        )
       )
   )
 
@@ -1290,7 +1311,12 @@
   )
 
 (defmethod enemy-method-99 ((this enemy) (arg0 process-focusable))
-  #f
+  (if (and arg0
+           (nonzero? arg0)
+           (type? arg0 target)
+           (= (-> (the-as target arg0) tobot?) 'mp-puppet))
+      #t
+      #f)
   )
 
 (defmethod reset-to-collide-spec ((this enemy-focus) (arg0 collide-spec))
@@ -1582,6 +1608,9 @@
    @TODO - unsure if there is a pattern for the events and this should have a more specific name"
   (local-vars (s5-5 rgbaf))
   (cond
+    ((= arg2 'go-state)
+     (mp-enemy-handle-go-state-event! this arg3)
+     )
     ((= arg2 'track)
      (and (nonzero? (-> this hit-points))
           (logtest? (-> this enemy-flags) (enemy-flag vulnerable))
@@ -1637,6 +1666,9 @@
        )
      )
     ((= arg2 'attack)
+     (when (= (mp-actor-handle-attack-hijack 'enemy this arg0 arg3) 'block)
+       (return #f)
+       )
      (let ((info (the-as attack-info (-> arg3 param 1))))
        (when (!= (-> info id) (-> this incoming attack-id))    
          (format 0 "[Enemy] Got 'attack on ~A for nid=~D pid=~D info=~A citizen-incoming-attack-id=~D info-attack-id=~D" 

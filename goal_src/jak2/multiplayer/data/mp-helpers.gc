@@ -706,18 +706,15 @@
 (defun mp-apply-ai-hijacks ()
   "Main entry point for applying engine-wide multiplayer hijacks."
 
-  ;; 1. Enemy Hijacks
-  (mp-apply-enemy-hijacks)
-
-  ;; 2. Entity Status Hijack
+  ;; 1. Entity Status Hijack
   (when (not *old-process-entity-status*)
     (set! *old-process-entity-status* process-entity-status!)
     (set! process-entity-status! mp-process-entity-status-hijack))
 
-  ;; 3. Vehicle Hijacks
+  ;; 2. Vehicle Hijacks
   (mp-vehicle-apply-hijacks)
 
-  ;; 4. Traffic Ghost Correction Hijacks (citizen common-post)
+  ;; 3. Traffic Ghost Correction Hijacks (citizen common-post)
   (mp-apply-traffic-hijacks)
 
   (none))
