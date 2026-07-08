@@ -7,6 +7,7 @@
 
 
 (define-extern birth-viewer (function process entity-actor object))
+(define-extern mp-handle-process-entity-status! (function process entity-perm-status symbol none))
 
 
 ;; DECOMP BEGINS
@@ -2514,6 +2515,7 @@
 
 ;; WARN: Return type mismatch int vs entity-perm-status.
 (defun process-entity-status! ((arg0 process) (arg1 entity-perm-status) (arg2 symbol))
+  (mp-handle-process-entity-status! arg0 arg1 arg2)
   (the-as entity-perm-status (cond
                                ((and (-> arg0 entity) arg0 (= arg0 (-> arg0 entity extra process)))
                                 (let ((v1-6 (-> arg0 entity extra)))

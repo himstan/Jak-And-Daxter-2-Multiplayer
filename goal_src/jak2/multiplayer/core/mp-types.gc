@@ -1252,7 +1252,6 @@
 (define-perm *mp-debug-boss* symbol #f)
 (define-perm *mp-debug-simulate-loss?* symbol #f)
 (define-perm *mp-debug-simulate-loss-time* time-frame 0)
-(define-perm *mp-hijacks-applied?* symbol #f)
 (define-extern *mp-waypoint-pending-count* int)
 
 (define-perm *mp-local-airlock-state* mp-airlock-state-table (new 'static 'mp-airlock-state-table))
@@ -1348,7 +1347,6 @@
 (define-extern mp-enemy-battle-spawn-protected? (function enemy symbol))
 (define-extern mp-enemy-note-remote-battle-spawn! (function enemy none))
 (define-extern iterate-process-tree (function process-tree (function object object) kernel-context object))
-(define-extern mp-vehicle-apply-hijacks (function none))
 (define-extern mp-enemy-sync-idle (state enemy))
 (define-extern mp-target-get-state-from-id (function uint symbol))
 (define-extern mp-target-get-id-from-state (function symbol uint))

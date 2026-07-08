@@ -8,6 +8,8 @@
 (define-extern mp-get-remote-target-process (function process-focusable))
 (define-extern mp-combat-valid-player-target? (function process-focusable symbol symbol))
 (define-extern mp-combat-best-player-target (function process-focusable process-focusable process-focusable process-focusable process-focusable))
+(define-extern mp-vehicle-guard-handle-event! (function vehicle process int symbol event-message-block symbol))
+(define-extern mp-vehicle-clear-stale-player-driver! (function vehicle none))
 
 (deftype turret-unknown-stack-structure (structure)
   "TODO - sigh...another one that i cant seem to find a fit"
@@ -964,6 +966,14 @@
 
 ;; WARN: disable def twice: 112. This may happen when a cond (no else) is nested inside of another conditional, but it should be rare.
 (defmethod rigid-body-object-method-46 ((this vehicle-guard) (arg0 process-drawable) (arg1 int) (arg2 symbol) (arg3 event-message-block))
+  (let ((mp-result (mp-vehicle-guard-handle-event! this arg0 arg1 arg2 arg3)))
+    (when (= mp-result 'block)
+      (return #f)
+      )
+    (when (= mp-result 'handled)
+      (return #t)
+      )
+    )
   (case arg2
     (('impact-impulse)
      (let ((s5-1 (the-as matrix (-> arg3 param 0))))
@@ -1057,6 +1067,7 @@
   )
 
 (defmethod spawn-default-vehicle-rider! ((this vehicle-guard) (arg0 traffic-object-spawn-params))
+  (mp-vehicle-clear-stale-player-driver! this)
   (vehicle-rider-spawn this crimson-guard-rider arg0)
   0
   (none)

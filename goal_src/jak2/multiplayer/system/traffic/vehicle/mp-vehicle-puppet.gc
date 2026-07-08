@@ -3,24 +3,6 @@
 
 ;; --- Vehicle Sync Logic (Ghost Authority) ---
 
-(define *old-vehicle-event-handler* (the-as (function vehicle process int symbol event-message-block object) #f))
-(define *old-vehicle-guard-event-handler*
-  (the-as (function vehicle-guard process int symbol event-message-block object) #f))
-(define *old-vehicle-method-120* (the-as (function vehicle none) #f))
-(define *old-vehicle-method-121* (the-as (function vehicle none) #f))
-(define *old-vehicle-method-122* (the-as (function vehicle none) #f))
-(define *old-vehicle-method-123* (the-as (function vehicle none) #f))
-(define *old-vehicle-method-105* (the-as (function vehicle symbol) #f))
-(define *old-vehicle-method-51* (the-as (function vehicle none) #f))
-(define *old-vehicle-method-52* (the-as (function vehicle none) #f))
-(define *old-vehicle-method-94* (the-as (function vehicle none) #f))
-(define *old-vehicle-guard-method-94* (the-as (function vehicle-guard none) #f))
-(define *old-vehicle-method-137* (the-as (function vehicle traffic-object-spawn-params none) #f))
-(define *old-vehicle-guard-method-137* (the-as (function vehicle-guard traffic-object-spawn-params none) #f))
-(define *old-vehicle-method-87* (the-as (function vehicle none) #f))
-(define *old-vehicle-enable-bike-mode* (the-as (function vehicle none) #f))
-(define *old-vehicle-enable-rapid-camera* (the-as (function vehicle none) #f))
-
 ;; Global handle to the vehicle currently being driven by the remote puppet.
 ;; Using a handle is memory-safe; it resolves to #f if the vehicle is deactivated.
 (define *mp-remote-driven-vehicle* (the-as handle #f))
@@ -620,13 +602,16 @@
   #f
   )
 
-(defbehavior mp-vehicle-event-handler-hijack vehicle ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
-  (let ((v-net-id (-> self net-id)))
-    (when (and (nonzero? v-net-id) (= v-net-id (-> *remote-info* veh-state net-id)))
+(defun mp-vehicle-handle-event! ((this vehicle) (arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
+  (let ((v-net-id (-> this net-id)))
+    (when (and (nonzero? v-net-id)
+               *remote-info*
+               (nonzero? *remote-info*)
+               (= v-net-id (-> *remote-info* veh-state net-id)))
       ;; If this is the remote player's vehicle, ignore damage events from local machine
       (case arg2
         (('attack 'touch 'impulse)
-         (return #f)
+         (return 'block)
          )
         )
       )
@@ -634,26 +619,18 @@
 
   (case arg2
     (('traffic-off 'traffic-off-force)
-     (when (mp-vehicle-refuse-traffic-off? self)
-       (return #f)
+     (when (mp-vehicle-refuse-traffic-off? this)
+       (return 'block)
        )
      (when (not (mp-is-traffic-authoritative?))
-       (set! (-> self net-id) (the uint 0))
-       (deactivate self)
-       (return #t)
+       (set! (-> this net-id) (the uint 0))
+       (deactivate this)
+       (return 'handled)
        )
      )
     )
-  (if *old-vehicle-event-handler*
-      (*old-vehicle-event-handler* self arg0 arg1 arg2 arg3)
-      #f
-      )
-)
-
-;; Top-level lambda to avoid per-frame heap allocation leak.
-(define *mp-vehicle-event-handler-hijack-lambda* 
-  (lambda ((this vehicle) (arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
-    (with-pp (set! pp this) (mp-vehicle-event-handler-hijack arg0 arg1 arg2 arg3))))
+  #f
+  )
 
 (defun mp-vehicle-guard-clear-combat! ((veh vehicle-guard))
   (when (and veh (nonzero? veh))
@@ -781,7 +758,7 @@
   (none)
   )
 
-(defun mp-vehicle-guard-event-handler-hijack ((this vehicle) (arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
+(defun mp-vehicle-guard-handle-event! ((this vehicle) (arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   "Preserve guard alert/pursuit events while keeping MP vehicle protections."
   (when (and (type? this vehicle-guard)
              (or (= arg2 'pilot-on)
@@ -789,16 +766,19 @@
     (mp-vehicle-guard-clear-combat! (the-as vehicle-guard this))
     (case arg2
       (('alert-begin 'alert-end 'end-pursuit)
-       (return #t)
+       (return 'handled)
        )
       )
     )
 
   (let ((v-net-id (-> this net-id)))
-    (when (and (nonzero? v-net-id) (= v-net-id (-> *remote-info* veh-state net-id)))
+    (when (and (nonzero? v-net-id)
+               *remote-info*
+               (nonzero? *remote-info*)
+               (= v-net-id (-> *remote-info* veh-state net-id)))
       (case arg2
         (('attack 'touch 'impulse)
-         (return #f)
+         (return 'block)
          )
         )
       )
@@ -807,23 +787,16 @@
   (case arg2
     (('traffic-off 'traffic-off-force)
      (when (mp-vehicle-refuse-traffic-off? this)
-       (return #f)
+       (return 'block)
        )
      (when (not (mp-is-traffic-authoritative?))
        (set! (-> this net-id) (the uint 0))
        (deactivate this)
-       (return #t)
+       (return 'handled)
        )
      )
     )
-  (if (and (type? this vehicle-guard)
-           *old-vehicle-guard-event-handler*)
-      (*old-vehicle-guard-event-handler* (the-as vehicle-guard this) arg0 arg1 arg2 arg3)
-      (if *old-vehicle-event-handler*
-          (*old-vehicle-event-handler* this arg0 arg1 arg2 arg3)
-          #f
-          )
-      )
+  #f
   )
 
 (defun mp-vehicle-remote-driven? ((veh vehicle))
@@ -1026,12 +999,6 @@
     ;; Apply ghost P-controller: nudge rbody velocity toward authoritative position
     (mp-vehicle-apply-ghost-correction this)
 
-    ;; CRITICAL: Even if not authoritative, we MUST call method-121 to update the 
-    ;; collision grid, or players will fall through the vehicle.
-    (when (and (-> this rbody) (not (logtest? (-> this rbody state flags) (rigid-body-flag enable-physics))))
-      (if *old-vehicle-method-121* (*old-vehicle-method-121* this))
-      )
-
     ;; EXTRA STABILITY: If not authoritative, kill all momentum.
     ;; We SKIP this if in player-control, so the local physics can run (driving exhaust/sounds).
     (when (and (-> this state) (!= (-> this state name) 'player-control))
@@ -1046,125 +1013,45 @@
       )
     )
   (none)
-)
+  )
 
-(defun mp-vehicle-method-94-hijack ((this vehicle))
-  "Unified input hijack for all vehicle types. Redirects to pad 1 if a puppet is driving."
+(defun mp-vehicle-run-puppet-input! ((this vehicle))
+  "Run puppet-driver input for vehicles using pad 1. Returns true when vanilla input should stop."
   (mp-vehicle-claim-local-driver-sync! this)
   (let ((pad-idx (mp-vehicle-get-pad-index this)))
     (if (= pad-idx 1)
         ;; Puppet is driving: implement generic vehicle control
-        (let ((pad (-> *cpad-list* cpads 1)))
-          (let ((s5-0 (new 'stack-no-clear 'vector)))
-            (set! (-> s5-0 x) (analog-input (the-as int (-> pad leftx)) 128.0 48.0 110.0 -1.0))
-            (set! (-> s5-0 w) (analog-input (the-as int (-> pad lefty)) 128.0 48.0 110.0 -1.0))
-            (set! (-> s5-0 y) (fmin 1.0 (* 0.023529412 (the float (-> pad abutton (abutton-idx x))))))
-            (set! (-> s5-0 z) (fmin 1.0 (* 0.023529412 (the float (-> pad abutton (abutton-idx square))))))
-            (vehicle-method-95 this (the-as vector (&-> s5-0 x)))
-            )
-          (if (or (cpad-hold? 1 l1) (and (logtest? (-> this info flags) 512) (cpad-hold? 1 r1)))
-              (start-jump this)
+        (begin
+          (let ((pad (-> *cpad-list* cpads 1)))
+            (let ((s5-0 (new 'stack-no-clear 'vector)))
+              (set! (-> s5-0 x) (analog-input (the-as int (-> pad leftx)) 128.0 48.0 110.0 -1.0))
+              (set! (-> s5-0 w) (analog-input (the-as int (-> pad lefty)) 128.0 48.0 110.0 -1.0))
+              (set! (-> s5-0 y) (fmin 1.0 (* 0.023529412 (the float (-> pad abutton (abutton-idx x))))))
+              (set! (-> s5-0 z) (fmin 1.0 (* 0.023529412 (the float (-> pad abutton (abutton-idx square))))))
+              (vehicle-method-95 this (the-as vector (&-> s5-0 x)))
               )
-          (if (cpad-pressed? 1 circle) (activate-turbo-boost! this))
+            (if (or (cpad-hold? 1 l1) (and (logtest? (-> this info flags) 512) (cpad-hold? 1 r1)))
+                (start-jump this)
+                )
+            (if (cpad-pressed? 1 circle) (activate-turbo-boost! this))
+            )
+          #t
           )
-        (cond
-          (*old-vehicle-method-94*
-           (*old-vehicle-method-94* this)
-           )
-          )
+        #f
         )
     )
-  (none)
   )
 
-(defun mp-vehicle-guard-method-94-hijack ((this vehicle))
-  "Preserve guard-vehicle turret aiming/firing before delegating to MP vehicle input."
-  (if (and (type? this vehicle-guard)
-           *old-vehicle-guard-method-94*)
-      (*old-vehicle-guard-method-94* (the-as vehicle-guard this))
-      (mp-vehicle-method-94-hijack this)
-      )
-  (none)
-  )
-
-(defun mp-vehicle-method-120-hijack ((this vehicle))
-  (if *old-vehicle-method-120* (*old-vehicle-method-120* this))
-  (mp-vehicle-common-post-sync this)
-  (none))
-
-(defun mp-vehicle-method-121-hijack ((this vehicle))
-  (if *old-vehicle-method-121* (*old-vehicle-method-121* this))
-  (mp-vehicle-common-post-sync this)
-  (none))
-
-(defun mp-vehicle-method-122-hijack ((this vehicle))
-  (if *old-vehicle-method-122* (*old-vehicle-method-122* this))
-  (mp-vehicle-common-post-sync this)
-  (none))
-
-(defun mp-vehicle-method-123-hijack ((this vehicle))
-  (if *old-vehicle-method-123* (*old-vehicle-method-123* this))
-  (mp-vehicle-common-post-sync this)
-  (none))
-
-(defun mp-vehicle-method-105-hijack ((this vehicle))
-  (if (mp-vehicle-is-local-authoritative? this)
-      (if *old-vehicle-method-105* (*old-vehicle-method-105* this) #t)
-      (let ((rec (mp-get-traffic-ghost (-> this net-id))))
-        (if rec
-            (logtest? (-> rec ghost-target-aid) MP_VEHICLE_STATE_FLAG_PHYSICS)
-            (or (nonzero? (-> this net-id))
-                (and (-> this state) (= (-> this state name) 'player-control))
-                (mp-is-daxter?)
-                )
+(defun mp-vehicle-remote-needs-physics? ((this vehicle))
+  (let ((rec (mp-get-traffic-ghost (-> this net-id))))
+    (if rec
+        (logtest? (-> rec ghost-target-aid) MP_VEHICLE_STATE_FLAG_PHYSICS)
+        (or (nonzero? (-> this net-id))
+            (and (-> this state) (= (-> this state name) 'player-control))
+            (mp-is-daxter?)
             )
         )
-      )
-  )
-
-(defun mp-vehicle-method-51-hijack ((this vehicle))
-  (if *old-vehicle-method-51* (*old-vehicle-method-51* this))
-  (none)
-  )
-
-(defun mp-vehicle-method-137-hijack ((this vehicle) (params traffic-object-spawn-params))
-  "Keep ambient rider spawning from preserving stale local/puppet driver handles."
-  (mp-vehicle-clear-stale-player-driver! this)
-  (if (and (type? this vehicle-guard)
-           *old-vehicle-guard-method-137*)
-      (*old-vehicle-guard-method-137* (the-as vehicle-guard this) params)
-      (if *old-vehicle-method-137*
-          (*old-vehicle-method-137* this params)
-          )
-      )
-  (mp-vehicle-clear-stale-player-driver! this)
-  (none)
-  )
-
-(defun mp-vehicle-method-52-hijack ((this vehicle))
-  (if *old-vehicle-method-52* (*old-vehicle-method-52* this))
-  (none)
-  )
-
-(defun mp-vehicle-method-87-hijack ((this vehicle))
-  (if (mp-should-apply-vehicle-camera? this)
-      (if *old-vehicle-method-87* (*old-vehicle-method-87* this))
-      )
-  (none)
-  )
-
-(defun mp-vehicle-enable-bike-mode-hijack ((this vehicle))
-  (if (mp-should-apply-vehicle-camera? this)
-      (if *old-vehicle-enable-bike-mode* (*old-vehicle-enable-bike-mode* this))
-      )
-  (none)
-  )
-
-(defun mp-vehicle-enable-rapid-camera-hijack ((this vehicle))
-  (if (mp-should-apply-vehicle-camera? this)
-      (if *old-vehicle-enable-rapid-camera* (*old-vehicle-enable-rapid-camera* this))
-      )
-  (none)
+    )
   )
 
 ;; --- Sync Application ---
@@ -1511,127 +1398,3 @@
   (none)
 )
 
-;; --- Hijack Application ---
-
-(defun mp-vehicle-apply-hijacks ()
-  "Robust re-patching for vehicles. Checks actual method pointers to handle level loads."
-  (let ((m94-id (the int 94))
-        (m120-id (the int 120))
-        (m121-id (the int 121))
-        (m122-id (the int 122))
-        (m123-id (the int 123))
-        (m105-id (the int 105))
-        (m51-id (the int 51))
-        (m52-id (the int 52))
-        (m137-id (the int 137))
-        (m87-id 87)
-        (ebm-id 89)
-        (erc-id 91)
-        (m46-id (method-id-of-type vehicle rigid-body-object-method-46)))
-                        
-    ;; Phase 1: patch base vehicle class (always available in game.gd)
-    (let ((cur-m105 (method-of-type vehicle vehicle-needs-physics?)))
-      (when (!= cur-m105 mp-vehicle-method-105-hijack)
-        (set! *old-vehicle-event-handler* (the-as (function vehicle process int symbol event-message-block object) (method-of-type vehicle rigid-body-object-method-46)))
-        (method-set! vehicle m46-id *mp-vehicle-event-handler-hijack-lambda*)
-        
-        (set! *old-vehicle-method-94* (the-as (function vehicle none) (method-of-type vehicle vehicle-method-94)))
-        (method-set! vehicle m94-id mp-vehicle-method-94-hijack)
-        
-        (set! *old-vehicle-method-120* (the-as (function vehicle none) (method-of-type vehicle vehicle-method-120)))
-        (method-set! vehicle m120-id mp-vehicle-method-120-hijack)
-        
-        (set! *old-vehicle-method-121* (the-as (function vehicle none) (method-of-type vehicle vehicle-method-121)))
-        (method-set! vehicle m121-id mp-vehicle-method-121-hijack)
-
-        (set! *old-vehicle-method-122* (the-as (function vehicle none) (method-of-type vehicle vehicle-method-122)))
-        (method-set! vehicle m122-id mp-vehicle-method-122-hijack)
-
-        (set! *old-vehicle-method-123* (the-as (function vehicle none) (method-of-type vehicle vehicle-method-123)))
-        (method-set! vehicle m123-id mp-vehicle-method-123-hijack)
-
-        (set! *old-vehicle-method-105* (the-as (function vehicle symbol) (method-of-type vehicle vehicle-needs-physics?)))
-        (method-set! vehicle m105-id mp-vehicle-method-105-hijack)
-
-        (set! *old-vehicle-method-51* (the-as (function vehicle none) (method-of-type vehicle rigid-body-object-method-51)))
-        (method-set! vehicle m51-id mp-vehicle-method-51-hijack)
-
-        (set! *old-vehicle-method-52* (the-as (function vehicle none) (method-of-type vehicle rigid-body-object-method-52)))
-        (method-set! vehicle m52-id mp-vehicle-method-52-hijack)
-
-        (set! *old-vehicle-method-137* (the-as (function vehicle traffic-object-spawn-params none) (method-of-type vehicle spawn-default-vehicle-rider!)))
-        (method-set! vehicle m137-id mp-vehicle-method-137-hijack)
-
-        (set! *old-vehicle-method-87* (the-as (function vehicle none) (method-of-type vehicle enable-player-vehicle-camera!)))
-        (method-set! vehicle m87-id mp-vehicle-method-87-hijack)
-
-        (set! *old-vehicle-enable-bike-mode* (the-as (function vehicle none) (method-of-type vehicle enable-bike-mode)))
-        (method-set! vehicle ebm-id mp-vehicle-enable-bike-mode-hijack)
-
-        (set! *old-vehicle-enable-rapid-camera* (the-as (function vehicle none) (method-of-type vehicle enable-rapid-camera-tracking)))
-        (method-set! vehicle erc-id mp-vehicle-enable-rapid-camera-hijack)
-        (format 0 "[MP-Traffic] Base vehicle class patched.~%")
-        )
-      )
-
-    ;; Phase 2: patch subtypes (defined in cwi.gd and loaded later)
-    (when (and (nonzero? (the-as uint bikea))
-               (nonzero? (the-as uint cara)))
-      
-      (let ((cur-m105 (-> (the-as type bikea) method-table 105)))
-        ;; Robust check: if bikea is not using our hijack, it means cwi.gd was reloaded
-        (when (!= cur-m105 mp-vehicle-method-105-hijack)
-          (when (and (nonzero? (the-as uint vehicle-guard))
-                     (!= (-> (the-as type vehicle-guard) method-table 94) mp-vehicle-guard-method-94-hijack))
-            (set! *old-vehicle-guard-method-94*
-                  (the-as (function vehicle-guard none) (-> (the-as type vehicle-guard) method-table 94)))
-            )
-          (when (and (nonzero? (the-as uint vehicle-guard))
-                     (!= (-> (the-as type vehicle-guard) method-table m137-id) mp-vehicle-method-137-hijack))
-            (set! *old-vehicle-guard-method-137*
-                  (the-as (function vehicle-guard traffic-object-spawn-params none)
-                          (-> (the-as type vehicle-guard) method-table m137-id)))
-            )
-          (when (and (nonzero? (the-as uint vehicle-guard))
-                     (!= (-> (the-as type vehicle-guard) method-table m46-id) mp-vehicle-guard-event-handler-hijack))
-            (set! *old-vehicle-guard-event-handler*
-                  (the-as (function vehicle-guard process int symbol event-message-block object)
-                          (-> (the-as type vehicle-guard) method-table m46-id)))
-            )
-          (dotimes (i 14)
-            (let ((t (case i
-                       ((0) bikea) ((1) bikeb) ((2) bikec)
-                       ((3) cara)  ((4) carb)  ((5) carc)
-                       ((6) vehicle-guard) ((7) guard-bike) ((8) hellcat)
-                       ((9) test-bike) ((10) test-car)
-                       (else (the-as type #f)))))
-              (when (and t (nonzero? t))
-                (if (or (= t vehicle-guard) (= t guard-bike) (= t hellcat))
-                    (method-set! t m94-id mp-vehicle-guard-method-94-hijack)
-                    (method-set! t m94-id mp-vehicle-method-94-hijack)
-                    )
-                (method-set! t m120-id mp-vehicle-method-120-hijack)
-                (method-set! t m121-id mp-vehicle-method-121-hijack)
-                (method-set! t m122-id mp-vehicle-method-122-hijack)
-                (method-set! t m123-id mp-vehicle-method-123-hijack)
-                (method-set! t m105-id mp-vehicle-method-105-hijack)
-                (method-set! t m51-id mp-vehicle-method-51-hijack)
-                (method-set! t m52-id mp-vehicle-method-52-hijack)
-                (method-set! t m137-id mp-vehicle-method-137-hijack)
-                (method-set! t m87-id mp-vehicle-method-87-hijack)
-                (method-set! t ebm-id mp-vehicle-enable-bike-mode-hijack)
-                (method-set! t erc-id mp-vehicle-enable-rapid-camera-hijack)
-                (if (or (= t vehicle-guard) (= t guard-bike) (= t hellcat))
-                    (method-set! t m46-id mp-vehicle-guard-event-handler-hijack)
-                    (method-set! t m46-id *mp-vehicle-event-handler-hijack-lambda*)
-                    )
-                )
-              )
-            )
-          (format 0 "[MP-Traffic] All vehicle subtypes patched (multi-method).~%")
-          )
-        )
-      )
-    )
-  (none)
-)

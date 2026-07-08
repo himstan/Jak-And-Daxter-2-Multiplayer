@@ -5,6 +5,11 @@
 ;; name in dgo: vehicle-util
 ;; dgos: CWI
 
+(define-extern mp-should-apply-vehicle-camera? (function vehicle symbol))
+(define-extern mp-vehicle-clear-stale-player-driver! (function vehicle none))
+(define-extern mp-vehicle-is-local-authoritative? (function vehicle symbol))
+(define-extern mp-vehicle-remote-needs-physics? (function vehicle symbol))
+
 ;; DECOMP BEGINS
 
 (defmethod init-vehicle-particle-constants! ((this rigid-body-vehicle-constants))
@@ -968,6 +973,9 @@
   )
 
 (defmethod enable-player-vehicle-camera! ((this vehicle))
+  (when (not (mp-should-apply-vehicle-camera? this))
+    (return #f)
+    )
   (when (not (logtest? (rigid-body-object-flag camera) (-> this flags)))
     (logior! (-> this flags) (rigid-body-object-flag camera))
     (set! (-> this cam-speed-interp) 0.0)
@@ -1032,6 +1040,9 @@
   )
 
 (defmethod enable-bike-mode ((this vehicle))
+  (when (not (mp-should-apply-vehicle-camera? this))
+    (return #f)
+    )
   (when (not (logtest? (rigid-body-object-flag camera-bike-mode) (-> this flags)))
     (logior! (-> this flags) (rigid-body-object-flag camera-bike-mode))
     (set-setting! 'bike-mode #f 0.0 0)
@@ -1050,6 +1061,9 @@
   )
 
 (defmethod enable-rapid-camera-tracking ((this vehicle))
+  (when (not (mp-should-apply-vehicle-camera? this))
+    (return #f)
+    )
   (when (logtest? (-> this flags) (rigid-body-object-flag player-driving))
     (logior! (-> this flags) (rigid-body-object-flag camera-rapid-track-mode))
     (set-setting! 'rapid-tracking #f 0.0 0)
@@ -1350,13 +1364,17 @@
   )
 
 (defmethod spawn-default-vehicle-rider! ((this vehicle) (spawn-params traffic-object-spawn-params))
+  (mp-vehicle-clear-stale-player-driver! this)
   (vehicle-rider-spawn this citizen-norm-rider spawn-params)
   0
   (none)
   )
 
 (defmethod vehicle-needs-physics? ((this vehicle))
-  (logtest? (rigid-body-object-flag disturbed player-touching player-driving in-pursuit) (-> this flags))
+  (if (mp-vehicle-is-local-authoritative? this)
+      (logtest? (rigid-body-object-flag disturbed player-touching player-driving in-pursuit) (-> this flags))
+      (mp-vehicle-remote-needs-physics? this)
+      )
   )
 
 (defmethod clear-disturbed-when-settled! ((this vehicle))

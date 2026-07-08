@@ -11,6 +11,9 @@
 
 (define-extern vehicle-parking-minimap? (function vehicle symbol))
 (define-extern mp-vehicle-remove-parking-minimap! (function vehicle none))
+(define-extern mp-vehicle-handle-event! (function vehicle process int symbol event-message-block symbol))
+(define-extern mp-vehicle-run-puppet-input! (function vehicle symbol))
+(define-extern mp-vehicle-common-post-sync (function vehicle none))
 
 ;; DECOMP BEGINS
 
@@ -347,6 +350,9 @@
   )
 
 (defmethod vehicle-method-94 ((this vehicle))
+  (when (mp-vehicle-run-puppet-input! this)
+    (return #f)
+    )
   (cond
     ((or (logtest? (rigid-body-object-flag player-grabbed) (-> this flags))
          (and *target* (focus-test? *target* dead grabbed))
@@ -799,6 +805,7 @@
     )
   (set! (-> this vehicle-jkhn1b23jn1) (the-as int (-> this flags)))
   (ja-post)
+  (mp-vehicle-common-post-sync this)
   0
   (none)
   )
@@ -970,6 +977,7 @@
   (let ((a1-0 (-> this rbody state position)))
     (set! (-> this flight-level) (get-height-at-point *traffic-height-map* a1-0))
     )
+  (mp-vehicle-common-post-sync this)
   0
   (none)
   )
@@ -1152,6 +1160,7 @@
   (label cfg-35)
   0
   (label cfg-36)
+  (mp-vehicle-common-post-sync this)
   0
   (none)
   )
@@ -1302,6 +1311,7 @@
     (+! (-> v1-88 accum1) a0-42)
     )
   (label cfg-26)
+  (mp-vehicle-common-post-sync this)
   0
   0
   (none)
@@ -1731,6 +1741,14 @@
   )
 
 (defmethod rigid-body-object-method-46 ((this vehicle) (arg0 process-drawable) (arg1 int) (arg2 symbol) (arg3 event-message-block))
+  (let ((mp-result (mp-vehicle-handle-event! this arg0 arg1 arg2 arg3)))
+    (when (= mp-result 'block)
+      (return #f)
+      )
+    (when (= mp-result 'handled)
+      (return #t)
+      )
+    )
   (when (and (= arg2 'touched) arg0 (logtest? (process-mask bit18) (-> arg0 mask)))
     (dotimes (s1-0 4)
       (let ((a1-2 (new 'stack-no-clear 'event-message-block)))

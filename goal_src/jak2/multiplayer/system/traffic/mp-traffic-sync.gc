@@ -744,7 +744,6 @@
                )
             )
           (begin
-            (mp-vehicle-apply-hijacks)
             ;; Apply piggybacked vehicle data only when this client has a valid city traffic context.
             (when (or (mp-is-traffic-authoritative?)
                       (mp-traffic-local-city-loaded?))

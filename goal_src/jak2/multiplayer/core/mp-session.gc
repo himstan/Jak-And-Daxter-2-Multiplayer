@@ -137,13 +137,6 @@
     )
   (none))
 
-(defun mp-apply-startup-hijacks! ()
-  (when (not *mp-hijacks-applied?*)
-    (mp-apply-ai-hijacks)
-    (set! *mp-hijacks-applied?* #t)
-    )
-  (none))
-
 (defun mp-close-reconnect-ui-if-active! ()
   (when *mp-reconnect-menu-active?*
     (format 0 "[MP-UI] Connection restored. Closing Reconnect screen smoothly.~%")
@@ -185,7 +178,6 @@
     (mp-auto-enable-sync-if-ready! status)
     (if (or (= status 3) (= status 4) (= status 5) (= status 6) (= status 7) (= status 8))
         (begin
-          (mp-apply-startup-hijacks!)
           (pc-multi-poll (the-as uint *local-info*) (the-as uint *remote-info*))
           (pc-multi-receive-state (the-as uint *remote-info*))
           (set! (-> *local-info* role) (pc-multi-get-role))

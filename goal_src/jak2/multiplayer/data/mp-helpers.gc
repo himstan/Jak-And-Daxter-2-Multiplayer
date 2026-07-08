@@ -665,56 +665,25 @@
       )
   )
 
-(define *old-process-entity-status* (the-as (function process entity-perm-status symbol entity-perm-status) #f))
-
-(defbehavior mp-traffic-event-handler-hijack citizen ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
-  "Specialized event handler for traffic puppets (Citizens/Vehicles)."
-  (case arg2
-    (('traffic-off 'traffic-off-force)
-     (format 0 "[MP-Helpers] Cleaning up ~A nid=~D pid=~D because of 'traffic-off or 'traffic-off-force~%" (-> self name) (-> self net-id) (-> self pid))
-     (set! (-> self net-id) (the uint 0))
-     (deactivate self)
-     (return #t)
-     )
-    )
-
-  ;; For now, traffic doesn't have a global 'old' handler like enemies do in mp-helpers.
-  ;; It relies on the specific citizen type's logic.
-  #f
-)
-
 ;; --- Generic Puppet States ---
 
-(defun mp-process-entity-status-hijack ((arg0 process) (arg1 entity-perm-status) (arg2 symbol))
+(defun mp-handle-process-entity-status! ((arg0 process) (arg1 entity-perm-status) (arg2 symbol))
   ;; Detect when an entity is being marked as dead or task-complete locally
   (when (and arg2
              (logtest? (the-as int arg1) (the-as int (logior (entity-perm-status dead) (entity-perm-status subtask-complete))))
              (not *mp-processing-remote-event*)
              (mp-is-jak?) ;; CRITICAL: Only the Host (Jak) should broadcast world-status changes (BREAK events)
+             arg0
+             (nonzero? arg0)
              (-> arg0 entity)
+             (nonzero? (-> arg0 entity))
              (not (movie?))
              (not (mp-should-block-break-sync? arg0))
              )
     (format 0 "[MP-WorldEvent] Sending BREAK for process ~A~%" arg0)
     (mp-send-world-event MP_EVENT_BREAK (-> arg0 entity aid)))
-
-  (if *old-process-entity-status*
-      (*old-process-entity-status* arg0 arg1 arg2)
-      (entity-perm-status bit-0)) ;; Safe fallback
+  (none)
   )
-
-(defun mp-apply-ai-hijacks ()
-  "Main entry point for applying engine-wide multiplayer hijacks."
-
-  ;; 1. Entity Status Hijack
-  (when (not *old-process-entity-status*)
-    (set! *old-process-entity-status* process-entity-status!)
-    (set! process-entity-status! mp-process-entity-status-hijack))
-
-  ;; 2. Vehicle Hijacks
-  (mp-vehicle-apply-hijacks)
-
-  (none))
 
 (defun mp-send-world-event ((etype uint) (aid uint))
   "Send a world event to the network buffer (Outbound)."
