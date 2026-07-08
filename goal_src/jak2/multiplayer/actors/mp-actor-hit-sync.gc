@@ -43,7 +43,10 @@
 
 (defun mp-play-remote-hit-sound! ((e-proc enemy) (hit-sound-id uint))
   "Play the initiator-side hit connect sound for an accepted remote-player hit."
-  (when (and e-proc (nonzero? e-proc))
+  (when (and e-proc
+             (nonzero? e-proc)
+             (-> e-proc root)
+             (nonzero? (-> e-proc root)))
     (case hit-sound-id
       (((the-as uint (mp-hit-sound-id punch)))
        (sound-play-by-spec (static-sound-spec "punch-hit" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> e-proc root trans))
@@ -240,6 +243,9 @@
         )
       )
     (let ((damage-taken (max 0 (- old-hp (-> evt new-hp)))))
+      (when (> damage-taken 0)
+        (mp-play-remote-hit-sound! e-proc (-> evt hit-sound-id))
+        )
       (format 0 "[MP-ActorHit] Remote ~A hit applied nid=~D attack-id=~D damage=~D hp=~D->~D~%"
               label
               (-> evt net-id)

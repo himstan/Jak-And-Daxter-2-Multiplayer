@@ -790,7 +790,7 @@
          )
        )
       ((= message 'attack)
-       (when (and (not-puppet? self) (= (-> self active) 1))
+       (when (and (not-puppet? proc) (= (-> self active) 1))
          (let ((v1-56 (the-as object (-> block param 1))))
            (when (!= (-> (the-as attack-info v1-56) id) (-> self incoming-attack-id))
              (set! (-> self incoming-attack-id) (-> (the-as attack-info v1-56) id))
