@@ -426,7 +426,7 @@
              (set! driver *target*)
              )
             (else
-              (let ((puppet (mp-puppet-get-proc)))
+              (let ((puppet *mp-puppet*))
                 (when (and puppet
                            (nonzero? puppet)
                            (focus-test? puppet pilot)
@@ -1753,7 +1753,7 @@
                               (set! s4-2 (the-as vehicle (handle->process-safe (-> *target* pilot vehicle))))
                               )
                             (when (not s4-2)
-                              (let ((puppet (mp-puppet-get-proc)))
+                              (let ((puppet *mp-puppet*))
                                 (when (and puppet
                                            (nonzero? puppet)
                                            (-> puppet pilot)

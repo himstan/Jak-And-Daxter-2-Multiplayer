@@ -307,7 +307,7 @@
           (set! started? #t)
           )
         )
-      (let ((puppet (mp-puppet-get-proc)))
+      (let ((puppet *mp-puppet*))
         (when (and puppet (nonzero? puppet))
           (when (or (focus-test? puppet pilot)
                     (< (* min-start-distance min-start-distance)

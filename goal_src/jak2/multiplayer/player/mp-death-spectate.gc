@@ -45,7 +45,7 @@
         )
 
     (set! *mp-force-remote-puppet-for-spectate?* #t)
-    (let ((puppet (mp-puppet-get-proc)))
+    (let ((puppet *mp-puppet*))
       (if (mp-valid-remote-spectate-puppet? puppet)
           (the-as process-focusable puppet)
           (the-as process-focusable #f)
@@ -57,7 +57,7 @@
 (defun mp-region-target-pos ()
   "Return the target-region position, following the remote puppet while death-spectating."
   (when *mp-spectator-countdown-active?*
-    (let ((puppet (mp-puppet-get-proc)))
+    (let ((puppet *mp-puppet*))
       (when (and puppet
                  (nonzero? puppet)
                  (-> puppet root)

@@ -579,7 +579,7 @@
 
 (defun warp-gate-puppet? ((actor target))
   (if (and actor (nonzero? actor))
-      (let ((puppet (mp-puppet-get-proc)))
+      (let ((puppet *mp-puppet*))
         (and puppet (nonzero? puppet) (= actor puppet))
         )
       #f

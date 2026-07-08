@@ -209,7 +209,7 @@
                (nonzero? (-> *target* control))
                (not (focus-test? *target* teleporting)))
       (mp-draw-target-eye-debug *target* "LOCAL" (meters 4.0) (font-color yellow)))
-    (let ((puppet (mp-puppet-get-proc)))
+    (let ((puppet *mp-puppet*))
       (when (and puppet
                  (nonzero? puppet)
                  (-> puppet control)

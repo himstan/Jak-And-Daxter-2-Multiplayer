@@ -144,7 +144,7 @@
            )
 
          ;; 3. Manage process lifecycle
-         (let ((proc (mp-puppet-get-proc)))
+         (let ((proc *mp-puppet*))
            (if (not proc)
                (begin
                 (when (and (not *mp-puppet-is-warping?*)
@@ -160,14 +160,14 @@
                  (mp-puppet-apply-ghost-correction! proc)
                  )
                )
-           (mp-remote-player-marker-update! (mp-puppet-get-proc))
+           (mp-remote-player-marker-update! *mp-puppet*)
            )
          )
        )
       (else
        (begin
          (mp-remote-player-marker-kill!)
-         (let ((proc (mp-puppet-get-proc)))
+         (let ((proc *mp-puppet*))
            (when proc
              (format 0 "[MP-Puppet] Deactivating puppet (Remote Status ~D)~%" remote-status)
              (mp-puppet-deactivate!)

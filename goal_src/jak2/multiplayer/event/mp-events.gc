@@ -764,7 +764,7 @@
 
 (defun mp-receive-edge-grab-event ((evt mp-world-event) (pilot? symbol))
   "Receiver: Apply authoritative edge grab data to the puppet and trigger immediate snapping."
-  (let ((puppet (mp-puppet-get-proc)))
+  (let ((puppet *mp-puppet*))
     (when puppet
       (format 0 "[MP] Authoritative Edge Grab received! (Pilot: ~A)~%" pilot?)
 
@@ -789,7 +789,7 @@
 
 (defun mp-receive-pole-grab-event ((evt mp-world-event))
   "Receiver: attach the puppet to the matching local swingpole process."
-  (let ((puppet (mp-puppet-get-proc))
+  (let ((puppet *mp-puppet*)
         (ent (entity-by-aid (-> evt aid))))
     (when (and puppet ent (nonzero? ent))
       (let ((pole-proc (-> ent extra process)))

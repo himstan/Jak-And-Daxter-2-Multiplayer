@@ -6,7 +6,7 @@
 (defun mp-draw-puppet-debug ()
   "Draw real-time debug visualization for the remote target puppet"
   (when *mp-puppet-debug?*
-    (let ((proc (mp-puppet-get-proc))
+    (let ((proc *mp-puppet*)
           (ghost *mp-puppet-ghost*)
           (draw-pos (new 'stack-no-clear 'vector)))
       

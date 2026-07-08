@@ -190,7 +190,7 @@
         (set! near? #t)
         )
       (when (not near?)
-        (let ((puppet (mp-puppet-get-proc)))
+        (let ((puppet *mp-puppet*))
           (when (and puppet
                      (nonzero? puppet)
                      (focus-test? puppet pilot)
@@ -227,7 +227,7 @@
         (set! near? #t)
         )
       (when (not near?)
-        (let ((puppet (mp-puppet-get-proc)))
+        (let ((puppet *mp-puppet*))
           (when (and puppet
                      (nonzero? puppet)
                      (-> puppet root)
@@ -269,7 +269,7 @@
       (set! high-enough? #t)
       )
     (when (not high-enough?)
-      (let ((puppet (mp-puppet-get-proc)))
+      (let ((puppet *mp-puppet*))
         (when (and puppet
                    (nonzero? puppet)
                    (-> puppet root)

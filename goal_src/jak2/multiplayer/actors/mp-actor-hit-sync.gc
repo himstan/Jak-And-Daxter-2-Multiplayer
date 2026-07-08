@@ -327,7 +327,7 @@
       (when (mp-actor-remote-attacker-blocked? attacker remote-replay?)
         (return 'block)
         )
-      (let ((puppet (mp-puppet-get-proc)))
+      (let ((puppet *mp-puppet*))
         (when (and (not remote-replay?)
                    puppet
                    (nonzero? puppet)

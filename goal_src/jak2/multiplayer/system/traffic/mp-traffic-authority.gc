@@ -4,7 +4,7 @@
 (defun mp-traffic-local-interest-pos ()
   "Return the local position traffic authority should reason about."
   (when *mp-spectator-countdown-active?*
-    (let ((puppet (mp-puppet-get-proc)))
+    (let ((puppet *mp-puppet*))
       (when (and puppet
                  (nonzero? puppet)
                  (-> puppet root)

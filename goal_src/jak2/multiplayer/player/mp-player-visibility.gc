@@ -12,7 +12,7 @@
               (logclear! (-> *target* draw status) (if (mp-is-jak?) (draw-control-status no-draw no-draw-bounds2) (draw-control-status no-draw no-draw-bounds))))
 
           ;; 2. Remote Puppet Visibility (Clearing no-draw stuck from target-continue)
-          (let ((puppet (mp-puppet-get-proc)))
+          (let ((puppet *mp-puppet*))
             (when (and puppet (nonzero? puppet) (-> puppet draw) (nonzero? (-> puppet draw)))
               ;; Always ensure the puppet's Jak model is drawn if it exists
               (logclear! (-> puppet draw status) (if (mp-is-jak?) (draw-control-status no-draw no-draw-bounds) (draw-control-status no-draw no-draw-bounds2)))
@@ -21,7 +21,7 @@
           )
         (begin
           ;; HIDE puppets during movies
-          (let ((puppet (mp-puppet-get-proc)))
+          (let ((puppet *mp-puppet*))
             (when (and puppet (nonzero? puppet) (-> puppet draw))
               (logior! (-> puppet draw status) (draw-control-status no-draw))
               )
@@ -44,7 +44,7 @@
         )
 
       ;; Puppet Sidekick (The Daxter on the remote Jak puppet's shoulder)
-      (let ((puppet (mp-puppet-get-proc)))
+      (let ((puppet *mp-puppet*))
         (when (and puppet (nonzero? puppet) (-> puppet sidekick) (nonzero? (-> puppet sidekick)))
           (let ((sk (the-as sidekick (ppointer->process (-> puppet sidekick)))))
             (when (and sk (nonzero? sk) (-> sk draw) (nonzero? (-> sk draw)))

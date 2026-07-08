@@ -745,7 +745,7 @@
 (defun mp-event-handler-change-mode-darkjak ((aid uint))
   "Remote player activated Dark Jak! Force visual transform on local puppet (Client only)."
   (when (and (mp-is-daxter?) (not (mp-is-jak?)))
-    (let ((puppet (mp-puppet-get-proc)))
+    (let ((puppet *mp-puppet*))
       (when puppet
         (format 0 "[MP-WorldEvent] Remote player activated Dark Jak! Triggering engine change-mode...~%")
         (send-event puppet 'change-mode 'darkjak #f (darkjak-stage active))
@@ -757,7 +757,7 @@
 (defun mp-event-handler-end-mode-darkjak ((aid uint))
   "Remote player deactivated Dark Jak! Force visual reversion on local puppet (Client only)."
   (when (and (mp-is-daxter?) (not (mp-is-jak?)))
-    (let ((puppet (mp-puppet-get-proc)))
+    (let ((puppet *mp-puppet*))
       (when puppet
         (format 0 "[MP-WorldEvent] Remote player deactivated Dark Jak! Triggering engine change-mode...~%")
         (send-event puppet 'change-mode 'normal #t)

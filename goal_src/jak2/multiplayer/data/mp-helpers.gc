@@ -255,7 +255,7 @@
 (defun mp-is-remote-attacker? ((proc process))
   "Is the process either the remote puppet or in its parentage (e.g., projectile)?"
   (if (or (not proc) (zero? proc)) (return #f))
-  (let ((puppet (mp-puppet-get-proc)))
+  (let ((puppet *mp-puppet*))
     (if (not puppet) (return #f))
     (let ((curr proc))
       (while (and curr (nonzero? curr))

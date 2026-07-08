@@ -30,7 +30,7 @@
     (logior! (-> self focus-status) (focus-status indax ignore))
     (logior! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
     (when (mp-is-daxter?)
-      (let ((jak-proc (mp-puppet-get-proc)))
+      (let ((jak-proc *mp-puppet*))
         (mp-ride-along-sync-camera-target! self jak-proc)
         )
       )
@@ -57,7 +57,7 @@
   :trans (behavior ()
     (if (mp-is-daxter?)
             (set! *local-riding?* #t))
-    (let ((jak-proc (if (mp-is-jak?) *target* (mp-puppet-get-proc))))
+    (let ((jak-proc (if (mp-is-jak?) *target* *mp-puppet*)))
             (when jak-proc
                 (quaternion-copy! (-> self control quat) (-> jak-proc control quat))
                 (quaternion-copy! (-> self control dir-targ) (-> jak-proc control quat))
@@ -100,7 +100,7 @@
     (set! (-> self control gspot-pos quad) (-> self control trans quad))
     (do-joint-math (-> self draw) (-> self node-list) (-> self skel))
     
-    (let ((jak-proc (if (mp-is-jak?) *target* (mp-puppet-get-proc))))
+    (let ((jak-proc (if (mp-is-jak?) *target* *mp-puppet*)))
       (when (mp-is-daxter?)
         (mp-ride-along-sync-camera-target! self jak-proc)
         )
@@ -154,7 +154,7 @@
     (until (ja-done? 0)
       (let ((progress (/ (ja-frame-num 0) (the float (ja-num-frames 0)))))
         (let ((target-pos (new 'stack-no-clear 'vector)))
-           (let ((jak-proc (if (mp-is-jak?) *target* (mp-puppet-get-proc))))
+           (let ((jak-proc (if (mp-is-jak?) *target* *mp-puppet*)))
              (if jak-proc
                  (if (and (nonzero? (-> jak-proc node-list)) (> (-> jak-proc node-list length) 23) (nonzero? (-> jak-proc node-list data 23 bone)))
                      (vector-copy! target-pos (-> jak-proc node-list data 23 bone transform trans))

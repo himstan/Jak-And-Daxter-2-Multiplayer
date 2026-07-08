@@ -93,7 +93,7 @@
 
 (defun hoverboard-training-manager-get-ride-target ()
   (if (and *multi-sync-enabled?* (mp-is-daxter?) *local-riding?*)
-      (let ((ride-target (mp-puppet-get-proc)))
+      (let ((ride-target *mp-puppet*))
         (if (and ride-target (nonzero? ride-target))
             ride-target
             (the-as target #f)

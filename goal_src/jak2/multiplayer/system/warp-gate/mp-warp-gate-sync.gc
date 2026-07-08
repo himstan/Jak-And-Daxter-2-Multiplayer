@@ -55,7 +55,7 @@
                                   (phase uint)
                                   (as-indax? symbol)
                                   (evt mp-warp-gate-event))
-  (let ((puppet (mp-puppet-get-proc))
+  (let ((puppet *mp-puppet*)
         (target-state (mp-warp-gate-target-state phase as-indax?)))
     (when (and puppet
                (nonzero? puppet)

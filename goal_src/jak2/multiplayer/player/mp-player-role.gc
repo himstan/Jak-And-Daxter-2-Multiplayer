@@ -22,7 +22,7 @@
   (let ((loc-role (-> *local-info* role))
         (rem-role (if (mp-is-jak?) 1 0)))
     (set! (-> *local-info* player-procs loc-role) (process->handle *target*))
-    (let ((proc (mp-puppet-get-proc)))
+    (let ((proc *mp-puppet*))
       (if proc
           (set! (-> *local-info* player-procs rem-role) (process->handle proc))
           (set! (-> *local-info* player-procs rem-role) (the-as handle #f)))))

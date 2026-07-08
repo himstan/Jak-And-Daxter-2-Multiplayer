@@ -1291,7 +1291,7 @@ it returns a triangle and normal direction to push in.
     ;; hack: prevent crazy velocities.
     (when (< 1638400.0 (vector-length arg0))
       (if (= (-> this process) *mp-puppet*)
-        (let ((puppet (mp-puppet-get-proc)))
+        (let ((puppet *mp-puppet*))
           (when (and puppet (nonzero? puppet))
             (set! *mp-puppet-is-recovering?* #t)
             (deactivate puppet)

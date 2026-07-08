@@ -581,7 +581,7 @@
       (set! (-> *mp-puppet-ghost* cam-angle-y) (-> evt cam-angle-y))
       )
 
-    (let ((proc (mp-puppet-get-proc)))
+    (let ((proc *mp-puppet*))
       (when proc
         (mp-puppet-apply-weapon-state! proc *mp-puppet-ghost*)
         (mp-puppet-flush-pending-gun-shot! proc *mp-puppet-ghost*)
@@ -1227,28 +1227,9 @@
   (none)
   )
 
-(defun mp-puppet-alive? ()
-  "Returns true if the specified target is currently alive."
-  (and *mp-puppet*
-       (nonzero? *mp-puppet*)
-       (not (focus-test? *mp-puppet* inactive))
-       (-> *mp-puppet* state)
-       (nonzero? (-> *mp-puppet* state))
-       (not (= (-> *mp-puppet* state name) 'dead))
-       )
-  )
-
-(defun mp-puppet-get-proc ()
-  "Find the puppet target process if it exists."
-  (if (mp-puppet-alive?)
-      *mp-puppet*
-      (the-as target #f)
-      )
-  )
-
 (defun mp-puppet-deactivate! ()
   "Deactivate and clear the remote puppet singleton if the process is still valid."
-  (let ((puppet (mp-puppet-get-proc)))
+  (let ((puppet *mp-puppet*))
     (when (and puppet (nonzero? puppet))
       (deactivate puppet)
       )
@@ -1263,7 +1244,7 @@
 
 (defun mp-puppet-spawn ((id uint))
   "Spawn a new puppet target using native engine initialization."
-  (when (and (not (mp-puppet-alive?))
+  (when (and (not *mp-puppet*)
              *target*
              (-> *game-info* current-continue)
              ;; Safety: Don't spawn if we are in title or demo (Check next-state AND current state)

@@ -277,7 +277,7 @@
   (when *mp-gun-debug?*
     (when (and *target* (nonzero? *target*))
       (mp-draw-target-gun-debug *target* "LOCAL"))
-    (let ((puppet (mp-puppet-get-proc)))
+    (let ((puppet *mp-puppet*))
       (when (and puppet (nonzero? puppet))
         (mp-draw-target-gun-debug puppet "PUPPET")))
     )
