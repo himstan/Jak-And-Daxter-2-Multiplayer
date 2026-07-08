@@ -2,6 +2,18 @@
 (in-package goal)
 
 
+(defun is-ghost-in-pausable-state? ((rec mp-traffic-ghost-record))
+  (let ((state-name (if (and rec (-> rec ghost-state-id)) (mp-target-get-state-from-id (-> rec ghost-state-id)) #f)))
+    (is-in-pausable-state? state-name)
+    )
+  )
+
+(defun should-pause-sync? ((e enemy) (rec mp-traffic-ghost-record))
+  (or (logtest? (-> e enemy-flags) (enemy-flag stop-syncing))
+      (is-enemy-in-pausable-state? e)
+      (is-ghost-in-pausable-state? rec))
+  )
+
 (defun mp-pedestrian-terminal-state? ((target-sym symbol))
   (or (= target-sym 'knocked)
       (= target-sym 'knocked-off-vehicle)

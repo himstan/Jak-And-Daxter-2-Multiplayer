@@ -457,18 +457,18 @@
   "blocking-plane.o"
   "idle-control.o"
   "dark-eco-pool.o"
-  "joint-exploder.o" ;; moved up for vehicle-h
+  "joint-exploder.o"
   "enemy-h.o"
   "nav-enemy-h.o"
   "rigid-body-h.o"
-  "damage-number.o" ;; added
-  "statistics.o" ;; added
+  "damage-number.o"
+  "statistics.o"
   "enemy.o"
   "nav-enemy.o"
-  "nav-graph-h.o" ;; added for traffic-engine-h
-  "traffic-engine-h.o" ;; added for vehicle-h
-  "vehicle-h.o" ;; added for citizen-h
-  "citizen-h.o" ;; added for mp-helpers
+  "nav-graph-h.o"
+  "traffic-engine-h.o"
+  "vehicle-h.o"
+  "citizen-h.o"
   "base-plat.o"
   "plat.o"
   "basebutton.o"
@@ -562,13 +562,15 @@
   "mod-settings.o" ;; added ;;mod-base-change
   "mod-common-functions.o" ;; added
   "orb-placer.o"  ;; added
-  "mp-helpers.o" ;; added
+  "mp-world-events.o" ;; added
+  "mp-scene-state.o" ;; added
   "mp-player-targeting.o" ;; added
   "mp-level-sync.o" ;; added
   "mp-airlock-sync.o" ;; added
   "mp-teleport-utils.o" ;; added
   "mp-left-behind.o" ;; added
   "mp-enemy-h.o" ;; added
+  "mp-enemy-tombstone.o" ;; added
   "mp-actor-ghost-sync.o" ;; added
   "mp-actor-hit-sync.o" ;; added
   "mp-enemy-sync.o" ;; added

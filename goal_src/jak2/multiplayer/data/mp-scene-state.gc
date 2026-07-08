@@ -1,0 +1,40 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(define-extern scene-lookup (function basic scene))
+
+(defun mp-multiplayer-scene-or-load-active? ()
+  "True while local/remote cutscene or level paging state can make gameplay death/sync unsafe."
+  (the symbol
+    (or *scene-player*
+        (movie?)
+        (real-movie?)
+        (and *level*
+             (nonzero? *level*)
+             (-> *level* loading-level)
+             (-> *level* default-level)
+             (!= (-> *level* loading-level) (-> *level* default-level)))
+        (and *remote-info*
+             (nonzero? *remote-info*)
+             (nonzero? (-> *remote-info* scene-active)))
+        )
+    )
+  )
+
+(defun mp-scene-sync-active-or-pending? ()
+  "True while local or remote scene sync still owns actors, grabs, or level paging."
+  (the symbol
+    (or (mp-multiplayer-scene-or-load-active?)
+        *mp-pending-scene-sync?*
+        )
+    )
+  )
+
+(defun mp-should-suppress-local-endlessfall? ()
+  "Suppress bogus player endlessfall while MP cutscene/level transitions own the world."
+  (the symbol
+    (and *multi-sync-enabled?*
+         (= (pc-multi-get-status) 6)
+         (mp-multiplayer-scene-or-load-active?))
+    )
+  )

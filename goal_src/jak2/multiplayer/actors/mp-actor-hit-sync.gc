@@ -5,6 +5,95 @@
 ;; entity-specific authority and event-send policy in the caller modules.
 
 (define *mp-actor-remote-attack-event* (the-as mp-actor-attack-event #f))
+(define *mp-current-remote-hit-sound-id* (the-as uint32 0))
+
+(defun mp-hit-sound-id-from-attack-mode ((mode symbol))
+  "Map a target attack mode to the connect sound played by target-send-attack."
+  (cond
+    ((or (= mode 'spin) (= mode 'spin-air))
+     (the-as uint (mp-hit-sound-id spin))
+     )
+    ((or (= mode 'punch) (= mode 'flip) (= mode 'flut-attack))
+     (the-as uint (mp-hit-sound-id punch))
+     )
+    ((= mode 'uppercut)
+     (the-as uint (mp-hit-sound-id uppercut))
+     )
+    ((or (= mode 'flop) (= mode 'flop-down))
+     (the-as uint (mp-hit-sound-id flop))
+     )
+    ((= mode 'board-spin)
+     (the-as uint (mp-hit-sound-id board-spin))
+     )
+    ((= mode 'mech-punch)
+     (the-as uint (mp-hit-sound-id mech-punch))
+     )
+    (else
+     (the-as uint (mp-hit-sound-id spin))
+     )
+    )
+  )
+
+(defun mp-hit-sound-id-from-attack-info ((info attack-info))
+  (if (and info (nonzero? info))
+      (mp-hit-sound-id-from-attack-mode (-> info mode))
+      (the-as uint (mp-hit-sound-id spin))
+      )
+  )
+
+(defun mp-play-remote-hit-sound! ((e-proc enemy) (hit-sound-id uint))
+  "Play the initiator-side hit connect sound for an accepted remote-player hit."
+  (when (and e-proc (nonzero? e-proc))
+    (case hit-sound-id
+      (((the-as uint (mp-hit-sound-id punch)))
+       (sound-play-by-spec (static-sound-spec "punch-hit" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> e-proc root trans))
+       )
+      (((the-as uint (mp-hit-sound-id uppercut)))
+       (sound-play-by-spec (static-sound-spec "uppercut-hit" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> e-proc root trans))
+       )
+      (((the-as uint (mp-hit-sound-id flop)))
+       (sound-play-by-spec (static-sound-spec "flop-hit" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> e-proc root trans))
+       )
+      (((the-as uint (mp-hit-sound-id board-spin)))
+       (sound-play-by-spec (static-sound-spec "board-impact" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> e-proc root trans))
+       )
+      (((the-as uint (mp-hit-sound-id mech-punch)))
+       (sound-play-by-spec (static-sound-spec "mech-punch-hit" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> e-proc root trans))
+       )
+      (else
+       (sound-play-by-spec (static-sound-spec "spin-hit" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> e-proc root trans))
+       )
+      )
+    )
+  (none)
+  )
+
+(defun mp-is-local-attacker? ((proc process))
+  "Is the process either the local target or in its parentage (e.g., projectile)?"
+  (if (or (not proc) (zero? proc)) (return #f))
+  (let ((curr proc))
+    (while (and curr (nonzero? curr))
+      (if (= curr *target*) (return #t))
+      (set! curr (if (and (-> curr parent) (nonzero? (-> curr parent))) (the-as process (ppointer->process (-> curr parent))) (the-as process #f)))
+      )
+    )
+  #f
+  )
+
+(defun mp-is-remote-attacker? ((proc process))
+  "Is the process either the remote puppet or in its parentage (e.g., projectile)?"
+  (if (or (not proc) (zero? proc)) (return #f))
+  (let ((puppet *mp-puppet*))
+    (if (not puppet) (return #f))
+    (let ((curr proc))
+      (while (and curr (nonzero? curr))
+        (if (= curr puppet) (return #t))
+        (set! curr (if (and (-> curr parent) (nonzero? (-> curr parent))) (the-as process (ppointer->process (-> curr parent))) (the-as process #f)))
+        )
+      )
+    )
+  #f
+  )
 
 (defun mp-actor-event-attack-info ((msg event-message-block))
   "Return the attack-info payload from an event-message-block, or #f."

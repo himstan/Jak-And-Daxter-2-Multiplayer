@@ -1762,7 +1762,7 @@
   (ja-channel-push! 1 0)
   (cond
     ((and (not (task-node-open? (game-task-node stadium-board1-training-judge)))
-          (mp-stadium-board1-both-tutorials-done?)
+          (logtest? (-> *game-info* features) (game-feature board))
           )
      (let ((a0-15 (-> this skel root-channel 0)))
        (set! (-> a0-15 frame-group) (the-as art-joint-anim (-> this draw art-group data 2)))

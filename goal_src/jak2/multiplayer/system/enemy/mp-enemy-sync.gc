@@ -4,6 +4,55 @@
 (define-extern mp-get-enemy-auth (function uint mp-enemy-auth-record))
 (define-extern mp-get-free-enemy-auth (function mp-enemy-auth-record))
 
+(defun is-in-pausable-state? ((state-name symbol))
+  (case state-name
+    (('knocked 'get-up-front 'get-up-back 'die 'die-falling 'die-fast)
+     #t
+     )
+    (else #f)
+    )
+  )
+
+(defun is-enemy-in-pausable-state? ((e enemy))
+  (let ((state-name (if (-> e state) (-> e state name) #f)))
+    (is-in-pausable-state? state-name)
+    )
+  )
+
+(defun mp-enemy-death-presentation-active? ((e enemy))
+  "True once a loaded enemy should finish its local death presentation."
+  (and e
+       (nonzero? e)
+       (or (logtest? (-> e enemy-flags) (enemy-flag death-start mp-synced-death stop-syncing))
+           (is-enemy-in-pausable-state? e))
+       )
+  )
+
+(defun mp-enemy-get-death-hint ((e-proc enemy))
+  "Capture the visual death path the owner is starting."
+  (when (and e-proc (nonzero? e-proc))
+    (let ((cur-state (if (-> e-proc state) (-> e-proc state name) #f))
+          (info (-> e-proc enemy-info)))
+      (cond
+        ((= cur-state 'die-fast)
+         (mp-enemy-death-hint die-fast)
+         )
+        ((and info (nonzero? info)
+              (-> info use-die-falling)
+              (or (= cur-state 'die-falling)
+                  (= cur-state 'knocked)
+                  (= cur-state 'knocked-vicinity)
+                  (!= (-> e-proc incoming knocked-type) (knocked-type knocked-type-0))))
+         (mp-enemy-death-hint die-falling)
+         )
+        (else
+         (mp-enemy-death-hint die)
+         )
+        )
+      )
+    )
+  )
+
 ;; --- State ID Mapping ---
 
 (defun mp-enemy-get-state-id ((e-proc enemy))
