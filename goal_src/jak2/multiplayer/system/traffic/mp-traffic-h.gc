@@ -6,8 +6,6 @@
 (declare-type vehicle-rider process-focusable)
 
 ;; Forward-declare civilian pedestrian subtypes (defined in cwi.gd).
-;; Needed so mp-apply-traffic-hijacks can patch their method tables at runtime,
-;; after cwi.gd has loaded and these types exist.
 (declare-type civilian citizen)
 (declare-type citizen-norm civilian)
 (declare-type citizen-rebel citizen-norm)

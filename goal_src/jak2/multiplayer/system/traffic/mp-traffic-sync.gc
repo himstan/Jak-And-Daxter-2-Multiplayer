@@ -744,10 +744,6 @@
                )
             )
           (begin
-            ;; Re-apply hijacks each frame until cwi.gd subtypes are patched.
-            ;; Phase 1 (citizen) is a no-op after the first call; Phase 2 retries
-            ;; until civilian/citizen-norm/fat/chick symbols become non-null.
-            (mp-apply-traffic-hijacks)
             (mp-vehicle-apply-hijacks)
             ;; Apply piggybacked vehicle data only when this client has a valid city traffic context.
             (when (or (mp-is-traffic-authoritative?)

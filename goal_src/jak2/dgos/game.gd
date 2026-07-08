@@ -579,7 +579,6 @@
   "mp-vehicle-authoritative.o" ;; added
   "mp-mission-vehicles.o" ;; added
   "mp-vehicle-puppet.o" ;; added
-  "mp-traffic-hijacks.o" ;; added
   "mp-traffic-sync.o" ;; added
   "mp-traffic-debug.o" ;; added
   "mp-enemy-debug.o" ;; added  

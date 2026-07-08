@@ -490,7 +490,7 @@
 
 (defun mp-pedestrian-apply-ghost-state ((proc citizen) (slot mp-pedestrian-state))
   "Update the ghost record for a pedestrian from the latest remote data.
-   The actual position correction runs each frame via mp-citizen-common-post-hijack."
+   The actual position correction runs each frame from citizen common-post."
   ;; 1. Find or allocate ghost record
   (let ((rec (mp-get-traffic-ghost (-> slot net-id))))
     (when (not rec)

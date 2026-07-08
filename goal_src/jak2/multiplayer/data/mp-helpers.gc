@@ -714,9 +714,6 @@
   ;; 2. Vehicle Hijacks
   (mp-vehicle-apply-hijacks)
 
-  ;; 3. Traffic Ghost Correction Hijacks (citizen common-post)
-  (mp-apply-traffic-hijacks)
-
   (none))
 
 (defun mp-send-world-event ((etype uint) (aid uint))

@@ -5,6 +5,10 @@
 ;; name in dgo: citizen
 ;; dgos: CWI
 
+(define-extern mp-pedestrian-run-common-post-pre! (function citizen none))
+(define-extern mp-pedestrian-run-common-post-post! (function citizen none))
+(define-extern mp-pedestrian-handle-event! (function citizen process int symbol event-message-block symbol))
+
 ;; DECOMP BEGINS
 
 (define *citizen-debug* #f)
@@ -273,6 +277,14 @@
 (defmethod general-event-handler ((this citizen) (arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   "Handles various events for the enemy
    @TODO - unsure if there is a pattern for the events and this should have a more specific name"
+  (let ((mp-result (mp-pedestrian-handle-event! this arg0 arg1 arg2 arg3)))
+    (when (= mp-result 'block)
+      (return #f)
+      )
+    (when (= mp-result 'handled)
+      (return #t)
+      )
+    )
   (case arg2
     (('hit 'hit-flinch 'hit-knocked)
      (let ((v1-1 #f))
@@ -410,6 +422,7 @@
    - tracks when the enemy was last drawn
    - looks at the target and handles attacking
    @TODO Not extremely well understood yet"
+  (mp-pedestrian-run-common-post-pre! this)
   (when (< (-> this next-time-look-at) (current-time))
     (when (nonzero? (-> this neck))
       (let ((a0-4 (handle->process (-> this focus handle))))
@@ -488,6 +501,7 @@
       )
     )
   (ja-post)
+  (mp-pedestrian-run-common-post-post! this)
   0
   (none)
   )

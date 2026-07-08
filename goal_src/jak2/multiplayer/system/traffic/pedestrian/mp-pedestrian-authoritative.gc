@@ -109,6 +109,32 @@
 
 ;; --- Pedestrian Packing (Authoritative Side) ---
 
+(defun mp-pedestrian-apply-remote-attack! ((evt mp-actor-attack-event))
+  "Apply a client-requested pedestrian hit on the traffic authority."
+  (let ((e-proc (mp-pedestrian-find-by-net-id (-> evt net-id))))
+    (when (and e-proc (nonzero? e-proc))
+      (let ((rec (mp-get-traffic-ghost (-> evt net-id))))
+        (when (and rec
+                   (nonzero? (-> evt attack-id))
+                   (= (-> evt attack-id) (-> rec last-attack-id)))
+          (format 0 "[MP-Traffic] Blocking duplicate remote attack ID ~D on nid=~D~%" (-> evt attack-id) (-> evt net-id))
+          (return #f)
+          )
+        (let ((attacker (mp-get-remote-target-process)))
+          (when (not (mp-actor-apply-authoritative-remote-damage! (the-as enemy e-proc) attacker evt 'pedestrian))
+            (return #f)
+            )
+          (when (and rec
+                     (nonzero? (-> evt attack-id)))
+            (set! (-> rec last-attack-id) (-> evt attack-id))
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
 (defun mp-pedestrian-target-aid-from-process ((focus process))
   "Encode the focused player role as 1=Host, 2=Client, or 0 if it is not a player target."
   (when (and focus (nonzero? focus))
