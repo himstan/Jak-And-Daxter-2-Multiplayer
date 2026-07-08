@@ -15,6 +15,40 @@
 (define-perm *mp-puppet-last-fresh-input-time* time-frame (the-as time-frame 0))
 (define *mp-puppet-input-stale-time* (seconds 0.2))
 
+(defun mp-reset-puppet-state! ()
+  (set! *mp-puppet-was-far?* #f)
+  (set! *mp-force-remote-puppet-for-spectate?* #f)
+  (set! *mp-puppet-pending-gun-shot?* #f)
+  (set! *mp-puppet-pending-gun-shot-weapon* (the uint 0))
+  (set! *mp-puppet-pending-gun-shot-seq* (the uint 0))
+  (set! *mp-puppet-pending-gun-shot-cam-angle-y* 0.0)
+  (set! *mp-puppet-last-packet-id* (the uint 0))
+  (set! *mp-puppet-last-fresh-input-time* (the-as time-frame 0))
+  (set! *mp-puppet-state-mismatch-count* 0)
+  (when (and *mp-puppet*
+             (nonzero? *mp-puppet*))
+    (deactivate *mp-puppet*)
+    (set! *mp-puppet* (the-as target #f))
+    )
+  (when (and *mp-puppet-ghost*
+             (nonzero? (the-as uint *mp-puppet-ghost*)))
+    (mem-set32! (the-as pointer *mp-puppet-ghost*) (/ (size-of mp-target-ghost-record) 4) 0)
+    )
+  (when (and *target*
+             (nonzero? *target*)
+             (-> *target* sidekick)
+             (nonzero? (-> *target* sidekick)))
+    (let ((sk (the-as sidekick (ppointer->process (-> *target* sidekick)))))
+      (when (and sk
+                 (nonzero? sk)
+                 (-> sk draw)
+                 (nonzero? (-> sk draw)))
+        (logclear! (-> sk draw status) (draw-control-status no-draw))
+        )
+      )
+    )
+  (none))
+
 ;; --- Puppet Sync Logic ---
 
 (defun mp-target-get-state-from-id ((id uint))

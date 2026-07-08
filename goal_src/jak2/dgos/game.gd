@@ -596,7 +596,7 @@
   "mp-task-sync-hooks.o" ;; added
   "mp-sync-state.o" ;; added
   "mp-event-handlers.o" ;; added
-  "mp-stadium-board1.o" ;; added
+  "mp-stadium-board1-patch.o" ;; added
   "mp-waypoint-sync.o" ;; added
   "mp-warp-gate-sync.o" ;; added
   "mp-events.o" ;; added
@@ -604,7 +604,9 @@
   "mp-data.o" ;; added
   "mp-remote.o" ;; added
   "mp-role.o" ;; added
-  "mp-ui.o" ;; added
+  "mp-network.o" ;; added
+  "mp-session.o" ;; added
+  "mp-demo-guard.o" ;; added
   "mp-main.o" ;; added
   "mod-custom-code.o" ;; added
   "mod-debug.o" ;; added

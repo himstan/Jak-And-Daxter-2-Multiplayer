@@ -3,6 +3,15 @@
 
 (defconstant MP_REMOTE_PLAYER_MARKER_KEY (the-as int #x4d50524d))
 
+(defun mp-reset-remote-marker-state! ()
+  (when (and *minimap*
+             (nonzero? *minimap*)
+             (-> *minimap* engine)
+             (nonzero? (-> *minimap* engine)))
+    (kill-by-key (-> *minimap* engine) MP_REMOTE_PLAYER_MARKER_KEY)
+    )
+  (none))
+
 (defun mp-update-remote-transform ()
   "Consolidated logic for calculating the remote player's visual and physical transform"
   (when (not (and *remote-info* (nonzero? *remote-info*)))

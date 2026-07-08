@@ -53,6 +53,27 @@
    )
   )
 
+(defun mp-reset-player-sync-state! ()
+  (set! *local-riding?* #f)
+  (set! *has-ridden-before?* #t)
+  (set! *remote-player-is-dying* #f)
+  (set! *remote-player-is-dead* #f)
+  (set! *mp-local-player-is-respawning* #f)
+  (set! *multi-remote-first-seen?* #t)
+  (when (and *local-info*
+             (nonzero? (the-as uint *local-info*)))
+    (mem-set32! (the-as pointer *local-info*) (/ (size-of local-player-info) 4) 0)
+    (set! (-> *local-info* role) -1)
+    )
+  (when (and *remote-info*
+             (nonzero? (the-as uint *remote-info*)))
+    (mem-set32! (the-as pointer *remote-info*) (/ (size-of remote-player-info) 4) 0)
+    )
+  (vector-reset! *multi-remote-interp-pos*)
+  (set! *multi-remote-interp-angle* 0.0)
+  (vector-reset! *multi-remote-render-pos*)
+  (none))
+
 (defun mp-extract-local-stats ()
   "Update local info with current game stats"
   (set! (-> *local-info* money) (-> *game-info* money))

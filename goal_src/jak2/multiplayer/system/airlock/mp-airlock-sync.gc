@@ -282,6 +282,25 @@
   (none)
   )
 
+(defun mp-reset-airlock-state! ()
+  (when (and *mp-airlock-buffer*
+             (nonzero? (the-as uint *mp-airlock-buffer*)))
+    (mem-set32! (the-as pointer *mp-airlock-buffer*) (/ (size-of mp-airlock-sync-buffer) 4) 0)
+    )
+  (when (and *mp-local-airlock-state*
+             (nonzero? (the-as uint *mp-local-airlock-state*)))
+    (mp-airlock-clear-table! *mp-local-airlock-state*)
+    )
+  (when (and *mp-remote-airlock-state*
+             (nonzero? (the-as uint *mp-remote-airlock-state*)))
+    (mp-airlock-clear-table! *mp-remote-airlock-state*)
+    )
+  (set! *mp-airlock-local-sequence* (the uint 0))
+  (set! *mp-airlock-last-local-airlock-aid* (the uint 0))
+  (set! *mp-airlock-last-local-state-id* (the uint 0))
+  (set! *mp-airlock-last-local-level-id* (the uint 0))
+  (none))
+
 (defun mp-airlock-set-local-state! ((airlock-aid uint) (state-id mp-airlock-state-id))
   (when (mp-airlock-ready?)
     (if (= state-id (mp-airlock-state-id none))

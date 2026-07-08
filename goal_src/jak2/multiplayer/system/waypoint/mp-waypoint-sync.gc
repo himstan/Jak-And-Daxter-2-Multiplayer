@@ -316,6 +316,14 @@
   (none)
   )
 
+(defun mp-reset-waypoint-state! ()
+  (mp-waypoint-clear-transition-buffers!)
+  (set! *mp-waypoint-last-snapshot-time* (the-as time-frame 0))
+  (set! *mp-waypoint-applying-remote?* #f)
+  (set! *mp-waypoint-sync-local-level-id* (the uint 0))
+  (set! *mp-waypoint-sync-remote-level-id* (the uint 0))
+  (none))
+
 (defun mp-waypoint-update-level-context! ()
   "Track waypoint-only level context and drop stale command buffers on changes."
   (let ((local-level-id (mp-current-active-level-id))

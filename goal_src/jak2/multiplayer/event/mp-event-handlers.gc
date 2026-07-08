@@ -1,6 +1,34 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(defun mp-reset-scene-sync-state! ()
+  (set! *multi-remote-spawn-time* (the-as time-frame 0))
+  (set! *mp-last-scene-player* #f)
+  (set! *mp-was-riding-before-scene* #f)
+  (set! *mp-pending-scene-sync?* #f)
+  (set! *mp-pending-scene-sync-next-log-time* (the-as time-frame 0))
+  (set! *mp-scene-sync-target-hold?* #f)
+  (set! *mp-scene-sync-target-hold-until* (the-as time-frame 0))
+  (when (and *mp-pending-scene-sync-name*
+             (nonzero? (the-as uint *mp-pending-scene-sync-name*)))
+    (set! (-> *mp-pending-scene-sync-name* data 0) (the uint 0))
+    )
+  (when (and *mp-pending-scene-sync-continue-name*
+             (nonzero? (the-as uint *mp-pending-scene-sync-continue-name*)))
+    (set! (-> *mp-pending-scene-sync-continue-name* data 0) (the uint 0))
+    )
+  (set! *mp-intro-skip-full-sync-pending?* #f)
+  (set! *mp-intro-skip-blackout-pending?* #f)
+  (when (and *mp-last-scene-name*
+             (nonzero? (the-as uint *mp-last-scene-name*)))
+    (set! (-> *mp-last-scene-name* data 0) (the uint 0))
+    )
+  (when (and *mp-last-local-continue-name*
+             (nonzero? (the-as uint *mp-last-local-continue-name*)))
+    (set! (-> *mp-last-local-continue-name* data 0) (the uint 0))
+    )
+  (none))
+
 ;; --- Event Handlers ---
 (defun mp-event-remote-player-respawned ((aid uint))
   (set! *remote-player-is-dying* #f)

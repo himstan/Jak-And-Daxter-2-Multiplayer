@@ -1,0 +1,98 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defun mp-network-status-ready? ((status int))
+  (if (< status 3)
+      (begin
+        (when *multi-sync-enabled?*
+          (format 0 "[MP-Network] Return Early: Status ~D, SyncEnabled? ~A~%" status *multi-sync-enabled?*)
+          )
+        #f
+        )
+      #t
+      )
+  )
+
+(defun mp-local-frame-target-ready? ()
+  (and *target*
+       (nonzero? *target*)
+       (-> *target* control)
+       (nonzero? (-> *target* control))
+       (not (focus-test? *target* teleporting)))
+  )
+
+(defun mp-network-log-active-sync! ((status int) (role int))
+  (when (and *local-info*
+             (nonzero? (the-as uint *local-info*))
+             (>= (- (current-time) *multi-last-sync-frame*) (seconds 5)))
+    (format 0 "[MP-Network] Active and Syncing! (Status ~D, Role ~D, SyncFlag ~D)~%"
+            status
+            role
+            (-> *local-info* sync-flag))
+    (set! *multi-last-sync-frame* (current-time))
+    )
+  (none))
+
+(defun mp-network-pack-local-frame! ((status int))
+  (when (and *local-info*
+             (nonzero? (the-as uint *local-info*)))
+    (let ((role (-> *local-info* role)))
+      (when (and (= status 6)
+                 (or (zero? role) *multi-sync-enabled?*))
+        (mp-extract-environment-state)
+        (when (mp-local-frame-target-ready?)
+          (mp-network-log-active-sync! status role)
+          (mp-extract-local-data)
+          (mp-push-local-events)
+          )
+        )
+      )
+    )
+  (none))
+
+(defun mp-local-state-send-tick ()
+  (when (and *local-info*
+             (nonzero? (the-as uint *local-info*)))
+    (pc-multi-send-state (the-as uint *local-info*))
+    )
+  (none))
+
+(defun mp-event-send-tick ()
+  (when (and *mp-event-buffer*
+             (nonzero? (the-as uint *mp-event-buffer*)))
+    (pc-multi-send-events (the-as uint *mp-event-buffer*))
+    )
+  (none))
+
+(defun mp-airlock-send-tick ()
+  (mp-airlock-sync-tick)
+  (none))
+
+(defun mp-enemy-send-tick ()
+  (when (and *mp-enemy-buffer*
+             (nonzero? (the-as uint *mp-enemy-buffer*)))
+    (pc-multi-send-enemies (the-as uint *mp-enemy-buffer*))
+    )
+  (none))
+
+(defun mp-traffic-send-tick ()
+  (when (and (mp-is-jak?)
+             *mp-traffic-buffer*
+             (nonzero? (the-as uint *mp-traffic-buffer*)))
+    (pc-multi-send-traffic (the-as uint *mp-traffic-buffer*))
+    )
+  (none))
+
+(defun mp-network-sync-window-tick ()
+  "Network sync window scheduler. Packs local state and sends each subsystem payload."
+  (let ((status (pc-multi-get-status)))
+    (if (not (mp-network-status-ready? status))
+        (return #f))
+    (mp-network-pack-local-frame! status)
+    (mp-local-state-send-tick)
+    (mp-event-send-tick)
+    (mp-airlock-send-tick)
+    (mp-enemy-send-tick)
+    (mp-traffic-send-tick)
+    )
+  (none))

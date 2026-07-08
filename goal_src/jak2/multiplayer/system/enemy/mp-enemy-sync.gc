@@ -850,3 +850,16 @@
   (mp-enemy-debug-draw)
   (none)
   )
+
+(defun mp-reset-enemy-state! ()
+  (set! *mp-battle-spawn-counter* (the uint 0))
+  (set! *mp-incoming-battle-spawn-aid* (the uint 0))
+  (when (and *mp-enemy-buffer*
+             (nonzero? (the-as uint *mp-enemy-buffer*)))
+    (mem-set32! (the-as pointer *mp-enemy-buffer*) (/ (size-of mp-enemy-sync-buffer) 4) 0)
+    )
+  (when (and *mp-enemy-auth*
+             (nonzero? (the-as uint *mp-enemy-auth*)))
+    (mem-set32! (the-as pointer *mp-enemy-auth*) (/ (* 128 (size-of mp-enemy-auth-record)) 4) 0)
+    )
+  (none))

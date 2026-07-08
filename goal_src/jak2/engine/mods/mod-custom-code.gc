@@ -5,61 +5,9 @@
 ;; name in dgo: mod-custom-code
 ;; dgos: TODO
 
-;; --- Multiplayer Externs ---
-(define-extern multiplayer-client-tick (function none))
-(define-extern multiplayer-network-tick (function none))
-(define-extern *dproc* process)
-(define-extern activate-progress (function process symbol none))
-
-(define *mp-open-demo-end-progress* #f)
-(define *mp-demo-end-menu-active?* #f)
-(define *mp-palace-exited-waiting?* #f)
-
-(defun mp-client-ready-to-enable-sync-on-spawn? ((status int))
-  (and *local-info*
-       (nonzero? (the-as uint *local-info*))
-       (= (-> *local-info* role) 1)
-       (= status 6)
-       (zero? (-> *local-info* sync-flag)))
-  )
-
-(defun open-demo-end-progress ()
-  (when (and *dproc* (nonzero? *dproc*))
-    (activate-progress *dproc* 'demo-end)
-    (set! *mp-demo-end-menu-active?* #t)
-    (set! *mp-palace-exited-waiting?* #f)
-  )
-)
-
-(defun demo-guard-tick ()
-  (when *mp-open-demo-end-progress*
-     (open-demo-end-progress)
-     (set! *mp-open-demo-end-progress* #f)
-  )
-
-  (when (and 
-             (not *debug-segment*)
-             *target*
-             (nonzero? *target*)
-             (task-node-closed? (game-task-node palace-boss-resolution)))
-    (let ((current-level (level-get-target-inside *level*)))
-      (when (and current-level (nonzero? current-level))
-        (let ((level-name (-> current-level name)))
-          (cond
-            ((member level-name '(palboss palroof palcab palshaft throne palent palout lbrnermk lashthrn lthrnout))
-              (set! *mp-palace-exited-waiting?* #t)
-            )
-            (else
-              (when (and *mp-palace-exited-waiting?* (not *mp-demo-end-menu-active?*))
-                (open-demo-end-progress)
-              )
-            )
-          )
-        )
-      )
-    )
-  )
-)
+;; --- Multiplayer Hook Adapters ---
+(define-extern mp-frame-tick (function none))
+(define-extern mp-on-local-spawn! (function none))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; What is this file for.
@@ -77,10 +25,7 @@ an orb |#
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun runs-every-frame ()
-  ;; --- Multiplayer Tick ---
-  ;; Runs Polling, Interpolation, and high-frequency state logic
-  (multiplayer-client-tick)
-  (demo-guard-tick)
+  (mp-frame-tick)
   (none)
   )
 
@@ -131,75 +76,7 @@ an orb |#
 
 (defun runs-on-jak-spawn ()
   ;; Code here runs every time jak spawns (loading a file new game or death)
-  (set! *mp-demo-end-menu-active?* #f)
-  (set! *mp-palace-exited-waiting?* #f)
-  ;; Update status to IN_GAME (6) if we are connected and fully synced
-  (let ((status (pc-multi-get-status)))
-    (cond
-      ((and *local-info*
-            (nonzero? (the-as uint *local-info*))
-            (= (-> *local-info* role) 1))
-       (if (mp-client-ready-to-enable-sync-on-spawn? status)
-           (begin
-             (set! *multi-sync-enabled?* #t)
-             (format 0 "[GOAL] Client spawned in-game after full sync. Enabling multiplayer sync.~%")
-             )
-           (begin
-             (set! *multi-sync-enabled?* #f)
-             (format 0 "[GOAL] Client spawned before full sync completion. Keeping multiplayer sync disabled.~%")
-             )
-           )
-       )
-      (else
-       (set! *multi-sync-enabled?* #t)
-       (format 0 "[GOAL] Jak spawned! Enabling multiplayer sync.~%")
-       )
-      )
-    (when (>= status 3)
-      (if (mp-is-jak?)
-          (begin
-            (pc-multi-set-status 6)
-            (set! *multi-last-send-time* 0)
-            (mp-arm-mission-failed-full-sync-after-spawn)
-            )
-          (begin
-            ;; Client side: only update/arm if we are already in-game and finished full sync
-            (when (and *local-info* (nonzero? *local-info*) (= status 6) (zero? (-> *local-info* sync-flag)))
-              (set! *multi-last-send-time* 0)
-              (mp-arm-mission-failed-full-sync-after-spawn)
-              )
-            )
-          )
-      )
-
-    ;; Only auto-initialize if we aren't already connected/connecting
-    (when (zero? status)
-      (let ((host-arg (pc-multi-get-command-line-arg "-mp-host"))
-            (client-arg (pc-multi-get-command-line-arg "-mp-client")))
-        (cond
-          ;; 1. Priority: CLI Host Flag
-          ((and host-arg (nonzero? (-> host-arg allocated-length)))
-           (format 0 "[MP-Auto] Hosting via CLI argument.~%")
-           (pc-multi-setup-host)
-           (pc-multi-set-status 6)
-           (set! (-> *local-info* sync-flag) (the-as uint 1))
-           )
-          ;; 2. Priority: CLI Client Flag
-          ((and client-arg (nonzero? (-> client-arg allocated-length)))
-           (format 0 "[MP-Auto] Connecting via CLI argument.~%")
-           (pc-multi-setup-client client-arg 26210)
-           )
-
-          ;; 3. Priority: Saved Setting
-          ((-> *pc-settings* mp-hosting-mode?)
-           (format 0 "[MP-Host] Hosting mode active (from settings). Initializing server...~%")
-           (pc-multi-setup-host)
-           (set! (-> *local-info* sync-flag) (the-as uint 1))
-           )
-          )
-        )
-      )
-    )
+  (mp-on-local-spawn!)
 
   (none)
   )

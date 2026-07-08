@@ -1,0 +1,59 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: mp-demo-guard.gc
+;; name in dgo: mp-demo-guard
+
+(define-extern *dproc* process)
+(define-extern activate-progress (function process symbol none))
+
+(define *mp-open-demo-end-progress* #f)
+(define *mp-demo-end-menu-active?* #f)
+(define *mp-palace-exited-waiting?* #f)
+
+(defun mp-demo-guard-on-local-spawn! ()
+  (set! *mp-demo-end-menu-active?* #f)
+  (set! *mp-palace-exited-waiting?* #f)
+  (none))
+
+(defun mp-open-demo-end-progress! ()
+  (when (and *dproc* (nonzero? (the-as uint *dproc*)))
+    (activate-progress *dproc* 'demo-end)
+    (set! *mp-demo-end-menu-active?* #t)
+    (set! *mp-palace-exited-waiting?* #f)
+    )
+  (none))
+
+(defun mp-palace-demo-end-level? ((level-name symbol))
+  (member level-name '(palboss palroof palcab palshaft throne palent palout lbrnermk lashthrn lthrnout))
+  )
+
+(defun mp-demo-guard-check-palace-exit! ()
+  (when (and (not *debug-segment*)
+             *target*
+             (nonzero? (the-as uint *target*))
+             *level*
+             (nonzero? (the-as uint *level*))
+             (task-node-closed? (game-task-node palace-boss-resolution)))
+    (let ((current-level (level-get-target-inside *level*)))
+      (when (and current-level (nonzero? (the-as uint current-level)))
+        (let ((level-name (-> current-level name)))
+          (if (mp-palace-demo-end-level? level-name)
+              (set! *mp-palace-exited-waiting?* #t)
+              (when (and *mp-palace-exited-waiting?* (not *mp-demo-end-menu-active?*))
+                (mp-open-demo-end-progress!)
+                )
+              )
+          )
+        )
+      )
+    )
+  (none))
+
+(defun mp-demo-guard-tick ()
+  (when *mp-open-demo-end-progress*
+    (mp-open-demo-end-progress!)
+    (set! *mp-open-demo-end-progress* #f)
+    )
+  (mp-demo-guard-check-palace-exit!)
+  (none))
