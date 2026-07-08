@@ -1,0 +1,118 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defun mp-traffic-local-interest-pos ()
+  "Return the local position traffic authority should reason about."
+  (when *mp-spectator-countdown-active?*
+    (let ((puppet (mp-puppet-get-proc)))
+      (when (and puppet
+                 (nonzero? puppet)
+                 (-> puppet root)
+                 (nonzero? (-> puppet root)))
+        (return (-> puppet root trans))
+        )
+      )
+    (when (and *multi-remote-render-pos*
+               (nonzero? *multi-remote-render-pos*))
+      (return *multi-remote-render-pos*)
+      )
+    )
+  (when (and *target*
+             (nonzero? *target*)
+             (-> *target* control)
+             (nonzero? (-> *target* control)))
+    (return (-> *target* control trans))
+    )
+  #f
+  )
+
+(defun mp-traffic-authority-distance ()
+  "Distance between the local traffic interest point and remote player."
+  (when (or *remote-player-is-dead* *remote-player-is-dying*)
+    (return 0.0)
+    )
+  (let ((local-pos (mp-traffic-local-interest-pos)))
+    (if (and local-pos
+             (nonzero? local-pos)
+             *multi-remote-render-pos*
+             (nonzero? *multi-remote-render-pos*))
+        (vector-vector-distance (the-as vector local-pos) *multi-remote-render-pos*)
+        1000000000.0
+        )
+    )
+  )
+
+(defun mp-update-traffic-authority ()
+  "Determine who owns the open-world traffic and suppress local spawning if needed"
+  (let ((is-active? (nonzero? (pc-multi-get-status))))
+    (if (or (not is-active?) (not *traffic-manager*) (zero? *traffic-manager*))
+        (begin ;; Offline, fallback, or no active traffic manager
+          (set! *mp-traffic-suppressed* #f)
+          (set! *mp-traffic-sync-active* #f)
+          (set! *mp-traffic-host-spawning-active* #f)
+          )
+        (begin
+          (let ((was-suppressed? *mp-traffic-suppressed*))
+            ;; GLOBAL HOST RESET: Ensure Host never has suppressed traffic
+            (if (mp-is-jak?) ;; Host Side
+                (set! *mp-traffic-suppressed* #f)
+                )
+            (if (mp-is-daxter?) ;; Client Side
+                (when (not (and *target* (nonzero? *target*) (-> *target* control) (nonzero? (-> *target* control))))
+                  (set! *mp-traffic-suppressed* #t)
+                  )
+                )
+            (let ((dist (mp-traffic-authority-distance)))
+
+              (if (mp-is-daxter?) ;; Client Side
+                  (begin
+                    (if *mp-traffic-sync-active*
+                        (when (> dist (meters 400.0))
+                          (set! *mp-traffic-sync-active* #f)
+                          (mp-traffic-cleanup-after-sync-exit!)
+                          )
+                        (begin
+                          (when (< dist (meters 400.0))
+                            (set! *mp-traffic-sync-active* #t)
+                            )
+                          (when (< dist (meters 450.0))
+                            (mp-traffic-force-clear-local-vehicles!)
+                            )
+                          )
+                        )
+                    (cond
+                      (*mp-traffic-sync-active*
+                       (set! *mp-traffic-suppressed* #t)
+                       (set! *mp-traffic-drain-active* #t)
+                       )
+                      ((< dist (meters 500.0))
+                       (set! *mp-traffic-drain-active* #t)
+                       (set! *mp-traffic-suppressed* #t)
+                       )
+                      ((> dist (meters 550.0))
+                       (set! *mp-traffic-drain-active* #f)
+                       (set! *mp-traffic-suppressed* #f)
+                       )
+                      )
+                    )
+                  (begin ;; Host Side (mp-is-jak? was handled above for suppression)
+                    (set! *mp-traffic-host-spawning-active* #f)
+                    (if *mp-traffic-sync-active*
+                        (when (> dist (meters 400.0))
+                          (set! *mp-traffic-sync-active* #f)
+                          )
+                        (when (< dist (meters 400.0))
+                          (set! *mp-traffic-sync-active* #t)
+                          )
+                        )
+                    )
+                  )
+              )
+            (when (and was-suppressed? (not *mp-traffic-suppressed*) (not *mp-traffic-sync-active*))
+              (mp-traffic-refill-local-active-cells!)
+              )
+            )
+          )
+        )
+    )
+  (none))

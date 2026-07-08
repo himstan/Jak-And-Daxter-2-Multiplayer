@@ -41,7 +41,7 @@
   )
 
 (defun mp-palace-squid-remote-player-valid? ()
-  (let ((remote (mp-get-remote-target-process)))
+  (let ((remote *mp-puppet*))
     (and remote
          (nonzero? remote)
          (-> remote root)
@@ -52,7 +52,7 @@
   )
 
 (defun mp-palace-squid-target-pos! ((proc squid) (out vector))
-  (let ((remote (mp-get-remote-target-process))
+  (let ((remote *mp-puppet*)
         (local-ok? (mp-palace-squid-local-player-valid?))
         (remote-ok? (mp-palace-squid-remote-player-valid?))
         )
@@ -309,7 +309,7 @@
         (send-event
           proc
           'attack
-          (mp-get-remote-target-process)
+          *mp-puppet*
           (static-attack-info ((id (-> evt param0)) (mode 'mp-hit-remote) (shove-back (meters 2)) (shove-up (meters 0.5)))))
         (set! *mp-processing-remote-event* #f)
         )

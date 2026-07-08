@@ -1,0 +1,142 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(define *mp-spectating?* #f)
+(define *mp-spectator-countdown-active?* #f)
+
+(defun mp-valid-remote-spectate-puppet? ((puppet target))
+  "True when the remote puppet can safely be used as a camera target."
+  (and puppet
+       (nonzero? puppet)
+       (-> puppet root)
+       (nonzero? (-> puppet root))
+       (-> puppet control)
+       (nonzero? (-> puppet control))
+       )
+  )
+
+(defun mp-prepare-remote-spectate-target! ()
+  "Request the remote level and return a safe puppet target for death spectate."
+  (let ((dead? (and *target*
+                    (nonzero? *target*)
+                    (-> *target* state)
+                    (nonzero? (-> *target* state))
+                    (mp-target-death-state? (-> *target* state name)))))
+    (if (not (and dead?
+                  *mp-spectator-countdown-active?*
+                  (not *remote-player-is-dead*)
+                  (not *remote-player-is-dying*)
+                  *remote-info*
+                  (nonzero? *remote-info*)
+                  (>= (-> *remote-info* status) 4)))
+        (begin
+          (set! *mp-force-remote-puppet-for-spectate?* #f)
+          (return (the-as process-focusable #f))
+          )
+        )
+
+    (mp-ensure-remote-level-wanted!)
+    (if (or (zero? (-> *remote-info* level))
+            (not (mp-remote-level-ready?)))
+        (begin
+          (set! *mp-force-remote-puppet-for-spectate?* #f)
+          (return (the-as process-focusable #f))
+          )
+        )
+
+    (set! *mp-force-remote-puppet-for-spectate?* #t)
+    (let ((puppet (mp-puppet-get-proc)))
+      (if (mp-valid-remote-spectate-puppet? puppet)
+          (the-as process-focusable puppet)
+          (the-as process-focusable #f)
+          )
+      )
+    )
+  )
+
+(defun mp-region-target-pos ()
+  "Return the target-region position, following the remote puppet while death-spectating."
+  (when *mp-spectator-countdown-active?*
+    (let ((puppet (mp-puppet-get-proc)))
+      (when (and puppet
+                 (nonzero? puppet)
+                 (-> puppet root)
+                 (nonzero? (-> puppet root)))
+        (return (-> puppet root trans))
+        )
+      )
+    (when (and *multi-remote-render-pos*
+               (nonzero? *multi-remote-render-pos*))
+      (return *multi-remote-render-pos*)
+      )
+    )
+  (target-pos 0)
+  )
+
+;; --- Spectator Mode / Death Logic ---
+(defun mp-update-death-spectate ()
+  "Update spectator camera targets and snap positioning when dead."
+  (let ((dead? (and *target*
+                    (nonzero? *target*)
+                    (-> *target* state)
+                    (nonzero? (-> *target* state))
+                    (mp-target-death-state? (-> *target* state name)))))
+    (cond
+      ((and dead? *mp-spectator-countdown-active?*)
+       (when (not *mp-spectating?*)
+         ;; Just died & countdown started! Set camera target to the remote player puppet
+         (let ((rem-proc (mp-prepare-remote-spectate-target!)))
+           (when (and rem-proc (nonzero? rem-proc) (-> rem-proc root) (nonzero? (-> rem-proc root)))
+             (format 0 "[MP] Player died & countdown started. Switching camera focus to remote puppet.~%")
+             (send-event *camera* 'change-target rem-proc)
+             ;; Teleport camera to remote puppet to snap instantly
+             (when (and (-> *target* control) (nonzero? (-> *target* control)))
+               (vector-copy! (-> *target* control camera-pos) (-> rem-proc root trans))
+               )
+             (when (and *camera* (nonzero? *camera*))
+               (send-event *camera* 'teleport)
+               )
+             (set! *mp-spectating?* #t)
+             )
+           )
+         )
+       ;; While spectating, snap the camera if it gets too far away
+       (when *mp-spectating?*
+         (let ((rem-proc (mp-prepare-remote-spectate-target!)))
+           (when (and rem-proc (nonzero? rem-proc) (-> rem-proc root) (nonzero? (-> rem-proc root)))
+             (let ((cam-dist (vector-vector-distance (-> *math-camera* trans) (-> rem-proc root trans))))
+               (when (> cam-dist (meters 100.0))
+                 (format 0 "[MP] Spectator camera too far (~F meters). Snapping to remote player.~%" (/ cam-dist (meters 1.0)))
+                 (when (and (-> *target* control) (nonzero? (-> *target* control)))
+                   (vector-copy! (-> *target* control camera-pos) (-> rem-proc root trans))
+                   )
+                 (when (and *camera* (nonzero? *camera*))
+                   (send-event *camera* 'teleport)
+                   )
+                 )
+               )
+             )
+           )
+         )
+       )
+      (else
+       (when *mp-spectating?*
+         ;; Just respawned! Restore camera target to local target
+         (format 0 "[MP] Player respawned. Restoring camera focus to local target.~%")
+         (send-event *camera* 'change-target *target*)
+         ;; Teleport camera back to local target instantly
+         (when (and (-> *target* control) (nonzero? (-> *target* control)))
+           (vector-copy! (-> *target* control camera-pos) (-> *target* control trans))
+           )
+         (when (and *camera* (nonzero? *camera*))
+           (send-event *camera* 'teleport)
+           )
+         (set! *mp-spectating?* #f)
+         )
+       (set! *mp-spectator-countdown-active?* #f)
+       (set! *mp-force-remote-puppet-for-spectate?* #f)
+       )
+      )
+    )
+  (none)
+  )

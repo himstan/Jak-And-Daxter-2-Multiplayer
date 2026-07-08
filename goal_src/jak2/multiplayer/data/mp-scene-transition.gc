@@ -1,0 +1,65 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defun mp-teleport-to-remote ()
+  (when (and *target*
+             (nonzero? *target*)
+             (-> *target* control)
+             (nonzero? (-> *target* control))
+             *remote-info*
+             (nonzero? *remote-info*))
+    (set! (-> *target* control trans x) (-> *remote-info* x))
+    (set! (-> *target* control trans y) (-> *remote-info* y))
+    (set! (-> *target* control trans z) (-> *remote-info* z))
+    (set! (-> *target* control camera-pos quad) (-> *target* control trans quad))
+    (when (and *camera* (nonzero? *camera*))
+      (send-event *camera* 'teleport)
+      )
+    )
+  (none)
+  )
+
+(defun mp-restore-local-target-after-scene! ()
+  "Restore the local target's role-specific base state after a scene ends."
+  (when (and *target* (nonzero? *target*))
+    (if *mp-was-riding-before-scene*
+        (begin
+          (format 0 "[MP] Scene ended. Restoring ride-along state...~%")
+          (set! *has-ridden-before?* #f)
+          )
+        (begin
+          (format 0 "[MP] Scene ended. Restoring base Daxter state...~%")
+          (set! *has-ridden-before?* #t)
+          )
+        )
+    )
+  (none))
+
+(defun mp-handle-scene-transition ()
+  "Handle state changes when entering/exiting scenes"
+  (let ((in-scene? (not (not *scene-player*))))
+    ;; 1. Handle Exiting Scene
+    (when (and (mp-is-daxter?)
+               *mp-last-scene-player*
+               (not in-scene?))
+      (mp-restore-local-target-after-scene!)
+      )
+
+    (when (not in-scene?)
+      (mp-request-intro-skip-full-sync-when-ready!)
+      (mp-hold-intro-skip-blackout!)
+      (set! *mp-remote-wants-skip* #f)
+      (set! *mp-local-wants-skip* #f)
+      ;; SAFETY: Force client-side black presentation state off once we are no longer in a scene.
+      (if (and *mp-last-scene-player*
+               (not *mp-intro-skip-blackout-pending?*))
+          (begin
+            (format 0 "[MP] Forcing blackout off after scene end.~%")
+            (mp-clear-client-presentation-blackout!)
+            )
+          )
+      )
+
+    (set! *mp-last-scene-player* in-scene?)
+    )
+  (none))

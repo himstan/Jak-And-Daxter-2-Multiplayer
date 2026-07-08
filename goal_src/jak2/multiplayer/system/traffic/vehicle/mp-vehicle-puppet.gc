@@ -741,6 +741,39 @@
   (none)
   )
 
+(defun mp-vehicle-pack-local-player-snapshot! ()
+  "Pack the local target's current vehicle occupancy into local-info."
+  (when (and *local-info*
+             (nonzero? *local-info*)
+             *target*
+             (nonzero? *target*)
+             (focus-test? *target* pilot)
+             (nonzero? (-> *target* pilot))
+             (nonzero? (-> *target* pilot vehicle))
+             (-> *target* state)
+             (nonzero? (-> *target* state))
+             (not (mp-target-death-state? (-> *target* state name)))
+             (!= (-> *target* state name) 'target-pilot-get-off)
+             (!= (-> *target* state name) 'target-indax-pilot-get-off))
+    (let* ((pilot-info (-> *target* pilot))
+           (v-proc (the-as vehicle (handle->process-safe (-> pilot-info vehicle)))))
+      (when (and v-proc (nonzero? v-proc))
+        (mp-vehicle-promote-local-driver! v-proc)
+        )
+      (when (and v-proc (nonzero? v-proc) (nonzero? (-> v-proc net-id)))
+        ;; Set occupancy info before pilot-riding so remote puppets can play get-on.
+        (set! (-> *local-info* riding-veh-id) (-> v-proc net-id))
+        (set! (-> *local-info* riding-seat-index) (the uint8 (-> pilot-info seat-index)))
+        ;; Only broadcast vehicle physics if we are the driver.
+        (when (zero? (-> pilot-info seat-index))
+          (mp-vehicle-pack v-proc (-> *local-info* veh-state))
+          )
+        )
+      )
+    )
+  (none)
+  )
+
 (defun mp-vehicle-guard-ensure-remote-combat! ((veh vehicle-guard))
   (when (and veh
              (nonzero? veh)

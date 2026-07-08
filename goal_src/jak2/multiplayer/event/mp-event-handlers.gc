@@ -145,16 +145,17 @@
     (format 0 "[MP-WorldEvent] Received MP_EVENT_ATTACK_ENEMY for nid=~D attack-id=~D~%" net-id (-> evt attack-id))
     (let ((proc (find-enemy-by-aid net-id)))
       (if (and proc (nonzero? proc))
-          (let ((attacker (mp-get-remote-target-process)))
-            (format 0 "[MP-WorldEvent] Applying Authoritative hit to ~A from remote attacker ~A nid=~D~%" proc attacker net-id)
-            (mp-actor-apply-authoritative-remote-damage! (the-as enemy proc) attacker evt 'enemy)
-            ;; Explicitly set focus to the remote attacker
-            (if (and attacker
-                     (nonzero? attacker)
-                     (-> (the-as enemy proc) focus)
-                     (nonzero? (-> (the-as enemy proc) focus)))
-                (set! (-> (the-as enemy proc) focus handle) (process->handle attacker))
-                )
+          (let ((attacker *mp-puppet*))
+            (when (and attacker (nonzero? attacker))
+              (format 0 "[MP-WorldEvent] Applying Authoritative hit to ~A from remote attacker ~A nid=~D~%" proc attacker net-id)
+              (mp-actor-apply-authoritative-remote-damage! (the-as enemy proc) attacker evt 'enemy)
+              ;; Explicitly set focus to the remote attacker
+              (if (and attacker
+                       (nonzero? attacker)
+                       (-> (the-as enemy proc) focus)
+                       (nonzero? (-> (the-as enemy proc) focus)))
+                  (set! (-> (the-as enemy proc) focus handle) (process->handle attacker))
+                  ))
             )
           (format 0 "[MP-WorldEvent] ERROR: Could not find enemy process for nid=~D~%" net-id))
       )

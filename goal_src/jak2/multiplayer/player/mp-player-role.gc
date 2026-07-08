@@ -1,0 +1,29 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defun mp-update-role-transformation ()
+  "Handle transforming Jak to Daxter (Ride-Along) or vice-versa"
+  (if (and *target* (nonzero? *target*)
+           (mp-is-daxter?)
+           (not (logtest? (-> *target* focus-status) (focus-status indax)))
+           (not (logtest? (-> *target* focus-status) (focus-status teleporting)))
+           (and *level* (nonzero? *level*) (zero? (the-as uint (-> *level* loading-level))))
+           (not (and (-> *target* next-state) (= (-> *target* next-state name) 'target-load-wait)))
+           (nonzero? (-> *target* control))
+           (let ((surf (-> *target* control current-surface)))
+             (and surf (not (zero? (the-as uint surf))) (not (logtest? (the-as uint surf) 3)) (< (the-as uint surf) #x70000000))))
+      (begin
+        (format 0 "[MP] Role assigned: 1. Transforming via target-indax-init (Ride-Along default)...~%")
+        (target-indax-init #t)))
+  (none))
+
+(defun mp-update-ai-targeting ()
+  "Update player-procs handles for AI targeting"
+  (let ((loc-role (-> *local-info* role))
+        (rem-role (if (mp-is-jak?) 1 0)))
+    (set! (-> *local-info* player-procs loc-role) (process->handle *target*))
+    (let ((proc (mp-puppet-get-proc)))
+      (if proc
+          (set! (-> *local-info* player-procs rem-role) (process->handle proc))
+          (set! (-> *local-info* player-procs rem-role) (the-as handle #f)))))
+  (none))

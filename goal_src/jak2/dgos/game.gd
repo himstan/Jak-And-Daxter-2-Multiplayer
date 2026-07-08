@@ -563,6 +563,7 @@
   "mod-common-functions.o" ;; added
   "orb-placer.o"  ;; added
   "mp-helpers.o" ;; added
+  "mp-player-targeting.o" ;; added
   "mp-level-sync.o" ;; added
   "mp-airlock-sync.o" ;; added
   "mp-teleport-utils.o" ;; added
@@ -580,6 +581,7 @@
   "mp-mission-vehicles.o" ;; added
   "mp-vehicle-puppet.o" ;; added
   "mp-traffic-sync.o" ;; added
+  "mp-traffic-authority.o" ;; added
   "mp-traffic-debug.o" ;; added
   "mp-enemy-debug.o" ;; added  
   "mp-debug.o" ;; added
@@ -594,14 +596,17 @@
   "mp-task-sync-hooks.o" ;; added
   "mp-sync-state.o" ;; added
   "mp-event-handlers.o" ;; added
+  "mp-scene-transition.o" ;; added
   "mp-stadium-board1-patch.o" ;; added
   "mp-waypoint-sync.o" ;; added
   "mp-warp-gate-sync.o" ;; added
   "mp-events.o" ;; added
   "mp-mission-events.o" ;; added
-  "mp-data.o" ;; added
+  "mp-player-snapshot.o" ;; added
   "mp-remote.o" ;; added
-  "mp-role.o" ;; added
+  "mp-player-role.o" ;; added
+  "mp-player-visibility.o" ;; added
+  "mp-death-spectate.o" ;; added
   "mp-network.o" ;; added
   "mp-session.o" ;; added
   "mp-demo-guard.o" ;; added

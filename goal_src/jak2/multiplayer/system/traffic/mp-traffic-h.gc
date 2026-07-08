@@ -28,7 +28,6 @@
 
 ;; --- Authority Macros ---
 
-(define-extern mp-is-traffic-ready? (function symbol))
 (define-extern mp-multiplayer-scene-or-load-active? (function symbol))
 
 ;; --- Externs ---
@@ -250,5 +249,136 @@
 (define *mp-get-guard-target* (the-as (function citizen handle) #f))
 
 (define-extern mp-traffic-force-clear-local-vehicles! (function none))
+
+(defun mp-is-traffic-ready? ()
+  "Is the traffic system fully initialized and ready for sync? (Client Side)"
+  (and *traffic-manager*
+       (nonzero? *traffic-manager*)
+       *lwide-entity*
+       (nonzero? (the-as uint *lwide-entity*))
+       )
+  )
+
+(defun mp-is-traffic-spawn-ready? ()
+  "True when it is safe to materialize remote traffic puppets that need level art."
+  (and (mp-is-traffic-ready?)
+       *level*
+       (nonzero? *level*)
+       (= (-> *level* loading-level) (-> *level* default-level))
+       *target*
+       (nonzero? *target*)
+       (-> *target* control)
+       (nonzero? (-> *target* control))
+       (not (focus-test? *target* teleporting))
+       )
+  )
+
+(defun mp-local-world-ready-for-remote-sync? ()
+  "True when local player/world state is stable enough for remote puppet and traffic state changes."
+  (and *level*
+       (nonzero? *level*)
+       (= (-> *level* loading-level) (-> *level* default-level))
+       *target*
+       (nonzero? *target*)
+       (-> *target* control)
+       (nonzero? (-> *target* control))
+       (not (focus-test? *target* teleporting))
+       (not (and (-> *target* next-state)
+                 (nonzero? (-> *target* next-state))
+                 (= (-> *target* next-state name) 'target-load-wait)))
+       )
+  )
+
+(defun mp-traffic-art-context! ((kind symbol) (net-id uint) (object-type uint) (state-id uint))
+  "Remember the latest MP traffic spawn/update path for loader error correlation."
+  (set! *mp-traffic-art-context-kind* kind)
+  (set! *mp-traffic-art-context-net-id* net-id)
+  (set! *mp-traffic-art-context-object-type* object-type)
+  (set! *mp-traffic-art-context-state-id* state-id)
+  (set! *mp-traffic-art-context-time* (current-time))
+  (none)
+  )
+
+(defun mp-traffic-debug-update-frame-context! ()
+  "Capture per-frame traffic sync context using only primitive debug fields."
+  (if (and *mp-traffic-buffer* (nonzero? (the-as uint *mp-traffic-buffer*)))
+      (begin
+        (set! *mp-traffic-art-context-ped-count* (-> *mp-traffic-buffer* ped-count))
+        (set! *mp-traffic-art-context-veh-count* (-> *mp-traffic-buffer* veh-count))
+        )
+      (begin
+        (set! *mp-traffic-art-context-ped-count* (the uint 0))
+        (set! *mp-traffic-art-context-veh-count* (the uint 0))
+        )
+      )
+  (if (and *local-info* (nonzero? *local-info*))
+      (set! *mp-traffic-art-context-local-level* (-> *local-info* level))
+      (set! *mp-traffic-art-context-local-level* (the uint 0))
+      )
+  (if (and *remote-info* (nonzero? *remote-info*))
+      (set! *mp-traffic-art-context-remote-level* (-> *remote-info* level))
+      (set! *mp-traffic-art-context-remote-level* (the uint 0))
+      )
+  (if (mp-is-traffic-spawn-ready?)
+      (set! *mp-traffic-art-context-spawn-ready* #t)
+      (set! *mp-traffic-art-context-spawn-ready* #f)
+      )
+  (set! *mp-traffic-art-context-riding* #f)
+  (when (and *target*
+             (nonzero? *target*)
+             (focus-test? *target* pilot)
+             (-> *target* pilot)
+             (nonzero? (-> *target* pilot)))
+    (set! *mp-traffic-art-context-riding* #t)
+    )
+  (none)
+  )
+
+(defun mp-traffic-type-loaded? ((t-type traffic-type))
+  "Check if the art group for a given traffic type is already loaded in memory. (Client Side)"
+  ;; GLOBAL SAFETY: Spawning remote traffic requires stable level art.
+  (if (not (mp-is-traffic-spawn-ready?))
+      (return #f))
+
+  (let ((ag-name (the-as string #f)))
+    (case t-type
+      (((traffic-type bikea)) (set! ag-name "skel-bikea"))
+      (((traffic-type bikeb)) (set! ag-name "skel-bikeb"))
+      (((traffic-type bikec)) (set! ag-name "skel-bikec"))
+      (((traffic-type cara)) (set! ag-name "skel-cara"))
+      (((traffic-type carb)) (set! ag-name "skel-carb"))
+      (((traffic-type carc)) (set! ag-name "skel-carc"))
+      (((traffic-type guard-bike)) (set! ag-name "skel-guard-bike"))
+      (((traffic-type hellcat)) (set! ag-name "skel-hellcat"))
+      (((traffic-type citizen-norm-1) (traffic-type citizen-norm-2)) (set! ag-name "skel-citizen-norm"))
+      (((traffic-type tt5)) (set! ag-name "skel-citizen-rebel"))
+      (((traffic-type citizen-chick)) (set! ag-name "skel-citizen-chick"))
+      (((traffic-type citizen-fat)) (set! ag-name "skel-citizen-fat"))
+      (((traffic-type metalhead-predator)) (set! ag-name "skel-metalhead-predator"))
+      (((traffic-type metalhead-grunt)) (set! ag-name "skel-grunt"))
+      (((traffic-type metalhead-flitter)) (set! ag-name "skel-flitter"))
+      (((traffic-type crimson-guard-1) (traffic-type crimson-guard-0)) (set! ag-name "skel-crimson-guard"))
+      )
+    (if ag-name
+        (let ((skel (the-as skeleton-group (art-group-get-by-name *level* ag-name (the-as (pointer uint32) #f)))))
+          (if (and skel (nonzero? skel))
+              ;; The skeleton-group doesn't have the data array, the actual art-group does.
+              (let ((ag (art-group-get-by-name *level* (-> skel art-group-name) (the-as (pointer uint32) #f))))
+                (if (and ag
+                         (nonzero? ag)
+                         (> (-> ag length) 0)
+                         (-> ag data 0)
+                         (nonzero? (-> ag data 0)))
+                    #t
+                    #f
+                    )
+                )
+              #f
+              )
+          )
+        #f
+        )
+    )
+  )
 
 (none)

@@ -1,0 +1,296 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(define *mp-combat-retarget-distance-bias* 8192.0)
+
+(defun mp-target-ride-along? ((target-proc process-focusable))
+  "Return true when a target process is riding along or is transitioning into ride-along."
+  (and target-proc
+       (nonzero? target-proc)
+       (type? target-proc target)
+       (or (and (-> (the-as target target-proc) state)
+                (nonzero? (-> (the-as target target-proc) state))
+                (= (-> (the-as target target-proc) state name) 'target-ride-along))
+           (and (-> (the-as target target-proc) next-state)
+                (nonzero? (-> (the-as target target-proc) next-state))
+                (= (-> (the-as target target-proc) next-state name) 'target-ride-along)))
+       )
+  )
+
+(defun mp-combat-valid-player-target? ((target-proc process-focusable) (require-control? symbol))
+  "True when a player target is safe to use for combat targeting."
+  (and target-proc
+       (nonzero? target-proc)
+       (not (focus-test? target-proc disable dead inactive))
+       (not (logtest? (-> target-proc mask) (process-mask sleep)))
+       (-> target-proc root)
+       (nonzero? (-> target-proc root))
+       (not (mp-target-ride-along? target-proc))
+       (or (not require-control?)
+           (and (-> (the-as target target-proc) control)
+                (nonzero? (-> (the-as target target-proc) control))))
+       )
+  )
+
+(defun mp-combat-local-player-target ((require-control? symbol))
+  "Return the local player if they are valid for combat targeting."
+  (if (and *target*
+           (nonzero? *target*)
+           (mp-combat-valid-player-target? *target* require-control?))
+      (the-as process-focusable *target*)
+      (the-as process-focusable #f)
+      )
+  )
+
+(defun mp-combat-remote-player-target ((require-control? symbol))
+  "Return the remote player if multiplayer is live and they are valid for combat targeting."
+  (if (and *multi-sync-enabled?*
+           (= (pc-multi-get-status) 6)
+           *local-info*
+           (nonzero? *local-info*))
+      (let ((remote-proc *mp-puppet*))
+        (if (and remote-proc
+                 (nonzero? remote-proc)
+                 (mp-combat-valid-player-target? remote-proc require-control?))
+            remote-proc
+            (the-as process-focusable #f)
+            )
+        )
+      (the-as process-focusable #f)
+      )
+  )
+
+(defun mp-combat-best-player-target ((source process-focusable)
+                                     (current-target process-focusable)
+                                     (local-target process-focusable)
+                                     (remote-target process-focusable))
+  "Pick a stable player combat target, preferring the current one unless the other is meaningfully closer."
+  (cond
+    ((and local-target
+          (nonzero? local-target)
+          remote-target
+          (nonzero? remote-target)
+          source
+          (nonzero? source)
+          (-> source root)
+          (nonzero? (-> source root)))
+     (let ((local-dist (vector-vector-distance (-> source root trans) (-> local-target root trans)))
+           (remote-dist (vector-vector-distance (-> source root trans) (-> remote-target root trans))))
+       (cond
+         ((= current-target local-target)
+          (if (< remote-dist (- local-dist *mp-combat-retarget-distance-bias*))
+              remote-target
+              local-target
+              )
+          )
+         ((= current-target remote-target)
+          (if (< local-dist (- remote-dist *mp-combat-retarget-distance-bias*))
+              local-target
+              remote-target
+              )
+          )
+         ((< remote-dist local-dist)
+          remote-target
+          )
+         (else
+           local-target
+           )
+         )
+       )
+     )
+    ((and local-target (nonzero? local-target))
+     local-target
+     )
+    ((and remote-target (nonzero? remote-target))
+     remote-target
+     )
+    (else
+      (the-as process-focusable #f)
+      )
+    )
+  )
+
+(defun mp-target-death-state? ((state-name symbol))
+  "Return true for target states that should be treated as player death."
+  (or (= state-name 'target-death)
+      (= state-name 'target-indax-death)
+      (= state-name 'target-tube-death)
+      (= state-name 'target-pilot-death)
+      (= state-name 'target-indax-pilot-death)
+      (= state-name 'target-mech-death)
+      )
+  )
+
+(defun mp-guard-target-debug-allowed? ((net-id uint))
+  (and *mp-guard-target-debug?*
+       (nonzero? net-id)
+       (or (zero? *mp-guard-target-debug-net-id*)
+           (= net-id *mp-guard-target-debug-net-id*))
+       )
+  )
+
+(defun mp-guard-target-debug-ready? ((net-id uint))
+  (and (mp-guard-target-debug-allowed? net-id)
+       (>= (current-time) *mp-guard-target-debug-next-time*)
+       )
+  )
+
+(defun mp-guard-target-debug-bump! ()
+  (set! *mp-guard-target-debug-next-time* (+ (current-time) (seconds 0.35)))
+  (none)
+  )
+
+(defun mp-guard-target-debug-process-label ((proc process))
+  (cond
+    ((or (not proc) (zero? proc)) 'NONE)
+    ((= proc *target*) 'LOCAL)
+    (else
+      (let ((remote *mp-puppet*))
+        (if (and remote (= proc remote))
+            'REMOTE-PUPPET
+            'OTHER
+            )
+        )
+      )
+    )
+  )
+
+(defun mp-guard-target-debug-handle-label ((target-handle handle))
+  (if (and target-handle (nonzero? target-handle))
+      (mp-guard-target-debug-process-label (handle->process-safe target-handle))
+      'NONE
+      )
+  )
+
+(defun mp-guard-target-debug-process-type ((proc process))
+  (if (and proc (nonzero? proc))
+      (-> proc type symbol)
+      'none
+      )
+  )
+
+(defun mp-guard-target-debug-handle-type ((target-handle handle))
+  (if (and target-handle (nonzero? target-handle))
+      (mp-guard-target-debug-process-type (handle->process-safe target-handle))
+      'none
+      )
+  )
+
+(defun mp-any-player-near-and-piloting? ((veh process-drawable) (dist-sq float))
+  "Check if any player, local or puppet, is near the vehicle and is a pilot."
+  (let ((near? #f))
+    (when (and veh
+               (nonzero? veh)
+               (-> veh root)
+               (nonzero? (-> veh root)))
+      (when (and *target*
+                 (nonzero? *target*)
+                 (focus-test? *target* pilot)
+                 (< (vector-vector-distance-squared (-> veh root trans) (target-pos 0)) dist-sq))
+        (set! near? #t)
+        )
+      (when (not near?)
+        (let ((puppet (mp-puppet-get-proc)))
+          (when (and puppet
+                     (nonzero? puppet)
+                     (focus-test? puppet pilot)
+                     (-> puppet root)
+                     (nonzero? (-> puppet root))
+                     (< (vector-vector-distance-squared (-> veh root trans) (-> puppet root trans)) dist-sq))
+            (set! near? #t)
+            )
+          )
+        )
+      )
+    near?
+    )
+  )
+
+(defun mp-point-near-pos-xz? ((point vector) (pos vector) (radius float))
+  (and point
+       (nonzero? point)
+       pos
+       (nonzero? pos)
+       (< (vector-vector-xz-distance-squared point pos) (square radius))
+       )
+  )
+
+(defun mp-any-player-near-pos-xz? ((pos vector) (radius float))
+  "True if either local target or remote target representation is within radius on XZ."
+  (let ((near? #f))
+    (when (and pos (nonzero? pos))
+      (when (and *target*
+                 (nonzero? *target*)
+                 (-> *target* control)
+                 (nonzero? (-> *target* control))
+                 (mp-point-near-pos-xz? (-> *target* control trans) pos radius))
+        (set! near? #t)
+        )
+      (when (not near?)
+        (let ((puppet (mp-puppet-get-proc)))
+          (when (and puppet
+                     (nonzero? puppet)
+                     (-> puppet root)
+                     (nonzero? (-> puppet root))
+                     (mp-point-near-pos-xz? (-> puppet root trans) pos radius))
+            (set! near? #t)
+            )
+          )
+        )
+      (when (and (not near?)
+                 *multi-remote-render-pos*
+                 (nonzero? *multi-remote-render-pos*)
+                 (mp-point-near-pos-xz? *multi-remote-render-pos* pos radius))
+        (set! near? #t)
+        )
+      (when (and (not near?)
+                 *remote-info*
+                 (nonzero? *remote-info*))
+        (let ((remote-pos (new 'stack-no-clear 'vector)))
+          (set-vector! remote-pos (-> *remote-info* x) (-> *remote-info* y) (-> *remote-info* z) 1.0)
+          (when (mp-point-near-pos-xz? remote-pos pos radius)
+            (set! near? #t)
+            )
+          )
+        )
+      )
+    near?
+    )
+  )
+
+(defun mp-any-player-y-at-least? ((min-y float))
+  "True if either local target or remote target representation is at or above min-y."
+  (let ((high-enough? #f))
+    (when (and *target*
+               (nonzero? *target*)
+               (-> *target* control)
+               (nonzero? (-> *target* control))
+               (>= (-> *target* control trans y) min-y))
+      (set! high-enough? #t)
+      )
+    (when (not high-enough?)
+      (let ((puppet (mp-puppet-get-proc)))
+        (when (and puppet
+                   (nonzero? puppet)
+                   (-> puppet root)
+                   (nonzero? (-> puppet root))
+                   (>= (-> puppet root trans y) min-y))
+          (set! high-enough? #t)
+          )
+        )
+      )
+    (when (and (not high-enough?)
+               *multi-remote-render-pos*
+               (nonzero? *multi-remote-render-pos*)
+               (>= (-> *multi-remote-render-pos* y) min-y))
+      (set! high-enough? #t)
+      )
+    (when (and (not high-enough?)
+               *remote-info*
+               (nonzero? *remote-info*)
+               (>= (-> *remote-info* y) min-y))
+      (set! high-enough? #t)
+      )
+    high-enough?
+    )
+  )

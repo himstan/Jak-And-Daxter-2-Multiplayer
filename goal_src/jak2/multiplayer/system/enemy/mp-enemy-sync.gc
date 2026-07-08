@@ -284,7 +284,7 @@
     (when (and focus (nonzero? focus))
       (if (and *target* (nonzero? *target*) (= focus *target*))
           (set! (-> slot focus-aid) (the-as uint32 (+ 1 (-> *local-info* role))))
-          (let ((remote (mp-get-remote-target-process)))
+          (let ((remote *mp-puppet*))
              (if (and remote (nonzero? remote) (= focus remote))
                  (set! (-> slot focus-aid) (the-as uint32 (+ 1 (if (= (-> *local-info* role) 0) 1 0))))
                  )
@@ -489,7 +489,7 @@
               (let ((target-role (the-as uint8 (+ -1 (-> rec ghost-focus-aid)))))
                 (let ((focus-proc (if (= target-role (-> *local-info* role))
                                       (the-as process-focusable *target*)
-                                      (the-as process-focusable (mp-get-remote-target-process)))))
+                                      (the-as process-focusable *mp-puppet*))))
                   (when (and focus-proc
                              (nonzero? focus-proc)
                              (-> e-proc focus)

@@ -219,7 +219,7 @@
     (let ((target-role (the-as uint8 (+ -1 (-> rec ghost-target-aid)))))
       (if (= target-role (-> *local-info* role))
           (return (the-as process-focusable *target*))
-          (return (the-as process-focusable (mp-get-remote-target-process)))
+          (return (the-as process-focusable *mp-puppet*))
           )
       )
     )

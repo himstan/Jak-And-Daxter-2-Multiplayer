@@ -5,7 +5,6 @@
 ;; name in dgo: traffic-engine
 ;; dgos: CWI
 (declare-type crimson-guard citizen)
-(define-extern mp-get-remote-target-process (function process-focusable))
 (define-extern mp-combat-valid-player-target? (function process-focusable symbol symbol))
 (define-extern mp-combat-best-player-target (function process-focusable process-focusable process-focusable process-focusable process-focusable))
 ;; DECOMP BEGINS
@@ -1200,8 +1199,9 @@
 (defun mp-traffic-valid-remote-target ()
   (when (and *multi-sync-enabled?*
              (= (pc-multi-get-status) 6))
-    (let ((remote (mp-get-remote-target-process)))
+    (let ((remote *mp-puppet*))
       (when (and remote
+                 (nonzero? remote)
                  (mp-traffic-valid-player-target? remote))
         (return remote)
         )

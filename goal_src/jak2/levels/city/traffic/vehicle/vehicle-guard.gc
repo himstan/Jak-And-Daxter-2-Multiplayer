@@ -5,7 +5,6 @@
 ;; name in dgo: vehicle-guard
 ;; dgos: CWI
 
-(define-extern mp-get-remote-target-process (function process-focusable))
 (define-extern mp-combat-valid-player-target? (function process-focusable symbol symbol))
 (define-extern mp-combat-best-player-target (function process-focusable process-focusable process-focusable process-focusable process-focusable))
 (define-extern mp-vehicle-guard-handle-event! (function vehicle process int symbol event-message-block symbol))
@@ -748,7 +747,7 @@
                              (the-as process-focusable #f)))
            (remote-proc (if (and *multi-sync-enabled?*
                                  (= (pc-multi-get-status) 6))
-                            (mp-get-remote-target-process)
+                            *mp-puppet*
                             (the-as process-focusable #f)))
            (remote-target (if (and remote-proc
                                    (nonzero? remote-proc)

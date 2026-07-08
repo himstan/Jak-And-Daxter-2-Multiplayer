@@ -15,10 +15,7 @@
      "LOCAL"
      )
     (else
-      (let ((remote (the-as process-focusable #f)))
-        (when (and *local-info* (nonzero? *local-info*))
-          (set! remote (mp-get-remote-target-process))
-          )
+      (let ((remote *mp-puppet*))
         (if (and remote (nonzero? remote) (= focus-proc remote))
             "REMOTE"
             "OTHER"

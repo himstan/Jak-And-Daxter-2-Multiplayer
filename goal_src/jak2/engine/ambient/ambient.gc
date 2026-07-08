@@ -6,7 +6,6 @@
 ;; dgos: ENGINE, GAME
 
 (define-extern string->talker-speech (function string talker-speech-class))
-(define-extern mp-get-remote-target-process (function process-focusable))
 
 ;; DECOMP BEGINS
 
@@ -170,7 +169,7 @@
     (set! s2-0 0)
     (goto cfg-27)
     )
-  (let ((puppet (mp-get-remote-target-process)))
+  (let ((puppet *mp-puppet*))
     (when (and puppet (nonzero? puppet))
       (let ((root-control (-> (the-as process-drawable puppet) root)))
         (when (and root-control (nonzero? root-control))
@@ -232,7 +231,7 @@
               (puppet (the process #f)))
           (when (or (and (mp-is-jak?) (= (-> arg0 channel) (gui-channel daxter)))
                     (and (mp-is-daxter?) (= (-> arg0 channel) (gui-channel jak))))
-            (set! puppet (mp-get-remote-target-process))
+            (set! puppet *mp-puppet*)
             (if (and puppet (nonzero? puppet))
                 (set! play-on-puppet? #t)
                 )
