@@ -580,16 +580,18 @@
   #f
   )
 
+(defbehavior can-puppet-pick-up? collectable ()
+  (the-as symbol 
+    (and
+      (= (pickup-type board) (-> self pickup-type))
+    )
+  )
+)
+
 (defbehavior collectable-standard-event-handler collectable ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   (local-vars (v0-4 object))
   (when (and (or (= arg2 'touch) (= arg2 'attack))
-             (and (= arg0 *target*)  ;; ONLY allow collection by the local target!
-                  (not (and arg0
-                            (nonzero? arg0)
-                            (type-type? (-> arg0 type) target)
-                            (= (-> (the-as target arg0) tobot?) 'mp-puppet)
-                            )
-                       )
+             (and (or (can-puppet-pick-up?) (not-puppet? arg0))
                   (logtest? (-> self flags) (collectable-flag pickup))
                   (time-elapsed? (the-as int (-> self birth-time)) (the-as time-frame (-> self collect-timeout)))
                   (not (and (-> self next-state) (= (-> self next-state name) 'pickup)))
