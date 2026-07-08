@@ -607,7 +607,6 @@
   "mp-session.o" ;; added
   "mp-demo-guard.o" ;; added
   "mp-main.o" ;; added
-  "mod-custom-code.o" ;; added
   "mod-debug.o" ;; added
   "mp-airlock-debug.o"
   "mp-elevator-debug.o"
