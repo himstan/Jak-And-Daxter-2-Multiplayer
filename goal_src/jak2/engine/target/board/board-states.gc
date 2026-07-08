@@ -33,7 +33,7 @@
 ;; DECOMP BEGINS
 
 (defbehavior target-board-get-off-to-falling-or-indax target ((arg0 symbol))
-  (if (or (and (mp-is-daxter?) (not (= self *mp-puppet*))) (and (mp-is-jak?) (= self *mp-puppet*)))
+  (if (mp-target-is-daxter? self)
       (go target-indax-start (the handle #f))
       (go target-falling arg0)
       )
@@ -41,7 +41,7 @@
   )
 
 (defbehavior target-board-get-off-to-hit-ground-or-indax target ((arg0 symbol))
-  (if (or (and (mp-is-daxter?) (not (= self *mp-puppet*))) (and (mp-is-jak?) (= self *mp-puppet*)))
+  (if (mp-target-is-daxter? self)
       (go target-indax-start (the handle #f))
       (go target-hit-ground arg0)
       )

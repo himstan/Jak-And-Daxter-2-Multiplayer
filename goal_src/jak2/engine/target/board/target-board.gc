@@ -1280,8 +1280,7 @@
       )
     (twist-set! (-> self board upper-body) (the-as float #f) (-> self board upper-body-roty) (the-as float #f))
     )
-  (let ((mp-daxter-board? (or (and (mp-is-daxter?) (not (= self *mp-puppet*)))
-                              (and (mp-is-jak?) (= self *mp-puppet*)))))
+  (let ((mp-daxter-board? (mp-target-is-daxter? self)))
     (when (and (board-on-ground?)
                (not (or (logtest? (-> self draw status) (draw-control-status no-draw-temp no-draw-bounds))
                         (and (not mp-daxter-board?)
@@ -1576,8 +1575,7 @@
   )
 
 (defbehavior mp-daxter-stowed-board-hidden? target ()
-  (let ((daxter-actor? (or (and (mp-is-daxter?) (not (= self *mp-puppet*)))
-                           (and (mp-is-jak?) (= self *mp-puppet*))))
+  (let ((daxter-actor? (mp-target-is-daxter? self))
         (in-vehicle? #f)
         (ride-along? #f)
         )
@@ -1629,7 +1627,7 @@
           )
         )
       (unless indax?
-        (if (or (and (mp-is-daxter?) (not (= self *mp-puppet*))) (and (mp-is-jak?) (= self *mp-puppet*)))
+        (if (mp-target-is-daxter? self)
           (set-vector! (-> self board board-scale) 0.5 0.5 0.5 1.0)
           (set! (-> self board board-scale quad) (-> self control scale quad))
         )
@@ -2565,7 +2563,7 @@
   )
 
 (defbehavior target-board-ride-post target ()
-  (if (or (and (mp-is-daxter?) (not (= self *mp-puppet*))) (and (mp-is-jak?) (= self *mp-puppet*)))
+  (if (mp-target-is-daxter? self)
     (set-vector! (-> self root scale) 0.6 0.6 0.6 1.0)
     (set! (-> self board board-scale quad) (-> self control scale quad))
   )
@@ -2799,7 +2797,7 @@
 
 (defbehavior target-board-post target ()
   (target-board-real-post)
-  (if (or (and (mp-is-daxter?) (not (= self *mp-puppet*))) (and (mp-is-jak?) (= self *mp-puppet*)))
+  (if (mp-target-is-daxter? self)
     (set-vector! (-> self root scale) 0.6 0.6 0.6 1.0)
     (set! (-> self board board-scale quad) (-> self control scale quad))
   )
