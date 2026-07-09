@@ -913,10 +913,11 @@
    (flags           uint8)
    (target-aid      uint8)    ;; 0 = none, 1 = Host, 2 = Client
    (context-align   uint8 2)  ;; Aligns the named sync context fields below.
+   (animation-profile uint32) ;; Type-specific initial animation selection.
    (vehicle-net-id  uint32)   ;; Vehicle rider bootstrap context, 0 = unset
    (transport-id    uint32)   ;; Transport-spawned guard context, 0 = unset
    (transport-side  uint8)    ;; Optional transport side hint/debug
-   (pad             uint8 11)
+   (pad             uint8 7)
    )
   :size-assert 64)
 
@@ -1039,6 +1040,8 @@
    (ghost-hp         int32)
    (ghost-state-id  uint8)           ;; Pedestrian state ID; unused for vehicles
    (ghost-target-aid uint8)          ;; Target sync for pedestrians (e.g. crimson-guard)
+   (ghost-animation-profile uint32)  ;; Latest authoritative pedestrian animation selection
+   (last-applied-animation-profile uint32)
    (last-attack-id   uint32)
    (last-local-attack-id uint32)
    (last-local-attack-time time-frame)

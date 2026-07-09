@@ -60,6 +60,7 @@ void handle_pedestrian_sync_packet(const _ENetEvent& event, MultiplayerData& dat
       state->hp = incoming->hp;
       state->state_id = incoming->state_id;
       state->target_aid = incoming->target_aid;
+      state->animation_profile = incoming->animation_profile;
       state->vehicle_net_id = incoming->vehicle_net_id;
       state->transport_id = incoming->transport_id;
       state->transport_side = incoming->transport_side;
@@ -86,10 +87,13 @@ void send_pedestrian_sync_packets(MultiplayerData& data, MPTrafficSyncBufferGOAL
       dst->hp = src->hp;
       dst->state_id = src->state_id;
       dst->target_aid = src->target_aid;
+      dst->animation_profile = src->animation_profile;
       dst->vehicle_net_id = src->vehicle_net_id;
       dst->transport_id = src->transport_id;
       dst->transport_side = src->transport_side;
       dst->pad[0] = 0;
+      dst->pad[1] = 0;
+      dst->pad[2] = 0;
     }
     size_t packet_size = pedestrian_packet_size(chunk_size);
     MultiplayerManager::broadcast(data, exclude_peer, &packet, packet_size, ENET_PACKET_FLAG_UNSEQUENCED);

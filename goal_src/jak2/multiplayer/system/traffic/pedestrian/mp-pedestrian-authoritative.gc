@@ -269,6 +269,7 @@
   (mp-pedestrian-refresh-authoritative-ghost! e-proc)
   (set! (-> slot object-type) (the uint8 (-> e-proc traffic-type)))
   (set! (-> slot object-variance) (the uint8 0))
+  (set! (-> slot animation-profile) (mp-pedestrian-get-animation-profile e-proc))
   (set! (-> slot x) (-> e-proc root trans x))
   (set! (-> slot y) (-> e-proc root trans y))
   (set! (-> slot z) (-> e-proc root trans z))

@@ -576,6 +576,7 @@
   "mp-enemy-sync.o" ;; added
   "mp-traffic-h.o" ;; added
   "mp-traffic-ghosts.o" ;; added
+  "mp-pedestrian-animation-sync.o" ;; added
   "mp-pedestrian-authoritative.o" ;; added
   "mp-pedestrian-state-sync.o" ;; added
   "mp-pedestrian-puppet.o" ;; added

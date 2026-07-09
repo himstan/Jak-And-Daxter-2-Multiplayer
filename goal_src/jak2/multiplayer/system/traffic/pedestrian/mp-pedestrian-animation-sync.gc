@@ -1,0 +1,91 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; Preserve host-selected locomotion clips when a reserve-pool citizen becomes
+;; a remote multiplayer puppet. This module intentionally uses only citizen
+;; fields so it remains independent of the concrete CWI pedestrian DGO types.
+
+(defun mp-pedestrian-pack-animation-profile ((walk-anim int) (run-anim int))
+  (the uint
+       (logior (logand walk-anim #xff)
+               (shl (logand run-anim #xff) 8)))
+  )
+
+(defun mp-pedestrian-profile-walk-anim ((profile uint))
+  (the int (logand profile #xff))
+  )
+
+(defun mp-pedestrian-profile-run-anim ((profile uint))
+  (the int (logand (shr profile 8) #xff))
+  )
+
+(defun mp-pedestrian-get-animation-profile ((ped citizen))
+  (if (and ped (nonzero? ped))
+      (mp-pedestrian-pack-animation-profile (-> ped anim-walk) (-> ped anim-run))
+      (the uint 0))
+  )
+
+(defun mp-pedestrian-apply-norm-walk-tuning! ((ped citizen) (walk-anim int))
+  (cond
+    ((= walk-anim 12)
+     (set! (-> ped dist-walk-anim) 8736.768)
+     (set! (-> ped speed-walk) 10240.0))
+    ((= walk-anim 13)
+     (set! (-> ped dist-walk-anim) 13107.2)
+     (set! (-> ped speed-walk) 12288.0))
+    ((= walk-anim 11)
+     (set! (-> ped dist-walk-anim) 4370.432)
+     (set! (-> ped speed-walk) 4096.0)))
+  (none)
+  )
+
+(defun mp-pedestrian-apply-chick-walk-tuning! ((ped citizen) (walk-anim int) (run-anim int))
+  (cond
+    ((= walk-anim 4)
+     (set! (-> ped dist-walk-anim) 15728.64)
+     (set! (-> ped speed-walk) 14745.6))
+    ((= walk-anim 5)
+     (set! (-> ped dist-walk-anim) 8736.768)
+     (set! (-> ped speed-walk) 8192.0))
+    ((= walk-anim 6)
+     (set! (-> ped dist-walk-anim) 15728.64)
+     (set! (-> ped speed-walk) 12288.0)))
+  (if (= run-anim 8)
+      (set! (-> ped dist-run-anim) 28385.28)
+      (set! (-> ped dist-run-anim) 26214.4))
+  (none)
+  )
+
+(defun mp-pedestrian-apply-profile-travel-tuning! ((ped citizen) (walk-anim int) (run-anim int))
+  (case (-> ped traffic-type)
+    (((traffic-type citizen-norm-1) (traffic-type citizen-norm-2))
+     (mp-pedestrian-apply-norm-walk-tuning! ped walk-anim))
+    (((traffic-type citizen-chick))
+     (mp-pedestrian-apply-chick-walk-tuning! ped walk-anim run-anim))
+    (((traffic-type citizen-fat))
+     (set! (-> ped dist-walk-anim) 16384.0)
+     (set! (-> ped speed-walk) 12288.0)))
+  (none)
+  )
+
+(defun mp-pedestrian-apply-animation-profile! ((ped citizen) (profile uint))
+  (when (and ped (nonzero? ped) (nonzero? profile))
+    (let ((walk-anim (mp-pedestrian-profile-walk-anim profile))
+          (run-anim (mp-pedestrian-profile-run-anim profile)))
+      (set! (-> ped anim-walk) walk-anim)
+      (set! (-> ped anim-run) run-anim)
+      (mp-pedestrian-apply-profile-travel-tuning! ped walk-anim run-anim)))
+  (none)
+  )
+
+(defun mp-pedestrian-apply-remote-animation-profile! ((ped citizen) (rec mp-traffic-ghost-record))
+  (when (and ped
+             (nonzero? ped)
+             rec
+             (nonzero? rec)
+             (nonzero? (-> rec ghost-animation-profile))
+             (!= (-> rec ghost-animation-profile) (-> rec last-applied-animation-profile)))
+    (mp-pedestrian-apply-animation-profile! ped (-> rec ghost-animation-profile))
+    (set! (-> rec last-applied-animation-profile) (-> rec ghost-animation-profile)))
+  (none)
+  )
