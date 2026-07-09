@@ -5,10 +5,12 @@
   (set! *multi-remote-spawn-time* (the-as time-frame 0))
   (set! *mp-last-scene-player* #f)
   (set! *mp-was-riding-before-scene* #f)
+  (set! *mp-last-remote-scene-active* (the uint 0))
   (set! *mp-pending-scene-sync?* #f)
   (set! *mp-pending-scene-sync-next-log-time* (the-as time-frame 0))
   (set! *mp-scene-sync-target-hold?* #f)
   (set! *mp-scene-sync-target-hold-until* (the-as time-frame 0))
+  (mp-clear-active-local-scene-name!)
   (when (and *mp-pending-scene-sync-name*
              (nonzero? (the-as uint *mp-pending-scene-sync-name*)))
     (set! (-> *mp-pending-scene-sync-name* data 0) (the uint 0))
@@ -657,6 +659,7 @@
       )
     (when (and s* (nonzero? (length s*)))
       (format 0 "[MP-WorldEvent] Remote started scene: ~S. Waiting for level-ready NPC-sync.~%" s*)
+      (set! *mp-last-remote-scene-active* (the uint 1))
       (mp-arm-pending-scene-sync! s* ev)
       )
     )
@@ -669,6 +672,7 @@
   (none))
 
 (defun mp-event-handler-scene-skipped ((aid uint))
+  (set! *mp-last-remote-scene-active* (the uint 0))
   (when *scene-player*
     (format 0 "[MP-WorldEvent] All players skipped. Aborting locally.~%")
     (send-event (ppointer->process *scene-player*) 'abort)

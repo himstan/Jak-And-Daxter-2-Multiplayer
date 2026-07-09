@@ -38,11 +38,18 @@
 (defun mp-handle-scene-transition ()
   "Handle state changes when entering/exiting scenes"
   (let ((in-scene? (not (not *scene-player*))))
+    (when in-scene?
+      (mp-record-active-local-scene-name!)
+      )
+
     ;; 1. Handle Exiting Scene
-    (when (and (mp-is-daxter?)
-               *mp-last-scene-player*
+    (when (and *mp-last-scene-player*
                (not in-scene?))
-      (mp-restore-local-target-after-scene!)
+      (when (mp-is-daxter?)
+        (mp-restore-local-target-after-scene!)
+        )
+      (mp-scene-sync-after-local-end! *mp-active-local-scene-name*)
+      (mp-clear-active-local-scene-name!)
       )
 
     (when (not in-scene?)
@@ -58,6 +65,14 @@
             (mp-clear-client-presentation-blackout!)
             )
           )
+      )
+
+    (when (and (not in-scene?)
+               (not *mp-pending-scene-sync?*)
+               (or (not *remote-info*)
+                   (not (nonzero? *remote-info*))
+                   (zero? (-> *remote-info* scene-active))))
+      (set! *mp-last-remote-scene-active* (the uint 0))
       )
 
     (set! *mp-last-scene-player* in-scene?)

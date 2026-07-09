@@ -596,6 +596,7 @@
   "mp-clock.o" ;; added
   "mp-environment.o" ;; added
   "mp-task-sync-hooks.o" ;; added
+  "mp-scene-sync-hooks.o" ;; added
   "mp-sync-state.o" ;; added
   "mp-event-handlers.o" ;; added
   "mp-scene-transition.o" ;; added

@@ -252,9 +252,12 @@
 (defun mp-remote-scene-active? ()
   (and *multi-sync-enabled?*
        (= (pc-multi-get-status) 6)
-       *remote-info*
-       (nonzero? (-> *remote-info* status))
-       (nonzero? (-> *remote-info* scene-active)))
+       (or *mp-pending-scene-sync?*
+           (nonzero? *mp-last-remote-scene-active*)
+           (and *remote-info*
+                (nonzero? *remote-info*)
+                (nonzero? (-> *remote-info* status))
+                (nonzero? (-> *remote-info* scene-active)))))
   )
 
 (defun mp-abort-local-scene! ((scene-proc scene-player))
