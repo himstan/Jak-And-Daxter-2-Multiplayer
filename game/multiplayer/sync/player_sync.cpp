@@ -79,6 +79,8 @@ void mp_handle_player_state_packet(MultiplayerData& data,
   entity.equipped_weapon = state->equipped_weapon;
   entity.turret_active = state->turret_active;
   entity.last_sequence_num = state->header.sequenceNum;
+  entity.action_seq = state->action_seq;
+  entity.action_state_id = state->action_state_id;
   memcpy(&entity.veh_state, &state->veh_state, sizeof(MPVehicleState));
 
   if (data.local_role == 0 && state->netId == 1 &&
@@ -188,6 +190,8 @@ void mp_send_player_state(MultiplayerData& data, LocalPlayerInfoGOAL* local) {
   local_state.scene_active = local->scene_active;
   local_state.equipped_weapon = local->equipped_weapon;
   local_state.turret_active = local->turret_active;
+  local_state.action_seq = local->action_seq;
+  local_state.action_state_id = local->action_state_id;
   local_state.money = local->money;
   local_state.gems = local->gems;
   local_state.skill = local->skill;
@@ -273,6 +277,8 @@ void mp_sync_remote_player_to_goal(MultiplayerData& data, RemotePlayerInfoGOAL* 
     remote_goal->riding = 0;
     remote_goal->riding_veh_id = 0;
     remote_goal->riding_seat_index = 0;
+    remote_goal->action_seq = 0;
+    remote_goal->action_state_id = 0;
     return;
   }
 
@@ -320,6 +326,8 @@ void mp_sync_remote_player_to_goal(MultiplayerData& data, RemotePlayerInfoGOAL* 
   remote_goal->scene_active = remote_state.scene_active;
   remote_goal->equipped_weapon = remote_state.equipped_weapon;
   remote_goal->turret_active = remote_state.turret_active;
+  remote_goal->action_seq = remote_state.action_seq;
+  remote_goal->action_state_id = remote_state.action_state_id;
   remote_goal->turret_roty = remote_state.turret_roty;
   remote_goal->turret_rotx = remote_state.turret_rotx;
   memcpy(&remote_goal->veh_state, &remote_state.veh_state, sizeof(MPVehicleState));

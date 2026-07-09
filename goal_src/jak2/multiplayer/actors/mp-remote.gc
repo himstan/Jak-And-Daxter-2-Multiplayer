@@ -51,7 +51,7 @@
 (defun mp-remote-player-marker-update! ((proc target))
   "Keep one remote-player marker alive, using the puppet when active or the ghost position when far."
   (when (and *minimap* (nonzero? *minimap*) *target* (nonzero? *target*))
-    (if (and proc (nonzero? proc))
+    (if (mp-puppet-valid? proc)
         (add-icon! *minimap* proc (the-as uint (minimap-class remote-player)) MP_REMOTE_PLAYER_MARKER_KEY (the-as vector #t) 0)
         (add-icon! *minimap* *target* (the-as uint (minimap-class remote-player)) MP_REMOTE_PLAYER_MARKER_KEY *multi-remote-render-pos* 0)
         )
@@ -90,6 +90,13 @@
              )
            )
 
+         (when (and *mp-puppet*
+                    (nonzero? *mp-puppet*)
+                    (not (mp-puppet-valid? *mp-puppet*)))
+           (format 0 "[MP-Puppet] Clearing stale dead puppet pointer before respawn.~%")
+           (mp-puppet-clear-stale!)
+           )
+
          ;; 2.5 Distance check for force respawn
          (let ((dist (meters 0.0)))
            (when (and *target*
@@ -103,7 +110,7 @@
              )
              (when (and (> dist (meters 250.0))
                         (not *mp-force-remote-puppet-for-spectate?*))
-               (when *mp-puppet*
+               (when (mp-puppet-valid? *mp-puppet*)
                  (format 0 "[MP-Puppet] Remote player is far (~m). Deactivating puppet...~%" dist)
                  (mp-puppet-deactivate!)
                  )
@@ -145,7 +152,7 @@
 
          ;; 3. Manage process lifecycle
          (let ((proc *mp-puppet*))
-           (if (not proc)
+           (if (not (mp-puppet-valid? proc))
                (begin
                 (when (and (not *mp-puppet-is-warping?*)
                            (or (not *mp-puppet-was-far?*)

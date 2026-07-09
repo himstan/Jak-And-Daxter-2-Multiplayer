@@ -13,7 +13,10 @@
 (define-perm *mp-puppet-state-mismatch-count* int 0)
 (define-perm *mp-puppet-last-packet-id* uint (the uint 0))
 (define-perm *mp-puppet-last-fresh-input-time* time-frame (the-as time-frame 0))
+(define-perm *mp-puppet-last-action-seq* uint (the uint 0))
+(define-perm *mp-puppet-action-warmup-start* time-frame (the-as time-frame 0))
 (define *mp-puppet-input-stale-time* (seconds 0.2))
+(define *mp-puppet-action-warmup-time* (seconds 0.3))
 
 (defun mp-reset-puppet-state! ()
   (set! *mp-puppet-was-far?* #f)
@@ -24,6 +27,8 @@
   (set! *mp-puppet-pending-gun-shot-cam-angle-y* 0.0)
   (set! *mp-puppet-last-packet-id* (the uint 0))
   (set! *mp-puppet-last-fresh-input-time* (the-as time-frame 0))
+  (set! *mp-puppet-last-action-seq* (the uint 0))
+  (set! *mp-puppet-action-warmup-start* (the-as time-frame 0))
   (set! *mp-puppet-state-mismatch-count* 0)
   (when (and *mp-puppet*
              (nonzero? *mp-puppet*))
@@ -48,6 +53,59 @@
       )
     )
   (none))
+
+(defun mp-puppet-valid? ((proc target))
+  "True when a puppet pointer still names a live target process."
+  (if (and proc
+           (nonzero? proc)
+           (!= (-> proc status) 'dead)
+           (-> proc control)
+           (nonzero? (-> proc control))
+           (-> proc state)
+           (nonzero? (-> proc state))
+           (!= (-> proc parent) *target-dead-pool*))
+      #t
+      #f
+      )
+  )
+
+(defun mp-puppet-clear-stale! ()
+  "Clear a stale puppet singleton without touching an already-dead process."
+  (set! *mp-puppet* (the-as target #f))
+  (set! *mp-puppet-pending-gun-shot?* #f)
+  (set! *mp-puppet-pending-gun-shot-weapon* (the uint 0))
+  (set! *mp-puppet-pending-gun-shot-seq* (the uint 0))
+  (set! *mp-puppet-pending-gun-shot-cam-angle-y* 0.0)
+  (set! *mp-puppet-action-warmup-start* (the-as time-frame 0))
+  (set! *mp-puppet-state-mismatch-count* 0)
+  (none)
+  )
+
+(defun mp-puppet-snap-to-ghost-on-spawn! ((proc target))
+  "Seed a fresh puppet with the current ghost transform before native simulation runs."
+  (let ((ghost *mp-puppet-ghost*))
+    (when (and proc
+               (nonzero? proc)
+               ghost
+               (nonzero? ghost)
+               (-> ghost active?)
+               (-> proc control)
+               (nonzero? (-> proc control)))
+      (let ((control (-> proc control)))
+        (vector-copy! (-> control trans) (-> ghost trans))
+        (vector-copy! (-> control trans-old) (-> ghost trans))
+        (vector-copy! (-> control trans-old-old) (-> ghost trans))
+        (vector-copy! (-> control trans-old-old-old) (-> ghost trans))
+        (vector-copy! (-> control transv) (-> ghost velocity))
+        (vector-copy! (-> control transv-ctrl) (-> ghost velocity))
+        (quaternion-copy! (-> control quat) (-> ghost quat))
+        (quaternion-copy! (-> control quat-for-control) (-> ghost quat))
+        (quaternion-copy! (-> control dir-targ) (-> ghost quat))
+        )
+      )
+    )
+  (none)
+  )
 
 ;; --- Puppet Sync Logic ---
 
@@ -74,6 +132,10 @@
     (((mp-target-state-id roll))         'target-roll)
     (((mp-target-state-id roll-flip))    'target-roll-flip)
     (((mp-target-state-id flop))         'target-flop)
+    (((mp-target-state-id running-attack)) 'target-running-attack)
+    (((mp-target-state-id attack-air))   'target-attack-air)
+    (((mp-target-state-id attack-uppercut)) 'target-attack-uppercut)
+    (((mp-target-state-id attack-uppercut-jump)) 'target-attack-uppercut-jump)
     (((mp-target-state-id indax-stance)) 'target-indax-stance)
     (((mp-target-state-id indax-walk))   'target-indax-walk)
     (((mp-target-state-id indax-jump))   'target-indax-jump)
@@ -204,6 +266,10 @@
     (('target-roll)             (the uint (mp-target-state-id roll)))
     (('target-roll-flip)        (the uint (mp-target-state-id roll-flip)))
     (('target-flop)             (the uint (mp-target-state-id flop)))
+    (('target-running-attack)   (the uint (mp-target-state-id running-attack)))
+    (('target-attack-air)       (the uint (mp-target-state-id attack-air)))
+    (('target-attack-uppercut)  (the uint (mp-target-state-id attack-uppercut)))
+    (('target-attack-uppercut-jump) (the uint (mp-target-state-id attack-uppercut-jump)))
     (('target-indax-stance)      (the uint (mp-target-state-id indax-stance)))
     (('target-indax-walk)        (the uint (mp-target-state-id indax-walk)))
     (('target-indax-jump)        (the uint (mp-target-state-id indax-jump)))
@@ -645,6 +711,251 @@
     )
   )
 
+(defun mp-target-authoritative-action-state? ((state symbol))
+  "True for short player action states that should be bumped from network edges."
+  (case state
+    (('target-jump
+      'target-double-jump
+      'target-high-jump
+      'target-roll
+      'target-roll-flip
+      'target-flop
+      'target-attack
+      'target-running-attack
+      'target-attack-air
+      'target-attack-uppercut
+      'target-attack-uppercut-jump
+      'target-indax-jump
+      'target-indax-double-jump
+      'target-indax-high-jump
+      'target-indax-high-jump-jump
+      'target-indax-roll
+      'target-indax-roll-flip
+      'target-indax-flop
+      'target-indax-attack
+      'target-indax-attack-air
+      'target-indax-running-attack
+      'target-indax-attack-uppercut
+      'target-indax-attack-uppercut-jump
+      'target-board-jump
+      'target-board-jump-kick
+      'target-mech-jump
+      'target-mech-punch
+      'target-carry-jump
+      'target-carry-pickup
+      'target-carry-drop
+      'target-carry-throw
+      )
+     #t
+     )
+    (else #f)
+    )
+  )
+
+(defun mp-target-upward-action-state? ((state symbol))
+  "True when authoritative action sync should trust the remote vertical pose."
+  (case state
+    (('target-jump
+      'target-double-jump
+      'target-high-jump
+      'target-attack-uppercut-jump
+      'target-indax-jump
+      'target-indax-double-jump
+      'target-indax-high-jump
+      'target-indax-high-jump-jump
+      'target-indax-attack-uppercut-jump
+      'target-board-jump
+      'target-board-jump-kick
+      'target-mech-jump
+      'target-carry-jump
+      )
+     #t
+     )
+    (else #f)
+    )
+  )
+
+(defun mp-target-authoritative-board-action-state? ((state symbol))
+  "True for board actions that should only be forced while already boarding."
+  (case state
+    (('target-board-jump
+      'target-board-jump-kick
+      )
+     #t
+     )
+    (else #f)
+    )
+  )
+
+(defun mp-puppet-authoritative-action-compatible? ((proc target) (cur-state symbol) (action-state symbol))
+  "Avoid forcing action states across mode boundaries already handled elsewhere."
+  (and proc
+       (nonzero? proc)
+       (not (focus-test? proc pilot tube flut pole))
+       (not (mp-target-death-state? cur-state))
+       (not (= cur-state 'target-ride-along))
+       (or (not (mp-target-authoritative-board-action-state? action-state))
+           (focus-test? proc board)
+           (mp-target-authoritative-board-action-state? cur-state))
+       )
+  )
+
+(defun mp-puppet-snap-for-authoritative-action! ((proc target) (ghost mp-target-ghost-record) (action-state symbol))
+  "Prime pose/velocity so the next target state starts from the remote player's truth."
+  (when (and proc
+             (nonzero? proc)
+             ghost
+             (nonzero? ghost)
+             (-> proc control)
+             (nonzero? (-> proc control)))
+    (let ((control (-> proc control)))
+      (set! (-> control trans x) (-> ghost trans x))
+      (set! (-> control trans z) (-> ghost trans z))
+      (when (mp-target-upward-action-state? action-state)
+        (set! (-> control trans y) (-> ghost trans y))
+        )
+      (vector-copy! (-> control transv) (-> ghost velocity))
+      (quaternion-copy! (-> control quat) (-> ghost quat))
+      (quaternion-copy! (-> control quat-for-control) (-> ghost quat))
+      (quaternion-copy! (-> control dir-targ) (-> ghost quat))
+      )
+    )
+  (none)
+  )
+
+(defun mp-puppet-go-authoritative-action! ((proc target) (action-state symbol))
+  "Enter a whitelisted action state with native default arguments."
+  (case action-state
+    (('target-jump)
+     (go-process proc target-jump (-> *TARGET-bank* jump-height-min) (-> *TARGET-bank* jump-height-max) (the-as surface #f))
+     )
+    (('target-double-jump)
+     (go-process proc target-double-jump (-> *TARGET-bank* double-jump-height-min) (-> *TARGET-bank* double-jump-height-max))
+     )
+    (('target-high-jump)
+     (go-process proc target-high-jump (-> *TARGET-bank* duck-jump-height-min) (-> *TARGET-bank* duck-jump-height-max) 'duck)
+     )
+    (('target-roll)
+     (go-process proc target-roll)
+     )
+    (('target-roll-flip)
+     (go-process proc target-roll-flip (-> *TARGET-bank* roll-flip-height) (-> *TARGET-bank* roll-flip-dist))
+     )
+    (('target-flop)
+     (go-process proc target-flop 0.0 0.0 0.0)
+     )
+    (('target-attack)
+     (go-process proc target-attack)
+     )
+    (('target-running-attack)
+     (go-process proc target-running-attack)
+     )
+    (('target-attack-air)
+     (go-process proc target-attack-air #f)
+     )
+    (('target-attack-uppercut)
+     (go-process proc target-attack-uppercut (-> *TARGET-bank* attack-jump-height-min) (-> *TARGET-bank* attack-jump-height-max))
+     )
+    (('target-attack-uppercut-jump)
+     (go-process proc target-attack-uppercut-jump (-> *TARGET-bank* attack-jump-height-min) (-> *TARGET-bank* attack-jump-height-max))
+     )
+    (('target-indax-jump)
+     (go-process proc target-indax-jump (-> *TARGET-bank* indax-jump-height-min) (-> *TARGET-bank* indax-jump-height-max) (the-as surface #f))
+     )
+    (('target-indax-double-jump)
+     (go-process proc target-indax-double-jump (-> *TARGET-bank* indax-double-jump-height-min) (-> *TARGET-bank* indax-double-jump-height-max))
+     )
+    (('target-indax-high-jump)
+     (go-process proc target-indax-high-jump (-> *TARGET-bank* duck-jump-height-min) (-> *TARGET-bank* duck-jump-height-max) 'duck)
+     )
+    (('target-indax-high-jump-jump)
+     (go-process proc target-indax-high-jump-jump (-> *TARGET-bank* duck-jump-height-min) (-> *TARGET-bank* duck-jump-height-max) 'duck)
+     )
+    (('target-indax-roll)
+     (go-process proc target-indax-roll)
+     )
+    (('target-indax-roll-flip)
+     (go-process proc target-indax-roll-flip (-> *TARGET-bank* roll-flip-height) (-> *TARGET-bank* roll-flip-dist))
+     )
+    (('target-indax-flop)
+     (go-process proc target-indax-flop 0.0 0.0 0.0)
+     )
+    (('target-indax-attack)
+     (go-process proc target-indax-attack)
+     )
+    (('target-indax-attack-air)
+     (go-process proc target-indax-attack-air #f)
+     )
+    (('target-indax-running-attack)
+     (go-process proc target-indax-running-attack)
+     )
+    (('target-indax-attack-uppercut)
+     (go-process proc target-indax-attack-uppercut (-> *TARGET-bank* attack-jump-height-min) (-> *TARGET-bank* attack-jump-height-max))
+     )
+    (('target-indax-attack-uppercut-jump)
+     (go-process proc target-indax-attack-uppercut-jump (-> *TARGET-bank* attack-jump-height-min) (-> *TARGET-bank* attack-jump-height-max))
+     )
+    (('target-board-jump)
+     (go-process proc target-board-jump (-> *TARGET_BOARD-bank* jump-height-min) (-> *TARGET_BOARD-bank* jump-height-max) #f)
+     )
+    (('target-board-jump-kick)
+     (go-process proc target-board-jump-kick)
+     )
+    (('target-mech-jump)
+     (go-process proc target-mech-jump (-> *TARGET-bank* mech-jump-height-min) (-> *TARGET-bank* mech-jump-height-max) (the-as surface #f))
+     )
+    (('target-mech-punch)
+     (go-process proc target-mech-punch)
+     )
+    (('target-carry-jump)
+     (go-process proc target-carry-jump (-> *TARGET-bank* carry-jump-height-min) (-> *TARGET-bank* carry-jump-height-max) #f)
+     )
+    (('target-carry-pickup)
+     (go-process proc target-carry-pickup)
+     )
+    (('target-carry-drop)
+     (go-process proc target-carry-drop)
+     )
+    (('target-carry-throw)
+     (go-process proc target-carry-throw)
+     )
+    (else #f)
+    )
+  (none)
+  )
+
+(defun mp-puppet-apply-authoritative-action! ((proc target) (ghost mp-target-ghost-record) (cur-state symbol))
+  "Apply one-shot remote action transitions that raw input can miss after correction."
+  (when (and *remote-info*
+             (nonzero? *remote-info*)
+             proc
+             (nonzero? proc)
+             ghost
+             (nonzero? ghost)
+             (-> proc control)
+             (nonzero? (-> proc control))
+             (time-elapsed? *mp-puppet-action-warmup-start* *mp-puppet-action-warmup-time*)
+             cur-state
+             (!= cur-state 'target-indax-start)
+             (!= cur-state 'dead-state))
+    (let ((action-seq (-> *remote-info* action-seq))
+          (action-state (mp-target-get-state-from-id (-> *remote-info* action-state-id))))
+      (when (and (nonzero? action-seq)
+                 (!= action-seq *mp-puppet-last-action-seq*)
+                 action-state
+                 (!= cur-state action-state)
+                 (mp-target-authoritative-action-state? action-state)
+                 (mp-puppet-authoritative-action-compatible? proc cur-state action-state))
+        (mp-puppet-snap-for-authoritative-action! proc ghost action-state)
+        (mp-puppet-go-authoritative-action! proc action-state)
+        (set! *mp-puppet-last-action-seq* action-seq)
+        (set! *mp-puppet-state-mismatch-count* 0)
+        )
+      )
+    )
+  (none)
+  )
+
 (defun mp-puppet-preserve-platform-y? ((proc target) (cur-state symbol))
   "True when platform rider motion should own the puppet's vertical position."
   (and proc
@@ -985,6 +1296,8 @@
       (let ((cur-state (if (-> proc state) (-> proc state name) #f)))
         ;; 1. Position/Rotation Sync (P-Controller)
         (mp-puppet-apply-transform-correction! proc ghost cur-state)
+        (mp-puppet-apply-authoritative-action! proc ghost cur-state)
+        (set! cur-state (if (-> proc state) (-> proc state name) cur-state))
 
         ;; 3. State Bumping (Reconciliation Fallback)
         (let ((ghost-state (mp-target-get-state-from-id (-> ghost state-id))))
@@ -1239,6 +1552,7 @@
   (set! *mp-puppet-pending-gun-shot-weapon* (the uint 0))
   (set! *mp-puppet-pending-gun-shot-seq* (the uint 0))
   (set! *mp-puppet-pending-gun-shot-cam-angle-y* 0.0)
+  (set! *mp-puppet-action-warmup-start* (the-as time-frame 0))
   (none)
   )
 
@@ -1262,17 +1576,23 @@
         (set! *remote-player-is-dying* #f)
         (set! *remote-player-is-dead* #f)
         (set! *mp-local-player-is-respawning* #f)
+        (set! *mp-puppet-action-warmup-start* (current-time))
+        (if (and *remote-info*
+                 (nonzero? *remote-info*))
+            (set! *mp-puppet-last-action-seq* (-> *remote-info* action-seq))
+            (set! *mp-puppet-last-action-seq* (the uint 0))
+            )
         
         ;; Assign the second pad in the global list to the puppet
         ;; We use pad 1 (controller 2) as the dedicated puppet pad
         (set! (-> *mp-puppet* control cpad) (-> *cpad-list* cpads 1))
         (set! (-> *cpad-list* num-cpads) 1) ;; Stop the engine from clearing it with hardware polls
+        (mp-puppet-snap-to-ghost-on-spawn! *mp-puppet*)
         
-        ;; If we are the Host (Jak), the remote player is Daxter. 
-        ;; Send native change-mode event to initialize Indax (Daxter) states and skeletons.
+        ;; If we are the Host (Jak), mp-puppet-init already entered target-indax-start.
+        ;; Do not send another indax change-mode during snapshot/level load startup.
         (if (mp-is-jak?)
           (begin
-            (send-event *mp-puppet* 'change-mode 'indax #f)
             (when *mp-puppet-is-recovering?*
               (set! *mp-puppet-is-recovering?* #f)
               (go-process *mp-puppet* target-indax-spawn-reset)

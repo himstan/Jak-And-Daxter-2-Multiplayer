@@ -34,6 +34,8 @@ struct RemoteEntityState {
   uint8_t scene_active;
   uint8_t equipped_weapon;
   uint8_t turret_active;
+  uint32_t action_seq;
+  uint32_t action_state_id;
   float turret_roty;
   float turret_rotx;
   uint32_t last_sequence_num = 0;
@@ -102,7 +104,8 @@ struct RemotePlayerInfoGOAL {
   uint32_t sync_aids[128];
   float turret_roty;
   float turret_rotx;
-  uint8_t pad_env[8];
+  uint32_t action_seq;
+  uint32_t action_state_id;
   uint64_t player_procs[2];
   MPVehicleState veh_state;
 };
@@ -154,7 +157,8 @@ struct LocalPlayerInfoGOAL {
   uint32_t sync_aids[128];
   float turret_roty;
   float turret_rotx;
-  uint8_t pad_env[8];
+  uint32_t action_seq;
+  uint32_t action_state_id;
   uint64_t player_procs[2];
   MPVehicleState veh_state;
 };

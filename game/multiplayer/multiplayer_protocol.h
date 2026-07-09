@@ -85,6 +85,8 @@ struct PacketPlayerState {
   uint8_t task_mask[64];
   uint8_t active_task_mask[64];
   MPVehicleState veh_state;
+  uint32_t action_seq;
+  uint32_t action_state_id;
 };
 
 struct PacketTurretState {
