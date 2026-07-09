@@ -801,7 +801,6 @@
        (nonzero? proc)
        (not (focus-test? proc pilot tube flut pole))
        (not (mp-target-death-state? cur-state))
-       (not (= cur-state 'target-ride-along))
        (or (not (mp-target-authoritative-board-action-state? action-state))
            (focus-test? proc board)
            (mp-target-authoritative-board-action-state? cur-state))
@@ -1377,7 +1376,7 @@
               ((= cur-state 'target-ride-along)
                ;; Puppet thinks it's riding, but ghost is NOT.
                (when (!= ghost-state 'target-ride-along)
-                 (when (>= *mp-puppet-state-mismatch-count* 10)
+                 (when (>= *mp-puppet-state-mismatch-count* 2)
                    (format 0 "[MP-Puppet] Stuck in ride-along! Forcing exit to ~A~%" ghost-state)
                    ;; Transition directly to the authoritative state via event; :exit handles cleanup
                    (set! *local-riding?* #f)
