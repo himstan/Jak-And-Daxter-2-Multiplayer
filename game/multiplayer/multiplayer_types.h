@@ -10,6 +10,7 @@
 
 #include "multiplayer_protocol.h"
 #include "multiplayer_port_mapping.h"
+#include "multiplayer_stats.h"
 
 struct RemoteEntityState {
   uint8_t status;
@@ -283,4 +284,6 @@ struct MultiplayerData {
   uint16_t port_mapping_local_port = 0;
   uint16_t port_mapping_external_port = 0;
   uint32_t last_port_mapping_refresh_time = 0;
+  // Rate tracking and statistics
+  MultiplayerStats stats;
 };

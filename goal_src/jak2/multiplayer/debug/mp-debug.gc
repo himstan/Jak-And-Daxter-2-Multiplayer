@@ -56,15 +56,96 @@
     )
   (none))
 
+(defun mp-get-packet-type-name ((idx int))
+  (cond
+    ((= idx 0) "STATE_UPDATE")
+    ((= idx 1) "EVENT_JOIN")
+    ((= idx 2) "EVENT_LEAVE")
+    ((= idx 3) "EVENT_GAME")
+    ((= idx 4) "FULL_SYNC")
+    ((= idx 5) "ENEMY_SYNC")
+    ((= idx 6) "PEDESTRIAN_SYNC")
+    ((= idx 7) "VEHICLE_SYNC")
+    ((= idx 8) "TURRET_SYNC")
+    ((= idx 9) "SQUID_SYNC")
+    ((= idx 10) "AIRLOCK_SYNC")
+    (else "UNKNOWN")
+    )
+  )
+
 (defun mp-draw-network-debug ()
-  "Display network health stats (Ping, Loss, TPS)."
+  "Display network health stats (Ping, Loss, TPS, Throughput, Totals)."
   (when *mp-debug-network*
     (let ((ping (pc-multi-get-ping))
-          (loss (pc-multi-get-packet-loss)))
+          (loss (pc-multi-get-packet-loss))
+          (ping-var (pc-multi-get-ping-variance))
+          (total-sent (pc-multi-get-total-sent-bytes))
+          (total-recv (pc-multi-get-total-received-bytes))
+          (packets-sent (pc-multi-get-total-sent-packets))
+          (packets-recv (pc-multi-get-total-received-packets))
+          (send-rate (pc-multi-get-send-rate))
+          (recv-rate (pc-multi-get-recv-rate))
+          (peer-ip (pc-multi-get-peer-ip))
+          (peer-port (pc-multi-get-peer-port))
+          (role-str "OFFLINE")
+          )
+      (when (and *local-info* (nonzero? *local-info*))
+        (cond
+          ((= (-> *local-info* role) 0) (set! role-str "HOST (JAK)"))
+          ((= (-> *local-info* role) 1) (set! role-str "CLIENT (DAXTER)"))
+          )
+        )
       (format *stdcon* "~0k--- MP NETWORK DEBUG ---~%")
-      (format *stdcon* "PING: ~D ms~%" ping)
-      (format *stdcon* "LOSS: ~D%~%" loss)
-      (format *stdcon* "TPS:  ~D / ~D (Actual / Target)~%" *mp-actual-tps* *multi-sync-tps*)
+      (format *stdcon* "ROLE:      ~S~%" role-str)
+      (if (and peer-ip (> (length peer-ip) 0))
+          (format *stdcon* "PEER:      ~S:~D~%" peer-ip peer-port)
+          (format *stdcon* "PEER:      NONE~%")
+          )
+      (format *stdcon* "PING (ENG): ~D ms (var: ~D ms)~%" ping ping-var)
+      (format *stdcon* "LOSS:      ~D%~%" loss)
+      (format *stdcon* "TPS:       ~D / ~D (Actual / Target)~%" *mp-actual-tps* *multi-sync-tps*)
+      
+      ;; Show rates in KB/s
+      (let ((rate-in-kb (/ (the float recv-rate) 1024.0))
+            (rate-out-kb (/ (the float send-rate) 1024.0)))
+        (cond
+          ((>= total-recv (* 1024 1024))
+           (format *stdcon* "DATA IN:   ~,,2f KB/s (Total: ~,,2f MB)~%" rate-in-kb (/ (the float total-recv) 1048576.0)))
+          (else
+           (format *stdcon* "DATA IN:   ~,,2f KB/s (Total: ~,,2f KB)~%" rate-in-kb (/ (the float total-recv) 1024.0)))
+          )
+        (cond
+          ((>= total-sent (* 1024 1024))
+           (format *stdcon* "DATA OUT:  ~,,2f KB/s (Total: ~,,2f MB)~%" rate-out-kb (/ (the float total-sent) 1048576.0)))
+          (else
+           (format *stdcon* "DATA OUT:  ~,,2f KB/s (Total: ~,,2f KB)~%" rate-out-kb (/ (the float total-sent) 1024.0)))
+          )
+        )
+      (format *stdcon* "PACKETS:   In: ~D / Out: ~D~%" packets-recv packets-sent)
+      
+      ;; Category breakdown
+      (format *stdcon* "BY CATEGORY:~%")
+      (dotimes (idx 11)
+        (let ((t-sent (pc-multi-get-type-total-sent idx))
+              (t-recv (pc-multi-get-type-total-recv idx))
+              (r-send (pc-multi-get-type-send-rate idx))
+              (r-recv (pc-multi-get-type-recv-rate idx)))
+          (when (or (> t-sent 0) (> t-recv 0))
+            (let ((name (mp-get-packet-type-name idx))
+                  (rs-kb (/ (the float r-send) 1024.0))
+                  (rr-kb (/ (the float r-recv) 1024.0)))
+              (format *stdcon* "  ~S: Out: ~,,2f KB/s (~,,1fK) | In: ~,,2f KB/s (~,,1fK)~%"
+                      name
+                      rs-kb
+                      (/ (the float t-sent) 1024.0)
+                      rr-kb
+                      (/ (the float t-recv) 1024.0)
+                      )
+              )
+            )
+          )
+        )
+
       (format *stdcon* "-------------------------~%~%")
       )
     )

@@ -2,6 +2,8 @@
 
 #include "common/log/log.h"
 #include "game/multiplayer/multiplayer_types.h"
+#include "game/multiplayer/multiplayer_session.h"
+#include "game/multiplayer/multiplayer_protocol.h"
 
 int16_t mp_pack_float_q(float value) {
   if (value > 1.0f) {
@@ -69,11 +71,13 @@ bool mp_send_packet(MultiplayerData& data,
 
   if (data.local_role == 0) {
     enet_host_broadcast(data.host, channel, packet);
+    data.stats.track_sent_bytes(packet_data, size);
     return true;
   }
 
   if (data.server_peer && data.server_peer->state == ENET_PEER_STATE_CONNECTED) {
     if (enet_peer_send(data.server_peer, channel, packet) == 0) {
+      data.stats.track_sent_bytes(packet_data, size);
       return true;
     }
     enet_packet_destroy(packet);
@@ -103,5 +107,6 @@ bool mp_send_packet_to_peer(ENetPeer* peer,
     enet_packet_destroy(packet);
     return false;
   }
+  multiplayer_data().stats.track_sent_bytes(packet_data, size);
   return true;
 }

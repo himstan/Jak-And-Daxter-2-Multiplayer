@@ -107,6 +107,8 @@ void handle_receive_packet(MultiplayerData& data,
 }
 
 void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* remote) {
+  data.stats.calculate_rates(data.host);
+
   ENetEvent event;
   uint32_t current_time = enet_time_get();
 
@@ -121,6 +123,7 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
     switch (event.type) {
       case ENET_EVENT_TYPE_RECEIVE:
         data.last_receive_time = current_time;
+        data.stats.track_recv_bytes(event.packet->data, event.packet->dataLength);
         if (data.join_status == (int)MultiplayerStatus::RECONNECTING) {
           lg::info("[Multiplayer] Data packet received. Connection restored. Resuming status {}...",
                    data.pre_reconnect_status);
@@ -474,6 +477,131 @@ int pc_multi_get_packet_loss() {
   return count > 0 ? (total / count) : 0;
 }
 
+int pc_multi_get_ping_variance() {
+  auto& data = multiplayer_data();
+  if (!data.host) {
+    return 0;
+  }
+  if (data.server_peer) {
+    return data.server_peer->roundTripTimeVariance;
+  }
+
+  u32 total = 0;
+  u32 count = 0;
+  for (size_t i = 0; i < data.host->peerCount; i++) {
+    if (data.host->peers[i].state == ENET_PEER_STATE_CONNECTED) {
+      total += data.host->peers[i].roundTripTimeVariance;
+      count++;
+    }
+  }
+  return count > 0 ? (total / count) : 0;
+}
+
+int pc_multi_get_total_sent_bytes() {
+  auto& data = multiplayer_data();
+  if (!data.host) {
+    return 0;
+  }
+  return data.host->totalSentData;
+}
+
+int pc_multi_get_total_received_bytes() {
+  auto& data = multiplayer_data();
+  if (!data.host) {
+    return 0;
+  }
+  return data.host->totalReceivedData;
+}
+
+int pc_multi_get_total_sent_packets() {
+  auto& data = multiplayer_data();
+  if (!data.host) {
+    return 0;
+  }
+  return data.host->totalSentPackets;
+}
+
+int pc_multi_get_total_received_packets() {
+  auto& data = multiplayer_data();
+  if (!data.host) {
+    return 0;
+  }
+  return data.host->totalReceivedPackets;
+}
+
+int pc_multi_get_send_rate() {
+  auto& data = multiplayer_data();
+  return data.stats.send_rate_bytes_per_sec;
+}
+
+int pc_multi_get_recv_rate() {
+  auto& data = multiplayer_data();
+  return data.stats.recv_rate_bytes_per_sec;
+}
+
+int pc_multi_get_peer_port() {
+  auto& data = multiplayer_data();
+  if (!data.host) {
+    return 0;
+  }
+  if (data.server_peer) {
+    return data.server_peer->address.port;
+  }
+  for (size_t i = 0; i < data.host->peerCount; i++) {
+    if (data.host->peers[i].state == ENET_PEER_STATE_CONNECTED) {
+      return data.host->peers[i].address.port;
+    }
+  }
+  return 0;
+}
+
+u64 pc_multi_get_peer_ip() {
+  auto& data = multiplayer_data();
+  if (!data.host) {
+    return jak2::make_string_from_c("");
+  }
+  ENetAddress addr;
+  bool found = false;
+  if (data.server_peer) {
+    addr = data.server_peer->address;
+    found = true;
+  } else {
+    for (size_t i = 0; i < data.host->peerCount; i++) {
+      if (data.host->peers[i].state == ENET_PEER_STATE_CONNECTED) {
+        addr = data.host->peers[i].address;
+        found = true;
+        break;
+      }
+    }
+  }
+  if (found) {
+    char ip[64];
+    enet_address_get_host_ip(&addr, ip, sizeof(ip));
+    return jak2::make_string_from_c(ip);
+  }
+  return jak2::make_string_from_c("");
+}
+
+int pc_multi_get_type_send_rate(int type) {
+  if (type < 0 || type >= 11) return 0;
+  return multiplayer_data().stats.send_rate_by_type[type];
+}
+
+int pc_multi_get_type_recv_rate(int type) {
+  if (type < 0 || type >= 11) return 0;
+  return multiplayer_data().stats.recv_rate_by_type[type];
+}
+
+int pc_multi_get_type_total_sent(int type) {
+  if (type < 0 || type >= 11) return 0;
+  return (int)multiplayer_data().stats.sent_bytes_by_type[type];
+}
+
+int pc_multi_get_type_total_recv(int type) {
+  if (type < 0 || type >= 11) return 0;
+  return (int)multiplayer_data().stats.recv_bytes_by_type[type];
+}
+
 void init_multiplayer_pc_port() {
   jak2::make_function_symbol_from_c("pc-multi-setup-host", (void*)pc_multi_setup_host);
   jak2::make_function_symbol_from_c("pc-multi-setup-client", (void*)pc_multi_setup_client);
@@ -512,4 +640,17 @@ void init_multiplayer_pc_port() {
   jak2::make_function_symbol_from_c("pc-multi-get-ticks", (void*)pc_multi_get_ticks);
   jak2::make_function_symbol_from_c("pc-multi-get-ping", (void*)pc_multi_get_ping);
   jak2::make_function_symbol_from_c("pc-multi-get-packet-loss", (void*)pc_multi_get_packet_loss);
+  jak2::make_function_symbol_from_c("pc-multi-get-ping-variance", (void*)pc_multi_get_ping_variance);
+  jak2::make_function_symbol_from_c("pc-multi-get-total-sent-bytes", (void*)pc_multi_get_total_sent_bytes);
+  jak2::make_function_symbol_from_c("pc-multi-get-total-received-bytes", (void*)pc_multi_get_total_received_bytes);
+  jak2::make_function_symbol_from_c("pc-multi-get-total-sent-packets", (void*)pc_multi_get_total_sent_packets);
+  jak2::make_function_symbol_from_c("pc-multi-get-total-received-packets", (void*)pc_multi_get_total_received_packets);
+  jak2::make_function_symbol_from_c("pc-multi-get-send-rate", (void*)pc_multi_get_send_rate);
+  jak2::make_function_symbol_from_c("pc-multi-get-recv-rate", (void*)pc_multi_get_recv_rate);
+  jak2::make_function_symbol_from_c("pc-multi-get-peer-ip", (void*)pc_multi_get_peer_ip);
+  jak2::make_function_symbol_from_c("pc-multi-get-peer-port", (void*)pc_multi_get_peer_port);
+  jak2::make_function_symbol_from_c("pc-multi-get-type-send-rate", (void*)pc_multi_get_type_send_rate);
+  jak2::make_function_symbol_from_c("pc-multi-get-type-recv-rate", (void*)pc_multi_get_type_recv_rate);
+  jak2::make_function_symbol_from_c("pc-multi-get-type-total-sent", (void*)pc_multi_get_type_total_sent);
+  jak2::make_function_symbol_from_c("pc-multi-get-type-total-recv", (void*)pc_multi_get_type_total_recv);
 }
