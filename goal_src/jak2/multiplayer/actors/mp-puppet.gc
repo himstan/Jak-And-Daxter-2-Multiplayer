@@ -129,6 +129,8 @@
     (((mp-target-state-id gun-stance))   'target-gun-stance)
     (((mp-target-state-id gun-walk))     'target-gun-walk)
     (((mp-target-state-id high-jump))    'target-high-jump)
+    (((mp-target-state-id duck-high-jump)) 'target-duck-high-jump)
+    (((mp-target-state-id duck-high-jump-jump)) 'target-duck-high-jump-jump)
     (((mp-target-state-id roll))         'target-roll)
     (((mp-target-state-id roll-flip))    'target-roll-flip)
     (((mp-target-state-id flop))         'target-flop)
@@ -263,6 +265,8 @@
     (('target-gun-stance)       (the uint (mp-target-state-id gun-stance)))
     (('target-gun-walk)         (the uint (mp-target-state-id gun-walk)))
     (('target-high-jump)        (the uint (mp-target-state-id high-jump)))
+    (('target-duck-high-jump)   (the uint (mp-target-state-id duck-high-jump)))
+    (('target-duck-high-jump-jump) (the uint (mp-target-state-id duck-high-jump-jump)))
     (('target-roll)             (the uint (mp-target-state-id roll)))
     (('target-roll-flip)        (the uint (mp-target-state-id roll-flip)))
     (('target-flop)             (the uint (mp-target-state-id flop)))
@@ -717,6 +721,8 @@
     (('target-jump
       'target-double-jump
       'target-high-jump
+      'target-duck-high-jump
+      'target-duck-high-jump-jump
       'target-roll
       'target-roll-flip
       'target-flop
@@ -758,6 +764,8 @@
     (('target-jump
       'target-double-jump
       'target-high-jump
+      'target-duck-high-jump
+      'target-duck-high-jump-jump
       'target-attack-uppercut-jump
       'target-indax-jump
       'target-indax-double-jump
@@ -833,7 +841,13 @@
      (go-process proc target-double-jump (-> *TARGET-bank* double-jump-height-min) (-> *TARGET-bank* double-jump-height-max))
      )
     (('target-high-jump)
-     (go-process proc target-high-jump (-> *TARGET-bank* duck-jump-height-min) (-> *TARGET-bank* duck-jump-height-max) 'duck)
+     (go-process proc target-high-jump (-> *TARGET-bank* flip-jump-height-min) (-> *TARGET-bank* flip-jump-height-max) 'flip)
+     )
+    (('target-duck-high-jump)
+     (go-process proc target-duck-high-jump (-> *TARGET-bank* duck-jump-height-min) (-> *TARGET-bank* duck-jump-height-max) 'duck)
+     )
+    (('target-duck-high-jump-jump)
+     (go-process proc target-duck-high-jump-jump (-> *TARGET-bank* duck-jump-height-min) (-> *TARGET-bank* duck-jump-height-max) 'duck)
      )
     (('target-roll)
      (go-process proc target-roll)
