@@ -3149,7 +3149,7 @@
     ((> (-> this alert-state level) 0)
      (if (and (logtest? (-> this alert-state flags) (traffic-alert-flag target-jak))
               (not (logtest? (-> this alert-state flags) (traffic-alert-flag alert-ending)))
-              (mp-traffic-valid-local-target?)
+              (or (mp-traffic-valid-local-target?) (mp-traffic-valid-remote-target))
               )
          (for-all-active-processes this (lambda ((arg0 process-focusable) (arg1 traffic-object-type-info))
                                           (if (logtest? (-> arg1 flags) (traffic-type-flags trtflags-0))

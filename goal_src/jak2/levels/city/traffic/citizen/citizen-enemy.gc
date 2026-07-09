@@ -1,6 +1,9 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern mp-combat-valid-player-target? (function process-focusable symbol symbol))
+(define-extern mp-combat-best-player-target (function process-focusable process-focusable process-focusable process-focusable process-focusable))
+
 ;; name: citizen-enemy.gc
 ;; name in dgo: citizen-enemy
 ;; dgos: CWI
@@ -202,9 +205,26 @@
               )
             )
           )
-        (if (and *target* (< (vector-vector-distance (target-pos 0) s5-0) f30-0))
-            (set! s4-0 *target*)
+        (let ((local-target (if (and *target* (nonzero? *target*) (mp-combat-valid-player-target? *target* #f))
+                                (the-as process-focusable *target*)
+                                (the-as process-focusable #f)))
+              (remote-target (if (and *multi-sync-enabled?* (= (pc-multi-get-status) 6) *mp-puppet* (nonzero? *mp-puppet*) (mp-combat-valid-player-target? *mp-puppet* #f))
+                                 *mp-puppet*
+                                 (the-as process-focusable #f))))
+          (let ((best-player (mp-combat-best-player-target this (the-as process-focusable #f) local-target remote-target)))
+            (when (and best-player (nonzero? best-player))
+              (let ((best-root (-> best-player root)))
+                (when (and best-root (nonzero? best-root))
+                  (let ((f0-dist (vector-vector-distance (-> best-root trans) s5-0)))
+                    (when (< f0-dist f30-0)
+                      (set! s4-0 best-player)
+                      )
+                    )
+                  )
+                )
+              )
             )
+          )
         )
       (when s4-0
         (try-update-focus (-> this focus) (the-as process-focusable s4-0) this)
