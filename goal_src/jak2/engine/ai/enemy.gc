@@ -1681,7 +1681,8 @@
          (format 0 " penetrate=~A~%" 
                           (enum->string penetrate (-> info penetrate-using)))
          (cond
-           ((and (logtest? (-> this enemy-flags) (enemy-flag vulnerable))
+           ((and (or (logtest? (-> this enemy-flags) (enemy-flag vulnerable))
+                     *mp-processing-remote-event*)
                  (not (logtest? (-> this focus-status) (focus-status grabbed)))
                  )
             (set-incoming-attack-info
