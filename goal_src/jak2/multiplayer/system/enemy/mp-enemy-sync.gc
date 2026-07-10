@@ -3,6 +3,7 @@
 
 (define-extern mp-get-enemy-auth (function uint mp-enemy-auth-record))
 (define-extern mp-get-free-enemy-auth (function mp-enemy-auth-record))
+(define-extern mp-enemy-find-remote-slot (function uint mp-enemy-state))
 (define-extern *mp-enemy-debug-auth?* symbol)
 
 (defun is-in-pausable-state? ((state-name symbol))
@@ -366,6 +367,62 @@
   (none)
   )
 
+(defun mp-enemy-reset-remote-motion-sample! ((rec mp-enemy-auth-record))
+  (when (and rec (nonzero? rec))
+    (vector-reset! (-> rec ghost-linvel))
+    (set! (-> rec ghost-sample-time) (the uint 0))
+    )
+  (none)
+  )
+
+(defun mp-enemy-update-remote-linvel! ((rec mp-enemy-auth-record)
+                                       (slot mp-enemy-state)
+                                       (sample-time uint)
+                                       (previous-time uint))
+  (when (and rec (nonzero? rec) slot (nonzero? slot))
+    (let ((remote-pos (new 'stack-no-clear 'vector)))
+      (set-vector! remote-pos (-> slot x) (-> slot y) (-> slot z) 1.0)
+      (if (and (nonzero? previous-time)
+               (> sample-time previous-time)
+               (< (- sample-time previous-time) (the uint 500))
+               (< (vector-vector-distance remote-pos (-> rec ghost-trans)) (meters 10)))
+          (let ((sample-seconds (* 0.001 (the float (- sample-time previous-time))))
+                (measured-linvel (new 'stack-no-clear 'vector)))
+            (vector-float*! measured-linvel
+                            (vector-! measured-linvel remote-pos (-> rec ghost-trans))
+                            (/ 1.0 sample-seconds))
+            (vector-lerp! (-> rec ghost-linvel) (-> rec ghost-linvel) measured-linvel 0.5)
+            )
+          (vector-reset! (-> rec ghost-linvel))
+          )
+      )
+    )
+  (none)
+  )
+
+(defun mp-enemy-note-remote-transform-sample! ((rec mp-enemy-auth-record)
+                                                (slot mp-enemy-state))
+  "Update the authoritative sample and derive velocity only once per network packet."
+  (when (and rec
+             (nonzero? rec)
+             slot
+             (nonzero? slot)
+             (nonzero? (-> slot last-updated))
+             (!= (-> slot last-updated) (-> rec ghost-sample-time)))
+    (let ((sample-time (the-as uint (-> slot last-updated)))
+          (previous-time (-> rec ghost-sample-time)))
+      (mp-enemy-update-remote-linvel! rec slot sample-time previous-time)
+      (set-vector! (-> rec ghost-trans) (-> slot x) (-> slot y) (-> slot z) 1.0)
+      (set! (-> rec ghost-quat x) (-> slot quat-x))
+      (set! (-> rec ghost-quat y) (-> slot quat-y))
+      (set! (-> rec ghost-quat z) (-> slot quat-z))
+      (set! (-> rec ghost-quat w) (-> slot quat-w))
+      (set! (-> rec ghost-sample-time) sample-time)
+      )
+    )
+  (none)
+  )
+
 (defun mp-enemy-apply-state ((e-proc enemy) (slot mp-enemy-state))
   "Apply remote sync data to local enemy proxy (Non-Owner Side)."
   ;; GUARD: Don't apply to dead or uninitialized processes
@@ -375,14 +432,8 @@
     (let ((enemy-aid (mp-get-enemy-aid e-proc)))
       (when (nonzero? enemy-aid)
         (let ((rec (mp-get-enemy-auth enemy-aid)))
-          (when rec
-            (set! (-> rec ghost-trans x) (-> slot x))
-            (set! (-> rec ghost-trans y) (-> slot y))
-            (set! (-> rec ghost-trans z) (-> slot z))
-            (set! (-> rec ghost-quat x) (-> slot quat-x))
-            (set! (-> rec ghost-quat y) (-> slot quat-y))
-            (set! (-> rec ghost-quat z) (-> slot quat-z))
-            (set! (-> rec ghost-quat w) (-> slot quat-w))
+          (when (and rec (nonzero? rec))
+            (mp-enemy-note-remote-transform-sample! rec slot)
             (set! (-> rec ghost-state) (the-as mp-enemy-state-id (-> slot state)))
             (set! (-> rec ghost-focus-aid) (-> slot focus-aid))
             )
@@ -460,6 +511,7 @@
           (set! (-> rec just-taken-authority) #f)
           (set! (-> rec last-applied-remote-state) (the-as mp-enemy-state-id 0))
           (set! (-> rec last-remote-state-bump-time) 0)
+          (mp-enemy-reset-remote-motion-sample! rec)
           (return rec)
           )
       )
@@ -595,51 +647,54 @@
        )
   )
 
-(defun mp-enemy-should-predictive-move? ((e-proc enemy))
-  (if (and e-proc
-           (nonzero? e-proc)
-           (not (mp-enemy-authoritative? e-proc))
-           (not (mp-enemy-battle-spawn-protected? e-proc))
-           (not (logtest? (-> e-proc enemy-flags) (enemy-flag death-start))))
-      #t
-      #f)
+(defun mp-enemy-remote-slot-fresh? ((slot mp-enemy-state))
+  "Does this slot contain a recent authoritative enemy sample?"
+  (when (and slot
+             (nonzero? slot)
+             (nonzero? (-> slot actor-id))
+             (nonzero? (-> slot last-updated)))
+    (let ((now (pc-multi-get-ticks))
+          (last-updated (-> slot last-updated)))
+      (return (and (>= now last-updated)
+                   (< (- now last-updated) (the uint64 2000))))
+      )
+    )
+  #f
   )
 
-(defun mp-enemy-predictive-move ((e-proc enemy))
-  "Smoothly move the local puppet towards its authoritative ghost position."
+(defun mp-enemy-remote-transform-ready? ((e-proc enemy) (slot mp-enemy-state))
+  "Can this non-owner safely follow the supplied authoritative sample?"
   (when (and e-proc
              (nonzero? e-proc)
+             slot
+             (nonzero? slot)
+             *local-info*
+             (nonzero? *local-info*)
              (-> e-proc root)
              (nonzero? (-> e-proc root)))
     (let ((enemy-aid (mp-get-enemy-aid e-proc)))
-      (when (nonzero? enemy-aid)
-        (let ((rec (mp-get-enemy-auth enemy-aid)))
-          (when rec
-            (mp-actor-apply-ghost-correction!
-              (-> e-proc root trans)
-              (-> e-proc root transv)
-              (-> e-proc root quat)
-              (-> rec ghost-trans)
-              (-> rec ghost-quat)
-              0.7
-              0.4
-              #f)
-            (when (and (not (mp-enemy-authoritative? e-proc))
-                       (nonzero? (-> rec ghost-focus-aid)))
-              (let ((target-role (the-as uint8 (+ -1 (-> rec ghost-focus-aid)))))
-                (let ((focus-proc (if (= target-role (-> *local-info* role))
-                                      (the-as process-focusable *target*)
-                                      (the-as process-focusable *mp-puppet*))))
-                  (when (and focus-proc
-                             (nonzero? focus-proc)
-                             (-> e-proc focus)
-                             (nonzero? (-> e-proc focus)))
-                    (set! (-> e-proc focus handle) (process->handle focus-proc))
-                    )
-                  )
-                )
-              )
-            )
+      (return (and (nonzero? enemy-aid)
+                   (= enemy-aid (-> slot actor-id))
+                   (mp-enemy-remote-slot-fresh? slot)
+                   (not (mp-enemy-authoritative? e-proc))
+                   (not (mp-enemy-terminal-sync? e-proc enemy-aid))))
+      )
+    )
+  #f
+  )
+
+(defun mp-enemy-predicted-remote-trans! ((rec mp-enemy-auth-record) (out vector))
+  "Predict a short distance beyond the latest sample to hide packet cadence and latency."
+  (when (and rec (nonzero? rec) out (nonzero? out))
+    (vector-copy! out (-> rec ghost-trans))
+    (let ((sample-time (-> rec ghost-sample-time))
+          (now (the-as uint (pc-multi-get-ticks))))
+      (when (and (nonzero? sample-time) (>= now sample-time))
+        (let ((ahead-ms (fmin 100.0
+                              (fmax 0.0
+                                    (+ (the float (- now sample-time))
+                                       (* 0.5 (the float (pc-multi-get-ping))))))))
+          (vector+float*! out (-> rec ghost-trans) (-> rec ghost-linvel) (* 0.001 ahead-ms))
           )
         )
       )
@@ -647,16 +702,129 @@
   (none)
   )
 
-(defun mp-enemy-battle-spawn-protected? ((e-proc enemy))
-  "Should movement correction wait while this non-owned battle enemy runs its spawn intro?"
-  (if (and e-proc
-           (nonzero? e-proc)
-           (not *mp-processing-remote-event*)
-           (logtest? (-> e-proc enemy-flags) (enemy-flag mp-battle-enemy))
-           (not (logtest? (-> e-proc enemy-flags) (enemy-flag directed-ready)))
-           (not (mp-enemy-authoritative? e-proc)))
-      #t
-      #f)
+(defun mp-enemy-debug-smooth-correction ((e-proc enemy)
+                                         (slot mp-enemy-state)
+                                         (replica-dist float))
+  (when (and *mp-enemy-debug-auth?*
+             e-proc
+             (nonzero? e-proc)
+             slot
+             (nonzero? slot)
+             (> replica-dist (meters 1)))
+    (format 0 "[MP-EnemyTrace] replica-smooth aid=~D dist=~F age-ms=~D~%"
+            (mp-get-enemy-aid e-proc)
+            replica-dist
+            (- (pc-multi-get-ticks) (-> slot last-updated)))
+    )
+  (none)
+  )
+
+(defun mp-enemy-apply-smoothed-root! ((root collide-shape)
+                                      (rec mp-enemy-auth-record)
+                                      (predicted-pos vector)
+                                      (replica-dist float)
+                                      (smooth-factor float))
+  (when (and root
+             (nonzero? root)
+             rec
+             (nonzero? rec)
+             predicted-pos
+             (nonzero? predicted-pos))
+    (if (> replica-dist (meters 5))
+        (begin
+          (vector-copy! (-> root trans) predicted-pos)
+          (quaternion-copy! (-> root quat) (-> rec ghost-quat))
+          )
+        (begin
+          (vector-lerp! (-> root trans) (-> root trans) predicted-pos smooth-factor)
+          (quaternion-slerp! (-> root quat) (-> root quat) (-> rec ghost-quat) smooth-factor)
+          )
+        )
+    (vector-copy! (-> root transv) (-> rec ghost-linvel))
+    )
+  (none)
+  )
+
+(defun mp-enemy-smooth-remote-transform! ((e-proc enemy)
+                                          (rec mp-enemy-auth-record)
+                                          (slot mp-enemy-state))
+  "Render a non-owner from predicted authoritative motion while preserving smooth animation."
+  (when (and e-proc
+             (nonzero? e-proc)
+             rec
+             (nonzero? rec)
+             slot
+             (nonzero? slot)
+             (-> e-proc root)
+             (nonzero? (-> e-proc root)))
+    (let ((root (-> e-proc root))
+          (predicted-pos (new 'stack-no-clear 'vector)))
+      (mp-enemy-predicted-remote-trans! rec predicted-pos)
+      (let ((replica-dist (vector-vector-distance (-> root trans) predicted-pos))
+            (smooth-factor (fmin 1.0 (* 15.0 (seconds-per-frame)))))
+        (mp-enemy-debug-smooth-correction e-proc slot replica-dist)
+        (mp-enemy-apply-smoothed-root! root rec predicted-pos replica-dist smooth-factor)
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-enemy-apply-remote-focus! ((e-proc enemy) (rec mp-enemy-auth-record))
+  (when (and e-proc
+             (nonzero? e-proc)
+             rec
+             (nonzero? rec)
+             *local-info*
+             (nonzero? *local-info*)
+             (nonzero? (-> rec ghost-focus-aid))
+             (-> e-proc focus)
+             (nonzero? (-> e-proc focus)))
+    (let ((target-role (the-as uint8 (+ -1 (-> rec ghost-focus-aid)))))
+      (let ((focus-proc (if (= target-role (-> *local-info* role))
+                            (the-as process-focusable *target*)
+                            (the-as process-focusable *mp-puppet*))))
+        (when (and focus-proc (nonzero? focus-proc))
+          (set! (-> e-proc focus handle) (process->handle focus-proc))
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-enemy-apply-remote-transform-from-slot! ((e-proc enemy) (slot mp-enemy-state))
+  (when (mp-enemy-remote-transform-ready? e-proc slot)
+    (let ((rec (mp-get-enemy-auth (mp-get-enemy-aid e-proc))))
+      (when (and rec (nonzero? rec))
+        (mp-enemy-note-remote-transform-sample! rec slot)
+        (mp-enemy-smooth-remote-transform! e-proc rec slot)
+        (mp-enemy-apply-remote-focus! e-proc rec)
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-enemy-apply-remote-transform! ((e-proc enemy))
+  "Apply the latest fresh remote slot after local enemy post logic."
+  (when (and e-proc
+             (nonzero? e-proc)
+             *local-info*
+             (nonzero? *local-info*))
+    (let ((enemy-aid (mp-get-enemy-aid e-proc)))
+      (when (and (nonzero? enemy-aid)
+                 (not (mp-enemy-authoritative? e-proc))
+                 (not (mp-enemy-terminal-sync? e-proc enemy-aid)))
+        (let ((slot (mp-enemy-find-remote-slot enemy-aid)))
+          (when (and slot (nonzero? slot))
+            (mp-enemy-apply-remote-transform-from-slot! e-proc slot)
+            )
+          )
+        )
+      )
+    )
+  (none)
   )
 
 (defun mp-enemy-note-remote-battle-spawn! ((e-proc enemy))
@@ -682,6 +850,7 @@
                   (set! (-> rec just-taken-authority) #f)
                   (set! (-> rec last-applied-remote-state) (the-as mp-enemy-state-id 0))
                   (set! (-> rec last-remote-state-bump-time) 0)
+                  (mp-enemy-reset-remote-motion-sample! rec)
                   (when (and (-> e-proc root) (nonzero? (-> e-proc root)))
                     (vector-copy! (-> rec ghost-trans) (-> e-proc root trans))
                     (quaternion-copy! (-> rec ghost-quat) (-> e-proc root quat))
@@ -772,6 +941,7 @@
     (set! (-> rec just-taken-authority) #f)
     (set! (-> rec last-applied-remote-state) (the-as mp-enemy-state-id 0))
     (set! (-> rec last-remote-state-bump-time) 0)
+    (mp-enemy-reset-remote-motion-sample! rec)
     (set! (-> rec owner) (the-as uint8 local-role))
     (when (and (-> e-proc root)
                (nonzero? (-> e-proc root)))
@@ -880,7 +1050,9 @@
                 (mp-enemy-init-auth-record! rec e-proc enemy-aid local-role)
 
                 (let ((slot (mp-enemy-find-remote-slot enemy-aid)))
-                  (when slot
+                  (when (and slot
+                             (nonzero? slot)
+                             (mp-enemy-remote-slot-fresh? slot))
                       ;; Remote is already broadcasting it. 
                       ;; If they are aggro, we MUST yield.
                       (if (= (-> slot is-aggro) 1)
@@ -928,7 +1100,9 @@
                     (is-daxter-and-riding-along (and (mp-is-daxter?) *local-riding?*))
                     (remote-slot (mp-enemy-find-remote-slot enemy-aid)))
 
-                (when remote-slot
+                (when (and remote-slot
+                           (nonzero? remote-slot)
+                           (mp-enemy-remote-slot-fresh? remote-slot))
                   (set! (-> rec last-remote-seen) (current-time))
 
                   ;; --- Rule: Dual Authority Resolution (Host Priority) ---
@@ -1060,6 +1234,7 @@
                         (+! (-> *mp-enemy-buffer* local-count) 1)
                         (set! (-> rec last-applied-remote-state) (the-as mp-enemy-state-id 0))
                         (set! (-> rec last-remote-state-bump-time) 0)
+                        (mp-enemy-reset-remote-motion-sample! rec)
                         (vector-copy! (-> rec ghost-trans) (-> e-proc root trans))
                         (quaternion-copy! (-> rec ghost-quat) (-> e-proc root quat))
                         (set! (-> rec ghost-state) (the-as mp-enemy-state-id (mp-enemy-get-state-id e-proc)))
@@ -1070,14 +1245,16 @@
                       (if (or (and remote-slot (< (- (current-time) (-> rec last-remote-seen)) (seconds 2)))
                               (< (- (current-time) (-> rec last-transfer-time)) (seconds 2)))
                           (begin
-                            (when (and remote-slot (nonzero? (-> e-proc root)))
+                            (when (and remote-slot
+                                       (nonzero? remote-slot)
+                                       (mp-enemy-remote-slot-fresh? remote-slot)
+                                       (-> e-proc root)
+                                       (nonzero? (-> e-proc root)))
                               ;; Apply the remote state data (Updates ghost position/rotation/state)
                               (mp-enemy-apply-state e-proc remote-slot)
-                              ;; Apply a correction immediately too. Some nav enemies, notably rhino,
-                              ;; can spend most frames in travel posts where local navigation otherwise wins.
-                              (when (not (mp-enemy-battle-spawn-protected? e-proc))
-                                (mp-enemy-predictive-move e-proc)
-                                )
+                              ;; Apply the authoritative transform immediately; common-post applies it
+                              ;; again after local species/navigation post logic has finished.
+                              (mp-enemy-apply-remote-transform-from-slot! e-proc remote-slot)
                               )
                             )
                           (begin

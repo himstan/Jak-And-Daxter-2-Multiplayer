@@ -6,8 +6,7 @@
 ;; dgos: GAME, COMMON
 
 (define-extern mp-enemy-allow-local-state-transition? (function enemy symbol))
-(define-extern mp-enemy-should-predictive-move? (function enemy symbol))
-(define-extern mp-enemy-predictive-move (function enemy none))
+(define-extern mp-enemy-apply-remote-transform! (function enemy none))
 
 ;; DECOMP BEGINS
 
@@ -204,9 +203,6 @@
    - tracks when the enemy was last drawn
    - looks at the target and handles attacking
    @TODO Not extremely well understood yet"
-  (when (mp-enemy-should-predictive-move? (the-as enemy self))
-    (mp-enemy-predictive-move (the-as enemy self))
-    )
   (if (and (nonzero? (-> self draw)) (logtest? (-> self draw status) (draw-control-status on-screen)))
       (set-time! (-> self last-draw-time))
       )
@@ -279,6 +275,7 @@
       (joint-mod-debug-draw (-> self neck))
       )
   (ja-post)
+  (mp-enemy-apply-remote-transform! (the-as enemy self))
   0
   (none)
   )
