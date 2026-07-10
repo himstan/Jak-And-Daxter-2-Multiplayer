@@ -37,6 +37,7 @@
                                            :flags (shadow-flags shdf03 disable-draw)
                                            :shadow-dir (new 'static 'vector :y -1.0 :w 614400.0)
                                            :bot-plane (new 'static 'plane :y 1.0 :w 4096.0)
+                                           :bot-plane (new 'static 'plane :y 1.0 :w 4096.0)
                                            :top-plane (new 'static 'plane :y 1.0 :w -4096.0)
                                            )
                                )
@@ -507,7 +508,9 @@
   )
 
 (defmethod go-stare2 ((this enemy))
-  (go (method-of-object this stare))
+  (when (mp-enemy-allow-local-state-transition? this)
+    (go (method-of-object this stare))
+    )
   )
 
 (defmethod go-hostile ((this enemy))
@@ -517,15 +520,21 @@
   )
 
 (defmethod go-ambush ((this enemy))
-  (go (method-of-object this ambush))
+  (when (mp-enemy-allow-local-state-transition? this)
+    (go (method-of-object this ambush))
+    )
   )
 
 (defmethod go-flee ((this enemy))
-  (go (method-of-object this flee))
+  (when (mp-enemy-allow-local-state-transition? this)
+    (go (method-of-object this flee))
+    )
   )
 
 (defmethod go-directed ((this enemy))
-  (go (method-of-object this directed))
+  (when (mp-enemy-allow-local-state-transition? this)
+    (go (method-of-object this directed))
+    )
   )
 
 (defmethod react-to-focus ((this enemy))
@@ -1161,6 +1170,7 @@
 
 ;; WARN: Return type mismatch object vs none.
 (defbehavior enemy-init-by-other enemy ((arg0 process-drawable) (arg1 enemy-init-by-other-params))
+  (set! (-> self net-id) (the-as uint 0))
   (let ((a1-1 (-> arg1 entity)))
     (if a1-1
         (process-entity-set! self a1-1)
@@ -1310,13 +1320,8 @@
   #t
   )
 
-(defmethod enemy-method-99 ((this enemy) (arg0 process-focusable))
-  (if (and arg0
-           (nonzero? arg0)
-           (type? arg0 target)
-           (= (-> (the-as target arg0) tobot?) 'mp-puppet))
-      #t
-      #f)
+(defmethod should-flee? ((this enemy) (arg0 process-focusable))
+  #f
   )
 
 (defmethod reset-to-collide-spec ((this enemy-focus) (arg0 collide-spec))
@@ -1492,7 +1497,7 @@
     (let ((s3-2 (cond
                   (s3-1
                     (cond
-                      ((enemy-method-99 this arg0)
+                      ((should-flee? this arg0)
                        4
                        )
                       (s2-0

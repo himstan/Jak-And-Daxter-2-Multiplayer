@@ -3,6 +3,7 @@
 
 (define-extern mp-get-enemy-auth (function uint mp-enemy-auth-record))
 (define-extern mp-get-free-enemy-auth (function mp-enemy-auth-record))
+(define-extern *mp-enemy-debug-auth?* symbol)
 
 (defun is-in-pausable-state? ((state-name symbol))
   (case state-name
@@ -252,6 +253,19 @@
                       (mp-enemy-state-retry-ready? rec))
               (let ((st (method-state (-> e-proc type) (the-as basic target-state))))
                 (when (and st (nonzero? st))
+                  (when *mp-enemy-debug-auth?*
+                    (format 0 "[MP-EnemyTrace] state-request aid=~D owner=~D local=~D current=~A~%"
+                            (mp-get-enemy-aid e-proc)
+                            (-> rec owner)
+                            (if (and *local-info* (nonzero? *local-info*)) (-> *local-info* role) 255)
+                            (if (-> e-proc state) (-> e-proc state name) #f)
+                            )
+                    (format 0 "[MP-EnemyTrace] state-request pending=~A target=~A incoming=~D last=~D~%"
+                            (if (-> e-proc next-state) (-> e-proc next-state name) #f)
+                            target-state
+                            remote-state-id
+                            (-> rec last-applied-remote-state))
+                    )
                   (set! *mp-processing-remote-event* #t)
                   (send-event e-proc 'go-state target-state)
                   (set! *mp-processing-remote-event* #f)
@@ -277,6 +291,14 @@
       (when (!= cur-state target-state)
         (let ((st (method-state (-> e-proc type) (the-as basic target-state))))
           (when (and st (nonzero? st))
+            (when *mp-enemy-debug-auth?*
+              (format 0 "[MP-EnemyTrace] state-queue aid=~D current=~A pending=~A target=~A status=~A~%"
+                      (mp-get-enemy-aid e-proc)
+                      cur-state
+                      (if (-> e-proc next-state) (-> e-proc next-state name) #f)
+                      target-state
+                      (-> e-proc status))
+              )
             (process-mask-clear! (-> e-proc mask) sleep sleep-code)
             (set! (-> e-proc next-state) (the-as state st))
             (enter-state
@@ -461,11 +483,80 @@
   (mp-is-jak?) ;; fallback to host if unknown
   )
 
+(defun mp-enemy-awaiting-battle-network-id? ((e-proc enemy))
+  "True while a recycled battle enemy has not received its new dynamic network ID."
+  (and e-proc
+       (nonzero? e-proc)
+       (logtest? (-> e-proc enemy-flags) (enemy-flag mp-battle-enemy))
+       (zero? (-> e-proc net-id)))
+  )
+
 (defun mp-enemy-allow-local-state-transition? ((e-proc enemy))
-  "True when this peer may run vanilla local enemy state transitions."
-  (if (and e-proc (nonzero? e-proc))
-      (or (mp-enemy-authoritative? e-proc) *mp-processing-remote-event*)
+  "Allow startup transitions until ownership is known, then defer to the owner."
+  (if (and e-proc
+           (nonzero? e-proc))
+      (if (mp-enemy-awaiting-battle-network-id? e-proc)
+          #t
+          (let ((enemy-aid (mp-get-enemy-aid e-proc)))
+            (if (nonzero? enemy-aid)
+                (let ((rec (mp-get-enemy-auth enemy-aid)))
+                  (if rec
+                      (if (and *local-info*
+                               (nonzero? *local-info*))
+                          (or (= (-> rec owner) (-> *local-info* role))
+                              *mp-processing-remote-event*)
+                          #t)
+                      #t))
+                #t)))
       #f)
+  )
+
+(defun mp-process-allow-local-state-transition? ((proc process))
+  "Allow normal state transitions except for non-authoritative enemy replicas."
+  (if (and proc
+           (nonzero? proc)
+           (logtest? (-> proc mask) (process-mask enemy))
+           (type? proc enemy))
+      (mp-enemy-allow-local-state-transition? (the-as enemy proc))
+      #t)
+  )
+
+(defun mp-enemy-restore-local-state-transition! ((e-proc enemy))
+  "Restore an enemy's current state transition hook after authority arrives locally."
+  (when (and e-proc
+             (nonzero? e-proc))
+    (let ((current-state (-> e-proc state)))
+      (when (and current-state
+                 (nonzero? current-state))
+        (set! (-> e-proc trans-hook) (-> current-state trans))
+        (when (and (-> e-proc focus)
+                   (nonzero? (-> e-proc focus))
+                   (or (= (-> current-state name) 'chase)
+                       (= (-> current-state name) 'hostile)
+                       (= (-> current-state name) 'notice)))
+          (set! (-> e-proc focus aware) (enemy-aware enemy-aware-3))
+          (let ((enemy-aid (mp-get-enemy-aid e-proc)))
+            (when (nonzero? enemy-aid)
+              (let ((rec (mp-get-enemy-auth enemy-aid)))
+                (when (and rec (nonzero? (-> rec ghost-focus-aid)))
+                  (let ((target-role (the-as uint8 (+ -1 (-> rec ghost-focus-aid)))))
+                    (let ((focus-proc (if (= target-role (-> *local-info* role))
+                                          (the-as process-focusable *target*)
+                                          (the-as process-focusable *mp-puppet*))))
+                      (when (and focus-proc (nonzero? focus-proc))
+                        (set! (-> e-proc focus handle) (process->handle focus-proc))
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  (none)
   )
 
 (defun mp-enemy-allow-kill-prefer-falling? ((e-proc enemy))
@@ -767,7 +858,7 @@
               (when is-culled
                 (let ((rec (mp-get-enemy-auth enemy-aid)))
                   (when rec
-                    (format 0 "[MP-Sync] Cleaning up culled/errored enemy ~A aid=~D nid=~D in state ~A.~%" e-proc enemy-aid cur-state enemy-nid)
+                    (format 0 "[MP-Sync] Cleaning up culled/errored enemy ~A aid=~D nid=~D in state ~A.~%" e-proc enemy-aid enemy-nid cur-state)
                     (set! (-> rec aid) (the-as uint32 0))
                     )
                   )
@@ -952,6 +1043,9 @@
                       )
                     (if (= (-> rec owner) local-role)
                     (begin
+                      (when (-> rec just-taken-authority)
+                        (mp-enemy-restore-local-state-transition! e-proc)
+                        )
                       (mp-enemy-snap-to-ghost-on-takeover! e-proc rec enemy-aid)
                       ;; PACK LOCAL STATE
                       (when (and (!= (-> e-proc status) 'dead)

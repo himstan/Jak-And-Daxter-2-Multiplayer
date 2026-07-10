@@ -1070,6 +1070,6 @@
   (none)
   )
 
-(defmethod enemy-method-99 ((this fodder) (arg0 process-focusable))
+(defmethod should-flee? ((this fodder) (arg0 process-focusable))
   (focus-test? arg0 mech)
   )

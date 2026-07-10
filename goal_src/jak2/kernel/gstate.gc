@@ -51,6 +51,8 @@ It type checks the arguments for the entry function.
 
 ;; DECOMP BEGINS
 
+(define-extern mp-process-allow-local-state-transition? (function process symbol))
+
 (defmacro go (next-state &rest args)
   "Change the state of the current process.
    This will only return if this is called within the post thread.
@@ -412,7 +414,10 @@ It type checks the arguments for the entry function.
              (set! (-> pp stack-frame-top) #f)
              )
          (set! (-> pp post-hook) (-> new-state post))
-         (set! (-> pp trans-hook) (-> new-state trans))
+         (set! (-> pp trans-hook)
+               (if (mp-process-allow-local-state-transition? pp)
+                   (-> new-state trans)
+                   (the-as function #f)))
 
 
          ;; start up the new state. First run the enter function
@@ -424,7 +429,8 @@ It type checks the arguments for the entry function.
 
          ;; run the trans function before the code.
          (let ((trans-func (-> new-state trans)))
-           (if trans-func
+           (if (and trans-func
+                    (mp-process-allow-local-state-transition? pp))
                (trans-func)
                )
            )

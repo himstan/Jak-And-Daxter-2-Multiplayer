@@ -744,7 +744,7 @@
   :post nav-enemy-falling-post
   )
 
-(defmethod enemy-method-99 ((this flitter) (arg0 process-focusable))
+(defmethod should-flee? ((this flitter) (arg0 process-focusable))
   (focus-test? arg0 mech)
   )
 
@@ -756,7 +756,7 @@
              (f30-0 (vector-length s4-1))
              )
         (cond
-          ((enemy-method-99 this s3-0)
+          ((should-flee? this s3-0)
            (go-flee this)
            )
           ((and (< f30-0 32768.0) (not (flitter-method-182 this s3-0)))

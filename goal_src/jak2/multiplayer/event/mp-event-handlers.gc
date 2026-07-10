@@ -1,6 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern *mp-enemy-debug-auth?* symbol)
+
 (defun mp-reset-scene-sync-state! ()
   (set! *multi-remote-spawn-time* (the-as time-frame 0))
   (set! *mp-last-scene-player* #f)
@@ -147,16 +149,38 @@
     (format 0 "[MP-WorldEvent] Received MP_EVENT_ATTACK_ENEMY for nid=~D attack-id=~D~%" net-id (-> evt attack-id))
     (let ((proc (find-enemy-by-aid net-id)))
       (if (and proc (nonzero? proc))
-          (let ((attacker *mp-puppet*))
+          (let ((attacker *mp-puppet*)
+                (e-proc (the-as enemy proc))
+                (rec (mp-get-enemy-auth net-id)))
             (when (and attacker (nonzero? attacker))
+              (when *mp-enemy-debug-auth?*
+                (format 0 "[MP-EnemyTrace] attack-replay aid=~D attack=~D owner=~D local=~D~%"
+                        net-id
+                        (-> evt attack-id)
+                        (if rec (-> rec owner) 255)
+                        (if (and *local-info* (nonzero? *local-info*)) (-> *local-info* role) 255)
+                        )
+                (format 0 "[MP-EnemyTrace] attack-replay state=~A pending=~A hp=~D target-hp=~D~%"
+                        (if (-> e-proc state) (-> e-proc state name) #f)
+                        (if (-> e-proc next-state) (-> e-proc next-state name) #f)
+                        (-> e-proc hit-points)
+                        (-> evt new-hp))
+                )
               (format 0 "[MP-WorldEvent] Applying Authoritative hit to ~A from remote attacker ~A nid=~D~%" proc attacker net-id)
-              (mp-actor-apply-authoritative-remote-damage! (the-as enemy proc) attacker evt 'enemy)
+              (mp-actor-apply-authoritative-remote-damage! e-proc attacker evt 'enemy)
+              (when *mp-enemy-debug-auth?*
+                (format 0 "[MP-EnemyTrace] attack-result aid=~D state=~A pending=~A hp=~D~%"
+                        net-id
+                        (if (-> e-proc state) (-> e-proc state name) #f)
+                        (if (-> e-proc next-state) (-> e-proc next-state name) #f)
+                        (-> e-proc hit-points))
+                )
               ;; Explicitly set focus to the remote attacker
               (if (and attacker
                        (nonzero? attacker)
-                       (-> (the-as enemy proc) focus)
-                       (nonzero? (-> (the-as enemy proc) focus)))
-                  (set! (-> (the-as enemy proc) focus handle) (process->handle attacker))
+                       (-> e-proc focus)
+                       (nonzero? (-> e-proc focus)))
+                  (set! (-> e-proc focus handle) (process->handle attacker))
                   ))
             )
           (format 0 "[MP-WorldEvent] ERROR: Could not find enemy process for nid=~D~%" net-id))
@@ -715,6 +739,12 @@
           (set! (-> rec owner) remote-role)
           (set! (-> rec last-transfer-time) (current-time)) ;; Prevent re-acquisition during handover
           (set! (-> rec last-remote-seen) (current-time))
+          (when (and proc (nonzero? proc))
+            (let ((e-proc (the-as enemy proc)))
+              (set! (-> e-proc trans-hook) #f)
+              (logior! (-> e-proc mask) (process-mask sleep-code))
+              )
+            )
           (mp-send-world-event MP_EVENT_ENEMY_AUTHORITY_ACK aid)
           )
         )
