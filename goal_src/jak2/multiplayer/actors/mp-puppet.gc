@@ -109,6 +109,20 @@
 
 ;; --- Puppet Sync Logic ---
 
+(defun mp-puppet-start-hit-flash! ((proc target))
+  "Start the vanilla timed-invulnerability blink on a valid remote puppet."
+  (when (and proc
+             (nonzero? proc)
+             (-> proc control)
+             (nonzero? (-> proc control)))
+    (target-timed-invulnerable
+      (the-as time-frame (-> *TARGET-bank* hit-invulnerable-timeout))
+      proc
+      1)
+    )
+  (none)
+  )
+
 (defun mp-target-get-state-from-id ((id uint))
   "Map a numeric mp-target-state-id back to a state name symbol."
   (case (the-as mp-target-state-id (the int id))
@@ -1330,6 +1344,7 @@
                (set! *mp-puppet-state-mismatch-count* 0)
                )
               ((or (= ghost-state 'target-hit) (= ghost-state 'target-indax-hit))
+               (mp-puppet-start-hit-flash! proc)
                (send-event proc 'mp-hit)
                (set! *mp-puppet-state-mismatch-count* 0)
                )
