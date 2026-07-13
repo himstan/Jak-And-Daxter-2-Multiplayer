@@ -1272,9 +1272,6 @@
                               ((and is-bot (not (mp-is-jak?)))
                                (set! (-> rec owner) (the uint8 0))
                                (set! (-> rec just-taken-authority) #f)
-                               (when (mp-enemy-retired-host-bot-proxy? e-proc)
-                                 (logior! (-> e-proc enemy-flags) (enemy-flag stop-syncing))
-                                 )
                                )
                               (else
                                (format 0 "[MP] Remote sync stale for ~A aid=~D nid=~D. Reclaiming authority.~%" e-proc enemy-aid enemy-nid)

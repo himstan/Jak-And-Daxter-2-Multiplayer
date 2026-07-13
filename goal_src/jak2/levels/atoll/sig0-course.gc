@@ -104,7 +104,6 @@
   )
 
 (defun sig0-scene-release-ready? ((arg0 sig-atoll))
-  (format 0 "Called sig scene release ready?~%")
   (when (not (and arg0 (nonzero? arg0)))
     (return #f)
     )
