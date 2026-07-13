@@ -1,18 +1,65 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(defun debug-state-name ((proc process))
+  (if (and proc
+           (nonzero? proc)
+           (-> proc state)
+           (nonzero? (-> proc state)))
+      (-> proc state name)
+      'none
+      )
+  )
+
+(defun debug-next-state-name ((proc process))
+  (if (and proc
+           (nonzero? proc)
+           (-> proc next-state)
+           (nonzero? (-> proc next-state)))
+      (-> proc next-state name)
+      'none
+      )
+  )
+
+(defun mp-enemy-debug-remote-slot-state ((slot mp-enemy-state))
+  (if (and slot
+           (nonzero? slot)
+           (nonzero? (-> slot actor-id)))
+      (mp-enemy-get-state-from-id (the-as uint (-> slot state)))
+      'none
+      )
+  )
+
+(defun mp-enemy-debug-remote-slot-age ((slot mp-enemy-state))
+  (if (and slot
+           (nonzero? slot)
+           (nonzero? (-> slot last-updated))
+           (>= (pc-multi-get-ticks) (-> slot last-updated)))
+      (- (pc-multi-get-ticks) (-> slot last-updated))
+      (the uint64 0)
+      )
+  )
+
 (defun mp-draw-enemy-debug ()
   "Overlay real-time ghost sync data for enemies."
-  (when *mp-debug-draw*
+  (when (and *mp-debug-draw*
+             *local-info*
+             (nonzero? *local-info*))
     (format *stdcon* "~0k--- MP ENEMY GHOST DEBUG ---~%")
     
     (iterate-process-tree *active-pool* (lambda ((p process-tree))
       (let ((proc (the-as process p)))
-        (when (and proc (type? proc enemy) (!= (mp-get-enemy-aid (the-as enemy proc)) 0))
+        (when (and proc
+                   (nonzero? proc)
+                   (type? proc enemy)
+                   (!= (mp-get-enemy-aid (the-as enemy proc)) 0))
           (let ((e-proc (the-as enemy proc))
                 (aid (mp-get-enemy-aid (the-as enemy proc))))
             (let ((rec (mp-get-enemy-auth aid)))
-              (when rec
+              (when (and rec
+                         (nonzero? rec)
+                         (-> e-proc root)
+                         (nonzero? (-> e-proc root)))
                 (let ((draw-pos (new 'stack-no-clear 'vector)))
                   (vector-copy! draw-pos (-> e-proc root trans))
                   (set! (-> draw-pos y) (+ (-> draw-pos y) (meters 2.0)))
@@ -21,15 +68,21 @@
                     (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
                                       (the-as string 
                                       (if is-owner
-                                        (format #f "AID: ~D (~S)~%STATE: ~S~%" 
+                                        (format #f "AID: ~D (~S)~%STATE: ~S~%GRABBED: ~A~%" 
                                                 aid 
                                                 "OWNER"
-                                                (if (-> e-proc state) (-> e-proc state name) "NONE"))
-                                        (format #f "AID: ~D (~S)~%STATE: ~S~%GHOST-STATE: ~S" 
-                                              aid 
-                                              "PUPPET"
-                                              (if (-> e-proc state) (-> e-proc state name) "NONE")
-                                              (mp-enemy-get-state-from-id (the-as uint (-> rec ghost-state))))
+                                                (debug-state-name e-proc)
+                                                (logtest? (-> e-proc focus-status) (focus-status grabbed)))
+                                        (let ((remote-slot (mp-enemy-find-remote-slot aid)))
+                                          (format #f
+                                                  "AID: ~D (PUPPET)~%STATE: ~S~%REMOTE: ~S (~D ms)~%CACHE: ~S~%GRABBED: ~A~%"
+                                                  aid
+                                                  (debug-state-name e-proc)
+                                                  (mp-enemy-debug-remote-slot-state remote-slot)
+                                                  (mp-enemy-debug-remote-slot-age remote-slot)
+                                                  (mp-enemy-get-state-from-id (the-as uint (-> rec ghost-state)))
+                                                  (logtest? (-> e-proc focus-status) (focus-status grabbed)))
+                                          )
                                       )
                                       )
                                       draw-pos 
