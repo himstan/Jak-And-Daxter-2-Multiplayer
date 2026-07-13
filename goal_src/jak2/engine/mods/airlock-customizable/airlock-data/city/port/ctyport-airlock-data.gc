@@ -7,6 +7,7 @@
                 :on-notice '(cond ((task-open? "city-port-run-resolution") #f) ((task-closed? "city-krew-delivery-resolution") '(gungame)))
                 :on-activate '(want-load 'ctyport 'ctywide 'gungame)
                 :on-enter '(begin (want-display 'gungame 'display) (want-sound 'ctywide1 'ctywide2 'gungame1))
+                :on-reconcile '((want-load 'ctyport 'ctywide 'gungame) (want-display 'gungame 'display))
                 :on-exit #f
                 :on-cross '(begin (want-vis 'gungame) (want-continue "gungame-start"))
                 :on-inside #f
@@ -17,6 +18,7 @@
                 :on-notice '(when (task-closed? "under-mech-introduction") '(underb))
                 :on-activate '(want-load 'ctyport 'ctywide 'underb)
                 :on-enter '(want-display 'underb 'display)
+                :on-reconcile '((want-load 'ctyport 'ctywide 'underb) (want-display 'underb 'display))
                 :on-exit #f
                 :on-cross #f
                 :on-inside #f
@@ -27,6 +29,7 @@
                 :on-notice '(when (and (task-closed? "under-sig-resolution") (not (send-event self 'front))) '(underb))
                 :on-activate '(want-load 'ctyport 'ctywide 'underb)
                 :on-enter '(want-display 'underb 'display)
+                :on-reconcile '((want-load 'ctyport 'ctywide 'underb) (want-display 'underb 'display))
                 :on-exit #f
                 :on-cross #f
                 :on-inside #f
@@ -37,6 +40,7 @@
                 :on-notice '(cond ((or (task-open? "city-port-run-resolution") (not (task-closed? "city-krew-delivery-delivery"))) #f) (else '(hiphog)))
                 :on-activate '(want-load 'ctyport 'ctywide 'hiphog)
                 :on-enter '(begin (want-display 'hiphog 'display) (want-sound 'ctywide1 'ctywide2 'hiphog1))
+                :on-reconcile '((want-load 'ctyport 'ctywide 'hiphog) (want-display 'hiphog 'display))
                 :on-exit #f
                 :on-cross '(want-vis 'hiphog)
                 :on-inside #f

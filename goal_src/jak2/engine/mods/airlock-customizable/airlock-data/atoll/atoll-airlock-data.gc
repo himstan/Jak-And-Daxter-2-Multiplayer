@@ -7,6 +7,7 @@
                 :on-notice '(unless (and (send-event self 'front) (demo?)) '(atollext))
                 :on-activate '(want-load 'atoll 'atollext #f)
                 :on-enter '(want-display 'atollext 'display)
+                :on-reconcile '((want-load 'atoll 'atollext #f) (want-display 'atollext 'display))
                 :on-exit #f
                 :on-cross '(when (task-closed? "atoll-water-resolution") (task-close! "atoll-water-exit"))
                 :on-inside #f

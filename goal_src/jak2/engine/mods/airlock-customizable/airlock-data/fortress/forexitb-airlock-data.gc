@@ -7,6 +7,7 @@
                 :on-notice '(when #t '(ctyslumb ctywide))
                 :on-activate '(want-load 'ctyslumb 'ctywide 'forexitb)
                 :on-enter '(begin (want-display 'ctyslumb 'display) (want-display 'ctywide 'display) (want-sound 'ctywide1 'ctywide2 'forexit1) (task-close! "fortress-escape-resolution"))
+                :on-reconcile '((want-load 'ctyslumb 'ctywide 'forexitb) (begin (want-display 'ctyslumb 'display) (want-display 'ctywide 'display)))
                 :on-exit #f
                 :on-cross #f
                 :on-inside #f

@@ -48,7 +48,6 @@
       (when (mp-is-daxter?)
         (mp-restore-local-target-after-scene!)
         )
-      (mp-arm-hiphog-airlock-scene-repair!)
       (mp-scene-sync-after-local-end! *mp-active-local-scene-name*)
       (mp-clear-active-local-scene-name!)
       )
@@ -67,8 +66,6 @@
             )
           )
       )
-
-    (mp-process-hiphog-airlock-scene-repair!)
 
     (when (and (not in-scene?)
                (not *mp-pending-scene-sync?*)

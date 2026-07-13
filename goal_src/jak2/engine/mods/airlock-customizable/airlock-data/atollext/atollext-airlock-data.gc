@@ -8,6 +8,7 @@
                 :on-notice '(when #t '(ctyslumc ctywide))
                 :on-activate #f
                 :on-enter '(begin (want-display 'ctywide 'display) (want-display 'ctyslumc 'display) (want-vis 'ctyslumc) (send-event self 'sound 'enter))
+                :on-reconcile '((want-load 'atollext 'ctyslumc 'ctywide) (begin (want-display 'ctywide 'display) (want-display 'ctyslumc 'display)))
                 :on-exit '(begin (want-display 'ctywide #f) (want-display 'ctyslumc #f))
                 :on-cross #f
                 :on-inside '(begin (want-load 'atollext 'atoll #f) (want-sound 'atoll1 'atoll2 'ctywide1) (setting-pers minimap mode 'clear mask MINIMAP_FLAG_MINIMAP time (seconds 80)))
@@ -19,6 +20,7 @@
                 :on-notice '(when #t '(atoll))
                 :on-activate #f
                 :on-enter '(begin (want-display 'atoll 'display) (send-event self 'sound 'exit) (want-vis 'atoll))
+                :on-reconcile '((want-load 'atollext 'atoll #f) (want-display 'atoll 'display))
                 :on-exit '(want-display 'atoll #f)
                 :on-cross #f
                 :on-inside '(begin (want-load 'ctyslumc 'ctywide 'atollext) (want-sound 'ctywide1 'ctywide2 'ctywide3))

@@ -7,6 +7,7 @@
                 :on-notice '(when (and (task-closed? "ruins-tower-resolution") (not (task-open? "city-escort-kid-introduction")) (not (task-open? "city-escort-kid-resolution"))) '(hideout))
                 :on-activate #f
                 :on-enter '(want-display 'hideout 'display)
+                :on-reconcile '((want-load 'ctysluma 'ctywide 'hideout) (want-display 'hideout 'display))
                 :on-exit #f
                 :on-cross '(want-vis 'hideout)
                 :on-inside #f
@@ -17,6 +18,7 @@
                 :on-notice '(cond ((task-closed? "nest-boss-resolution") '(forresca)) ((task-closed? "fortress-save-friends-resolution") #f) ((task-closed? "fortress-save-friends-introduction") '(forresca)) ((task-closed? "fortress-dump-resolution") #f) ((task-closed? "fortress-dump-introduction") '(fordumpa)))
                 :on-activate '(cond ((task-closed? "fortress-save-friends-introduction") (want-load 'ctysluma 'ctywide 'forresca)) ((task-closed? "fortress-dump-introduction") (want-load 'ctysluma 'ctywide 'fordumpa)))
                 :on-enter '(cond ((task-closed? "fortress-save-friends-introduction") (want-display 'forresca 'display) (want-sound 'ctywide1 'ctywide2 'forresc1)) ((task-closed? "fortress-dump-introduction") (want-display 'fordumpa 'display) (want-sound 'ctywide1 'ctywide2 'fordump1)))
+                :on-reconcile '((cond ((task-closed? "fortress-save-friends-introduction") (want-load 'ctysluma 'ctywide 'forresca)) ((task-closed? "fortress-dump-introduction") (want-load 'ctysluma 'ctywide 'fordumpa))) (cond ((task-closed? "fortress-save-friends-introduction") (want-display 'forresca 'display)) ((task-closed? "fortress-dump-introduction") (want-display 'fordumpa 'display))))
                 :on-exit #f
                 :on-cross '(cond ((task-closed? "fortress-save-friends-introduction") (want-vis 'forresca)) ((task-closed? "fortress-dump-resolution") #f) ((task-closed? "fortress-dump-introduction") (want-vis 'fordumpa)))
                 :on-inside #f

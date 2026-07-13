@@ -7,6 +7,7 @@
                 :on-notice '(when (task-closed? "atoll-water-resolution") '(oracle))
                 :on-activate '(want-load 'ctyslumc 'ctywide 'oracle)
                 :on-enter '(begin (want-display 'oracle 'display) (want-sound 'ctywide1 'ctywide2 'oracle1))
+                :on-reconcile '((want-load 'ctyslumc 'ctywide 'oracle) (want-display 'oracle 'display))
                 :on-exit #f
                 :on-cross '(want-vis 'oracle)
                 :on-inside #f
@@ -17,6 +18,7 @@
                 :on-notice '(when (task-closed? "atoll-water-introduction") '(atollext))
                 :on-activate '(want-load 'atollext 'ctyslumc 'ctywide)
                 :on-enter '(want-display 'atollext 'display)
+                :on-reconcile '((want-load 'atollext 'ctyslumc 'ctywide) (want-display 'atollext 'display))
                 :on-exit #f
                 :on-cross #f
                 :on-inside #f

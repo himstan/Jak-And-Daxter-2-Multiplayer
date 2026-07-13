@@ -7,6 +7,7 @@
                 :on-notice '(when #t '(ctypal tombd))
                 :on-activate '(want-load 'ctypal 'tombd 'tomba)
                 :on-enter '(want-display 'ctypal 'display)
+                :on-reconcile '((want-load 'ctypal 'tombd 'tomba) (want-display 'ctypal 'display))
                 :on-exit '(want-display 'ctypal #f)
                 :on-cross #f
                 :on-inside #f
@@ -17,6 +18,7 @@
                 :on-notice '(when (task-closed? "tomb-boss-resolution") '(tomba))
                 :on-activate '(when (task-closed? "tomb-boss-resolution") (want-load 'ctypal 'tombd 'tomba))
                 :on-enter '(want-display 'tomba 'display)
+                :on-reconcile '((when (task-closed? "tomb-boss-resolution") (want-load 'ctypal 'tombd 'tomba)) (when (task-closed? "tomb-boss-resolution") (want-display 'tomba 'display)))
                 :on-exit '(begin (want-display 'tomba #f) (want-display 'tombb #f) (want-display 'tombc #f))
                 :on-cross #f
                 :on-inside #f

@@ -7,6 +7,7 @@
                 :on-notice '(cond ((task-closed? "tomb-boss-resolution") (if (send-event self 'front) #f '(tombboss))) ((task-closed? "tomb-boss-introduction") #f) ((task-closed? "tomb-boss-door") '(tombboss)) ((and (task-closed? "tomb-poles-resolution") (task-closed? "tomb-water-resolution")) (scene-play "tomb-boss-open") #f))
                 :on-activate '(when (and (task-closed? "tomb-boss-door") (not (task-closed? "tomb-boss-resolution"))) (want-load 'tomba 'tombboss 'tombext))
                 :on-enter '(begin (want-display 'tombboss 'display) (want-display 'tombext 'special))
+                :on-reconcile '((want-load 'tomba 'tombboss 'tombext) (begin (want-display 'tombboss 'display) (want-display 'tombext 'special)))
                 :on-exit '(begin (want-display 'tombboss #f) (want-display 'tombext #f))
                 :on-cross #f
                 :on-inside #f
@@ -17,6 +18,7 @@
                 :on-notice '(when (or (not (task-closed? "tomb-water-resolution")) (task-closed? "tomb-boss-resolution")) '(tombc))
                 :on-activate #f
                 :on-enter '(want-display 'tombc 'display)
+                :on-reconcile '((want-load 'tomba 'tombc #f) (want-display 'tombc 'display))
                 :on-exit '(want-display 'tombc #f)
                 :on-cross #f
                 :on-inside #f
@@ -27,6 +29,7 @@
                 :on-notice '(when (or (not (task-closed? "tomb-poles-resolution")) (task-closed? "tomb-boss-resolution")) '(tombb))
                 :on-activate #f
                 :on-enter '(want-display 'tombb 'display)
+                :on-reconcile '((want-load 'tomba 'tombb #f) (want-display 'tombb 'display))
                 :on-exit '(want-display 'tombb #f)
                 :on-cross '(want-load 'tomba 'tombb 'tombe)
                 :on-inside #f
@@ -37,6 +40,7 @@
                 :on-notice '(when (and (task-closed? "tomb-poles-boulder") (or (not (task-closed? "tomb-poles-resolution")) (task-closed? "tomb-boss-resolution"))) '(tombb))
                 :on-activate #f
                 :on-enter '(want-display 'tombb 'display)
+                :on-reconcile '((want-load 'tomba 'tombb #f) (want-display 'tombb 'display))
                 :on-exit '(want-display 'tombb #f)
                 :on-cross #f
                 :on-inside #f
@@ -47,6 +51,7 @@
                 :on-notice '(when (and (task-closed? "tomb-water-vibe") (or (not (task-closed? "tomb-water-resolution")) (task-closed? "tomb-boss-resolution"))) '(tombc))
                 :on-activate #f
                 :on-enter '(want-display 'tombc 'display)
+                :on-reconcile '((want-load 'tomba 'tombc #f) (want-display 'tombc 'display))
                 :on-exit '(want-display 'tombc #f)
                 :on-cross #f
                 :on-inside #f
@@ -57,6 +62,7 @@
                 :on-notice '(when (task-closed? "tomb-boss-resolution") '(tombd))
                 :on-activate '(when (task-closed? "tomb-boss-resolution") (want-load 'tomba 'tombd 'tombb))
                 :on-enter '(want-display 'tombd 'display)
+                :on-reconcile '((want-load 'tomba 'tombd 'tombb) (want-display 'tombd 'display))
                 :on-exit '(want-display 'tombd #f)
                 :on-cross #f
                 :on-inside #f

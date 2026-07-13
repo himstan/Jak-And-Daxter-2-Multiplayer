@@ -7,6 +7,7 @@
                 :on-notice '(when (task-closed? "castle-break-in-introduction") '(castle))
                 :on-activate '(want-load 'caspad 'castle #f)
                 :on-enter '(begin (want-display 'castle 'display) (talker-spawn "cityv021"))
+                :on-reconcile '((want-load 'caspad 'castle #f) (want-display 'castle 'display))
                 :on-exit #f
                 :on-cross #f
                 :on-inside #f

@@ -7,6 +7,7 @@
                 :on-notice '(when #t '(ctyfarma ctywide))
                 :on-activate #f
                 :on-enter '(begin (want-display 'ctywide 'display) (want-vis 'ctyfarma) (send-event self 'sound 'enter))
+                :on-reconcile '((want-load 'ctyfarma 'ctywide #f) (want-display 'ctywide 'display))
                 :on-exit '(begin (want-display 'ctywide #f))
                 :on-cross #f
                 :on-inside '(cond ((task-open? "forest-scouts-get-board")) (else (want-load 'ctyfarma 'mountain #f) (want-sound 'mount1 'mount2 'ctywide1)))
@@ -27,6 +28,7 @@
                 :on-notice '(when #t '(mountain))
                 :on-activate #f
                 :on-enter '(begin (want-display 'mountain 'display) (want-vis 'mountain) (send-event self 'sound 'exit))
+                :on-reconcile '((want-load 'ctyfarma 'mountain #f) (want-display 'mountain 'display))
                 :on-exit '(want-display 'mountain #f)
                 :on-cross #f
                 :on-inside '(begin (want-load 'ctyfarma 'ctywide #f) (want-sound 'ctywide1 'ctywide2 'ctyfarm1))

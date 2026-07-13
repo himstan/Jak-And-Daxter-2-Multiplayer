@@ -7,6 +7,7 @@
                 :on-notice '(cond ((task-closed? "sewer-escort-introduction") '(sewescb)) ((task-closed? "sewer-enemy-introduction") '(sewerb)))
                 :on-activate '(cond ((task-closed? "sewer-escort-introduction") (want-load 'sewescb 'ctyindb 'ctywide)) ((task-closed? "sewer-enemy-introduction") (want-load 'sewerb 'ctyindb 'ctywide)))
                 :on-enter '(cond ((task-closed? "sewer-escort-introduction") (want-display 'sewescb 'display) (want-sound 'ctywide1 'ctywide2 'sewer4)) ((task-closed? "sewer-enemy-introduction") (want-display 'sewerb 'display) (want-sound 'ctywide1 'ctywide2 'sewer1)))
+                :on-reconcile '((cond ((task-closed? "sewer-escort-introduction") (want-load 'sewescb 'ctyindb 'ctywide)) ((task-closed? "sewer-enemy-introduction") (want-load 'sewerb 'ctyindb 'ctywide))) (cond ((task-closed? "sewer-escort-introduction") (want-display 'sewescb 'display)) ((task-closed? "sewer-enemy-introduction") (want-display 'sewerb 'display))))
                 :on-exit #f
                 :on-cross '(cond ((task-closed? "sewer-escort-introduction") (want-sound 'ctywide1 'ctywide2 'sewer4) '(want-vis 'sewesc)) ((task-closed? "sewer-enemy-introduction") (want-sound 'ctywide1 'ctywide2 'sewer1) '(want-vis 'sewer)))
                 :on-inside #f

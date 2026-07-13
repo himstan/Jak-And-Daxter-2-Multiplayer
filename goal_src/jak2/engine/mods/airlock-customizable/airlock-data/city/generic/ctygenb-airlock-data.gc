@@ -7,6 +7,7 @@
                 :on-notice '(cond ((focus-test? *target* pilot) #f) ((task-closed? "nest-boss-resolution") '(palshaft)) ((task-closed? "palace-boss-resolution") #f) ((task-closed? "palace-cable-introduction") '(palshaft)))
                 :on-activate '(cond ((focus-test? *target* pilot) #f) ((task-closed? "nest-boss-resolution") (want-load 'ctygenb 'ctywide 'palshaft)) ((task-closed? "palace-boss-resolution") #f) ((task-closed? "palace-cable-introduction") (want-load 'ctygenb 'ctywide 'palshaft)))
                 :on-enter '(begin (want-display 'palshaft 'display) (want-sound 'ctywide1 'ctywide2 'palcab1))
+                :on-reconcile '((cond ((focus-test? *target* pilot) #f) ((task-closed? "nest-boss-resolution") (want-load 'ctygenb 'ctywide 'palshaft)) ((task-closed? "palace-boss-resolution") #f) ((task-closed? "palace-cable-introduction") (want-load 'ctygenb 'ctywide 'palshaft))) (cond ((focus-test? *target* pilot) #f) ((task-closed? "nest-boss-resolution") (want-display 'palshaft 'display)) ((task-closed? "palace-boss-resolution") #f) ((task-closed? "palace-cable-introduction") (want-display 'palshaft 'display))))
                 :on-exit #f
                 :on-cross '(want-vis 'palshaft)
                 :on-inside #f

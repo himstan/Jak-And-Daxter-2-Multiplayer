@@ -7,6 +7,7 @@
                 :on-notice '(when (task-closed? "fortress-dump-missile") '(ctysluma ctywide))
                 :on-activate '(want-load 'ctysluma 'ctywide 'fordumpc)
                 :on-enter '(begin (want-display 'ctysluma 'display) (want-display 'ctywide 'display))
+                :on-reconcile '((want-load 'ctysluma 'ctywide 'fordumpc) (begin (want-display 'ctysluma 'display) (want-display 'ctywide 'display)))
                 :on-exit #f
                 :on-cross #f
                 :on-inside #f

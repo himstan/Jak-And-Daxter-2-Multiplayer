@@ -7,6 +7,7 @@
                 :on-notice '(when #t '(drillb drillmid drillmtn))
                 :on-activate #f
                 :on-enter '(begin (want-display 'drillb 'display))
+                :on-reconcile '((want-load 'drillb 'drillmid 'drillmtn) (want-display 'drillb 'display))
                 :on-exit '(begin (want-display 'drillb #f))
                 :on-cross #f
                 :on-inside '(begin (want-load 'drillmid 'drill 'drillmtn))
@@ -17,6 +18,7 @@
                 :on-notice '(unless (task-closed? "drill-mech-resolution") '(drill drillmid drillmtn))
                 :on-activate #f
                 :on-enter '(begin (want-display 'drill 'display))
+                :on-reconcile '((want-load 'drill 'drillmid 'drillmtn) (want-display 'drill 'display))
                 :on-exit '(begin (want-display 'drill #f))
                 :on-cross #f
                 :on-inside '(begin (want-load 'drillmid 'drillb 'drillmtn))
@@ -27,6 +29,7 @@
                 :on-notice '(when #t '(drillb drillmid drillmtn))
                 :on-activate #f
                 :on-enter '(begin (want-display 'drillb 'display))
+                :on-reconcile '((want-load 'drillb 'drillmid 'drillmtn) (want-display 'drillb 'display))
                 :on-exit '(begin (want-display 'drillb #f))
                 :on-cross #f
                 :on-inside '(begin (want-load 'drillmid 'drill 'drillmtn))
@@ -37,6 +40,7 @@
                 :on-notice '(unless (and (task-closed? "drill-mech-started-smashing") (not (task-closed? "drill-mech-smash-consoles"))) '(drill drillmid drillmtn))
                 :on-activate #f
                 :on-enter '(begin (want-display 'drill 'display))
+                :on-reconcile '((want-load 'drill 'drillmid 'drillmtn) (want-display 'drill 'display))
                 :on-exit #f
                 :on-cross #f
                 :on-inside #f

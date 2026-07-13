@@ -7,6 +7,7 @@
                 :on-notice '(when (task-closed? "strip-rescue-introduction") '(vinroom))
                 :on-activate '(want-load 'vinroom 'ctywide 'ctyinda)
                 :on-enter '(begin (want-display 'vinroom 'display) (want-sound 'ctywide1 'ctywide2 'vinroom1))
+                :on-reconcile '((want-load 'vinroom 'ctywide 'ctyinda) (want-display 'vinroom 'display))
                 :on-exit #f
                 :on-cross '(want-vis 'vinroom)
                 :on-inside #f
@@ -17,6 +18,7 @@
                 :on-notice '(when (task-closed? "consite-find-baron-introduction") '(consiteb))
                 :on-activate '(want-load 'ctyinda 'ctywide 'consiteb)
                 :on-enter '(begin (want-display 'consiteb 'display) (want-sound 'ctywide1 'ctywide2 #f))
+                :on-reconcile '((want-load 'ctyinda 'ctywide 'consiteb) (want-display 'consiteb 'display))
                 :on-exit #f
                 :on-cross '(want-vis 'consiteb)
                 :on-inside #f

@@ -7,6 +7,7 @@
                 :on-notice '(when (or (not (send-event self 'front)) (and (not (task-open? "city-oracle-level0-training")) (not (task-open? "city-oracle-level1-training")))) '(ctyslumc ctywide))
                 :on-activate #f
                 :on-enter '(begin (want-display 'ctyslumc 'display) (want-display 'ctywide 'display))
+                :on-reconcile '((want-load 'oracle 'ctyslumc 'ctywide) (begin (want-display 'ctyslumc 'display) (want-display 'ctywide 'display)))
                 :on-exit #f
                 :on-cross '(want-vis 'ctyslumc)
                 :on-inside #f

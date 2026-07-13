@@ -28,6 +28,7 @@
                 :on-notice '(when #t '(ctyslumb ctywide))
                 :on-activate #f
                 :on-enter '(begin (want-display 'ctywide 'display) (want-vis 'ctyslumb) (send-event self 'sound 'enter))
+                :on-reconcile '((want-load 'ctyslumb 'ctywide #f) (want-display 'ctywide 'display))
                 :on-exit '(want-display 'ctywide #f)
                 :on-cross #f
                 :on-inside '(begin (want-load 'ctyslumb 'ruins #f) (want-sound 'ruins1 'ruins2 'ctywide1))
@@ -39,6 +40,7 @@
                 :on-notice '(when #t '(ruins))
                 :on-activate #f
                 :on-enter '(begin (want-display 'ruins 'display) (send-event self 'sound 'exit) (want-vis 'ruins))
+                :on-reconcile '((want-load 'ctyslumb 'ruins #f) (want-display 'ruins 'display))
                 :on-exit '(want-display 'ruins #f)
                 :on-cross '(want-vis 'ruins)
                 :on-inside '(begin (want-load 'ctyslumb 'ctywide #f) (want-sound 'ctywide1 'ctywide2 'ctywide3))

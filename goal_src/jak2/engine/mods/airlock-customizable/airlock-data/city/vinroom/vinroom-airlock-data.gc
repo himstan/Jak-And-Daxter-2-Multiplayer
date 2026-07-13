@@ -7,6 +7,7 @@
                 :on-notice '(when #t '(ctyinda ctywide))
                 :on-activate '(want-load 'vinroom 'ctyinda 'ctywide)
                 :on-enter '(begin (want-display 'ctyinda 'display) (want-display 'ctywide 'display))
+                :on-reconcile '((want-load 'vinroom 'ctyinda 'ctywide) (begin (want-display 'ctyinda 'display) (want-display 'ctywide 'display)))
                 :on-exit #f
                 :on-cross '(want-vis 'ctyinda)
                 :on-inside #f

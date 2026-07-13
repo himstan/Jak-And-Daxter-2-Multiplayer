@@ -27,6 +27,7 @@
                 :on-notice '(when #t '(prison))
                 :on-activate '(want-load 'prison 'forrescb)
                 :on-enter '(want-display 'prison 'display)
+                :on-reconcile '((want-load 'prison 'forrescb #f) (want-display 'prison 'display))
                 :on-exit #f
                 :on-cross '(want-sound 'forresc1 'forresc2 'forexit1)
                 :on-inside #f

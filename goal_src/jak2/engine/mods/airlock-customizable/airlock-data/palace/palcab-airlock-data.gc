@@ -7,6 +7,7 @@
                 :on-notice '(when #t '(palshaft))
                 :on-activate '(want-load 'palshaft 'palcab 'palroof)
                 :on-enter '(want-display 'palshaft 'display)
+                :on-reconcile '((want-load 'palshaft 'palcab 'palroof) (want-display 'palshaft 'display))
                 :on-exit #f
                 :on-cross #f
                 :on-inside #f

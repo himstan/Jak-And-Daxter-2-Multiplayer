@@ -22,6 +22,7 @@
    (on-notice      pair)   ;; evaluated on initialization to determine which levels must be loaded to open the airlock (can include task conditions)
    (on-activate    pair)   ;; actions executed when activating the airlock (e.g. load levels with 'want-load', load sound banks with 'want-sound')
    (on-enter       pair)   ;; actions executed once the airlock finishes opening (e.g. display levels using 'want-display', load sound banks with `want-sound`)
+   (on-reconcile   pair)   ;; two idempotent scripts: load intent, then display intent after loading
    (on-exit        pair)   ;; actions executed when exiting the airlock (e.g. hide levels, unload sound banks with 'want-sound')
    (on-cross       pair)   ;; actions executed at the exact moment of crossing the airlock (e.g. close task nodes)
    (on-inside      pair)   ;; actions executed while inside the airlock zone (e.g. load levels or sound banks)
@@ -35,6 +36,7 @@
                                  &key (on-notice #f)
                                  &key (on-activate #f)
                                  &key (on-enter #f)
+                                 &key (on-reconcile #f)
                                  &key (on-exit #f)
                                  &key (on-cross #f)
                                  &key (on-inside #f)
@@ -46,6 +48,7 @@
      :on-notice ,on-notice
      :on-activate ,on-activate
      :on-enter ,on-enter
+     :on-reconcile ,on-reconcile
      :on-exit ,on-exit
      :on-cross ,on-cross
      :on-inside ,on-inside
@@ -97,6 +100,8 @@
    (on-notice              pair) ;; added
    (on-activate            pair) ;; added
    (on-enter               pair) ;; added
+   (on-reconcile           pair) ;; added
+   (reconcile-next-time    time-frame) ;; added
    (on-exit                pair) ;; added
    (on-cross               pair) ;; added
    (on-inside              pair) ;; added
@@ -134,6 +139,11 @@
     (dont-have-elevator-or-is-standing-on-it (_type_) symbol)
     (airlock-ready-for-state? (_type_) symbol)
     (airlock-ready-for-script? (_type_ pair) symbol)
+    (airlock-reconcile-runtime-ready? (_type_) symbol)
+    (airlock-reconcile-script (_type_ int) pair)
+    (airlock-commit-in-progress? (_type_) symbol)
+    (airlock-needs-reconcile? (_type_) symbol)
+    (reconcile-open-airlock! (_type_) none)
     (airlock-transitioning-to? (_type_ symbol) symbol)
     (airlock-in-state? (_type_ symbol) symbol)
     (airlock-can-start-opening? (_type_) symbol)
@@ -156,6 +166,7 @@
                 :on-notice #f
                 :on-activate #f
                 :on-enter #f
+                :on-reconcile #f
                 :on-exit #f
                 :on-cross #f
                 :on-inside #f

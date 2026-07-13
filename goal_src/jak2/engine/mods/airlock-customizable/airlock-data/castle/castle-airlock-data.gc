@@ -7,6 +7,7 @@
                 :on-notice '(when #t '(caspad))
                 :on-activate '(want-load 'caspad 'castle #f)
                 :on-enter '(want-display 'caspad 'display)
+                :on-reconcile '((want-load 'caspad 'castle #f) (want-display 'caspad 'display))
                 :on-exit #f
                 :on-cross #f
                 :on-inside #f
@@ -17,6 +18,7 @@
                 :on-notice '(when (and (task-closed? "castle-break-in-resolution") (not (task-closed? "castle-boss-resolution"))) '(casboss))
                 :on-activate '(want-load 'castle 'casboss #f)
                 :on-enter '(want-display 'casboss 'display)
+                :on-reconcile '((want-load 'castle 'casboss #f) (want-display 'casboss 'display))
                 :on-exit #f
                 :on-cross #f
                 :on-inside #f
