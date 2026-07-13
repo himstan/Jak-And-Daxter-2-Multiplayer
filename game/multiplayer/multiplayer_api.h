@@ -18,6 +18,7 @@ void pc_multi_receive_palace_squid(u32 buffer_ptr);
 void pc_multi_send_airlock_state(u32 buffer_ptr);
 void pc_multi_receive_airlock_state(u32 buffer_ptr);
 u64 pc_multi_get_enemy_sync_time();
+u64 pc_multi_get_vehicle_sync_time(u32 net_id);
 void pc_multi_disconnect();
 void pc_multi_setup_host();
 void pc_multi_setup_client(u32 ip_ptr, u32 port);

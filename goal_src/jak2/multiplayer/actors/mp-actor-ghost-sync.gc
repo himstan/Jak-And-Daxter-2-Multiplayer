@@ -87,15 +87,17 @@
 
 (defun mp-actor-traffic-predicted-trans! ((rec mp-traffic-ghost-record) (out vector))
   (when (and rec
-             (nonzero? rec))
+             (nonzero? rec)
+             out
+             (nonzero? out))
     (vector-copy! out (-> rec ghost-trans))
-    (when (and (= (-> rec entity-kind) (the uint8 0))
-               (nonzero? (-> rec last-correction-time)))
+    (when (nonzero? (-> rec last-correction-time))
       (let ((now (pc-multi-get-ticks)))
         (when (>= now (-> rec last-correction-time))
           (let ((age-ms (the float (- now (-> rec last-correction-time))))
-                (ping-ms (the float (pc-multi-get-ping))))
-            (let ((ahead-seconds (* 0.001 (fmin 150.0 (fmax 0.0 (+ age-ms (* ping-ms 0.5)))))))
+                (ping-ms (the float (pc-multi-get-ping)))
+                (max-ahead-ms (if (= (-> rec entity-kind) (the uint8 1)) 100.0 150.0)))
+            (let ((ahead-seconds (* 0.001 (fmin max-ahead-ms (fmax 0.0 (+ age-ms (* ping-ms 0.5)))))))
               (when (> ahead-seconds 0.0)
                 (vector+float*! out (-> rec ghost-trans) (-> rec ghost-linvel) ahead-seconds)
                 )

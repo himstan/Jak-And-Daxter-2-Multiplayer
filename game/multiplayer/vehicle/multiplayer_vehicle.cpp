@@ -5,11 +5,16 @@
 #include "game/multiplayer/sync/traffic_sync.h"
 #include "common/log/log.h"
 #include "enet/enet.h"
+#include <cstddef>
 #include <cstring>
 
 namespace {
 size_t vehicle_packet_size(uint32_t count) {
-  return mp_traffic_packet_size(count, sizeof(MPVehicleStatePacked));
+  return offsetof(PacketVehicleSync, vehs) + (sizeof(MPVehicleStatePacked) * count);
+}
+
+bool vehicle_sequence_is_newer(uint32_t incoming, uint32_t previous) {
+  return previous == 0 || static_cast<int32_t>(incoming - previous) > 0;
 }
 }
 
@@ -18,6 +23,14 @@ void handle_vehicle_sync_packet(const _ENetEvent& event, MultiplayerData& data) 
     return;
   }
   uint32_t current_time = enet_time_get();
+  if (event.packet->dataLength < vehicle_packet_size(0)) {
+    if (current_time - data.last_traffic_short_packet_debug_time > 2000) {
+      lg::info("[Multiplayer] Short vehicle traffic header. bytes={} need={}",
+               event.packet->dataLength, vehicle_packet_size(0));
+      data.last_traffic_short_packet_debug_time = current_time;
+    }
+    return;
+  }
   PacketVehicleSync* sync = (PacketVehicleSync*)event.packet->data;
   uint32_t veh_count = (sync->count < (uint32_t)MAX_VEHICLES_PER_PACKET) ?
                        sync->count :
@@ -49,6 +62,13 @@ void handle_vehicle_sync_packet(const _ENetEvent& event, MultiplayerData& data) 
         [](const MPVehicleState& item) { return item.net_id; });
     if (state) {
       uint32_t slot = (uint32_t)(state - data.traffic_buffer.vehicles);
+      if (state->net_id != incoming->net_id) {
+        data.veh_last_updated[slot] = 0;
+        data.veh_last_sequence[slot] = 0;
+      }
+      if (!vehicle_sequence_is_newer(sync->header.sequenceNum, data.veh_last_sequence[slot])) {
+        continue;
+      }
       state->net_id = incoming->net_id;
       state->vehicle_type = incoming->vehicle_type;
       state->color_index = incoming->color_index;
@@ -68,6 +88,7 @@ void handle_vehicle_sync_packet(const _ENetEvent& event, MultiplayerData& data) 
       state->state_flags = incoming->state_flags;
       memcpy(state->rider_aids, incoming->rider_aids, sizeof(state->rider_aids));
       data.veh_last_updated[slot] = current_time;
+      data.veh_last_sequence[slot] = sync->header.sequenceNum;
     }
   }
 }
@@ -77,7 +98,7 @@ void send_vehicle_sync_packets(MultiplayerData& data, MPTrafficSyncBufferGOAL* b
   uint32_t sent_vehs = 0;
   while (sent_vehs < total_vehs) {
     uint32_t chunk_size = (total_vehs - sent_vehs < MAX_VEHICLES_PER_PACKET) ? (total_vehs - sent_vehs) : MAX_VEHICLES_PER_PACKET;
-    PacketVehicleSync packet; packet.header.type = PacketType::VEHICLE_SYNC;
+    PacketVehicleSync packet = {}; packet.header.type = PacketType::VEHICLE_SYNC;
     packet.header.sequenceNum = ++data.sequence_num;
     packet.count = chunk_size; packet.timestamp = enet_time_get();
     packet.level_hash = data.local_traffic_level_hash;

@@ -28,6 +28,7 @@ void multiplayer_reset_remote_traffic_buffers(MultiplayerData& data) {
   memset(&data.traffic_buffer, 0, sizeof(data.traffic_buffer));
   memset(data.ped_last_updated, 0, sizeof(data.ped_last_updated));
   memset(data.veh_last_updated, 0, sizeof(data.veh_last_updated));
+  memset(data.veh_last_sequence, 0, sizeof(data.veh_last_sequence));
   data.remote_traffic_buffer_level_hash = 0;
   data.last_traffic_sync_time = 0;
 }
@@ -96,6 +97,8 @@ void multiplayer_cleanup_stale_sync(MultiplayerData& data, uint32_t current_time
     if (data.traffic_buffer.vehicles[i].net_id != 0 &&
         current_time - data.veh_last_updated[i] > 2000) {
       data.traffic_buffer.vehicles[i].net_id = 0;
+      data.veh_last_updated[i] = 0;
+      data.veh_last_sequence[i] = 0;
     }
   }
 }

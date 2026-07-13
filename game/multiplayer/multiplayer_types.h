@@ -248,6 +248,7 @@ struct MultiplayerData {
   uint32_t last_traffic_short_packet_debug_time = 0;
   uint64_t ped_last_updated[MAX_PEDESTRIAN_SYNC_COUNT] = {0};
   uint64_t veh_last_updated[MAX_VEHICLE_SYNC_COUNT] = {0};
+  uint32_t veh_last_sequence[MAX_VEHICLE_SYNC_COUNT] = {0};
 
   MPPalaceSquidState remote_palace_squid_state = {};
   uint32_t last_palace_squid_sync_time = 0;

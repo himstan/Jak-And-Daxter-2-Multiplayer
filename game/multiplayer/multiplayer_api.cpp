@@ -371,6 +371,27 @@ u64 pc_multi_get_enemy_sync_time() {
   return multiplayer_data().last_enemy_sync_time;
 }
 
+u64 pc_multi_get_vehicle_sync_time(u32 net_id) {
+  if (net_id == 0) {
+    return 0;
+  }
+
+  const auto& data = multiplayer_data();
+  for (const auto& [remote_id, entity] : data.remote_entities) {
+    (void)remote_id;
+    if (entity.veh_state.net_id == net_id) {
+      return entity.receive_tick;
+    }
+  }
+
+  for (uint32_t slot = 0; slot < MAX_VEHICLE_SYNC_COUNT; ++slot) {
+    if (data.traffic_buffer.vehicles[slot].net_id == net_id) {
+      return data.veh_last_updated[slot];
+    }
+  }
+  return 0;
+}
+
 void pc_multi_disconnect() {
   MultiplayerManager::disconnect(multiplayer_data());
 }
@@ -631,6 +652,8 @@ void init_multiplayer_pc_port() {
                                     (void*)pc_multi_receive_airlock_state);
   jak2::make_function_symbol_from_c("pc-multi-get-enemy-sync-time",
                                     (void*)pc_multi_get_enemy_sync_time);
+  jak2::make_function_symbol_from_c("pc-multi-get-vehicle-sync-time",
+                                    (void*)pc_multi_get_vehicle_sync_time);
   jak2::make_function_symbol_from_c("pc-multi-get-role", (void*)pc_multi_get_role);
   jak2::make_function_symbol_from_c("pc-multi-disconnect", (void*)pc_multi_disconnect);
   jak2::make_function_symbol_from_c("pc-multi-get-command-line-arg",
