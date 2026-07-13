@@ -1,5 +1,30 @@
 (in-package goal)
 
+(define-extern mp-vehicle-remote-puppet-currently-driving? (function symbol))
+
+(define *mp-ride-along-rapid-camera?* #f)
+
+(defun mp-ride-along-update-camera-speed! ((ride-along-active? symbol))
+  "Use rapid camera tracking only while local Daxter rides with a remote vehicle driver."
+  (let ((rapid-tracking-needed?
+          (and ride-along-active?
+               (mp-is-daxter?)
+               *local-riding?*
+               (mp-vehicle-remote-puppet-currently-driving?))))
+    (cond
+      ((and rapid-tracking-needed? (not *mp-ride-along-rapid-camera?*))
+       (set-setting! 'rapid-tracking #f 0.0 0)
+       (set! *mp-ride-along-rapid-camera?* #t)
+       )
+      ((and (not rapid-tracking-needed?) *mp-ride-along-rapid-camera?*)
+       (remove-setting! 'rapid-tracking)
+       (set! *mp-ride-along-rapid-camera?* #f)
+       )
+      )
+    )
+  (none)
+  )
+
 (defun mp-ride-along-sync-camera-target! ((local-target target) (ride-target target))
   "Client-side ride-along camera handoff between local Daxter and the remote Jak puppet."
   (when (and (mp-is-daxter?) *camera* (nonzero? *camera*) local-target (nonzero? local-target))
@@ -31,6 +56,7 @@
     (logior! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
     (when (mp-is-daxter?)
       (let ((jak-proc *mp-puppet*))
+        (mp-ride-along-update-camera-speed! #t)
         (mp-ride-along-sync-camera-target! self jak-proc)
         )
       )
@@ -49,6 +75,7 @@
       (when (and (-> self draw) (nonzero? (-> self draw)))
         (logclear! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
         )
+      (mp-ride-along-update-camera-speed! #f)
       ;; log next state as well
       (when (= (if (-> self next-state) (-> self next-state name) 'none) 'target-indax-grab)
         (set! *local-riding-before-grabbed?* #t)
@@ -105,6 +132,7 @@
     
     (let ((jak-proc (if (mp-is-jak?) *target* *mp-puppet*)))
       (when (mp-is-daxter?)
+        (mp-ride-along-update-camera-speed! #t)
         (mp-ride-along-sync-camera-target! self jak-proc)
         )
       (if (and jak-proc (nonzero? jak-proc))

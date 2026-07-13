@@ -184,6 +184,30 @@
        )
   )
 
+(defun mp-vehicle-remote-puppet-currently-driving? ()
+  "True while the remote puppet is safely attached to a valid vehicle's driver seat."
+  (when (and *mp-puppet*
+             (nonzero? *mp-puppet*)
+             (focus-test? *mp-puppet* pilot))
+    (let ((pilot-info (-> *mp-puppet* pilot)))
+      (when (and pilot-info
+                 (nonzero? pilot-info)
+                 (zero? (-> pilot-info seat-index)))
+        (let ((vehicle-proc (handle->process-safe (-> pilot-info vehicle))))
+          (when (and vehicle-proc
+                     (nonzero? vehicle-proc)
+                     (type? vehicle-proc vehicle))
+            (return
+              (the-as symbol
+                (mp-vehicle-remote-puppet-driving? (the-as vehicle vehicle-proc))))
+            )
+          )
+        )
+      )
+    )
+  (the-as symbol #f)
+  )
+
 (defun mp-vehicle-stale-player-driver? ((veh vehicle))
   "Detect target handles that leaked into an ambient traffic driver's seat."
   (when (and veh
