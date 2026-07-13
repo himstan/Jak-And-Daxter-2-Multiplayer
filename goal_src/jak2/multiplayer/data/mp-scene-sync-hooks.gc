@@ -2,6 +2,117 @@
 (in-package goal)
 
 (define-perm *mp-active-local-scene-name* string (new 'global 'string 64 ""))
+(define-perm *mp-hiphog-airlock-repair-pending?* symbol #f)
+(define-perm *mp-hiphog-airlock-repair-not-before* time-frame 0)
+
+(defun mp-hiphog-exit-airlock ()
+  "Return the live Hip Hog exit airlock process when it is available."
+  (when (and *level* (nonzero? *level*))
+    (let ((door-entity (entity-by-name "hip-door-b-1")))
+      (when (and door-entity (nonzero? door-entity))
+        (let ((door-proc (-> door-entity extra process)))
+          (when (and door-proc
+                     (nonzero? door-proc)
+                     (type? door-proc com-airlock))
+            (return (the-as com-airlock door-proc))
+            )
+          )
+        )
+      )
+    )
+  (the-as com-airlock #f)
+  )
+
+(defun mp-hiphog-exit-airlock-open? ()
+  (let ((door (mp-hiphog-exit-airlock)))
+    (the-as symbol
+            (and door
+                 (nonzero? door)
+                 (airlock-in-state? door 'open)
+                 )
+            )
+    )
+  )
+
+(defun mp-arm-hiphog-airlock-scene-repair! ()
+  (when (mp-hiphog-exit-airlock-open?)
+    (set! *mp-hiphog-airlock-repair-pending?* #t)
+    (set! *mp-hiphog-airlock-repair-not-before* (+ (current-time) (seconds 0.25)))
+    (format 0 "[MP-SceneHook] Armed open Hip Hog airlock display repair.~%")
+    )
+  (none)
+  )
+
+(defun mp-reset-hiphog-airlock-scene-repair! ()
+  (set! *mp-hiphog-airlock-repair-pending?* #f)
+  (set! *mp-hiphog-airlock-repair-not-before* (the-as time-frame 0))
+  (none)
+  )
+
+(defun mp-clear-hiphog-airlock-scene-repair! ((reason string))
+  (when *mp-hiphog-airlock-repair-pending?*
+    (format 0 "[MP-SceneHook] Discarding Hip Hog airlock display repair: ~A.~%" reason)
+    )
+  (mp-reset-hiphog-airlock-scene-repair!)
+  (none)
+  )
+
+(defun mp-hiphog-airlock-repair-gameplay-ready? ()
+  (the-as symbol
+          (and (not *scene-player*)
+               (not (movie?))
+               (not (real-movie?))
+               (not *mp-pending-scene-sync?*)
+               *target*
+               (nonzero? *target*)
+               (-> *target* control)
+               (nonzero? (-> *target* control))
+               (not (focus-test? *target* teleporting))
+               *level*
+               (nonzero? *level*)
+               (= (-> *level* loading-level) (-> *level* default-level))
+               *load-state*
+               (nonzero? *load-state*)
+               )
+          )
+  )
+
+(defun mp-hiphog-airlock-repair-context-active? ()
+  (the-as symbol
+          (and *load-state*
+               (nonzero? *load-state*)
+               (= (-> *load-state* vis-nick) 'hiphog)
+               (mp-level-active? 'hiphog)
+               )
+          )
+  )
+
+(defun mp-apply-hiphog-airlock-scene-repair! ()
+  (format 0 "[MP-SceneHook] Restoring open Hip Hog airlock levels after scene teardown.~%")
+  (mp-reset-hiphog-airlock-scene-repair!)
+  (script-eval '(want-load 'ctyport 'ctywide 'hiphog))
+  (script-eval '(begin (want-display 'ctyport 'display) (want-display 'ctywide 'display)))
+  (none)
+  )
+
+(defun mp-process-hiphog-airlock-scene-repair! ()
+  (when (and *mp-hiphog-airlock-repair-pending?*
+             (>= (current-time) *mp-hiphog-airlock-repair-not-before*)
+             (mp-hiphog-airlock-repair-gameplay-ready?))
+    (cond
+      ((not (mp-hiphog-airlock-repair-context-active?))
+       (mp-clear-hiphog-airlock-scene-repair! "Hip Hog is no longer the visibility level")
+       )
+      ((not (mp-hiphog-exit-airlock-open?))
+       (mp-clear-hiphog-airlock-scene-repair! "exit door is no longer open")
+       )
+      (else
+       (mp-apply-hiphog-airlock-scene-repair!)
+       )
+      )
+    )
+  (none)
+  )
 
 (defun mp-clear-active-local-scene-name! ()
   (when (and *mp-active-local-scene-name*
