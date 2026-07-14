@@ -270,6 +270,19 @@
        )
   )
 
+(defun mp-is-traffic-existing-update-ready? ()
+  "True when existing traffic puppets may consume state without materializing level art."
+  (and (mp-is-traffic-ready?)
+       *level*
+       (nonzero? *level*)
+       *target*
+       (nonzero? *target*)
+       (-> *target* control)
+       (nonzero? (-> *target* control))
+       (not (focus-test? *target* teleporting))
+       )
+  )
+
 (defun mp-local-world-ready-for-remote-sync? ()
   "True when local player/world state is stable enough for remote puppet and traffic state changes."
   (and *level*

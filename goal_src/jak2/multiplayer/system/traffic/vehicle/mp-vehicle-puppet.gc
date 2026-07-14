@@ -1390,16 +1390,21 @@
   )
 
 (defun mp-vehicle-apply-piggyback ()
-  (if (not (mp-is-traffic-spawn-ready?))
+  (if (not (and *remote-info*
+                (nonzero? *remote-info*)
+                (mp-is-traffic-existing-update-ready?)))
       (begin
         (set! *mp-remote-driven-vehicle* (the-as handle #f))
         (return #f)
         )
       )
-  (let ((driven-net-id (-> *remote-info* veh-state net-id))
+  (let ((spawn-ready? (mp-is-traffic-spawn-ready?))
+        (driven-net-id (-> *remote-info* veh-state net-id))
         (old-veh (handle->process *mp-remote-driven-vehicle*)))
     (when (and (nonzero? *mp-remote-driven-vehicle*) 
-               (or (not old-veh) (!= driven-net-id (-> (the-as vehicle old-veh) net-id))))
+               (or (not old-veh)
+                   (zero? old-veh)
+                   (!= driven-net-id (-> (the-as vehicle old-veh) net-id))))
       (when (and old-veh (nonzero? old-veh))
         (mp-vehicle-release-stale-player-control! (the-as vehicle old-veh))
         )
@@ -1407,23 +1412,26 @@
       )
     (when (nonzero? driven-net-id)
       (let ((proc (mp-vehicle-find-by-net-id driven-net-id))
-            (can-spawn-puppet? (mp-vehicle-can-spawn-puppet? driven-net-id)))
+            (vehicle-can-spawn? (mp-vehicle-can-spawn-puppet? driven-net-id)))
         (if (and proc (nonzero? proc))
             (begin
               (set! *mp-remote-driven-vehicle* (process->handle proc))
               (logior! (-> proc flags) (rigid-body-object-flag persistent))
               (logclear! (-> proc mask) (process-mask pause sleep actor-pause))
               (if (<= (-> *remote-info* veh-state state-id) 2)
-                  (when can-spawn-puppet?
+                  (when vehicle-can-spawn?
                     (mp-vehicle-force-cull-local! proc)
                     )
                   (begin
                     (mp-vehicle-apply-ghost-state proc (-> *remote-info* veh-state))
-                    (mp-vehicle-ensure-guard-minimap! proc)
+                    (when spawn-ready?
+                      (mp-vehicle-ensure-guard-minimap! proc)
+                      )
                     )
                   )
             )
-            (when (and can-spawn-puppet?
+            (when (and spawn-ready?
+                       vehicle-can-spawn?
                        (> (-> *remote-info* veh-state state-id) 2)
                        (not *mp-puppet-was-far?*))
               (format 0 "[MP-Traffic] Missing driven vehicle ~D! Spawning...~%" driven-net-id)
@@ -1435,7 +1443,7 @@
     (when (zero? driven-net-id)
       (set! *mp-remote-driven-vehicle* (the-as handle #f))
       )
-    (when old-veh
+    (when (and old-veh (nonzero? old-veh))
       (mp-vehicle-release-stale-player-control! (the-as vehicle old-veh))
       )
     )

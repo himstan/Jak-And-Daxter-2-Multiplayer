@@ -508,8 +508,18 @@
 
 (defun mp-traffic-remote-refresh-ready? ()
   "True when same-level existing puppets may consume fresh ghost snapshots."
-  (and (mp-is-traffic-spawn-ready?)
+  (and (mp-is-traffic-existing-update-ready?)
        (mp-traffic-primary-levels-match?))
+  )
+
+(defun mp-traffic-same-city-zone-load-refresh-ready? ()
+  "True when local paging remains within the shared primary city traffic context."
+  (let ((local-primary (mp-traffic-local-primary-level-id)))
+    (and (mp-multiplayer-level-load-active?)
+         (nonzero? local-primary)
+         (mp-city-level? (mp-level-id->symbol local-primary))
+         (mp-traffic-remote-refresh-ready?))
+    )
   )
 
 (defun mp-traffic-refresh-existing-ped-slot! ((slot mp-pedestrian-state))
@@ -548,21 +558,26 @@
     (when (and proc
                (nonzero? proc)
                slot
-               (nonzero? slot)
-               (> (-> slot state-id) 2))
-      (let ((local-pilot (get-rider-in-seat proc 0)))
-        (when (not (and local-pilot
-                        *target*
-                        (nonzero? *target*)
-                        (= local-pilot *target*)))
-          (let ((rec (mp-traffic-get-or-create-ghost! (-> slot net-id) (the uint 1))))
-            (when (and rec (nonzero? rec))
-              (set! refreshed? (mp-vehicle-record-ghost-sample! proc slot rec))
+               (nonzero? slot))
+      (if (<= (-> slot state-id) 2)
+          (begin
+            (mp-vehicle-force-cull-local! proc)
+            (set! refreshed? #t)
+            )
+          (let ((local-pilot (get-rider-in-seat proc 0)))
+            (when (not (and local-pilot
+                            *target*
+                            (nonzero? *target*)
+                            (= local-pilot *target*)))
+              (let ((rec (mp-traffic-get-or-create-ghost! (-> slot net-id) (the uint 1))))
+                (when (and rec (nonzero? rec))
+                  (set! refreshed? (mp-vehicle-record-ghost-sample! proc slot rec))
+                  )
+                )
               )
             )
           )
         )
-      )
     refreshed?
     )
   )
@@ -665,6 +680,16 @@
   (none)
   )
 
+(defun mp-traffic-update-existing-during-zone-load! ()
+  "Refresh materialized same-city traffic during paging, then retain the normal cleanup passes."
+  (set! *mp-traffic-last-remote-apply-ready* #f)
+  (mp-vehicle-apply-piggyback)
+  (mp-traffic-refresh-existing-remote!)
+  (mp-traffic-clear-incoming-remote!)
+  (mp-cleanup-traffic-ghosts)
+  (none)
+  )
+
 (defun mp-traffic-log-level-mismatch! ()
   "Throttle logs when ambient traffic is skipped because the host is in another primary level."
   (when (and (mp-is-traffic-spawn-ready?)
@@ -712,7 +737,9 @@
   (let ((status (pc-multi-get-status)))
     (when (and (nonzero? status) *mp-traffic-sync-active*)
       (mp-traffic-debug-update-frame-context!)
-      (if (mp-multiplayer-scene-or-load-active?)
+      (if (or (mp-multiplayer-scene-active?)
+              (and (mp-multiplayer-level-load-active?)
+                   (not (mp-traffic-same-city-zone-load-refresh-ready?))))
           (begin
             (set! *mp-traffic-last-remote-apply-ready* #f)
             (set! (-> *mp-traffic-buffer* ped-count) (the uint 0))
@@ -763,7 +790,8 @@
                   )
                 ;; Puppet Logic: Receive and Apply (Client Side ONLY)
                 (begin
-                  (if (mp-traffic-local-city-loaded?)
+                  (cond
+                    ((mp-traffic-local-city-loaded?)
                       (begin
                         (mp-traffic-note-level-context!)
                         (mp-traffic-debug-update-frame-context!)
@@ -805,6 +833,11 @@
                             )
                           )
                         )
+                      )
+                    ((mp-traffic-same-city-zone-load-refresh-ready?)
+                     (mp-traffic-update-existing-during-zone-load!)
+                     )
+                    (else
                       (begin
                         (set! *mp-traffic-last-remote-apply-ready* #f)
                         (let ((last-log-time (-> *mp-traffic-buffer* last-sync-time)))
@@ -815,6 +848,7 @@
                           )
                         )
                       )
+                    )
                   )
                 )
             )

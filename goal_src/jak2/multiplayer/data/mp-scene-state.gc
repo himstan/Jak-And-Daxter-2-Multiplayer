@@ -3,21 +3,35 @@
 
 (define-extern scene-lookup (function basic scene))
 
-(defun mp-multiplayer-scene-or-load-active? ()
-  "True while local/remote cutscene or level paging state can make gameplay death/sync unsafe."
+(defun mp-multiplayer-level-load-active? ()
+  "True while the level system is paging a level other than its default level."
+  (the symbol
+    (and *level*
+         (nonzero? *level*)
+         (-> *level* loading-level)
+         (-> *level* default-level)
+         (!= (-> *level* loading-level) (-> *level* default-level)))
+    )
+  )
+
+(defun mp-multiplayer-scene-active? ()
+  "True while a local or remote cutscene owns multiplayer gameplay state."
   (the symbol
     (or *scene-player*
         (movie?)
         (real-movie?)
-        (and *level*
-             (nonzero? *level*)
-             (-> *level* loading-level)
-             (-> *level* default-level)
-             (!= (-> *level* loading-level) (-> *level* default-level)))
         (and *remote-info*
              (nonzero? *remote-info*)
              (nonzero? (-> *remote-info* scene-active)))
         )
+    )
+  )
+
+(defun mp-multiplayer-scene-or-load-active? ()
+  "True while local/remote cutscene or level paging state can make gameplay death/sync unsafe."
+  (the symbol
+    (or (mp-multiplayer-scene-active?)
+        (mp-multiplayer-level-load-active?))
     )
   )
 
