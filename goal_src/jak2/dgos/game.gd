@@ -615,6 +615,8 @@
   "mp-session.o" ;; added
   "mp-demo-guard.o" ;; added
   "mp-main.o" ;; added
+  "path-editor-h.o" ;; added - path-editor-h
+  "path-editor.o" ;; added - path-editor
   "mod-debug.o" ;; added
   "mp-airlock-debug.o"
   "mp-elevator-debug.o"
