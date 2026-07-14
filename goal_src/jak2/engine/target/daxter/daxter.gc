@@ -697,22 +697,11 @@
 (defbehavior target-ride-along-handler target ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   (case arg2
     (('attack 'attack-or-shove 'attack-invinc 'shove 'touched 'bonk)
-     (let ((atk-info (the-as attack-info #f)))
-       (when (and arg3 (nonzero? arg3) (>= (-> arg3 num-params) 2))
-         (set! atk-info (the-as attack-info (-> arg3 param 1)))
+     (if (or *remote-player-is-dead*
+             *remote-player-is-dying*)
+         (target-indax-handler arg0 arg1 arg2 arg3)
+         (the-as object #t)
          )
-       (if (or *remote-player-is-dead*
-               *remote-player-is-dying*
-               (and atk-info
-                    (nonzero? atk-info)
-                    (logtest? (-> atk-info mask) (attack-mask mode))
-                    (= (-> atk-info mode) 'endlessfall)
-                    )
-               )
-           (target-indax-handler arg0 arg1 arg2 arg3)
-           (the-as object #t)
-           )
-       )
      )
     (else
       (target-indax-handler arg0 arg1 arg2 arg3)
