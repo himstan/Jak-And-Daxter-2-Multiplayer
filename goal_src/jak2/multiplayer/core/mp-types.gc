@@ -370,7 +370,7 @@
    (hit-sound-id uint32 :overlay-at (-> data 28))
    (source-pos   vector :inline :overlay-at (-> data 32))
    (attack-dir   vector :inline :overlay-at (-> data 48))
-   (penetrate    uint8 :overlay-at (-> data 64))
+   (penetrate    uint64 :overlay-at (-> data 64))
    )
   )
 

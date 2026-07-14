@@ -376,7 +376,7 @@
       (set! (-> evt hit-sound-id) (the-as uint32 (if (nonzero? *mp-current-remote-hit-sound-id*)
                                                      (the-as uint *mp-current-remote-hit-sound-id*)
                                                      (mp-hit-sound-id-from-attack-info info))))
-      (set! (-> evt penetrate) (the-as uint8 penetrate))
+      (set! (-> evt penetrate) (the-as uint penetrate))
       (mp-actor-capture-source-pos! evt e-proc attacker info)
       (mp-actor-capture-attack-dir! evt e-proc info)
       (format 0 "[MP-ActorHit] Queue event=~D nid=~D attack-id=~D damage=~D new-hp=~D penetrate=~D~%"
