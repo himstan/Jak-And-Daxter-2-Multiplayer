@@ -5,6 +5,7 @@
               (static-airlock-data
                 :airlock-name "com-airlock-inner-20"
                 :on-notice '(when #t '(ctyfarma ctywide))
+                :other-side-levels '(atoll mountain)
                 :on-activate #f
                 :on-enter '(begin (want-display 'ctywide 'display) (want-vis 'ctyfarma) (send-event self 'sound 'enter))
                 :on-reconcile '((want-load 'ctyfarma 'ctywide #f) (want-display 'ctywide 'display))
@@ -25,6 +26,7 @@
                 )
               (static-airlock-data
                 :airlock-name "com-airlock-inner-38"
+                :other-side-levels '(ctywide)
                 :on-notice '(when #t '(mountain))
                 :on-activate #f
                 :on-enter '(begin (want-display 'mountain 'display) (want-vis 'mountain) (send-event self 'sound 'exit))
