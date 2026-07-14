@@ -367,7 +367,11 @@
             (set! (-> *game-info* skill) (-> *local-info* sync-skill))
 
             (let ((h-task (-> *local-info* host-task)))
-              (when (nonzero? h-task)
+              (when (and (nonzero? h-task)
+                         (not (or (= h-task (the-as uint (game-task-node city-vehicle-training-map)))
+                                  (= h-task (the-as uint (game-task-node city-vehicle-training-hover-zone-1)))
+                                  (= h-task (the-as uint (game-task-node city-vehicle-training-hover-zone-2)))
+                                  (= h-task (the-as uint (game-task-node city-vehicle-training-resolution))))))
                 (task-node-close! (the-as game-task-node h-task))
                 (mp-task-sync-after-remote-close! (the-as game-task-node h-task))
                 )
@@ -438,30 +442,35 @@
             (let ((byte-idx (/ i 8))
                   (bit-idx (logand i 7)))
               
-              ;; 2.1 Sync CLOSED nodes
-              (when (and (logtest? (-> mask byte-idx) (ash 1 bit-idx))
-                         (not (logtest? (-> nodes data i flags) (game-task-node-flag closed))))
-                (format 0 "[MP-Client] Remote closed task node ~D. Applying locally.~%" i)
-                (task-node-close! (the-as game-task-node i))
-                (mp-task-sync-after-remote-close! (the-as game-task-node i))
-                )
+              (unless (or (= i (the-as uint (game-task-node city-vehicle-training-map)))
+                          (= i (the-as uint (game-task-node city-vehicle-training-hover-zone-1)))
+                          (= i (the-as uint (game-task-node city-vehicle-training-hover-zone-2)))
+                          (= i (the-as uint (game-task-node city-vehicle-training-resolution))))
+                ;; 2.1 Sync CLOSED nodes
+                (when (and (logtest? (-> mask byte-idx) (ash 1 bit-idx))
+                           (not (logtest? (-> nodes data i flags) (game-task-node-flag closed))))
+                  (format 0 "[MP-Client] Remote closed task node ~D. Applying locally.~%" i)
+                  (task-node-close! (the-as game-task-node i))
+                  (mp-task-sync-after-remote-close! (the-as game-task-node i))
+                  )
 
-              ;; 2.2 Sync ACTIVE (Open) nodes
-              (when (and (logtest? (-> active-mask byte-idx) (ash 1 bit-idx))
-                         (task-node-closed? (the-as game-task-node i)))
-                
-                ;; 2.2.1 PROTECTION: If we are in a scene and the remote wants to skip, 
-                ;; or we are in the middle of a remote skip event, don't re-open task managers.
-                (let ((should-open? #t))
-                  (when (or *mp-remote-wants-skip* *mp-local-wants-skip* *mp-processing-remote-event* *scene-player*)
-                    (set! should-open? #f))
+                ;; 2.2 Sync ACTIVE (Open) nodes
+                (when (and (logtest? (-> active-mask byte-idx) (ash 1 bit-idx))
+                           (task-node-closed? (the-as game-task-node i)))
                   
-                  (when should-open?
-                    (format 0 "[MP-Client] Remote has active task node ~D. Opening locally.~%" i)
-                    (set! *mp-processing-remote-event* #t)
-                    (task-node-open! (the-as game-task-node i))
-                    (mp-task-sync-after-remote-open! (the-as game-task-node i))
-                    (set! *mp-processing-remote-event* #f)
+                  ;; 2.2.1 PROTECTION: If we are in a scene and the remote wants to skip,
+                  ;; or we are in the middle of a remote skip event, don't re-open task managers.
+                  (let ((should-open? #t))
+                    (when (or *mp-remote-wants-skip* *mp-local-wants-skip* *mp-processing-remote-event* *scene-player*)
+                      (set! should-open? #f))
+
+                    (when should-open?
+                      (format 0 "[MP-Client] Remote has active task node ~D. Opening locally.~%" i)
+                      (set! *mp-processing-remote-event* #t)
+                      (task-node-open! (the-as game-task-node i))
+                      (mp-task-sync-after-remote-open! (the-as game-task-node i))
+                      (set! *mp-processing-remote-event* #f)
+                      )
                     )
                   )
                 )
