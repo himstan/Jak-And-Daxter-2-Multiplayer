@@ -1435,6 +1435,113 @@
 
 (set! (-> *sew-scare-grunt-nav-enemy-info* fact-defaults) *fact-info-enemy-defaults*)
 
+(defun sew-scare-grunt-get-grill-proc ((scare-grunt sew-scare-grunt)) sew-grill
+  (when (or (not scare-grunt) (zero? scare-grunt))
+    (format 0 "[Sewer] Skipping scare manipy spawn: missing scare-grunt.~%")
+    (return (the-as sew-grill #f))
+    )
+  (let ((grill-actor (-> scare-grunt grill-actor)))
+    (when (or (not grill-actor) (zero? grill-actor))
+      (format 0 "[Sewer] Skipping scare manipy spawn: missing grill actor.~%")
+      (return (the-as sew-grill #f))
+      )
+    (let ((grill-proc (the-as sew-grill (-> grill-actor extra process))))
+      (when (or (not grill-proc) (zero? grill-proc))
+        (format 0 "[Sewer] Skipping scare manipy spawn: missing grill process.~%")
+        (return (the-as sew-grill #f))
+        )
+      grill-proc
+      )
+    )
+  )
+
+(defun sew-scare-grunt-get-grill-art-group () skeleton-group
+  (when (or (not *level*) (zero? *level*))
+    (format 0 "[Sewer] Skipping scare manipy spawn: missing level.~%")
+    (return (the-as skeleton-group #f))
+    )
+  (let ((grill-art-group
+          (the-as skeleton-group
+            (art-group-get-by-name *level* "skel-sew-grill" (the-as (pointer uint32) #f)))))
+    (when (or (not grill-art-group) (zero? grill-art-group))
+      (format 0 "[Sewer] Skipping scare manipy spawn: missing skel-sew-grill art group.~%")
+      (return (the-as skeleton-group #f))
+      )
+    grill-art-group
+    )
+  )
+
+(defun sew-scare-grunt-configure-manipy! ((scare-grunt sew-scare-grunt)
+                                          (grill-entity entity-actor)
+                                          (grill-draw draw-control)
+                                          (manipy-proc manipy)) symbol
+  (let ((manipy-draw (-> manipy-proc draw)))
+    (when (or (not manipy-draw) (zero? manipy-draw))
+      (format 0 "[Sewer] Scare manipy spawned without draw control for grill aid=~D.~%"
+              (-> grill-entity aid))
+      (deactivate manipy-proc)
+      (return #f)
+      )
+    (set! (-> scare-grunt manipy) (the-as (pointer manipy) manipy-proc))
+    (send-event manipy-proc 'anim-mode 'clone-anim)
+    (set! (-> manipy-draw light-index) (-> grill-draw light-index))
+    (logior! (-> grill-draw status) (draw-control-status no-draw))
+    (format 0 "[Sewer] Spawned scare manipy ~A from grill aid=~D.~%"
+            manipy-proc
+            (-> grill-entity aid))
+    )
+  #t
+  )
+
+(defun sew-scare-grunt-spawn-manipy! ((scare-grunt sew-scare-grunt)) symbol
+  "Safely spawn and configure the manipy hidden inside a sewer scare-grunt's grill."
+  (let ((grill-proc (sew-scare-grunt-get-grill-proc scare-grunt)))
+    (when (or (not grill-proc) (zero? grill-proc))
+      (return #f)
+      )
+    (let ((scare-root (-> scare-grunt root)))
+      (when (or (not scare-root) (zero? scare-root))
+        (format 0 "[Sewer] Skipping scare manipy spawn: missing scare-grunt root.~%")
+        (return #f)
+        )
+      (let ((grill-entity (-> grill-proc entity))
+            (grill-draw (-> grill-proc draw))
+            (grill-art-group (sew-scare-grunt-get-grill-art-group)))
+        (when (or (not grill-entity) (zero? grill-entity))
+          (format 0 "[Sewer] Skipping scare manipy spawn: missing grill entity.~%")
+          (return #f)
+          )
+        (when (or (not grill-draw) (zero? grill-draw))
+          (format 0 "[Sewer] Skipping scare manipy spawn: missing grill draw control.~%")
+          (return #f)
+          )
+        (when (or (not grill-art-group) (zero? grill-art-group))
+          (return #f)
+          )
+        (let ((manipy-proc
+                (the-as manipy
+                  (process-spawn
+                    manipy
+                    :init manipy-init
+                    (-> scare-root trans)
+                    grill-entity
+                    grill-art-group
+                    #f
+                    0
+                    :to scare-grunt
+                    ))))
+          (when (or (not manipy-proc) (zero? manipy-proc))
+            (format 0 "[Sewer] Scare manipy process-spawn failed for grill aid=~D.~%"
+                    (-> grill-entity aid))
+            (return #f)
+            )
+          (sew-scare-grunt-configure-manipy! scare-grunt grill-entity grill-draw manipy-proc)
+          )
+        )
+      )
+    )
+  )
+
 (defstate waiting (sew-scare-grunt)
   :virtual #t
   :event enemy-event-handler
@@ -1483,44 +1590,24 @@
   :event enemy-event-handler
   :enter (behavior ()
     (logclear! (-> self draw status) (draw-control-status no-draw))
-    (let* ((actor (-> self grill-actor))
-           (actor-proc (if actor
-                           (-> actor extra process)
-                           )
-                       )
-           )
-      (when actor-proc
-        (set! (-> self manipy)
-              (process-spawn
-                manipy
-                :init manipy-init
-                (-> self root trans)
-                (-> actor-proc entity)
-                (art-group-get-by-name *level* "skel-sew-grill" (the-as (pointer uint32) #f))
-                #f
-                0
-                :to self
-                )
-              )
-        (send-event (ppointer->process (-> self manipy)) 'anim-mode 'clone-anim)
-        (set! (-> self manipy 0 draw light-index) (-> (the-as sew-grill actor-proc) draw light-index))
-        (logior! (-> (the-as sew-grill actor-proc) draw status) (draw-control-status no-draw))
-        )
-      )
+    (sew-scare-grunt-spawn-manipy! self)
     (set! (-> self spooled-sound-id)
           (lookup-gui-connection-id *gui-control* (-> self anim name) (gui-channel art-load) (gui-action none))
           )
     )
   :exit (behavior ()
-    (let* ((actor (-> self grill-actor))
-           (actor-proc (if actor
-                           (-> actor extra process)
-                           )
-                       )
-           )
-      (if actor-proc
-          (logclear! (-> (the-as sew-grill actor-proc) draw status) (draw-control-status no-draw))
+    (let ((grill-actor (-> self grill-actor)))
+      (when (and grill-actor (nonzero? grill-actor))
+        (let ((grill-proc (the-as sew-grill (-> grill-actor extra process))))
+          (when (and grill-proc (nonzero? grill-proc))
+            (let ((grill-draw (-> grill-proc draw)))
+              (when (and grill-draw (nonzero? grill-draw))
+                (logclear! (-> grill-draw status) (draw-control-status no-draw))
+                )
+              )
+            )
           )
+        )
       )
     ;; og:preserve-this fix bug where the spool anim never gets aborted
     (#when PC_PORT
