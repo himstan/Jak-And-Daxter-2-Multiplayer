@@ -3,10 +3,20 @@
 
 (define-extern *mp-enemy-debug-auth?* symbol)
 
+(defun mp-clear-connected-scene-broadcast! ()
+  (when (and *mp-connected-scene-broadcast-name*
+             (nonzero? *mp-connected-scene-broadcast-name*))
+    (set! (-> *mp-connected-scene-broadcast-name* data 0) (the uint 0))
+    (set! (-> *mp-connected-scene-broadcast-name* data -4) (the-as uint 0))
+    )
+  (none)
+  )
+
 (defun mp-reset-scene-sync-state! ()
   (set! *multi-remote-spawn-time* (the-as time-frame 0))
   (set! *mp-last-scene-player* #f)
   (set! *mp-was-riding-before-scene* #f)
+  (mp-clear-connected-scene-broadcast!)
   (set! *mp-last-remote-scene-active* (the uint 0))
   (set! *mp-pending-scene-sync?* #f)
   (set! *mp-pending-scene-sync-next-log-time* (the-as time-frame 0))
@@ -658,6 +668,9 @@
 (defun mp-process-pending-scene-sync! ()
   (when *mp-pending-scene-sync?*
     (cond
+      ((and *scene-player* (nonzero? *scene-player*))
+       (mp-log-pending-scene-sync-wait! "another local scene is active")
+       )
       ((not (mp-scene-sync-levels-ready-or-request!))
        (mp-log-pending-scene-sync-wait! "scene continue levels are not loaded")
        )
@@ -675,16 +688,51 @@
   (none)
   )
 
+(defun mp-local-scene-name-matches? ((scene-name string))
+  (when (and scene-name
+             (nonzero? scene-name)
+             (nonzero? (length scene-name))
+             *scene-player*
+             (nonzero? *scene-player*))
+    (let ((scene-proc (the-as scene-player (ppointer->process *scene-player*))))
+      (when (and scene-proc
+                 (nonzero? scene-proc)
+                 (-> scene-proc scene)
+                 (nonzero? (-> scene-proc scene))
+                 (-> scene-proc scene name)
+                 (nonzero? (-> scene-proc scene name)))
+        (return (string= scene-name (-> scene-proc scene name)))
+        )
+      )
+    )
+  #f
+  )
+
+(defun mp-pending-scene-name-matches? ((scene-name string))
+  (and scene-name
+       (nonzero? scene-name)
+       *mp-pending-scene-sync?*
+       *mp-pending-scene-sync-name*
+       (nonzero? *mp-pending-scene-sync-name*)
+       (string= scene-name *mp-pending-scene-sync-name*))
+  )
+
+(defun mp-duplicate-scene-start? ((scene-name string))
+  (or (mp-local-scene-name-matches? scene-name)
+      (mp-pending-scene-name-matches? scene-name))
+  )
+
 (defun mp-event-handler-scene-start ((ev mp-scene-event))
   (let ((s* *mp-scene-name-scratch*))
-    (when (and *scene-player* (real-movie?))
-      (format 0 "[MP-Scene] Ignoring remote scene start event. We are already in scene:~S~%" (-> (the-as scene-player (ppointer->process *scene-player*)) scene name))
-      (none)
-      )
-    (when (and s* (nonzero? (length s*)))
-      (format 0 "[MP-WorldEvent] Remote started scene: ~S. Waiting for level-ready NPC-sync.~%" s*)
-      (set! *mp-last-remote-scene-active* (the uint 1))
-      (mp-arm-pending-scene-sync! s* ev)
+    (when (and s* (nonzero? s*) (nonzero? (length s*)))
+      (if (mp-duplicate-scene-start? s*)
+          (format 0 "[MP-Scene] Suppressing duplicate remote scene start: ~S~%" s*)
+          (begin
+            (format 0 "[MP-WorldEvent] Remote started scene: ~S. Waiting for level-ready NPC-sync.~%" s*)
+            (set! *mp-last-remote-scene-active* (the uint 1))
+            (mp-arm-pending-scene-sync! s* ev)
+            )
+          )
       )
     )
   (none))

@@ -35,11 +35,60 @@
     )
   (none))
 
+(defun mp-scene-catchup-client-connected? ()
+  (and *remote-info*
+       (nonzero? *remote-info*)
+       (>= (-> *remote-info* status) 4))
+  )
+
+(defun mp-connected-scene-broadcast-current? ((scene-name string))
+  (and scene-name
+       (nonzero? scene-name)
+       *mp-connected-scene-broadcast-name*
+       (nonzero? *mp-connected-scene-broadcast-name*)
+       (nonzero? (length *mp-connected-scene-broadcast-name*))
+       (string= scene-name *mp-connected-scene-broadcast-name*))
+  )
+
+(defun mp-note-connected-scene-broadcast! ((scene-name string))
+  "Remember that the active scene was announced after the client connected."
+  (when (and (mp-is-jak?)
+             (mp-scene-catchup-client-connected?)
+             scene-name
+             (nonzero? scene-name)
+             *mp-connected-scene-broadcast-name*
+             (nonzero? *mp-connected-scene-broadcast-name*))
+    (copy-string<-string *mp-connected-scene-broadcast-name* scene-name)
+    )
+  (none)
+  )
+
+(defun mp-replay-active-scene-for-connected-client! ()
+  "Catch up a client that connected after this scene-player started."
+  (when (and (mp-is-jak?)
+             *multi-sync-enabled?*
+             (= (pc-multi-get-status) 6)
+             (mp-scene-catchup-client-connected?)
+             *mp-active-local-scene-name*
+             (nonzero? *mp-active-local-scene-name*)
+             (nonzero? (length *mp-active-local-scene-name*))
+             (not (mp-connected-scene-broadcast-current? *mp-active-local-scene-name*)))
+    (format 0 "[MP-Scene] Broadcasting catch-up scene start: ~S~%"
+            *mp-active-local-scene-name*)
+    (mp-send-scene-event (mp-scene-state started) *mp-active-local-scene-name*)
+    )
+  (none)
+  )
+
 (defun mp-handle-scene-transition ()
   "Handle state changes when entering/exiting scenes"
   (let ((in-scene? (not (not *scene-player*))))
     (when in-scene?
       (mp-record-active-local-scene-name!)
+      (if (mp-scene-catchup-client-connected?)
+          (mp-replay-active-scene-for-connected-client!)
+          (mp-clear-connected-scene-broadcast!)
+          )
       )
 
     ;; 1. Handle Exiting Scene
@@ -50,6 +99,7 @@
         )
       (mp-scene-sync-after-local-end! *mp-active-local-scene-name*)
       (mp-clear-active-local-scene-name!)
+      (mp-clear-connected-scene-broadcast!)
       )
 
     (when (not in-scene?)

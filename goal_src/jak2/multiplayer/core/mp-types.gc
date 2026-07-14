@@ -8,6 +8,7 @@
 (define-perm *mp-last-scene-player* symbol #f)
 (define-perm *mp-was-riding-before-scene* symbol #f)
 (define-perm *mp-last-scene-name* string (new 'global 'string 64 ""))
+(define-perm *mp-connected-scene-broadcast-name* string (new 'global 'string 64 ""))
 (define-perm *mp-pending-scene-sync?* symbol #f)
 (define-perm *mp-pending-scene-sync-name* string (new 'global 'string 64 ""))
 (define-perm *mp-pending-scene-sync-continue-name* string (new 'global 'string 64 ""))

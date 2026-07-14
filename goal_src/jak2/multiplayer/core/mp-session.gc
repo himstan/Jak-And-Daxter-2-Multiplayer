@@ -175,6 +175,9 @@
 
 (defun mp-session-tick ()
   (let ((status (pc-multi-get-status)))
+    (when (or (< status 3) (= status 7) (= status 8))
+      (mp-clear-connected-scene-broadcast!)
+      )
     (mp-auto-enable-sync-if-ready! status)
     (if (or (= status 3) (= status 4) (= status 5) (= status 6) (= status 7) (= status 8))
         (begin
