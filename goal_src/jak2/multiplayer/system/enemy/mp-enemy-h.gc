@@ -26,16 +26,32 @@
 (define *mp-search-enemy-res* (the-as enemy #f))
 (define *mp-search-enemy-aid* (the-as uint 0))
 
+(defun mp-enemy-lookup-candidate? ((e-proc enemy))
+  (and e-proc
+       (nonzero? e-proc)
+       (!= (-> e-proc status) 'dead)
+       (> (-> e-proc hit-points) 0)
+       (not (focus-test? e-proc inactive))
+       (not (logtest? (-> e-proc enemy-flags)
+                      (enemy-flag death-start mp-synced-death stop-syncing))))
+  )
+
 (defun mp-find-enemy-callback ((p process-tree))
   (let ((proc (the-as process p)))
-    ;; Broaden mask to find suspended or differently masked enemies
-    (when (and proc (type? proc process-drawable))
-      (let ((e-proc (the-as enemy proc))
-            (e-aid (mp-get-enemy-aid (the-as enemy proc))))
-        (when (= e-aid *mp-search-enemy-aid*)
+    ;; Broaden mask to find suspended or differently masked enemies, but never
+    ;; reinterpret an unrelated drawable or select a terminal streamed copy.
+    (when (and proc (nonzero? proc) (type? proc enemy))
+      (let ((e-proc (the-as enemy proc)))
+        (when (and (mp-enemy-lookup-candidate? e-proc)
+                   (= (mp-get-enemy-aid e-proc) *mp-search-enemy-aid*))
           (set! *mp-search-enemy-res* e-proc)
-          (return #f)))))
-  #t)
+          (return #f)
+          )
+        )
+      )
+    )
+  #t
+  )
 
 (defun find-enemy-by-aid ((aid uint))
   "Find a loaded enemy process by its AID."
