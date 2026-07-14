@@ -309,6 +309,7 @@
         (return #f))
     (if (not (mp-session-tick))
         (return #f))
+    (mp-ui-trigger-tick)
     (mp-sync-scene-tick)
     (mp-send-tick)
     (mp-receive-tick)
