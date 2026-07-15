@@ -15,7 +15,6 @@
 (define-perm *mp-puppet-last-fresh-input-time* time-frame (the-as time-frame 0))
 (define-perm *mp-puppet-last-action-seq* uint (the uint 0))
 (define-perm *mp-puppet-action-warmup-start* time-frame (the-as time-frame 0))
-(define-perm *mp-puppet-suppress-dark-punch-edge?* symbol #f)
 (define *mp-puppet-input-stale-time* (seconds 0.2))
 (define *mp-puppet-action-warmup-time* (seconds 0.3))
 
@@ -31,7 +30,6 @@
   (set! *mp-puppet-last-fresh-input-time* (the-as time-frame 0))
   (set! *mp-puppet-last-action-seq* (the uint 0))
   (set! *mp-puppet-action-warmup-start* (the-as time-frame 0))
-  (set! *mp-puppet-suppress-dark-punch-edge?* #f)
   (set! *mp-puppet-state-mismatch-count* 0)
   (when (and *mp-puppet*
              (nonzero? *mp-puppet*))
@@ -80,7 +78,6 @@
   (set! *mp-puppet-pending-gun-shot-seq* (the uint 0))
   (set! *mp-puppet-pending-gun-shot-cam-angle-y* 0.0)
   (set! *mp-puppet-action-warmup-start* (the-as time-frame 0))
-  (set! *mp-puppet-suppress-dark-punch-edge?* #f)
   (set! *mp-puppet-state-mismatch-count* 0)
   (none)
   )
@@ -429,7 +426,7 @@
   (set! (-> pad old-righty 0) (-> pad righty))
   
   (set! (-> pad button0-abs 2) (-> pad button0-abs 1))
-  (set! (-> pad button0-abs 1) (-> pad button0-abs 0))
+  (set! (-> pad button0-abs 1) (-> pad button0-shadow-abs 0))
   (set! (-> pad button0-rel 2) (-> pad button0-rel 1))
   (set! (-> pad button0-rel 1) (-> pad button0-rel 0))
 
@@ -439,6 +436,8 @@
       (set! (-> history button0-abs (- 14 i)) (-> history button0-abs (- 13 i)))
       (set! (-> history button0-rel (- 14 i)) (-> history button0-rel (- 13 i)))
       )
+    (set! (-> history button0-abs 1) (-> pad button0-shadow-abs 0))
+    (set! (-> history button0-rel 1) (-> pad button0-rel 0))
     )
 
   ;; 2. Set new raw values
@@ -490,6 +489,7 @@
      (if (< ry (the-as uint 30)) (set! buttons-pushed (logior (pad-buttons r-analog-up) buttons-pushed)))
      (if (> ry (the-as uint 225)) (set! buttons-pushed (logior (pad-buttons r-analog-down) buttons-pushed)))
 
+     (set! (-> pad button0-shadow-abs 0) buttons-pushed)
      (set! (-> pad button0-abs 0) buttons-pushed)
      )
   (set! (-> pad button0-rel 0) (logclear (-> pad button0-abs 0) (-> pad button0-abs 1)))
@@ -934,25 +934,6 @@
   (none)
   )
 
-(defun mp-puppet-consume-forced-dark-punch-edge! ((proc target))
-  "Prevent a replayed Dark punch from treating its trigger edge as combo step two."
-  (when *mp-puppet-suppress-dark-punch-edge?*
-    (set! *mp-puppet-suppress-dark-punch-edge?* #f)
-    (when (and proc
-               (nonzero? proc)
-               (-> proc control)
-               (nonzero? (-> proc control)))
-      (let ((pad (-> proc control cpad)))
-        (when (and pad
-                   (nonzero? pad))
-          (logclear! (-> pad button0-rel 0) (pad-buttons square))
-          )
-        )
-      )
-    )
-  (none)
-  )
-
 (defun mp-puppet-snap-for-authoritative-action! ((proc target) (ghost mp-target-ghost-record) (action-state symbol))
   "Prime pose/velocity so the next target state starts from the remote player's truth."
   (when (and proc
@@ -1019,7 +1000,6 @@
      (go-process proc target-attack-uppercut-jump (-> *TARGET-bank* attack-jump-height-min) (-> *TARGET-bank* attack-jump-height-max))
      )
     (('target-darkjak-running-attack)
-     (set! *mp-puppet-suppress-dark-punch-edge?* #t)
      (go-process proc target-darkjak-running-attack)
      )
     (('target-darkjak-bomb0)
@@ -1498,6 +1478,9 @@
       (when (and *remote-info* (nonzero? *remote-info*))
         (mp-darkjak-apply-remote-stage! proc (-> *remote-info* darkjak-stage))
         )
+      ;; Match local target processing order: expose the current pad sample before
+      ;; authoritative replay so native state entry can consume its trigger edge.
+      (mp-puppet-apply-input! proc ghost)
       (let ((cur-state (if (-> proc state) (-> proc state name) #f)))
         ;; 1. Position/Rotation Sync (P-Controller)
         (mp-puppet-apply-transform-correction! proc ghost cur-state)
@@ -1719,10 +1702,8 @@
             )
           )
 
-        ;; 4. Weapon/Input Sync (Authoritative gun state first, then raw input)
+        ;; 4. Weapon Sync
         (mp-puppet-apply-weapon-state! proc ghost)
-        (mp-puppet-apply-input! proc ghost)
-        (mp-puppet-consume-forced-dark-punch-edge! proc)
         (mp-puppet-flush-pending-gun-shot! proc ghost)
         (mp-puppet-refresh-duck-gun-visibility! proc cur-state)
       )
@@ -1769,13 +1750,11 @@
   (set! *mp-puppet-pending-gun-shot-seq* (the uint 0))
   (set! *mp-puppet-pending-gun-shot-cam-angle-y* 0.0)
   (set! *mp-puppet-action-warmup-start* (the-as time-frame 0))
-  (set! *mp-puppet-suppress-dark-punch-edge?* #f)
   (none)
   )
 
 (defun mp-puppet-spawn ((id uint))
   "Spawn a new puppet target using native engine initialization."
-  (set! *mp-puppet-suppress-dark-punch-edge?* #f)
   (when (and (not *mp-puppet*)
              *target*
              (-> *game-info* current-continue)
