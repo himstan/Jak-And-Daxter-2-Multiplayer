@@ -1037,11 +1037,15 @@
    (last-seen       time-frame)  ;; Timestamp of last remote update
    (ghost-trans     vector :inline)
    (ghost-quat      quaternion :inline)
+   (presentation-trans vector :inline) ;; Client-only host-driven display position for puppet pedestrians
+   (presentation-quat quaternion :inline) ;; Client-only host-driven display facing for puppet pedestrians
    (ghost-linvel    vector :inline)   ;; Vehicles: remote linear velocity; peds: locally estimated velocity
    (ghost-angvel    vector :inline)   ;; Vehicles: remote angular velocity; peds: previous authoritative position
    (ghost-hp         int32)
    (ghost-state-id  uint8)           ;; Pedestrian state ID; unused for vehicles
    (ghost-target-aid uint8)          ;; Target sync for pedestrians (e.g. crimson-guard)
+   (presentation-valid uint8)        ;; Client-only presentation transform has been initialized
+   (presentation-pad uint8)
    (ghost-animation-profile uint32)  ;; Latest authoritative pedestrian animation selection
    (last-applied-animation-profile uint32)
    (last-attack-id   uint32)

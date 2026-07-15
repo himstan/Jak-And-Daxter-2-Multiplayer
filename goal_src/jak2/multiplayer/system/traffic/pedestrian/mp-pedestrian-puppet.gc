@@ -504,6 +504,7 @@
         (set! (-> rec authorized-trans-frame) 0)
         (set! (-> rec ghost-animation-profile) (the uint32 0))
         (set! (-> rec last-applied-animation-profile) (the uint32 0))
+        (set! (-> rec presentation-valid) (the uint8 0))
         (set! (-> rec last-correction-time) (the uint64 0))
         (set-vector! (-> rec ghost-linvel) 0.0 0.0 0.0 0.0)
         (set-vector! (-> rec ghost-angvel) (-> slot x) (-> slot y) (-> slot z) 1.0)

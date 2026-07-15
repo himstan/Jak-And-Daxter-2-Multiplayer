@@ -43,32 +43,94 @@
   #f
   )
 
-(defun mp-ped-predictive-move ((ped citizen))
-  "Smoothly nudge a citizen's velocity and position toward the authoritative ghost position."
+(defun mp-pedestrian-frame-blend ((rate float))
+  (fmin 1.0 (fmax 0.0 (* rate (seconds-per-frame))))
+  )
+
+(defun mp-pedestrian-snap-presentation! ((rec mp-traffic-ghost-record) (target-trans vector))
+  (when (and rec
+             (nonzero? rec)
+             target-trans
+             (nonzero? target-trans))
+    (vector-copy! (-> rec presentation-trans) target-trans)
+    (quaternion-copy! (-> rec presentation-quat) (-> rec ghost-quat))
+    (set! (-> rec presentation-valid) (the uint8 1))
+    )
+  (none)
+  )
+
+(defun mp-pedestrian-smooth-presentation! ((rec mp-traffic-ghost-record) (target-trans vector))
+  (when (and rec
+             (nonzero? rec)
+             target-trans
+             (nonzero? target-trans))
+    (vector-lerp! (-> rec presentation-trans)
+                  (-> rec presentation-trans)
+                  target-trans
+                  (mp-pedestrian-frame-blend 15.0))
+    (quaternion-slerp! (-> rec presentation-quat)
+                       (-> rec presentation-quat)
+                       (-> rec ghost-quat)
+                       (mp-pedestrian-frame-blend 24.0))
+    )
+  (none)
+  )
+
+(defun mp-pedestrian-apply-presentation! ((ped citizen) (rec mp-traffic-ghost-record))
   (when (and ped
              (nonzero? ped)
-             (not (mp-pedestrian-riding-vehicle? ped)))
+             rec
+             (nonzero? rec)
+             (-> ped root)
+             (nonzero? (-> ped root)))
+    (vector-copy! (-> ped root trans) (-> rec presentation-trans))
+    (vector-copy! (-> ped root transv) (-> rec ghost-linvel))
+    (quaternion-copy! (-> ped root quat) (-> rec presentation-quat))
+    )
+  (none)
+  )
+
+(defun mp-pedestrian-playback! ((ped citizen) (rec mp-traffic-ghost-record))
+  "Replace client pedestrian steering with a smoothed transform derived only from host samples."
+  (when (and ped
+             (nonzero? ped)
+             rec
+             (nonzero? rec)
+             (-> ped root)
+             (nonzero? (-> ped root)))
+    (let ((target-trans (new 'stack-no-clear 'vector))
+          (ghost-state (mp-ped-get-state-from-id (the uint (-> rec ghost-state-id)))))
+      (mp-actor-traffic-predicted-trans! rec target-trans)
+      (let ((presentation-dist (vector-vector-distance (-> rec presentation-trans) target-trans)))
+        (if (or (zero? (-> rec presentation-valid))
+                (> presentation-dist (meters 5))
+                (mp-pedestrian-terminal-state? ghost-state))
+            (mp-pedestrian-snap-presentation! rec target-trans)
+            (mp-pedestrian-smooth-presentation! rec target-trans)
+            )
+        )
+      (mp-pedestrian-apply-presentation! ped rec)
+      )
+    )
+  (none)
+  )
+
+(defun mp-ped-predictive-move ((ped citizen))
+  "Apply host transform playback to a pedestrian puppet when it is not vehicle-attached."
+  (when (and ped
+             (nonzero? ped))
     (let ((net-id (-> ped net-id)))
       (when (and (nonzero? net-id)
                  (-> ped root)
                  (nonzero? (-> ped root)))
         (let ((rec (mp-get-traffic-ghost net-id)))
-          (when (and rec
-                     (nonzero? rec)
-                     (not (should-pause-sync? ped rec)))
-            (let ((predicted-trans (new 'stack-no-clear 'vector))
-                  (ghost-state (mp-ped-get-state-from-id (the uint (-> rec ghost-state-id)))))
-              (mp-actor-traffic-predicted-trans! rec predicted-trans)
-              (mp-actor-apply-ghost-correction!
-                (-> ped root trans)
-                (-> ped root transv)
-                (-> ped root quat)
-                predicted-trans
-                (-> rec ghost-quat)
-                0.85
-                0.35
-                (mp-pedestrian-terminal-state? ghost-state))
-              )
+          (when (and rec (nonzero? rec))
+            (if (mp-pedestrian-riding-vehicle? ped)
+                (set! (-> rec presentation-valid) (the uint8 0))
+                (when (not (should-pause-sync? ped rec))
+                  (mp-pedestrian-playback! ped rec)
+                  )
+                )
             )
           )
         )
@@ -318,9 +380,9 @@
           )
         )
       )
-    (when (and (nonzero? (-> this net-id))
-               (not (mp-pedestrian-death-started? this)))
-      (when (not (should-pause-sync? this rec))
+    (when (nonzero? (-> this net-id))
+      (when (and (not (mp-pedestrian-death-started? this))
+                 (not (should-pause-sync? this rec)))
         (mp-pedestrian-sync-remote-state! this rec)
         (mp-pedestrian-sync-guard-target! this rec)
         (mp-pedestrian-lock-local-state-manager! this rec)
@@ -343,7 +405,6 @@
           (mp-pedestrian-sync-guard-target! this rec)
           (mp-pedestrian-lock-local-state-manager! this rec)
           )
-        (mp-ped-predictive-move this)
         )
       )
     )
