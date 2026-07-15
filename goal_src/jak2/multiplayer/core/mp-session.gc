@@ -7,7 +7,6 @@
 (define-extern mp-network-sync-window-tick (function none))
 (define-extern *dproc* process)
 (define-extern activate-progress (function process symbol none))
-(define-extern activate-progress (function process symbol none))
 (define-extern mp-demo-guard-tick (function none))
 (define-extern mp-demo-guard-on-local-spawn! (function none))
 
@@ -163,7 +162,7 @@
   (none))
 
 (defun mp-enter-host-left-terminal-state! ()
-  "Stop remote gameplay before the Host Left progress screen unloads level assets."
+  "Stop remote gameplay after its submitted foreground DMA has finished rendering."
   (set! *multi-sync-enabled?* #f)
   (mp-reset-puppet-state!)
   (mp-reset-remote-marker-state!)
@@ -180,6 +179,7 @@
 (defun mp-update-host-left-ui! ((status int))
   (when (and (= status 8)
              (not *mp-host-left-menu-active?*))
+    (sync-path 0 0)
     (mp-enter-host-left-terminal-state!)
     (when (and *dproc*
                (nonzero? (the-as uint *dproc*)))
@@ -201,14 +201,16 @@
           (pc-multi-poll (the-as uint *local-info*) (the-as uint *remote-info*))
           (pc-multi-receive-state (the-as uint *remote-info*))
           (set! (-> *local-info* role) (pc-multi-get-role))
+          (set! status (pc-multi-get-status))
+          (when (= status 8)
+            (set! *multi-sync-enabled?* #f)
+            )
           )
         (begin
           (set! (-> *local-info* role) -1)
           (return #f)
           )
         )
-    (mp-update-reconnect-ui! status)
-    (mp-update-host-left-ui! status)
     #t
     ))
 
@@ -320,6 +322,11 @@
   (none))
 
 (defun mp-ui-trigger-tick ()
+  "Mutate multiplayer progress UI only at determine-pause-mode's post-DMA safe point."
+  (let ((status (pc-multi-get-status)))
+    (mp-update-reconnect-ui! status)
+    (mp-update-host-left-ui! status)
+    )
   (mp-demo-guard-tick)
   (none))
 
@@ -330,7 +337,6 @@
         (return #f))
     (if (not (mp-session-tick))
         (return #f))
-    (mp-ui-trigger-tick)
     (mp-sync-scene-tick)
     (mp-send-tick)
     (mp-receive-tick)

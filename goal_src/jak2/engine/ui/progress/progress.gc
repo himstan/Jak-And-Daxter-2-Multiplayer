@@ -475,6 +475,13 @@
     )
   )
 
+(defun progress-copied-background? ((state symbol))
+  (or (= state 'title)
+      (= state 'demo-end)
+      (= state 'demo-disclaimer)
+      )
+  )
+
 (defun activate-progress ((arg0 process) (arg1 symbol))
   (when *target*
     (when (progress-allowed?)
@@ -492,12 +499,12 @@
       (cond
         (*progress-process*
           (deactivate (-> *progress-process* 0))
-          (set! (-> *blit-displays-work* menu-mode) (or (= arg1 'reconnect) (= arg1 'host-left) (= arg1 'demo-end) (= arg1 'demo-disclaimer) (= arg1 'title)))
+          (set! (-> *blit-displays-work* menu-mode) (progress-copied-background? arg1))
           (set! *progress-process* (process-spawn progress arg1 :to arg0 :stack (&-> *progress-stack* DPROCESS_STACK_SIZE)))
           (set-master-mode 'progress)
           )
         (else
-          (set! (-> *blit-displays-work* menu-mode) (or (= arg1 'reconnect) (= arg1 'host-left) (= arg1 'demo-end) (= arg1 'demo-disclaimer) (= arg1 'title)))
+          (set! (-> *blit-displays-work* menu-mode) (progress-copied-background? arg1))
           (set! *progress-process* (process-spawn progress arg1 :to arg0 :stack (&-> *progress-stack* DPROCESS_STACK_SIZE)))
           (set-master-mode 'progress)
           )
@@ -1505,10 +1512,8 @@
           (speed-mod (if (-> *pc-settings* fast-progress?) (-> *pc-cheat-state* progress-speed) 1.0))
           )
       (when (hud-hidden?)
-        (set! (-> *blit-displays-work* menu-mode) (or (= (-> *progress-state* starting-state) 'title)
-                                                     (= (-> *progress-state* starting-state) 'reconnect)
-                                                     (= (-> *progress-state* starting-state) 'host-left)
-                                                     (= (-> *progress-state* starting-state) 'demo-disclaimer)))
+        (set! (-> *blit-displays-work* menu-mode)
+              (progress-copied-background? (-> *progress-state* starting-state)))
         (set! (-> self pos-transition) (seek-ease
                                          (-> self pos-transition)
                                          f30-0

@@ -6,6 +6,7 @@
 ;; dgos: ENGINE, GAME
 
 (define-extern draw-vortex (function none))
+(define-extern mp-ui-trigger-tick (function none))
 
 ;; DECOMP BEGINS
 
@@ -2213,6 +2214,7 @@
   (if (and *progress-process* (!= *master-mode* 'progress))
       (deactivate-progress)
       )
+  (mp-ui-trigger-tick)
   0
   )
 
