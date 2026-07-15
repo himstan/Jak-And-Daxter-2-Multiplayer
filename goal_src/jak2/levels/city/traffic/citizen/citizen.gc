@@ -733,6 +733,7 @@
   (set! (-> self interp) 0.0)
   (logclear! (-> self flags) (citizen-flag run-mode))
   (logclear! (-> self flags) (citizen-flag shuffle-mode))
+  (logclear! (-> self flags) (citizen-flag dark-guard))
   (if (logtest? (-> arg0 flags) (traffic-spawn-flags dark-guard))
       (logior! (-> self flags) (citizen-flag dark-guard))
       )
