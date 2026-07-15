@@ -1708,6 +1708,7 @@
                 (PC_PORT
                   (let ((old-hp (-> this hit-points))
                         (dmg-taken (take-damage-from-attack this arg0 arg3)))
+                    (format 0 "[Enemy] ~A nid=~D pid=~D took ~D damage from the ~A attack.~%" (-> this name) (-> this net-id) (-> this pid) dmg-taken (-> info mode))
                     (when (> dmg-taken 0)
                       (process-spawn damage-number (damage-amount-from-attack this arg0 arg3) (-> this root trans) (-> this mask))
                       (send-damage-to-bar *health-bar-manager* this dmg-taken old-hp)

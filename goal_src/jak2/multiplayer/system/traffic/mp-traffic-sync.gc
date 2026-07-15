@@ -769,6 +769,8 @@
             (if (or (mp-is-jak?) (mp-is-traffic-authoritative?))
                 ;; Authoritative Logic: Gather and Pack
                 (begin
+                  ;; Reclaim host bookkeeping before current entities request slots.
+                  (mp-cleanup-authoritative-traffic-ghosts!)
                   (set! (-> *mp-traffic-buffer* ped-count) (the uint 0))
                   (set! (-> *mp-traffic-buffer* veh-count) (the uint 0))
                   

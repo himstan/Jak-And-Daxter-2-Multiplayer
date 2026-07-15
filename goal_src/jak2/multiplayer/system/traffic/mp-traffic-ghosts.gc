@@ -4,6 +4,48 @@
 ;; Shared traffic ghost record registry. Pedestrian and vehicle puppet code both
 ;; use these records for authoritative samples and correction state.
 
+(define-perm *mp-authoritative-traffic-ghost-cleanup-time* time-frame 0)
+(define-perm *mp-traffic-ghost-allocation-failure-log-time* time-frame 0)
+
+(defun mp-traffic-ghost-used-count ()
+  "Count allocated records in the shared traffic ghost registry."
+  (let ((used-count (the int 0)))
+    (dotimes (i MP_MAX_TRAFFIC_GHOST_RECORDS)
+      (let ((rec (-> *mp-traffic-ghosts* i)))
+        (when (and rec
+                   (nonzero? rec)
+                   (nonzero? (-> rec net-id)))
+          (+! used-count 1)
+          )
+        )
+      )
+    used-count
+    )
+  )
+
+(defun mp-release-traffic-ghost! ((rec mp-traffic-ghost-record))
+  "Release a traffic ghost slot and reset state that must not survive reuse."
+  (when (and rec (nonzero? rec))
+    (set! (-> rec net-id) (the uint32 0))
+    (set! (-> rec entity-kind) (the uint8 0))
+    (set! (-> rec last-seen) 0)
+    (set! (-> rec ghost-hp) (the int32 0))
+    (set! (-> rec ghost-state-id) (the uint8 0))
+    (set! (-> rec ghost-target-aid) (the uint8 0))
+    (set! (-> rec ghost-animation-profile) (the uint32 0))
+    (set! (-> rec last-applied-animation-profile) (the uint32 0))
+    (set! (-> rec last-attack-id) (the uint32 0))
+    (set! (-> rec last-local-attack-id) (the uint32 0))
+    (set! (-> rec last-local-attack-time) 0)
+    (set! (-> rec last-correction-time) (the uint64 0))
+    (set! (-> rec last-applied-state-id) (the uint32 0))
+    (set! (-> rec last-state-bump-time) 0)
+    (set! (-> rec authorized-trans-state-id) (the uint32 0))
+    (set! (-> rec authorized-trans-frame) 0)
+    )
+  (none)
+  )
+
 (defun mp-get-traffic-ghost ((net-id uint))
   "Find an existing ghost record by net-id. Returns #f if not found."
   (dotimes (i MP_MAX_TRAFFIC_GHOST_RECORDS)
@@ -35,14 +77,20 @@
       (set! rec (mp-get-traffic-ghost net-id))
       (when (not rec)
         (set! rec (mp-get-free-traffic-ghost))
-        (when (and rec (nonzero? rec))
-          (set! (-> rec net-id) net-id)
-          (set! (-> rec last-seen) 0)
-          (set! (-> rec last-correction-time) (the uint64 0))
-          (set! (-> rec last-applied-state-id) (the uint32 0))
-          (set! (-> rec last-state-bump-time) 0)
-          (set! (-> rec authorized-trans-state-id) (the uint32 0))
-          (set! (-> rec authorized-trans-frame) 0)
+        (if (and rec (nonzero? rec))
+            (begin
+              (mp-release-traffic-ghost! rec)
+              (set! (-> rec net-id) net-id)
+              )
+            (when (time-elapsed? *mp-traffic-ghost-allocation-failure-log-time* (seconds 1))
+              (format 0
+                      "[MP-TrafficGhost] Allocation failed nid=~D kind=~D used=~D/~D~%"
+                      net-id
+                      entity-kind
+                      (mp-traffic-ghost-used-count)
+                      MP_MAX_TRAFFIC_GHOST_RECORDS)
+              (set! *mp-traffic-ghost-allocation-failure-log-time* (current-time))
+              )
           )
         )
       (when (and rec (nonzero? rec))
@@ -51,6 +99,58 @@
       )
     rec
     )
+  )
+
+(defun mp-authoritative-pedestrian-ghost-missing? ((rec mp-traffic-ghost-record))
+  "Return true when a pedestrian ghost no longer has a corresponding process."
+  (when (or (not rec)
+            (not (nonzero? rec))
+            (!= (-> rec entity-kind) (the uint8 0)))
+    (return #f)
+    )
+  (let ((ped-proc (mp-pedestrian-find-by-net-id (-> rec net-id))))
+    (or (not ped-proc)
+        (not (nonzero? ped-proc)))
+    )
+  )
+
+(defun mp-cleanup-authoritative-traffic-ghosts! ()
+  "Reclaim stale and missing pedestrian records on the traffic authority."
+  (when (and (mp-is-traffic-authoritative?)
+             (time-elapsed? *mp-authoritative-traffic-ghost-cleanup-time* (seconds 1)))
+    (let ((stale-count (the int 0))
+          (missing-ped-count (the int 0)))
+      (dotimes (i MP_MAX_TRAFFIC_GHOST_RECORDS)
+        (let ((rec (-> *mp-traffic-ghosts* i)))
+          (when (and rec
+                     (nonzero? rec)
+                     (nonzero? (-> rec net-id)))
+            (cond
+              ((time-elapsed? (-> rec last-seen) (seconds 10))
+               (+! stale-count 1)
+               (mp-release-traffic-ghost! rec)
+               )
+              ((mp-authoritative-pedestrian-ghost-missing? rec)
+               (+! missing-ped-count 1)
+               (mp-release-traffic-ghost! rec)
+               )
+              )
+            )
+          )
+        )
+      (when (or (nonzero? stale-count)
+                (nonzero? missing-ped-count))
+        (format 0
+                "[MP-TrafficGhost] Authority cleanup stale=~D missing-ped=~D used=~D/~D~%"
+                stale-count
+                missing-ped-count
+                (mp-traffic-ghost-used-count)
+                MP_MAX_TRAFFIC_GHOST_RECORDS)
+        )
+      )
+    (set! *mp-authoritative-traffic-ghost-cleanup-time* (current-time))
+    )
+  (none)
   )
 
 (defun mp-cleanup-traffic-ghosts ()
@@ -62,7 +162,7 @@
         (format 0
                 "[MP-TrafficGhost] Cleaning up stale nid=~D after 10 seconds.~%"
                 (-> rec net-id))
-        (set! (-> rec net-id) (the uint 0))
+        (mp-release-traffic-ghost! rec)
         )
       )
     )

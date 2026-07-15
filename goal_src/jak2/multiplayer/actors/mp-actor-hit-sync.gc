@@ -564,6 +564,10 @@
                   (set! (-> rec last-local-attack-time) (current-time))
                   (mp-actor-send-attack-event! e-proc attacker info arg3 MP_EVENT_ATTACK_PED net-id (-> e-proc hit-points))
                   )
+                (when (not rec)
+                  (format 0
+                          "[MP-ActorHit] Ped broadcast blocked: missing traffic ghost nid=~D~%"
+                          net-id))
                 )
               )
             )
