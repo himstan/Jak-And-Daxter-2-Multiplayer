@@ -41,9 +41,13 @@
          (let ((v1-4 (-> self pilot)))
            (when (nonzero? v1-4)
              (let ((a0-5 (handle->process (-> v1-4 vehicle))))
-               (if a0-5
-                   (put-rider-in-seat (the-as vehicle a0-5) (-> v1-4 seat-index) (the-as process-focusable #f))
+               (when (and a0-5 (nonzero? a0-5))
+                 (let ((seat-rider (get-rider-in-seat (the-as vehicle a0-5) (-> v1-4 seat-index))))
+                   (when (or (not seat-rider) (= seat-rider self))
+                     (put-rider-in-seat (the-as vehicle a0-5) (-> v1-4 seat-index) (the-as process-focusable #f))
+                     )
                    )
+                 )
                )
              )
            )
@@ -279,8 +283,7 @@
           (else
             ;; Local player boarding: Use proximity/occupancy logic.
             (let* ((force-passenger? (cpad-hold? (-> self control cpad number) l1))
-                   (driver-seat-rider (get-rider-in-seat (the-as vehicle s4-1) 0))
-                   (driver-seat-player? (and driver-seat-rider (type? driver-seat-rider target)))
+                   (driver-seat-player? (vehicle-driver-seat-has-player? (the-as vehicle s4-1)))
                    (passenger-seat (vehicle-find-empty-passenger-seat (the-as vehicle s4-1) (-> self control trans)))
                    )
               (cond

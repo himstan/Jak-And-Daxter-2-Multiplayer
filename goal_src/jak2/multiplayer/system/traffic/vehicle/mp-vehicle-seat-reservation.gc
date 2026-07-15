@@ -1,0 +1,113 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defun mp-vehicle-seat-reservation-levels-match? ()
+  "Only consume seat reservations while both players are in the same primary level."
+  (when (and *local-info*
+             (nonzero? *local-info*)
+             *remote-info*
+             (nonzero? *remote-info*)
+             (= (pc-multi-get-status) 6)
+             (= (-> *remote-info* status) 6))
+    (let ((local-level (mp-level-packed-primary-id (-> *local-info* level)))
+          (remote-level (mp-level-packed-primary-id (-> *remote-info* level))))
+      (return (and (nonzero? local-level)
+                   (= local-level remote-level)))
+      )
+    )
+  #f
+  )
+
+(defun mp-local-vehicle-seat-claim? ((veh vehicle) (seat-index int))
+  "True while the local target is entering or occupying this exact vehicle seat."
+  (when (and veh
+             (nonzero? veh)
+             *target*
+             (nonzero? *target*)
+             (focus-test? *target* pilot)
+             (-> *target* pilot)
+             (nonzero? (-> *target* pilot))
+             (-> *target* state)
+             (nonzero? (-> *target* state)))
+    (let ((pilot-info (-> *target* pilot))
+          (state-name (-> *target* state name)))
+      (when (and (nonzero? (-> pilot-info vehicle))
+                 (= (handle->process-safe (-> pilot-info vehicle)) veh)
+                 (= (-> pilot-info seat-index) seat-index)
+                 (not (mp-target-death-state? state-name))
+                 (!= state-name 'target-pilot-get-off)
+                 (!= state-name 'target-indax-pilot-get-off))
+        (return #t)
+        )
+      )
+    )
+  #f
+  )
+
+(defun mp-remote-vehicle-seat-claim? ((veh vehicle) (seat-index int))
+  "Validate the remote snapshot's claim against a live vehicle and seat."
+  (when (and veh
+             (nonzero? veh)
+             (-> veh info)
+             (nonzero? (-> veh info))
+             *remote-info*
+             (nonzero? *remote-info*)
+             (mp-vehicle-seat-reservation-levels-match?)
+             (>= seat-index 0)
+             (< seat-index (-> veh info seat-count))
+             (nonzero? (-> veh net-id))
+             (= (-> *remote-info* riding-veh-id) (-> veh net-id))
+             (= (the int (-> *remote-info* riding-seat-index)) seat-index))
+    (return #t)
+    )
+  #f
+  )
+
+(defun mp-remote-seat-claim-wins? ((veh vehicle) (seat-index int))
+  "An earlier visible remote claim wins; simultaneous claims use the lower role (host)."
+  (when (mp-remote-vehicle-seat-claim? veh seat-index)
+    (when (not (mp-local-vehicle-seat-claim? veh seat-index))
+      (return #t)
+      )
+    (when (and *local-info*
+               (nonzero? *local-info*)
+               *remote-info*
+               (nonzero? *remote-info*)
+               (< (-> *remote-info* role) (-> *local-info* role)))
+      (return #t)
+      )
+    )
+  #f
+  )
+
+(defun mp-vehicle-seat-reserved-by-remote? ((veh vehicle) (seat-index int))
+  "Return whether local boarding and puppet reconciliation should honor the remote claim."
+  (mp-remote-seat-claim-wins? veh seat-index)
+  )
+
+(defun mp-resolve-local-vehicle-seat-conflict! ()
+  "Cancel the local client when both players claimed the same seat before either observed it."
+  (when (and *target*
+             (nonzero? *target*)
+             *local-info*
+             (nonzero? *local-info*)
+             (-> *target* pilot)
+             (nonzero? (-> *target* pilot)))
+    (let* ((pilot-info (-> *target* pilot))
+           (vehicle-proc (the-as vehicle (handle->process-safe (-> pilot-info vehicle))))
+           (seat-index (-> pilot-info seat-index)))
+      (when (and vehicle-proc
+                 (nonzero? vehicle-proc)
+                 (mp-local-vehicle-seat-claim? vehicle-proc seat-index)
+                 (mp-remote-seat-claim-wins? vehicle-proc seat-index))
+        (format 0
+                "[MP-Vehicle] Seat conflict on vehicle ~D seat ~D; local role ~D yielding.~%"
+                (-> vehicle-proc net-id)
+                seat-index
+                (-> *local-info* role))
+        (send-event *target* 'end-mode)
+        )
+      )
+    )
+  (none)
+  )

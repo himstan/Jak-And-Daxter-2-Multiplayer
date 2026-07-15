@@ -583,6 +583,7 @@
   "mp-vehicle-authoritative.o" ;; added
   "mp-mission-vehicles.o" ;; added
   "mp-vehicle-puppet.o" ;; added
+  "mp-vehicle-seat-reservation.o" ;; added
   "mp-traffic-sync.o" ;; added
   "mp-traffic-authority.o" ;; added
   "mp-traffic-debug.o" ;; added

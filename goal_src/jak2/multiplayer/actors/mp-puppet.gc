@@ -1335,6 +1335,7 @@
   (when (and proc
              (nonzero? proc)
              (-> proc control)
+             (nonzero? (-> proc control))
              v-proc
              (nonzero? v-proc)
              (>= seat-index 0)
@@ -1342,6 +1343,28 @@
     (mp-vehicle-clear-seat-occupant! v-proc seat-index proc)
     (remove-rider v-proc proc)
     (send-event proc 'change-mode (mp-puppet-pilot-entry-mode) v-proc seat-index #f)
+    )
+  (none)
+  )
+
+(defun mp-puppet-repair-vehicle-seat-claim! ((proc target) (v-proc vehicle) (seat-index int))
+  "Restore the winning puppet after a late local conflict disturbed the native rider array."
+  (when (and proc
+             (nonzero? proc)
+             v-proc
+             (nonzero? v-proc)
+             (-> v-proc info)
+             (nonzero? (-> v-proc info))
+             (>= seat-index 0)
+             (< seat-index (-> v-proc info seat-count))
+             (focus-test? proc pilot-riding)
+             (mp-puppet-synced-to-vehicle-seat? proc v-proc seat-index))
+    (mp-vehicle-clear-seat-occupant! v-proc seat-index proc)
+    (let ((seat-rider (get-rider-in-seat v-proc seat-index)))
+      (when (or (not seat-rider) (= seat-rider proc))
+        (put-rider-in-seat v-proc seat-index proc)
+        )
+      )
     )
   (none)
   )
@@ -1570,9 +1593,14 @@
                (let ((v-proc (mp-vehicle-find-by-net-id riding-veh-id)))
                  (when (and v-proc (nonzero? v-proc))
                    (let ((seat-index (the int riding-seat-index)))
-                     (when (not (mp-puppet-synced-to-vehicle-seat? proc v-proc seat-index))
-                       ;; Native pilot get-on attaches the rider at the animation-ready frame.
-                       (mp-puppet-start-vehicle-entry! proc v-proc seat-index)
+                     (when (mp-vehicle-seat-reserved-by-remote? v-proc seat-index)
+                       (if (mp-puppet-synced-to-vehicle-seat? proc v-proc seat-index)
+                           (mp-puppet-repair-vehicle-seat-claim! proc v-proc seat-index)
+                           (begin
+                             ;; Native pilot get-on attaches the rider at the animation-ready frame.
+                             (mp-puppet-start-vehicle-entry! proc v-proc seat-index)
+                             )
+                           )
                        )
                      )
                    )

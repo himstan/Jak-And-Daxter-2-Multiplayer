@@ -263,6 +263,7 @@
   (when (and *mp-enemy-buffer* (nonzero? (the-as uint *mp-enemy-buffer*)))
     (set! (-> *mp-enemy-buffer* last-sync-time) (pc-multi-get-enemy-sync-time))
     )
+  (mp-resolve-local-vehicle-seat-conflict!)
   (mp-manage-remote-puppet)
   (mp-extract-local-stats)
   (mp-stadium-board1-tick)
