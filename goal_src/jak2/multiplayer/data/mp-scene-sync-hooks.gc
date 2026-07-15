@@ -2,6 +2,22 @@
 (in-package goal)
 
 (define-perm *mp-active-local-scene-name* string (new 'global 'string 64 ""))
+(define-perm *mp-aborted-scene-catchup-logged?* symbol #f)
+
+(defun mp-local-scene-aborted? ()
+  "True while the active scene-player is tearing down after a skip/abort."
+  (when (and *scene-player*
+             (nonzero? *scene-player*))
+    (let ((scene-proc (the-as scene-player (ppointer->process *scene-player*))))
+      (when (and scene-proc
+                 (nonzero? scene-proc))
+        (return (-> scene-proc aborted?))
+        )
+      )
+    )
+  #f
+  )
+
 (defun mp-clear-active-local-scene-name! ()
   (when (and *mp-active-local-scene-name*
              (nonzero? *mp-active-local-scene-name*))
@@ -12,7 +28,8 @@
 
 (defun mp-record-active-local-scene-name! ()
   "Remember the current local scene so transition cleanup can run after it ends."
-  (when (and *scene-player*
+  (when (and (not (mp-local-scene-aborted?))
+             *scene-player*
              (nonzero? *scene-player*))
     (let ((scene-proc (the-as scene-player (ppointer->process *scene-player*))))
       (when (and scene-proc

@@ -22,6 +22,7 @@
   (set! *mp-pending-scene-sync-next-log-time* (the-as time-frame 0))
   (set! *mp-scene-sync-target-hold?* #f)
   (set! *mp-scene-sync-target-hold-until* (the-as time-frame 0))
+  (set! *mp-aborted-scene-catchup-logged?* #f)
   (mp-clear-active-local-scene-name!)
   (when (and *mp-pending-scene-sync-name*
              (nonzero? (the-as uint *mp-pending-scene-sync-name*)))
@@ -245,6 +246,22 @@
   (and scene-name
        (nonzero? scene-name)
        (string= scene-name "intro-samos-hut"))
+  )
+
+(defun mp-intro-chain-scene? ((scene-name string))
+  (and scene-name
+       (nonzero? scene-name)
+       (or (string= scene-name "intro-samos-hut")
+           (string= scene-name "intro-vortex")
+           (string= scene-name "intro-city-square")
+           (string= scene-name "intro-prison")))
+  )
+
+(defun mp-ignore-intro-start-after-skip? ((scene-name string))
+  "Ignore teardown-generated intro starts while the client awaits prison full sync."
+  (and (mp-is-daxter?)
+       *mp-intro-skip-blackout-pending?*
+       (mp-intro-chain-scene? scene-name))
   )
 
 (defun mp-arm-intro-skip-full-sync! ((scene-name string))
@@ -665,29 +682,6 @@
   (none)
   )
 
-(defun mp-process-pending-scene-sync! ()
-  (when *mp-pending-scene-sync?*
-    (cond
-      ((and *scene-player* (nonzero? *scene-player*))
-       (mp-log-pending-scene-sync-wait! "another local scene is active")
-       )
-      ((not (mp-scene-sync-levels-ready-or-request!))
-       (mp-log-pending-scene-sync-wait! "scene continue levels are not loaded")
-       )
-      ((not (mp-pending-scene-sync-scene-ready?))
-       (mp-log-pending-scene-sync-wait! "scene definition is not loaded")
-       )
-      ((not (mp-local-scene-teleport-ready?))
-       (mp-log-pending-scene-sync-wait! "local target is not ready")
-       )
-      (else
-       (mp-finish-pending-scene-sync!)
-       )
-      )
-    )
-  (none)
-  )
-
 (defun mp-local-scene-name-matches? ((scene-name string))
   (when (and scene-name
              (nonzero? scene-name)
@@ -708,6 +702,35 @@
   #f
   )
 
+(defun mp-process-pending-scene-sync! ()
+  (when *mp-pending-scene-sync?*
+    (cond
+      ((mp-local-scene-name-matches? *mp-pending-scene-sync-name*)
+       (format 0 "[MP-SceneSync] Pending remote scene ~S is already active locally; consuming it.~%"
+               *mp-pending-scene-sync-name*)
+       (set! *mp-pending-scene-sync?* #f)
+       (set! *mp-pending-scene-sync-next-log-time* (the-as time-frame 0))
+       )
+      ((and *scene-player* (nonzero? *scene-player*))
+       (mp-log-pending-scene-sync-wait! "another local scene is active")
+       )
+      ((not (mp-scene-sync-levels-ready-or-request!))
+       (mp-log-pending-scene-sync-wait! "scene continue levels are not loaded")
+       )
+      ((not (mp-pending-scene-sync-scene-ready?))
+       (mp-log-pending-scene-sync-wait! "scene definition is not loaded")
+       )
+      ((not (mp-local-scene-teleport-ready?))
+       (mp-log-pending-scene-sync-wait! "local target is not ready")
+       )
+      (else
+       (mp-finish-pending-scene-sync!)
+       )
+      )
+    )
+  (none)
+  )
+
 (defun mp-pending-scene-name-matches? ((scene-name string))
   (and scene-name
        (nonzero? scene-name)
@@ -725,14 +748,19 @@
 (defun mp-event-handler-scene-start ((ev mp-scene-event))
   (let ((s* *mp-scene-name-scratch*))
     (when (and s* (nonzero? s*) (nonzero? (length s*)))
-      (if (mp-duplicate-scene-start? s*)
-          (format 0 "[MP-Scene] Suppressing duplicate remote scene start: ~S~%" s*)
-          (begin
-            (format 0 "[MP-WorldEvent] Remote started scene: ~S. Waiting for level-ready NPC-sync.~%" s*)
-            (set! *mp-last-remote-scene-active* (the uint 1))
-            (mp-arm-pending-scene-sync! s* ev)
-            )
-          )
+      (cond
+        ((mp-ignore-intro-start-after-skip? s*)
+         (format 0 "[MP-IntroSkip] Ignoring post-skip intro scene start: ~S.~%" s*)
+         )
+        ((mp-duplicate-scene-start? s*)
+         (format 0 "[MP-Scene] Suppressing duplicate remote scene start: ~S~%" s*)
+         )
+        (else
+         (format 0 "[MP-WorldEvent] Remote started scene: ~S. Waiting for level-ready NPC-sync.~%" s*)
+         (set! *mp-last-remote-scene-active* (the uint 1))
+         (mp-arm-pending-scene-sync! s* ev)
+         )
+        )
       )
     )
   (none))

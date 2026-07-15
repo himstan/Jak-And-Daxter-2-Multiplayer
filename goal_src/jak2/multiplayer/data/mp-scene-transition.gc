@@ -71,11 +71,20 @@
              (mp-scene-catchup-client-connected?)
              *mp-active-local-scene-name*
              (nonzero? *mp-active-local-scene-name*)
-             (nonzero? (length *mp-active-local-scene-name*))
-             (not (mp-connected-scene-broadcast-current? *mp-active-local-scene-name*)))
-    (format 0 "[MP-Scene] Broadcasting catch-up scene start: ~S~%"
-            *mp-active-local-scene-name*)
-    (mp-send-scene-event (mp-scene-state started) *mp-active-local-scene-name*)
+             (nonzero? (length *mp-active-local-scene-name*)))
+    (cond
+      ((mp-local-scene-aborted?)
+       (when (not *mp-aborted-scene-catchup-logged?*)
+         (format 0 "[MP-Scene] Suppressing catch-up broadcast for aborted scene-player.~%")
+         (set! *mp-aborted-scene-catchup-logged?* #t)
+         )
+       )
+      ((not (mp-connected-scene-broadcast-current? *mp-active-local-scene-name*))
+       (format 0 "[MP-Scene] Broadcasting catch-up scene start: ~S~%"
+               *mp-active-local-scene-name*)
+       (mp-send-scene-event (mp-scene-state started) *mp-active-local-scene-name*)
+       )
+      )
     )
   (none)
   )
@@ -103,6 +112,7 @@
       )
 
     (when (not in-scene?)
+      (set! *mp-aborted-scene-catchup-logged?* #f)
       (mp-request-intro-skip-full-sync-when-ready!)
       (mp-hold-intro-skip-blackout!)
       (set! *mp-remote-wants-skip* #f)
