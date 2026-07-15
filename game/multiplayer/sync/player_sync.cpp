@@ -61,6 +61,7 @@ void mp_handle_player_state_packet(MultiplayerData& data,
   entity.state_id = state->state_id;
   entity.level_hash = state->level_hash;
   entity.riding = state->riding;
+  entity.darkjak_stage = state->darkjak_stage;
   entity.clock = state->clock;
   entity.tod_frame = state->tod_frame;
   entity.tod_ratio = state->tod_ratio;
@@ -173,6 +174,7 @@ void mp_send_player_state(MultiplayerData& data, LocalPlayerInfoGOAL* local) {
   local_state.level_hash = local->level;
   data.local_traffic_level_hash = local_state.level_hash;
   local_state.riding = local->riding;
+  local_state.darkjak_stage = local->darkjak_stage;
   local_state.clock = local->clock;
   local_state.tod_frame = local->tod_frame;
   local_state.tod_ratio = local->tod_ratio;
@@ -275,6 +277,7 @@ void mp_sync_remote_player_to_goal(MultiplayerData& data, RemotePlayerInfoGOAL* 
     remote_goal->send_tick = 0;
     remote_goal->receive_tick = 0;
     remote_goal->riding = 0;
+    remote_goal->darkjak_stage = 0;
     remote_goal->riding_veh_id = 0;
     remote_goal->riding_seat_index = 0;
     remote_goal->action_seq = 0;
@@ -309,6 +312,7 @@ void mp_sync_remote_player_to_goal(MultiplayerData& data, RemotePlayerInfoGOAL* 
   remote_goal->status = (remote_state.status > 0) ? (int32_t)remote_state.status : 1;
   remote_goal->packet_id = remote_state.last_sequence_num;
   remote_goal->riding = remote_state.riding;
+  remote_goal->darkjak_stage = remote_state.darkjak_stage;
   remote_goal->clock = remote_state.clock;
   remote_goal->tod_frame = remote_state.tod_frame;
   remote_goal->tod_ratio = remote_state.tod_ratio;

@@ -590,6 +590,7 @@
   "mp-enemy-debug.o" ;; added  
   "mp-debug.o" ;; added
   "mp-task-debug.o" ;; added
+  "mp-oracle-darkjak.o" ;; added
   "mp-puppet.o" ;; added
   "mp-puppet-debug.o" ;; added
   "mp-eye-debug.o" ;; added

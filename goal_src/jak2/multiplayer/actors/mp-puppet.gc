@@ -15,6 +15,7 @@
 (define-perm *mp-puppet-last-fresh-input-time* time-frame (the-as time-frame 0))
 (define-perm *mp-puppet-last-action-seq* uint (the uint 0))
 (define-perm *mp-puppet-action-warmup-start* time-frame (the-as time-frame 0))
+(define-perm *mp-puppet-suppress-dark-punch-edge?* symbol #f)
 (define *mp-puppet-input-stale-time* (seconds 0.2))
 (define *mp-puppet-action-warmup-time* (seconds 0.3))
 
@@ -30,6 +31,7 @@
   (set! *mp-puppet-last-fresh-input-time* (the-as time-frame 0))
   (set! *mp-puppet-last-action-seq* (the uint 0))
   (set! *mp-puppet-action-warmup-start* (the-as time-frame 0))
+  (set! *mp-puppet-suppress-dark-punch-edge?* #f)
   (set! *mp-puppet-state-mismatch-count* 0)
   (when (and *mp-puppet*
              (nonzero? *mp-puppet*))
@@ -78,6 +80,7 @@
   (set! *mp-puppet-pending-gun-shot-seq* (the uint 0))
   (set! *mp-puppet-pending-gun-shot-cam-angle-y* 0.0)
   (set! *mp-puppet-action-warmup-start* (the-as time-frame 0))
+  (set! *mp-puppet-suppress-dark-punch-edge?* #f)
   (set! *mp-puppet-state-mismatch-count* 0)
   (none)
   )
@@ -824,6 +827,10 @@
       'target-attack-air
       'target-attack-uppercut
       'target-attack-uppercut-jump
+      'target-darkjak-running-attack
+      'target-darkjak-bomb0
+      'target-darkjak-bomb1
+      'target-darkjak-giant
       'target-indax-jump
       'target-indax-double-jump
       'target-indax-high-jump
@@ -894,10 +901,56 @@
        (nonzero? proc)
        (not (focus-test? proc pilot tube flut pole))
        (not (mp-target-death-state? cur-state))
+       (mp-darkjak-puppet-action-compatible? proc action-state)
        (or (not (mp-target-authoritative-board-action-state? action-state))
            (focus-test? proc board)
            (mp-target-authoritative-board-action-state? cur-state))
        )
+  )
+
+(defun mp-puppet-dark-blast-prelude-active? ((proc target) (cur-state symbol) (action-state symbol))
+  "True when native uppercut code is already preparing the synchronized Dark Blast."
+  (and (= action-state 'target-darkjak-bomb1)
+       (= cur-state 'target-attack-uppercut)
+       proc
+       (nonzero? proc)
+       (focus-test? proc dark)
+       (-> proc darkjak)
+       (nonzero? (-> proc darkjak))
+       (logtest? (-> proc darkjak stage) (darkjak-stage bomb1))
+       )
+  )
+
+(defun mp-puppet-authoritative-action-observed? ((proc target) (cur-state symbol) (action-state symbol))
+  "Acknowledge actions already entered through synchronized raw input."
+  (or (= cur-state action-state)
+      (mp-puppet-dark-blast-prelude-active? proc cur-state action-state)
+      )
+  )
+
+(defun mp-puppet-ack-authoritative-action! ((action-seq uint))
+  (set! *mp-puppet-last-action-seq* action-seq)
+  (set! *mp-puppet-state-mismatch-count* 0)
+  (none)
+  )
+
+(defun mp-puppet-consume-forced-dark-punch-edge! ((proc target))
+  "Prevent a replayed Dark punch from treating its trigger edge as combo step two."
+  (when *mp-puppet-suppress-dark-punch-edge?*
+    (set! *mp-puppet-suppress-dark-punch-edge?* #f)
+    (when (and proc
+               (nonzero? proc)
+               (-> proc control)
+               (nonzero? (-> proc control)))
+      (let ((pad (-> proc control cpad)))
+        (when (and pad
+                   (nonzero? pad))
+          (logclear! (-> pad button0-rel 0) (pad-buttons square))
+          )
+        )
+      )
+    )
+  (none)
   )
 
 (defun mp-puppet-snap-for-authoritative-action! ((proc target) (ghost mp-target-ghost-record) (action-state symbol))
@@ -964,6 +1017,22 @@
      )
     (('target-attack-uppercut-jump)
      (go-process proc target-attack-uppercut-jump (-> *TARGET-bank* attack-jump-height-min) (-> *TARGET-bank* attack-jump-height-max))
+     )
+    (('target-darkjak-running-attack)
+     (set! *mp-puppet-suppress-dark-punch-edge?* #t)
+     (go-process proc target-darkjak-running-attack)
+     )
+    (('target-darkjak-bomb0)
+     (mp-darkjak-emit-puppet-attack-feedback! proc *target*)
+     (go-process proc target-darkjak-bomb0)
+     )
+    (('target-darkjak-bomb1)
+     (mp-darkjak-emit-puppet-attack-feedback! proc *target*)
+     (go-process proc target-attack-uppercut (-> *TARGET-bank* attack-jump-height-min) (-> *TARGET-bank* attack-jump-height-max))
+     )
+    (('target-darkjak-giant)
+     (mp-darkjak-emit-puppet-transform-feedback! proc *target*)
+     (go-process proc target-darkjak-giant)
      )
     (('target-indax-jump)
      (go-process proc target-indax-jump (-> *TARGET-bank* indax-jump-height-min) (-> *TARGET-bank* indax-jump-height-max) (the-as surface #f))
@@ -1049,13 +1118,17 @@
       (when (and (nonzero? action-seq)
                  (!= action-seq *mp-puppet-last-action-seq*)
                  action-state
-                 (!= cur-state action-state)
-                 (mp-target-authoritative-action-state? action-state)
-                 (mp-puppet-authoritative-action-compatible? proc cur-state action-state))
-        (mp-puppet-snap-for-authoritative-action! proc ghost action-state)
-        (mp-puppet-go-authoritative-action! proc action-state)
-        (set! *mp-puppet-last-action-seq* action-seq)
-        (set! *mp-puppet-state-mismatch-count* 0)
+                 (mp-target-authoritative-action-state? action-state))
+        (cond
+          ((mp-puppet-authoritative-action-observed? proc cur-state action-state)
+           (mp-puppet-ack-authoritative-action! action-seq)
+           )
+          ((mp-puppet-authoritative-action-compatible? proc cur-state action-state)
+           (mp-puppet-snap-for-authoritative-action! proc ghost action-state)
+           (mp-puppet-go-authoritative-action! proc action-state)
+           (mp-puppet-ack-authoritative-action! action-seq)
+           )
+          )
         )
       )
     )
@@ -1422,10 +1495,17 @@
       ;; CRITICAL: Ensure the process is never culled by distance/kernel optimizations
       (logclear! (-> proc mask) (process-mask pause sleep actor-pause))
 
+      (when (and *remote-info* (nonzero? *remote-info*))
+        (mp-darkjak-apply-remote-stage! proc (-> *remote-info* darkjak-stage))
+        )
       (let ((cur-state (if (-> proc state) (-> proc state name) #f)))
         ;; 1. Position/Rotation Sync (P-Controller)
         (mp-puppet-apply-transform-correction! proc ghost cur-state)
         (mp-puppet-apply-authoritative-action! proc ghost cur-state)
+        (when (and *remote-info*
+                   (nonzero? *remote-info*))
+          (mp-darkjak-update-puppet-giant-feedback! proc *target* (-> *remote-info* darkjak-stage))
+          )
         (set! cur-state (if (-> proc state) (-> proc state name) cur-state))
 
         ;; 3. State Bumping (Reconciliation Fallback)
@@ -1642,6 +1722,7 @@
         ;; 4. Weapon/Input Sync (Authoritative gun state first, then raw input)
         (mp-puppet-apply-weapon-state! proc ghost)
         (mp-puppet-apply-input! proc ghost)
+        (mp-puppet-consume-forced-dark-punch-edge! proc)
         (mp-puppet-flush-pending-gun-shot! proc ghost)
         (mp-puppet-refresh-duck-gun-visibility! proc cur-state)
       )
@@ -1688,11 +1769,13 @@
   (set! *mp-puppet-pending-gun-shot-seq* (the uint 0))
   (set! *mp-puppet-pending-gun-shot-cam-angle-y* 0.0)
   (set! *mp-puppet-action-warmup-start* (the-as time-frame 0))
+  (set! *mp-puppet-suppress-dark-punch-edge?* #f)
   (none)
   )
 
 (defun mp-puppet-spawn ((id uint))
   "Spawn a new puppet target using native engine initialization."
+  (set! *mp-puppet-suppress-dark-punch-edge?* #f)
   (when (and (not *mp-puppet*)
              *target*
              (-> *game-info* current-continue)

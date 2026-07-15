@@ -13,12 +13,15 @@
   TASK_MANAGER_INIT_HOOK
   (lambda :behavior task-manager
     ()
-    (set! (-> self data-float 0) (the-as float (send-event *target* 'test-pickup (pickup-type eco-pill-dark))))
-    (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim))
+    (set! (-> self data-int32 0) (if (mp-oracle-darkjak-training-participant?) 1 0))
+    (when (and (nonzero? (-> self data-int32 0)) *target* (nonzero? *target*))
+      (set! (-> self data-float 0) (the-as float (send-event *target* 'test-pickup (pickup-type eco-pill-dark))))
+      (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim))
+      (send-event *target* 'get-notify self)
+      )
     (set! (-> self sound-id 0)
           (add-process *gui-control* self (gui-channel message) (gui-action play) (-> self name) 81920.0 0)
           )
-    (send-event *target* 'get-notify self)
     (none)
     )
   )
@@ -29,9 +32,11 @@
   TASK_MANAGER_CLEANUP_HOOK
   (lambda :behavior task-manager
     ()
-    (send-event *target* 'get-pickup (pickup-type eco-pill-dark) (-> self data-float 0))
-    (send-event *target* 'change-mode 'darkjak #f (darkjak-stage disable-force-on))
-    (send-event *target* 'get-notify #f)
+    (when (and (nonzero? (-> self data-int32 0)) *target* (nonzero? *target*))
+      (send-event *target* 'get-pickup (pickup-type eco-pill-dark) (-> self data-float 0))
+      (send-event *target* 'change-mode 'darkjak #f (darkjak-stage disable-force-on))
+      (send-event *target* 'get-notify #f)
+      )
     (set-action!
       *gui-control*
       (gui-action stop)
@@ -55,12 +60,14 @@
     ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
     (case arg2
       (('notify)
-       (case (-> arg3 param 0)
-         (('attack)
-          (if (= (-> arg3 param 1) 16)
-              (go-virtual complete)
-              )
-          )
+       (when (and arg3 (nonzero? arg3) (nonzero? (-> self data-int32 0)))
+         (case (-> arg3 param 0)
+           (('attack)
+            (if (= (-> arg3 param 1) 16)
+                (go-virtual complete)
+                )
+            )
+           )
          )
        )
       )
@@ -73,7 +80,10 @@
   TASK_MANAGER_UPDATE_HOOK
   (lambda :behavior task-manager
     ()
-    (if (and *target* (not (logtest? (focus-status dark) (-> *target* focus-status))))
+    (if (and (nonzero? (-> self data-int32 0))
+             *target*
+             (nonzero? *target*)
+             (not (logtest? (focus-status dark) (-> *target* focus-status))))
         (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim))
         )
     (when (= (get-status *gui-control* (-> self sound-id 0)) (gui-status active))
@@ -107,12 +117,15 @@
   TASK_MANAGER_INIT_HOOK
   (lambda :behavior task-manager
     ()
-    (set! (-> self data-float 0) (the-as float (send-event *target* 'test-pickup (pickup-type eco-pill-dark))))
-    (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim))
+    (set! (-> self data-int32 0) (if (mp-oracle-darkjak-training-participant?) 1 0))
+    (when (and (nonzero? (-> self data-int32 0)) *target* (nonzero? *target*))
+      (set! (-> self data-float 0) (the-as float (send-event *target* 'test-pickup (pickup-type eco-pill-dark))))
+      (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim))
+      (send-event *target* 'get-notify self)
+      )
     (set! (-> self sound-id 0)
           (add-process *gui-control* self (gui-channel message) (gui-action play) (-> self name) 81920.0 0)
           )
-    (send-event *target* 'get-notify self)
     (none)
     )
   )
@@ -123,9 +136,11 @@
   TASK_MANAGER_CLEANUP_HOOK
   (lambda :behavior task-manager
     ()
-    (send-event *target* 'get-pickup (pickup-type eco-pill-dark) (-> self data-float 0))
-    (send-event *target* 'change-mode 'darkjak #f (darkjak-stage disable-force-on))
-    (send-event *target* 'get-notify #f)
+    (when (and (nonzero? (-> self data-int32 0)) *target* (nonzero? *target*))
+      (send-event *target* 'get-pickup (pickup-type eco-pill-dark) (-> self data-float 0))
+      (send-event *target* 'change-mode 'darkjak #f (darkjak-stage disable-force-on))
+      (send-event *target* 'get-notify #f)
+      )
     (set-action!
       *gui-control*
       (gui-action stop)
@@ -149,12 +164,14 @@
     ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
     (case arg2
       (('notify)
-       (case (-> arg3 param 0)
-         (('attack)
-          (if (= (-> arg3 param 1) 17)
-              (go-virtual complete)
-              )
-          )
+       (when (and arg3 (nonzero? arg3) (nonzero? (-> self data-int32 0)))
+         (case (-> arg3 param 0)
+           (('attack)
+            (if (= (-> arg3 param 1) 17)
+                (go-virtual complete)
+                )
+            )
+           )
          )
        )
       )
@@ -167,7 +184,10 @@
   TASK_MANAGER_UPDATE_HOOK
   (lambda :behavior task-manager
     ()
-    (if (and *target* (not (logtest? (focus-status dark) (-> *target* focus-status))))
+    (if (and (nonzero? (-> self data-int32 0))
+             *target*
+             (nonzero? *target*)
+             (not (logtest? (focus-status dark) (-> *target* focus-status))))
         (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim))
         )
     (when (= (get-status *gui-control* (-> self sound-id 0)) (gui-status active))
@@ -201,12 +221,15 @@
   TASK_MANAGER_INIT_HOOK
   (lambda :behavior task-manager
     ()
-    (set! (-> self data-float 0) (the-as float (send-event *target* 'test-pickup (pickup-type eco-pill-dark))))
-    (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim))
+    (set! (-> self data-int32 0) (if (mp-oracle-darkjak-training-participant?) 1 0))
+    (when (and (nonzero? (-> self data-int32 0)) *target* (nonzero? *target*))
+      (set! (-> self data-float 0) (the-as float (send-event *target* 'test-pickup (pickup-type eco-pill-dark))))
+      (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim))
+      (send-event *target* 'get-notify self)
+      )
     (set! (-> self sound-id 0)
           (add-process *gui-control* self (gui-channel message) (gui-action play) (-> self name) 81920.0 0)
           )
-    (send-event *target* 'get-notify self)
     (set-time! (-> self start-time))
     (none)
     )
@@ -218,9 +241,11 @@
   TASK_MANAGER_CLEANUP_HOOK
   (lambda :behavior task-manager
     ()
-    (send-event *target* 'get-pickup (pickup-type eco-pill-dark) (-> self data-float 0))
-    (send-event *target* 'change-mode 'darkjak #f (darkjak-stage disable-force-on))
-    (send-event *target* 'get-notify #f)
+    (when (and (nonzero? (-> self data-int32 0)) *target* (nonzero? *target*))
+      (send-event *target* 'get-pickup (pickup-type eco-pill-dark) (-> self data-float 0))
+      (send-event *target* 'change-mode 'darkjak #f (darkjak-stage disable-force-on))
+      (send-event *target* 'get-notify #f)
+      )
     (set-action!
       *gui-control*
       (gui-action stop)
@@ -242,7 +267,10 @@
   TASK_MANAGER_UPDATE_HOOK
   (lambda :behavior task-manager
     ()
-    (if (and *target* (not (logtest? (focus-status dark) (-> *target* focus-status))))
+    (if (and (nonzero? (-> self data-int32 0))
+             *target*
+             (nonzero? *target*)
+             (not (logtest? (focus-status dark) (-> *target* focus-status))))
         (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim))
         )
     (when (= (get-status *gui-control* (-> self sound-id 0)) (gui-status active))
@@ -276,12 +304,15 @@
   TASK_MANAGER_INIT_HOOK
   (lambda :behavior task-manager
     ()
-    (set! (-> self data-float 0) (the-as float (send-event *target* 'test-pickup (pickup-type eco-pill-dark))))
-    (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim))
+    (set! (-> self data-int32 0) (if (mp-oracle-darkjak-training-participant?) 1 0))
+    (when (and (nonzero? (-> self data-int32 0)) *target* (nonzero? *target*))
+      (set! (-> self data-float 0) (the-as float (send-event *target* 'test-pickup (pickup-type eco-pill-dark))))
+      (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim))
+      (send-event *target* 'get-notify self)
+      )
     (set! (-> self sound-id 0)
           (add-process *gui-control* self (gui-channel message) (gui-action play) (-> self name) 81920.0 0)
           )
-    (send-event *target* 'get-notify self)
     (none)
     )
   )
@@ -292,9 +323,11 @@
   TASK_MANAGER_CLEANUP_HOOK
   (lambda :behavior task-manager
     ()
-    (send-event *target* 'get-pickup (pickup-type eco-pill-dark) (-> self data-float 0))
-    (send-event *target* 'change-mode 'darkjak #f (darkjak-stage disable-force-on))
-    (send-event *target* 'get-notify #f)
+    (when (and (nonzero? (-> self data-int32 0)) *target* (nonzero? *target*))
+      (send-event *target* 'get-pickup (pickup-type eco-pill-dark) (-> self data-float 0))
+      (send-event *target* 'change-mode 'darkjak #f (darkjak-stage disable-force-on))
+      (send-event *target* 'get-notify #f)
+      )
     (set-action!
       *gui-control*
       (gui-action stop)
@@ -318,12 +351,14 @@
     ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
     (case arg2
       (('notify)
-       (case (-> arg3 param 0)
-         (('attack)
-          (if (= (-> arg3 param 1) 18)
-              #f
-              )
-          )
+       (when (and arg3 (nonzero? arg3) (nonzero? (-> self data-int32 0)))
+         (case (-> arg3 param 0)
+           (('attack)
+            (if (= (-> arg3 param 1) 18)
+                #f
+                )
+            )
+           )
          )
        )
       )
@@ -336,7 +371,10 @@
   TASK_MANAGER_UPDATE_HOOK
   (lambda :behavior task-manager
     ()
-    (if (and *target* (not (logtest? (focus-status dark) (-> *target* focus-status))))
+    (if (and (nonzero? (-> self data-int32 0))
+             *target*
+             (nonzero? *target*)
+             (not (logtest? (focus-status dark) (-> *target* focus-status))))
         (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim))
         )
     (when (= (get-status *gui-control* (-> self sound-id 0)) (gui-status active))

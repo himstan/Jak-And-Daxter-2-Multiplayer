@@ -64,6 +64,7 @@ struct PacketPlayerState {
   uint32_t state_id;
   uint32_t level_hash;
   uint32_t riding;
+  uint32_t darkjak_stage;
   uint64_t clock;
   uint64_t tod_frame;
   float tod_ratio;
@@ -88,6 +89,7 @@ struct PacketPlayerState {
   uint32_t action_seq;
   uint32_t action_state_id;
 };
+static_assert(sizeof(PacketPlayerState) == 340, "PacketPlayerState wire layout must remain explicit");
 
 struct PacketTurretState {
   PacketHeader header;

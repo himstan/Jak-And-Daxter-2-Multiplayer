@@ -162,14 +162,31 @@
       )
   (none))
 
+(defun mp-enter-host-left-terminal-state! ()
+  "Stop remote gameplay before the Host Left progress screen unloads level assets."
+  (set! *multi-sync-enabled?* #f)
+  (mp-reset-puppet-state!)
+  (mp-reset-remote-marker-state!)
+  (when (and *remote-info* (nonzero? *remote-info*))
+    (set! (-> *remote-info* status) 0)
+    (set! (-> *remote-info* darkjak-stage) (the uint 0))
+    (set! (-> *remote-info* action-seq) (the uint 0))
+    (set! (-> *remote-info* action-state-id) (the uint 0))
+    (set! (-> *remote-info* buttons) (the-as uint16 0))
+    )
+  (none)
+  )
+
 (defun mp-update-host-left-ui! ((status int))
   (when (and (= status 8)
-             (not *mp-host-left-menu-active?*)
-             *dproc*
-             (nonzero? (the-as uint *dproc*)))
-    (format 0 "[MP-UI] Host has left the session. Activating Host Left screen.~%")
-    (activate-progress *dproc* 'host-left)
-    (set! *mp-host-left-menu-active?* #t)
+             (not *mp-host-left-menu-active?*))
+    (mp-enter-host-left-terminal-state!)
+    (when (and *dproc*
+               (nonzero? (the-as uint *dproc*)))
+      (format 0 "[MP-UI] Host has left the session. Activating Host Left screen.~%")
+      (activate-progress *dproc* 'host-left)
+      (set! *mp-host-left-menu-active?* #t)
+      )
     )
   (none))
 

@@ -393,12 +393,21 @@
   (when (and *local-info*
              (nonzero? *local-info*))
     (let ((local-state 0))
+      (set! (-> *local-info* darkjak-stage) (the uint 0))
       (if (and *target*
                (nonzero? *target*)
                (-> *target* state)
                (nonzero? (-> *target* state)))
           (set! local-state (the int (mp-target-get-id-from-state (-> *target* state name))))
           )
+      (when (and *target*
+                 (nonzero? *target*)
+                 (focus-test? *target* dark)
+                 (-> *target* darkjak)
+                 (nonzero? (-> *target* darkjak)))
+        (set! (-> *local-info* darkjak-stage)
+              (mp-darkjak-persistent-stage (the uint (-> *target* darkjak stage))))
+        )
       (when (and (mp-is-jak?) (!= (the uint local-state) *mp-last-local-state-id*))
         (cond
           ((= local-state (the uint (mp-target-state-id darkjak-get-on)))

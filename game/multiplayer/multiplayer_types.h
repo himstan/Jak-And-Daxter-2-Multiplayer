@@ -21,6 +21,7 @@ struct RemoteEntityState {
   uint32_t state_id;
   uint32_t level_hash;
   uint32_t riding;
+  uint32_t darkjak_stage;
   uint64_t clock;
   uint64_t tod_frame;
   float tod_ratio;
@@ -43,6 +44,7 @@ struct RemoteEntityState {
   uint32_t last_turret_sequence_num = 0;
   MPVehicleState veh_state;
 };
+static_assert(sizeof(RemoteEntityState) == 224, "RemoteEntityState layout must remain stable");
 
 struct MPEvent {
   uint32_t etype;
@@ -72,7 +74,7 @@ struct RemotePlayerInfoGOAL {
   int32_t status;
   uint32_t packet_id;
   uint32_t riding;
-  uint32_t pad_clock;
+  uint32_t darkjak_stage;
   uint64_t clock;
   uint64_t tod_frame;
   float tod_ratio;
@@ -124,7 +126,7 @@ struct LocalPlayerInfoGOAL {
   int32_t status; // Placeholder
   uint32_t packet_id;
   uint32_t riding;
-  uint32_t pad_clock;
+  uint32_t darkjak_stage;
   uint64_t clock;
   uint64_t tod_frame;
   float tod_ratio;

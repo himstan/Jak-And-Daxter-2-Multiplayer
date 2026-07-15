@@ -154,6 +154,7 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
           data.remote_entities.erase(1);
         } else {
           lg::warn("[Multiplayer] Host has left the session.");
+          data.remote_entities.erase(0);
           data.join_status = (int)MultiplayerStatus::HOST_LEFT;
         }
         break;
