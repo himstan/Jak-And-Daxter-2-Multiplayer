@@ -8,6 +8,67 @@
   (time-elapsed? last-bump (seconds 0.35))
   )
 
+(defun mp-actor-presentation-frame-blend ((rate float))
+  (fmin 1.0 (fmax 0.0 (* rate (seconds-per-frame))))
+  )
+
+(defun mp-actor-update-presentation! ((presentation-trans vector)
+                                      (presentation-quat quaternion)
+                                      (target-trans vector)
+                                      (target-quat quaternion)
+                                      (initialized? symbol)
+                                      (force-snap? symbol))
+  "Advance an independent replica transform using only authoritative samples."
+  (when (and presentation-trans
+             (nonzero? presentation-trans)
+             presentation-quat
+             (nonzero? presentation-quat)
+             target-trans
+             (nonzero? target-trans)
+             target-quat
+             (nonzero? target-quat))
+    (if (or (not initialized?)
+            force-snap?
+            (> (vector-vector-distance presentation-trans target-trans) (meters 5)))
+        (begin
+          (vector-copy! presentation-trans target-trans)
+          (quaternion-copy! presentation-quat target-quat)
+          )
+        (begin
+          (vector-lerp! presentation-trans
+                        presentation-trans
+                        target-trans
+                        (mp-actor-presentation-frame-blend 15.0))
+          (quaternion-slerp! presentation-quat
+                             presentation-quat
+                             target-quat
+                             (mp-actor-presentation-frame-blend 24.0))
+          )
+        )
+    )
+  (none)
+  )
+
+(defun mp-actor-apply-presentation! ((root collide-shape)
+                                     (presentation-trans vector)
+                                     (presentation-quat quaternion)
+                                     (authoritative-linvel vector))
+  "Overwrite locally generated motion with the host-derived presentation transform."
+  (when (and root
+             (nonzero? root)
+             presentation-trans
+             (nonzero? presentation-trans)
+             presentation-quat
+             (nonzero? presentation-quat)
+             authoritative-linvel
+             (nonzero? authoritative-linvel))
+    (vector-copy! (-> root trans) presentation-trans)
+    (quaternion-copy! (-> root quat) presentation-quat)
+    (vector-copy! (-> root transv) authoritative-linvel)
+    )
+  (none)
+  )
+
 (defun mp-actor-note-traffic-ghost-sample! ((rec mp-traffic-ghost-record)
                                             (new-x float)
                                             (new-y float)

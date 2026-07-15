@@ -371,6 +371,15 @@
   (when (and rec (nonzero? rec))
     (vector-reset! (-> rec ghost-linvel))
     (set! (-> rec ghost-sample-time) (the uint 0))
+    (set! (-> rec presentation-valid) (the uint8 0))
+    )
+  (none)
+  )
+
+(defun mp-enemy-release-auth-record! ((rec mp-enemy-auth-record))
+  (when (and rec (nonzero? rec))
+    (mp-enemy-reset-remote-motion-sample! rec)
+    (set! (-> rec aid) (the-as uint32 0))
     )
   (none)
   )
@@ -719,36 +728,10 @@
   (none)
   )
 
-(defun mp-enemy-apply-smoothed-root! ((root collide-shape)
-                                      (rec mp-enemy-auth-record)
-                                      (predicted-pos vector)
-                                      (replica-dist float)
-                                      (smooth-factor float))
-  (when (and root
-             (nonzero? root)
-             rec
-             (nonzero? rec)
-             predicted-pos
-             (nonzero? predicted-pos))
-    (if (> replica-dist (meters 5))
-        (begin
-          (vector-copy! (-> root trans) predicted-pos)
-          (quaternion-copy! (-> root quat) (-> rec ghost-quat))
-          )
-        (begin
-          (vector-lerp! (-> root trans) (-> root trans) predicted-pos smooth-factor)
-          (quaternion-slerp! (-> root quat) (-> root quat) (-> rec ghost-quat) smooth-factor)
-          )
-        )
-    (vector-copy! (-> root transv) (-> rec ghost-linvel))
-    )
-  (none)
-  )
-
 (defun mp-enemy-smooth-remote-transform! ((e-proc enemy)
                                           (rec mp-enemy-auth-record)
                                           (slot mp-enemy-state))
-  "Render a non-owner from predicted authoritative motion while preserving smooth animation."
+  "Render a non-owner from an independent host-derived presentation transform."
   (when (and e-proc
              (nonzero? e-proc)
              rec
@@ -760,10 +743,21 @@
     (let ((root (-> e-proc root))
           (predicted-pos (new 'stack-no-clear 'vector)))
       (mp-enemy-predicted-remote-trans! rec predicted-pos)
-      (let ((replica-dist (vector-vector-distance (-> root trans) predicted-pos))
-            (smooth-factor (fmin 1.0 (* 15.0 (seconds-per-frame)))))
+      (let ((replica-dist (if (nonzero? (-> rec presentation-valid))
+                              (vector-vector-distance (-> rec presentation-trans) predicted-pos)
+                              0.0)))
         (mp-enemy-debug-smooth-correction e-proc slot replica-dist)
-        (mp-enemy-apply-smoothed-root! root rec predicted-pos replica-dist smooth-factor)
+        (mp-actor-update-presentation! (-> rec presentation-trans)
+                                       (-> rec presentation-quat)
+                                       predicted-pos
+                                       (-> rec ghost-quat)
+                                       (nonzero? (-> rec presentation-valid))
+                                       #f)
+        (set! (-> rec presentation-valid) (the uint8 1))
+        (mp-actor-apply-presentation! root
+                                      (-> rec presentation-trans)
+                                      (-> rec presentation-quat)
+                                      (-> rec ghost-linvel))
         )
       )
     )
@@ -1006,8 +1000,8 @@
           ;; already presenting a local death, let that vanilla flow finish.
           (when (mp-aid-dead-perm? enemy-aid)
             (let ((rec (mp-get-enemy-auth enemy-aid)))
-              (when rec
-                (set! (-> rec aid) (the-as uint32 0))
+              (when (and rec (nonzero? rec))
+                (mp-enemy-release-auth-record! rec)
                 )
               )
             (if (mp-enemy-death-presentation-active? e-proc)
@@ -1027,9 +1021,9 @@
                                  (= cur-state 'process-drawable-art-error))))
               (when is-culled
                 (let ((rec (mp-get-enemy-auth enemy-aid)))
-                  (when rec
+                  (when (and rec (nonzero? rec))
                     (format 0 "[MP-Sync] Cleaning up culled/errored enemy ~A aid=~D nid=~D in state ~A.~%" e-proc enemy-aid enemy-nid cur-state)
-                    (set! (-> rec aid) (the-as uint32 0))
+                    (mp-enemy-release-auth-record! rec)
                     )
                   )
                 (return #t)
@@ -1252,9 +1246,6 @@
                                        (nonzero? (-> e-proc root)))
                               ;; Apply the remote state data (Updates ghost position/rotation/state)
                               (mp-enemy-apply-state e-proc remote-slot)
-                              ;; Apply the authoritative transform immediately; common-post applies it
-                              ;; again after local species/navigation post logic has finished.
-                              (mp-enemy-apply-remote-transform-from-slot! e-proc remote-slot)
                               )
                             )
                           (begin
@@ -1315,7 +1306,7 @@
       (when (nonzero? (-> rec aid))
         (if (>= (- (current-time) (-> rec last-remote-seen)) (seconds 10))
             (begin
-              (set! (-> rec aid) (the-as uint32 0))
+              (mp-enemy-release-auth-record! rec)
               )
             )
         )

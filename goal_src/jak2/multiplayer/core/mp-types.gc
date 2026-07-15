@@ -1029,7 +1029,7 @@
 
 ;; --- Ghost Record for Traffic Sync (Position Prediction) ---
 ;; Stores the last-known authoritative position/state for each traffic entity.
-;; Used by the non-authoritative side's P-controller to smoothly correct local simulation.
+;; Used to present non-authoritative traffic from host-derived motion.
 (deftype mp-traffic-ghost-record (structure)
   ((net-id          uint32)
    (entity-kind     uint8)       ;; 0=pedestrian, 1=vehicle
@@ -1037,8 +1037,8 @@
    (last-seen       time-frame)  ;; Timestamp of last remote update
    (ghost-trans     vector :inline)
    (ghost-quat      quaternion :inline)
-   (presentation-trans vector :inline) ;; Client-only host-driven display position for puppet pedestrians
-   (presentation-quat quaternion :inline) ;; Client-only host-driven display facing for puppet pedestrians
+   (presentation-trans vector :inline) ;; Client-only host-driven display position
+   (presentation-quat quaternion :inline) ;; Client-only host-driven display facing
    (ghost-linvel    vector :inline)   ;; Vehicles: remote linear velocity; peds: locally estimated velocity
    (ghost-angvel    vector :inline)   ;; Vehicles: remote angular velocity; peds: previous authoritative position
    (ghost-hp         int32)
@@ -1169,8 +1169,12 @@
    ;; --- Ghost Predictive Sync ---
    (ghost-trans        vector :inline)
    (ghost-quat         quaternion :inline)
+   (presentation-trans vector :inline) ;; GOAL-only remote display position
+   (presentation-quat  quaternion :inline) ;; GOAL-only remote display facing
    (ghost-linvel       vector :inline)
    (ghost-sample-time  uint32)
+   (presentation-valid uint8)
+   (presentation-pad   uint8 3)
    (ghost-state        mp-enemy-state-id)
    (ghost-focus-aid    uint32)
    (just-taken-authority symbol)
