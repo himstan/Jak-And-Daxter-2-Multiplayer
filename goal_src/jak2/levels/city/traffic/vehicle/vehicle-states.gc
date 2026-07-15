@@ -5,6 +5,8 @@
 ;; name in dgo: vehicle-states
 ;; dgos: CWI
 
+(define-extern mp-vehicle-local-target-driving? (function vehicle symbol))
+
 ;; DECOMP BEGINS
 
 (defbehavior vehicle-event-handler vehicle ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
@@ -128,7 +130,9 @@
   :virtual #t
   :event vehicle-event-handler
   :enter (behavior ()
-    (set-setting! 'sound-flava #f 31.0 5)
+    (when (mp-vehicle-local-target-driving? self)
+      (set-setting! 'sound-flava #f 31.0 5)
+      )
     (set-time! (-> self state-time))
     (iterate-prims (-> self root) (lambda ((arg0 collide-shape-prim))
                                     (when (!= (-> arg0 prim-core prim-type) (prim-type mesh))
@@ -178,12 +182,15 @@
       (set! (-> self controls lean-z) 0.0)
       (reset-flight-level-transition! self)
       (set! (-> self max-time-step) 0.033333335)
+      ;; The camera flag is the ownership token for local player settings.
+      (when (logtest? (-> self flags) (rigid-body-object-flag camera))
+        (remove-setting! 'sound-flava)
+        )
       (disable-player-vehicle-camera! self)
       )
     (set! (-> self damage-factor) (* 1.33 (-> self damage-factor)))
     (rigid-body-object-method-42 self)
     (logclear! (-> self flags) (rigid-body-object-flag player-driving))
-    (remove-setting! 'sound-flava)
     )
   :trans (behavior ()
     (when (time-elapsed? (-> self state-time) (seconds 0.1))
@@ -399,8 +406,8 @@
       (set! (-> self crash-level) 3)
       (set! (-> self force-level) 3)
       (logclear! (-> self flags) (rigid-body-object-flag persistent player-driving))
-      (sound-play-by-spec (static-sound-spec "vehicle-explode") (new-sound-id) (the-as vector #t))
-      (sound-play-by-spec (static-sound-spec "vehicle-explo-b") (new-sound-id) (the-as vector #t))
+      (sound-play-by-spec (static-sound-spec "vehicle-explode") (new-sound-id) (-> self root trans))
+      (sound-play-by-spec (static-sound-spec "vehicle-explo-b") (new-sound-id) (-> self root trans))
       (rigid-body-object-method-42 self)
       (let ((s4-0 (new 'stack-no-clear 'vector))
             (s5-2 (new 'stack-no-clear 'vector))

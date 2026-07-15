@@ -147,7 +147,7 @@
              (the int (* 1524.0 f0-38))
              0
              (sound-group sfx)
-             #t
+             (-> this root trans)
              )
            )
          )
@@ -161,7 +161,7 @@
         )
       )
     (if (< (rand-vu) (-> this power-fluctuation-factor))
-        (sound-play "damage-pops" :id (-> this damage-pop-sound-id))
+        (sound-play "damage-pops" :id (-> this damage-pop-sound-id) :position (-> this root trans))
         )
     0
     (none)
@@ -550,7 +550,7 @@
                 (set! (-> this smoke-part-accum s4-4) (the-as basic (-> sv-272 birthaccum)))
                 )
               (if s3-3
-                  (sound-play "damage-zaps" :id (-> this damage-zap-sound-id))
+                  (sound-play "damage-zaps" :id (-> this damage-zap-sound-id) :position (-> this root trans))
                   )
               )
             )

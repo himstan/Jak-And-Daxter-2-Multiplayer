@@ -917,29 +917,37 @@
 
 (defmethod do-engine-sounds ((this bike-base))
   (call-parent-method this)
-  (when (logtest? (-> this flags) (rigid-body-object-flag player-driving))
-    (if (zero? (-> this roll-sound-id))
-        (set! (-> this roll-sound-id) (new-sound-id))
-        )
-    (let* ((f0-4
-             (* 4.0
-                (-> this force-scale)
-                (-> this sputter-sound-envelope)
-                (-> this info inv-max-engine-thrust)
-                (+ (-> this roll-thrust 0) (-> this roll-thrust 1))
-                )
-             )
-           (f1-6 (* 0.32 f0-4))
-           (f0-5 0.5)
-           )
-      (sound-play-by-name
-        (static-sound-name "bike-thrust")
-        (-> this roll-sound-id)
-        (the int (* 1024.0 f1-6))
-        (the int (* 1524.0 f0-5))
-        0
-        (sound-group sfx)
-        #t
+  (cond
+    ((logtest? (-> this flags) (rigid-body-object-flag player-driving))
+     (if (zero? (-> this roll-sound-id))
+         (set! (-> this roll-sound-id) (new-sound-id))
+         )
+     (let* ((f0-4
+              (* 4.0
+                 (-> this force-scale)
+                 (-> this sputter-sound-envelope)
+                 (-> this info inv-max-engine-thrust)
+                 (+ (-> this roll-thrust 0) (-> this roll-thrust 1))
+                 )
+              )
+            (f1-6 (* 0.32 f0-4))
+            (f0-5 0.5)
+            )
+       (sound-play-by-name
+         (static-sound-name "bike-thrust")
+         (-> this roll-sound-id)
+         (the int (* 1024.0 f1-6))
+         (the int (* 1524.0 f0-5))
+         0
+         (sound-group sfx)
+         (-> this root trans)
+         )
+       )
+     )
+    (else
+      (when (nonzero? (-> this roll-sound-id))
+        (sound-stop (-> this roll-sound-id))
+        (set! (-> this roll-sound-id) (new 'static 'sound-id))
         )
       )
     )
@@ -1450,7 +1458,7 @@
 (defmethod start-jump ((this guard-bike))
   (when (not (logtest? (rigid-body-object-flag jump-sound) (-> this flags)))
     (logior! (-> this flags) (rigid-body-object-flag jump-sound))
-    (sound-play "bike-hop")
+    (sound-play "bike-hop" :position (-> this root trans))
     )
   (logior! (-> this flags) (rigid-body-object-flag jump))
   0

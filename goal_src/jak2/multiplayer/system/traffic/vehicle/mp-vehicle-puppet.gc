@@ -595,7 +595,7 @@
         (mp-vehicle-play-flight-level-sound! veh)
         )
       )
-    (logclear! (-> veh flags) (rigid-body-object-flag flight-level-transition flight-level-transition-ending camera-rapid-track-mode))
+    (logclear! (-> veh flags) (rigid-body-object-flag flight-level-transition flight-level-transition-ending))
     (disable-rapid-camera-tracking veh)
     (none)
     )
@@ -859,7 +859,8 @@
 (defun mp-vehicle-remote-driven? ((veh vehicle))
   (and veh
        (nonzero? veh)
-       (or (= veh *mp-remote-driven-vehicle*)
+       (or (and (nonzero? *mp-remote-driven-vehicle*)
+                (= veh (handle->process-safe *mp-remote-driven-vehicle*)))
            (let ((pilot (get-rider-in-seat veh 0)))
              (and pilot
                   (nonzero? pilot)
