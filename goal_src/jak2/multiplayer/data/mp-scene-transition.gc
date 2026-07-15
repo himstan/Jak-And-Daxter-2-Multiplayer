@@ -89,8 +89,36 @@
   (none)
   )
 
+(defun mp-clear-remote-scene-latch! ()
+  (set! *mp-last-remote-scene-active* (the uint 0))
+  (set! *mp-remote-scene-start-packet-id* (the uint 0))
+  (none)
+  )
+
+(defun mp-reconcile-remote-scene-latch! ()
+  "Let a fresh player-state heartbeat retire the remote scene-start latch."
+  (when (and (nonzero? *mp-last-remote-scene-active*)
+             (not *mp-pending-scene-sync?*))
+    (cond
+      ((or (not *remote-info*)
+           (not (nonzero? *remote-info*))
+           (zero? (-> *remote-info* status)))
+       (format 0 "[MP-Scene] Clearing remote scene latch: remote player is unavailable.~%")
+       (mp-clear-remote-scene-latch!)
+       )
+      ((and (zero? (-> *remote-info* scene-active))
+            (!= (-> *remote-info* packet-id) *mp-remote-scene-start-packet-id*))
+       (format 0 "[MP-Scene] Fresh heartbeat reports remote scene inactive; clearing latch.~%")
+       (mp-clear-remote-scene-latch!)
+       )
+      )
+    )
+  (none)
+  )
+
 (defun mp-handle-scene-transition ()
   "Handle state changes when entering/exiting scenes"
+  (mp-reconcile-remote-scene-latch!)
   (let ((in-scene? (not (not *scene-player*))))
     (when in-scene?
       (mp-record-active-local-scene-name!)
@@ -125,14 +153,6 @@
             (mp-clear-client-presentation-blackout!)
             )
           )
-      )
-
-    (when (and (not in-scene?)
-               (not *mp-pending-scene-sync?*)
-               (or (not *remote-info*)
-                   (not (nonzero? *remote-info*))
-                   (zero? (-> *remote-info* scene-active))))
-      (set! *mp-last-remote-scene-active* (the uint 0))
       )
 
     (set! *mp-last-scene-player* in-scene?)

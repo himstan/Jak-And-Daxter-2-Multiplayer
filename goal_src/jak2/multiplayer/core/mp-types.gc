@@ -1220,6 +1220,7 @@
 (define-perm *mp-last-pole-grab-handle* handle (the-as handle #f))
 (define-perm *mp-pole-grab-latched?* symbol #f)
 (define-perm *mp-last-remote-scene-active* uint (the uint 0))
+(define-perm *mp-remote-scene-start-packet-id* uint (the uint 0))
 (define *mp-remote-wants-skip* #f)
 (define *mp-local-wants-skip* #f)
 
@@ -1428,6 +1429,7 @@
 (define-extern mp-target-death-state? (function symbol symbol))
 (define-extern mp-play-remote-death-vo (function none))
 (define-extern mp-play-local-death-vo (function none))
+(define-extern mp-level-packed-primary-id (function uint uint))
 (define-extern mp-clear-local-vehicle-occupancy! (function target none))
 (define-extern mp-respawn-local-target! (function target none))
 (define-extern mp-respawn-local-target-at-remote! (function target none))
