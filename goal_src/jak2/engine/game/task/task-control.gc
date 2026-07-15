@@ -936,7 +936,7 @@
   (local-vars (a1-1 symbol))
   (when (and 
              (not *debug-segment*)
-             (>= (the-as uint (-> this task)) (the-as uint (game-task city-shuttle))))
+             (= (the-as uint (-> this task)) (the-as uint (game-task city-shuttle))))
     (return #f)
     )
   (let ((game-nodes (-> *game-info* sub-task-list))
