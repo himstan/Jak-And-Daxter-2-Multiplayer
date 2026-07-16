@@ -17,6 +17,7 @@
 
 (deftype airlock-data (structure)
   ((airlock-name   string) ;; airlock entity name (should match the entity name placed in the level)
+   (mp-sync?       symbol) ;; whether this airlock participates in multiplayer sync
    (other-side-levels pair) ;; levels that prove the remote player is already on the other side of this airlock
    (airlock-elevator string)
    (on-notice      pair)   ;; evaluated on initialization to determine which levels must be loaded to open the airlock (can include task conditions)
@@ -31,6 +32,7 @@
   )
 
 (defmacro static-airlock-data (&key (airlock-name #f)
+                                 &key (mp-sync? #t)
                                  &key (other-side-levels #f)
                                  &key (airlock-elevator #f)
                                  &key (on-notice #f)
@@ -43,6 +45,7 @@
                                  &key (on-deactivate #f))
   `(new 'static 'airlock-data
      :airlock-name ,airlock-name
+     :mp-sync? ,mp-sync?
      :airlock-elevator ,airlock-elevator
      :other-side-levels ,other-side-levels
      :on-notice ,on-notice
@@ -95,6 +98,7 @@
    (sound-post-close-stop  sound-spec)
    (spool-sound-time       time-frame)
    (door-radius            meters)
+   (mp-sync?               symbol) ;; whether this airlock participates in multiplayer sync
    (other-side-levels      pair) ;; added
    (airlock-elevator       string) ;; added
    (on-notice              pair) ;; added

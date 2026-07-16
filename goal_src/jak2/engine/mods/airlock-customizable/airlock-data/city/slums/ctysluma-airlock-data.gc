@@ -15,6 +15,7 @@
                 )
               (static-airlock-data
                 :airlock-name "fort-entry-gate-17"
+                :mp-sync? #f
                 :on-notice '(cond ((task-closed? "nest-boss-resolution") '(forresca)) ((task-closed? "fortress-save-friends-resolution") #f) ((task-closed? "fortress-save-friends-introduction") '(forresca)) ((task-closed? "fortress-dump-resolution") #f) ((task-closed? "fortress-dump-introduction") '(fordumpa)))
                 :on-activate '(cond ((task-closed? "fortress-save-friends-introduction") (want-load 'ctysluma 'ctywide 'forresca)) ((task-closed? "fortress-dump-introduction") (want-load 'ctysluma 'ctywide 'fordumpa)))
                 :on-enter '(cond ((task-closed? "fortress-save-friends-introduction") (want-display 'forresca 'display) (want-sound 'ctywide1 'ctywide2 'forresc1)) ((task-closed? "fortress-dump-introduction") (want-display 'fordumpa 'display) (want-sound 'ctywide1 'ctywide2 'fordump1)))
