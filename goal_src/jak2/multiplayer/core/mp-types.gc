@@ -128,6 +128,7 @@
 (defconstant MP_EVENT_MTN_PLAT_SHOOT (the-as uint 32))
 (defconstant MP_EVENT_MTN_DICE (the-as uint 33))
 (defconstant MP_EVENT_PALACE_SQUID (the-as uint 34))
+(defconstant MP_EVENT_FORT_MISSILE_TARGET (the-as uint 35))
 
 (defconstant MP_PALACE_SQUID_EVT_HIT_REQUEST (the-as uint 1))
 (defconstant MP_PALACE_SQUID_EVT_GRENADE (the-as uint 2))
@@ -309,6 +310,11 @@
 (deftype mp-world-event (mp-event)
   ((aid uint32 :overlay-at (-> data 0))
     )
+  )
+
+(deftype mp-fort-missile-target-event (mp-event)
+  ((target-index uint32 :overlay-at (-> data 0))
+   )
   )
 
 (defenum mp-enemy-death-hint (uint32)
@@ -1479,6 +1485,7 @@
 (define-extern mp-event-handler-mtn-plat-shoot (function mp-mtn-plat-shoot-event none))
 (define-extern mp-send-mtn-dice-event (function mtn-dice int none))
 (define-extern mp-event-handler-mtn-dice (function mp-mtn-dice-event none))
+(define-extern mp-fort-missile-target-replay! (function uint none))
 (define-extern mp-palace-squid-tick (function squid none))
 (define-extern mp-palace-squid-target-pos! (function squid vector vector))
 (define-extern mp-palace-squid-should-swallow-attack? (function squid process event-message-block symbol))

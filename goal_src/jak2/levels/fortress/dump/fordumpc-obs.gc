@@ -178,10 +178,11 @@
   ((root      collide-shape-moving :override)
    (part-mat  matrix                2 :inline)
    (sound-id  uint32)
+   (target-index uint32)
    )
   (:state-methods
     idle
-    die
+    (die symbol)
     )
   )
 
@@ -212,6 +213,24 @@
     )
   )
 
+(defun mp-send-fort-missile-target-event ((target fort-missile-target))
+  (let ((multi-status (pc-multi-get-status)))
+    (if (or (not *multi-sync-enabled?*) (!= multi-status 6))
+      (return #f)
+    )
+    (when (and target (nonzero? target))
+      (let ((q-idx *mp-event-queue-write-ptr*))
+        (let ((evt (the-as mp-fort-missile-target-event (-> *mp-event-queue* q-idx))))
+          (set! (-> evt etype) MP_EVENT_FORT_MISSILE_TARGET)
+          (set! (-> evt target-index) (-> target target-index))
+        )
+        (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
+      )
+    )
+  )
+  (none)
+)
+
 (defstate idle (fort-missile-target)
   :virtual #t
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
@@ -222,12 +241,15 @@
              (v1-1 (as-type proc projectile))
              )
          (if (and gp-0 v1-1 (= (-> s5-0 mode) 'fort-robotank-shot))
-             (go-virtual die)
+             (go-virtual die #f)
              )
          )
        )
       (('trigger)
-       (go-virtual die)
+       (go-virtual die #f)
+       )
+      (('mp-replay-die)
+       (go-virtual die #t)
        )
       )
     )
@@ -236,7 +258,10 @@
 
 (defstate die (fort-missile-target)
   :virtual #t
-  :enter (behavior ()
+  :enter (behavior ((replay? symbol))
+    (when (not replay?)
+      (mp-send-fort-missile-target-event self)
+      )
     (let ((v1-1 (the-as collide-shape-prim-group (-> self root root-prim))))
       (set! (-> v1-1 child 0 prim-core collide-as) (collide-spec))
       (set! (-> v1-1 child 0 prim-core collide-with) (collide-spec))
@@ -326,7 +351,8 @@
   )
 
 ;; WARN: Return type mismatch object vs none.
-(defbehavior fort-missile-target-init-by-other fort-missile-target ((arg0 vector) (arg1 vector))
+(defbehavior fort-missile-target-init-by-other fort-missile-target ((arg0 vector) (arg1 vector) (arg2 int))
+  (set! (-> self target-index) (the-as uint arg2))
   (stack-size-set! (-> self main-thread) 512)
   (let ((s4-0 (new 'process 'collide-shape self (collide-list-enum usually-hit-by-player))))
     (let ((s3-0 (new 'process 'collide-shape-prim-group s4-0 (the-as uint 4) 0)))
@@ -412,6 +438,24 @@
     dormant
     )
   )
+
+(defun mp-fort-missile-target-replay! ((target-index uint))
+  (if (>= target-index (the uint 4))
+    (return #f)
+  )
+  (let ((parent (process-by-type-exact 'fort-missile *active-pool*)))
+    (if (and parent (nonzero? parent) (type? parent fort-missile))
+      (let ((target-handle (-> (the-as fort-missile parent) bomb target-index)))
+        (let ((target-proc (handle->process-safe target-handle)))
+          (if (and target-proc (nonzero? target-proc) (type? target-proc fort-missile-target))
+            (send-event target-proc 'mp-replay-die)
+          )
+        )
+      )
+    )
+  )
+(none)
+)
 
 
 (defskelgroup skel-fort-missile fort-missile fort-missile-lod0-jg fort-missile-idle-ja
@@ -885,7 +929,7 @@
               )
           (vector-normalize! (vector-! s4-2 s2-1 (-> this root trans)) 1.0)
           (vector-float*! s1-0 s4-2 -1.0)
-          (set! (-> this bomb s3-2) (ppointer->handle (process-spawn fort-missile-target s2-1 s1-0 :to this)))
+          (set! (-> this bomb s3-2) (ppointer->handle (process-spawn fort-missile-target s2-1 s1-0 s3-2 :to this)))
           )
         (vector-rotate-y! s5-1 s5-1 16384.0)
         )

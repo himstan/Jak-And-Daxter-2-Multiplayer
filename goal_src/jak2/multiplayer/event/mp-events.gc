@@ -883,6 +883,16 @@
       ((MP_EVENT_MTN_PLAT_SHOOT)          (mp-event-handler-mtn-plat-shoot (the-as mp-mtn-plat-shoot-event evt)))
       ((MP_EVENT_MTN_DICE)                (mp-event-handler-mtn-dice (the-as mp-mtn-dice-event evt)))
       ((MP_EVENT_PALACE_SQUID)            (mp-receive-palace-squid-event (the-as mp-palace-squid-event evt)))
+      ((MP_EVENT_FORT_MISSILE_TARGET)
+       (let ((missile-target-event (the-as mp-fort-missile-target-event evt)))
+         (format 0
+                 "[MP-FortTarget][RECV] dispatching event type=~D index=~D to replay handler.~%"
+                 (-> evt etype)
+                 (-> missile-target-event target-index))
+         (mp-fort-missile-target-replay!
+           (the-as uint (-> missile-target-event target-index)))
+         )
+       )
       )
     )
   (set! *mp-processing-remote-event* #f)
