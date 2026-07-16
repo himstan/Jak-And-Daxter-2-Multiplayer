@@ -1,6 +1,145 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(deftype mp-traffic-authority-rule (structure)
+  ((start-distance      float)
+   (end-distance        float)
+   (start-bounded?      symbol)
+   (end-bounded?        symbol)
+   (start-inclusive?    symbol)
+   (end-inclusive?      symbol)
+   (action               symbol)
+   )
+  )
+
+(defconstant MP_TRAFFIC_HOST_SYNC_DISTANCE (meters 250.0))
+(defconstant MP_TRAFFIC_CLIENT_SYNC_DISTANCE (meters 260.0))
+(defconstant MP_TRAFFIC_CLIENT_LOCAL_CLEAR_DISTANCE (meters 270.0))
+(defconstant MP_TRAFFIC_CLIENT_DRAIN_ENTER_DISTANCE (meters 300.0))
+(defconstant MP_TRAFFIC_CLIENT_DRAIN_EXIT_DISTANCE (meters 310.0))
+
+(define *mp-traffic-client-sync-enter-rule*
+  (new 'static 'mp-traffic-authority-rule
+       :start-distance 0.0
+       :end-distance MP_TRAFFIC_CLIENT_SYNC_DISTANCE
+       :start-bounded? #f
+       :end-bounded? #t
+       :start-inclusive? #t
+       :end-inclusive? #f
+       :action 'client-sync-enter))
+
+(define *mp-traffic-client-sync-exit-rule*
+  (new 'static 'mp-traffic-authority-rule
+       :start-distance MP_TRAFFIC_CLIENT_SYNC_DISTANCE
+       :end-distance 0.0
+       :start-bounded? #t
+       :end-bounded? #f
+       :start-inclusive? #f
+       :end-inclusive? #f
+       :action 'client-sync-exit))
+
+(define *mp-traffic-client-local-clear-rule*
+  (new 'static 'mp-traffic-authority-rule
+       :start-distance 0.0
+       :end-distance MP_TRAFFIC_CLIENT_LOCAL_CLEAR_DISTANCE
+       :start-bounded? #f
+       :end-bounded? #t
+       :start-inclusive? #t
+       :end-inclusive? #f
+       :action 'client-local-clear))
+
+(define *mp-traffic-client-drain-enter-rule*
+  (new 'static 'mp-traffic-authority-rule
+       :start-distance 0.0
+       :end-distance MP_TRAFFIC_CLIENT_DRAIN_ENTER_DISTANCE
+       :start-bounded? #f
+       :end-bounded? #t
+       :start-inclusive? #t
+       :end-inclusive? #f
+       :action 'client-drain-enter))
+
+(define *mp-traffic-client-drain-exit-rule*
+  (new 'static 'mp-traffic-authority-rule
+       :start-distance MP_TRAFFIC_CLIENT_DRAIN_EXIT_DISTANCE
+       :end-distance 0.0
+       :start-bounded? #t
+       :end-bounded? #f
+       :start-inclusive? #f
+       :end-inclusive? #f
+       :action 'client-drain-exit))
+
+(define *mp-traffic-host-sync-enter-rule*
+  (new 'static 'mp-traffic-authority-rule
+       :start-distance 0.0
+       :end-distance MP_TRAFFIC_HOST_SYNC_DISTANCE
+       :start-bounded? #f
+       :end-bounded? #t
+       :start-inclusive? #t
+       :end-inclusive? #f
+       :action 'host-sync-enter))
+
+(define *mp-traffic-host-sync-exit-rule*
+  (new 'static 'mp-traffic-authority-rule
+       :start-distance MP_TRAFFIC_HOST_SYNC_DISTANCE
+       :end-distance 0.0
+       :start-bounded? #t
+       :end-bounded? #f
+       :start-inclusive? #f
+       :end-inclusive? #f
+       :action 'host-sync-exit))
+
+(defun mp-traffic-authority-rule-active? ((rule mp-traffic-authority-rule) (dist float))
+  "Return whether a traffic authority rule contains the current distance."
+  (when (and rule (nonzero? rule))
+    (let ((after-start? (if (-> rule start-bounded?)
+                           (if (-> rule start-inclusive?)
+                               (>= dist (-> rule start-distance))
+                               (> dist (-> rule start-distance)))
+                           #t))
+          (before-end? (if (-> rule end-bounded?)
+                          (if (-> rule end-inclusive?)
+                              (<= dist (-> rule end-distance))
+                              (< dist (-> rule end-distance)))
+                          #t)))
+      (and after-start? before-end?)
+      )
+    )
+  )
+
+(defun mp-traffic-apply-authority-rule! ((rule mp-traffic-authority-rule))
+  "Apply the action described by a matching traffic authority rule."
+  (when (and rule (nonzero? rule))
+    (case (-> rule action)
+      (('client-sync-enter)
+       (set! *mp-traffic-sync-active* #t))
+      (('client-sync-exit)
+       (set! *mp-traffic-sync-active* #f)
+       (mp-traffic-cleanup-after-sync-exit!))
+      (('client-local-clear)
+       (mp-traffic-force-clear-local-vehicles!))
+      (('client-drain-enter)
+       (set! *mp-traffic-drain-active* #t)
+       (set! *mp-traffic-suppressed* #t))
+      (('client-drain-exit)
+       (set! *mp-traffic-drain-active* #f)
+       (set! *mp-traffic-suppressed* #f))
+      (('host-sync-enter)
+       (set! *mp-traffic-sync-active* #t))
+      (('host-sync-exit)
+       (set! *mp-traffic-sync-active* #f))
+      )
+    )
+  (none)
+  )
+
+(defun mp-traffic-evaluate-authority-rule! ((rule mp-traffic-authority-rule) (dist float))
+  "Apply a traffic authority rule when its distance range matches."
+  (when (mp-traffic-authority-rule-active? rule dist)
+    (mp-traffic-apply-authority-rule! rule)
+    )
+  (none)
+  )
+
 (defun mp-traffic-local-interest-pos ()
   "Return the local position traffic authority should reason about."
   (when *mp-spectator-countdown-active?*
@@ -67,17 +206,10 @@
               (if (mp-is-daxter?) ;; Client Side
                   (begin
                     (if *mp-traffic-sync-active*
-                        (when (> dist (meters 300.0))
-                          (set! *mp-traffic-sync-active* #f)
-                          (mp-traffic-cleanup-after-sync-exit!)
-                          )
+                        (mp-traffic-evaluate-authority-rule! *mp-traffic-client-sync-exit-rule* dist)
                         (begin
-                          (when (< dist (meters 300.0))
-                            (set! *mp-traffic-sync-active* #t)
-                            )
-                          (when (< dist (meters 310.0))
-                            (mp-traffic-force-clear-local-vehicles!)
-                            )
+                          (mp-traffic-evaluate-authority-rule! *mp-traffic-client-sync-enter-rule* dist)
+                          (mp-traffic-evaluate-authority-rule! *mp-traffic-client-local-clear-rule* dist)
                           )
                         )
                     (cond
@@ -85,25 +217,19 @@
                        (set! *mp-traffic-suppressed* #t)
                        (set! *mp-traffic-drain-active* #t)
                        )
-                      ((< dist (meters 350.0))
-                       (set! *mp-traffic-drain-active* #t)
-                       (set! *mp-traffic-suppressed* #t)
+                      ((mp-traffic-authority-rule-active? *mp-traffic-client-drain-enter-rule* dist)
+                       (mp-traffic-apply-authority-rule! *mp-traffic-client-drain-enter-rule*)
                        )
-                      ((> dist (meters 400.0))
-                       (set! *mp-traffic-drain-active* #f)
-                       (set! *mp-traffic-suppressed* #f)
+                      ((mp-traffic-authority-rule-active? *mp-traffic-client-drain-exit-rule* dist)
+                       (mp-traffic-apply-authority-rule! *mp-traffic-client-drain-exit-rule*)
                        )
                       )
                     )
                   (begin ;; Host Side (mp-is-jak? was handled above for suppression)
                     (set! *mp-traffic-host-spawning-active* #f)
                     (if *mp-traffic-sync-active*
-                        (when (> dist (meters 250.0))
-                          (set! *mp-traffic-sync-active* #f)
-                          )
-                        (when (< dist (meters 250.0))
-                          (set! *mp-traffic-sync-active* #t)
-                          )
+                        (mp-traffic-evaluate-authority-rule! *mp-traffic-host-sync-exit-rule* dist)
+                        (mp-traffic-evaluate-authority-rule! *mp-traffic-host-sync-enter-rule* dist)
                         )
                     )
                   )
