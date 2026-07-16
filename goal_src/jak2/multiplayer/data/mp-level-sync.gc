@@ -66,6 +66,26 @@
   (the-as uint (logand packed-level #xff))
   )
 
+(defun mp-fort-elec-gate-remote-level-ready? ()
+  (when (or (not *multi-sync-enabled?*)
+            (!= (pc-multi-get-status) 6))
+    (return #t)
+    )
+  (when (not (and *load-state*
+                  (nonzero? *load-state*)
+                  *remote-info*
+                  (nonzero? *remote-info*)))
+    (return #t)
+    )
+  (let ((local-level-id (mp-level-symbol->id (-> *load-state* vis-nick)))
+        (remote-level-id (mp-level-packed-primary-id (-> *remote-info* level))))
+    (if (or (zero? local-level-id)
+            (zero? remote-level-id))
+        #t
+        (= local-level-id remote-level-id))
+    )
+  )
+
 (defun mp-level-packed-extra-id ((packed-level uint))
   (the-as uint (logand (shr packed-level 8) #xff))
   )

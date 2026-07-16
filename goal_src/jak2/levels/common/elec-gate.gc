@@ -1,6 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern mp-fort-elec-gate-remote-level-ready? (function symbol))
+
 ;; name: elec-gate.gc
 ;; name in dgo: elec-gate
 ;; dgos: GAME, COMMON
@@ -228,6 +230,15 @@
     (if (nonzero? (-> self part-off))
         (spawn-particles self (-> self part-off))
         )
+    )
+  )
+
+(defstate waiting-for-remote-player (elec-gate)
+  :enter (behavior ()
+    (none)
+    )
+  :code (behavior ()
+    (none)
     )
   )
 
@@ -806,6 +817,79 @@
 (deftype fort-elec-gate (elec-gate)
   ((palette-id  int32)
    )
+  )
+
+(defstate waiting-for-remote-player (fort-elec-gate)
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+      (case message
+        (('trigger)
+         (if (mp-fort-elec-gate-remote-level-ready?)
+             (go-virtual active)
+             (go waiting-for-remote-player)
+             )
+         )
+        (else
+         (let ((idle-event (-> (method-of-type elec-gate idle) event)))
+           (when idle-event
+             ((the-as (function process int symbol event-message-block object) idle-event)
+              proc argc message block)
+             )
+           )
+         )
+        )
+      )
+  :enter (behavior ()
+    (let ((active-enter (-> (method-of-type elec-gate active) enter)))
+      (when active-enter
+        ((the-as (function none) active-enter))
+        )
+      )
+    )
+  :trans (behavior ()
+    (if (mp-fort-elec-gate-remote-level-ready?)
+        (go-virtual shutdown)
+        (let ((active-trans (-> (method-of-type elec-gate active) trans)))
+          (when active-trans
+            ((the-as (function none) active-trans))
+            )
+          )
+        )
+    )
+  :exit (behavior ()
+    (let ((active-exit (-> (method-of-type elec-gate active) exit)))
+      (when active-exit
+        ((the-as (function none) active-exit))
+        )
+      )
+    )
+  :code (behavior ()
+    (let ((active-code (-> (method-of-type elec-gate active) code)))
+      (when active-code
+        ((the-as (function none) active-code))
+        )
+      )
+    )
+  :post (behavior ()
+    (let ((active-post (-> (method-of-type elec-gate active) post)))
+      (when active-post
+        ((the-as (function none) active-post))
+        )
+      )
+    )
+  )
+
+(defstate idle (fort-elec-gate)
+  :virtual #t
+  :trans (behavior ()
+      (if (mp-fort-elec-gate-remote-level-ready?)
+       (let ((trans-code (-> (method-of-type elec-gate idle) trans)))
+         (when trans-code
+           ((the-as (function none) trans-code))
+           )
+         )
+       (go waiting-for-remote-player)
+       )
+      )
   )
 
 
