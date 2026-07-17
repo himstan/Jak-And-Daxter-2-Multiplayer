@@ -60,6 +60,7 @@
     (when (and ent (nonzero? ent))
       (let ((perm (-> ent extra perm)))
         (when (not (logtest? (-> perm status) (entity-perm-status dead)))
+          (mp-mark-aid-dead-perm! aid)
           (logior! (-> perm status) (entity-perm-status dead))
           (if (and *target* (nonzero? *target*))
               (send-event *target* 'get-pickup (pickup-type skill) 1.0))
@@ -73,6 +74,7 @@
     (when (and ent (nonzero? ent))
       (let ((perm (-> ent extra perm)))
         (when (not (logtest? (-> perm status) (entity-perm-status dead)))
+          (mp-mark-aid-dead-perm! aid)
           (logior! (-> perm status) (entity-perm-status dead))
           (if (and *target* (nonzero? *target*))
               (send-event *target* 'get-pickup (pickup-type gem) 1.0))
@@ -142,6 +144,7 @@
                  (if (mp-should-block-break-sync? proc)
                       (debug-log *mp-debug-log?* "[MP-Event-Handlers] Ignoring BREAK for important process ~A aid=~D~%" proc aid)
                       (begin
+                        (mp-mark-aid-dead-perm! aid)
                         (logior! (-> perm status) (entity-perm-status dead subtask-complete))
                         (send-event proc 'attack #f (static-attack-info ((id (new-attack-id))
                                                                          (mode 'mp-break)
