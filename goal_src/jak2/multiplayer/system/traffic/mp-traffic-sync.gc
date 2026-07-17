@@ -509,14 +509,10 @@
        (mp-traffic-primary-levels-match?))
   )
 
-(defun mp-traffic-same-city-zone-load-refresh-ready? ()
-  "True when local paging remains within the shared primary city traffic context."
-  (let ((local-primary (mp-traffic-local-primary-level-id)))
-    (and (mp-multiplayer-level-load-active?)
-         (nonzero? local-primary)
-         (mp-city-level? (mp-level-id->symbol local-primary))
-         (mp-traffic-remote-refresh-ready?))
-    )
+(defun mp-traffic-level-load-refresh-ready? ()
+  "True when existing traffic can consume matching snapshots during any level load."
+  (and (mp-multiplayer-level-load-active?)
+       (mp-traffic-remote-refresh-ready?))
   )
 
 (defun mp-traffic-refresh-existing-ped-slot! ((slot mp-pedestrian-state))
@@ -677,8 +673,8 @@
   (none)
   )
 
-(defun mp-traffic-update-existing-during-zone-load! ()
-  "Refresh materialized same-city traffic during paging, then retain the normal cleanup passes."
+(defun mp-traffic-update-existing-during-level-load! ()
+  "Refresh materialized traffic during paging, then retain the normal cleanup passes."
   (set! *mp-traffic-last-remote-apply-ready* #f)
   (mp-vehicle-apply-piggyback)
   (mp-traffic-refresh-existing-remote!)
@@ -733,7 +729,7 @@
       (mp-traffic-debug-update-frame-context!)
       (if (or (mp-multiplayer-scene-active?)
               (and (mp-multiplayer-level-load-active?)
-                   (not (mp-traffic-same-city-zone-load-refresh-ready?))))
+                   (not (mp-traffic-level-load-refresh-ready?))))
           (begin
             (set! *mp-traffic-last-remote-apply-ready* #f)
             (set! (-> *mp-traffic-buffer* ped-count) (the uint 0))
@@ -830,8 +826,8 @@
                           )
                         )
                       )
-                    ((mp-traffic-same-city-zone-load-refresh-ready?)
-                     (mp-traffic-update-existing-during-zone-load!)
+                    ((mp-traffic-level-load-refresh-ready?)
+                     (mp-traffic-update-existing-during-level-load!)
                      )
                     (else
                       (begin

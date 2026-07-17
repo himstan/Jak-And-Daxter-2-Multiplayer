@@ -1039,7 +1039,7 @@
 
   (when (and (not (mp-vehicle-is-local-authoritative? this))
              (nonzero? (-> this net-id)))
-    (when (not (mp-is-traffic-spawn-ready?))
+    (when (not (mp-is-traffic-existing-update-ready?))
       (return #f)
       )
     
@@ -1291,7 +1291,7 @@
   "Update the ghost record for a vehicle from the latest remote data."
   (if (not (and proc (nonzero? proc))) (return #f))
   (if (not (and slot (nonzero? slot))) (return #f))
-  (if (not (mp-is-traffic-spawn-ready?)) (return #f))
+  (if (not (mp-is-traffic-existing-update-ready?)) (return #f))
 
   ;; Protect the local player's vehicle from remote state syncing if they are the pilot.
   ;; We allow syncing if the local player is just a passenger.
