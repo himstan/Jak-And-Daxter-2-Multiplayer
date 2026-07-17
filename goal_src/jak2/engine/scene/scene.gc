@@ -281,7 +281,7 @@
              *mp-local-wants-skip*
              (not (-> scene-proc aborted?))
              (not (mp-remote-scene-active?)))
-    (format 0 "[MP-Scene] Remote scene became inactive; completing local skip vote.~%")
+    (debug-log *mp-debug-log?* "[MP-Scene] Remote scene became inactive; completing local skip vote.~%")
     (mp-abort-local-scene! scene-proc)
     )
   (none)
@@ -543,15 +543,13 @@
                )
              )
             (else
-              (format
-                0
+              (debug-log *mp-debug-log?*
                 "[scene-debug] preload scene=~A actor=~A actor-art=~A~%"
                 (-> gp-0 name)
                 (-> s2-0 name)
                 (-> s2-0 art-group)
                 )
-              (format
-                0
+              (debug-log *mp-debug-log?*
                 "[scene-debug] preload actor-level=~A load-level=~A preload-ag=~A~%"
                 (-> s2-0 level)
                 (-> s1-0 name)
@@ -1309,7 +1307,7 @@
                        )
                      )
                     ((not (mp-remote-scene-active?))
-                     (format 0 "[MP-Scene] Remote scene inactive. Skipping locally without vote.~%")
+                     (debug-log *mp-debug-log?* "[MP-Scene] Remote scene inactive. Skipping locally without vote.~%")
                      (mp-abort-local-scene! self)
                      )
                     (else
@@ -1718,7 +1716,7 @@
     )
 
   (when (and (not (or *mp-processing-remote-event* *mp-remote-wants-skip* *mp-local-wants-skip*)) (-> self scene) (not (-> self aborted?)))
-    (format 0 "[MP-Scene] Broadcasting scene start: ~S~%" (-> self scene name))
+    (debug-log *mp-debug-log?* "[MP-Scene] Broadcasting scene start: ~S~%" (-> self scene name))
     (mp-send-scene-event (mp-scene-state started) (-> self scene name)))
 
   (set! *mp-local-wants-skip* #f)

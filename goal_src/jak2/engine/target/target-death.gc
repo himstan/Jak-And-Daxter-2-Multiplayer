@@ -1429,12 +1429,12 @@
   (when (and *multi-sync-enabled?* (= (pc-multi-get-status) 6))
     ;; 1. Handle Remote Puppets
     (when (= (-> self tobot?) 'mp-puppet)
-      (format 0 "[MP-Puppet] Death Sequence Complete. Waiting for remote respawn...~%")
+      (debug-log *mp-debug-log?* "[Target-Death] Death Sequence Complete. Waiting for remote respawn...~%")
       (loop
         (let ((ghost-state (mp-target-get-state-from-id (-> *mp-puppet-ghost* state-id))))
           ;; If the remote ghost is no longer in a death state, we are done!
           (when (not (mp-target-death-state? ghost-state))
-            (format 0 "[MP-Puppet] Ghost respawned (State: ~A). Exiting death reset.~%" ghost-state)
+            (debug-log *mp-debug-log?* "[Target-Death] Ghost respawned (State: ~A). Exiting death reset.~%" ghost-state)
             (if (mp-is-jak?)
                 (go target-indax-start (the handle #f))
                 (go target-stance)
@@ -1449,7 +1449,7 @@
     (when (and (= self *target*) (not (= (-> self tobot?) 'mp-puppet)))
       (mp-send-world-event MP_EVENT_PLAYER_DIED (the-as uint 0))
       (mp-clear-local-vehicle-occupancy! self)
-      (format 0 "[MP-Death] Mission Death. Spectating and waiting 20s...~%")
+      (debug-log *mp-debug-log?* "[Target-Death] Mission Death. Spectating and waiting 20s...~%")
       (set! *mp-spectator-countdown-active?* #t)
       (remove-setting! 'process-mask)
       (remove-setting! 'mode-name)
@@ -1517,10 +1517,10 @@
              (let ((remote *mp-puppet*))
                (when (and remote (nonzero? remote) *remote-player-is-dead*)
                    (begin
-                     (format 0 "[MP-Death] Double Death or remote disconnected.~%")
+                     (debug-log *mp-debug-log?* "[Target-Death] Double Death or remote disconnected.~%")
                      (if (not (mp-is-fail-mission-pending?))
                          (begin
-                           (format 0 "[MP-Death] Triggering full reset.~%")
+                           (debug-log *mp-debug-log?* "[Target-Death] Triggering full reset.~%")
                            (set! *remote-player-is-dying* #f)
                            (set! *remote-player-is-dead* #f)
                            (set! *mp-spectator-countdown-active?* #f)
@@ -1530,7 +1530,7 @@
                            (goto cfg-reset-init)
                            )
                          (begin
-                           (format 0 "[MP-Death] Yielding to task-manager fail mission.~%")
+                           (debug-log *mp-debug-log?* "[Target-Death] Yielding to task-manager fail mission.~%")
                            (suspend)
                            )
                          )
@@ -1634,10 +1634,10 @@
     )
   :trans (-> target-hit trans)
   :code (behavior ((arg0 symbol))
-    (format 0 "[Death] target-death: reason is ~A~%" arg0)
+    (debug-log *mp-debug-log?* "[Target-Death] target-death: reason is ~A~%" arg0)
     (when (and (= arg0 'endlessfall)
                (mp-should-suppress-local-endlessfall?))
-      (format 0 "[MP-Death] Suppressing cutscene/loading endlessfall for Jak.~%")
+      (debug-log *mp-debug-log?* "[Target-Death] Suppressing cutscene/loading endlessfall for Jak.~%")
       (set! (-> self control transv quad) (the-as uint128 0))
       (go target-stance)
       )

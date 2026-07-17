@@ -125,13 +125,13 @@
     (if (or (focus-test? ped-proc inactive)
             (= (-> ped-proc status) 'dead))
         (begin
-          (format 0 "[MP-Traffic-Sync] Cleaning up ~A nid=~D pid=~D inactive=~A status=~A because it was dead/inactive" (-> ped-proc name) (-> ped-proc net-id) (-> ped-proc pid) (focus-test? ped-proc inactive) (-> ped-proc status))
+          (debug-log *mp-debug-log?* "[MP-Traffic-Sync] Cleaning up ~A nid=~D pid=~D inactive=~A status=~A because it was dead/inactive" (-> ped-proc name) (-> ped-proc net-id) (-> ped-proc pid) (focus-test? ped-proc inactive) (-> ped-proc status))
           (set! (-> ped-proc net-id) (the uint 0))
         )
         (begin
           (logclear! (-> ped-proc flags) (citizen-flag persistent))
           (send-event ped-proc 'traffic-off-force)
-          (format 0 "[MP-Traffic-Sync] Cleaning up ~A nid=~D pid=~D because it was illegal" (-> ped-proc name) (-> ped-proc net-id) (-> ped-proc pid))
+          (debug-log *mp-debug-log?* "[MP-Traffic-Sync] Cleaning up ~A nid=~D pid=~D because it was illegal" (-> ped-proc name) (-> ped-proc net-id) (-> ped-proc pid))
           (set! (-> ped-proc net-id) (the uint 0))
           )
         )
@@ -203,7 +203,7 @@
       (when (and (or (nonzero? ped-cull-count)
                      (nonzero? veh-cull-count))
                  (time-elapsed? *mp-traffic-targeted-prune-log-time* (seconds 1)))
-        (format 0
+        (debug-log *mp-debug-log?*
                 "[MP-TrafficGate] targeted-prune peds=~D vehs=~D~%"
                 ped-cull-count
                 veh-cull-count)
@@ -319,7 +319,7 @@
   (when (and *traffic-engine*
              (nonzero? (the-as uint *traffic-engine*)))
     (let ((level-data (-> *traffic-engine* level-data-array slot-idx)))
-      (format 0
+      (debug-log *mp-debug-log?*
               "[MP-TrafficGate] ~S slot=~D city-linked=~A active-cells=~D newly-active-cells=~D~%"
               reason
               slot-idx
@@ -415,16 +415,14 @@
 
 (defun mp-traffic-log-level-gate! ((reason symbol))
   "Emit a compact snapshot of the traffic readiness inputs around zone transitions."
-  (format
-    0
+  (debug-log *mp-debug-log?*
     "[MP-TrafficGate] ~S local-primary=~D local-symbol=~S remote-primary=~D "
     reason
     (mp-traffic-local-primary-level-id)
     (mp-traffic-local-primary-level-symbol)
     (mp-traffic-remote-primary-level-id)
     )
-  (format
-    0
+  (debug-log *mp-debug-log?*
     "match=~A ready=~A spawn-ready=~A riding=~A target-level=~S "
     (mp-traffic-primary-levels-match?)
     (mp-traffic-local-primary-level-ready?)
@@ -432,8 +430,7 @@
     *mp-traffic-art-context-riding*
     (mp-traffic-target-level-name)
     )
-  (format
-    0
+  (debug-log *mp-debug-log?*
     "peds=~D vehs=~D~%"
     (if (and *mp-traffic-buffer*
              (nonzero? (the-as uint *mp-traffic-buffer*)))
@@ -452,7 +449,7 @@
         (mp-traffic-log-level-data-slot! reason 0)
         (mp-traffic-log-level-data-slot! reason 1)
         )
-      (format 0 "[MP-TrafficGate] ~S traffic-engine=missing~%" reason)
+      (debug-log *mp-debug-log?* "[MP-TrafficGate] ~S traffic-engine=missing~%" reason)
       )
   (none)
   )
@@ -485,7 +482,7 @@
           (mp-traffic-clear-incoming-remote!)
           (mp-traffic-clear-pending-remote!)
           )
-      (format 0
+      (debug-log *mp-debug-log?*
               "[MP-Traffic] Level context changed. Holding ambient traffic local-primary=~D remote-primary=~D~%"
               local-primary
               remote-primary)
@@ -666,7 +663,7 @@
                 (nonzero? veh-refresh-count))
         (mp-cleanup-traffic-ghosts)
         (when (time-elapsed? *mp-traffic-refresh-existing-log-time* (seconds 1))
-          (format 0
+          (debug-log *mp-debug-log?*
                   "[MP-TrafficGate] refresh-existing peds=~D vehs=~D ready=~A~%"
                   ped-refresh-count
                   veh-refresh-count
@@ -695,14 +692,12 @@
   (when (and (mp-is-traffic-spawn-ready?)
              (not (mp-traffic-primary-levels-match?))
              (time-elapsed? *mp-traffic-level-mismatch-log-time* (seconds 1)))
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "[MP-Traffic] Skip remote ambient traffic: local-primary=~D remote-primary=~D~%"
       (mp-traffic-local-primary-level-id)
       (mp-traffic-remote-primary-level-id)
       )
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "[MP-Traffic] packed local=~D remote=~D peds=~D vehs=~D riding=~A~%"
       (if (and *local-info* (nonzero? *local-info*)) (-> *local-info* level) (the uint 0))
       (if (and *remote-info* (nonzero? *remote-info*)) (-> *remote-info* level) (the uint 0))
@@ -721,8 +716,7 @@
              (mp-traffic-primary-levels-match?)
              (not (mp-traffic-local-primary-level-ready?))
              (time-elapsed? *mp-traffic-level-settle-log-time* (seconds 1)))
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "[MP-Traffic] Hold remote ambient traffic until local traffic level is resident: local-primary=~D remote-primary=~D ready-level=~A~%"
       (mp-traffic-local-primary-level-id)
       (mp-traffic-remote-primary-level-id)
@@ -755,7 +749,7 @@
             (set! (-> *mp-traffic-buffer* ped-count) (the uint 0))
             (set! (-> *mp-traffic-buffer* veh-count) (the uint 0))
             (when (time-elapsed? (-> *mp-traffic-buffer* last-sync-time) (seconds 5))
-               (format 0 "[MP-Traffic] Waiting for Traffic Manager & Levels...~%")
+               (debug-log *mp-debug-log?* "[MP-Traffic] Waiting for Traffic Manager & Levels...~%")
                (set! (-> *mp-traffic-buffer* last-sync-time) (the-as uint (current-time)))
                )
             )
@@ -786,7 +780,7 @@
                   (mp-sync-mission-traffic-update)
 
                   (when (time-elapsed? (-> *mp-traffic-buffer* last-sync-time) (seconds 2))
-                    (format 0 "[MP-Traffic] Authoritative Active: ~D peds, ~D vehs ready=~A riding=~A local-level=~D remote-level=~D~%" (-> *mp-traffic-buffer* ped-count) (-> *mp-traffic-buffer* veh-count) *mp-traffic-art-context-spawn-ready* *mp-traffic-art-context-riding* *mp-traffic-art-context-local-level* *mp-traffic-art-context-remote-level*)
+                    (debug-log *mp-debug-log?* "[MP-Traffic] Authoritative Active: ~D peds, ~D vehs ready=~A riding=~A local-level=~D remote-level=~D~%" (-> *mp-traffic-buffer* ped-count) (-> *mp-traffic-buffer* veh-count) *mp-traffic-art-context-spawn-ready* *mp-traffic-art-context-riding* *mp-traffic-art-context-local-level* *mp-traffic-art-context-remote-level*)
                     (set! (-> *mp-traffic-buffer* last-sync-time) (the-as uint (current-time)))
                     )
                   )
@@ -807,7 +801,7 @@
                               (pc-multi-receive-traffic (the-as uint *mp-traffic-buffer*))
                               (mp-traffic-debug-update-frame-context!)
                               (when (time-elapsed? (-> *mp-traffic-buffer* last-sync-time) (seconds 2))
-                                (format 0 "[MP-Traffic] Puppet Active: ~D peds, ~D vehs ready=~A riding=~A local-level=~D remote-level=~D~%" (-> *mp-traffic-buffer* ped-count) (-> *mp-traffic-buffer* veh-count) *mp-traffic-art-context-spawn-ready* *mp-traffic-art-context-riding* *mp-traffic-art-context-local-level* *mp-traffic-art-context-remote-level*)
+                                (debug-log *mp-debug-log?* "[MP-Traffic] Puppet Active: ~D peds, ~D vehs ready=~A riding=~A local-level=~D remote-level=~D~%" (-> *mp-traffic-buffer* ped-count) (-> *mp-traffic-buffer* veh-count) *mp-traffic-art-context-spawn-ready* *mp-traffic-art-context-riding* *mp-traffic-art-context-local-level* *mp-traffic-art-context-remote-level*)
                                 (set! (-> *mp-traffic-buffer* last-sync-time) (the-as uint (current-time)))
                                 )
                               (when (or (nonzero? (-> *mp-traffic-buffer* ped-count)) (nonzero? (-> *mp-traffic-buffer* veh-count)))

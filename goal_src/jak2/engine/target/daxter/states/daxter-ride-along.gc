@@ -108,7 +108,7 @@
     (if (and (not (real-movie?)) (or (mp-is-daxter?) (not *remote-info*) (zero? (-> *remote-info* scene-active))) (cpad-pressed? (-> self control cpad number) x))
         (begin
           (sound-play "jump")
-          (format 0 "[MP] Exiting ride along state...~%")
+          (debug-log *mp-debug-log?* "[Daxter-Ride-Along] Exiting ride along state...~%")
           (logclear! (-> self draw status) (draw-control-status no-draw))
           (set! *local-riding?* #f)
           (go target-indax-jump

@@ -258,7 +258,7 @@
 
 (defun mp-waypoint-debug-log! ((stage symbol) (evt mp-waypoint-event) (course-bot bot) (fallback-name string))
   (when (mp-waypoint-debug-should-log? evt course-bot)
-    (format 0
+    (debug-log *mp-debug-log?*
             "[MP-Waypoint] role=~S stage=~S type=~S course=~D wp=~D req=~D"
             (if (mp-is-jak?) 'host 'client)
             stage
@@ -267,14 +267,14 @@
             (-> evt waypoint-id)
             (-> evt waypoint-request)
             )
-    (format 0
+    (debug-log *mp-debug-log?*
             " skip=~D host-scene=~D local-scene=~D target-ready=~D"
             (-> evt skipped)
             (-> evt host-in-scene)
             (if (mp-waypoint-local-scene-active?) (the uint 1) (the uint 0))
             (if (mp-waypoint-target-ready?) (the uint 1) (the uint 0))
             )
-    (format 0
+    (debug-log *mp-debug-log?*
             " bot=~S bot-wp=~D bot-req=~D state=~S next=~S"
             (mp-waypoint-debug-course-name course-bot fallback-name)
             (mp-waypoint-debug-current-waypoint course-bot)
@@ -282,7 +282,7 @@
             (mp-waypoint-debug-state-name course-bot)
             (mp-waypoint-debug-next-state-name course-bot)
             )
-    (format 0
+    (debug-log *mp-debug-log?*
             " scene-handle=~D draw=~D~%"
             (if (mp-waypoint-debug-scene-handle-present? course-bot) (the uint 1) (the uint 0))
             (mp-waypoint-debug-draw-status course-bot)

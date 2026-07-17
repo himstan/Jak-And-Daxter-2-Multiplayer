@@ -173,7 +173,6 @@
       (when (time-elapsed? (-> self state-time) (seconds 0.01))
         (let ((v1-50 (ja-group)))
           (when (not (and v1-50 (= v1-50 daxter-indax-jump-loop-ja)))
-            (format 0 "[Indax] target-indax-roll-flip: animation done, falling...~%")
             (ja-channel-push! 1 (seconds 0.1))
             (ja :group! daxter-indax-jump-loop-ja :num! min))))
       (let ((v1-59 (new-stack-vector0))

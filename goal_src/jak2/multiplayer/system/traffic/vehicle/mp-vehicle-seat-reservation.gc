@@ -100,7 +100,7 @@
                  (nonzero? vehicle-proc)
                  (mp-local-vehicle-seat-claim? vehicle-proc seat-index)
                  (mp-remote-seat-claim-wins? vehicle-proc seat-index))
-        (format 0
+        (debug-log *mp-debug-log?*
                 "[MP-Vehicle] Seat conflict on vehicle ~D seat ~D; local role ~D yielding.~%"
                 (-> vehicle-proc net-id)
                 seat-index

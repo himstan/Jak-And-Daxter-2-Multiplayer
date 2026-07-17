@@ -782,7 +782,7 @@
     ;; ----- MULTIPLAYER CANCEL JOIN LOGIC -----
     ;; If we are leaving the 'searching-game state and NOT going into the game ('go-away), cancel.
     (when (and (= (-> this current) 'searching-game) (!= arg0 'go-away))
-      (format 0 "[MP-UI] Canceling search/join from Progress menu.~%")
+      (debug-log *mp-debug-log?* "[MP-UI] Canceling search/join from Progress menu.~%")
       (pc-multi-stop-search)
       (pc-multi-disconnect)
       (pc-multi-set-status (the-as int 0))
@@ -1256,7 +1256,7 @@
                      )
                (+! itercount 1)
                )
-             (if (>= itercount 100) (format 0 "[PROGRESS-DEBUG] Stuck in option loop (back)!~%"))
+             (if (>= itercount 100) (debug-log *mp-debug-log?* "[PROGRESS-DEBUG] Stuck in option loop (back)!~%"))
              )
            )
          )
@@ -1284,7 +1284,7 @@
                      )
                (+! itercount 1)
                )
-             (if (>= itercount 100) (format 0 "[PROGRESS-DEBUG] Stuck in option loop (forward)!~%"))
+             (if (>= itercount 100) (debug-log *mp-debug-log?* "[PROGRESS-DEBUG] Stuck in option loop (forward)!~%"))
              )
            )
          )
@@ -2873,7 +2873,7 @@
   (when (cpad-pressed? 0 confirm)
     (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons confirm))
     (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons confirm))
-    (format 0 "[MP-UI] Disconnect requested from Progress menu.~%")
+    (debug-log *mp-debug-log?* "[MP-UI] Disconnect requested from Progress menu.~%")
     
     ;; 1. Break the network link
     (pc-multi-disconnect)
@@ -4002,7 +4002,7 @@
   (when (cpad-pressed? 0 confirm)
     (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons confirm))
     (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons confirm))
-    (format 0 "[MP-UI] Host left. Returning to main menu.~%")
+    (debug-log *mp-debug-log?* "[MP-UI] Host left. Returning to main menu.~%")
     
     (pc-multi-disconnect)
     (mp-reset-state)

@@ -368,7 +368,7 @@
 
 (defun mp-level-sync-log-unknown! ()
   (when (>= (current-time) *mp-level-sync-next-unknown-log-time*)
-    (format 0 "[MP-LevelSync] Remote level id ~D is unknown. Falling back to current teleport behavior.~%"
+    (debug-log *mp-debug-log?* "[MP-LevelSync] Remote level id ~D is unknown. Falling back to current teleport behavior.~%"
             (if (and *remote-info* (nonzero? *remote-info*)) (-> *remote-info* level) (the uint 0)))
     (set! *mp-level-sync-next-unknown-log-time* (+ (current-time) (seconds 2)))
     )

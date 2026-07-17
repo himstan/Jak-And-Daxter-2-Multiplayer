@@ -255,13 +255,13 @@
               (let ((st (method-state (-> e-proc type) (the-as basic target-state))))
                 (when (and st (nonzero? st))
                   (when *mp-enemy-debug-auth?*
-                    (format 0 "[MP-EnemyTrace] state-request aid=~D owner=~D local=~D current=~A~%"
+                    (debug-log *mp-debug-log?* "[MP-Enemy-Sync] state-request aid=~D owner=~D local=~D current=~A~%"
                             (mp-get-enemy-aid e-proc)
                             (-> rec owner)
                             (if (and *local-info* (nonzero? *local-info*)) (-> *local-info* role) 255)
                             (if (-> e-proc state) (-> e-proc state name) #f)
                             )
-                    (format 0 "[MP-EnemyTrace] state-request pending=~A target=~A incoming=~D last=~D~%"
+                    (debug-log *mp-debug-log?* "[MP-Enemy-Sync] state-request pending=~A target=~A incoming=~D last=~D~%"
                             (if (-> e-proc next-state) (-> e-proc next-state name) #f)
                             target-state
                             remote-state-id
@@ -293,7 +293,7 @@
         (let ((st (method-state (-> e-proc type) (the-as basic target-state))))
           (when (and st (nonzero? st))
             (when *mp-enemy-debug-auth?*
-              (format 0 "[MP-EnemyTrace] state-queue aid=~D current=~A pending=~A target=~A status=~A~%"
+              (debug-log *mp-debug-log?* "[MP-Enemy-Sync] state-queue aid=~D current=~A pending=~A target=~A status=~A~%"
                       (mp-get-enemy-aid e-proc)
                       cur-state
                       (if (-> e-proc next-state) (-> e-proc next-state name) #f)
@@ -720,7 +720,7 @@
              slot
              (nonzero? slot)
              (> replica-dist (meters 1)))
-    (format 0 "[MP-EnemyTrace] replica-smooth aid=~D dist=~F age-ms=~D~%"
+    (debug-log *mp-debug-log?* "[MP-Enemy-Sync] replica-smooth aid=~D dist=~F age-ms=~D~%"
             (mp-get-enemy-aid e-proc)
             replica-dist
             (- (pc-multi-get-ticks) (-> slot last-updated)))
@@ -850,8 +850,7 @@
                     (quaternion-copy! (-> rec ghost-quat) (-> e-proc root quat))
                     )
                   (set! (-> rec ghost-state) (the-as mp-enemy-state-id (mp-enemy-get-state-id e-proc)))
-                  (format
-                    0
+                  (debug-log *mp-debug-log?*
                     "[MP-BattleSpawn][~A][AUTH-SEED] proc=~A aid=~D owner=~D state=~D root=~A~%"
                     (if (mp-is-jak?) "HOST" "CLIENT")
                     e-proc
@@ -861,8 +860,7 @@
                     (-> e-proc root)
                     )
                   )
-                (format
-                  0
+                (debug-log *mp-debug-log?*
                   "[MP-BattleSpawn][~A][AUTH-SEED-FAIL] no free auth record proc=~A aid=~D~%"
                   (if (mp-is-jak?) "HOST" "CLIENT")
                   e-proc
@@ -870,8 +868,7 @@
                   )
                 )
               )
-          (format
-            0
+          (debug-log *mp-debug-log?*
             "[MP-BattleSpawn][~A][AUTH-SEED-WAIT] spawned proc has no AID yet proc=~A~%"
             (if (mp-is-jak?) "HOST" "CLIENT")
             e-proc
@@ -957,9 +954,9 @@
              (nonzero? (-> e-proc root)))
     (set! (-> rec just-taken-authority) #f)
     (if (mp-enemy-terminal-sync? e-proc enemy-aid)
-        (format 0 "[MP-Sync] Skipping takeover snap for terminal enemy aid=~D nid=~D~%" enemy-aid (-> e-proc net-id))
+        (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Skipping takeover snap for terminal enemy aid=~D nid=~D~%" enemy-aid (-> e-proc net-id))
         (begin
-          (format 0 "[MP-Sync] Snapping ~A aid=~D nid=~D to ghost position on authority takeover.~%" e-proc enemy-aid (-> e-proc net-id))
+          (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Snapping ~A aid=~D nid=~D to ghost position on authority takeover.~%" e-proc enemy-aid (-> e-proc net-id))
           (vector-copy! (-> e-proc root trans) (-> rec ghost-trans))
           (quaternion-copy! (-> e-proc root quat) (-> rec ghost-quat))
           (vector-reset! (-> e-proc root transv))
@@ -1022,7 +1019,7 @@
               (when is-culled
                 (let ((rec (mp-get-enemy-auth enemy-aid)))
                   (when (and rec (nonzero? rec))
-                    (format 0 "[MP-Sync] Cleaning up culled/errored enemy ~A aid=~D nid=~D in state ~A.~%" e-proc enemy-aid enemy-nid cur-state)
+                    (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Cleaning up culled/errored enemy ~A aid=~D nid=~D in state ~A.~%" e-proc enemy-aid enemy-nid cur-state)
                     (mp-enemy-release-auth-record! rec)
                     )
                   )
@@ -1157,7 +1154,7 @@
                     (if (!= (-> rec owner) local-role)
                         (begin
                           (when (>= (- (current-time) (-> rec last-transfer-time)) (seconds 2))
-                            (format 0 "[MP] Requesting authority over ~A aid=~D nid=~D - Local Aggro Detected!~%" e-proc enemy-aid enemy-nid)
+                            (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Requesting authority over ~A aid=~D nid=~D - Local Aggro Detected!~%" e-proc enemy-aid enemy-nid)
                             (mp-send-world-event MP_EVENT_ENEMY_AUTHORITY_REQUEST enemy-aid)
                             (set! (-> rec last-transfer-time) (current-time))
                             (set! (-> rec is-aggro) #t)
@@ -1187,7 +1184,7 @@
                             (when (and (< local-dist (-> e-proc enemy-info notice-distance))
                                        (< local-dist (- remote-dist (meters 10))))
                               (when (!= (-> rec owner) local-role)
-                                (format 0 "[MP] Requesting authority over ~A aid=~D nid=~D via proximity.~%" e-proc enemy-aid enemy-nid)
+                                (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Requesting authority over ~A aid=~D nid=~D via proximity.~%" e-proc enemy-aid enemy-nid)
                                 (mp-send-world-event MP_EVENT_ENEMY_AUTHORITY_REQUEST enemy-aid)
                                 (set! (-> rec last-transfer-time) (current-time))
                                 )
@@ -1254,7 +1251,7 @@
                             (cond
                               ((or (logtest? (-> e-proc enemy-flags) (enemy-flag death-start))
                                    (and remote-slot (= (-> remote-slot state) 2)))
-                               (format 0 "[MP] Remote sync stale for ~A aid=~D nid=~D during DEATH. Severing sync and killing locally.~%" e-proc enemy-aid enemy-nid)
+                               (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Remote sync stale for ~A aid=~D nid=~D during DEATH. Severing sync and killing locally.~%" e-proc enemy-aid enemy-nid)
                                (set! (-> rec owner) local-role)
                                (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death))
                                (set! (-> e-proc hit-points) 0)
@@ -1265,7 +1262,7 @@
                                (set! (-> rec just-taken-authority) #f)
                                )
                               (else
-                               (format 0 "[MP] Remote sync stale for ~A aid=~D nid=~D. Reclaiming authority.~%" e-proc enemy-aid enemy-nid)
+                               (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Remote sync stale for ~A aid=~D nid=~D. Reclaiming authority.~%" e-proc enemy-aid enemy-nid)
                                (set! (-> rec owner) local-role)
                                (set! (-> rec just-taken-authority) #t)
                                )
@@ -1286,7 +1283,7 @@
                 (let ((ent (-> e-proc entity)))
                   (if (and ent (nonzero? ent)) (logior! (-> ent extra perm status) (entity-perm-status dead)))
                   )
-                (format 0 "[MP] Deactivating enemy ~A aid=~D nid=~D via Remote sync-aids.~%" e-proc enemy-aid enemy-nid)
+                (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Deactivating enemy ~A aid=~D nid=~D via Remote sync-aids.~%" e-proc enemy-aid enemy-nid)
                 (deactivate e-proc)
                 (return (the-as symbol 'dead))
                 )

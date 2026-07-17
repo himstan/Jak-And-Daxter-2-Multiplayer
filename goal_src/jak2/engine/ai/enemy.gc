@@ -78,7 +78,7 @@
              (nonzero? e-proc)
              (or (<= (-> e-proc hit-points) 0)
                  (logtest? (-> e-proc enemy-flags) (enemy-flag death-start))))
-    (format 0 "[Enemy] Stopping sync on ~A with nid=~D pid=~D~%" (-> e-proc name) (-> e-proc net-id) (-> e-proc pid))
+    (debug-log *mp-debug-log?* "[Enemy] Stopping sync on ~A with nid=~D pid=~D~%" (-> e-proc name) (-> e-proc net-id) (-> e-proc pid))
     (logior! (-> e-proc enemy-flags) (enemy-flag stop-syncing))
     )
   (none)
@@ -1674,15 +1674,15 @@
        (return #f)
        )
      (let ((info (the-as attack-info (-> arg3 param 1))))
-       (when (!= (-> info id) (-> this incoming attack-id))    
-         (format 0 "[Enemy] Got 'attack on ~A for nid=~D pid=~D info=~A citizen-incoming-attack-id=~D info-attack-id=~D" 
-                 (-> this name) 
-                 (-> this net-id) 
-                 (-> this pid) 
-                 (-> info mode) 
-                 (-> this incoming attack-id) 
+       (when (!= (-> info id) (-> this incoming attack-id))
+         (debug-log *mp-debug-log?* "[Enemy] Got 'attack on ~A for nid=~D pid=~D info=~A citizen-incoming-attack-id=~D info-attack-id=~D"
+                 (-> this name)
+                 (-> this net-id)
+                 (-> this pid)
+                 (-> info mode)
+                 (-> this incoming attack-id)
                  (-> info id))
-         (format 0 " penetrate=~A~%" 
+         (debug-log *mp-debug-log?* " penetrate=~A~%"
                           (enum->string penetrate (-> info penetrate-using)))
          (cond
            ((and (or (logtest? (-> this enemy-flags) (enemy-flag vulnerable))
@@ -1708,7 +1708,7 @@
                 (PC_PORT
                   (let ((old-hp (-> this hit-points))
                         (dmg-taken (take-damage-from-attack this arg0 arg3)))
-                    (format 0 "[Enemy] ~A nid=~D pid=~D took ~D damage from the ~A attack.~%" (-> this name) (-> this net-id) (-> this pid) dmg-taken (-> info mode))
+                    (debug-log *mp-debug-log?* "[Enemy] ~A nid=~D pid=~D took ~D damage from the ~A attack.~%" (-> this name) (-> this net-id) (-> this pid) dmg-taken (-> info mode))
                     (when (> dmg-taken 0)
                       (process-spawn damage-number (damage-amount-from-attack this arg0 arg3) (-> this root trans) (-> this mask))
                       (send-damage-to-bar *health-bar-manager* this dmg-taken old-hp)
@@ -1751,7 +1751,7 @@
        )
      )
     ((= arg2 'hit-flinch)
-     (format 0 "[Enemy] Called 'hit-flinch event handler for nid=~D hit-points:~D~%" (-> this net-id) (-> this hit-points)) 
+     (debug-log *mp-debug-log?* "[Enemy] Called 'hit-flinch event handler for nid=~D hit-points:~D~%" (-> this net-id) (-> this hit-points))
      (when (zero? (-> this hit-points))
        (logclear! (-> this mask) (process-mask actor-pause))
        (logclear! (-> this focus-status) (focus-status dangerous))
@@ -1771,7 +1771,7 @@
      #t
      )
     ((= arg2 'hit-knocked)
-     (format 0 "[Enemy] Called 'hit-knocked event handler for nid=~D~%" (-> this net-id))
+     (debug-log *mp-debug-log?* "[Enemy] Called 'hit-knocked event handler for nid=~D~%" (-> this net-id))
      (logclear! (-> this mask) (process-mask actor-pause))
      (logclear! (-> this focus-status) (focus-status dangerous))
      (logclear! (-> this enemy-flags) (enemy-flag use-notice-distance))
@@ -1793,11 +1793,11 @@
           )
          )
        )
-     (format 0 "[Enemy] Going to knocked state for nid=~D~%" (-> this net-id))
+     (debug-log *mp-debug-log?* "[Enemy] Going to knocked state for nid=~D~%" (-> this net-id))
      (go (method-of-object this knocked))
      )
     ((= arg2 'hit)
-     (format 0 "[Enemy] Called 'hit event handler for nid=~D~%" (-> this net-id))
+     (debug-log *mp-debug-log?* "[Enemy] Called 'hit event handler for nid=~D~%" (-> this net-id))
      (logclear! (-> this mask) (process-mask actor-pause))
      (logclear! (-> this focus-status) (focus-status dangerous))
      (logclear! (-> this enemy-flags) (enemy-flag use-notice-distance))
@@ -1813,12 +1813,12 @@
      (send-event arg0 'get-attack-count 1)
      (if (zero? (-> this hit-points))
          (begin
-            (format 0 "[Enemy] Calling kill-prefer-falling for nid=~D~%" (-> this net-id))
+            (debug-log *mp-debug-log?* "[Enemy] Calling kill-prefer-falling for nid=~D~%" (-> this net-id))
             (kill-prefer-falling this)
            )
          
          (begin
-            (format 0 "[Enemy] Going to hit state for nid=~D~%" (-> this net-id))
+            (debug-log *mp-debug-log?* "[Enemy] Going to hit state for nid=~D~%" (-> this net-id))
             (go (method-of-object this hit))
            )
          )
@@ -1921,7 +1921,7 @@
      )
     ((= arg2 'die-fast)
      (logior! (-> this draw status) (draw-control-status no-draw))
-     (format 0 "[Enemy] Calling dying method from 'die-fast event handler for nid=~D~%" (-> this net-id))
+     (debug-log *mp-debug-log?* "[Enemy] Calling dying method from 'die-fast event handler for nid=~D~%" (-> this net-id))
      (dying this)
      (send-event (ppointer->process (-> this parent)) 'child-die)
      (let ((s5-3 (-> this on-death)))
@@ -3311,10 +3311,10 @@
     (if (>= (-> self enemy-info knocked-seek-ry-clamp) 0.0)
         (set! (-> self desired-angle) (enemy-method-51 self))
         )
-    (format 0 "[Enemy] Checking for death in knocked state for nid=~D hit-points=~D~%" (-> self net-id) (-> self hit-points))
+    (debug-log *mp-debug-log?* "[Enemy] Checking for death in knocked state for nid=~D hit-points=~D~%" (-> self net-id) (-> self hit-points))
     (if (zero? (-> self hit-points))
         (begin
-            (format 0 "[Enemy] Calling dying method from knocked state :enter for pid=~D~%" (-> self net-id))
+            (debug-log *mp-debug-log?* "[Enemy] Calling dying method from knocked state :enter for pid=~D~%" (-> self net-id))
             (dying self)
           )
         (play-damage-or-death-sound self 0)
@@ -3452,7 +3452,7 @@
 
 (defmethod dying ((this enemy))
   "Cleans-up the enemy and any associated resources. Potentially spawns skull gems"
-  (format 0 "[Enemy] Method dying got called for nid=~D~%" (-> this net-id))
+  (debug-log *mp-debug-log?* "[Enemy] Method dying got called for nid=~D~%" (-> this net-id))
   (when (not (logtest? (enemy-flag called-dying) (-> this enemy-flags)))
     (set! (-> this enemy-flags) (the-as enemy-flag (logior (enemy-flag called-dying) (-> this enemy-flags))))
     (play-damage-or-death-sound this 1)
@@ -3514,7 +3514,7 @@
   :virtual #t
   :event enemy-event-handler
   :enter (behavior ()
-    (format 0 "[Enemy] Calling dying method from die state :enter for nid=~D~%" (-> self net-id))
+    (debug-log *mp-debug-log?* "[Enemy] Calling dying method from die state :enter for nid=~D~%" (-> self net-id))
     (dying self)
     (let ((v1-3 (-> self root root-prim)))
       (set! (-> v1-3 prim-core collide-as) (collide-spec))
@@ -3564,7 +3564,7 @@
   :virtual #t
   :event enemy-event-handler
   :enter (behavior ()
-    (format 0 "[Enemy] Calling dying method from 'die-falling event handler for nid=~D~%" (-> self net-id))
+    (debug-log *mp-debug-log?* "[Enemy] Calling dying method from 'die-falling event handler for nid=~D~%" (-> self net-id))
     (dying self)
     (let ((v1-3 (-> self root root-prim)))
       (set! (-> v1-3 prim-core collide-as) (collide-spec))

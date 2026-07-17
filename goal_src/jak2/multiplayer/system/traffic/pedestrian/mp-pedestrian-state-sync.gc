@@ -264,7 +264,7 @@
           (if (and (-> this focus) (nonzero? (-> this focus)))
               (set! focus-handle (-> this focus handle))
               )
-          (format 0
+          (debug-log *mp-debug-log?*
                   "[MP-GuardTarget] nid=~D phase=set state=pre aid=~D focus=~S focus-type=~S "
                   (-> rec net-id)
                   (-> rec ghost-target-aid)
@@ -277,7 +277,7 @@
                                       (-> this focus handle)
                                       (the-as handle #f))
                                   )))
-            (format 0
+            (debug-log *mp-debug-log?*
                     "traffic=~S traffic-type=~S resolved=~S resolved-type=~S lock=0~%"
                     (mp-guard-target-debug-handle-label target-handle)
                     (mp-guard-target-debug-handle-type target-handle)
@@ -294,7 +294,7 @@
             (if (and (-> this focus) (nonzero? (-> this focus)))
                 (set! focus-handle (-> this focus handle))
                 )
-            (format 0
+            (debug-log *mp-debug-log?*
                     "[MP-GuardTarget] nid=~D phase=set state=post aid=~D focus=~S focus-type=~S "
                     (-> rec net-id)
                     (-> rec ghost-target-aid)
@@ -307,7 +307,7 @@
                                         (-> this focus handle)
                                         (the-as handle #f))
                                     )))
-              (format 0
+              (debug-log *mp-debug-log?*
                       "traffic=~S traffic-type=~S lock=1~%"
                       (mp-guard-target-debug-handle-label target-handle)
                       (mp-guard-target-debug-handle-type target-handle)
@@ -456,7 +456,7 @@
      (when (and this
                 (nonzero? this)
                 (not (mp-pedestrian-death-started? this)))
-       (format 0
+       (debug-log *mp-debug-log?*
                "[MP-Traffic] Cleaning up ~A nid=~D pid=~D inactive=~A status=~A because it was dead/inactive~%"
                (-> this name)
                (-> this net-id)

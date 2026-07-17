@@ -21,6 +21,6 @@
   (mp-reset-puppet-state!)
   (mp-reset-remote-marker-state!)
   (mp-reset-environment-sync)
-  (format 0 "[MP] State has been fully reset.~%")
+  (debug-log *mp-debug-log?* "[MP] State has been fully reset.~%")
   (none)
   )

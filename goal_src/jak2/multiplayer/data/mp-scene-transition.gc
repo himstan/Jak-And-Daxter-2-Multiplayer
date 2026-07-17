@@ -24,11 +24,11 @@
   (when (and *target* (nonzero? *target*))
     (if *mp-was-riding-before-scene*
         (begin
-          (format 0 "[MP] Scene ended. Restoring ride-along state...~%")
+          (debug-log *mp-debug-log?* "[MP-Scene-Transition] Scene ended. Restoring ride-along state...~%")
           (set! *has-ridden-before?* #f)
           )
         (begin
-          (format 0 "[MP] Scene ended. Restoring base Daxter state...~%")
+          (debug-log *mp-debug-log?* "[MP-Scene-Transition] Scene ended. Restoring base Daxter state...~%")
           (set! *has-ridden-before?* #t)
           )
         )
@@ -75,12 +75,12 @@
     (cond
       ((mp-local-scene-aborted?)
        (when (not *mp-aborted-scene-catchup-logged?*)
-         (format 0 "[MP-Scene] Suppressing catch-up broadcast for aborted scene-player.~%")
+         (debug-log *mp-debug-log?* "[MP-Scene-Transition] Suppressing catch-up broadcast for aborted scene-player.~%")
          (set! *mp-aborted-scene-catchup-logged?* #t)
          )
        )
       ((not (mp-connected-scene-broadcast-current? *mp-active-local-scene-name*))
-       (format 0 "[MP-Scene] Broadcasting catch-up scene start: ~S~%"
+       (debug-log *mp-debug-log?* "[MP-Scene-Transition] Broadcasting catch-up scene start: ~S~%"
                *mp-active-local-scene-name*)
        (mp-send-scene-event (mp-scene-state started) *mp-active-local-scene-name*)
        )
@@ -103,12 +103,12 @@
       ((or (not *remote-info*)
            (not (nonzero? *remote-info*))
            (zero? (-> *remote-info* status)))
-       (format 0 "[MP-Scene] Clearing remote scene latch: remote player is unavailable.~%")
+       (debug-log *mp-debug-log?* "[MP-Scene-Transition] Clearing remote scene latch: remote player is unavailable.~%")
        (mp-clear-remote-scene-latch!)
        )
       ((and (zero? (-> *remote-info* scene-active))
             (!= (-> *remote-info* packet-id) *mp-remote-scene-start-packet-id*))
-       (format 0 "[MP-Scene] Fresh heartbeat reports remote scene inactive; clearing latch.~%")
+       (debug-log *mp-debug-log?* "[MP-Scene-Transition] Fresh heartbeat reports remote scene inactive; clearing latch.~%")
        (mp-clear-remote-scene-latch!)
        )
       )
@@ -149,7 +149,7 @@
       (if (and *mp-last-scene-player*
                (not *mp-intro-skip-blackout-pending?*))
           (begin
-            (format 0 "[MP] Forcing blackout off after scene end.~%")
+            (debug-log *mp-debug-log?* "[MP-Scene-Transition] Forcing blackout off after scene end.~%")
             (mp-clear-client-presentation-blackout!)
             )
           )

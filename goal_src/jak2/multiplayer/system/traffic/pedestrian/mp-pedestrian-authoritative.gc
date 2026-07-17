@@ -117,7 +117,7 @@
         (when (and rec
                    (nonzero? (-> evt attack-id))
                    (= (-> evt attack-id) (-> rec last-attack-id)))
-          (format 0 "[MP-Traffic] Blocking duplicate remote attack ID ~D on nid=~D~%" (-> evt attack-id) (-> evt net-id))
+          (debug-log *mp-debug-log?* "[MP-Traffic] Blocking duplicate remote attack ID ~D on nid=~D~%" (-> evt attack-id) (-> evt net-id))
           (return #f)
           )
         (let ((attacker *mp-puppet*))
@@ -165,7 +165,7 @@
 
 (defun mp-pedestrian-debug-pack-guard-target! ((e-proc citizen) (slot mp-pedestrian-state) (target-handle handle))
   (when (mp-guard-target-debug-ready? (-> slot net-id))
-    (format 0
+    (debug-log *mp-debug-log?*
             "[MP-GuardTarget] nid=~D phase=pack state=~S aid=~D src=~S src-type=~S "
             (-> slot net-id)
             (mp-ped-get-state-from-id (the uint (-> slot state-id)))
@@ -177,7 +177,7 @@
       (if (and (-> e-proc focus) (nonzero? (-> e-proc focus)))
           (set! focus-handle (-> e-proc focus handle))
           )
-      (format 0
+      (debug-log *mp-debug-log?*
               "focus=~S focus-type=~S traffic=~S traffic-type=~S lock=~D~%"
               (mp-guard-target-debug-handle-label focus-handle)
               (mp-guard-target-debug-handle-type focus-handle)

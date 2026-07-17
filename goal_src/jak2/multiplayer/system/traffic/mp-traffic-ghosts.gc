@@ -84,7 +84,7 @@
               (set! (-> rec net-id) net-id)
               )
             (when (time-elapsed? *mp-traffic-ghost-allocation-failure-log-time* (seconds 1))
-              (format 0
+              (debug-log *mp-debug-log?*
                       "[MP-TrafficGhost] Allocation failed nid=~D kind=~D used=~D/~D~%"
                       net-id
                       entity-kind
@@ -141,7 +141,7 @@
         )
       (when (or (nonzero? stale-count)
                 (nonzero? missing-ped-count))
-        (format 0
+        (debug-log *mp-debug-log?*
                 "[MP-TrafficGhost] Authority cleanup stale=~D missing-ped=~D used=~D/~D~%"
                 stale-count
                 missing-ped-count
@@ -160,7 +160,7 @@
     (let ((rec (-> *mp-traffic-ghosts* i)))
       (when (and (nonzero? (-> rec net-id))
                  (time-elapsed? (-> rec last-seen) (seconds 10)))
-        (format 0
+        (debug-log *mp-debug-log?*
                 "[MP-TrafficGhost] Cleaning up stale nid=~D after 10 seconds.~%"
                 (-> rec net-id))
         (mp-release-traffic-ghost! rec)

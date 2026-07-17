@@ -53,7 +53,7 @@
              (not (movie?))
              (not (mp-should-block-break-sync? arg0))
              )
-    (format 0 "[MP-WorldEvent] Sending BREAK for process ~A aid=~D~%" arg0 (-> arg0 entity aid))
+    (debug-log *mp-debug-log?* "[MP-WorldEvent] Sending BREAK for process ~A aid=~D~%" arg0 (-> arg0 entity aid))
     (mp-send-world-event MP_EVENT_BREAK (-> arg0 entity aid))
     )
   (none)

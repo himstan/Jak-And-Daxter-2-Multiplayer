@@ -251,7 +251,7 @@
         )
       (when (not slot)
         (set! slot (-> table states 0))
-        (format 0 "[MP-Airlock] WARNING: airlock state table overflow, replacing slot 0 with aid=~D.~%" airlock-aid)
+        (debug-log *mp-debug-log?* "[MP-Airlock] WARNING: airlock state table overflow, replacing slot 0 with aid=~D.~%" airlock-aid)
         )
       (mp-airlock-write-state! slot airlock-aid state-id)
       (mp-airlock-refresh-count! table)

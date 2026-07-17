@@ -5,7 +5,7 @@
   (if (< status 3)
       (begin
         (when *multi-sync-enabled?*
-          (format 0 "[MP-Network] Return Early: Status ~D, SyncEnabled? ~A~%" status *multi-sync-enabled?*)
+          (debug-log *mp-debug-log?* "[MP-Network] Return Early: Status ~D, SyncEnabled? ~A~%" status *multi-sync-enabled?*)
           )
         #f
         )
@@ -25,7 +25,7 @@
   (when (and *local-info*
              (nonzero? (the-as uint *local-info*))
              (>= (- (current-time) *multi-last-sync-frame*) (seconds 5)))
-    (format 0 "[MP-Network] Active and Syncing! (Status ~D, Role ~D, SyncFlag ~D)~%"
+    (debug-log *mp-debug-log?* "[MP-Network] Active and Syncing! (Status ~D, Role ~D, SyncFlag ~D)~%"
             status
             role
             (-> *local-info* sync-flag))

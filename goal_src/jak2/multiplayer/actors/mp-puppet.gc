@@ -578,7 +578,7 @@
              (not (and (-> proc gun gun)
                        (nonzero? (-> proc gun gun))))
              )
-    (format 0
+    (debug-log *mp-debug-log?*
             "[MP-Puppet][GunReplay] Repairing stale gun: weapon=~D state=~S~%"
             (the-as uint weapon)
             (if (and (-> proc state) (nonzero? (-> proc state)))
@@ -698,7 +698,7 @@
             )
           (when (!= *mp-puppet-pending-gun-shot-seq* *mp-puppet-last-gun-replay-debug-seq*)
             (set! *mp-puppet-last-gun-replay-debug-seq* *mp-puppet-pending-gun-shot-seq*)
-            (format 0
+            (debug-log *mp-debug-log?*
                     "[MP-Puppet][GunReplay] Waiting: state=~S using=~A gun=~A live=~A current=~D expected=~D~%"
                     (if (and proc (nonzero? proc) (-> proc state) (nonzero? (-> proc state)))
                         (-> proc state name)
@@ -1498,7 +1498,7 @@
             (cond
               ((and (mp-target-death-state? ghost-state)
                     (not (mp-target-death-state? cur-state)))
-               (format 0 "[MP-Puppet] Authoritative Death! Bumping ~A -> ~A~%" cur-state ghost-state)
+               (debug-log *mp-debug-log?* "[MP-Puppet] Authoritative Death! Bumping ~A -> ~A~%" cur-state ghost-state)
                (set! *remote-player-is-dying* #t)
                (send-event proc 'mp-die)
                (mp-play-remote-death-vo)
@@ -1514,7 +1514,7 @@
                (set! *mp-puppet-state-mismatch-count* 0)
                )
               ((= ghost-state 'target-ride-along)
-               (format 0 "[MP-Puppet] Authoritative Ride Along! Bumping ~A -> ~A~%" cur-state ghost-state)
+               (debug-log *mp-debug-log?* "[MP-Puppet] Authoritative Ride Along! Bumping ~A -> ~A~%" cur-state ghost-state)
                ;; Safety: Ensure puppet has a valid pad before entering a state that checks inputs
                (when (not (-> proc control cpad))
                  (set! (-> proc control cpad) (-> *cpad-list* cpads 1))
@@ -1524,7 +1524,7 @@
                )
               ((and (mp-target-board-state? ghost-state)
                     (not (mp-puppet-in-board-state? proc cur-state)))
-               (format 0 "[MP-Puppet] Authoritative Board! Bumping ~A -> ~A~%" cur-state ghost-state)
+               (debug-log *mp-debug-log?* "[MP-Puppet] Authoritative Board! Bumping ~A -> ~A~%" cur-state ghost-state)
                ;; Use the native mode change so target-board-init spawns and opens the board model.
                (send-event proc 'change-mode 'board #f)
                (set! *mp-puppet-state-mismatch-count* 0)
@@ -1532,7 +1532,7 @@
               ((and (not (mp-target-board-state? ghost-state))
                     (mp-puppet-in-board-state? proc cur-state))
                (when (>= *mp-puppet-state-mismatch-count* 10)
-                 (format 0 "[MP-Puppet] Authoritative Non-Board! Bumping ~A -> ~A~%" cur-state ghost-state)
+                 (debug-log *mp-debug-log?* "[MP-Puppet] Authoritative Non-Board! Bumping ~A -> ~A~%" cur-state ghost-state)
                  (send-event proc 'change-mode 'normal)
                  (set! *mp-puppet-state-mismatch-count* 0)
                  )
@@ -1540,14 +1540,14 @@
               ((and (not (mp-target-pole-state? ghost-state))
                     (mp-puppet-in-pole-state? proc cur-state))
                (when (>= *mp-puppet-state-mismatch-count* 10)
-                 (format 0 "[MP-Puppet] Authoritative Non-Pole! Bumping ~A -> ~A~%" cur-state ghost-state)
+                 (debug-log *mp-debug-log?* "[MP-Puppet] Authoritative Non-Pole! Bumping ~A -> ~A~%" cur-state ghost-state)
                  (send-event proc 'end-mode 'pole)
                  (set! *mp-puppet-state-mismatch-count* 0)
                  )
                )
               ((= cur-state 'process-drawable-art-error)
                 (when (>= *mp-puppet-state-mismatch-count* 10)
-                  (format 0 "[MP-Puppet] Stuck in drawable art error! Forcing exit...~%")
+                  (debug-log *mp-debug-log?* "[MP-Puppet] Stuck in drawable art error! Forcing exit...~%")
                   (deactivate proc)
                   (set! *mp-puppet* (the-as target #f))
                   (set! *mp-puppet-state-mismatch-count* 0)
@@ -1557,7 +1557,7 @@
                ;; Puppet thinks it's riding, but ghost is NOT.
                (when (!= ghost-state 'target-ride-along)
                  (when (>= *mp-puppet-state-mismatch-count* 2)
-                   (format 0 "[MP-Puppet] Stuck in ride-along! Forcing exit to ~A~%" ghost-state)
+                   (debug-log *mp-debug-log?* "[MP-Puppet] Stuck in ride-along! Forcing exit to ~A~%" ghost-state)
                    ;; Transition directly to the authoritative state via event; :exit handles cleanup
                    (set! *local-riding?* #f)
                    (send-event proc 'change-mode 'normal #f)
@@ -1578,7 +1578,7 @@
                               )
                           )
                  (when (>= *mp-puppet-state-mismatch-count* 10)
-                   (format 0 "[MP-Puppet] Stuck in hang! Forcing exit via 'end-mode...~%")
+                   (debug-log *mp-debug-log?* "[MP-Puppet] Stuck in hang! Forcing exit via 'end-mode...~%")
                    (send-event proc 'end-mode 'edge-grab)
                    (set! *mp-puppet-state-mismatch-count* 0)
                    )
@@ -1624,7 +1624,7 @@
                  (when (and turret-proc (nonzero? turret-proc))
                    (mp-puppet-apply-turret-aim! turret-proc info)
                    (when (not (mp-puppet-synced-to-turret? proc turret-proc))
-                     (format 0 "[MP-Puppet] Synced to turret (AID ~D)! Starting turret entry.~%" riding-veh-id)
+                     (debug-log *mp-debug-log?* "[MP-Puppet] Synced to turret (aid=~D)! Starting turret entry.~%" riding-veh-id)
 
                      ;; Clean up old vehicle occupancy if any
                      (when (and (focus-test? proc pilot)
@@ -1674,7 +1674,7 @@
                     (not (or (= ghost-state 'target-turret-stance)
                              (= ghost-state 'target-turret-get-on))))
                ;; Remote player exited turret, but puppet is still in it. Force exit.
-               (format 0 "[MP-Puppet] Puppet is in turret but ghost is not! Forcing exit.~%")
+               (debug-log *mp-debug-log?* "[MP-Puppet] Puppet is in turret but ghost is not! Forcing exit.~%")
                (send-event proc 'change-state (if (mp-is-jak?) target-indax-start target-stance) (the handle #f))
                (when (and (nonzero? (-> proc turret)) (nonzero? (-> (the-as mp-turret-info-dummy (-> proc turret)) handle)))
                  (let ((turret-proc (the-as mp-base-turret-dummy (handle->process (-> (the-as mp-turret-info-dummy (-> proc turret)) handle)))))
@@ -1763,7 +1763,7 @@
                                                         (= (-> *target* next-state name) 'target-demo)))
                       (and (-> *target* state) (or (= (-> *target* state name) 'target-title)
                                                    (= (-> *target* state name) 'target-demo))))))
-    (format 0 "[MP-Puppet] Spawning new target puppet with ID ~D...~%" id)
+    (debug-log *mp-debug-log?* "[MP-Puppet] Spawning new target puppet with ID ~D...~%" id)
     (let ((p (process-spawn target :init mp-puppet-init (-> *game-info* current-continue) :from *target-dead-pool* :to *target-pool* :stack *kernel-dram-stack*)))
       (when p
         (set! *mp-puppet* (-> p 0))

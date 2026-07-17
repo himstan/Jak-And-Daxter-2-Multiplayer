@@ -124,7 +124,7 @@
       )
     (cond
       ((and ride-along? (focus-test? *target* indax))
-       (format 0 "[MP-Teleport] Daxter player hopping onto Jak (ride-along)~%")
+       (debug-log *mp-debug-log?* "[MP-Teleport] Daxter player hopping onto Jak (ride-along)~%")
        (mp-teleport-player-to-remote-coords! *target* 4096.0)
        (go-process *target* target-indax-jump-on)
        )
@@ -137,18 +137,18 @@
               (let ((best-seat (mp-teleport-find-last-empty-seat veh #f)))
                 (cond
                   ((!= best-seat -1)
-                   (format 0 "[MP-Teleport] Teleporting player into vehicle seat ~D~%" best-seat)
+                   (debug-log *mp-debug-log?* "[MP-Teleport] Teleporting player into vehicle seat ~D~%" best-seat)
                    (mp-teleport-board-vehicle-seat! *target* veh best-seat)
                    )
                   (else
-                   (format 0 "[MP-Teleport] Vehicle full. Teleporting next to vehicle.~%")
+                   (debug-log *mp-debug-log?* "[MP-Teleport] Vehicle full. Teleporting next to vehicle.~%")
                    (mp-teleport-reset-local-base-state! *target*)
                    )
                   )
                 )
               )
              (else
-              (format 0 "[MP-Teleport] Vehicle ~D not found. Teleporting to remote player coords.~%" riding-veh-id)
+              (debug-log *mp-debug-log?* "[MP-Teleport] Vehicle ~D not found. Teleporting to remote player coords.~%" riding-veh-id)
               (mp-teleport-player-to-remote-coords! *target* 4096.0)
               (mp-teleport-reset-local-base-state! *target*)
               )
@@ -157,7 +157,7 @@
          )
        )
       (else
-       (format 0 "[MP-Teleport] Remote player on foot. Teleporting to remote player coords.~%")
+       (debug-log *mp-debug-log?* "[MP-Teleport] Remote player on foot. Teleporting to remote player coords.~%")
        (mp-teleport-player-to-remote-coords! *target* 4096.0)
        (mp-teleport-reset-local-base-state! *target*)
        )
@@ -176,12 +176,12 @@
          (let ((veh (mp-vehicle-find-by-net-id riding-veh-id)))
            (cond
              ((and veh (nonzero? veh) (-> veh root) (nonzero? (-> veh root)))
-              (format 0 "[MP-Death] Remote player is in vehicle ~D. Respawning beside it.~%" riding-veh-id)
+              (debug-log *mp-debug-log?* "[MP-Death] Remote player is in vehicle ~D. Respawning beside it.~%" riding-veh-id)
               (mp-teleport-player-to-vehicle! player veh (meters 8.0) (meters 8.0))
               (let ((best-seat (mp-teleport-find-last-empty-seat veh #t)))
                 (if (!= best-seat -1)
                     (begin
-                      (format 0 "[MP-Death] Respawning player into safe passenger seat ~D~%" best-seat)
+                      (debug-log *mp-debug-log?* "[MP-Death] Respawning player into safe passenger seat ~D~%" best-seat)
                       (mp-teleport-board-vehicle-seat! player veh best-seat)
                       )
                     (mp-respawn-local-target! player)
@@ -189,7 +189,7 @@
                 )
               )
              (else
-              (format 0 "[MP-Death] Remote vehicle ~D not found. Respawning at remote coords.~%" riding-veh-id)
+              (debug-log *mp-debug-log?* "[MP-Death] Remote vehicle ~D not found. Respawning at remote coords.~%" riding-veh-id)
               (mp-teleport-player-to-remote-coords! player 4096.0)
               (mp-respawn-local-target! player)
               )
@@ -198,7 +198,7 @@
          )
        )
       (else
-       (format 0 "[MP-Death] Remote player on foot. Respawning at remote coords.~%")
+       (debug-log *mp-debug-log?* "[MP-Death] Remote player on foot. Respawning at remote coords.~%")
        (mp-teleport-player-to-remote-coords! player 4096.0)
        (mp-respawn-local-target! player)
        )
@@ -210,7 +210,7 @@
 (defun mp-scene-sync-teleport-to-remote! ()
   "Snap the local target to the remote player for scene sync without vehicle boarding."
   (when (mp-local-scene-teleport-ready?)
-    (format 0 "[MP-SceneTeleport] Snapping to remote position for scene load.~%")
+    (debug-log *mp-debug-log?* "[MP-SceneTeleport] Snapping to remote position for scene load.~%")
     (mp-teleport-player-to-remote-coords! *target* 4096.0)
     )
   (none)

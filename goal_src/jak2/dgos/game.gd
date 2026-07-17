@@ -8,6 +8,7 @@
   "matrix-h.o"
   "quaternion-h.o"
   "mp-types.o"
+  "debug-log.o"
   "euler-h.o"
   "transform-h.o"
   "geometry-h.o"

@@ -102,7 +102,7 @@
              *mp-stadium-board1-local-tutorial-done?*
              (not *mp-stadium-board1-local-tutorial-announced?*))
     (set! *mp-stadium-board1-local-tutorial-announced?* #t)
-    (format 0 "[MP-StadiumBoard1] Local player completed the tutorial. Broadcasting to peer...~%")
+    (debug-log *mp-debug-log?* "[MP-StadiumBoard1] Local player completed the tutorial. Broadcasting to peer...~%")
     (mp-stadium-board1-queue-event MP_MISSION_EVT_STADIUM_BOARD1_TUTORIAL_DONE 0)
     )
   (none)
@@ -126,7 +126,7 @@
 
 (defun mp-stadium-board1-mark-tutorial-done! ()
   (set! *mp-stadium-board1-local-tutorial-done?* #t)
-  (format 0 "[MP-StadiumBoard1] Local player completed the tutorial.~%")
+  (debug-log *mp-debug-log?* "[MP-StadiumBoard1] Local player completed the tutorial.~%")
   (mp-stadium-board1-broadcast-tutorial-done!)
   (none)
   )
@@ -138,7 +138,7 @@
 
 (defun mp-stadium-board1-start-challenge! ((send-event? symbol))
   ;; log the bools below, and the send event flag
-  (format 0 "[MP-StadiumBoard1] Starting challenge. Stadium mission active?: ~A, Stadium not active?: ~A, Send Event: ~A~%"
+  (debug-log *mp-debug-log?* "[MP-StadiumBoard1] Starting challenge. Stadium mission active?: ~A, Stadium not active?: ~A, Send Event: ~A~%"
           (mp-stadium-board1-mission-active?) (not *mp-stadium-board1-active?*) send-event?)
   (when (and (mp-stadium-board1-mission-active?)
              (not *mp-stadium-board1-active?*))
@@ -150,7 +150,7 @@
       (set! *mp-stadium-board1-local-finished?* #f)
       (set! *mp-stadium-board1-remote-finished?* #f)
       (when send-event?
-        (format 0 "[MP-StadiumBoard1] Starting challenge. Broadcasting to peer...~%")
+        (debug-log *mp-debug-log?* "[MP-StadiumBoard1] Starting challenge. Broadcasting to peer...~%")
         (mp-stadium-board1-queue-event MP_MISSION_EVT_STADIUM_BOARD1_CHALLENGE_START 0)
       )
     )
@@ -167,15 +167,15 @@
   (when *mp-stadium-board1-pending-remote-start?*
     (cond
       ((and *stadium-board1-judge* (nonzero? *stadium-board1-judge*) *target* (nonzero? *target*))
-        (format 0 "[MP-StadiumBoard1] Delivering pending challenge start to judge ~A.~%" *stadium-board1-judge*)
+        (debug-log *mp-debug-log?* "[MP-StadiumBoard1] Delivering pending challenge start to judge ~A.~%" *stadium-board1-judge*)
         (set! *mp-stadium-board1-pending-remote-start?* #f)
         (send-event (handle->process (ppointer->handle *stadium-board1-judge*)) 'mp-start :from *target*)
         )
       ((and (not *stadium-board1-judge*))
-        (format 0 "[MP-StadiumBoard1] Judge handle is stale; waiting for next judge spawn.~%")
+        (debug-log *mp-debug-log?* "[MP-StadiumBoard1] Judge handle is stale; waiting for next judge spawn.~%")
         )
       (else
-        (format 0 "[MP-StadiumBoard1] Remote challenge start pending; judge not ready.~%")
+        (debug-log *mp-debug-log?* "[MP-StadiumBoard1] Remote challenge start pending; judge not ready.~%")
         )
       )
     )
@@ -235,7 +235,7 @@
                *mp-stadium-board1-active?*
                (or force?
                    (!= score previous-score)))
-      (format 0 "[MP-StadiumBoard1] Broadcasting score update. Score: ~D, Last Sent Score: ~D, Force: ~A~%"
+      (debug-log *mp-debug-log?* "[MP-StadiumBoard1] Broadcasting score update. Score: ~D, Last Sent Score: ~D, Force: ~A~%"
               score previous-score force?)
       (set! *mp-stadium-board1-last-score-sent* score)
       (set! *mp-stadium-board1-last-score-send-time* (current-time))
@@ -300,7 +300,7 @@
   )
 
 (defun mp-stadium-board1-receive-event ((evt mp-stadium-board1-event))
-  (format 0 "[MP-StadiumBoard1] Received mission event ~D. Score: ~D~%" (-> evt mission-evt) (-> evt score))
+  (debug-log *mp-debug-log?* "[MP-StadiumBoard1] Received mission event ~D. Score: ~D~%" (-> evt mission-evt) (-> evt score))
   (case (-> evt mission-evt)
     ((MP_MISSION_EVT_STADIUM_BOARD1_TUTORIAL_DONE)
      (set! *mp-stadium-board1-remote-tutorial-done?* #t)

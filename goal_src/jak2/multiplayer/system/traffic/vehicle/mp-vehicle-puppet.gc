@@ -73,32 +73,28 @@
              (nonzero? slot)
              params
              (nonzero? params))
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "[MP-VehSpawn] ~S nid=~D type=~D state=~D "
       reason
       (-> slot net-id)
       (the uint (-> slot vehicle-type))
       (the uint (-> slot state-id))
       )
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "nav-branch=~A riding=~A local-level=~D remote-level=~D "
       (mp-vehicle-param-nav-branch-ready? params)
       *mp-traffic-art-context-riding*
       *mp-traffic-art-context-local-level*
       *mp-traffic-art-context-remote-level*
       )
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "peds=~D vehs=~D slot0-linked=~A slot0-active=~D "
       *mp-traffic-art-context-ped-count*
       *mp-traffic-art-context-veh-count*
       (mp-vehicle-debug-level-data-linked? 0)
       (mp-vehicle-debug-level-data-active-count 0)
       )
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "slot1-linked=~A slot1-active=~D pos=(~f,~f,~f)~%"
       (mp-vehicle-debug-level-data-linked? 1)
       (mp-vehicle-debug-level-data-active-count 1)
@@ -318,7 +314,7 @@
              (or (not (-> veh is-parked?)) (zero? (-> veh is-parked?))))
     (let ((conn (add-icon! *minimap* veh (the-as uint (minimap-class parking-spot)) (the-as int #f) (the-as vector #t) 0)))
       (when (and conn (nonzero? conn))
-        (format 0 "Adding MP_VEHICLE_PARKING_MINIMAP_ATTACHED flag to vehicle with id: ~D current pad-bytes 1: ~A~%" (-> veh net-id) (-> veh pad-bytes 1))
+        (debug-log *mp-debug-log?* "Adding MP_VEHICLE_PARKING_MINIMAP_ATTACHED flag to vehicle with id: ~D current pad-bytes 1: ~A~%" (-> veh net-id) (-> veh pad-bytes 1))
         (set! (-> veh is-parked?) #t)
         (set! (-> veh pad-bytes 1) MP_VEHICLE_PARKING_MINIMAP_ATTACHED)
         )
@@ -421,16 +417,14 @@
 (defun mp-vehicle-parking-minimap-debug! ((action symbol) (veh vehicle) (slot-state-id uint))
   "Log parking minimap decisions without dereferencing the vehicle state object."
   (when (and veh (nonzero? veh))
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "[MP-Vehicle] parking-minimap ~A nid=~D slot-state=~D veh-state=#x~X~%"
       action
       (-> veh net-id)
       slot-state-id
       (-> veh state)
       )
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "[MP-Vehicle] parking-minimap parked=~A pad1=~D local-riding=~A spawn-ready=~A~%"
       (-> veh is-parked?)
       (-> veh pad-bytes 1)
@@ -736,7 +730,7 @@
         (logior! (-> veh flags) (rigid-body-object-flag persistent player-driving riding))
         (logclear! (-> veh flags) (rigid-body-object-flag ai-driving alert in-pursuit target-in-sight rammed-target))
         (set! (-> veh pad-index) (the-as uint (-> *target* control cpad number)))
-        (format 0 "[MP-Traffic] Promoted Daxter-driven local vehicle to NetID ~D.~%" new-net-id)
+        (debug-log *mp-debug-log?* "[MP-Traffic] Promoted Daxter-driven local vehicle to nid=~D.~%" new-net-id)
         )
       )
     )
@@ -1435,7 +1429,7 @@
                        vehicle-can-spawn?
                        (> (-> *remote-info* veh-state state-id) 2)
                        (not *mp-puppet-was-far?*))
-              (format 0 "[MP-Traffic] Missing driven vehicle ~D! Spawning...~%" driven-net-id)
+              (debug-log *mp-debug-log?* "[MP-Traffic] Missing driven vehicle ~D! Spawning...~%" driven-net-id)
               (mp-vehicle-spawn-puppet (-> *remote-info* veh-state))
             )
           )

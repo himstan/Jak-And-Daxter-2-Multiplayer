@@ -647,13 +647,13 @@
       (if (= (-> this id) 0) ;; Vehicle (Tracker ID 0)
           (begin
             (set! (-> arg0 net-id) *mp-vehicle-net-id-counter*)
-            ;; (format 0 "[MP-Traffic] Assigned NetID ~D to Vehicle type ~D~%" *mp-vehicle-net-id-counter* (-> arg0 object-type))
+            (debug-log *mp-debug-log?* "[Traffic-Engine] Assigned nid=~D to veh-type=~D~%" *mp-vehicle-net-id-counter* (-> arg0 object-type))
             (+! *mp-vehicle-net-id-counter* 1)
             (if (>= *mp-vehicle-net-id-counter* (the uint16 65535)) (set! *mp-vehicle-net-id-counter* (the uint16 32768)))
             )
           (begin ;; Pedestrian (Tracker ID 1)
             (set! (-> arg0 net-id) *mp-pedestrian-net-id-counter*)
-            ;; (format 0 "[MP-Traffic] Assigned NetID ~D to Pedestrian type ~D~%" *mp-pedestrian-net-id-counter* (-> arg0 object-type))
+            (debug-log *mp-debug-log?* "[Traffic-Engine] Assigned nid=~D to ped-type=~D~%" *mp-pedestrian-net-id-counter* (-> arg0 object-type))
             (+! *mp-pedestrian-net-id-counter* 1)
             (if (>= *mp-pedestrian-net-id-counter* (the uint16 65535)) (set! *mp-pedestrian-net-id-counter* (the uint16 1)))
             )
@@ -742,7 +742,7 @@
                    *multi-remote-render-pos*
                    (nonzero? *multi-remote-render-pos*)
                    (< (vector-vector-distance (-> s4-0 params position) *multi-remote-render-pos*) (meters 450.0)))
-              (format 0 "[MP-Traffic] Blocking local spawn within Host's bubble at dist ~F~%"
+              (debug-log *mp-debug-log?* "[Traffic-Engine] Blocking local spawn within Host's bubble at dist ~F~%"
                       (vector-vector-distance (-> s4-0 params position) *multi-remote-render-pos*))
               (activate-from-params this (-> s4-0 params))
               )
@@ -764,13 +764,13 @@
       (if (= (-> this id) 0) ;; Vehicle (Tracker ID 0)
           (begin
             (set! (-> arg0 net-id) *mp-vehicle-net-id-counter*)
-            ;; (format 0 "[MP-Traffic] Assigned NetID ~D to Vehicle type ~D~%" *mp-vehicle-net-id-counter* (-> arg0 object-type))
+            (debug-log *mp-debug-log?* "[Traffic-Engine] Assigned nid=~D to veh-type=~D~%" *mp-vehicle-net-id-counter* (-> arg0 object-type))
             (+! *mp-vehicle-net-id-counter* 1)
             (if (>= *mp-vehicle-net-id-counter* (the uint16 65535)) (set! *mp-vehicle-net-id-counter* (the uint16 32768)))
             )
           (begin ;; Pedestrian (Tracker ID 1)
             (set! (-> arg0 net-id) *mp-pedestrian-net-id-counter*)
-            ;; (format 0 "[MP-Traffic] Assigned NetID ~D to Pedestrian type ~D~%" *mp-pedestrian-net-id-counter* (-> arg0 object-type))
+            (debug-log *mp-debug-log?* "[Traffic-Engine] Assigned nid=~D to ped-type=~D~%" *mp-pedestrian-net-id-counter* (-> arg0 object-type))
             (+! *mp-pedestrian-net-id-counter* 1)
             (if (>= *mp-pedestrian-net-id-counter* (the uint16 65535)) (set! *mp-pedestrian-net-id-counter* (the uint16 1)))
             )

@@ -93,7 +93,7 @@
          (when (and *mp-puppet*
                     (nonzero? *mp-puppet*)
                     (not (mp-puppet-valid? *mp-puppet*)))
-           (format 0 "[MP-Puppet] Clearing stale dead puppet pointer before respawn.~%")
+           (debug-log *mp-debug-log?* "[MP-Remote] Clearing stale dead puppet pointer before respawn.~%")
            (mp-puppet-clear-stale!)
            )
 
@@ -111,7 +111,7 @@
              (when (and (> dist (meters 250.0))
                         (not *mp-force-remote-puppet-for-spectate?*))
                (when (mp-puppet-valid? *mp-puppet*)
-                 (format 0 "[MP-Puppet] Remote player is far (~m). Deactivating puppet...~%" dist)
+                 (debug-log *mp-debug-log?* "[MP-Remote] Remote player is far (~m). Deactivating puppet...~%" dist)
                  (mp-puppet-deactivate!)
                  )
                (set! *mp-puppet-was-far?* #t)
@@ -121,12 +121,12 @@
                         (not *mp-puppet-is-warping?*)
                         (mp-remote-level-ready?))
                (when *mp-puppet-was-far?*
-                 (format 0 "[MP-Puppet] Remote player is far, but spectate needs puppet. Allowing respawn...~%")
+                 (debug-log *mp-debug-log?* "[MP-Remote] Remote player is far, but spectate needs puppet. Allowing respawn...~%")
                  )
                (set! *mp-puppet-was-far?* #f)
                )
              (when (and (< dist (meters 250.0)) *mp-puppet-was-far?* (not *mp-puppet-is-warping?*))
-                (format 0 "[MP-Puppet] Remote player returned to proximity (~m). Forcing respawn...~%" dist)
+                (debug-log *mp-debug-log?* "[MP-Remote] Remote player returned to proximity (~m). Forcing respawn...~%" dist)
 
                 ;; 1. Keep their vehicle alive if any.
                 ;; Deactivating it here causes the traffic layer to respawn the remote-driven
@@ -135,7 +135,7 @@
                   (when (nonzero? v-net-id)
                     (let ((v-proc (mp-vehicle-find-by-net-id v-net-id)))
                       (when (and v-proc (nonzero? v-proc))
-                        (format 0 "[MP-Puppet] Preserving remote vehicle ~D during puppet respawn.~%" v-net-id)
+                        (debug-log *mp-debug-log?* "[MP-Remote] Preserving remote vehicle ~D during puppet respawn.~%" v-net-id)
                         (set! *mp-remote-driven-vehicle* (process->handle v-proc))
                         (logior! (-> v-proc flags) (rigid-body-object-flag persistent))
                         (logclear! (-> v-proc mask) (process-mask pause sleep actor-pause))
@@ -158,7 +158,7 @@
                            (or (not *mp-puppet-was-far?*)
                                (and *mp-force-remote-puppet-for-spectate?*
                                     (mp-remote-level-ready?))))
-                 (format 0 "[MP-Puppet] Spawning new target puppet for Status ~D...~%" remote-status)
+                 (debug-log *mp-debug-log?* "[MP-Remote] Spawning new target puppet for Status ~D...~%" remote-status)
                  (mp-puppet-spawn (the-as uint (-> *remote-info* id)))
                 )
                )
@@ -176,7 +176,7 @@
          (mp-remote-player-marker-kill!)
          (let ((proc *mp-puppet*))
            (when proc
-             (format 0 "[MP-Puppet] Deactivating puppet (Remote Status ~D)~%" remote-status)
+             (debug-log *mp-debug-log?* "[MP-Remote] Deactivating puppet (Remote Status ~D)~%" remote-status)
              (mp-puppet-deactivate!)
              (set! *mp-puppet-last-fresh-input-time* (the-as time-frame 0))
              (set! *mp-puppet-was-far?* #f)

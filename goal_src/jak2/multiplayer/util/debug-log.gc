@@ -1,0 +1,10 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defmacro debug-log (condition &rest format-args)
+  "Write a runtime debug message only when CONDITION is enabled."
+  `(when ,condition
+     (format 0 "[~S] " (pc-get-local-timestamp))
+     (format 0 ,@format-args)
+     )
+   )

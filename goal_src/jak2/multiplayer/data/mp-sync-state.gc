@@ -8,7 +8,7 @@
 (defun mp-close-full-sync-progress-ui! ()
   "Ask any active progress UI to leave before the authoritative full-sync load."
   (when (and *progress-process* (nonzero? *progress-process*))
-    (format 0 "[MP-Client] Closing progress UI for full sync.~%")
+    (debug-log *mp-debug-log?* "[MP-Sync-State] Closing progress UI for full sync.~%")
     (set-next-state (-> *progress-process* 0) 'go-away 0)
     )
   (none))
@@ -16,7 +16,7 @@
 (defun mp-force-clear-full-sync-progress-ui! ()
   "Hard clear stale progress presentation state after the full-sync world is ready."
   (when (and *progress-process* (nonzero? *progress-process*))
-    (format 0 "[MP-Client] Forcing stale progress UI closed after full sync.~%")
+    (debug-log *mp-debug-log?* "[MP-Sync-State] Forcing stale progress UI closed after full sync.~%")
     (deactivate (-> *progress-process* 0))
     )
   (when (and *blit-displays-work* (nonzero? *blit-displays-work*))
@@ -38,7 +38,7 @@
 
 (defun mp-log-full-sync-wait! ((reason symbol))
   (when (>= (- (current-time) *mp-full-sync-wait-log-time*) (seconds 2))
-    (format 0 "[MP-Client] Waiting for full sync: ~A.~%" reason)
+    (debug-log *mp-debug-log?* "[MP-Sync-State] Waiting for full sync: ~A.~%" reason)
     (set! *mp-full-sync-wait-log-time* (current-time))
     )
   (none))
@@ -238,14 +238,14 @@
             )
           )
         )
-      (format 0
+      (debug-log *mp-debug-log?*
               "[MP-BlackoutDiag] net status=~D role=~D sync-enabled=~A sync-flag=~D master=~A~%"
               (pc-multi-get-status)
               (-> *local-info* role)
               *multi-sync-enabled?*
               (-> *local-info* sync-flag)
               master-mode)
-      (format 0
+      (debug-log *mp-debug-log?*
               "[MP-BlackoutDiag] display frame=~D blackout-time=~D pmode-alp=~D render=~A bg-a=~F bg-a-force=~F~%"
               frame
               blackout-time
@@ -253,24 +253,24 @@
               render?
               bg-a
               bg-a-force)
-      (format 0
+      (debug-log *mp-debug-log?*
               "[MP-BlackoutDiag] default def-bg-a=~F def-bg-a-force=~F screen-filter=~A menu-mode=~A~%"
               default-bg-a
               default-bg-a-force
               screen-filter?
               menu-mode?)
-      (format 0
+      (debug-log *mp-debug-log?*
               "[MP-BlackoutDiag] blit screen-copied=~A count-down=~D progress-interp=~F~%"
               screen-copied?
               blit-countdown
               progress-interp)
-      (format 0
+      (debug-log *mp-debug-log?*
               "[MP-BlackoutDiag] progress current=~A next=~A loading=~A load-level=~A~%"
               progress-current
               progress-next
               loading-level
               load-level)
-      (format 0
+      (debug-log *mp-debug-log?*
               "[MP-BlackoutDiag] target state=~A next=~A level=~A focus=#x~X draw-status=#x~X~%"
               target-state
               target-next-state
@@ -315,7 +315,7 @@
             )
            (else
             (mp-close-local-fail-mission!)
-            (format 0 "[MP-Client] Starting Full Sync Hard Load for ~S...~%" *mp-continue-name*)
+            (debug-log *mp-debug-log?* "[MP-Sync-State] Starting Full Sync Hard Load for ~S...~%" *mp-continue-name*)
             (mp-close-full-sync-progress-ui!)
             (set! *multi-sync-enabled?* #f)
             (pc-multi-set-status 5)
@@ -348,7 +348,7 @@
                  (mp-log-full-sync-wait! 'phase2-level-paging)
                  )
                 (else
-                 (format 0 "[MP-Client] Level ~S is active. Transitioning to Phase 3...~%" (-> cont level))
+                 (debug-log *mp-debug-log?* "[MP-Sync-State] Level ~S is active. Transitioning to Phase 3...~%" (-> cont level))
                  (set! (-> *local-info* sync-flag) (the-as uint 3))
                  )
                 )
@@ -361,7 +361,7 @@
        (if (not (mp-full-sync-client-ready-for-apply?))
            (mp-log-full-sync-apply-wait!)
            (begin
-            (format 0 "[MP-Client] Paging Complete. Applying World State for Level ~S...~%" *mp-continue-name*)
+            (debug-log *mp-debug-log?* "[MP-Sync-State] Paging Complete. Applying World State for Level ~S...~%" *mp-continue-name*)
             (set! (-> *game-info* money) (-> *local-info* sync-money))
             (set! (-> *game-info* gem) (-> *local-info* sync-gems))
             (set! (-> *game-info* skill) (-> *local-info* sync-skill))
@@ -380,12 +380,12 @@
             ;; Sync AIDs (Orbs, etc.)
             (let ((count (-> *local-info* sync-aids-count)))
               (if (> count 128) (set! count (the-as uint 128)))
-              (format 0 "[MP-Client] Marking ~D actors as dead in fresh perm-list...~%" count)
+              (debug-log *mp-debug-log?* "[MP-Sync-State] Marking ~D actors as dead in fresh perm-list...~%" count)
               (dotimes (i (the-as int count))
                 (let ((aid (-> *local-info* sync-aids i)))
                   ;; 1. Inject into Global Perm-List
                   (when (not (mp-mark-aid-dead-perm! aid))
-                    (format 0 "[MP-Client] WARNING: Failed to store full-sync dead AID ~D.~%" aid)
+                    (debug-log *mp-debug-log?* "[MP-Sync-State] WARNING: Failed to store full-sync dead aid=~D.~%" aid)
                     )
 
                ;; 2. Surgical Deactivation (Now that the level is 'active, this will actually find things)
@@ -403,11 +403,11 @@
                                (let ((proc (-> ent process)))
                                  (if (and proc (nonzero? proc))
                                      (begin
-                                       (format 0 "[MP-Client] Surgical Deactivate: Actor AID ~D in Level ~S~%" aid (-> lev name))
+                                       (debug-log *mp-debug-log?* "[MP-Sync-State] Surgical Deactivate: Actor aid=~D in Level ~S~%" aid (-> lev name))
                                        (deactivate proc)))))))))))))))
 
          ;; FINAL TELEPORT: Snap to Host's exact position
-         (format 0 "[MP-Client] Snap-Teleport to Host: ~F ~F ~F~%" (-> *remote-info* x) (-> *remote-info* y) (-> *remote-info* z))
+         (debug-log *mp-debug-log?* "[MP-Sync-State] Snap-Teleport to Host: ~F ~F ~F~%" (-> *remote-info* x) (-> *remote-info* y) (-> *remote-info* z))
          (set! (-> *target* control trans x) (-> *remote-info* x))
          (set! (-> *target* control trans y) (-> *remote-info* y))
          (set! (-> *target* control trans z) (-> *remote-info* z))
@@ -422,7 +422,7 @@
          (set! (-> *local-info* sync-flag) (the-as uint 0))
          (set! *mp-intro-skip-blackout-pending?* #f)
          (set! *multi-sync-enabled?* #t)
-         (format 0 "[MP-Client] Join Handshake & Level Alignment Successful! Enabled sync flag.~%")
+         (debug-log *mp-debug-log?* "[MP-Sync-State] Join Handshake & Level Alignment Successful! Enabled sync flag.~%")
          )
          )
        )
@@ -449,7 +449,7 @@
                 ;; 2.1 Sync CLOSED nodes
                 (when (and (logtest? (-> mask byte-idx) (ash 1 bit-idx))
                            (not (logtest? (-> nodes data i flags) (game-task-node-flag closed))))
-                  (format 0 "[MP-Client] Remote closed task node ~D. Applying locally.~%" i)
+                  (debug-log *mp-debug-log?* "[MP-Sync-State] Remote closed task node ~D. Applying locally.~%" i)
                   (task-node-close! (the-as game-task-node i))
                   (mp-task-sync-after-remote-close! (the-as game-task-node i))
                   )
@@ -465,7 +465,7 @@
                       (set! should-open? #f))
 
                     (when should-open?
-                      (format 0 "[MP-Client] Remote has active task node ~D. Opening locally.~%" i)
+                      (debug-log *mp-debug-log?* "[MP-Sync-State] Remote has active task node ~D. Opening locally.~%" i)
                       (set! *mp-processing-remote-event* #t)
                       (task-node-open! (the-as game-task-node i))
                       (mp-task-sync-after-remote-open! (the-as game-task-node i))

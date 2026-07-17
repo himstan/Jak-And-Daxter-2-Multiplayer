@@ -87,7 +87,7 @@
          ;; Just died & countdown started! Set camera target to the remote player puppet
          (let ((rem-proc (mp-prepare-remote-spectate-target!)))
            (when (and rem-proc (nonzero? rem-proc) (-> rem-proc root) (nonzero? (-> rem-proc root)))
-             (format 0 "[MP] Player died & countdown started. Switching camera focus to remote puppet.~%")
+             (debug-log *mp-debug-log?* "[MP-Death-Spectate] Player died & countdown started. Switching camera focus to remote puppet.~%")
              (send-event *camera* 'change-target rem-proc)
              ;; Teleport camera to remote puppet to snap instantly
              (when (and (-> *target* control) (nonzero? (-> *target* control)))
@@ -106,7 +106,7 @@
            (when (and rem-proc (nonzero? rem-proc) (-> rem-proc root) (nonzero? (-> rem-proc root)))
              (let ((cam-dist (vector-vector-distance (-> *math-camera* trans) (-> rem-proc root trans))))
                (when (> cam-dist (meters 100.0))
-                 (format 0 "[MP] Spectator camera too far (~F meters). Snapping to remote player.~%" (/ cam-dist (meters 1.0)))
+                 (debug-log *mp-debug-log?* "[MP-Death-Spectate] Spectator camera too far (~F meters). Snapping to remote player.~%" (/ cam-dist (meters 1.0)))
                  (when (and (-> *target* control) (nonzero? (-> *target* control)))
                    (vector-copy! (-> *target* control camera-pos) (-> rem-proc root trans))
                    )
@@ -122,7 +122,7 @@
       (else
        (when *mp-spectating?*
          ;; Just respawned! Restore camera target to local target
-         (format 0 "[MP] Player respawned. Restoring camera focus to local target.~%")
+         (debug-log *mp-debug-log?* "[MP-Death-Spectate] Player respawned. Restoring camera focus to local target.~%")
          (send-event *camera* 'change-target *target*)
          ;; Teleport camera back to local target instantly
          (when (and (-> *target* control) (nonzero? (-> *target* control)))

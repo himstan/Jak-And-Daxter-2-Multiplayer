@@ -1333,7 +1333,7 @@
                                           (started? uint)
                                           (time-limit time-frame)
                                           (remaining-time time-frame))
-  (format 0 "[MP-Shuttle] shuttle-set-timer-from-remaining! started?=~D limit=~D remaining=~D~%" started? time-limit remaining-time)
+  (debug-log *mp-debug-log?* "[MP-Shuttle] shuttle-set-timer-from-remaining! started?=~D limit=~D remaining=~D~%" started? time-limit remaining-time)
   (when (and task (nonzero? task))
     (let ((safe-remaining remaining-time))
       (when (< safe-remaining (the-as time-frame 0))
@@ -1347,7 +1347,7 @@
         ((nonzero? started?)
          (set! (-> task data-int32 9) 1)
          (set! (-> task start-time) (- (current-time) (- time-limit safe-remaining)))
-         (format 0 "[MP-Shuttle]   -> set start-time to ~D (current-time=~D, elapsed=~D)~%"
+         (debug-log *mp-debug-log?* "[MP-Shuttle] set start-time to ~D (current-time=~D, elapsed=~D)~%"
                  (-> task start-time) (current-time) (- time-limit safe-remaining))
          (set! (-> *game-info* timer) safe-remaining)
          (set! (-> *game-info* timer-flash) (< safe-remaining (seconds 10)))
@@ -1404,7 +1404,7 @@
       (when (or (> remote-sub-state (-> task sub-state))
                 (and (= remote-sub-state (-> task sub-state))
                      (nonzero? *mp-shuttle-started?*)))
-        (format 0 "[MP-Shuttle] Applying remote state task=~D sub=~D remaining=~D seq=~D~%"
+        (debug-log *mp-debug-log?* "[MP-Shuttle] Applying remote state task=~D sub=~D remaining=~D seq=~D~%"
                 task-node
                 remote-sub-state
                 *mp-shuttle-remaining-time*

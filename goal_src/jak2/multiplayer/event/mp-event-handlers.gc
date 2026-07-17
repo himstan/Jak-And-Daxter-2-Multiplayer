@@ -131,7 +131,7 @@
 (defun mp-event-handler-break ((aid uint))
   (let ((ent (entity-by-aid aid)))
     (when (and ent (nonzero? ent))
-      (format 0 "[MP-WorldEvent] Received MP_EVENT_BREAK for aid=~D Entity: ~A~%" aid ent)
+      (debug-log *mp-debug-log?* "[MP-Event-Handlers] Received MP_EVENT_BREAK for aid=~D Entity: ~A~%" aid ent)
       (let ((perm (-> ent extra perm)))
         (when (not (logtest? (-> perm status) (entity-perm-status dead subtask-complete)))
           (let ((proc (-> ent extra process)))
@@ -140,7 +140,7 @@
                  ;; CRITICAL SAFETY: Never 'break' an NPC or anything that shouldn't just die from a crate-break
                  ;; This prevents accidental mission failure if a client triggers an entity status change.
                  (if (mp-should-block-break-sync? proc)
-                      (format 0 "[MP-WorldEvent] Ignoring BREAK for important process ~A aid=~D~%" proc aid)
+                      (debug-log *mp-debug-log?* "[MP-Event-Handlers] Ignoring BREAK for important process ~A aid=~D~%" proc aid)
                       (begin
                         (logior! (-> perm status) (entity-perm-status dead subtask-complete))
                         (send-event proc 'attack #f (static-attack-info ((id (new-attack-id))
@@ -158,7 +158,7 @@
 
 (defun mp-event-handler-attack-enemy ((evt mp-actor-attack-event))
   (let ((net-id (-> evt net-id)))
-    (format 0 "[MP-WorldEvent] Received MP_EVENT_ATTACK_ENEMY for nid=~D attack-id=~D~%" net-id (-> evt attack-id))
+    (debug-log *mp-debug-log?* "[MP-Event-Handlers] Received MP_EVENT_ATTACK_ENEMY for nid=~D attack-id=~D~%" net-id (-> evt attack-id))
     (let ((proc (find-enemy-by-aid net-id)))
       (if (and proc (nonzero? proc))
           (let ((attacker *mp-puppet*)
@@ -166,22 +166,22 @@
                 (rec (mp-get-enemy-auth net-id)))
             (when (and attacker (nonzero? attacker))
               (when *mp-enemy-debug-auth?*
-                (format 0 "[MP-EnemyTrace] attack-replay aid=~D attack=~D owner=~D local=~D~%"
+                (debug-log *mp-debug-log?* "[MP-Event-Handlers] attack-replay aid=~D attack=~D owner=~D local=~D~%"
                         net-id
                         (-> evt attack-id)
                         (if rec (-> rec owner) 255)
                         (if (and *local-info* (nonzero? *local-info*)) (-> *local-info* role) 255)
                         )
-                (format 0 "[MP-EnemyTrace] attack-replay state=~A pending=~A hp=~D target-hp=~D~%"
+                (debug-log *mp-debug-log?* "[MP-Event-Handlers] attack-replay state=~A pending=~A hp=~D target-hp=~D~%"
                         (if (-> e-proc state) (-> e-proc state name) #f)
                         (if (-> e-proc next-state) (-> e-proc next-state name) #f)
                         (-> e-proc hit-points)
                         (-> evt new-hp))
                 )
-              (format 0 "[MP-WorldEvent] Applying Authoritative hit to ~A from remote attacker ~A nid=~D~%" proc attacker net-id)
+              (debug-log *mp-debug-log?* "[MP-Event-Handlers] Applying Authoritative hit to ~A from remote attacker ~A nid=~D~%" proc attacker net-id)
               (mp-actor-apply-authoritative-remote-damage! e-proc attacker evt 'enemy)
               (when *mp-enemy-debug-auth?*
-                (format 0 "[MP-EnemyTrace] attack-result aid=~D state=~A pending=~A hp=~D~%"
+                (debug-log *mp-debug-log?* "[MP-Event-Handlers] attack-result aid=~D state=~A pending=~A hp=~D~%"
                         net-id
                         (if (-> e-proc state) (-> e-proc state name) #f)
                         (if (-> e-proc next-state) (-> e-proc next-state name) #f)
@@ -195,7 +195,7 @@
                   (set! (-> e-proc focus handle) (process->handle attacker))
                   ))
             )
-          (format 0 "[MP-WorldEvent] ERROR: Could not find enemy process for nid=~D~%" net-id))
+          (debug-log *mp-debug-log?* "[MP-Event-Handlers] ERROR: Could not find enemy process for nid=~D~%" net-id))
       )
     )
   (none))
@@ -206,10 +206,10 @@
     (let ((proc (mp-pedestrian-find-by-net-id net-id)))
       (if (and proc (nonzero? proc))
         (begin
-          (format 0 "[MP-WorldEvent] Applying authoritative pedestrian hit from client context nid=~D attack-id=~D~%" net-id (-> evt attack-id))
+          (debug-log *mp-debug-log?* "[MP-Event-Handlers] Applying authoritative pedestrian hit from client context nid=~D attack-id=~D~%" net-id (-> evt attack-id))
           (mp-pedestrian-apply-remote-attack! evt)
         )
-        (format 0 "[MP-WorldEvent] ERROR: Could not find pedestrian for hit! nid=~D~%" net-id)
+        (debug-log *mp-debug-log?* "[MP-Event-Handlers] ERROR: Could not find pedestrian for hit! nid=~D~%" net-id)
       )
     )
   )
@@ -223,21 +223,21 @@
                (not (and (-> *target* next-state) (= (-> *target* next-state name) 'target-ride-along)))
                (not (= (-> *target* state name) 'target-ride-along)))
           (begin
-            (format 0 "[MP-WorldEvent] Local player hit! Applying authoritative damage.~%")
+            (debug-log *mp-debug-log?* "[MP-Event-Handlers] Local player hit! Applying authoritative damage.~%")
             (send-event *target* 'attack #f (static-attack-info ((id (new-attack-id)) (mode 'mp-hit-from-enemy)))))
-          (format 0 "[MP-WorldEvent] Local player hit ignored (Riding along).~%"))))
+          (debug-log *mp-debug-log?* "[MP-Event-Handlers] Local player hit ignored (Riding along).~%"))))
   (none))
 
 (defun mp-handle-remote-scene-hacks ((scene-name string))
   (case (string->symbol scene-name)
     (('city-get-yellow-gun)
       (when (and *target* (not (logtest? (-> *game-info* features) (game-feature gun-yellow))))
-         (format 0 "[MP] Received Gun Yellow sync! Giving to player.~%")
+         (debug-log *mp-debug-log?* "[MP-Event-Handlers] Received Gun Yellow sync! Giving to player.~%")
          (pickup-collectable! (-> *target* fact) (pickup-type gun-yellow) 1.0 (the-as handle #f))
          (task-close! "sewer-enemy-resolution")
     ))
     (('city-keira-hover-challenge-intro)
-      (format 0 "[MP] Received Keira Delivery Scene. Forcing task close.~%")
+      (debug-log *mp-debug-log?* "[MP-Event-Handlers] Received Keira Delivery Scene. Forcing task close.~%")
       (task-close! "city-keira-delivery-delivery")
     )
   )
@@ -270,11 +270,11 @@
   (when (mp-intro-samos-hut-scene? scene-name)
     (cond
       ((mp-is-jak?)
-       (format 0 "[MP-IntroSkip] Remote skipped intro-samos-hut. Host full sync pending.~%")
+       (debug-log *mp-debug-log?* "[MP-Event-Handlers] Remote skipped intro-samos-hut. Host full sync pending.~%")
        (set! *mp-intro-skip-full-sync-pending?* #t)
        )
       ((mp-is-daxter?)
-       (format 0 "[MP-IntroSkip] Remote skipped intro-samos-hut. Client blackout pending.~%")
+       (debug-log *mp-debug-log?* "[MP-Event-Handlers] Remote skipped intro-samos-hut. Client blackout pending.~%")
        (set! *mp-intro-skip-blackout-pending?* #t)
        )
       )
@@ -308,7 +308,7 @@
   "Consume the pending first-intro skip sync once the host is safely in prison."
   (when (and *mp-intro-skip-full-sync-pending?*
              (mp-intro-skip-host-ready-for-full-sync?))
-    (format 0 "[MP-IntroSkip] Host stable in prison. Requesting full sync for client.~%")
+    (debug-log *mp-debug-log?* "[MP-Event-Handlers] Host stable in prison. Requesting full sync for client.~%")
     (set! *mp-intro-skip-full-sync-pending?* #f)
     (pc-multi-request-full-sync)
     )
@@ -363,7 +363,7 @@
 
 (defun mp-log-pending-scene-sync-wait! ((reason string))
   (when (>= (current-time) *mp-pending-scene-sync-next-log-time*)
-    (format 0 "[MP-SceneSync] Waiting to start remote scene ~S (continue: ~S): ~A.~%"
+    (debug-log *mp-debug-log?* "[MP-Event-Handlers] Waiting to start remote scene ~S (continue: ~S): ~A.~%"
             *mp-pending-scene-sync-name*
             *mp-pending-scene-sync-continue-name*
             reason)
@@ -377,7 +377,7 @@
   (mp-copy-scene-sync-event-continue! *mp-pending-scene-sync-continue-name* evt)
   (set! *mp-pending-scene-sync?* #t)
   (set! *mp-pending-scene-sync-next-log-time* (the-as time-frame 0))
-  (format 0 "[MP-SceneSync] Armed remote scene sync for ~S (continue: ~S).~%"
+  (debug-log *mp-debug-log?* "[MP-Event-Handlers] Armed remote scene sync for ~S (continue: ~S).~%"
           *mp-pending-scene-sync-name*
           *mp-pending-scene-sync-continue-name*)
   (none)
@@ -579,7 +579,7 @@
        (set! *mp-scene-sync-target-hold?* #f)
        )
       ((>= (current-time) *mp-scene-sync-target-hold-until*)
-       (format 0 "[MP-SceneSync] Releasing scene target hold after timeout.~%")
+       (debug-log *mp-debug-log?* "[MP-Event-Handlers] Releasing scene target hold after timeout.~%")
        (set! *mp-scene-sync-target-hold?* #f)
        )
       (else
@@ -606,8 +606,8 @@
           (if (and npc (nonzero? npc))
               (let ((npc-proc (the-as process-drawable npc)))
                 (if (mp-scene-sync-use-entity-trigger? scene-name)
-                    (format 0 "[MP-WorldEvent] Found scene object ~S. Snapping and sending trigger.~%" entity-name)
-                    (format 0 "[MP-WorldEvent] Found NPC ~S. Snapping and signaling force-step.~%" entity-name)
+                    (debug-log *mp-debug-log?* "[MP-Event-Handlers] Found scene object ~S. Snapping and sending trigger.~%" entity-name)
+                    (debug-log *mp-debug-log?* "[MP-Event-Handlers] Found NPC ~S. Snapping and signaling force-step.~%" entity-name)
                     )
                 (when (and npc-proc
                            (nonzero? npc-proc)
@@ -628,7 +628,7 @@
                     (send-event npc 'mp-force-scene-step scene-name)
                     )
                 )
-              (format 0 "[MP-WorldEvent] NPC ~S not birthed yet. It should link via its own logic when it does.~%" entity-name)
+              (debug-log *mp-debug-log?* "[MP-Event-Handlers] NPC ~S not birthed yet. It should link via its own logic when it does.~%" entity-name)
               )
           )
         )
@@ -664,7 +664,7 @@
                                      *mp-pending-scene-sync-continue-name*
                                      (the-as string (-> scene-obj load-point-obj))
                                      )))
-                    (format 0 "[MP-WorldEvent] Spawning authoritative scene-player for ~S (continue: ~S)~%"
+                    (debug-log *mp-debug-log?* "[MP-Event-Handlers] Spawning authoritative scene-player for ~S (continue: ~S)~%"
                             scene-name
                             load-pt)
                     (let ((old-remote-context *mp-processing-remote-event*))
@@ -707,7 +707,7 @@
   (when *mp-pending-scene-sync?*
     (cond
       ((mp-local-scene-name-matches? *mp-pending-scene-sync-name*)
-       (format 0 "[MP-SceneSync] Pending remote scene ~S is already active locally; consuming it.~%"
+       (debug-log *mp-debug-log?* "[MP-Event-Handlers] Pending remote scene ~S is already active locally; consuming it.~%"
                *mp-pending-scene-sync-name*)
        (set! *mp-pending-scene-sync?* #f)
        (set! *mp-pending-scene-sync-next-log-time* (the-as time-frame 0))
@@ -751,13 +751,13 @@
     (when (and s* (nonzero? s*) (nonzero? (length s*)))
       (cond
         ((mp-ignore-intro-start-after-skip? s*)
-         (format 0 "[MP-IntroSkip] Ignoring post-skip intro scene start: ~S.~%" s*)
+         (debug-log *mp-debug-log?* "[MP-Event-Handlers] Ignoring post-skip intro scene start: ~S.~%" s*)
          )
         ((mp-duplicate-scene-start? s*)
-         (format 0 "[MP-Scene] Suppressing duplicate remote scene start: ~S~%" s*)
+         (debug-log *mp-debug-log?* "[MP-Event-Handlers] Suppressing duplicate remote scene start: ~S~%" s*)
          )
         (else
-         (format 0 "[MP-WorldEvent] Remote started scene: ~S. Waiting for level-ready NPC-sync.~%" s*)
+         (debug-log *mp-debug-log?* "[MP-Event-Handlers] Remote started scene: ~S. Waiting for level-ready NPC-sync.~%" s*)
          (set! *mp-last-remote-scene-active* (the uint 1))
          (set! *mp-remote-scene-start-packet-id*
                (if (and *remote-info* (nonzero? *remote-info*))
@@ -771,7 +771,7 @@
   (none))
 
 (defun mp-event-handler-scene-request-skip ((aid uint))
-  (format 0 "[MP-WorldEvent] Remote player requested to skip scene.~%")
+  (debug-log *mp-debug-log?* "[MP-Event-Handlers] Remote player requested to skip scene.~%")
   (set! *mp-remote-wants-skip* #t)
   (mp-arm-intro-skip-full-sync! *mp-scene-name-scratch*)
   (none))
@@ -780,7 +780,7 @@
   (set! *mp-last-remote-scene-active* (the uint 0))
   (set! *mp-remote-scene-start-packet-id* (the uint 0))
   (when *scene-player*
-    (format 0 "[MP-WorldEvent] All players skipped. Aborting locally.~%")
+    (debug-log *mp-debug-log?* "[MP-Event-Handlers] All players skipped. Aborting locally.~%")
     (send-event (ppointer->process *scene-player*) 'abort)
     ;; Force blackout off immediately to prevent getting stuck
     (mp-clear-client-presentation-blackout!)
@@ -795,12 +795,12 @@
         (local-role (the-as uint8 (-> *local-info* role)))
         (remote-role (the-as uint8 (if (= (-> *local-info* role) 0) 1 0))))
     (when rec
-      (format 0 "[MP-WorldEvent] Remote (Role ~D) requested authority over aid=~D.~%" remote-role aid)
+      (debug-log *mp-debug-log?* "[MP-Event-Handlers] Remote (Role ~D) requested authority over aid=~D.~%" remote-role aid)
       (when (or (mp-aid-dead-perm? aid)
                 (and proc
                      (nonzero? proc)
                      (mp-enemy-terminal-sync? (the-as enemy proc) aid)))
-        (format 0 "[MP-WorldEvent] Blocking authority request for terminal enemy aid=~D nid=~D~%"
+        (debug-log *mp-debug-log?* "[MP-Event-Handlers] Blocking authority request for terminal enemy aid=~D nid=~D~%"
                 aid
                 (if (and proc (nonzero? proc)) (-> (the-as enemy proc) net-id) (the uint 0)))
         (return #f)
@@ -817,7 +817,7 @@
             (set! should-yield? #t))
         
         (when should-yield?
-          (format 0 "[MP-WorldEvent] Yielding authority of aid=~D to remote.~%" aid)
+          (debug-log *mp-debug-log?* "[MP-Event-Handlers] Yielding authority of aid=~D to remote.~%" aid)
           (set! (-> rec owner) remote-role)
           (set! (-> rec last-transfer-time) (current-time)) ;; Prevent re-acquisition during handover
           (set! (-> rec last-remote-seen) (current-time))
@@ -844,13 +844,13 @@
                 (and proc
                      (nonzero? proc)
                      (mp-enemy-terminal-sync? (the-as enemy proc) aid)))
-        (format 0 "[MP-WorldEvent] Ignoring authority ack for terminal enemy aid=~D nid=~D~%"
+        (debug-log *mp-debug-log?* "[MP-Event-Handlers] Ignoring authority ack for terminal enemy aid=~D nid=~D~%"
                 aid
                 (if (and proc (nonzero? proc)) (-> (the-as enemy proc) net-id) (the uint 0)))
         (set! (-> rec just-taken-authority) #f)
         (return #f)
         )
-      (format 0 "[MP-WorldEvent] Remote granted authority over aid=~D. Taking ownership.~%" aid)
+      (debug-log *mp-debug-log?* "[MP-Event-Handlers] Remote granted authority over aid=~D. Taking ownership.~%" aid)
       (set! (-> rec owner) local-role)
       (set! (-> rec last-transfer-time) (current-time))
       (set! (-> rec just-taken-authority) #t)
@@ -863,7 +863,7 @@
   (when (and (mp-is-daxter?) (not (mp-is-jak?)))
     (let ((puppet *mp-puppet*))
       (when (and puppet (nonzero? puppet))
-        (format 0 "[MP-WorldEvent] Remote player activated Dark Jak! Triggering engine change-mode...~%")
+        (debug-log *mp-debug-log?* "[MP-Event-Handlers] Remote player activated Dark Jak! Triggering engine change-mode...~%")
         (send-event puppet 'change-mode 'darkjak #f (darkjak-stage active))
         (mp-darkjak-emit-puppet-transform-feedback! puppet *target*)
         )
@@ -876,7 +876,7 @@
   (when (and (mp-is-daxter?) (not (mp-is-jak?)))
     (let ((puppet *mp-puppet*))
       (when puppet
-        (format 0 "[MP-WorldEvent] Remote player deactivated Dark Jak! Triggering engine change-mode...~%")
+        (debug-log *mp-debug-log?* "[MP-Event-Handlers] Remote player deactivated Dark Jak! Triggering engine change-mode...~%")
         (send-event puppet 'change-mode 'normal #t)
         )
       )
@@ -914,7 +914,7 @@
 
 (defun mp-event-handler-mtn-plat-shoot ((evt mp-mtn-plat-shoot-event))
   (let ((aid (-> evt aid)))
-    (format 0 "[MP-WorldEvent] Received MP_EVENT_MTN_PLAT_SHOOT for aid=~D.~%" aid)
+    (debug-log *mp-debug-log?* "[MP-Event-Handlers] Received MP_EVENT_MTN_PLAT_SHOOT for aid=~D.~%" aid)
     (let ((ent (entity-by-aid aid)))
       (when (and ent (nonzero? ent))
         (let ((proc (-> ent extra process)))
@@ -968,7 +968,7 @@
 
 (defun mp-event-handler-mtn-dice ((evt mp-mtn-dice-event))
   (let ((aid (-> evt aid)))
-    (format 0 "[MP-WorldEvent] Received MP_EVENT_MTN_DICE for aid=~D.~%" aid)
+    (debug-log *mp-debug-log?* "[MP-Event-Handlers] Received MP_EVENT_MTN_DICE for aid=~D.~%" aid)
     (let ((ent (entity-by-aid aid)))
       (when (and ent (nonzero? ent))
         (let ((proc (-> ent extra process)))

@@ -1260,6 +1260,8 @@
 (define *mp-pending-scene-name* (new 'global 'string 64 (the-as string #f)))
 (define-perm *mp-debug-draw* symbol #f)
 (define-perm *mp-debug-network* symbol #f)
+(define-perm *mp-enemy-debug-auth?* symbol #f)
+(define-perm *mp-debug-log?* symbol *debug-segment*)
 (define-perm *mp-level-debug?* symbol #f)
 (define-perm *mp-airlock-debug?* symbol #f)
 (define-perm *mp-airlock-world-debug?* symbol #f)

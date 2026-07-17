@@ -411,11 +411,11 @@
       (when (and (mp-is-jak?) (!= (the uint local-state) *mp-last-local-state-id*))
         (cond
           ((= local-state (the uint (mp-target-state-id darkjak-get-on)))
-           (format 0 "[MP] Host entering Dark Jak! Broadcasting event...~%")
+           (debug-log *mp-debug-log?* "[MP-Player-Snapshot] Host entering Dark Jak! Broadcasting event...~%")
            (mp-send-world-event MP_EVENT_CHANGE_MODE_DARKJAK (the uint 0))
            )
           ((= local-state (the uint (mp-target-state-id darkjak-get-off)))
-           (format 0 "[MP] Host exiting Dark Jak! Broadcasting event...~%")
+           (debug-log *mp-debug-log?* "[MP-Player-Snapshot] Host exiting Dark Jak! Broadcasting event...~%")
            (mp-send-world-event MP_EVENT_END_MODE_DARKJAK (the uint 0))
            )
           )

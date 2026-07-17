@@ -36,32 +36,28 @@
              params
              (nonzero? params)
              (time-elapsed? *mp-pedestrian-missing-nav-log-time* (seconds 1)))
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "[MP-PedSpawn] ~S nid=~D type=~D state=~D "
       reason
       (-> slot net-id)
       (the uint (-> slot object-type))
       (the uint (-> slot state-id))
       )
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "nav-mesh=~A nav-branch=~A engine=~A riding=~A "
       (mp-pedestrian-param-nav-mesh-ready? params)
       (mp-pedestrian-param-nav-branch-ready? params)
       (mp-pedestrian-debug-engine-ready?)
       *mp-traffic-art-context-riding*
       )
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "local-level=~D remote-level=~D peds=~D vehs=~D "
       *mp-traffic-art-context-local-level*
       *mp-traffic-art-context-remote-level*
       *mp-traffic-art-context-ped-count*
       *mp-traffic-art-context-veh-count*
       )
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "pos=(~f,~f,~f)~%"
       (-> params position x)
       (-> params position y)
@@ -79,8 +75,7 @@
              (nonzero? params)
              (zero? (-> proc controller branch))
              (time-elapsed? *mp-pedestrian-branchless-log-time* (seconds 1)))
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "[MP-PedSpawn] ~S branchless-proc nid=~D type=~D nav=~A "
       reason
       (-> params net-id)
@@ -88,16 +83,14 @@
       (and (-> proc nav)
            (nonzero? (the-as uint (-> proc nav))))
       )
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "param-branch=~A riding=~A local-level=~D remote-level=~D "
       (mp-pedestrian-param-nav-branch-ready? params)
       *mp-traffic-art-context-riding*
       *mp-traffic-art-context-local-level*
       *mp-traffic-art-context-remote-level*
       )
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "proc-state=~S pos=(~f,~f,~f)~%"
       (if (and (-> proc state)
                (nonzero? (-> proc state)))
@@ -127,7 +120,7 @@
              (= (-> proc net-id) net-id)
              (or (focus-test? proc inactive)
                  (= (-> proc status) 'dead)))
-    (format 0 "[MP-Pedestrian-Puppet] Cleaning up stale ~A nid=~D pid=~D inactive=~A status=~A because it was dead/inactive" (-> proc name) (-> proc net-id) (-> proc pid) (focus-test? proc inactive) (-> proc status))
+    (debug-log *mp-debug-log?* "[MP-Pedestrian-Puppet] Cleaning up stale ~A nid=~D pid=~D inactive=~A status=~A because it was dead/inactive" (-> proc name) (-> proc net-id) (-> proc pid) (focus-test? proc inactive) (-> proc status))
     (set! (-> proc net-id) (the uint 0))
     )
   (none)
@@ -404,7 +397,7 @@
         (when (and spawned-proc (nonzero? spawned-proc) (type? spawned-proc citizen))
           (set! proc (the-as citizen spawned-proc))
           (send-event *traffic-manager* 'add-object (-> params object-type) proc)
-          (format 0
+          (debug-log *mp-debug-log?*
                   "[MP-ShuttleSpawn] nid=~D spawned=1 pos=(~f,~f,~f)~%"
                   (-> params net-id)
                   (-> params position x)
@@ -440,7 +433,7 @@
              (nonzero? (-> slot net-id)))
     (let ((proc (mp-traffic-spawn-transport-guard! (mp-pedestrian-slot-transport-id slot) (-> slot net-id))))
         (when (and proc (nonzero? proc))
-          (format 0 "[MP-PedSpawn] Transport guard puppet nid=~D transport-id=~D pid=~D~%" (-> slot net-id) (mp-pedestrian-slot-transport-id slot) (-> proc pid))
+          (debug-log *mp-debug-log?* "[MP-PedSpawn] Transport guard puppet nid=~D transport-id=~D pid=~D~%" (-> slot net-id) (mp-pedestrian-slot-transport-id slot) (-> proc pid))
           proc
         )
       )
@@ -464,7 +457,7 @@
             (let ((proc (mp-pedestrian-spawn-transport-guard-puppet slot)))
               (when (and proc
                          (nonzero? proc))
-                (format 0 "[Ped-Debug] Spawned ~A puppet in a transport with nid=~D pid=~D~%" (-> proc name) (-> proc net-id) (-> proc pid))                     
+                (debug-log *mp-debug-log?* "[Ped-Debug] Spawned ~A puppet in a transport with nid=~D pid=~D~%" (-> proc name) (-> proc net-id) (-> proc pid))
                 (set! spawned? #t)
                 )
               )
@@ -474,7 +467,7 @@
                   (let ((proc (mp-pedestrian-spawn-proc params)))
                     (when (and proc (nonzero? proc))
                       (mp-pedestrian-finish-spawn! proc params)
-                      (format 0 "[Ped-Debug] Spawned ~A puppet with nid=~D pid=~D~%" (-> proc name) (-> proc net-id) (-> proc pid))
+                      (debug-log *mp-debug-log?* "[Ped-Debug] Spawned ~A puppet with nid=~D pid=~D~%" (-> proc name) (-> proc net-id) (-> proc pid))
                       (set! spawned? #t)
                       )
                     )
@@ -520,13 +513,13 @@
       (set! (-> rec ghost-hp) (-> slot hp))
       (set! (-> rec ghost-target-aid) (-> slot target-aid))
       (when (mp-guard-target-debug-ready? (-> slot net-id))
-        (format 0
+        (debug-log *mp-debug-log?*
                 "[MP-GuardTarget] nid=~D phase=recv state=~S aid=~D "
                 (-> slot net-id)
                 (mp-ped-get-state-from-id (the uint (-> slot state-id)))
                 (-> rec ghost-target-aid)
                 )
-        (format 0
+        (debug-log *mp-debug-log?*
                 "focus=~S focus-type=~S traffic=~S traffic-type=~S lock=0~%"
                 'NONE
                 'none
@@ -542,7 +535,7 @@
   (when (and proc (nonzero? proc))
     (cond
       ((and (not (logtest? (-> proc enemy-flags) (enemy-flag stop-syncing))) (or (focus-test? proc inactive) (= (-> proc status) 'dead)))
-       (format 0 "[MP-Pedestrian-Puppet] Cleaning up ~A nid=~D pid=~D inactive=~A status=~A because it was dead/inactive~%" (-> proc name) (-> proc net-id) (-> proc pid) (focus-test? proc inactive) (-> proc status))
+       (debug-log *mp-debug-log?* "[MP-Pedestrian-Puppet] Cleaning up ~A nid=~D pid=~D inactive=~A status=~A because it was dead/inactive~%" (-> proc name) (-> proc net-id) (-> proc pid) (focus-test? proc inactive) (-> proc status))
        (set! (-> proc net-id) (the uint 0))
        )
       (else
@@ -562,7 +555,7 @@
             (mp-pedestrian-log-branchless-proc! 'ghost-update proc params)
             )
           (send-event proc 'traffic-off-force)
-          (format 0 "[MP-Pedestrian-Puppet] Force traffic off ~A nid=~D pid=~D inactive=~A status=~A because it was dead/inactive~%" (-> proc name) (-> proc net-id) (-> proc pid) (focus-test? proc inactive) (-> proc status))
+          (debug-log *mp-debug-log?* "[MP-Pedestrian-Puppet] Force traffic off ~A nid=~D pid=~D inactive=~A status=~A because it was dead/inactive~%" (-> proc name) (-> proc net-id) (-> proc pid) (focus-test? proc inactive) (-> proc status))
           (set! (-> proc net-id) (the uint 0))
           )
 

@@ -1008,7 +1008,7 @@ This gives us more freedom to write code how we want.
     (pc-multi-set-status (the-as int 5))
     (set! (-> *local-info* sync-flag) (the-as uint 0))
     
-    (format 0 "[MP-Host] Remote joined. Transitioning to engine loading flow...~%")
+    (debug-log *mp-debug-log?* "[MP-Host] Remote joined. Transitioning to engine loading flow...~%")
     (when (and *bigmap* (nonzero? *bigmap*))
       (set! (-> *bigmap* drawing-flag) #t)
       )

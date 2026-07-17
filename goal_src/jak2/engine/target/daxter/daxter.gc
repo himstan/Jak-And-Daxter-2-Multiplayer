@@ -497,7 +497,7 @@
           (go target-indax-start (the handle #f))
         )
         (begin
-          (format 0 "[MP] Triggered target-indax-exit. Next state: ~A ~%" (-> self next-state name))
+          (debug-log *mp-debug-log?* "[Daxter] Triggered target-indax-exit. Next state: ~A ~%" (-> self next-state name))
           (logclear! (-> self focus-status) (focus-status indax))
           (logclear! (-> self control root-prim prim-core action) (collide-action stuck-wall-escape))
           (set! (-> self control mod-surface) *walk-mods*)

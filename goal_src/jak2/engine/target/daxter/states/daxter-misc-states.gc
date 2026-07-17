@@ -83,7 +83,7 @@
     (logior! (-> self focus-status) (focus-status grabbed))
     (set! (-> self control unknown-word04) (the-as uint arg0))
     (logior! (-> self skel effect flags) (effect-control-flag ecf2))
-    (format 0 "[MP] Entered target-indax-grab with anim: ~A~%" arg0)
+    (debug-log *mp-debug-log?* "[Daxter-Misc-States] Entered target-indax-grab with anim: ~A~%" arg0)
     )
   :exit (behavior ()
     (set-time! (-> self ambient-time))

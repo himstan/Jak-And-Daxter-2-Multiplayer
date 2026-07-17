@@ -4160,6 +4160,10 @@
              (flag "Eye Debug View" *mp-eye-debug?* dm-boolean-toggle-pick-func)
              )
            (menu
+             "Log"
+             (flag "Debug Log" *mp-debug-log?* dm-boolean-toggle-pick-func)
+             )
+           (menu
              "Gun"
              (flag "Gun Debug Draw" *mp-gun-debug?* dm-boolean-toggle-pick-func)
              )
@@ -4183,6 +4187,7 @@
            (menu
             "Tasks"
             (flag "Task Debug Draw" *mp-debug-task-sync* dm-boolean-toggle-pick-func)
+            (flag "Waypoint Logs" *mp-waypoint-debug?* dm-boolean-toggle-pick-func)
              )
            (menu
             "Battle"

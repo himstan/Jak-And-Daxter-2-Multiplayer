@@ -1437,17 +1437,17 @@
 
 (defun sew-scare-grunt-get-grill-proc ((scare-grunt sew-scare-grunt)) sew-grill
   (when (or (not scare-grunt) (zero? scare-grunt))
-    (format 0 "[Sewer] Skipping scare manipy spawn: missing scare-grunt.~%")
+    (debug-log *mp-debug-log?* "[Sewer] Skipping scare manipy spawn: missing scare-grunt.~%")
     (return (the-as sew-grill #f))
     )
   (let ((grill-actor (-> scare-grunt grill-actor)))
     (when (or (not grill-actor) (zero? grill-actor))
-      (format 0 "[Sewer] Skipping scare manipy spawn: missing grill actor.~%")
+      (debug-log *mp-debug-log?* "[Sewer] Skipping scare manipy spawn: missing grill actor.~%")
       (return (the-as sew-grill #f))
       )
     (let ((grill-proc (the-as sew-grill (-> grill-actor extra process))))
       (when (or (not grill-proc) (zero? grill-proc))
-        (format 0 "[Sewer] Skipping scare manipy spawn: missing grill process.~%")
+        (debug-log *mp-debug-log?* "[Sewer] Skipping scare manipy spawn: missing grill process.~%")
         (return (the-as sew-grill #f))
         )
       grill-proc
@@ -1457,14 +1457,14 @@
 
 (defun sew-scare-grunt-get-grill-art-group () skeleton-group
   (when (or (not *level*) (zero? *level*))
-    (format 0 "[Sewer] Skipping scare manipy spawn: missing level.~%")
+    (debug-log *mp-debug-log?* "[Sewer] Skipping scare manipy spawn: missing level.~%")
     (return (the-as skeleton-group #f))
     )
   (let ((grill-art-group
           (the-as skeleton-group
             (art-group-get-by-name *level* "skel-sew-grill" (the-as (pointer uint32) #f)))))
     (when (or (not grill-art-group) (zero? grill-art-group))
-      (format 0 "[Sewer] Skipping scare manipy spawn: missing skel-sew-grill art group.~%")
+      (debug-log *mp-debug-log?* "[Sewer] Skipping scare manipy spawn: missing skel-sew-grill art group.~%")
       (return (the-as skeleton-group #f))
       )
     grill-art-group
@@ -1477,7 +1477,7 @@
                                           (manipy-proc manipy)) symbol
   (let ((manipy-draw (-> manipy-proc draw)))
     (when (or (not manipy-draw) (zero? manipy-draw))
-      (format 0 "[Sewer] Scare manipy spawned without draw control for grill aid=~D.~%"
+      (debug-log *mp-debug-log?* "[Sewer] Scare manipy spawned without draw control for grill aid=~D.~%"
               (-> grill-entity aid))
       (deactivate manipy-proc)
       (return #f)
@@ -1486,7 +1486,7 @@
     (send-event manipy-proc 'anim-mode 'clone-anim)
     (set! (-> manipy-draw light-index) (-> grill-draw light-index))
     (logior! (-> grill-draw status) (draw-control-status no-draw))
-    (format 0 "[Sewer] Spawned scare manipy ~A from grill aid=~D.~%"
+    (debug-log *mp-debug-log?* "[Sewer] Spawned scare manipy ~A from grill aid=~D.~%"
             manipy-proc
             (-> grill-entity aid))
     )
@@ -1501,18 +1501,18 @@
       )
     (let ((scare-root (-> scare-grunt root)))
       (when (or (not scare-root) (zero? scare-root))
-        (format 0 "[Sewer] Skipping scare manipy spawn: missing scare-grunt root.~%")
+        (debug-log *mp-debug-log?* "[Sewer] Skipping scare manipy spawn: missing scare-grunt root.~%")
         (return #f)
         )
       (let ((grill-entity (-> grill-proc entity))
             (grill-draw (-> grill-proc draw))
             (grill-art-group (sew-scare-grunt-get-grill-art-group)))
         (when (or (not grill-entity) (zero? grill-entity))
-          (format 0 "[Sewer] Skipping scare manipy spawn: missing grill entity.~%")
+          (debug-log *mp-debug-log?* "[Sewer] Skipping scare manipy spawn: missing grill entity.~%")
           (return #f)
           )
         (when (or (not grill-draw) (zero? grill-draw))
-          (format 0 "[Sewer] Skipping scare manipy spawn: missing grill draw control.~%")
+          (debug-log *mp-debug-log?* "[Sewer] Skipping scare manipy spawn: missing grill draw control.~%")
           (return #f)
           )
         (when (or (not grill-art-group) (zero? grill-art-group))
@@ -1531,7 +1531,7 @@
                     :to scare-grunt
                     ))))
           (when (or (not manipy-proc) (zero? manipy-proc))
-            (format 0 "[Sewer] Scare manipy process-spawn failed for grill aid=~D.~%"
+            (debug-log *mp-debug-log?* "[Sewer] Scare manipy process-spawn failed for grill aid=~D.~%"
                     (-> grill-entity aid))
             (return #f)
             )

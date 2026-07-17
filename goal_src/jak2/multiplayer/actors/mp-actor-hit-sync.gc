@@ -190,28 +190,28 @@
                                                     (label symbol))
   "Apply an authoritative actor hit without duplicating pedestrian/enemy hit logic."
   (when (or (not e-proc) (not (nonzero? e-proc)))
-    (format 0 "[MP-ActorHit] Remote ~A hit blocked: missing proc nid=~D attack-id=~D~%"
+    (debug-log *mp-debug-log?* "[MP-ActorHit] Remote ~A hit blocked: missing proc nid=~D attack-id=~D~%"
             label
             (-> evt net-id)
             (-> evt attack-id))
     (return #f)
     )
   (when (or (not attacker) (not (nonzero? attacker)) (not (type? attacker process-drawable)))
-    (format 0 "[MP-ActorHit] Remote ~A hit blocked: missing attacker nid=~D attack-id=~D~%"
+    (debug-log *mp-debug-log?* "[MP-ActorHit] Remote ~A hit blocked: missing attacker nid=~D attack-id=~D~%"
             label
             (-> evt net-id)
             (-> evt attack-id))
     (return #f)
     )
   (when (<= (-> e-proc hit-points) 0)
-    (format 0 "[MP-ActorHit] Remote ~A hit blocked: already dead nid=~D attack-id=~D~%"
+    (debug-log *mp-debug-log?* "[MP-ActorHit] Remote ~A hit blocked: already dead nid=~D attack-id=~D~%"
             label
             (-> evt net-id)
             (-> evt attack-id))
     (return #f)
     )
   (when (logtest? (-> e-proc focus-status) (focus-status grabbed))
-    (format 0 "[MP-ActorHit] Remote ~A hit blocked: grabbed nid=~D attack-id=~D~%"
+    (debug-log *mp-debug-log?* "[MP-ActorHit] Remote ~A hit blocked: grabbed nid=~D attack-id=~D~%"
             label
             (-> evt net-id)
             (-> evt attack-id))
@@ -235,7 +235,7 @@
           (logior! (-> e-proc enemy-flags) (enemy-flag stop-syncing))
           (when (nonzero? aid)
             (mp-mark-aid-dead-perm! aid)
-            (format 0 "[MP-ActorHit] Fatal remote enemy hit finalized nid=~D aid=~D new-hp=0~%"
+            (debug-log *mp-debug-log?* "[MP-ActorHit] Fatal remote enemy hit finalized nid=~D aid=~D new-hp=0~%"
                     (-> evt net-id)
                     aid)
             )
@@ -246,7 +246,7 @@
       (when (> damage-taken 0)
         (mp-play-remote-hit-sound! e-proc (-> evt hit-sound-id))
         )
-      (format 0 "[MP-ActorHit] Remote ~A hit applied nid=~D attack-id=~D damage=~D hp=~D->~D~%"
+      (debug-log *mp-debug-log?* "[MP-ActorHit] Remote ~A hit applied nid=~D attack-id=~D damage=~D hp=~D->~D~%"
               label
               (-> evt net-id)
               (-> evt attack-id)
@@ -400,14 +400,14 @@
       (set! (-> evt penetrate) (the-as uint penetrate))
       (mp-actor-capture-source-pos! evt e-proc attacker info)
       (mp-actor-capture-attack-dir! evt e-proc info)
-      (format 0 "[MP-ActorHit] Queue event=~D nid=~D attack-id=~D damage=~D new-hp=~D penetrate=~D "
+      (debug-log *mp-debug-log?* "[MP-ActorHit] Queue event=~D nid=~D attack-id=~D damage=~D new-hp=~D penetrate=~D "
               event-type
               net-id
               (-> evt attack-id)
               damage
               new-hp
               (-> evt penetrate))
-      (format 0 "knock=~D~%" (-> evt knocked-type))
+      (debug-log *mp-debug-log?* "knock=~D~%" (-> evt knocked-type))
       )
     (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
     )
@@ -565,7 +565,7 @@
                   (mp-actor-send-attack-event! e-proc attacker info arg3 MP_EVENT_ATTACK_PED net-id (-> e-proc hit-points))
                   )
                 (when (not rec)
-                  (format 0
+                  (debug-log *mp-debug-log?*
                           "[MP-ActorHit] Ped broadcast blocked: missing traffic ghost nid=~D~%"
                           net-id))
                 )

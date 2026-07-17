@@ -7,7 +7,7 @@
              (nonzero? *setting-control*))
     (remove-setting! 'airlock)
     (apply-settings *setting-control*)
-    (format 0 "[MP-TaskSync] Cleared atoll Sig airlock setting after remote task close.~%")
+    (debug-log *mp-debug-log?* "[MP-TaskSync] Cleared atoll Sig airlock setting after remote task close.~%")
     )
   (none))
 
@@ -18,7 +18,7 @@
     (remove-setting! 'sound-mode)
     (remove-setting! 'airlock)
     (apply-settings *setting-control*)
-    (format 0 "[MP-TaskSync] Cleared atoll battle settings after remote task close.~%")
+    (debug-log *mp-debug-log?* "[MP-TaskSync] Cleared atoll battle settings after remote task close.~%")
     )
   (none))
 

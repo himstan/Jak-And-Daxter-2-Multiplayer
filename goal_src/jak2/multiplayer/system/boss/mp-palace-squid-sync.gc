@@ -215,7 +215,7 @@
         (set! *mp-palace-squid-last-applied-state* (-> slot state-id))
         (mp-palace-squid-go-state! proc (-> slot state-id))
         (let ((new-name (mp-palace-squid-current-state-name proc)))
-          (format 0 "[MP-BOSS] State change (REMOTE SYNC): ~S -> ~S~%" old-name new-name)
+          (debug-log *mp-debug-log?* "[MP-BOSS] State change (REMOTE SYNC): ~S -> ~S~%" old-name new-name)
           (set! *mp-palace-squid-last-state-name* new-name)
           )
         )
@@ -469,7 +469,7 @@
           ;; then the squid changed state for a local reason (e.g. an internal go).
           (let ((cur-name (mp-palace-squid-current-state-name proc)))
             (when (and cur-name (!= cur-name *mp-palace-squid-last-state-name*))
-              (format 0 "[MP-BOSS] State change (LOCAL): ~S -> ~S~%"
+              (debug-log *mp-debug-log?* "[MP-BOSS] State change (LOCAL): ~S -> ~S~%"
                       *mp-palace-squid-last-state-name* cur-name)
               (set! *mp-palace-squid-last-state-name* cur-name)
               )

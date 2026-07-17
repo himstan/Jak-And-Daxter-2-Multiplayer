@@ -3,9 +3,11 @@
 #include <chrono>
 #include <algorithm>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <list>
 #include <random>
+#include <sstream>
 #include <thread>
 
 #define MINIAUDIO_IMPLEMENTATION
@@ -1307,6 +1309,19 @@ time_t pc_get_unix_timestamp() {
   return std::time(nullptr);
 }
 
+u64 pc_get_local_timestamp() {
+  const auto now = std::chrono::system_clock::now();
+  const auto milliseconds =
+      std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+  const auto centiseconds = (milliseconds / 10) % 100;
+  const auto time = std::chrono::system_clock::to_time_t(now);
+  const auto local_time = *std::localtime(&time);
+  std::ostringstream timestamp;
+  timestamp << std::put_time(&local_time, "%Y-%m-%dT%H:%M:%S") << "." << std::setfill('0')
+            << std::setw(2) << centiseconds;
+  return g_pc_port_funcs.make_string_from_c(timestamp.str().c_str());
+}
+
 u64 pc_filepath_exists(u32 filepath) {
   auto filepath_str = std::string(Ptr<String>(filepath).c()->data());
   return bool_to_symbol(fs::exists(filepath_str));
@@ -1465,6 +1480,7 @@ void init_common_pc_port_functions(
   // Return the current OS as a symbol. Actually returns what it was compiled for!
   make_func_symbol_func("pc-get-os", (void*)pc_get_os);
   make_func_symbol_func("pc-get-unix-timestamp", (void*)pc_get_unix_timestamp);
+  make_func_symbol_func("pc-get-local-timestamp", (void*)pc_get_local_timestamp);
   make_func_symbol_func("pc-treat-pad0-as-pad1", (void*)pc_treat_pad0_as_pad1);
   make_func_symbol_func("pc-is-imgui-visible?", (void*)pc_is_imgui_visible);
 

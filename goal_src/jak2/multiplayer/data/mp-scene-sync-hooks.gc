@@ -53,7 +53,7 @@
                (nonzero? *camera*)
                *camera-combiner*
                (nonzero? *camera-combiner*))
-      (format 0 "[MP-SceneHook] Repairing camera after ~S.~%" scene-name)
+      (debug-log *mp-debug-log?* "[MP-SceneHook] Repairing camera after ~S.~%" scene-name)
       (set! *external-cam-mode* #f)
       (cam-start #t)
       (when (and *camera*

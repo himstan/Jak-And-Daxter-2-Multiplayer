@@ -146,7 +146,7 @@
                (= phase MP_WARP_GATE_PHASE_BEGIN)
                gate-proc
                (nonzero? gate-proc))
-      (format 0 "[MP-WarpGate] Following remote gate locally for ride-along.~%")
+      (debug-log *mp-debug-log?* "[MP-WarpGate] Following remote gate locally for ride-along.~%")
       (set! *has-ridden-before?* #f)
       (send-event gate-proc 'mp-use)
       )

@@ -1447,7 +1447,7 @@
   :virtual #t
   :code (behavior ((arg0 symbol) (arg1 handle))
     (let ((p-type (if (-> self fact) (-> self fact pickup-type) (pickup-type none))))
-      (format 0 "[MP] Money pickup: type ~D, entity ~A, handle-proc ~A~%" p-type (-> self entity) (handle->process arg1))
+      (debug-log *mp-debug-log?* "[Collectables] Money pickup: type ~D, entity ~A, handle-proc ~A~%" p-type (-> self entity) (handle->process arg1))
       (if (handle->process arg1)
           (cond
             ((and (= p-type (pickup-type skill)) (-> self entity) (nonzero? (-> self entity)))

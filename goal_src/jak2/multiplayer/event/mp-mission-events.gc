@@ -73,8 +73,7 @@
         (set! (-> evt breed-index) (the-as uint32 breed-index))
         (set! (-> evt initial?) (if initial? (the-as uint32 1) (the-as uint32 0)))
         (set! (-> evt enemy-aid) (the-as uint32 enemy-aid))
-        (format
-          0
+        (debug-log *mp-debug-log?*
           "[MP-BattleEvent][~A][SEND] evt=~D battle=~S spawner=~D breed=~D~%"
           (if (mp-is-jak?) "HOST" "CLIENT")
           battle-evt
@@ -82,15 +81,13 @@
           spawner-index
           breed-index
           )
-        (format
-          0
+        (debug-log *mp-debug-log?*
           "[MP-BattleEvent][~A][SEND] initial=~A aid=~D~%"
           (if (mp-is-jak?) "HOST" "CLIENT")
           initial?
           enemy-aid
           )
-        (format
-          0
+        (debug-log *mp-debug-log?*
           "[MP-BattleEvent][~A][SEND] queued q=~D~%"
           (if (mp-is-jak?) "HOST" "CLIENT")
           q-idx
@@ -284,13 +281,13 @@
               (case evt-msg
                 (('leave)
                  (when (and p-name (!= p-name ""))
-                   (format 0 "[MP-MissionEvent] Host triggered 'leave' for actor ~S. Syncing...~%" p-name)
+                   (debug-log *mp-debug-log?* "[MP-MissionEvent] Host triggered 'leave' for actor ~S. Syncing...~%" p-name)
                    (mp-send-mission-event p-name MP_MISSION_EVT_LEAVE)
                    )
                  )
                 (('play-scene)
                  (when (and p-name (!= p-name ""))
-                   (format 0 "[MP-MissionEvent] Host triggered 'play-scene' for actor ~S. Syncing...~%" p-name)
+                   (debug-log *mp-debug-log?* "[MP-MissionEvent] Host triggered 'play-scene' for actor ~S. Syncing...~%" p-name)
                    (mp-send-mission-event p-name MP_MISSION_EVT_PLAY_SCENE)
                    )
                  )
