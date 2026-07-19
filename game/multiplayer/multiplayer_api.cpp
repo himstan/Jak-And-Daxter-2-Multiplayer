@@ -4,6 +4,10 @@
 #include <limits>
 #include <string>
 
+#ifdef OS_POSIX
+#include <netdb.h>
+#endif
+
 #include "common/cross_sockets/XSocket.h"
 #include "common/goal_constants.h"
 #include "common/log/log.h"

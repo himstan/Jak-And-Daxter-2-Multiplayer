@@ -405,6 +405,7 @@ target_link_libraries(runtime common fmt enet SDL3::SDL3 imgui discord-rpc sound
 if(WIN32)
     target_link_libraries(runtime mman ole32 oleaut32 iphlpapi libsodium)
 else()
+    target_include_directories(runtime PRIVATE "${LIBSODIUM_INCLUDE_DIR}")
     target_link_libraries(runtime pthread dl libsodium)
 endif()
 
