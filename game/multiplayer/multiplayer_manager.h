@@ -9,6 +9,7 @@ class MultiplayerManager {
   static void setup_host(MultiplayerData& data, bool internet_host);
   static void setup_client(MultiplayerData& data, const char* ip, int port);
   static void disconnect(MultiplayerData& data);
+  static bool retry_online_setup(MultiplayerData& data);
 
   static void broadcast(MultiplayerData& data,
                         int channel,
@@ -32,3 +33,5 @@ class MultiplayerManager {
  private:
   static void discovery_responder_func(MultiplayerData* data);
 };
+
+int multiplayer_host_invite_status(MultiplayerData& data);

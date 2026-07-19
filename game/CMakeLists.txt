@@ -347,11 +347,13 @@ set(RUNTIME_SOURCE
         system/iop_thread.cpp
         multiplayer/multiplayer.cpp
         multiplayer/multiplayer_api.cpp
+        multiplayer/multiplayer_direct_connect.cpp
         multiplayer/multiplayer_manager.cpp
         multiplayer/multiplayer_packet.cpp
         multiplayer/multiplayer_port_mapping.cpp
         multiplayer/multiplayer_scanner.cpp
         multiplayer/multiplayer_security.cpp
+        multiplayer/multiplayer_version.cpp
         multiplayer/multiplayer_session.cpp
         multiplayer/multiplayer_stats.cpp
         multiplayer/sync/airlock_sync.cpp

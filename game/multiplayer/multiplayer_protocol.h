@@ -4,7 +4,7 @@
 
 #pragma pack(push, 1)
 
-const int DISCOVERY_PORT = 3001;
+const int DISCOVERY_PORT = 26211;
 const char* const DISCOVERY_MAGIC = "OG_MP_DISCOVERY";
 
 enum class MultiplayerChannel : uint8_t {
@@ -22,7 +22,9 @@ enum class MultiplayerStatus : int32_t {
   IN_GAME = 6,
   RECONNECTING = 7,
   HOST_LEFT = 8,
-  FAILED = -1
+  FAILED = -1,
+  VERSION_MISMATCH = -2,
+  TOKEN_DISCOVERY_FAILED = -3
 };
 
 enum class PacketType : uint8_t {
@@ -95,7 +97,8 @@ struct PacketPlayerState {
   uint32_t action_seq;
   uint32_t action_state_id;
 };
-static_assert(sizeof(PacketPlayerState) == 340, "PacketPlayerState wire layout must remain explicit");
+static_assert(sizeof(PacketPlayerState) == 340,
+              "PacketPlayerState wire layout must remain explicit");
 
 struct PacketTurretState {
   PacketHeader header;
@@ -107,7 +110,7 @@ struct PacketTurretState {
 
 struct PacketGameEvent {
   PacketHeader header;
-  uint8_t pad[3]; // Align to 8 bytes for GOAL mapping
+  uint8_t pad[3];  // Align to 8 bytes for GOAL mapping
   uint8_t raw_data[496];
 };
 
@@ -129,7 +132,7 @@ struct MPEnemyState {
   uint32_t actor_id;
   float x, y, z;
   float quat_x, quat_y, quat_z, quat_w;
-  float pad1[3]; // Removed anim_index, anim_frame, last_anim_frame
+  float pad1[3];  // Removed anim_index, anim_frame, last_anim_frame
   int32_t hp;
   uint32_t state;
   uint32_t focus_aid;
@@ -137,8 +140,8 @@ struct MPEnemyState {
   uint8_t owner;
   uint8_t is_aggro;
   uint8_t pad[5];
-  uint64_t last_updated; // Cross-referenced with C++ enet_time_get()
-  uint8_t pad_align[8];  // Pad to 80 bytes (16-byte alignment from GOAL)
+  uint64_t last_updated;  // Cross-referenced with C++ enet_time_get()
+  uint8_t pad_align[8];   // Pad to 80 bytes (16-byte alignment from GOAL)
 };
 
 // Packed structure for network transmission only
@@ -149,8 +152,8 @@ struct MPEnemyStatePacked {
   int32_t hp;
   uint8_t state;
   uint32_t focus_aid;
-  uint8_t flags; // Bitmask: [0: attack_flag, 1: owner, 2: is_aggro]
-  uint8_t pad[1]; // Total size: 32 bytes (4-byte aligned)
+  uint8_t flags;   // Bitmask: [0: attack_flag, 1: owner, 2: is_aggro]
+  uint8_t pad[1];  // Total size: 32 bytes (4-byte aligned)
 };
 
 struct PacketEnemySync {
@@ -176,7 +179,7 @@ struct MPPedestrianState {
   float quat_x, quat_y, quat_z, quat_w;
   int32_t hp;
   uint8_t flags;
-  uint8_t target_aid; // 0 = none, 1 = Host, 2 = Client
+  uint8_t target_aid;  // 0 = none, 1 = Host, 2 = Client
   uint8_t context_align[2];
   uint32_t animation_profile;
   uint32_t vehicle_net_id;
@@ -193,17 +196,15 @@ struct MPPedestrianStatePacked {
   float x, y, z;
   int16_t quat[4];
   int32_t hp;
-  uint8_t state_id;   // Replaces int16_t anim_index
-  uint8_t target_aid; // Replaces int16_t anim_speed
+  uint8_t state_id;    // Replaces int16_t anim_index
+  uint8_t target_aid;  // Replaces int16_t anim_speed
   uint32_t animation_profile;
   uint32_t vehicle_net_id;
   uint32_t transport_id;
   uint8_t transport_side;
   uint8_t pad[3];
 };
-static_assert(sizeof(MPPedestrianStatePacked) == 48,
-              "MPPedestrianStatePacked must be 48 bytes");
-
+static_assert(sizeof(MPPedestrianStatePacked) == 48, "MPPedestrianStatePacked must be 48 bytes");
 
 struct PacketPedestrianSync {
   PacketHeader header;
@@ -221,8 +222,8 @@ struct MPVehicleStatePacked {
   uint8_t target_aid;
   float x, y, z;
   int16_t quat[4];
-  int16_t lin_vel[3]; // Downcast
-  int16_t ang_vel[3]; // Downcast
+  int16_t lin_vel[3];  // Downcast
+  int16_t ang_vel[3];  // Downcast
   uint8_t state_flags;
   uint32_t rider_aids[4];
 };

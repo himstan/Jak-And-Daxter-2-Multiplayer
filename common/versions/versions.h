@@ -74,3 +74,4 @@ std::string version_to_game_name_external(GameVersion v);
 std::vector<std::string> valid_game_version_names();
 
 std::string build_revision();
+std::string build_commit();

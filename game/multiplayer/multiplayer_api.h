@@ -3,6 +3,9 @@
 #include "common/common_types.h"
 
 int pc_multi_get_role();
+int pc_multi_set_local_version(u32 version_ptr);
+u64 pc_multi_get_local_version();
+u64 pc_multi_get_required_version();
 void pc_multi_poll(u32 local_ptr, u32 remote_ptr);
 void pc_multi_send_state(u32 local_ptr);
 void pc_multi_receive_state(u32 remote_ptr);
@@ -23,19 +26,26 @@ void pc_multi_disconnect();
 void pc_multi_setup_host();
 void pc_multi_setup_internet_host();
 void pc_multi_setup_client(u32 ip_ptr, u32 port);
-int pc_multi_get_status();
+int64_t pc_multi_get_status();
 void pc_multi_set_status(int status);
 void pc_multi_request_full_sync();
 void pc_multi_stop_search();
 void pc_multi_start_search();
 u64 pc_multi_get_command_line_arg(u32 str_ptr);
 void pc_multi_connect_found_host();
-int pc_multi_host_invite_ready();
+int pc_multi_get_host_invite_status();
+int pc_multi_retry_online_setup();
 int pc_multi_copy_invite();
 int pc_multi_stage_clipboard_invite();
 int pc_multi_get_staged_invite_status();
 void pc_multi_connect_staged_invite();
 void pc_multi_clear_staged_invite();
+void pc_multi_clear_direct_connect();
+void pc_multi_reset_direct_connect();
+u64 pc_multi_get_direct_field(int field);
+int pc_multi_edit_direct_field(int field, u32 key);
+int pc_multi_direct_connect_ready();
+int pc_multi_connect_direct();
 void pc_multi_debug_stop_receive(u32 val);
 u64 pc_multi_get_ticks();
 int pc_multi_get_ping();

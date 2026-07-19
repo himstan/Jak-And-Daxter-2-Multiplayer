@@ -70,6 +70,7 @@
 
 (defun mp-start-host-from-cli! ((internet-host? symbol))
   (debug-log *mp-debug-log?* "[MP-Session] Hosting via CLI argument.~%")
+  (mp-configure-bridge-version!)
   (if internet-host?
       (pc-multi-setup-internet-host)
       (pc-multi-setup-host)
@@ -79,12 +80,15 @@
   (none))
 
 (defun mp-start-client-from-cli! ((client-arg string))
-  (debug-log *mp-debug-log?* "[MP-Session] Connecting via CLI argument.~%")
+  (debug-log *mp-debug-log?* "[MP-Session] Starting client via CLI argument.~%")
+  (mp-clear-version-mismatch-ui!)
+  (mp-configure-bridge-version!)
   (pc-multi-setup-client client-arg 26210)
   (none))
 
 (defun mp-start-host-from-settings! ()
   (debug-log *mp-debug-log?* "[MP-Session] Hosting mode active (from settings). Initializing server...~%")
+  (mp-configure-bridge-version!)
   (if (and *pc-settings* (nonzero? (the-as uint *pc-settings*))
            (-> *pc-settings* mp-internet-host?))
       (pc-multi-setup-internet-host)
@@ -126,6 +130,7 @@
   (set! *multi-sync-enabled?* #f)
   (set! *mp-reconnect-menu-active?* #f)
   (set! *mp-host-left-menu-active?* #f)
+  (mp-clear-version-mismatch-ui!)
   (set! *mp-reconnect-process* (the-as handle #f))
   (set! *multi-last-send-time* (the-as time-frame 0))
   (none))
@@ -196,8 +201,49 @@
     )
   (none))
 
+(defun mp-show-version-mismatch-ui! ()
+  (when (mp-cache-required-version!)
+    (cond
+      ((and *progress-process*
+            (nonzero? (the-as uint *progress-process*)))
+       (let ((progress-obj (-> *progress-process* 0)))
+         (when (and progress-obj
+                    (nonzero? (the-as uint progress-obj)))
+           (set! *mp-version-mismatch-menu-active?* #t)
+           (sound-play "menu-error")
+           (set-next-state progress-obj 'version-mismatch 0)
+           )
+         )
+       )
+      ((and *dproc*
+            (nonzero? (the-as uint *dproc*)))
+       (set! *mp-version-mismatch-menu-active?* #t)
+       (sound-play "menu-error")
+       (activate-progress *dproc* 'version-mismatch)
+       )
+      )
+    )
+  (none))
+
+(defun mp-update-version-mismatch-ui! ((status int))
+  (when (and (= status -2)
+             (not *mp-version-mismatch-menu-active?*))
+    (mp-show-version-mismatch-ui!)
+    )
+  (none))
+
+(defun mp-connect-discovered-host-if-ready! ((status int))
+  (if (= status 2)
+      (begin
+        (pc-multi-connect-found-host)
+        (pc-multi-get-status)
+        )
+      status
+      )
+  )
+
 (defun mp-session-tick ()
-  (let ((status (pc-multi-get-status)))
+  (let ((status (mp-connect-discovered-host-if-ready! (pc-multi-get-status))))
     (when (or (< status 3) (= status 7) (= status 8))
       (mp-clear-connected-scene-broadcast!)
       )
@@ -332,6 +378,7 @@
   (let ((status (pc-multi-get-status)))
     (mp-update-reconnect-ui! status)
     (mp-update-host-left-ui! status)
+    (mp-update-version-mismatch-ui! status)
     )
   (mp-demo-guard-tick)
   (none))

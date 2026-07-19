@@ -16,7 +16,15 @@ struct MPPortMappingResult {
   const char* error = "";
 };
 
+enum class MPPortMappingState {
+  IDLE,
+  PENDING,
+  READY,
+  FAILED,
+};
+
 MPPortMappingResult mp_open_udp_port_mapping(uint16_t local_port, uint16_t external_port);
+bool mp_is_public_ipv4(const std::string& address);
 bool mp_refresh_udp_port_mapping(MPPortMappingMethod method,
                                  uint16_t local_port,
                                  uint16_t external_port);

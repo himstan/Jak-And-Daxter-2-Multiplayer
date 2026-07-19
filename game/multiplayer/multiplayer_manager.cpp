@@ -1,22 +1,27 @@
 #include "multiplayer_manager.h"
-#include "multiplayer_protocol.h"
-#include "multiplayer_packet.h"
-#include "multiplayer_port_mapping.h"
-#include "multiplayer_session.h"
-#include "common/log/log.h"
-#include "common/cross_sockets/XSocket.h"
-#include "enet/enet.h"
 
 #include <chrono>
+
+#include "multiplayer_packet.h"
+#include "multiplayer_port_mapping.h"
+#include "multiplayer_protocol.h"
+#include "multiplayer_session.h"
+
+#include "common/cross_sockets/XSocket.h"
+#include "common/log/log.h"
+
+#include "enet/enet.h"
 
 namespace {
 constexpr size_t kMaxGameplayPeers = 8;
 constexpr auto kPortMappingRefreshInterval = std::chrono::hours(1);
+constexpr auto kPortMappingRefreshRetryDelay = std::chrono::seconds(5);
+constexpr int kPortMappingRefreshAttempts = 3;
 
 bool wait_for_mapping_stop(MultiplayerData& data, std::chrono::milliseconds duration) {
   std::unique_lock<std::mutex> lock(data.port_mapping_mutex);
-  return data.port_mapping_cv.wait_for(
-      lock, duration, [&data]() { return data.port_mapping_worker_stop.load(); });
+  return data.port_mapping_cv.wait_for(lock, duration,
+                                       [&data]() { return data.port_mapping_worker_stop.load(); });
 }
 
 void start_port_mapping_worker(MultiplayerData& data, uint16_t local_port, uint16_t external_port) {
@@ -27,15 +32,13 @@ void start_port_mapping_worker(MultiplayerData& data, uint16_t local_port, uint1
   }
 
   data.port_mapping_worker_stop = false;
-  ++data.port_mapping_generation;
   {
     std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
-    data.port_mapping_active = false;
+    data.port_mapping_state = MPPortMappingState::PENDING;
     data.port_mapping_method = MPPortMappingMethod::NONE;
     data.port_mapping_local_port = local_port;
     data.port_mapping_external_port = external_port;
     data.port_mapping_external_ip.clear();
-    data.last_port_mapping_refresh_time = 0;
   }
 
   data.port_mapping_thread = std::thread([&data, local_port, external_port]() {
@@ -51,54 +54,74 @@ void start_port_mapping_worker(MultiplayerData& data, uint16_t local_port, uint1
       return;
     }
 
+    const bool usable_mapping = mapping.success && mp_is_public_ipv4(mapping.external_ip);
+    if (mapping.success && !usable_mapping) {
+      mp_close_udp_port_mapping(mapping.method, local_port, external_port);
+      mapping.success = false;
+    }
+
     {
       std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
-      data.port_mapping_active = mapping.success;
-      data.port_mapping_method = mapping.method;
+      data.port_mapping_state = usable_mapping ? MPPortMappingState::READY
+                                               : MPPortMappingState::FAILED;
+      data.port_mapping_method = usable_mapping ? mapping.method : MPPortMappingMethod::NONE;
       data.port_mapping_local_port = local_port;
       data.port_mapping_external_port = external_port;
-      data.port_mapping_external_ip = mapping.external_ip;
-      data.last_port_mapping_refresh_time = enet_time_get();
+      data.port_mapping_external_ip = usable_mapping ? mapping.external_ip : std::string();
     }
 
-    if (mapping.success) {
+    if (usable_mapping) {
       lg::info("[Multiplayer] Temporary UDP port mapping active for port {}.", external_port);
     } else {
-      lg::warn("[Multiplayer] Automatic UDP port mapping failed: {}", mapping.error);
+      lg::warn("[Multiplayer] Automatic UDP port mapping failed.");
+      return;
     }
 
-    while (mapping.success && !wait_for_mapping_stop(
-                                  data,
-                                  std::chrono::duration_cast<std::chrono::milliseconds>(
-                                      kPortMappingRefreshInterval))) {
-      if (mapping.method == MPPortMappingMethod::NAT_PMP &&
-          !mp_refresh_udp_port_mapping(mapping.method, local_port, external_port)) {
-        lg::warn("[Multiplayer] Temporary UDP port mapping refresh failed.");
+    bool refresh_failed = false;
+    while (!wait_for_mapping_stop(data, std::chrono::duration_cast<std::chrono::milliseconds>(
+                                            kPortMappingRefreshInterval))) {
+      if (mapping.method != MPPortMappingMethod::NAT_PMP) {
+        continue;
       }
-      std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
-      data.last_port_mapping_refresh_time = enet_time_get();
+      bool refreshed = false;
+      for (int attempt = 0; attempt < kPortMappingRefreshAttempts && !refreshed; ++attempt) {
+        refreshed = mp_refresh_udp_port_mapping(mapping.method, local_port, external_port);
+        if (!refreshed && attempt + 1 < kPortMappingRefreshAttempts &&
+            wait_for_mapping_stop(data, kPortMappingRefreshRetryDelay)) {
+          break;
+        }
+      }
+      if (!refreshed) {
+        refresh_failed = !data.port_mapping_worker_stop;
+        break;
+      }
     }
 
-    if (mapping.success) {
-      mp_close_udp_port_mapping(mapping.method, local_port, external_port);
-      lg::info("[Multiplayer] Temporary UDP port mapping removed.");
-    }
+    mp_close_udp_port_mapping(mapping.method, local_port, external_port);
+    lg::info("[Multiplayer] Temporary UDP port mapping removed.");
     std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
-    data.port_mapping_active = false;
+    data.port_mapping_state = refresh_failed ? MPPortMappingState::FAILED
+                                             : MPPortMappingState::IDLE;
     data.port_mapping_method = MPPortMappingMethod::NONE;
     data.port_mapping_external_ip.clear();
+    if (refresh_failed) {
+      lg::warn("[Multiplayer] Automatic UDP port mapping refresh failed.");
+    }
   });
 }
 
 void stop_port_mapping_worker(MultiplayerData& data) {
   data.port_mapping_worker_stop = true;
-  ++data.port_mapping_generation;
   data.port_mapping_cv.notify_all();
   if (data.port_mapping_thread.joinable()) {
     data.port_mapping_thread.join();
   }
+  std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
+  data.port_mapping_state = MPPortMappingState::IDLE;
+  data.port_mapping_method = MPPortMappingMethod::NONE;
+  data.port_mapping_external_ip.clear();
 }
-}
+}  // namespace
 
 void MultiplayerManager::setup_host(MultiplayerData& data, bool internet_host) {
   if (data.host)
@@ -115,7 +138,13 @@ void MultiplayerManager::setup_host(MultiplayerData& data, bool internet_host) {
   address.port = 26210;
 
   if (!data.security.start_host(address.port)) {
-    lg::error("[Multiplayer] Could not initialize protocol security.");
+    lg::error("[Multiplayer] Could not initialize secure handshake.");
+    return;
+  }
+  if (!data.security.set_local_version(data.local_version)) {
+    lg::error("[Multiplayer] Cannot host without a valid mod version.");
+    data.security.reset();
+    data.join_status = (int)MultiplayerStatus::FAILED;
     return;
   }
 
@@ -126,11 +155,12 @@ void MultiplayerManager::setup_host(MultiplayerData& data, bool internet_host) {
     data.local_role = 0;
     data.local_net_id = 0;
     data.authenticated_peer = nullptr;
+    data.host_game_active = false;
     data.pending_handshakes = {};
     data.authentication_failures = {};
     data.next_authentication_failure_slot = 0;
     data.internet_host = internet_host;
-    data.join_status = (int)MultiplayerStatus::CONNECTING; // Waiting for peer
+    data.join_status = (int)MultiplayerStatus::CONNECTING;  // Waiting for peer
     data.initialized = true;
 
     // Start discovery responder
@@ -144,6 +174,42 @@ void MultiplayerManager::setup_host(MultiplayerData& data, bool internet_host) {
   }
 }
 
+bool MultiplayerManager::retry_online_setup(MultiplayerData& data) {
+  uint16_t local_port = 0;
+  uint16_t external_port = 0;
+  {
+    std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
+    if (!data.initialized || data.local_role != 0 || !data.internet_host ||
+        data.port_mapping_state != MPPortMappingState::FAILED) {
+      return false;
+    }
+    local_port = data.port_mapping_local_port;
+    external_port = data.port_mapping_external_port;
+  }
+  if (local_port == 0 || external_port == 0) {
+    return false;
+  }
+  start_port_mapping_worker(data, local_port, external_port);
+  return true;
+}
+
+int multiplayer_host_invite_status(MultiplayerData& data) {
+  if (!data.initialized || data.local_role != 0 || data.security.invite_token().empty()) {
+    return 0;
+  }
+  if (!data.internet_host) {
+    return 1;
+  }
+  std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
+  if (data.port_mapping_state == MPPortMappingState::FAILED) {
+    return -1;
+  }
+  return data.port_mapping_state == MPPortMappingState::READY &&
+                 !data.port_mapping_external_ip.empty()
+             ? 1
+             : 0;
+}
+
 void MultiplayerManager::setup_client(MultiplayerData& data, const char* ip, int port) {
   if (data.host)
     disconnect(data);
@@ -152,6 +218,12 @@ void MultiplayerManager::setup_client(MultiplayerData& data, const char* ip, int
     if (enet_initialize() != 0)
       return;
     data.enet_initialized = true;
+  }
+
+  if (!data.security.set_local_version(data.local_version)) {
+    lg::error("[Multiplayer] Cannot connect without a valid mod version.");
+    data.join_status = (int)MultiplayerStatus::FAILED;
+    return;
   }
 
   data.host = enet_host_create(NULL, 1, 2, 0, 0);
@@ -188,6 +260,7 @@ void MultiplayerManager::disconnect(MultiplayerData& data) {
 
   if (!data.initialized) {
     data.security.reset();
+    multiplayer_clear_session_state(data);
     return;
   }
 
@@ -209,6 +282,7 @@ void MultiplayerManager::disconnect(MultiplayerData& data) {
 
   data.initialized = false;
   data.internet_host = false;
+  data.host_game_active = false;
   data.handshake_started_time = 0;
   data.authenticated_peer = nullptr;
   data.pending_handshakes = {};
@@ -238,7 +312,8 @@ void MultiplayerManager::send_to_peer(ENetPeer* peer,
 
 void MultiplayerManager::discovery_responder_func(MultiplayerData* data) {
   int sock = open_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-  if (sock < 0) return;
+  if (sock < 0)
+    return;
 
   sockaddr_in listen_addr;
   listen_addr.sin_family = AF_INET;
@@ -251,7 +326,7 @@ void MultiplayerManager::discovery_responder_func(MultiplayerData* data) {
     return;
   }
 
-  set_socket_timeout(sock, 1000000); // 1s timeout for checking stop flag
+  set_socket_timeout(sock, 1000000);  // 1s timeout for checking stop flag
 
   lg::info("[Multiplayer] Discovery responder active on port {}", DISCOVERY_PORT);
 
@@ -259,14 +334,16 @@ void MultiplayerManager::discovery_responder_func(MultiplayerData* data) {
   while (data->host_discovery_active) {
     sockaddr_in from_addr;
     socklen_t from_len = sizeof(from_addr);
-    int bytes_received = recvfrom(sock, buffer, sizeof(buffer) - 1, 0, (sockaddr*)&from_addr, &from_len);
-    
+    int bytes_received =
+        recvfrom(sock, buffer, sizeof(buffer) - 1, 0, (sockaddr*)&from_addr, &from_len);
+
     if (bytes_received > 0) {
       buffer[bytes_received] = '\0';
       if (std::string(buffer) == DISCOVERY_MAGIC) {
-        const std::string reply =
+        std::string reply =
             std::string(DISCOVERY_MAGIC) + "|" + data->security.invite_token();
         sendto(sock, reply.c_str(), reply.size(), 0, (sockaddr*)&from_addr, from_len);
+        mp_secure_clear_string(reply);
       }
     }
   }

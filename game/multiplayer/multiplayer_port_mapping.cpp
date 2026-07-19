@@ -20,6 +20,31 @@
 namespace {
 constexpr uint32_t kPortMappingLeaseSeconds = 7200;
 
+bool parse_ipv4_host_order(const std::string& address, uint32_t& output) {
+  uint32_t octets[4] = {};
+  size_t octet = 0;
+  bool has_digit = false;
+  for (const char character : address) {
+    if (character >= '0' && character <= '9') {
+      has_digit = true;
+      octets[octet] = octets[octet] * 10 + static_cast<uint32_t>(character - '0');
+      if (octets[octet] > 255) {
+        return false;
+      }
+    } else if (character == '.' && has_digit && octet < 3) {
+      ++octet;
+      has_digit = false;
+    } else {
+      return false;
+    }
+  }
+  if (!has_digit || octet != 3) {
+    return false;
+  }
+  output = (octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3];
+  return true;
+}
+
 #ifdef _WIN32
 struct NetworkAdapterInfo {
   std::string local_ip;
@@ -282,6 +307,42 @@ bool natpmp_query_external_ip(std::string& external_ip) {
 }
 #endif
 }  // namespace
+
+bool mp_is_public_ipv4(const std::string& address) {
+  uint32_t ip = 0;
+  if (!parse_ipv4_host_order(address, ip)) {
+    return false;
+  }
+  const uint8_t first = static_cast<uint8_t>(ip >> 24);
+  const uint8_t second = static_cast<uint8_t>(ip >> 16);
+  const uint8_t third = static_cast<uint8_t>(ip >> 8);
+  if (first == 0 || first == 10 || first == 127 || first >= 224) {
+    return false;
+  }
+  if (first == 100 && second >= 64 && second <= 127) {
+    return false;
+  }
+  if (first == 169 && second == 254) {
+    return false;
+  }
+  if (first == 172 && second >= 16 && second <= 31) {
+    return false;
+  }
+  if (first == 192 && second == 168) {
+    return false;
+  }
+  if (first == 192 && second == 0 && (third == 0 || third == 2)) {
+    return false;
+  }
+  if (first == 198 && (second == 18 || second == 19)) {
+    return false;
+  }
+  if ((first == 198 && second == 51 && third == 100) ||
+      (first == 203 && second == 0 && third == 113)) {
+    return false;
+  }
+  return ip != UINT32_C(0xffffffff);
+}
 
 MPPortMappingResult mp_open_udp_port_mapping(uint16_t local_port, uint16_t external_port) {
 #ifdef _WIN32

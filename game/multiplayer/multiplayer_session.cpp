@@ -1,17 +1,18 @@
 #include "multiplayer_session.h"
 
+#include <algorithm>
+#include <cstring>
+#include <sodium.h>
+
 #include "common/log/log.h"
-#include "game/multiplayer/multiplayer_protocol.h"
 
 #include "enet/enet.h"
-
-#include <cstring>
-#include <algorithm>
+#include "game/multiplayer/multiplayer_protocol.h"
 
 namespace {
 MultiplayerData g_multiplayer_data;
 bool g_debug_receive_stopped = false;
-}
+}  // namespace
 
 MultiplayerData& multiplayer_data() {
   return g_multiplayer_data;
@@ -46,30 +47,58 @@ void multiplayer_reset_remote_airlock_state(MultiplayerData& data) {
   data.last_remote_airlock_sequence = 0;
 }
 
-void multiplayer_clear_session_state(MultiplayerData& data) {
+void multiplayer_clear_remote_peer_state(MultiplayerData& data) {
   data.pending_full_sync = false;
   data.pending_full_sync_sent_once = false;
   data.last_full_sync_send_time = 0;
   data.last_receive_time = 0;
   data.pre_reconnect_status = 0;
-  data.server_peer = nullptr;
   data.authenticated_peer = nullptr;
-  mp_secure_clear_string(data.staged_invite);
-  data.staged_invite_status = 0;
   data.inbound_events.clear();
   data.remote_entity = {};
   memset(&data.remote_enemy_buffer, 0, sizeof(data.remote_enemy_buffer));
   data.last_enemy_sync_time = 0;
   data.last_enemy_sequence = 0;
-  data.local_traffic_level_hash = 0;
   data.last_remote_traffic_level_hash = 0;
   multiplayer_reset_remote_traffic_buffers(data);
   multiplayer_reset_remote_palace_squid_state(data);
   multiplayer_reset_remote_airlock_state(data);
+}
+
+void multiplayer_clear_direct_connect_draft(MultiplayerData& data) {
+  sodium_memzero(data.direct_address.data(), data.direct_address.size());
+  sodium_memzero(data.direct_port.data(), data.direct_port.size());
+  sodium_memzero(data.direct_token.data(), data.direct_token.size());
+}
+
+bool multiplayer_prepare_host_for_next_peer(MultiplayerData& data) {
+  multiplayer_clear_remote_peer_state(data);
+  data.pending_handshakes = {};
+  if (!data.security.rotate_host_peer_session()) {
+    data.join_status = (int)MultiplayerStatus::FAILED;
+    return false;
+  }
+  data.join_status =
+      data.host_game_active ? (int)MultiplayerStatus::IN_GAME : (int)MultiplayerStatus::CONNECTING;
+  return true;
+}
+
+void multiplayer_clear_session_state(MultiplayerData& data) {
+  multiplayer_clear_remote_peer_state(data);
+  data.host_game_active = false;
+  data.server_peer = nullptr;
+  mp_secure_clear_string(data.staged_invite);
+  data.staged_invite_status = 0;
+  multiplayer_clear_direct_connect_draft(data);
+  data.required_version.clear();
+  data.local_traffic_level_hash = 0;
   {
     std::lock_guard<std::mutex> lock(data.discovery_result_mutex);
     std::fill(data.found_ip.begin(), data.found_ip.end(), '\0');
     data.found_ip.clear();
+    data.directed_discovery = false;
+    data.directed_discovery_address = 0;
+    data.directed_discovery_game_port = 0;
   }
 }
 
@@ -87,6 +116,7 @@ void multiplayer_set_status(MultiplayerData& data, int status) {
   }
   if (data.local_role == 0 && status == (int)MultiplayerStatus::IN_GAME &&
       old_status != (int)MultiplayerStatus::IN_GAME) {
+    data.host_game_active = true;
     multiplayer_request_full_sync(data);
   }
 }

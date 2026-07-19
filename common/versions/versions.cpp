@@ -67,3 +67,7 @@ std::string build_revision() {
   }
   return "Unknown Revision";
 }
+
+std::string build_commit() {
+  return std::string(BUILT_SHA);
+}

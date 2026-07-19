@@ -1,8 +1,10 @@
 #include "multiplayer_scanner.h"
 #include "multiplayer_protocol.h"
+#include "multiplayer_security.h"
 #include "common/cross_sockets/XSocket.h"
 #include "common/log/log.h"
 #include <chrono>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -88,6 +90,27 @@ std::vector<sockaddr_in> get_lan_discovery_targets() {
 }
 }  // namespace
 
+bool mp_parse_discovery_response(const char* bytes, size_t size, std::string& token) {
+  const std::string prefix = std::string(DISCOVERY_MAGIC) + "|";
+  constexpr size_t kEncodedTokenSize = 22;
+  if (!bytes || size != prefix.size() + kEncodedTokenSize ||
+      memcmp(bytes, prefix.data(), prefix.size()) != 0) {
+    return false;
+  }
+  for (size_t index = prefix.size(); index < size; ++index) {
+    const char character = bytes[index];
+    const bool valid = (character >= 'A' && character <= 'Z') ||
+                       (character >= 'a' && character <= 'z') ||
+                       (character >= '0' && character <= '9') || character == '-' ||
+                       character == '_';
+    if (!valid) {
+      return false;
+    }
+  }
+  token.assign(bytes + prefix.size(), kEncodedTokenSize);
+  return true;
+}
+
 void MultiplayerScanner::start_search(MultiplayerData& data) {
   if (data.join_status == (int)MultiplayerStatus::SEARCHING) return;
   
@@ -95,11 +118,38 @@ void MultiplayerScanner::start_search(MultiplayerData& data) {
   {
     std::lock_guard<std::mutex> lock(data.discovery_result_mutex);
     data.found_ip.clear();
+    data.directed_discovery = false;
+    data.directed_discovery_address = 0;
+    data.directed_discovery_game_port = 0;
   }
   if (data.scanner_thread.joinable()) {
     data.scanner_thread.join();
   }
   data.scanner_thread = std::thread(scan_thread_func, &data);
+}
+
+bool MultiplayerScanner::start_direct_search(MultiplayerData& data,
+                                             const std::string& address,
+                                             uint16_t game_port) {
+  sockaddr_in target = {};
+  target.sin_family = AF_INET;
+  if (game_port == 0 || inet_pton(AF_INET, address.c_str(), &target.sin_addr) != 1) {
+    return false;
+  }
+  data.stop_search = true;
+  if (data.scanner_thread.joinable()) {
+    data.scanner_thread.join();
+  }
+  data.stop_search = false;
+  {
+    std::lock_guard<std::mutex> lock(data.discovery_result_mutex);
+    data.found_ip.clear();
+    data.directed_discovery = true;
+    data.directed_discovery_address = target.sin_addr.s_addr;
+    data.directed_discovery_game_port = game_port;
+  }
+  data.scanner_thread = std::thread(scan_thread_func, &data);
+  return true;
 }
 
 void MultiplayerScanner::stop_search(MultiplayerData& data) {
@@ -108,6 +158,11 @@ void MultiplayerScanner::stop_search(MultiplayerData& data) {
   if (data.scanner_thread.joinable()) {
     data.scanner_thread.join();
   }
+  std::lock_guard<std::mutex> lock(data.discovery_result_mutex);
+  mp_secure_clear_string(data.found_ip);
+  data.directed_discovery = false;
+  data.directed_discovery_address = 0;
+  data.directed_discovery_game_port = 0;
 }
 
 int MultiplayerScanner::get_status(const MultiplayerData& data) {
@@ -116,6 +171,17 @@ int MultiplayerScanner::get_status(const MultiplayerData& data) {
 
 void MultiplayerScanner::scan_thread_func(MultiplayerData* data) {
   data->join_status = (int)MultiplayerStatus::SEARCHING;
+  bool directed = false;
+  uint32_t directed_address = 0;
+  uint16_t game_port = 26210;
+  {
+    std::lock_guard<std::mutex> lock(data->discovery_result_mutex);
+    directed = data->directed_discovery;
+    directed_address = data->directed_discovery_address;
+    if (directed && data->directed_discovery_game_port != 0) {
+      game_port = data->directed_discovery_game_port;
+    }
+  }
   
   int sock = open_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
   if (sock < 0) {
@@ -128,9 +194,19 @@ void MultiplayerScanner::scan_thread_func(MultiplayerData* data) {
   set_socket_option(sock, SOL_SOCKET, SO_BROADCAST, &broadcast_enable, sizeof(broadcast_enable));
   set_socket_timeout(sock, 500000); // 500ms timeout
 
-  const auto discovery_targets = get_lan_discovery_targets();
-  lg::info("[Multiplayer] Starting LAN discovery on port {} across {} broadcast target(s)...",
-           DISCOVERY_PORT, discovery_targets.size());
+  std::vector<sockaddr_in> discovery_targets;
+  if (directed) {
+    sockaddr_in target = {};
+    target.sin_family = AF_INET;
+    target.sin_port = htons(DISCOVERY_PORT);
+    target.sin_addr.s_addr = directed_address;
+    discovery_targets.assign(1, target);
+    lg::info("[Multiplayer] Starting directed host discovery.");
+  } else {
+    discovery_targets = get_lan_discovery_targets();
+    lg::info("[Multiplayer] Starting LAN discovery on port {} across {} broadcast target(s)...",
+             DISCOVERY_PORT, discovery_targets.size());
+  }
 
   const int max_attempts = 10;
   for (int attempt = 0; attempt < max_attempts && !data->stop_search; ++attempt) {
@@ -146,18 +222,20 @@ void MultiplayerScanner::scan_thread_func(MultiplayerData* data) {
     
     int bytes_received = recvfrom(sock, buffer, sizeof(buffer) - 1, 0, (sockaddr*)&from_addr, &from_len);
     if (bytes_received > 0) {
-      buffer[bytes_received] = '\0';
-      const std::string response(buffer);
-      const std::string response_prefix = std::string(DISCOVERY_MAGIC) + "|";
-      if (response.starts_with(response_prefix) && response.size() > response_prefix.size()) {
+      std::string token;
+      const bool expected_source = ntohs(from_addr.sin_port) == DISCOVERY_PORT &&
+                                   (!directed || from_addr.sin_addr.s_addr == directed_address);
+      if (expected_source &&
+          mp_parse_discovery_response(buffer, static_cast<size_t>(bytes_received), token)) {
         const std::string found_ip = address_to_string(from_addr);
-        const std::string found_invite =
-            found_ip + ":26210/" + response.substr(response_prefix.size());
+        std::string found_invite = found_ip + ":" + std::to_string(game_port) + "/" + token;
         {
           std::lock_guard<std::mutex> lock(data->discovery_result_mutex);
           data->found_ip = found_invite;
         }
-        lg::info("[Multiplayer] Found a LAN host.");
+        mp_secure_clear_string(found_invite);
+        mp_secure_clear_string(token);
+        lg::info("[Multiplayer] Found a compatible discovery responder.");
         data->join_status = (int)MultiplayerStatus::FOUND;
         close_socket(sock);
         return;
@@ -167,7 +245,8 @@ void MultiplayerScanner::scan_thread_func(MultiplayerData* data) {
 
   lg::info("[Multiplayer] Discovery timed out.");
   if (data->join_status == (int)MultiplayerStatus::SEARCHING) {
-    data->join_status = (int)MultiplayerStatus::FAILED;
+    data->join_status = directed ? (int)MultiplayerStatus::TOKEN_DISCOVERY_FAILED
+                                 : (int)MultiplayerStatus::FAILED;
   }
   close_socket(sock);
 }

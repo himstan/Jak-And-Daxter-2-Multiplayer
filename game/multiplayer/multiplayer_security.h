@@ -1,11 +1,11 @@
 #pragma once
 
-#include "game/multiplayer/multiplayer_protocol.h"
-
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
+
+#include "game/multiplayer/multiplayer_protocol.h"
 
 constexpr size_t kMultiplayerMaxDatagramSize = 2048;
 
@@ -17,6 +17,7 @@ struct MultiplayerDatagram {
 enum class SecurityReceiveKind {
   REJECTED,
   HANDSHAKE,
+  VERSION_MISMATCH,
   GAMEPLAY,
 };
 
@@ -33,10 +34,13 @@ class MultiplayerSecurity {
 
   bool start_host(uint16_t port);
   bool start_client(const std::string& invite, std::string& host, uint16_t& port);
+  bool set_local_version(const std::string& version);
+  bool rotate_host_peer_session();
   void reset();
 
   bool authenticated() const;
   const std::string& invite_token() const;
+  const std::string& remote_version() const;
   std::string invite_for_address(const std::string& address) const;
 
   bool make_server_hello(MultiplayerDatagram& output) const;
@@ -59,6 +63,7 @@ class MultiplayerSecurity {
   void derive_session_keys(int local_role);
   void make_proof(const char* label, std::array<uint8_t, kKeySize>& proof) const;
   bool accept_counter(uint64_t counter);
+  void clear_peer_secrets();
   void clear_secrets();
 
   bool m_host = false;
@@ -76,6 +81,8 @@ class MultiplayerSecurity {
   std::array<uint8_t, kNoncePrefixSize> m_send_nonce_prefix = {};
   std::array<uint8_t, kNoncePrefixSize> m_receive_nonce_prefix = {};
   std::string m_encoded_token;
+  std::string m_local_version;
+  std::string m_remote_version;
 };
 
 void mp_secure_clear_string(std::string& value);

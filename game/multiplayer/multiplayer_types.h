@@ -1,18 +1,18 @@
 #pragma once
 
-#include <cstdint>
-#include <atomic>
 #include <array>
+#include <atomic>
+#include <condition_variable>
+#include <cstdint>
+#include <mutex>
 #include <string>
 #include <thread>
-#include <mutex>
-#include <condition_variable>
 
-#include "multiplayer_protocol.h"
 #include "multiplayer_port_mapping.h"
+#include "multiplayer_protocol.h"
+#include "multiplayer_ring_buffer.h"
 #include "multiplayer_security.h"
 #include "multiplayer_stats.h"
-#include "multiplayer_ring_buffer.h"
 
 struct RemoteEntityState {
   uint8_t status;
@@ -115,18 +115,19 @@ struct RemotePlayerInfoGOAL {
   uint64_t player_procs[2];
   MPVehicleState veh_state;
 };
-static_assert(sizeof(RemotePlayerInfoGOAL) == 960, "RemotePlayerInfoGOAL must match remote-player-info");
+static_assert(sizeof(RemotePlayerInfoGOAL) == 960,
+              "RemotePlayerInfoGOAL must match remote-player-info");
 
 struct LocalPlayerInfoGOAL {
   float x, y, z, angle;
   float velocity[4];
   uint64_t send_tick;
   uint64_t receive_tick;
-  uint32_t id; // Placeholder
+  uint32_t id;  // Placeholder
   int32_t role;
   uint32_t state_id;
   uint32_t level;
-  int32_t status; // Placeholder
+  int32_t status;  // Placeholder
   uint32_t packet_id;
   uint32_t riding;
   uint32_t darkjak_stage;
@@ -168,7 +169,8 @@ struct LocalPlayerInfoGOAL {
   uint64_t player_procs[2];
   MPVehicleState veh_state;
 };
-static_assert(sizeof(LocalPlayerInfoGOAL) == 960, "LocalPlayerInfoGOAL must match local-player-info");
+static_assert(sizeof(LocalPlayerInfoGOAL) == 960,
+              "LocalPlayerInfoGOAL must match local-player-info");
 
 struct MPEnemySyncBufferGOAL {
   uint32_t local_count;
@@ -179,8 +181,7 @@ struct MPEnemySyncBufferGOAL {
   MPEnemyState remote_enemies[MAX_ENEMY_SYNC_COUNT];
   uint64_t last_sync_time;
 };
-static_assert(sizeof(MPEnemySyncBufferGOAL) == 20520,
-              "MPEnemySyncBufferGOAL must match GOAL");
+static_assert(sizeof(MPEnemySyncBufferGOAL) == 20520, "MPEnemySyncBufferGOAL must match GOAL");
 
 struct MPTrafficSyncBufferGOAL {
   uint32_t ped_count;
@@ -191,8 +192,7 @@ struct MPTrafficSyncBufferGOAL {
   MPVehicleState vehicles[MAX_VEHICLE_SYNC_COUNT];
   uint64_t last_sync_time;
 };
-static_assert(sizeof(MPTrafficSyncBufferGOAL) == 13352,
-              "MPTrafficSyncBufferGOAL must match GOAL");
+static_assert(sizeof(MPTrafficSyncBufferGOAL) == 13352, "MPTrafficSyncBufferGOAL must match GOAL");
 
 struct MPPalaceSquidSyncBufferGOAL {
   MPPalaceSquidState local_state;
@@ -202,7 +202,8 @@ struct MPPalaceSquidSyncBufferGOAL {
   uint64_t last_sync_time;
   uint8_t pad[8];
 };
-static_assert(sizeof(MPPalaceSquidSyncBufferGOAL) == 264, "MPPalaceSquidSyncBufferGOAL must match GOAL");
+static_assert(sizeof(MPPalaceSquidSyncBufferGOAL) == 264,
+              "MPPalaceSquidSyncBufferGOAL must match GOAL");
 
 struct MPAirlockStateGOAL {
   uint32_t airlock_aid;
@@ -247,7 +248,7 @@ struct MultiplayerData {
   bool initialized = false;
   bool enet_initialized = false;
   struct _ENetHost* host = nullptr;
-  struct _ENetPeer* server_peer = nullptr;  // Only used if we are a client
+  struct _ENetPeer* server_peer = nullptr;         // Only used if we are a client
   struct _ENetPeer* authenticated_peer = nullptr;  // Only used if we are a host
   int local_role = -1;
   uint32_t local_net_id = 0;
@@ -255,12 +256,18 @@ struct MultiplayerData {
   uint32_t last_out_event_seq = 0;
   MultiplayerSecurity security;
   bool internet_host = false;
+  bool host_game_active = false;
   uint32_t handshake_started_time = 0;
   std::array<AuthenticationFailure, 16> authentication_failures = {};
   size_t next_authentication_failure_slot = 0;
   std::array<PendingHandshake, 8> pending_handshakes = {};
   std::string staged_invite;
   int staged_invite_status = 0;
+  std::array<char, 16> direct_address = {};
+  std::array<char, 6> direct_port = {};
+  std::array<char, 23> direct_token = {};
+  std::string local_version;
+  std::string required_version;
 
   RemoteEntityState remote_entity = {};
   MultiplayerRingBuffer<PacketGameEvent, 64> inbound_events;
@@ -290,10 +297,14 @@ struct MultiplayerData {
   uint32_t last_remote_airlock_sequence = 0;
 
   // New fields for joining/searching
-  std::atomic<int> join_status{0}; // 0: idle, 1: searching, 2: found, 3: connecting, 4: connected, -1: failed
+  std::atomic<int> join_status{
+      0};  // 0: idle, 1: searching, 2: found, 3: connecting, 4: connected, -1: failed
   std::string found_ip = "";
   std::mutex discovery_result_mutex;
   std::atomic<bool> stop_search{false};
+  bool directed_discovery = false;
+  uint32_t directed_discovery_address = 0;
+  uint16_t directed_discovery_game_port = 0;
 
   // Discovery / Hosting responder
   std::thread discovery_thread;
@@ -309,18 +320,16 @@ struct MultiplayerData {
   uint32_t last_receive_time = 0;
   int pre_reconnect_status = 0;
 
-  // Host-side temporary router mapping. Does not store or expose public IP.
+  // Host-side temporary router mapping. The address remains private to the bridge.
   std::thread port_mapping_thread;
   std::mutex port_mapping_mutex;
   std::condition_variable port_mapping_cv;
   std::atomic<bool> port_mapping_worker_stop{false};
-  std::atomic<uint32_t> port_mapping_generation{0};
-  bool port_mapping_active = false;
+  MPPortMappingState port_mapping_state = MPPortMappingState::IDLE;
   MPPortMappingMethod port_mapping_method = MPPortMappingMethod::NONE;
   uint16_t port_mapping_local_port = 0;
   uint16_t port_mapping_external_port = 0;
   std::string port_mapping_external_ip;
-  uint32_t last_port_mapping_refresh_time = 0;
   // Rate tracking and statistics
   MultiplayerStats stats;
 };
