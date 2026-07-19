@@ -264,7 +264,7 @@
   )
 
 (defun mp-current-level-packed-id ()
-  "Collect all currently active/loaded levels and pack them into a single uint32 (up to 4 levels)."
+  "Pack the primary and desired levels, falling back to resident levels when no valid wants exist."
   (let ((primary-level (mp-current-active-level-symbol)))
     (if primary-level
         (let ((ids (new 'stack-no-clear 'array 'uint8 4)))
@@ -272,26 +272,32 @@
           (set! (-> ids 1) (the uint8 0))
           (set! (-> ids 2) (the uint8 0))
           (set! (-> ids 3) (the uint8 0))
-          (let ((next-idx 1))
-            ;; 1. Check *load-state* want levels first to align with loading intentions
+          (let ((next-idx 1)
+                (has-valid-wants? #f))
+            ;; Desired levels are authoritative because resident levels may be awaiting unload.
             (when (and *load-state* (nonzero? *load-state*))
               (dotimes (idx 6)
                 (let ((level-name (-> *load-state* want idx name)))
-                  (when (and level-name
-                             (!= level-name primary-level)
-                             (< next-idx 4))
+                  (when level-name
                     (let ((lid (mp-level-symbol->id level-name)))
-                      (when (and (> lid 0) (not (mp-array-has-uint8? ids next-idx lid)))
-                        (set! (-> ids next-idx) (the uint8 lid))
-                        (+! next-idx 1)
+                      (when (> lid 0)
+                        (set! has-valid-wants? #t)
+                        (when (and (!= level-name primary-level)
+                                   (< next-idx 4)
+                                   (not (mp-array-has-uint8? ids next-idx lid)))
+                          (set! (-> ids next-idx) (the uint8 lid))
+                          (+! next-idx 1)
+                          )
                         )
                       )
                     )
                   )
                 )
               )
-            ;; 2. Fall back/supplement with actual active levels from *level*
-            (when (and *level* (nonzero? *level*))
+            ;; Fall back only when load-state has no usable desired levels.
+            (when (and (not has-valid-wants?)
+                       *level*
+                       (nonzero? *level*))
               (dotimes (idx 7)
                 (let ((lev (-> *level* level idx)))
                   (when (and lev
