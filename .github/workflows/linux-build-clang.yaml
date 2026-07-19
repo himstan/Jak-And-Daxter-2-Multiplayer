@@ -42,7 +42,8 @@ jobs:
             libxinerama-dev libxcursor-dev libpulse-dev \
             libxi-dev zip ninja-build libgl1-mesa-dev libssl-dev \
             libfreetype6-dev libx11-dev libxrandr-dev libgl1-mesa-dev \
-            libudev-dev libopenal-dev libflac-dev libogg-dev libvorbis-dev
+            libudev-dev libopenal-dev libflac-dev libogg-dev libvorbis-dev \
+            libsodium-dev
 
       - name: Setup sccache
         uses: hendrikmuhs/ccache-action@v1.2.23
@@ -63,6 +64,14 @@ jobs:
 
       - name: Build Project
         run: cmake --build build --parallel $((`nproc`))
+
+      - name: Verify static libsodium linkage
+        if: ${{ contains(inputs.cmakePreset, '-static') }}
+        run: |
+          if ldd ./build/game/gk | grep -q 'libsodium'; then
+            echo "Static build unexpectedly depends on a shared libsodium library."
+            exit 1
+          fi
 
 #      - name: Run Tests
 #        env:

@@ -32,9 +32,9 @@ jobs:
           HOMEBREW_NO_INSTALL_CLEANUP: 1
           HOMEBREW_NO_ANALYTICS: 1
         run: |
-          if ! brew install ninja nasm; then
+          if ! brew install ninja nasm libsodium; then
             brew update
-            brew install ninja nasm
+            brew install ninja nasm libsodium
           fi
 
       - name: Setup sccache
@@ -59,6 +59,14 @@ jobs:
 
       - name: List libraries of gk
         run: otool -L ./build/game/gk
+
+      - name: Verify static libsodium linkage
+        if: ${{ contains(inputs.cmakePreset, '-static') }}
+        run: |
+          if otool -L ./build/game/gk | grep -q 'libsodium'; then
+            echo "Static build unexpectedly depends on a shared libsodium library."
+            exit 1
+          fi
 
       - name: Run Tests
         run: ./test.sh
