@@ -380,16 +380,26 @@ if(WIN32)
         IMPORTED_LOCATION "${PROJECT_SOURCE_DIR}/third-party/libsodium/x64/libsodium.dll"
         INTERFACE_INCLUDE_DIRECTORIES "${PROJECT_SOURCE_DIR}/third-party/libsodium/include")
 else()
-    find_path(LIBSODIUM_INCLUDE_DIR sodium.h REQUIRED)
+    set(LIBSODIUM_ROOT "" CACHE PATH "Optional libsodium installation prefix")
+    find_path(LIBSODIUM_INCLUDE_DIR sodium.h
+        HINTS "${LIBSODIUM_ROOT}"
+        PATH_SUFFIXES include
+        REQUIRED)
     if(STATICALLY_LINK)
         set(LIBSODIUM_ORIGINAL_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
         set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
-        find_library(LIBSODIUM_STATIC_LIBRARY sodium REQUIRED)
+        find_library(LIBSODIUM_STATIC_LIBRARY sodium
+            HINTS "${LIBSODIUM_ROOT}"
+            PATH_SUFFIXES lib
+            REQUIRED)
         set(CMAKE_FIND_LIBRARY_SUFFIXES ${LIBSODIUM_ORIGINAL_FIND_LIBRARY_SUFFIXES})
         add_library(libsodium STATIC IMPORTED GLOBAL)
         set(LIBSODIUM_LINK_LIBRARY "${LIBSODIUM_STATIC_LIBRARY}")
     else()
-        find_library(LIBSODIUM_LIBRARY sodium REQUIRED)
+        find_library(LIBSODIUM_LIBRARY sodium
+            HINTS "${LIBSODIUM_ROOT}"
+            PATH_SUFFIXES lib
+            REQUIRED)
         add_library(libsodium UNKNOWN IMPORTED GLOBAL)
         set(LIBSODIUM_LINK_LIBRARY "${LIBSODIUM_LIBRARY}")
     endif()

@@ -50,9 +50,11 @@ jobs:
           CC: clang
           CXX: clang++
         run: |
+          SODIUM_ROOT="$(brew --prefix libsodium)"
           cmake -B build --preset=${{ inputs.cmakePreset }} \
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -DLIBSODIUM_ROOT="${SODIUM_ROOT}"
 
       - name: Build Project
         run: cmake --build build --parallel $((`sysctl -n hw.logicalcpu`))
