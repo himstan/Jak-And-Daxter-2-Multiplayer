@@ -18,8 +18,6 @@ Currently this mod only serves as a 2 player Co-op mod, but most likely will be 
 - For online play, the host may need to allow the game through Windows Firewall, and also manually port-forward.
 - The default game port is `26210`.
 
-LAN discovery is available through **Find LAN**, but direct connect is the most reliable option when playing over the internet.
-
 ## Hosting A Game
 
 1. Start the mod.
@@ -29,16 +27,18 @@ LAN discovery is available through **Find LAN**, but direct connect is the most 
 
 3. Choose **Host LAN** or **Host Online**
 
+   <img src="images/readme/host-online-or-lan.png" alt="Host Online or Host LAN menu options showing" width="500">
+
 4. Choose **New Game** or **Load Game**.
 
-   <img src="images/readme/host-new-game.png" alt="Host Game menu showing New Game and Load Game" width="500">
+   <img src="images/readme/host-new-game-or-load-game.png" alt="Host Game menu showing New Game and Load Game" width="500">
 
    <img src="images/readme/host-select-save.png" alt="Host save selection menu" width="500">
 
-5. Select **Copy Invite**, then send the copied invite privately to the other player. Wait on
+5. Select **Copy Invite**, then send the copied invite (will contain your public IP) privately to the other player. Wait on
    the host screen until they connect.
 
-   <img src="images/readme/host-waiting-for-daxter.png" alt="Host waiting for Daxter to connect" width="500">
+   <img src="images/readme/host-waiting-for-player.png" alt="Host waiting for Daxter to connect" width="500">
 
 6. Once the client connects, the game will continue into the selected save or new game.
 
@@ -51,34 +51,50 @@ The host is Jak. In general, if something important needs to be decided by the g
 1. Start the mod.
 2. Choose **Join Game** from the title menu.
 
-   <img src="images/readme/client-join-game.png" alt="Title menu with Join Game selected" width="500">
+   <img src="images/readme/client-join-game.png" alt="Join Game menu options" width="500">
 
-3. If you are on the same network as the host, try **Find LAN**.
+3. Select one of the three joining methods:
 
-   <img src="images/readme/client-find-lan.png" alt="Join Game menu with Find LAN selected" width="500">
+### Option 1: With Invite Token (Recommended for Online)
+Use this option when joining a friend over the internet using a copied host invite string.
 
-4. If the game is not found, choose **Direct Connect**.
+1. Copy the invite string sent by the host to your clipboard.
+2. Choose **With Invite Token**.
+3. Select **Paste Invite**. Once valid clipboard data is detected, the status will display **Paste Invite: Invite ready**.
+4. Select **Connect**.
 
-   <img src="images/readme/client-direct-connect.png" alt="Join Game menu with Direct Connect selected" width="500">
+   <img src="images/readme/client-invite-not-ready.png" alt="Paste invite before clipboard detection" width="450">
+   <img src="images/readme/client-invite-ready.png" alt="Paste invite ready" width="450">
 
-5. Copy the invite sent by the host, select **Paste Invite**, then select **Connect**. The address
-   and token are validated privately and are never displayed or saved by the game.
+### Option 2: Scan LAN
+Use this option when playing on the same local network (LAN) or local split-screen setup.
 
-   <img src="images/readme/client-connect-game.png" alt="Direct Connect menu with Connect selected" width="500">
+1. Choose **Scan LAN**.
+2. The game will search for active hosts on your private network and connect automatically.
 
-The joining player is Daxter.
+### Option 3: Direct Connect
+Use this option to manually specify host details. (CTRL+V pasting is supported)
 
-<img src="images/readme/client-in-game.png" alt="Client player in game after connection" width="500">
+1. Choose **Direct Connect**.
+2. Verify or update the target **Address**, **Port** (default `26210`), and optional **Token**.
+3. Select **Connect**.
+
+   <img src="images/readme/client-direct-connect.png" alt="Direct Connect settings menu" width="500">
+
+---
+
+Once connected, the joining player enters the world as **Daxter**!
+
+<img src="images/readme/client-in-game.png" alt="Client player in game as Daxter" width="500">
 
 ## Using An Invite
 
-Online invites use the compact `address:port/token` form. Do not post an invite publicly as it contains the host's public IP address! It is a
-temporary credential for the current hosting session. Direct Connect only reports whether the
-clipboard contains a valid invite; it never renders the address or token.
+Online invites use form: `address:port/token` Do not post an invite publicly as it contains the host's public IP address! It is a
+temporary credential for the current hosting session.
 
 ## Local Split Screen
 
-You can play locally by running two instances of the game in windowed mode and placing them next to each other. Have one instance choose **Host Game**, then have the other choose **Join Game** and **Find LAN**.
+You can play locally by running two instances of the game in windowed mode and placing them next to each other. Have one instance choose **Host Game**, then have the other choose **Join Game** and **Scan LAN**.
 
 Each instance should recognize a connected controller. If you only have one controller, use the controller for one game window and the keyboard for the other.
 
@@ -100,9 +116,9 @@ The Reconnect button is going to act as your primary safeline while playing this
 
 ### The Client Cannot Find The Host
 
-Check Windows Firewall on the host machine and allow the game/OpenGOAL through it. For internet play, the host may also need to forward UDP port `26210` on their router.
+Check Windows Firewall on the host machine and allow the game/OpenGOAL through it. For internet play, the host should also forward the UDP port `26210` on their router.
 
-## Known Rough Edges
+## Known issues
 
 - The remote player puppets can miss their animation triggers, so when they jump they might be "falling" until their legs hit the floor.
 - The Traffic Sync is very much so host owned, if the client player exits the host's traffic radius the handover is pretty invasive, it's going to remove all traffic on the client's side until he gets far enough from the Host. When he does the Client is going to start spawning peds and vehicles locally.
