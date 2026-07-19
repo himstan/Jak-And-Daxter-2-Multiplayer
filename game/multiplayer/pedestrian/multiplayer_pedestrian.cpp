@@ -18,11 +18,27 @@ void handle_pedestrian_sync_packet(const _ENetEvent& event, MultiplayerData& dat
     return;
   }
   uint32_t current_time = enet_time_get();
-  PacketPedestrianSync* sync = (PacketPedestrianSync*)event.packet->data;
-  uint32_t ped_count = (sync->count < (uint32_t)MAX_PEDESTRIANS_PER_PACKET) ?
-                       sync->count :
-                       (uint32_t)MAX_PEDESTRIANS_PER_PACKET;
-  if (event.packet->dataLength < pedestrian_packet_size(ped_count)) {
+  if (!event.packet->data || event.packet->dataLength < pedestrian_packet_size(0)) {
+    if (current_time - data.last_traffic_short_packet_debug_time > 2000) {
+      lg::info("[Multiplayer] Short pedestrian traffic header. bytes={} need={}",
+               event.packet->dataLength, pedestrian_packet_size(0));
+      data.last_traffic_short_packet_debug_time = current_time;
+    }
+    return;
+  }
+  constexpr size_t count_offset = sizeof(PacketHeader);
+  constexpr size_t level_offset = sizeof(PacketHeader) + sizeof(uint32_t) + sizeof(uint64_t);
+  uint32_t ped_count = 0;
+  uint32_t level_hash = 0;
+  PacketHeader header = {};
+  memcpy(&header, event.packet->data, sizeof(header));
+  memcpy(&ped_count, event.packet->data + count_offset, sizeof(ped_count));
+  memcpy(&level_hash, event.packet->data + level_offset, sizeof(level_hash));
+  if (header.type != PacketType::PEDESTRIAN_SYNC || ped_count > MAX_PEDESTRIANS_PER_PACKET ||
+      !mp_sequence_is_newer(header.sequenceNum, data.last_pedestrian_sequence)) {
+    return;
+  }
+  if (event.packet->dataLength != pedestrian_packet_size(ped_count)) {
     if (current_time - data.last_traffic_short_packet_debug_time > 2000) {
       lg::info("[Multiplayer] Short pedestrian traffic packet. bytes={} count={} need={}",
                event.packet->dataLength, ped_count, pedestrian_packet_size(ped_count));
@@ -30,40 +46,47 @@ void handle_pedestrian_sync_packet(const _ENetEvent& event, MultiplayerData& dat
     }
     return;
   }
-  if (!mp_accept_traffic_level(data, sync->level_hash, ped_count, "pedestrian", current_time)) {
+  if (!mp_accept_traffic_level(data, level_hash, ped_count, "pedestrian", current_time)) {
     return;
   }
+  data.last_pedestrian_sequence = header.sequenceNum;
   if (current_time - data.last_ped_traffic_debug_time > 2000) {
     lg::info("[Multiplayer] Accepted pedestrian traffic. packetLevel={} remoteLevel={} count={}",
-             sync->level_hash, data.last_remote_traffic_level_hash, ped_count);
+             level_hash, data.last_remote_traffic_level_hash, ped_count);
     data.last_ped_traffic_debug_time = current_time;
   }
   data.last_traffic_sync_time = current_time;
   for (uint32_t i = 0; i < ped_count; i++) {
-    auto* incoming = &sync->peds[i];
-    if (incoming->net_id == 0) continue;
+    MPPedestrianStatePacked incoming = {};
+    memcpy(&incoming, event.packet->data + pedestrian_packet_size(0) + i * sizeof(incoming),
+           sizeof(incoming));
+    if (incoming.net_id == 0) continue;
+    if (!mp_float_is_finite(incoming.x) || !mp_float_is_finite(incoming.y) ||
+        !mp_float_is_finite(incoming.z)) {
+      continue;
+    }
     auto* state = mp_find_matching_or_empty_slot(
         data.traffic_buffer.pedestrians,
         MAX_PEDESTRIAN_SYNC_COUNT,
-        incoming->net_id,
+        incoming.net_id,
         [](const MPPedestrianState& item) { return item.net_id; });
     if (state) {
       uint32_t slot = (uint32_t)(state - data.traffic_buffer.pedestrians);
-      state->net_id = incoming->net_id;
-      state->object_type = incoming->object_type;
-      state->object_variance = incoming->object_variance;
-      state->x = incoming->x; state->y = incoming->y; state->z = incoming->z;
-      state->quat_x = mp_unpack_float_q(incoming->quat[0]);
-      state->quat_y = mp_unpack_float_q(incoming->quat[1]);
-      state->quat_z = mp_unpack_float_q(incoming->quat[2]);
-      state->quat_w = mp_unpack_float_q(incoming->quat[3]);
-      state->hp = incoming->hp;
-      state->state_id = incoming->state_id;
-      state->target_aid = incoming->target_aid;
-      state->animation_profile = incoming->animation_profile;
-      state->vehicle_net_id = incoming->vehicle_net_id;
-      state->transport_id = incoming->transport_id;
-      state->transport_side = incoming->transport_side;
+      state->net_id = incoming.net_id;
+      state->object_type = incoming.object_type;
+      state->object_variance = incoming.object_variance;
+      state->x = incoming.x; state->y = incoming.y; state->z = incoming.z;
+      state->quat_x = mp_unpack_float_q(incoming.quat[0]);
+      state->quat_y = mp_unpack_float_q(incoming.quat[1]);
+      state->quat_z = mp_unpack_float_q(incoming.quat[2]);
+      state->quat_w = mp_unpack_float_q(incoming.quat[3]);
+      state->hp = incoming.hp;
+      state->state_id = incoming.state_id;
+      state->target_aid = incoming.target_aid;
+      state->animation_profile = incoming.animation_profile;
+      state->vehicle_net_id = incoming.vehicle_net_id;
+      state->transport_id = incoming.transport_id;
+      state->transport_side = incoming.transport_side;
       data.ped_last_updated[slot] = current_time;
     }
   }

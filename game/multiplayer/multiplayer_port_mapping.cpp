@@ -115,7 +115,7 @@ class ComApartment {
   bool already_initialized = false;
 };
 
-bool upnp_add_mapping(uint16_t local_port, uint16_t external_port) {
+bool upnp_add_mapping(uint16_t local_port, uint16_t external_port, std::string& external_ip) {
   NetworkAdapterInfo adapter;
   if (!find_primary_adapter(adapter)) {
     return false;
@@ -150,6 +150,14 @@ bool upnp_add_mapping(uint16_t local_port, uint16_t external_port) {
                      &mapping);
 
   if (mapping) {
+    BSTR mapped_address = nullptr;
+    if (SUCCEEDED(mapping->get_ExternalIPAddress(&mapped_address)) && mapped_address) {
+      char address[INET_ADDRSTRLEN] = {};
+      WideCharToMultiByte(CP_UTF8, 0, mapped_address, -1, address, sizeof(address), nullptr,
+                          nullptr);
+      external_ip = address;
+      SysFreeString(mapped_address);
+    }
     mapping->Release();
   }
   SysFreeString(description);
@@ -235,6 +243,43 @@ bool natpmp_request_mapping(uint16_t local_port, uint16_t external_port, uint32_
   closesocket(sock);
   return success;
 }
+
+bool natpmp_query_external_ip(std::string& external_ip) {
+  NetworkAdapterInfo adapter;
+  if (!find_primary_adapter(adapter)) {
+    return false;
+  }
+  SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  if (sock == INVALID_SOCKET) {
+    return false;
+  }
+  DWORD timeout_ms = 500;
+  setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout_ms),
+             sizeof(timeout_ms));
+  sockaddr_in gateway = adapter.gateway;
+  gateway.sin_port = htons(5351);
+  const uint8_t request[2] = {0, 0};
+  uint8_t response[12] = {};
+  const int sent = sendto(sock, reinterpret_cast<const char*>(request), sizeof(request), 0,
+                          reinterpret_cast<sockaddr*>(&gateway), sizeof(gateway));
+  sockaddr_in from = {};
+  int from_len = sizeof(from);
+  const int received = sent == sizeof(request)
+                           ? recvfrom(sock, reinterpret_cast<char*>(response), sizeof(response), 0,
+                                      reinterpret_cast<sockaddr*>(&from), &from_len)
+                           : -1;
+  closesocket(sock);
+  if (received != sizeof(response) || from.sin_addr.s_addr != gateway.sin_addr.s_addr ||
+      response[0] != 0 || response[1] != 128 || read_be16(&response[2]) != 0) {
+    return false;
+  }
+  char address[INET_ADDRSTRLEN] = {};
+  if (!inet_ntop(AF_INET, &response[8], address, sizeof(address))) {
+    return false;
+  }
+  external_ip = address;
+  return true;
+}
 #endif
 }  // namespace
 
@@ -243,19 +288,23 @@ MPPortMappingResult mp_open_udp_port_mapping(uint16_t local_port, uint16_t exter
   WSADATA wsa_data = {};
   WSAStartup(MAKEWORD(2, 2), &wsa_data);
 
-  if (upnp_add_mapping(local_port, external_port)) {
-    return {true, MPPortMappingMethod::UPNP_IGD, ""};
+  std::string external_ip;
+  if (upnp_add_mapping(local_port, external_port, external_ip)) {
+    return {true, MPPortMappingMethod::UPNP_IGD, external_ip, ""};
   }
 
   if (natpmp_request_mapping(local_port, external_port, kPortMappingLeaseSeconds)) {
-    return {true, MPPortMappingMethod::NAT_PMP, ""};
+    natpmp_query_external_ip(external_ip);
+    return {true, MPPortMappingMethod::NAT_PMP, external_ip, ""};
   }
 
-  return {false, MPPortMappingMethod::NONE, "router did not accept UPnP IGD or NAT-PMP mapping"};
+  return {false, MPPortMappingMethod::NONE, {},
+          "router did not accept UPnP IGD or NAT-PMP mapping"};
 #else
   (void)local_port;
   (void)external_port;
-  return {false, MPPortMappingMethod::NONE, "automatic port mapping is only implemented on Windows"};
+  return {false, MPPortMappingMethod::NONE, {},
+          "automatic port mapping is only implemented on Windows"};
 #endif
 }
 

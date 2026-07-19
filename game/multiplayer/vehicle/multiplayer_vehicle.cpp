@@ -13,9 +13,6 @@ size_t vehicle_packet_size(uint32_t count) {
   return offsetof(PacketVehicleSync, vehs) + (sizeof(MPVehicleStatePacked) * count);
 }
 
-bool vehicle_sequence_is_newer(uint32_t incoming, uint32_t previous) {
-  return previous == 0 || static_cast<int32_t>(incoming - previous) > 0;
-}
 }
 
 void handle_vehicle_sync_packet(const _ENetEvent& event, MultiplayerData& data) {
@@ -31,11 +28,18 @@ void handle_vehicle_sync_packet(const _ENetEvent& event, MultiplayerData& data) 
     }
     return;
   }
-  PacketVehicleSync* sync = (PacketVehicleSync*)event.packet->data;
-  uint32_t veh_count = (sync->count < (uint32_t)MAX_VEHICLES_PER_PACKET) ?
-                       sync->count :
-                       (uint32_t)MAX_VEHICLES_PER_PACKET;
-  if (event.packet->dataLength < vehicle_packet_size(veh_count)) {
+  constexpr size_t count_offset = sizeof(PacketHeader);
+  constexpr size_t level_offset = sizeof(PacketHeader) + sizeof(uint32_t) + sizeof(uint64_t);
+  uint32_t veh_count = 0;
+  uint32_t level_hash = 0;
+  PacketHeader header = {};
+  memcpy(&header, event.packet->data, sizeof(header));
+  memcpy(&veh_count, event.packet->data + count_offset, sizeof(veh_count));
+  memcpy(&level_hash, event.packet->data + level_offset, sizeof(level_hash));
+  if (header.type != PacketType::VEHICLE_SYNC || veh_count > MAX_VEHICLES_PER_PACKET) {
+    return;
+  }
+  if (event.packet->dataLength != vehicle_packet_size(veh_count)) {
     if (current_time - data.last_traffic_short_packet_debug_time > 2000) {
       lg::info("[Multiplayer] Short vehicle traffic packet. bytes={} count={} need={}",
                event.packet->dataLength, veh_count, vehicle_packet_size(veh_count));
@@ -43,52 +47,58 @@ void handle_vehicle_sync_packet(const _ENetEvent& event, MultiplayerData& data) 
     }
     return;
   }
-  if (!mp_accept_traffic_level(data, sync->level_hash, veh_count, "vehicle", current_time)) {
+  if (!mp_accept_traffic_level(data, level_hash, veh_count, "vehicle", current_time)) {
     return;
   }
   if (current_time - data.last_veh_traffic_debug_time > 2000) {
     lg::info("[Multiplayer] Accepted vehicle traffic. packetLevel={} remoteLevel={} count={}",
-             sync->level_hash, data.last_remote_traffic_level_hash, veh_count);
+             level_hash, data.last_remote_traffic_level_hash, veh_count);
     data.last_veh_traffic_debug_time = current_time;
   }
   data.last_traffic_sync_time = current_time;
   for (uint32_t i = 0; i < veh_count; i++) {
-    auto* incoming = &sync->vehs[i];
-    if (incoming->net_id == 0) continue;
+    MPVehicleStatePacked incoming = {};
+    memcpy(&incoming, event.packet->data + vehicle_packet_size(0) + i * sizeof(incoming),
+           sizeof(incoming));
+    if (incoming.net_id == 0) continue;
+    if (!mp_float_is_finite(incoming.x) || !mp_float_is_finite(incoming.y) ||
+        !mp_float_is_finite(incoming.z)) {
+      continue;
+    }
     auto* state = mp_find_matching_or_empty_slot(
         data.traffic_buffer.vehicles,
         MAX_VEHICLE_SYNC_COUNT,
-        incoming->net_id,
+        incoming.net_id,
         [](const MPVehicleState& item) { return item.net_id; });
     if (state) {
       uint32_t slot = (uint32_t)(state - data.traffic_buffer.vehicles);
-      if (state->net_id != incoming->net_id) {
+      if (state->net_id != incoming.net_id) {
         data.veh_last_updated[slot] = 0;
         data.veh_last_sequence[slot] = 0;
       }
-      if (!vehicle_sequence_is_newer(sync->header.sequenceNum, data.veh_last_sequence[slot])) {
+      if (!mp_sequence_is_newer(header.sequenceNum, data.veh_last_sequence[slot])) {
         continue;
       }
-      state->net_id = incoming->net_id;
-      state->vehicle_type = incoming->vehicle_type;
-      state->color_index = incoming->color_index;
-      state->state_id = incoming->state_id;
-      state->target_aid = incoming->target_aid;
-      state->x = incoming->x; state->y = incoming->y; state->z = incoming->z;
-      state->quat_x = mp_unpack_float_q(incoming->quat[0]);
-      state->quat_y = mp_unpack_float_q(incoming->quat[1]);
-      state->quat_z = mp_unpack_float_q(incoming->quat[2]);
-      state->quat_w = mp_unpack_float_q(incoming->quat[3]);
-      state->lin_vel_x = (float)incoming->lin_vel[0] / 10.0f;
-      state->lin_vel_y = (float)incoming->lin_vel[1] / 10.0f;
-      state->lin_vel_z = (float)incoming->lin_vel[2] / 10.0f;
-      state->ang_vel_x = mp_unpack_float_q(incoming->ang_vel[0]) * 10.0f;
-      state->ang_vel_y = mp_unpack_float_q(incoming->ang_vel[1]) * 10.0f;
-      state->ang_vel_z = mp_unpack_float_q(incoming->ang_vel[2]) * 10.0f;
-      state->state_flags = incoming->state_flags;
-      memcpy(state->rider_aids, incoming->rider_aids, sizeof(state->rider_aids));
+      state->net_id = incoming.net_id;
+      state->vehicle_type = incoming.vehicle_type;
+      state->color_index = incoming.color_index;
+      state->state_id = incoming.state_id;
+      state->target_aid = incoming.target_aid;
+      state->x = incoming.x; state->y = incoming.y; state->z = incoming.z;
+      state->quat_x = mp_unpack_float_q(incoming.quat[0]);
+      state->quat_y = mp_unpack_float_q(incoming.quat[1]);
+      state->quat_z = mp_unpack_float_q(incoming.quat[2]);
+      state->quat_w = mp_unpack_float_q(incoming.quat[3]);
+      state->lin_vel_x = (float)incoming.lin_vel[0] / 10.0f;
+      state->lin_vel_y = (float)incoming.lin_vel[1] / 10.0f;
+      state->lin_vel_z = (float)incoming.lin_vel[2] / 10.0f;
+      state->ang_vel_x = mp_unpack_float_q(incoming.ang_vel[0]) * 10.0f;
+      state->ang_vel_y = mp_unpack_float_q(incoming.ang_vel[1]) * 10.0f;
+      state->ang_vel_z = mp_unpack_float_q(incoming.ang_vel[2]) * 10.0f;
+      state->state_flags = incoming.state_flags;
+      memcpy(state->rider_aids, incoming.rider_aids, sizeof(state->rider_aids));
       data.veh_last_updated[slot] = current_time;
-      data.veh_last_sequence[slot] = sync->header.sequenceNum;
+      data.veh_last_sequence[slot] = header.sequenceNum;
     }
   }
 }
@@ -109,7 +119,9 @@ void send_vehicle_sync_packets(MultiplayerData& data, MPTrafficSyncBufferGOAL* b
       dst->x = src->x; dst->y = src->y; dst->z = src->z;
       dst->quat[0] = mp_pack_float_q(src->quat_x); dst->quat[1] = mp_pack_float_q(src->quat_y);
       dst->quat[2] = mp_pack_float_q(src->quat_z); dst->quat[3] = mp_pack_float_q(src->quat_w);
-      dst->lin_vel[0] = (int16_t)(src->lin_vel_x * 10.0f); dst->lin_vel[1] = (int16_t)(src->lin_vel_y * 10.0f); dst->lin_vel[2] = (int16_t)(src->lin_vel_z * 10.0f);
+      dst->lin_vel[0] = mp_pack_float_scaled(src->lin_vel_x, 10.0f);
+      dst->lin_vel[1] = mp_pack_float_scaled(src->lin_vel_y, 10.0f);
+      dst->lin_vel[2] = mp_pack_float_scaled(src->lin_vel_z, 10.0f);
       dst->ang_vel[0] = mp_pack_float_q(src->ang_vel_x / 10.0f); dst->ang_vel[1] = mp_pack_float_q(src->ang_vel_y / 10.0f); dst->ang_vel[2] = mp_pack_float_q(src->ang_vel_z / 10.0f);
       dst->state_flags = src->state_flags; memcpy(dst->rider_aids, src->rider_aids, 16);
     }

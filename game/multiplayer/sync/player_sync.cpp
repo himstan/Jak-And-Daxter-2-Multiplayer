@@ -19,19 +19,48 @@ bool has_host_continue(const LocalPlayerInfoGOAL* local) {
   }
   return false;
 }
+
+bool finite_vehicle_state(const MPVehicleState& state) {
+  return mp_float_is_finite(state.x) && mp_float_is_finite(state.y) &&
+         mp_float_is_finite(state.z) && mp_float_is_finite(state.quat_x) &&
+         mp_float_is_finite(state.quat_y) && mp_float_is_finite(state.quat_z) &&
+         mp_float_is_finite(state.quat_w) && mp_float_is_finite(state.lin_vel_x) &&
+         mp_float_is_finite(state.lin_vel_y) && mp_float_is_finite(state.lin_vel_z) &&
+         mp_float_is_finite(state.ang_vel_x) && mp_float_is_finite(state.ang_vel_y) &&
+         mp_float_is_finite(state.ang_vel_z);
+}
 }
 
 void mp_handle_player_state_packet(MultiplayerData& data,
                                    const ENetPacket* packet,
                                    RemotePlayerInfoGOAL* remote,
                                    uint32_t current_time) {
-  const auto* state = PacketView(packet).as_exact<PacketPlayerState>(PacketType::STATE_UPDATE);
+  const auto state = PacketView(packet).as_exact<PacketPlayerState>(PacketType::STATE_UPDATE);
   if (!state) {
     return;
   }
+  if (!mp_float_is_finite(state->x) || !mp_float_is_finite(state->y) ||
+      !mp_float_is_finite(state->z) || !mp_float_is_finite(state->angle) ||
+      !mp_float_is_finite(state->vel_x) || !mp_float_is_finite(state->vel_y) ||
+      !mp_float_is_finite(state->vel_z) || !mp_float_is_finite(state->cam_angle_y) ||
+      !mp_float_is_finite(state->tod_ratio) || !mp_float_is_finite(state->weather_cloud) ||
+      !mp_float_is_finite(state->weather_fog) || !mp_float_is_finite(state->weather_rain) ||
+      !mp_float_is_finite(state->money) || !mp_float_is_finite(state->gems) ||
+      !mp_float_is_finite(state->skill) || !finite_vehicle_state(state->veh_state)) {
+    return;
+  }
+  if (state->status > static_cast<uint8_t>(MultiplayerStatus::HOST_LEFT) &&
+      state->status != static_cast<uint8_t>(MultiplayerStatus::FAILED)) {
+    return;
+  }
 
-  auto& entity = data.remote_entities[state->netId];
-  if (state->header.sequenceNum <= entity.last_sequence_num) {
+  const uint32_t expected_remote_id = data.local_role == 0 ? 1 : 0;
+  if (state->netId != expected_remote_id) {
+    return;
+  }
+
+  auto& entity = data.remote_entity;
+  if (!mp_sequence_is_newer(state->header.sequenceNum, entity.last_sequence_num)) {
     return;
   }
 
@@ -102,13 +131,20 @@ void mp_handle_player_state_packet(MultiplayerData& data,
 }
 
 void mp_handle_turret_state_packet(MultiplayerData& data, const ENetPacket* packet) {
-  const auto* state = PacketView(packet).as_exact<PacketTurretState>(PacketType::TURRET_SYNC);
+  const auto state = PacketView(packet).as_exact<PacketTurretState>(PacketType::TURRET_SYNC);
   if (!state) {
     return;
   }
+  if (!mp_float_is_finite(state->roty) || !mp_float_is_finite(state->rotx)) {
+    return;
+  }
 
-  auto& entity = data.remote_entities[state->netId];
-  if (state->header.sequenceNum <= entity.last_turret_sequence_num) {
+  const uint32_t expected_remote_id = data.local_role == 0 ? 1 : 0;
+  if (state->netId != expected_remote_id) {
+    return;
+  }
+  auto& entity = data.remote_entity;
+  if (!mp_sequence_is_newer(state->header.sequenceNum, entity.last_turret_sequence_num)) {
     return;
   }
   entity.last_turret_sequence_num = state->header.sequenceNum;
@@ -121,8 +157,19 @@ void mp_handle_turret_state_packet(MultiplayerData& data, const ENetPacket* pack
 void mp_handle_full_sync_packet(const ENetPacket* packet,
                                 LocalPlayerInfoGOAL* local,
                                 RemotePlayerInfoGOAL* remote) {
-  const auto* full_sync = PacketView(packet).as_exact<PacketFullSync>(PacketType::FULL_SYNC);
+  const auto full_sync = PacketView(packet).as_exact<PacketFullSync>(PacketType::FULL_SYNC);
   if (!full_sync || !local || !remote) {
+    return;
+  }
+  if (!mp_float_is_finite(full_sync->money) || !mp_float_is_finite(full_sync->gems) ||
+      !mp_float_is_finite(full_sync->skill) || !mp_float_is_finite(full_sync->x) ||
+      !mp_float_is_finite(full_sync->y) || !mp_float_is_finite(full_sync->z) ||
+      !mp_float_is_finite(full_sync->tod_ratio) ||
+      !mp_float_is_finite(full_sync->weather_cloud) ||
+      !mp_float_is_finite(full_sync->weather_fog) ||
+      !mp_float_is_finite(full_sync->weather_rain) ||
+      !mp_float_is_finite(full_sync->cam_angle_y) || full_sync->sync_aids_count > 128 ||
+      !memchr(full_sync->host_continue, '\0', sizeof(full_sync->host_continue))) {
     return;
   }
 
@@ -137,7 +184,7 @@ void mp_handle_full_sync_packet(const ENetPacket* packet,
   memcpy(local->host_continue, full_sync->host_continue, sizeof(local->host_continue));
   memcpy(local->task_mask, full_sync->task_mask, sizeof(local->task_mask));
   memcpy(local->active_task_mask, full_sync->active_task_mask, sizeof(local->active_task_mask));
-  local->sync_aids_count = mp_clamp_count(full_sync->sync_aids_count, 128);
+  local->sync_aids_count = full_sync->sync_aids_count;
   local->riding = full_sync->riding;
   memcpy(local->sync_aids, full_sync->sync_aids, sizeof(local->sync_aids));
   local->clock = full_sync->clock;
@@ -263,8 +310,7 @@ void mp_sync_remote_player_to_goal(MultiplayerData& data, RemotePlayerInfoGOAL* 
   }
 
   uint32_t other_net_id = (data.local_role == 0) ? 1 : 0;
-  auto it = data.remote_entities.find(other_net_id);
-  if (it == data.remote_entities.end()) {
+  if (data.remote_entity.last_sequence_num == 0) {
     remote_goal->status = 0;
     remote_goal->scene_active = 0;
     remote_goal->turret_active = 0;
@@ -285,7 +331,7 @@ void mp_sync_remote_player_to_goal(MultiplayerData& data, RemotePlayerInfoGOAL* 
     return;
   }
 
-  const auto& remote_state = it->second;
+  const auto& remote_state = data.remote_entity;
   uint64_t age_ms = 0;
   uint32_t current_time = enet_time_get();
   if (remote_state.receive_tick != 0 && current_time >= remote_state.receive_tick) {

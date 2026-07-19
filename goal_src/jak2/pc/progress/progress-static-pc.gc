@@ -104,108 +104,80 @@ This gives us more freedom to write code how we want.
     )
   (none))
 
-(deftype menu-ip-address-option (menu-option)
-  ()
-  )
+(deftype menu-paste-invite-option (menu-option) ())
+(deftype menu-connect-invite-option (menu-option) ())
+(deftype menu-copy-invite-option (menu-option) ())
 
-(defmethod respond-progress ((obj menu-ip-address-option) (p progress) (selected? symbol))
-  (if selected?
-    (let ((key (pc-get-last-key)))
-      (when (nonzero? key)
-        (let ((s (-> *pc-settings* mp-join-ip)))
-          (cond
-            ;; Backspace
-            ((= key #x08)
-             (when (> (length s) 0)
-               (set! (-> s data (dec (length s))) 0)
-               ))
-            ;; Enter/Return - finish editing
-            ((or (= key #x0D) (= key #x0A))
-             (set! (-> p selected-option) #f)
-             )
-            ;; Numbers and dots only
-            ((and (or (and (>= key #x30) (<= key #x39)) (= key #x2e)) (< (length s) 15))
-             (let ((len (length s)))
-               (set! (-> s data len) key)
-               (set! (-> s data (inc len)) 0)
-               )
-             )
-            )
-          )
-        (pc-settings-save)
-        )
-      )
-    )
-  0)
-
-(defmethod draw-option ((obj menu-ip-address-option) (p progress) (font-ctx font-context) (option-index int) (selected? symbol))
-  (let ((alpha (max 0.0 (* 2.0 (- 0.5 (-> p menu-transition)))))
-        (ip (-> *pc-settings* mp-join-ip)))
-    (set! (-> font-ctx alpha) alpha)
-    (set-flags! font-ctx (font-flags kerning middle large))
-    (set-scale! font-ctx 0.5)
-    (+! (-> font-ctx origin y) 11.0)
-    (when (= option-index (-> p option-index))
-       (draw-generic-highlight (the int (+ -2.0 (-> font-ctx origin y))) 18 alpha)
-       )
-
-    (if (is-valid-ipv4? ip)
-        (set-color! font-ctx (font-color progress))
-        (set-color! font-ctx (font-color red)))
-        
-    (format (clear *temp-string*) "~S: ~S" (lookup-text! *common-text* (text-id progress-ip-address) #f) ip)
-    (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
-    )
+(defun mp-draw-invite-action ((label text-id) (status int) (show-status? symbol)
+                              (p progress) (font-ctx font-context) (option-index int))
+  (when (and p (nonzero? (the-as uint p))
+             font-ctx (nonzero? (the-as uint font-ctx)))
+    (let ((alpha (max 0.0 (* 2.0 (- 0.5 (-> p menu-transition))))))
+      (set! (-> font-ctx alpha) alpha)
+      (set-flags! font-ctx (font-flags kerning middle large))
+      (set-scale! font-ctx 0.5)
+      (+! (-> font-ctx origin y) 11.0)
+      (when (= option-index (-> p option-index))
+        (draw-generic-highlight (the int (+ -2.0 (-> font-ctx origin y))) 18 alpha))
+      (if (< status 0)
+          (set-color! font-ctx (font-color red))
+          (set-color! font-ctx (font-color progress)))
+      (cond
+        ((and show-status? (= status 1))
+         (format (clear *temp-string*) "~S: ~S"
+                 (lookup-text! *common-text* label #f)
+                 (lookup-text! *common-text* (text-id progress-invite-ready) #f)))
+        ((and show-status? (= status -1))
+         (format (clear *temp-string*) "~S: ~S"
+                 (lookup-text! *common-text* label #f)
+                 (lookup-text! *common-text* (text-id progress-invalid-invite) #f)))
+        (else
+         (format (clear *temp-string*) "~S" (lookup-text! *common-text* label #f))))
+      (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))))
   (none))
 
-(deftype menu-port-option (menu-option)
-  ()
-  )
-
-(defmethod respond-progress ((obj menu-port-option) (p progress) (selected? symbol))
-  (if selected?
-    (let ((key (pc-get-last-key)))
-      (when (nonzero? key)
-        (cond
-          ;; Backspace
-          ((= key #x08)
-           (set! (-> *pc-settings* mp-join-port) (/ (-> *pc-settings* mp-join-port) 10))
-           )
-          ;; Enter/Return - finish editing
-          ((or (= key #x0D) (= key #x0A))
-           (set! (-> p selected-option) #f)
-           )
-          ;; Digits 0-9
-          ((and (>= key #x30) (<= key #x39))
-           (let ((val (- key #x30)))
-             (set! (-> *pc-settings* mp-join-port) (+ (* (-> *pc-settings* mp-join-port) 10) val))
-             (if (> (-> *pc-settings* mp-join-port) 65535)
-                 (set! (-> *pc-settings* mp-join-port) 65535))
-             )
-           )
-          )
-        (pc-settings-save)
-        )
-      )
-    )
+(defmethod respond-progress ((obj menu-paste-invite-option) (p progress) (selected? symbol))
+  (when (and selected? p (nonzero? (the-as uint p)))
+    (set! (-> p selected-option) #f)
+    (if (= (pc-multi-stage-clipboard-invite) 1)
+        (sound-play "generic-beep")
+        (sound-play "menu-error")))
   0)
 
-(defmethod draw-option ((obj menu-port-option) (p progress) (font-ctx font-context) (option-index int) (selected? symbol))
-  (let ((alpha (max 0.0 (* 2.0 (- 0.5 (-> p menu-transition)))))
-        (port (-> *pc-settings* mp-join-port)))
-    (set! (-> font-ctx alpha) alpha)
-    (set-flags! font-ctx (font-flags kerning middle large))
-    (set-scale! font-ctx 0.5)
-    (+! (-> font-ctx origin y) 11.0)
-    (when (= option-index (-> p option-index))
-       (draw-generic-highlight (the int (+ -2.0 (-> font-ctx origin y))) 18 alpha)
-       )
+(defmethod draw-option ((obj menu-paste-invite-option) (p progress) (font-ctx font-context)
+                        (option-index int) (selected? symbol))
+  (mp-draw-invite-action (text-id progress-paste-invite)
+                         (pc-multi-get-staged-invite-status) #t p font-ctx option-index))
 
-    (set-color! font-ctx (font-color progress))
-    (format (clear *temp-string*) "~S: ~D" (lookup-text! *common-text* (text-id progress-port) #f) port)
-    (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
-    )
-  (none))
+(defmethod respond-progress ((obj menu-connect-invite-option) (p progress) (selected? symbol))
+  (when (and selected? p (nonzero? (the-as uint p)))
+    (set! (-> p selected-option) #f)
+    (if (= (pc-multi-get-staged-invite-status) 1)
+        (begin
+          (sound-play "generic-beep")
+          (set-next-state p 'connecting-direct 0))
+        (sound-play "menu-error")))
+  0)
+
+(defmethod draw-option ((obj menu-connect-invite-option) (p progress) (font-ctx font-context)
+                        (option-index int) (selected? symbol))
+  (mp-draw-invite-action (text-id progress-connect)
+                         (if (= (pc-multi-get-staged-invite-status) 1) 0 -1)
+                         #f p font-ctx option-index))
+
+(defmethod respond-progress ((obj menu-copy-invite-option) (p progress) (selected? symbol))
+  (when (and selected? p (nonzero? (the-as uint p)))
+    (set! (-> p selected-option) #f)
+    (if (= (pc-multi-copy-invite) 1)
+        (sound-play "generic-beep")
+        (sound-play "menu-error")))
+  0)
+
+(defmethod draw-option ((obj menu-copy-invite-option) (p progress) (font-ctx font-context)
+                        (option-index int) (selected? symbol))
+  (mp-draw-invite-action (text-id progress-copy-invite)
+                         (if (= (pc-multi-host-invite-ready) 1) 0 -1)
+                         #f p font-ctx option-index))
 
 (define *title-pc*
   (new 'static 'menu-option-list
@@ -216,7 +188,7 @@ This gives us more freedom to write code how we want.
       (new 'static 'menu-sub-menu-option
         :name (text-id progress-host-game)
         :scale #t
-        :next-state 'host-game
+        :next-state 'host-mode
         )
       (new 'static 'menu-sub-menu-option
         :name (text-id progress-join-game)
@@ -967,6 +939,31 @@ This gives us more freedom to write code how we want.
     )
   )
 
+(define *host-mode-options-pc*
+  (new 'static 'menu-option-list
+    :y-center #xc6
+    :y-space 30
+    :scale 0.82
+    :options (new 'static 'boxed-array :type menu-option
+      (new 'static 'menu-sub-menu-option
+        :name (text-id progress-host-lan)
+        :scale #t
+        :next-state 'host-lan
+        )
+      (new 'static 'menu-sub-menu-option
+        :name (text-id progress-host-online)
+        :scale #t
+        :next-state 'host-online
+        )
+      (new 'static 'menu-sub-menu-option
+        :name (text-id progress-back)
+        :scale #t
+        :next-state 'back
+        )
+      )
+    )
+  )
+
 (define *host-game-options-pc*
   (new 'static 'menu-option-list
     :y-center #xc6
@@ -1000,31 +997,48 @@ This gives us more freedom to write code how we want.
   (= (pc-multi-get-status) 4)
   )
 
-(defmethod respond-progress ((obj menu-waiting-for-daxter-option) (p progress) (selected? symbol))
-  ;; Check if anyone joined (Status 4 = CONNECTED_LOBBY)
-  (when (and (mp-progress-host-peer-ready?) (not *multi-sync-enabled?*))
-    ;; Peer joined! Start game.
-    (sound-play "generic-beep")
-    (pc-multi-set-status (the-as int 5))
-    (set! (-> *local-info* sync-flag) (the-as uint 0))
-    
-    (debug-log *mp-debug-log?* "[MP-Host] Remote joined. Transitioning to engine loading flow...~%")
-    (when (and *bigmap* (nonzero? *bigmap*))
-      (set! (-> *bigmap* drawing-flag) #t)
-      )
-    (cond
-      ((and (-> *pc-settings* mp-is-new-game?)
-            (< (-> *pc-settings* mp-selected-save-slot) 4))
-       (set-next-state p 'saving 0)
-       )
-      ((-> *pc-settings* mp-is-new-game?)
-       (mp-progress-intro-start! (logtest? (-> *game-info* purchase-secrets) (game-secrets hero-mode)))
-       )
-      (else
-        (set-next-state p 'loading 0)
+(defun mp-progress-advance-host-if-ready! ((p progress))
+  (if (and p
+           (nonzero? (the-as uint p))
+           (mp-progress-host-peer-ready?)
+           (not *multi-sync-enabled?*))
+      (begin
+        (sound-play "generic-beep")
+        (pc-multi-set-status (the-as int 5))
+        (when (and *local-info* (nonzero? (the-as uint *local-info*)))
+          (set! (-> *local-info* sync-flag) (the-as uint 0)))
+
+        (debug-log *mp-debug-log?* "[MP-Host] Remote joined. Transitioning to engine loading flow...~%")
+        (when (and *bigmap* (nonzero? *bigmap*))
+          (set! (-> *bigmap* drawing-flag) #t)
+          )
+        (cond
+          ((and *pc-settings*
+                (nonzero? (the-as uint *pc-settings*))
+                (-> *pc-settings* mp-is-new-game?)
+                (< (-> *pc-settings* mp-selected-save-slot) 4))
+           (set-next-state p 'saving 0)
+           )
+          ((and *pc-settings*
+                (nonzero? (the-as uint *pc-settings*))
+                (-> *pc-settings* mp-is-new-game?))
+           (if (and *game-info* (nonzero? (the-as uint *game-info*)))
+               (mp-progress-intro-start!
+                 (logtest? (-> *game-info* purchase-secrets) (game-secrets hero-mode)))
+               (mp-progress-intro-start! #f))
+           )
+          (else
+            (set-next-state p 'loading 0)
+            )
+          )
+        #t
         )
+      #f
       )
     )
+
+(defmethod respond-progress ((obj menu-waiting-for-daxter-option) (p progress) (selected? symbol))
+  (mp-progress-advance-host-if-ready! p)
   0)
 
 (defmethod draw-option ((obj menu-waiting-for-daxter-option) (p progress) (font-ctx font-context) (option-index int) (selected? symbol))
@@ -1046,6 +1060,7 @@ This gives us more freedom to write code how we want.
     :scale 0.82
     :options (new 'static 'boxed-array :type menu-option
       (new 'static 'menu-waiting-for-daxter-option)
+      (new 'static 'menu-copy-invite-option :name (text-id progress-copy-invite))
       (new 'static 'menu-sub-menu-option
         :name (text-id progress-back)
         :scale #t
@@ -1066,7 +1081,7 @@ This gives us more freedom to write code how we want.
       (set! (-> obj last-status) status)
       (cond
         ((= status 2) ;; Found
-         (pc-multi-setup-client (pc-multi-get-found-ip) 26210)
+         (pc-multi-connect-found-host)
          )
         ((= status 4) ;; Connected
          (sound-play "generic-beep")
@@ -1147,17 +1162,12 @@ This gives us more freedom to write code how we want.
     :y-space 30
     :scale 0.82
     :options (new 'static 'boxed-array :type menu-option
-      (new 'static 'menu-ip-address-option :name (text-id progress-ip-address))
-      (new 'static 'menu-port-option :name (text-id progress-port))
-      (new 'static 'menu-sub-menu-option
-        :name (text-id progress-connect)
-        :scale #t
-        :next-state 'connecting-direct
-        )
+      (new 'static 'menu-paste-invite-option :name (text-id progress-paste-invite))
+      (new 'static 'menu-connect-invite-option :name (text-id progress-connect))
       (new 'static 'menu-sub-menu-option
         :name (text-id progress-back)
         :scale #t
-        :next-state 'back
+        :next-state 'leave-direct-connect
         )
       )
     )

@@ -351,6 +351,7 @@ set(RUNTIME_SOURCE
         multiplayer/multiplayer_packet.cpp
         multiplayer/multiplayer_port_mapping.cpp
         multiplayer/multiplayer_scanner.cpp
+        multiplayer/multiplayer_security.cpp
         multiplayer/multiplayer_session.cpp
         multiplayer/multiplayer_stats.cpp
         multiplayer/sync/airlock_sync.cpp
@@ -370,18 +371,37 @@ set(RUNTIME_SOURCE
 
 add_subdirectory(sound)
 
+if(WIN32)
+    add_library(libsodium SHARED IMPORTED GLOBAL)
+    set_target_properties(libsodium PROPERTIES
+        IMPORTED_IMPLIB "${PROJECT_SOURCE_DIR}/third-party/libsodium/x64/libsodium.lib"
+        IMPORTED_LOCATION "${PROJECT_SOURCE_DIR}/third-party/libsodium/x64/libsodium.dll"
+        INTERFACE_INCLUDE_DIRECTORIES "${PROJECT_SOURCE_DIR}/third-party/libsodium/include")
+else()
+    find_path(LIBSODIUM_INCLUDE_DIR sodium.h REQUIRED)
+    find_library(LIBSODIUM_LIBRARY sodium REQUIRED)
+    add_library(libsodium UNKNOWN IMPORTED GLOBAL)
+    set_target_properties(libsodium PROPERTIES
+        IMPORTED_LOCATION "${LIBSODIUM_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES "${LIBSODIUM_INCLUDE_DIR}")
+endif()
+
 # we build the runtime as a static library.
 add_library(runtime STATIC ${RUNTIME_SOURCE} "../third-party/glad/src/glad.c")
 
 target_link_libraries(runtime common fmt enet SDL3::SDL3 imgui discord-rpc sound stb_image libco libcurl)
 if(WIN32)
-    target_link_libraries(runtime mman ole32 oleaut32 iphlpapi)
+    target_link_libraries(runtime mman ole32 oleaut32 iphlpapi libsodium)
 else()
-    target_link_libraries(runtime pthread dl)
+    target_link_libraries(runtime pthread dl libsodium)
 endif()
 
 add_executable(gk main.cpp)
 target_link_libraries(gk runtime)
 if(WIN32)
+    add_custom_command(TARGET gk POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_FILE:libsodium>"
+                "$<TARGET_FILE_DIR:gk>")
     set_target_properties(gk PROPERTIES VS_DPI_AWARE "PerMonitor")
 endif()

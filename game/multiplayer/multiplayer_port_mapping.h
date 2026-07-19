@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 enum class MPPortMappingMethod {
   NONE,
@@ -11,6 +12,7 @@ enum class MPPortMappingMethod {
 struct MPPortMappingResult {
   bool success = false;
   MPPortMappingMethod method = MPPortMappingMethod::NONE;
+  std::string external_ip;
   const char* error = "";
 };
 

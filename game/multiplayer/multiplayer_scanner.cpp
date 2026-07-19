@@ -92,6 +92,10 @@ void MultiplayerScanner::start_search(MultiplayerData& data) {
   if (data.join_status == (int)MultiplayerStatus::SEARCHING) return;
   
   data.stop_search = false;
+  {
+    std::lock_guard<std::mutex> lock(data.discovery_result_mutex);
+    data.found_ip.clear();
+  }
   if (data.scanner_thread.joinable()) {
     data.scanner_thread.join();
   }
@@ -136,16 +140,24 @@ void MultiplayerScanner::scan_thread_func(MultiplayerData* data) {
     }
 
     // Wait for reply
-    char buffer[64];
+    char buffer[128];
     sockaddr_in from_addr;
     socklen_t from_len = sizeof(from_addr);
     
     int bytes_received = recvfrom(sock, buffer, sizeof(buffer) - 1, 0, (sockaddr*)&from_addr, &from_len);
     if (bytes_received > 0) {
       buffer[bytes_received] = '\0';
-      if (std::string(buffer) == DISCOVERY_MAGIC) {
-        data->found_ip = address_to_string(from_addr);
-        lg::info("[Multiplayer] Found host at {}", data->found_ip);
+      const std::string response(buffer);
+      const std::string response_prefix = std::string(DISCOVERY_MAGIC) + "|";
+      if (response.starts_with(response_prefix) && response.size() > response_prefix.size()) {
+        const std::string found_ip = address_to_string(from_addr);
+        const std::string found_invite =
+            found_ip + ":26210/" + response.substr(response_prefix.size());
+        {
+          std::lock_guard<std::mutex> lock(data->discovery_result_mutex);
+          data->found_ip = found_invite;
+        }
+        lg::info("[Multiplayer] Found a LAN host.");
         data->join_status = (int)MultiplayerStatus::FOUND;
         close_socket(sock);
         return;

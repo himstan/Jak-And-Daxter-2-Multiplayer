@@ -179,6 +179,14 @@
   ;; there's probably a way to consistently do it synchronously
   (load-level-text-files (the-as int (-> *pc-settings* text-language)))
 
+  ;; The waiting status must be polled independently of the currently highlighted menu row.
+  (when (and this
+             (nonzero? (the-as uint this))
+             (= (-> this current) 'waiting-for-daxter)
+             (mp-progress-advance-host-if-ready! this))
+    (return 0)
+    )
+
   ;; Multiplayer Hosting Intercept
   (when (and (-> *pc-settings* mp-hosting-mode?)
              (or (= (-> this current) 'select-load)

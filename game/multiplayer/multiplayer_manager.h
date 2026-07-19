@@ -6,7 +6,7 @@
 
 class MultiplayerManager {
  public:
-  static void setup_host(MultiplayerData& data);
+  static void setup_host(MultiplayerData& data, bool internet_host);
   static void setup_client(MultiplayerData& data, const char* ip, int port);
   static void disconnect(MultiplayerData& data);
 

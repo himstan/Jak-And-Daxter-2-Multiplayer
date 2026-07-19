@@ -44,23 +44,30 @@ void unpack_enemy_state(MPEnemyState& state, const MPEnemyStatePacked& incoming,
 }
 
 void mp_handle_enemy_sync_packet(MultiplayerData& data, const ENetPacket* packet, uint32_t current_time) {
-  const auto* sync = PacketView(packet).as_minimum<PacketEnemySync>(
-      PacketType::ENEMY_SYNC, sizeof(PacketHeader) + sizeof(uint32_t) + sizeof(uint64_t));
-  if (!sync) {
+  constexpr size_t prefix_size = sizeof(PacketHeader) + sizeof(uint32_t) + sizeof(uint64_t);
+  PacketView view(packet);
+  if (!view.has_header() || view.type() != PacketType::ENEMY_SYNC ||
+      packet->dataLength < prefix_size) {
     return;
   }
 
-  uint32_t enemy_count = mp_clamp_count(sync->count, MAX_ENEMIES_PER_PACKET);
-  if (!PacketView(packet).has_counted_payload(enemy_count,
-                                              sizeof(MPEnemyStatePacked),
-                                              sizeof(PacketHeader) + sizeof(uint32_t) + sizeof(uint64_t))) {
+  uint32_t encoded_count = 0;
+  PacketHeader header = {};
+  memcpy(&header, packet->data, sizeof(header));
+  memcpy(&encoded_count, packet->data + sizeof(PacketHeader), sizeof(encoded_count));
+  if (encoded_count > MAX_ENEMIES_PER_PACKET ||
+      !view.has_counted_payload(encoded_count, sizeof(MPEnemyStatePacked), prefix_size) ||
+      !mp_sequence_is_newer(header.sequenceNum, data.last_enemy_sequence)) {
     return;
   }
 
+  data.last_enemy_sequence = header.sequenceNum;
   data.last_enemy_sync_time = current_time;
-  for (uint32_t i = 0; i < enemy_count; i++) {
-    const auto& incoming = sync->enemies[i];
-    if (incoming.actor_id == 0) {
+  for (uint32_t i = 0; i < encoded_count; i++) {
+    MPEnemyStatePacked incoming = {};
+    memcpy(&incoming, packet->data + prefix_size + i * sizeof(incoming), sizeof(incoming));
+    if (incoming.actor_id == 0 || !mp_float_is_finite(incoming.x) ||
+        !mp_float_is_finite(incoming.y) || !mp_float_is_finite(incoming.z)) {
       continue;
     }
     MPEnemyState* slot = find_enemy_slot(data.remote_enemy_buffer, incoming.actor_id);

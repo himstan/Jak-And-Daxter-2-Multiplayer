@@ -68,9 +68,12 @@
     )
   (none))
 
-(defun mp-start-host-from-cli! ()
+(defun mp-start-host-from-cli! ((internet-host? symbol))
   (debug-log *mp-debug-log?* "[MP-Session] Hosting via CLI argument.~%")
-  (pc-multi-setup-host)
+  (if internet-host?
+      (pc-multi-setup-internet-host)
+      (pc-multi-setup-host)
+      )
   (pc-multi-set-status 6)
   (mp-set-local-sync-flag! (the uint 1))
   (none))
@@ -82,17 +85,20 @@
 
 (defun mp-start-host-from-settings! ()
   (debug-log *mp-debug-log?* "[MP-Session] Hosting mode active (from settings). Initializing server...~%")
-  (pc-multi-setup-host)
+  (if (and *pc-settings* (nonzero? (the-as uint *pc-settings*))
+           (-> *pc-settings* mp-internet-host?))
+      (pc-multi-setup-internet-host)
+      (pc-multi-setup-host))
   (mp-set-local-sync-flag! (the uint 1))
   (none))
 
 (defun mp-auto-start-session-on-spawn! ((status int))
   (when (zero? status)
     (let ((host-arg (pc-multi-get-command-line-arg "-mp-host"))
-          (client-arg (pc-multi-get-command-line-arg "-mp-client")))
+          (client-arg (pc-multi-get-command-line-arg "-mp-invite")))
       (cond
         ((and host-arg (nonzero? (the-as uint host-arg)) (nonzero? (-> host-arg allocated-length)))
-         (mp-start-host-from-cli!)
+         (mp-start-host-from-cli! (string= host-arg "internet"))
          )
         ((and client-arg (nonzero? (the-as uint client-arg)) (nonzero? (-> client-arg allocated-length)))
          (mp-start-client-from-cli! client-arg)

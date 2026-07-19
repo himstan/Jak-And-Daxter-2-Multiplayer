@@ -8,15 +8,19 @@
 void mp_handle_airlock_sync_packet(MultiplayerData& data,
                                    const ENetPacket* packet,
                                    uint32_t current_time) {
-  const auto* sync = PacketView(packet).as_exact<PacketAirlockSync>(PacketType::AIRLOCK_SYNC);
-  if (!sync || sync->sequence <= data.last_remote_airlock_sequence) {
+  const auto sync = PacketView(packet).as_exact<PacketAirlockSync>(PacketType::AIRLOCK_SYNC);
+  if (!sync || sync->count > MAX_AIRLOCK_SYNC_COUNT ||
+      !mp_sequence_is_newer(sync->sequence, data.last_remote_airlock_sequence)) {
     return;
   }
 
   memset(&data.remote_airlock_table, 0, sizeof(data.remote_airlock_table));
-  data.remote_airlock_table.count =
-      sync->count < (uint32_t)MAX_AIRLOCK_SYNC_COUNT ? sync->count : MAX_AIRLOCK_SYNC_COUNT;
+  data.remote_airlock_table.count = sync->count;
   for (uint32_t i = 0; i < data.remote_airlock_table.count; i++) {
+    if (sync->states[i].airlock_aid == 0 || sync->states[i].state_id > 3) {
+      memset(&data.remote_airlock_table, 0, sizeof(data.remote_airlock_table));
+      return;
+    }
     memcpy(&data.remote_airlock_table.states[i], &sync->states[i], sizeof(MPAirlockStateGOAL));
     data.remote_airlock_table.states[i].last_updated = current_time;
   }

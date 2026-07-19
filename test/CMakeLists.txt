@@ -75,6 +75,11 @@ add_executable(goalc-test
 
 target_link_libraries(goalc-test common runtime compiler gtest decomp Zydis libzstd_static tree-sitter)
 
+add_executable(multiplayer-test
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer_test_main.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/test_multiplayer_bridge.cpp)
+target_link_libraries(multiplayer-test runtime gtest)
+
 add_executable(test_image_resize ${CMAKE_CURRENT_LIST_DIR}/common/test_image_resize.cpp)
 target_link_libraries(test_image_resize common)
 

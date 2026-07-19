@@ -6,6 +6,7 @@
 #include "enet/enet.h"
 
 #include <cstring>
+#include <algorithm>
 
 namespace {
 MultiplayerData g_multiplayer_data;
@@ -31,6 +32,7 @@ void multiplayer_reset_remote_traffic_buffers(MultiplayerData& data) {
   memset(data.veh_last_sequence, 0, sizeof(data.veh_last_sequence));
   data.remote_traffic_buffer_level_hash = 0;
   data.last_traffic_sync_time = 0;
+  data.last_pedestrian_sequence = 0;
 }
 
 void multiplayer_reset_remote_palace_squid_state(MultiplayerData& data) {
@@ -51,15 +53,24 @@ void multiplayer_clear_session_state(MultiplayerData& data) {
   data.last_receive_time = 0;
   data.pre_reconnect_status = 0;
   data.server_peer = nullptr;
+  data.authenticated_peer = nullptr;
+  mp_secure_clear_string(data.staged_invite);
+  data.staged_invite_status = 0;
   data.inbound_events.clear();
-  data.remote_entities.clear();
+  data.remote_entity = {};
   memset(&data.remote_enemy_buffer, 0, sizeof(data.remote_enemy_buffer));
   data.last_enemy_sync_time = 0;
+  data.last_enemy_sequence = 0;
   data.local_traffic_level_hash = 0;
   data.last_remote_traffic_level_hash = 0;
   multiplayer_reset_remote_traffic_buffers(data);
   multiplayer_reset_remote_palace_squid_state(data);
   multiplayer_reset_remote_airlock_state(data);
+  {
+    std::lock_guard<std::mutex> lock(data.discovery_result_mutex);
+    std::fill(data.found_ip.begin(), data.found_ip.end(), '\0');
+    data.found_ip.clear();
+  }
 }
 
 void multiplayer_request_full_sync(MultiplayerData& data) {

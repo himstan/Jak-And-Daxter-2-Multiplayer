@@ -3839,7 +3839,6 @@
                 (begin
                   (pc-multi-disconnect)
                   (mp-reset-state)
-                  (pc-multi-setup-client (-> *pc-settings* mp-join-ip) (-> *pc-settings* mp-join-port))
                   )
                 (restart-mission)
                 )

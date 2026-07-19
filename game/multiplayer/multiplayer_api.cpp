@@ -1,6 +1,8 @@
 #include "multiplayer_api.h"
 
 #include "common/log/log.h"
+#include "common/cross_sockets/XSocket.h"
+#include "common/goal_constants.h"
 #include "game/kernel/common/kmachine.h"
 #include "game/kernel/jak2/kscheme.h"
 #include "game/multiplayer/multiplayer.h"
@@ -21,30 +23,74 @@
 #include "game/multiplayer/vehicle/multiplayer_vehicle.h"
 
 #include "enet/enet.h"
+#include "third-party/SDL/include/SDL3/SDL.h"
 
 #include <cstring>
 
 namespace {
 constexpr u32 kMinGoalPointer = 0x1000;
-constexpr uint32_t kPortMappingRefreshIntervalMs = 60 * 60 * 1000;
+
+bool authentication_address_banned(MultiplayerData& data, uint32_t address, uint32_t now);
+void record_authentication_failure(MultiplayerData& data, uint32_t address, uint32_t now);
+void add_pending_handshake(MultiplayerData& data, ENetPeer* peer, uint32_t now);
+void remove_pending_handshake(MultiplayerData& data, ENetPeer* peer);
+void expire_pending_handshakes(MultiplayerData& data, uint32_t now);
+void disconnect_other_pending_peers(MultiplayerData& data, ENetPeer* authenticated);
+
+std::string local_invite_address() {
+  char hostname[256] = {};
+  if (gethostname(hostname, sizeof(hostname)) != 0) {
+    return "127.0.0.1";
+  }
+  addrinfo hints = {};
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_DGRAM;
+  addrinfo* addresses = nullptr;
+  if (getaddrinfo(hostname, nullptr, &hints, &addresses) != 0) {
+    return "127.0.0.1";
+  }
+
+  std::string result = "127.0.0.1";
+  for (const addrinfo* address = addresses; address; address = address->ai_next) {
+    const auto* ipv4 = reinterpret_cast<const sockaddr_in*>(address->ai_addr);
+    const uint32_t host_order = ntohl(ipv4->sin_addr.s_addr);
+    if ((host_order >> 24) == 127 || host_order == 0) {
+      continue;
+    }
+    char buffer[INET_ADDRSTRLEN] = {};
+    if (inet_ntop(AF_INET, &ipv4->sin_addr, buffer, sizeof(buffer))) {
+      result = buffer;
+      break;
+    }
+  }
+  freeaddrinfo(addresses);
+  return result;
+}
 
 template <typename T>
 T* goal_ptr(u32 ptr) {
-  if (ptr < kMinGoalPointer) {
+  if (ptr < kMinGoalPointer || ptr > static_cast<u32>(EE_MAIN_MEM_SIZE - sizeof(T))) {
     return nullptr;
   }
   return Ptr<T>(ptr).c();
 }
 
 const char* goal_string_data(u32 ptr) {
-  if (ptr < kMinGoalPointer) {
+  if (ptr < kMinGoalPointer ||
+      ptr > static_cast<u32>(EE_MAIN_MEM_SIZE - sizeof(String) - 1)) {
     return nullptr;
   }
   auto* str = Ptr<String>(ptr).c();
   if (!str) {
     return nullptr;
   }
-  return str->data();
+  constexpr u32 kMaxBridgeStringLength = 4096;
+  if (str->len > kMaxBridgeStringLength ||
+      str->len > static_cast<u32>(EE_MAIN_MEM_SIZE) - ptr - sizeof(String) - 1) {
+    return nullptr;
+  }
+  const char* value = str->data();
+  return value[str->len] == '\0' ? value : nullptr;
 }
 
 void handle_receive_packet(MultiplayerData& data,
@@ -57,7 +103,13 @@ void handle_receive_packet(MultiplayerData& data,
     return;
   }
 
-  switch (view.type()) {
+  const PacketType packet_type = view.type();
+  const int sender_role = data.local_role == 0 ? 1 : 0;
+  if (!mp_packet_direction_allowed(packet_type, sender_role)) {
+    return;
+  }
+
+  switch (packet_type) {
     case PacketType::STATE_UPDATE:
       mp_handle_player_state_packet(data, packet, remote, current_time);
       break;
@@ -95,7 +147,6 @@ void handle_receive_packet(MultiplayerData& data,
       break;
     case PacketType::EVENT_JOIN:
     case PacketType::EVENT_LEAVE:
-      break;
     default:
       if (current_time - data.last_traffic_short_packet_debug_time > 2000) {
         lg::warn("[Multiplayer] Ignoring unknown packet type {} ({} bytes).",
@@ -122,39 +173,87 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
 
     switch (event.type) {
       case ENET_EVENT_TYPE_RECEIVE:
-        data.last_receive_time = current_time;
-        data.stats.track_recv_bytes(event.packet->data, event.packet->dataLength);
-        if (data.join_status == (int)MultiplayerStatus::RECONNECTING) {
-          lg::info("[Multiplayer] Data packet received. Connection restored. Resuming status {}...",
-                   data.pre_reconnect_status);
-          data.join_status = data.pre_reconnect_status;
+      {
+        if (data.local_role == 0 && data.authenticated_peer &&
+            event.peer != data.authenticated_peer) {
+          enet_packet_destroy(event.packet);
+          break;
         }
-        handle_receive_packet(data, event.packet, local, remote, current_time);
+        SecurityReceiveResult secured =
+            data.security.receive(data.local_role, event.packet->data, event.packet->dataLength);
+        bool response_sent = true;
+        if (secured.response.size != 0) {
+          response_sent = mp_send_raw_packet_to_peer(
+              event.peer, static_cast<int>(MultiplayerChannel::CONTROL),
+              secured.response.bytes.data(), secured.response.size, ENET_PACKET_FLAG_RELIABLE);
+        }
+        if (!response_sent) {
+          enet_peer_disconnect_now(event.peer, 0);
+        } else if (secured.kind == SecurityReceiveKind::HANDSHAKE &&
+                   data.security.authenticated()) {
+          if (data.local_role == 0) {
+            data.authenticated_peer = event.peer;
+            disconnect_other_pending_peers(data, event.peer);
+          }
+          data.handshake_started_time = 0;
+          data.last_receive_time = current_time;
+          data.join_status = (int)MultiplayerStatus::CONNECTED_LOBBY;
+          lg::info("[Multiplayer] Protocol v2 peer authenticated.");
+        } else if (secured.kind == SecurityReceiveKind::GAMEPLAY) {
+          ENetPacket plaintext_packet = {};
+          plaintext_packet.data = secured.plaintext.bytes.data();
+          plaintext_packet.dataLength = secured.plaintext.size;
+          data.last_receive_time = current_time;
+          data.stats.track_recv_bytes(plaintext_packet.data, plaintext_packet.dataLength);
+          if (data.join_status == (int)MultiplayerStatus::RECONNECTING) {
+            lg::info(
+                "[Multiplayer] Authenticated packet received. Connection restored. Resuming status {}...",
+                data.pre_reconnect_status);
+            data.join_status = data.pre_reconnect_status;
+          }
+          handle_receive_packet(data, &plaintext_packet, local, remote, current_time);
+        } else if (secured.kind == SecurityReceiveKind::REJECTED && data.local_role == 0 &&
+                   !data.authenticated_peer) {
+          record_authentication_failure(data, event.peer->address.host, current_time);
+          enet_peer_disconnect_now(event.peer, 0);
+          remove_pending_handshake(data, event.peer);
+        }
         enet_packet_destroy(event.packet);
         break;
+      }
       case ENET_EVENT_TYPE_CONNECT:
         data.last_receive_time = current_time;
         if (data.local_role == 1) {
-          lg::info("[Multiplayer] Successfully connected to host.");
-          data.join_status = (int)MultiplayerStatus::CONNECTED_LOBBY;
+          data.handshake_started_time = current_time;
+          lg::info("[Multiplayer] Transport connected. Awaiting protocol authentication.");
         } else if (data.local_role == 0) {
-          char ip[64];
-          enet_address_get_host_ip(&event.peer->address, ip, sizeof(ip));
-          lg::info("[Multiplayer] Client connected");
-          if (data.join_status != (int)MultiplayerStatus::IN_GAME) {
-            data.join_status = (int)MultiplayerStatus::CONNECTED_LOBBY;
-          } else {
-            multiplayer_request_full_sync(data);
+          if (data.authenticated_peer || data.security.authenticated() ||
+              authentication_address_banned(data, event.peer->address.host, current_time)) {
+            enet_peer_disconnect_now(event.peer, 0);
+            break;
           }
+          add_pending_handshake(data, event.peer, current_time);
+          MultiplayerDatagram hello;
+          if (data.security.make_server_hello(hello)) {
+            mp_send_raw_packet_to_peer(event.peer,
+                                       static_cast<int>(MultiplayerChannel::CONTROL),
+                                       hello.bytes.data(), hello.size, ENET_PACKET_FLAG_RELIABLE);
+          }
+          lg::info("[Multiplayer] Client transport connected. Authentication challenge sent.");
         }
         break;
       case ENET_EVENT_TYPE_DISCONNECT:
         if (data.local_role == 0) {
-          lg::info("[Multiplayer] Client disconnected.");
-          data.remote_entities.erase(1);
+          remove_pending_handshake(data, event.peer);
+          if (event.peer == data.authenticated_peer) {
+            data.authenticated_peer = nullptr;
+            data.remote_entity = {};
+            data.join_status = (int)MultiplayerStatus::FAILED;
+            lg::info("[Multiplayer] Authenticated client disconnected.");
+          }
         } else {
           lg::warn("[Multiplayer] Host has left the session.");
-          data.remote_entities.erase(0);
+          data.remote_entity = {};
           data.join_status = (int)MultiplayerStatus::HOST_LEFT;
         }
         break;
@@ -162,31 +261,94 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
         break;
     }
   }
+
+  if (data.local_role == 0) {
+    expire_pending_handshakes(data, current_time);
+  } else if (!data.security.authenticated() && data.handshake_started_time != 0 &&
+             current_time - data.handshake_started_time > 5000) {
+    lg::warn("[Multiplayer] Protocol authentication timed out.");
+    MultiplayerManager::disconnect(data);
+  }
 }
 
-void refresh_host_port_mapping(MultiplayerData& data, uint32_t current_time) {
-  MPPortMappingMethod method = MPPortMappingMethod::NONE;
-  uint16_t local_port = 0;
-  uint16_t external_port = 0;
-  {
-    std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
-    if (data.local_role != 0 || !data.port_mapping_active ||
-        data.port_mapping_method != MPPortMappingMethod::NAT_PMP ||
-        current_time - data.last_port_mapping_refresh_time < kPortMappingRefreshIntervalMs) {
+MultiplayerData::AuthenticationFailure* authentication_failure_for(
+    MultiplayerData& data, uint32_t address, bool create) {
+  for (auto& entry : data.authentication_failures) {
+    if (entry.address == address) {
+      return &entry;
+    }
+  }
+  if (!create) {
+    return nullptr;
+  }
+  auto& entry = data.authentication_failures[data.next_authentication_failure_slot];
+  data.next_authentication_failure_slot =
+      (data.next_authentication_failure_slot + 1) % data.authentication_failures.size();
+  entry = {};
+  entry.address = address;
+  return &entry;
+}
+
+bool authentication_address_banned(MultiplayerData& data, uint32_t address, uint32_t now) {
+  auto* entry = authentication_failure_for(data, address, false);
+  return entry && static_cast<int32_t>(entry->banned_until - now) > 0;
+}
+
+void record_authentication_failure(MultiplayerData& data, uint32_t address, uint32_t now) {
+  auto* entry = authentication_failure_for(data, address, true);
+  if (!entry) {
+    return;
+  }
+  if (entry->window_start == 0 || now - entry->window_start > 30000) {
+    entry->window_start = now;
+    entry->count = 0;
+  }
+  if (entry->count < UINT8_MAX) {
+    ++entry->count;
+  }
+  if (entry->count >= 3) {
+    entry->banned_until = now + 60000;
+    entry->window_start = now;
+    entry->count = 0;
+  }
+}
+
+void add_pending_handshake(MultiplayerData& data, ENetPeer* peer, uint32_t now) {
+  for (auto& pending : data.pending_handshakes) {
+    if (!pending.peer) {
+      pending.peer = peer;
+      pending.deadline = now + 5000;
       return;
     }
-    method = data.port_mapping_method;
-    local_port = data.port_mapping_local_port;
-    external_port = data.port_mapping_external_port;
   }
+  enet_peer_disconnect_now(peer, 0);
+}
 
-  if (mp_refresh_udp_port_mapping(method, local_port, external_port)) {
-    std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
-    data.last_port_mapping_refresh_time = current_time;
-  } else {
-    std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
-    data.last_port_mapping_refresh_time = current_time;
-    lg::warn("[Multiplayer] Temporary UDP port mapping refresh failed.");
+void remove_pending_handshake(MultiplayerData& data, ENetPeer* peer) {
+  for (auto& pending : data.pending_handshakes) {
+    if (pending.peer == peer) {
+      pending = {};
+      return;
+    }
+  }
+}
+
+void expire_pending_handshakes(MultiplayerData& data, uint32_t now) {
+  for (auto& pending : data.pending_handshakes) {
+    if (pending.peer && static_cast<int32_t>(now - pending.deadline) >= 0) {
+      record_authentication_failure(data, pending.peer->address.host, now);
+      enet_peer_disconnect_now(pending.peer, 0);
+      pending = {};
+    }
+  }
+}
+
+void disconnect_other_pending_peers(MultiplayerData& data, ENetPeer* authenticated) {
+  for (auto& pending : data.pending_handshakes) {
+    if (pending.peer && pending.peer != authenticated) {
+      enet_peer_disconnect_now(pending.peer, 0);
+    }
+    pending = {};
   }
 }
 
@@ -231,7 +393,6 @@ void pc_multi_poll(u32 local_ptr, u32 remote_ptr) {
 
     poll_network(data, local, remote);
     current_time = enet_time_get();
-    refresh_host_port_mapping(data, current_time);
     multiplayer_cleanup_stale_sync(data, current_time);
     multiplayer_update_receive_timeout(data, current_time);
   } catch (...) {
@@ -378,11 +539,8 @@ u64 pc_multi_get_vehicle_sync_time(u32 net_id) {
   }
 
   const auto& data = multiplayer_data();
-  for (const auto& [remote_id, entity] : data.remote_entities) {
-    (void)remote_id;
-    if (entity.veh_state.net_id == net_id) {
-      return entity.receive_tick;
-    }
+  if (data.remote_entity.veh_state.net_id == net_id) {
+    return data.remote_entity.receive_tick;
   }
 
   for (uint32_t slot = 0; slot < MAX_VEHICLE_SYNC_COUNT; ++slot) {
@@ -398,16 +556,30 @@ void pc_multi_disconnect() {
 }
 
 void pc_multi_setup_host() {
-  MultiplayerManager::setup_host(multiplayer_data());
+  MultiplayerManager::setup_host(multiplayer_data(), false);
+}
+
+void pc_multi_setup_internet_host() {
+  MultiplayerManager::setup_host(multiplayer_data(), true);
 }
 
 void pc_multi_setup_client(u32 ip_ptr, u32 port) {
-  const char* ip = goal_string_data(ip_ptr);
-  if (!ip || !ip[0]) {
-    lg::warn("[Multiplayer] Ignoring setup-client with invalid IP string.");
+  (void)port;
+  const char* invite = goal_string_data(ip_ptr);
+  if (!invite || !invite[0]) {
+    lg::warn("[Multiplayer] Ignoring setup-client with empty invite string.");
     return;
   }
-  MultiplayerManager::setup_client(multiplayer_data(), ip, (int)port);
+  auto& data = multiplayer_data();
+  MultiplayerManager::disconnect(data);
+  std::string host;
+  uint16_t invite_port = 0;
+  if (!data.security.start_client(invite, host, invite_port)) {
+    lg::warn("[Multiplayer] Rejected invalid or legacy multiplayer invite.");
+    data.join_status = (int)MultiplayerStatus::FAILED;
+    return;
+  }
+  MultiplayerManager::setup_client(data, host.c_str(), invite_port);
 }
 
 int pc_multi_get_status() {
@@ -447,8 +619,123 @@ u64 pc_multi_get_command_line_arg(u32 str_ptr) {
   return s7.offset;
 }
 
-u64 pc_multi_get_found_ip() {
-  return jak2::make_string_from_c(multiplayer_data().found_ip.c_str());
+static void connect_private_invite(MultiplayerData& data, std::string& invite) {
+  MultiplayerManager::disconnect(data);
+  std::string host;
+  uint16_t port = 0;
+  const bool valid = data.security.start_client(invite, host, port);
+  mp_secure_clear_string(invite);
+  if (!valid) {
+    data.join_status = (int)MultiplayerStatus::FAILED;
+    return;
+  }
+  MultiplayerManager::setup_client(data, host.c_str(), port);
+}
+
+void pc_multi_connect_found_host() {
+  auto& data = multiplayer_data();
+  std::string invite;
+  {
+    std::lock_guard<std::mutex> lock(data.discovery_result_mutex);
+    invite.swap(data.found_ip);
+  }
+  if (invite.empty()) {
+    data.join_status = (int)MultiplayerStatus::FAILED;
+    return;
+  }
+  connect_private_invite(data, invite);
+}
+
+static std::string current_host_invite(MultiplayerData& data) {
+  std::string address = local_invite_address();
+  if (data.internet_host) {
+    std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
+    if (!data.port_mapping_active || data.port_mapping_external_ip.empty()) {
+      return {};
+    }
+    address = data.port_mapping_external_ip;
+  }
+  return data.security.invite_for_address(address);
+}
+
+int pc_multi_host_invite_ready() {
+  auto& data = multiplayer_data();
+  if (!data.initialized || data.local_role != 0 || data.security.invite_token().empty()) {
+    return 0;
+  }
+  if (!data.internet_host) {
+    return 1;
+  }
+  std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
+  return data.port_mapping_active && !data.port_mapping_external_ip.empty() ? 1 : 0;
+}
+
+int pc_multi_copy_invite() {
+  std::string invite = current_host_invite(multiplayer_data());
+  if (invite.empty()) {
+    return 0;
+  }
+  const bool copied = SDL_SetClipboardText(invite.c_str());
+  mp_secure_clear_string(invite);
+  return copied ? 1 : 0;
+}
+
+void pc_multi_clear_staged_invite() {
+  auto& data = multiplayer_data();
+  mp_secure_clear_string(data.staged_invite);
+  data.staged_invite_status = 0;
+}
+
+int pc_multi_stage_clipboard_invite() {
+  auto& data = multiplayer_data();
+  pc_multi_clear_staged_invite();
+  char* clipboard_text = SDL_GetClipboardText();
+  if (!clipboard_text) {
+    data.staged_invite_status = -1;
+    return 0;
+  }
+
+  constexpr size_t kMaximumInviteLength = 43;
+  size_t length = 0;
+  while (length <= kMaximumInviteLength && clipboard_text[length] != '\0') {
+    ++length;
+  }
+  bool valid = length <= kMaximumInviteLength;
+  std::string candidate;
+  if (valid) {
+    candidate.assign(clipboard_text, length);
+    MultiplayerSecurity validator;
+    std::string host;
+    uint16_t port = 0;
+    valid = validator.start_client(candidate, host, port);
+  }
+  SDL_free(clipboard_text);
+
+  if (!valid) {
+    mp_secure_clear_string(candidate);
+    data.staged_invite_status = -1;
+    return 0;
+  }
+  data.staged_invite.swap(candidate);
+  data.staged_invite_status = 1;
+  return 1;
+}
+
+int pc_multi_get_staged_invite_status() {
+  return multiplayer_data().staged_invite_status;
+}
+
+void pc_multi_connect_staged_invite() {
+  auto& data = multiplayer_data();
+  if (data.staged_invite_status != 1 || data.staged_invite.empty()) {
+    data.join_status = (int)MultiplayerStatus::FAILED;
+    return;
+  }
+
+  std::string invite;
+  invite.swap(data.staged_invite);
+  data.staged_invite_status = 0;
+  connect_private_invite(data, invite);
 }
 
 void pc_multi_debug_stop_receive(u32 val) {
@@ -561,49 +848,6 @@ int pc_multi_get_recv_rate() {
   return data.stats.recv_rate_bytes_per_sec;
 }
 
-int pc_multi_get_peer_port() {
-  auto& data = multiplayer_data();
-  if (!data.host) {
-    return 0;
-  }
-  if (data.server_peer) {
-    return data.server_peer->address.port;
-  }
-  for (size_t i = 0; i < data.host->peerCount; i++) {
-    if (data.host->peers[i].state == ENET_PEER_STATE_CONNECTED) {
-      return data.host->peers[i].address.port;
-    }
-  }
-  return 0;
-}
-
-u64 pc_multi_get_peer_ip() {
-  auto& data = multiplayer_data();
-  if (!data.host) {
-    return jak2::make_string_from_c("");
-  }
-  ENetAddress addr;
-  bool found = false;
-  if (data.server_peer) {
-    addr = data.server_peer->address;
-    found = true;
-  } else {
-    for (size_t i = 0; i < data.host->peerCount; i++) {
-      if (data.host->peers[i].state == ENET_PEER_STATE_CONNECTED) {
-        addr = data.host->peers[i].address;
-        found = true;
-        break;
-      }
-    }
-  }
-  if (found) {
-    char ip[64];
-    enet_address_get_host_ip(&addr, ip, sizeof(ip));
-    return jak2::make_string_from_c(ip);
-  }
-  return jak2::make_string_from_c("");
-}
-
 int pc_multi_get_type_send_rate(int type) {
   if (type < 0 || type >= 11) return 0;
   return multiplayer_data().stats.send_rate_by_type[type];
@@ -626,13 +870,27 @@ int pc_multi_get_type_total_recv(int type) {
 
 void init_multiplayer_pc_port() {
   jak2::make_function_symbol_from_c("pc-multi-setup-host", (void*)pc_multi_setup_host);
+  jak2::make_function_symbol_from_c("pc-multi-setup-internet-host",
+                                    (void*)pc_multi_setup_internet_host);
   jak2::make_function_symbol_from_c("pc-multi-setup-client", (void*)pc_multi_setup_client);
   jak2::make_function_symbol_from_c("pc-multi-get-status", (void*)pc_multi_get_status);
   jak2::make_function_symbol_from_c("pc-multi-set-status", (void*)pc_multi_set_status);
   jak2::make_function_symbol_from_c("pc-multi-request-full-sync", (void*)pc_multi_request_full_sync);
   jak2::make_function_symbol_from_c("pc-multi-stop-search", (void*)pc_multi_stop_search);
   jak2::make_function_symbol_from_c("pc-multi-start-search", (void*)pc_multi_start_search);
-  jak2::make_function_symbol_from_c("pc-multi-get-found-ip", (void*)pc_multi_get_found_ip);
+  jak2::make_function_symbol_from_c("pc-multi-connect-found-host",
+                                    (void*)pc_multi_connect_found_host);
+  jak2::make_function_symbol_from_c("pc-multi-host-invite-ready",
+                                    (void*)pc_multi_host_invite_ready);
+  jak2::make_function_symbol_from_c("pc-multi-copy-invite", (void*)pc_multi_copy_invite);
+  jak2::make_function_symbol_from_c("pc-multi-stage-clipboard-invite",
+                                    (void*)pc_multi_stage_clipboard_invite);
+  jak2::make_function_symbol_from_c("pc-multi-get-staged-invite-status",
+                                    (void*)pc_multi_get_staged_invite_status);
+  jak2::make_function_symbol_from_c("pc-multi-connect-staged-invite",
+                                    (void*)pc_multi_connect_staged_invite);
+  jak2::make_function_symbol_from_c("pc-multi-clear-staged-invite",
+                                    (void*)pc_multi_clear_staged_invite);
   jak2::make_function_symbol_from_c("pc-multi-poll", (void*)pc_multi_poll);
   jak2::make_function_symbol_from_c("pc-multi-send-state", (void*)pc_multi_send_state);
   jak2::make_function_symbol_from_c("pc-multi-receive-state", (void*)pc_multi_receive_state);
@@ -671,8 +929,6 @@ void init_multiplayer_pc_port() {
   jak2::make_function_symbol_from_c("pc-multi-get-total-received-packets", (void*)pc_multi_get_total_received_packets);
   jak2::make_function_symbol_from_c("pc-multi-get-send-rate", (void*)pc_multi_get_send_rate);
   jak2::make_function_symbol_from_c("pc-multi-get-recv-rate", (void*)pc_multi_get_recv_rate);
-  jak2::make_function_symbol_from_c("pc-multi-get-peer-ip", (void*)pc_multi_get_peer_ip);
-  jak2::make_function_symbol_from_c("pc-multi-get-peer-port", (void*)pc_multi_get_peer_port);
   jak2::make_function_symbol_from_c("pc-multi-get-type-send-rate", (void*)pc_multi_get_type_send_rate);
   jak2::make_function_symbol_from_c("pc-multi-get-type-recv-rate", (void*)pc_multi_get_type_recv_rate);
   jak2::make_function_symbol_from_c("pc-multi-get-type-total-sent", (void*)pc_multi_get_type_total_sent);

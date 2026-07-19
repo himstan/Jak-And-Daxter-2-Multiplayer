@@ -7,17 +7,22 @@
 const int DISCOVERY_PORT = 3001;
 const char* const DISCOVERY_MAGIC = "OG_MP_DISCOVERY";
 
-enum class MultiplayerStatus : uint8_t {
+enum class MultiplayerChannel : uint8_t {
+  STATE = 0,
+  CONTROL = 1,
+};
+
+enum class MultiplayerStatus : int32_t {
   IDLE = 0,
   SEARCHING = 1,
   FOUND = 2,
   CONNECTING = 3,
-  CONNECTED_LOBBY = 4, // Both connected, waiting in menu
-  GAME_STARTING = 5,   // Host/Client is loading the save/level
-  IN_GAME = 6,         // Fully spawned and playing
-  RECONNECTING = 7,    // Connection lost, trying to restore
-  HOST_LEFT = 8,       // Host has explicitly left the session
-  FAILED = 255
+  CONNECTED_LOBBY = 4,
+  GAME_STARTING = 5,
+  IN_GAME = 6,
+  RECONNECTING = 7,
+  HOST_LEFT = 8,
+  FAILED = -1
 };
 
 enum class PacketType : uint8_t {
@@ -31,7 +36,8 @@ enum class PacketType : uint8_t {
   VEHICLE_SYNC = 7,
   TURRET_SYNC = 8,
   PALACE_SQUID_SYNC = 9,
-  AIRLOCK_SYNC = 10
+  AIRLOCK_SYNC = 10,
+  COUNT = 11
 };
 
 struct PacketHeader {

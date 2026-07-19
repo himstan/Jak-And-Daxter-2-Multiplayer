@@ -27,17 +27,20 @@ LAN discovery is available through **Find LAN**, but direct connect is the most 
 
    <img src="images/readme/host-host-game.png" alt="Title menu with Host Game selected" width="500">
 
-3. Choose **New Game** or **Load Game**.
+3. Choose **Host LAN** or **Host Online**
+
+4. Choose **New Game** or **Load Game**.
 
    <img src="images/readme/host-new-game.png" alt="Host Game menu showing New Game and Load Game" width="500">
 
    <img src="images/readme/host-select-save.png" alt="Host save selection menu" width="500">
 
-4. Wait on the host screen until the Daxter player connects.
+5. Select **Copy Invite**, then send the copied invite privately to the other player. Wait on
+   the host screen until they connect.
 
    <img src="images/readme/host-waiting-for-daxter.png" alt="Host waiting for Daxter to connect" width="500">
 
-5. Once the client connects, the game will continue into the selected save or new game.
+6. Once the client connects, the game will continue into the selected save or new game.
 
    <img src="images/readme/host-in-game.png" alt="Host player in game after connection" width="500">
 
@@ -58,9 +61,8 @@ The host is Jak. In general, if something important needs to be decided by the g
 
    <img src="images/readme/client-direct-connect.png" alt="Join Game menu with Direct Connect selected" width="500">
 
-5. Enter the host's IP address and port.
-
-6. Use port `26210` unless the host tells you otherwise.
+5. Copy the invite sent by the host, select **Paste Invite**, then select **Connect**. The address
+   and token are validated privately and are never displayed or saved by the game.
 
    <img src="images/readme/client-connect-game.png" alt="Direct Connect menu with Connect selected" width="500">
 
@@ -68,17 +70,11 @@ The joining player is Daxter.
 
 <img src="images/readme/client-in-game.png" alt="Client player in game after connection" width="500">
 
-## Entering The IP Address
+## Using An Invite
 
-You will need a keyboard to type the IP address. You can still select the **Address** and **Port** fields with a controller by pressing **X** on the field. If you are using the keyboard already, press **Space** instead.
-
-Once the field is selected, type the host's IP address or port. When you are done, press **X** or **Space** again to stop editing that field.
-
-<img src="images/readme/client-valid-ip.png" alt="Direct Connect menu with a valid IP address entered" width="500">
-
-If the IP address is invalid, it will show in red.
-
-<img src="images/readme/client-invalid-ip.png" alt="Direct Connect menu showing an invalid IP address" width="500">
+Online invites use the compact `address:port/token` form. Do not post an invite publicly as it contains the host's public IP address! It is a
+temporary credential for the current hosting session. Direct Connect only reports whether the
+clipboard contains a valid invite; it never renders the address or token.
 
 ## Local Split Screen
 
