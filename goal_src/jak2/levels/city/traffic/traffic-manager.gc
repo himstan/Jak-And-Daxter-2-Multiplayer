@@ -169,9 +169,8 @@
 
 (defmethod spawn-all ((this traffic-manager))
 
-  ;; MULTIPLAYER GUARD: Only the traffic authority (Host) should autonomously spawn traffic.
-  ;; This prevents the Client machine from leaking local, non-synced traffic during transitions.
-  (when (mp-is-traffic-authoritative?)
+  (when (and (mp-is-traffic-authoritative?)
+             (or (mp-is-jak?) (mp-is-traffic-spawn-ready?)))
 
     (dotimes (i 21)
       (let ((s4-0 (-> this traffic-engine object-type-info-array i)))
