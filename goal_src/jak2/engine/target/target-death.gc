@@ -381,7 +381,9 @@
            )
        )
       ((logtest? (continue-flags indax) (-> arg0 flags))
-       (go target-indax-start (the-as handle #f))
+       (if (mp-target-is-daxter? self)
+          (go target-indax-start (the-as handle #f))
+         )
        )
       ((logtest? (continue-flags record-path) (-> arg0 flags))
        )
@@ -1515,7 +1517,7 @@
         
              ;; Check if remote player also died (Double Death)
              (let ((remote *mp-puppet*))
-               (when (and remote (nonzero? remote) *remote-player-is-dead*)
+               (when (or (not *multi-sync-enabled?*) (and remote (nonzero? remote) *remote-player-is-dead*))
                    (begin
                      (debug-log *mp-debug-log?* "[Target-Death] Double Death or remote disconnected.~%")
                      (if (not (mp-is-fail-mission-pending?))
