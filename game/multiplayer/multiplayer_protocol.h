@@ -202,7 +202,8 @@ struct MPPedestrianStatePacked {
   uint32_t vehicle_net_id;
   uint32_t transport_id;
   uint8_t transport_side;
-  uint8_t pad[3];
+  uint8_t flags;
+  uint8_t pad[2];
 };
 static_assert(sizeof(MPPedestrianStatePacked) == 48, "MPPedestrianStatePacked must be 48 bytes");
 

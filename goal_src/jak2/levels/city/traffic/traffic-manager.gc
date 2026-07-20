@@ -14,7 +14,7 @@
 (deftype traffic-manager (process)
   ((traffic-engine    traffic-engine)
    (fast-spawn        symbol)
-   (dark-guard-ratio  int32)
+   (dark-guard-spawn-count int32)
    (spawn-params      traffic-object-spawn-params  :inline)
    )
   (:state-methods
@@ -28,6 +28,7 @@
     (kill-all-inactive (_type_) none)
     (reset-and-init (_type_) none)
     (init-params (_type_) none)
+    (get-dark-guard-ratio (_type_) int)
     )
   )
 
@@ -49,6 +50,45 @@
     (add-debug-sphere #t (bucket-id debug2) (-> v1-10 sphere) (-> v1-10 sphere r) *color-green*)
     )
   0
+  (none)
+  )
+
+(defmethod get-dark-guard-ratio ((this traffic-manager))
+  (if (task-node-closed? (game-task-node tomb-boss-resolution))
+    (the-as int 5)
+    (the-as int 0)
+    )
+)
+
+(defun configure-dark-guard-spawn! ((this traffic-manager) (params traffic-object-spawn-params))
+  (when (and params (nonzero? params))
+    (logclear! (-> params flags) (traffic-spawn-flags dark-guard))
+    (when (and this
+               (nonzero? this)
+               (= (-> params object-type) (traffic-type crimson-guard-1)))
+      (let ((dark-guard-ratio (get-dark-guard-ratio this)))
+        (when (and (> dark-guard-ratio 0)
+                   (>= (+ (-> this dark-guard-spawn-count) 1) dark-guard-ratio))
+          (logior! (-> params flags) (traffic-spawn-flags dark-guard))
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+(defun record-dark-guard-spawn! ((this traffic-manager) (params traffic-object-spawn-params))
+  (when (and this
+             (nonzero? this)
+             params
+             (nonzero? params)
+             (= (-> params object-type) (traffic-type crimson-guard-1))
+             (> (get-dark-guard-ratio this) 0))
+    (if (logtest? (-> params flags) (traffic-spawn-flags dark-guard))
+        (set! (-> this dark-guard-spawn-count) 0)
+        (+! (-> this dark-guard-spawn-count) 1)
+        )
+    )
   (none)
   )
 
@@ -163,15 +203,12 @@
                   ((and (logtest? (-> s0-0 flags) (traffic-type-flags trtflags-1))
                         (logtest? (-> s0-0 flags) (traffic-type-flags trtflags-3))
                         (< v1-21 (-> s0-0 want-count)))
-                    (logclear! (-> spawn-params flags) (traffic-spawn-flags dark-guard))
-                    (when (and (= (-> spawn-params object-type) (traffic-type crimson-guard-1))
-                               (> (-> this dark-guard-ratio) 0)
-                               (zero? (mod v1-21 (-> this dark-guard-ratio))))
-                      (logior! (-> spawn-params flags) (traffic-spawn-flags dark-guard)))
+                    (configure-dark-guard-spawn! this spawn-params)
                     (let ((traffic-obj (traffic-object-spawn this spawn-params)))
                       (cond
                         (traffic-obj
                           (add-object (-> this traffic-engine) spawn-type traffic-obj)
+                          (record-dark-guard-spawn! this spawn-params)
                           (+! (-> s0-0 reserve-count) -1)
                           (+! (-> spawn-params id) 1)
                           (+! spawned-nb 1)
@@ -399,6 +436,7 @@
     (set! (-> traffic-want-counts 9) 14)
     (set! (-> traffic-want-counts 10) 14)
     (set! (-> this fast-spawn) *traffic-fast-spawn*)
+    (set! (-> this dark-guard-spawn-count) 0)
     (reset-and-init this)
     (let ((v1-20 (-> this traffic-engine)))
       (dotimes (a0-2 21)
@@ -426,11 +464,6 @@
       )
     (set! (-> params id) (the-as uint 1))
     )
-  (set! (-> this dark-guard-ratio) (if (task-node-closed? (game-task-node tomb-boss-resolution))
-                                       5
-                                       0
-                                       )
-        )
   (restore-default-settings (-> this traffic-engine))
   (set! *traffic-manager* this)
   0

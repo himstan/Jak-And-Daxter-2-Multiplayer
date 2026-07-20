@@ -906,6 +906,13 @@
   (die-fast              43)
   )
 
+(defenum mp-pedestrian-flags
+  :type uint8
+  :bitfield #t
+  (dead)
+  (dark-guard)
+  )
+
 (deftype mp-pedestrian-state (structure)
   ((net-id          uint32)
    (object-type     uint8)
@@ -920,7 +927,7 @@
    (quat-z          float)
    (quat-w          float)
    (hp              int32)
-   (flags           uint8)
+   (flags           mp-pedestrian-flags)
    (target-aid      uint8)    ;; 0 = none, 1 = Host, 2 = Client
    (context-align   uint8 2)  ;; Aligns the named sync context fields below.
    (animation-profile uint32) ;; Type-specific initial animation selection.
