@@ -53,14 +53,14 @@ tasks:
       - sh: test -f {{.GK_BIN_RELEASE_DIR}}/gk{{.EXE_FILE_EXTENSION}}
         msg: "Couldn't locate runtime executable in '{{.GK_BIN_RELEASE_DIR}}/gk'"
     cmds:
-      - "{{.GK_BIN_RELEASE_DIR}}/gk -v --game {{.GAME}} -- -boot -debug -fakeiso -snapshot slot9 -mp-host true"
+      - "{{.GK_BIN_RELEASE_DIR}}/gk -v --game {{.GAME}} -- -boot -debug -fakeiso -mp-host true"
   boot-game-p2:
     desc: "Boots the game as the second player on port 8120, it will fail if it's not already compiled!"
     preconditions:
       - sh: test -f {{.GK_BIN_RELEASE_DIR}}/gk{{.EXE_FILE_EXTENSION}}
         msg: "Couldn't locate runtime executable in '{{.GK_BIN_RELEASE_DIR}}/gk'"
     cmds:
-      - '{{.GK_BIN_RELEASE_DIR}}/gk --port 8120 -v --game jak2 -- -boot -debug -fakeiso -snapshot slot9 -mp-client 127.0.0.1'
+      - '{{.GK_BIN_RELEASE_DIR}}/gk --port 8120 -v --game jak2 -- -boot -debug -fakeiso -mp-client 127.0.0.1'
   boot-game-retail:
     desc: "Boots the game without debug mode, it will fail if it's not already compiled!"
     preconditions:
@@ -74,7 +74,7 @@ tasks:
       - sh: test -f {{.GK_BIN_RELEASE_DIR}}/gk{{.EXE_FILE_EXTENSION}}
         msg: "Couldn't locate runtime executable in '{{.GK_BIN_RELEASE_DIR}}/gk'"
     cmds:
-      - "{{.GK_BIN_RELEASE_DIR}}/gk -v --game {{.GAME}} -- -fakeiso -debug -continue forexita-tube -mp-host true"
+      - "{{.GK_BIN_RELEASE_DIR}}/gk -v --game {{.GAME}} -- -fakeiso -debug -mp-host true"
   run-game-p2:
     desc: "Start the game's runtime, to start the game itself the REPL is required"
     preconditions:

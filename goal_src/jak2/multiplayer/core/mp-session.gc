@@ -99,7 +99,7 @@
 (defun mp-auto-start-session-on-spawn! ((status int))
   (when (zero? status)
     (let ((host-arg (pc-multi-get-command-line-arg "-mp-host"))
-          (client-arg (pc-multi-get-command-line-arg "-mp-invite")))
+          (client-arg (pc-multi-get-command-line-arg "-mp-client")))
       (cond
         ((and host-arg (nonzero? (the-as uint host-arg)) (nonzero? (-> host-arg allocated-length)))
          (mp-start-host-from-cli! (string= host-arg "internet"))
