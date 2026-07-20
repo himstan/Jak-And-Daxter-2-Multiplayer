@@ -85,13 +85,25 @@ This is updated from the entity system used in Crash 2, which had most of these 
 
 (defmethod new res-lump ((allocation symbol) (type-to-make type) (arg0 int) (arg1 int))
   "Allocate a new res-lump."
-  (let ((v0-0 (object-new allocation type-to-make (the-as int (+ (-> type-to-make size) (* (+ arg0 -1) 16) arg1)))))
-    (set! (-> v0-0 allocated-length) arg0)
-    (set! (-> v0-0 data-size) arg1)
-    (set! (-> v0-0 length) 0)
-    (set! (-> v0-0 data-base) (&-> v0-0 tag arg0))
-    (set! (-> v0-0 data-top) (&-> v0-0 tag arg0))
-    v0-0
+  (let* ((v0-0 (object-new allocation type-to-make (the-as int (-> type-to-make size))))
+         (tag-storage-size (* arg0 (size-of res-tag)))
+         (resource-storage (malloc allocation (+ tag-storage-size arg1)))
+         )
+    (when (and v0-0
+               (nonzero? v0-0)
+               resource-storage
+               (nonzero? resource-storage))
+      (let ((data-base (&+ resource-storage tag-storage-size)))
+        (set! (-> v0-0 allocated-length) arg0)
+        (set! (-> v0-0 data-size) arg1)
+        (set! (-> v0-0 length) 0)
+        (set! (-> v0-0 tag) (the-as (pointer res-tag) resource-storage))
+        (set! (-> v0-0 data-base) data-base)
+        (set! (-> v0-0 data-top) data-base)
+        (return v0-0)
+        )
+      )
+    (the-as res-lump #f)
     )
   )
 
@@ -686,9 +698,7 @@ This is updated from the entity system used in Crash 2, which had most of these 
    it will be reused. Alignment will be at least 8 bytes.
    If the input tag has elt-count = 0, it will return a tag for elt-count = 1."
   (local-vars (resource-mem pointer))
-  (let* ((tag-pair (lookup-tag-idx this (-> arg0 name) 'exact (-> arg0 key-frame)))
-         (existing-tag (-> this tag (-> tag-pair lo)))
-         )
+  (let ((tag-pair (lookup-tag-idx this (-> arg0 name) 'exact (-> arg0 key-frame))))
     0
     (if (and (>= (the-as int tag-pair) 0) (!= (-> arg0 key-frame) (-> arg0 key-frame)))
         (set! tag-pair (new 'static 'res-tag-pair :lo #xffffffff :hi #xffffffff))
@@ -696,7 +706,11 @@ This is updated from the entity system used in Crash 2, which had most of these 
     (if (zero? (-> arg0 elt-count))
         (set! arg0 (copy-and-set-field arg0 elt-count 1))
         )
-    (let ((data-size (length arg0)))
+    (let ((data-size (length arg0))
+          (existing-tag (new 'static 'res-tag)))
+      (when (>= (the-as int tag-pair) 0)
+        (set! existing-tag (-> this tag (-> tag-pair lo)))
+        )
       (cond
         ((and (>= (the-as int tag-pair) 0) (>= (length existing-tag) data-size))
          (set! resource-mem (&+ (-> this data-base) (-> existing-tag data-offset)))

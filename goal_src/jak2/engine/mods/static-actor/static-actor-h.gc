@@ -1,0 +1,267 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; Public authoring types and macros for adding vanilla-style actors to loaded BSPs.
+
+(defconstant STATIC_ACTOR_REGISTRY_MAX 256)
+(defconstant STATIC_ACTOR_AID_MIN 60000)
+(defconstant STATIC_ACTOR_AID_MAX 65534)
+(defconstant STATIC_ACTOR_CUSTOM_VIS_ID -1)
+
+(deftype static-actor-property (basic)
+  ((name       symbol)
+   (secondary-name symbol)
+   (kind       symbol)
+   (elt-type   symbol)
+   (data       object)
+   (extra      object)
+   (elt-count  int32)
+   (inlined?   symbol)
+   (key-frame  float)
+   )
+  )
+
+(deftype static-actor-definition (basic)
+  ((level                symbol)
+   (name                 string)
+   (etype                symbol)
+   (aid                  actor-id)
+   (trans                vector)
+   (quat                 quaternion)
+   (task                 game-task)
+   (kill-mask            task-mask)
+   (vis-dist             meters)
+   (required-art-groups  (array string))
+   (properties           (array static-actor-property))
+   )
+  )
+
+(define-extern register-static-actor! (function static-actor-definition symbol))
+(define-extern static-actor-augment-bsp! (function bsp-header none))
+
+(defmacro static-actor-art-groups (&rest names)
+  `(new 'static 'boxed-array :type string ,@names)
+  )
+
+(defmacro static-actor-properties (&rest properties)
+  `(new 'static 'boxed-array :type static-actor-property ,@properties)
+  )
+
+(defmacro static-actor-points (&rest points)
+  `(new 'static 'boxed-array :type vector
+     ,@(apply
+         (lambda (point)
+           `(new 'static 'vector
+              :x (meters ,(car point))
+              :y (meters ,(cadr point))
+              :z (meters ,(caddr point))
+              :w 1.0
+              )
+           )
+         points)
+     )
+  )
+
+;; Unitless vectors for generic vector-array properties. Use static-actor-points
+;; for positions, path control points, and volumes so meters are converted.
+(defmacro static-actor-vectors (&rest vectors)
+  `(new 'static 'boxed-array :type vector
+     ,@(apply
+         (lambda (value)
+           `(new 'static 'vector
+              :x ,(car value)
+              :y ,(cadr value)
+              :z ,(caddr value)
+              :w ,(cadddr value)
+              )
+           )
+         vectors)
+     )
+  )
+
+(defmacro static-actor-floats (&rest values)
+  `(new 'static 'boxed-array :type float ,@values)
+  )
+
+(defmacro static-actor-string (name value &key (key-frame -1000000000.0))
+  `(new 'static 'static-actor-property
+     :name ,name
+     :kind 'string
+     :elt-type 'string
+     :data ,value
+     :elt-count 1
+     :inlined? #f
+     :key-frame ,key-frame
+     )
+  )
+
+(defmacro static-actor-symbol (name value &key (key-frame -1000000000.0))
+  `(new 'static 'static-actor-property
+     :name ,name
+     :kind 'symbol
+     :elt-type 'symbol
+     :data ,value
+     :elt-count 1
+     :inlined? #f
+     :key-frame ,key-frame
+     )
+  )
+
+(defmacro static-actor-int (name value &key (key-frame -1000000000.0))
+  `(new 'static 'static-actor-property
+     :name ,name
+     :kind 'int
+     :elt-type 'int32
+     :data ,value
+     :elt-count 1
+     :inlined? #t
+     :key-frame ,key-frame
+     )
+  )
+
+(defmacro static-actor-uint (name value &key (key-frame -1000000000.0))
+  `(new 'static 'static-actor-property
+     :name ,name
+     :kind 'uint
+     :elt-type 'uint32
+     :data ,value
+     :elt-count 1
+     :inlined? #t
+     :key-frame ,key-frame
+     )
+  )
+
+(defmacro static-actor-float (name value &key (key-frame -1000000000.0))
+  `(new 'static 'static-actor-property
+     :name ,name
+     :kind 'float
+     :elt-type 'float
+     :data ,value
+     :elt-count 1
+     :inlined? #t
+     :key-frame ,key-frame
+     )
+  )
+
+(defmacro static-actor-vector (name x y z w &key (key-frame -1000000000.0))
+  `(new 'static 'static-actor-property
+     :name ,name
+     :kind 'vector
+     :elt-type 'vector
+     :data (new 'static 'vector :x ,x :y ,y :z ,z :w ,w)
+     :elt-count 1
+     :inlined? #t
+     :key-frame ,key-frame
+     )
+  )
+
+(defmacro static-actor-point (name x y z &key (key-frame -1000000000.0))
+  `(new 'static 'static-actor-property
+     :name ,name
+     :kind 'vector
+     :elt-type 'vector
+     :data (new 'static 'vector :x (meters ,x) :y (meters ,y) :z (meters ,z) :w 1.0)
+     :elt-count 1
+     :inlined? #t
+     :key-frame ,key-frame
+     )
+  )
+
+(defmacro static-actor-float-array (name values &key (key-frame -1000000000.0))
+  `(new 'static 'static-actor-property
+     :name ,name
+     :kind 'float-array
+     :elt-type 'float
+     :data ,values
+     :elt-count ,(length (cdr values))
+     :inlined? #t
+     :key-frame ,key-frame
+     )
+  )
+
+(defmacro static-actor-vector-array (name values &key (key-frame -1000000000.0))
+  `(new 'static 'static-actor-property
+     :name ,name
+     :kind 'vector-array
+     :elt-type 'vector
+     :data ,values
+     :elt-count ,(length (cdr values))
+     :inlined? #t
+     :key-frame ,key-frame
+     )
+  )
+
+(defmacro static-actor-volume (name min-point max-point &key (key-frame -1000000000.0))
+  `(static-actor-vector-array
+     ,name
+     (static-actor-points ,min-point ,max-point)
+     :key-frame ,key-frame
+     )
+  )
+
+(defmacro static-actor-path (name points &key (knots #f) &key (key-frame -1000000000.0))
+  `(new 'static 'static-actor-property
+     :name ,name
+     :secondary-name ',(string->symbol-format "{}-k" (if (pair? name) (cadr name) name))
+     :kind 'path
+     :elt-type 'vector
+     :data ,points
+     :extra ,knots
+     :elt-count ,(length (cdr points))
+     :inlined? #t
+     :key-frame ,key-frame
+     )
+  )
+
+(defmacro static-actor-raw-property (name elt-type data elt-count inlined?
+                                     &key (key-frame -1000000000.0))
+  `(new 'static 'static-actor-property
+     :name ,name
+     :kind 'raw
+     :elt-type ',elt-type
+     :data ,data
+     :elt-count ,elt-count
+     :inlined? ,inlined?
+     :key-frame ,key-frame
+     )
+  )
+
+(defmacro defstatic-actor (definition-name
+                           &key level
+                           &key name
+                           &key etype
+                           &key aid
+                           &key trans
+                           &key (quat (0.0 0.0 0.0 1.0))
+                           &key (task (game-task none))
+                           &key (kill-mask (task-mask))
+                           &key (vis-dist 10000.0)
+                           &key (required-art-groups (static-actor-art-groups))
+                           &key (properties (static-actor-properties)))
+  `(begin
+     (define ,definition-name
+       (new 'static 'static-actor-definition
+         :level ,level
+         :name ,name
+         :etype ,etype
+         :aid ,aid
+         :trans (new 'static 'vector
+                  :x (meters ,(car trans))
+                  :y (meters ,(cadr trans))
+                  :z (meters ,(caddr trans))
+                  :w 1.0)
+         :quat (new 'static 'quaternion
+                 :x ,(car quat)
+                 :y ,(cadr quat)
+                 :z ,(caddr quat)
+                 :w ,(cadddr quat))
+         :task ,task
+         :kill-mask ,kill-mask
+         :vis-dist (meters ,vis-dist)
+         :required-art-groups ,required-art-groups
+         :properties ,properties
+         )
+       )
+     (register-static-actor! ,definition-name)
+     )
+  )

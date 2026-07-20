@@ -729,7 +729,7 @@
                   )
                 )
         )
-  (if (not (-> arg1 vis-info 0))
+  (if (or (< (-> this vis-id) 0) (not (-> arg1 vis-info 0)))
       (set! (-> this extra vis-dist) (res-lump-float this 'vis-dist :default 40960000.0))
       )
   (cond
@@ -1805,6 +1805,7 @@
 ;; ERROR: Unsupported inline assembly instruction kind - [mfc0 v1, Count]
 (defmethod birth ((this bsp-header))
   (local-vars (v1-74 int) (s5-0 int) (sv-16 int))
+  (static-actor-augment-bsp! this)
   (.mfc0 s5-0 Count)
   (let ((a2-0 (if (nonzero? (-> this actors))
                   (-> this actors length)
@@ -2402,7 +2403,8 @@
                     (set! sv-48 (-> s3-4 data s1-1))
                     (cond
                         ;; og:preserve-this entity blacklist
-                        ((and (#if PC_PORT (or (with-pc (and (not (-> *pc-settings* ps2-actor-vis?))
+                        ((and (or (< (-> sv-48 vis-id) 0)
+                                  (#if PC_PORT (or (with-pc (and (not (-> *pc-settings* ps2-actor-vis?))
                                                              ;; ban specific entities
                                                              (not (let ((name (res-lump-struct (-> sv-48 entity) 'name string)))
                                                                   (or (string= name "fort-entry-gate-11")
@@ -2414,10 +2416,11 @@
                                                                       (string= name "under-locking-1")
                                                                       (string= name "under-locking-2"))))))
                                                (is-object-visible? s4-1 (-> sv-48 vis-id)))
-                                           (is-object-visible? s4-1 (-> sv-48 vis-id)))
+                                           (is-object-visible? s4-1 (-> sv-48 vis-id))))
                             (not (logtest? (-> sv-48 perm status) (entity-perm-status bit-9 bit-10)))
                             (not (logtest? (-> sv-48 kill-mask) sv-32))
-                            (or (-> s4-1 vis-info 0) (< (vector-vector-distance (-> sv-48 trans) sv-16) (-> sv-48 vis-dist)))
+                            (or (and (>= (-> sv-48 vis-id) 0) (-> s4-1 vis-info 0))
+                                (< (vector-vector-distance (-> sv-48 trans) sv-16) (-> sv-48 vis-dist)))
                             ;; og:preserve-this PC port note: added this extra check to fix level types being used after deloaded because of bad entity placement
                             (#if PC_PORT
                                 (or (not (type-type? (-> sv-48 entity type) entity-actor)) (and (valid? (-> (the-as entity-actor (-> sv-48 entity)) etype) type "entity-type-check etype" #f *stdcon*)

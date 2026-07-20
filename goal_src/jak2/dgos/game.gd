@@ -170,6 +170,7 @@
   "progress-generic-h-pc.o" ;; added
   "rpc-h.o"
   "path-h.o"
+  "static-actor-h.o" ;; added - programmatic static actor definitions
   "nav-mesh-h.o"
   "nav-control-h.o"
   "spatial-hash-h.o"
@@ -358,6 +359,8 @@
   "memory-usage.o"
   "entity.o"
   "path.o"
+  "static-actor.o" ;; added - programmatic static actor framework
+  "static-actor-data.o" ;; added - static actor registrations
   "vol.o"
   "nav-mesh.o"
   "nav-control.o"

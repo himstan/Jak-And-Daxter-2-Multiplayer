@@ -1739,6 +1739,11 @@ into 7 sections, which might explain the weird sizes in the center.
 (defmethod is-object-visible? ((this level) (arg0 int))
   "Is drawable arg0 visible? Note that this will return #f if the visibility data is not loaded."
 
+  ;; Programmatic static actors have no compiler-generated visibility bit.
+  (when (< arg0 0)
+    (return #t)
+    )
+
   ;; check the vis bits!
   (let* (;; lwu v1, 388(a0)
             (vis-data (-> this vis-bits))

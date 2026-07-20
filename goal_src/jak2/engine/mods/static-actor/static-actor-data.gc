@@ -1,0 +1,35 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defstatic-actor tomb-plat-return-3-definition
+  :level 'tombboss
+  :name "tomb-plat-return-3"
+  :etype 'tomb-plat-return
+  :aid 60000
+  :trans (241.0 -70.0 1411.0)
+  :vis-dist 200.0
+  :required-art-groups
+  (static-actor-art-groups "skel-tomb-plat-return")
+  :properties
+  (static-actor-properties
+    (static-actor-path
+      'intro
+      (static-actor-points
+        (241.0 -70.0 1411.0)
+        (241.0 -70.0 1411.0)
+        (241.0 -70.0 1411.0)
+        (241.0 -70.0 1411.0)))
+    (static-actor-path
+      'path
+      (static-actor-points
+        (241.0 -70.0 1411.0)
+        (232.0 -71.0 1408.333333)
+        (223.0 -72.0 1405.666667)
+        (214.0 -73.0 1403.0)))
+    (static-actor-string 'task-name "tomb-poles-boulder")
+    (static-actor-volume
+      'visvol
+      (206.0 -97.0 1395.0)
+      (249.0 -62.0 1419.0))
+    )
+  )
