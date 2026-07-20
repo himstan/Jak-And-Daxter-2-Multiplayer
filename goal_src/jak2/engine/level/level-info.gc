@@ -2181,6 +2181,29 @@
           )
         :want-sound (new 'static 'array symbol 3 'tomb4 'tomb5 'tomb6)
         )
+      (new 'static 'continue-point
+        :name "tombboss-spider-end"
+        :level 'tombboss
+        :trans (new 'static 'vector :x 1030000.0 :y -284793.8 :z 5784947.0 :w 1.0)
+        :quat (new 'static 'vector :y -0.7 :w 0.8)
+        :camera-trans (new 'static 'vector :x 1069799.25 :y -270032.9 :z 5788609.0 :w 1.0)
+        :camera-rot (new 'static 'inline-array vector3s 3
+          (new 'static 'vector3s :data (new 'static 'array float 3 -0.0553 0.0 0.9984))
+          (new 'static 'vector3s :data (new 'static 'array float 3 -0.1377 0.9904 -0.0076))
+          (new 'static 'vector3s :data (new 'static 'array float 3 -0.9889 -0.1379 -0.0548))
+          )
+        :on-goto #f
+        :vis-nick 'tombboss
+        :want (new 'static 'inline-array level-buffer-state 6
+          (new 'static 'level-buffer-state :name 'tomba :display? 'display :force-vis? #f :force-inside? #f)
+          (new 'static 'level-buffer-state :name 'tombboss :display? 'display :force-vis? #f :force-inside? #f)
+          (new 'static 'level-buffer-state :name 'tombext :display? 'special :force-vis? #f :force-inside? #f)
+          (new 'static 'level-buffer-state :name #f :display? #f :force-vis? #f :force-inside? #f)
+          (new 'static 'level-buffer-state :name #f :display? #f :force-vis? #f :force-inside? #f)
+          (new 'static 'level-buffer-state :name #f :display? #f :force-vis? #f :force-inside? #f)
+          )
+        :want-sound (new 'static 'array symbol 3 'tomb4 'tomb5 'tomb6)
+        )
       )
     :tasks '()
     :priority 100
