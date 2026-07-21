@@ -799,7 +799,7 @@ Ptr<Type> intern_type_from_c(const char* name, u64 methods) {
   // there's a weird flag system used here.
   // if methods is a number that's not 0 or 1, its used as the desired number of methods.
   // If method is 0, and a new type needs to be created, it uses 12 methods
-  // If method is 1, and a new type needs to be created, it uses 44 methods
+  // If method is 1, and a new type needs to be created, it uses 256 methods
   // If method is 0 or 1 and no new type needs to be created, there is no error.
   // Requesting a type to have fewer methods than the existing type has is ok.
   // Requesting a type to have more methods than the existing type is not ok and prints an error.
@@ -818,7 +818,7 @@ Ptr<Type> intern_type_from_c(const char* name, u64 methods) {
       // whatever builds the v2/v4 object files (level data) doesn't actually know method counts.
       // so it just puts a 1.  In this case, we should put lots of methods, just in case.
       // I guess 44 was the number they picked.
-      n_methods = 0x2c;
+      n_methods = 0x100;
     }
 
     // create the type.
