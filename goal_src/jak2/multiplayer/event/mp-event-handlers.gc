@@ -753,6 +753,9 @@
   (let ((s* *mp-scene-name-scratch*))
     (when (and s* (nonzero? s*) (nonzero? (length s*)))
       (cond
+        ((mp-tomb-boulder-ignore-remote-scene? s*)
+         (debug-log *mp-debug-log?* "[MP-Event-Handlers] Ignoring Daxter-only tomb scene: ~S~%" s*)
+         )
         ((mp-ignore-intro-start-after-skip? s*)
          (debug-log *mp-debug-log?* "[MP-Event-Handlers] Ignoring post-skip intro scene start: ~S.~%" s*)
          )
@@ -784,7 +787,12 @@
   (set! *mp-remote-scene-start-packet-id* (the uint 0))
   (when *scene-player*
     (debug-log *mp-debug-log?* "[MP-Event-Handlers] All players skipped. Aborting locally.~%")
-    (send-event (ppointer->process *scene-player*) 'abort)
+    (let ((scene-proc (the-as scene-player (ppointer->process *scene-player*))))
+      (when (and scene-proc (nonzero? scene-proc))
+        (mp-tomb-boulder-before-scene-abort! scene-proc)
+        (send-event scene-proc 'abort)
+        )
+      )
     ;; Force blackout off immediately to prevent getting stuck
     (mp-clear-client-presentation-blackout!)
     )

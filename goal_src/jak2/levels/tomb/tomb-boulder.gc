@@ -6,6 +6,7 @@
 ;; dgos: TOE
 
 (declare-type tomb-wing-door com-airlock)
+(define-extern mp-tomb-boulder-finish-daxter-chase! (function none))
 
 ;; DECOMP BEGINS
 
@@ -347,6 +348,17 @@
     )
   )
 
+(defun tomb-boulder-distance-to-door ((self tomb-boulder) (door-pos vector))
+  (when (and self (nonzero? self)
+             door-pos (nonzero? door-pos))
+    (let ((root (-> self root)))
+      (when (and root (nonzero? root))
+        (return (vector-vector-distance (-> root trans) door-pos))
+        )
+      )
+    )
+  -1.0
+  )
 
 (defstate idle (tomb-boulder)
   :virtual #t
@@ -364,6 +376,11 @@
            )
          )
        #f
+       )
+      (('door-distance)
+       (let ((door-pos (the-as vector (-> block param 0))))
+         (tomb-boulder-distance-to-door self door-pos)
+         )
        )
       )
     )
@@ -448,6 +465,7 @@
         (until #f
           (when (and (not *scene-player*)
                      *target*
+                     (not (task-node-closed? (game-task-node tomb-poles-boulder-started)))
                      (and (>= 81920.0 (vector-vector-distance (-> self root trans) (-> *target* control trans)))
                           (not (logtest? (focus-status teleporting) (-> *target* focus-status)))
                           )
@@ -503,6 +521,11 @@
            )
          )
        v0-0
+       )
+      (('door-distance)
+       (let ((door-pos (the-as vector (-> block param 0))))
+         (tomb-boulder-distance-to-door self door-pos)
+         )
        )
       (('trigger)
        (set! v0-0 1)
@@ -744,10 +767,15 @@
        )
       ((10 11 12 13 14)
        (remove-setting! 'music)
-       (task-node-close! (game-task-node tomb-poles-boulder))
+       (if (mp-is-daxter?)
+           (mp-tomb-boulder-finish-daxter-chase!)
+           (task-node-close! (game-task-node tomb-poles-boulder))
+           )
        (auto-save-user)
        (if (and *target* (not (logtest? (-> *target* focus-status) (focus-status dead))))
-           (start 'play (get-continue-by-name *game-info* "tomb-boulder-end"))
+           (start 'play (get-continue-by-name
+                          *game-info*
+                          (if (mp-is-daxter?) "tombboss-spider-end" "tomb-boulder-end")))
            )
        (logior! (-> self mask) (process-mask sleep))
        (suspend)
@@ -850,10 +878,7 @@
            )
          )
         ((= v1-0 12)
-         (if (mp-is-daxter?)
-            (set-continue! *game-info* "tombboss-spider-end" #f)
-            (set-continue! *game-info* "tomb-boulder-climb" #f)
-           )
+         (set-continue! *game-info* "tomb-boulder-climb" #f)
          (set! (-> self target-pause) #f)
          (set! (-> self mode) (the-as uint 13))
          )
@@ -1080,6 +1105,7 @@ This commonly includes things such as:
         (send-event "tomb-boulder-4" 'draw #t)
         (send-event "tomb-boulder-4" 'trigger)
         (task-close! "tomb-poles-poles")
+        (task-close! "tomb-poles-boulder-started")
         )
       )
     :cut-list '()

@@ -1,0 +1,311 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(define-extern mp-send-mission-event (function string uint none))
+(define-extern *mp-spectator-countdown-active?* symbol)
+(define-extern *mp-force-remote-puppet-for-spectate?* symbol)
+(define-extern *mp-spectating?* symbol)
+
+(define-perm *mp-tomb-boulder-reconnect-restart?* symbol #t)
+(define-perm *mp-tomb-boulder-completion-pending?* symbol #f)
+(define-perm *mp-tomb-boulder-full-sync-local-placement?* symbol #f)
+
+(defun mp-tomb-boulder-reset-state! ()
+  (set! *mp-tomb-boulder-reconnect-restart?* #t)
+  (set! *mp-tomb-boulder-completion-pending?* #f)
+  (set! *mp-tomb-boulder-full-sync-local-placement?* #f)
+  (none)
+  )
+
+(defun mp-tomb-boulder-role-session? ()
+  (the symbol
+       (and *local-info*
+            (nonzero? *local-info*)
+            (or (= (-> *local-info* role) 0)
+                (= (-> *local-info* role) 1))))
+  )
+
+(defun mp-tomb-boulder-split-active? ()
+  (the symbol
+       (and (mp-tomb-boulder-role-session?)
+            *multi-sync-enabled?*
+            (= (pc-multi-get-status) 6)))
+  )
+
+(defun mp-tomb-boulder-task-closed? ((node game-task-node))
+  (the symbol
+       (and *game-info*
+            (nonzero? *game-info*)
+            (task-node-closed? node)))
+  )
+
+(defun mp-tomb-boulder-started? ()
+  (mp-tomb-boulder-task-closed? (game-task-node tomb-poles-boulder-started))
+  )
+
+(defun mp-tomb-boulder-complete? ()
+  (mp-tomb-boulder-task-closed? (game-task-node tomb-poles-boulder))
+  )
+
+(defun mp-tomb-boulder-chase-continue? ((continue-name string))
+  (the symbol
+       (and continue-name
+            (nonzero? continue-name)
+            (or (string= continue-name "tomb-boulder")
+                (string= continue-name "tomb-boulder-explode")
+                (string= continue-name "tomb-boulder-climb")
+                (string= continue-name "tombboss-spider-end"))))
+  )
+
+(defun mp-tomb-boulder-current-continue-name ()
+  (when (and *game-info* (nonzero? *game-info*))
+    (let ((continue-point (-> *game-info* current-continue)))
+      (when (and continue-point
+                 (nonzero? continue-point)
+                 (-> continue-point name)
+                 (nonzero? (-> continue-point name)))
+        (return (-> continue-point name))
+        )
+      )
+    )
+  (the-as string #f)
+  )
+
+(defun mp-tomb-boulder-local-chase-death? ()
+  (let ((continue-name (mp-tomb-boulder-current-continue-name)))
+    (the symbol
+         (and (mp-tomb-boulder-role-session?)
+              (mp-is-daxter?)
+              (mp-tomb-boulder-chase-continue? continue-name)))
+    )
+  )
+
+(defun mp-tomb-boulder-prepare-local-death! ()
+  (set! *mp-spectator-countdown-active?* #f)
+  (set! *mp-force-remote-puppet-for-spectate?* #f)
+  (set! *mp-spectating?* #f)
+  (when (and *camera* (nonzero? *camera*)
+             *target* (nonzero? *target*))
+    (send-event *camera* 'change-target *target*)
+    )
+  (none)
+  )
+
+(defun mp-tomb-boulder-ignore-remote-continue? ((continue-name string))
+  (when (and (mp-tomb-boulder-role-session?) (mp-is-jak?))
+    (return (mp-tomb-boulder-chase-continue? continue-name))
+    )
+  (when (and (mp-tomb-boulder-role-session?)
+             (mp-is-daxter?))
+    (let ((local-continue (mp-tomb-boulder-current-continue-name)))
+      (return (mp-tomb-boulder-chase-continue? local-continue))
+      )
+    )
+  #f
+  )
+
+(defun mp-tomb-boulder-adjust-scene! ((scene-proc scene-player))
+  (when (and scene-proc (nonzero? scene-proc))
+    (let ((scene-obj (-> scene-proc scene)))
+      (when (and scene-obj
+                 (nonzero? scene-obj)
+                 (-> scene-obj name)
+                 (nonzero? (-> scene-obj name))
+                 (string= (-> scene-obj name) "tomb-boulder-start"))
+        (set! (-> scene-obj end-point-obj)
+              (if (mp-tomb-boulder-split-active?)
+                  (if (mp-is-jak?) "tomb-boulder-end" "tomb-boulder")
+                  "tomb-boulder"))
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-tomb-boulder-local-only-scene? ((scene-name string))
+  (the symbol
+       (and (mp-tomb-boulder-role-session?)
+            (mp-is-daxter?)
+            scene-name
+            (nonzero? scene-name)
+            (string= scene-name "tomb-spider-scare")))
+  )
+
+(defun mp-tomb-boulder-ignore-remote-scene? ((scene-name string))
+  (the symbol
+       (and (mp-tomb-boulder-role-session?)
+            scene-name
+            (nonzero? scene-name)
+            (string= scene-name "tomb-spider-scare")))
+  )
+
+(defun mp-tomb-boulder-finish-intro! ()
+  (when (and *game-info*
+             (nonzero? *game-info*))
+    (when (not (task-node-closed? (game-task-node tomb-poles-poles)))
+      (task-node-close! (game-task-node tomb-poles-poles))
+      )
+    (when (not (task-node-closed? (game-task-node tomb-poles-boulder-started)))
+      (task-node-close! (game-task-node tomb-poles-boulder-started))
+      )
+    )
+  (none)
+  )
+
+(defun mp-tomb-boulder-before-scene-abort! ((scene-proc scene-player))
+  (when (and scene-proc (nonzero? scene-proc))
+    (let ((scene-obj (-> scene-proc scene)))
+      (when (and scene-obj
+                 (nonzero? scene-obj)
+                 (-> scene-obj name)
+                 (nonzero? (-> scene-obj name))
+                 (string= (-> scene-obj name) "tomb-boulder-start"))
+        (mp-tomb-boulder-finish-intro!)
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-tomb-boulder-after-scene-end! ((scene-name string))
+  (when (and scene-name
+             (nonzero? scene-name)
+             (string= scene-name "tomb-boulder-start"))
+    (mp-tomb-boulder-finish-intro!)
+    )
+  (none)
+  )
+
+(defun mp-tomb-boulder-snapshot-task-closed? ((node game-task-node))
+  (when (and *remote-info* (nonzero? *remote-info*))
+    (let ((node-index (the-as int node)))
+      (when (and (>= node-index 0) (< node-index 512))
+        (let ((byte-index (/ node-index 8))
+              (bit-index (logand node-index 7)))
+          (return (logtest? (-> *remote-info* task-mask byte-index)
+                            (ash 1 bit-index)))
+          )
+        )
+      )
+    )
+  #f
+  )
+
+(defun mp-tomb-boulder-full-sync-isolated? ()
+  (and (mp-tomb-boulder-snapshot-task-closed?
+         (game-task-node tomb-poles-boulder-started))
+       (not (mp-tomb-boulder-snapshot-task-closed?
+              (game-task-node tomb-poles-boulder))))
+  )
+
+(defun mp-tomb-boulder-suppress-full-sync? ()
+  (and (mp-is-daxter?)
+       (mp-tomb-boulder-full-sync-isolated?)
+       (not *mp-tomb-boulder-reconnect-restart?*))
+  )
+
+(defun mp-tomb-boulder-prepare-full-sync-continue! ((continue-name string) (name-length int))
+  (set! *mp-tomb-boulder-full-sync-local-placement?* #f)
+  (if (and *mp-tomb-boulder-reconnect-restart?*
+           (mp-tomb-boulder-full-sync-isolated?)
+           continue-name
+           (nonzero? continue-name))
+      (begin
+        (set! *mp-tomb-boulder-full-sync-local-placement?* #t)
+        (copy-string<-string continue-name "tomb-boulder")
+        (length continue-name)
+        )
+      name-length)
+  )
+
+(defun mp-tomb-boulder-skip-full-sync-host-teleport? ()
+  (the symbol
+       (and *mp-tomb-boulder-full-sync-local-placement?*
+            (mp-is-daxter?)
+            (mp-tomb-boulder-full-sync-isolated?)))
+  )
+
+(defun mp-tomb-boulder-restore-local-full-sync-camera! ()
+  (when (and *target* (nonzero? *target*))
+    (let ((control (-> *target* control)))
+      (when (and control (nonzero? control))
+        (vector-copy! (-> control camera-pos) (-> control trans))
+        )
+      )
+    (when (and *camera* (nonzero? *camera*))
+      (send-event *camera* 'change-target *target*)
+      (send-event *camera* 'teleport)
+      )
+    )
+  (none)
+  )
+
+(defun mp-tomb-boulder-consume-full-sync! ()
+  (when (and *local-info* (nonzero? *local-info*))
+    (set! (-> *local-info* sync-flag) (the-as uint 0))
+    )
+  (set! *multi-sync-enabled?* #t)
+  (pc-multi-set-status 6)
+  (debug-log *mp-debug-log?* "[MP-TombBoulder] Ignored host full sync during the isolated Daxter chase.~%")
+  (none)
+  )
+
+(defun mp-tomb-boulder-full-sync-complete! ()
+  (when (mp-is-daxter?)
+    (set! *mp-tomb-boulder-reconnect-restart?* #f)
+    (set! *mp-tomb-boulder-full-sync-local-placement?* #f)
+    )
+  (none)
+  )
+
+(defun mp-tomb-boulder-note-session-status! ((status int))
+  (when (and (mp-is-daxter?)
+             (or (= status 7) (= status 8)))
+    (set! *mp-tomb-boulder-reconnect-restart?* #t)
+    (set! *mp-tomb-boulder-completion-pending?* #f)
+    (set! *mp-tomb-boulder-full-sync-local-placement?* #f)
+    )
+  (none)
+  )
+
+(defun mp-tomb-boulder-finish-daxter-chase! ()
+  (when (and (mp-is-daxter?)
+             (mp-tomb-boulder-role-session?))
+    (mp-tomb-boulder-finish-intro!)
+    (set! *mp-tomb-boulder-completion-pending?* #t)
+    (when (not (mp-tomb-boulder-complete?))
+      (task-node-close! (game-task-node tomb-poles-boulder))
+      )
+    (when (and *multi-sync-enabled?*
+               (= (pc-multi-get-status) 6)
+               (not *mp-processing-remote-event*))
+      (mp-send-mission-event "" MP_MISSION_EVT_TOMB_BOULDER_COMPLETE)
+      )
+    )
+  (none)
+  )
+
+(defun mp-tomb-boulder-receive-completion! ()
+  (when (and (mp-is-jak?)
+             (mp-tomb-boulder-started?)
+             (not (mp-tomb-boulder-complete?)))
+    (debug-log *mp-debug-log?* "[MP-TombBoulder] Daxter completed the chase; closing the host task.~%")
+    (task-node-close! (game-task-node tomb-poles-boulder))
+    )
+  (none)
+  )
+
+(defun mp-tomb-boulder-note-remote-task-state! ((node-index int) (remote-closed? symbol))
+  (when (and (= node-index (the-as int (game-task-node tomb-poles-boulder)))
+             remote-closed?)
+    (set! *mp-tomb-boulder-completion-pending?* #f)
+    )
+  (none)
+  )
+
+(defun mp-tomb-boulder-block-remote-task-open? ((node-index int))
+  (the symbol
+       (and (mp-is-daxter?)
+            *mp-tomb-boulder-completion-pending?*
+            (= node-index (the-as int (game-task-node tomb-poles-boulder)))))
+  )

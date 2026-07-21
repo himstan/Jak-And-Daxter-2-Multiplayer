@@ -303,9 +303,13 @@
 (defun mp-handle-full-sync-state ()
   "Handle Full Sync State Machine (MUST BE ABOVE GUARDS)"
   (when (and (mp-is-daxter?) (nonzero? (-> *local-info* sync-flag)))
-    (case (-> *local-info* sync-flag)
+    (if (mp-tomb-boulder-suppress-full-sync?)
+        (mp-tomb-boulder-consume-full-sync!)
+        (case (-> *local-info* sync-flag)
       ((1) ;; Phase 1: Request Hard Load
        (let ((name-len (mp-copy-host-continue-name!)))
+         (set! name-len
+               (mp-tomb-boulder-prepare-full-sync-continue! *mp-continue-name* name-len))
          (cond
            ((zero? name-len)
             (mp-log-full-sync-wait! 'empty-continue)
@@ -406,13 +410,23 @@
                                        (debug-log *mp-debug-log?* "[MP-Sync-State] Surgical Deactivate: Actor aid=~D in Level ~S~%" aid (-> lev name))
                                        (deactivate proc)))))))))))))))
 
-         ;; FINAL TELEPORT: Snap to Host's exact position
-         (debug-log *mp-debug-log?* "[MP-Sync-State] Snap-Teleport to Host: ~F ~F ~F~%" (-> *remote-info* x) (-> *remote-info* y) (-> *remote-info* z))
-         (set! (-> *target* control trans x) (-> *remote-info* x))
-         (set! (-> *target* control trans y) (-> *remote-info* y))
-         (set! (-> *target* control trans z) (-> *remote-info* z))
-         (set! (-> *target* control camera-pos quad) (-> *target* control trans quad))
-         (send-event *camera* 'teleport)
+         ;; FINAL TELEPORT: Tomb reconnects keep the freshly loaded local chase position.
+         (if (mp-tomb-boulder-skip-full-sync-host-teleport?)
+             (begin
+               (debug-log *mp-debug-log?* "[MP-Sync-State] Keeping Daxter at the local tomb-boulder continue.~%")
+               (mp-tomb-boulder-restore-local-full-sync-camera!)
+               )
+             (begin
+               (debug-log *mp-debug-log?* "[MP-Sync-State] Snap-Teleport to Host: ~F ~F ~F~%" (-> *remote-info* x) (-> *remote-info* y) (-> *remote-info* z))
+               (set! (-> *target* control trans x) (-> *remote-info* x))
+               (set! (-> *target* control trans y) (-> *remote-info* y))
+               (set! (-> *target* control trans z) (-> *remote-info* z))
+               (set! (-> *target* control camera-pos quad) (-> *target* control trans quad))
+               (when (and *camera* (nonzero? *camera*))
+                 (send-event *camera* 'teleport)
+                 )
+               )
+             )
          (set-setting! 'allow-recharge #f 0.0 0)
          (mp-force-apply-remote-environment-state)
          (mp-force-clear-full-sync-progress-ui!)
@@ -422,11 +436,13 @@
          (set! (-> *local-info* sync-flag) (the-as uint 0))
          (set! *mp-intro-skip-blackout-pending?* #f)
          (set! *multi-sync-enabled?* #t)
+         (mp-tomb-boulder-full-sync-complete!)
          (debug-log *mp-debug-log?* "[MP-Sync-State] Join Handshake & Level Alignment Successful! Enabled sync flag.~%")
          )
          )
        )
       )
+    )
     )
   (none))
 
@@ -441,13 +457,15 @@
           (dotimes (i (min 512 (-> nodes length)))
             (let ((byte-idx (/ i 8))
                   (bit-idx (logand i 7)))
+              (let ((remote-closed? (logtest? (-> mask byte-idx) (ash 1 bit-idx))))
+                (mp-tomb-boulder-note-remote-task-state! i remote-closed?)
               
               (unless (or (= i (the-as uint (game-task-node city-vehicle-training-map)))
                           (= i (the-as uint (game-task-node city-vehicle-training-hover-zone-1)))
                           (= i (the-as uint (game-task-node city-vehicle-training-hover-zone-2)))
                           (= i (the-as uint (game-task-node city-vehicle-training-resolution))))
                 ;; 2.1 Sync CLOSED nodes
-                (when (and (logtest? (-> mask byte-idx) (ash 1 bit-idx))
+                (when (and remote-closed?
                            (not (logtest? (-> nodes data i flags) (game-task-node-flag closed))))
                   (debug-log *mp-debug-log?* "[MP-Sync-State] Remote closed task node ~D. Applying locally.~%" i)
                   (task-node-close! (the-as game-task-node i))
@@ -463,6 +481,8 @@
                   (let ((should-open? #t))
                     (when (or *mp-remote-wants-skip* *mp-local-wants-skip* *mp-processing-remote-event* *scene-player*)
                       (set! should-open? #f))
+                    (when (mp-tomb-boulder-block-remote-task-open? i)
+                      (set! should-open? #f))
 
                     (when should-open?
                       (debug-log *mp-debug-log?* "[MP-Sync-State] Remote has active task node ~D. Opening locally.~%" i)
@@ -474,6 +494,7 @@
                     )
                   )
                 )
+              )
               )
             )
           )

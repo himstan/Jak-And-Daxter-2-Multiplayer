@@ -1254,20 +1254,59 @@
    )
   (:state-methods
     open
+    waiting-for-boulder
     close
     )
   )
 
+(defun tomb-boulder-door-task-closed? ((node game-task-node))
+  (the symbol
+       (and *game-info*
+            (nonzero? *game-info*)
+            (task-node-closed? node)))
+  )
+
+(defun tomb-boulder-door-distance ((door tomb-boulder-door))
+  (when (and door (nonzero? door)
+             (-> door root) (nonzero? (-> door root)))
+    (let ((boulder (process-by-name "tomb-boulder-4" *active-pool*)))
+      (when (and boulder (nonzero? boulder))
+        (return (the-as float
+                        (send-event boulder 'door-distance (-> door root trans))))
+        )
+      )
+    )
+  -1.0
+  )
+
+(defun tomb-boulder-door-ready-to-close? ((door tomb-boulder-door))
+  (when (not (and door (nonzero? door)))
+    (return #t)
+    )
+  (let ((boulder-distance (tomb-boulder-door-distance door)))
+    (the symbol
+         (or (tomb-boulder-door-task-closed? (game-task-node tomb-poles-boulder))
+             (>= boulder-distance (meters 25))
+             (time-elapsed? (-> door state-time) (seconds 5))))
+    )
+  )
 
 (defstate close (tomb-boulder-door)
   :virtual #t
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
     (case message
       (('reset)
-       (if (task-node-closed? (game-task-node tomb-poles-boulder))
-           (go-virtual close)
+       (cond
+         ((tomb-boulder-door-task-closed? (game-task-node tomb-poles-boulder))
+          (go-virtual close)
+          )
+         ((tomb-boulder-door-task-closed? (game-task-node tomb-poles-boulder-started))
+          (go-virtual waiting-for-boulder)
+          )
+         (else
            (go-virtual open)
            )
+         )
        )
       )
     )
@@ -1279,6 +1318,19 @@
     (logior! (-> self mask) (process-mask sleep))
     (suspend)
     0
+    )
+  )
+
+(defstate waiting-for-boulder (tomb-boulder-door)
+  :virtual #t
+  :event (-> (method-of-type tomb-boulder-door close) event)
+  :code (behavior ()
+    (ja :num-func num-func-identity :frame-num (ja-aframe 5.0 0))
+    (until (tomb-boulder-door-ready-to-close? self)
+      (transform-post)
+      (suspend)
+      )
+    (go-virtual close)
     )
   )
 
@@ -1325,10 +1377,17 @@
     (the-as skeleton-group (art-group-get-by-name *level* "skel-tomb-boulder-door" (the-as (pointer uint32) #f)))
     (the-as pair 0)
     )
-  (if (task-node-closed? (game-task-node tomb-poles-boulder))
-      (go (method-of-object this close))
+  (cond
+    ((tomb-boulder-door-task-closed? (game-task-node tomb-poles-boulder))
+     (go (method-of-object this close))
+     )
+    ((tomb-boulder-door-task-closed? (game-task-node tomb-poles-boulder-started))
+     (go (method-of-object this waiting-for-boulder))
+     )
+    (else
       (go (method-of-object this open))
       )
+    )
   (none)
   )
 

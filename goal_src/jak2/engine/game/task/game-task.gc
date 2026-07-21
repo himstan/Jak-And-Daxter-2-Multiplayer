@@ -6581,7 +6581,7 @@
             :when-open #f
             :flags (game-task-node-flag save-on-life)
             :parent-node (new 'static 'array game-task-node 4
-              (game-task-node tomb-poles-poles)
+              (game-task-node tomb-poles-boulder-started)
               (game-task-node none)
               (game-task-node none)
               (game-task-node none)
@@ -12306,9 +12306,29 @@
                     )
             :on-close #f
             )
+          ;; Multiplayer-only tomb chase latch. Kept at the end to preserve existing ids.
+          (new 'static 'game-task-node-info
+            :level 'tomb
+            :task (game-task tomb-poles)
+            :name "tomb-poles-boulder-started"
+            :when-open #f
+            :flags (game-task-node-flag save-on-life)
+            :parent-node (new 'static 'array game-task-node 4
+              (game-task-node tomb-poles-poles)
+              (game-task-node none)
+              (game-task-node none)
+              (game-task-node none)
+              )
+            :on-open #f
+            :info #f
+            :borrow '()
+            :open? #f
+            :on-close '(send-event "tomb-boulder-door-1" 'reset)
+            :description (text-id progress-missions-tomb-poles)
+            )
           )
         )
-  (set! (-> gp-0 mission-list) (new 'global 'boxed-array game-task-node-info 324))
+  (set! (-> gp-0 mission-list) (new 'global 'boxed-array game-task-node-info 325))
   (dotimes (v1-3 (-> gp-0 sub-task-list length))
     (if (-> gp-0 sub-task-list v1-3 info)
         (set! (-> gp-0 sub-task-list v1-3 info manager) (the-as handle #f))

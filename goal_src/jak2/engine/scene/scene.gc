@@ -8,6 +8,9 @@
 (define-extern string-crc32 (function string uint))
 (define-extern *mp-processing-remote-event* symbol)
 (define-extern mp-send-scene-event (function mp-scene-state string none))
+(define-extern mp-tomb-boulder-adjust-scene! (function scene-player none))
+(define-extern mp-tomb-boulder-before-scene-abort! (function scene-player none))
+(define-extern mp-tomb-boulder-local-only-scene? (function string symbol))
 (define-extern *art-group-load-debug-caller* symbol)
 (define-extern *art-group-load-debug-context-a* object)
 (define-extern *art-group-load-debug-context-b* object)
@@ -261,6 +264,7 @@
   )
 
 (defun mp-abort-local-scene! ((scene-proc scene-player))
+  (mp-tomb-boulder-before-scene-abort! scene-proc)
   (set! (-> scene-proc aborted?) #t)
   (set-blackout-frames 0)
   (none)
@@ -1695,6 +1699,7 @@
       (set! (-> self scene) #f)
       )
     )
+  (mp-tomb-boulder-adjust-scene! self)
   (set! (-> self aborted?) (if (and (-> self scene) (string= (-> self scene name) *mp-last-scene-name*)) #t #f))
   (set! (-> self gui-id) (add-process
                            *gui-control*
@@ -1715,7 +1720,10 @@
     (copy-string<-string *mp-last-scene-name* (-> self scene name))
     )
 
-  (when (and (not (or *mp-processing-remote-event* *mp-remote-wants-skip* *mp-local-wants-skip*)) (-> self scene) (not (-> self aborted?)))
+  (when (and (not (or *mp-processing-remote-event* *mp-remote-wants-skip* *mp-local-wants-skip*))
+             (-> self scene)
+             (not (-> self aborted?))
+             (not (mp-tomb-boulder-local-only-scene? (-> self scene name))))
     (debug-log *mp-debug-log?* "[MP-Scene] Broadcasting scene start: ~S~%" (-> self scene name))
     (mp-send-scene-event (mp-scene-state started) (-> self scene name)))
 

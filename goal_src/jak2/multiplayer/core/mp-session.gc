@@ -133,6 +133,7 @@
   (mp-clear-version-mismatch-ui!)
   (set! *mp-reconnect-process* (the-as handle #f))
   (set! *multi-last-send-time* (the-as time-frame 0))
+  (mp-tomb-boulder-reset-state!)
   (none))
 
 (defun mp-auto-enable-sync-if-ready! ((status int))
@@ -257,6 +258,7 @@
           (when (= status 8)
             (set! *multi-sync-enabled?* #f)
             )
+          (mp-tomb-boulder-note-session-status! status)
           )
         (begin
           (set! (-> *local-info* role) -1)

@@ -8,6 +8,8 @@
 (define-extern mp-remote-level-ready? (function symbol))
 (define-extern mp-prepare-remote-spectate-target! (function process-focusable))
 (define-extern mp-should-suppress-local-endlessfall? (function symbol))
+(define-extern mp-tomb-boulder-local-chase-death? (function symbol))
+(define-extern mp-tomb-boulder-prepare-local-death! (function none))
 
 (defbehavior target-indax-death-post target ()
   (daxter-gun-update-eco-aura!)
@@ -115,7 +117,16 @@
          (set! (-> self control transv quad) (the-as uint128 0))
 
   ;; --- MP MULTIPLAYER DEATH HIJACK ---
-  (when (and *multi-sync-enabled?* (= (pc-multi-get-status) 6))
+  (when (and (= self *target*)
+             (not (= (-> self tobot?) 'mp-puppet))
+             (mp-tomb-boulder-local-chase-death?))
+    (mp-tomb-boulder-prepare-local-death!)
+    )
+  (when (and *multi-sync-enabled?*
+             (= (pc-multi-get-status) 6)
+             (not (and (= self *target*)
+                       (not (= (-> self tobot?) 'mp-puppet))
+                       (mp-tomb-boulder-local-chase-death?))))
     ;; 1. Handle Remote Puppets
     (when (= (-> self tobot?) 'mp-puppet)
       (debug-log *mp-debug-log?* "[Daxter-Death] Indax Death Sequence Complete. Waiting for remote respawn...~%")
