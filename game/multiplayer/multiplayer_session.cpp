@@ -89,6 +89,7 @@ void multiplayer_clear_session_state(MultiplayerData& data) {
   data.server_peer = nullptr;
   mp_secure_clear_string(data.staged_invite);
   data.staged_invite_status = 0;
+  mp_secure_clear_string(data.reconnect_invite);
   multiplayer_clear_direct_connect_draft(data);
   data.required_version.clear();
   data.local_traffic_level_hash = 0;

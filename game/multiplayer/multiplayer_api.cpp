@@ -638,6 +638,7 @@ void pc_multi_setup_client(u32 ip_ptr, u32 port) {
   std::string host;
   uint16_t invite_port = 0;
   if (data.security.start_client(invite, host, invite_port)) {
+    data.reconnect_invite = invite;
     MultiplayerManager::setup_client(data, host.c_str(), invite_port);
     return;
   }
@@ -693,12 +694,34 @@ static void connect_private_invite(MultiplayerData& data, std::string& invite) {
   std::string host;
   uint16_t port = 0;
   const bool valid = data.security.start_client(invite, host, port);
+  if (valid) {
+    data.reconnect_invite = invite;
+  }
   mp_secure_clear_string(invite);
   if (!valid) {
     data.join_status = (int)MultiplayerStatus::FAILED;
     return;
   }
   MultiplayerManager::setup_client(data, host.c_str(), port);
+}
+
+int pc_multi_reconnect() {
+  auto& data = multiplayer_data();
+  if (data.reconnect_invite.empty()) {
+    lg::warn("[Multiplayer] Reconnect requested without a saved client invite.");
+    data.join_status = (int)MultiplayerStatus::FAILED;
+    return 0;
+  }
+
+  std::string invite = data.reconnect_invite;
+  connect_private_invite(data, invite);
+  if (data.initialized && data.local_role == 1) {
+    lg::info("[Multiplayer] Client reconnect attempt started.");
+    return 1;
+  }
+
+  lg::warn("[Multiplayer] Client reconnect attempt failed to start.");
+  return 0;
 }
 
 void pc_multi_clear_direct_connect() {
@@ -1033,6 +1056,7 @@ void init_multiplayer_pc_port() {
                                     (void*)pc_multi_get_vehicle_sync_time);
   jak2::make_function_symbol_from_c("pc-multi-get-role", (void*)pc_multi_get_role);
   jak2::make_function_symbol_from_c("pc-multi-disconnect", (void*)pc_multi_disconnect);
+  jak2::make_function_symbol_from_c("pc-multi-reconnect", (void*)pc_multi_reconnect);
   jak2::make_function_symbol_from_c("pc-multi-get-command-line-arg",
                                     (void*)pc_multi_get_command_line_arg);
   jak2::make_function_symbol_from_c("pc-multi-debug-stop-receive",

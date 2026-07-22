@@ -8,9 +8,10 @@
   (mp-network-sync-window-tick)
   (none))
 
-(defun mp-reset-state ()
-  "Reset all multiplayer flags, buffers, and singletons to their default state."
-  (mp-reset-session-state!)
+(defun mp-reset-gameplay-state ()
+  "Reset multiplayer gameplay state while preserving the active session UI."
+  (set! *multi-sync-enabled?* #f)
+  (set! *multi-last-send-time* (the-as time-frame 0))
   (mp-reset-event-state!)
   (mp-reset-scene-sync-state!)
   (mp-reset-player-sync-state!)
@@ -22,6 +23,13 @@
   (mp-reset-puppet-state!)
   (mp-reset-remote-marker-state!)
   (mp-reset-environment-sync)
+  (none)
+  )
+
+(defun mp-reset-state ()
+  "Reset all multiplayer flags, buffers, and singletons to their default state."
+  (mp-reset-session-state!)
+  (mp-reset-gameplay-state)
   (debug-log *mp-debug-log?* "[MP] State has been fully reset.~%")
   (none)
   )

@@ -226,6 +226,33 @@ TEST(MultiplayerDirectConnect, ValidatesOptionalTokenAndClearsDraft) {
   EXPECT_EQ(data.direct_token[0], '\0');
 }
 
+TEST(MultiplayerReconnect, StartsFromSavedInviteAndClearsOnDisconnect) {
+  auto& data = multiplayer_data();
+  pc_multi_disconnect();
+
+  MultiplayerSecurity host;
+  ASSERT_TRUE(host.start_host(26210));
+  data.local_version = "v1.0.0";
+  data.reconnect_invite = host.invite_for_address("127.0.0.1");
+
+  EXPECT_EQ(pc_multi_reconnect(), 1);
+  EXPECT_TRUE(data.initialized);
+  EXPECT_EQ(data.local_role, 1);
+  EXPECT_FALSE(data.reconnect_invite.empty());
+
+  pc_multi_disconnect();
+  EXPECT_TRUE(data.reconnect_invite.empty());
+}
+
+TEST(MultiplayerReconnect, MissingInviteFailsWithoutStartingClient) {
+  auto& data = multiplayer_data();
+  pc_multi_disconnect();
+
+  EXPECT_EQ(pc_multi_reconnect(), 0);
+  EXPECT_FALSE(data.initialized);
+  EXPECT_EQ(data.join_status.load(), static_cast<int>(MultiplayerStatus::FAILED));
+}
+
 TEST(MultiplayerSecurity, RejectsMalformedAndNonIpv4Invites) {
   MultiplayerSecurity client;
   std::string host;

@@ -267,6 +267,7 @@ struct MultiplayerData {
   std::array<PendingHandshake, 8> pending_handshakes = {};
   std::string staged_invite;
   int staged_invite_status = 0;
+  std::string reconnect_invite;
   std::array<char, 16> direct_address = {};
   std::array<char, 6> direct_port = {};
   std::array<char, 23> direct_token = {};
