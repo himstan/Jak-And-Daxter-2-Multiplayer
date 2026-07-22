@@ -6705,6 +6705,7 @@
             :borrow '()
             :open? #f
             :on-close '(begin 
+                (set-continue! *game-info* "tomb-start-bottom" #t)
                 (mp-tomb-boulder-set-respawn-policy! #f)
               )
             )
