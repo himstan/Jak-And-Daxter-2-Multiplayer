@@ -122,6 +122,13 @@
     )
   :code (behavior ((arg0 continue-point))
     (local-vars (v1-96 symbol))
+    (when (and *mp-debug-log?*
+               arg0
+               (nonzero? arg0)
+               (-> arg0 name)
+               (nonzero? (-> arg0 name)))
+      (debug-log *mp-debug-log?* "[MP-ContinueTrace] target-continue requested=~S~%" (-> arg0 name))
+      )
     (set! *spawn-actors* #f)
     (set! (-> self control unknown-word04) (the-as uint #f))
     (set-time! (-> self state-time))

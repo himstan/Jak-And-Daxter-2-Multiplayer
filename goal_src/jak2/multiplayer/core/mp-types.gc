@@ -1276,6 +1276,7 @@
 (define-perm *mp-debug-network* symbol #f)
 (define-perm *mp-enemy-debug-auth?* symbol #f)
 (define-perm *mp-debug-log?* symbol *debug-segment*)
+(define-perm *mp-respawn-policy-debug?* symbol #f)
 (define-perm *mp-level-debug?* symbol #f)
 (define-perm *mp-airlock-debug?* symbol #f)
 (define-perm *mp-airlock-world-debug?* symbol #f)
@@ -1321,6 +1322,7 @@
 (define-extern mp-draw-battle-debug (function none))
 (define-extern mp-draw-boss-debug (function none))
 (define-extern mp-draw-boss-debug-overlay (function none))
+(define-extern respawn-policy-debug-draw (function none))
 (define *mp-daxter-damage-mult* 2.0)
 
 ;; --- Function Implementations ---

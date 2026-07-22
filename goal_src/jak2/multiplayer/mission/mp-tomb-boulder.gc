@@ -2,6 +2,7 @@
 (in-package goal)
 
 (define-extern mp-send-mission-event (function string uint none))
+(define-extern should-player-block-remote-respawn? (function symbol))
 
 (define-perm *mp-tomb-boulder-reconnect-restart?* symbol #t)
 (define-perm *mp-tomb-boulder-completion-pending?* symbol #f)
@@ -16,7 +17,7 @@
   (set! *mp-tomb-boulder-reconnect-restart?* #t)
   (set! *mp-tomb-boulder-completion-pending?* #f)
   (set! *mp-tomb-boulder-full-sync-local-placement?* #f)
-  (mp-tomb-boulder-set-respawn-policy! #f)
+  (mp-tomb-boulder-set-respawn-policy! (should-player-block-remote-respawn?))
   (none)
   )
 
@@ -72,6 +73,22 @@
       )
     )
   (the-as string #f)
+  )
+
+(defun level-auto-continue-protected? ((current continue-point) (candidate continue-point))
+  (the symbol
+       (and (mp-is-daxter?)
+            (or *mp-tomb-boulder-completion-pending?*
+                (mp-tomb-boulder-complete?))
+            current
+            (nonzero? current)
+            candidate
+            (nonzero? candidate)
+            (-> current name)
+            (nonzero? (-> current name))
+            (-> candidate name)
+            (nonzero? (-> candidate name))
+            (string= (-> current name) "tombboss-spider-end")))
   )
 
 (defun mp-tomb-boulder-ignore-remote-continue? ((continue-name string))
@@ -246,11 +263,15 @@
   (none)
   )
 
+(defun should-player-block-remote-respawn? ()
+    (the-as symbol (mp-tomb-boulder-chase-continue? (mp-tomb-boulder-current-continue-name)))
+  )
+
 (defun mp-tomb-boulder-full-sync-complete! ()
   (when (mp-is-daxter?)
     (set! *mp-tomb-boulder-reconnect-restart?* #f)
     (set! *mp-tomb-boulder-full-sync-local-placement?* #f)
-    (mp-tomb-boulder-set-respawn-policy! (mp-tomb-boulder-chase-continue? (mp-tomb-boulder-current-continue-name)))
+    (mp-tomb-boulder-set-respawn-policy! (should-player-block-remote-respawn?))
     )
   (none)
   )
@@ -263,7 +284,7 @@
     (set! *mp-tomb-boulder-full-sync-local-placement?* #f)
     )
   (when (= status 8)
-    (mp-tomb-boulder-set-respawn-policy! #f)
+    (mp-tomb-boulder-set-respawn-policy! (should-player-block-remote-respawn?))
     )
   (none)
   )
@@ -273,7 +294,7 @@
              (mp-tomb-boulder-role-session?))
     (mp-tomb-boulder-finish-intro!)
     (set! *mp-tomb-boulder-completion-pending?* #t)
-    (mp-tomb-boulder-set-respawn-policy! #f)
+    (mp-tomb-boulder-set-respawn-policy! (should-player-block-remote-respawn?))
     (when (not (mp-tomb-boulder-complete?))
       (task-node-close! (game-task-node tomb-poles-boulder))
       )
@@ -302,7 +323,7 @@
   (when (and (= node-index (the-as int (game-task-node tomb-poles-boulder)))
              remote-closed?)
     (set! *mp-tomb-boulder-completion-pending?* #f)
-    (mp-tomb-boulder-set-respawn-policy! #f)
+    (mp-tomb-boulder-set-respawn-policy! (should-player-block-remote-respawn?))
     )
   (none)
   )

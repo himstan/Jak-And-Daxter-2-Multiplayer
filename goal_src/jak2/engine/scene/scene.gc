@@ -1191,6 +1191,18 @@
       ((and *target* (-> self scene) (-> self scene end-point-obj))
        (let ((gp-3 (scene-decode-continue (the-as basic (-> self scene end-point-obj)))))
          (when gp-3
+           (when (and *mp-debug-log?*
+                      (-> self scene)
+                      (nonzero? (-> self scene))
+                      (-> self scene name)
+                      (nonzero? (-> self scene name))
+                      (-> gp-3 name)
+                      (nonzero? (-> gp-3 name)))
+             (debug-log *mp-debug-log?*
+                        "[MP-ContinueTrace] scene-end scene=~S endpoint=~S~%"
+                        (-> self scene name)
+                        (-> gp-3 name))
+             )
            (set-continue! *game-info* gp-3 #f)
            (send-event *target* 'continue gp-3)
            )

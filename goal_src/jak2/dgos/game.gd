@@ -628,4 +628,5 @@
   "mod-debug.o" ;; added
   "mp-airlock-debug.o"
   "mp-elevator-debug.o"
+  "mp-respawn-policy-debug.o"
  ))

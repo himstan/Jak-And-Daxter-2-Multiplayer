@@ -23,6 +23,7 @@ into 7 sections, which might explain the weird sizes in the center.
 
 (define-extern level-update-after-load (function level login-state level))
 (define-extern *level-type-list* type)
+(define-extern level-auto-continue-protected? (function continue-point continue-point symbol))
 
 (defglobalconstant NUM_LEVEL_PAGES 146)
 (defglobalconstant LEVEL_PAGE_SIZE_KB 126) ;; original value
@@ -2651,7 +2652,34 @@ into 7 sections, which might explain the weird sizes in the center.
         )
       )
     (if (and (>= num-vis-levs 1) (!= (-> lev-for-vis name) (-> this vis-nick)))
-        (want-vis-level this (-> lev-for-vis name))
+        (let ((current-continue (if (and *game-info* (nonzero? *game-info*))
+                                    (-> *game-info* current-continue)
+                                    (the-as continue-point #f)))
+              (candidate-continue (if (and (-> lev-for-vis info)
+                                           (nonzero? (-> lev-for-vis info))
+                                           (not (null? (-> lev-for-vis info continues))))
+                                      (the-as continue-point (car (-> lev-for-vis info continues)))
+                                      (the-as continue-point #f))))
+          (if (and (level-auto-continue-protected? current-continue candidate-continue)
+                   (-> current-continue vis-nick)
+                   (nonzero? (-> current-continue vis-nick)))
+              (when (!= (-> this vis-nick) (-> current-continue vis-nick))
+                (when *mp-debug-log?*
+                  (debug-log *mp-debug-log?*
+                             "[ContinuePager] align-vis old=~S new=~S current=~S candidate=~S role=~D~%"
+                             (-> this vis-nick)
+                             (-> current-continue vis-nick)
+                             (-> current-continue name)
+                             (-> candidate-continue name)
+                             (if (and *local-info* (nonzero? *local-info*))
+                                 (-> *local-info* role)
+                                 -1))
+                  )
+                (want-vis-level this (-> current-continue vis-nick))
+                )
+              (want-vis-level this (-> lev-for-vis name))
+              )
+          )
         )
     )
   (label cfg-125)
@@ -2796,7 +2824,37 @@ into 7 sections, which might explain the weird sizes in the center.
             (if (and (the-as continue-point s3-0)
                      (not (logtest? (-> (the-as continue-point s3-0) flags) (continue-flags change-continue no-auto)))
                      )
-                (set-continue! *game-info* (the-as basic s3-0) #f)
+                (if (level-auto-continue-protected?
+                      (-> *game-info* current-continue)
+                      (the-as continue-point s3-0))
+                    (when *mp-debug-log?*
+                      (debug-log *mp-debug-log?*
+                                 "[ContinuePager] protected current=~S candidate=~S vis=~S role=~D~%"
+                                 (-> *game-info* current-continue name)
+                                 (-> (the-as continue-point s3-0) name)
+                                 (-> *load-state* vis-nick)
+                                 (if (and *local-info* (nonzero? *local-info*))
+                                     (-> *local-info* role)
+                                     -1))
+                      )
+                    (begin
+                      (when (and *mp-debug-log?*
+                                 (or (mp-trace-tomb-continue? (-> (the-as continue-point s3-0) name))
+                                     (and (-> *game-info* current-continue)
+                                          (nonzero? (-> *game-info* current-continue))
+                                          (mp-trace-tomb-continue? (-> *game-info* current-continue name)))))
+                        (debug-log *mp-debug-log?*
+                                   "[MP-ContinueTrace] level-auto vis=~S old=~S candidate=~S~%"
+                                   (-> *load-state* vis-nick)
+                                   (if (and (-> *game-info* current-continue)
+                                            (nonzero? (-> *game-info* current-continue)))
+                                       (-> *game-info* current-continue name)
+                                       (the-as string #f))
+                                   (-> (the-as continue-point s3-0) name))
+                        )
+                      (set-continue! *game-info* (the-as basic s3-0) #f)
+                      )
+                    )
                 )
             )
           )

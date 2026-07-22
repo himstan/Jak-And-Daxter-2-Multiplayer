@@ -4198,6 +4198,10 @@
              (flag "Boss Debug Draw" *mp-debug-boss* dm-boolean-toggle-pick-func)
              )
            (menu
+            "Respawn"
+             (flag "Respawn Policy Debug Draw" *mp-respawn-policy-debug?* dm-boolean-toggle-pick-func)
+             )
+           (menu
                "Airlock/Elevator"
                (flag "Airlock Sync Debug" *mp-airlock-debug?* dm-boolean-toggle-pick-func)
                (flag "Airlock World Debug" *mp-airlock-world-debug?* dm-boolean-toggle-pick-func)

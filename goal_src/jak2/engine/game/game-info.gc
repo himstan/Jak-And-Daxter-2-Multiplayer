@@ -13,6 +13,37 @@
 (define-extern lightning-probe-callback (function lightning-tracker none))
 (define-extern process-drawable-shock-effect (function process-drawable lightning-spec (function lightning-tracker none) sparticle-launcher int int float object)) ;; guess
 
+(defun mp-trace-continue-name ((value basic))
+  (case (rtype-of value)
+    ((string)
+     (the-as string value)
+     )
+    ((continue-point)
+     (let ((continue (the-as continue-point value)))
+       (when (and continue
+                  (nonzero? continue)
+                  (-> continue name)
+                  (nonzero? (-> continue name)))
+         (return (-> continue name))
+         )
+       )
+     )
+    )
+  (the-as string #f)
+  )
+
+(defun mp-trace-tomb-continue? ((name string))
+  (the symbol
+       (and name
+            (nonzero? name)
+            (or (string= name "tomb-start-bottom")
+                (string= name "tomb-boulder")
+                (string= name "tomb-boulder-explode")
+                (string= name "tomb-boulder-climb")
+                (string= name "tomb-boulder-end")
+                (string= name "tombboss-spider-end"))))
+  )
+
 ;; DECOMP BEGINS
 
 (defmethod debug-draw ((this border-plane))
@@ -193,6 +224,21 @@
 ;; WARN: Using new Jak 2 rtype-of
 (defmethod set-continue! ((this game-info) (arg0 basic) (arg1 symbol))
   (let ((s5-0 (-> this current-continue)))
+    (let ((old-name (if (and s5-0 (nonzero? s5-0))
+                        (-> s5-0 name)
+                        (the-as string #f)))
+          (new-name (mp-trace-continue-name arg0)))
+      (when (and *mp-debug-log?*
+                 (or (mp-trace-tomb-continue? old-name)
+                     (mp-trace-tomb-continue? new-name)))
+        (debug-log *mp-debug-log?*
+                   "[MP-ContinueTrace] set-continue old=~S new=~S force=~S mode=~S~%"
+                   old-name
+                   new-name
+                   arg1
+                   (-> this mode))
+        )
+      )
     (if (null? arg0)
         (set! arg0 (the-as basic #f))
         )
@@ -235,6 +281,14 @@
     (when (!= s5-0 (-> this current-continue))
       (set! (-> this continue-deaths) 0)
       (set! (-> this continue-time) (-> *display* game-clock frame-counter))
+      )
+    (when (and *mp-debug-log?*
+               (-> this current-continue)
+               (nonzero? (-> this current-continue))
+               (mp-trace-tomb-continue? (-> this current-continue name)))
+      (debug-log *mp-debug-log?*
+                 "[MP-ContinueTrace] set-continue result=~S~%"
+                 (-> this current-continue name))
       )
     )
   (-> this current-continue)

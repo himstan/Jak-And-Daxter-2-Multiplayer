@@ -1,0 +1,9 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defun respawn-policy-debug-draw ()
+  (when *mp-respawn-policy-debug?*
+    (format *stdcon* "Remote allows respawn on them: ~A ~% Local allows respawn on remote: ~A~%" (mp-remote-blocks-respawn?) *mp-block-local-respawn-on-remote?*)
+    )
+  (none)
+  )
