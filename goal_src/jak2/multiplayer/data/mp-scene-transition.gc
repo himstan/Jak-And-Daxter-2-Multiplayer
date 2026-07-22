@@ -1,6 +1,9 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern mp-tomb-scene-sync-suppressed? (function symbol))
+(define-extern mp-tomb-scene-transport-suppressed? (function string symbol))
+
 (defun mp-teleport-to-remote ()
   (when (and *target*
              (nonzero? *target*)
@@ -78,6 +81,10 @@
          (debug-log *mp-debug-log?* "[MP-Scene-Transition] Suppressing catch-up broadcast for aborted scene-player.~%")
          (set! *mp-aborted-scene-catchup-logged?* #t)
          )
+       )
+      ((mp-tomb-scene-transport-suppressed? *mp-active-local-scene-name*)
+       (debug-log *mp-debug-log?* "[MP-Scene-Transition] Suppressing tomb scene catch-up: ~S~%"
+               *mp-active-local-scene-name*)
        )
       ((not (mp-connected-scene-broadcast-current? *mp-active-local-scene-name*))
        (debug-log *mp-debug-log?* "[MP-Scene-Transition] Broadcasting catch-up scene start: ~S~%"

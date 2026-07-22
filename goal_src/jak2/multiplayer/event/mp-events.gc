@@ -7,6 +7,8 @@
 (declare-type mp-shuttle-event mp-event)
 (declare-type mp-city-power-event mp-event)
 (define-extern mp-receive-world-event (function mp-world-event none))
+(define-extern mp-tomb-scene-sync-suppressed? (function symbol))
+(define-extern mp-tomb-scene-transport-suppressed? (function string symbol))
 
 (defun mp-reset-event-state! ()
   (set! *mp-processing-remote-event* #f)
@@ -989,6 +991,12 @@
   ;; GUARD: Only send if synced and in-game
   (if (or (not *multi-sync-enabled?*) (!= (pc-multi-get-status) 6))
       (return #f))
+  (when (mp-tomb-scene-transport-suppressed? name)
+    (debug-log *mp-debug-log?* "[MP-SceneEvent] Suppressed tomb scene transport: ~S state=~D~%"
+            name
+            (the-as uint state))
+    (return #f)
+    )
 
   (let ((q-idx *mp-event-queue-write-ptr*))
     (let ((evt (the-as mp-scene-event (-> *mp-event-queue* q-idx))))

@@ -11,6 +11,10 @@
 (define-extern mp-tomb-boulder-adjust-scene! (function scene-player none))
 (define-extern mp-tomb-boulder-before-scene-abort! (function scene-player none))
 (define-extern mp-tomb-boulder-local-only-scene? (function string symbol))
+(define-extern mp-tomb-scene-sync-suppressed? (function symbol))
+(define-extern mp-tomb-scene-transport-suppressed? (function string symbol))
+(define-extern mp-tomb-scene-local-blocked? (function string symbol))
+(define-extern mp-tomb-boss-intro-local-blocked? (function symbol))
 (define-extern *art-group-load-debug-caller* symbol)
 (define-extern *art-group-load-debug-context-a* object)
 (define-extern *art-group-load-debug-context-b* object)
@@ -1318,7 +1322,8 @@
                     (*mp-remote-wants-skip*
                      ;; Both want to skip.
                      (mp-abort-local-scene! self)
-                     (when *multi-sync-enabled?*
+                     (when (and *multi-sync-enabled?*
+                                (not (mp-tomb-scene-transport-suppressed? (-> self scene name))))
                        (mp-send-scene-event (mp-scene-state skipped) (-> self scene name))
                        )
                      )
@@ -1329,7 +1334,8 @@
                     (else
                       ;; Local player wants to skip, but remote hasn't yet
                       (set! *mp-local-wants-skip* #t)
-                      (mp-send-scene-event (mp-scene-state request-skip) (-> self scene name))
+                      (when (not (mp-tomb-scene-transport-suppressed? (-> self scene name)))
+                        (mp-send-scene-event (mp-scene-state request-skip) (-> self scene name)))
                       )
                     )
                   (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons triangle))
@@ -1735,7 +1741,12 @@
   (when (and (not (or *mp-processing-remote-event* *mp-remote-wants-skip* *mp-local-wants-skip*))
              (-> self scene)
              (not (-> self aborted?))
-             (not (mp-tomb-boulder-local-only-scene? (-> self scene name))))
+             (not (mp-tomb-boulder-local-only-scene? (-> self scene name)))
+             (not (mp-tomb-scene-transport-suppressed? (-> self scene name)))
+             (not (mp-tomb-scene-sync-suppressed?))
+             (not (mp-tomb-scene-local-blocked? (-> self scene name)))
+             (not (and (string= (-> self scene name) "tomb-boss-intro")
+                       (mp-tomb-boss-intro-local-blocked?))))
     (debug-log *mp-debug-log?* "[MP-Scene] Broadcasting scene start: ~S~%" (-> self scene name))
     (mp-send-scene-event (mp-scene-state started) (-> self scene name)))
 

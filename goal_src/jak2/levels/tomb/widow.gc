@@ -1,6 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern mp-tomb-boss-intro-local-blocked? (function symbol))
+
 ;; name: widow.gc
 ;; name in dgo: widow
 ;; dgos: TOA
@@ -2173,6 +2175,13 @@
   :post (the-as (function none :behavior widow) transform-post)
   )
 
+(defun get-target-dist-from-widow ((w widow) (t target))
+  (if (and t (nonzero? t) w (nonzero? w))
+      (vector-vector-xz-distance (-> w circle-center) (-> t control trans))
+      500000.0
+    )
+  )
+
 (defstate hidden (widow)
   :virtual #t
   :enter (behavior ()
@@ -2195,19 +2204,20 @@
   :trans (behavior ()
     (cond
       ((and (= (-> self movie-handle) #f) (not (task-node-closed? (game-task-node tomb-boss-introduction))))
-       (when (and *target*
-                  (task-node-closed? (game-task-node tomb-boss-door))
-                  (not *scene-player*)
+       (when (and (not *scene-player*)
                   (not *progress-process*)
-                  )
-         (let ((f0-0 (vector-vector-xz-distance (-> self circle-center) (-> *target* control trans))))
+                  (task-node-closed? (game-task-node tomb-boss-door))
+                  (or 
+                    (and *target* (not (mp-target-is-daxter? *target*))) 
+                    (and *mp-puppet* (not (mp-target-is-daxter? *mp-puppet*)))))
+         (let ((target-dist (if (mp-target-is-daxter? *target*) (get-target-dist-from-widow self *mp-puppet*) (get-target-dist-from-widow self *target*))))
            (cond
-             ((< f0-0 376832.0)
+             ((< target-dist 376832.0)
               (set! (-> self movie-handle)
                     (ppointer->handle (process-spawn scene-player :init scene-player-init "tomb-boss-intro" #t #f))
                     )
               )
-             ((< f0-0 409600.0)
+             ((< target-dist 409600.0)
               (script-eval '(want-anim "tomb-boss-intro"))
               )
              )

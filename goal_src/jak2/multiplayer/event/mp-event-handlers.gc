@@ -2,6 +2,7 @@
 (in-package goal)
 
 (define-extern *mp-enemy-debug-auth?* symbol)
+(define-extern mp-tomb-scene-transport-suppressed? (function string symbol))
 
 (defun mp-clear-connected-scene-broadcast! ()
   (when (and *mp-connected-scene-broadcast-name*
@@ -753,8 +754,11 @@
   (let ((s* *mp-scene-name-scratch*))
     (when (and s* (nonzero? s*) (nonzero? (length s*)))
       (cond
+        ((mp-tomb-scene-transport-suppressed? s*)
+         (debug-log *mp-debug-log?* "[MP-Event-Handlers] Ignoring locally-owned tomb scene: ~S~%" s*)
+         )
         ((mp-tomb-boulder-ignore-remote-scene? s*)
-         (debug-log *mp-debug-log?* "[MP-Event-Handlers] Ignoring Daxter-only tomb scene: ~S~%" s*)
+         (debug-log *mp-debug-log?* "[MP-Event-Handlers] Ignoring role-incompatible tomb scene: ~S~%" s*)
          )
         ((mp-ignore-intro-start-after-skip? s*)
          (debug-log *mp-debug-log?* "[MP-Event-Handlers] Ignoring post-skip intro scene start: ~S.~%" s*)

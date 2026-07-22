@@ -4,7 +4,7 @@
 (define *tomba-airlock-data* (new 'static 'boxed-array :type airlock-data
               (static-airlock-data
                 :airlock-name "tomb-boss-door-1"
-                :on-notice '(cond ((task-closed? "tomb-boss-resolution") (if (send-event self 'front) #f '(tombboss))) ((task-closed? "tomb-boss-introduction") #f) ((task-closed? "tomb-boss-door") '(tombboss)) ((and (task-closed? "tomb-poles-resolution") (task-closed? "tomb-water-resolution")) (scene-play "tomb-boss-open") #f))
+                :on-notice '(cond ((task-closed? "tomb-boss-resolution") (if (send-event self 'front) #f '(tombboss))) ((task-closed? "tomb-boss-introduction") #f) ((task-closed? "tomb-boss-door") '(tombboss)) ((and (task-closed? "tomb-poles-resolution") (task-closed? "tomb-water-resolution") (mp-is-jak?)) (scene-play "tomb-boss-open") #f))
                 :on-activate '(when (and (task-closed? "tomb-boss-door") (not (task-closed? "tomb-boss-resolution"))) (want-load 'tomba 'tombboss 'tombext))
                 :on-enter '(begin (want-display 'tombboss 'display) (want-display 'tombext 'special))
                 :on-reconcile '((want-load 'tomba 'tombboss 'tombext) (begin (want-display 'tombboss 'display) (want-display 'tombext 'special)))

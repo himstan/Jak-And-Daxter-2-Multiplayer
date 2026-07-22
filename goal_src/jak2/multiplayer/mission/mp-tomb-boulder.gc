@@ -3,6 +3,8 @@
 
 (define-extern mp-send-mission-event (function string uint none))
 (define-extern should-player-block-remote-respawn? (function symbol))
+(define-extern mp-tomb-boulder-snapshot-task-closed? (function game-task-node symbol))
+(define-extern should-player-block-remote-respawn? (function symbol))
 
 (define-perm *mp-tomb-boulder-reconnect-restart?* symbol #t)
 (define-perm *mp-tomb-boulder-completion-pending?* symbol #f)
@@ -21,18 +23,9 @@
   (none)
   )
 
-(defun mp-tomb-boulder-role-session? ()
-  (the symbol
-       (and *local-info*
-            (nonzero? *local-info*)
-            (or (= (-> *local-info* role) 0)
-                (= (-> *local-info* role) 1))))
-  )
-
 (defun mp-tomb-boulder-split-active? ()
   (the symbol
-       (and (mp-tomb-boulder-role-session?)
-            *multi-sync-enabled?*
+       (and *multi-sync-enabled?*
             (= (pc-multi-get-status) 6)))
   )
 
@@ -88,15 +81,16 @@
             (nonzero? (-> current name))
             (-> candidate name)
             (nonzero? (-> candidate name))
-            (string= (-> current name) "tombboss-spider-end")))
+            (string= (-> current name) "tombboss-spider-end")
+            (not (mp-tomb-boulder-snapshot-task-closed?
+                          (game-task-node tomb-boss-door)))))
   )
 
 (defun mp-tomb-boulder-ignore-remote-continue? ((continue-name string))
-  (when (and (mp-tomb-boulder-role-session?) (mp-is-jak?))
+  (when (mp-is-jak?)
     (return (mp-tomb-boulder-chase-continue? continue-name))
     )
-  (when (and (mp-tomb-boulder-role-session?)
-             (mp-is-daxter?))
+  (when (mp-is-daxter?)
     (let ((local-continue (mp-tomb-boulder-current-continue-name)))
       (return (mp-tomb-boulder-chase-continue? local-continue))
       )
@@ -124,19 +118,45 @@
 
 (defun mp-tomb-boulder-local-only-scene? ((scene-name string))
   (the symbol
-       (and (mp-tomb-boulder-role-session?)
-            (mp-is-daxter?)
+       (and (mp-is-daxter?)
             scene-name
             (nonzero? scene-name)
             (string= scene-name "tomb-spider-scare")))
   )
 
+(defun mp-tomb-scene-transport-suppressed? ((scene-name string))
+  (the symbol
+       (and scene-name
+            (nonzero? scene-name)
+            (or (string= scene-name "tomb-unlock-poles")
+                (string= scene-name "tomb-boss-open"))))
+  )
+
+(defun mp-tomb-scene-local-blocked? ((scene-name string))
+  (the symbol
+       (and (mp-is-daxter?)
+            (mp-tomb-scene-transport-suppressed? scene-name)))
+  )
+
+(defun mp-tomb-scene-sync-suppressed? ()
+  (the symbol
+       (and (mp-is-daxter?)
+            (should-player-block-remote-respawn?)))
+  )
+
+(defun mp-tomb-boss-intro-local-blocked? ()
+  (the symbol
+       (mp-is-daxter?))
+  )
+
 (defun mp-tomb-boulder-ignore-remote-scene? ((scene-name string))
   (the symbol
-       (and (mp-tomb-boulder-role-session?)
-            scene-name
+       (and scene-name
             (nonzero? scene-name)
-            (string= scene-name "tomb-spider-scare")))
+            (or (string= scene-name "tomb-spider-scare")
+                (mp-tomb-scene-sync-suppressed?)
+                (and (mp-is-jak?)
+                     (string= scene-name "tomb-boss-intro")))))
   )
 
 (defun mp-tomb-boulder-finish-intro! ()
@@ -198,7 +218,7 @@
   (and (mp-tomb-boulder-snapshot-task-closed?
          (game-task-node tomb-poles-boulder-started))
        (not (mp-tomb-boulder-snapshot-task-closed?
-              (game-task-node tomb-poles-boulder))))
+              (game-task-node tomb-boss-door))))
   )
 
 (defun tomb-poles-boulder-closed-and-boss-door-not-closed? ()
@@ -290,8 +310,7 @@
   )
 
 (defun mp-tomb-boulder-finish-daxter-chase! ()
-  (when (and (mp-is-daxter?)
-             (mp-tomb-boulder-role-session?))
+  (when (mp-is-daxter?)
     (mp-tomb-boulder-finish-intro!)
     (set! *mp-tomb-boulder-completion-pending?* #t)
     (mp-tomb-boulder-set-respawn-policy! (should-player-block-remote-respawn?))
