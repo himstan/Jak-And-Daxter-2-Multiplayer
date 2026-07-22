@@ -604,6 +604,7 @@
   "mp-clock.o" ;; added
   "mp-environment.o" ;; added
   "mp-tomb-boulder.o" ;; added
+  "mp-tomb-daxter-wait.o" ;; added
   "mp-task-sync-hooks.o" ;; added
   "mp-scene-sync-hooks.o" ;; added
   "mp-sync-state.o" ;; added
