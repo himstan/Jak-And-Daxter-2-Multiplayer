@@ -19,6 +19,22 @@
 
 #include "fmt/format.h"
 
+namespace {
+bool is_safe_debug_symbol_name(std::string_view name) {
+  if (name.empty() || name.size() >= 50) {
+    return false;
+  }
+
+  for (const auto byte : name) {
+    const auto value = static_cast<unsigned char>(byte);
+    if (value < 0x20 || value > 0x7e) {
+      return false;
+    }
+  }
+  return true;
+}
+}  // namespace
+
 /*!
  * Is the target halted? If we don't know or aren't connected, returns false.
  */
@@ -444,16 +460,33 @@ void Debugger::update_break_info(std::optional<std::string> dump_path) {
 
   m_memory_map = m_listener->build_memory_map();
   // lg::print("{}", m_memory_map.print());
-  read_symbol_table();
   m_regs_valid = xdbg::get_regs_now(m_debug_context.tid, &m_regs_at_break);
+
+  try {
+    read_symbol_table();
+  } catch (const std::exception&) {
+    m_symbol_name_to_offset_map.clear();
+    m_symbol_offset_to_name_map.clear();
+    m_symbol_name_to_value_map.clear();
+    lg::print("[Debugger] Symbol table refresh failed; continuing without target symbols.\n");
+  }
 
   if (regs_valid()) {
     m_break_info = get_rip_info(m_regs_at_break.rip);
     update_continue_info();
 
-    get_backtrace(m_regs_at_break.rip, m_regs_at_break.gprs[emitter::RSP], dump_path);
-    auto dis = disassemble_at_rip(m_break_info);
-    lg::print("{}\n", dis.text);
+    try {
+      get_backtrace(m_regs_at_break.rip, m_regs_at_break.gprs[emitter::RSP], dump_path);
+    } catch (const std::exception&) {
+      lg::print("[Debugger] Backtrace generation failed; continuing with disassembly and registers.\n");
+    }
+
+    try {
+      auto dis = disassemble_at_rip(m_break_info);
+      lg::print("{}\n", dis.text);
+    } catch (const std::exception&) {
+      lg::print("[Debugger] Crash-site disassembly failed; continuing with registers.\n");
+    }
   }
 
   if (!m_regs_valid) {
@@ -672,6 +705,7 @@ void Debugger::read_symbol_table_jak2() {
   m_symbol_name_to_offset_map.clear();
   m_symbol_offset_to_name_map.clear();
   m_symbol_name_to_value_map.clear();
+  u32 invalid_symbol_names = 0;
 
   // now loop through all the symbols
   for (int i = 0; i < (SYM_TO_STRING_OFFSET + 4) / 4; i++) {
@@ -699,8 +733,8 @@ void Debugger::read_symbol_table_jak2() {
       ASSERT(sym_offset < SYM_TABLE_MEM_SIZE / 4);
 
       std::string str(str_buff);
-      if (str.length() >= 50) {
-        lg::print("Invalid symbol #x{:x}!\n", sym_offset);
+      if (!is_safe_debug_symbol_name(str)) {
+        invalid_symbol_names++;
         continue;
       }
 
@@ -726,6 +760,10 @@ void Debugger::read_symbol_table_jak2() {
   }
 
   ASSERT(m_symbol_offset_to_name_map.size() == m_symbol_name_to_offset_map.size());
+  if (invalid_symbol_names) {
+    lg::print("Skipped {} corrupt symbol name(s) while reading crashed target memory.\n",
+              invalid_symbol_names);
+  }
   lg::print("Read symbol table ({} bytes, {} reads, {} symbols, {:.2f} ms)\n", bytes_read, reads,
             m_symbol_name_to_offset_map.size(), timer.getMs());
 }

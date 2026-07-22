@@ -579,6 +579,7 @@
   "mp-actor-ghost-sync.o" ;; added
   "mp-actor-hit-sync.o" ;; added
   "mp-enemy-sync.o" ;; added
+  "mp-battle-sync.o" ;; added
   "mp-traffic-h.o" ;; added
   "mp-traffic-ghosts.o" ;; added
   "mp-pedestrian-animation-sync.o" ;; added

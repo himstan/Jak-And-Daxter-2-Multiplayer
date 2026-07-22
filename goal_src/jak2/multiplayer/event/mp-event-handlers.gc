@@ -199,7 +199,11 @@
                   (set! (-> e-proc focus handle) (process->handle attacker))
                   ))
             )
-          (debug-log *mp-debug-log?* "[MP-Event-Handlers] ERROR: Could not find enemy process for nid=~D~%" net-id))
+          (begin
+            (when (and (>= net-id #x60000000) (< net-id #x70000000))
+              (mp-battle-request-rosters!)
+              )
+            (debug-log *mp-debug-log?* "[MP-Event-Handlers] ERROR: Could not find enemy process for nid=~D; requested battle roster.~%" net-id)))
       )
     )
   (none))

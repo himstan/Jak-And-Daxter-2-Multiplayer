@@ -352,6 +352,7 @@
   (mp-apply-remote-world-state)
   (mp-apply-remote-environment-state)
   (mp-process-inbound-events)
+  (mp-battle-sync-tick (pc-multi-get-status))
   (mp-waypoint-sync-tick)
   (mp-update-role-transformation)
   (mp-update-death-spectate)

@@ -73,6 +73,9 @@
         (set! (-> evt breed-index) (the-as uint32 breed-index))
         (set! (-> evt initial?) (if initial? (the-as uint32 1) (the-as uint32 0)))
         (set! (-> evt enemy-aid) (the-as uint32 enemy-aid))
+        (set! (-> evt owner-role) (the-as int32 -1))
+        (set! (-> evt epoch) (the-as uint32 0))
+        (set! (-> evt roster-generation) (the-as uint32 0))
         (debug-log *mp-debug-log?*
           "[MP-BattleEvent][~A][SEND] evt=~D battle=~S spawner=~D breed=~D~%"
           (if (mp-is-jak?) "HOST" "CLIENT")
@@ -100,17 +103,23 @@
   )
 
 (defun mp-send-battle-start-event ((proc process-tree))
-  (mp-send-battle-event proc MP_BATTLE_EVT_START 0 0 #f (the-as uint 0))
+  (when (and proc (nonzero? proc) (type? proc battle))
+    (mp-battle-handle-local-trigger! (the-as battle proc))
+    )
   (none)
   )
 
 (defun mp-send-battle-end-event ((proc process-tree))
-  (mp-send-battle-event proc MP_BATTLE_EVT_END 0 0 #f (the-as uint 0))
+  (when (and proc (nonzero? proc) (type? proc battle))
+    (mp-battle-note-local-end! (the-as battle proc))
+    )
   (none)
   )
 
 (defun mp-send-battle-spawn-event ((proc process-tree) (spawner-index int) (breed-index int) (initial? symbol) (enemy-aid uint))
-  (mp-send-battle-event proc MP_BATTLE_EVT_SPAWN spawner-index breed-index initial? enemy-aid)
+  (when (and proc (nonzero? proc) (type? proc battle))
+    (mp-battle-note-local-spawn! (the-as battle proc) spawner-index breed-index initial? enemy-aid)
+    )
   (none)
   )
 

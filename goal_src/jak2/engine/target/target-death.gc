@@ -1558,6 +1558,7 @@
   ;; --- END MP MULTIPLAYER DEATH HIJACK ---
 
   (label cfg-reset-init)
+  (mp-reset-battle-sync-state!)
   (initialize!
     (-> self game)
     (if (= arg0 'bot)

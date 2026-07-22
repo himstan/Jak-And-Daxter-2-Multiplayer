@@ -33,7 +33,7 @@
        (> (-> e-proc hit-points) 0)
        (not (focus-test? e-proc inactive))
        (not (logtest? (-> e-proc enemy-flags)
-                      (enemy-flag death-start mp-synced-death stop-syncing))))
+                      (enemy-flag death-start mp-synced-death))))
   )
 
 (defun mp-find-enemy-callback ((p process-tree))

@@ -2773,11 +2773,9 @@
   :virtual #t
   :event enemy-event-handler
   :enter (behavior ()
-    (when (not (or 
-      (type? self hopper)
-      (type? self sig)))
-        (logior! (-> self enemy-flags) (enemy-flag stop-syncing))
-      )
+    (when (or (type? self crimson-guard))
+            (logior! (-> self enemy-flags) (enemy-flag stop-syncing))
+          )
     (set-time! (-> self state-time))
     (logclear! (-> self mask) (process-mask actor-pause))
     (logior! (-> self focus-status) (focus-status dangerous))
@@ -3453,6 +3451,7 @@
 (defmethod dying ((this enemy))
   "Cleans-up the enemy and any associated resources. Potentially spawns skull gems"
   (debug-log *mp-debug-log?* "[Enemy] Method dying got called for nid=~D~%" (-> this net-id))
+  (mp-battle-note-enemy-death! this)
   (when (not (logtest? (enemy-flag called-dying) (-> this enemy-flags)))
     (set! (-> this enemy-flags) (the-as enemy-flag (logior (enemy-flag called-dying) (-> this enemy-flags))))
     (play-damage-or-death-sound this 1)

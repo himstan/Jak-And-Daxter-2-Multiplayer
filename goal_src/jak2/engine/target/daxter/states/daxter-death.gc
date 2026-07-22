@@ -241,6 +241,7 @@
   ;; --- END MP MULTIPLAYER DEATH HIJACK ---
 
   (label cfg-reset-init)
+  (mp-reset-battle-sync-state!)
   (initialize! (-> self game) 'life (the-as game-save #f) (the-as string #f))
          (set-time! (-> self state-time))
          (sleep-code))

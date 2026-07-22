@@ -25,8 +25,9 @@
   "True once a loaded enemy should finish its local death presentation."
   (and e
        (nonzero? e)
-       (or (logtest? (-> e enemy-flags) (enemy-flag death-start mp-synced-death stop-syncing))
-           (is-enemy-in-pausable-state? e))
+       (or (<= (-> e hit-points) 0)
+           (= (-> e status) 'dead)
+           (logtest? (-> e enemy-flags) (enemy-flag death-start mp-synced-death)))
        )
   )
 
@@ -529,6 +530,16 @@
   )
 
 (defun mp-enemy-authoritative? ((e-proc enemy))
+  (when (and e-proc
+             (nonzero? e-proc)
+             *local-info*
+             (nonzero? *local-info*))
+    (let ((battle-owner (mp-battle-enemy-owner-role e-proc)))
+      (when (>= battle-owner 0)
+        (return (= battle-owner (-> *local-info* role)))
+        )
+      )
+    )
   (when (type? e-proc bot)
     (return (mp-is-jak?))
   )
@@ -640,7 +651,7 @@
        (nonzero? e-proc)
        (or (<= (-> e-proc hit-points) 0)
            (= (-> e-proc status) 'dead)
-           (logtest? (-> e-proc enemy-flags) (enemy-flag death-start stop-syncing mp-synced-death))
+           (logtest? (-> e-proc enemy-flags) (enemy-flag death-start mp-synced-death))
            (and (nonzero? enemy-aid)
                 (mp-aid-dead-perm? enemy-aid)))
        )
@@ -1088,6 +1099,7 @@
             (when rec
               ;; 2. Remote Claim Processing
               (let ((is-bot (type? e-proc bot))
+                    (battle-owner (mp-battle-enemy-owner-role e-proc))
                     (is-daxter-and-riding-along (and (mp-is-daxter?) *local-riding?*))
                     (remote-slot (mp-enemy-find-remote-slot enemy-aid)))
 
@@ -1097,7 +1109,9 @@
                   (set! (-> rec last-remote-seen) (current-time))
 
                   ;; --- Rule: Dual Authority Resolution (Host Priority) ---
-                  (if (or is-bot is-daxter-and-riding-along)
+                  (if (>= battle-owner 0)
+                      (set! (-> rec owner) (the-as uint8 battle-owner))
+                      (if (or is-bot is-daxter-and-riding-along)
                       (set! (-> rec owner) (the uint8 0))
                       (when (and (= local-role 1) (= (-> remote-slot owner) 0) (= (-> rec owner) 1))
                         (if (or (and (-> rec is-aggro) (not (= (-> remote-slot is-aggro) 1)))
@@ -1110,8 +1124,9 @@
                             )
                         )
                       )
+                      )
 
-                  (when (and (not is-bot) (not is-daxter-and-riding-along))
+                  (when (and (< battle-owner 0) (not is-bot) (not is-daxter-and-riding-along))
                     (cond
                       ((and (= (-> remote-slot is-aggro) 1) (not (-> rec is-aggro)) (>= (- (current-time) (-> rec last-transfer-time)) (seconds 2)))
                        (set! (-> rec owner) remote-role)
@@ -1143,7 +1158,8 @@
                     )
                   )
 
-                (when (and (not is-bot)
+                (when (and (< battle-owner 0)
+                           (not is-bot)
                            (not is-daxter-and-riding-along)
                            (not (mp-enemy-terminal-sync? e-proc enemy-aid)))
                   ;; 3. Local Aggro Detection
@@ -1196,7 +1212,12 @@
                     )
                   )
                 
-                (when (and is-bot (!= (-> rec owner) (the uint8 0)))
+                (when (>= battle-owner 0)
+                  (set! (-> rec owner) (the-as uint8 battle-owner))
+                  (set! (-> rec just-taken-authority) #f)
+                  )
+
+                (when (and (< battle-owner 0) is-bot (!= (-> rec owner) (the uint8 0)))
                   (set! (-> rec owner) (the uint8 0))
                   )
                 
@@ -1256,6 +1277,10 @@
                                (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death))
                                (set! (-> e-proc hit-points) 0)
                                (send-event e-proc 'die)
+                               )
+                              ((>= battle-owner 0)
+                               (set! (-> rec owner) (the-as uint8 battle-owner))
+                               (set! (-> rec just-taken-authority) #f)
                                )
                               ((and is-bot (not (mp-is-jak?)))
                                (set! (-> rec owner) (the uint8 0))

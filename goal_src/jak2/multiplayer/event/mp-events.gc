@@ -157,46 +157,15 @@
       (-> evt breed-index)
       (-> evt initial?)
       )
-
-    (let ((proc (process-by-name name-str *active-pool*)))
-      (if (and proc (type? proc battle))
-          (begin
-            (debug-log *mp-debug-log?* "[MP-BattleEvent][~A][RECV] dispatch battle-proc=~A~%" (if (mp-is-jak?) "HOST" "CLIENT") proc)
-            (case battle-evt
-              ((MP_BATTLE_EVT_START)
-               (send-event proc 'mp-battle-start)
-               )
-              ((MP_BATTLE_EVT_END)
-               (send-event proc 'mp-battle-end)
-               )
-              ((MP_BATTLE_EVT_SPAWN)
-               (debug-log *mp-debug-log?*
-                 "[MP-BattleEvent][~A][RECV-SPAWN] dispatch spawner=~D breed=~D initial=~D aid=~D~%"
-                 (if (mp-is-jak?) "HOST" "CLIENT")
-                 (-> evt spawner-index)
-                 (-> evt breed-index)
-                 (-> evt initial?)
-                 (-> evt enemy-aid)
-                 )
-               (send-event
-                 proc
-                 'mp-battle-spawn
-                 (the-as int (-> evt spawner-index))
-                 (the-as int (-> evt breed-index))
-                 (the-as int (-> evt initial?))
-                 (the-as int (-> evt enemy-aid))
-                 )
-               )
-              )
-            )
-          (debug-log *mp-debug-log?*
-            "[MP-BattleEvent][~A][RECV-MISS] no active battle proc for ~S, proc=~A~%"
-            (if (mp-is-jak?) "HOST" "CLIENT")
-            name-str
-            proc
-            )
-          )
+    (debug-log *mp-debug-log?*
+      "[MP-BattleEvent][~A][RECV] owner=~D epoch=~D local=~D~%"
+      (if (mp-is-jak?) "HOST" "CLIENT")
+      (-> evt owner-role)
+      (-> evt epoch)
+      (if (and *local-info* (nonzero? *local-info*)) (-> *local-info* role) -1)
       )
+
+    (mp-battle-receive-event! evt name-str)
     )
   (set! *mp-processing-remote-event* #f)
   (none)
