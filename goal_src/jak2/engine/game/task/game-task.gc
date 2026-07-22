@@ -6704,7 +6704,9 @@
             :info #f
             :borrow '()
             :open? #f
-            :on-close #f
+            :on-close '(begin 
+                (mp-tomb-boulder-set-respawn-policy! #f)
+              )
             )
           (new 'static 'game-task-node-info
             :level 'tomb

@@ -32,6 +32,8 @@ struct RemoteEntityState {
   float weather_rain;
   uint16_t buttons;
   uint8_t leftx, lefty, rightx, righty;
+  uint8_t respawn_flags;
+  uint8_t respawn_pad;
   float cam_angle_y;
   uint32_t riding_veh_id;
   uint8_t riding_seat_index;
@@ -86,7 +88,8 @@ struct RemotePlayerInfoGOAL {
   float weather_rain;
   uint16_t buttons;
   uint8_t leftx, lefty, rightx, righty;
-  uint16_t pad_cam;
+  uint8_t respawn_flags;
+  uint8_t respawn_pad;
   float cam_angle_y;
   uint32_t riding_veh_id;
   uint8_t riding_seat_index;
@@ -139,7 +142,8 @@ struct LocalPlayerInfoGOAL {
   float weather_rain;
   uint16_t buttons;
   uint8_t leftx, lefty, rightx, righty;
-  uint16_t pad_cam;
+  uint8_t respawn_flags;
+  uint8_t respawn_pad;
   float cam_angle_y;
   uint32_t riding_veh_id;
   uint8_t riding_seat_index;

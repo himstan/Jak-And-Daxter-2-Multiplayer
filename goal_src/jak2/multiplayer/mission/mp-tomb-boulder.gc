@@ -2,18 +2,21 @@
 (in-package goal)
 
 (define-extern mp-send-mission-event (function string uint none))
-(define-extern *mp-spectator-countdown-active?* symbol)
-(define-extern *mp-force-remote-puppet-for-spectate?* symbol)
-(define-extern *mp-spectating?* symbol)
 
 (define-perm *mp-tomb-boulder-reconnect-restart?* symbol #t)
 (define-perm *mp-tomb-boulder-completion-pending?* symbol #f)
 (define-perm *mp-tomb-boulder-full-sync-local-placement?* symbol #f)
 
+(defun mp-tomb-boulder-set-respawn-policy! ((blocked? symbol))
+  (mp-set-respawn-blocks! blocked? blocked?)
+  (none)
+  )
+
 (defun mp-tomb-boulder-reset-state! ()
   (set! *mp-tomb-boulder-reconnect-restart?* #t)
   (set! *mp-tomb-boulder-completion-pending?* #f)
   (set! *mp-tomb-boulder-full-sync-local-placement?* #f)
+  (mp-tomb-boulder-set-respawn-policy! #f)
   (none)
   )
 
@@ -69,26 +72,6 @@
       )
     )
   (the-as string #f)
-  )
-
-(defun mp-tomb-boulder-local-chase-death? ()
-  (let ((continue-name (mp-tomb-boulder-current-continue-name)))
-    (the symbol
-         (and (mp-tomb-boulder-role-session?)
-              (mp-is-daxter?)
-              (mp-tomb-boulder-chase-continue? continue-name)))
-    )
-  )
-
-(defun mp-tomb-boulder-prepare-local-death! ()
-  (set! *mp-spectator-countdown-active?* #f)
-  (set! *mp-force-remote-puppet-for-spectate?* #f)
-  (set! *mp-spectating?* #f)
-  (when (and *camera* (nonzero? *camera*)
-             *target* (nonzero? *target*))
-    (send-event *camera* 'change-target *target*)
-    )
-  (none)
   )
 
 (defun mp-tomb-boulder-ignore-remote-continue? ((continue-name string))
@@ -149,6 +132,9 @@
       (task-node-close! (game-task-node tomb-poles-boulder-started))
       )
     )
+  (when (mp-tomb-boulder-chase-continue? (mp-tomb-boulder-current-continue-name))
+    (mp-tomb-boulder-set-respawn-policy! #t)
+    )
   (none)
   )
 
@@ -198,21 +184,31 @@
               (game-task-node tomb-poles-boulder))))
   )
 
+(defun tomb-poles-boulder-closed-and-boss-door-not-closed? ()
+  (and (mp-tomb-boulder-snapshot-task-closed?
+         (game-task-node tomb-poles-boulder))
+       (not (mp-tomb-boulder-snapshot-task-closed?
+              (game-task-node tomb-boss-door))))
+  )
+
 (defun mp-tomb-boulder-suppress-full-sync? ()
   (and (mp-is-daxter?)
-       (mp-tomb-boulder-full-sync-isolated?)
+       (or (mp-tomb-boulder-full-sync-isolated?) (tomb-poles-boulder-closed-and-boss-door-not-closed?))
        (not *mp-tomb-boulder-reconnect-restart?*))
   )
 
 (defun mp-tomb-boulder-prepare-full-sync-continue! ((continue-name string) (name-length int))
   (set! *mp-tomb-boulder-full-sync-local-placement?* #f)
   (if (and *mp-tomb-boulder-reconnect-restart?*
-           (mp-tomb-boulder-full-sync-isolated?)
+           (or (mp-tomb-boulder-full-sync-isolated?) (tomb-poles-boulder-closed-and-boss-door-not-closed?))
            continue-name
            (nonzero? continue-name))
       (begin
         (set! *mp-tomb-boulder-full-sync-local-placement?* #t)
-        (copy-string<-string continue-name "tomb-boulder")
+        (if (tomb-poles-boulder-closed-and-boss-door-not-closed?)
+            (copy-string<-string continue-name "tombboss-spider-end")
+            (copy-string<-string continue-name "tomb-boulder")
+          )
         (length continue-name)
         )
       name-length)
@@ -254,6 +250,7 @@
   (when (mp-is-daxter?)
     (set! *mp-tomb-boulder-reconnect-restart?* #f)
     (set! *mp-tomb-boulder-full-sync-local-placement?* #f)
+    (mp-tomb-boulder-set-respawn-policy! (mp-tomb-boulder-chase-continue? (mp-tomb-boulder-current-continue-name)))
     )
   (none)
   )
@@ -265,6 +262,9 @@
     (set! *mp-tomb-boulder-completion-pending?* #f)
     (set! *mp-tomb-boulder-full-sync-local-placement?* #f)
     )
+  (when (= status 8)
+    (mp-tomb-boulder-set-respawn-policy! #f)
+    )
   (none)
   )
 
@@ -273,6 +273,7 @@
              (mp-tomb-boulder-role-session?))
     (mp-tomb-boulder-finish-intro!)
     (set! *mp-tomb-boulder-completion-pending?* #t)
+    (mp-tomb-boulder-set-respawn-policy! #f)
     (when (not (mp-tomb-boulder-complete?))
       (task-node-close! (game-task-node tomb-poles-boulder))
       )
@@ -287,10 +288,12 @@
 
 (defun mp-tomb-boulder-receive-completion! ()
   (when (and (mp-is-jak?)
-             (mp-tomb-boulder-started?)
-             (not (mp-tomb-boulder-complete?)))
-    (debug-log *mp-debug-log?* "[MP-TombBoulder] Daxter completed the chase; closing the host task.~%")
-    (task-node-close! (game-task-node tomb-poles-boulder))
+             (mp-tomb-boulder-started?))
+    (mp-tomb-boulder-set-respawn-policy! #f)
+    (when (not (mp-tomb-boulder-complete?))
+      (debug-log *mp-debug-log?* "[MP-TombBoulder] Daxter completed the chase; closing the host task.~%")
+      (task-node-close! (game-task-node tomb-poles-boulder))
+      )
     )
   (none)
   )
@@ -299,6 +302,7 @@
   (when (and (= node-index (the-as int (game-task-node tomb-poles-boulder)))
              remote-closed?)
     (set! *mp-tomb-boulder-completion-pending?* #f)
+    (mp-tomb-boulder-set-respawn-policy! #f)
     )
   (none)
   )

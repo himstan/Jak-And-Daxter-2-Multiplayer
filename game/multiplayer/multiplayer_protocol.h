@@ -81,6 +81,7 @@ struct PacketPlayerState {
   float weather_rain;
   uint16_t buttons;
   uint8_t leftx, lefty, rightx, righty;
+  uint8_t respawn_flags;
   float cam_angle_y;
   uint32_t riding_veh_id;
   uint8_t riding_seat_index;
@@ -97,7 +98,7 @@ struct PacketPlayerState {
   uint32_t action_seq;
   uint32_t action_state_id;
 };
-static_assert(sizeof(PacketPlayerState) == 340,
+static_assert(sizeof(PacketPlayerState) == 341,
               "PacketPlayerState wire layout must remain explicit");
 
 struct PacketTurretState {

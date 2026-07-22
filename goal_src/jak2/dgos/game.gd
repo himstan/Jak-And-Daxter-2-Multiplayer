@@ -569,6 +569,7 @@
   "mp-world-events.o" ;; added
   "mp-scene-state.o" ;; added
   "mp-player-targeting.o" ;; added
+  "mp-respawn-policy.o" ;; added
   "mp-level-sync.o" ;; added
   "mp-airlock-sync.o" ;; added
   "mp-teleport-utils.o" ;; added

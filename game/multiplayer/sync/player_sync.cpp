@@ -102,6 +102,7 @@ void mp_handle_player_state_packet(MultiplayerData& data,
   entity.lefty = state->lefty;
   entity.rightx = state->rightx;
   entity.righty = state->righty;
+  entity.respawn_flags = state->respawn_flags;
   entity.cam_angle_y = state->cam_angle_y;
   entity.riding_veh_id = state->riding_veh_id;
   entity.riding_seat_index = state->riding_seat_index;
@@ -233,6 +234,7 @@ void mp_send_player_state(MultiplayerData& data, LocalPlayerInfoGOAL* local) {
   local_state.lefty = local->lefty;
   local_state.rightx = local->rightx;
   local_state.righty = local->righty;
+  local_state.respawn_flags = local->respawn_flags;
   local_state.cam_angle_y = local->cam_angle_y;
   local_state.riding_veh_id = local->riding_veh_id;
   local_state.riding_seat_index = local->riding_seat_index;
@@ -314,6 +316,8 @@ void mp_sync_remote_player_to_goal(MultiplayerData& data, RemotePlayerInfoGOAL* 
     remote_goal->status = 0;
     remote_goal->scene_active = 0;
     remote_goal->turret_active = 0;
+    remote_goal->respawn_flags = 0;
+    remote_goal->respawn_pad = 0;
     remote_goal->turret_roty = 0.0f;
     remote_goal->turret_rotx = 0.0f;
     remote_goal->velocity[0] = 0.0f;
@@ -370,6 +374,8 @@ void mp_sync_remote_player_to_goal(MultiplayerData& data, RemotePlayerInfoGOAL* 
   remote_goal->lefty = remote_state.lefty;
   remote_goal->rightx = remote_state.rightx;
   remote_goal->righty = remote_state.righty;
+  remote_goal->respawn_flags = remote_state.respawn_flags;
+  remote_goal->respawn_pad = 0;
   remote_goal->cam_angle_y = remote_state.cam_angle_y;
   remote_goal->riding_veh_id = remote_state.riding_veh_id;
   remote_goal->riding_seat_index = remote_state.riding_seat_index;
