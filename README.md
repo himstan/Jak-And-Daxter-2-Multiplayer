@@ -15,17 +15,19 @@ Currently this mod only serves as a 2 player Co-op mod, but most likely will be 
 ## Before You Play
 
 - Both players should use the same version of the mod.
-- For online play, the host may need to allow the game through Windows Firewall, and also manually port-forward.
-- The default game port is `26210`.
+- For online play, the host needs to allow the game through Windows Firewall, and also manually port-forward if their router has UPnP disabled.
+- In case you live behind CGNAT or for any other reason you cannot port forward, Hamachi, Tailscale, or any other VPN solution should work for playing the game online (should host/join LAN though) as well.
+- The default game port is `26210` which is sadly not configurable at the moment but a session configuration menu is planned.
 
 ## Hosting A Game
+### Disclaimer! Hosting Online will attempt to do an automatic port mapping on your router! (it does required your router to support UPnP/NAT-PMP and have it enabled)
 
 1. Start the mod.
 2. Choose **Host Game** from the title menu.
 
    <img src="images/readme/host-host-game.png" alt="Title menu with Host Game selected" width="500">
 
-3. Choose **Host LAN** or **Host Online**
+3. Choose **Host LAN** or **Host Online** <br> 
 
    <img src="images/readme/host-online-or-lan.png" alt="Host Online or Host LAN menu options showing" width="500">
 
@@ -36,7 +38,7 @@ Currently this mod only serves as a 2 player Co-op mod, but most likely will be 
    <img src="images/readme/host-select-save.png" alt="Host save selection menu" width="500">
 
 5. Select **Copy Invite**, then send the copied invite (will contain your public IP) privately to the other player. Wait on
-   the host screen until they connect.
+   the host screen until they connect. <br>If the **Copy Invite** button stays red, then that means that either your port is not already forwarded, and also the automatic port mapping has also failed. I suggest you go with a VPN solution and Host LAN.
 
    <img src="images/readme/host-waiting-for-player.png" alt="Host waiting for Daxter to connect" width="500">
 
@@ -116,10 +118,12 @@ The Reconnect button is going to act as your primary safeline while playing this
 
 ### The Client Cannot Find The Host
 
-Check Windows Firewall on the host machine and allow the game/OpenGOAL through it. For internet play, the host should also forward the UDP port `26210` on their router.
+Check Windows Firewall on the host machine and allow the game/OpenGOAL through it. For online play, the host must aso have the UDP port `26210` forwarded on their router. <br>
+If they have UPnP supported and enabled on their router, the port mapping should be automatic upon pressing **Host Online** and selecting a save.
 
 ## Known issues
 
+- There's a couple of random crashes, so expect that, especially on the non-host Daxter side.
 - The remote player puppets can miss their animation triggers, so when they jump they might be "falling" until their legs hit the floor.
 - The Traffic Sync is very much so host owned, if the client player exits the host's traffic radius the handover is pretty invasive, it's going to remove all traffic on the client's side until he gets far enough from the Host. When he does the Client is going to start spawning peds and vehicles locally.
 - Reconnecting is currently the main recovery path for client-side issues and soft-locks.
