@@ -129,6 +129,7 @@ If they have UPnP supported and enabled on their router, the port mapping should
 - Reconnecting is currently the main recovery path for client-side issues and soft-locks.
 - Some situations may still behave better when the host leads the interaction.
 - Testing has not been very thorough, so please feel free to report any issues or game-breaking bugs you find!
+- The red and yellow gungames are pretty buggy, and are only roughly synced.
 
 ## Credits
 
