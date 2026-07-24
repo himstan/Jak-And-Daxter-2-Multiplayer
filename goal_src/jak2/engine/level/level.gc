@@ -926,9 +926,7 @@ into 7 sections, which might explain the weird sizes in the center.
                      )
                    )
                )
-             #t
-             (break!)
-             0
+             (return (the-as level #f))
              )
             (else
               (start-debug "successfully found load: size #x~X, bits #x~X, offset ~D~%"
