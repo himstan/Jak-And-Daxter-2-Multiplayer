@@ -31,6 +31,18 @@
        )
   )
 
+(defun mp-enemy-terminal-sync? ((e-proc enemy) (enemy-aid uint))
+  "True once sync/authority must stop treating this enemy as alive."
+  (and e-proc
+       (nonzero? e-proc)
+       (or (<= (-> e-proc hit-points) 0)
+           (= (-> e-proc status) 'dead)
+           (logtest? (-> e-proc enemy-flags) (enemy-flag death-start mp-synced-death))
+           (and (nonzero? enemy-aid)
+                (mp-aid-dead-perm? enemy-aid)))
+       )
+  )
+
 (defun mp-enemy-get-death-hint ((e-proc enemy))
   "Capture the visual death path the owner is starting."
   (when (and e-proc (nonzero? e-proc))
@@ -287,34 +299,46 @@
   "Force an inbound authoritative enemy state without compile-time state dispatch."
   (when (and e-proc
              (nonzero? e-proc)
-             target-state
-             (not (logtest? (-> e-proc enemy-flags) (enemy-flag death-start))))
-    (let ((cur-state (if (-> e-proc state) (-> e-proc state name) #f)))
-      (when (!= cur-state target-state)
-        (let ((st (method-state (-> e-proc type) (the-as basic target-state))))
-          (when (and st (nonzero? st))
-            (when *mp-enemy-debug-auth?*
-              (debug-log *mp-debug-log?* "[MP-Enemy-Sync] state-queue aid=~D current=~A pending=~A target=~A status=~A~%"
-                      (mp-get-enemy-aid e-proc)
-                      cur-state
-                      (if (-> e-proc next-state) (-> e-proc next-state name) #f)
-                      target-state
-                      (-> e-proc status))
-              )
-            (process-mask-clear! (-> e-proc mask) sleep sleep-code)
-            (set! (-> e-proc next-state) (the-as state st))
-            (enter-state
-              (the-as object st)
-              (the-as object #f)
-              (the-as object #f)
-              (the-as object #f)
-              (the-as object #f)
-              (the-as object #f))
-            (with-pp
-              (when (and (= (-> *kernel-context* current-process) pp)
-                         (= (-> pp main-thread) (-> pp top-thread))
-                         (= (-> pp state) (-> pp next-state)))
-                (throw 'go #t)
+             target-state)
+    (let ((e-root (-> e-proc root))
+          (enemy-aid (mp-get-enemy-aid e-proc)))
+      (when (and e-root
+                 (nonzero? e-root)
+                 (not (mp-enemy-terminal-sync? e-proc enemy-aid)))
+        (let ((current-state (-> e-proc state)))
+          (let ((cur-state (if (and current-state (nonzero? current-state))
+                               (-> current-state name)
+                               #f)))
+            (when (!= cur-state target-state)
+              (let ((st (method-state (-> e-proc type) (the-as basic target-state))))
+                (when (and st (nonzero? st))
+                  (when *mp-enemy-debug-auth?*
+                    (let ((pending-state (-> e-proc next-state)))
+                      (debug-log *mp-debug-log?* "[MP-Enemy-Sync] state-queue aid=~D current=~A pending=~A target=~A status=~A~%"
+                              enemy-aid
+                              cur-state
+                              (if (and pending-state (nonzero? pending-state)) (-> pending-state name) #f)
+                              target-state
+                              (-> e-proc status))
+                      )
+                    )
+                  (process-mask-clear! (-> e-proc mask) sleep sleep-code)
+                  (set! (-> e-proc next-state) (the-as state st))
+                  (enter-state
+                    (the-as object (-> e-root trans))
+                    (the-as object #f)
+                    (the-as object #f)
+                    (the-as object #f)
+                    (the-as object #f)
+                    (the-as object #f))
+                  (with-pp
+                    (when (and (= (-> *kernel-context* current-process) pp)
+                               (= (-> pp main-thread) (-> pp top-thread))
+                               (= (-> pp state) (-> pp next-state)))
+                      (throw 'go #t)
+                      )
+                    )
+                  )
                 )
               )
             )
@@ -643,18 +667,6 @@
 (defun mp-enemy-should-run-dying? ((e-proc enemy))
   "Vanilla dying cleanup should only run for authoritative or confirmed-dead enemies."
   (mp-enemy-allow-kill-prefer-falling? e-proc)
-  )
-
-(defun mp-enemy-terminal-sync? ((e-proc enemy) (enemy-aid uint))
-  "True once sync/authority must stop treating this enemy as alive."
-  (and e-proc
-       (nonzero? e-proc)
-       (or (<= (-> e-proc hit-points) 0)
-           (= (-> e-proc status) 'dead)
-           (logtest? (-> e-proc enemy-flags) (enemy-flag death-start mp-synced-death))
-           (and (nonzero? enemy-aid)
-                (mp-aid-dead-perm? enemy-aid)))
-       )
   )
 
 (defun mp-enemy-retired-host-bot-proxy? ((e-proc enemy))
