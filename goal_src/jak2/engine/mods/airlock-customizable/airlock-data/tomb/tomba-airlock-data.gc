@@ -26,7 +26,8 @@
                 )
               (static-airlock-data
                 :airlock-name "tomb-wing-door-4"
-                :on-notice '(when (or (not (task-closed? "tomb-poles-resolution")) (task-closed? "tomb-boss-resolution")) '(tombb))
+                :on-notice '(when (or (task-closed? "tomb-water-resolution") (task-closed? "tomb-boss-resolution")) '(tombb))
+                :on-blocked '(voice-play "ds117" daxter)
                 :on-activate #f
                 :on-enter '(want-display 'tombb 'display)
                 :on-reconcile '((want-load 'tomba 'tombb #f) (want-display 'tombb 'display))

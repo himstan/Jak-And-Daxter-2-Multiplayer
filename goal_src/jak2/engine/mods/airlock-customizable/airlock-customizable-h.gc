@@ -21,6 +21,7 @@
    (other-side-levels pair) ;; levels that prove the remote player is already on the other side of this airlock
    (airlock-elevator string)
    (on-notice      pair)   ;; evaluated on initialization to determine which levels must be loaded to open the airlock (can include task conditions)
+   (on-blocked     pair)   ;; actions executed once when a player approaches while on-notice has no valid destination
    (on-activate    pair)   ;; actions executed when activating the airlock (e.g. load levels with 'want-load', load sound banks with 'want-sound')
    (on-enter       pair)   ;; actions executed once the airlock finishes opening (e.g. display levels using 'want-display', load sound banks with `want-sound`)
    (on-reconcile   pair)   ;; two idempotent scripts: load intent, then display intent after loading
@@ -36,6 +37,7 @@
                                  &key (other-side-levels #f)
                                  &key (airlock-elevator #f)
                                  &key (on-notice #f)
+                                 &key (on-blocked #f)
                                  &key (on-activate #f)
                                  &key (on-enter #f)
                                  &key (on-reconcile #f)
@@ -49,6 +51,7 @@
      :airlock-elevator ,airlock-elevator
      :other-side-levels ,other-side-levels
      :on-notice ,on-notice
+     :on-blocked ,on-blocked
      :on-activate ,on-activate
      :on-enter ,on-enter
      :on-reconcile ,on-reconcile
@@ -102,6 +105,8 @@
    (other-side-levels      pair) ;; added
    (airlock-elevator       string) ;; added
    (on-notice              pair) ;; added
+   (on-blocked             pair) ;; added
+   (blocked-script-ran?    symbol) ;; added
    (on-activate            pair) ;; added
    (on-enter               pair) ;; added
    (on-reconcile           pair) ;; added
@@ -129,6 +134,9 @@
     (local-player-can-report-airlock-ready? (_type_) symbol :behavior com-airlock)
     (airlock-notice-level-list (_type_) pair)
     (airlock-has-valid-notice-destination? (_type_) symbol)
+    (airlock-local-player-in-active-range? (_type_) symbol)
+    (airlock-blocked-approach? (_type_) symbol)
+    (update-blocked-airlock! (_type_) none)
     (airlock-destination-level? (_type_ symbol pair) symbol)
     (airlock-load-conflicts-with-current-want? (_type_) symbol)
     (destination-loaded? (_type_ symbol) symbol)

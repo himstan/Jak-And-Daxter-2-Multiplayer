@@ -25,6 +25,7 @@
                 )
               (static-airlock-data
                 :airlock-name "com-airlock-inner-27"
+                :other-side-levels '(ctywide)
                 :on-notice '(when #t '(ctypal tombd))
                 :on-activate #f
                 :on-enter '(begin (want-display 'tombd 'display) (send-event self 'sound 'exit))
@@ -36,6 +37,7 @@
                 )
               (static-airlock-data
                 :airlock-name "com-airlock-inner-28"
+                :other-side-levels '(tombd)
                 :on-notice '(when #t '(ctypal ctywide))
                 :on-activate #f
                 :on-enter '(begin (want-display 'ctywide 'display) (send-event self 'sound 'enter))

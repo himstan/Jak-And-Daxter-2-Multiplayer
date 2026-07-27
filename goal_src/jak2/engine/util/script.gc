@@ -52,6 +52,30 @@
     )
   )
 
+(defun script-voice-channel ((channel-name symbol))
+  (case channel-name
+    (('jak) (gui-channel jak))
+    (('daxter) (gui-channel daxter))
+    (('sig) (gui-channel sig))
+    (('ashelin) (gui-channel ashelin))
+    (('mog) (gui-channel mog))
+    (('jinx) (gui-channel jinx))
+    (('grim) (gui-channel grim))
+    (('kid) (gui-channel kid))
+    (('kor) (gui-channel kor))
+    (('hal) (gui-channel hal))
+    (('guard) (gui-channel guard))
+    (('crocadog) (gui-channel crocadog))
+    (('alert) (gui-channel alert))
+    (('citizen) (gui-channel citizen))
+    (('bbush) (gui-channel bbush))
+    (('krew) (gui-channel krew))
+    (('voice) (gui-channel voice))
+    (('message) (gui-channel message))
+    (else (gui-channel none))
+    )
+  )
+
 ;; WARN: Return type mismatch int vs time-frame.
 (defun command-get-time ((arg0 object) (arg1 int))
   (the-as time-frame (cond
@@ -2533,6 +2557,41 @@
           (when (-> arg0 side-effect?)
             (mp-tomb-boulder-set-respawn-policy!
               (the-as symbol (-> arg0 param 1)))
+            )
+          (none)
+          )
+  )
+  )
+
+(let ((v1-135 (-> *script-form* 89)))
+  (set! (-> v1-135 name) 'voice-play)
+  (set! (-> v1-135 spec)
+        '((return macro (none))
+          (function macro (symbol))
+          (name eval (string))
+          (channel macro (symbol))
+          &key
+          (speaker eval (string process entity-actor symbol #f) target)))
+  (set! (-> v1-135 func)
+        (lambda ((arg0 script-context))
+          (when (and (-> arg0 side-effect?)
+                     *gui-control*
+                     (nonzero? *gui-control*))
+            (let ((speaker (command-get-process (-> arg0 param 3) (-> arg0 process)))
+                  (channel (script-voice-channel (the-as symbol (-> arg0 param 2))))
+                  (voice-key (the-as string (-> arg0 param 1))))
+              (cond
+                ((= channel (gui-channel none))
+                 (format 0 "ERROR: SCRIPT: unknown voice channel ~A.~%" (-> arg0 param 2))
+                 )
+                ((and speaker
+                      (nonzero? speaker)
+                      voice-key
+                      (nonzero? (the-as uint voice-key)))
+                 (add-process *gui-control* speaker channel (gui-action play) voice-key -99.0 0)
+                 )
+                )
+              )
             )
           (none)
           )

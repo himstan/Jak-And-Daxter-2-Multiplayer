@@ -86,6 +86,7 @@
         (set! (-> this other-side-levels) (-> data i other-side-levels))
         (set! (-> this airlock-elevator) (-> data i airlock-elevator))
         (set! (-> this on-notice) (-> data i on-notice))
+        (set! (-> this on-blocked) (-> data i on-blocked))
         (set! (-> this on-activate) (-> data i on-activate))
         (set! (-> this on-enter) (-> data i on-enter))
         (set! (-> this on-reconcile) (-> data i on-reconcile))
@@ -159,6 +160,68 @@
                    )
                )
           )
+  )
+
+(defmethod airlock-local-player-in-active-range? ((this com-airlock))
+  (when (and (airlock-ready-for-state? this)
+             *target*
+             (nonzero? *target*)
+             (-> *target* control)
+             (nonzero? (-> *target* control)))
+    (let ((target-pos (target-pos 0)))
+      (return
+        (the-as symbol
+                (and (target-in-airlock-active-range? this target-pos #f)
+                     (target-in-airlock-height? this target-pos #f)))
+        )
+      )
+    )
+  #f
+  )
+
+(defmethod airlock-blocked-approach? ((this com-airlock))
+  (when (and (airlock-ready-for-state? this)
+             (-> this on-blocked)
+             (airlock-local-player-in-active-range? this)
+             *target*
+             (nonzero? *target*)
+             (-> *target* control)
+             (nonzero? (-> *target* control))
+             (not (focus-test? *target* pilot teleporting))
+             *setting-control*
+             (nonzero? *setting-control*)
+             *level*
+             (nonzero? *level*)
+             (not (load-in-progress? *level*))
+             (not *scene-player*)
+             (not (movie?))
+             (not (real-movie?))
+             (not *mp-pending-scene-sync?*))
+    (let ((cross-dist (check-crossing-distance this (target-pos 0) #t)))
+      (return
+        (the-as symbol
+                (and (< (-> this latch-closed-time) (current-time))
+                     (local-player-in-airlock-sync-distance? this cross-dist)
+                     (target-can-open-airlock? this cross-dist)
+                     (not (airlock-has-valid-notice-destination? this))))
+        )
+      )
+    )
+  #f
+  )
+
+(defmethod update-blocked-airlock! ((this com-airlock))
+  (when (airlock-ready-for-state? this)
+    (when (not (airlock-local-player-in-active-range? this))
+      (set! (-> this blocked-script-ran?) #f)
+      )
+    (when (and (not (-> this blocked-script-ran?))
+               (airlock-blocked-approach? this))
+      (set! (-> this blocked-script-ran?) #t)
+      (run-airlock-script! this (-> this on-blocked) 'on-blocked)
+      )
+    )
+  (none)
   )
 
 (defmethod airlock-transitioning-to? ((this com-airlock) (state-name symbol))
@@ -386,6 +449,7 @@
   (set! (-> this sound-close-stop) #f)
   (set! (-> this door-radius) 20480.0)
   (set! (-> this reconcile-next-time) (the-as time-frame 0))
+  (set! (-> this blocked-script-ran?) #f)
   (set! (-> this mp-sync?) #t)
   (init-airlock-data-array! this) ;; added
   (init-airlock-pair-data! this) ;; added
@@ -964,6 +1028,7 @@
       (if (logtest? (-> self draw status) (draw-control-status on-screen))
           (set! (-> self visible-move?) #t)
           )
+      (update-blocked-airlock! self)
       (when (-> self mp-sync?)
         (let* ((target-pos (target-pos 0))
                (cross-dist (check-crossing-distance self target-pos #t))
