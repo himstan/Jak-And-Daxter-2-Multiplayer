@@ -299,6 +299,72 @@
   (none)
   )
 
+(defun mp-enemy-log-collision-repair! ((enemy-aid uint)
+                                       (source-state symbol)
+                                       (target-state symbol)
+                                       (restored-as collide-spec)
+                                       (restored-with collide-spec))
+  (when *mp-enemy-debug-auth?*
+    (debug-log *mp-debug-log?*
+      "[MP-Enemy-Sync] collision-repair aid=~D source=~A target=~A as=~D with=~D~%"
+      enemy-aid
+      source-state
+      target-state
+      restored-as
+      restored-with)
+    )
+  (none)
+  )
+
+(defun mp-enemy-restore-interrupted-root-collision! ((e-proc enemy)
+                                                      (target-state symbol))
+  "Restore temporary root collision when a forced state interrupts code with no exit cleanup."
+  (when (or (not (and e-proc (nonzero? e-proc)))
+            (not target-state)
+            (mp-enemy-authoritative? e-proc))
+    (return #f)
+    )
+  (let ((current-state (-> e-proc state)))
+    (when (or (not (and current-state (nonzero? current-state)))
+              (-> current-state exit))
+      (return #f)
+      )
+    (let ((e-root (-> e-proc root)))
+      (when (not (and e-root (nonzero? e-root)))
+        (return #f)
+        )
+      (let ((root-prim (-> e-root root-prim)))
+        (when (not (and root-prim (nonzero? root-prim)))
+          (return #f)
+          )
+        (let ((backup-as (-> e-root backup-collide-as))
+              (backup-with (-> e-root backup-collide-with))
+              (restored? #f))
+          (when (and (zero? (-> root-prim prim-core collide-as))
+                     (nonzero? backup-as))
+            (set! (-> root-prim prim-core collide-as) backup-as)
+            (set! restored? #t)
+            )
+          (when (and (zero? (-> root-prim prim-core collide-with))
+                     (nonzero? backup-with))
+            (set! (-> root-prim prim-core collide-with) backup-with)
+            (set! restored? #t)
+            )
+          (when restored?
+            (mp-enemy-log-collision-repair!
+              (mp-get-enemy-aid e-proc)
+              (-> current-state name)
+              target-state
+              (-> root-prim prim-core collide-as)
+              (-> root-prim prim-core collide-with))
+            )
+          restored?
+          )
+        )
+      )
+    )
+  )
+
 (defun mp-enemy-force-remote-state! ((e-proc enemy) (target-state symbol))
   "Force an inbound authoritative enemy state without compile-time state dispatch."
   (when (and e-proc
@@ -326,6 +392,7 @@
                               (-> e-proc status))
                       )
                     )
+                  (mp-enemy-restore-interrupted-root-collision! e-proc target-state)
                   (process-mask-clear! (-> e-proc mask) sleep sleep-code)
                   (set! (-> e-proc next-state) (the-as state st))
                   (enter-state
