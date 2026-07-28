@@ -215,7 +215,6 @@
     (mp-battle-clear-spawn-record! (-> *mp-battle-spawn-records* idx))
     )
   (set! *mp-battle-spawn-counter* (the uint 0))
-  (set! *mp-incoming-battle-spawn-aid* (the uint 0))
   (set! *mp-battle-last-session-status* -1)
   (set! *mp-battle-last-roster-request* (the-as time-frame 0))
   (set! *mp-battle-sync-initialized?* #t)
@@ -561,24 +560,6 @@
   (none)
   )
 
-(defun mp-battle-ensure-spawner-handle! ((battle-proc battle)
-                                         (spawn-record mp-battle-spawn-record)
-                                         (enemy-proc enemy))
-  (when (and battle-proc
-             (nonzero? battle-proc)
-             spawn-record
-             (nonzero? spawn-record)
-             enemy-proc
-             (nonzero? enemy-proc))
-    (let ((spawner (get-spawner-by-index battle-proc (-> spawn-record spawner-index))))
-      (when (and spawner (nonzero? spawner))
-        (set! (-> spawner creature) (process->handle enemy-proc))
-        )
-      )
-    )
-  (none)
-  )
-
 (defun mp-battle-spawn-record-process ((spawn-record mp-battle-spawn-record))
   (when (and spawn-record (nonzero? spawn-record) (nonzero? (-> spawn-record enemy-aid)))
     (return (find-enemy-by-aid (the-as uint (-> spawn-record enemy-aid))))
@@ -599,6 +580,143 @@
   (none)
   )
 
+(defun mp-battle-remote-death-aid-index ((enemy-aid uint))
+  (when (and *remote-info* (nonzero? *remote-info*))
+    (let ((sync-aid-count (min 128 (the-as int (-> *remote-info* sync-aids-count)))))
+      (dotimes (idx sync-aid-count)
+        (when (= (-> *remote-info* sync-aids idx) (the-as uint32 enemy-aid))
+          (return idx)
+          )
+        )
+      )
+    )
+  -1
+  )
+
+(defun mp-battle-log-recovery-remote-state! ((spawn-record mp-battle-spawn-record))
+  (when (and spawn-record (nonzero? spawn-record))
+    (let ((enemy-aid (the-as uint (-> spawn-record enemy-aid))))
+      (let ((remote-slot (mp-enemy-find-remote-slot enemy-aid))
+            (death-aid-index (mp-battle-remote-death-aid-index enemy-aid)))
+        (if (and remote-slot (nonzero? remote-slot))
+            (begin
+              (debug-log *mp-debug-log?*
+                "[MP-BattleSync][RECOVER-DIAG][REMOTE] aid=~D slot=~A fresh=~A hp=~D state=~D owner=~D.~%"
+                enemy-aid
+                remote-slot
+                (mp-enemy-remote-slot-fresh? remote-slot)
+                (-> remote-slot hp)
+                (-> remote-slot state)
+                (-> remote-slot owner))
+              (debug-log *mp-debug-log?*
+                "[MP-BattleSync][RECOVER-DIAG][REMOTE] aid=~D aggro=~D updated=~D.~%"
+                enemy-aid
+                (-> remote-slot is-aggro)
+                (-> remote-slot last-updated))
+              )
+            (debug-log *mp-debug-log?*
+              "[MP-BattleSync][RECOVER-DIAG][REMOTE] aid=~D slot=#f.~%"
+              enemy-aid)
+            )
+        (debug-log *mp-debug-log?*
+          "[MP-BattleSync][RECOVER-DIAG][REMOTE] aid=~D sync-aids-index=~D sync-aids-count=~D.~%"
+          enemy-aid
+          death-aid-index
+          (if (and *remote-info* (nonzero? *remote-info*))
+              (min 128 (the-as int (-> *remote-info* sync-aids-count)))
+              0))
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-battle-log-recovery-enemy! ((enemy-aid uint)
+                                      (creature-handle handle)
+                                      (enemy-proc enemy))
+  (when (and enemy-proc (nonzero? enemy-proc))
+    (let ((state (-> enemy-proc state)))
+      (debug-log *mp-debug-log?*
+        "[MP-BattleSync][RECOVER-DIAG][LOCAL] expected-aid=~D handle=~D proc=~A observed-aid=~D nid=~D status=~A.~%"
+        enemy-aid
+        (the-as uint creature-handle)
+        enemy-proc
+        (mp-get-enemy-aid enemy-proc)
+        (-> enemy-proc net-id)
+        (-> enemy-proc status))
+      (debug-log *mp-debug-log?*
+        "[MP-BattleSync][RECOVER-DIAG][LOCAL] hp=~D state=~A.~%"
+        (-> enemy-proc hit-points)
+        (if (and state (nonzero? state)) (-> state name) #f))
+      (debug-log *mp-debug-log?*
+        "[MP-BattleSync][RECOVER-DIAG][LOCAL] inactive=~A death-start=~A synced-death=~A stop-syncing=~A mask=~D enemy-flags=~D.~%"
+        (focus-test? enemy-proc inactive)
+        (logtest? (-> enemy-proc enemy-flags) (enemy-flag death-start))
+        (logtest? (-> enemy-proc enemy-flags) (enemy-flag mp-synced-death))
+        (logtest? (-> enemy-proc enemy-flags) (enemy-flag stop-syncing))
+        (-> enemy-proc mask)
+        (-> enemy-proc enemy-flags))
+      )
+    )
+  (none)
+  )
+
+(defun mp-battle-log-recovery-process! ((spawn-record mp-battle-spawn-record)
+                                        (spawner battle-spawner))
+  (when (and spawn-record (nonzero? spawn-record) spawner (nonzero? spawner))
+    (let ((enemy-aid (the-as uint (-> spawn-record enemy-aid)))
+          (creature-handle (-> spawner creature)))
+      (if (zero? creature-handle)
+          (debug-log *mp-debug-log?*
+            "[MP-BattleSync][RECOVER-DIAG][LOCAL] aid=~D spawner-handle=#f reason=EMPTY-HANDLE.~%"
+            enemy-aid)
+          (let ((proc (handle->process creature-handle)))
+            (cond
+              ((not (and proc (nonzero? proc)))
+               (debug-log *mp-debug-log?*
+                 "[MP-BattleSync][RECOVER-DIAG][LOCAL] aid=~D spawner-handle=~D reason=STALE-HANDLE.~%"
+                 enemy-aid
+                 (the-as uint creature-handle))
+               )
+              ((not (type? proc enemy))
+               (debug-log *mp-debug-log?*
+                 "[MP-BattleSync][RECOVER-DIAG][LOCAL] aid=~D spawner-handle=~D proc=~A reason=WRONG-TYPE.~%"
+                 enemy-aid
+                 (the-as uint creature-handle)
+                 proc)
+               )
+              (else
+               (mp-battle-log-recovery-enemy!
+                 enemy-aid creature-handle (the-as enemy proc))
+               )
+              )
+            )
+          )
+      )
+    )
+  (none)
+  )
+
+(defun mp-battle-log-recovery-diagnostics! ((battle-proc battle)
+                                            (spawn-record mp-battle-spawn-record))
+  (when (and battle-proc
+             (nonzero? battle-proc)
+             spawn-record
+             (nonzero? spawn-record))
+    (let ((spawner (get-spawner-by-index battle-proc (-> spawn-record spawner-index))))
+      (if (and spawner (nonzero? spawner))
+          (mp-battle-log-recovery-process! spawn-record spawner)
+          (debug-log *mp-debug-log?*
+            "[MP-BattleSync][RECOVER-DIAG][LOCAL] aid=~D spawner=~D reason=MISSING-SPAWNER.~%"
+            (-> spawn-record enemy-aid)
+            (-> spawn-record spawner-index))
+          )
+      )
+    (mp-battle-log-recovery-remote-state! spawn-record)
+    )
+  (none)
+  )
+
 (defun mp-battle-respawn-record! ((record mp-battle-sync-record)
                                   (spawn-record mp-battle-spawn-record)
                                   (battle-proc battle))
@@ -610,18 +728,15 @@
              (nonzero? battle-proc)
              (not (logtest? (-> battle-proc flags) (battle-flags beaten))))
     (set! *mp-processing-remote-event* #t)
-    (set! *mp-incoming-battle-spawn-aid* (the-as uint (-> spawn-record enemy-aid)))
     (send-event battle-proc
                 'mp-battle-spawn
                 (-> spawn-record spawner-index)
                 (-> spawn-record breed-index)
                 (if (-> spawn-record initial?) 1 0)
                 (the-as int (-> spawn-record enemy-aid)))
-    (set! *mp-incoming-battle-spawn-aid* (the uint 0))
     (set! *mp-processing-remote-event* #f)
     (let ((enemy-proc (mp-battle-spawn-record-process spawn-record)))
       (when (and enemy-proc (nonzero? enemy-proc))
-        (mp-battle-ensure-spawner-handle! battle-proc spawn-record enemy-proc)
         (mp-battle-apply-latest-state! enemy-proc)
         (debug-log *mp-debug-log?* "[MP-BattleSync] Recovered aid=~D spawner=~D epoch=~D.~%"
                 (-> spawn-record enemy-aid)
@@ -643,15 +758,13 @@
               (enemy-proc (mp-battle-spawn-record-process spawn-record)))
           (cond
             ((and enemy-proc (nonzero? enemy-proc))
-             (when (and battle-proc (nonzero? battle-proc))
-               (mp-battle-ensure-spawner-handle! battle-proc spawn-record enemy-proc)
-               )
              (mp-battle-apply-latest-state! enemy-proc)
              )
             ((and battle-proc
                   (nonzero? battle-proc)
                   (>= (- (current-time) (-> spawn-record last-attempt)) (seconds 1)))
              (set! (-> spawn-record last-attempt) (current-time))
+             (mp-battle-log-recovery-diagnostics! battle-proc spawn-record)
              (mp-battle-respawn-record! record spawn-record battle-proc)
              )
             )

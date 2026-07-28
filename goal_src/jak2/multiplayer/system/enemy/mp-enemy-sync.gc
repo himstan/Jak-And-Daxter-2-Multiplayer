@@ -154,6 +154,8 @@
       (('back-spring) (the-as uint32 78))
       (('cartwheel-left) (the-as uint32 79))
       (('tumble-right) (the-as uint32 80))
+      (('turn) (the-as uint32 81))
+      (('attack-recover) (the-as uint32 82))
       (else (the-as uint32 0))
       )
     )
@@ -242,6 +244,8 @@
     (((mp-enemy-state-id back-spring)) 'back-spring)
     (((mp-enemy-state-id cartwheel-left)) 'cartwheel-left)
     (((mp-enemy-state-id tumble-right)) 'tumble-right)
+    (((mp-enemy-state-id turn)) 'turn)
+    (((mp-enemy-state-id attack-recover)) 'attack-recover)
     (else 'active)
     )
   )
@@ -587,6 +591,19 @@
        (zero? (-> e-proc net-id)))
   )
 
+(defun mp-enemy-battle-state-unmapped? ((e-proc enemy)
+                                        (rec mp-enemy-auth-record))
+  "Allow vanilla transitions for battle replicas while the owner state is unmapped."
+  (if (and e-proc
+           (nonzero? e-proc)
+           rec
+           (nonzero? rec)
+           (logtest? (-> e-proc enemy-flags) (enemy-flag mp-battle-enemy))
+           (zero? (-> rec ghost-state)))
+      #t
+      #f)
+  )
+
 (defun mp-enemy-allow-local-state-transition? ((e-proc enemy))
   "Allow startup transitions until ownership is known, then defer to the owner."
   (if (and e-proc
@@ -596,11 +613,12 @@
           (let ((enemy-aid (mp-get-enemy-aid e-proc)))
             (if (nonzero? enemy-aid)
                 (let ((rec (mp-get-enemy-auth enemy-aid)))
-                  (if rec
+                  (if (and rec (nonzero? rec))
                       (if (and *local-info*
                                (nonzero? *local-info*))
                           (or (= (-> rec owner) (-> *local-info* role))
-                              *mp-processing-remote-event*)
+                              *mp-processing-remote-event*
+                              (mp-enemy-battle-state-unmapped? e-proc rec))
                           #t)
                       #t))
                 #t)))
@@ -1355,7 +1373,6 @@
 
 (defun mp-reset-enemy-state! ()
   (set! *mp-battle-spawn-counter* (the uint 0))
-  (set! *mp-incoming-battle-spawn-aid* (the uint 0))
   (when (and *mp-enemy-buffer*
              (nonzero? (the-as uint *mp-enemy-buffer*)))
     (mem-set32! (the-as pointer *mp-enemy-buffer*) (/ (size-of mp-enemy-sync-buffer) 4) 0)

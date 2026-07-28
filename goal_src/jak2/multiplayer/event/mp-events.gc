@@ -149,7 +149,7 @@
       (set! (-> name-str data -4) (the-as uint len)))
 
     (debug-log *mp-debug-log?*
-      "[MP-BattleEvent][~A][RECV] evt=~D battle=~S spawner=~D breed=~D initial=~D~%"
+      "[MP-BattleEvent][~A][RECV] evt=~D battle=~S spawner=~D breed=~D initial=~D "
       (if (mp-is-jak?) "HOST" "CLIENT")
       battle-evt
       name-str
@@ -158,11 +158,16 @@
       (-> evt initial?)
       )
     (debug-log *mp-debug-log?*
-      "[MP-BattleEvent][~A][RECV] owner=~D epoch=~D local=~D~%"
+      "aid=~D~%"
+      (-> evt enemy-aid)
+      )
+    (debug-log *mp-debug-log?*
+      "[MP-BattleEvent][~A][RECV] owner=~D epoch=~D local=~D aid=~D~%"
       (if (mp-is-jak?) "HOST" "CLIENT")
       (-> evt owner-role)
       (-> evt epoch)
       (if (and *local-info* (nonzero? *local-info*)) (-> *local-info* role) -1)
+      (-> evt enemy-aid)
       )
 
     (mp-battle-receive-event! evt name-str)
