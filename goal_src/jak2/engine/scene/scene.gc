@@ -1645,6 +1645,19 @@
     )
   )
 
+(defun can-daxter-revert-to-ride-along-after-scene? ((scene-p scene-player))
+  (if (or (not scene-p) (zero? scene-p) (not (-> scene-p scene)) (zero? (-> scene-p scene)) (not (-> scene-p scene name)) (zero? (-> scene-p scene name)))
+    #t
+    (let ((scene-name (-> scene-p scene name)))
+      (not 
+        (or
+          (string= scene-name "tomb-boulder-start")
+          )
+        )
+      )
+    )
+  )
+
 ;; WARN: Return type mismatch object vs none.
 ;; WARN: Using new Jak 2 rtype-of
 ;; WARN: Using new Jak 2 rtype-of
@@ -1716,6 +1729,9 @@
       (set-blackout-frames (seconds 0.2))
       (set! (-> self scene) #f)
       )
+    )
+  (when *mp-was-riding-before-scene*
+    (set! *mp-was-riding-before-scene* (can-daxter-revert-to-ride-along-after-scene? self))
     )
   (mp-tomb-boulder-adjust-scene! self)
   (set! (-> self aborted?) (if (and (-> self scene) (string= (-> self scene name) *mp-last-scene-name*)) #t #f))
