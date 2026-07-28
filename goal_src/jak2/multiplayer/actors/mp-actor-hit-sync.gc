@@ -231,6 +231,7 @@
         )
       (when (and (= label 'enemy)
                  (zero? authoritative-hp))
+        (mp-battle-note-enemy-death! e-proc)
         (let ((aid (mp-get-enemy-aid e-proc)))
           (logior! (-> e-proc enemy-flags) (enemy-flag stop-syncing))
           (when (nonzero? aid)
