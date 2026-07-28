@@ -17,6 +17,7 @@
 (define-extern mp-enemy-apply-remote-transform! (function enemy none))
 (define-extern mp-enemy-handle-go-state-event! (function enemy event-message-block symbol))
 (define-extern mp-enemy-broadcast-death (function enemy none))
+(define-extern mp-await-authority (state enemy))
 
 (declare-type hopper nav-enemy)
 (declare-type bot nav-enemy)
@@ -537,6 +538,7 @@
 (defmethod react-to-focus ((this enemy))
   "@TODO - flesh out docs"
   (when (not (mp-enemy-allow-local-state-transition? this))
+    (go mp-await-authority)
     (return #f)
     )
   (mp-enemy-refresh-player-focus! this)
@@ -2248,6 +2250,25 @@
         )
     (enemy-method-129 self)
     (ja-post)
+    )
+  )
+
+(defstate mp-await-authority (enemy)
+  :event enemy-event-handler
+  :code sleep-code
+  :post (behavior ()
+    (let ((idle-state (method-of-type enemy idle)))
+      (when (nonzero? idle-state)
+        (let ((idle-post (-> idle-state post)))
+          (when idle-post
+            ((the-as (function none) idle-post))
+            )
+          )
+        )
+      )
+    (when (mp-enemy-allow-local-state-transition? self)
+      (react-to-focus self)
+      )
     )
   )
 
