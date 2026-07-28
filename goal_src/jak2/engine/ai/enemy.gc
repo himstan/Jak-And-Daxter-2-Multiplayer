@@ -443,6 +443,8 @@
 (defmethod enemy-method-108 ((this enemy) (arg0 process-drawable) (arg1 event-message-block))
   (let ((s4-0 (the-as touching-shapes-entry (-> arg1 param 0))))
     (when (and s4-0
+               (nonzero? s4-0)
+               (!= s4-0 *mp-puppet*)
                (and (logtest? (-> this incoming penetrate-using) (penetrate board))
                     (not (logtest? (-> this incoming penetrate-using) (penetrate spin)))
                     )
