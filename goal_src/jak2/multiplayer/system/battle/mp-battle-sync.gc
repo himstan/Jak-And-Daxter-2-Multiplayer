@@ -567,6 +567,77 @@
   (the-as enemy #f)
   )
 
+(defun mp-battle-spawn-record-for-spawner? ((spawn-record mp-battle-spawn-record)
+                                            (battle-name string)
+                                            (spawner-index int))
+  (and (mp-battle-spawn-record-active? spawn-record)
+       battle-name
+       (nonzero? battle-name)
+       (mp-battle-name-bytes-match? (-> spawn-record battle-name) battle-name)
+       (= (-> spawn-record spawner-index) spawner-index))
+  )
+
+(defun mp-battle-retire-spawn-record! ((spawn-record mp-battle-spawn-record))
+  (when (and spawn-record
+             (nonzero? spawn-record)
+             (mp-battle-spawn-record-active? spawn-record))
+    (set! (-> spawn-record active?) #f)
+    (let ((enemy-proc (mp-battle-spawn-record-process spawn-record)))
+      (when (and enemy-proc
+                 (nonzero? enemy-proc)
+                 (type? enemy-proc enemy)
+                 (logtest? (-> enemy-proc enemy-flags) (enemy-flag mp-battle-enemy)))
+        (deactivate enemy-proc)
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-battle-retire-spawner-conflicts! ((battle-proc battle)
+                                            (spawner battle-spawner)
+                                            (expected-aid uint))
+  (when (and battle-proc
+             (nonzero? battle-proc)
+             spawner
+             (nonzero? spawner)
+             (nonzero? expected-aid))
+    (let ((battle-name (mp-battle-process-name battle-proc))
+          (spawner-index (get-spawner-index battle-proc spawner)))
+      (when (>= spawner-index 0)
+        (dotimes (idx MP_MAX_BATTLE_SPAWN_RECORDS)
+          (let ((spawn-record (-> *mp-battle-spawn-records* idx)))
+            (when (and (mp-battle-spawn-record-for-spawner? spawn-record battle-name spawner-index)
+                       (!= (the-as uint (-> spawn-record enemy-aid)) expected-aid))
+              (debug-log *mp-debug-log?*
+                "[MP-BattleSync] Retiring conflicting spawn aid=~D expected=~D spawner=~D.~%"
+                (-> spawn-record enemy-aid)
+                expected-aid
+                spawner-index)
+              (mp-battle-retire-spawn-record! spawn-record)
+              )
+            )
+          )
+        )
+      (let ((current-proc (the-as enemy (handle->process (-> spawner creature)))))
+        (when (and current-proc
+                   (nonzero? current-proc)
+                   (type? current-proc enemy)
+                   (logtest? (-> current-proc enemy-flags) (enemy-flag mp-battle-enemy))
+                   (!= (mp-get-enemy-aid current-proc) expected-aid))
+          (debug-log *mp-debug-log?*
+            "[MP-BattleSync] Retiring unregistered spawner enemy aid=~D expected=~D.~%"
+            (mp-get-enemy-aid current-proc)
+            expected-aid)
+          (deactivate current-proc)
+          (set! (-> spawner creature) (the-as handle #f))
+          )
+        )
+      )
+    )
+  (none)
+  )
+
 (defun mp-battle-apply-latest-state! ((enemy-proc enemy))
   (when (and enemy-proc (nonzero? enemy-proc))
     (let ((remote-slot (mp-enemy-find-remote-slot (mp-get-enemy-aid enemy-proc))))
@@ -727,21 +798,46 @@
              battle-proc
              (nonzero? battle-proc)
              (not (logtest? (-> battle-proc flags) (battle-flags beaten))))
-    (set! *mp-processing-remote-event* #t)
-    (send-event battle-proc
-                'mp-battle-spawn
-                (-> spawn-record spawner-index)
-                (-> spawn-record breed-index)
-                (if (-> spawn-record initial?) 1 0)
-                (the-as int (-> spawn-record enemy-aid)))
-    (set! *mp-processing-remote-event* #f)
-    (let ((enemy-proc (mp-battle-spawn-record-process spawn-record)))
-      (when (and enemy-proc (nonzero? enemy-proc))
-        (mp-battle-apply-latest-state! enemy-proc)
-        (debug-log *mp-debug-log?* "[MP-BattleSync] Recovered aid=~D spawner=~D epoch=~D.~%"
-                (-> spawn-record enemy-aid)
-                (-> spawn-record spawner-index)
-                (-> record epoch))
+    (let ((spawner (get-spawner-by-index battle-proc (-> spawn-record spawner-index))))
+      (when (and spawner (nonzero? spawner))
+        (mp-battle-retire-spawner-conflicts!
+          battle-proc
+          spawner
+          (the-as uint (-> spawn-record enemy-aid)))
+        )
+      (set! *mp-processing-remote-event* #t)
+      (send-event battle-proc
+                  'mp-battle-spawn
+                  (-> spawn-record spawner-index)
+                  (-> spawn-record breed-index)
+                  (if (-> spawn-record initial?) 1 0)
+                  (the-as int (-> spawn-record enemy-aid)))
+      (set! *mp-processing-remote-event* #f)
+      (let ((enemy-proc (mp-battle-spawn-record-process spawn-record)))
+        (cond
+          ((and enemy-proc
+                (nonzero? enemy-proc)
+                (= (mp-get-enemy-aid enemy-proc) (the-as uint (-> spawn-record enemy-aid))))
+           (mp-battle-apply-latest-state! enemy-proc)
+           (debug-log *mp-debug-log?* "[MP-BattleSync] Recovered aid=~D spawner=~D epoch=~D.~%"
+                   (-> spawn-record enemy-aid)
+                   (-> spawn-record spawner-index)
+                   (-> record epoch))
+           )
+          (enemy-proc
+           (debug-log *mp-debug-log?*
+             "[MP-BattleSync] Recovery aid mismatch expected=~D observed=~D spawner=~D.~%"
+             (-> spawn-record enemy-aid)
+             (mp-get-enemy-aid enemy-proc)
+             (-> spawn-record spawner-index))
+           )
+          (else
+           (debug-log *mp-debug-log?*
+             "[MP-BattleSync] Recovery produced no process aid=~D spawner=~D.~%"
+             (-> spawn-record enemy-aid)
+             (-> spawn-record spawner-index))
+           )
+          )
         )
       )
     )

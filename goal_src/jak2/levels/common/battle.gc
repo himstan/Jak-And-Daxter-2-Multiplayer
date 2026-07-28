@@ -1261,8 +1261,11 @@
       (set! (-> s1-1 directed?) #t)
       (set! (-> s1-1 no-initial-move-to-ground?) s2-1)
       (set! (-> s1-1 battle-enemy?) #t)
-      (if (or local-owner? (nonzero? aid-override))
-        (set! (-> s1-1 aid-override) (if local-owner? (mp-generate-battle-enemy-aid) aid-override))
+      (if (nonzero? aid-override)
+        (set! (-> s1-1 aid-override) aid-override)
+        (when local-owner?
+          (set! (-> s1-1 aid-override) (mp-generate-battle-enemy-aid))
+          )
         )
       (debug-log *mp-debug-log?*
         "[MP-BattleSpawn][~A][TRY] battle=~A spawner=~D breed=~D initial=~A aid=~D~%"
@@ -1312,7 +1315,7 @@
                       (mp-enemy-note-remote-battle-spawn! spawned-proc)
                       )
                     (when local-owner?
-                      (mp-battle-note-local-spawn! this arg1 arg3 arg2 (-> spawned-proc entity aid))
+                      (mp-battle-note-local-spawn! this arg1 arg3 arg2 (mp-get-enemy-aid spawned-proc))
                       )
                     )
                   (debug-log *mp-debug-log?*
