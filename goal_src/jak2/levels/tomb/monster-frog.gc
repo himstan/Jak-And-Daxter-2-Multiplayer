@@ -168,6 +168,21 @@
 
 (set! (-> *monster-frog-nav-enemy-info* fact-defaults) *fact-info-enemy-defaults*)
 
+(defun monster-frog-replica-moving? ((frog monster-frog))
+  "Use the host-derived presentation velocity to gate replica locomotion animation."
+  (when (and frog
+             (nonzero? frog)
+             (not (mp-enemy-authoritative? frog)))
+    (let ((frog-root (-> frog root)))
+      (when (and frog-root (nonzero? frog-root))
+        (return (> (vector-xz-length-squared (-> frog-root transv))
+                   (* (meters 1) (meters 1))))
+        )
+      )
+    )
+  #f
+  )
+
 ;; WARN: new jak 2 until loop case, check carefully
 (defbehavior monster-frog-hop-slow-code monster-frog ()
   (until #f
@@ -176,7 +191,9 @@
       (set! (-> v1-0 nav callback-info) *nav-enemy-null-callback-info*)
       )
     0
-    (dotimes (gp-0 (rnd-int-range self 2 3))
+    (dotimes (gp-0 (if (mp-enemy-authoritative? self)
+                       (rnd-int-range self 2 3)
+                       0))
       (cond
         ((zero? (rnd-int-count self 4))
          (let ((v1-7 (ja-group)))
@@ -202,6 +219,22 @@
             (ja :num! (seek!))
             )
           )
+        )
+      )
+    (when (not (mp-enemy-authoritative? self))
+      (let ((idle-group (ja-group)))
+        (when (not (and idle-group (= idle-group monster-frog-idle0-ja)))
+          (ja-channel-push! 1 (seconds 0.1))
+          )
+        )
+      (ja-no-eval :group! monster-frog-idle0-ja :num! (seek!) :frame-num 0.0)
+      (until (or (mp-enemy-authoritative? self)
+                 (monster-frog-replica-moving? self))
+        (suspend)
+        (if (ja-done? 0)
+            (ja-no-eval :group! monster-frog-idle0-ja :num! (seek!) :frame-num 0.0)
+            (ja :num! (seek!))
+            )
         )
       )
     (let ((v1-71 self))
