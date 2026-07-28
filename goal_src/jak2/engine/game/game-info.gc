@@ -8,10 +8,12 @@
 ;; initialize was manually fixed.
 
 (define-extern demo? (function symbol))
+(define-extern task-closed? (function string symbol))
 (define-extern task-resolution-close! (function game-task symbol))
 (define-extern *lightning-darkjak-pill* lightning-spec)
 (define-extern lightning-probe-callback (function lightning-tracker none))
 (define-extern process-drawable-shock-effect (function process-drawable lightning-spec (function lightning-tracker none) sparticle-launcher int int float object)) ;; guess
+(define *has-played-not-supposed-to-be-here* #f)
 
 (defun mp-trace-continue-name ((value basic))
   (case (rtype-of value)
@@ -221,6 +223,32 @@
   (the-as continue-point #f)
   )
 
+(defun play-not-supposed-to-be-here ()
+  (let ((sfx-volume (if (and *setting-control* (nonzero? *setting-control*))
+                        (-> *setting-control* user-current sfx-volume)
+                        0.0)))
+    (play-sound-file
+      "jad2mp/not-supposed-to-be-here.mp3"
+      (the int (/ (* 100.0 sfx-volume) 8)))
+    (set! *has-played-not-supposed-to-be-here* #t)
+    )
+  (none)
+  )
+
+(defun handle-set-continue-hooks ((old-continue continue-point) (new-continue continue-point))
+  (when (and new-continue
+             (nonzero? new-continue)
+             (-> new-continue name)
+             (nonzero? (-> new-continue name))
+             (!= old-continue new-continue)
+             (string= (-> new-continue name) "tomb-start")
+             (not (task-closed? "canyon-insert-items-resolution"))
+             (not *has-played-not-supposed-to-be-here*))
+    (play-not-supposed-to-be-here)
+    )
+  (none)
+  )
+
 ;; WARN: Using new Jak 2 rtype-of
 (defmethod set-continue! ((this game-info) (arg0 basic) (arg1 symbol))
   (let ((s5-0 (-> this current-continue)))
@@ -281,6 +309,7 @@
     (when (!= s5-0 (-> this current-continue))
       (set! (-> this continue-deaths) 0)
       (set! (-> this continue-time) (-> *display* game-clock frame-counter))
+      (handle-set-continue-hooks s5-0 (-> this current-continue))
       )
     (when (and *mp-debug-log?*
                (-> this current-continue)
