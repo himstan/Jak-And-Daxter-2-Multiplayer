@@ -705,6 +705,7 @@
 (defstate go-to-door (tomb-beetle)
   :virtual #t
   :enter (behavior ()
+    (logior! (-> self enemy-flags) (enemy-flag stop-syncing))
     (let ((v1-1 (-> self root root-prim)))
       (set! (-> v1-1 prim-core collide-as) (collide-spec))
       (set! (-> v1-1 prim-core collide-with) (collide-spec))
