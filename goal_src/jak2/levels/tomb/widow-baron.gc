@@ -7,6 +7,8 @@
 
 (declare-type baron-pod process-drawable)
 (declare-type tomb-boss-pillar process-drawable)
+(define-extern spydroid-launch-with-aid (function uint int :behavior widow))
+(define-extern widow-bomb-launch-with-args (function symbol symbol symbol int vector int :behavior widow))
 
 ;; DECOMP BEGINS
 
@@ -284,6 +286,19 @@
    (last-gun-hit-stage            int16)
    (gun-hits                      int16)
    (last-attack-id                uint32)
+   (remote-spydroid-aids          uint32 8)
+   (remote-spydroid-slots         int32 8)
+   (remote-spydroid-trans         vector 8 :inline)
+   (remote-spydroid-quat          quaternion 8 :inline)
+   (remote-spydroid-dest          vector 8 :inline)
+   (remote-spydroid-read          int32)
+   (remote-spydroid-write         int32)
+   (remote-spydroid-count         int32)
+   (remote-bomb-slots              int32 8)
+   (remote-bomb-dest               vector 8 :inline)
+   (remote-bomb-read               int32)
+   (remote-bomb-write              int32)
+   (remote-bomb-count              int32)
    )
   (:state-methods
     beaten

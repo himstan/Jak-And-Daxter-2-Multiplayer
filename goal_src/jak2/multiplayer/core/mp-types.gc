@@ -128,6 +128,8 @@
 (defconstant MP_EVENT_MTN_DICE (the-as uint 33))
 (defconstant MP_EVENT_PALACE_SQUID (the-as uint 34))
 (defconstant MP_EVENT_FORT_MISSILE_TARGET (the-as uint 35))
+(defconstant MP_EVENT_WIDOW_SPYDROID (the-as uint 36))
+(defconstant MP_EVENT_WIDOW_BOMB (the-as uint 37))
 
 (defconstant MP_PALACE_SQUID_EVT_HIT_REQUEST (the-as uint 1))
 (defconstant MP_PALACE_SQUID_EVT_GRENADE (the-as uint 2))
@@ -224,6 +226,7 @@
 (declare-type process-focusable process-drawable)
 (declare-type enemy process-focusable)
 (declare-type battle process-drawable)
+(declare-type widow process-drawable)
 (declare-type citizen enemy)
 (declare-type vehicle process-focusable)
 (declare-type target process-focusable)
@@ -323,6 +326,21 @@
 
 (deftype mp-fort-missile-target-event (mp-event)
   ((target-index uint32 :overlay-at (-> data 0))
+   )
+  )
+
+(deftype mp-widow-spydroid-event (mp-event)
+  ((spydroid-aid    uint32     :overlay-at (-> data 0))
+   (launch-slot     int32      :overlay-at (-> data 4))
+   (spawn-trans     vector     :inline :overlay-at (-> data 16))
+   (spawn-quat      quaternion :inline :overlay-at (-> data 32))
+   (launch-dest     vector     :inline :overlay-at (-> data 48))
+   )
+  )
+
+(deftype mp-widow-bomb-event (mp-event)
+  ((launch-slot int32 :overlay-at (-> data 0))
+   (launch-dest vector :inline :overlay-at (-> data 16))
    )
   )
 
@@ -1196,6 +1214,8 @@
   (key 86)
   (land 87)
   (stand 88)
+  ;; Misc
+  (directed 89)
   )
 
 (deftype mp-enemy-auth-record (structure)
@@ -1514,6 +1534,8 @@
 (define-extern mp-arm-mission-failed-full-sync-after-spawn (function none))
 (define-extern mp-request-mission-failed-full-sync-when-ready (function none))
 (define-extern mp-receive-world-event (function mp-world-event none))
+(define-extern mp-receive-widow-spydroid-event (function mp-widow-spydroid-event none))
+(define-extern mp-receive-widow-bomb-event (function mp-widow-bomb-event none))
 (define-extern mp-receive-battle-event (function mp-battle-event none))
 (define-extern mp-puppet-receive-gun-shot! (function mp-player-gun-shot-event none))
 (define-extern mp-puppet-apply-weapon-state! (function target mp-target-ghost-record none))

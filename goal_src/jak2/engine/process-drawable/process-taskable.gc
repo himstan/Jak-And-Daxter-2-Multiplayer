@@ -455,6 +455,7 @@
       )
     )
   (set! (-> this event-hook) (-> (method-of-object this idle) event))
+  (set! (-> this state-locked?) #f)
   (go (method-of-object this hide))
   (none)
   )
