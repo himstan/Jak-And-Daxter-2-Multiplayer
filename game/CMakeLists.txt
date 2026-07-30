@@ -360,6 +360,7 @@ set(RUNTIME_SOURCE
         multiplayer/sync/enemy_sync.cpp
         multiplayer/sync/event_sync.cpp
         multiplayer/sync/palace_squid_sync.cpp
+        multiplayer/sync/widow_sync.cpp
         multiplayer/sync/player_sync.cpp
         multiplayer/sync/traffic_sync.cpp
         multiplayer/pedestrian/multiplayer_pedestrian.cpp

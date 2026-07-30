@@ -39,7 +39,8 @@ enum class PacketType : uint8_t {
   TURRET_SYNC = 8,
   PALACE_SQUID_SYNC = 9,
   AIRLOCK_SYNC = 10,
-  COUNT = 11
+  WIDOW_SYNC = 11,
+  COUNT = 12
 };
 
 struct PacketHeader {
@@ -264,6 +265,22 @@ struct PacketPalaceSquidSync {
   uint64_t timestamp;
   MPPalaceSquidState state;
 };
+
+struct MPWidowState {
+  uint32_t active;
+  uint32_t state_id;
+  float x, y, z;
+  uint32_t last_updated;
+  uint8_t pad[8];
+};
+static_assert(sizeof(MPWidowState) == 32, "MPWidowState must be 32 bytes");
+
+struct PacketWidowSync {
+  PacketHeader header;
+  uint64_t timestamp;
+  MPWidowState state;
+};
+static_assert(sizeof(PacketWidowSync) == 45, "PacketWidowSync must be packed");
 
 struct MPAirlockState {
   uint32_t airlock_aid;

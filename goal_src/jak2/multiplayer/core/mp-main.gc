@@ -1,7 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(define-extern mp-reset-boss-sync-state! (function none))
 
 (defun multiplayer-network-tick ()
   "Compatibility wrapper for the multiplayer network sync window."

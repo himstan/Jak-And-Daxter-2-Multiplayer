@@ -6,6 +6,7 @@
 (define-extern mp-widow-spydroid-send-event (function uint int vector quaternion vector none))
 (define-extern mp-widow-bomb-send-event (function int vector none))
 (define-extern widow-bomb-slots-full (function int :behavior widow))
+(define-extern mp-widow-go-state! (function widow uint none))
 
 ;; name: widow.gc
 ;; name in dgo: widow
@@ -300,6 +301,12 @@
         )
       )
     )
+  )
+
+(defbehavior mp-widow-transform-post widow ()
+  (transform-post)
+  (mp-widow-sync-tick self)
+  (none)
   )
 
 (defbehavior widow-next-pod widow ()
@@ -652,7 +659,7 @@
      0
      )
     ((>= (-> self next-launch) 0)
-     (when (and (>= (- (current-time) (-> self state-time)) (seconds 0.25))
+     (when (and (or (mp-is-daxter?) (>= (- (current-time) (-> self state-time)) (seconds 0.25)))
                 (let ((v1-8 (ja-group)))
                   (not (and v1-8 (= v1-8 (-> self draw art-group data 18))))
                   )
@@ -907,6 +914,12 @@
       )
     )
   (none)
+  )
+
+(defun mp-widow-remote-bombs-pending? ((self widow))
+  (and self
+       (nonzero? self)
+       (> (-> self remote-bomb-count) 0))
   )
 
 (defbehavior widow-bomb-launch widow ((arg0 symbol) (arg1 symbol) (arg2 symbol))
@@ -1224,7 +1237,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate hover-low-stage-3 (widow)
@@ -1248,7 +1261,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate hover-shooting-stage-3 (widow)
@@ -1348,7 +1361,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate hover-launch-bombs-stage-3 (widow)
@@ -1401,7 +1414,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate hover-big-blast-stage-3 (widow)
@@ -1621,7 +1634,7 @@
       )
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate hover-rise-stage-3 (widow)
@@ -1657,7 +1670,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate hover-seek-under-stage-3 (widow)
@@ -1688,7 +1701,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate hover-jump-down-stage-3 (widow)
@@ -1734,7 +1747,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate big-reaction-stage-2 (widow)
@@ -1786,7 +1799,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate watch-bombs-stage-2 (widow)
@@ -1821,7 +1834,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate launch-bombs-stage-2 (widow)
@@ -1852,7 +1865,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate back-to-perch-stage-2 (widow)
@@ -1925,7 +1938,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate hover-low-stage-2 (widow)
@@ -1978,7 +1991,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate hover-shooting-stage-2 (widow)
@@ -2073,7 +2086,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate hover-rise-stage-2 (widow)
@@ -2116,7 +2129,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate hover-seek-under-stage-2 (widow)
@@ -2152,7 +2165,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate hover-jump-down-stage-2 (widow)
@@ -2197,7 +2210,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate launch-droids-stage-2 (widow)
@@ -2228,7 +2241,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate big-reaction-stage-1 (widow)
@@ -2274,7 +2287,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate watch-bombs-stage-1 (widow)
@@ -2306,7 +2319,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate launch-bombs-stage-1 (widow)
@@ -2338,7 +2351,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate watch-droids-stage-1 (widow)
@@ -2368,7 +2381,7 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
-  :post (the-as (function none :behavior widow) transform-post)
+  :post (the-as (function none :behavior widow) mp-widow-transform-post)
   )
 
 (defstate launch-droids-stage-1 (widow)
@@ -2475,4 +2488,37 @@
     (none)
     )
   :code (the-as (function none :behavior widow) sleep-code)
+  )
+
+(defun mp-widow-go-state! ((proc widow) (state-id uint))
+  (when (and proc (nonzero? proc))
+    (case (the-as mp-widow-state-id (the int state-id))
+      (((mp-widow-state-id beaten))                 (go (method-of-object proc beaten)))
+      (((mp-widow-state-id kaboom))                 (go (method-of-object proc kaboom)))
+      (((mp-widow-state-id hover-low-stage-3))      (go (method-of-object proc hover-low-stage-3)))
+      (((mp-widow-state-id hover-shooting-stage-3)) (go (method-of-object proc hover-shooting-stage-3)))
+      (((mp-widow-state-id hover-launch-bombs-stage-3)) (go (method-of-object proc hover-launch-bombs-stage-3)))
+      (((mp-widow-state-id hover-big-blast-stage-3)) (go (method-of-object proc hover-big-blast-stage-3)))
+      (((mp-widow-state-id hover-rise-stage-3))     (go (method-of-object proc hover-rise-stage-3)))
+      (((mp-widow-state-id hover-seek-under-stage-3)) (go hover-seek-under-stage-3))
+      (((mp-widow-state-id hover-jump-down-stage-3)) (go (method-of-object proc hover-jump-down-stage-3)))
+      (((mp-widow-state-id big-reaction-stage-2))   (go (method-of-object proc big-reaction-stage-2)))
+      (((mp-widow-state-id watch-bombs-stage-2))    (go (method-of-object proc watch-bombs-stage-2)))
+      (((mp-widow-state-id launch-bombs-stage-2))   (go (method-of-object proc launch-bombs-stage-2)))
+      (((mp-widow-state-id back-to-perch-stage-2))  (go (method-of-object proc back-to-perch-stage-2)))
+      (((mp-widow-state-id hover-low-stage-2))      (go (method-of-object proc hover-low-stage-2)))
+      (((mp-widow-state-id hover-shooting-stage-2)) (go (method-of-object proc hover-shooting-stage-2)))
+      (((mp-widow-state-id hover-rise-stage-2))     (go (method-of-object proc hover-rise-stage-2)))
+      (((mp-widow-state-id hover-seek-under-stage-2)) (go (method-of-object proc hover-seek-under-stage-2)))
+      (((mp-widow-state-id hover-jump-down-stage-2)) (go (method-of-object proc hover-jump-down-stage-2)))
+      (((mp-widow-state-id launch-droids-stage-2))  (go (method-of-object proc launch-droids-stage-2)))
+      (((mp-widow-state-id big-reaction-stage-1))   (go (method-of-object proc big-reaction-stage-1)))
+      (((mp-widow-state-id watch-bombs-stage-1))    (go (method-of-object proc watch-bombs-stage-1)))
+      (((mp-widow-state-id launch-bombs-stage-1))   (go (method-of-object proc launch-bombs-stage-1)))
+      (((mp-widow-state-id watch-droids-stage-1))   (go (method-of-object proc watch-droids-stage-1)))
+      (((mp-widow-state-id launch-droids-stage-1))  (go (method-of-object proc launch-droids-stage-1)))
+      (((mp-widow-state-id hidden))                 (go (method-of-object proc hidden)))
+      )
+    )
+  (none)
   )

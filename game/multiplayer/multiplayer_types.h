@@ -209,6 +209,15 @@ struct MPPalaceSquidSyncBufferGOAL {
 static_assert(sizeof(MPPalaceSquidSyncBufferGOAL) == 264,
               "MPPalaceSquidSyncBufferGOAL must match GOAL");
 
+struct MPWidowSyncBufferGOAL {
+  MPWidowState local_state;
+  MPWidowState remote_state;
+  uint64_t last_sync_time;
+  uint8_t pad[8];
+};
+static_assert(sizeof(MPWidowSyncBufferGOAL) == 80,
+              "MPWidowSyncBufferGOAL must match GOAL");
+
 struct MPAirlockStateGOAL {
   uint32_t airlock_aid;
   uint32_t state_id;
@@ -296,6 +305,10 @@ struct MultiplayerData {
 
   MPPalaceSquidState remote_palace_squid_state = {};
   uint32_t last_palace_squid_sync_time = 0;
+
+  MPWidowState remote_widow_state = {};
+  uint32_t last_widow_sync_time = 0;
+  uint32_t last_widow_sequence = 0;
 
   MPAirlockStateTableGOAL remote_airlock_table = {};
   uint32_t last_airlock_sync_time = 0;

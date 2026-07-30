@@ -103,6 +103,7 @@ bool mp_packet_direction_allowed(PacketType type, int sender_role) {
     case PacketType::PEDESTRIAN_SYNC:
     case PacketType::VEHICLE_SYNC:
     case PacketType::PALACE_SQUID_SYNC:
+    case PacketType::WIDOW_SYNC:
       return sender_role == 0;
     case PacketType::STATE_UPDATE:
     case PacketType::EVENT_GAME:

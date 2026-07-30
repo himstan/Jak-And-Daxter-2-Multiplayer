@@ -31,6 +31,7 @@
 #include "game/multiplayer/sync/enemy_sync.h"
 #include "game/multiplayer/sync/event_sync.h"
 #include "game/multiplayer/sync/palace_squid_sync.h"
+#include "game/multiplayer/sync/widow_sync.h"
 #include "game/multiplayer/sync/player_sync.h"
 #include "game/multiplayer/sync/traffic_sync.h"
 #include "game/multiplayer/vehicle/multiplayer_vehicle.h"
@@ -147,6 +148,9 @@ void handle_receive_packet(MultiplayerData& data,
       break;
     case PacketType::PALACE_SQUID_SYNC:
       mp_handle_palace_squid_sync_packet(data, packet, current_time);
+      break;
+    case PacketType::WIDOW_SYNC:
+      mp_handle_widow_sync_packet(data, packet, current_time);
       break;
     case PacketType::AIRLOCK_SYNC:
       mp_handle_airlock_sync_packet(data, packet, current_time);
@@ -568,6 +572,25 @@ void pc_multi_receive_palace_squid(u32 buffer_ptr) {
                                                     mp_receive_palace_squid_sync(data, buffer);
                                                   }
                                                 });
+}
+
+void pc_multi_send_widow(u32 buffer_ptr) {
+  with_goal_buffer<MPWidowSyncBufferGOAL>(buffer_ptr, "pc_multi_send_widow", [](auto* buffer) {
+    auto& data = multiplayer_data();
+    if (data.initialized) {
+      mp_send_widow_sync(data, buffer);
+    }
+  });
+}
+
+void pc_multi_receive_widow(u32 buffer_ptr) {
+  with_goal_buffer<MPWidowSyncBufferGOAL>(buffer_ptr, "pc_multi_receive_widow",
+                                         [](auto* buffer) {
+                                           auto& data = multiplayer_data();
+                                           if (data.initialized) {
+                                             mp_receive_widow_sync(data, buffer);
+                                           }
+                                         });
 }
 
 void pc_multi_send_airlock_state(u32 buffer_ptr) {
@@ -1046,6 +1069,8 @@ void init_multiplayer_pc_port() {
                                     (void*)pc_multi_send_palace_squid);
   jak2::make_function_symbol_from_c("pc-multi-receive-palace-squid",
                                     (void*)pc_multi_receive_palace_squid);
+  jak2::make_function_symbol_from_c("pc-multi-send-widow", (void*)pc_multi_send_widow);
+  jak2::make_function_symbol_from_c("pc-multi-receive-widow", (void*)pc_multi_receive_widow);
   jak2::make_function_symbol_from_c("pc-multi-send-airlock-state",
                                     (void*)pc_multi_send_airlock_state);
   jak2::make_function_symbol_from_c("pc-multi-receive-airlock-state",

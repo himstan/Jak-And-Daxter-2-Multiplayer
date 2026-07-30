@@ -15,13 +15,6 @@
 ;; Tracks the last known squid state name for local vs remote change detection
 (define *mp-palace-squid-last-state-name* (the-as symbol 'none))
 
-(defun mp-reset-boss-sync-state! ()
-  (when (and *mp-palace-squid-buffer*
-             (nonzero? (the-as uint *mp-palace-squid-buffer*)))
-    (mem-set32! (the-as pointer *mp-palace-squid-buffer*) (/ (size-of mp-palace-squid-sync-buffer) 4) 0)
-    )
-  (none))
-
 (defun mp-palace-squid-ready? ()
   (and *multi-sync-enabled?*
        (= (pc-multi-get-status) 6)

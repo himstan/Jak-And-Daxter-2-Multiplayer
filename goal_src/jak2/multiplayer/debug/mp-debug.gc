@@ -221,6 +221,156 @@
     )
   )
 
+(defun mp-find-widow-process ()
+  "Search the active process pool for any process of type widow."
+  (let ((found-proc (the-as process #f)))
+    (let ((widow-entity (entity-by-type widow)))
+          (when (and widow-entity (nonzero? widow-entity))
+            (let ((widow-proc (-> widow-entity extra process)))
+              (when (and widow-proc
+                         (nonzero? widow-proc)
+                         (type? widow-proc widow))
+                (set! found-proc widow-proc)
+                )
+              )
+            )
+      )
+    found-proc
+    )
+  )
+
+(defun mp-widow-debug-valid-position? ((slot mp-widow-state))
+  (and slot
+       (nonzero? slot)
+       (= (-> slot x) (-> slot x))
+       (= (-> slot y) (-> slot y))
+       (= (-> slot z) (-> slot z))
+       (< (fabs (-> slot x)) (meters 100000.0))
+       (< (fabs (-> slot y)) (meters 100000.0))
+       (< (fabs (-> slot z)) (meters 100000.0)))
+  )
+
+(defun mp-widow-debug-slot-active? ((slot mp-widow-state))
+  (and slot (nonzero? slot)
+       (nonzero? (-> slot active))
+       (mp-widow-debug-valid-position? slot))
+  )
+
+(defun mp-widow-debug-slot-age ((slot mp-widow-state))
+  (let ((now (pc-multi-get-ticks)))
+    (if (and slot (nonzero? slot)
+             (>= now (-> slot last-updated)))
+        (- now (-> slot last-updated))
+        0
+        )
+    )
+  )
+
+(defun mp-widow-debug-draw-ghost ((proc widow) (slot mp-widow-state))
+  (when (and proc (nonzero? proc)
+             (-> proc root) (nonzero? (-> proc root))
+             (mp-widow-debug-slot-active? slot))
+    (let ((widow-pos (-> proc root trans))
+          (ghost-pos (new 'stack-no-clear 'vector)))
+      (set-vector! ghost-pos (-> slot x) (-> slot y) (-> slot z) 1.0)
+      (add-debug-sphere #t (bucket-id debug-no-zbuf1) ghost-pos (meters 1.0)
+                        (static-rgba 0 255 255 180))
+      (when (> (vector-vector-distance widow-pos ghost-pos) (meters 0.1))
+        (add-debug-line #t (bucket-id debug-no-zbuf1) widow-pos ghost-pos
+                        (static-rgba 0 255 255 180) #f (the-as rgba 0))
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-draw-widow-boss-debug ()
+  "Display Widow state and snapshot diagnostics."
+  (let ((proc (mp-find-widow-process)))
+    (when (and proc (nonzero? proc))
+      (format *stdcon* "WIDOW: current=~S next=~S~%"
+              (debug-state-name proc)
+              (debug-next-state-name proc))
+      (when (and *mp-widow-buffer*
+                 (nonzero? (the-as uint *mp-widow-buffer*)))
+        (let ((local-state (-> *mp-widow-buffer* local-state))
+              (remote-state (-> *mp-widow-buffer* remote-state)))
+          (if (mp-widow-debug-slot-active? local-state)
+              (format *stdcon* "  LOCAL: id=~D state=~S pos=(~F,~F,~F)~%"
+                      (-> local-state state-id)
+                      (mp-widow-state-id->name (-> local-state state-id))
+                      (-> local-state x) (-> local-state y) (-> local-state z))
+              (format *stdcon* "  LOCAL: unavailable~%"))
+          (if (mp-widow-debug-slot-active? remote-state)
+              (format *stdcon* "  REMOTE: id=~D state=~S pos=(~F,~F,~F) age=~D~%"
+                      (-> remote-state state-id)
+                      (mp-widow-state-id->name (-> remote-state state-id))
+                      (-> remote-state x) (-> remote-state y) (-> remote-state z)
+                      (mp-widow-debug-slot-age remote-state))
+              (format *stdcon* "  REMOTE: unavailable~%"))
+          (when (and (mp-widow-debug-slot-active? local-state)
+                     (mp-widow-debug-slot-active? remote-state))
+            (let ((local-pos (new 'stack-no-clear 'vector))
+                  (remote-pos (new 'stack-no-clear 'vector)))
+              (set-vector! local-pos (-> local-state x) (-> local-state y) (-> local-state z) 1.0)
+              (set-vector! remote-pos (-> remote-state x) (-> remote-state y) (-> remote-state z) 1.0)
+              (format *stdcon* "  SNAPSHOT DELTA: ~F~%"
+                      (vector-vector-distance local-pos remote-pos))
+              )
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-draw-widow-boss-overlay ()
+  "Draw Widow state and ghost position above the boss."
+  (let ((proc (the-as widow (mp-find-widow-process))))
+    (when (and proc (nonzero? proc)
+               (-> proc root) (nonzero? (-> proc root)))
+      (let ((draw-pos (new 'stack-no-clear 'vector)))
+        (vector-copy! draw-pos (-> proc root trans))
+        (+! (-> draw-pos y) (meters 8.0))
+        (if (and *mp-widow-buffer*
+                 (nonzero? (the-as uint *mp-widow-buffer*)))
+            (let ((snapshot-state (if (mp-is-jak?)
+                                      (-> *mp-widow-buffer* local-state)
+                                      (-> *mp-widow-buffer* remote-state))))
+              (if (mp-widow-debug-slot-active? snapshot-state)
+                  (let ((ghost-pos (new 'stack-no-clear 'vector)))
+                    (set-vector! ghost-pos (-> snapshot-state x) (-> snapshot-state y) (-> snapshot-state z) 1.0)
+                    (add-debug-text-3d
+                      #t (bucket-id debug-no-zbuf1)
+                      (the-as string
+                        (format #f "WIDOW~%STATE:~S~%GHOST:~S (~D)~%DELTA:~F"
+                                (debug-state-name proc)
+                                (mp-widow-state-id->name (-> snapshot-state state-id))
+                                (mp-widow-debug-slot-age snapshot-state)
+                                (vector-vector-distance (-> proc root trans) ghost-pos)))
+                      draw-pos (font-color cyan) (the-as vector2h #f))
+                    (mp-widow-debug-draw-ghost proc snapshot-state)
+                    )
+                  (add-debug-text-3d
+                    #t (bucket-id debug-no-zbuf1)
+                    (the-as string
+                      (format #f "WIDOW~%STATE:~S~%GHOST: unavailable"
+                              (debug-state-name proc)))
+                    draw-pos (font-color orange) (the-as vector2h #f))
+                  )
+              )
+            (add-debug-text-3d
+              #t (bucket-id debug-no-zbuf1)
+              (the-as string (format #f "WIDOW~%STATE:~S~%BUFFER: unavailable" (debug-state-name proc)))
+              draw-pos (font-color orange) (the-as vector2h #f))
+            )
+        )
+      )
+    )
+  (none)
+  )
+
 (defun mp-draw-boss-debug ()
   "Overlay real-time boss synchronization state."
   (when *mp-debug-boss*
@@ -282,14 +432,15 @@
         )
       )
     (format *stdcon* "-------------------------~%~%")
+    (mp-draw-widow-boss-debug)
     )
   (none))
 
 (defun mp-draw-boss-debug-overlay ()
   "Draw real-time sync stats above the squid boss's head in 3D world-space.
-   Mirrors the pattern used by mp-enemy/ped/vehicle debug overlays.
-   Toggled independently by *mp-debug-boss-overlay?*."
+   Mirrors the pattern used by mp-enemy/ped/vehicle debug overlays."
   (when *mp-debug-boss*
+    (mp-draw-widow-boss-overlay)
     (let ((proc *mp-palace-squid-proc*))
       (when (and proc (nonzero? proc)
                  (-> proc root)

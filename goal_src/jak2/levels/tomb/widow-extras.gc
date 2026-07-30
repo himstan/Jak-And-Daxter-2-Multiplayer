@@ -573,7 +573,7 @@
     (case arg2
       (('attack)
        (cond
-         ((= (-> arg0 type) target)
+         ((and (= (-> arg0 type) target) (!= arg0 *mp-puppet*))
           (let ((gp-0 (new 'stack-no-clear 'vector))
                 (f30-0 32768.0)
                 )
@@ -625,6 +625,9 @@
           (send-event (ppointer->process (-> self parent)) 'bomb-kicked)
           (go-virtual back-atcha)
           )
+         ((and (= (-> arg0 type) target) (= arg0 *mp-puppet*))
+           (return #f)
+         )
          (else
            (go-virtual explode)
            )

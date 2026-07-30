@@ -18,6 +18,8 @@ void pc_multi_receive_traffic(u32 buffer_ptr);
 void pc_multi_clear_remote_traffic();
 void pc_multi_send_palace_squid(u32 buffer_ptr);
 void pc_multi_receive_palace_squid(u32 buffer_ptr);
+void pc_multi_send_widow(u32 buffer_ptr);
+void pc_multi_receive_widow(u32 buffer_ptr);
 void pc_multi_send_airlock_state(u32 buffer_ptr);
 void pc_multi_receive_airlock_state(u32 buffer_ptr);
 u64 pc_multi_get_enemy_sync_time();
