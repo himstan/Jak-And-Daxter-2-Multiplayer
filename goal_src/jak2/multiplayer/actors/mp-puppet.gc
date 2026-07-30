@@ -593,6 +593,29 @@
        )
   )
 
+(defun mp-puppet-force-gun-replay-equip! ((proc target) (weapon pickup-type))
+  "Start the normal gun activation transition when replay finds an idle puppet."
+  (when (and proc
+             (nonzero? proc)
+             (-> proc control)
+             (nonzero? (-> proc control))
+             (-> proc gun)
+             (nonzero? (-> proc gun))
+             (not (using-gun? proc))
+             (nonzero? (the-as uint weapon)))
+    (debug-log *mp-debug-log?*
+               "[MP-Puppet][GunReplay] Forcing gun equip: weapon=~D state=~S~%"
+               (the-as uint weapon)
+               (if (and (-> proc state) (nonzero? (-> proc state)))
+                   (-> proc state name)
+                   'none
+                   )
+               )
+    (send-event proc 'change-mode 'gun #f weapon)
+    )
+  (none)
+  )
+
 (defun mp-puppet-repair-gun-replay-state! ((proc target) (ghost mp-target-ghost-record) (weapon pickup-type))
   "Reset a stale puppet gun before retrying a queued remote shot."
   (when (and proc
@@ -713,6 +736,7 @@
     (mp-puppet-apply-weapon-state! proc ghost)
     (let ((weapon (the-as pickup-type
                           (mp-equipped-weapon->pickup-type *mp-puppet-pending-gun-shot-weapon*))))
+      (mp-puppet-force-gun-replay-equip! proc weapon)
       (mp-puppet-repair-gun-replay-state! proc ghost weapon)
       (if (mp-puppet-gun-replay-ready? proc weapon)
           (begin
