@@ -936,12 +936,6 @@
   (none)
   )
 
-(defun mp-widow-remote-bombs-pending? ((self widow))
-  (and self
-       (nonzero? self)
-       (> (-> self remote-bomb-count) 0))
-  )
-
 (defbehavior widow-bomb-launch widow ((arg0 symbol) (arg1 symbol) (arg2 symbol))
   (widow-bomb-launch-with-args
     arg0 arg1 arg2
