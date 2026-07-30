@@ -371,7 +371,7 @@
      0
      )
     ((>= (-> self next-launch) 0)
-     (when (and (>= (- (current-time) (-> self state-time)) (seconds 0.25))
+     (when (and (or (mp-is-daxter?) (>= (- (current-time) (-> self state-time)) (seconds 0.25)))
                 (let ((v1-24 (ja-group)))
                   (not (and v1-24 (= v1-24 (-> self draw art-group data 18))))
                   )
