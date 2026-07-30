@@ -5,6 +5,7 @@
 (define-extern mp-widow-bomb-process-kick-events (function widow none))
 (define-extern mp-widow-bomb-process-fizzle-events (function widow none))
 (define-extern mp-widow-remote-bombs-pending? (function widow object))
+(define-extern find-widow-proc (function widow))
 
 (defun mp-widow-current-state-name ((proc widow))
   (when (and proc (nonzero? proc))
@@ -199,6 +200,26 @@
   (none)
   )
 
+(defun mp-widow-bomb-hit-send-event ((hit-amount int) (hit-position vector))
+  (when (and *multi-sync-enabled?*
+             (= (pc-multi-get-status) 6)
+             (not *mp-processing-remote-event*)
+             hit-position
+             (nonzero? hit-position)
+             (or (= hit-amount 1) (= hit-amount 4)))
+    (let ((q-idx *mp-event-queue-write-ptr*))
+      (let ((event (the-as mp-widow-bomb-hit-event
+                           (-> *mp-event-queue* q-idx))))
+        (set! (-> event etype) MP_EVENT_WIDOW_BOMB_HIT)
+        (set! (-> event amount) (the-as int32 hit-amount))
+        (set! (-> event hit-position quad) (-> hit-position quad))
+        )
+      (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
+      )
+    )
+  (none)
+  )
+
 (define-extern mp-widow-spydroid-queue! (function widow mp-widow-spydroid-event none))
 (define-extern mp-widow-bomb-queue! (function widow mp-widow-bomb-event none))
 
@@ -206,15 +227,11 @@
   (when (and evt (nonzero? evt))
     (debug-log *mp-debug-log?* "[MP-Widow][REMOTE] received aid=~D~%"
                (-> evt spydroid-aid))
-    (let ((widow-entity (entity-by-type widow)))
-      (when (and widow-entity (nonzero? widow-entity))
-        (let ((widow-proc (-> widow-entity extra process)))
-          (when (and widow-proc
-                     (nonzero? widow-proc)
-                     (type? widow-proc widow))
-            (mp-widow-spydroid-queue! (the-as widow widow-proc) evt)
-            )
-          )
+    (let ((widow-proc (find-widow-proc)))
+      (when (and widow-proc
+                 (nonzero? widow-proc)
+                 (type? widow-proc widow))
+        (mp-widow-spydroid-queue! (the-as widow widow-proc) evt)
         )
       )
     )
@@ -230,15 +247,11 @@
   (when (and evt (nonzero? evt))
     (debug-log *mp-debug-log?* "[MP-Widow][REMOTE] received bomb slot=~D~%"
                (-> evt launch-slot))
-    (let ((widow-entity (entity-by-type widow)))
-      (when (and widow-entity (nonzero? widow-entity))
-        (let ((widow-proc (-> widow-entity extra process)))
-          (when (and widow-proc
-                     (nonzero? widow-proc)
-                     (type? widow-proc widow))
-            (mp-widow-bomb-queue! (the-as widow widow-proc) evt)
-            )
-          )
+    (let ((widow-proc (find-widow-proc)))
+      (when (and widow-proc
+                 (nonzero? widow-proc)
+                 (type? widow-proc widow))
+        (mp-widow-bomb-queue! (the-as widow widow-proc) evt)
         )
       )
     )
@@ -247,5 +260,16 @@
 
 (defun mp-receive-widow-bomb-event ((evt mp-widow-bomb-event))
   (mp-widow-bomb-process evt)
+  (none)
+  )
+
+(defun mp-receive-widow-bomb-hit-event ((evt mp-widow-bomb-hit-event))
+  (when (and evt (nonzero? evt))
+    (let ((widow-proc (find-widow-proc)))
+      (when (and widow-proc (nonzero? widow-proc))
+        (send-event widow-proc 'bomb-hit (-> evt hit-position) (-> evt amount) 'mp-replica)
+        )
+      )
+    )
   (none)
   )

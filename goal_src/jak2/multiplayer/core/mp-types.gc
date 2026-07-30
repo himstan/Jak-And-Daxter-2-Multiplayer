@@ -132,6 +132,7 @@
 (defconstant MP_EVENT_WIDOW_BOMB (the-as uint 37))
 (defconstant MP_EVENT_WIDOW_BOMB_KICK (the-as uint 38))
 (defconstant MP_EVENT_WIDOW_BOMB_FIZZLE (the-as uint 39))
+(defconstant MP_EVENT_WIDOW_BOMB_HIT (the-as uint 40))
 
 (defconstant MP_PALACE_SQUID_EVT_HIT_REQUEST (the-as uint 1))
 (defconstant MP_PALACE_SQUID_EVT_GRENADE (the-as uint 2))
@@ -357,6 +358,12 @@
 (deftype mp-widow-bomb-fizzle-event (mp-event)
   ((launch-slot      int32     :overlay-at (-> data 0))
    (fizzle-deadline  time-frame :overlay-at (-> data 8))
+   )
+  )
+
+(deftype mp-widow-bomb-hit-event (mp-event)
+  ((amount      int32 :overlay-at (-> data 0))
+   (hit-position vector :inline :overlay-at (-> data 16))
    )
   )
 
@@ -1606,6 +1613,7 @@
 (define-extern mp-receive-widow-bomb-event (function mp-widow-bomb-event none))
 (define-extern mp-receive-widow-bomb-kick-event (function mp-widow-bomb-kick-event none))
 (define-extern mp-receive-widow-bomb-fizzle-event (function mp-widow-bomb-fizzle-event none))
+(define-extern mp-receive-widow-bomb-hit-event (function mp-widow-bomb-hit-event none))
 (define-extern mp-receive-battle-event (function mp-battle-event none))
 (define-extern mp-puppet-receive-gun-shot! (function mp-player-gun-shot-event none))
 (define-extern mp-puppet-apply-weapon-state! (function target mp-target-ghost-record none))
