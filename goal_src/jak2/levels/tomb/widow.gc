@@ -2532,6 +2532,20 @@
   (none)
   )
 
+(defun mp-widow-replay-catwalk-hit! ((proc widow) (catwalk-index int))
+  (when (and proc
+             (nonzero? proc)
+             (>= catwalk-index 1)
+             (<= catwalk-index 7))
+    (let ((catwalk-proc (handle->process (-> proc catwalk catwalk-index))))
+      (when (and catwalk-proc (nonzero? catwalk-proc))
+        (send-event catwalk-proc 'green-hit)
+        )
+      )
+    )
+  (none)
+  )
+
 (defun find-widow-proc ()
   (let ((widow-entity (entity-by-type widow)))
         (when (and widow-entity (nonzero? widow-entity))

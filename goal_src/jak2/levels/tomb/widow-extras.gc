@@ -13,6 +13,7 @@
 (define-extern mp-widow-bomb-fizzle-pending? (function int symbol))
 (define-extern mp-widow-bomb-fizzle-deadline (function int integer))
 (define-extern mp-widow-bomb-claim-fizzle-slot! (function int symbol))
+(define-extern mp-widow-catwalk-hit-send-event (function int none))
 
 ;; name: widow-extras.gc
 ;; name in dgo: widow-extras
@@ -166,9 +167,13 @@
             )
            )
          )
-       )
+      )
       (('green-hit)
+       (when (and (mp-is-daxter?) (not *mp-processing-remote-event*))
+         (return #f)
+         )
        (when (nonzero? (-> self which-look))
+         (mp-widow-catwalk-hit-send-event (-> self which-look))
          (send-event (ppointer->process (-> self parent)) 'catwalk-hit (-> self which-look))
          (go-virtual shatter)
          )

@@ -878,6 +878,8 @@
        (mp-receive-widow-bomb-fizzle-event (the-as mp-widow-bomb-fizzle-event evt)))
       ((MP_EVENT_WIDOW_BOMB_HIT)
        (mp-receive-widow-bomb-hit-event (the-as mp-widow-bomb-hit-event evt)))
+      ((MP_EVENT_WIDOW_CATWALK_HIT)
+       (mp-receive-widow-catwalk-hit-event (the-as mp-widow-catwalk-hit-event evt)))
       )
     )
   (set! *mp-processing-remote-event* #f)
