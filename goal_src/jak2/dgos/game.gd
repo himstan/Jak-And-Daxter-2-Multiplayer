@@ -581,6 +581,7 @@
   "mp-enemy-sync.o" ;; added
   "mp-battle-sync.o" ;; added
   "mp-tomb-widow-sync.o" ;; added
+  "mp-widow-bomb-sync.o" ;; added
   "mp-traffic-h.o" ;; added
   "mp-traffic-ghosts.o" ;; added
   "mp-pedestrian-animation-sync.o" ;; added

@@ -5,6 +5,9 @@
 (define-extern mp-generate-battle-enemy-aid (function uint))
 (define-extern mp-widow-spydroid-send-event (function uint int vector quaternion vector none))
 (define-extern mp-widow-bomb-send-event (function int vector none))
+(define-extern mp-widow-bomb-send-kick-event (function int vector vector float none))
+(define-extern mp-widow-bomb-clear-kick-slot! (function int none))
+(define-extern mp-widow-bomb-clear-fizzle-slot! (function int none))
 (define-extern widow-bomb-slots-full (function int :behavior widow))
 (define-extern mp-widow-go-state! (function widow uint none))
 
@@ -857,8 +860,13 @@
     ((>= (-> self remote-bomb-count) 8)
      (debug-log *mp-debug-log?* "[MP-Widow][REMOTE] rejected bomb queue-full count=~D~%"
                 (-> self remote-bomb-count))
-     )
+    )
     (else
+      (mp-widow-bomb-clear-kick-slot! (-> event launch-slot))
+      (let ((existing-bomb (handle->process (-> self bomb (-> event launch-slot)))))
+        (when (and existing-bomb (nonzero? existing-bomb))
+          (mp-widow-bomb-clear-fizzle-slot! (-> event launch-slot)))
+        )
       (let ((queue-index (-> self remote-bomb-write)))
         (set! (-> self remote-bomb-slots queue-index) (-> event launch-slot))
         (set! (-> self remote-bomb-dest queue-index quad) (-> event launch-dest quad))

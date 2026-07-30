@@ -1,0 +1,244 @@
+(in-package goal)
+
+;; Widow bombs use the host-selected launch slot as their multiplayer identity.
+(defconstant MP_WIDOW_BOMB_SLOT_COUNT (the int 8))
+(defconstant MP_WIDOW_BOMB_KICK_TIMEOUT (seconds 3.0))
+(defconstant MP_WIDOW_BOMB_FIZZLE_TIMEOUT (seconds 5.0))
+
+(define-extern mp-widow-bomb-dispatch-kick! (function widow int symbol))
+(define-extern mp-widow-bomb-dispatch-fizzle! (function widow int symbol))
+
+(deftype mp-widow-kick-state (structure)
+  ((pending uint 8)
+   (dispatched uint 8)
+   (kick-from vector 8 :inline)
+   (kick-dest vector 8 :inline)
+   (kick-height float 8)
+   (kick-time time-frame 8)
+   (fizzle-pending uint 8)
+   (fizzle-dispatched uint 8)
+   (fizzle-deadline time-frame 8)
+   (fizzle-received time-frame 8)
+   )
+  )
+
+(define-perm *mp-widow-kick-state*
+  mp-widow-kick-state
+  (new 'static 'mp-widow-kick-state))
+
+(defun mp-widow-bomb-slot-valid? ((slot int))
+  (and (>= slot 0) (< slot MP_WIDOW_BOMB_SLOT_COUNT)))
+
+(defun mp-widow-bomb-send-kick-event ((slot int)
+                                      (kick-from vector)
+                                      (kick-dest vector)
+                                      (kick-height float))
+  (when (and (mp-widow-bomb-slot-valid? slot)
+             kick-from
+             (nonzero? kick-from)
+             kick-dest
+             (nonzero? kick-dest)
+             *multi-sync-enabled?*
+             (= (pc-multi-get-status) 6)
+             (not *mp-processing-remote-event*))
+    (let ((queue-index *mp-event-queue-write-ptr*))
+      (let ((event (the-as mp-widow-bomb-kick-event
+                           (-> *mp-event-queue* queue-index))))
+        (set! (-> event etype) MP_EVENT_WIDOW_BOMB_KICK)
+        (set! (-> event launch-slot) (the-as int32 slot))
+        (set! (-> event kick-from quad) (-> kick-from quad))
+        (set! (-> event kick-dest quad) (-> kick-dest quad))
+        (set! (-> event kick-height) kick-height)
+        (debug-log *mp-debug-log?*
+                   "[MP-Widow][KICK] sent slot=~D from=(~F,~F,~F)~%"
+                   slot
+                   (-> kick-from x) (-> kick-from y) (-> kick-from z)
+                   )
+        (debug-log *mp-debug-log?*
+                   "[MP-Widow][KICK] to=(~F,~F,~F) height=~F~%"
+                   (-> kick-dest x) (-> kick-dest y) (-> kick-dest z)
+                   kick-height)
+        )
+      (set! *mp-event-queue-write-ptr*
+            (logand (+ queue-index 1) 31))
+      )
+    )
+  (none)
+  )
+
+(defun mp-widow-bomb-clear-kick-slot! ((slot int))
+  (when (mp-widow-bomb-slot-valid? slot)
+    (set! (-> *mp-widow-kick-state* pending slot) 0)
+    (set! (-> *mp-widow-kick-state* dispatched slot) 0)
+    (set! (-> *mp-widow-kick-state* kick-time slot) 0)
+    )
+  (none)
+  )
+
+(defun mp-widow-bomb-clear-fizzle-slot! ((slot int))
+  (when (mp-widow-bomb-slot-valid? slot)
+    (set! (-> *mp-widow-kick-state* fizzle-pending slot) 0)
+    (set! (-> *mp-widow-kick-state* fizzle-dispatched slot) 0)
+    (set! (-> *mp-widow-kick-state* fizzle-deadline slot) 0)
+    (set! (-> *mp-widow-kick-state* fizzle-received slot) 0)
+    )
+  (none)
+  )
+
+(defun mp-widow-bomb-send-fizzle-event ((slot int) (deadline time-frame))
+  (when (and (mp-widow-bomb-slot-valid? slot)
+             (> deadline 0)
+             (mp-is-jak?)
+             *multi-sync-enabled?*
+             (= (pc-multi-get-status) 6)
+             (not *mp-processing-remote-event*))
+    (let ((queue-index *mp-event-queue-write-ptr*))
+      (let ((event (the-as mp-widow-bomb-fizzle-event
+                           (-> *mp-event-queue* queue-index))))
+        (set! (-> event etype) MP_EVENT_WIDOW_BOMB_FIZZLE)
+        (set! (-> event launch-slot) (the-as int32 slot))
+        (set! (-> event fizzle-deadline) deadline)
+        (debug-log *mp-debug-log?*
+                   "[MP-Widow][FIZZLE][HOST] sent slot=~D deadline=~D~%"
+                   slot deadline)
+        )
+      (set! *mp-event-queue-write-ptr*
+            (logand (+ queue-index 1) 31))
+      )
+    )
+  (none)
+  )
+
+(defun mp-widow-bomb-kick-pending? ((slot int))
+  (if (mp-widow-bomb-slot-valid? slot)
+      (nonzero? (-> *mp-widow-kick-state* pending slot))
+      #f)
+  )
+
+(defun mp-widow-bomb-kick-from ((slot int))
+  (when (mp-widow-bomb-slot-valid? slot)
+    (return (-> *mp-widow-kick-state* kick-from slot)))
+  #f
+  )
+
+(defun mp-widow-bomb-kick-dest ((slot int))
+  (when (mp-widow-bomb-slot-valid? slot)
+    (return (-> *mp-widow-kick-state* kick-dest slot)))
+  #f
+  )
+
+(defun mp-widow-bomb-kick-height ((slot int))
+  (when (mp-widow-bomb-slot-valid? slot)
+    (return (-> *mp-widow-kick-state* kick-height slot)))
+  0.0
+  )
+
+(defun mp-widow-bomb-fizzle-pending? ((slot int))
+  (and (mp-widow-bomb-slot-valid? slot)
+       (nonzero? (-> *mp-widow-kick-state* fizzle-pending slot)))
+  )
+
+(defun mp-widow-bomb-fizzle-deadline ((slot int))
+  (when (mp-widow-bomb-slot-valid? slot)
+    (return (-> *mp-widow-kick-state* fizzle-deadline slot)))
+  0
+  )
+
+(defun mp-widow-bomb-claim-fizzle-slot! ((slot int))
+  (when (and (mp-widow-bomb-fizzle-pending? slot)
+             (zero? (-> *mp-widow-kick-state* fizzle-dispatched slot)))
+    (set! (-> *mp-widow-kick-state* fizzle-dispatched slot) 1)
+    (return #t))
+  #f
+  )
+
+(defun mp-widow-bomb-claim-kick-slot! ((slot int))
+  (when (and (mp-widow-bomb-slot-valid? slot)
+             (nonzero? (-> *mp-widow-kick-state* pending slot))
+             (zero? (-> *mp-widow-kick-state* dispatched slot)))
+    (set! (-> *mp-widow-kick-state* dispatched slot) 1)
+    (return #t))
+  #f
+  )
+
+(defun mp-receive-widow-bomb-kick-event ((event mp-widow-bomb-kick-event))
+  (when (and event
+             (nonzero? event)
+             (mp-widow-bomb-slot-valid? (-> event launch-slot))
+             (-> event kick-from)
+             (nonzero? (-> event kick-from))
+             (-> event kick-dest)
+             (nonzero? (-> event kick-dest)))
+    (let ((slot (-> event launch-slot)))
+      (set! (-> *mp-widow-kick-state* pending slot) 1)
+      (set! (-> *mp-widow-kick-state* dispatched slot) 0)
+      (set! (-> *mp-widow-kick-state* kick-from slot quad) (-> event kick-from quad))
+      (set! (-> *mp-widow-kick-state* kick-dest slot quad) (-> event kick-dest quad))
+      (set! (-> *mp-widow-kick-state* kick-height slot) (-> event kick-height))
+      (set! (-> *mp-widow-kick-state* kick-time slot) (current-time))
+      (debug-log *mp-debug-log?* "[MP-Widow][KICK] queued slot=~D~%" slot)
+      )
+    )
+  (none)
+  )
+
+(defun mp-receive-widow-bomb-fizzle-event ((event mp-widow-bomb-fizzle-event))
+  (when (and event
+             (nonzero? event)
+             (mp-widow-bomb-slot-valid? (-> event launch-slot))
+             (> (-> event fizzle-deadline) 0))
+    (let ((slot (-> event launch-slot)))
+      (set! (-> *mp-widow-kick-state* fizzle-pending slot) 1)
+      (set! (-> *mp-widow-kick-state* fizzle-dispatched slot) 0)
+      (set! (-> *mp-widow-kick-state* fizzle-deadline slot)
+            (-> event fizzle-deadline))
+      (set! (-> *mp-widow-kick-state* fizzle-received slot) (current-time))
+      (debug-log *mp-debug-log?*
+                 "[MP-Widow][FIZZLE][REMOTE] queued slot=~D deadline=~D~%"
+                 slot (-> event fizzle-deadline))
+      )
+    )
+  (none)
+  )
+
+(defun mp-widow-bomb-process-fizzle-events ((widow-proc widow))
+  (when (and widow-proc (nonzero? widow-proc))
+    (dotimes (slot MP_WIDOW_BOMB_SLOT_COUNT)
+      (when (mp-widow-bomb-fizzle-pending? slot)
+        (cond
+          ((> (- (current-time) (-> *mp-widow-kick-state* fizzle-received slot))
+              MP_WIDOW_BOMB_FIZZLE_TIMEOUT)
+           (debug-log *mp-debug-log?*
+                      "[MP-Widow][FIZZLE] expired pending slot=~D~%"
+                      slot)
+           (mp-widow-bomb-clear-fizzle-slot! slot)
+           )
+          ((mp-widow-bomb-dispatch-fizzle! widow-proc slot)
+           )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-widow-bomb-process-kick-events ((widow-proc widow))
+  (when (and widow-proc (nonzero? widow-proc))
+    (dotimes (slot MP_WIDOW_BOMB_SLOT_COUNT)
+      (when (nonzero? (-> *mp-widow-kick-state* pending slot))
+        (cond
+          ((> (- (current-time) (-> *mp-widow-kick-state* kick-time slot))
+              MP_WIDOW_BOMB_KICK_TIMEOUT)
+           (debug-log *mp-debug-log?*
+                      "[MP-Widow][KICK] expired pending slot=~D~%"
+                      slot)
+           (mp-widow-bomb-clear-kick-slot! slot)
+           )
+          ((mp-widow-bomb-dispatch-kick! widow-proc slot)
+           )
+          )
+        )
+      )
+    )
+  (none)
+  )

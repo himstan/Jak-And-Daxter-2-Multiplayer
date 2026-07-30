@@ -2,6 +2,8 @@
 
 (define-extern mp-widow-go-state! (function widow uint none))
 (define-extern mp-widow-bomb-process-queue (function widow none))
+(define-extern mp-widow-bomb-process-kick-events (function widow none))
+(define-extern mp-widow-bomb-process-fizzle-events (function widow none))
 (define-extern mp-widow-remote-bombs-pending? (function widow object))
 
 (defun mp-widow-current-state-name ((proc widow))
@@ -128,11 +130,14 @@
     (if (mp-is-jak?)
         (begin
           (mp-widow-pack-state! proc (-> *mp-widow-buffer* local-state))
+          (mp-widow-bomb-process-kick-events proc)
           (pc-multi-send-widow (the-as uint *mp-widow-buffer*))
           )
         (begin
           (pc-multi-receive-widow (the-as uint *mp-widow-buffer*))
           (mp-widow-bomb-process-queue proc)
+          (mp-widow-bomb-process-fizzle-events proc)
+          (mp-widow-bomb-process-kick-events proc)
           (mp-widow-apply-state! proc (-> *mp-widow-buffer* remote-state))
           )
         )
