@@ -292,12 +292,13 @@
   )
 
 (defun mp-waypoint-event-blocked-by-scene? ((evt mp-waypoint-event))
-  (and (mp-waypoint-local-scene-active?)
-       (or (and (= (-> evt etype) MP_EVENT_WAYPOINT_BUMP)
-                (not (nonzero? (-> evt host-in-scene)))
-                )
-           (= (-> evt etype) MP_EVENT_WAYPOINT_SNAPSHOT)
-           )
+  (and evt
+       (nonzero? evt)
+       (or *mp-pending-scene-sync?*
+           (mp-waypoint-local-scene-active?))
+       (or (= (-> evt etype) MP_EVENT_WAYPOINT_BUMP)
+           (= (-> evt etype) MP_EVENT_WAYPOINT_REQUEST)
+           (= (-> evt etype) MP_EVENT_WAYPOINT_SNAPSHOT))
       )
   )
 
@@ -353,6 +354,20 @@
 (defun mp-waypoint-can-apply-event? ((evt mp-waypoint-event))
   (and (mp-waypoint-sync-ready?)
        (not (mp-waypoint-event-blocked-by-scene? evt))
+       )
+  )
+
+(defun mp-waypoint-event-valid? ((evt mp-waypoint-event))
+  "Reject malformed network commands before process-tree lookup or bot mutation."
+  (and evt
+       (nonzero? evt)
+       (> (-> evt course-id) 0)
+       (>= (-> evt waypoint-request) 0)
+       (or (not (= (-> evt etype) MP_EVENT_WAYPOINT_BUMP))
+           (>= (-> evt waypoint-id) 0))
+       *mp-waypoint-name-scratch*
+       (nonzero? *mp-waypoint-name-scratch*)
+       (<= (length *mp-waypoint-name-scratch*) 31)
        )
   )
 
@@ -640,6 +655,12 @@
   )
 
 (defun mp-waypoint-try-apply-event! ((evt mp-waypoint-event) (name string))
+  (when (or (not evt)
+            (not (nonzero? evt))
+            (not name)
+            (not (nonzero? name)))
+    (return #f)
+    )
   (let ((course-bot (mp-waypoint-find-bot (-> evt course-id) name)))
     (cond
       ((not course-bot)
@@ -665,7 +686,15 @@
        )
       ((= (-> evt etype) MP_EVENT_WAYPOINT_REQUEST)
        (mp-waypoint-debug-log! 'apply-request evt course-bot name)
+       (debug-log *mp-debug-log?*
+         "[MP-Waypoint] Request apply begin course=~D request=~D~%"
+         (-> evt course-id)
+         (-> evt waypoint-request))
        (mp-waypoint-apply-request-to-bot! course-bot (-> evt waypoint-request))
+       (debug-log *mp-debug-log?*
+         "[MP-Waypoint] Request apply complete course=~D request=~D~%"
+         (-> evt course-id)
+         (-> evt waypoint-request))
        #t
        )
       (else
@@ -736,6 +765,9 @@
   )
 
 (defun mp-receive-waypoint-event ((evt mp-waypoint-event) (snapshot? symbol))
+  (when (or (not evt) (not (nonzero? evt)))
+    (return #f)
+    )
   (if (not (mp-waypoint-sync-ready?))
       (begin
         (mp-waypoint-copy-event-name-to-scratch! evt)
@@ -744,6 +776,15 @@
         )
       )
   (mp-waypoint-copy-event-name-to-scratch! evt)
+  (when (not (mp-waypoint-event-valid? evt))
+    (debug-log *mp-debug-log?*
+      "[MP-Waypoint] Dropping malformed inbound event type=~D course=~D waypoint=~D request=~D~%"
+      (-> evt etype)
+      (-> evt course-id)
+      (-> evt waypoint-id)
+      (-> evt waypoint-request))
+    (return #f)
+    )
   (when (mp-waypoint-host-should-drop-inbound? evt snapshot?)
     (return #f)
     )
@@ -765,6 +806,7 @@
 
 (defun mp-waypoint-retry-pending! ()
   (when (and (mp-waypoint-sync-ready?) (> *mp-waypoint-pending-count* 0))
+    ;; One bounded pass per tick prevents a deferred command from monopolizing the main loop.
     (dotimes (offset 32)
       (let* ((idx (mp-waypoint-pending-retry-index offset))
              (pending (-> *mp-pending-waypoints* idx)))

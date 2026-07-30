@@ -685,16 +685,14 @@
         (set! active-default-level (-> *level* default-level name))
         )
       )
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "[load-debug] drawable requested missing art-group=~A skel=~A proc=~A entity=~A~%"
       (if (and skelgroup (nonzero? skelgroup)) (-> skelgroup art-group-name) #f)
       skelgroup
       proc
       (if (and proc (nonzero? proc)) (-> proc entity) #f)
       )
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "[load-debug] drawable levels proc-level=~A load-level=~A global-loading=~A global-default=~A~%"
       proc-level
       load-level-name

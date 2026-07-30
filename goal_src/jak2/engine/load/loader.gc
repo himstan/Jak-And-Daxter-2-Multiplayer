@@ -167,24 +167,21 @@
                           )
         )
         )
-    (format 0 "[load-debug] failed art-group load name=~A version=~D current-process=~A load-dir-level=~A~%" arg0 arg1 current-proc *art-group-load-debug-level*)
-    (format
-      0
+    (debug-log *mp-debug-log?* "[load-debug] failed art-group load name=~A version=~D current-process=~A load-dir-level=~A~%" arg0 arg1 current-proc *art-group-load-debug-level*)
+    (debug-log *mp-debug-log?*
       "[load-debug] caller=~A context-a=~A context-b=~A~%"
       *art-group-load-debug-caller*
       *art-group-load-debug-context-a*
       *art-group-load-debug-context-b*
       )
-    (format
-      0
+    (debug-log *mp-debug-log?*
       "[load-debug] art-dir existing=~A index=~D dir-len=~D requested-load=~A~%"
       *art-group-load-debug-existing?*
       *art-group-load-debug-found-index*
       *art-group-load-debug-dir-length*
       *art-group-load-debug-can-load?*
       )
-  (format
-    0
+  (debug-log *mp-debug-log?*
     "[load-debug] mp-traffic-context kind=~A nid=~D obj-type=~D state=~D ctx-time=~D~%"
     *mp-traffic-art-context-kind*
     *mp-traffic-art-context-net-id*
@@ -192,8 +189,7 @@
     *mp-traffic-art-context-state-id*
     *mp-traffic-art-context-time*
     )
-  (format
-    0
+  (debug-log *mp-debug-log?*
     "[load-debug] mp-traffic-frame peds=~D vehs=~D local-level=~D remote-level=~D spawn-ready=~A riding=~A~%"
     *mp-traffic-art-context-ped-count*
     *mp-traffic-art-context-veh-count*

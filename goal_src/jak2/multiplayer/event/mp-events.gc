@@ -885,6 +885,42 @@
   (set! *mp-processing-remote-event* #f)
   (none))
 
+(defun mp-log-inbound-event-begin! ((evt mp-event) (event-index int))
+  "Log the event fields that are useful when a handler stops servicing the tick."
+  (when (and evt (nonzero? evt))
+    (cond
+      ((or (= (-> evt etype) MP_EVENT_WAYPOINT_BUMP)
+           (= (-> evt etype) MP_EVENT_WAYPOINT_REQUEST)
+           (= (-> evt etype) MP_EVENT_WAYPOINT_SNAPSHOT))
+       (let ((waypoint-evt (the-as mp-waypoint-event evt)))
+         (debug-log *mp-debug-log?*
+           "[MP-Events] Dispatch begin index=~D type=~D course=~D waypoint=~D request=~D~%"
+           event-index
+           (-> waypoint-evt etype)
+           (-> waypoint-evt course-id)
+           (-> waypoint-evt waypoint-id)
+           (-> waypoint-evt waypoint-request)))
+       )
+      (else
+       (debug-log *mp-debug-log?*
+         "[MP-Events] Dispatch begin index=~D type=~D~%"
+         event-index
+         (-> evt etype))
+       )
+      )
+    )
+  (none))
+
+(defun mp-log-inbound-event-complete! ((evt mp-event) (event-index int))
+  "Log handler completion separately from dispatch so a stuck handler is identifiable."
+  (when (and evt (nonzero? evt))
+    (debug-log *mp-debug-log?*
+      "[MP-Events] Dispatch complete index=~D type=~D~%"
+      event-index
+      (-> evt etype))
+    )
+  (none))
+
 (defun mp-clear-pole-grab-event-latch ((pole-handle handle))
   (when (= *mp-last-pole-grab-handle* pole-handle)
     (set! *mp-pole-grab-latched?* #f)
@@ -1059,10 +1095,12 @@
               (debug-log *mp-debug-log?* "[MP-Events] Coalesced inbound waypoint event at index ~D; newer command in batch~%" i)
               (begin
                 (debug-log *mp-debug-log?* "[MP-Events] Event received! Index: ~D, Type: ~D~%" i (-> evt etype))
+                (mp-log-inbound-event-begin! evt (the-as int i))
                 (if (= (-> evt etype) 8) ;; Magic number for scene event
                     (mp-receive-scene-event (the-as mp-scene-event evt))
                     (mp-receive-world-event (the-as mp-world-event evt))
                     )
+                (mp-log-inbound-event-complete! evt (the-as int i))
                 )
               )
           )
