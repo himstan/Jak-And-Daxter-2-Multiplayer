@@ -12,7 +12,17 @@ void mp_handle_widow_sync_packet(MultiplayerData& data,
   if (!sync || data.local_role == 0 || sync->state.active > 1 || sync->state.state_id > 25 ||
       !mp_float_is_finite(sync->state.x) || !mp_float_is_finite(sync->state.y) ||
       !mp_float_is_finite(sync->state.z) ||
+      !mp_float_is_finite(sync->state.quat_x) || !mp_float_is_finite(sync->state.quat_y) ||
+      !mp_float_is_finite(sync->state.quat_z) || !mp_float_is_finite(sync->state.quat_w) ||
       !mp_sequence_is_newer(sync->header.sequenceNum, data.last_widow_sequence)) {
+    return;
+  }
+
+  const float quat_norm_sq = sync->state.quat_x * sync->state.quat_x +
+                             sync->state.quat_y * sync->state.quat_y +
+                             sync->state.quat_z * sync->state.quat_z +
+                             sync->state.quat_w * sync->state.quat_w;
+  if (quat_norm_sq <= 0.000001f) {
     return;
   }
 

@@ -296,17 +296,27 @@
         (let ((local-state (-> *mp-widow-buffer* local-state))
               (remote-state (-> *mp-widow-buffer* remote-state)))
           (if (mp-widow-debug-slot-active? local-state)
-              (format *stdcon* "  LOCAL: id=~D state=~S pos=(~F,~F,~F)~%"
-                      (-> local-state state-id)
-                      (mp-widow-state-id->name (-> local-state state-id))
-                      (-> local-state x) (-> local-state y) (-> local-state z))
+              (begin
+                (format *stdcon* "  LOCAL: id=~D state=~S pos=(~F,~F,~F)~%"
+                        (-> local-state state-id)
+                        (mp-widow-state-id->name (-> local-state state-id))
+                        (-> local-state x) (-> local-state y) (-> local-state z))
+                (format *stdcon* "  LOCAL ROT: (~F,~F,~F,~F)~%"
+                        (-> local-state quat-x) (-> local-state quat-y)
+                        (-> local-state quat-z) (-> local-state quat-w))
+                )
               (format *stdcon* "  LOCAL: unavailable~%"))
           (if (mp-widow-debug-slot-active? remote-state)
-              (format *stdcon* "  REMOTE: id=~D state=~S pos=(~F,~F,~F) age=~D~%"
-                      (-> remote-state state-id)
-                      (mp-widow-state-id->name (-> remote-state state-id))
-                      (-> remote-state x) (-> remote-state y) (-> remote-state z)
-                      (mp-widow-debug-slot-age remote-state))
+              (begin
+                (format *stdcon* "  REMOTE: id=~D state=~S pos=(~F,~F,~F) age=~D~%"
+                        (-> remote-state state-id)
+                        (mp-widow-state-id->name (-> remote-state state-id))
+                        (-> remote-state x) (-> remote-state y) (-> remote-state z)
+                        (mp-widow-debug-slot-age remote-state))
+                (format *stdcon* "  REMOTE ROT: (~F,~F,~F,~F)~%"
+                        (-> remote-state quat-x) (-> remote-state quat-y)
+                        (-> remote-state quat-z) (-> remote-state quat-w))
+                )
               (format *stdcon* "  REMOTE: unavailable~%"))
           (when (and (mp-widow-debug-slot-active? local-state)
                      (mp-widow-debug-slot-active? remote-state))

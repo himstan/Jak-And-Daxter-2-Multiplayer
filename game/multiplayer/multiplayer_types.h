@@ -215,7 +215,7 @@ struct MPWidowSyncBufferGOAL {
   uint64_t last_sync_time;
   uint8_t pad[8];
 };
-static_assert(sizeof(MPWidowSyncBufferGOAL) == 80,
+static_assert(sizeof(MPWidowSyncBufferGOAL) == 112,
               "MPWidowSyncBufferGOAL must match GOAL");
 
 struct MPAirlockStateGOAL {

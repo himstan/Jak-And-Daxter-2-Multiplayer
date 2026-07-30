@@ -271,16 +271,17 @@ struct MPWidowState {
   uint32_t state_id;
   float x, y, z;
   uint32_t last_updated;
+  float quat_x, quat_y, quat_z, quat_w;
   uint8_t pad[8];
 };
-static_assert(sizeof(MPWidowState) == 32, "MPWidowState must be 32 bytes");
+static_assert(sizeof(MPWidowState) == 48, "MPWidowState must be 48 bytes");
 
 struct PacketWidowSync {
   PacketHeader header;
   uint64_t timestamp;
   MPWidowState state;
 };
-static_assert(sizeof(PacketWidowSync) == 45, "PacketWidowSync must be packed");
+static_assert(sizeof(PacketWidowSync) == 61, "PacketWidowSync must be packed");
 
 struct MPAirlockState {
   uint32_t airlock_aid;

@@ -1099,9 +1099,13 @@
    (y            float)
    (z            float)
    (last-updated uint32)
+   (quat-x       float)
+   (quat-y       float)
+   (quat-z       float)
+   (quat-w       float)
    (pad          uint8 8)
    )
-  :size-assert 32)
+  :size-assert 48)
 
 (deftype mp-widow-sync-buffer (structure)
   ((local-state  mp-widow-state :inline)
@@ -1109,7 +1113,7 @@
    (last-sync-time uint64)
    (pad          uint8 8)
    )
-  :size-assert 80)
+  :size-assert 112)
 
 (defenum mp-airlock-state-id (uint32)
   (none 0)
