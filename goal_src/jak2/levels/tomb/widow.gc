@@ -441,6 +441,9 @@
                                             (set! (-> (the-as spydroid s4-1) floor) (-> self launch-dest y))
                                             )
                                            (run-now-in-process s4-1 enemy-init-by-other self s5-0)
+                                           (when (and s4-1 (nonzero? s4-1))
+                                             (logior! (-> (the-as enemy s4-1) enemy-flags) (enemy-flag boss-spawned))
+                                             )
                                           (when (and (mp-is-jak?) (nonzero? s4-1))
                                             (mp-widow-spydroid-send-event
                                               (-> (the-as enemy s4-1) net-id)

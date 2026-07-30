@@ -9,6 +9,7 @@
 
 (define-extern mp-enemy-authoritative? (function enemy symbol))
 (define-extern mp-get-enemy-aid (function enemy uint))
+(define-extern is-proc-related-to-target? (function process symbol))
 
 (defpartgroup group-spydroid-trail
   :id 709
@@ -721,6 +722,22 @@
   (none)
   )
 
+(defun is-proc-related-to-target? ((proc process))
+  (cond
+    ((or (not proc) (zero? proc))
+      (return #f)
+      )
+    ((type? proc target)
+      (return #t)
+      )
+    ((and (-> proc parent) (nonzero? (-> proc parent)) (-> proc parent 0) (nonzero? (-> proc parent 0)) (type? (-> proc parent 0) process))
+      (return (is-proc-related-to-target? (the-as process (-> proc parent 0))))
+      )
+    (else
+      (return #f)))
+    #f
+  )
+
 (defmethod general-event-handler ((this spydroid) (arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   "Handles various events for the enemy
    @TODO - unsure if there is a pattern for the events and this should have a more specific name"
@@ -736,6 +753,11 @@
         (('touch 'bonk 'attack)
          (let ((a1-3 (new 'stack-no-clear 'event-message-block)))
            (set! (-> a1-3 from) (process->ppointer pp))
+           (if (and (mp-is-daxter?) 
+                   (logtest? (-> this enemy-flags) (enemy-flag boss-spawned))
+                   (is-proc-related-to-target? this))
+            (return #f)
+            )
            (set! (-> a1-3 num-params) 0)
            (set! (-> a1-3 message) 'widow-get-center)
            (let ((sv-144 (the-as vector (send-event-function (ppointer->process (-> this parent)) a1-3)))

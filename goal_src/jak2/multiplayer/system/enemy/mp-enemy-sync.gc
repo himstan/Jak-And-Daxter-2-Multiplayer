@@ -639,6 +639,9 @@
   )
 
 (defun mp-enemy-authoritative? ((e-proc enemy))
+  (when (mp-enemy-host-only? e-proc)
+    (return (mp-is-jak?))
+    )
   (when (and e-proc
              (nonzero? e-proc)
              *local-info*
@@ -956,7 +959,7 @@
             (if rec
                 (begin
                   (set! (-> rec aid) (the-as uint32 enemy-aid))
-                  (set! (-> rec owner) remote-role)
+                  (set! (-> rec owner) (the-as uint8 (if (mp-enemy-host-only? e-proc) 0 remote-role)))
                   (set! (-> rec is-aggro) #f)
                   (set! (-> rec last-transfer-time) (current-time))
                   (set! (-> rec last-remote-seen) (current-time))
@@ -1208,6 +1211,9 @@
               )
 
             (when rec
+              (when (mp-enemy-host-only? e-proc)
+                (set! (-> rec owner) (the-as uint8 0))
+                )
               ;; 2. Remote Claim Processing
               (let ((is-bot (type? e-proc bot))
                     (battle-owner (mp-battle-enemy-owner-role e-proc))
@@ -1269,7 +1275,8 @@
                     )
                   )
 
-                (when (and (< battle-owner 0)
+                (when (and (not (mp-enemy-host-only? e-proc))
+                           (< battle-owner 0)
                            (not is-bot)
                            (not is-daxter-and-riding-along)
                            (not (mp-enemy-terminal-sync? e-proc enemy-aid)))
@@ -1294,7 +1301,11 @@
                     )
 
                   ;; 4. Local Proximity Claim
-                  (when (and (not is-bot) (not is-daxter-and-riding-along) (not (-> rec is-aggro)) (>= (- (current-time) (-> rec last-transfer-time)) (seconds 5)))
+                  (when (and (not (mp-enemy-host-only? e-proc))
+                             (not is-bot)
+                             (not is-daxter-and-riding-along)
+                             (not (-> rec is-aggro))
+                             (>= (- (current-time) (-> rec last-transfer-time)) (seconds 5)))
                     (let ((local-pos (mp-enemy-local-player-pos)))
                       (when (and local-pos
                                  (nonzero? local-pos)
@@ -1323,10 +1334,16 @@
                     )
                   )
                 
-                (when (>= battle-owner 0)
-                  (set! (-> rec owner) (the-as uint8 battle-owner))
-                  (set! (-> rec just-taken-authority) #f)
-                  )
+                (if (mp-enemy-host-only? e-proc)
+                    (begin
+                      (set! (-> rec owner) (the-as uint8 0))
+                      (set! (-> rec just-taken-authority) #f)
+                      )
+                    (when (>= battle-owner 0)
+                      (set! (-> rec owner) (the-as uint8 battle-owner))
+                      (set! (-> rec just-taken-authority) #f)
+                      )
+                    )
 
                 (when (and (< battle-owner 0) is-bot (!= (-> rec owner) (the uint8 0)))
                   (set! (-> rec owner) (the uint8 0))
@@ -1396,6 +1413,13 @@
                               ((and is-bot (not (mp-is-jak?)))
                                (set! (-> rec owner) (the uint8 0))
                                (set! (-> rec just-taken-authority) #f)
+                               )
+                              ((logtest? (-> e-proc enemy-flags) (enemy-flag boss-spawned))
+                               (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Remote sync stale for ~A aid=~D nid=~D. Severing sync and killing locally since it's a boss spawned enemy.~%" e-proc enemy-aid enemy-nid)
+                               (set! (-> rec owner) (the uint8 0))
+                               (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death))
+                               (set! (-> e-proc hit-points) 0)
+                               (send-event e-proc 'die)
                                )
                               (else
                                (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Remote sync stale for ~A aid=~D nid=~D. Reclaiming authority.~%" e-proc enemy-aid enemy-nid)

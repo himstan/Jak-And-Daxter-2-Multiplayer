@@ -3,6 +3,13 @@
 
 ;; --- Enemy Helpers ---
 
+(defun mp-enemy-host-only? ((e-proc enemy))
+  "True when this enemy must remain authoritative on the host."
+  (and e-proc
+       (nonzero? e-proc)
+       (logtest? (-> e-proc enemy-flags) (enemy-flag boss-spawned)))
+  )
+
 (defun mp-get-enemy-aid ((e-proc enemy))
   "Get the unique Actor ID for an enemy, supporting both entities and traffic citizens."
   (let ((e-aid (the-as uint 0)))

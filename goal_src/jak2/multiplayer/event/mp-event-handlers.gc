@@ -824,6 +824,12 @@
                 (if (and proc (nonzero? proc)) (-> (the-as enemy proc) net-id) (the uint 0)))
         (return #f)
         )
+      (when (and proc
+                 (nonzero? proc)
+                 (mp-enemy-host-only? (the-as enemy proc)))
+        (debug-log *mp-debug-log?* "[MP-Event-Handlers] Blocking authority request for host-only enemy aid=~D~%" aid)
+        (return #f)
+        )
       ;; Decision Logic:
       ;; If we are Host (0), we evaluate.
       ;; If we are Client (1), we always yield to Host.
@@ -866,6 +872,13 @@
         (debug-log *mp-debug-log?* "[MP-Event-Handlers] Ignoring authority ack for terminal enemy aid=~D nid=~D~%"
                 aid
                 (if (and proc (nonzero? proc)) (-> (the-as enemy proc) net-id) (the uint 0)))
+        (set! (-> rec just-taken-authority) #f)
+        (return #f)
+        )
+      (when (and proc
+                 (nonzero? proc)
+                 (mp-enemy-host-only? (the-as enemy proc)))
+        (debug-log *mp-debug-log?* "[MP-Event-Handlers] Blocking authority ack for host-only enemy aid=~D~%" aid)
         (set! (-> rec just-taken-authority) #f)
         (return #f)
         )
