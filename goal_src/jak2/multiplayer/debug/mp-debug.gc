@@ -120,7 +120,7 @@
     ((= idx 6) "PEDESTRIAN_SYNC")
     ((= idx 7) "VEHICLE_SYNC")
     ((= idx 8) "TURRET_SYNC")
-    ((= idx 9) "SQUID_SYNC")
+    ((= idx 9) "PALACE_SQUID_SYNC")
     ((= idx 10) "AIRLOCK_SYNC")
     ((= idx 11) "WIDOW_SYNC")
     (else "UNKNOWN")
@@ -189,18 +189,28 @@
         (let ((t-sent (pc-multi-get-type-total-sent idx))
               (t-recv (pc-multi-get-type-total-recv idx))
               (r-send (pc-multi-get-type-send-rate idx))
-              (r-recv (pc-multi-get-type-recv-rate idx)))
+              (r-recv (pc-multi-get-type-recv-rate idx))
+              (p-send (pc-multi-get-type-send-packet-rate idx))
+              (p-recv (pc-multi-get-type-recv-packet-rate idx))
+              (t-sent-packets (pc-multi-get-type-total-sent-packets idx))
+              (t-recv-packets (pc-multi-get-type-total-received-packets idx)))
           (when (or (> t-sent 0) (> t-recv 0))
             (let ((name (mp-get-packet-type-name idx))
                   (rs-kb (/ (the float r-send) 1024.0))
                   (rr-kb (/ (the float r-recv) 1024.0)))
-              (format *stdcon* "  ~S: Out: ~,,2f KB/s (~,,1fK) | In: ~,,2f KB/s (~,,1fK)~%"
+              (format *stdcon* "  ~S: Out: ~,,2f KB/s (~D pps) | In: ~,,2f KB/s (~D pps)~%"
                       name
                       rs-kb
-                      (/ (the float t-sent) 1024.0)
+                      p-send
                       rr-kb
-                      (/ (the float t-recv) 1024.0)
+                      p-recv
                       )
+              (format *stdcon* "      APP TOTAL KB: Out ~,,1f / In ~,,1f~%"
+                      (/ (the float t-sent) 1024.0)
+                      (/ (the float t-recv) 1024.0))
+              (format *stdcon* "      APP PACKETS TOTAL: Out ~D / In ~D~%"
+                      t-sent-packets
+                      t-recv-packets)
               )
             )
           )

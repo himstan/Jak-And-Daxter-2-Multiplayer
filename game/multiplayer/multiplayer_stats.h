@@ -37,13 +37,21 @@ struct MultiplayerStats {
   // Category rates and totals
   std::array<uint64_t, kPacketTypeCount> sent_bytes_by_type = {};
   std::array<uint64_t, kPacketTypeCount> recv_bytes_by_type = {};
+  std::array<uint64_t, kPacketTypeCount> sent_packets_by_type = {};
+  std::array<uint64_t, kPacketTypeCount> recv_packets_by_type = {};
   std::array<uint32_t, kPacketTypeCount> send_rate_by_type = {};
   std::array<uint32_t, kPacketTypeCount> recv_rate_by_type = {};
+  std::array<uint32_t, kPacketTypeCount> send_packet_rate_by_type = {};
+  std::array<uint32_t, kPacketTypeCount> recv_packet_rate_by_type = {};
   std::array<uint64_t, kPacketTypeCount> last_sent_bytes_by_type = {};
   std::array<uint64_t, kPacketTypeCount> last_recv_bytes_by_type = {};
+  std::array<uint64_t, kPacketTypeCount> last_sent_packets_by_type = {};
+  std::array<uint64_t, kPacketTypeCount> last_recv_packets_by_type = {};
 
   void calculate_rates(struct _ENetHost* host);
   void calculate_rates(struct _ENetHost* host, uint32_t current_time);
+  void track_sent_packet(PacketType type, size_t size);
+  void track_recv_packet(PacketType type, size_t size);
   void track_sent_bytes(const void* packet_data, size_t size);
   void track_recv_bytes(const void* packet_data, size_t size);
   void reset();

@@ -247,6 +247,7 @@ void MultiplayerManager::setup_client(MultiplayerData& data, const char* ip, int
 }
 
 void MultiplayerManager::disconnect(MultiplayerData& data) {
+  data.packet_scheduler.clear();
   data.stop_search = true;
   data.host_discovery_active = false;
   if (data.scanner_thread.joinable()) {

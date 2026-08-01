@@ -98,6 +98,34 @@ TEST(MultiplayerStats, TracksWidowSyncAndUsesPacketTypeCountBounds) {
   const size_t widow_index = static_cast<size_t>(PacketType::WIDOW_SYNC);
   EXPECT_EQ(stats.sent_bytes_by_type[widow_index], packet.size());
   EXPECT_EQ(stats.recv_bytes_by_type[widow_index], packet.size());
+  EXPECT_EQ(stats.sent_packets_by_type[widow_index], 1u);
+  EXPECT_EQ(stats.recv_packets_by_type[widow_index], 1u);
+}
+
+TEST(MultiplayerStats, CalculatesPerTypePacketRatesFromElapsedTime) {
+  ENetHost host = {};
+  MultiplayerStats stats;
+  const size_t type_index = static_cast<size_t>(PacketType::EVENT_GAME);
+
+  host.totalSentData = 0;
+  host.totalReceivedData = 0;
+  host.totalSentPackets = 0;
+  host.totalReceivedPackets = 0;
+  stats.calculate_rates(&host, 1000);
+
+  stats.track_sent_packet(PacketType::EVENT_GAME, 100);
+  stats.track_sent_packet(PacketType::EVENT_GAME, 100);
+  stats.track_recv_packet(PacketType::EVENT_GAME, 100);
+  host.totalSentData = 200;
+  host.totalReceivedData = 100;
+  host.totalSentPackets = 2;
+  host.totalReceivedPackets = 1;
+  stats.calculate_rates(&host, 2000);
+
+  EXPECT_EQ(stats.send_packet_rate_by_type[type_index], 2u);
+  EXPECT_EQ(stats.recv_packet_rate_by_type[type_index], 1u);
+  EXPECT_EQ(stats.sent_packets_by_type[type_index], 2u);
+  EXPECT_EQ(stats.recv_packets_by_type[type_index], 1u);
 }
 
 TEST(MultiplayerStats, PreservesDecimalEnetLossAndSuppressesDefaultRtt) {

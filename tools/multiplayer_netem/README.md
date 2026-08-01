@@ -62,6 +62,23 @@ Supported directional fields are `latency-ms`, `jitter-ms`, `loss-percent`, `bur
 
 Bandwidth shaping is intentionally excluded from this version.
 
+## Packet windows
+
+The game uses one outbound application-packet scheduler. At the configured 30 TPS,
+the game builds the current player, subsystem, traffic, and boss snapshots and then
+flushes the queued application packets once at the end of that window. Multiple ENet
+datagrams may be flushed by one window when a snapshot is chunked.
+
+Gameplay events are queued when they are created and are transmitted in the next
+packet window, so scheduler delay is at most about 33 ms at a healthy 30 TPS. Reliable
+events remain FIFO and are not coalesced. Continuous unreliable snapshots may replace
+older queued snapshots, while chunked traffic snapshots keep their packet order.
+
+The network debug overlay reports both the sync-window rate and per-category
+application packet rates. ENet wire PPS can differ because ENet bundles application
+packets and retransmits reliable packets. Handshake and ENet protocol-control
+responses remain outside the application packet scheduler.
+
 ## Lifecycle and logs
 
 The Taskfile starts the relay hidden and stores its PID in `out/build/Release/multiplayer-netem.pid`. The helper verifies that the PID belongs to the expected `multiplayer-netem.exe` before treating it as the relay or stopping it. Statistics are appended to `out/build/Release/multiplayer-netem.log` once per second and once more during relay shutdown.

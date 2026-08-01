@@ -37,8 +37,12 @@ void clear_rate_state(MultiplayerStats& stats) {
   for (size_t i = 0; i < MultiplayerStats::kPacketTypeCount; i++) {
     stats.send_rate_by_type[i] = 0;
     stats.recv_rate_by_type[i] = 0;
+    stats.send_packet_rate_by_type[i] = 0;
+    stats.recv_packet_rate_by_type[i] = 0;
     stats.last_sent_bytes_by_type[i] = 0;
     stats.last_recv_bytes_by_type[i] = 0;
+    stats.last_sent_packets_by_type[i] = 0;
+    stats.last_recv_packets_by_type[i] = 0;
   }
 }
 }  // namespace
@@ -91,8 +95,12 @@ void MultiplayerStats::reset() {
     recv_bytes_by_type[i] = 0;
     send_rate_by_type[i] = 0;
     recv_rate_by_type[i] = 0;
+    send_packet_rate_by_type[i] = 0;
+    recv_packet_rate_by_type[i] = 0;
     last_sent_bytes_by_type[i] = 0;
     last_recv_bytes_by_type[i] = 0;
+    last_sent_packets_by_type[i] = 0;
+    last_recv_packets_by_type[i] = 0;
   }
 }
 
@@ -147,8 +155,12 @@ void MultiplayerStats::calculate_rates(struct _ENetHost* host, uint32_t current_
     for (size_t i = 0; i < kPacketTypeCount; i++) {
       last_sent_bytes_by_type[i] = sent_bytes_by_type[i];
       last_recv_bytes_by_type[i] = recv_bytes_by_type[i];
+      last_sent_packets_by_type[i] = sent_packets_by_type[i];
+      last_recv_packets_by_type[i] = recv_packets_by_type[i];
       send_rate_by_type[i] = 0;
       recv_rate_by_type[i] = 0;
+      send_packet_rate_by_type[i] = 0;
+      recv_packet_rate_by_type[i] = 0;
     }
     return;
   }
@@ -178,12 +190,24 @@ void MultiplayerStats::calculate_rates(struct _ENetHost* host, uint32_t current_
       uint64_t type_recv_diff = type_recv >= last_recv_bytes_by_type[i]
                                     ? type_recv - last_recv_bytes_by_type[i]
                                     : type_recv;
+      uint64_t type_sent_packet_diff =
+          sent_packets_by_type[i] >= last_sent_packets_by_type[i]
+              ? sent_packets_by_type[i] - last_sent_packets_by_type[i]
+              : sent_packets_by_type[i];
+      uint64_t type_recv_packet_diff =
+          recv_packets_by_type[i] >= last_recv_packets_by_type[i]
+              ? recv_packets_by_type[i] - last_recv_packets_by_type[i]
+              : recv_packets_by_type[i];
 
       send_rate_by_type[i] = rate_from_delta(type_sent_diff, elapsed);
       recv_rate_by_type[i] = rate_from_delta(type_recv_diff, elapsed);
+      send_packet_rate_by_type[i] = rate_from_delta(type_sent_packet_diff, elapsed);
+      recv_packet_rate_by_type[i] = rate_from_delta(type_recv_packet_diff, elapsed);
 
       last_sent_bytes_by_type[i] = type_sent;
       last_recv_bytes_by_type[i] = type_recv;
+      last_sent_packets_by_type[i] = sent_packets_by_type[i];
+      last_recv_packets_by_type[i] = recv_packets_by_type[i];
     }
 
     last_rate_update_time = current_time;
@@ -192,20 +216,34 @@ void MultiplayerStats::calculate_rates(struct _ENetHost* host, uint32_t current_
 
 void MultiplayerStats::track_sent_bytes(const void* packet_data, size_t size) {
   if (packet_data && size >= sizeof(PacketHeader)) {
-    uint8_t type_idx = 0;
-    memcpy(&type_idx, packet_data, sizeof(type_idx));
-    if (type_idx < kPacketTypeCount) {
-      sent_bytes_by_type[type_idx] += size;
-    }
+    PacketType type = PacketType::COUNT;
+    memcpy(&type, packet_data, sizeof(type));
+    track_sent_packet(type, size);
   }
 }
 
 void MultiplayerStats::track_recv_bytes(const void* packet_data, size_t size) {
   if (packet_data && size >= sizeof(PacketHeader)) {
-    uint8_t type_idx = 0;
-    memcpy(&type_idx, packet_data, sizeof(type_idx));
-    if (type_idx < kPacketTypeCount) {
-      recv_bytes_by_type[type_idx] += size;
-    }
+    PacketType type = PacketType::COUNT;
+    memcpy(&type, packet_data, sizeof(type));
+    track_recv_packet(type, size);
   }
+}
+
+void MultiplayerStats::track_sent_packet(PacketType type, size_t size) {
+  const size_t type_idx = static_cast<size_t>(type);
+  if (type_idx >= kPacketTypeCount) {
+    return;
+  }
+  sent_bytes_by_type[type_idx] += size;
+  sent_packets_by_type[type_idx]++;
+}
+
+void MultiplayerStats::track_recv_packet(PacketType type, size_t size) {
+  const size_t type_idx = static_cast<size_t>(type);
+  if (type_idx >= kPacketTypeCount) {
+    return;
+  }
+  recv_bytes_by_type[type_idx] += size;
+  recv_packets_by_type[type_idx]++;
 }

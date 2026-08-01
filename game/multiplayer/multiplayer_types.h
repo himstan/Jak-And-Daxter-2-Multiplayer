@@ -9,6 +9,7 @@
 #include <thread>
 
 #include "multiplayer_port_mapping.h"
+#include "multiplayer_packet_scheduler.h"
 #include "multiplayer_protocol.h"
 #include "multiplayer_ring_buffer.h"
 #include "multiplayer_security.h"
@@ -349,5 +350,6 @@ struct MultiplayerData {
   uint16_t port_mapping_external_port = 0;
   std::string port_mapping_external_ip;
   // Rate tracking and statistics
+  MultiplayerPacketScheduler packet_scheduler;
   MultiplayerStats stats;
 };

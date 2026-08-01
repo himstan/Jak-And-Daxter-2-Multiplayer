@@ -326,12 +326,9 @@
   (none))
 
 (defun mp-update-send-clock! ((current-ticks uint))
-  (let ((interval (the uint64 (/ 1000 *multi-sync-tps*))))
-    (if (> (- current-ticks (the uint64 *multi-last-send-time*)) (* 2 interval))
-        (set! *multi-last-send-time* (the-as time-frame current-ticks))
-        (+! *multi-last-send-time* (the-as time-frame interval))
-        )
-    )
+  "Anchor the next packet window to the actual flush time.
+   This intentionally avoids catch-up bursts after a delayed game frame."
+  (set! *multi-last-send-time* (the-as time-frame current-ticks))
   (none))
 
 (defun mp-update-tps-counter! ()
@@ -357,7 +354,7 @@
   (mp-sync-clock-client)
   (mp-update-debug-loss!)
   (mp-request-mission-failed-full-sync-when-ready)
-  (let ((current-ticks (pc-multi-get-ticks)))
+  (let ((current-ticks (the-as uint64 (pc-multi-get-ticks))))
     (when (and (not *mp-debug-simulate-loss?*)
                (>= (- current-ticks (the uint64 *multi-last-send-time*))
                    (the uint64 (/ 1000 *multi-sync-tps*))))

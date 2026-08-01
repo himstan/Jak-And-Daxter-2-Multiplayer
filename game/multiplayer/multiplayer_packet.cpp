@@ -147,28 +147,24 @@ bool mp_send_packet(MultiplayerData& data,
     return false;
   }
 
+  ENetPeer* target_peer = nullptr;
   if (data.local_role == 0) {
-    if (data.authenticated_peer &&
-        data.authenticated_peer->state == ENET_PEER_STATE_CONNECTED &&
-        enet_peer_send(data.authenticated_peer, channel, packet) == 0) {
-      data.stats.track_sent_bytes(packet_data, size);
-      return true;
-    }
+    target_peer = data.authenticated_peer;
+  } else if (data.local_role == 1) {
+    target_peer = data.server_peer;
+  }
+
+  if (!target_peer || target_peer->state != ENET_PEER_STATE_CONNECTED) {
     enet_packet_destroy(packet);
     return false;
   }
 
-  if (data.server_peer && data.server_peer->state == ENET_PEER_STATE_CONNECTED) {
-    if (enet_peer_send(data.server_peer, channel, packet) == 0) {
-      data.stats.track_sent_bytes(packet_data, size);
-      return true;
-    }
-    enet_packet_destroy(packet);
-    return false;
-  }
+  return data.packet_scheduler.enqueue(
+      target_peer, channel, packet, packet_type, size, flags);
+}
 
-  enet_packet_destroy(packet);
-  return false;
+size_t mp_flush_packet_window(MultiplayerData& data) {
+  return data.packet_scheduler.flush(data.stats);
 }
 
 bool mp_send_packet_to_peer(ENetPeer* peer,

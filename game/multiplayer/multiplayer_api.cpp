@@ -467,6 +467,17 @@ void pc_multi_poll(u32 local_ptr, u32 remote_ptr) {
   }
 }
 
+void pc_multi_flush_packet_window() {
+  try {
+    auto& data = multiplayer_data();
+    if (data.initialized && data.host) {
+      mp_flush_packet_window(data);
+    }
+  } catch (...) {
+    lg::error("[Multiplayer] Exception in pc_multi_flush_packet_window");
+  }
+}
+
 void pc_multi_send_state(u32 local_ptr) {
   if (multiplayer_debug_receive_stopped()) {
     return;
@@ -1093,6 +1104,30 @@ int pc_multi_get_type_total_recv(int type) {
   return (int)multiplayer_data().stats.recv_bytes_by_type[type];
 }
 
+int pc_multi_get_type_send_packet_rate(int type) {
+  if (!multiplayer_stats_valid_packet_type(type))
+    return 0;
+  return multiplayer_data().stats.send_packet_rate_by_type[type];
+}
+
+int pc_multi_get_type_recv_packet_rate(int type) {
+  if (!multiplayer_stats_valid_packet_type(type))
+    return 0;
+  return multiplayer_data().stats.recv_packet_rate_by_type[type];
+}
+
+u64 pc_multi_get_type_total_sent_packets(int type) {
+  if (!multiplayer_stats_valid_packet_type(type))
+    return 0;
+  return multiplayer_data().stats.sent_packets_by_type[type];
+}
+
+u64 pc_multi_get_type_total_received_packets(int type) {
+  if (!multiplayer_stats_valid_packet_type(type))
+    return 0;
+  return multiplayer_data().stats.recv_packets_by_type[type];
+}
+
 void init_multiplayer_pc_port() {
   jak2::make_function_symbol_from_c("pc-multi-set-local-version",
                                     (void*)pc_multi_set_local_version);
@@ -1138,6 +1173,8 @@ void init_multiplayer_pc_port() {
   jak2::make_function_symbol_from_c("pc-multi-connect-direct",
                                     (void*)pc_multi_connect_direct);
   jak2::make_function_symbol_from_c("pc-multi-poll", (void*)pc_multi_poll);
+  jak2::make_function_symbol_from_c("pc-multi-flush-packet-window",
+                                    (void*)pc_multi_flush_packet_window);
   jak2::make_function_symbol_from_c("pc-multi-send-state", (void*)pc_multi_send_state);
   jak2::make_function_symbol_from_c("pc-multi-receive-state", (void*)pc_multi_receive_state);
   jak2::make_function_symbol_from_c("pc-multi-send-events", (void*)pc_multi_send_events);
@@ -1209,4 +1246,12 @@ void init_multiplayer_pc_port() {
                                     (void*)pc_multi_get_type_total_sent);
   jak2::make_function_symbol_from_c("pc-multi-get-type-total-recv",
                                     (void*)pc_multi_get_type_total_recv);
+  jak2::make_function_symbol_from_c("pc-multi-get-type-send-packet-rate",
+                                    (void*)pc_multi_get_type_send_packet_rate);
+  jak2::make_function_symbol_from_c("pc-multi-get-type-recv-packet-rate",
+                                    (void*)pc_multi_get_type_recv_packet_rate);
+  jak2::make_function_symbol_from_c("pc-multi-get-type-total-sent-packets",
+                                    (void*)pc_multi_get_type_total_sent_packets);
+  jak2::make_function_symbol_from_c("pc-multi-get-type-total-received-packets",
+                                    (void*)pc_multi_get_type_total_received_packets);
 }

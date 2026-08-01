@@ -48,6 +48,7 @@ void multiplayer_reset_remote_airlock_state(MultiplayerData& data) {
 }
 
 void multiplayer_clear_remote_peer_state(MultiplayerData& data) {
+  data.packet_scheduler.clear();
   data.pending_full_sync = false;
   data.pending_full_sync_sent_once = false;
   data.last_full_sync_send_time = 0;

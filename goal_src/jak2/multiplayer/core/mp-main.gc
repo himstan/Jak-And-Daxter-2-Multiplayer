@@ -3,8 +3,8 @@
 
 
 (defun multiplayer-network-tick ()
-  "Compatibility wrapper for the multiplayer network sync window."
-  (mp-network-sync-window-tick)
+  "Compatibility wrapper for the multiplayer frame scheduler."
+  (mp-send-tick)
   (none))
 
 (defun mp-reset-gameplay-state ()
