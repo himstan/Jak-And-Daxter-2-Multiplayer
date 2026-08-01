@@ -77,8 +77,14 @@ target_link_libraries(goalc-test common runtime compiler gtest decomp Zydis libz
 
 add_executable(multiplayer-test
         ${CMAKE_CURRENT_LIST_DIR}/multiplayer_test_main.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/test_multiplayer_bridge.cpp)
+        ${CMAKE_CURRENT_LIST_DIR}/test_multiplayer_bridge.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/test_multiplayer_stats.cpp)
 target_link_libraries(multiplayer-test runtime gtest)
+if(WIN32)
+  target_sources(multiplayer-test PRIVATE
+          ${CMAKE_CURRENT_LIST_DIR}/test_multiplayer_netem.cpp)
+  target_link_libraries(multiplayer-test multiplayer-netem-core)
+endif()
 
 add_executable(test_image_resize ${CMAKE_CURRENT_LIST_DIR}/common/test_image_resize.cpp)
 target_link_libraries(test_image_resize common)

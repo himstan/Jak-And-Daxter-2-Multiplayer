@@ -90,7 +90,7 @@ TEST(MultiplayerPacket, DirectionPolicyMatchesHostAndClientRoles) {
     const PacketType type = static_cast<PacketType>(value);
     const bool host_only = type == PacketType::FULL_SYNC || type == PacketType::PEDESTRIAN_SYNC ||
                            type == PacketType::VEHICLE_SYNC ||
-                           type == PacketType::PALACE_SQUID_SYNC;
+                           type == PacketType::PALACE_SQUID_SYNC || type == PacketType::WIDOW_SYNC;
     const bool gameplay = type != PacketType::EVENT_JOIN && type != PacketType::EVENT_LEAVE;
     EXPECT_EQ(mp_packet_direction_allowed(type, 0), gameplay);
     EXPECT_EQ(mp_packet_direction_allowed(type, 1), gameplay && !host_only);

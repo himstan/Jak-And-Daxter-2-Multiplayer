@@ -60,7 +60,63 @@ tasks:
       - sh: test -f {{.GK_BIN_RELEASE_DIR}}/gk{{.EXE_FILE_EXTENSION}}
         msg: "Couldn't locate runtime executable in '{{.GK_BIN_RELEASE_DIR}}/gk'"
     cmds:
-      - '{{.GK_BIN_RELEASE_DIR}}/gk --port 8120 -v --game jak2 -- -boot -debug -fakeiso -mp-client 127.0.0.1'
+      - '{{.GK_BIN_RELEASE_DIR}}/gk --port 8120 -v --game {{.GAME}} -- -boot -debug -fakeiso -mp-client 127.0.0.1'
+  start-mp-netem:
+    desc: "Starts the local UDP multiplayer network emulator"
+    vars:
+      NETEM_PROFILE: '{{default "wifi" .NETEM_PROFILE}}'
+      NETEM_SEED: '{{default "1" .NETEM_SEED}}'
+    preconditions:
+      - sh: test -f {{.GK_BIN_RELEASE_DIR}}/multiplayer-netem{{.EXE_FILE_EXTENSION}}
+        msg: "Couldn't locate multiplayer-netem executable in '{{.GK_BIN_RELEASE_DIR}}'"
+    cmds:
+      - cmd: >-
+          powershell.exe -NoProfile -ExecutionPolicy Bypass
+          -File ./scripts/tasks/multiplayer-netem.ps1
+          -Action Start
+          -ExecutablePath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem{{.EXE_FILE_EXTENSION}}"
+          -PidPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.pid"
+          -LogPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.log"
+          -Profile "{{.NETEM_PROFILE}}"
+          -Seed "{{.NETEM_SEED}}"
+  stop-mp-netem:
+    desc: "Stops the local UDP multiplayer network emulator"
+    cmds:
+      - cmd: >-
+          powershell.exe -NoProfile -ExecutionPolicy Bypass
+          -File ./scripts/tasks/multiplayer-netem.ps1
+          -Action Stop
+          -ExecutablePath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem{{.EXE_FILE_EXTENSION}}"
+          -PidPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.pid"
+          -LogPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.log"
+  boot-game-netem:
+    desc: "Boots the host through the local UDP multiplayer network emulator"
+    vars:
+      NETEM_PROFILE: '{{default "wifi" .NETEM_PROFILE}}'
+      NETEM_SEED: '{{default "1" .NETEM_SEED}}'
+    preconditions:
+      - sh: test -f {{.GK_BIN_RELEASE_DIR}}/gk{{.EXE_FILE_EXTENSION}}
+        msg: "Couldn't locate runtime executable in '{{.GK_BIN_RELEASE_DIR}}/gk'"
+    cmds:
+      - task: start-mp-netem
+        vars:
+          NETEM_PROFILE: "{{.NETEM_PROFILE}}"
+          NETEM_SEED: "{{.NETEM_SEED}}"
+      - "{{.GK_BIN_RELEASE_DIR}}/gk -v --game {{.GAME}} -- -boot -debug -fakeiso -snapshot slot1 -mp-host true"
+  boot-game-p2-netem:
+    desc: "Boots the client through the local UDP multiplayer network emulator"
+    preconditions:
+      - sh: test -f {{.GK_BIN_RELEASE_DIR}}/gk{{.EXE_FILE_EXTENSION}}
+        msg: "Couldn't locate runtime executable in '{{.GK_BIN_RELEASE_DIR}}/gk'"
+    cmds:
+      - cmd: >-
+          powershell.exe -NoProfile -ExecutionPolicy Bypass
+          -File ./scripts/tasks/multiplayer-netem.ps1
+          -Action Status
+          -ExecutablePath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem{{.EXE_FILE_EXTENSION}}"
+          -PidPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.pid"
+          -LogPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.log"
+      - '{{.GK_BIN_RELEASE_DIR}}/gk --port 8120 -v --game jak2 -- -boot -debug -fakeiso -snapshot slot1 -mp-client 127.0.0.1 -mp-client-port 26212'
   boot-game-retail:
     desc: "Boots the game without debug mode, it will fail if it's not already compiled!"
     preconditions:
@@ -249,6 +305,13 @@ tasks:
   unit-tests:
     cmds:
       - "{{.GOALCTEST_BIN_DEBUG_DIR}}/goalc-test{{.EXE_FILE_EXTENSION}} {{.TEST_FILTER}}"
+  multiplayer-tests:
+    desc: "Runs the multiplayer bridge and netem tests"
+    preconditions:
+      - sh: test -f {{.GOALCTEST_BIN_DEBUG_DIR}}/multiplayer-test{{.EXE_FILE_EXTENSION}}
+        msg: "Couldn't locate multiplayer-test executable in '{{.GOALCTEST_BIN_DEBUG_DIR}}'"
+    cmds:
+      - '{{.GOALCTEST_BIN_DEBUG_DIR}}/multiplayer-test{{.EXE_FILE_EXTENSION}} --gtest_color=yes'
   offline-tests: # ran by jenkins
     cmds:
       - '{{.OFFLINETEST_BIN_RELEASE_DIR}}/offline-test{{.EXE_FILE_EXTENSION}} --iso_data_path "./iso_data/{{.GAME}}" --game {{.GAME}} --fail-on-cmp'

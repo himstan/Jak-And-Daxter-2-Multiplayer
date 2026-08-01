@@ -85,6 +85,7 @@ bool multiplayer_prepare_host_for_next_peer(MultiplayerData& data) {
 
 void multiplayer_clear_session_state(MultiplayerData& data) {
   multiplayer_clear_remote_peer_state(data);
+  data.stats.reset();
   data.host_game_active = false;
   data.server_peer = nullptr;
   mp_secure_clear_string(data.staged_invite);

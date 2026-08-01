@@ -1,4 +1,5 @@
 add_subdirectory(level_tools)
+add_subdirectory(multiplayer_netem)
 
 add_executable(dgo_unpacker
         dgo_unpacker.cpp)

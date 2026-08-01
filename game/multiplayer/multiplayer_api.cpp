@@ -889,14 +889,16 @@ int pc_multi_get_ping() {
   if (!data.host) {
     return 0;
   }
-  if (data.server_peer) {
+  if (data.server_peer && data.server_peer->state == ENET_PEER_STATE_CONNECTED &&
+      multiplayer_enet_rtt_sample_valid(*data.server_peer)) {
     return data.server_peer->roundTripTime;
   }
 
-  u32 total = 0;
-  u32 count = 0;
+  uint64_t total = 0;
+  uint32_t count = 0;
   for (size_t i = 0; i < data.host->peerCount; i++) {
-    if (data.host->peers[i].state == ENET_PEER_STATE_CONNECTED) {
+    if (data.host->peers[i].state == ENET_PEER_STATE_CONNECTED &&
+        multiplayer_enet_rtt_sample_valid(data.host->peers[i])) {
       total += data.host->peers[i].roundTripTime;
       count++;
     }
@@ -905,23 +907,76 @@ int pc_multi_get_ping() {
 }
 
 int pc_multi_get_packet_loss() {
+  return static_cast<int>(pc_multi_get_packet_loss_percent());
+}
+
+int pc_multi_get_ping_valid() {
   auto& data = multiplayer_data();
   if (!data.host) {
     return 0;
   }
   if (data.server_peer) {
-    return (data.server_peer->packetLoss * 100) / 65536;
+    return data.server_peer->state == ENET_PEER_STATE_CONNECTED &&
+                   multiplayer_enet_rtt_sample_valid(*data.server_peer)
+               ? 1
+               : 0;
   }
 
-  u32 total = 0;
-  u32 count = 0;
+  for (size_t i = 0; i < data.host->peerCount; i++) {
+    if (data.host->peers[i].state == ENET_PEER_STATE_CONNECTED &&
+        multiplayer_enet_rtt_sample_valid(data.host->peers[i])) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+float pc_multi_get_packet_loss_percent() {
+  auto& data = multiplayer_data();
+  if (!data.host) {
+    return 0.0f;
+  }
+  if (data.server_peer) {
+    if (data.server_peer->state != ENET_PEER_STATE_CONNECTED) {
+      return 0.0f;
+    }
+    return multiplayer_enet_ratio_to_percent(data.server_peer->packetLoss);
+  }
+
+  uint64_t total = 0;
+  uint32_t count = 0;
   for (size_t i = 0; i < data.host->peerCount; i++) {
     if (data.host->peers[i].state == ENET_PEER_STATE_CONNECTED) {
-      total += (data.host->peers[i].packetLoss * 100) / 65536;
+      total += data.host->peers[i].packetLoss;
       count++;
     }
   }
-  return count > 0 ? (total / count) : 0;
+  return count > 0 ? multiplayer_enet_ratio_to_percent(static_cast<uint32_t>(total / count))
+                   : 0.0f;
+}
+
+float pc_multi_get_packet_loss_variance_percent() {
+  auto& data = multiplayer_data();
+  if (!data.host) {
+    return 0.0f;
+  }
+  if (data.server_peer) {
+    if (data.server_peer->state != ENET_PEER_STATE_CONNECTED) {
+      return 0.0f;
+    }
+    return multiplayer_enet_ratio_to_percent(data.server_peer->packetLossVariance);
+  }
+
+  uint64_t total = 0;
+  uint32_t count = 0;
+  for (size_t i = 0; i < data.host->peerCount; i++) {
+    if (data.host->peers[i].state == ENET_PEER_STATE_CONNECTED) {
+      total += data.host->peers[i].packetLossVariance;
+      count++;
+    }
+  }
+  return count > 0 ? multiplayer_enet_ratio_to_percent(static_cast<uint32_t>(total / count))
+                   : 0.0f;
 }
 
 int pc_multi_get_ping_variance() {
@@ -929,14 +984,16 @@ int pc_multi_get_ping_variance() {
   if (!data.host) {
     return 0;
   }
-  if (data.server_peer) {
+  if (data.server_peer && data.server_peer->state == ENET_PEER_STATE_CONNECTED &&
+      multiplayer_enet_rtt_sample_valid(*data.server_peer)) {
     return data.server_peer->roundTripTimeVariance;
   }
 
-  u32 total = 0;
-  u32 count = 0;
+  uint64_t total = 0;
+  uint32_t count = 0;
   for (size_t i = 0; i < data.host->peerCount; i++) {
-    if (data.host->peers[i].state == ENET_PEER_STATE_CONNECTED) {
+    if (data.host->peers[i].state == ENET_PEER_STATE_CONNECTED &&
+        multiplayer_enet_rtt_sample_valid(data.host->peers[i])) {
       total += data.host->peers[i].roundTripTimeVariance;
       count++;
     }
@@ -986,26 +1043,52 @@ int pc_multi_get_recv_rate() {
   return data.stats.recv_rate_bytes_per_sec;
 }
 
+int pc_multi_get_send_packet_rate() {
+  auto& data = multiplayer_data();
+  return data.stats.send_rate_packets_per_sec;
+}
+
+int pc_multi_get_recv_packet_rate() {
+  auto& data = multiplayer_data();
+  return data.stats.recv_rate_packets_per_sec;
+}
+
+u64 pc_multi_get_wire_total_sent_bytes() {
+  return multiplayer_data().stats.wire_total_sent_bytes;
+}
+
+u64 pc_multi_get_wire_total_received_bytes() {
+  return multiplayer_data().stats.wire_total_recv_bytes;
+}
+
+u64 pc_multi_get_wire_total_sent_packets() {
+  return multiplayer_data().stats.wire_total_sent_packets;
+}
+
+u64 pc_multi_get_wire_total_received_packets() {
+  return multiplayer_data().stats.wire_total_recv_packets;
+}
+
 int pc_multi_get_type_send_rate(int type) {
-  if (type < 0 || type >= 11)
+  if (!multiplayer_stats_valid_packet_type(type))
     return 0;
   return multiplayer_data().stats.send_rate_by_type[type];
 }
 
 int pc_multi_get_type_recv_rate(int type) {
-  if (type < 0 || type >= 11)
+  if (!multiplayer_stats_valid_packet_type(type))
     return 0;
   return multiplayer_data().stats.recv_rate_by_type[type];
 }
 
 int pc_multi_get_type_total_sent(int type) {
-  if (type < 0 || type >= 11)
+  if (!multiplayer_stats_valid_packet_type(type))
     return 0;
   return (int)multiplayer_data().stats.sent_bytes_by_type[type];
 }
 
 int pc_multi_get_type_total_recv(int type) {
-  if (type < 0 || type >= 11)
+  if (!multiplayer_stats_valid_packet_type(type))
     return 0;
   return (int)multiplayer_data().stats.recv_bytes_by_type[type];
 }
@@ -1089,6 +1172,11 @@ void init_multiplayer_pc_port() {
   jak2::make_function_symbol_from_c("pc-multi-get-ticks", (void*)pc_multi_get_ticks);
   jak2::make_function_symbol_from_c("pc-multi-get-ping", (void*)pc_multi_get_ping);
   jak2::make_function_symbol_from_c("pc-multi-get-packet-loss", (void*)pc_multi_get_packet_loss);
+  jak2::make_function_symbol_from_c("pc-multi-get-ping-valid", (void*)pc_multi_get_ping_valid);
+  jak2::make_function_symbol_from_c("pc-multi-get-packet-loss-percent",
+                                    (void*)pc_multi_get_packet_loss_percent);
+  jak2::make_function_symbol_from_c("pc-multi-get-packet-loss-variance-percent",
+                                    (void*)pc_multi_get_packet_loss_variance_percent);
   jak2::make_function_symbol_from_c("pc-multi-get-ping-variance",
                                     (void*)pc_multi_get_ping_variance);
   jak2::make_function_symbol_from_c("pc-multi-get-total-sent-bytes",
@@ -1101,6 +1189,18 @@ void init_multiplayer_pc_port() {
                                     (void*)pc_multi_get_total_received_packets);
   jak2::make_function_symbol_from_c("pc-multi-get-send-rate", (void*)pc_multi_get_send_rate);
   jak2::make_function_symbol_from_c("pc-multi-get-recv-rate", (void*)pc_multi_get_recv_rate);
+  jak2::make_function_symbol_from_c("pc-multi-get-send-packet-rate",
+                                    (void*)pc_multi_get_send_packet_rate);
+  jak2::make_function_symbol_from_c("pc-multi-get-recv-packet-rate",
+                                    (void*)pc_multi_get_recv_packet_rate);
+  jak2::make_function_symbol_from_c("pc-multi-get-wire-total-sent-bytes",
+                                    (void*)pc_multi_get_wire_total_sent_bytes);
+  jak2::make_function_symbol_from_c("pc-multi-get-wire-total-received-bytes",
+                                    (void*)pc_multi_get_wire_total_received_bytes);
+  jak2::make_function_symbol_from_c("pc-multi-get-wire-total-sent-packets",
+                                    (void*)pc_multi_get_wire_total_sent_packets);
+  jak2::make_function_symbol_from_c("pc-multi-get-wire-total-received-packets",
+                                    (void*)pc_multi_get_wire_total_received_packets);
   jak2::make_function_symbol_from_c("pc-multi-get-type-send-rate",
                                     (void*)pc_multi_get_type_send_rate);
   jak2::make_function_symbol_from_c("pc-multi-get-type-recv-rate",
