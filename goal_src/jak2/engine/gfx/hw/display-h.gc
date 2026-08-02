@@ -59,7 +59,7 @@ At any point in time, there are 3 frames in progress:
    (frames                display-frame  2) ;; per-frame dma/timing
    (bgcolor               gs-bgcolor) ;; GS setting
    (pmode                 gs-pmode) ;; GS setting
-   (clock                 clock          13)
+   (clock                 clock          14)
    (session-clock         clock          :overlay-at (-> clock 0))
    (game-clock            clock          :overlay-at (-> clock 1))
    (base-clock            clock          :overlay-at (-> clock 2))
@@ -67,12 +67,13 @@ At any point in time, there are 3 frames in progress:
    (frame-clock           clock          :overlay-at (-> clock 4))
    (real-frame-clock      clock          :overlay-at (-> clock 5))
    (target-clock          clock          :overlay-at (-> clock 6))
-   (entity-clock          clock          :overlay-at (-> clock 7))
+   (shared-clock          clock          :overlay-at (-> clock 7))
    (part-clock            clock          :overlay-at (-> clock 8))
    (bg-clock              clock          :overlay-at (-> clock 9))
    (camera-clock          clock          :overlay-at (-> clock 10))
    (user0-clock           clock          :overlay-at (-> clock 11))
    (total-game-clock      clock          :overlay-at (-> clock 12))
+   (presentation-clock    clock          :overlay-at (-> clock 13))
    (time-factor           float)
    (dog-ratio             float)
    (vblank-start-time     int64          2)

@@ -4,7 +4,7 @@
 (defun mp-sync-clock-host ()
   "Update Host Clock BEFORE sync"
   (if (mp-is-jak?)
-      (set! (-> *local-info* clock) (current-time)))
+      (set! (-> *local-info* clock) (-> *display* shared-clock frame-counter)))
   (none))
 
 (defun mp-sync-clock-client ()
@@ -24,18 +24,13 @@
              (= (-> *level* loading-level) (-> *level* default-level))
              (not (load-in-progress? *level*)))
         (let* ((host-clock (-> *remote-info* clock))
-               (diff (- host-clock (current-time))))
+               (diff (- host-clock (-> *display* shared-clock frame-counter))))
           ;; Only sync if Host clock is AHEAD of local clock to avoid jittering/stalling
           ;; Also sync if we are vastly ahead (e.g. host started game after us)
           (when (and (nonzero? host-clock)
                      (or (> diff 0) (< diff -60)))
-            ;; Synchronize display clocks
-            (set! (-> *display* base-clock frame-counter) host-clock)
-            (set! (-> *display* base-clock old-frame-counter) (+ host-clock -1))
-            (set! (-> *display* game-clock frame-counter) host-clock)
-            (set! (-> *display* game-clock old-frame-counter) (+ host-clock -1))
-            ;; Also sync the process clock if we are in a process
-            (set! (-> pp clock frame-counter) host-clock)
-            (set! (-> pp clock old-frame-counter) (+ host-clock -1))
+            ;; Synchronize the entity and pusher gameplay clock.
+            (set! (-> *display* shared-clock frame-counter) host-clock)
+            (set! (-> *display* shared-clock old-frame-counter) (+ host-clock -1))
             ))))
   (none))

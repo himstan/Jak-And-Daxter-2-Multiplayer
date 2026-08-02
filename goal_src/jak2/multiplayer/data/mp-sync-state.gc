@@ -102,7 +102,7 @@
     (set! (-> *display* pmode alp) 255)
     (put-display-env 255)
     )
-  (set! *mp-post-clear-diag-until* (+ (current-time) (seconds 8)))
+  (set! *mp-post-clear-diag-until* (+ (presentation-clock-time) (seconds 8)))
   (none))
 
 (defun mp-client-presentation-black? ()
@@ -112,7 +112,7 @@
         (filter-active? #f)
         (menu-active? #f))
     (when (and *display* (nonzero? *display*) *game-info* (nonzero? *game-info*))
-      (set! blackout-active? (< (-> *display* base-clock frame-counter) (-> *game-info* blackout-time)))
+      (set! blackout-active? (< (presentation-clock-time) (-> *game-info* blackout-time)))
       )
     (when (and *setting-control* (nonzero? *setting-control*))
       (let ((user-current (-> *setting-control* user-current)))
@@ -140,9 +140,10 @@
              (>= (pc-multi-get-status) (mp-connection-status connected-lobby))
              (or *multi-sync-enabled?* (nonzero? (-> *local-info* sync-flag)))
              (or (mp-client-presentation-black?)
-                 (< (current-time) *mp-post-clear-diag-until*))
-             (>= (- (current-time) *mp-blackout-diag-log-time*) (seconds 1)))
+                 (< (presentation-clock-time) *mp-post-clear-diag-until*))
+             (>= (- (presentation-clock-time) *mp-blackout-diag-log-time*) (seconds 1)))
     (let ((frame 0)
+          (presentation-frame 0)
           (blackout-time 0)
           (pmode-alp (the-as uint 0))
           (bg-a -1.0)
@@ -167,8 +168,11 @@
           (target-draw-status (the-as uint 0))
           )
       (when (and *display* (nonzero? *display*))
-        (set! frame (-> *display* base-clock frame-counter))
+        (set! frame (-> *display* shared-clock frame-counter))
         (set! pmode-alp (-> *display* pmode alp))
+        )
+      (when (and *display* (nonzero? *display*))
+        (set! presentation-frame (presentation-clock-time))
         )
       (when (and *game-info* (nonzero? *game-info*))
         (set! blackout-time (-> *game-info* blackout-time))
@@ -246,10 +250,13 @@
               (-> *local-info* sync-flag)
               master-mode)
       (debug-log *mp-debug-log?*
-              "[MP-BlackoutDiag] display frame=~D blackout-time=~D pmode-alp=~D render=~A bg-a=~F bg-a-force=~F~%"
+              "[MP-BlackoutDiag] shared frame=~D presentation frame=~D blackout-time=~D pmode-alp=~D~%"
               frame
+              presentation-frame
               blackout-time
-              pmode-alp
+              pmode-alp)
+      (debug-log *mp-debug-log?*
+              "[MP-BlackoutDiag] render=~A bg-a=~F bg-a-force=~F~%"
               render?
               bg-a
               bg-a-force)
@@ -277,7 +284,7 @@
               target-current-level
               target-focus
               target-draw-status)
-      (set! *mp-blackout-diag-log-time* (current-time))
+      (set! *mp-blackout-diag-log-time* (presentation-clock-time))
       )
     )
   (none))

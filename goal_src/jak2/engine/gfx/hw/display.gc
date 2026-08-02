@@ -24,6 +24,18 @@
   (-> *display* base-clock integral-frame-counter)
   )
 
+(defun presentation-clock-time ()
+  "Get the local clock time used by presentation deadlines."
+  (if (and *display* (nonzero? *display*))
+      (let ((clock (-> *display* presentation-clock)))
+        (if (and clock (nonzero? clock))
+            (-> clock frame-counter)
+            (the-as time-frame 0))
+        )
+      (the-as time-frame 0)
+      )
+  )
+
 (defmethod set-time-ratios ((this display) (arg0 float))
   "Set the 'dog ratio'. This should be 1 when the game is running at full speed.
    Larger dog ratio means slower."
@@ -49,7 +61,7 @@
 
 (defun set-display ((arg0 display))
   "Allocate and initialize clocks for the display."
-  (dotimes (s5-0 13)
+  (dotimes (s5-0 14)
     (set! (-> arg0 clock s5-0) (new 'global 'clock s5-0))
     )
   (set! (-> arg0 base-clock mask) (process-mask freeze pause menu progress))
@@ -58,7 +70,7 @@
   (set! (-> arg0 frame-clock mask) (process-mask freeze pause menu progress))
   (set! (-> arg0 target-clock mask) (process-mask freeze pause menu progress))
   (set! (-> arg0 camera-clock mask) (process-mask freeze pause menu progress))
-  (set! (-> arg0 entity-clock mask) (process-mask freeze pause menu progress))
+  (set! (-> arg0 shared-clock mask) (process-mask freeze pause menu progress))
   (set! (-> arg0 part-clock mask) (process-mask freeze pause menu progress))
   (set! (-> arg0 bg-clock mask) (process-mask freeze pause menu progress))
   (set! (-> arg0 user0-clock mask) (process-mask freeze pause menu progress))
@@ -68,8 +80,8 @@
   (set! (-> *camera-pool* clock) (-> arg0 camera-clock))
   (set! (-> *target-pool* clock) (-> arg0 target-clock))
   (set! (-> *mid-pool* clock) (-> arg0 real-clock))
-  (set! (-> *pusher-pool* clock) (-> arg0 entity-clock))
-  (set! (-> *entity-pool* clock) (-> arg0 entity-clock))
+  (set! (-> *pusher-pool* clock) (-> arg0 shared-clock))
+  (set! (-> *entity-pool* clock) (-> arg0 shared-clock))
   (set! (-> *bg-pool* clock) (-> arg0 bg-clock))
   (set! (-> *default-pool* clock) (-> arg0 base-clock))
   arg0

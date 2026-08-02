@@ -1163,7 +1163,7 @@
       (set! (-> v1-26 prim-core collide-as) (-> self root backup-collide-as))
       (set! (-> v1-26 prim-core collide-with) (-> self root backup-collide-with))
       )
-    (set! (-> self clock) (-> *display* entity-clock))
+    (set! (-> self clock) (-> *display* shared-clock))
     (if (nonzero? (-> self draw))
         (logclear! (-> self draw status) (draw-control-status no-draw))
         )

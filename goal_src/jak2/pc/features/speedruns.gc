@@ -462,7 +462,7 @@
     (when (and (not (-> *speedrun-info* has-started?))
                *target*
                ;; not in blackout
-               (>= (-> *display* base-clock frame-counter) (-> *game-info* blackout-time))
+               (>= (presentation-clock-time) (-> *game-info* blackout-time))
                (!= (-> *setting-control* user-current bg-a-force) 1.0)
                ;; target has landed on ground/water, or we're about to enter target-hit-ground state
                (or (logtest? (-> *target* control status) (collide-status on-ground on-surface on-water))
@@ -565,7 +565,7 @@
 
 (defmethod draw-menu ((this speedrun-manager))
   ;; don't allow the menu to open during blackouts, apparently causes bugs
-  (when (>= (-> *game-info* blackout-time) (current-time))
+  (when (>= (-> *game-info* blackout-time) (presentation-clock-time))
     (return 0))
   ;; handle opening and closing the menu
   (cond

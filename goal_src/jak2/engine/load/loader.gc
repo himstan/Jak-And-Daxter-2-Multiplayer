@@ -2183,7 +2183,7 @@
 
 (defmethod update ((this gui-control) (arg0 symbol))
   (set! (-> this ids 65)
-        (the-as sound-id (if (and (>= (-> *display* base-clock frame-counter) (-> *game-info* blackout-time))
+        (the-as sound-id (if (and (>= (presentation-clock-time) (-> *game-info* blackout-time))
                                   (= (-> *setting-control* user-current bg-a) 0.0)
                                   (= (-> *setting-control* user-current bg-a-force) 0.0)
                                   )

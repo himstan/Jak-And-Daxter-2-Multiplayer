@@ -182,7 +182,7 @@
         (send-event *traffic-manager* 'deactivate-by-type (unbox 18))
         (send-event *traffic-manager* 'deactivate-by-type (unbox 19))
         )
-      (1 (apply ,(lambda :behavior scene-player () (update-rates! (-> *display* entity-clock) 0.1) (none))))
+      (1 (apply ,(lambda :behavior scene-player () (update-rates! (-> *display* shared-clock) 0.1) (none))))
       (267
         (part-tracker
           "group-fortress-big-explosion"
@@ -226,7 +226,7 @@
         )
       (10000
         (task-close! "fortress-dump-resolution")
-        (apply ,(lambda :behavior scene-player () (update-rates! (-> *display* entity-clock) 1.0) (none)))
+        (apply ,(lambda :behavior scene-player () (update-rates! (-> *display* shared-clock) 1.0) (none)))
         (send-event *traffic-manager* 'restore-default-settings)
         )
       )

@@ -14,7 +14,7 @@
    This overrides any previous letterboxing."
   (with-pp
     (set! (-> *game-info* letterbox-time)
-          (+ (-> *display* base-clock frame-counter)
+          (+ (presentation-clock-time)
              (the int (/ (* (the float arg0) (-> *display* game-clock clock-ratio)) (-> pp clock clock-ratio)))
              )
           )
@@ -70,19 +70,21 @@
    Unlike letterbox, this only can increase the time, unless
    you request 0, in which case blackout is disabled immediately"
   (with-pp
-    (if (zero? arg0)
-        (set! (-> *game-info* blackout-time) (-> *display* base-clock frame-counter))
-        (set! (-> *game-info* blackout-time)
-              (the-as time-frame
-                (max (-> *game-info* blackout-time)
-                  (+ (-> *display* base-clock frame-counter)
-                     (the int (/ (* (the float arg0) (-> *display* game-clock clock-ratio)) (-> pp clock clock-ratio)))
-                     arg0
-                     )
+    (let ((blackout-time-now (presentation-clock-time)))
+      (if (zero? arg0)
+          (set! (-> *game-info* blackout-time) blackout-time-now)
+          (set! (-> *game-info* blackout-time)
+                (the-as time-frame
+                  (max (-> *game-info* blackout-time)
+                    (+ blackout-time-now
+                       (the int (/ (* (the float arg0) (-> *display* game-clock clock-ratio)) (-> pp clock clock-ratio)))
+                       arg0
+                       )
+                    )
                   )
                 )
-              )
-        )
+          )
+      )
     (none)
     )
   )
@@ -237,7 +239,7 @@
 
 (defun pause-allowed? ()
   "Are you allowed to pause?"
-  (not (or (< (-> *display* base-clock frame-counter) (-> *game-info* blackout-time))
+  (not (or (< (presentation-clock-time) (-> *game-info* blackout-time))
            (!= (-> *setting-control* user-current bg-a) 0.0)
            (!= (-> *setting-control* user-current bg-a-force) 0.0)
            (not (-> *setting-control* user-current allow-pause))
@@ -778,7 +780,7 @@
             (lookup-text! *common-text* (text-id pause) #f)
             buf
             256
-            (if (< (-> *display* base-clock frame-counter) (-> *game-info* letterbox-time))
+            (if (< (presentation-clock-time) (-> *game-info* letterbox-time))
                 352
                 320
                 )
@@ -789,7 +791,7 @@
       (let ((s2-2 (the int (-> *font-context* origin y))))
         (cond
           ;; og:preserve-this the console is drawn over the letterbox so this is pointless and has been disabled
-          ((#if PC_PORT #f (or (movie?) (< (-> *display* base-clock frame-counter) (-> *game-info* letterbox-time))))
+          ((#if PC_PORT #f (or (movie?) (< (presentation-clock-time) (-> *game-info* letterbox-time))))
            (+! s2-2 56)
            )
           (*display-profile*
@@ -942,9 +944,9 @@
         )
 
     ;; letterbox drawing
-    (when (or (movie?) (< (-> *display* base-clock frame-counter) (-> *game-info* letterbox-time)))
-      (if (< (-> *game-info* letterbox-time) (-> *display* base-clock frame-counter))
-          (set! (-> *game-info* letterbox-time) (-> *display* base-clock frame-counter))
+    (when (or (movie?) (< (presentation-clock-time) (-> *game-info* letterbox-time)))
+      (if (< (-> *game-info* letterbox-time) (presentation-clock-time))
+          (set! (-> *game-info* letterbox-time) (presentation-clock-time))
           )
       (if (#if (not PC_PORT)
                (and (= (-> *setting-control* user-current aspect-ratio) 'aspect4x3)
@@ -963,7 +965,7 @@
 
     ;; blackout drawing
     (when (-> *setting-control* user-current render)
-      (if (< (-> *display* base-clock frame-counter) (-> *game-info* blackout-time))
+      (if (< (presentation-clock-time) (-> *game-info* blackout-time))
           (set! (-> *setting-control* user-default bg-a-force) 1.0)
           (set! (-> *setting-control* user-default bg-a-force) 0.0)
           )
