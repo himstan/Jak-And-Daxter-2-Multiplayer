@@ -1,11 +1,17 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+
+#include "game/multiplayer/generated/multiplayer_schema_generated.h"
 
 #pragma pack(push, 1)
 
 const int DISCOVERY_PORT = 26211;
 const char* const DISCOVERY_MAGIC = "OG_MP_DISCOVERY";
+inline constexpr size_t kPacketHeaderWireSize = sizeof(uint8_t) + sizeof(uint32_t);
+inline constexpr uint16_t kMultiplayerWireRevision = multiplayer::schema::kWireRevision;
+inline constexpr size_t kEventEnvelopeHeaderWireSize = kPacketHeaderWireSize + sizeof(uint32_t) + sizeof(uint16_t);
 
 enum class MultiplayerChannel : uint8_t {
   STATE = 0,
@@ -112,19 +118,9 @@ struct PacketTurretState {
 
 struct PacketGameEvent {
   PacketHeader header;
-  uint8_t pad[3];  // Align to 8 bytes for GOAL mapping
-  uint8_t raw_data[496];
-};
-
-struct WorldEventData {
-  uint32_t actor_id;
-  uint32_t attack_id;
-};
-
-struct SceneEventData {
-  uint32_t state;
-  char scene_name[32];
-  uint32_t event_id;
+  uint32_t event_id = 0;
+  uint16_t payload_size = 0;
+  uint8_t payload[480] = {};
 };
 
 #define MAX_ENEMY_SYNC_COUNT 128

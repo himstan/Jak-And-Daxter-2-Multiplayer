@@ -29,10 +29,10 @@
 (defun mp-widow-bomb-slot-valid? ((slot int))
   (and (>= slot 0) (< slot MP_WIDOW_BOMB_SLOT_COUNT)))
 
-(defun mp-widow-bomb-send-kick-event ((slot int)
-                                      (kick-from vector)
-                                      (kick-dest vector)
-                                      (kick-height float))
+(defun mp-widow-bomb-queue-kick! ((slot int)
+                                  (kick-from vector)
+                                  (kick-dest vector)
+                                  (kick-height float))
   (when (and (mp-widow-bomb-slot-valid? slot)
              kick-from
              (nonzero? kick-from)
@@ -41,27 +41,8 @@
              *multi-sync-enabled?*
              (= (pc-multi-get-status) 6)
              (not *mp-processing-remote-event*))
-    (let ((queue-index *mp-event-queue-write-ptr*))
-      (let ((event (the-as mp-widow-bomb-kick-event
-                           (-> *mp-event-queue* queue-index))))
-        (set! (-> event etype) MP_EVENT_WIDOW_BOMB_KICK)
-        (set! (-> event launch-slot) (the-as int32 slot))
-        (set! (-> event kick-from quad) (-> kick-from quad))
-        (set! (-> event kick-dest quad) (-> kick-dest quad))
-        (set! (-> event kick-height) kick-height)
-        (debug-log *mp-debug-log?*
-                   "[MP-Widow][KICK] sent slot=~D from=(~F,~F,~F)~%"
-                   slot
-                   (-> kick-from x) (-> kick-from y) (-> kick-from z)
-                   )
-        (debug-log *mp-debug-log?*
-                   "[MP-Widow][KICK] to=(~F,~F,~F) height=~F~%"
-                   (-> kick-dest x) (-> kick-dest y) (-> kick-dest z)
-                   kick-height)
-        )
-      (set! *mp-event-queue-write-ptr*
-            (logand (+ queue-index 1) 31))
-      )
+    (mp-event-enqueue!
+      (mp-event-build-widow-bomb-kick slot kick-from kick-dest kick-height))
     )
   (none)
   )
@@ -85,26 +66,15 @@
   (none)
   )
 
-(defun mp-widow-bomb-send-fizzle-event ((slot int) (deadline time-frame))
+(defun mp-widow-bomb-queue-fizzle! ((slot int) (deadline time-frame))
   (when (and (mp-widow-bomb-slot-valid? slot)
              (> deadline 0)
              (mp-is-jak?)
              *multi-sync-enabled?*
              (= (pc-multi-get-status) 6)
              (not *mp-processing-remote-event*))
-    (let ((queue-index *mp-event-queue-write-ptr*))
-      (let ((event (the-as mp-widow-bomb-fizzle-event
-                           (-> *mp-event-queue* queue-index))))
-        (set! (-> event etype) MP_EVENT_WIDOW_BOMB_FIZZLE)
-        (set! (-> event launch-slot) (the-as int32 slot))
-        (set! (-> event fizzle-deadline) deadline)
-        (debug-log *mp-debug-log?*
-                   "[MP-Widow][FIZZLE][HOST] sent slot=~D deadline=~D~%"
-                   slot deadline)
-        )
-      (set! *mp-event-queue-write-ptr*
-            (logand (+ queue-index 1) 31))
-      )
+    (mp-event-enqueue!
+      (mp-event-build-widow-bomb-fizzle slot deadline))
     )
   (none)
   )
@@ -161,7 +131,7 @@
   #f
   )
 
-(defun mp-receive-widow-bomb-kick-event ((event mp-widow-bomb-kick-event))
+(defun mp-widow-bomb-apply-kick-event! ((event mp-widow-bomb-kick-event))
   (when (and event
              (nonzero? event)
              (mp-widow-bomb-slot-valid? (-> event launch-slot))
@@ -182,7 +152,7 @@
   (none)
   )
 
-(defun mp-receive-widow-bomb-fizzle-event ((event mp-widow-bomb-fizzle-event))
+(defun mp-widow-bomb-apply-fizzle-event! ((event mp-widow-bomb-fizzle-event))
   (when (and event
              (nonzero? event)
              (mp-widow-bomb-slot-valid? (-> event launch-slot))

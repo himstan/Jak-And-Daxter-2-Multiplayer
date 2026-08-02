@@ -62,12 +62,13 @@
          (when (not *mp-processing-remote-event*)
            (let ((attacking-proc (find-offending-process-focusable proc (the-as attack-info (-> block param 1)))))
              (if (and attacking-proc (= attacking-proc *target*))
-                 (mp-send-world-event MP_EVENT_BREAK (-> self entity aid)))))
+                 (mp-event-enqueue! (mp-event-build-aid MP_EVENT_BREAK (-> self entity aid)))))
          (go-virtual die)
          #f
          )
        )
       )
+    )
     )
   :code sleep-code
   )

@@ -556,7 +556,7 @@
   :enter (behavior ((arg0 handle))
     (set! (-> self control anim-handle) arg0)
     (when (and (!= (-> self tobot?) 'mp-puppet) (not *mp-processing-remote-event*))
-      (mp-send-pole-grab-event arg0)
+      (mp-event-hook-pole-grab! arg0)
       )
     (set-time! (-> self state-time))
     (set! (-> self control mod-surface) *pole-mods*)
@@ -778,7 +778,7 @@
              *multi-sync-enabled?*
              (!= (-> self state name) 'target-pilot-edge-grab)
              (!= (-> self state name) 'target-indax-pilot-edge-grab))
-        (mp-send-edge-grab-event #f)
+        (mp-event-hook-edge-grab! #f)
         )
     (set! (-> self control unknown-handle000) (the-as handle #f))
     (set! (-> self control mod-surface) *edge-grab-mods*)

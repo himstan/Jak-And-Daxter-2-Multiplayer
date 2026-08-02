@@ -53,7 +53,8 @@ static_assert(sizeof(RemoteEntityState) == 224, "RemoteEntityState layout must r
 
 struct MPEvent {
   uint32_t etype;
-  uint8_t pad[12];
+  uint32_t payload_size;
+  uint8_t pad[8];
   uint8_t data[480];
 };
 static_assert(sizeof(MPEvent) == 496, "MPEvent must match GOAL mp-event");

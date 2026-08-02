@@ -8,7 +8,11 @@
   "matrix-h.o"
   "quaternion-h.o"
   "mp-types.o"
+  "mp-schema-generated.o"
+  "mp-event-h.o"
   "debug-log.o"
+  "mp-event-queue.o"
+  "mp-event-builders.o"
   "euler-h.o"
   "transform-h.o"
   "geometry-h.o"
@@ -566,7 +570,7 @@
   "mod-settings.o" ;; added ;;mod-base-change
   "mod-common-functions.o" ;; added
   "orb-placer.o"  ;; added
-  "mp-world-events.o" ;; added
+  "mp-event-hooks.o" ;; added
   "mp-scene-state.o" ;; added
   "mp-player-targeting.o" ;; added
   "mp-respawn-policy.o" ;; added
@@ -611,13 +615,12 @@
   "mp-task-sync-hooks.o" ;; added
   "mp-scene-sync-hooks.o" ;; added
   "mp-sync-state.o" ;; added
-  "mp-event-handlers.o" ;; added
   "mp-scene-transition.o" ;; added
   "mp-stadium-board1-patch.o" ;; added
   "mp-waypoint-sync.o" ;; added
   "mp-warp-gate-sync.o" ;; added
+  "mp-event-handlers.o" ;; added
   "mp-events.o" ;; added
-  "mp-mission-events.o" ;; added
   "mp-player-snapshot.o" ;; added
   "mp-remote.o" ;; added
   "mp-player-role.o" ;; added

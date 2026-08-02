@@ -302,23 +302,21 @@
   (when (and (mp-battle-record-event-sendable? record battle-evt)
              *multi-sync-enabled?*
              (= (pc-multi-get-status) 6))
-    (let ((queue-index *mp-event-queue-write-ptr*))
-      (let ((evt (the-as mp-battle-event (-> *mp-event-queue* queue-index))))
-        (set! (-> evt etype) MP_EVENT_BATTLE_EVENT)
-        (set! (-> evt battle-evt) battle-evt)
-        (mp-battle-fill-event-name! evt record)
-        (set! (-> evt spawner-index) (the-as uint32 spawner-index))
-        (set! (-> evt breed-index) (the-as uint32 breed-index))
-        (set! (-> evt initial?) (if initial? (the uint32 1) (the uint32 0)))
-        (set! (-> evt enemy-aid) (the-as uint32 enemy-aid))
-        (set! (-> evt owner-role)
-              (if (= battle-evt MP_BATTLE_EVT_CLAIM)
-                  (-> record pending-owner-role)
-                  (-> record owner-role)))
-        (set! (-> evt epoch) (-> record epoch))
-        (set! (-> evt roster-generation) (the-as uint32 roster-generation))
+    (let ((event (mp-event-build-battle
+                   battle-evt
+                   spawner-index
+                   breed-index
+                   initial?
+                   enemy-aid
+                   (if (= battle-evt MP_BATTLE_EVT_CLAIM)
+                       (-> record pending-owner-role)
+                       (-> record owner-role))
+                   (-> record epoch)
+                   roster-generation)))
+      (when event
+        (mp-battle-fill-event-name! event record)
+        (mp-event-enqueue! event)
         )
-      (set! *mp-event-queue-write-ptr* (logand (+ queue-index 1) 31))
       )
     )
   (none)

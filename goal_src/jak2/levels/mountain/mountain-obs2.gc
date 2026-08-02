@@ -7,7 +7,13 @@
 
 ;; DECOMP BEGINS
 
-(define-extern mp-send-mtn-plat-shoot-event (function mtn-plat-shoot none))
+(deftype mp-mtn-plat-shoot-stub (process-drawable)
+  ((incoming-attack-id uint32)
+   (state-flip uint32)
+   (hint-count float)
+   (axe-flip vector :inline)
+   )
+  )
 
 (deftype mtn-iris-door (process-drawable)
   ((root  collide-shape :override)
@@ -233,7 +239,10 @@ For example for an elevator pre-compute the distance between the first and last 
                        (set! (-> self angle-flip-vel) -10.0)
                        (set-time! (-> self state-time))
                        (when (and *multi-sync-enabled?* (not *mp-processing-remote-event*))
-                         (mp-send-mtn-plat-shoot-event self)
+                         (mp-event-enqueue!
+                           (mp-event-build-mtn-plat-shoot
+                             (-> self entity aid)
+                             (-> (the-as mp-mtn-plat-shoot-stub self) axe-flip)))
                          )
                        )
                      )

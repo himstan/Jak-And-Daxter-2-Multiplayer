@@ -8,6 +8,18 @@ dotenv:
   - ./scripts/tasks/.env.default
 
 tasks:
+  generate-multiplayer-schema:
+    desc: "Generate C++ and GOAL multiplayer packet metadata"
+    cmds:
+      - "{{.PYTHON}} ./tools/multiplayer_schema/generate.py"
+  check-multiplayer-schema:
+    desc: "Verify generated multiplayer packet metadata is current"
+    cmds:
+      - "{{.PYTHON}} ./tools/multiplayer_schema/generate.py --check"
+  check-multiplayer-event-architecture:
+    desc: "Verify GOAL multiplayer event ownership boundaries"
+    cmds:
+      - "{{.PYTHON}} ./tools/multiplayer_schema/check_event_architecture.py"
   # SETTINGS / CONFIGURATION
   settings:
     - "{{.PYTHON}} ./scripts/tasks/update-env.py --info"
@@ -116,7 +128,7 @@ tasks:
           -ExecutablePath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem{{.EXE_FILE_EXTENSION}}"
           -PidPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.pid"
           -LogPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.log"
-      - '{{.GK_BIN_RELEASE_DIR}}/gk --port 8120 -v --game jak2 -- -boot -debug -fakeiso -snapshot slot1 -mp-client 127.0.0.1 -mp-client-port 26212'
+      - '{{.GK_BIN_RELEASE_DIR}}/gk --port 8120 -v --game jak2 -- -boot -debug -fakeiso -snapshot slot7 -mp-client 127.0.0.1 -mp-client-port 26212'
   boot-game-retail:
     desc: "Boots the game without debug mode, it will fail if it's not already compiled!"
     preconditions:

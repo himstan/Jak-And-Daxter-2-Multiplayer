@@ -110,21 +110,7 @@
   (none))
 
 (defun mp-get-packet-type-name ((idx int))
-  (cond
-    ((= idx 0) "STATE_UPDATE")
-    ((= idx 1) "EVENT_JOIN")
-    ((= idx 2) "EVENT_LEAVE")
-    ((= idx 3) "EVENT_GAME")
-    ((= idx 4) "FULL_SYNC")
-    ((= idx 5) "ENEMY_SYNC")
-    ((= idx 6) "PEDESTRIAN_SYNC")
-    ((= idx 7) "VEHICLE_SYNC")
-    ((= idx 8) "TURRET_SYNC")
-    ((= idx 9) "PALACE_SQUID_SYNC")
-    ((= idx 10) "AIRLOCK_SYNC")
-    ((= idx 11) "WIDOW_SYNC")
-    (else "UNKNOWN")
-    )
+  (mp-schema-packet-name idx)
   )
 
 (defun mp-draw-network-debug ()
@@ -185,7 +171,7 @@
       
       ;; Category breakdown
       (format *stdcon* "BY CATEGORY:~%")
-      (dotimes (idx 12)
+      (dotimes (idx MP_PACKET_COUNT)
         (let ((t-sent (pc-multi-get-type-total-sent idx))
               (t-recv (pc-multi-get-type-total-recv idx))
               (r-send (pc-multi-get-type-send-rate idx))

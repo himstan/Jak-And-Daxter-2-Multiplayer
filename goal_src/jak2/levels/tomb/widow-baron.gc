@@ -1014,7 +1014,7 @@
        (return #f)
        )
      (when (mp-is-jak?)
-       (mp-widow-bomb-hit-send-event (the-as int (-> arg3 param 1)) (the-as vector (-> arg3 param 0)))
+       (mp-widow-queue-bomb-hit! (the-as int (-> arg3 param 1)) (the-as vector (-> arg3 param 0)))
        )
      (set! (-> self bomb-hits) (min 4 (+ (-> self bomb-hits) (-> arg3 param 1))))
      (let ((v1-33 (handle->process (-> self hud))))

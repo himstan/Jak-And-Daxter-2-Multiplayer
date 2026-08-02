@@ -851,7 +851,7 @@
     ;; MP Broadcast: inform others that we grabbed a pilot-ledge
     ;; CRITICAL: Send AFTER we reset interpolation to 0.0!
     (if (and (!= (-> self tobot?) 'mp-puppet) *multi-sync-enabled?*)
-        (mp-send-edge-grab-event #t)
+        (mp-event-hook-edge-grab! #t)
         )
     )
   :exit (-> target-edge-grab exit)

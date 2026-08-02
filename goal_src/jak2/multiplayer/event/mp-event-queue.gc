@@ -1,0 +1,113 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defconstant MP_EVENT_QUEUE_CAPACITY (the int 32))
+(defconstant MP_EVENT_QUEUE_WORDS (the int 124))
+(define-perm *mp-event-queue* (inline-array mp-event)
+  (new 'static 'inline-array mp-event 32))
+(define-perm *mp-event-queue-write-ptr* int 0)
+(define-perm *mp-event-queue-read-ptr* int 0)
+(define-perm *mp-event-queue-count* int 0)
+
+(defun mp-event-copy! ((destination mp-event) (source mp-event))
+  (when (and destination (nonzero? (the-as uint destination))
+             source (nonzero? (the-as uint source)))
+    (dotimes (word-index 124)
+      (set! (-> (the-as (pointer uint32) destination) word-index)
+            (-> (the-as (pointer uint32) source) word-index))
+      )
+    (return #t)
+    )
+  #f
+  )
+
+(defun mp-event-prepare! ((event mp-event) (event-type uint))
+  "Clear a temporary event and select its validated top-level event ID."
+  (when (and event (nonzero? (the-as uint event))
+             (mp-schema-event-known? event-type))
+    (mem-set32! (the-as pointer event) MP_EVENT_QUEUE_WORDS 0)
+    (set! (-> event etype) event-type)
+    (set! (-> event payload-size) (the uint 0))
+    (debug-log *mp-debug-log?* "[MP-EventQueue] Succesfully prepared event id=~D.~%" (-> event etype))
+    (return #t)
+    )
+  (debug-log *mp-debug-log?* "[MP-EventQueue] Failed to prepare event id=~D.~%" (-> event etype))
+  #f
+  )
+
+(defun mp-event-queue-full? ()
+  (>= *mp-event-queue-count* 32)
+  )
+
+(defun mp-event-queue-reset! ()
+  (set! *mp-event-queue-write-ptr* 0)
+  (set! *mp-event-queue-read-ptr* 0)
+  (set! *mp-event-queue-count* 0)
+  (when (and *mp-event-queue*
+             (nonzero? (the-as uint *mp-event-queue*)))
+    (mem-set32! (the-as pointer *mp-event-queue*)
+                (* MP_EVENT_QUEUE_CAPACITY MP_EVENT_QUEUE_WORDS)
+                0)
+    )
+  (none)
+  )
+
+(defun mp-event-enqueue! ((event mp-event))
+  "Copy one populated event into the bounded FIFO; newest events are dropped when full."
+  (cond
+    ((or (not event) (zero? (the-as uint event)))
+     (debug-log *mp-debug-log?* "[MP-EventQueue] Rejected null event.~%")
+     #f)
+    ((not (mp-schema-event-known? (-> event etype)))
+     (debug-log *mp-debug-log?* "[MP-EventQueue] Rejected unknown event ID ~D.~%" (-> event etype))
+     #f)
+    ((> (-> event payload-size) 480)
+     (debug-log *mp-debug-log?* "[MP-EventQueue] Rejected oversized event ID ~D size ~D.~%"
+                (-> event etype) (-> event payload-size))
+     #f)
+    ((or (not *multi-sync-enabled?*) (!= (pc-multi-get-status) 6))
+     #f)
+    ((mp-event-queue-full?)
+     (debug-log *mp-debug-log?* "[MP-EventQueue] Queue full; dropping newest event ID ~D.~%"
+                (-> event etype))
+     #f)
+    (else
+     (let ((destination (the-as mp-event (-> *mp-event-queue* *mp-event-queue-write-ptr*))))
+       (if (mp-event-copy! destination event)
+         (begin
+           (set! *mp-event-queue-write-ptr* (logand (+ *mp-event-queue-write-ptr* 1) 31))
+           (+! *mp-event-queue-count* 1)
+           (debug-log *mp-debug-log?* "[MP-EventQueue] Enqueued event id=~D.~%" (-> event etype))
+           #t
+           )
+         (begin
+           (debug-log *mp-debug-log?* "[MP-EventQueue] Failed to enque event id=~D.~%" (-> event etype))
+           #f
+           )
+        )
+       )
+     )
+    )
+  )
+
+(defun mp-push-local-events ()
+  "Move queued events into the fixed bridge batch without exposing queue internals."
+  (when (and *mp-event-buffer*
+             (nonzero? (the-as uint *mp-event-buffer*)))
+    (let ((out-index 0))
+      (while (and (> *mp-event-queue-count* 0) (< out-index 16))
+        (let ((source (the-as mp-event
+                              (-> *mp-event-queue* *mp-event-queue-read-ptr*)))
+              (destination (-> *mp-event-buffer* out-events out-index)))
+          (mp-event-copy! destination source)
+          )
+        (set! *mp-event-queue-read-ptr*
+              (logand (+ *mp-event-queue-read-ptr* 1) 31))
+        (-! *mp-event-queue-count* 1)
+        (+! out-index 1)
+        )
+      (set! (-> *mp-event-buffer* out-count) (the-as uint out-index))
+      )
+    )
+  (none)
+  )

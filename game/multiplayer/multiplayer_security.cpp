@@ -12,7 +12,7 @@
 
 namespace {
 constexpr std::array<uint8_t, 4> kMagic = {'O', 'G', 'M', '1'};
-constexpr uint16_t kWireRevision = 1;
+constexpr uint16_t kWireRevision = multiplayer::schema::kWireRevision;
 constexpr uint8_t kServerHello = 1;
 constexpr uint8_t kClientProof = 2;
 constexpr uint8_t kServerProof = 3;

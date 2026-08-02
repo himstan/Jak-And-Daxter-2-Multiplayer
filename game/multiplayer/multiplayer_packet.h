@@ -26,6 +26,7 @@ class PacketView {
 
   bool has_header() const;
   PacketType type() const;
+  uint32_t sequence_num() const;
   size_t size() const;
 
   template <typename T>
@@ -49,6 +50,7 @@ class PacketView {
   }
 
   bool has_counted_payload(uint32_t count, size_t element_size, size_t prefix_size) const;
+  const uint8_t* data() const;
 
  private:
   const ENetPacket* m_packet = nullptr;

@@ -4,7 +4,6 @@
 ;; Tomb Daxter stand-in interaction. This uses the existing mission-event
 ;; packet so no shared C++ structure changes are required.
 
-(define-extern mp-send-mission-event (function string uint none))
 
 (defconstant MP_TOMB_DAXTER_WAIT_NPC_NAME "daxter-npc-2")
 (defconstant MP_TOMB_DAXTER_WAIT_MOVE_THRESHOLD (meters 0.01))
@@ -179,7 +178,8 @@
   (set! *mp-tomb-daxter-wait-state* 'local-waiting)
   (mp-tomb-daxter-wait-apply-local! npc)
   (when (and *multi-sync-enabled?* (not *mp-processing-remote-event*))
-    (mp-send-mission-event MP_TOMB_DAXTER_WAIT_NPC_NAME MP_MISSION_EVT_TOMB_DAXTER_WAIT_START)
+    (mp-event-enqueue!
+      (mp-event-build-actor-name MP_EVENT_MISSION_TOMB_DAXTER_WAIT_START MP_TOMB_DAXTER_WAIT_NPC_NAME))
     )
   (none)
   )
@@ -192,7 +192,8 @@
     (mp-tomb-daxter-wait-set-draw! (the-as process-drawable *target*) #f)
     )
   (when (and *multi-sync-enabled?* (not *mp-processing-remote-event*))
-    (mp-send-mission-event MP_TOMB_DAXTER_WAIT_NPC_NAME MP_MISSION_EVT_TOMB_DAXTER_WAIT_END)
+    (mp-event-enqueue!
+      (mp-event-build-actor-name MP_EVENT_MISSION_TOMB_DAXTER_WAIT_END MP_TOMB_DAXTER_WAIT_NPC_NAME))
     )
   (none)
   )

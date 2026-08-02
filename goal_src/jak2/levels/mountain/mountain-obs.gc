@@ -14,7 +14,18 @@
   (mtpflags-3)
   )
 
-(define-extern mp-send-mtn-dice-event (function mtn-dice int none))
+(deftype mp-mtn-dice-stub (process-drawable)
+  ((incoming-attack-id uint32)
+   (watervol entity-actor)
+   (face-matrix matrix 6 :inline)
+   (face-matrix-back matrix 6 :inline)
+   (face-status int32 6)
+   (time-anim float)
+   (speed-anim float)
+   (rot-axis vector :inline)
+   (rot-org vector :inline)
+   )
+  )
 
 ;; DECOMP BEGINS
 
@@ -814,7 +825,12 @@
                      (when (and *multi-sync-enabled?* (not *mp-processing-remote-event*))
                        (let ((prim (get-touched-prim a1-26 (-> self root) (the-as touching-shapes-entry gp-3))))
                          (when (and prim (nonzero? prim))
-                           (mp-send-mtn-dice-event self (the-as int (-> prim prim-id)))
+                           (mp-event-enqueue!
+                             (mp-event-build-mtn-dice
+                               (-> self entity aid)
+                               (the-as int (-> prim prim-id))
+                               (-> (the-as mp-mtn-dice-stub self) rot-axis)
+                               (-> (the-as mp-mtn-dice-stub self) rot-org)))
                            )
                          )
                        )

@@ -225,29 +225,26 @@
       )
   )
 
-(defun mp-palace-squid-queue-event! ((evt-kind uint) (sequence uint) (param0 int) (param1 int) (param2 int) (charge float) (target-pos vector) (source-pos vector))
+(defun mp-palace-squid-queue-event! ((evt-kind uint)
+                                      (sequence uint)
+                                      (param0 int)
+                                      (param1 int)
+                                      (param2 int)
+                                      (charge float)
+                                      (target-pos vector)
+                                      (source-pos vector))
   (if (or (not (mp-palace-squid-ready?)) *mp-processing-remote-event*)
       (return #f))
-  (let ((q-idx *mp-event-queue-write-ptr*))
-    (let ((evt (the-as mp-palace-squid-event (-> *mp-event-queue* q-idx))))
-      (set! (-> evt etype) MP_EVENT_PALACE_SQUID)
-      (set! (-> evt squid-evt) evt-kind)
-      (set! (-> evt sequence) sequence)
-      (set! (-> evt param0) param0)
-      (set! (-> evt param1) param1)
-      (set! (-> evt param2) param2)
-      (set! (-> evt charge) charge)
-      (if target-pos
-          (vector-copy! (-> evt target-position) target-pos)
-          (vector-reset! (-> evt target-position))
-          )
-      (if source-pos
-          (vector-copy! (-> evt source-position) source-pos)
-          (vector-reset! (-> evt source-position))
-          )
-      )
-    (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
-    )
+  (mp-event-enqueue!
+    (mp-event-build-palace-squid
+      evt-kind
+      sequence
+      param0
+      param1
+      param2
+      charge
+      target-pos
+      source-pos))
   (none)
   )
 
@@ -415,32 +412,6 @@
 (defun mp-palace-squid-poll-resolution! ()
   (when (and (not (mp-is-jak?)) (> *mp-palace-squid-pending-resolution-seq* *mp-palace-squid-last-action-seq*))
     (mp-palace-squid-apply-resolution-event! *mp-palace-squid-pending-resolution-seq*)
-    )
-  (none)
-  )
-
-(defun mp-receive-palace-squid-event ((evt mp-palace-squid-event))
-  (case (-> evt squid-evt)
-    ((MP_PALACE_SQUID_EVT_HIT_REQUEST)
-     (mp-palace-squid-apply-hit-request! evt)
-     )
-    ((MP_PALACE_SQUID_EVT_GRENADE)
-     (when (and (not (mp-is-jak?)) (> (-> evt sequence) *mp-palace-squid-last-action-seq*))
-       (set! *mp-palace-squid-last-action-seq* (-> evt sequence))
-       (mp-palace-squid-apply-grenade-event! evt)
-       )
-     )
-    ((MP_PALACE_SQUID_EVT_WHIRLWIND)
-     (when (and (not (mp-is-jak?)) (> (-> evt sequence) *mp-palace-squid-last-action-seq*))
-       (set! *mp-palace-squid-last-action-seq* (-> evt sequence))
-       (mp-palace-squid-apply-whirlwind-event! evt)
-       )
-     )
-    ((MP_PALACE_SQUID_EVT_RESOLUTION)
-     (when (and (not (mp-is-jak?)) (> (-> evt sequence) *mp-palace-squid-last-action-seq*))
-       (set! *mp-palace-squid-pending-resolution-seq* (-> evt sequence))
-       )
-     )
     )
   (none)
   )

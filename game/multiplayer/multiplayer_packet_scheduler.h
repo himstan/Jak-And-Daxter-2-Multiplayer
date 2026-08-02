@@ -8,12 +8,15 @@
 #include <cstdint>
 #include <functional>
 #include <deque>
+#include <vector>
 
 struct MultiplayerStats;
 
 class MultiplayerPacketScheduler {
  public:
   using PacketSender = std::function<bool(ENetPeer*, int, ENetPacket*)>;
+  using PlainPacketSender =
+      std::function<bool(ENetPeer*, int, const uint8_t*, size_t, PacketType, size_t, ENetPacketFlag)>;
 
   static constexpr size_t kDefaultMaxPackets = 256;
   static constexpr size_t kDefaultMaxBytes = 2 * 1024 * 1024;
@@ -33,8 +36,17 @@ class MultiplayerPacketScheduler {
                size_t application_size,
                ENetPacketFlag flags);
 
+  bool enqueue_plain(ENetPeer* peer,
+                     int channel,
+                     const void* packet_data,
+                     size_t size,
+                     PacketType type,
+                     size_t application_size,
+                     ENetPacketFlag flags);
+
   size_t flush(MultiplayerStats& stats);
   size_t flush(MultiplayerStats& stats, const PacketSender& sender);
+  size_t flush_plain(MultiplayerStats& stats, const PlainPacketSender& sender);
   void clear();
 
   size_t queued_packet_count() const { return queued_packet_count_; }
@@ -50,7 +62,7 @@ class MultiplayerPacketScheduler {
 
   struct QueuedPacket {
     ENetPeer* peer = nullptr;
-    ENetPacket* packet = nullptr;
+    std::vector<uint8_t> data;
     PacketType type = PacketType::COUNT;
     size_t application_size = 0;
     int channel = 0;

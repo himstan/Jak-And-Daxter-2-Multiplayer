@@ -3,10 +3,8 @@
 
 (define-extern mp-tomb-boss-intro-local-blocked? (function symbol))
 (define-extern mp-generate-battle-enemy-aid (function uint))
-(define-extern mp-widow-spydroid-send-event (function uint int vector quaternion vector none))
-(define-extern mp-widow-bomb-send-event (function int vector none))
-(define-extern mp-widow-bomb-hit-send-event (function int vector none))
-(define-extern mp-widow-bomb-send-kick-event (function int vector vector float none))
+(define-extern mp-widow-queue-spydroid! (function uint int vector quaternion vector none))
+(define-extern mp-widow-queue-bomb! (function int vector none))
 (define-extern mp-widow-bomb-clear-kick-slot! (function int none))
 (define-extern mp-widow-bomb-clear-fizzle-slot! (function int none))
 (define-extern widow-bomb-slots-full (function int :behavior widow))
@@ -445,7 +443,7 @@
                                              (logior! (-> (the-as enemy s4-1) enemy-flags) (enemy-flag boss-spawned))
                                              )
                                           (when (and (mp-is-jak?) (nonzero? s4-1))
-                                            (mp-widow-spydroid-send-event
+                                            (mp-widow-queue-spydroid!
                                               (-> (the-as enemy s4-1) net-id)
                                               (-> self next-launch)
                                               (the-as vector (-> s5-0 trans))
@@ -715,7 +713,7 @@
              )
            (when (handle->process (-> self bomb (-> self next-launch)))
              (when (mp-is-jak?)
-               (mp-widow-bomb-send-event
+               (mp-widow-queue-bomb!
                  (-> self next-launch)
                  (-> self launch-dest))
                )

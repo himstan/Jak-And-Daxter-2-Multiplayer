@@ -295,12 +295,12 @@ void MultiplayerManager::disconnect(MultiplayerData& data) {
   lg::info("[Multiplayer] Disconnected.");
 }
 
-void MultiplayerManager::broadcast(MultiplayerData& data,
+bool MultiplayerManager::broadcast(MultiplayerData& data,
                                    int channel,
                                    const void* packet_data,
                                    size_t size,
                                    ENetPacketFlag flags) {
-  mp_send_packet(data, channel, packet_data, size, flags);
+  return mp_send_packet(data, channel, packet_data, size, flags);
 }
 
 void MultiplayerManager::send_to_peer(ENetPeer* peer,

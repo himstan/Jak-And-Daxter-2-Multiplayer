@@ -274,15 +274,16 @@
 (defun mp-gungame-send-red-intro-step! ((step uint))
   (when (and (mp-gungame-sync-active?) (mp-is-jak?))
     (set! *mp-gungame-red-intro-step* step)
-    (mp-send-gungame-event
-      MP_MISSION_EVT_GUNGAME_TUTORIAL_STEP
-      MP_GUNGAME_COURSE_RED
-      step
-      0
-      (the uint 0)
-      (the uint 0)
-      (the uint 0)
-      (the uint 1))
+    (mp-event-enqueue!
+      (mp-event-build-gungame
+        MP_EVENT_MISSION_GUNGAME_TUTORIAL_STEP
+        MP_GUNGAME_COURSE_RED
+        step
+        0
+        (the uint 0)
+        (the uint 0)
+        (the uint 0)
+        (the uint 1)))
     )
   (none)
   )
@@ -544,15 +545,16 @@
              target-info)
     (let ((cid (mp-gungame-course-id (-> this course))))
       (when (nonzero? cid)
-        (mp-send-gungame-event
-          MP_MISSION_EVT_GUNGAME_TARGET_SPAWNED
-          cid
-          (the uint (-> target-info num))
-          spawn-kind
-          (the uint 0)
-          (the uint 0)
-          (the uint 1)
-          (the uint 1))
+        (mp-event-enqueue!
+          (mp-event-build-gungame
+            MP_EVENT_MISSION_GUNGAME_TARGET_SPAWNED
+            cid
+            (the uint (-> target-info num))
+            spawn-kind
+            (the uint 0)
+            (the uint 0)
+            (the uint 1)
+            (the uint 1)))
         )
       )
     )
@@ -568,24 +570,26 @@
       (set-time! *mp-gungame-last-snapshot-time*)
       (dotimes (chunk 4)
         (let ((elapsed (the-as uint (if (> (current-time) (-> this start-time)) (- (current-time) (-> this start-time)) 0))))
-          (mp-send-gungame-event
-            MP_MISSION_EVT_GUNGAME_COURSE_SNAPSHOT
-            cid
-            (the-as uint chunk)
-            (-> this score)
-            elapsed
-            (mp-gungame-chunk-mask (-> this course) (the-as uint chunk) (tpath-flags broken))
-            (if (-> this open-end?) (the uint 1) (the uint 0))
-            (-> this end-door))
-          (mp-send-gungame-event
-            MP_MISSION_EVT_GUNGAME_COURSE_SNAPSHOT
-            cid
-            (the-as uint (+ chunk 16))
-            (-> this score)
-            elapsed
-            (mp-gungame-spawned-mask (-> this course) (the-as uint chunk))
-            (if (-> this open-end?) (the uint 1) (the uint 0))
-            (-> this end-door))
+          (mp-event-enqueue!
+            (mp-event-build-gungame
+              MP_EVENT_MISSION_GUNGAME_COURSE_SNAPSHOT
+              cid
+              (the-as uint chunk)
+              (-> this score)
+              elapsed
+              (mp-gungame-chunk-mask (-> this course) (the-as uint chunk) (tpath-flags broken))
+              (if (-> this open-end?) (the uint 1) (the uint 0))
+              (-> this end-door)))
+          (mp-event-enqueue!
+            (mp-event-build-gungame
+              MP_EVENT_MISSION_GUNGAME_COURSE_SNAPSHOT
+              cid
+              (the-as uint (+ chunk 16))
+              (-> this score)
+              elapsed
+              (mp-gungame-spawned-mask (-> this course) (the-as uint chunk))
+              (if (-> this open-end?) (the uint 1) (the uint 0))
+              (-> this end-door)))
           )
         )
       )
@@ -599,15 +603,16 @@
                (mp-is-jak?)
                (nonzero? cid))
       (dotimes (chunk 4)
-        (mp-send-gungame-event
-          MP_MISSION_EVT_GUNGAME_COURSE_END
-          cid
-          (the-as uint chunk)
-          (-> this score)
-          (the-as uint (if (> (current-time) (-> this start-time)) (- (current-time) (-> this start-time)) 0))
-          (mp-gungame-chunk-mask (-> this course) (the-as uint chunk) (tpath-flags broken))
-          (the uint 0)
-          (-> this end-door))
+        (mp-event-enqueue!
+          (mp-event-build-gungame
+            MP_EVENT_MISSION_GUNGAME_COURSE_END
+            cid
+            (the-as uint chunk)
+            (-> this score)
+            (the-as uint (if (> (current-time) (-> this start-time)) (- (current-time) (-> this start-time)) 0))
+            (mp-gungame-chunk-mask (-> this course) (the-as uint chunk) (tpath-flags broken))
+            (the uint 0)
+            (-> this end-door)))
         )
       )
     )
@@ -690,10 +695,10 @@
              (not (mp-gungame-local-authority?))
              *mp-gungame-pending?*
              (nonzero? *mp-gungame-course-id*)
-             (or (= *mp-gungame-event-kind* MP_MISSION_EVT_GUNGAME_COURSE_SNAPSHOT)
-                 (= *mp-gungame-event-kind* MP_MISSION_EVT_GUNGAME_TARGET_BROKEN)
-                 (= *mp-gungame-event-kind* MP_MISSION_EVT_GUNGAME_TARGET_SPAWNED)
-                 (= *mp-gungame-event-kind* MP_MISSION_EVT_GUNGAME_COURSE_END)))
+             (or (= *mp-gungame-event-kind* MP_EVENT_MISSION_GUNGAME_COURSE_SNAPSHOT)
+                 (= *mp-gungame-event-kind* MP_EVENT_MISSION_GUNGAME_TARGET_BROKEN)
+                 (= *mp-gungame-event-kind* MP_EVENT_MISSION_GUNGAME_TARGET_SPAWNED)
+                 (= *mp-gungame-event-kind* MP_EVENT_MISSION_GUNGAME_COURSE_END)))
     ;; If the manager isn't already running the right course, set it up
     (let ((target-course (mp-gungame-course-by-id *mp-gungame-course-id*)))
       (when (and target-course (!= (-> this course) target-course))
@@ -710,13 +715,13 @@
         (go (method-of-object this course))
         )
       )
-    (when (= *mp-gungame-event-kind* MP_MISSION_EVT_GUNGAME_COURSE_SNAPSHOT)
+    (when (= *mp-gungame-event-kind* MP_EVENT_MISSION_GUNGAME_COURSE_SNAPSHOT)
       (set! (-> this end-door) *mp-gungame-end-door*)
       (set! (-> this open-end?) (if (nonzero? *mp-gungame-open-end?*) #t #f))
       (set! (-> this score) *mp-gungame-score*)
       (set! (-> this start-time) (- (current-time) *mp-gungame-elapsed-time*))
       )
-    (when (= *mp-gungame-event-kind* MP_MISSION_EVT_GUNGAME_TARGET_SPAWNED)
+    (when (= *mp-gungame-event-kind* MP_EVENT_MISSION_GUNGAME_TARGET_SPAWNED)
       (let ((idx (mp-gungame-target-index (-> this course) *mp-gungame-target-num*)))
         (when (and (>= idx 0) (< idx (length (-> this course))))
           (let ((info (-> this course idx)))
@@ -727,7 +732,7 @@
           )
         )
       )
-    (when (= *mp-gungame-event-kind* MP_MISSION_EVT_GUNGAME_TARGET_BROKEN)
+    (when (= *mp-gungame-event-kind* MP_EVENT_MISSION_GUNGAME_TARGET_BROKEN)
       (logior! *mp-gungame-broken-mask* (mp-gungame-mask-for-target-num (-> this course) *mp-gungame-target-num*))
       (let ((idx (mp-gungame-target-index (-> this course) *mp-gungame-target-num*)))
         (when (and (>= idx 0) (< idx (length (-> this course))))
@@ -746,7 +751,7 @@
       (mp-gungame-door-open! this (the-as int (-> this end-door)) #t)
       )
     (when (or *mp-gungame-course-ended?*
-              (= *mp-gungame-event-kind* MP_MISSION_EVT_GUNGAME_COURSE_END))
+              (= *mp-gungame-event-kind* MP_EVENT_MISSION_GUNGAME_COURSE_END))
       (set! (-> this open-end?) #f)
       (set! (-> this score) *mp-gungame-score*)
       (mp-gungame-door-open! this (the-as int (-> this end-door)) #t)
@@ -2637,8 +2642,8 @@
           (mp-is-daxter?)
           *mp-gungame-pending?*
           (nonzero? *mp-gungame-course-id*)
-          (or (= *mp-gungame-event-kind* MP_MISSION_EVT_GUNGAME_COURSE_SNAPSHOT)
-              (= *mp-gungame-event-kind* MP_MISSION_EVT_GUNGAME_TARGET_BROKEN)))
+          (or (= *mp-gungame-event-kind* MP_EVENT_MISSION_GUNGAME_COURSE_SNAPSHOT)
+              (= *mp-gungame-event-kind* MP_EVENT_MISSION_GUNGAME_TARGET_BROKEN)))
      (let ((target-course (mp-gungame-course-by-id *mp-gungame-course-id*))
            (crates (mp-gungame-crates-by-id *mp-gungame-course-id*))
            (door (mp-gungame-default-door-by-id *mp-gungame-course-id*)))

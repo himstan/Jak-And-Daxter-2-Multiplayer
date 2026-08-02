@@ -764,7 +764,7 @@
       )
   )
 
-(defun mp-receive-waypoint-event ((evt mp-waypoint-event) (snapshot? symbol))
+(defun mp-waypoint-apply-remote-event! ((evt mp-waypoint-event) (snapshot? symbol))
   (when (or (not evt) (not (nonzero? evt)))
     (return #f)
     )
@@ -846,29 +846,29 @@
   (none)
   )
 
-(defun mp-waypoint-fill-event! ((evt mp-waypoint-event) (etype uint) (course-bot bot) (waypoint-id int) (skipped? symbol) (waypoint-request int))
-  (set! (-> evt etype) etype)
-  (set! (-> evt course-id) (the-as uint32 (-> course-bot course course-id)))
-  (set! (-> evt waypoint-id) waypoint-id)
-  (set! (-> evt skipped) (if skipped? (the uint 1) (the uint 0)))
-  (set! (-> evt waypoint-request) (the-as int32 waypoint-request))
-  (set! (-> evt host-in-scene) (if *scene-player* (the uint 1) (the uint 0)))
-  (mp-waypoint-copy-name-to-event! evt (-> course-bot name))
-  (none)
-  )
-
-(defun mp-send-waypoint-event ((etype uint) (course-bot bot) (waypoint-id int) (skipped? symbol) (waypoint-request int) (cache? symbol))
+(defun mp-waypoint-queue-event! ((etype uint)
+                                 (course-bot bot)
+                                 (waypoint-id int)
+                                 (skipped? symbol)
+                                 (waypoint-request int)
+                                 (cache? symbol))
   (if (not (mp-waypoint-sync-ready?))
       (return #f))
-  (let ((q-idx *mp-event-queue-write-ptr*))
-    (let ((evt (the-as mp-waypoint-event (-> *mp-event-queue* q-idx))))
-      (mp-waypoint-fill-event! evt etype course-bot waypoint-id skipped? waypoint-request)
+  (let ((event (mp-event-build-waypoint
+                 etype
+                 (-> course-bot course course-id)
+                 waypoint-id
+                 skipped?
+                 waypoint-request
+                 (if *scene-player* #t #f)
+                 (-> course-bot name))))
+    (when event
       (when cache?
-        (mp-waypoint-cache-event! evt)
+        (mp-waypoint-cache-event! event)
         )
-      (mp-waypoint-debug-log! 'local-send evt course-bot (the-as string #f))
+      (mp-waypoint-debug-log! 'local-send event course-bot (the-as string #f))
+      (mp-event-enqueue! event)
       )
-    (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
     )
   (none)
   )
@@ -888,7 +888,7 @@
 (defun mp-on-local-waypoint-bump ((course-bot bot) (waypoint-id int) (skipped? symbol))
   (when (and (mp-waypoint-local-command-can-send? course-bot)
              (-> course-bot waypoint))
-    (mp-send-waypoint-event
+    (mp-waypoint-queue-event!
       MP_EVENT_WAYPOINT_BUMP
       course-bot
       waypoint-id
@@ -901,7 +901,7 @@
 
 (defun mp-on-local-waypoint-request ((course-bot bot) (waypoint-request int))
   (when (mp-waypoint-local-command-can-send? course-bot)
-    (mp-send-waypoint-event
+    (mp-waypoint-queue-event!
       MP_EVENT_WAYPOINT_REQUEST
       course-bot
       (if (-> course-bot waypoint) (-> course-bot waypoint waypoint-id) -1)
@@ -917,7 +917,7 @@
     (when (and proc (type? proc bot))
       (let ((course-bot (the-as bot proc)))
         (when (and (-> course-bot course) (-> course-bot waypoint))
-          (mp-send-waypoint-event
+          (mp-waypoint-queue-event!
             MP_EVENT_WAYPOINT_SNAPSHOT
             course-bot
             (-> course-bot waypoint waypoint-id)
@@ -932,19 +932,20 @@
   )
 
 (defun mp-waypoint-send-recent-command! ((recent mp-recent-waypoint-command))
-  (let ((q-idx *mp-event-queue-write-ptr*))
-    (let ((evt (the-as mp-waypoint-event (-> *mp-event-queue* q-idx))))
-      (set! (-> evt etype) (-> recent etype))
-      (set! (-> evt course-id) (-> recent course-id))
-      (set! (-> evt waypoint-id) (-> recent waypoint-id))
-      (set! (-> evt skipped) (if (-> recent skipped?) (the uint 1) (the uint 0)))
-      (set! (-> evt waypoint-request) (-> recent waypoint-request))
-      (set! (-> evt host-in-scene) (if (-> recent host-in-scene?) (the uint 1) (the uint 0)))
-      (mp-waypoint-copy-recent-name-to-event! evt recent)
-      (mp-waypoint-copy-event-name-to-scratch! evt)
-      (mp-waypoint-debug-log! 'local-replay evt (the-as bot #f) *mp-waypoint-name-scratch*)
+  (let ((event (mp-event-build-waypoint
+                 (-> recent etype)
+                 (-> recent course-id)
+                 (-> recent waypoint-id)
+                 (-> recent skipped?)
+                 (-> recent waypoint-request)
+                 (-> recent host-in-scene?)
+                 (the-as string #f))))
+    (when event
+      (mp-waypoint-copy-recent-name-to-event! event recent)
+      (mp-waypoint-copy-event-name-to-scratch! event)
+      (mp-waypoint-debug-log! 'local-replay event (the-as bot #f) *mp-waypoint-name-scratch*)
+      (mp-event-enqueue! event)
       )
-    (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
     )
   (none)
   )

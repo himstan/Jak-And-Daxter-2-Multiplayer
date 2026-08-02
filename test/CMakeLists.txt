@@ -78,6 +78,7 @@ target_link_libraries(goalc-test common runtime compiler gtest decomp Zydis libz
 add_executable(multiplayer-test
         ${CMAKE_CURRENT_LIST_DIR}/multiplayer_test_main.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_multiplayer_bridge.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/test_multiplayer_protocol.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_multiplayer_stats.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_multiplayer_scheduler.cpp)
 target_link_libraries(multiplayer-test runtime gtest)

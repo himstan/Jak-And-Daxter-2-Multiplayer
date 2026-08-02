@@ -7,7 +7,7 @@
 
 (define-extern string-crc32 (function string uint))
 (define-extern *mp-processing-remote-event* symbol)
-(define-extern mp-send-scene-event (function mp-scene-state string none))
+(define-extern mp-event-hook-scene! (function mp-scene-state string none))
 (define-extern mp-tomb-boulder-adjust-scene! (function scene-player none))
 (define-extern mp-tomb-boulder-before-scene-abort! (function scene-player none))
 (define-extern mp-tomb-boulder-local-only-scene? (function string symbol))
@@ -1324,7 +1324,7 @@
                      (mp-abort-local-scene! self)
                      (when (and *multi-sync-enabled?*
                                 (not (mp-tomb-scene-transport-suppressed? (-> self scene name))))
-                       (mp-send-scene-event (mp-scene-state skipped) (-> self scene name))
+                       (mp-event-hook-scene! (mp-scene-state skipped) (-> self scene name))
                        )
                      )
                     ((not (mp-remote-scene-active?))
@@ -1335,7 +1335,7 @@
                       ;; Local player wants to skip, but remote hasn't yet
                       (set! *mp-local-wants-skip* #t)
                       (when (not (mp-tomb-scene-transport-suppressed? (-> self scene name)))
-                        (mp-send-scene-event (mp-scene-state request-skip) (-> self scene name)))
+                        (mp-event-hook-scene! (mp-scene-state request-skip) (-> self scene name)))
                       )
                     )
                   (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons triangle))
@@ -1764,7 +1764,7 @@
              (not (and (string= (-> self scene name) "tomb-boss-intro")
                        (mp-tomb-boss-intro-local-blocked?))))
     (debug-log *mp-debug-log?* "[MP-Scene] Broadcasting scene start: ~S~%" (-> self scene name))
-    (mp-send-scene-event (mp-scene-state started) (-> self scene name)))
+    (mp-event-hook-scene! (mp-scene-state started) (-> self scene name)))
 
   (set! *mp-local-wants-skip* #f)
   (set! *mp-remote-wants-skip* #f)

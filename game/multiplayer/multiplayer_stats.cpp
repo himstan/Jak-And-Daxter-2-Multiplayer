@@ -215,17 +215,15 @@ void MultiplayerStats::calculate_rates(struct _ENetHost* host, uint32_t current_
 }
 
 void MultiplayerStats::track_sent_bytes(const void* packet_data, size_t size) {
-  if (packet_data && size >= sizeof(PacketHeader)) {
-    PacketType type = PacketType::COUNT;
-    memcpy(&type, packet_data, sizeof(type));
+  if (packet_data && size >= kPacketHeaderWireSize) {
+    const auto type = static_cast<PacketType>(*static_cast<const uint8_t*>(packet_data));
     track_sent_packet(type, size);
   }
 }
 
 void MultiplayerStats::track_recv_bytes(const void* packet_data, size_t size) {
-  if (packet_data && size >= sizeof(PacketHeader)) {
-    PacketType type = PacketType::COUNT;
-    memcpy(&type, packet_data, sizeof(type));
+  if (packet_data && size >= kPacketHeaderWireSize) {
+    const auto type = static_cast<PacketType>(*static_cast<const uint8_t*>(packet_data));
     track_recv_packet(type, size);
   }
 }

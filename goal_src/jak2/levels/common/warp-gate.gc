@@ -607,7 +607,7 @@
              (nonzero? end-pos))
     (let ((gate-proc (warp-gate-find-arrival-proc-safe end-pos)))
       (when (and gate-proc (nonzero? gate-proc))
-        (mp-send-warp-gate-event gate-proc
+        (mp-warp-gate-queue-event! gate-proc
                                  MP_WARP_GATE_PHASE_ARRIVE
                                  as-indax?
                                  start-pos
@@ -810,7 +810,7 @@
         )
       )
     (when (warp-gate-should-broadcast? *target*)
-      (mp-send-warp-gate-event self
+      (mp-warp-gate-queue-event! self
                                MP_WARP_GATE_PHASE_BEGIN
                                (focus-test? *target* indax)
                                (-> self center)

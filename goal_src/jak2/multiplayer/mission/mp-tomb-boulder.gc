@@ -1,7 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(define-extern mp-send-mission-event (function string uint none))
 (define-extern should-player-block-remote-respawn? (function symbol))
 (define-extern mp-tomb-boulder-snapshot-task-closed? (function game-task-node symbol))
 (define-extern should-player-block-remote-respawn? (function symbol))
@@ -320,7 +319,8 @@
     (when (and *multi-sync-enabled?*
                (= (pc-multi-get-status) 6)
                (not *mp-processing-remote-event*))
-      (mp-send-mission-event "" MP_MISSION_EVT_TOMB_BOULDER_COMPLETE)
+      (mp-event-enqueue!
+        (mp-event-build-actor-name MP_EVENT_MISSION_TOMB_BOULDER_COMPLETE ""))
       )
     )
   (none)

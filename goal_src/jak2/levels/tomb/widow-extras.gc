@@ -1,19 +1,19 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(define-extern mp-widow-bomb-send-kick-event (function int vector vector float none))
+(define-extern mp-widow-bomb-queue-kick! (function int vector vector float none))
 (define-extern mp-widow-bomb-clear-kick-slot! (function int none))
 (define-extern mp-widow-bomb-kick-pending? (function int symbol))
 (define-extern mp-widow-bomb-kick-from (function int object))
 (define-extern mp-widow-bomb-kick-dest (function int object))
 (define-extern mp-widow-bomb-kick-height (function int float))
 (define-extern mp-widow-bomb-claim-kick-slot! (function int symbol))
-(define-extern mp-widow-bomb-send-fizzle-event (function int time-frame none))
+(define-extern mp-widow-bomb-queue-fizzle! (function int time-frame none))
 (define-extern mp-widow-bomb-clear-fizzle-slot! (function int none))
 (define-extern mp-widow-bomb-fizzle-pending? (function int symbol))
 (define-extern mp-widow-bomb-fizzle-deadline (function int integer))
 (define-extern mp-widow-bomb-claim-fizzle-slot! (function int symbol))
-(define-extern mp-widow-catwalk-hit-send-event (function int none))
+(define-extern mp-widow-queue-catwalk-hit! (function int none))
 
 ;; name: widow-extras.gc
 ;; name in dgo: widow-extras
@@ -173,7 +173,7 @@
          (return #f)
          )
        (when (nonzero? (-> self which-look))
-         (mp-widow-catwalk-hit-send-event (-> self which-look))
+         (mp-widow-queue-catwalk-hit! (-> self which-look))
          (send-event (ppointer->process (-> self parent)) 'catwalk-hit (-> self which-look))
          (go-virtual shatter)
          )
@@ -734,7 +734,7 @@
                    (nonzero? (-> bomb parent)))
           (let ((slot (widow-bomb-slot bomb)))
             (when (>= slot 0)
-              (mp-widow-bomb-send-fizzle-event slot deadline)))
+              (mp-widow-bomb-queue-fizzle! slot deadline)))
           )
         )
       )
@@ -883,7 +883,7 @@
               (go-virtual back-atcha)
               (let ((slot (widow-bomb-slot self)))
                 (when (>= slot 0)
-                  (mp-widow-bomb-send-kick-event
+                  (mp-widow-bomb-queue-kick!
                     slot kick-from kick-dest kick-height)))
               )
             )

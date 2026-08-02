@@ -146,95 +146,86 @@
   (none)
   )
 
-(defun mp-widow-spydroid-send-event ((spydroid-aid uint)
-                                     (launch-slot int)
-                                     (spawn-trans vector)
-                                     (spawn-quat quaternion)
-                                     (launch-dest vector))
+(defun mp-widow-queue-spydroid! ((spydroid-aid uint)
+                                 (launch-slot int)
+                                 (spawn-trans vector)
+                                 (spawn-quat quaternion)
+                                 (launch-dest vector))
   (when (and (mp-is-jak?)
              *multi-sync-enabled?*
              (= (pc-multi-get-status) 6)
              (not *mp-processing-remote-event*)
-             (> spydroid-aid 0))
-    (let ((q-idx *mp-event-queue-write-ptr*))
-        (let ((evt (the-as mp-widow-spydroid-event (-> *mp-event-queue* q-idx))))
-        (set! (-> evt etype) MP_EVENT_WIDOW_SPYDROID)
-        (set! (-> evt spydroid-aid) (the-as uint32 spydroid-aid))
-        (set! (-> evt launch-slot) (the-as int32 launch-slot))
-        (set! (-> evt spawn-trans quad) (-> spawn-trans quad))
-        (set! (-> evt spawn-quat quad) (-> spawn-quat quad))
-        (set! (-> evt launch-dest quad) (-> launch-dest quad))
+             (> spydroid-aid 0)
+             spawn-trans
+             (nonzero? spawn-trans)
+             spawn-quat
+             (nonzero? spawn-quat)
+             launch-dest
+             (nonzero? launch-dest))
+    (let ((event (mp-event-build-widow-spydroid
+                   spydroid-aid launch-slot spawn-trans spawn-quat launch-dest)))
+      (when event
         (debug-log *mp-debug-log?*
                    "[MP-Widow][HOST] launch aid=~D slot=~D trans=(~F,~F,~F) floor=~F~%"
-                   spydroid-aid launch-slot
-                   (-> spawn-trans x) (-> spawn-trans y) (-> spawn-trans z)
+                   spydroid-aid
+                   launch-slot
+                   (-> spawn-trans x)
+                   (-> spawn-trans y)
+                   (-> spawn-trans z)
                    (-> launch-dest y))
+        (mp-event-enqueue! event)
         )
-      (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
       )
     )
   (none)
   )
 
-(defun mp-widow-bomb-send-event ((launch-slot int) (launch-dest vector))
+(defun mp-widow-queue-bomb! ((launch-slot int) (launch-dest vector))
   (when (and (mp-is-jak?)
              *multi-sync-enabled?*
              (= (pc-multi-get-status) 6)
              (not *mp-processing-remote-event*)
              (>= launch-slot 0)
-             (< launch-slot 8))
-    (let ((q-idx *mp-event-queue-write-ptr*))
-      (let ((evt (the-as mp-widow-bomb-event (-> *mp-event-queue* q-idx))))
-        (set! (-> evt etype) MP_EVENT_WIDOW_BOMB)
-        (set! (-> evt launch-slot) (the-as int32 launch-slot))
-        (set! (-> evt launch-dest quad) (-> launch-dest quad))
-        (debug-log *mp-debug-log?* "[MP-Widow][HOST] bomb launch slot=~D dest=(~F,~F,~F)~%"
+             (< launch-slot 8)
+             launch-dest
+             (nonzero? launch-dest))
+    (let ((event (mp-event-build-widow-bomb launch-slot launch-dest)))
+      (when event
+        (debug-log *mp-debug-log?*
+                   "[MP-Widow][HOST] bomb launch slot=~D dest=(~F,~F,~F)~%"
                    launch-slot
                    (-> launch-dest x)
                    (-> launch-dest y)
                    (-> launch-dest z))
+        (mp-event-enqueue! event)
         )
-      (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
       )
     )
   (none)
   )
 
-(defun mp-widow-bomb-hit-send-event ((hit-amount int) (hit-position vector))
+(defun mp-widow-queue-bomb-hit! ((hit-amount int) (hit-position vector))
   (when (and *multi-sync-enabled?*
              (= (pc-multi-get-status) 6)
              (not *mp-processing-remote-event*)
              hit-position
              (nonzero? hit-position)
              (or (= hit-amount 1) (= hit-amount 4)))
-    (let ((q-idx *mp-event-queue-write-ptr*))
-      (let ((event (the-as mp-widow-bomb-hit-event
-                           (-> *mp-event-queue* q-idx))))
-        (set! (-> event etype) MP_EVENT_WIDOW_BOMB_HIT)
-        (set! (-> event amount) (the-as int32 hit-amount))
-        (set! (-> event hit-position quad) (-> hit-position quad))
-        )
-      (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
-      )
+    (mp-event-enqueue!
+      (mp-event-build-widow-bomb-hit hit-amount hit-position))
     )
   (none)
   )
 
-(defun mp-widow-catwalk-hit-send-event ((catwalk-index int))
+(defun mp-widow-queue-catwalk-hit! ((catwalk-index int))
   (when (and *multi-sync-enabled?*
              (= (pc-multi-get-status) 6)
              (mp-is-jak?)
              (not *mp-processing-remote-event*)
              (>= catwalk-index 1)
              (<= catwalk-index 7))
-    (let ((q-idx *mp-event-queue-write-ptr*))
-      (let ((event (the-as mp-widow-catwalk-hit-event
-                           (-> *mp-event-queue* q-idx))))
-        (set! (-> event etype) MP_EVENT_WIDOW_CATWALK_HIT)
-        (set! (-> event catwalk-index) (the-as int32 catwalk-index))
-        )
-      (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
-      )
+    (mp-event-enqueue!
+      (mp-event-build-widow-catwalk-hit catwalk-index))
     )
   (none)
   )
@@ -257,7 +248,7 @@
   (none)
   )
 
-(defun mp-receive-widow-spydroid-event ((evt mp-widow-spydroid-event))
+(defun mp-widow-apply-spydroid-event! ((evt mp-widow-spydroid-event))
   (mp-widow-spydroid-process evt)
   (none)
   )
@@ -277,12 +268,12 @@
   (none)
   )
 
-(defun mp-receive-widow-bomb-event ((evt mp-widow-bomb-event))
+(defun mp-widow-apply-bomb-event! ((evt mp-widow-bomb-event))
   (mp-widow-bomb-process evt)
   (none)
   )
 
-(defun mp-receive-widow-bomb-hit-event ((evt mp-widow-bomb-hit-event))
+(defun mp-widow-apply-bomb-hit-event! ((evt mp-widow-bomb-hit-event))
   (when (and evt (nonzero? evt))
     (let ((widow-proc (find-widow-proc)))
       (when (and widow-proc (nonzero? widow-proc))
@@ -293,7 +284,7 @@
   (none)
   )
 
-(defun mp-receive-widow-catwalk-hit-event ((evt mp-widow-catwalk-hit-event))
+(defun mp-widow-apply-catwalk-hit-event! ((evt mp-widow-catwalk-hit-event))
   (when (and evt (nonzero? evt))
     (let ((catwalk-index (-> evt catwalk-index)))
       (when (and (>= catwalk-index 1) (<= catwalk-index 7))

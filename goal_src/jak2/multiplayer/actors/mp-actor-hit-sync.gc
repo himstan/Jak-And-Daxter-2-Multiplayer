@@ -382,35 +382,48 @@
       (return #f))
   (if (zero? net-id)
       (return #f))
-
-  (let ((q-idx *mp-event-queue-write-ptr*))
-    (let* ((evt (the-as mp-actor-attack-event (-> *mp-event-queue* q-idx)))
-           (damage (damage-amount-from-attack e-proc attacker event-block))
-           (penetrate (mp-actor-resolve-event-penetrate e-proc attacker event-block info))
-           (knocked-type (mp-actor-resolve-event-knocked-type e-proc info penetrate)))
-      (set! (-> evt etype) event-type)
-      (set! (-> evt net-id) (the-as uint32 net-id))
-      (set! (-> evt attack-id) (the-as uint32 (if (and info (nonzero? info)) (-> info id) (the uint 0))))
-      (set! (-> evt new-hp) (the-as uint32 new-hp))
-      (set! (-> evt shove-back) (if (and info (nonzero? info) (logtest? (attack-mask shove-back) (-> info mask))) (-> info shove-back) (meters 2)))
-      (set! (-> evt shove-up) (if (and info (nonzero? info) (logtest? (attack-mask shove-up) (-> info mask))) (-> info shove-up) (meters 0.5)))
-      (set! (-> evt knocked-type) (the-as uint32 knocked-type))
-      (set! (-> evt hit-sound-id) (the-as uint32 (if (nonzero? *mp-current-remote-hit-sound-id*)
-                                                     (the-as uint *mp-current-remote-hit-sound-id*)
-                                                     (mp-hit-sound-id-from-attack-info info))))
-      (set! (-> evt penetrate) (the-as uint penetrate))
-      (mp-actor-capture-source-pos! evt e-proc attacker info)
-      (mp-actor-capture-attack-dir! evt e-proc info)
-      (debug-log *mp-debug-log?* "[MP-ActorHit] Queue event=~D nid=~D attack-id=~D damage=~D new-hp=~D penetrate=~D "
-              event-type
-              net-id
-              (-> evt attack-id)
-              damage
-              new-hp
-              (-> evt penetrate))
-      (debug-log *mp-debug-log?* "knock=~D~%" (-> evt knocked-type))
+  (let* ((damage (damage-amount-from-attack e-proc attacker event-block))
+         (penetrate (mp-actor-resolve-event-penetrate e-proc attacker event-block info))
+         (knocked-type (mp-actor-resolve-event-knocked-type e-proc info penetrate))
+         (attack-id (if (and info (nonzero? info)) (-> info id) 0))
+         (shove-back (if (and info (nonzero? info)
+                             (logtest? (attack-mask shove-back) (-> info mask)))
+                         (-> info shove-back)
+                         (meters 2)))
+         (shove-up (if (and info (nonzero? info)
+                           (logtest? (attack-mask shove-up) (-> info mask)))
+                       (-> info shove-up)
+                       (meters 0.5)))
+         (hit-sound-id (the-as uint32
+                               (if (nonzero? *mp-current-remote-hit-sound-id*)
+                                   (the-as uint *mp-current-remote-hit-sound-id*)
+                                   (mp-hit-sound-id-from-attack-info info))))
+         (details (new 'stack-no-clear 'mp-actor-attack-build-data))
+         (event (the-as mp-actor-attack-event #f)))
+    (set! (-> details net-id) net-id)
+    (set! (-> details attack-id) attack-id)
+    (set! (-> details flags) 0)
+    (set! (-> details knocked-type) (the-as uint knocked-type))
+    (set! (-> details new-hp) new-hp)
+    (set! (-> details shove-back) shove-back)
+    (set! (-> details shove-up) shove-up)
+    (set! (-> details hit-sound-id) hit-sound-id)
+    (set! (-> details penetrate) (the-as uint penetrate))
+    (set! event (mp-event-build-actor-attack event-type details))
+    (when event
+      (mp-actor-capture-source-pos! event e-proc attacker info)
+      (mp-actor-capture-attack-dir! event e-proc info)
+      (debug-log *mp-debug-log?*
+                 "[MP-ActorHit] Queue event=~D nid=~D attack-id=~D damage=~D new-hp=~D penetrate=~D "
+                 event-type
+                 net-id
+                 (-> event attack-id)
+                 damage
+                 new-hp
+                 (-> event penetrate))
+      (debug-log *mp-debug-log?* "knock=~D~%" (-> event knocked-type))
+      (mp-event-enqueue! event)
       )
-    (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
     )
   #t
   )

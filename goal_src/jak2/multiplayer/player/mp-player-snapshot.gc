@@ -60,28 +60,24 @@
       )
   )
 
-(defun mp-send-player-gun-shot-event ((gun-type uint))
-  "Send a reliable gun-shot replay event for the local authoritative player."
+(defun mp-player-queue-gun-shot! ((gun-type uint))
+  "Queue a reliable gun-shot replay event through the common event API."
   (if (or (not *multi-sync-enabled?*)
           (!= (pc-multi-get-status) 6)
           *mp-processing-remote-event*)
       (return #f))
-
   (let ((weapon (mp-pickup-type->equipped-weapon gun-type)))
     (when (not (zero? weapon))
-      (let ((q-idx *mp-event-queue-write-ptr*))
-        (let ((evt (the-as mp-player-gun-shot-event (-> *mp-event-queue* q-idx))))
-          (set! (-> evt etype) MP_EVENT_PLAYER_GUN_SHOT)
-          (set! (-> evt weapon-type) (the-as uint32 weapon))
-          (+! *mp-local-gun-shot-seq* 1)
-          (set! (-> evt shot-seq) *mp-local-gun-shot-seq*)
-          (set! (-> evt cam-angle-y) (mp-current-camera-angle-y))
-          )
-        (set! *mp-event-queue-write-ptr* (logand (+ q-idx 1) 31))
-        )
+      (+! *mp-local-gun-shot-seq* 1)
+      (mp-event-enqueue!
+        (mp-event-build-player-gun-shot
+          (the-as uint weapon)
+          *mp-local-gun-shot-seq*
+          (mp-current-camera-angle-y)))
       )
     )
-  (none))
+  (none)
+  )
 
 (defun mp-clear-local-vehicle-occupancy! ((player target))
   "Detach the local player from a vehicle seat without touching ride-along state."
@@ -412,11 +408,11 @@
         (cond
           ((= local-state (the uint (mp-target-state-id darkjak-get-on)))
            (debug-log *mp-debug-log?* "[MP-Player-Snapshot] Host entering Dark Jak! Broadcasting event...~%")
-           (mp-send-world-event MP_EVENT_CHANGE_MODE_DARKJAK (the uint 0))
+           (mp-event-enqueue! (mp-event-build-aid MP_EVENT_CHANGE_MODE_DARKJAK (the uint 0)))
            )
           ((= local-state (the uint (mp-target-state-id darkjak-get-off)))
            (debug-log *mp-debug-log?* "[MP-Player-Snapshot] Host exiting Dark Jak! Broadcasting event...~%")
-           (mp-send-world-event MP_EVENT_END_MODE_DARKJAK (the uint 0))
+           (mp-event-enqueue! (mp-event-build-aid MP_EVENT_END_MODE_DARKJAK (the uint 0)))
            )
           )
         )

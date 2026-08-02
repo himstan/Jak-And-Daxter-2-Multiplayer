@@ -95,3 +95,16 @@ task multiplayer-tests
 ```
 
 The tests cover profiles, seeded decisions, burst loss, jitter, reordering, duplication, endpoint routing, queue limits, statistics, and bidirectional disabled-impairment pass-through.
+
+## Packet schema and compact events
+
+Application packet metadata is generated from `tools/multiplayer_schema/manifest.json`.
+Run `task generate-multiplayer-schema` after changing packet or event definitions and
+`task check-multiplayer-schema` in validation scripts. The generated descriptors drive
+direction checks, scheduler ordering, coalescing, packet bounds, GOAL constants, and
+the debug packet names.
+
+`EVENT_GAME` is a reliable variable-length envelope. It carries an event ID, a
+16-bit payload length, and exactly that many payload bytes. The legacy GOAL
+`mp-event` record remains a bridge-compatible temporary queue record, but its 496-byte
+size is not transmitted. New event codecs should serialize only the fields they use.

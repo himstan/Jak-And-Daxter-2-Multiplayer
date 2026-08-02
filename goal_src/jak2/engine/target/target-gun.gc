@@ -2623,7 +2623,7 @@
             )
            )
         (when (not *mp-processing-remote-event*)
-          (mp-send-player-gun-shot-event (the-as uint arg0))
+          (mp-player-queue-gun-shot! (the-as uint arg0))
           )
         (let ((g-info (-> self gun)))
           (when (and g-info (nonzero? g-info))

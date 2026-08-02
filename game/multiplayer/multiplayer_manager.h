@@ -11,18 +11,18 @@ class MultiplayerManager {
   static void disconnect(MultiplayerData& data);
   static bool retry_online_setup(MultiplayerData& data);
 
-  static void broadcast(MultiplayerData& data,
+  static bool broadcast(MultiplayerData& data,
                         int channel,
                         const void* packet_data,
                         size_t size,
                         ENetPacketFlag flags);
 
   template <typename T>
-  static void broadcast(MultiplayerData& data,
+  static bool broadcast(MultiplayerData& data,
                         int channel,
                         const T& packet_data,
                         ENetPacketFlag flags) {
-    broadcast(data, channel, &packet_data, sizeof(T), flags);
+    return broadcast(data, channel, &packet_data, sizeof(T), flags);
   }
   static void send_to_peer(ENetPeer* peer,
                            int channel,

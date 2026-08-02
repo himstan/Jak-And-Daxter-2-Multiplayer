@@ -12159,15 +12159,16 @@ For example `20` would mean 4 red gun pickups, or 2 yellow gun pickups"
 (defun mp-gungame-send-red-intro-step! ((step uint))
   (when (and (mp-gungame-sync-active?) (mp-is-jak?))
     (set! *mp-gungame-red-intro-step* step)
-    (mp-send-gungame-event
-      MP_MISSION_EVT_GUNGAME_TUTORIAL_STEP
-      MP_GUNGAME_COURSE_RED
-      step
-      0
-      (the uint 0)
-      (the uint 0)
-      (the uint 0)
-      (the uint 1))
+    (mp-event-enqueue!
+      (mp-event-build-gungame
+        MP_EVENT_MISSION_GUNGAME_TUTORIAL_STEP
+        MP_GUNGAME_COURSE_RED
+        step
+        0
+        (the uint 0)
+        (the uint 0)
+        (the uint 0)
+        (the uint 1)))
     )
   (none)
   )
@@ -12202,15 +12203,16 @@ For example `20` would mean 4 red gun pickups, or 2 yellow gun pickups"
 (defun mp-gungame-send-yellow-intro-step! ((step uint))
   (when (and (mp-gungame-sync-active?) (mp-is-jak?))
     (set! *mp-gungame-yellow-intro-step* step)
-    (mp-send-gungame-event
-      MP_MISSION_EVT_GUNGAME_TUTORIAL_STEP
-      MP_GUNGAME_COURSE_YELLOW
-      step
-      0
-      (the uint 0)
-      (the uint 0)
-      (the uint 0)
-      (the uint 1))
+    (mp-event-enqueue!
+      (mp-event-build-gungame
+        MP_EVENT_MISSION_GUNGAME_TUTORIAL_STEP
+        MP_GUNGAME_COURSE_YELLOW
+        step
+        0
+        (the uint 0)
+        (the uint 0)
+        (the uint 0)
+        (the uint 1)))
     )
   (none)
   )

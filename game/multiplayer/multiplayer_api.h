@@ -7,7 +7,7 @@ int pc_multi_set_local_version(u32 version_ptr);
 u64 pc_multi_get_local_version();
 u64 pc_multi_get_required_version();
 void pc_multi_poll(u32 local_ptr, u32 remote_ptr);
-void pc_multi_flush_packet_window();
+int pc_multi_flush_packet_window();
 void pc_multi_send_state(u32 local_ptr);
 void pc_multi_receive_state(u32 remote_ptr);
 void pc_multi_send_events(u32 event_ptr);

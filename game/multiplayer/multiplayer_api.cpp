@@ -114,6 +114,10 @@ void handle_receive_packet(MultiplayerData& data,
   }
 
   const PacketType packet_type = view.type();
+  const auto* descriptor = multiplayer::schema::packet_descriptor(static_cast<uint8_t>(packet_type));
+  if (!descriptor || view.size() - kPacketHeaderWireSize > descriptor->max_payload) {
+    return;
+  }
   const int sender_role = data.local_role == 0 ? 1 : 0;
   if (!mp_packet_direction_allowed(packet_type, sender_role)) {
     return;
@@ -467,15 +471,17 @@ void pc_multi_poll(u32 local_ptr, u32 remote_ptr) {
   }
 }
 
-void pc_multi_flush_packet_window() {
+int pc_multi_flush_packet_window() {
   try {
     auto& data = multiplayer_data();
     if (data.initialized && data.host) {
       mp_flush_packet_window(data);
+      return 1;
     }
   } catch (...) {
     lg::error("[Multiplayer] Exception in pc_multi_flush_packet_window");
   }
+  return 0;
 }
 
 void pc_multi_send_state(u32 local_ptr) {

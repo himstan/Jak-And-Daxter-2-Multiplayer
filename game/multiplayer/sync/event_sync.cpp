@@ -3,35 +3,101 @@
 #include "common/log/log.h"
 #include "game/multiplayer/multiplayer_manager.h"
 #include "game/multiplayer/multiplayer_packet.h"
+#include "game/multiplayer/multiplayer_wire_codec.h"
 
 #include <cstring>
+#include <vector>
 
 namespace {
 constexpr uint32_t kMaxGoalEvents = 16;
-constexpr size_t kMaxInboundEvents = 64;
+constexpr size_t kMaxEventPayload = 480;
+
+bool decode_game_event_bytes(const void* data, size_t size, PacketGameEvent& output) {
+  if (!data || size < kEventEnvelopeHeaderWireSize) {
+    return false;
+  }
+
+  const auto* bytes = static_cast<const uint8_t*>(data);
+  multiplayer::wire::Reader reader(bytes, size);
+  uint8_t type = 0;
+  uint32_t sequence = 0;
+  uint32_t event_id = 0;
+  uint16_t payload_size = 0;
+  if (!reader.read_u8(type) || type != static_cast<uint8_t>(PacketType::EVENT_GAME) ||
+      !reader.read_u32(sequence) || !reader.read_u32(event_id) ||
+      !multiplayer::schema::event_descriptor(event_id) ||
+      !reader.read_u16(payload_size) || payload_size > kMaxEventPayload ||
+      reader.remaining() != payload_size) {
+    return false;
+  }
+
+  const uint8_t* payload = reader.read_span(payload_size);
+  if (!payload || !reader.consumed_all()) {
+    return false;
+  }
+
+  output = {};
+  output.header.type = static_cast<PacketType>(type);
+  output.header.sequenceNum = sequence;
+  output.event_id = event_id;
+  output.payload_size = payload_size;
+  memcpy(output.payload, payload, payload_size);
+  return true;
+}
+
+bool encode_game_event_bytes(const MPEvent& event,
+                             uint32_t sequence,
+                             std::vector<uint8_t>& output) {
+  const uint32_t payload_size = event.payload_size == 0 ? kMaxEventPayload : event.payload_size;
+  if (payload_size > kMaxEventPayload || !multiplayer::schema::event_descriptor(event.etype)) {
+    return false;
+  }
+
+  output.resize(kEventEnvelopeHeaderWireSize + payload_size);
+  multiplayer::wire::Writer writer(output.data(), output.size());
+  if (!writer.write_u8(static_cast<uint8_t>(PacketType::EVENT_GAME)) ||
+      !writer.write_u32(sequence) || !writer.write_u32(event.etype) ||
+      !writer.write_u16(static_cast<uint16_t>(payload_size)) ||
+      !writer.write_bytes(event.data, payload_size)) {
+    return false;
+  }
+  output.resize(writer.size());
+  return true;
+}
+}  // namespace
+
+bool mp_encode_game_event(const MPEvent& event,
+                          uint32_t sequence,
+                          std::vector<uint8_t>& output) {
+  return encode_game_event_bytes(event, sequence, output);
+}
+
+bool mp_decode_game_event(const void* data, size_t size, PacketGameEvent& output) {
+  return decode_game_event_bytes(data, size, output);
 }
 
 void mp_handle_game_event_packet(MultiplayerData& data, const ENetPacket* packet) {
-  const auto event = PacketView(packet).as_exact<PacketGameEvent>(PacketType::EVENT_GAME);
-  if (!event) {
+  PacketView view(packet);
+  PacketGameEvent event = {};
+  if (!view.has_header() || view.type() != PacketType::EVENT_GAME ||
+      !mp_decode_game_event(view.data(), view.size(), event)) {
     return;
   }
 
-  uint32_t type = 0;
-  memcpy(&type, event->raw_data, sizeof(type));
   const uint32_t now = enet_time_get();
   if (now - data.last_event_receive_debug_time > 2000) {
-    lg::info("[Multiplayer] Receiving game events. Latest type {}", type);
+    lg::info("[Multiplayer] Receiving game event {} ({} bytes)",
+             event.event_id,
+             event.payload_size);
     data.last_event_receive_debug_time = now;
   }
 
-  if (data.inbound_events.size() >= kMaxInboundEvents) {
+  if (!data.inbound_events.try_push(event)) {
     if (now - data.last_event_queue_debug_time > 2000) {
-      lg::warn("[Multiplayer] Inbound event queue full. Dropping oldest event.");
+      lg::warn("[Multiplayer] Inbound event queue full. Dropping newest event.");
       data.last_event_queue_debug_time = now;
     }
   }
-  data.inbound_events.push_overwrite(*event);
 }
 
 void mp_send_game_events(MultiplayerData& data, MPEventBufferGOAL* events) {
@@ -39,13 +105,20 @@ void mp_send_game_events(MultiplayerData& data, MPEventBufferGOAL* events) {
     return;
   }
 
-  uint32_t out_count = mp_clamp_count(events->out_count, kMaxGoalEvents);
+  const uint32_t out_count = mp_clamp_count(events->out_count, kMaxGoalEvents);
   for (uint32_t i = 0; i < out_count; ++i) {
-    PacketGameEvent out_event = {};
-    out_event.header.type = PacketType::EVENT_GAME;
-    out_event.header.sequenceNum = ++data.last_out_event_seq;
-    memcpy(out_event.raw_data, &events->out_events[i], sizeof(MPEvent));
-    MultiplayerManager::broadcast(data, data.local_role, out_event, ENET_PACKET_FLAG_RELIABLE);
+    std::vector<uint8_t> encoded;
+    if (!mp_encode_game_event(events->out_events[i], ++data.last_out_event_seq, encoded)) {
+      lg::warn("[Multiplayer] Dropping oversized event {}.", events->out_events[i].etype);
+      continue;
+    }
+    if (MultiplayerManager::broadcast(data,
+                                      data.local_role,
+                                      encoded.data(),
+                                      encoded.size(),
+                                      ENET_PACKET_FLAG_RELIABLE)) {
+      lg::debug("[Multiplayer] Submitted event id={}", events->out_events[i].etype);
+    }
   }
   events->out_count = 0;
 }
@@ -58,12 +131,12 @@ void mp_receive_game_events(MultiplayerData& data, MPEventBufferGOAL* events) {
   if (events->in_count > kMaxGoalEvents) {
     events->in_count = kMaxGoalEvents;
   }
-  if (!data.inbound_events.empty()) {
-    lg::info("[Multiplayer] Moving {} events to GOAL. Current in_count: {}",
-             data.inbound_events.size(), events->in_count);
-  }
   PacketGameEvent incoming = {};
   while (events->in_count < kMaxGoalEvents && data.inbound_events.pop(incoming)) {
-    memcpy(&events->in_events[events->in_count++], incoming.raw_data, sizeof(MPEvent));
+    MPEvent& goal_event = events->in_events[events->in_count++];
+    goal_event = {};
+    goal_event.etype = incoming.event_id;
+    goal_event.payload_size = incoming.payload_size;
+    memcpy(goal_event.data, incoming.payload, incoming.payload_size);
   }
 }

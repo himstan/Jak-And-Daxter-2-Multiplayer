@@ -26,6 +26,15 @@ class MultiplayerRingBuffer {
     ++m_size;
   }
 
+  bool try_push(const T& value) {
+    if (m_size == Capacity) {
+      return false;
+    }
+    m_values[(m_head + m_size) % Capacity] = value;
+    ++m_size;
+    return true;
+  }
+
   bool pop(T& value) {
     if (empty()) {
       return false;

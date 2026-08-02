@@ -89,7 +89,7 @@
       ((not (mp-connected-scene-broadcast-current? *mp-active-local-scene-name*))
        (debug-log *mp-debug-log?* "[MP-Scene-Transition] Broadcasting catch-up scene start: ~S~%"
                *mp-active-local-scene-name*)
-       (mp-send-scene-event (mp-scene-state started) *mp-active-local-scene-name*)
+       (mp-event-hook-scene! (mp-scene-state started) *mp-active-local-scene-name*)
        )
       )
     )
