@@ -8,7 +8,7 @@ class MultiplayerManager {
  public:
   static void setup_host(MultiplayerData& data, bool internet_host);
   static void setup_client(MultiplayerData& data, const char* ip, int port);
-  static void disconnect(MultiplayerData& data);
+  static void disconnect(MultiplayerData& data, bool preserve_reconnect_state = false);
   static bool retry_online_setup(MultiplayerData& data);
 
   static bool broadcast(MultiplayerData& data,

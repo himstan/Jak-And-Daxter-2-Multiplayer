@@ -1,6 +1,7 @@
 #include "multiplayer_manager.h"
 
 #include <chrono>
+#include <string>
 
 #include "multiplayer_packet.h"
 #include "multiplayer_port_mapping.h"
@@ -17,6 +18,33 @@ constexpr size_t kMaxGameplayPeers = 8;
 constexpr auto kPortMappingRefreshInterval = std::chrono::hours(1);
 constexpr auto kPortMappingRefreshRetryDelay = std::chrono::seconds(5);
 constexpr int kPortMappingRefreshAttempts = 3;
+constexpr int kOrderlyDisconnectDrainAttempts = 10;
+
+std::string enet_endpoint_string(const ENetAddress& address) {
+  char host[64] = {};
+  if (enet_address_get_host_ip(&address, host, sizeof(host)) != 0) {
+    return "<unknown>:" + std::to_string(address.port);
+  }
+  return std::string(host) + ":" + std::to_string(address.port);
+}
+
+std::string enet_peer_endpoint_string(const ENetPeer* peer) {
+  return peer ? enet_endpoint_string(peer->address) : "<none>";
+}
+
+uint16_t enet_local_port(const ENetHost* host) {
+  if (!host) {
+    return 0;
+  }
+  if (host->address.port != 0) {
+    return host->address.port;
+  }
+  ENetAddress local = {};
+  if (enet_socket_get_address(host->socket, &local) != 0) {
+    return 0;
+  }
+  return local.port;
+}
 
 bool wait_for_mapping_stop(MultiplayerData& data, std::chrono::milliseconds duration) {
   std::unique_lock<std::mutex> lock(data.port_mapping_mutex);
@@ -121,6 +149,99 @@ void stop_port_mapping_worker(MultiplayerData& data) {
   data.port_mapping_method = MPPortMappingMethod::NONE;
   data.port_mapping_external_ip.clear();
 }
+
+void disconnect_peer_after_leave(ENetHost* host,
+                                 ENetPeer* peer,
+                                 uint32_t disconnect_reason,
+                                 bool leave_sent) {
+  if (!host || !peer) {
+    lg::warn("[MP-Leave] Teardown skipped: host or peer unavailable (host={}, peer={}).", host != nullptr,
+             peer != nullptr);
+    return;
+  }
+  if (peer->state == ENET_PEER_STATE_DISCONNECTED) {
+    lg::info("[MP-Leave] Teardown skipped: peer {} was already disconnected (reason={}).",
+             enet_peer_endpoint_string(peer), disconnect_reason);
+    return;
+  }
+
+  const auto endpoint = enet_peer_endpoint_string(peer);
+  int drain_iterations = 0;
+  int receive_events = 0;
+  int disconnect_events = 0;
+  bool forced_disconnect = false;
+  lg::info("[MP-Leave] Beginning peer teardown for {} (leave_sent={}, reason={}, initial_state={}, reliable_in_transit={}, waiting_data={}, outgoing_data={}, packets_sent={}).",
+           endpoint, leave_sent, disconnect_reason, static_cast<int>(peer->state),
+           peer->reliableDataInTransit, peer->totalWaitingData, peer->outgoingDataTotal,
+           peer->packetsSent);
+
+  if (leave_sent) {
+    enet_peer_disconnect_later(peer, disconnect_reason);
+    for (int attempt = 0; attempt < kOrderlyDisconnectDrainAttempts &&
+                              peer->state != ENET_PEER_STATE_DISCONNECTED;
+         ++attempt) {
+      drain_iterations = attempt + 1;
+      ENetEvent event = {};
+      enet_host_service(host, &event, 5);
+      if (event.type == ENET_EVENT_TYPE_RECEIVE && event.packet) {
+        ++receive_events;
+        enet_packet_destroy(event.packet);
+      } else if (event.type == ENET_EVENT_TYPE_DISCONNECT) {
+        ++disconnect_events;
+      }
+    }
+  }
+
+  if (peer->state != ENET_PEER_STATE_DISCONNECTED) {
+    forced_disconnect = true;
+    enet_peer_disconnect_now(peer, disconnect_reason);
+  }
+  lg::info("[MP-Leave] Peer teardown complete for {} (drain_iterations={}, received_during_drain={}, disconnect_events={}, forced_disconnect={}, final_state={}, reliable_in_transit={}, waiting_data={}, outgoing_data={}, packets_sent={}).",
+           endpoint, drain_iterations, receive_events, disconnect_events, forced_disconnect,
+           static_cast<int>(peer->state), peer->reliableDataInTransit, peer->totalWaitingData,
+           peer->outgoingDataTotal, peer->packetsSent);
+}
+
+bool send_leave_notice(MultiplayerData& data, MultiplayerLeaveReason reason) {
+  if (!data.initialized || !data.host || !data.security.authenticated()) {
+    lg::warn("[MP-Leave] Could not send EVENT_LEAVE (reason {}): authenticated transport unavailable (initialized={}, host={}, security_authenticated={}, queued_packets={}, queued_bytes={}).",
+             static_cast<int>(reason), data.initialized, data.host != nullptr,
+             data.security.authenticated(), data.packet_scheduler.queued_packet_count(),
+             data.packet_scheduler.queued_byte_count());
+    return false;
+  }
+
+  ENetPeer* peer = data.local_role == 0 ? data.authenticated_peer : data.server_peer;
+  if (!peer || peer->state != ENET_PEER_STATE_CONNECTED) {
+    lg::warn("[MP-Leave] Could not send EVENT_LEAVE (reason {}): peer unavailable (peer={}, state={}, queued_packets={}, queued_bytes={}).",
+             static_cast<int>(reason), enet_peer_endpoint_string(peer),
+             peer ? static_cast<int>(peer->state) : -1,
+             data.packet_scheduler.queued_packet_count(), data.packet_scheduler.queued_byte_count());
+    return false;
+  }
+
+  lg::info("[MP-Leave] Sending EVENT_LEAVE directly to {} (role={}, reason={}, peer_state={}, queued_packets={}, queued_bytes={}, reliable_in_transit={}, waiting_data={}, outgoing_data={}, packets_sent={}).",
+           enet_peer_endpoint_string(peer), data.local_role, static_cast<int>(reason),
+           static_cast<int>(peer->state), data.packet_scheduler.queued_packet_count(),
+           data.packet_scheduler.queued_byte_count(), peer->reliableDataInTransit,
+           peer->totalWaitingData, peer->outgoingDataTotal, peer->packetsSent);
+  PacketLeave leave = {{PacketType::EVENT_LEAVE, ++data.sequence_num}, reason};
+  if (!mp_send_packet_immediately(data, peer, static_cast<int>(MultiplayerChannel::CONTROL),
+                                  &leave, sizeof(leave), ENET_PACKET_FLAG_RELIABLE)) {
+    lg::warn("[MP-Leave] Could not encrypt or send EVENT_LEAVE (reason={}) to {}.",
+             static_cast<int>(reason), enet_peer_endpoint_string(peer));
+    return false;
+  }
+
+  const auto reliable_before_flush = peer->reliableDataInTransit;
+  const auto waiting_before_flush = peer->totalWaitingData;
+  enet_host_flush(data.host);
+  lg::info("[MP-Leave] EVENT_LEAVE accepted locally by ENet (reason={}, peer={}, reliable_before_flush={}, waiting_before_flush={}, reliable_after_flush={}, waiting_after_flush={}, packets_sent={}); this does not confirm remote delivery.",
+           static_cast<int>(reason), enet_peer_endpoint_string(peer), reliable_before_flush,
+           waiting_before_flush, peer->reliableDataInTransit, peer->totalWaitingData,
+           peer->packetsSent);
+  return true;
+}
 }  // namespace
 
 void MultiplayerManager::setup_host(MultiplayerData& data, bool internet_host) {
@@ -211,12 +332,17 @@ int multiplayer_host_invite_status(MultiplayerData& data) {
 }
 
 void MultiplayerManager::setup_client(MultiplayerData& data, const char* ip, int port) {
+  lg::info("[MP-Reconnect] Creating client transport for target {}:{} (reconnect_active={}, attempt={}, status={}).",
+           ip ? ip : "<null>", port, data.reconnect_attempt_active,
+           data.reconnect_attempt_count, data.join_status.load());
   if (data.host)
     disconnect(data);
 
   if (!data.enet_initialized) {
-    if (enet_initialize() != 0)
+    if (enet_initialize() != 0) {
+      lg::error("[MP-Reconnect] ENet initialization failed while creating client transport.");
       return;
+    }
     data.enet_initialized = true;
   }
 
@@ -227,27 +353,41 @@ void MultiplayerManager::setup_client(MultiplayerData& data, const char* ip, int
   }
 
   data.host = enet_host_create(NULL, 1, 2, 0, 0);
-  if (data.host) {
-    ENetAddress server_address;
-    enet_address_set_host(&server_address, ip);
-    server_address.port = port;
+  if (!data.host) {
+    lg::error("[MP-Reconnect] ENet client host creation failed for target {}:{}.",
+              ip ? ip : "<null>", port);
+    return;
+  }
 
-    data.server_peer = enet_host_connect(data.host, &server_address, 2, 0);
-    if (data.server_peer) {
-      lg::info("[Multiplayer] Client connecting...");
-      data.local_role = 1;
-      data.local_net_id = 1;
-      data.join_status = (int)MultiplayerStatus::CONNECTING;
-      data.initialized = true;
-    } else {
-      enet_host_destroy(data.host);
-      data.host = nullptr;
-    }
+  ENetAddress server_address = {};
+  const int address_result = enet_address_set_host(&server_address, ip);
+  server_address.port = port;
+  lg::info("[MP-Reconnect] Client UDP socket created on local port {} (target resolve_result={}, parsed_target={}:{}).",
+           enet_local_port(data.host), address_result, ip ? ip : "<null>", server_address.port);
+  if (address_result != 0) {
+    lg::warn("[MP-Reconnect] Target address resolution failed for {}:{}; ENet connect will report the final result.",
+             ip ? ip : "<null>", port);
+  }
+
+  data.server_peer = enet_host_connect(data.host, &server_address, 2, 0);
+  if (data.server_peer) {
+    lg::info("[MP-Reconnect] ENet peer created for {}:{} (local_port={}, peer_state={}, reconnect_active={}); connect event pending.",
+             ip ? ip : "<null>", server_address.port, enet_local_port(data.host),
+             static_cast<int>(data.server_peer->state), data.reconnect_attempt_active);
+    lg::info("[Multiplayer] Client connecting...");
+    data.local_role = 1;
+    data.local_net_id = 1;
+    data.join_status = (int)MultiplayerStatus::CONNECTING;
+    data.initialized = true;
+  } else {
+    lg::error("[MP-Reconnect] ENet peer creation failed for {}:{} (local_port={}).",
+              ip ? ip : "<null>", server_address.port, enet_local_port(data.host));
+    enet_host_destroy(data.host);
+    data.host = nullptr;
   }
 }
 
-void MultiplayerManager::disconnect(MultiplayerData& data) {
-  data.packet_scheduler.clear();
+void MultiplayerManager::disconnect(MultiplayerData& data, bool preserve_reconnect_state) {
   data.stop_search = true;
   data.host_discovery_active = false;
   if (data.scanner_thread.joinable()) {
@@ -260,26 +400,39 @@ void MultiplayerManager::disconnect(MultiplayerData& data) {
   stop_port_mapping_worker(data);
 
   if (!data.initialized) {
+    data.packet_scheduler.clear();
     data.security.reset();
-    multiplayer_clear_session_state(data);
+    multiplayer_clear_session_state(data, preserve_reconnect_state);
+    if (preserve_reconnect_state) {
+      data.join_status = (int)MultiplayerStatus::RECONNECTING;
+    }
     return;
   }
 
   if (data.host) {
     if (data.local_role == 1 && data.server_peer) {
-      enet_peer_disconnect_now(data.server_peer, 0);
+      const bool leave_sent = send_leave_notice(
+          data, preserve_reconnect_state ? MultiplayerLeaveReason::CLIENT_RECONNECTING
+                                         : MultiplayerLeaveReason::CLIENT_CLOSED);
+      disconnect_peer_after_leave(
+          data.host, data.server_peer,
+          preserve_reconnect_state ? 0 : kDisconnectReasonClientClosed, leave_sent);
     } else if (data.local_role == 0) {
-      // Host disconnecting: notify all peers
+      const bool leave_sent = send_leave_notice(data, MultiplayerLeaveReason::HOST_CLOSED);
+      ENetPeer* authenticated_peer = data.authenticated_peer;
       for (size_t i = 0; i < data.host->peerCount; ++i) {
         ENetPeer* peer = &data.host->peers[i];
         if (peer->state == ENET_PEER_STATE_CONNECTED) {
-          enet_peer_disconnect_now(peer, 0);
+          disconnect_peer_after_leave(data.host, peer, kDisconnectReasonHostClosed,
+                                      peer == authenticated_peer && leave_sent);
         }
       }
     }
     enet_host_destroy(data.host);
     data.host = nullptr;
   }
+
+  data.packet_scheduler.clear();
 
   data.initialized = false;
   data.internet_host = false;
@@ -290,9 +443,12 @@ void MultiplayerManager::disconnect(MultiplayerData& data) {
   data.authentication_failures = {};
   data.next_authentication_failure_slot = 0;
   data.security.reset();
-  data.join_status = (int)MultiplayerStatus::IDLE;
-  multiplayer_clear_session_state(data);
-  lg::info("[Multiplayer] Disconnected.");
+  data.join_status = preserve_reconnect_state ? (int)MultiplayerStatus::RECONNECTING
+                                              : (int)MultiplayerStatus::IDLE;
+  multiplayer_clear_session_state(data, preserve_reconnect_state);
+  if (!preserve_reconnect_state) {
+    lg::info("[Multiplayer] Disconnected.");
+  }
 }
 
 bool MultiplayerManager::broadcast(MultiplayerData& data,

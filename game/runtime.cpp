@@ -476,12 +476,12 @@ RuntimeExitStatus exec_runtime(GameLaunchOptions game_options, int argc, const c
 
   // kill renderer after all threads are stopped.
   // this makes sure the std::shared_ptr<Display> is destroyed in the main thread.
+  pc_multi_disconnect();
   if (enable_display) {
     Gfx::Exit();
   }
   lg::info("GOAL Runtime Shutdown (code {})", fmt::underlying(MasterExit));
   munmap(g_ee_main_mem, EE_MAIN_MEM_SIZE);
   Discord_Shutdown();
-  pc_multi_disconnect();
   return MasterExit;
 }

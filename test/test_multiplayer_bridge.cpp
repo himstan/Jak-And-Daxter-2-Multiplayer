@@ -1,9 +1,13 @@
 #include <cmath>
+#include <atomic>
+#include <chrono>
 #include <cstring>
 #include <limits>
 #include <string>
+#include <thread>
 #include <vector>
 
+#include "enet/enet.h"
 #include "game/multiplayer/multiplayer_packet.h"
 #include "game/multiplayer/multiplayer_api.h"
 #include "game/multiplayer/multiplayer_manager.h"
@@ -16,6 +20,67 @@
 #include "gtest/gtest.h"
 
 namespace {
+struct LocalEnetPair {
+  ENetHost* receiver = nullptr;
+  ENetHost* sender = nullptr;
+  ENetPeer* receiver_peer = nullptr;
+  ENetPeer* sender_peer = nullptr;
+
+  ~LocalEnetPair() {
+    if (sender) {
+      enet_host_destroy(sender);
+    }
+    if (receiver) {
+      enet_host_destroy(receiver);
+    }
+  }
+};
+
+bool connect_local_enet_pair(LocalEnetPair& pair) {
+  ENetAddress receiver_address = {};
+  receiver_address.host = ENET_HOST_ANY;
+  receiver_address.port = 0;
+  pair.receiver = enet_host_create(&receiver_address, 1, 2, 0, 0);
+  pair.sender = enet_host_create(nullptr, 1, 2, 0, 0);
+  if (!pair.receiver || !pair.sender) {
+    return false;
+  }
+
+  ENetAddress sender_address = {};
+  if (enet_address_set_host(&sender_address, "127.0.0.1") != 0) {
+    return false;
+  }
+  sender_address.port = pair.receiver->address.port;
+  pair.sender_peer = enet_host_connect(pair.sender, &sender_address, 2, 0);
+  if (!pair.sender_peer) {
+    return false;
+  }
+
+  for (int attempt = 0; attempt < 200; ++attempt) {
+    ENetEvent event = {};
+    while (enet_host_service(pair.receiver, &event, 0) > 0) {
+      if (event.type == ENET_EVENT_TYPE_CONNECT) {
+        pair.receiver_peer = event.peer;
+      } else if (event.type == ENET_EVENT_TYPE_RECEIVE) {
+        enet_packet_destroy(event.packet);
+      }
+    }
+    while (enet_host_service(pair.sender, &event, 0) > 0) {
+      if (event.type == ENET_EVENT_TYPE_RECEIVE) {
+        enet_packet_destroy(event.packet);
+      }
+    }
+    enet_host_flush(pair.sender);
+    enet_host_flush(pair.receiver);
+    if (pair.receiver_peer && pair.sender_peer->state == ENET_PEER_STATE_CONNECTED &&
+        pair.receiver_peer->state == ENET_PEER_STATE_CONNECTED) {
+      return true;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  return false;
+}
+
 void authenticate(MultiplayerSecurity& host, MultiplayerSecurity& client) {
   ASSERT_TRUE(host.set_local_version("v1.0.0"));
   ASSERT_TRUE(client.set_local_version("v1.0.0"));
@@ -91,7 +156,7 @@ TEST(MultiplayerPacket, DirectionPolicyMatchesHostAndClientRoles) {
     const bool host_only = type == PacketType::FULL_SYNC || type == PacketType::PEDESTRIAN_SYNC ||
                            type == PacketType::VEHICLE_SYNC ||
                            type == PacketType::PALACE_SQUID_SYNC || type == PacketType::WIDOW_SYNC;
-    const bool gameplay = type != PacketType::EVENT_JOIN && type != PacketType::EVENT_LEAVE;
+    const bool gameplay = type != PacketType::EVENT_JOIN;
     EXPECT_EQ(mp_packet_direction_allowed(type, 0), gameplay);
     EXPECT_EQ(mp_packet_direction_allowed(type, 1), gameplay && !host_only);
   }
@@ -134,6 +199,118 @@ TEST(MultiplayerSecurity, InviteRoundTripAndMutualAuthentication) {
   EXPECT_EQ(parsed_host, "127.0.0.1");
   EXPECT_EQ(parsed_port, 26210);
   authenticate(host, client);
+}
+
+TEST(MultiplayerSecurity, AuthenticatedLeaveCanTravelInBothDirections) {
+  MultiplayerSecurity host;
+  MultiplayerSecurity client;
+  ASSERT_TRUE(host.start_host(26210));
+  std::string parsed_host;
+  uint16_t parsed_port = 0;
+  ASSERT_TRUE(client.start_client(host.invite_for_address("127.0.0.1"), parsed_host, parsed_port));
+  authenticate(host, client);
+
+  PacketLeave client_leave = {{PacketType::EVENT_LEAVE, 1},
+                              MultiplayerLeaveReason::CLIENT_RECONNECTING};
+  MultiplayerDatagram encrypted_client_leave;
+  ASSERT_TRUE(client.seal(1, client_leave.header.type, &client_leave, sizeof(client_leave),
+                          encrypted_client_leave));
+  const auto host_result =
+      host.receive(0, encrypted_client_leave.bytes.data(), encrypted_client_leave.size);
+  ASSERT_EQ(host_result.kind, SecurityReceiveKind::GAMEPLAY);
+  ASSERT_EQ(host_result.plaintext.size, sizeof(client_leave));
+  PacketLeave decoded_client_leave = {};
+  memcpy(&decoded_client_leave, host_result.plaintext.bytes.data(), sizeof(decoded_client_leave));
+  EXPECT_EQ(decoded_client_leave.reason, MultiplayerLeaveReason::CLIENT_RECONNECTING);
+
+  PacketLeave host_leave = {{PacketType::EVENT_LEAVE, 2}, MultiplayerLeaveReason::HOST_CLOSED};
+  MultiplayerDatagram encrypted_host_leave;
+  ASSERT_TRUE(host.seal(0, host_leave.header.type, &host_leave, sizeof(host_leave),
+                        encrypted_host_leave));
+  const auto client_result =
+      client.receive(1, encrypted_host_leave.bytes.data(), encrypted_host_leave.size);
+  ASSERT_EQ(client_result.kind, SecurityReceiveKind::GAMEPLAY);
+  ASSERT_EQ(client_result.plaintext.size, sizeof(host_leave));
+  PacketLeave decoded_host_leave = {};
+  memcpy(&decoded_host_leave, client_result.plaintext.bytes.data(), sizeof(decoded_host_leave));
+  EXPECT_EQ(decoded_host_leave.reason, MultiplayerLeaveReason::HOST_CLOSED);
+}
+
+TEST(MultiplayerDisconnect, SendsOneDirectLeaveDespiteQueuedGameplay) {
+  struct ScopedEnet {
+    bool initialized = enet_initialize() == 0;
+    ~ScopedEnet() {
+      if (initialized) {
+        enet_deinitialize();
+      }
+    }
+  } enet;
+  ASSERT_TRUE(enet.initialized);
+
+  LocalEnetPair pair;
+  ASSERT_TRUE(connect_local_enet_pair(pair));
+
+  MultiplayerSecurity host_security;
+  ASSERT_TRUE(host_security.start_host(pair.receiver->address.port));
+  ASSERT_TRUE(host_security.set_local_version("v1.0.0"));
+
+  MultiplayerData client_data;
+  client_data.host = pair.sender;
+  client_data.server_peer = pair.sender_peer;
+  client_data.local_role = 1;
+  client_data.initialized = true;
+  client_data.reconnect_invite = "127.0.0.1:26210/AAAAAAAAAAAAAAAAAAAAAA";
+  std::string parsed_host;
+  uint16_t parsed_port = 0;
+  ASSERT_TRUE(client_data.security.start_client(
+      host_security.invite_for_address("127.0.0.1"), parsed_host, parsed_port));
+  authenticate(host_security, client_data.security);
+
+  PacketHeader queued_gameplay = {PacketType::EVENT_GAME, 99};
+  ASSERT_TRUE(client_data.packet_scheduler.enqueue_plain(
+      pair.sender_peer, static_cast<int>(MultiplayerChannel::CONTROL), &queued_gameplay,
+      sizeof(queued_gameplay), PacketType::EVENT_GAME, sizeof(queued_gameplay),
+      ENET_PACKET_FLAG_RELIABLE));
+
+  std::atomic<bool> stop_receiver = false;
+  std::atomic<int> leave_count = 0;
+  std::atomic<int> received_reason = static_cast<int>(MultiplayerLeaveReason::HOST_CLOSED);
+  std::thread receiver_thread([&]() {
+    while (!stop_receiver.load()) {
+      ENetEvent event = {};
+      while (enet_host_service(pair.receiver, &event, 1) > 0) {
+        if (event.type != ENET_EVENT_TYPE_RECEIVE || !event.packet) {
+          continue;
+        }
+        const auto result = host_security.receive(0, event.packet->data, event.packet->dataLength);
+        if (result.kind == SecurityReceiveKind::GAMEPLAY) {
+          ENetPacket plaintext = {};
+          plaintext.data = const_cast<uint8_t*>(result.plaintext.bytes.data());
+          plaintext.dataLength = result.plaintext.size;
+          const auto leave = PacketView(&plaintext).as_exact<PacketLeave>(PacketType::EVENT_LEAVE);
+          if (leave) {
+            received_reason.store(static_cast<int>(leave->reason));
+            leave_count.fetch_add(1);
+          }
+        }
+        enet_packet_destroy(event.packet);
+      }
+    }
+  });
+
+  MultiplayerManager::disconnect(client_data);
+  pair.sender = nullptr;
+  stop_receiver.store(true);
+  receiver_thread.join();
+
+  EXPECT_EQ(leave_count.load(), 1);
+  EXPECT_EQ(static_cast<MultiplayerLeaveReason>(received_reason.load()),
+            MultiplayerLeaveReason::CLIENT_CLOSED);
+  EXPECT_FALSE(client_data.initialized);
+  EXPECT_TRUE(client_data.reconnect_invite.empty());
+
+  MultiplayerManager::disconnect(client_data);
+  EXPECT_EQ(leave_count.load(), 1);
 }
 
 TEST(MultiplayerDiscovery, RequiresExactBoundedTokenResponse) {
@@ -242,6 +419,203 @@ TEST(MultiplayerReconnect, StartsFromSavedInviteAndClearsOnDisconnect) {
 
   pc_multi_disconnect();
   EXPECT_TRUE(data.reconnect_invite.empty());
+  EXPECT_FALSE(data.reconnect_attempt_active);
+}
+
+TEST(MultiplayerPacket, LeavePacketUsesOneByteReasonAndExactSchema) {
+  PacketLeave leave = {{PacketType::EVENT_LEAVE, 17}, MultiplayerLeaveReason::CLIENT_RECONNECTING};
+  ENetPacket packet = {};
+  packet.data = reinterpret_cast<uint8_t*>(&leave);
+  packet.dataLength = sizeof(leave);
+
+  const auto decoded = PacketView(&packet).as_exact<PacketLeave>(PacketType::EVENT_LEAVE);
+  ASSERT_TRUE(decoded.has_value());
+  EXPECT_EQ(decoded->reason, MultiplayerLeaveReason::CLIENT_RECONNECTING);
+  EXPECT_EQ(sizeof(leave), kPacketHeaderWireSize + 1);
+
+  packet.dataLength -= 1;
+  EXPECT_FALSE(PacketView(&packet).as_exact<PacketLeave>(PacketType::EVENT_LEAVE));
+}
+
+TEST(MultiplayerReconnect, UsesAutomaticBackoffUntilCancelled) {
+  MultiplayerData data;
+  data.local_role = 1;
+  data.join_status = (int)MultiplayerStatus::IN_GAME;
+
+  multiplayer_enter_client_reconnect(data, 1000);
+  EXPECT_EQ(data.join_status, (int)MultiplayerStatus::RECONNECTING);
+  EXPECT_EQ(data.reconnect_next_attempt_time, 1250u);
+  EXPECT_TRUE(multiplayer_client_reconnect_due(data, 1250));
+
+  multiplayer_note_client_reconnect_attempt_started(data);
+  EXPECT_FALSE(multiplayer_client_reconnect_due(data, 1250));
+  multiplayer_note_client_reconnect_failed(data, 2000);
+  EXPECT_EQ(data.reconnect_attempt_count, 1u);
+  EXPECT_EQ(data.reconnect_next_attempt_time, 2500u);
+
+  multiplayer_note_client_reconnect_attempt_started(data);
+  multiplayer_note_client_reconnect_failed(data, 3000);
+  EXPECT_EQ(data.reconnect_next_attempt_time, 4000u);
+  multiplayer_note_client_reconnect_attempt_started(data);
+  multiplayer_note_client_reconnect_failed(data, 5000);
+  EXPECT_EQ(data.reconnect_next_attempt_time, 7000u);
+  multiplayer_note_client_reconnect_attempt_started(data);
+  multiplayer_note_client_reconnect_failed(data, 8000);
+  EXPECT_EQ(data.reconnect_attempt_count, 4u);
+  EXPECT_EQ(data.reconnect_next_attempt_time, 13000u);
+
+  multiplayer_note_client_reconnect_attempt_started(data);
+  multiplayer_note_client_reconnect_failed(data, 14000);
+  EXPECT_EQ(data.reconnect_attempt_count, 4u);
+  EXPECT_EQ(data.reconnect_next_attempt_time, 19000u);
+
+  multiplayer_cancel_client_reconnect(data);
+  EXPECT_FALSE(data.reconnect_attempt_active);
+  EXPECT_EQ(data.reconnect_attempt_count, 0u);
+  EXPECT_EQ(data.reconnect_next_attempt_time, 0u);
+}
+
+TEST(MultiplayerReconnect, HandshakeTimeoutPreservesInviteAndSchedulesRetry) {
+  MultiplayerData data;
+  data.local_role = 1;
+  data.join_status = (int)MultiplayerStatus::RECONNECTING;
+  data.reconnect_invite = "127.0.0.1:26210/AAAAAAAAAAAAAAAAAAAAAA";
+  data.reconnect_attempt_active = true;
+
+  multiplayer_handle_client_handshake_timeout(data, 5000);
+
+  EXPECT_EQ(data.join_status, (int)MultiplayerStatus::RECONNECTING);
+  EXPECT_FALSE(data.reconnect_attempt_active);
+  EXPECT_EQ(data.reconnect_next_attempt_time, 5500u);
+  EXPECT_EQ(data.reconnect_invite, "127.0.0.1:26210/AAAAAAAAAAAAAAAAAAAAAA");
+}
+
+TEST(MultiplayerReconnect, DoesNotCompleteUntilFullSyncRestoresInGameStatus) {
+  MultiplayerData data;
+  data.local_role = 1;
+  data.join_status = (int)MultiplayerStatus::CONNECTING;
+  data.reconnect_attempt_active = true;
+  data.reconnect_attempt_count = 2;
+
+  multiplayer_note_client_reconnect_authenticated(data);
+
+  EXPECT_TRUE(data.reconnect_waiting_for_full_sync);
+  EXPECT_EQ(data.reconnect_attempt_count, 2u);
+  multiplayer_set_status(data, (int)MultiplayerStatus::CONNECTED_LOBBY);
+  EXPECT_TRUE(data.reconnect_waiting_for_full_sync);
+  multiplayer_set_status(data, (int)MultiplayerStatus::IN_GAME);
+  EXPECT_FALSE(data.reconnect_waiting_for_full_sync);
+  EXPECT_EQ(data.reconnect_attempt_count, 0u);
+}
+
+TEST(MultiplayerReconnect, IgnoresUnauthenticatedPeersForTimeout) {
+  MultiplayerData data;
+  data.local_role = 0;
+  data.join_status = (int)MultiplayerStatus::IN_GAME;
+  data.last_authenticated_receive_time = 100;
+
+  multiplayer_update_receive_timeout(data, 10101);
+
+  EXPECT_EQ(data.join_status, (int)MultiplayerStatus::IN_GAME);
+  EXPECT_EQ(data.last_authenticated_receive_time, 100u);
+}
+
+TEST(MultiplayerReconnect, HostRecoveryClearsRemoteStateAndRotatesSecurity) {
+  MultiplayerData data;
+  MultiplayerSecurity client;
+  ASSERT_TRUE(data.security.start_host(26210));
+  ASSERT_TRUE(data.security.set_local_version("v1.0.0"));
+  const std::string invite = data.security.invite_for_address("127.0.0.1");
+  std::string parsed_host;
+  uint16_t parsed_port = 0;
+  ASSERT_TRUE(client.start_client(invite, parsed_host, parsed_port));
+  authenticate(data.security, client);
+
+  data.local_role = 0;
+  data.host_game_active = true;
+  data.join_status = (int)MultiplayerStatus::IN_GAME;
+  data.authenticated_peer = nullptr;
+  data.remote_entity.last_sequence_num = 42;
+  data.pending_full_sync = true;
+  data.inbound_events.push_overwrite({});
+  data.reconnect_invite = "client-side-state-must-not-be-cleared-on-host";
+
+  ASSERT_TRUE(multiplayer_begin_host_reconnect(data));
+
+  EXPECT_TRUE(data.host_game_active);
+  EXPECT_EQ(data.join_status, (int)MultiplayerStatus::RECONNECTING);
+  EXPECT_FALSE(data.security.authenticated());
+  EXPECT_EQ(data.security.invite_for_address("127.0.0.1"), invite);
+  EXPECT_EQ(data.remote_entity.last_sequence_num, 0u);
+  EXPECT_FALSE(data.pending_full_sync);
+  EXPECT_TRUE(data.inbound_events.empty());
+  EXPECT_EQ(data.reconnect_invite, "client-side-state-must-not-be-cleared-on-host");
+
+  MultiplayerSecurity replacement_client;
+  ASSERT_TRUE(replacement_client.start_client(invite, parsed_host, parsed_port));
+  authenticate(data.security, replacement_client);
+}
+
+TEST(MultiplayerSession, AcceptsAuthenticatedClientLeaveReasons) {
+  MultiplayerData data;
+  MultiplayerSecurity client;
+  ASSERT_TRUE(data.security.start_host(26210));
+  ASSERT_TRUE(data.security.set_local_version("v1.0.0"));
+  std::string parsed_host;
+  uint16_t parsed_port = 0;
+  ASSERT_TRUE(client.start_client(data.security.invite_for_address("127.0.0.1"), parsed_host,
+                                  parsed_port));
+  authenticate(data.security, client);
+
+  ENetPeer peer = {};
+  peer.state = ENET_PEER_STATE_DISCONNECTED;
+  data.local_role = 0;
+  data.authenticated_peer = &peer;
+  data.host_game_active = true;
+  data.join_status = (int)MultiplayerStatus::IN_GAME;
+  data.remote_entity.last_sequence_num = 42;
+  data.inbound_events.push_overwrite({});
+
+  ASSERT_TRUE(multiplayer_handle_client_leave(
+      data, &peer, MultiplayerLeaveReason::CLIENT_RECONNECTING));
+  EXPECT_EQ(data.join_status, (int)MultiplayerStatus::RECONNECTING);
+  EXPECT_EQ(data.authenticated_peer, nullptr);
+  EXPECT_FALSE(data.security.authenticated());
+  EXPECT_EQ(data.remote_entity.last_sequence_num, 0u);
+  EXPECT_TRUE(data.inbound_events.empty());
+
+  EXPECT_FALSE(multiplayer_handle_client_leave(data, &peer, MultiplayerLeaveReason::HOST_CLOSED));
+}
+
+TEST(MultiplayerSession, HostLeaveIsTerminalAndCancelsReconnect) {
+  MultiplayerData data;
+  MultiplayerSecurity host;
+  ASSERT_TRUE(host.start_host(26210));
+  std::string parsed_host;
+  uint16_t parsed_port = 0;
+  ASSERT_TRUE(data.security.start_client(host.invite_for_address("127.0.0.1"), parsed_host,
+                                         parsed_port));
+  ASSERT_TRUE(data.security.set_local_version("v1.0.0"));
+  ASSERT_TRUE(host.set_local_version("v1.0.0"));
+  authenticate(host, data.security);
+
+  ENetPeer peer = {};
+  peer.state = ENET_PEER_STATE_DISCONNECTED;
+  data.local_role = 1;
+  data.server_peer = &peer;
+  data.join_status = (int)MultiplayerStatus::RECONNECTING;
+  data.reconnect_attempt_active = true;
+  data.remote_entity.last_sequence_num = 99;
+  data.inbound_events.push_overwrite({});
+
+  ASSERT_TRUE(multiplayer_handle_host_leave(data, &peer, MultiplayerLeaveReason::HOST_CLOSED));
+  EXPECT_EQ(data.join_status, (int)MultiplayerStatus::HOST_LEFT);
+  EXPECT_EQ(data.server_peer, nullptr);
+  EXPECT_FALSE(data.security.authenticated());
+  EXPECT_FALSE(data.reconnect_attempt_active);
+  EXPECT_EQ(data.remote_entity.last_sequence_num, 0u);
+  EXPECT_TRUE(data.inbound_events.empty());
+  EXPECT_FALSE(multiplayer_handle_host_leave(data, &peer, MultiplayerLeaveReason::CLIENT_CLOSED));
 }
 
 TEST(MultiplayerReconnect, MissingInviteFailsWithoutStartingClient) {
@@ -345,7 +719,7 @@ TEST(MultiplayerSession, ClearsOnlyRemotePeerStateForActiveHost) {
 
   data.remote_entity.last_sequence_num = 42;
   data.remote_entity.riding = 1;
-  data.last_receive_time = 1234;
+  data.last_authenticated_receive_time = 1234;
   data.last_enemy_sequence = 9;
   data.remote_enemy_buffer.remote_enemies[0].actor_id = 7;
   data.traffic_buffer.vehicles[0].net_id = 11;
@@ -365,7 +739,7 @@ TEST(MultiplayerSession, ClearsOnlyRemotePeerStateForActiveHost) {
   EXPECT_FALSE(data.pending_full_sync);
   EXPECT_EQ(data.remote_entity.last_sequence_num, 0u);
   EXPECT_EQ(data.remote_entity.riding, 0u);
-  EXPECT_EQ(data.last_receive_time, 0u);
+  EXPECT_EQ(data.last_authenticated_receive_time, 0u);
   EXPECT_EQ(data.last_enemy_sequence, 0u);
   EXPECT_EQ(data.remote_enemy_buffer.remote_enemies[0].actor_id, 0u);
   EXPECT_EQ(data.traffic_buffer.vehicles[0].net_id, 0u);

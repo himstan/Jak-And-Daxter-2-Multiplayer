@@ -13,6 +13,7 @@
 #include <ostream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "tools/multiplayer_netem/netem_core.h"
 
@@ -21,6 +22,7 @@ namespace multiplayer_netem {
 bool parse_endpoint(std::string_view text, sockaddr_in& endpoint, std::string& error);
 std::string endpoint_to_string(const sockaddr_in& endpoint);
 bool same_endpoint(const sockaddr_in& left, const sockaddr_in& right);
+bool is_transient_receive_error(int error);
 
 class EndpointRouter {
  public:
@@ -33,11 +35,23 @@ class EndpointRouter {
   explicit EndpointRouter(sockaddr_in target);
 
   Route route_for(const sockaddr_in& source);
+  Route route_for(const sockaddr_in& source, NetemTimePoint now);
   std::optional<sockaddr_in> client_endpoint() const;
+  bool is_retired_endpoint(const sockaddr_in& endpoint) const;
 
  private:
+  struct ClientEndpoint {
+    sockaddr_in endpoint = {};
+    NetemTimePoint last_seen;
+  };
+
+  struct RetiredClient {
+    sockaddr_in endpoint = {};
+  };
+
   sockaddr_in m_target;
-  std::optional<sockaddr_in> m_client;
+  std::optional<ClientEndpoint> m_client;
+  std::vector<RetiredClient> m_retired_clients;
 };
 
 struct RelayConfig {
@@ -81,6 +95,8 @@ class UdpRelay {
   ImpairmentModel m_host_to_client_model;
   PacketQueue m_queue;
   RelayStats m_stats;
+  NetemTimePoint m_last_ignored_log_time;
+  NetemTimePoint m_last_receive_reset_log_time;
 };
 
 }  // namespace multiplayer_netem

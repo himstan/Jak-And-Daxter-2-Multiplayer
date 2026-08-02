@@ -627,6 +627,7 @@
   "mp-player-visibility.o" ;; added
   "mp-death-spectate.o" ;; added
   "mp-network.o" ;; added
+  "mp-reconnect.o" ;; added
   "mp-session.o" ;; added
   "mp-demo-guard.o" ;; added
   "mp-main.o" ;; added

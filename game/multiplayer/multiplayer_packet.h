@@ -61,6 +61,12 @@ bool mp_send_packet(MultiplayerData& data,
                     const void* packet_data,
                     size_t size,
                     ENetPacketFlag flags);
+bool mp_send_packet_immediately(MultiplayerData& data,
+                                ENetPeer* peer,
+                                int channel,
+                                const void* packet_data,
+                                size_t size,
+                                ENetPacketFlag flags);
 size_t mp_flush_packet_window(MultiplayerData& data);
 bool mp_send_packet_to_peer(ENetPeer* peer,
                             int channel,

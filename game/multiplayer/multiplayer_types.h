@@ -337,8 +337,11 @@ struct MultiplayerData {
   uint32_t last_event_receive_debug_time = 0;
 
   // Reconnection tracking
-  uint32_t last_receive_time = 0;
-  int pre_reconnect_status = 0;
+  uint32_t last_authenticated_receive_time = 0;
+  bool reconnect_attempt_active = false;
+  bool reconnect_waiting_for_full_sync = false;
+  uint32_t reconnect_attempt_count = 0;
+  uint32_t reconnect_next_attempt_time = 0;
 
   // Host-side temporary router mapping. The address remains private to the bridge.
   std::thread port_mapping_thread;

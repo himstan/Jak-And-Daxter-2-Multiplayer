@@ -23,13 +23,13 @@ struct EventDescriptor {
   const char* name;
 };
 
-inline constexpr uint16_t kWireRevision = 3;
+inline constexpr uint16_t kWireRevision = 4;
 inline constexpr size_t kPacketCount = 12;
 inline constexpr size_t kMaxPacketSize = 2048;
 inline constexpr std::array<PacketDescriptor, kPacketCount> kPackets = {{
     {0, "STATE_UPDATE", 3, 2, 2, 1024, 0, 0},
     {1, "EVENT_JOIN", 0, 0, 5, 0, 0, 0},
-    {2, "EVENT_LEAVE", 0, 0, 5, 0, 0, 0},
+    {2, "EVENT_LEAVE", 3, 0, 5, 1, 0, 0},
     {3, "EVENT_GAME", 3, 0, 5, 496, 0, 0},
     {4, "FULL_SYNC", 1, 1, 5, 2048, 0, 0},
     {5, "ENEMY_SYNC", 3, 2, 4, 2048, 0, 0},

@@ -119,7 +119,8 @@ void mp_handle_player_state_packet(MultiplayerData& data,
       data.pending_full_sync_sent_once) {
     data.pending_full_sync = false;
     data.pending_full_sync_sent_once = false;
-    lg::info("[Multiplayer] Client entered game. Full sync acknowledged.");
+    lg::info("[MP-Reconnect] Client entered game. Full sync acknowledged (sequence={}, status={}).",
+             state->header.sequenceNum, state->status);
   }
 
   if (remote && state->netId == 0) {
@@ -301,9 +302,12 @@ void mp_send_player_state(MultiplayerData& data, LocalPlayerInfoGOAL* local) {
   sync.weather_cloud = local->weather_cloud;
   sync.weather_fog = local->weather_fog;
   sync.weather_rain = local->weather_rain;
-  MultiplayerManager::broadcast(data, 1, sync, ENET_PACKET_FLAG_RELIABLE);
+  const bool queued = MultiplayerManager::broadcast(data, 1, sync, ENET_PACKET_FLAG_RELIABLE);
   data.pending_full_sync_sent_once = true;
-  lg::info("[Multiplayer] Sent full sync to client.");
+  lg::info("[MP-Reconnect] Full sync {} for client (sequence={}, pending={}, queued_packets={}, queued_bytes={}).",
+           queued ? "queued" : "rejected", sync.header.sequenceNum,
+           data.pending_full_sync.load(), data.packet_scheduler.queued_packet_count(),
+           data.packet_scheduler.queued_byte_count());
 }
 
 void mp_sync_remote_player_to_goal(MultiplayerData& data, RemotePlayerInfoGOAL* remote_goal) {

@@ -33,6 +33,12 @@ enum class MultiplayerStatus : int32_t {
   TOKEN_DISCOVERY_FAILED = -3
 };
 
+// ENet disconnect data distinguishes an intentional session shutdown from a
+// transport loss. Zero remains the transient/network-loss reason used by ENet
+// itself and by reconnect recovery.
+inline constexpr uint32_t kDisconnectReasonHostClosed = 1;
+inline constexpr uint32_t kDisconnectReasonClientClosed = 2;
+
 enum class PacketType : uint8_t {
   STATE_UPDATE = 0,
   EVENT_JOIN = 1,
@@ -53,6 +59,19 @@ struct PacketHeader {
   PacketType type;
   uint32_t sequenceNum;
 };
+
+enum class MultiplayerLeaveReason : uint8_t {
+  CLIENT_RECONNECTING = 1,
+  CLIENT_CLOSED = 2,
+  HOST_CLOSED = 3,
+};
+
+struct PacketLeave {
+  PacketHeader header;
+  MultiplayerLeaveReason reason;
+};
+
+static_assert(sizeof(PacketLeave) == 6, "PacketLeave must contain a one-byte reason");
 
 struct MPVehicleState {
   uint32_t net_id;

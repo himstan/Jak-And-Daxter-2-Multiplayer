@@ -151,6 +151,7 @@
   (set! *multi-sync-enabled?* #f)
   (set! *mp-reconnect-menu-active?* #f)
   (set! *mp-host-left-menu-active?* #f)
+  (mp-reconnect-reset-state!)
   (mp-clear-version-mismatch-ui!)
   (set! *mp-reconnect-process* (the-as handle #f))
   (set! *multi-last-send-time* (the-as time-frame 0))
@@ -169,31 +170,6 @@
         )
     (set! *multi-sync-enabled?* #t)
     )
-  (none))
-
-(defun mp-close-reconnect-ui-if-active! ()
-  (when *mp-reconnect-menu-active?*
-    (debug-log *mp-debug-log?* "[MP-Session] Connection restored. Closing Reconnect screen smoothly.~%")
-    (when (and *progress-process* (nonzero? (the-as uint *progress-process*)))
-      (set-next-state (-> *progress-process* 0) 'go-away 0)
-      )
-    (set! *mp-reconnect-menu-active?* #f)
-    )
-  (none))
-
-(defun mp-update-reconnect-ui! ((status int))
-  (if (= status 7)
-      (begin
-        (when (and (not *mp-reconnect-menu-active?*)
-                   *dproc*
-                   (nonzero? (the-as uint *dproc*)))
-          (debug-log *mp-debug-log?* "[MP-Session] Connection lost. Activating Reconnect screen.~%")
-          (activate-progress *dproc* 'reconnect)
-          (set! *mp-reconnect-menu-active?* #t)
-          )
-        )
-      (mp-close-reconnect-ui-if-active!)
-      )
   (none))
 
 (defun mp-enter-host-left-terminal-state! ()
@@ -289,6 +265,7 @@
           (when (= status 8)
             (set! *multi-sync-enabled?* #f)
             )
+          (mp-reconnect-observe-status! status)
           (mp-tomb-boulder-note-session-status! status)
           )
         (begin

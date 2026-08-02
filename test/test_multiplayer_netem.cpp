@@ -25,6 +25,7 @@ using multiplayer_netem::DirectionSettings;
 using multiplayer_netem::EndpointRouter;
 using multiplayer_netem::ImpairmentModel;
 using multiplayer_netem::NetemClock;
+using multiplayer_netem::NetemTimePoint;
 using multiplayer_netem::PacketQueue;
 using multiplayer_netem::QueuedDatagram;
 using multiplayer_netem::RelayConfig;
@@ -38,12 +39,12 @@ sockaddr_in loopback_endpoint(uint16_t port) {
   return endpoint;
 }
 
-SOCKET bind_ephemeral(sockaddr_in& endpoint) {
+SOCKET bind_port(uint16_t port, sockaddr_in& endpoint) {
   const SOCKET socket_handle = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
   if (socket_handle == INVALID_SOCKET) {
     return INVALID_SOCKET;
   }
-  const sockaddr_in requested = loopback_endpoint(0);
+  const sockaddr_in requested = loopback_endpoint(port);
   if (bind(socket_handle, reinterpret_cast<const sockaddr*>(&requested), sizeof(requested)) != 0) {
     closesocket(socket_handle);
     return INVALID_SOCKET;
@@ -54,6 +55,10 @@ SOCKET bind_ephemeral(sockaddr_in& endpoint) {
     return INVALID_SOCKET;
   }
   return socket_handle;
+}
+
+SOCKET bind_ephemeral(sockaddr_in& endpoint) {
+  return bind_port(0, endpoint);
 }
 
 bool send_text(SOCKET socket_handle, const sockaddr_in& destination, std::string_view text) {
@@ -126,6 +131,13 @@ TEST(MultiplayerNetemEndpoint, ParsesIpv4EndpointAndRejectsInvalidPorts) {
   EXPECT_FALSE(multiplayer_netem::parse_endpoint("127.0.0.1:0", endpoint, error));
   EXPECT_FALSE(multiplayer_netem::parse_endpoint("localhost:26212", endpoint, error));
   EXPECT_FALSE(multiplayer_netem::parse_endpoint("127.0.0.1", endpoint, error));
+}
+
+TEST(MultiplayerNetemEndpoint, TreatsWindowsUdpResetAsTransient) {
+  EXPECT_TRUE(multiplayer_netem::is_transient_receive_error(WSAEWOULDBLOCK));
+  EXPECT_TRUE(multiplayer_netem::is_transient_receive_error(WSAEINTR));
+  EXPECT_TRUE(multiplayer_netem::is_transient_receive_error(WSAECONNRESET));
+  EXPECT_FALSE(multiplayer_netem::is_transient_receive_error(WSAEINVAL));
 }
 
 TEST(MultiplayerNetemImpairment, SameSeedProducesSameLossAndDelayDecisions) {
@@ -217,18 +229,44 @@ TEST(MultiplayerNetemQueue, EnforcesPacketAndByteLimits) {
   EXPECT_EQ(queue.byte_count(), 0u);
 }
 
-TEST(MultiplayerNetemRouting, LearnsOneClientAndRejectsUnexpectedEndpoints) {
+TEST(MultiplayerNetemRouting, MigratesToReplacementAndRetiresOldEndpoints) {
   const sockaddr_in host = loopback_endpoint(26210);
-  const sockaddr_in client = loopback_endpoint(31001);
-  const sockaddr_in other = loopback_endpoint(31002);
+  const sockaddr_in first_client = loopback_endpoint(31001);
+  const sockaddr_in second_client = loopback_endpoint(31002);
+  const sockaddr_in third_client = loopback_endpoint(31003);
+  const auto base_time = NetemTimePoint{};
   EndpointRouter router(host);
 
-  EXPECT_EQ(router.route_for(client), EndpointRouter::Route::ClientToHost);
-  EXPECT_EQ(router.route_for(client), EndpointRouter::Route::ClientToHost);
-  EXPECT_EQ(router.route_for(host), EndpointRouter::Route::HostToClient);
-  EXPECT_EQ(router.route_for(other), EndpointRouter::Route::Ignored);
+  EXPECT_EQ(router.route_for(first_client, base_time), EndpointRouter::Route::ClientToHost);
+  EXPECT_EQ(router.route_for(first_client, base_time + std::chrono::milliseconds(1)),
+            EndpointRouter::Route::ClientToHost);
+  EXPECT_EQ(router.route_for(host, base_time + std::chrono::milliseconds(2)),
+            EndpointRouter::Route::HostToClient);
+  EXPECT_EQ(router.route_for(second_client, base_time + std::chrono::milliseconds(10)),
+            EndpointRouter::Route::ClientToHost);
   ASSERT_TRUE(router.client_endpoint().has_value());
-  EXPECT_TRUE(multiplayer_netem::same_endpoint(*router.client_endpoint(), client));
+  EXPECT_TRUE(multiplayer_netem::same_endpoint(*router.client_endpoint(), second_client));
+  EXPECT_TRUE(router.is_retired_endpoint(first_client));
+  EXPECT_EQ(router.route_for(first_client, base_time + std::chrono::milliseconds(11)),
+            EndpointRouter::Route::Ignored);
+
+  EXPECT_EQ(router.route_for(third_client, base_time + std::chrono::milliseconds(20)),
+            EndpointRouter::Route::ClientToHost);
+  ASSERT_TRUE(router.client_endpoint().has_value());
+  EXPECT_TRUE(multiplayer_netem::same_endpoint(*router.client_endpoint(), third_client));
+  EXPECT_TRUE(router.is_retired_endpoint(second_client));
+  EXPECT_EQ(router.route_for(second_client, base_time + std::chrono::milliseconds(21)),
+            EndpointRouter::Route::Ignored);
+
+  EXPECT_EQ(router.route_for(second_client, base_time + std::chrono::milliseconds(521)),
+            EndpointRouter::Route::ClientToHost);
+  ASSERT_TRUE(router.client_endpoint().has_value());
+  EXPECT_TRUE(multiplayer_netem::same_endpoint(*router.client_endpoint(), second_client));
+  EXPECT_FALSE(router.is_retired_endpoint(second_client));
+  EXPECT_EQ(router.route_for(third_client, base_time + std::chrono::milliseconds(522)),
+            EndpointRouter::Route::Ignored);
+  EXPECT_EQ(router.route_for(host, base_time + std::chrono::milliseconds(523)),
+            EndpointRouter::Route::HostToClient);
 }
 
 TEST(MultiplayerNetemRelay, PassesUdpInBothDirectionsWithoutImpairment) {
@@ -237,10 +275,14 @@ TEST(MultiplayerNetemRelay, PassesUdpInBothDirectionsWithoutImpairment) {
 
   sockaddr_in host_endpoint = {};
   sockaddr_in client_endpoint = {};
+  sockaddr_in replacement_endpoint = {};
   const SOCKET host_socket = bind_ephemeral(host_endpoint);
-  const SOCKET client_socket = bind_ephemeral(client_endpoint);
+  SOCKET client_socket = bind_ephemeral(client_endpoint);
+  const SOCKET replacement_socket = bind_ephemeral(replacement_endpoint);
   ASSERT_NE(host_socket, INVALID_SOCKET);
   ASSERT_NE(client_socket, INVALID_SOCKET);
+  ASSERT_NE(replacement_socket, INVALID_SOCKET);
+  const uint16_t client_port = ntohs(client_endpoint.sin_port);
 
   RelayConfig config;
   config.listen_port = 0;
@@ -265,6 +307,10 @@ TEST(MultiplayerNetemRelay, PassesUdpInBothDirectionsWithoutImpairment) {
 
   bool forward_ok = false;
   bool reverse_ok = false;
+  bool replacement_forward_ok = false;
+  bool replacement_reverse_ok = false;
+  bool reused_forward_ok = false;
+  bool reused_reverse_ok = false;
   if (relay_port != 0) {
     const sockaddr_in relay_endpoint = loopback_endpoint(relay_port);
     forward_ok = send_text(client_socket, relay_endpoint, "ping");
@@ -275,21 +321,155 @@ TEST(MultiplayerNetemRelay, PassesUdpInBothDirectionsWithoutImpairment) {
       sockaddr_in client_source = {};
       reverse_ok = reverse_ok && receive_text(client_socket, client_source, 2000) == "pong";
     }
+
+    replacement_forward_ok = send_text(replacement_socket, relay_endpoint, "new");
+    sockaddr_in replacement_source = {};
+    replacement_forward_ok = replacement_forward_ok &&
+                             receive_text(host_socket, replacement_source, 2000) == "new";
+    if (replacement_forward_ok) {
+      replacement_reverse_ok = send_text(host_socket, replacement_source, "ok");
+      sockaddr_in replacement_client_source = {};
+      replacement_reverse_ok = replacement_reverse_ok &&
+                               receive_text(replacement_socket, replacement_client_source, 2000) ==
+                                   "ok";
+    }
+
+    EXPECT_TRUE(send_text(client_socket, relay_endpoint, "old"));
+    sockaddr_in ignored_source = {};
+    EXPECT_TRUE(receive_text(host_socket, ignored_source, 200).empty());
+
+    closesocket(client_socket);
+    client_socket = INVALID_SOCKET;
+    std::this_thread::sleep_for(std::chrono::milliseconds(550));
+
+    sockaddr_in reused_endpoint = {};
+    const SOCKET reused_socket = bind_port(client_port, reused_endpoint);
+    reused_forward_ok = reused_socket != INVALID_SOCKET &&
+                        send_text(reused_socket, relay_endpoint, "reuse");
+    sockaddr_in reused_source = {};
+    reused_forward_ok = reused_forward_ok &&
+                        receive_text(host_socket, reused_source, 2000) == "reuse";
+    if (reused_forward_ok) {
+      reused_reverse_ok = send_text(host_socket, reused_source, "again");
+      sockaddr_in reused_client_source = {};
+      reused_reverse_ok = reused_reverse_ok &&
+                          receive_text(reused_socket, reused_client_source, 2000) == "again";
+    }
+    if (reused_socket != INVALID_SOCKET) {
+      closesocket(reused_socket);
+    }
   }
 
   stop_requested = true;
   relay_thread.join();
   closesocket(host_socket);
-  closesocket(client_socket);
+  if (client_socket != INVALID_SOCKET) {
+    closesocket(client_socket);
+  }
+  closesocket(replacement_socket);
 
   EXPECT_NE(relay_port, 0);
   EXPECT_TRUE(forward_ok);
   EXPECT_TRUE(reverse_ok);
+  EXPECT_TRUE(replacement_forward_ok);
+  EXPECT_TRUE(replacement_reverse_ok);
+  EXPECT_TRUE(reused_forward_ok);
+  EXPECT_TRUE(reused_reverse_ok);
   EXPECT_EQ(run_result.load(), 0);
-  EXPECT_EQ(relay.stats().client_to_host.forwarded_packets, 1u);
-  EXPECT_EQ(relay.stats().host_to_client.forwarded_packets, 1u);
-  EXPECT_EQ(relay.stats().client_to_host.received_bytes, 4u);
-  EXPECT_EQ(relay.stats().host_to_client.forwarded_bytes, 4u);
+  EXPECT_EQ(relay.stats().client_to_host.forwarded_packets, 3u);
+  EXPECT_EQ(relay.stats().host_to_client.forwarded_packets, 3u);
+  EXPECT_EQ(relay.stats().client_to_host.received_bytes, 12u);
+  EXPECT_EQ(relay.stats().host_to_client.forwarded_bytes, 11u);
+}
+
+TEST(MultiplayerNetemRelay, SurvivesUdpResetAndForwardsReplacementTraffic) {
+  WinsockScope winsock;
+  ASSERT_TRUE(winsock.ready);
+
+  sockaddr_in host_endpoint = {};
+  sockaddr_in client_endpoint = {};
+  sockaddr_in replacement_host_endpoint = {};
+  sockaddr_in replacement_client_endpoint = {};
+  SOCKET host_socket = bind_ephemeral(host_endpoint);
+  SOCKET client_socket = bind_ephemeral(client_endpoint);
+  SOCKET replacement_host_socket = INVALID_SOCKET;
+  SOCKET replacement_client_socket = INVALID_SOCKET;
+  ASSERT_NE(host_socket, INVALID_SOCKET);
+  ASSERT_NE(client_socket, INVALID_SOCKET);
+  const uint16_t host_port = ntohs(host_endpoint.sin_port);
+
+  RelayConfig config;
+  config.listen_port = 0;
+  config.target = host_endpoint;
+  config.client_to_host = no_impairment();
+  config.host_to_client = no_impairment();
+  UdpRelay relay(config);
+  std::atomic_bool stop_requested = false;
+  std::atomic_int run_result = -1;
+  std::ostringstream log;
+  std::thread relay_thread([&] { run_result = relay.run(stop_requested, log); });
+
+  uint16_t relay_port = 0;
+  for (int attempt = 0; attempt < 200 && relay_port == 0; ++attempt) {
+    relay_port = relay.bound_port();
+    if (relay_port == 0) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+  }
+
+  bool initial_forward_ok = false;
+  bool replacement_forward_ok = false;
+  if (relay_port != 0) {
+    const sockaddr_in relay_endpoint = loopback_endpoint(relay_port);
+    initial_forward_ok = send_text(client_socket, relay_endpoint, "initial");
+    sockaddr_in initial_source = {};
+    initial_forward_ok = initial_forward_ok &&
+                         receive_text(host_socket, initial_source, 2000) == "initial";
+
+    if (initial_forward_ok) {
+      closesocket(host_socket);
+      host_socket = INVALID_SOCKET;
+      EXPECT_TRUE(send_text(client_socket, relay_endpoint, "trigger-reset"));
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+      closesocket(client_socket);
+      client_socket = INVALID_SOCKET;
+      replacement_host_socket = bind_port(host_port, replacement_host_endpoint);
+      replacement_client_socket = bind_ephemeral(replacement_client_endpoint);
+      EXPECT_NE(replacement_host_socket, INVALID_SOCKET);
+      EXPECT_NE(replacement_client_socket, INVALID_SOCKET);
+      if (replacement_host_socket != INVALID_SOCKET &&
+          replacement_client_socket != INVALID_SOCKET) {
+        replacement_forward_ok = send_text(replacement_client_socket, relay_endpoint, "after-reset");
+        sockaddr_in replacement_source = {};
+        replacement_forward_ok = replacement_forward_ok &&
+                                 receive_text(replacement_host_socket, replacement_source, 2000) ==
+                                     "after-reset";
+      }
+    }
+  }
+
+  stop_requested = true;
+  relay_thread.join();
+  const std::string relay_log = log.str();
+  if (host_socket != INVALID_SOCKET) {
+    closesocket(host_socket);
+  }
+  if (client_socket != INVALID_SOCKET) {
+    closesocket(client_socket);
+  }
+  if (replacement_host_socket != INVALID_SOCKET) {
+    closesocket(replacement_host_socket);
+  }
+  if (replacement_client_socket != INVALID_SOCKET) {
+    closesocket(replacement_client_socket);
+  }
+
+  EXPECT_NE(relay_port, 0);
+  EXPECT_TRUE(initial_forward_ok);
+  EXPECT_TRUE(replacement_forward_ok);
+  EXPECT_NE(relay_log.find("recvfrom transient reset"), std::string::npos);
+  EXPECT_EQ(run_result.load(), 0);
 }
 
 #endif

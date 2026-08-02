@@ -153,6 +153,60 @@ bool mp_send_packet(MultiplayerData& data,
       target_peer, channel, packet_data, size, packet_type, size, flags);
 }
 
+bool mp_send_packet_immediately(MultiplayerData& data,
+                                ENetPeer* peer,
+                                int channel,
+                                const void* packet_data,
+                                size_t size,
+                                ENetPacketFlag flags) {
+  if (!data.host || !peer || peer->state != ENET_PEER_STATE_CONNECTED || !packet_data ||
+      size < kPacketHeaderWireSize || size > multiplayer::schema::kMaxPacketSize) {
+    return false;
+  }
+
+  const PacketType packet_type = static_cast<PacketType>(*static_cast<const uint8_t*>(packet_data));
+  const auto* descriptor = multiplayer::schema::packet_descriptor(static_cast<uint8_t>(packet_type));
+  if (!descriptor || size - kPacketHeaderWireSize > descriptor->max_payload) {
+    return false;
+  }
+
+  channel = (flags & ENET_PACKET_FLAG_RELIABLE)
+                ? static_cast<int>(MultiplayerChannel::CONTROL)
+                : static_cast<int>(MultiplayerChannel::STATE);
+
+  MultiplayerDatagram secured;
+  if (!data.security.seal(data.local_role, packet_type, packet_data, size, secured)) {
+    if (packet_type == PacketType::EVENT_LEAVE) {
+      lg::warn("[MP-Leave] Secure seal rejected EVENT_LEAVE (peer_state={}, plaintext_bytes={}).",
+               static_cast<int>(peer->state), size);
+    }
+    return false;
+  }
+
+  ENetPacket* packet = enet_packet_create(secured.bytes.data(), secured.size, flags);
+  if (!packet) {
+    if (packet_type == PacketType::EVENT_LEAVE) {
+      lg::warn("[MP-Leave] ENet packet allocation failed for EVENT_LEAVE (secure_bytes={}).",
+               secured.size);
+    }
+    return false;
+  }
+
+  const int send_result = enet_peer_send(peer, channel, packet);
+  if (packet_type == PacketType::EVENT_LEAVE) {
+    lg::info("[MP-Leave] enet_peer_send(EVENT_LEAVE) result={} (channel={}, secure_bytes={}, peer_state={}, reliable_in_transit_before_flush={}, waiting_data={}).",
+             send_result, channel, secured.size, static_cast<int>(peer->state),
+             peer->reliableDataInTransit, peer->totalWaitingData);
+  }
+  if (send_result != 0) {
+    enet_packet_destroy(packet);
+    return false;
+  }
+
+  data.stats.track_sent_packet(packet_type, size);
+  return true;
+}
+
 size_t mp_flush_packet_window(MultiplayerData& data) {
   return data.packet_scheduler.flush_plain(
       data.stats,

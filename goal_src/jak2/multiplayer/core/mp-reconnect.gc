@@ -1,0 +1,84 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: mp-reconnect.gc
+;; name in dgo: mp-reconnect
+
+(define-extern *dproc* process)
+(define-extern activate-progress (function process symbol none))
+(define-extern mp-reset-gameplay-state (function none))
+
+(define-perm *mp-reconnect-gameplay-reset?* symbol #f)
+
+(defun mp-reconnect-client? ()
+  (= (pc-multi-get-role) 1)
+  )
+
+(defun mp-reconnect-terminal-status? ((status int))
+  (or (< status 3)
+      (= status 8)
+      (= status -1)
+      (= status -2))
+  )
+
+(defun mp-reconnect-reset-state! ()
+  (set! *mp-reconnect-gameplay-reset?* #f)
+  (none)
+  )
+
+(defun mp-reconnect-reset-gameplay-if-needed! ()
+  (when (and (mp-reconnect-client?)
+             (not *mp-reconnect-gameplay-reset?*))
+    (mp-reset-gameplay-state)
+    (set! *mp-reconnect-gameplay-reset?* #t)
+    (debug-log *mp-debug-log?* "[MP-Reconnect] Cleared gameplay state for peer recovery.~%")
+    )
+  (none)
+  )
+
+(defun mp-reconnect-observe-status! ((status int))
+  (when (mp-reconnect-client?)
+    (cond
+      ((= status 7)
+       (mp-reconnect-reset-gameplay-if-needed!)
+       )
+      ((or (= status 6) (mp-reconnect-terminal-status? status))
+       (set! *mp-reconnect-gameplay-reset?* #f)
+       )
+      )
+    )
+  (none)
+  )
+
+(defun mp-close-reconnect-ui-if-finished! ((status int))
+  (when (and (mp-reconnect-client?)
+             *mp-reconnect-menu-active?*
+             (or (= status 6) (mp-reconnect-terminal-status? status)))
+    (debug-log *mp-debug-log?* "[MP-Reconnect] Closing reconnect screen after session completion.~%")
+    (when (and *progress-process* (nonzero? (the-as uint *progress-process*)))
+      (set-next-state (-> *progress-process* 0) 'go-away 0)
+      )
+    (set! *mp-reconnect-menu-active?* #f)
+    )
+  (none)
+  )
+
+(defun mp-update-reconnect-ui! ((status int))
+  (when (mp-reconnect-client?)
+    (cond
+      ((= status 7)
+       (when (and (not *mp-reconnect-menu-active?*)
+                  *dproc*
+                  (nonzero? (the-as uint *dproc*)))
+         (debug-log *mp-debug-log?* "[MP-Session] Connection lost. Activating Reconnect screen.~%")
+         (activate-progress *dproc* 'reconnect)
+         (set! *mp-reconnect-menu-active?* #t)
+         )
+       )
+      ((or (= status 6) (mp-reconnect-terminal-status? status))
+       (mp-close-reconnect-ui-if-finished! status)
+       )
+      )
+    )
+  (none)
+  )

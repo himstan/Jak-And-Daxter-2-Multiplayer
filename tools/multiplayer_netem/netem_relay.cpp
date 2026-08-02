@@ -20,6 +20,7 @@ namespace {
 
 constexpr auto kSelectInterval = std::chrono::milliseconds(10);
 constexpr auto kStatsInterval = std::chrono::seconds(1);
+constexpr auto kClientEndpointRebindIdle = std::chrono::milliseconds(500);
 
 sockaddr_in make_loopback_endpoint(uint16_t port) {
   sockaddr_in endpoint = {};
@@ -36,10 +37,6 @@ bool set_nonblocking(SOCKET socket, std::ostream& log) {
     return false;
   }
   return true;
-}
-
-bool is_would_block_error(int error) {
-  return error == WSAEWOULDBLOCK || error == WSAEINTR;
 }
 
 }  // namespace
@@ -84,21 +81,67 @@ bool same_endpoint(const sockaddr_in& left, const sockaddr_in& right) {
          left.sin_port == right.sin_port;
 }
 
+bool is_transient_receive_error(int error) {
+  return error == WSAEWOULDBLOCK || error == WSAEINTR || error == WSAECONNRESET;
+}
+
 EndpointRouter::EndpointRouter(sockaddr_in target) : m_target(target) {}
 
 EndpointRouter::Route EndpointRouter::route_for(const sockaddr_in& source) {
+  return route_for(source, NetemClock::now());
+}
+
+EndpointRouter::Route EndpointRouter::route_for(const sockaddr_in& source, NetemTimePoint now) {
   if (same_endpoint(source, m_target)) {
     return m_client ? Route::HostToClient : Route::Ignored;
   }
+
   if (!m_client) {
-    m_client = source;
+    m_client = ClientEndpoint{source, now};
     return Route::ClientToHost;
   }
-  return same_endpoint(source, *m_client) ? Route::ClientToHost : Route::Ignored;
+
+  if (same_endpoint(source, m_client->endpoint)) {
+    m_client->last_seen = now;
+    return Route::ClientToHost;
+  }
+
+  for (auto retired = m_retired_clients.begin(); retired != m_retired_clients.end(); ++retired) {
+    if (!same_endpoint(source, retired->endpoint)) {
+      continue;
+    }
+
+    if (now - m_client->last_seen < kClientEndpointRebindIdle) {
+      return Route::Ignored;
+    }
+
+    m_retired_clients.erase(retired);
+    break;
+  }
+
+  // A reconnect creates a fresh ENet host and normally changes the client's
+  // ephemeral UDP port. Keep the relay opaque and treat a new endpoint as the
+  // replacement client. Retired endpoints remain blocked while the current
+  // client is active, but may be reused after the current client goes quiet.
+  m_retired_clients.push_back(RetiredClient{m_client->endpoint});
+  m_client = ClientEndpoint{source, now};
+  return Route::ClientToHost;
 }
 
 std::optional<sockaddr_in> EndpointRouter::client_endpoint() const {
-  return m_client;
+  if (!m_client) {
+    return std::nullopt;
+  }
+  return m_client->endpoint;
+}
+
+bool EndpointRouter::is_retired_endpoint(const sockaddr_in& endpoint) const {
+  for (const auto& retired : m_retired_clients) {
+    if (same_endpoint(endpoint, retired.endpoint)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 UdpRelay::UdpRelay(RelayConfig config)
@@ -177,7 +220,15 @@ bool UdpRelay::receive_available(std::ostream& log) {
                                   reinterpret_cast<sockaddr*>(&source), &source_size);
     if (received == SOCKET_ERROR) {
       const int error = WSAGetLastError();
-      if (is_would_block_error(error)) {
+      if (is_transient_receive_error(error)) {
+        const auto now = NetemClock::now();
+        if (error == WSAECONNRESET &&
+            (m_last_receive_reset_log_time == NetemTimePoint{} ||
+             now - m_last_receive_reset_log_time >= kStatsInterval)) {
+          log << "[Netem] recvfrom transient reset: " << error << "; continuing relay.\n";
+          log.flush();
+          m_last_receive_reset_log_time = now;
+        }
         return true;
       }
       log << "[Netem] recvfrom failed: " << error << '\n';
@@ -187,8 +238,26 @@ bool UdpRelay::receive_available(std::ostream& log) {
       continue;
     }
 
+    const auto now = NetemClock::now();
+    const auto previous_client = m_router.client_endpoint();
+    const bool source_was_retired = m_router.is_retired_endpoint(source);
+    const auto route = m_router.route_for(source, now);
+    const auto current_client = m_router.client_endpoint();
+    if (route == EndpointRouter::Route::ClientToHost && current_client &&
+        (!previous_client || !same_endpoint(*previous_client, *current_client))) {
+      if (!previous_client) {
+        log << "[Netem] client endpoint learned: " << endpoint_to_string(*current_client)
+            << '\n';
+      } else {
+        log << "[Netem] client endpoint " << (source_was_retired ? "reused" : "migrated")
+            << ": " << endpoint_to_string(*previous_client) << " -> "
+            << endpoint_to_string(*current_client) << '\n';
+      }
+      log.flush();
+    }
+
     Direction direction;
-    switch (m_router.route_for(source)) {
+    switch (route) {
       case EndpointRouter::Route::ClientToHost:
         direction = Direction::ClientToHost;
         break;
@@ -203,6 +272,14 @@ bool UdpRelay::receive_available(std::ostream& log) {
       }
       case EndpointRouter::Route::Ignored:
         ++m_stats.ignored_packets;
+        if (m_last_ignored_log_time == NetemTimePoint{} ||
+            now - m_last_ignored_log_time >= kStatsInterval) {
+          log << "[Netem] ignored endpoint " << endpoint_to_string(source) << " (current="
+              << (current_client ? endpoint_to_string(*current_client) : "<none>")
+              << ", ignored=" << m_stats.ignored_packets << ")\n";
+          log.flush();
+          m_last_ignored_log_time = now;
+        }
         continue;
     }
 
@@ -215,7 +292,6 @@ bool UdpRelay::receive_available(std::ostream& log) {
       continue;
     }
 
-    const auto now = NetemClock::now();
     schedule_packet(direction, receive_buffer.data(), static_cast<size_t>(received), impairment,
                     now);
     if (impairment.duplicated) {
@@ -255,6 +331,7 @@ void UdpRelay::send_due_packets(std::ostream& log, NetemTimePoint now) {
 void UdpRelay::log_stats(std::ostream& log) const {
   const auto& upload = m_stats.client_to_host;
   const auto& download = m_stats.host_to_client;
+  const auto client = m_router.client_endpoint();
   log << "[Netem] stats upload rx=" << upload.received_packets << " tx="
       << upload.forwarded_packets << " loss=" << upload.dropped_packets << " dup="
       << upload.duplicated_packets << " queue-drop=" << upload.queue_dropped_packets
@@ -262,7 +339,8 @@ void UdpRelay::log_stats(std::ostream& log) const {
       << " loss=" << download.dropped_packets << " dup=" << download.duplicated_packets
       << " queue-drop=" << download.queue_dropped_packets << "; ignored="
       << m_stats.ignored_packets << " send-errors=" << m_stats.send_errors
-      << " queued=" << m_queue.packet_count() << "/" << m_config.max_queue_packets << '\n';
+      << " queued=" << m_queue.packet_count() << "/" << m_config.max_queue_packets
+      << " client=" << (client ? endpoint_to_string(*client) : "<none>") << '\n';
   log.flush();
 }
 

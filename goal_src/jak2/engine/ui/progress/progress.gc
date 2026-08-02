@@ -66,6 +66,7 @@
 (define *progress-state* (new 'static 'progress-global-state :which-slot -1 :last-slot-saved -1))
 
 (define-extern *mod-version-text* string)
+(define-extern mp-reconnect-reset-gameplay-if-needed! (function none))
 
 (kmemopen global "mc-slot-info")
 
@@ -3886,9 +3887,9 @@
             (let ((role (pc-multi-get-role)))
               (if (= role 1)
                   (begin
-                    (mp-reset-gameplay-state)
+                    (mp-reconnect-reset-gameplay-if-needed!)
                     (if (= (pc-multi-reconnect) 1)
-                        (set-next-state arg1 'go-away 0)
+                        (none)
                         (debug-log *mp-debug-log?* "[MP-UI] Reconnect attempt could not start; staying in menu.~%")
                         )
                     )
