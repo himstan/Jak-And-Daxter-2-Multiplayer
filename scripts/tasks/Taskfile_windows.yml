@@ -20,3 +20,96 @@ vars:
   CMAKE_GEN_BUILD_DIR_DEBUG: ""
   CMAKE_BUILD_DIR_RELEASE: "--build ./out/build/Release"
   CMAKE_BUILD_DIR_DEBUG: "--build ./out/build/Debug"
+
+tasks:
+  start-mp-netem:
+    desc: "Starts the local UDP multiplayer network emulator (Windows only)"
+    vars:
+      NETEM_PROFILE: '{{default "wifi" .NETEM_PROFILE}}'
+      NETEM_SEED: '{{default "1" .NETEM_SEED}}'
+    preconditions:
+      - sh: test -f {{.GK_BIN_RELEASE_DIR}}/multiplayer-netem{{.EXE_FILE_EXTENSION}}
+        msg: "Couldn't locate multiplayer-netem executable in '{{.GK_BIN_RELEASE_DIR}}'"
+    cmds:
+      - cmd: >-
+          powershell.exe -NoProfile -ExecutionPolicy Bypass
+          -File ./scripts/tasks/multiplayer-netem.ps1
+          -Action Start
+          -ExecutablePath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem{{.EXE_FILE_EXTENSION}}"
+          -PidPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.pid"
+          -LogPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.log"
+          -MetadataPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.meta.json"
+          -Profile "{{.NETEM_PROFILE}}"
+          -Seed "{{.NETEM_SEED}}"
+  stop-mp-netem:
+    desc: "Stops the local UDP multiplayer network emulator (Windows only)"
+    cmds:
+      - cmd: >-
+          powershell.exe -NoProfile -ExecutionPolicy Bypass
+          -File ./scripts/tasks/multiplayer-netem.ps1
+          -Action Stop
+          -ExecutablePath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem{{.EXE_FILE_EXTENSION}}"
+          -PidPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.pid"
+          -LogPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.log"
+          -MetadataPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.meta.json"
+  boot-game-netem:
+    desc: "Boots the host through the local UDP multiplayer network emulator (Windows only)"
+    vars:
+      NETEM_PROFILE: '{{default "wifi" .NETEM_PROFILE}}'
+      NETEM_SEED: '{{default "1" .NETEM_SEED}}'
+    preconditions:
+      - sh: test -f {{.GK_BIN_RELEASE_DIR}}/gk{{.EXE_FILE_EXTENSION}}
+        msg: "Couldn't locate runtime executable in '{{.GK_BIN_RELEASE_DIR}}/gk'"
+      - sh: test -f {{.GK_BIN_RELEASE_DIR}}/multiplayer-netem{{.EXE_FILE_EXTENSION}}
+        msg: "Couldn't locate multiplayer-netem executable in '{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem'"
+    cmds:
+      - cmd: >-
+          powershell.exe -NoProfile -ExecutionPolicy Bypass
+          -File ./scripts/tasks/multiplayer-netem.ps1
+          -Action RunHost
+          -ExecutablePath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem{{.EXE_FILE_EXTENSION}}"
+          -PidPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.pid"
+          -LogPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.log"
+          -MetadataPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.meta.json"
+          -Profile "{{.NETEM_PROFILE}}"
+          -Seed "{{.NETEM_SEED}}"
+          -GameExecutablePath "{{.GK_BIN_RELEASE_DIR}}/gk{{.EXE_FILE_EXTENSION}}"
+          -GameArguments "-v|--game|{{.GAME}}|--|-boot|-debug|-fakeiso|-snapshot|slot7|-mp-host|true"
+  run-game-netem:
+    desc: "Boots the host through the local UDP multiplayer network emulator (Windows only)"
+    vars:
+      NETEM_PROFILE: '{{default "wifi" .NETEM_PROFILE}}'
+      NETEM_SEED: '{{default "1" .NETEM_SEED}}'
+    preconditions:
+      - sh: test -f {{.GK_BIN_RELEASE_DIR}}/gk{{.EXE_FILE_EXTENSION}}
+        msg: "Couldn't locate runtime executable in '{{.GK_BIN_RELEASE_DIR}}/gk'"
+      - sh: test -f {{.GK_BIN_RELEASE_DIR}}/multiplayer-netem{{.EXE_FILE_EXTENSION}}
+        msg: "Couldn't locate multiplayer-netem executable in '{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem'"
+    cmds:
+      - cmd: >-
+          powershell.exe -NoProfile -ExecutionPolicy Bypass
+          -File ./scripts/tasks/multiplayer-netem.ps1
+          -Action RunHost
+          -ExecutablePath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem{{.EXE_FILE_EXTENSION}}"
+          -PidPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.pid"
+          -LogPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.log"
+          -MetadataPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.meta.json"
+          -Profile "{{.NETEM_PROFILE}}"
+          -Seed "{{.NETEM_SEED}}"
+          -GameExecutablePath "{{.GK_BIN_RELEASE_DIR}}/gk{{.EXE_FILE_EXTENSION}}"
+          -GameArguments "-v|--game|{{.GAME}}|--|-debug|-fakeiso|-snapshot|slot1|-mp-host|true"
+  boot-game-p2-netem:
+    desc: "Boots the client through the local UDP multiplayer network emulator (Windows only)"
+    preconditions:
+      - sh: test -f {{.GK_BIN_RELEASE_DIR}}/gk{{.EXE_FILE_EXTENSION}}
+        msg: "Couldn't locate runtime executable in '{{.GK_BIN_RELEASE_DIR}}/gk'"
+    cmds:
+      - cmd: >-
+          powershell.exe -NoProfile -ExecutionPolicy Bypass
+          -File ./scripts/tasks/multiplayer-netem.ps1
+          -Action Status
+          -ExecutablePath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem{{.EXE_FILE_EXTENSION}}"
+          -PidPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.pid"
+          -LogPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.log"
+          -MetadataPath "{{.GK_BIN_RELEASE_DIR}}/multiplayer-netem.meta.json"
+      - '{{.GK_BIN_RELEASE_DIR}}/gk --port 8120 -v --game jak2 -- -boot -debug -fakeiso -snapshot slot7 -mp-client 127.0.0.1 -mp-client-port 26212'

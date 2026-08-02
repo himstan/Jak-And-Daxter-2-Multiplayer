@@ -269,6 +269,24 @@ TEST(MultiplayerNetemRouting, MigratesToReplacementAndRetiresOldEndpoints) {
             EndpointRouter::Route::HostToClient);
 }
 
+TEST(MultiplayerNetemRouting, BoundsRetiredEndpointsAndExpiresIdleState) {
+  const sockaddr_in host = loopback_endpoint(26210);
+  const auto base_time = NetemTimePoint{};
+  EndpointRouter router(host);
+
+  for (uint16_t port = 32000; port < 32032; ++port) {
+    EXPECT_EQ(router.route_for(loopback_endpoint(port),
+                               base_time + std::chrono::milliseconds(port - 32000)),
+              EndpointRouter::Route::ClientToHost);
+  }
+
+  EXPECT_EQ(router.retired_endpoint_count(), 16u);
+  EXPECT_TRUE(router.expire_idle(base_time + std::chrono::seconds(31)));
+  EXPECT_FALSE(router.client_endpoint().has_value());
+  EXPECT_EQ(router.retired_endpoint_count(), 0u);
+  EXPECT_FALSE(router.expire_idle(base_time + std::chrono::seconds(32)));
+}
+
 TEST(MultiplayerNetemRelay, PassesUdpInBothDirectionsWithoutImpairment) {
   WinsockScope winsock;
   ASSERT_TRUE(winsock.ready);

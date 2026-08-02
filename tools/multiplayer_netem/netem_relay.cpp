@@ -21,6 +21,8 @@ namespace {
 constexpr auto kSelectInterval = std::chrono::milliseconds(10);
 constexpr auto kStatsInterval = std::chrono::seconds(1);
 constexpr auto kClientEndpointRebindIdle = std::chrono::milliseconds(500);
+constexpr auto kClientEndpointStateIdle = std::chrono::seconds(30);
+constexpr size_t kMaximumRetiredClients = 16;
 
 sockaddr_in make_loopback_endpoint(uint16_t port) {
   sockaddr_in endpoint = {};
@@ -123,9 +125,21 @@ EndpointRouter::Route EndpointRouter::route_for(const sockaddr_in& source, Netem
   // ephemeral UDP port. Keep the relay opaque and treat a new endpoint as the
   // replacement client. Retired endpoints remain blocked while the current
   // client is active, but may be reused after the current client goes quiet.
+  if (m_retired_clients.size() >= kMaximumRetiredClients) {
+    m_retired_clients.erase(m_retired_clients.begin());
+  }
   m_retired_clients.push_back(RetiredClient{m_client->endpoint});
   m_client = ClientEndpoint{source, now};
   return Route::ClientToHost;
+}
+
+bool EndpointRouter::expire_idle(NetemTimePoint now) {
+  if (!m_client || now - m_client->last_seen < kClientEndpointStateIdle) {
+    return false;
+  }
+  m_client.reset();
+  m_retired_clients.clear();
+  return true;
 }
 
 std::optional<sockaddr_in> EndpointRouter::client_endpoint() const {
@@ -142,6 +156,10 @@ bool EndpointRouter::is_retired_endpoint(const sockaddr_in& endpoint) const {
     }
   }
   return false;
+}
+
+size_t EndpointRouter::retired_endpoint_count() const {
+  return m_retired_clients.size();
 }
 
 UdpRelay::UdpRelay(RelayConfig config)
@@ -362,6 +380,11 @@ int UdpRelay::run(std::atomic_bool& stop_requested, std::ostream& log) {
 
   auto next_stats = NetemClock::now() + kStatsInterval;
   while (!stop_requested.load()) {
+    const auto before_select = NetemClock::now();
+    if (m_router.expire_idle(before_select)) {
+      log << "[Netem] client endpoint state expired after idle timeout; accepting a fresh client endpoint.\n";
+      log.flush();
+    }
     fd_set read_set;
     FD_ZERO(&read_set);
     FD_SET(m_socket, &read_set);

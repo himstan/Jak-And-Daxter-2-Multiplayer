@@ -36,8 +36,10 @@ class EndpointRouter {
 
   Route route_for(const sockaddr_in& source);
   Route route_for(const sockaddr_in& source, NetemTimePoint now);
+  bool expire_idle(NetemTimePoint now);
   std::optional<sockaddr_in> client_endpoint() const;
   bool is_retired_endpoint(const sockaddr_in& endpoint) const;
+  size_t retired_endpoint_count() const;
 
  private:
   struct ClientEndpoint {
