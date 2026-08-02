@@ -12159,16 +12159,18 @@ For example `20` would mean 4 red gun pickups, or 2 yellow gun pickups"
 (defun mp-gungame-send-red-intro-step! ((step uint))
   (when (and (mp-gungame-sync-active?) (mp-is-jak?))
     (set! *mp-gungame-red-intro-step* step)
-    (mp-event-enqueue!
-      (mp-event-build-gungame
-        MP_EVENT_MISSION_GUNGAME_TUTORIAL_STEP
-        MP_GUNGAME_COURSE_RED
-        step
-        0
-        (the uint 0)
-        (the uint 0)
-        (the uint 0)
-        (the uint 1)))
+    (let ((event (new 'stack-no-clear 'mp-gungame-event))
+          (details (new 'stack-no-clear 'mp-gungame-build-data)))
+      (set! (-> details event-type) MP_EVENT_MISSION_GUNGAME_TUTORIAL_STEP)
+      (set! (-> details course-id) MP_GUNGAME_COURSE_RED)
+      (set! (-> details step) step)
+      (set! (-> details score) 0)
+      (set! (-> details elapsed-time) (the uint 0))
+      (set! (-> details broken-mask) (the uint 0))
+      (set! (-> details open-end?) (the uint 0))
+      (set! (-> details end-door) (the uint 1))
+      (mp-event-enqueue!
+        (mp-event-build-gungame! event details)))
     )
   (none)
   )
@@ -12203,16 +12205,18 @@ For example `20` would mean 4 red gun pickups, or 2 yellow gun pickups"
 (defun mp-gungame-send-yellow-intro-step! ((step uint))
   (when (and (mp-gungame-sync-active?) (mp-is-jak?))
     (set! *mp-gungame-yellow-intro-step* step)
-    (mp-event-enqueue!
-      (mp-event-build-gungame
-        MP_EVENT_MISSION_GUNGAME_TUTORIAL_STEP
-        MP_GUNGAME_COURSE_YELLOW
-        step
-        0
-        (the uint 0)
-        (the uint 0)
-        (the uint 0)
-        (the uint 1)))
+      (let ((event (new 'stack-no-clear 'mp-gungame-event))
+            (details (new 'stack-no-clear 'mp-gungame-build-data)))
+        (set! (-> details event-type) MP_EVENT_MISSION_GUNGAME_TUTORIAL_STEP)
+        (set! (-> details course-id) MP_GUNGAME_COURSE_YELLOW)
+        (set! (-> details step) step)
+        (set! (-> details score) 0)
+        (set! (-> details elapsed-time) (the uint 0))
+        (set! (-> details broken-mask) (the uint 0))
+        (set! (-> details open-end?) (the uint 0))
+        (set! (-> details end-door) (the uint 1))
+        (mp-event-enqueue!
+          (mp-event-build-gungame! event details)))
     )
   (none)
   )

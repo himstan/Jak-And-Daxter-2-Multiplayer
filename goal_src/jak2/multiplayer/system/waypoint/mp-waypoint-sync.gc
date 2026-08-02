@@ -854,14 +854,17 @@
                                  (cache? symbol))
   (if (not (mp-waypoint-sync-ready?))
       (return #f))
-  (let ((event (mp-event-build-waypoint
-                 etype
-                 (-> course-bot course course-id)
-                 waypoint-id
-                 skipped?
-                 waypoint-request
-                 (if *scene-player* #t #f)
-                 (-> course-bot name))))
+  (let ((event (new 'stack-no-clear 'mp-waypoint-event)))
+    (set! event
+      (mp-event-build-waypoint!
+        event
+        etype
+        (-> course-bot course course-id)
+        waypoint-id
+        skipped?
+        waypoint-request
+        (if *scene-player* #t #f)
+        (-> course-bot name)))
     (when event
       (when cache?
         (mp-waypoint-cache-event! event)
@@ -932,14 +935,17 @@
   )
 
 (defun mp-waypoint-send-recent-command! ((recent mp-recent-waypoint-command))
-  (let ((event (mp-event-build-waypoint
-                 (-> recent etype)
-                 (-> recent course-id)
-                 (-> recent waypoint-id)
-                 (-> recent skipped?)
-                 (-> recent waypoint-request)
-                 (-> recent host-in-scene?)
-                 (the-as string #f))))
+  (let ((event (new 'stack-no-clear 'mp-waypoint-event)))
+    (set! event
+      (mp-event-build-waypoint!
+        event
+        (-> recent etype)
+        (-> recent course-id)
+        (-> recent waypoint-id)
+        (-> recent skipped?)
+        (-> recent waypoint-request)
+        (-> recent host-in-scene?)
+        (the-as string #f)))
     (when event
       (mp-waypoint-copy-recent-name-to-event! event recent)
       (mp-waypoint-copy-event-name-to-scratch! event)

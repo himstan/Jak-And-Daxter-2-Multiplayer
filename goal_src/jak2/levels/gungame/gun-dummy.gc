@@ -2295,16 +2295,18 @@
       (when (and (mp-gungame-dummy-sync-active?)
                  (mp-is-jak?)
                  (not *mp-processing-remote-event*))
-        (mp-event-enqueue!
-          (mp-event-build-gungame
-            MP_EVENT_MISSION_GUNGAME_TARGET_BROKEN
-            *mp-gungame-course-id*
-            (the uint (-> self info num))
-            0
-            (the uint 0)
-            (the uint 0)
-            (the uint 1)
-            (the uint 1)))
+        (let ((event (new 'stack-no-clear 'mp-gungame-event))
+              (details (new 'stack-no-clear 'mp-gungame-build-data)))
+          (set! (-> details event-type) MP_EVENT_MISSION_GUNGAME_TARGET_BROKEN)
+          (set! (-> details course-id) *mp-gungame-course-id*)
+          (set! (-> details step) (the uint (-> self info num)))
+          (set! (-> details score) 0)
+          (set! (-> details elapsed-time) (the uint 0))
+          (set! (-> details broken-mask) (the uint 0))
+          (set! (-> details open-end?) (the uint 1))
+          (set! (-> details end-door) (the uint 1))
+          (mp-event-enqueue!
+            (mp-event-build-gungame! event details)))
         )
       (send-event (handle->process (-> self train-man)) 'score (the int (-> self score)))
       (break-dummy self)

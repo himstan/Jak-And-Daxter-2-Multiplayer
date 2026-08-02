@@ -41,8 +41,9 @@
              *multi-sync-enabled?*
              (= (pc-multi-get-status) (mp-connection-status in-game))
              (not *mp-processing-remote-event*))
-    (mp-event-enqueue!
-      (mp-event-build-widow-bomb-kick slot kick-from kick-dest kick-height))
+    (let ((event (new 'stack-no-clear 'mp-widow-bomb-kick-event)))
+      (mp-event-enqueue!
+        (mp-event-build-widow-bomb-kick! event slot kick-from kick-dest kick-height)))
     )
   (none)
   )
@@ -73,8 +74,9 @@
              *multi-sync-enabled?*
              (= (pc-multi-get-status) (mp-connection-status in-game))
              (not *mp-processing-remote-event*))
-    (mp-event-enqueue!
-      (mp-event-build-widow-bomb-fizzle slot deadline))
+    (let ((event (new 'stack-no-clear 'mp-widow-bomb-fizzle-event)))
+      (mp-event-enqueue!
+        (mp-event-build-widow-bomb-fizzle! event slot deadline)))
     )
   (none)
   )

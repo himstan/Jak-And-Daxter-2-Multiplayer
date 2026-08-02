@@ -235,16 +235,18 @@
                                       (source-pos vector))
   (if (or (not (mp-palace-squid-ready?)) *mp-processing-remote-event*)
       (return #f))
-  (mp-event-enqueue!
-    (mp-event-build-palace-squid
-      evt-kind
-      sequence
-      param0
-      param1
-      param2
-      charge
-      target-pos
-      source-pos))
+  (let ((event (new 'stack-no-clear 'mp-palace-squid-event))
+        (details (new 'stack-no-clear 'mp-palace-squid-build-data)))
+    (set! (-> details evt-kind) evt-kind)
+    (set! (-> details sequence) sequence)
+    (set! (-> details param0) param0)
+    (set! (-> details param1) param1)
+    (set! (-> details param2) param2)
+    (set! (-> details charge) charge)
+    (set! (-> details target-pos) target-pos)
+    (set! (-> details source-pos) source-pos)
+    (mp-event-enqueue!
+      (mp-event-build-palace-squid! event details)))
   (none)
   )
 

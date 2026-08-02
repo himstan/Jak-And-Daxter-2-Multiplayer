@@ -218,8 +218,9 @@
              (nonzero? target)
              *multi-sync-enabled?*
              (= (pc-multi-get-status) (mp-connection-status in-game)))
-    (mp-event-enqueue!
-      (mp-event-build-fort-missile-target (-> target target-index))))
+    (let ((event (new 'stack-no-clear 'mp-fort-missile-target-event)))
+      (mp-event-enqueue!
+        (mp-event-build-fort-missile-target! event (-> target target-index)))))
   (none)
   )
 

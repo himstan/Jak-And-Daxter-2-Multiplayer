@@ -1458,7 +1458,9 @@
 
     ;; 2. Handle Local Player
     (when (and (= self *target*) (not (= (-> self tobot?) 'mp-puppet)))
-      (mp-event-enqueue! (mp-event-build-aid MP_EVENT_PLAYER_DIED (the-as uint 0)))
+      (let ((event (new 'stack-no-clear 'mp-aid-event)))
+        (mp-event-enqueue!
+          (mp-event-build-aid! event MP_EVENT_PLAYER_DIED (the-as uint 0))))
       (when (not use-local-respawn?)
         (mp-clear-local-vehicle-occupancy! self)
         (debug-log *mp-debug-log?* "[Target-Death] Mission Death. Spectating and waiting 20s...~%")
@@ -1512,7 +1514,9 @@
                  (let ((remote (mp-prepare-remote-spectate-target!)))
                    (when (and remote (nonzero? remote))
                       (when (mp-remote-level-ready?)
-                        (mp-event-enqueue! (mp-event-build-aid MP_EVENT_PLAYER_RESPAWNED (the-as uint 0)))
+                          (let ((event (new 'stack-no-clear 'mp-aid-event)))
+                            (mp-event-enqueue!
+                              (mp-event-build-aid! event MP_EVENT_PLAYER_RESPAWNED (the-as uint 0))))
                         (set! (-> self fact health) (/ (-> self fact health-max) 2.0))
                         (set! *mp-local-player-is-respawning* #t)
                         (remove-setting! 'mode-name)

@@ -2845,7 +2845,9 @@
              (!= (-> guard mp-last-puppet-zap-attack-id) (-> guard attack-id))
              )
     (set! (-> guard mp-last-puppet-zap-attack-id) (-> guard attack-id))
-    (mp-event-enqueue! (mp-event-build-aid MP_EVENT_PLAYER_HIT (the uint 2)))
+    (let ((event (new 'stack-no-clear 'mp-aid-event)))
+      (mp-event-enqueue!
+        (mp-event-build-aid! event MP_EVENT_PLAYER_HIT (the uint 2))))
     )
   (none)
   )

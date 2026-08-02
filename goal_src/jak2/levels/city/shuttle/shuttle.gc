@@ -1445,15 +1445,17 @@
                 (!= (-> task data-int32 SHUTTLE_SYNC_LAST_COUNTER) counter)
                 (time-elapsed? *mp-shuttle-last-health-send-time* (seconds 2)))
         (+! *mp-shuttle-local-sequence* 1)
-        (mp-event-enqueue!
-          (mp-event-build-shuttle
-            task-node
-            (-> task sub-state)
-            started?
-            (-> task time-limit)
-            (shuttle-current-remaining-time task)
-            counter
-            *mp-shuttle-local-sequence*))
+        (let ((event (new 'stack-no-clear 'mp-shuttle-event)))
+          (mp-event-enqueue!
+            (mp-event-build-shuttle!
+              event
+              task-node
+              (-> task sub-state)
+              started?
+              (-> task time-limit)
+              (shuttle-current-remaining-time task)
+              counter
+              *mp-shuttle-local-sequence*)))
         (set! (-> task data-int32 SHUTTLE_SYNC_LAST_SUB_STATE) (the-as int (-> task sub-state)))
         (set! (-> task data-int32 SHUTTLE_SYNC_LAST_STARTED) (the-as int started?))
         (set! (-> task data-int32 SHUTTLE_SYNC_LAST_COUNTER) counter)

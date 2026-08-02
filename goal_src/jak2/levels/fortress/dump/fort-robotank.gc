@@ -450,11 +450,13 @@
                   (nonzero? *target*)
                   (-> *target* control)
                   (nonzero? (-> *target* control)))
-         (mp-event-enqueue!
-           (mp-event-build-robotank-trigger
-             (-> self name)
-             (the-as int (-> arg3 param 0))
-             (-> *target* control trans)))
+         (let ((event (new 'stack-no-clear 'mp-robotank-trigger-event)))
+           (mp-event-enqueue!
+             (mp-event-build-robotank-trigger!
+               event
+               (-> self name)
+               (the-as int (-> arg3 param 0))
+               (-> *target* control trans))))
          )
        (if (< (-> self continue-index) 0)
            (add-process *gui-control* self (gui-channel alert) (gui-action play) "cityv107" -99.0 0)

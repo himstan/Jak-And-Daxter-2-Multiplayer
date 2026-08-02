@@ -399,7 +399,7 @@
                                    (the-as uint *mp-current-remote-hit-sound-id*)
                                    (mp-hit-sound-id-from-attack-info info))))
          (details (new 'stack-no-clear 'mp-actor-attack-build-data))
-         (event (the-as mp-actor-attack-event #f)))
+         (event (new 'stack-no-clear 'mp-actor-attack-event)))
     (set! (-> details net-id) net-id)
     (set! (-> details attack-id) attack-id)
     (set! (-> details flags) 0)
@@ -409,7 +409,7 @@
     (set! (-> details shove-up) shove-up)
     (set! (-> details hit-sound-id) hit-sound-id)
     (set! (-> details penetrate) (the-as uint penetrate))
-    (set! event (mp-event-build-actor-attack event-type details))
+    (set! event (mp-event-build-actor-attack! event event-type details))
     (when event
       (mp-actor-capture-source-pos! event e-proc attacker info)
       (mp-actor-capture-attack-dir! event e-proc info)

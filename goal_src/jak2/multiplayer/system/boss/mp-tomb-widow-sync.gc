@@ -162,8 +162,10 @@
              (nonzero? spawn-quat)
              launch-dest
              (nonzero? launch-dest))
-    (let ((event (mp-event-build-widow-spydroid
-                   spydroid-aid launch-slot spawn-trans spawn-quat launch-dest)))
+    (let ((event (new 'stack-no-clear 'mp-widow-spydroid-event)))
+      (set! event
+        (mp-event-build-widow-spydroid!
+          event spydroid-aid launch-slot spawn-trans spawn-quat launch-dest))
       (when event
         (debug-log *mp-debug-log?*
                    "[MP-Widow][HOST] launch aid=~D slot=~D trans=(~F,~F,~F) floor=~F~%"
@@ -189,7 +191,8 @@
              (< launch-slot 8)
              launch-dest
              (nonzero? launch-dest))
-    (let ((event (mp-event-build-widow-bomb launch-slot launch-dest)))
+    (let ((event (new 'stack-no-clear 'mp-widow-bomb-event)))
+      (set! event (mp-event-build-widow-bomb! event launch-slot launch-dest))
       (when event
         (debug-log *mp-debug-log?*
                    "[MP-Widow][HOST] bomb launch slot=~D dest=(~F,~F,~F)~%"
@@ -211,8 +214,9 @@
              hit-position
              (nonzero? hit-position)
              (or (= hit-amount 1) (= hit-amount 4)))
-    (mp-event-enqueue!
-      (mp-event-build-widow-bomb-hit hit-amount hit-position))
+    (let ((event (new 'stack-no-clear 'mp-widow-bomb-hit-event)))
+      (mp-event-enqueue!
+        (mp-event-build-widow-bomb-hit! event hit-amount hit-position)))
     )
   (none)
   )
@@ -224,8 +228,9 @@
              (not *mp-processing-remote-event*)
              (>= catwalk-index 1)
              (<= catwalk-index 7))
-    (mp-event-enqueue!
-      (mp-event-build-widow-catwalk-hit catwalk-index))
+    (let ((event (new 'stack-no-clear 'mp-widow-catwalk-hit-event)))
+      (mp-event-enqueue!
+        (mp-event-build-widow-catwalk-hit! event catwalk-index)))
     )
   (none)
   )

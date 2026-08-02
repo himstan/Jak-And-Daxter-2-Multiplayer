@@ -101,7 +101,8 @@
              (nonzero? end-pos)
              (-> gate entity)
              (nonzero? (-> gate entity)))
-    (let ((continue-name (the-as string #f)))
+    (let ((continue-name (the-as string #f))
+          (event (new 'stack-no-clear 'mp-warp-gate-event)))
       (let ((warp-gate (the-as warp-gate gate)))
         (when (and (-> warp-gate continue)
                    (nonzero? (-> warp-gate continue))
@@ -111,7 +112,8 @@
           )
         )
       (mp-event-enqueue!
-        (mp-event-build-warp-gate
+        (mp-event-build-warp-gate!
+          event
           (-> gate entity aid)
           (the-as uint phase)
           (the-as uint (if as-indax? MP_WARP_GATE_FLAG_INDAX 0))

@@ -1289,8 +1289,9 @@
                         (begin
                           (when (>= (- (current-time) (-> rec last-transfer-time)) (seconds 2))
                             (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Requesting authority over ~A aid=~D nid=~D - Local Aggro Detected!~%" e-proc enemy-aid enemy-nid)
-                            (mp-event-enqueue!
-                              (mp-event-build-aid MP_EVENT_ENEMY_AUTHORITY_REQUEST enemy-aid))
+                            (let ((event (new 'stack-no-clear 'mp-aid-event)))
+                              (mp-event-enqueue!
+                                (mp-event-build-aid! event MP_EVENT_ENEMY_AUTHORITY_REQUEST enemy-aid)))
                             (set! (-> rec last-transfer-time) (current-time))
                             (set! (-> rec is-aggro) #t)
                             )
@@ -1324,8 +1325,9 @@
                                        (< local-dist (- remote-dist (meters 10))))
                               (when (!= (-> rec owner) local-role)
                                 (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Requesting authority over ~A aid=~D nid=~D via proximity.~%" e-proc enemy-aid enemy-nid)
-                                (mp-event-enqueue!
-                                  (mp-event-build-aid MP_EVENT_ENEMY_AUTHORITY_REQUEST enemy-aid))
+                                (let ((event (new 'stack-no-clear 'mp-aid-event)))
+                                  (mp-event-enqueue!
+                                    (mp-event-build-aid! event MP_EVENT_ENEMY_AUTHORITY_REQUEST enemy-aid)))
                                 (set! (-> rec last-transfer-time) (current-time))
                                 )
                               )

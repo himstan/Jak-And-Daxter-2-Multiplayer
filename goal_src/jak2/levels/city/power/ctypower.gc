@@ -292,8 +292,9 @@
         ((= arg2 'guard-turret-killed)
          (let ((s4-1 (-> arg3 param 0)))
            (set! (-> self data-int32 s4-1) 1)
-           (mp-event-enqueue!
-             (mp-event-build-city-power (the-as uint s4-1) (the uint 1) (-> arg0 root trans)))
+           (let ((event (new 'stack-no-clear 'mp-city-power-event)))
+             (mp-event-enqueue!
+               (mp-event-build-city-power! event (the-as uint s4-1) (the uint 1) (-> arg0 root trans))))
            (let ((v1-12 (process-spawn
                           cty-guard-turret-button
                           :init basebutton-init-by-other
@@ -316,8 +317,9 @@
         ((= arg2 'guard-turret-button-pushed)
          (let ((v1-21 (-> arg3 param 0)))
            (set! (-> self data-int32 v1-21) 2)
-           (mp-event-enqueue!
-             (mp-event-build-city-power (the-as uint v1-21) (the uint 2) (-> arg0 root trans)))
+           (let ((event (new 'stack-no-clear 'mp-city-power-event)))
+             (mp-event-enqueue!
+               (mp-event-build-city-power! event (the-as uint v1-21) (the uint 2) (-> arg0 root trans))))
            (set! (-> self slave 10) (process->handle arg0))
            (logior! (-> self minimap v1-21 flags) (minimap-flag fade-out))
            (set! (-> self minimap v1-21) #f)

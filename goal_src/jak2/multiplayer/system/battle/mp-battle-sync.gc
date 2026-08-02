@@ -304,17 +304,23 @@
   (when (and (mp-battle-record-event-sendable? record battle-evt)
              *multi-sync-enabled?*
              (= (pc-multi-get-status) (mp-connection-status in-game)))
-    (let ((event (mp-event-build-battle
-                   battle-evt
-                   spawner-index
-                   breed-index
-                   initial?
-                   enemy-aid
-                   (if (= battle-evt MP_BATTLE_EVT_CLAIM)
-                       (-> record pending-owner-role)
-                       (-> record owner-role))
-                   (-> record epoch)
-                   roster-generation)))
+    (let ((event (new 'stack-no-clear 'mp-battle-event))
+          (details (new 'stack-no-clear 'mp-battle-build-data)))
+      (set! (-> details battle-action) battle-evt)
+      (set! (-> details spawner-index) spawner-index)
+      (set! (-> details breed-index) breed-index)
+      (set! (-> details initial?) initial?)
+      (set! (-> details enemy-aid) enemy-aid)
+      (set! (-> details owner-role)
+            (if (= battle-evt MP_BATTLE_EVT_CLAIM)
+                (-> record pending-owner-role)
+                (-> record owner-role)))
+      (set! (-> details epoch) (-> record epoch))
+      (set! (-> details roster-generation) roster-generation)
+      (set! event
+        (mp-event-build-battle!
+          event
+          details))
       (when event
         (mp-battle-fill-event-name! event record)
         (mp-event-enqueue! event)
