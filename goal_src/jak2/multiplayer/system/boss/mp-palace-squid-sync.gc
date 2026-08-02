@@ -17,7 +17,7 @@
 
 (defun mp-palace-squid-ready? ()
   (and *multi-sync-enabled?*
-       (= (pc-multi-get-status) 6)
+       (= (pc-multi-get-status) (mp-connection-status in-game))
        *mp-palace-squid-buffer*
        (nonzero? (the-as uint *mp-palace-squid-buffer*))
        )

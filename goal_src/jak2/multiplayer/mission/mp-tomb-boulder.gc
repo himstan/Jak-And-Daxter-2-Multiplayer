@@ -25,7 +25,7 @@
 (defun mp-tomb-boulder-split-active? ()
   (the symbol
        (and *multi-sync-enabled?*
-            (= (pc-multi-get-status) 6)))
+            (= (pc-multi-get-status) (mp-connection-status in-game))))
   )
 
 (defun mp-tomb-boulder-task-closed? ((node game-task-node))
@@ -277,7 +277,7 @@
     (set! (-> *local-info* sync-flag) (the-as uint 0))
     )
   (set! *multi-sync-enabled?* #t)
-  (pc-multi-set-status 6)
+  (pc-multi-set-status (mp-connection-status in-game))
   (debug-log *mp-debug-log?* "[MP-TombBoulder] Ignored host full sync during the isolated Daxter chase.~%")
   (none)
   )
@@ -295,14 +295,15 @@
   (none)
   )
 
-(defun mp-tomb-boulder-note-session-status! ((status int))
+(defun mp-tomb-boulder-note-session-status! ((status mp-connection-status))
   (when (and (mp-is-daxter?)
-             (or (= status 7) (= status 8)))
+             (or (= status (mp-connection-status reconnecting))
+                 (= status (mp-connection-status host-left))))
     (set! *mp-tomb-boulder-reconnect-restart?* #t)
     (set! *mp-tomb-boulder-completion-pending?* #f)
     (set! *mp-tomb-boulder-full-sync-local-placement?* #f)
     )
-  (when (= status 8)
+  (when (= status (mp-connection-status host-left))
     (mp-tomb-boulder-set-respawn-policy! (should-player-block-remote-respawn?))
     )
   (none)
@@ -317,7 +318,7 @@
       (task-node-close! (game-task-node tomb-poles-boulder))
       )
     (when (and *multi-sync-enabled?*
-               (= (pc-multi-get-status) 6)
+               (= (pc-multi-get-status) (mp-connection-status in-game))
                (not *mp-processing-remote-event*))
       (mp-event-enqueue!
         (mp-event-build-actor-name MP_EVENT_MISSION_TOMB_BOULDER_COMPLETE ""))

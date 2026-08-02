@@ -14,11 +14,11 @@
   (= (pc-multi-get-role) 1)
   )
 
-(defun mp-reconnect-terminal-status? ((status int))
-  (or (< status 3)
-      (= status 8)
-      (= status -1)
-      (= status -2))
+(defun mp-reconnect-terminal-status? ((status mp-connection-status))
+  (or (< status (mp-connection-status connecting))
+      (= status (mp-connection-status host-left))
+      (= status (mp-connection-status failed))
+      (= status (mp-connection-status version-mismatch)))
   )
 
 (defun mp-reconnect-reset-state! ()
@@ -36,13 +36,13 @@
   (none)
   )
 
-(defun mp-reconnect-observe-status! ((status int))
+(defun mp-reconnect-observe-status! ((status mp-connection-status))
   (when (mp-reconnect-client?)
     (cond
-      ((= status 7)
+      ((= status (mp-connection-status reconnecting))
        (mp-reconnect-reset-gameplay-if-needed!)
        )
-      ((or (= status 6) (mp-reconnect-terminal-status? status))
+      ((or (= status (mp-connection-status in-game)) (mp-reconnect-terminal-status? status))
        (set! *mp-reconnect-gameplay-reset?* #f)
        )
       )
@@ -50,10 +50,10 @@
   (none)
   )
 
-(defun mp-close-reconnect-ui-if-finished! ((status int))
+(defun mp-close-reconnect-ui-if-finished! ((status mp-connection-status))
   (when (and (mp-reconnect-client?)
              *mp-reconnect-menu-active?*
-             (or (= status 6) (mp-reconnect-terminal-status? status)))
+             (or (= status (mp-connection-status in-game)) (mp-reconnect-terminal-status? status)))
     (debug-log *mp-debug-log?* "[MP-Reconnect] Closing reconnect screen after session completion.~%")
     (when (and *progress-process* (nonzero? (the-as uint *progress-process*)))
       (set-next-state (-> *progress-process* 0) 'go-away 0)
@@ -63,10 +63,10 @@
   (none)
   )
 
-(defun mp-update-reconnect-ui! ((status int))
+(defun mp-update-reconnect-ui! ((status mp-connection-status))
   (when (mp-reconnect-client?)
     (cond
-      ((= status 7)
+      ((= status (mp-connection-status reconnecting))
        (when (and (not *mp-reconnect-menu-active?*)
                   *dproc*
                   (nonzero? (the-as uint *dproc*)))
@@ -75,7 +75,7 @@
          (set! *mp-reconnect-menu-active?* #t)
          )
        )
-      ((or (= status 6) (mp-reconnect-terminal-status? status))
+      ((or (= status (mp-connection-status in-game)) (mp-reconnect-terminal-status? status))
        (mp-close-reconnect-ui-if-finished! status)
        )
       )

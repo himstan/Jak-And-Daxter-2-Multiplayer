@@ -48,7 +48,7 @@
   "Suppress bogus player endlessfall while MP cutscene/level transitions own the world."
   (the symbol
     (and *multi-sync-enabled?*
-         (= (pc-multi-get-status) 6)
+         (= (pc-multi-get-status) (mp-connection-status in-game))
          (mp-multiplayer-scene-or-load-active?))
     )
   )

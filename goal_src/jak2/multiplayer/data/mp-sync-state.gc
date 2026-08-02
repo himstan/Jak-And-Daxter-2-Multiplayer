@@ -137,7 +137,7 @@
   (when (and (mp-is-daxter?)
              *local-info*
              (nonzero? *local-info*)
-             (>= (pc-multi-get-status) 4)
+             (>= (pc-multi-get-status) (mp-connection-status connected-lobby))
              (or *multi-sync-enabled?* (nonzero? (-> *local-info* sync-flag)))
              (or (mp-client-presentation-black?)
                  (< (current-time) *mp-post-clear-diag-until*))
@@ -322,7 +322,7 @@
             (debug-log *mp-debug-log?* "[MP-Sync-State] Starting Full Sync Hard Load for ~S...~%" *mp-continue-name*)
             (mp-close-full-sync-progress-ui!)
             (set! *multi-sync-enabled?* #f)
-            (pc-multi-set-status 5)
+            (pc-multi-set-status (mp-connection-status game-starting))
             (set! (-> *local-info* sync-flag) (the-as uint 2))
             (set-continue! *game-info* *mp-continue-name* #t)
             (initialize! *game-info* 'game (the-as game-save #f) *mp-continue-name*)
@@ -431,7 +431,7 @@
          (mp-force-apply-remote-environment-state)
          (mp-force-clear-full-sync-progress-ui!)
          (mp-clear-client-presentation-blackout!)
-         (pc-multi-set-status 6)
+         (pc-multi-set-status (mp-connection-status in-game))
 
          (set! (-> *local-info* sync-flag) (the-as uint 0))
          (set! *mp-intro-skip-blackout-pending?* #f)

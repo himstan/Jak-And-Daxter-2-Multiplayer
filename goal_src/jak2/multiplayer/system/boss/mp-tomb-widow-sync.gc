@@ -127,7 +127,7 @@
              *mp-widow-buffer*
              (nonzero? (the-as uint *mp-widow-buffer*))
              *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6))
+             (= (pc-multi-get-status) (mp-connection-status in-game)))
     (if (mp-is-jak?)
         (begin
           (mp-widow-pack-state! proc (-> *mp-widow-buffer* local-state))
@@ -153,7 +153,7 @@
                                  (launch-dest vector))
   (when (and (mp-is-jak?)
              *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              (not *mp-processing-remote-event*)
              (> spydroid-aid 0)
              spawn-trans
@@ -183,7 +183,7 @@
 (defun mp-widow-queue-bomb! ((launch-slot int) (launch-dest vector))
   (when (and (mp-is-jak?)
              *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              (not *mp-processing-remote-event*)
              (>= launch-slot 0)
              (< launch-slot 8)
@@ -206,7 +206,7 @@
 
 (defun mp-widow-queue-bomb-hit! ((hit-amount int) (hit-position vector))
   (when (and *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              (not *mp-processing-remote-event*)
              hit-position
              (nonzero? hit-position)
@@ -219,7 +219,7 @@
 
 (defun mp-widow-queue-catwalk-hit! ((catwalk-index int))
   (when (and *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              (mp-is-jak?)
              (not *mp-processing-remote-event*)
              (>= catwalk-index 1)

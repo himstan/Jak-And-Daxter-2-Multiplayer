@@ -258,7 +258,7 @@
 
 (defun mp-remote-scene-active? ()
   (and *multi-sync-enabled?*
-       (= (pc-multi-get-status) 6)
+       (= (pc-multi-get-status) (mp-connection-status in-game))
        (or *mp-pending-scene-sync?*
            (nonzero? *mp-last-remote-scene-active*)
            (and *remote-info*

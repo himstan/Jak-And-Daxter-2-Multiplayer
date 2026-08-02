@@ -76,7 +76,7 @@
 (defun mp-should-use-local-respawn? ()
   (the symbol
        (and *multi-sync-enabled?*
-            (= (pc-multi-get-status) 6)
+            (= (pc-multi-get-status) (mp-connection-status in-game))
             (or *mp-block-local-respawn-on-remote?*
                 (mp-remote-blocks-respawn?))))
   )

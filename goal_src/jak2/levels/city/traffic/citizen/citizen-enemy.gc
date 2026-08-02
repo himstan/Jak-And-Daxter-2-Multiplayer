@@ -208,7 +208,7 @@
         (let ((local-target (if (and *target* (nonzero? *target*) (mp-combat-valid-player-target? *target* #f))
                                 (the-as process-focusable *target*)
                                 (the-as process-focusable #f)))
-              (remote-target (if (and *multi-sync-enabled?* (= (pc-multi-get-status) 6) *mp-puppet* (nonzero? *mp-puppet*) (mp-combat-valid-player-target? *mp-puppet* #f))
+              (remote-target (if (and *multi-sync-enabled?* (= (pc-multi-get-status) (mp-connection-status in-game)) *mp-puppet* (nonzero? *mp-puppet*) (mp-combat-valid-player-target? *mp-puppet* #f))
                                  *mp-puppet*
                                  (the-as process-focusable #f))))
           (let ((best-player (mp-combat-best-player-target this (the-as process-focusable #f) local-target remote-target)))

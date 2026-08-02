@@ -263,7 +263,7 @@
 
 (defun mp-draw-traffic-authority-bubbles ()
   (when (and *mp-traffic-bubble-debug?*
-             (nonzero? (pc-multi-get-status))
+             (mp-connection-status-active? (pc-multi-get-status))
              *target*
              (nonzero? *target*)
              (-> *target* control)

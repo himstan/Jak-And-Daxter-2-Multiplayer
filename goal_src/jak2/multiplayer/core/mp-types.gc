@@ -1,6 +1,29 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+;; Keep these values in sync with MultiplayerStatus in
+;; game/multiplayer/multiplayer_protocol.h.
+(defenum mp-connection-status
+  :type int32
+  (idle                    0)
+  (searching               1)
+  (found                   2)
+  (connecting              3)
+  (connected-lobby         4)
+  (game-starting           5)
+  (in-game                 6)
+  (reconnecting            7)
+  (host-left               8)
+  (failed                 -1)
+  (version-mismatch       -2)
+  (token-discovery-failed -3)
+  )
+
+(defun mp-connection-status-active? ((status mp-connection-status))
+  "Return true for every connection status except the offline/idle state."
+  (!= status (mp-connection-status idle))
+  )
+
 ;; --- Globals for Throttling ---
 (define-perm *log-level-warn* symbol #f)
 (define-perm *multi-last-send-time* time-frame 0)
@@ -1133,8 +1156,8 @@
 (define-extern pc-multi-setup-host (function none))
 (define-extern pc-multi-setup-internet-host (function none))
 (define-extern pc-multi-setup-client (function string int none))
-(define-extern pc-multi-get-status (function int))
-(define-extern pc-multi-set-status (function int none))
+(define-extern pc-multi-get-status (function mp-connection-status))
+(define-extern pc-multi-set-status (function mp-connection-status none))
 (define-extern pc-multi-request-full-sync (function none))
 (define-extern mp-close-local-fail-mission! (function none))
 (define-extern pc-multi-connect-found-host (function none))
@@ -1205,7 +1228,7 @@
 (define-extern mp-battle-note-local-end! (function battle none))
 (define-extern mp-battle-note-enemy-death! (function enemy none))
 (define-extern mp-battle-request-rosters! (function none))
-(define-extern mp-battle-sync-tick (function int none))
+(define-extern mp-battle-sync-tick (function mp-connection-status none))
 (define-extern mp-reset-battle-sync-state! (function none))
 (define-extern mp-arm-mission-failed-full-sync-after-spawn (function none))
 (define-extern mp-request-mission-failed-full-sync-when-ready (function none))

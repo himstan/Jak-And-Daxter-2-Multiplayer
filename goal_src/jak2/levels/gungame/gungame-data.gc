@@ -12119,7 +12119,7 @@ For example `20` would mean 4 red gun pickups, or 2 yellow gun pickups"
   )
 (defun mp-gungame-sync-active? ()
   (and *multi-sync-enabled?*
-       (= (pc-multi-get-status) 6)
+       (= (pc-multi-get-status) (mp-connection-status in-game))
        )
   )
 
@@ -12392,7 +12392,7 @@ For example `20` would mean 4 red gun pickups, or 2 yellow gun pickups"
 
 (defun mp-gungame-set-deterministic-rand! ((target-info tpath-info))
   (when (and *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              target-info)
     (set! *tpath-rand* (mp-gungame-deterministic-rand target-info))
     )

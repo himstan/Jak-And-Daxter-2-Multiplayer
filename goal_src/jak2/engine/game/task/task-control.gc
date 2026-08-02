@@ -1653,7 +1653,7 @@
            (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons confirm))
            (when (and (mp-is-jak?)
                       *multi-sync-enabled?*
-                      (= (pc-multi-get-status) 6)
+                      (= (pc-multi-get-status) (mp-connection-status in-game))
              (not (logtest? (-> self flags) (fail-mission-flags famflags-3))))
              (mp-event-enqueue!
                (mp-event-build-actor-name MP_EVENT_MISSION_FAILED_RETRY_YES ""))
@@ -1671,7 +1671,7 @@
            (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons triangle))
            (when (and (mp-is-jak?)
                       *multi-sync-enabled?*
-                      (= (pc-multi-get-status) 6))
+                      (= (pc-multi-get-status) (mp-connection-status in-game)))
              (mp-event-enqueue!
                (mp-event-build-actor-name MP_EVENT_MISSION_FAILED_RETRY_NO ""))
              )
@@ -1760,7 +1760,7 @@
            )
          (when (and (mp-is-jak?)
                     *multi-sync-enabled?*
-                    (= (pc-multi-get-status) 6))
+                    (= (pc-multi-get-status) (mp-connection-status in-game)))
            (debug-log *mp-debug-log?* "[Task-Control] Host mission failed without retry. Waiting for post-reload spawn before full sync.~%")
            (set! *mp-mission-failed-full-sync-await-spawn?* #t)
            (set! *mp-mission-failed-full-sync-pending?* #f)
@@ -1778,7 +1778,7 @@
             )
           (when (and (mp-is-jak?)
                      *multi-sync-enabled?*
-                     (= (pc-multi-get-status) 6))
+                     (= (pc-multi-get-status) (mp-connection-status in-game)))
             (debug-log *mp-debug-log?* "[Task-Control] Host retry selected. Waiting for post-reload spawn before full sync.~%")
             (set! *mp-mission-failed-full-sync-await-spawn?* #t)
             (set! *mp-mission-failed-full-sync-pending?* #f)

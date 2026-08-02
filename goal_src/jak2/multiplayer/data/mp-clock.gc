@@ -11,7 +11,7 @@
   "Update Client Clock AFTER sync - GUARDED to avoid black screen during load"
   (with-pp
     (if (and (mp-is-daxter?)
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              *multi-sync-enabled?*
              (zero? (-> *local-info* sync-flag))
              *target*

@@ -65,7 +65,7 @@
      (debug-log *mp-debug-log?* "[MP-EventQueue] Rejected oversized event ID ~D size ~D.~%"
                 (-> event etype) (-> event payload-size))
      #f)
-    ((or (not *multi-sync-enabled?*) (!= (pc-multi-get-status) 6))
+    ((or (not *multi-sync-enabled?*) (!= (pc-multi-get-status) (mp-connection-status in-game)))
      #f)
     ((mp-event-queue-full?)
      (debug-log *mp-debug-log?* "[MP-EventQueue] Queue full; dropping newest event ID ~D.~%"

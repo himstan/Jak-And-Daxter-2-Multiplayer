@@ -68,7 +68,7 @@
 
 (defun mp-fort-elec-gate-remote-level-ready? ()
   (when (or (not *multi-sync-enabled?*)
-            (!= (pc-multi-get-status) 6))
+            (!= (pc-multi-get-status) (mp-connection-status in-game)))
     (return #t)
     )
   (when (not (and *load-state*

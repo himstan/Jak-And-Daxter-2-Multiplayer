@@ -217,7 +217,7 @@
   (when (and target
              (nonzero? target)
              *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6))
+             (= (pc-multi-get-status) (mp-connection-status in-game)))
     (mp-event-enqueue!
       (mp-event-build-fort-missile-target (-> target target-index))))
   (none)

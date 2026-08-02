@@ -8,7 +8,7 @@ This gives us more freedom to write code how we want.
 
 (defun-extern pc-get-last-key uint)
 (defun-extern draw-generic-highlight int int float pointer)
-(defun-extern mp-update-version-mismatch-ui! int none)
+(defun-extern mp-update-version-mismatch-ui! mp-connection-status none)
 
 (defun mp-progress-intro-start! ((hero-mode? symbol))
   (set! (-> *game-info* mode) 'play)
@@ -1157,7 +1157,7 @@ This gives us more freedom to write code how we want.
   )
 
 (defun mp-progress-host-peer-ready? ()
-  (= (pc-multi-get-status) 4)
+  (= (pc-multi-get-status) (mp-connection-status connected-lobby))
   )
 
 (defun mp-progress-advance-host-if-ready! ((p progress))
@@ -1167,7 +1167,7 @@ This gives us more freedom to write code how we want.
            (not *multi-sync-enabled?*))
       (begin
         (sound-play "generic-beep")
-        (pc-multi-set-status (the-as int 5))
+        (pc-multi-set-status (mp-connection-status game-starting))
         (when (and *local-info* (nonzero? (the-as uint *local-info*)))
           (set! (-> *local-info* sync-flag) (the-as uint 0)))
 
@@ -1229,7 +1229,7 @@ This gives us more freedom to write code how we want.
   )
 
 (deftype menu-join-search-option (menu-option)
-  ((last-status int32)
+  ((last-status mp-connection-status)
    )
   )
 
@@ -1238,7 +1238,7 @@ This gives us more freedom to write code how we want.
     (when (!= status (-> obj last-status))
       (set! (-> obj last-status) status)
       (cond
-        ((= status 4) ;; Connected
+        ((= status (mp-connection-status connected-lobby)) ;; Connected
          (sound-play "generic-beep")
          (set! *multi-sync-enabled?* #t)
          )
@@ -1256,17 +1256,17 @@ This gives us more freedom to write code how we want.
     (+! (-> font-ctx origin y) 11.0)
     (set-color! font-ctx (font-color progress))
     
-    (if (or (= status -2) *mp-version-mismatch-menu-active?*)
+    (if (or (= status (mp-connection-status version-mismatch)) *mp-version-mismatch-menu-active?*)
         (format (clear *temp-string*)
                 (lookup-text! *common-text* (text-id progress-version-mismatch) #f)
                 (mp-required-version-for-display))
         (let ((msg (cond
-                     ((= status 1) (text-id progress-searching))
-                     ((= status 2) (text-id progress-joining))
-                     ((= status 3) (text-id progress-joining))
-                     ((= status 4) (text-id progress-connected))
-                     ((= status -1) (text-id progress-no-games-found))
-                     ((= status -3) (text-id progress-token-discovery-failed))
+                     ((= status (mp-connection-status searching)) (text-id progress-searching))
+                     ((= status (mp-connection-status found)) (text-id progress-joining))
+                     ((= status (mp-connection-status connecting)) (text-id progress-joining))
+                     ((= status (mp-connection-status connected-lobby)) (text-id progress-connected))
+                     ((= status (mp-connection-status failed)) (text-id progress-no-games-found))
+                     ((= status (mp-connection-status token-discovery-failed)) (text-id progress-token-discovery-failed))
                      (else (text-id progress-searching))
                      )))
           (format (clear *temp-string*) "~S" (lookup-text! *common-text* msg #f))))

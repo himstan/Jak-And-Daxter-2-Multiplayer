@@ -5,7 +5,7 @@
 
 (defun mp-darkjak-session-active? ()
   (and *multi-sync-enabled?*
-       (= (pc-multi-get-status) 6)
+       (= (pc-multi-get-status) (mp-connection-status in-game))
        )
   )
 

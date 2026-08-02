@@ -39,7 +39,7 @@
              kick-dest
              (nonzero? kick-dest)
              *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              (not *mp-processing-remote-event*))
     (mp-event-enqueue!
       (mp-event-build-widow-bomb-kick slot kick-from kick-dest kick-height))
@@ -71,7 +71,7 @@
              (> deadline 0)
              (mp-is-jak?)
              *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              (not *mp-processing-remote-event*))
     (mp-event-enqueue!
       (mp-event-build-widow-bomb-fizzle slot deadline))

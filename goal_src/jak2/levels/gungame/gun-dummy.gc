@@ -2180,7 +2180,7 @@
 
 (defun mp-gungame-dummy-sync-active? ()
   (and *multi-sync-enabled?*
-       (= (pc-multi-get-status) 6)
+       (= (pc-multi-get-status) (mp-connection-status in-game))
        (or (task-node-open? (game-task-node city-red-gun-training-try-once))
            (task-node-open? (game-task-node city-red-gun-training-resolution))
            (task-node-open? (game-task-node city-yellow-gun-training-resolution)))

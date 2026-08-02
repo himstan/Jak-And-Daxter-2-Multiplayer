@@ -875,7 +875,7 @@
 
 (defun mp-waypoint-local-command-can-send? ((course-bot bot))
   (and *multi-sync-enabled?*
-       (= (pc-multi-get-status) 6)
+       (= (pc-multi-get-status) (mp-connection-status in-game))
        (mp-waypoint-sync-ready?)
        (not *mp-processing-remote-event*)
        (not *mp-waypoint-applying-remote?*)
@@ -970,7 +970,7 @@
 
 (defun mp-waypoint-send-command-replays! ()
   (when (and *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              (mp-waypoint-sync-ready?)
              (>= (- (current-time) *mp-waypoint-last-snapshot-time*) (seconds 1)))
     (set! *mp-waypoint-last-snapshot-time* (current-time))
@@ -981,7 +981,7 @@
 
 (defun mp-waypoint-send-host-snapshot! ()
   (when (and *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              (mp-is-jak?)
              (mp-waypoint-sync-ready?)
              (>= (- (current-time) *mp-waypoint-last-snapshot-time*) (seconds 1)))

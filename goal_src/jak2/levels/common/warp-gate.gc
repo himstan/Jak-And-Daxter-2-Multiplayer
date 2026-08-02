@@ -591,7 +591,7 @@
        (nonzero? actor)
        (= actor *target*)
        *multi-sync-enabled?*
-       (= (pc-multi-get-status) 6)
+       (= (pc-multi-get-status) (mp-connection-status in-game))
        (not *mp-processing-remote-event*)
        )
   )

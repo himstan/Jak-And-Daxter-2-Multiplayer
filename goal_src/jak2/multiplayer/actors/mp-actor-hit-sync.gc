@@ -378,7 +378,7 @@
                                     (net-id uint)
                                     (new-hp int))
   "Queue a generic actor hit request with attack context for reconstruction."
-  (if (or (not *multi-sync-enabled?*) (!= (pc-multi-get-status) 6))
+  (if (or (not *multi-sync-enabled?*) (!= (pc-multi-get-status) (mp-connection-status in-game)))
       (return #f))
   (if (zero? net-id)
       (return #f))

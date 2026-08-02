@@ -155,7 +155,7 @@
 
 (defun mp-event-hook-pole-grab! ((pole-handle handle))
   "Record the local swingpole AID through the shared event queue."
-  (if (or (not *multi-sync-enabled?*) (!= (pc-multi-get-status) 6))
+  (if (or (not *multi-sync-enabled?*) (!= (pc-multi-get-status) (mp-connection-status in-game)))
       (return #f))
   (when (or (not *mp-pole-grab-latched?*)
             (!= *mp-last-pole-grab-handle* pole-handle))
@@ -185,7 +185,7 @@
 
 (defun mp-event-hook-edge-grab! ((pilot? symbol))
   "Pack local edge-grab state and enqueue one typed event."
-  (if (or (not *multi-sync-enabled?*) (!= (pc-multi-get-status) 6))
+  (if (or (not *multi-sync-enabled?*) (!= (pc-multi-get-status) (mp-connection-status in-game)))
       (return #f))
   (debug-log *mp-debug-log?*
              "[MP-Events] Authoritative Edge Grab broadcast! (Pilot: ~A)~%"
@@ -202,7 +202,7 @@
 
 (defun mp-event-hook-scene! ((state mp-scene-state) (name string))
   (when (and *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              (not (mp-tomb-scene-transport-suppressed? name)))
     (let ((event-type
             (cond

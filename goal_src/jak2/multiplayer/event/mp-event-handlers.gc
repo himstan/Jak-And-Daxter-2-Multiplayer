@@ -300,7 +300,7 @@
 (defun mp-intro-skip-host-ready-for-full-sync? ()
   "True once the host has landed at the prison continue after the skipped intro."
   (and (mp-is-jak?)
-       (= (pc-multi-get-status) 6)
+       (= (pc-multi-get-status) (mp-connection-status in-game))
        (not *scene-player*)
        *target*
        (nonzero? *target*)
@@ -335,7 +335,7 @@
   "Keep the client hidden between intro scene teardown and the host's authoritative full sync."
   (when (and *mp-intro-skip-blackout-pending?*
              (mp-is-daxter?)
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              (not *scene-player*))
     (set-blackout-frames (seconds 0.05))
     )
@@ -1196,7 +1196,7 @@
   "Arm the retry full-sync only after the host's retry reload has spawned Jak again."
   (when (and *mp-mission-failed-full-sync-await-spawn?*
              (mp-is-jak?)
-             (= (pc-multi-get-status) 6))
+             (= (pc-multi-get-status) (mp-connection-status in-game)))
     (debug-log *mp-debug-log?* "[MP-Events] Post-reload spawn observed. Full sync pending.~%")
     (set! *mp-mission-failed-full-sync-await-spawn?* #f)
     (set! *mp-mission-failed-full-sync-pending?* #t)
@@ -1214,7 +1214,7 @@
        (set! *mp-mission-failed-full-sync-pending?* #f)
        (set! *mp-mission-failed-full-sync-next-log-time* (the-as time-frame 0))
        )
-      ((and (= (pc-multi-get-status) 6)
+      ((and (= (pc-multi-get-status) (mp-connection-status in-game))
             (time-elapsed? *mp-mission-failed-full-sync-ready-time* (seconds 1))
             *target*
             (-> *target* control)
@@ -1233,7 +1233,7 @@
        )
       (else
         (cond
-          ((not (= (pc-multi-get-status) 6))
+          ((not (= (pc-multi-get-status) (mp-connection-status in-game)))
            (mp-log-mission-failed-full-sync-wait "network status is not IN_GAME")
            )
           ((not (time-elapsed? *mp-mission-failed-full-sync-ready-time* (seconds 1)))

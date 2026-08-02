@@ -70,7 +70,7 @@
   "Catch up a client that connected after this scene-player started."
   (when (and (mp-is-jak?)
              *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              (mp-scene-catchup-client-connected?)
              *mp-active-local-scene-name*
              (nonzero? *mp-active-local-scene-name*)

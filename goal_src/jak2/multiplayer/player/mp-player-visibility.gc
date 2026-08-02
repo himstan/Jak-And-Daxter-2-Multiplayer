@@ -30,7 +30,7 @@
         )
 
     ;; 3. Sidekick visibility management (Hide if not riding or in movie)
-    (when (nonzero? (pc-multi-get-status))
+    (when (mp-connection-status-active? (pc-multi-get-status))
       ;; Local Sidekick (The Daxter on your shoulder)
       (when (and *target* (nonzero? *target*) (-> *target* sidekick) (nonzero? (-> *target* sidekick)))
         (let ((sk (the-as sidekick (ppointer->process (-> *target* sidekick)))))

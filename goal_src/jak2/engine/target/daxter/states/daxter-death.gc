@@ -36,7 +36,7 @@
                (the-as float (send-event (handle->process-safe (-> self attack-info attacker)) 'target 'die arg0)))
          (set! (-> self neck flex-blend) 0.0)
          (target-timed-invulnerable-off self 0)
-         (if (not (and *multi-sync-enabled?* (= (pc-multi-get-status) 6)))
+         (if (not (and *multi-sync-enabled?* (= (pc-multi-get-status) (mp-connection-status in-game))))
              (set-setting! 'process-mask 'set 0.0 (process-mask enemy platform projectile death))
              )
          (when (not (or (= (-> self tobot?) 'tobot) (= (-> self tobot?) 'mp-puppet)))
@@ -118,7 +118,7 @@
   ;; --- MP MULTIPLAYER DEATH HIJACK ---
   (let ((use-local-respawn? (mp-begin-local-death-respawn-policy! self)))
     (when (and *multi-sync-enabled?*
-               (= (pc-multi-get-status) 6))
+               (= (pc-multi-get-status) (mp-connection-status in-game)))
     ;; 1. Handle Remote Puppets
     (when (= (-> self tobot?) 'mp-puppet)
       (debug-log *mp-debug-log?* "[Daxter-Death] Indax Death Sequence Complete. Waiting for remote respawn...~%")

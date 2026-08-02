@@ -654,7 +654,7 @@
   :code (behavior ()
     (local-vars (f30-0 float))
     (when (and *multi-sync-enabled?*
-               (= (pc-multi-get-status) 6)
+               (= (pc-multi-get-status) (mp-connection-status in-game))
                (mp-is-daxter?)
                (-> self pilot)
                (nonzero? (-> self pilot))

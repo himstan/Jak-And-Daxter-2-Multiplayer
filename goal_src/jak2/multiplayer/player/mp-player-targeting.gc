@@ -52,7 +52,7 @@
 (defun mp-combat-remote-player-target ((require-control? symbol))
   "Return the remote player if multiplayer is live and they are valid for combat targeting."
   (if (and *multi-sync-enabled?*
-           (= (pc-multi-get-status) 6)
+           (= (pc-multi-get-status) (mp-connection-status in-game))
            *local-info*
            (nonzero? *local-info*))
       (let ((remote-proc *mp-puppet*))

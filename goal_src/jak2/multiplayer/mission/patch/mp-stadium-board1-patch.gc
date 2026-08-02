@@ -36,7 +36,7 @@
 
 (defun mp-stadium-board1-queue-event ((evt-id uint) (score int))
   (when (and *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              (not *mp-processing-remote-event*))
     (mp-event-enqueue!
       (mp-event-build-stadium-board evt-id score))
@@ -75,7 +75,7 @@
 
 (defun mp-stadium-board1-mission-active? ()
   (and *multi-sync-enabled?*
-       (= (pc-multi-get-status) 6)
+       (= (pc-multi-get-status) (mp-connection-status in-game))
        (not (task-node-closed? (game-task-node stadium-board1-resolution)))
        )
   )
@@ -214,7 +214,7 @@
 (defun mp-stadium-board1-broadcast-score! ((score int) (force? symbol))
   (let ((previous-score *mp-stadium-board1-last-score-sent*))
     (when (and *multi-sync-enabled?*
-               (= (pc-multi-get-status) 6)
+               (= (pc-multi-get-status) (mp-connection-status in-game))
                *mp-stadium-board1-active?*
                (or force?
                    (!= score previous-score)))

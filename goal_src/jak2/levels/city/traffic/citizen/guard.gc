@@ -2839,7 +2839,7 @@
              *local-info*
              (nonzero? *local-info*)
              *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              (= (-> *local-info* role) 0)
              (mp-crimson-guard-remote-daxter-puppet? proc)
              (!= (-> guard mp-last-puppet-zap-attack-id) (-> guard attack-id))

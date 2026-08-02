@@ -28,7 +28,7 @@
 (defun mp-update-left-behind-teleport! ((condition symbol) (ride-along? symbol))
   "Manages the countdown timer and text warning for the left-behind state, executing the generic teleportation logic upon countdown completion."
   (when (and *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              *target*
              (nonzero? *target*)
              (-> *target* control)

@@ -725,7 +725,7 @@
 
 (defun mp-sync-traffic-update ()
   (let ((status (pc-multi-get-status)))
-    (when (and (nonzero? status) *mp-traffic-sync-active*)
+    (when (and (mp-connection-status-active? status) *mp-traffic-sync-active*)
       (mp-traffic-debug-update-frame-context!)
       (if (or (mp-multiplayer-scene-active?)
               (and (mp-multiplayer-level-load-active?)

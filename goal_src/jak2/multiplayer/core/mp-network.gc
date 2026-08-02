@@ -1,8 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(defun mp-network-status-ready? ((status int))
-  (if (< status 3)
+(defun mp-network-status-ready? ((status mp-connection-status))
+  (if (< status (mp-connection-status connecting))
       (begin
         (when *multi-sync-enabled?*
           (debug-log *mp-debug-log?* "[MP-Network] Return Early: Status ~D, SyncEnabled? ~A~%" status *multi-sync-enabled?*)
@@ -21,7 +21,7 @@
        (not (focus-test? *target* teleporting)))
   )
 
-(defun mp-network-log-active-sync! ((status int) (role int))
+(defun mp-network-log-active-sync! ((status mp-connection-status) (role int))
   (when (and *local-info*
              (nonzero? (the-as uint *local-info*))
              (>= (- (current-time) *multi-last-sync-frame*) (seconds 5)))
@@ -33,11 +33,11 @@
     )
   (none))
 
-(defun mp-network-pack-local-frame! ((status int))
+(defun mp-network-pack-local-frame! ((status mp-connection-status))
   (when (and *local-info*
              (nonzero? (the-as uint *local-info*)))
     (let ((role (-> *local-info* role)))
-      (when (and (= status 6)
+      (when (and (= status (mp-connection-status in-game))
                  (or (zero? role) *multi-sync-enabled?*))
         (mp-extract-environment-state)
         (when (mp-local-frame-target-ready?)

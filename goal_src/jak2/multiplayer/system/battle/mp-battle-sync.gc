@@ -40,7 +40,9 @@
   (inline-array mp-battle-spawn-record)
   (new 'static 'inline-array mp-battle-spawn-record MP_MAX_BATTLE_SPAWN_RECORDS))
 (define-perm *mp-battle-name-scratch* string (new 'global 'string 32 ""))
-(define-perm *mp-battle-last-session-status* int -1)
+(define-perm *mp-battle-last-session-status*
+  mp-connection-status
+  (mp-connection-status failed))
 (define-perm *mp-battle-last-roster-request* time-frame (the-as time-frame 0))
 (define-perm *mp-battle-sync-initialized?* symbol #f)
 
@@ -215,7 +217,7 @@
     (mp-battle-clear-spawn-record! (-> *mp-battle-spawn-records* idx))
     )
   (set! *mp-battle-spawn-counter* (the uint 0))
-  (set! *mp-battle-last-session-status* -1)
+  (set! *mp-battle-last-session-status* (mp-connection-status failed))
   (set! *mp-battle-last-roster-request* (the-as time-frame 0))
   (set! *mp-battle-sync-initialized?* #t)
   (none)
@@ -301,7 +303,7 @@
                                       (roster-generation uint))
   (when (and (mp-battle-record-event-sendable? record battle-evt)
              *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6))
+             (= (pc-multi-get-status) (mp-connection-status in-game)))
     (let ((event (mp-event-build-battle
                    battle-evt
                    spawner-index
@@ -397,7 +399,7 @@
 
 (defun mp-battle-handle-local-trigger! ((battle-proc battle))
   (mp-battle-ensure-initialized!)
-  (when (or (not *multi-sync-enabled?*) (!= (pc-multi-get-status) 6))
+  (when (or (not *multi-sync-enabled?*) (!= (pc-multi-get-status) (mp-connection-status in-game)))
     (return #t)
     )
   (when (not (and battle-proc
@@ -1194,7 +1196,7 @@
           (if (zero? (-> record missing-since))
               (set! (-> record missing-since) (current-time))
               (when (and (>= (- (current-time) (-> record missing-since)) (seconds 2))
-                         (= (pc-multi-get-status) 6))
+                         (= (pc-multi-get-status) (mp-connection-status in-game)))
                 (mp-battle-queue-record-event! record MP_BATTLE_EVT_RELEASE 0 0 #f (the uint 0) (the uint 0))
                 (set! (-> record active?) #f)
                 (set! (-> record start-applied?) #f)
@@ -1207,8 +1209,8 @@
   (none)
   )
 
-(defun mp-battle-host-adopt-disconnected-client! ((status int))
-  (when (and (= status 7)
+(defun mp-battle-host-adopt-disconnected-client! ((status mp-connection-status))
+  (when (and (= status (mp-connection-status reconnecting))
              *local-info*
              (nonzero? *local-info*)
              (= (-> *local-info* role) 0))
@@ -1224,9 +1226,10 @@
   (none)
   )
 
-(defun mp-battle-sync-tick ((status int))
+(defun mp-battle-sync-tick ((status mp-connection-status))
   (mp-battle-ensure-initialized!)
-  (when (and (= status 6) (!= *mp-battle-last-session-status* 6))
+  (when (and (= status (mp-connection-status in-game))
+             (!= *mp-battle-last-session-status* (mp-connection-status in-game)))
     (mp-battle-request-rosters!)
     )
   (mp-battle-host-adopt-disconnected-client! status)

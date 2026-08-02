@@ -63,7 +63,7 @@
 (defun mp-player-queue-gun-shot! ((gun-type uint))
   "Queue a reliable gun-shot replay event through the common event API."
   (if (or (not *multi-sync-enabled?*)
-          (!= (pc-multi-get-status) 6)
+          (!= (pc-multi-get-status) (mp-connection-status in-game))
           *mp-processing-remote-event*)
       (return #f))
   (let ((weapon (mp-pickup-type->equipped-weapon gun-type)))

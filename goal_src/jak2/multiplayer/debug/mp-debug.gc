@@ -139,7 +139,7 @@
         )
       (format *stdcon* "~0k--- MP NETWORK DEBUG ---~%")
       (format *stdcon* "ROLE:      ~S~%" role-str)
-      (if (> (pc-multi-get-status) 3)
+      (if (> (pc-multi-get-status) (mp-connection-status connecting))
           (format *stdcon* "PEER:      CONNECTED~%")
           (format *stdcon* "PEER:      NONE~%")
           )
@@ -400,7 +400,7 @@
       (format *stdcon* "ROLE: ~S~%" role)
       )
     (let ((squid-ready? (and *multi-sync-enabled?*
-                             (= (pc-multi-get-status) 6)
+                             (= (pc-multi-get-status) (mp-connection-status in-game))
                              *mp-palace-squid-buffer*
                              (nonzero? (the-as uint *mp-palace-squid-buffer*))
                              )))

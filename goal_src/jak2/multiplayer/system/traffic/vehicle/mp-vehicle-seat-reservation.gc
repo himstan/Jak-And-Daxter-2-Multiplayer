@@ -7,7 +7,7 @@
              (nonzero? *local-info*)
              *remote-info*
              (nonzero? *remote-info*)
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              (= (-> *remote-info* status) 6))
     (let ((local-level (mp-level-packed-primary-id (-> *local-info* level)))
           (remote-level (mp-level-packed-primary-id (-> *remote-info* level))))

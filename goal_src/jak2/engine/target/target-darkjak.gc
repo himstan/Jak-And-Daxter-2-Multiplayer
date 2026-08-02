@@ -932,7 +932,7 @@
 
 (defmethod update-clock! ((this darkjak-info) (arg0 int))
   (if (and *multi-sync-enabled?*
-           (= (pc-multi-get-status) 6))
+           (= (pc-multi-get-status) (mp-connection-status in-game)))
       (begin
         (set! (-> this clock-pos) 1.0)
         (set! (-> this clock-vel) 0.0)

@@ -1107,7 +1107,7 @@
 
 (defun mp-shuttle-local-rebel-dropoff-authority? ()
   "Return true when this client owns shuttle rebel dropoff completion."
-  (or (not (and *multi-sync-enabled?* (= (pc-multi-get-status) 6)))
+  (or (not (and *multi-sync-enabled?* (= (pc-multi-get-status) (mp-connection-status in-game))))
       (mp-is-jak?)
       )
   )
@@ -1272,7 +1272,7 @@
 (defun mp-shuttle-check-teleport-left-behind! ()
   "Check if the local player is left behind by a rebel vehicle driven by the remote player."
   (when (and *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              *target*
              (nonzero? *target*)
              *remote-info*
@@ -1431,7 +1431,7 @@
   (when (and task
              (nonzero? task)
              *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6)
+             (= (pc-multi-get-status) (mp-connection-status in-game))
              (not *mp-processing-remote-event*))
     (let ((started? (if (nonzero? (-> task data-int32 9)) (the uint 1) (the uint 0)))
           (counter (shuttle-counter-from-sub-state task (-> task sub-state)))

@@ -10,11 +10,11 @@
 (define-extern mp-demo-guard-tick (function none))
 (define-extern mp-demo-guard-on-local-spawn! (function none))
 
-(defun mp-client-ready-to-enable-sync-on-spawn? ((status int))
+(defun mp-client-ready-to-enable-sync-on-spawn? ((status mp-connection-status))
   (and *local-info*
        (nonzero? (the-as uint *local-info*))
        (= (-> *local-info* role) 1)
-       (= status 6)
+       (= status (mp-connection-status in-game))
        (zero? (-> *local-info* sync-flag)))
   )
 
@@ -24,7 +24,7 @@
     )
   (none))
 
-(defun mp-enable-sync-after-spawn! ((status int))
+(defun mp-enable-sync-after-spawn! ((status mp-connection-status))
   (cond
     ((and *local-info*
           (nonzero? (the-as uint *local-info*))
@@ -47,18 +47,18 @@
     )
   (none))
 
-(defun mp-arm-spawn-sync-state! ((status int))
-  (when (>= status 3)
+(defun mp-arm-spawn-sync-state! ((status mp-connection-status))
+  (when (>= status (mp-connection-status connecting))
     (if (mp-is-jak?)
         (begin
-          (pc-multi-set-status 6)
+          (pc-multi-set-status (mp-connection-status in-game))
           (set! *multi-last-send-time* 0)
           (mp-arm-mission-failed-full-sync-after-spawn)
           )
         (begin
           (when (and *local-info*
                      (nonzero? (the-as uint *local-info*))
-                     (= status 6)
+                     (= status (mp-connection-status in-game))
                      (zero? (-> *local-info* sync-flag)))
             (set! *multi-last-send-time* 0)
             (mp-arm-mission-failed-full-sync-after-spawn)
@@ -75,7 +75,7 @@
       (pc-multi-setup-internet-host)
       (pc-multi-setup-host)
       )
-  (pc-multi-set-status 6)
+  (pc-multi-set-status (mp-connection-status in-game))
   (mp-set-local-sync-flag! (the uint 1))
   (none))
 
@@ -106,8 +106,8 @@
   (mp-set-local-sync-flag! (the uint 1))
   (none))
 
-(defun mp-auto-start-session-on-spawn! ((status int))
-  (when (zero? status)
+(defun mp-auto-start-session-on-spawn! ((status mp-connection-status))
+  (when (= status (mp-connection-status idle))
     (let ((host-arg (pc-multi-get-command-line-arg "-mp-host"))
           (client-arg (pc-multi-get-command-line-arg "-mp-client")))
       (cond
@@ -160,8 +160,8 @@
   (mp-tomb-boulder-reset-state!)
   (none))
 
-(defun mp-auto-enable-sync-if-ready! ((status int))
-  (when (and (= status 6)
+(defun mp-auto-enable-sync-if-ready! ((status mp-connection-status))
+  (when (and (= status (mp-connection-status in-game))
              (not *multi-sync-enabled?*)
              (not (and (mp-is-daxter?) (nonzero? (-> *local-info* sync-flag)))))
     (if (mp-is-jak?)
@@ -189,8 +189,8 @@
   (none)
   )
 
-(defun mp-update-host-left-ui! ((status int))
-  (when (and (= status 8)
+(defun mp-update-host-left-ui! ((status mp-connection-status))
+  (when (and (= status (mp-connection-status host-left))
              (not *mp-host-left-menu-active?*))
     (sync-path 0 0)
     (mp-enter-host-left-terminal-state!)
@@ -227,15 +227,15 @@
     )
   (none))
 
-(defun mp-update-version-mismatch-ui! ((status int))
-  (when (and (= status -2)
+(defun mp-update-version-mismatch-ui! ((status mp-connection-status))
+  (when (and (= status (mp-connection-status version-mismatch))
              (not *mp-version-mismatch-menu-active?*))
     (mp-show-version-mismatch-ui!)
     )
   (none))
 
-(defun mp-connect-discovered-host-if-ready! ((status int))
-  (if (= status 2)
+(defun mp-connect-discovered-host-if-ready! ((status mp-connection-status))
+  (if (= status (mp-connection-status found))
       (begin
         (pc-multi-connect-found-host)
         (pc-multi-get-status)
@@ -246,23 +246,30 @@
 
 (defun mp-session-tick ()
   (let ((status (mp-connect-discovered-host-if-ready! (pc-multi-get-status))))
-    (when (not (= status 6))
+    (when (not (= status (mp-connection-status in-game)))
       (mp-clear-remote-respawn-policy!)
       )
-    (when (or (< status 3) (= status 7) (= status 8))
+    (when (or (< status (mp-connection-status connecting))
+              (= status (mp-connection-status reconnecting))
+              (= status (mp-connection-status host-left)))
       (mp-clear-connected-scene-broadcast!)
       )
     (mp-auto-enable-sync-if-ready! status)
-    (if (or (= status 3) (= status 4) (= status 5) (= status 6) (= status 7) (= status 8))
+    (if (or (= status (mp-connection-status connecting))
+            (= status (mp-connection-status connected-lobby))
+            (= status (mp-connection-status game-starting))
+            (= status (mp-connection-status in-game))
+            (= status (mp-connection-status reconnecting))
+            (= status (mp-connection-status host-left)))
         (begin
           (pc-multi-poll (the-as uint *local-info*) (the-as uint *remote-info*))
           (pc-multi-receive-state (the-as uint *remote-info*))
           (set! (-> *local-info* role) (pc-multi-get-role))
           (set! status (pc-multi-get-status))
-          (when (not (= status 6))
+          (when (not (= status (mp-connection-status in-game)))
             (mp-clear-remote-respawn-policy!)
             )
-          (when (= status 8)
+          (when (= status (mp-connection-status host-left))
             (set! *multi-sync-enabled?* #f)
             )
           (mp-reconnect-observe-status! status)

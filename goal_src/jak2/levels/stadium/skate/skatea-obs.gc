@@ -178,7 +178,7 @@
           (set! v0-0 #t)
           (set! (-> self board-picked-up) (the-as symbol v0-0))
           (when (and *multi-sync-enabled?*
-                     (= (pc-multi-get-status) 6)
+                     (= (pc-multi-get-status) (mp-connection-status in-game))
                      (not *mp-processing-remote-event*)
                      (mp-stadium-board1-mission-active?))
             (mp-stadium-board1-queue-event MP_EVENT_MISSION_STADIUM_BOARD1_BOARD_PICKED_UP 0)

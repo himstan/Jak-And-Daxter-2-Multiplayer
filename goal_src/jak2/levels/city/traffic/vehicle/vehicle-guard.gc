@@ -746,7 +746,7 @@
                              (the-as process-focusable *target*)
                              (the-as process-focusable #f)))
            (remote-proc (if (and *multi-sync-enabled?*
-                                 (= (pc-multi-get-status) 6))
+                                 (= (pc-multi-get-status) (mp-connection-status in-game)))
                             *mp-puppet*
                             (the-as process-focusable #f)))
            (remote-target (if (and remote-proc

@@ -737,7 +737,7 @@
             )
 
           (set! (-> this rand) (rand-vu))
-          (if (and (nonzero? (pc-multi-get-status))
+          (if (and (mp-connection-status-active? (pc-multi-get-status))
                    (not (mp-is-traffic-authoritative?))
                    *multi-remote-render-pos*
                    (nonzero? *multi-remote-render-pos*)
@@ -1173,7 +1173,7 @@
   )
 
 (defun mp-traffic-density-scale-for-type ((object-type int))
-  (if (nonzero? (pc-multi-get-status))
+  (if (mp-connection-status-active? (pc-multi-get-status))
       (fmax 0.0 (fmin 1.0 (if (< object-type 11) *mp-traffic-veh-density-scale* *mp-traffic-ped-density-scale*)))
       1.0
       )
@@ -1198,7 +1198,7 @@
 
 (defun mp-traffic-valid-remote-target ()
   (when (and *multi-sync-enabled?*
-             (= (pc-multi-get-status) 6))
+             (= (pc-multi-get-status) (mp-connection-status in-game)))
     (let ((remote *mp-puppet*))
       (when (and remote
                  (nonzero? remote)
@@ -1267,7 +1267,7 @@
   )
 
 (defun mp-traffic-density-scale-for-tracker ((tracker-id int))
-  (if (nonzero? (pc-multi-get-status))
+  (if (mp-connection-status-active? (pc-multi-get-status))
       (fmax 0.0 (fmin 1.0 (if (= tracker-id 1) *mp-traffic-veh-density-scale* *mp-traffic-ped-density-scale*)))
       1.0
       )
@@ -1331,7 +1331,7 @@
 
 (defun mp-traffic-refill-local-active-cells! ()
   "Seed local traffic for cells that became active while MP host traffic suppressed local spawning."
-  (when (and (nonzero? (pc-multi-get-status))
+  (when (and (mp-connection-status-active? (pc-multi-get-status))
              (not *mp-traffic-suppressed*)
              *traffic-manager*
              (nonzero? *traffic-manager*)
@@ -3677,7 +3677,7 @@
       )
     )
   (let ((s5-0 (math-camera-pos))
-        (host-skip-frustum? (and (mp-is-jak?) (nonzero? (pc-multi-get-status))))
+        (host-skip-frustum? (and (mp-is-jak?) (mp-connection-status-active? (pc-multi-get-status))))
         (f30-0 81920.0)
         (f28-0 819200.0)
         (f26-0 491520.0)
