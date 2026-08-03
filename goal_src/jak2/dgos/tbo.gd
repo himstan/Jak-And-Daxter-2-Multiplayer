@@ -16,6 +16,7 @@
   "heart-mar-ag.go"
   "widow-bomb-ag.go"
   "tomb-wing-door-ag.go"
+  "tomb-plat-return-ag.go"
   "particleman-ag.go"
   "tombboss-vis.go"
  ))
