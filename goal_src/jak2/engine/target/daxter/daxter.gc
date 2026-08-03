@@ -348,6 +348,43 @@
   (none)
   )
 
+(defun target-indax-board? ((proc target))
+  (if (and proc (nonzero? proc))
+      (let ((indax-info (-> proc indax)))
+        (if (and indax-info (nonzero? indax-info))
+            (-> indax-info indax-board?)
+            #f
+            )
+        )
+      #f
+      )
+  )
+
+(defbehavior target-indax-board-set! target ()
+  (when (and self
+             (nonzero? self)
+             (mp-target-is-daxter? self)
+             )
+    (let ((indax-info (-> self indax)))
+      (when (and indax-info (nonzero? indax-info))
+        (set! (-> indax-info indax-board?) #t)
+        )
+      )
+    )
+  (none)
+  )
+
+(defbehavior target-indax-board-clear! target ()
+  (when (and self (nonzero? self))
+    (let ((indax-info (-> self indax)))
+      (when (and indax-info (nonzero? indax-info))
+        (set! (-> indax-info indax-board?) #f)
+        )
+      )
+    )
+  (none)
+  )
+
 (defun target-indax-should-refill-health? ((tgt target) (reset-velocity? symbol))
   (if (and tgt
            (nonzero? tgt)
@@ -365,6 +402,7 @@
     (if (and surf (not (zero? (the-as uint surf))) (not (logtest? (the-as uint surf) 3)) (< (the-as uint surf) #x70000000))
         (logior! (-> surf flags) (surface-flag gun-fast-exit))))
   (target-exit)
+  (target-indax-board-clear!)
   (logior! (-> self game features) (game-feature sidekick))
   (target-sidekick-setup #t)
   (if (zero? (-> self indax))
