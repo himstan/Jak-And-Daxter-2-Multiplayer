@@ -74,7 +74,7 @@ tasks:
           -Profile "{{.NETEM_PROFILE}}"
           -Seed "{{.NETEM_SEED}}"
           -GameExecutablePath "{{.GK_BIN_RELEASE_DIR}}/gk{{.EXE_FILE_EXTENSION}}"
-          -GameArguments "-v|--game|{{.GAME}}|--|-boot|-debug|-fakeiso|-snapshot|slot7|-mp-host|true"
+          -GameArguments "-v|--game|{{.GAME}}|--|-boot|-debug|-fakeiso|-snapshot|slot9|-mp-host|true"
   run-game-netem:
     desc: "Boots the host through the local UDP multiplayer network emulator (Windows only)"
     vars:

@@ -314,7 +314,7 @@
     (set! (-> self control mod-surface) *flop-land-mods*)
     (logclear! (-> *flop-land-mods* flags) (surface-flag check-edge))
     (logior! (-> self state-flags) (state-flags sf15))
-    (cpad-set-buzz! (-> *cpad-list* cpads 0) 1 255 (seconds 0.2))
+    (rumble-local-controller self 1 255 (seconds 0.2))
     )
   :exit target-indax-exit
   :trans (behavior ()

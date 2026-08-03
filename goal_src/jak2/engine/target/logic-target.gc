@@ -3045,7 +3045,7 @@
   (set! (-> self control anim-handle) (the-as handle #f))
   (set! (-> self control actor-contact-handle) (the-as handle #f))
   (set! (-> self control yellow-eco-last-use-time) 0)
-  (buzz-stop! 0)
+  (stop-rumble-local-controller self)
   self
   )
 

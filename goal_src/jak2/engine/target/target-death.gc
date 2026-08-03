@@ -579,7 +579,7 @@
        )
       ((begin
          (target-timed-invulnerable (-> arg0 invinc-time) self 1)
-         (cpad-set-buzz! (-> *cpad-list* cpads 0) 0 255 (seconds 0.5))
+         (rumble-local-controller self 0 255 (seconds 0.5))
          (focus-test? self indax)
          )
        (let* ((v1-14 (rand-vu-int-count 4))

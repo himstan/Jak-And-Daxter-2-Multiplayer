@@ -1,0 +1,52 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defun rumble-local-controller ((owner target) (motor int) (amount int) (duration time-frame))
+  "Apply ordinary rumble only for an action owned by the local player."
+  (when (not-puppet? owner)
+    (cpad-set-buzz! (-> *cpad-list* cpads 0) motor amount duration)
+    )
+  (none)
+  )
+
+(defun stop-rumble-local-controller ((owner target))
+  "Stop local rumble only when the target being reset is locally owned."
+  (when (not-puppet? owner)
+    (buzz-stop! 0)
+    )
+  (none)
+  )
+
+(defun mp-projectile-owner ((projectile process-drawable))
+  "Resolve a gun projectile's owning target through projectile -> gun -> target."
+  (let ((owner (the-as target #f)))
+    (when (and projectile
+               (nonzero? projectile)
+               (-> projectile parent)
+               (nonzero? (-> projectile parent)))
+      (let ((gun-proc (ppointer->process (-> projectile parent))))
+        (when (and gun-proc
+                   (nonzero? gun-proc)
+                   (-> gun-proc parent)
+                   (nonzero? (-> gun-proc parent)))
+          (set! owner (the-as target (-> gun-proc parent 0)))
+          )
+        )
+      )
+    owner
+    )
+  )
+
+(defun mp-local-projectile-owner? ((projectile process-drawable))
+  "Is a projectile owned by this client's local target?"
+  (not-puppet? (mp-projectile-owner projectile))
+  )
+
+(defun mp-local-projectile-rumble! ((projectile process-drawable)
+                                    (motor int)
+                                    (amount int)
+                                    (duration time-frame))
+  "Apply projectile rumble only when its gun belongs to the local target."
+  (rumble-local-controller (mp-projectile-owner projectile) motor amount duration)
+  (none)
+  )

@@ -679,7 +679,9 @@
   (set! (-> self gun-type) (the-as pickup-type arg0))
 
   ;; og:preserve-this trigger effects
-  (when (and (pc-get-trigger-effects-enabled?) (-> *pc-settings* controller-swap-r1-r2?))
+  (when (and (not-puppet? self)
+             (pc-get-trigger-effects-enabled?)
+             (-> *pc-settings* controller-swap-r1-r2?))
     (case (-> self gun-type)
       (((pickup-type eco-red))
        (pc-send-trigger-effect-feedback! (pc-trigger-effect-option right) 0 4))

@@ -603,6 +603,7 @@
   "mp-debug.o" ;; added
   "mp-task-debug.o" ;; added
   "mp-oracle-darkjak.o" ;; added
+  "mp-rumble.o" ;; added
   "mp-puppet.o" ;; added
   "mp-puppet-debug.o" ;; added
   "mp-eye-debug.o" ;; added

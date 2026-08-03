@@ -161,7 +161,9 @@
       ((zero? v1-0)
        (sound-play "blue-shot-fire")
        ;; og:preserve-this trigger effects
-       (when (and (pc-get-trigger-effects-enabled?) (-> *pc-settings* controller-swap-r1-r2?))
+       (when (and (mp-local-projectile-owner? this)
+                  (pc-get-trigger-effects-enabled?)
+                  (-> *pc-settings* controller-swap-r1-r2?))
          (pc-send-trigger-rumble! 0 16383 25))
        )
       ((= v1-0 (projectile-options lose-altitude))
@@ -264,7 +266,7 @@
 (defmethod init-proj-settings! ((this gun-blue-shot))
   "Init relevant settings for the [[projectile]] such as gravity, speed, timeout, etc"
   (with-pp
-    (cpad-set-buzz! (-> *cpad-list* cpads 0) 1 204 (seconds 0.1))
+    (mp-local-projectile-rumble! this 1 204 (seconds 0.1))
     (set! (-> this init-pos quad) (-> this root trans quad))
     (set! (-> this init-dir quad) (-> this starting-dir quad))
     (vector-normalize-copy! (-> this root transv) (-> this init-dir) (* 327680.0 (-> pp clock frames-per-second)))

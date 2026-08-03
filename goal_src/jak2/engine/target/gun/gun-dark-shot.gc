@@ -363,7 +363,9 @@
           )
       (sound-play "pmkr-fire" :id (-> self fire-sound) :position (-> self root trans))
       ;; og:preserve-this trigger effects
-      (when (and (pc-get-trigger-effects-enabled?) (-> *pc-settings* controller-swap-r1-r2?))
+      (when (and (mp-local-projectile-owner? self)
+                 (pc-get-trigger-effects-enabled?)
+                 (-> *pc-settings* controller-swap-r1-r2?))
          (pc-send-trigger-rumble! 0 32767 50))
       (sound-play "pmkr-trail" :id (-> self trail-sound) :position (-> self root trans))
       )

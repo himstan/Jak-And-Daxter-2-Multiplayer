@@ -102,6 +102,10 @@
 (define-extern target-send-attack (function process symbol touching-shapes-entry int int penetrate symbol :behavior target))
 (define-extern target-powerup-effect (function symbol none :behavior target))
 (define-extern handle->process-safe (function handle process))
+(define-extern rumble-local-controller (function target int int time-frame none))
+(define-extern stop-rumble-local-controller (function target none))
+(define-extern mp-local-projectile-owner? (function process-drawable symbol))
+(define-extern mp-local-projectile-rumble! (function process-drawable int int time-frame none))
 
 
 (defenum darkjak-stage

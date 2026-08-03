@@ -415,7 +415,7 @@
                     )
                   )
                 )
-              (cpad-set-buzz! (-> *cpad-list* cpads 0) 1 255 (seconds 0.3))
+              (rumble-local-controller self 1 255 (seconds 0.3))
               (if (mp-target-is-daxter? self)
                   (target-board-play-daxter-vo self 1.0 0.3 #f)
                   (sound-play "board-boost")

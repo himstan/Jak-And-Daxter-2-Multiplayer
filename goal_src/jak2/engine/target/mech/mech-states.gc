@@ -2157,7 +2157,7 @@
        )
       (else
         (target-land-effect)
-        (cpad-set-buzz! (-> *cpad-list* cpads 0) 1 255 (seconds 0.3))
+        (rumble-local-controller self 1 255 (seconds 0.3))
         )
       )
     (set! (-> self control last-running-attack-end-time) 0)
