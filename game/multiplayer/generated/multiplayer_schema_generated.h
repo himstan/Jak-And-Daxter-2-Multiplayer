@@ -31,7 +31,7 @@ inline constexpr std::array<PacketDescriptor, kPacketCount> kPackets = {{
     {1, "EVENT_JOIN", 0, 0, 5, 0, 0, 0},
     {2, "EVENT_LEAVE", 3, 0, 5, 1, 0, 0},
     {3, "EVENT_GAME", 3, 0, 5, 496, 0, 0},
-    {4, "FULL_SYNC", 1, 1, 5, 2048, 0, 0},
+    {4, "BOOTSTRAP", 1, 1, 5, 2048, 0, 0},
     {5, "ENEMY_SYNC", 3, 2, 4, 2048, 0, 0},
     {6, "PEDESTRIAN_SYNC", 1, 3, 4, 2048, 0, 0},
     {7, "VEHICLE_SYNC", 1, 3, 4, 2048, 0, 0},

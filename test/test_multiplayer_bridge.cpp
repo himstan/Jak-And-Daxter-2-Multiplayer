@@ -17,6 +17,7 @@
 #include "game/multiplayer/multiplayer_session.h"
 #include "game/multiplayer/multiplayer_version.h"
 #include "game/multiplayer/multiplayer_wire_codec.h"
+#include "game/multiplayer/sync/player_sync.h"
 #include "gtest/gtest.h"
 
 namespace {
@@ -137,6 +138,95 @@ TEST(MultiplayerPacket, PacketViewRejectsTruncationUnknownTypesAndTrailingData) 
   EXPECT_FALSE(PacketView(&packet).as_exact<PacketPlayerState>(PacketType::STATE_UPDATE));
 }
 
+TEST(MultiplayerBootstrap, AppliesValidPacketToGoalBuffers) {
+  PacketBootstrap bootstrap = {};
+  bootstrap.header.type = PacketType::BOOTSTRAP;
+  bootstrap.header.sequenceNum = 7;
+  bootstrap.money = 12.0f;
+  bootstrap.gems = 3.0f;
+  bootstrap.skill = 4.0f;
+  bootstrap.x = 1.0f;
+  bootstrap.y = 2.0f;
+  bootstrap.z = 3.0f;
+  bootstrap.host_continue[0] = 't';
+  bootstrap.host_continue[1] = 'o';
+  bootstrap.host_continue[2] = 'm';
+  bootstrap.host_continue[3] = 'b';
+  bootstrap.sync_aids_count = 1;
+  bootstrap.sync_aids[0] = 42;
+
+  ENetPacket packet = {};
+  packet.data = reinterpret_cast<uint8_t*>(&bootstrap);
+  packet.dataLength = sizeof(bootstrap);
+  LocalPlayerInfoGOAL local = {};
+  RemotePlayerInfoGOAL remote = {};
+
+  mp_handle_bootstrap_packet(&packet, &local, &remote);
+
+  EXPECT_FLOAT_EQ(local.sync_money, 12.0f);
+  EXPECT_FLOAT_EQ(local.sync_gems, 3.0f);
+  EXPECT_FLOAT_EQ(local.sync_skill, 4.0f);
+  EXPECT_FLOAT_EQ(remote.x, 1.0f);
+  EXPECT_FLOAT_EQ(remote.y, 2.0f);
+  EXPECT_FLOAT_EQ(remote.z, 3.0f);
+  EXPECT_EQ(local.sync_aids_count, 1u);
+  EXPECT_EQ(local.sync_aids[0], 42u);
+  EXPECT_EQ(local.sync_flag, 1u);
+}
+
+TEST(MultiplayerBootstrap, RejectsInvalidPacketWithoutMutatingGoalBuffers) {
+  PacketBootstrap bootstrap = {};
+  bootstrap.header.type = PacketType::BOOTSTRAP;
+  bootstrap.money = std::numeric_limits<float>::quiet_NaN();
+  memset(bootstrap.host_continue, 'x', sizeof(bootstrap.host_continue));
+
+  ENetPacket packet = {};
+  packet.data = reinterpret_cast<uint8_t*>(&bootstrap);
+  packet.dataLength = sizeof(bootstrap);
+  LocalPlayerInfoGOAL local = {};
+  RemotePlayerInfoGOAL remote = {};
+
+  mp_handle_bootstrap_packet(&packet, &local, &remote);
+
+  EXPECT_EQ(local.sync_flag, 0u);
+  EXPECT_FLOAT_EQ(local.sync_money, 0.0f);
+  EXPECT_FLOAT_EQ(remote.x, 0.0f);
+}
+
+TEST(MultiplayerBootstrap, RequestResetsPendingSendState) {
+  MultiplayerData data;
+  data.pending_bootstrap = false;
+  data.pending_bootstrap_sent_once = true;
+  data.last_bootstrap_send_time = 99;
+
+  multiplayer_request_bootstrap(data);
+
+  EXPECT_TRUE(data.pending_bootstrap);
+  EXPECT_FALSE(data.pending_bootstrap_sent_once);
+  EXPECT_EQ(data.last_bootstrap_send_time, 0u);
+}
+
+TEST(MultiplayerBootstrap, PlayerStateAcknowledgesSentBootstrap) {
+  MultiplayerData data;
+  data.local_role = 0;
+  data.pending_bootstrap = true;
+  data.pending_bootstrap_sent_once = true;
+  PacketPlayerState state = {};
+  state.header.type = PacketType::STATE_UPDATE;
+  state.header.sequenceNum = 1;
+  state.netId = 1;
+  state.status = static_cast<uint8_t>(MultiplayerStatus::IN_GAME);
+  ENetPacket packet = {};
+  packet.data = reinterpret_cast<uint8_t*>(&state);
+  packet.dataLength = sizeof(state);
+  RemotePlayerInfoGOAL remote = {};
+
+  mp_handle_player_state_packet(data, &packet, &remote, 100);
+
+  EXPECT_FALSE(data.pending_bootstrap);
+  EXPECT_FALSE(data.pending_bootstrap_sent_once);
+}
+
 TEST(MultiplayerPacket, CountedPayloadRejectsOverflowAndTrailingData) {
   std::array<uint8_t, 32> bytes = {};
   ENetPacket packet = {};
@@ -153,7 +243,7 @@ TEST(MultiplayerPacket, CountedPayloadRejectsOverflowAndTrailingData) {
 TEST(MultiplayerPacket, DirectionPolicyMatchesHostAndClientRoles) {
   for (uint8_t value = 0; value < static_cast<uint8_t>(PacketType::COUNT); ++value) {
     const PacketType type = static_cast<PacketType>(value);
-    const bool host_only = type == PacketType::FULL_SYNC || type == PacketType::PEDESTRIAN_SYNC ||
+    const bool host_only = type == PacketType::BOOTSTRAP || type == PacketType::PEDESTRIAN_SYNC ||
                            type == PacketType::VEHICLE_SYNC ||
                            type == PacketType::PALACE_SQUID_SYNC || type == PacketType::WIDOW_SYNC;
     const bool gameplay = type != PacketType::EVENT_JOIN;
@@ -490,7 +580,7 @@ TEST(MultiplayerReconnect, HandshakeTimeoutPreservesInviteAndSchedulesRetry) {
   EXPECT_EQ(data.reconnect_invite, "127.0.0.1:26210/AAAAAAAAAAAAAAAAAAAAAA");
 }
 
-TEST(MultiplayerReconnect, DoesNotCompleteUntilFullSyncRestoresInGameStatus) {
+TEST(MultiplayerReconnect, DoesNotCompleteUntilBootstrapRestoresInGameStatus) {
   MultiplayerData data;
   data.local_role = 1;
   data.join_status = (int)MultiplayerStatus::CONNECTING;
@@ -499,12 +589,12 @@ TEST(MultiplayerReconnect, DoesNotCompleteUntilFullSyncRestoresInGameStatus) {
 
   multiplayer_note_client_reconnect_authenticated(data);
 
-  EXPECT_TRUE(data.reconnect_waiting_for_full_sync);
+  EXPECT_TRUE(data.reconnect_waiting_for_bootstrap);
   EXPECT_EQ(data.reconnect_attempt_count, 2u);
   multiplayer_set_status(data, (int)MultiplayerStatus::CONNECTED_LOBBY);
-  EXPECT_TRUE(data.reconnect_waiting_for_full_sync);
+  EXPECT_TRUE(data.reconnect_waiting_for_bootstrap);
   multiplayer_set_status(data, (int)MultiplayerStatus::IN_GAME);
-  EXPECT_FALSE(data.reconnect_waiting_for_full_sync);
+  EXPECT_FALSE(data.reconnect_waiting_for_bootstrap);
   EXPECT_EQ(data.reconnect_attempt_count, 0u);
 }
 
@@ -536,7 +626,7 @@ TEST(MultiplayerReconnect, HostRecoveryClearsRemoteStateAndRotatesSecurity) {
   data.join_status = (int)MultiplayerStatus::IN_GAME;
   data.authenticated_peer = nullptr;
   data.remote_entity.last_sequence_num = 42;
-  data.pending_full_sync = true;
+  data.pending_bootstrap = true;
   data.inbound_events.push_overwrite({});
   data.reconnect_invite = "client-side-state-must-not-be-cleared-on-host";
 
@@ -547,7 +637,7 @@ TEST(MultiplayerReconnect, HostRecoveryClearsRemoteStateAndRotatesSecurity) {
   EXPECT_FALSE(data.security.authenticated());
   EXPECT_EQ(data.security.invite_for_address("127.0.0.1"), invite);
   EXPECT_EQ(data.remote_entity.last_sequence_num, 0u);
-  EXPECT_FALSE(data.pending_full_sync);
+  EXPECT_FALSE(data.pending_bootstrap);
   EXPECT_TRUE(data.inbound_events.empty());
   EXPECT_EQ(data.reconnect_invite, "client-side-state-must-not-be-cleared-on-host");
 
@@ -715,7 +805,7 @@ TEST(MultiplayerSession, ClearsOnlyRemotePeerStateForActiveHost) {
   data.internet_host = true;
   multiplayer_set_status(data, (int)MultiplayerStatus::IN_GAME);
   ASSERT_TRUE(data.host_game_active);
-  ASSERT_TRUE(data.pending_full_sync);
+  ASSERT_TRUE(data.pending_bootstrap);
 
   data.remote_entity.last_sequence_num = 42;
   data.remote_entity.riding = 1;
@@ -736,7 +826,7 @@ TEST(MultiplayerSession, ClearsOnlyRemotePeerStateForActiveHost) {
   EXPECT_EQ(data.local_version, "dev-366c9e277");
   EXPECT_EQ(data.staged_invite, "private-staged-value");
   EXPECT_TRUE(data.internet_host);
-  EXPECT_FALSE(data.pending_full_sync);
+  EXPECT_FALSE(data.pending_bootstrap);
   EXPECT_EQ(data.remote_entity.last_sequence_num, 0u);
   EXPECT_EQ(data.remote_entity.riding, 0u);
   EXPECT_EQ(data.last_authenticated_receive_time, 0u);

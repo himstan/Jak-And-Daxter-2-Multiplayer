@@ -6,7 +6,7 @@
     {"name": "EVENT_JOIN", "id": 1, "direction": "none", "reliability": "reliable", "priority": "reliable", "coalescing": "never", "chunks": "preserve", "max_payload": 0},
     {"name": "EVENT_LEAVE", "id": 2, "direction": "both", "reliability": "reliable", "priority": "reliable", "coalescing": "never", "chunks": "preserve", "max_payload": 1},
     {"name": "EVENT_GAME", "id": 3, "direction": "both", "reliability": "reliable", "priority": "reliable", "coalescing": "never", "chunks": "preserve", "max_payload": 496},
-    {"name": "FULL_SYNC", "id": 4, "direction": "host_to_client", "reliability": "reliable", "priority": "full_sync", "coalescing": "never", "chunks": "preserve", "max_payload": 2048},
+    {"name": "BOOTSTRAP", "id": 4, "direction": "host_to_client", "reliability": "reliable", "priority": "bootstrap", "coalescing": "never", "chunks": "preserve", "max_payload": 2048},
     {"name": "ENEMY_SYNC", "id": 5, "direction": "both", "reliability": "unreliable", "priority": "snapshot", "coalescing": "never", "chunks": "preserve", "max_payload": 2048},
     {"name": "PEDESTRIAN_SYNC", "id": 6, "direction": "host_to_client", "reliability": "unreliable", "priority": "traffic", "coalescing": "never", "chunks": "preserve", "max_payload": 2048},
     {"name": "VEHICLE_SYNC", "id": 7, "direction": "host_to_client", "reliability": "unreliable", "priority": "traffic", "coalescing": "never", "chunks": "preserve", "max_payload": 2048},

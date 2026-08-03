@@ -32,11 +32,11 @@
      (if (mp-client-ready-to-enable-sync-on-spawn? status)
          (begin
            (set! *multi-sync-enabled?* #t)
-           (debug-log *mp-debug-log?* "[MP-Session] Client spawned in-game after full sync. Enabling multiplayer sync.~%")
+           (debug-log *mp-debug-log?* "[MP-Session] Client spawned in-game after bootstrap. Enabling multiplayer sync.~%")
            )
          (begin
            (set! *multi-sync-enabled?* #f)
-           (debug-log *mp-debug-log?* "[MP-Session] Client spawned before full sync completion. Keeping multiplayer sync disabled.~%")
+           (debug-log *mp-debug-log?* "[MP-Session] Client spawned before bootstrap completion. Keeping multiplayer sync disabled.~%")
            )
          )
      )
@@ -53,7 +53,7 @@
         (begin
           (pc-multi-set-status (mp-connection-status in-game))
           (set! *multi-last-send-time* 0)
-          (mp-arm-mission-failed-full-sync-after-spawn)
+          (mp-arm-mission-failed-bootstrap-after-spawn)
           )
         (begin
           (when (and *local-info*
@@ -61,7 +61,7 @@
                      (= status (mp-connection-status in-game))
                      (zero? (-> *local-info* sync-flag)))
             (set! *multi-last-send-time* 0)
-            (mp-arm-mission-failed-full-sync-after-spawn)
+            (mp-arm-mission-failed-bootstrap-after-spawn)
             )
           )
         )
@@ -129,6 +129,7 @@
 
 (defun mp-on-local-spawn! ()
   (let ((status (pc-multi-get-status)))
+    (mp-bootstrap-controller-start!)
     (mp-enable-sync-after-spawn! status)
     (mp-arm-spawn-sync-state! status)
     (mp-auto-start-session-on-spawn! status)
@@ -148,6 +149,7 @@
   (none))
 
 (defun mp-reset-session-state! ()
+  (mp-bootstrap-controller-reset!)
   (set! *multi-sync-enabled?* #f)
   (set! *mp-reconnect-menu-active?* #f)
   (set! *mp-host-left-menu-active?* #f)
@@ -284,11 +286,9 @@
     ))
 
 (defun mp-sync-scene-tick ()
-  (mp-handle-full-sync-state)
   (mp-handle-scene-transition)
   (mp-process-pending-scene-sync!)
   (mp-process-scene-sync-target-hold!)
-  (mp-log-client-blackout-diag!)
   (none))
 
 (defun mp-update-debug-loss! ()
@@ -337,7 +337,7 @@
   (mp-sync-clock-host)
   (mp-sync-clock-client)
   (mp-update-debug-loss!)
-  (mp-request-mission-failed-full-sync-when-ready)
+  (mp-request-mission-failed-bootstrap-when-ready)
   (let ((current-ticks (the-as uint64 (pc-multi-get-ticks))))
     (when (and (not *mp-debug-simulate-loss?*)
                (>= (- current-ticks (the uint64 *multi-last-send-time*))

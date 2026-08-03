@@ -69,8 +69,8 @@ TEST(MultiplayerPacketScheduler, ReliableEventsPrecedeSnapshotsAndKeepFifoOrder)
   ASSERT_TRUE(scheduler.enqueue(peer, 0, make_packet(PacketType::STATE_UPDATE, 10),
                                 PacketType::STATE_UPDATE, sizeof(PacketHeader),
                                 ENET_PACKET_FLAG_UNSEQUENCED));
-  ASSERT_TRUE(scheduler.enqueue(peer, 0, make_packet(PacketType::FULL_SYNC, 20),
-                                PacketType::FULL_SYNC, sizeof(PacketHeader),
+  ASSERT_TRUE(scheduler.enqueue(peer, 0, make_packet(PacketType::BOOTSTRAP, 20),
+                                PacketType::BOOTSTRAP, sizeof(PacketHeader),
                                 ENET_PACKET_FLAG_RELIABLE));
   ASSERT_TRUE(scheduler.enqueue(peer, 0, make_packet(PacketType::EVENT_GAME, 30),
                                 PacketType::EVENT_GAME, sizeof(PacketHeader),
@@ -85,7 +85,7 @@ TEST(MultiplayerPacketScheduler, ReliableEventsPrecedeSnapshotsAndKeepFifoOrder)
   EXPECT_EQ(sent[0].sequence, 30u);
   EXPECT_EQ(sent[1].type, PacketType::EVENT_GAME);
   EXPECT_EQ(sent[1].sequence, 31u);
-  EXPECT_EQ(sent[2].type, PacketType::FULL_SYNC);
+  EXPECT_EQ(sent[2].type, PacketType::BOOTSTRAP);
   EXPECT_EQ(sent[3].type, PacketType::STATE_UPDATE);
 }
 

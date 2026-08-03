@@ -29,6 +29,73 @@ bool finite_vehicle_state(const MPVehicleState& state) {
          mp_float_is_finite(state.ang_vel_x) && mp_float_is_finite(state.ang_vel_y) &&
          mp_float_is_finite(state.ang_vel_z);
 }
+
+bool valid_bootstrap_packet(const PacketBootstrap& bootstrap) {
+  return mp_float_is_finite(bootstrap.money) && mp_float_is_finite(bootstrap.gems) &&
+         mp_float_is_finite(bootstrap.skill) && mp_float_is_finite(bootstrap.x) &&
+         mp_float_is_finite(bootstrap.y) && mp_float_is_finite(bootstrap.z) &&
+         mp_float_is_finite(bootstrap.tod_ratio) &&
+         mp_float_is_finite(bootstrap.weather_cloud) &&
+         mp_float_is_finite(bootstrap.weather_fog) &&
+         mp_float_is_finite(bootstrap.weather_rain) &&
+         mp_float_is_finite(bootstrap.cam_angle_y) && bootstrap.sync_aids_count <= 128 &&
+         memchr(bootstrap.host_continue, '\0', sizeof(bootstrap.host_continue)) != nullptr;
+}
+
+void apply_bootstrap_to_goal(const PacketBootstrap& bootstrap,
+                             LocalPlayerInfoGOAL& local,
+                             RemotePlayerInfoGOAL& remote) {
+  local.sync_money = bootstrap.money;
+  local.sync_gems = bootstrap.gems;
+  local.sync_skill = bootstrap.skill;
+  remote.x = bootstrap.x;
+  remote.y = bootstrap.y;
+  remote.z = bootstrap.z;
+  local.host_task = bootstrap.host_task;
+  local.host_node = bootstrap.host_node;
+  memcpy(local.host_continue, bootstrap.host_continue, sizeof(local.host_continue));
+  memcpy(local.task_mask, bootstrap.task_mask, sizeof(local.task_mask));
+  memcpy(local.active_task_mask, bootstrap.active_task_mask, sizeof(local.active_task_mask));
+  local.sync_aids_count = bootstrap.sync_aids_count;
+  local.riding = bootstrap.riding;
+  memcpy(local.sync_aids, bootstrap.sync_aids, sizeof(local.sync_aids));
+  local.clock = bootstrap.clock;
+  remote.tod_frame = bootstrap.tod_frame;
+  remote.tod_ratio = bootstrap.tod_ratio;
+  remote.weather_cloud = bootstrap.weather_cloud;
+  remote.weather_fog = bootstrap.weather_fog;
+  remote.weather_rain = bootstrap.weather_rain;
+  if (local.sync_flag <= 1) {
+    local.sync_flag = 1;
+  }
+}
+
+PacketBootstrap make_bootstrap_packet(const LocalPlayerInfoGOAL& local, uint32_t sequence_num) {
+  PacketBootstrap bootstrap = {};
+  bootstrap.header.type = PacketType::BOOTSTRAP;
+  bootstrap.header.sequenceNum = sequence_num;
+  bootstrap.money = local.money;
+  bootstrap.gems = local.gems;
+  bootstrap.skill = local.skill;
+  bootstrap.x = local.x;
+  bootstrap.y = local.y;
+  bootstrap.z = local.z;
+  bootstrap.host_task = local.host_task;
+  bootstrap.host_node = local.host_node;
+  memcpy(bootstrap.host_continue, local.host_continue, sizeof(bootstrap.host_continue));
+  memcpy(bootstrap.task_mask, local.task_mask, sizeof(bootstrap.task_mask));
+  memcpy(bootstrap.active_task_mask, local.active_task_mask, sizeof(bootstrap.active_task_mask));
+  bootstrap.sync_aids_count = mp_clamp_count(local.sync_aids_count, 128);
+  bootstrap.riding = local.riding;
+  memcpy(bootstrap.sync_aids, local.sync_aids, sizeof(bootstrap.sync_aids));
+  bootstrap.clock = local.clock;
+  bootstrap.tod_frame = local.tod_frame;
+  bootstrap.tod_ratio = local.tod_ratio;
+  bootstrap.weather_cloud = local.weather_cloud;
+  bootstrap.weather_fog = local.weather_fog;
+  bootstrap.weather_rain = local.weather_rain;
+  return bootstrap;
+}
 }
 
 void mp_handle_player_state_packet(MultiplayerData& data,
@@ -115,11 +182,11 @@ void mp_handle_player_state_packet(MultiplayerData& data,
   memcpy(&entity.veh_state, &state->veh_state, sizeof(MPVehicleState));
 
   if (data.local_role == 0 && state->netId == 1 &&
-      state->status == (uint8_t)MultiplayerStatus::IN_GAME && data.pending_full_sync &&
-      data.pending_full_sync_sent_once) {
-    data.pending_full_sync = false;
-    data.pending_full_sync_sent_once = false;
-    lg::info("[MP-Reconnect] Client entered game. Full sync acknowledged (sequence={}, status={}).",
+      state->status == (uint8_t)MultiplayerStatus::IN_GAME && data.pending_bootstrap &&
+      data.pending_bootstrap_sent_once) {
+    data.pending_bootstrap = false;
+    data.pending_bootstrap_sent_once = false;
+    lg::info("[MP-Reconnect] Client entered game. Bootstrap acknowledged (sequence={}, status={}).",
              state->header.sequenceNum, state->status);
   }
 
@@ -156,48 +223,17 @@ void mp_handle_turret_state_packet(MultiplayerData& data, const ENetPacket* pack
   }
 }
 
-void mp_handle_full_sync_packet(const ENetPacket* packet,
+void mp_handle_bootstrap_packet(const ENetPacket* packet,
                                 LocalPlayerInfoGOAL* local,
                                 RemotePlayerInfoGOAL* remote) {
-  const auto full_sync = PacketView(packet).as_exact<PacketFullSync>(PacketType::FULL_SYNC);
-  if (!full_sync || !local || !remote) {
+  const auto bootstrap = PacketView(packet).as_exact<PacketBootstrap>(PacketType::BOOTSTRAP);
+  if (!bootstrap || !local || !remote) {
     return;
   }
-  if (!mp_float_is_finite(full_sync->money) || !mp_float_is_finite(full_sync->gems) ||
-      !mp_float_is_finite(full_sync->skill) || !mp_float_is_finite(full_sync->x) ||
-      !mp_float_is_finite(full_sync->y) || !mp_float_is_finite(full_sync->z) ||
-      !mp_float_is_finite(full_sync->tod_ratio) ||
-      !mp_float_is_finite(full_sync->weather_cloud) ||
-      !mp_float_is_finite(full_sync->weather_fog) ||
-      !mp_float_is_finite(full_sync->weather_rain) ||
-      !mp_float_is_finite(full_sync->cam_angle_y) || full_sync->sync_aids_count > 128 ||
-      !memchr(full_sync->host_continue, '\0', sizeof(full_sync->host_continue))) {
+  if (!valid_bootstrap_packet(*bootstrap)) {
     return;
   }
-
-  local->sync_money = full_sync->money;
-  local->sync_gems = full_sync->gems;
-  local->sync_skill = full_sync->skill;
-  remote->x = full_sync->x;
-  remote->y = full_sync->y;
-  remote->z = full_sync->z;
-  local->host_task = full_sync->host_task;
-  local->host_node = full_sync->host_node;
-  memcpy(local->host_continue, full_sync->host_continue, sizeof(local->host_continue));
-  memcpy(local->task_mask, full_sync->task_mask, sizeof(local->task_mask));
-  memcpy(local->active_task_mask, full_sync->active_task_mask, sizeof(local->active_task_mask));
-  local->sync_aids_count = full_sync->sync_aids_count;
-  local->riding = full_sync->riding;
-  memcpy(local->sync_aids, full_sync->sync_aids, sizeof(local->sync_aids));
-  local->clock = full_sync->clock;
-  remote->tod_frame = full_sync->tod_frame;
-  remote->tod_ratio = full_sync->tod_ratio;
-  remote->weather_cloud = full_sync->weather_cloud;
-  remote->weather_fog = full_sync->weather_fog;
-  remote->weather_rain = full_sync->weather_rain;
-  if (local->sync_flag <= 1) {
-    local->sync_flag = 1;
-  }
+  apply_bootstrap_to_goal(*bootstrap, *local, *remote);
 }
 
 void mp_send_player_state(MultiplayerData& data, LocalPlayerInfoGOAL* local) {
@@ -263,7 +299,7 @@ void mp_send_player_state(MultiplayerData& data, LocalPlayerInfoGOAL* local) {
     MultiplayerManager::broadcast(data, 0, turret_state, ENET_PACKET_FLAG_UNSEQUENCED);
   }
 
-  if (data.local_role != 0 || !data.pending_full_sync) {
+  if (data.local_role != 0 || !data.pending_bootstrap) {
     return;
   }
 
@@ -274,39 +310,17 @@ void mp_send_player_state(MultiplayerData& data, LocalPlayerInfoGOAL* local) {
   if (data.join_status != (int)MultiplayerStatus::IN_GAME || !has_host_continue(local)) {
     return;
   }
-  if (data.last_full_sync_send_time != 0 && current_time - data.last_full_sync_send_time < 500) {
+  if (data.last_bootstrap_send_time != 0 && current_time - data.last_bootstrap_send_time < 500) {
     return;
   }
-  data.last_full_sync_send_time = current_time;
+  data.last_bootstrap_send_time = current_time;
 
-  PacketFullSync sync = {};
-  sync.header.type = PacketType::FULL_SYNC;
-  sync.header.sequenceNum = ++data.sequence_num;
-  sync.money = local->money;
-  sync.gems = local->gems;
-  sync.skill = local->skill;
-  sync.x = local->x;
-  sync.y = local->y;
-  sync.z = local->z;
-  sync.host_task = local->host_task;
-  sync.host_node = local->host_node;
-  memcpy(sync.host_continue, local->host_continue, sizeof(sync.host_continue));
-  memcpy(sync.task_mask, local->task_mask, sizeof(sync.task_mask));
-  memcpy(sync.active_task_mask, local->active_task_mask, sizeof(sync.active_task_mask));
-  sync.sync_aids_count = mp_clamp_count(local->sync_aids_count, 128);
-  sync.riding = local->riding;
-  memcpy(sync.sync_aids, local->sync_aids, sizeof(sync.sync_aids));
-  sync.clock = local->clock;
-  sync.tod_frame = local->tod_frame;
-  sync.tod_ratio = local->tod_ratio;
-  sync.weather_cloud = local->weather_cloud;
-  sync.weather_fog = local->weather_fog;
-  sync.weather_rain = local->weather_rain;
-  const bool queued = MultiplayerManager::broadcast(data, 1, sync, ENET_PACKET_FLAG_RELIABLE);
-  data.pending_full_sync_sent_once = true;
-  lg::info("[MP-Reconnect] Full sync {} for client (sequence={}, pending={}, queued_packets={}, queued_bytes={}).",
-           queued ? "queued" : "rejected", sync.header.sequenceNum,
-           data.pending_full_sync.load(), data.packet_scheduler.queued_packet_count(),
+  const auto bootstrap = make_bootstrap_packet(*local, ++data.sequence_num);
+  const bool queued = MultiplayerManager::broadcast(data, 1, bootstrap, ENET_PACKET_FLAG_RELIABLE);
+  data.pending_bootstrap_sent_once = true;
+  lg::info("[MP-Reconnect] Bootstrap {} for client (sequence={}, pending={}, queued_packets={}, queued_bytes={}).",
+           queued ? "queued" : "rejected", bootstrap.header.sequenceNum,
+           data.pending_bootstrap.load(), data.packet_scheduler.queued_packet_count(),
            data.packet_scheduler.queued_byte_count());
 }
 

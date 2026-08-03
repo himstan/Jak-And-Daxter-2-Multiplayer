@@ -55,7 +55,7 @@ class MultiplayerPacketScheduler {
  private:
   enum class Priority : uint8_t {
     ReliableEvent = 0,
-    FullSync = 1,
+    Bootstrap = 1,
     Snapshot = 2,
     Traffic = 3,
   };

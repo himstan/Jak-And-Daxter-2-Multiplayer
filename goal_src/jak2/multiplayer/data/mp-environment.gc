@@ -99,7 +99,7 @@
   )
 
 (defun mp-force-apply-remote-environment-state ()
-  "Snap the client to the host environment, used after full-sync loads."
+  "Snap the client to the host environment, used after bootstrap loads."
   (when (and (mp-is-daxter?) (mp-env-valid?))
     (mp-snap-remote-time-of-day!)
     (mp-snap-remote-weather!)

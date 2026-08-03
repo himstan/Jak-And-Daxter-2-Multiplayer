@@ -7,7 +7,7 @@
 
 (define-perm *mp-tomb-boulder-reconnect-restart?* symbol #t)
 (define-perm *mp-tomb-boulder-completion-pending?* symbol #f)
-(define-perm *mp-tomb-boulder-full-sync-local-placement?* symbol #f)
+(define-perm *mp-tomb-boulder-bootstrap-local-placement?* symbol #f)
 
 (defun mp-tomb-boulder-set-respawn-policy! ((blocked? symbol))
   (mp-set-respawn-blocks! blocked? blocked?)
@@ -17,7 +17,7 @@
 (defun mp-tomb-boulder-reset-state! ()
   (set! *mp-tomb-boulder-reconnect-restart?* #t)
   (set! *mp-tomb-boulder-completion-pending?* #f)
-  (set! *mp-tomb-boulder-full-sync-local-placement?* #f)
+  (set! *mp-tomb-boulder-bootstrap-local-placement?* #f)
   (mp-tomb-boulder-set-respawn-policy! (should-player-block-remote-respawn?))
   (none)
   )
@@ -214,7 +214,7 @@
   #f
   )
 
-(defun mp-tomb-boulder-full-sync-isolated? ()
+(defun mp-tomb-boulder-bootstrap-isolated? ()
   (and (mp-tomb-boulder-snapshot-task-closed?
          (game-task-node tomb-poles-boulder-started))
        (not (mp-tomb-boulder-snapshot-task-closed?
@@ -228,23 +228,23 @@
               (game-task-node tomb-boss-door))))
   )
 
-(defun mp-tomb-boulder-suppress-full-sync? ()
+(defun mp-tomb-boulder-suppress-bootstrap? ()
   (and (mp-is-daxter?)
-       (or (mp-tomb-boulder-full-sync-isolated?) (tomb-poles-boulder-closed-and-boss-door-not-closed?))
+       (or (mp-tomb-boulder-bootstrap-isolated?) (tomb-poles-boulder-closed-and-boss-door-not-closed?))
        (not *mp-tomb-boulder-reconnect-restart?*))
   )
 
-(defun mp-tomb-boulder-prepare-full-sync-continue! ((continue-name string) (name-length int))
-  (set! *mp-tomb-boulder-full-sync-local-placement?* #f)
+(defun mp-tomb-boulder-prepare-bootstrap-continue! ((continue-name string) (name-length int))
+  (set! *mp-tomb-boulder-bootstrap-local-placement?* #f)
   (if (and *mp-tomb-boulder-reconnect-restart?*
-           (or (mp-tomb-boulder-full-sync-isolated?) (tomb-poles-boulder-closed-and-boss-door-not-closed?))
+           (or (mp-tomb-boulder-bootstrap-isolated?) (tomb-poles-boulder-closed-and-boss-door-not-closed?))
            continue-name
            (nonzero? continue-name))
       (begin
-        (set! *mp-tomb-boulder-full-sync-local-placement?* #t)
+        (set! *mp-tomb-boulder-bootstrap-local-placement?* #t)
         (mp-tomb-boulder-set-respawn-policy! #t)
         (debug-log *mp-debug-log?*
-                   "[MP-TombBoulder] Full sync local placement selected; blocking remote placement.~%")
+                   "[MP-TombBoulder] Bootstrap local placement selected; blocking remote placement.~%")
         (if (tomb-poles-boulder-closed-and-boss-door-not-closed?)
             (copy-string<-string continue-name "tombboss-spider-end")
             (copy-string<-string continue-name "tomb-boulder")
@@ -254,14 +254,14 @@
       name-length)
   )
 
-(defun mp-tomb-boulder-skip-full-sync-host-teleport? ()
+(defun mp-tomb-boulder-skip-bootstrap-host-teleport? ()
   (the symbol
-       (and *mp-tomb-boulder-full-sync-local-placement?*
+       (and *mp-tomb-boulder-bootstrap-local-placement?*
             (mp-is-daxter?)
-            (mp-tomb-boulder-full-sync-isolated?)))
+            (mp-tomb-boulder-bootstrap-isolated?)))
   )
 
-(defun mp-tomb-boulder-restore-local-full-sync-camera! ()
+(defun mp-tomb-boulder-restore-local-bootstrap-camera! ()
   (when (and *target* (nonzero? *target*))
     (let ((control (-> *target* control)))
       (when (and control (nonzero? control))
@@ -276,13 +276,13 @@
   (none)
   )
 
-(defun mp-tomb-boulder-consume-full-sync! ()
+(defun mp-tomb-boulder-consume-bootstrap! ()
   (when (and *local-info* (nonzero? *local-info*))
     (set! (-> *local-info* sync-flag) (the-as uint 0))
     )
   (set! *multi-sync-enabled?* #t)
   (pc-multi-set-status (mp-connection-status in-game))
-  (debug-log *mp-debug-log?* "[MP-TombBoulder] Ignored host full sync during the isolated Daxter chase.~%")
+  (debug-log *mp-debug-log?* "[MP-TombBoulder] Ignored host bootstrap during the isolated Daxter chase.~%")
   (none)
   )
 
@@ -290,10 +290,10 @@
     (the-as symbol (mp-tomb-boulder-chase-continue? (mp-tomb-boulder-current-continue-name)))
   )
 
-(defun mp-tomb-boulder-full-sync-complete! ()
+(defun mp-tomb-boulder-bootstrap-complete! ()
   (when (mp-is-daxter?)
     (set! *mp-tomb-boulder-reconnect-restart?* #f)
-    (set! *mp-tomb-boulder-full-sync-local-placement?* #f)
+    (set! *mp-tomb-boulder-bootstrap-local-placement?* #f)
     (mp-tomb-boulder-set-respawn-policy! (should-player-block-remote-respawn?))
     )
   (none)
@@ -305,7 +305,7 @@
                  (= status (mp-connection-status host-left))))
     (set! *mp-tomb-boulder-reconnect-restart?* #t)
     (set! *mp-tomb-boulder-completion-pending?* #f)
-    (set! *mp-tomb-boulder-full-sync-local-placement?* #f)
+    (set! *mp-tomb-boulder-bootstrap-local-placement?* #f)
     )
   (when (= status (mp-connection-status host-left))
     (mp-tomb-boulder-set-respawn-policy! (should-player-block-remote-respawn?))

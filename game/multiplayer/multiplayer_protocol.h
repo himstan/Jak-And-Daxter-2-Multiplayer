@@ -44,7 +44,7 @@ enum class PacketType : uint8_t {
   EVENT_JOIN = 1,
   EVENT_LEAVE = 2,
   EVENT_GAME = 3,
-  FULL_SYNC = 4,
+  BOOTSTRAP = 4,
   ENEMY_SYNC = 5,
   PEDESTRIAN_SYNC = 6,
   VEHICLE_SYNC = 7,
@@ -318,7 +318,7 @@ struct PacketAirlockSync {
 };
 static_assert(sizeof(PacketAirlockSync) == 141, "PacketAirlockSync must be packed");
 
-struct PacketFullSync {
+struct PacketBootstrap {
   PacketHeader header;
   float money;
   float gems;

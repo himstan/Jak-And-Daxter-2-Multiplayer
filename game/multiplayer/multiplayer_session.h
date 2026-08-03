@@ -20,7 +20,7 @@ bool multiplayer_prepare_host_for_next_peer(MultiplayerData& data,
 bool multiplayer_begin_host_reconnect(MultiplayerData& data);
 void multiplayer_clear_session_state(MultiplayerData& data,
                                       bool preserve_reconnect_state = false);
-void multiplayer_request_full_sync(MultiplayerData& data);
+void multiplayer_request_bootstrap(MultiplayerData& data);
 void multiplayer_set_status(MultiplayerData& data, int status);
 void multiplayer_cleanup_stale_sync(MultiplayerData& data, uint32_t current_time);
 void multiplayer_update_receive_timeout(MultiplayerData& data, uint32_t current_time);

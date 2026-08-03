@@ -330,16 +330,16 @@ struct MultiplayerData {
   std::thread discovery_thread;
   std::thread scanner_thread;
   std::atomic<bool> host_discovery_active{false};
-  std::atomic<bool> pending_full_sync{false};
-  bool pending_full_sync_sent_once = false;
-  uint32_t last_full_sync_send_time = 0;
+  std::atomic<bool> pending_bootstrap{false};
+  bool pending_bootstrap_sent_once = false;
+  uint32_t last_bootstrap_send_time = 0;
   uint32_t last_event_queue_debug_time = 0;
   uint32_t last_event_receive_debug_time = 0;
 
   // Reconnection tracking
   uint32_t last_authenticated_receive_time = 0;
   bool reconnect_attempt_active = false;
-  bool reconnect_waiting_for_full_sync = false;
+  bool reconnect_waiting_for_bootstrap = false;
   uint32_t reconnect_attempt_count = 0;
   uint32_t reconnect_next_attempt_time = 0;
 

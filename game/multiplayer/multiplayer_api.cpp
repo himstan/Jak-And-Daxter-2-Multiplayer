@@ -210,15 +210,15 @@ void handle_receive_packet(MultiplayerData& data,
     case PacketType::AIRLOCK_SYNC:
       mp_handle_airlock_sync_packet(data, packet, current_time);
       break;
-    case PacketType::FULL_SYNC: {
-      static uint32_t last_full_sync_log_time = 0;
-      if (last_full_sync_log_time == 0 || current_time - last_full_sync_log_time >= 1000) {
-        lg::info("[MP-Reconnect] Received FULL_SYNC from {} (status={}, reconnect_waiting={}, pending={}).",
+    case PacketType::BOOTSTRAP: {
+      static uint32_t last_bootstrap_log_time = 0;
+      if (last_bootstrap_log_time == 0 || current_time - last_bootstrap_log_time >= 1000) {
+        lg::info("[MP-Reconnect] Received BOOTSTRAP from {} (status={}, reconnect_waiting={}, pending={}).",
                  enet_peer_endpoint_string(sender), data.join_status.load(),
-                 data.reconnect_waiting_for_full_sync, data.pending_full_sync.load());
-        last_full_sync_log_time = current_time;
+                 data.reconnect_waiting_for_bootstrap, data.pending_bootstrap.load());
+        last_bootstrap_log_time = current_time;
       }
-      mp_handle_full_sync_packet(packet, local, remote);
+      mp_handle_bootstrap_packet(packet, local, remote);
       break;
     }
     case PacketType::EVENT_LEAVE: {
@@ -337,8 +337,8 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
             disconnect_other_pending_peers(data, event.peer);
             if (data.host_game_active) {
               data.join_status = (int)MultiplayerStatus::IN_GAME;
-              multiplayer_request_full_sync(data);
-              lg::info("[MP-Reconnect] Host is requesting full sync from replacement client {}.",
+              multiplayer_request_bootstrap(data);
+              lg::info("[MP-Reconnect] Host is requesting bootstrap from replacement client {}.",
                        enet_peer_endpoint_string(event.peer));
             } else {
               data.join_status = (int)MultiplayerStatus::CONNECTED_LOBBY;
@@ -346,8 +346,8 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
           } else {
             multiplayer_note_client_reconnect_authenticated(data);
             data.join_status = (int)MultiplayerStatus::CONNECTED_LOBBY;
-            lg::info("[MP-Reconnect] Client secure handshake complete; waiting for full sync={}.",
-                     data.reconnect_waiting_for_full_sync);
+            lg::info("[MP-Reconnect] Client secure handshake complete; waiting for bootstrap={}.",
+                     data.reconnect_waiting_for_bootstrap);
           }
           data.handshake_started_time = 0;
           data.last_authenticated_receive_time = current_time;
@@ -624,7 +624,7 @@ void pc_multi_poll(u32 local_ptr, u32 remote_ptr) {
     }
     const bool reconnect_phase = data.join_status == (int)MultiplayerStatus::RECONNECTING ||
                                  data.reconnect_attempt_active ||
-                                 data.reconnect_waiting_for_full_sync;
+                                 data.reconnect_waiting_for_bootstrap;
     if (!reconnect_phase) {
       last_reconnect_heartbeat_time = 0;
       last_reconnect_skip_log_time = 0;
@@ -633,9 +633,9 @@ void pc_multi_poll(u32 local_ptr, u32 remote_ptr) {
       if (reconnect_phase &&
           (last_reconnect_skip_log_time == 0 ||
            current_time - last_reconnect_skip_log_time >= 1000)) {
-        lg::warn("[MP-Reconnect] Poll skipped: transport unavailable (initialized={}, host={}, status={}, attempt_active={}, waiting_full_sync={}, invite_saved={}).",
+        lg::warn("[MP-Reconnect] Poll skipped: transport unavailable (initialized={}, host={}, status={}, attempt_active={}, waiting_bootstrap={}, invite_saved={}).",
                  data.initialized, data.host != nullptr, data.join_status.load(),
-                 data.reconnect_attempt_active, data.reconnect_waiting_for_full_sync,
+                 data.reconnect_attempt_active, data.reconnect_waiting_for_bootstrap,
                  !data.reconnect_invite.empty());
         last_reconnect_skip_log_time = current_time;
       }
@@ -667,12 +667,12 @@ void pc_multi_poll(u32 local_ptr, u32 remote_ptr) {
     if (reconnect_phase &&
         (last_reconnect_heartbeat_time == 0 ||
          current_time - last_reconnect_heartbeat_time >= 1000)) {
-      lg::info("[MP-Reconnect] Poll servicing reconnect (status={}, initialized={}, local_port={}, peer={}, peer_state={}, handshake_started={}, authenticated={}, attempt_active={}, waiting_full_sync={}, attempt={}, pending_handshakes={}).",
+      lg::info("[MP-Reconnect] Poll servicing reconnect (status={}, initialized={}, local_port={}, peer={}, peer_state={}, handshake_started={}, authenticated={}, attempt_active={}, waiting_bootstrap={}, attempt={}, pending_handshakes={}).",
                data.join_status.load(), data.initialized, enet_local_port(data.host),
                enet_peer_endpoint_string(data.server_peer),
                data.server_peer ? static_cast<int>(data.server_peer->state) : -1,
                data.handshake_started_time, data.security.authenticated(),
-               data.reconnect_attempt_active, data.reconnect_waiting_for_full_sync,
+               data.reconnect_attempt_active, data.reconnect_waiting_for_bootstrap,
                data.reconnect_attempt_count, pending_handshake_count(data));
       last_reconnect_heartbeat_time = current_time;
       last_reconnect_skip_log_time = 0;
@@ -915,12 +915,17 @@ void pc_multi_set_status(int status) {
   multiplayer_set_status(multiplayer_data(), status);
 }
 
-void pc_multi_request_full_sync() {
+void pc_multi_request_bootstrap() {
   auto& data = multiplayer_data();
   if (data.local_role == 0 && data.join_status == (int)MultiplayerStatus::IN_GAME) {
-    multiplayer_request_full_sync(data);
-    lg::info("[Multiplayer] Full sync requested by GOAL.");
+    multiplayer_request_bootstrap(data);
+    lg::info("[Multiplayer] Bootstrap requested by GOAL.");
   }
+}
+
+void pc_multi_request_full_sync() {
+  // Keep the old GOAL symbol as a forwarding compatibility alias.
+  pc_multi_request_bootstrap();
 }
 
 void pc_multi_stop_search() {
@@ -987,9 +992,9 @@ static bool try_saved_reconnect(MultiplayerData& data) {
 
 int pc_multi_reconnect() {
   auto& data = multiplayer_data();
-  lg::info("[MP-Reconnect] Manual reconnect requested (status={}, attempt_active={}, waiting_full_sync={}, attempt_count={}, invite_saved={}).",
+  lg::info("[MP-Reconnect] Manual reconnect requested (status={}, attempt_active={}, waiting_bootstrap={}, attempt_count={}, invite_saved={}).",
            data.join_status.load(), data.reconnect_attempt_active,
-           data.reconnect_waiting_for_full_sync, data.reconnect_attempt_count,
+           data.reconnect_waiting_for_bootstrap, data.reconnect_attempt_count,
            !data.reconnect_invite.empty());
   if (data.reconnect_invite.empty()) {
     lg::warn("[Multiplayer] Reconnect requested without a saved client invite.");
@@ -1389,6 +1394,8 @@ void init_multiplayer_pc_port() {
   jak2::make_function_symbol_from_c("pc-multi-setup-client", (void*)pc_multi_setup_client);
   jak2::make_function_symbol_from_c("pc-multi-get-status", (void*)pc_multi_get_status);
   jak2::make_function_symbol_from_c("pc-multi-set-status", (void*)pc_multi_set_status);
+  jak2::make_function_symbol_from_c("pc-multi-request-bootstrap",
+                                    (void*)pc_multi_request_bootstrap);
   jak2::make_function_symbol_from_c("pc-multi-request-full-sync",
                                     (void*)pc_multi_request_full_sync);
   jak2::make_function_symbol_from_c("pc-multi-stop-search", (void*)pc_multi_stop_search);

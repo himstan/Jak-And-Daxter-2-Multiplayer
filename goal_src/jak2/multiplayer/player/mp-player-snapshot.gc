@@ -194,7 +194,7 @@
   (none))
 
 (defun mp-pack-local-continue-name! ()
-  "Pack the current continue name bytes for client full-sync alignment."
+  "Pack the current continue name bytes for client bootstrap alignment."
   (when (and *local-info*
              (nonzero? *local-info*)
              *game-info*
@@ -304,7 +304,7 @@
   )
 
 (defun mp-pack-local-world-snapshot! ()
-  "Host-only full-sync world snapshot packed into local-info."
+  "Host-only bootstrap world snapshot packed into local-info."
   (when (and (mp-is-jak?)
              *local-info*
              (nonzero? *local-info*))

@@ -34,7 +34,7 @@
              (nonzero? (the-as uint *mp-pending-scene-sync-continue-name*)))
     (set! (-> *mp-pending-scene-sync-continue-name* data 0) (the uint 0))
     )
-  (set! *mp-intro-skip-full-sync-pending?* #f)
+  (set! *mp-intro-skip-bootstrap-pending?* #f)
   (set! *mp-intro-skip-blackout-pending?* #f)
   (when (and *mp-last-scene-name*
              (nonzero? (the-as uint *mp-last-scene-name*)))
@@ -273,20 +273,20 @@
   )
 
 (defun mp-ignore-intro-start-after-skip? ((scene-name string))
-  "Ignore teardown-generated intro starts while the client awaits prison full sync."
+  "Ignore teardown-generated intro starts while the client awaits prison bootstrap."
   (and (mp-is-daxter?)
        *mp-intro-skip-blackout-pending?*
        (mp-intro-chain-scene? scene-name))
   )
 
-(defun mp-arm-intro-skip-full-sync! ((scene-name string))
-  "Handle the first intro skip race with host full sync and client blackout."
+(defun mp-arm-intro-skip-bootstrap! ((scene-name string))
+  "Handle the first intro skip race with host bootstrap and client blackout."
   (when (mp-intro-samos-hut-scene? scene-name)
     (cond
       ((mp-is-jak?)
 
-       (debug-log *mp-debug-log?* "[MP-Event-Handlers] Remote skipped intro-samos-hut. Host full sync pending.~%")
-       (set! *mp-intro-skip-full-sync-pending?* #t)
+       (debug-log *mp-debug-log?* "[MP-Event-Handlers] Remote skipped intro-samos-hut. Host bootstrap pending.~%")
+       (set! *mp-intro-skip-bootstrap-pending?* #t)
        )
       ((mp-is-daxter?)
        (debug-log *mp-debug-log?* "[MP-Event-Handlers] Remote skipped intro-samos-hut. Client blackout pending.~%")
@@ -297,7 +297,7 @@
   (none)
   )
 
-(defun mp-intro-skip-host-ready-for-full-sync? ()
+(defun mp-intro-skip-host-ready-for-bootstrap? ()
   "True once the host has landed at the prison continue after the skipped intro."
   (and (mp-is-jak?)
        (= (pc-multi-get-status) (mp-connection-status in-game))
@@ -319,20 +319,20 @@
        (= (-> *game-info* current-continue level) 'prison))
   )
 
-(defun mp-request-intro-skip-full-sync-when-ready! ()
+(defun mp-request-intro-skip-bootstrap-when-ready! ()
   "Consume the pending first-intro skip sync once the host is safely in prison."
-  (when (and *mp-intro-skip-full-sync-pending?*
-             (mp-intro-skip-host-ready-for-full-sync?))
-    (debug-log *mp-debug-log?* "[MP-Event-Handlers] Host stable in prison. Requesting full sync for client.~%")
-    (set! *mp-intro-skip-full-sync-pending?* #f)
+  (when (and *mp-intro-skip-bootstrap-pending?*
+             (mp-intro-skip-host-ready-for-bootstrap?))
+    (debug-log *mp-debug-log?* "[MP-Event-Handlers] Host stable in prison. Requesting bootstrap for client.~%")
+    (set! *mp-intro-skip-bootstrap-pending?* #f)
 
-    (pc-multi-request-full-sync)
+    (pc-multi-request-bootstrap)
     )
   (none)
   )
 
 (defun mp-hold-intro-skip-blackout! ()
-  "Keep the client hidden between intro scene teardown and the host's authoritative full sync."
+  "Keep the client hidden between intro scene teardown and the host's authoritative bootstrap."
   (when (and *mp-intro-skip-blackout-pending?*
              (mp-is-daxter?)
              (= (pc-multi-get-status) (mp-connection-status in-game))
@@ -805,7 +805,7 @@
 (defun mp-event-handler-scene-request-skip ((aid uint))
   (debug-log *mp-debug-log?* "[MP-Event-Handlers] Remote player requested to skip scene.~%")
   (set! *mp-remote-wants-skip* #t)
-  (mp-arm-intro-skip-full-sync! *mp-scene-name-scratch*)
+  (mp-arm-intro-skip-bootstrap! *mp-scene-name-scratch*)
   (none))
 
 (defun mp-event-handler-scene-skipped ((aid uint))
@@ -823,7 +823,7 @@
     ;; Force blackout off immediately to prevent getting stuck
     (mp-clear-client-presentation-blackout!)
     )
-  (mp-arm-intro-skip-full-sync! *mp-scene-name-scratch*)
+  (mp-arm-intro-skip-bootstrap! *mp-scene-name-scratch*)
   (none))
 
 (defun mp-event-handler-authority-request ((aid uint))
@@ -998,7 +998,7 @@
   (when (mp-is-daxter?)
     (case m-evt
       ((MP_EVENT_MISSION_FAILED_RETRY_YES)
-       (debug-log *mp-debug-log?* "[MP-Events] Host selected retry. Closing prompt and awaiting full sync.~%")
+       (debug-log *mp-debug-log?* "[MP-Events] Host selected retry. Closing prompt and awaiting bootstrap.~%")
        (mp-close-local-fail-mission!)
        )
       ((MP_EVENT_MISSION_FAILED_RETRY_NO)
@@ -1184,39 +1184,39 @@
   (none)
   )
 
-(defun mp-log-mission-failed-full-sync-wait ((reason string))
-  "Throttle host retry full-sync readiness diagnostics."
-  (when (time-elapsed? *mp-mission-failed-full-sync-next-log-time* (seconds 2))
-    (debug-log *mp-debug-log?* "[MP-Events] Waiting to request full sync: ~A.~%" reason)
-    (set-time! *mp-mission-failed-full-sync-next-log-time*)
+(defun mp-log-mission-failed-bootstrap-wait ((reason string))
+  "Throttle host retry bootstrap readiness diagnostics."
+  (when (time-elapsed? *mp-mission-failed-bootstrap-next-log-time* (seconds 2))
+    (debug-log *mp-debug-log?* "[MP-Events] Waiting to request bootstrap: ~A.~%" reason)
+    (set-time! *mp-mission-failed-bootstrap-next-log-time*)
     )
   (none)
   )
 
-(defun mp-arm-mission-failed-full-sync-after-spawn ()
-  "Arm the retry full-sync only after the host's retry reload has spawned Jak again."
-  (when (and *mp-mission-failed-full-sync-await-spawn?*
+(defun mp-arm-mission-failed-bootstrap-after-spawn ()
+  "Arm the retry bootstrap only after the host's retry reload has spawned Jak again."
+  (when (and *mp-mission-failed-bootstrap-await-spawn?*
              (mp-is-jak?)
              (= (pc-multi-get-status) (mp-connection-status in-game)))
-    (debug-log *mp-debug-log?* "[MP-Events] Post-reload spawn observed. Full sync pending.~%")
-    (set! *mp-mission-failed-full-sync-await-spawn?* #f)
-    (set! *mp-mission-failed-full-sync-pending?* #t)
-    (set-time! *mp-mission-failed-full-sync-ready-time*)
-    (set! *mp-mission-failed-full-sync-next-log-time* (the-as time-frame 0))
+    (debug-log *mp-debug-log?* "[MP-Events] Post-reload spawn observed. Bootstrap pending.~%")
+    (set! *mp-mission-failed-bootstrap-await-spawn?* #f)
+    (set! *mp-mission-failed-bootstrap-pending?* #t)
+    (set-time! *mp-mission-failed-bootstrap-ready-time*)
+    (set! *mp-mission-failed-bootstrap-next-log-time* (the-as time-frame 0))
     )
   (none)
   )
 
-(defun mp-request-mission-failed-full-sync-when-ready ()
-  "After a host retry reload, request the existing full-sync packet once the world is stable."
-  (when *mp-mission-failed-full-sync-pending?*
+(defun mp-request-mission-failed-bootstrap-when-ready ()
+  "After a host retry reload, request the bootstrap packet once the world is stable."
+  (when *mp-mission-failed-bootstrap-pending?*
     (cond
       ((not (mp-is-jak?))
-       (set! *mp-mission-failed-full-sync-pending?* #f)
-       (set! *mp-mission-failed-full-sync-next-log-time* (the-as time-frame 0))
+       (set! *mp-mission-failed-bootstrap-pending?* #f)
+       (set! *mp-mission-failed-bootstrap-next-log-time* (the-as time-frame 0))
        )
       ((and (= (pc-multi-get-status) (mp-connection-status in-game))
-            (time-elapsed? *mp-mission-failed-full-sync-ready-time* (seconds 1))
+            (time-elapsed? *mp-mission-failed-bootstrap-ready-time* (seconds 1))
             *target*
             (-> *target* control)
             (not (focus-test? *target* teleporting))
@@ -1227,43 +1227,43 @@
             (nonzero? (the-as uint *level*))
             (= (-> *level* loading-level) (-> *level* default-level))
             (-> *game-info* current-continue))
-       (debug-log *mp-debug-log?* "[MP-Events] Host retry reload stable. Requesting full sync.~%")
-       (pc-multi-request-full-sync)
-       (set! *mp-mission-failed-full-sync-pending?* #f)
-       (set! *mp-mission-failed-full-sync-next-log-time* (the-as time-frame 0))
+       (debug-log *mp-debug-log?* "[MP-Events] Host retry reload stable. Requesting bootstrap.~%")
+       (pc-multi-request-bootstrap)
+       (set! *mp-mission-failed-bootstrap-pending?* #f)
+       (set! *mp-mission-failed-bootstrap-next-log-time* (the-as time-frame 0))
        )
       (else
         (cond
           ((not (= (pc-multi-get-status) (mp-connection-status in-game)))
-           (mp-log-mission-failed-full-sync-wait "network status is not IN_GAME")
+           (mp-log-mission-failed-bootstrap-wait "network status is not IN_GAME")
            )
-          ((not (time-elapsed? *mp-mission-failed-full-sync-ready-time* (seconds 1)))
-           (mp-log-mission-failed-full-sync-wait "post-spawn delay has not elapsed")
+          ((not (time-elapsed? *mp-mission-failed-bootstrap-ready-time* (seconds 1)))
+           (mp-log-mission-failed-bootstrap-wait "post-spawn delay has not elapsed")
            )
           ((not *target*)
-           (mp-log-mission-failed-full-sync-wait "target is missing")
+           (mp-log-mission-failed-bootstrap-wait "target is missing")
            )
           ((not (-> *target* control))
-           (mp-log-mission-failed-full-sync-wait "target control is missing")
+           (mp-log-mission-failed-bootstrap-wait "target control is missing")
            )
           ((focus-test? *target* teleporting)
-           (mp-log-mission-failed-full-sync-wait "target is teleporting")
+           (mp-log-mission-failed-bootstrap-wait "target is teleporting")
            )
           ((and (-> *target* state) (= (-> *target* state name) 'target-load-wait))
-           (mp-log-mission-failed-full-sync-wait "target state is load-wait")
+           (mp-log-mission-failed-bootstrap-wait "target state is load-wait")
            )
           ((and (-> *target* next-state) (= (-> *target* next-state name) 'target-load-wait))
-           (mp-log-mission-failed-full-sync-wait "target next-state is load-wait")
+           (mp-log-mission-failed-bootstrap-wait "target next-state is load-wait")
            )
           ((or (not *level*) (zero? (the-as uint *level*)))
-           (mp-log-mission-failed-full-sync-wait "level is missing")
+           (mp-log-mission-failed-bootstrap-wait "level is missing")
            )
           ((!= (-> *level* loading-level) (-> *level* default-level))
-           (mp-log-mission-failed-full-sync-wait "level is loading")
+           (mp-log-mission-failed-bootstrap-wait "level is loading")
            )
 
           ((not (-> *game-info* current-continue))
-           (mp-log-mission-failed-full-sync-wait "current continue is missing")
+           (mp-log-mission-failed-bootstrap-wait "current continue is missing")
            )
           )
        )

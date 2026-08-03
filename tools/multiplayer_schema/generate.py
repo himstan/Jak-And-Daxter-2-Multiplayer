@@ -14,7 +14,7 @@ GOAL_OUTPUT = ROOT / "goal_src" / "jak2" / "multiplayer" / "core" / "mp-schema-g
 EVENT_GOAL_OUTPUT = ROOT / "goal_src" / "jak2" / "multiplayer" / "event" / "mp-event-h.gc"
 
 ROLES = {"none": 0, "host_to_client": 1, "both": 3}
-PRIORITIES = {"reliable": 0, "full_sync": 1, "snapshot": 2, "traffic": 3}
+PRIORITIES = {"reliable": 0, "bootstrap": 1, "snapshot": 2, "traffic": 3}
 RELIABILITY = {"unreliable": 0, "reliable": 1}
 COALESCING = {"never": 0, "latest": 1}
 CHUNKS = {"replace": 0, "preserve": 1}

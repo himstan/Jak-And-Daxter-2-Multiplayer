@@ -5,6 +5,19 @@
 
 #include <vector>
 
+TEST(MultiplayerProtocol, BootstrapKeepsWireIdentityAndLayout) {
+  EXPECT_EQ(static_cast<uint8_t>(PacketType::BOOTSTRAP), 4u);
+  EXPECT_EQ(kMultiplayerWireRevision, 4u);
+  EXPECT_EQ(sizeof(PacketBootstrap), 769u);
+
+  const auto* descriptor = multiplayer::schema::packet_descriptor(4);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_STREQ(descriptor->name, "BOOTSTRAP");
+  EXPECT_EQ(descriptor->allowed_roles, 1u);
+  EXPECT_EQ(descriptor->priority, 1u);
+  EXPECT_EQ(descriptor->max_payload, 2048u);
+}
+
 TEST(MultiplayerEventCodec, EncodesOnlyTheDeclaredPayloadLength) {
   MPEvent event = {};
   event.etype = 34;
