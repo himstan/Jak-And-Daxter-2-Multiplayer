@@ -3,8 +3,11 @@
 
 (defun mp-remote-teleport-ready-or-request! ()
   "Request the remote player's levels and return true once they are locally ready."
-  (mp-ensure-remote-level-wanted!)
-  (mp-remote-level-ready?)
+  (if (mp-respawn-policy-blocks-remote-placement?)
+      #f
+      (begin
+        (mp-ensure-remote-level-wanted!)
+        (mp-remote-level-ready?)))
   )
 
 (defun mp-teleport-target-ready? ((player target))

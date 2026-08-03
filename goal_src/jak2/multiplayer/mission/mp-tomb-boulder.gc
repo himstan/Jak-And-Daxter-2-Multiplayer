@@ -70,8 +70,6 @@
 (defun level-auto-continue-protected? ((current continue-point) (candidate continue-point))
   (the symbol
        (and (mp-is-daxter?)
-            (or *mp-tomb-boulder-completion-pending?*
-                (mp-tomb-boulder-complete?))
             current
             (nonzero? current)
             candidate
@@ -80,9 +78,12 @@
             (nonzero? (-> current name))
             (-> candidate name)
             (nonzero? (-> candidate name))
-            (string= (-> current name) "tombboss-spider-end")
-            (not (mp-tomb-boulder-snapshot-task-closed?
-                          (game-task-node tomb-boss-door)))))
+            (or (mp-respawn-policy-blocks-remote-placement?)
+                (and (or *mp-tomb-boulder-completion-pending?*
+                         (mp-tomb-boulder-complete?))
+                     (string= (-> current name) "tombboss-spider-end")
+                     (not (mp-tomb-boulder-snapshot-task-closed?
+                                   (game-task-node tomb-boss-door)))))))
   )
 
 (defun mp-tomb-boulder-ignore-remote-continue? ((continue-name string))
@@ -241,6 +242,9 @@
            (nonzero? continue-name))
       (begin
         (set! *mp-tomb-boulder-full-sync-local-placement?* #t)
+        (mp-tomb-boulder-set-respawn-policy! #t)
+        (debug-log *mp-debug-log?*
+                   "[MP-TombBoulder] Full sync local placement selected; blocking remote placement.~%")
         (if (tomb-poles-boulder-closed-and-boss-door-not-closed?)
             (copy-string<-string continue-name "tombboss-spider-end")
             (copy-string<-string continue-name "tomb-boulder")

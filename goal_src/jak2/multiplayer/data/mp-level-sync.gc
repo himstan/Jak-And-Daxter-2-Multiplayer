@@ -2,6 +2,23 @@
 (in-package goal)
 
 (define-perm *mp-level-sync-next-unknown-log-time* time-frame 0)
+(define-perm *mp-level-sync-policy-next-log-time* time-frame 0)
+
+(defun mp-level-sync-log-policy-blocked! ()
+  (when (and *mp-debug-log?*
+             (>= (current-time) *mp-level-sync-policy-next-log-time*))
+    (let ((vis-level 'none))
+      (when (and *load-state* (nonzero? *load-state*))
+        (set! vis-level (-> *load-state* vis-nick))
+        )
+      (debug-log *mp-debug-log?*
+                 "[MP-LevelSync] Remote placement blocked by respawn policy; preserving vis=~S.~%"
+                 vis-level)
+      (set! *mp-level-sync-policy-next-log-time* (+ (current-time) (seconds 1)))
+      )
+    )
+  (none)
+  )
 
 (define *mp-level-id-table* (new 'static 'boxed-array :type symbol
                               'default-level 'intro 'demo 'ctywide 'ctysluma 'hideout 'title 'vinroom
@@ -383,7 +400,14 @@
 
 (defun mp-want-multiple-levels-for-remote-teleport! ((levels (pointer symbol)))
   "Request and load multiple level symbols for spectating/teleporting."
-  (when (and *load-state* (nonzero? *load-state*))
+  (when (mp-respawn-policy-blocks-remote-placement?)
+    (mp-level-sync-log-policy-blocked!)
+    )
+  (when (and (not (mp-respawn-policy-blocks-remote-placement?))
+             levels
+             (nonzero? levels)
+             *load-state*
+             (nonzero? *load-state*))
     (let ((desired-levels (new 'stack-no-clear 'array 'symbol 6)))
       (dotimes (idx 6)
         (set! (-> desired-levels idx) #f)

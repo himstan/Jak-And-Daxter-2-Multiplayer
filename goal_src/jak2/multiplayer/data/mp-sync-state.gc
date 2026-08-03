@@ -308,7 +308,6 @@
   )
 
 (defun mp-handle-full-sync-state ()
-  "Handle Full Sync State Machine (MUST BE ABOVE GUARDS)"
   (when (and (mp-is-daxter?) (nonzero? (-> *local-info* sync-flag)))
     (if (mp-tomb-boulder-suppress-full-sync?)
         (mp-tomb-boulder-consume-full-sync!)

@@ -24,6 +24,7 @@ into 7 sections, which might explain the weird sizes in the center.
 (define-extern level-update-after-load (function level login-state level))
 (define-extern *level-type-list* type)
 (define-extern level-auto-continue-protected? (function continue-point continue-point symbol))
+(define-extern mp-respawn-policy-blocks-remote-placement? (function symbol))
 
 (defglobalconstant NUM_LEVEL_PAGES 146)
 (defglobalconstant LEVEL_PAGE_SIZE_KB 126) ;; original value
@@ -2664,14 +2665,15 @@ into 7 sections, which might explain the weird sizes in the center.
               (when (!= (-> this vis-nick) (-> current-continue vis-nick))
                 (when *mp-debug-log?*
                   (debug-log *mp-debug-log?*
-                             "[ContinuePager] align-vis old=~S new=~S current=~S candidate=~S role=~D~%"
+                             "[ContinuePager] align-vis old=~S new=~S current=~S candidate=~S role=~D policy=~A~%"
                              (-> this vis-nick)
                              (-> current-continue vis-nick)
                              (-> current-continue name)
                              (-> candidate-continue name)
                              (if (and *local-info* (nonzero? *local-info*))
                                  (-> *local-info* role)
-                                 -1))
+                                 -1)
+                             (mp-respawn-policy-blocks-remote-placement?))
                   )
                 (want-vis-level this (-> current-continue vis-nick))
                 )
