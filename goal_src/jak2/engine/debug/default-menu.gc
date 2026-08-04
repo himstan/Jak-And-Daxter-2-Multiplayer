@@ -4133,23 +4133,6 @@
              (flag "Level Load View" *mp-level-debug?* dm-boolean-toggle-pick-func)
             )
            (menu
-             "Animation"
-             (flag "Animation Debug Draw" *mp-debug-draw* dm-boolean-toggle-pick-func)
-             (flag "Smooth Sync?" *mp-anim-smooth-sync?* dm-boolean-toggle-pick-func)
-             (float-var "Gain" *mp-anim-gain* dm-float-toggle-pick-func 100 5 #t 0 1 2)
-             (float-var "Snap Threshold" *mp-anim-snap-threshold* dm-float-toggle-pick-func 10 1 #t 0 300 1)
-             (float-var "Latency Factor" *mp-anim-latency-factor* dm-float-toggle-pick-func 10 1 #t 0 2 1)
-             (float-var "Speed Lerp" *mp-anim-speed-lerp* dm-float-toggle-pick-func 10 5 #t 0 1 2)
-             (float-var "Speed Offset" *mp-anim-speed-offset* dm-float-toggle-pick-func 100 1 #t -1 1 2)
-             (float-var "Max Speed" *mp-anim-max-speed* dm-float-toggle-pick-func 10 1 #t 0 10 1)
-             (float-var "Min Speed" *mp-anim-min-speed* dm-float-toggle-pick-func 10 1 #t 0 5 1)
-             (float-var "Ping Buffer" *mp-anim-ping-buffer* dm-float-toggle-pick-func 10 1 #t 0 100 1)
-             (float-var "Safety Buffer" *mp-anim-safety-buffer* dm-float-toggle-pick-func 10 1 #t 0 10 1)
-             (float-var "Ticks to Frames" *mp-anim-ticks-to-frames* dm-float-toggle-pick-func 10 1 #t 1 10 1)
-             (int-var "Blend Time (ticks)" *mp-anim-blend-time* dm-int-toggle-pick-func 1 1 #t 0 300)
-             (int-var "Max Latency (ticks)" *mp-anim-max-latency* dm-int-toggle-pick-func 1 5 #t 0 1000)
-             )
-           (menu
              "Network"
              (flag "Network Debug" *mp-debug-network* dm-boolean-toggle-pick-func)
              (flag "Simulate Connection Loss" *mp-debug-simulate-loss?* dm-boolean-toggle-pick-func)
@@ -4168,8 +4151,8 @@
              (flag "Gun Debug Draw" *mp-gun-debug?* dm-boolean-toggle-pick-func)
              )
            (menu
-             "Enemies"
-             (flag "Authority Debug Draw" *mp-enemy-debug-auth?* dm-boolean-toggle-pick-func)
+             "Enemy"
+             (flag "Enemy Debug Draw" *mp-enemy-debug-auth?* dm-boolean-toggle-pick-func)
              )
            (menu
              "Traffic"
