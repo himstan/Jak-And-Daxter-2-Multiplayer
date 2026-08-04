@@ -2469,6 +2469,9 @@
     (none)
     )
   :trans (behavior ()
+    (if (or (not (-> self heart)) (zero? (-> self heart)))
+      (set! (-> self heart) (ppointer->handle (process-spawn heart-mar (-> self root trans) :to self)))
+      )
     (cond
       ((and (= (-> self movie-handle) #f) (not (task-node-closed? (game-task-node tomb-boss-introduction))))
        (when (and (not *scene-player*)
@@ -2494,7 +2497,6 @@
       ((or (not (handle->process (-> self movie-handle)))
            (task-node-closed? (game-task-node tomb-boss-introduction))
            )
-       (set! (-> self heart) (ppointer->handle (process-spawn heart-mar (-> self root trans) :to self)))
        (set-setting! 'music 'danger7 0.0 0)
        (go-virtual launch-droids-stage-1)
        )
