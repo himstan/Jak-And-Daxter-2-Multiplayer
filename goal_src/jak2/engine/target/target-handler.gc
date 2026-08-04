@@ -894,20 +894,16 @@
        ;; Authoritative standard edge grab sync.
        (let ((gp-0 *remote-edge-grab-info*))
          (debug-log *mp-debug-log?* "[Target-Handler] Puppet event handler: mp-edge-grab-synced~%")
-         
-         ;; Safety fallback: if the actor is null or doesn't exist locally, target ourselves to prevent crash.
-         (let ((h (-> gp-0 actor-handle)))
-           (when (or (zero? h) (not (handle->process h)))
-             (debug-log *mp-debug-log?* "[Target-Handler] Actor handle invalid, falling back to self~%")
-             (set! (-> gp-0 actor-handle) (process->handle self))
-             )
-           )
-         ;; Branch based on character (Both states now surgically select between local/remote info)
-         (debug-log *mp-debug-log?* "[Target-Handler] Character check and go...~%")
-         (if (focus-test? self indax)
-             (go target-indax-edge-grab)
-             (go target-edge-grab)
-             )
+         (let ((actor-proc (handle->process-safe (-> gp-0 actor-handle))))
+           (when (and actor-proc
+                      (nonzero? actor-proc)
+                      (type? actor-proc process-drawable))
+             ;; Branch based on character only after the actor handle resolves.
+             (debug-log *mp-debug-log?* "[Target-Handler] Character check and go...~%")
+             (if (focus-test? self indax)
+                 (go target-indax-edge-grab)
+                 (go target-edge-grab)
+                 )))
          )
        (return #t)
        )
@@ -915,23 +911,22 @@
        ;; Authoritative pilot edge grab sync.
        (let ((gp-0 *remote-edge-grab-info*))
          (debug-log *mp-debug-log?* "[Target-Handler] Puppet event handler: mp-pilot-edge-grab-synced~%")
-         
-         ;; Safety fallback
-         (let ((h (-> gp-0 pilot-edge-grab handle)))
-           (when (or (zero? h) (not (handle->process h)))
-             (debug-log *mp-debug-log?* "[Target-Handler] Pilot handle invalid, falling back to self~%")
-             (set! (-> gp-0 pilot-edge-grab handle) (process->handle self))
-             )
-           )
-         ;; Ensure the main actor-handle is also synced/valid for the logic-target checks
-         (set! (-> gp-0 actor-handle) (-> gp-0 pilot-edge-grab handle))
-         ;; Redirect to standard engine state (The engine logic now picks the correct info buffer)
-         (debug-log *mp-debug-log?* "[Target-Handler] Go target-pilot-edge-grab...~%")
-         (if (focus-test? self indax)
-             (go target-indax-pilot-edge-grab (-> gp-0 pilot-edge-grab))
-             (go target-pilot-edge-grab (-> gp-0 pilot-edge-grab))
-             )
-       )
+         (let ((pilot-proc
+                 (handle->process-safe (-> gp-0 pilot-edge-grab handle))))
+           (if (and pilot-proc
+                    (nonzero? pilot-proc)
+                    (!= pilot-proc self)
+                    (type? pilot-proc process-drawable))
+               (begin
+                 ;; Ensure the main actor-handle is also synced for logic-target.
+                 (set! (-> gp-0 actor-handle) (process->handle pilot-proc))
+                 (debug-log *mp-debug-log?* "[Target-Handler] Go target-pilot-edge-grab...~%")
+                 (if (focus-test? self indax)
+                     (go target-indax-pilot-edge-grab (-> gp-0 pilot-edge-grab))
+                     (go target-pilot-edge-grab (-> gp-0 pilot-edge-grab))))
+               (debug-log *mp-debug-log?*
+                          "[Target-Handler] Pilot handle unresolved; dropping edge grab~%")))
+         )
       (return #t)
       )
       (('mp-pole-grab-synced)

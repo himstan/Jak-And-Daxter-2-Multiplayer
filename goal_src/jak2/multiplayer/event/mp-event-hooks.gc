@@ -102,6 +102,46 @@
   (none)
   )
 
+(defun mp-pack-edge-grab-process-ref!
+       ((dst mp-edge-grab-event-data) (proc process) (pilot? symbol))
+  (when (and dst (nonzero? dst))
+    (if pilot?
+        (begin
+          (set! (-> dst pilot-actor-id) (the uint 0))
+          (set! (-> dst pilot-actor-kind) (the uint 0)))
+        (begin
+          (set! (-> dst actor-id) (the uint 0))
+          (set! (-> dst actor-kind) (the uint 0))))
+    (when (and proc (nonzero? proc))
+      (let ((actor-id (the uint 0))
+            (actor-kind (the uint 0)))
+        (cond
+          ((type-type? (-> proc type) vehicle)
+           (set! actor-id (-> (the-as vehicle proc) net-id))
+           (set! actor-kind (the uint 2)))
+          ((and (not pilot?)
+                (type-type? (-> proc type) citizen))
+           (set! actor-id (-> (the-as citizen proc) net-id))
+           (set! actor-kind (the uint 3)))
+          ((type? proc process-drawable)
+           (let ((ent (-> (the-as process-drawable proc) entity)))
+             (when (and ent (nonzero? ent))
+               (set! actor-id (-> ent aid))
+               (set! actor-kind (the uint 1)))))
+          )
+        (if pilot?
+            (begin
+              (set! (-> dst pilot-actor-id) actor-id)
+              (set! (-> dst pilot-actor-kind) actor-kind))
+            (begin
+              (set! (-> dst actor-id) actor-id)
+              (set! (-> dst actor-kind) actor-kind)))
+        )
+      )
+    )
+  (none)
+  )
+
 (defun mp-pack-edge-grab-info ((dst mp-edge-grab-event-data) (src edge-grab-info))
   (when (and dst (nonzero? dst) src (nonzero? src))
     (dotimes (index 8)
@@ -110,24 +150,10 @@
       )
     (set! (-> dst status) (-> src status))
     (set! (-> dst actor-cshape-prim-offset) (-> src actor-cshape-prim-offset))
-    (set! (-> dst actor-id) (the uint 0))
-    (set! (-> dst actor-kind) (the uint 0))
-    (let ((proc (handle->process (-> src actor-handle))))
-      (when (and proc (nonzero? proc))
-        (cond
-          ((type-type? (-> proc type) vehicle)
-           (set! (-> dst actor-id) (-> (the-as vehicle proc) net-id))
-           (set! (-> dst actor-kind) (the uint 2)))
-          ((type-type? (-> proc type) citizen)
-           (set! (-> dst actor-id) (-> (the-as citizen proc) net-id))
-           (set! (-> dst actor-kind) (the uint 3)))
-          (else
-           (let ((ent (-> (the-as process-drawable proc) entity)))
-             (when (and ent (nonzero? ent))
-               (set! (-> dst actor-id) (-> ent aid))
-               (set! (-> dst actor-kind) (the uint 1))))))
-        )
-      )
+    (mp-pack-edge-grab-process-ref!
+      dst
+      (handle->process-safe (-> src actor-handle))
+      #f)
     (mem-copy! (the-as pointer (-> dst hanging-matrix))
                (the-as pointer (-> src hanging-matrix))
                64)
@@ -144,7 +170,11 @@
             (else 0)))
     (when (-> src pilot-edge-grab?)
       (vector-copy! (-> dst pilot-local-pos) (-> src pilot-edge-grab local-pos))
-      (vector-copy! (-> dst pilot-local-dir) (-> src pilot-edge-grab local-dir)))
+      (vector-copy! (-> dst pilot-local-dir) (-> src pilot-edge-grab local-dir))
+      (mp-pack-edge-grab-process-ref!
+        dst
+        (handle->process-safe (-> src pilot-edge-grab handle))
+        #t))
     (vector-copy! (-> dst pilot-start-grab-pos) (-> src pilot-start-grab-pos))
     (set! (-> dst pilot-grab-interp) (-> src pilot-grab-interp))
     )

@@ -1954,9 +1954,16 @@
     (cond
       ((-> s5-0 pilot-edge-grab?)
        (set! (-> self control ground-pat) (new 'static 'pat-surface :material (pat-material metal)))
-       (cond
-         ((send-event (handle->process (-> s5-0 pilot-edge-grab handle)) 'pilot-edge-grab s5-0)
-          (let ((a0-7 (handle->process (-> s5-0 pilot-edge-grab handle))))
+       (let ((pilot-proc (handle->process-safe (-> s5-0 pilot-edge-grab handle))))
+         (cond
+           ((and pilot-proc
+                 (nonzero? pilot-proc)
+                 (!= pilot-proc self)
+                 (type? pilot-proc process-drawable)
+                 (-> (the-as process-drawable pilot-proc) node-list)
+                 (nonzero? (-> (the-as process-drawable pilot-proc) node-list))
+                 (send-event pilot-proc 'pilot-edge-grab s5-0))
+            (let ((a0-7 pilot-proc))
             (set! (-> s5-0 center-hold-old quad) (-> s5-0 center-hold quad))
             (let ((gp-0 (new 'stack-no-clear 'bone)))
               (let* ((v1-13 (-> gp-0 transform))
@@ -1977,9 +1984,12 @@
               (set! (-> self control edge-grab-edge-dir quad) (-> (&+ gp-0 80) transform quad 0))
               )
             )
-          )
-         (else
-           (send-event self 'end-mode)
+           )
+           (else
+             (debug-log *mp-debug-log?*
+                        "[Target-Logic] Pilot handle invalid; ending edge grab~%")
+             (send-event self 'end-mode)
+             (return #f))
            )
          )
        )
@@ -2109,9 +2119,16 @@
     (cond
       ((-> gp-0 pilot-edge-grab?)
        (set! (-> self control ground-pat) (new 'static 'pat-surface :material (pat-material metal)))
-       (cond
-         ((send-event (handle->process (-> gp-0 pilot-edge-grab handle)) 'pilot-edge-grab gp-0)
-          (let ((a0-7 (handle->process (-> gp-0 pilot-edge-grab handle))))
+       (let ((pilot-proc (handle->process-safe (-> gp-0 pilot-edge-grab handle))))
+         (cond
+           ((and pilot-proc
+                 (nonzero? pilot-proc)
+                 (!= pilot-proc self)
+                 (type? pilot-proc process-drawable)
+                 (-> (the-as process-drawable pilot-proc) node-list)
+                 (nonzero? (-> (the-as process-drawable pilot-proc) node-list))
+                 (send-event pilot-proc 'pilot-edge-grab gp-0))
+            (let ((a0-7 pilot-proc))
             (set! (-> gp-0 center-hold-old quad) (-> gp-0 center-hold quad))
             (let ((s5-0 (new 'stack-no-clear 'bone)))
               (let* ((v1-13 (-> s5-0 transform))
@@ -2132,9 +2149,12 @@
               (set! (-> self control edge-grab-edge-dir quad) (-> (&+ s5-0 80) transform quad 0))
               )
             )
-          )
-         (else
-           (send-event self 'end-mode)
+           )
+           (else
+             (debug-log *mp-debug-log?*
+                        "[Target-Logic] Pilot handle invalid; ending rider edge grab~%")
+             (send-event self 'end-mode)
+             (return #f))
            )
          )
        )

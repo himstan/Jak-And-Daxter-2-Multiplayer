@@ -94,6 +94,12 @@
    )
   )
 
+(define-perm *mp-pending-pilot-edge-grab?* symbol #f)
+(define-perm *mp-pending-pilot-edge-grab-data*
+  mp-edge-grab-event-data
+  (new 'static 'mp-edge-grab-event-data))
+(define-perm *mp-pending-pilot-edge-grab-time* time-frame 0)
+
 (deftype mp-aid-event (mp-event)
   ((aid uint32 :overlay-at (-> data 0))))
 
