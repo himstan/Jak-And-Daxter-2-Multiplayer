@@ -576,6 +576,7 @@
   "mp-player-targeting.o" ;; added
   "mp-respawn-policy.o" ;; added
   "mp-level-sync.o" ;; added
+  "mp-airlock-state-mapper.o" ;; added
   "mp-airlock-sync.o" ;; added
   "mp-teleport-utils.o" ;; added
   "mp-left-behind.o" ;; added
@@ -583,16 +584,20 @@
   "mp-enemy-tombstone.o" ;; added
   "mp-actor-ghost-sync.o" ;; added
   "mp-actor-hit-sync.o" ;; added
+  "mp-enemy-state-mapper.o" ;; added
   "mp-enemy-sync.o" ;; added
   "mp-battle-sync.o" ;; added
+  "mp-widow-state-mapper.o" ;; added
   "mp-tomb-widow-sync.o" ;; added
   "mp-widow-bomb-sync.o" ;; added
   "mp-traffic-h.o" ;; added
   "mp-traffic-ghosts.o" ;; added
   "mp-pedestrian-animation-sync.o" ;; added
+  "mp-pedestrian-state-mapper.o" ;; added
   "mp-pedestrian-authoritative.o" ;; added
   "mp-pedestrian-state-sync.o" ;; added
   "mp-pedestrian-puppet.o" ;; added
+  "mp-vehicle-state-mapper.o" ;; added
   "mp-vehicle-authoritative.o" ;; added
   "mp-mission-vehicles.o" ;; added
   "mp-vehicle-puppet.o" ;; added
@@ -605,6 +610,7 @@
   "mp-task-debug.o" ;; added
   "mp-oracle-darkjak.o" ;; added
   "mp-rumble.o" ;; added
+  "mp-target-state-mapper.o" ;; added
   "mp-puppet.o" ;; added
   "mp-puppet-debug.o" ;; added
   "mp-eye-debug.o" ;; added

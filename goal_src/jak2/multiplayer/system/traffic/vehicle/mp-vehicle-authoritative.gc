@@ -3,58 +3,6 @@
 
 ;; --- Vehicle State ID Mapping ---
 
-(defun mp-veh-get-state-id ((v-proc vehicle))
-  "Map a vehicle's current state name to a numeric mp-veh-state-id."
-  ;; ADDED: v-proc safety
-  (if (not (and v-proc (nonzero? v-proc))) (return (the uint 0)))
-
-  (let ((state-name (if (-> v-proc state) (-> v-proc state name) 'none)))
-    (case state-name
-      (('idle)               (the uint (mp-veh-state-id idle)))
-      (('inactive)           (the uint (mp-veh-state-id inactive)))
-      (('active)             (the uint (mp-veh-state-id active)))
-      (('waiting)            (the uint (mp-veh-state-id waiting)))
-      (('player-control)     (the uint (mp-veh-state-id player-control)))
-      (('crash)              (the uint (mp-veh-state-id crash)))
-      (('explode)            (the uint (mp-veh-state-id explode)))
-      (('die)                (the uint (mp-veh-state-id die)))
-      (('measure-control-parameters) (the uint (mp-veh-state-id measure-control-parameters)))
-      (('hostile)            (the uint (mp-veh-state-id hostile)))
-      (('stop-and-shoot)     (the uint (mp-veh-state-id stop-and-shoot)))
-      (('slow-pursuit)       (the uint (mp-veh-state-id slow-pursuit)))
-      (('waiting-ambush)     (the uint (mp-veh-state-id waiting-ambush)))
-      (('waiting-race)       (the uint (mp-veh-state-id waiting-race)))
-      (('waiting-for-start)  (the uint (mp-veh-state-id waiting-for-start)))
-      (('racing)             (the uint (mp-veh-state-id racing)))
-      (('race-finished)      (the uint (mp-veh-state-id race-finished)))
-      (else                  (the uint (mp-veh-state-id none)))
-      )
-    )
-  )
-
-(defun mp-veh-get-state-from-id ((id uint))
-  "Map a numeric mp-veh-state-id back to a state name symbol."
-  (case (the-as mp-veh-state-id (the int id))
-    (((mp-veh-state-id idle))               'idle)
-    (((mp-veh-state-id inactive))           'inactive)
-    (((mp-veh-state-id active))             'active)
-    (((mp-veh-state-id waiting))            'waiting)
-    (((mp-veh-state-id player-control))     'player-control)
-    (((mp-veh-state-id crash))              'crash)
-    (((mp-veh-state-id explode))            'explode)
-    (((mp-veh-state-id die))                'die)
-    (((mp-veh-state-id measure-control-parameters)) 'measure-control-parameters)
-    (((mp-veh-state-id hostile))            'hostile)
-    (((mp-veh-state-id stop-and-shoot))     'stop-and-shoot)
-    (((mp-veh-state-id slow-pursuit))       'slow-pursuit)
-    (((mp-veh-state-id waiting-ambush))     'waiting-ambush)
-    (((mp-veh-state-id waiting-race))       'waiting-race)
-    (((mp-veh-state-id waiting-for-start))  'waiting-for-start)
-    (((mp-veh-state-id racing))             'racing)
-    (((mp-veh-state-id race-finished))      'race-finished)
-    (else #f)
-    )
-  )
 
 ;; --- Vehicle Packing (Authoritative Side) ---
 

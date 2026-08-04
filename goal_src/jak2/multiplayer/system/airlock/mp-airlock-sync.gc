@@ -384,15 +384,6 @@
     )
   )
 
-(defun mp-airlock-state-id->string ((state-id mp-airlock-state-id))
-  (case state-id
-    (((mp-airlock-state-id none)) "none")
-    (((mp-airlock-state-id ready)) "ready")
-    (((mp-airlock-state-id occupied)) "occupied")
-    (((mp-airlock-state-id commit)) "commit")
-    (else "unknown")
-    )
-  )
 
 (defun mp-airlock-sync-tick ()
   (when (mp-airlock-ready?)
