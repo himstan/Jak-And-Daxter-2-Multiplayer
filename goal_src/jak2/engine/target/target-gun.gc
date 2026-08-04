@@ -7,8 +7,6 @@
 
 ;; DECOMP BEGINS
 
-(define-extern mp-target-ride-along? (function process-focusable object))
-
 (if (not (nmember "gunp" *kernel-packages*))
     (set! *kernel-packages* (cons "gunp" *kernel-packages*))
     )

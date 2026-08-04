@@ -426,7 +426,6 @@
    (level       uint32)
    (status      int32)
    (packet-id   uint32)
-   (riding?     uint32)
    (darkjak-stage uint32)
    (clock       time-frame)
    (tod-frame   time-frame)
@@ -485,7 +484,6 @@
    (level       uint32)
    (status      int32)
    (packet-id   uint32)
-   (riding?     uint32)
    (darkjak-stage uint32)
    (clock       time-frame)
    (tod-frame   time-frame)
@@ -979,7 +977,6 @@
 (define-perm *mp-krew-collection-consumed-mask* uint (the uint 0))
 
 (define *daxter-pole-y-offset* 950.0)
-(define *local-riding?* #f)
 (define *visibility-overriden?* #f)
 (define *local-riding-before-grabbed?* #f)
 (define *mp-processing-remote-event* #f)
@@ -1062,6 +1059,7 @@
 (define-extern mp-draw-boss-debug (function none))
 (define-extern mp-draw-boss-debug-overlay (function none))
 (define-extern respawn-policy-debug-draw (function none))
+(define-extern mp-target-ride-along? (function process-focusable object))
 (define *mp-daxter-damage-mult* 2.0)
 
 ;; --- Function Implementations ---

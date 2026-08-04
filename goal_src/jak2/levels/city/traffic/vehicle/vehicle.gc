@@ -1849,7 +1849,7 @@
                (set! (-> this pad-index) (the-as uint (-> (the-as target s5-3) control cpad number)))
                (vehicle-controller-method-11 (-> this controller))
                )
-             (when (or (= s5-3 *target*) (and (= s5-3 *mp-puppet*) *local-riding?*))
+             (when (or (= s5-3 *target*) (and (= s5-3 *mp-puppet*) (mp-target-ride-along? *target*)))
                (enable-player-vehicle-camera! this)
                )
              )

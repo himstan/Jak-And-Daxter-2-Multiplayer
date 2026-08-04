@@ -375,7 +375,7 @@
        (suspend-for (seconds 0.05)
          )
        (mp-on-local-spawn!)
-       (if (and (= self *target*) *local-riding?* (mp-is-daxter?))
+       (if (and (= self *target*) (mp-is-daxter?) (mp-target-ride-along? self))
            (go target-ride-along)
            (let ((s5-8 (new 'static 'vector))
                  (a2-26 (find-nearest-entity (-> arg0 trans) warp-gate))

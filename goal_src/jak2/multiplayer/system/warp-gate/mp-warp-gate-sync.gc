@@ -133,7 +133,7 @@
       (set! *mp-puppet-is-warping?* #f)
     )
     (when (and (mp-is-daxter?)
-               *local-riding?*
+               (mp-target-ride-along? *target*)
                (= phase MP_WARP_GATE_PHASE_BEGIN)
                gate-proc
                (nonzero? gate-proc))

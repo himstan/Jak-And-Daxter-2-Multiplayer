@@ -29,7 +29,7 @@
       (set! (-> self control transv quad) (the-as uint128 0))
       (go target-indax-start (the handle #f))
       )
-    (when *local-riding?*
+    (when (mp-target-ride-along? self)
       (set! *has-ridden-before?* #f))
     (set! (-> self control unknown-word04) (the-as uint #f))
          (set! (-> self control did-move-to-pole-or-max-jump-height)

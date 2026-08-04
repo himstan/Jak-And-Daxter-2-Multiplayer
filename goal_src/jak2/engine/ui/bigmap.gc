@@ -603,7 +603,7 @@
           )
         )
       (if (string= (the-as string (-> arg1 class name)) "remote-player")
-          (when (not (and (mp-is-jak?) *local-riding?*))
+          (when (not (and (mp-is-jak?) (mp-target-ride-along? *mp-puppet*)))
             (draw-bigmap-remote-player-marker
               this
               arg0

@@ -808,7 +808,6 @@ TEST(MultiplayerSession, ClearsOnlyRemotePeerStateForActiveHost) {
   ASSERT_TRUE(data.pending_bootstrap);
 
   data.remote_entity.last_sequence_num = 42;
-  data.remote_entity.riding = 1;
   data.last_authenticated_receive_time = 1234;
   data.last_enemy_sequence = 9;
   data.remote_enemy_buffer.remote_enemies[0].actor_id = 7;
@@ -828,7 +827,6 @@ TEST(MultiplayerSession, ClearsOnlyRemotePeerStateForActiveHost) {
   EXPECT_TRUE(data.internet_host);
   EXPECT_FALSE(data.pending_bootstrap);
   EXPECT_EQ(data.remote_entity.last_sequence_num, 0u);
-  EXPECT_EQ(data.remote_entity.riding, 0u);
   EXPECT_EQ(data.last_authenticated_receive_time, 0u);
   EXPECT_EQ(data.last_enemy_sequence, 0u);
   EXPECT_EQ(data.remote_enemy_buffer.remote_enemies[0].actor_id, 0u);

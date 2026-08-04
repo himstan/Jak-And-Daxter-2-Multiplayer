@@ -2565,7 +2565,7 @@
       (if (logtest? (-> arg1 class flags) (minimap-flag goal))
           (set! (-> arg1 class icon-xy x) (the-as uint (mod (the int (-> this goal-time)) 6)))
           )
-      (when (not (and (mp-is-jak?) *local-riding?*))
+      (when (not (and (mp-is-jak?) (mp-target-ride-along? *mp-puppet*)))
         (when (and (not s2-0) (string= (the-as string (-> arg1 class name)) "remote-player"))
           (vector-matrix*! s3-2 s3-2 (-> arg0 mat))
           (draw-minimap-remote-player-marker this arg0 arg1 s3-2)

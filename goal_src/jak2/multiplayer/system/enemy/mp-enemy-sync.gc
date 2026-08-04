@@ -1217,7 +1217,7 @@
               ;; 2. Remote Claim Processing
               (let ((is-bot (type? e-proc bot))
                     (battle-owner (mp-battle-enemy-owner-role e-proc))
-                    (is-daxter-and-riding-along (and (mp-is-daxter?) *local-riding?*))
+                    (is-daxter-and-riding-along (mp-target-ride-along? *target*))
                     (remote-slot (mp-enemy-find-remote-slot enemy-aid)))
 
                 (when (and remote-slot

@@ -524,14 +524,14 @@
 
 (defun warp-gate-target-blocked? ()
   (or (focus-test? *target* in-head edge-grab pole flut tube board pilot mech)
-      (and *local-riding?* (focus-test? *target* indax))
+      (and (focus-test? *target* indax) (mp-target-ride-along? *target*))
       )
   )
 
 (defun warp-gate-ride-along-follow? ()
   (and *target*
        (nonzero? *target*)
-       *local-riding?*
+       (mp-target-ride-along? *target*)
        (focus-test? *target* indax)
        (mp-is-daxter?)
        )

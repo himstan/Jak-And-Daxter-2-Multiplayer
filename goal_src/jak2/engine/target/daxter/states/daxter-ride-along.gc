@@ -9,7 +9,7 @@
   (let ((rapid-tracking-needed?
           (and ride-along-active?
                (mp-is-daxter?)
-               *local-riding?*
+               (mp-target-ride-along? *target*)
                (mp-vehicle-remote-puppet-currently-driving?))))
     (cond
       ((and rapid-tracking-needed? (not *mp-ride-along-rapid-camera?*))
@@ -49,8 +49,6 @@
     (set! (-> self control transv quad) (the-as uint128 0))
     (set! (-> self control ctrl-xz-vel) 0.0)
     (set! *has-ridden-before?* #t)
-    (if (mp-is-daxter?)
-        (set! *local-riding?* #t))
     (set! (-> self control root-prim prim-core action) (collide-action))
     (logior! (-> self focus-status) (focus-status indax ignore))
     (logior! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
@@ -69,7 +67,6 @@
       (when (and (-> self next-state)
                  (= (-> self next-state name) 'target-indax-death))
         (set! *has-ridden-before?* #f))
-      (set! *local-riding?* #f)
       (set! (-> self control root-prim prim-core action) (collide-action solid can-ride stuck-wall-escape))
       (logclear! (-> self focus-status) (focus-status ignore))
       (when (and (-> self draw) (nonzero? (-> self draw)))
@@ -85,8 +82,6 @@
     )
 
   :trans (behavior ()
-    (if (mp-is-daxter?)
-            (set! *local-riding?* #t))
     (let ((jak-proc (if (mp-is-jak?) *target* *mp-puppet*)))
             (when jak-proc
                 (quaternion-copy! (-> self control quat) (-> jak-proc control quat))
@@ -110,7 +105,6 @@
           (sound-play "jump")
           (debug-log *mp-debug-log?* "[Daxter-Ride-Along] Exiting ride along state...~%")
           (logclear! (-> self draw status) (draw-control-status no-draw))
-          (set! *local-riding?* #f)
           (go target-indax-jump
                (-> *TARGET-bank* indax-jump-height-min)
                (-> *TARGET-bank* indax-jump-height-max)

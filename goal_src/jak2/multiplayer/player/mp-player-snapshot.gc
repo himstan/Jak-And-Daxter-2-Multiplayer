@@ -2,7 +2,6 @@
 (in-package goal)
 
 (defun mp-reset-player-sync-state! ()
-  (set! *local-riding?* #f)
   (set! *has-ridden-before?* #t)
   (set! *remote-player-is-dying* #f)
   (set! *remote-player-is-dead* #f)
@@ -144,11 +143,6 @@
     (set! (-> *local-info* money) (-> *game-info* money))
     (set! (-> *local-info* gems) (-> *game-info* gem))
     (set! (-> *local-info* skill) (-> *game-info* skill))
-    (when (mp-is-daxter?)
-      (if *local-riding?*
-          (set! (-> *local-info* riding?) (the-as uint 1))
-          (set! (-> *local-info* riding?) (the-as uint 0)))
-      )
     )
   (none))
 
@@ -463,8 +457,7 @@
         )
       (when (logtest? (-> *target* state-flags) (state-flags prevent-duck))
         (if (and (mp-is-daxter?)
-                 (or *local-riding?*
-                     (mp-target-ride-along? *target*)))
+                 (mp-target-ride-along? *target*))
             (logclear! buttons (pad-buttons l1))
             (logclear! buttons (pad-buttons l1 r1))
             )

@@ -8,6 +8,7 @@
   (and target-proc
        (nonzero? target-proc)
        (type? target-proc target)
+       (mp-target-is-daxter? target-proc)
        (or (and (-> (the-as target target-proc) state)
                 (nonzero? (-> (the-as target target-proc) state))
                 (= (-> (the-as target target-proc) state name) 'target-ride-along))

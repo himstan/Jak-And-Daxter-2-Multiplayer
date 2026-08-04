@@ -36,7 +36,12 @@
         (let ((sk (the-as sidekick (ppointer->process (-> *target* sidekick)))))
           (when (and sk (nonzero? sk) (-> sk draw) (nonzero? (-> sk draw)))
             ;; HIDE if in movie, or if the remote counterpart is NOT riding (or disconnected/inactive).
-            (if (or in-movie? (or (and (or (not (and *remote-info* (nonzero? *remote-info*))) (< (-> *remote-info* status) 4) (zero? (-> *remote-info* riding?))) (mp-is-jak?)) (and (mp-is-daxter?) *local-riding?*)))
+            (if (or in-movie?
+                    (or (and (mp-is-jak?)
+                             (or (not (and *remote-info* (nonzero? *remote-info*)))
+                                 (< (-> *remote-info* status) 4)
+                                 (not (mp-target-ride-along? *mp-puppet*))))
+                        (and (mp-is-daxter?) (mp-target-ride-along? *target*))))
                 (logior! (-> sk draw status) (draw-control-status no-draw))
                 (logclear! (-> sk draw status) (draw-control-status no-draw)))
             )
@@ -51,8 +56,11 @@
               ;; Puppet Jak's sidekick visibility depends on the counterpart (Local Daxter)'s riding state.
               ;; HIDE if in movie, or if counterpart isn't riding.
               (if (or in-movie?
-                      (not (or (and (mp-is-jak?) *remote-info* (nonzero? *remote-info*) (zero? (-> *remote-info* riding?)))
-                               (and (mp-is-daxter?) *local-riding?*))))
+                      (not (or (and (mp-is-jak?)
+                                    *remote-info*
+                                    (nonzero? *remote-info*)
+                                    (not (mp-target-ride-along? *mp-puppet*)))
+                               (and (mp-is-daxter?) (mp-target-ride-along? *target*)))))
                   (logior! (-> sk draw status) (draw-control-status no-draw))
                   (logclear! (-> sk draw status) (draw-control-status no-draw)))
               )

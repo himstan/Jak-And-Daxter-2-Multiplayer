@@ -57,7 +57,6 @@ void apply_bootstrap_to_goal(const PacketBootstrap& bootstrap,
   memcpy(local.task_mask, bootstrap.task_mask, sizeof(local.task_mask));
   memcpy(local.active_task_mask, bootstrap.active_task_mask, sizeof(local.active_task_mask));
   local.sync_aids_count = bootstrap.sync_aids_count;
-  local.riding = bootstrap.riding;
   memcpy(local.sync_aids, bootstrap.sync_aids, sizeof(local.sync_aids));
   local.clock = bootstrap.clock;
   remote.tod_frame = bootstrap.tod_frame;
@@ -86,7 +85,6 @@ PacketBootstrap make_bootstrap_packet(const LocalPlayerInfoGOAL& local, uint32_t
   memcpy(bootstrap.task_mask, local.task_mask, sizeof(bootstrap.task_mask));
   memcpy(bootstrap.active_task_mask, local.active_task_mask, sizeof(bootstrap.active_task_mask));
   bootstrap.sync_aids_count = mp_clamp_count(local.sync_aids_count, 128);
-  bootstrap.riding = local.riding;
   memcpy(bootstrap.sync_aids, local.sync_aids, sizeof(bootstrap.sync_aids));
   bootstrap.clock = local.clock;
   bootstrap.tod_frame = local.tod_frame;
@@ -156,7 +154,6 @@ void mp_handle_player_state_packet(MultiplayerData& data,
   entity.receive_tick = current_time;
   entity.state_id = state->state_id;
   entity.level_hash = state->level_hash;
-  entity.riding = state->riding;
   entity.darkjak_stage = state->darkjak_stage;
   entity.clock = state->clock;
   entity.tod_frame = state->tod_frame;
@@ -258,7 +255,6 @@ void mp_send_player_state(MultiplayerData& data, LocalPlayerInfoGOAL* local) {
   local_state.state_id = local->state_id;
   local_state.level_hash = local->level;
   data.local_traffic_level_hash = local_state.level_hash;
-  local_state.riding = local->riding;
   local_state.darkjak_stage = local->darkjak_stage;
   local_state.clock = local->clock;
   local_state.tod_frame = local->tod_frame;
@@ -344,7 +340,6 @@ void mp_sync_remote_player_to_goal(MultiplayerData& data, RemotePlayerInfoGOAL* 
     remote_goal->velocity[3] = 0.0f;
     remote_goal->send_tick = 0;
     remote_goal->receive_tick = 0;
-    remote_goal->riding = 0;
     remote_goal->darkjak_stage = 0;
     remote_goal->riding_veh_id = 0;
     remote_goal->riding_seat_index = 0;
@@ -379,7 +374,6 @@ void mp_sync_remote_player_to_goal(MultiplayerData& data, RemotePlayerInfoGOAL* 
   remote_goal->level = remote_state.level_hash;
   remote_goal->status = (remote_state.status > 0) ? (int32_t)remote_state.status : 1;
   remote_goal->packet_id = remote_state.last_sequence_num;
-  remote_goal->riding = remote_state.riding;
   remote_goal->darkjak_stage = remote_state.darkjak_stage;
   remote_goal->clock = remote_state.clock;
   remote_goal->tod_frame = remote_state.tod_frame;

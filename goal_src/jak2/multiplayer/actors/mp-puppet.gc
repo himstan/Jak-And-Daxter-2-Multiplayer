@@ -1611,7 +1611,6 @@
                  (when (>= *mp-puppet-state-mismatch-count* 2)
                    (debug-log *mp-debug-log?* "[MP-Puppet] Stuck in ride-along! Forcing exit to ~A~%" ghost-state)
                    ;; Transition directly to the authoritative state via event; :exit handles cleanup
-                   (set! *local-riding?* #f)
                    (send-event proc 'change-mode 'normal #f)
                    (set! *mp-puppet-state-mismatch-count* 0)
                    )
@@ -1820,7 +1819,6 @@
       (when p
         (set! *mp-puppet* (-> p 0))
         (set! (-> *mp-puppet* name) "mp-puppet")
-        (set! *local-riding?* #f)
         (set! *mp-puppet-state-mismatch-count* 0)
         (set! *remote-player-is-dying* #f)
         (set! *remote-player-is-dead* #f)

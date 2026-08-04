@@ -97,7 +97,6 @@ struct PacketPlayerState {
   uint64_t send_tick;
   uint32_t state_id;
   uint32_t level_hash;
-  uint32_t riding;
   uint32_t darkjak_stage;
   uint64_t clock;
   uint64_t tod_frame;
@@ -124,7 +123,7 @@ struct PacketPlayerState {
   uint32_t action_seq;
   uint32_t action_state_id;
 };
-static_assert(sizeof(PacketPlayerState) == 341,
+static_assert(sizeof(PacketPlayerState) == 337,
               "PacketPlayerState wire layout must remain explicit");
 
 struct PacketTurretState {
@@ -330,7 +329,6 @@ struct PacketBootstrap {
   uint8_t task_mask[64];
   uint8_t active_task_mask[64];
   uint32_t sync_aids_count;
-  uint32_t riding;
   uint32_t sync_aids[128];
   uint64_t clock;
   uint64_t tod_frame;
