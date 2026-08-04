@@ -1,11 +1,30 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; --- Drawing ---
+(define-extern mp-enemy-find-remote-slot (function uint mp-enemy-state))
+(define-extern mp-enemy-get-state-from-id (function uint symbol))
+
+;; Persistent buffers avoid allocating a formatted string for every enemy every frame.
+(define *mp-enemy-debug-local-text* (new 'global 'string 256 (the-as string #f)))
+(define *mp-enemy-debug-ghost-text* (new 'global 'string 512 (the-as string #f)))
+(define *mp-enemy-debug-text-overlap-distance* (meters 2.0))
+(define *mp-enemy-debug-text-stacked-offset* (meters 6.0))
+
+;; --- Text and state helpers ---
+
+(defun mp-enemy-debug-local-state ((e-proc enemy))
+  (when (and e-proc
+             (nonzero? e-proc)
+             (-> e-proc state)
+             (nonzero? (-> e-proc state)))
+    (return (-> e-proc state name))
+    )
+  'none
+  )
 
 (defun mp-enemy-debug-focus-label ((focus-proc process))
   (cond
-    ((or (not focus-proc) (zero? focus-proc))
+    ((not (and focus-proc (nonzero? focus-proc)))
      "NONE"
      )
     ((and *target* (nonzero? *target*) (= focus-proc *target*))
@@ -20,6 +39,20 @@
         )
       )
     )
+  )
+
+(defun mp-enemy-debug-focus-proc ((e-proc enemy))
+  (when (and e-proc
+             (nonzero? e-proc)
+             (-> e-proc focus)
+             (nonzero? (-> e-proc focus)))
+    (let ((focus (-> e-proc focus)))
+      (when (and focus (nonzero? focus))
+        (return (handle->process-safe (-> focus handle)))
+        )
+      )
+    )
+  (the-as process #f)
   )
 
 (defun mp-enemy-debug-focus-aid-label ((focus-aid uint))
@@ -38,52 +71,269 @@
     )
   )
 
+(defun mp-enemy-debug-owner? ((rec mp-enemy-auth-record))
+  (and rec
+       (nonzero? rec)
+       *local-info*
+       (nonzero? *local-info*)
+       (= (-> rec owner) (-> *local-info* role)))
+  )
+
+(defun mp-enemy-debug-text-color ((rec mp-enemy-auth-record))
+  (if (mp-enemy-debug-owner? rec)
+      (font-color green)
+      (font-color yellow)
+      )
+  )
+
+(defun mp-enemy-debug-ghost-state ((rec mp-enemy-auth-record))
+  (if (and rec (nonzero? rec))
+      (mp-enemy-get-state-from-id (the-as uint (-> rec ghost-state)))
+      'none
+      )
+  )
+
+(defun mp-enemy-debug-slot-state ((slot mp-enemy-state))
+  (if (and slot (nonzero? slot))
+      (mp-enemy-get-state-from-id (the-as uint (-> slot state)))
+      'none
+      )
+  )
+
+(defun mp-enemy-debug-slot-age-ms ((slot mp-enemy-state))
+  (if (and slot
+           (nonzero? slot)
+           (nonzero? (-> slot last-updated)))
+      (let ((now (the-as uint64 (pc-multi-get-ticks)))
+            (last-updated (-> slot last-updated)))
+        (if (>= now last-updated)
+            (the-as uint (- now last-updated))
+            (the uint 0)
+            )
+        )
+      (the uint 0)
+      )
+  )
+
+(defun mp-enemy-debug-format-local-text ((text-str string)
+                                         (enemy-aid uint)
+                                         (e-proc enemy)
+                                         (focus-label string))
+  (when (and text-str
+             (type? text-str string)
+             e-proc
+             (nonzero? e-proc))
+    (clear text-str)
+    (format text-str
+            "LOCAL AID: ~D HP: ~D~%STATE: ~S~%FOCUS: ~A"
+            enemy-aid
+            (-> e-proc hit-points)
+            (mp-enemy-debug-local-state e-proc)
+            focus-label)
+    )
+  (none)
+  )
+
+(defun mp-enemy-debug-format-ghost-text ((text-str string)
+                                         (rec mp-enemy-auth-record)
+                                         (remote-slot mp-enemy-state))
+  (when (and text-str
+             (type? text-str string)
+             rec
+             (nonzero? rec))
+    (clear text-str)
+    (if (and remote-slot (nonzero? remote-slot))
+        (begin
+          (format text-str
+                  "GHOST AID: ~D OWNER: ~D~%STATE: ~S FOCUS: ~A"
+                  (-> rec aid)
+                  (-> rec owner)
+                  (mp-enemy-debug-ghost-state rec)
+                  (mp-enemy-debug-focus-aid-label (the-as uint (-> rec ghost-focus-aid))))
+          (format text-str
+                  "~%SLOT: STATE ~S HP ~D ATTACK ~D AGE ~Dms"
+                  (mp-enemy-debug-slot-state remote-slot)
+                  (-> remote-slot hp)
+                  (-> remote-slot attack-flag)
+                  (mp-enemy-debug-slot-age-ms remote-slot))
+          )
+        (format text-str
+                "GHOST AID: ~D OWNER: ~D~%STATE: ~S FOCUS: ~A~%SLOT NONE"
+                (-> rec aid)
+                (-> rec owner)
+                (mp-enemy-debug-ghost-state rec)
+                (mp-enemy-debug-focus-aid-label (the-as uint (-> rec ghost-focus-aid))))
+        )
+    )
+  (none)
+  )
+
+;; --- Geometry and text drawing ---
+
+(defun mp-enemy-debug-text-overlaps? ((e-proc enemy)
+                                      (rec mp-enemy-auth-record))
+  (when (and e-proc
+             (nonzero? e-proc)
+             (-> e-proc root)
+             (nonzero? (-> e-proc root))
+             rec
+             (nonzero? rec))
+    (return (< (vector-vector-distance (-> e-proc root trans)
+                                       (-> rec ghost-trans))
+               *mp-enemy-debug-text-overlap-distance*))
+    )
+  #f
+  )
+
+(defun mp-enemy-debug-ghost-text-offset ((e-proc enemy)
+                                         (rec mp-enemy-auth-record))
+  (if (mp-enemy-debug-text-overlaps? e-proc rec)
+      *mp-enemy-debug-text-stacked-offset*
+      (meters 2.5)
+      )
+  )
+
+(defun-debug mp-enemy-debug-draw-local-text ((e-proc enemy)
+                                             (enemy-aid uint)
+                                             (focus-label string)
+                                             (color font-color))
+  (when (and e-proc
+             (nonzero? e-proc)
+             (-> e-proc root)
+             (nonzero? (-> e-proc root)))
+    (let ((text-pos (new 'stack-no-clear 'vector)))
+      (vector-copy! text-pos (-> e-proc root trans))
+      (+! (-> text-pos y) (meters 2.5))
+      (mp-enemy-debug-format-local-text *mp-enemy-debug-local-text*
+                                        enemy-aid
+                                        e-proc
+                                        focus-label)
+      (add-debug-text-3d #t
+                         (bucket-id debug-no-zbuf1)
+                         *mp-enemy-debug-local-text*
+                         text-pos
+                         color
+                         (the-as vector2h #f))
+      )
+    )
+  (none)
+  )
+
+(defun-debug mp-enemy-debug-draw-ghost-text ((e-proc enemy)
+                                             (rec mp-enemy-auth-record)
+                                             (remote-slot mp-enemy-state)
+                                             (color font-color))
+  (when (and e-proc
+             (nonzero? e-proc)
+             rec
+             (nonzero? rec))
+    (let ((text-pos (new 'stack-no-clear 'vector)))
+      (vector-copy! text-pos (-> rec ghost-trans))
+      (+! (-> text-pos y) (mp-enemy-debug-ghost-text-offset e-proc rec))
+      (mp-enemy-debug-format-ghost-text *mp-enemy-debug-ghost-text*
+                                        rec
+                                        remote-slot)
+      (add-debug-text-3d #t
+                         (bucket-id debug-no-zbuf1)
+                         *mp-enemy-debug-ghost-text*
+                         text-pos
+                         color
+                         (the-as vector2h #f))
+      )
+    )
+  (none)
+  )
+
+(defun-debug mp-enemy-debug-draw-ghost-geometry ((e-proc enemy)
+                                                 (rec mp-enemy-auth-record))
+  (when (and e-proc
+             (nonzero? e-proc)
+             rec
+             (nonzero? rec)
+             *local-info*
+             (nonzero? *local-info*)
+             (!= (-> rec owner) (-> *local-info* role)))
+    (let ((ghost-color (static-rgba 255 255 0 160)))
+      (add-debug-circle #t
+                        (bucket-id debug-no-zbuf1)
+                        (-> rec ghost-trans)
+                        (meters 0.5)
+                        ghost-color
+                        (the-as matrix #f))
+      (when (and (-> e-proc root)
+                 (nonzero? (-> e-proc root)))
+        (add-debug-line #t
+                        (bucket-id debug-no-zbuf1)
+                        (-> e-proc root trans)
+                        (-> rec ghost-trans)
+                        ghost-color
+                        #f
+                        (the-as rgba 0))
+        )
+      )
+    )
+  (none)
+  )
+
+(defun-debug mp-enemy-debug-draw-no-record ((e-proc enemy))
+  (when (and e-proc
+             (nonzero? e-proc)
+             (-> e-proc root)
+             (nonzero? (-> e-proc root)))
+    (let ((text-pos (new 'stack-no-clear 'vector)))
+      (vector-copy! text-pos (-> e-proc root trans))
+      (+! (-> text-pos y) (meters 2.5))
+      (add-debug-text-3d #t
+                         (bucket-id debug-no-zbuf1)
+                         "NO AUTH RECORD"
+                         text-pos
+                         (font-color orange)
+                         (the-as vector2h #f))
+      )
+    )
+  (none)
+  )
+
+(defun mp-enemy-debug-culled? ((e-proc enemy))
+  (when (and e-proc (nonzero? e-proc))
+    (let ((draw (-> e-proc draw))
+          (state-name (mp-enemy-debug-local-state e-proc)))
+      (return (or (and draw
+                       (nonzero? draw)
+                       (logtest? (-> draw status) (draw-control-status no-draw)))
+                  (= state-name 'inactive)
+                  (= state-name 'process-drawable-art-error)))
+      )
+    )
+  #t
+  )
+
 (defun-debug mp-enemy-debug-draw-callback ((p process-tree))
   (let ((proc (the-as process p)))
-    (when (and proc (logtest? (-> proc mask) (process-mask enemy collectable)) (type? proc enemy) (not (type? proc civilian)))
-      (let ((is-culled (or (logtest? (-> (the-as process-drawable proc) draw status) (draw-control-status no-draw)) 
-                           (= (if (-> (the-as enemy proc) state) (-> (the-as enemy proc) state name) #f) 'inactive)
-                           (= (if (-> (the-as enemy proc) state) (-> (the-as enemy proc) state name) #f) 'process-drawable-art-error))))
-        (when is-culled
-          (return #t)
-          )
-        )
-      (let ((e-proc (the-as enemy proc))
-            (enemy-aid (mp-get-enemy-aid (the-as enemy proc))))
-        (when (!= enemy-aid 0)
-          (let ((rec (mp-get-enemy-auth enemy-aid))
-                (text-pos (new 'stack 'vector))
-                (focus-proc (the-as process #f)))
-            (when (and (-> e-proc focus) (nonzero? (-> e-proc focus)))
-              (set! focus-proc (handle->process-safe (-> e-proc focus handle)))
-              )
-            (vector-copy! text-pos (-> e-proc root trans))
-            (+! (-> text-pos y) (meters 2.5)) ;; Offset above head
-            
-            (if rec
-                (let ((owner-role (-> rec owner))
-                      (is-aggro (-> rec is-aggro))
-                      (focus-label (mp-enemy-debug-focus-label focus-proc))
-                      (ghost-focus-label (mp-enemy-debug-focus-aid-label (-> rec ghost-focus-aid)))
-                      (state (if (-> e-proc state) (-> e-proc state name) "NONE")))
-                  ;; Use add-debug-text-3d with format directly. 
-                  ;; The engine's debug text system copies the string into its own internal buffer.
-                  (let ((color (if (= owner-role (-> *local-info* role)) (font-color green) (font-color red))))
-                    (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
-                                       (the-as string
-                                               (format #f
-                                                       "AID: ~D~%Owner: Role ~D~%Aggro: ~A~%Focus: ~A~%Ghost Focus: ~A~%State: ~S"
-                                                       enemy-aid
-                                                       owner-role
-                                                       is-aggro
-                                                       focus-label
-                                                       ghost-focus-label
-                                                       state))
-                                       text-pos color (the-as vector2h #f))
+    (when (and proc
+               (nonzero? proc)
+               (logtest? (-> proc mask) (process-mask enemy collectable))
+               (type? proc enemy)
+               (not (type? proc civilian)))
+      (let ((e-proc (the-as enemy proc)))
+        (when (not (mp-enemy-debug-culled? e-proc))
+          (let ((enemy-aid (mp-get-enemy-aid e-proc)))
+            (when (nonzero? enemy-aid)
+              (let ((rec (mp-get-enemy-auth enemy-aid)))
+                (if (and rec (nonzero? rec))
+                    (let ((remote-slot (mp-enemy-find-remote-slot enemy-aid))
+                          (focus-label (mp-enemy-debug-focus-label
+                                         (mp-enemy-debug-focus-proc e-proc))))
+                      (let ((color (mp-enemy-debug-text-color rec)))
+                        (mp-enemy-debug-draw-local-text e-proc enemy-aid focus-label color)
+                        (mp-enemy-debug-draw-ghost-text e-proc rec remote-slot color)
+                        (mp-enemy-debug-draw-ghost-geometry e-proc rec)
+                        )
+                      )
+                    (mp-enemy-debug-draw-no-record e-proc)
                     )
-                  )
-                (add-debug-text-3d #t (bucket-id debug-no-zbuf1) "NO AUTH RECORD" text-pos (font-color orange) (the-as vector2h #f))
                 )
+              )
             )
           )
         )
