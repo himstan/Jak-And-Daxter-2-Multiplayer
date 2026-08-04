@@ -545,7 +545,9 @@
                                              (= v1-3 'target-indax-pilot-death)
                                              (= v1-3 'target-indax-spawn-reset)
                                              (= v1-3 'target-look-around)
-                                             (= v1-3 'target-stance-look-around)))))
+                                             (= v1-3 'target-stance-look-around)
+                                             (= v1-3 'target-indax-float)
+                                             (= v1-3 'target-falling)))))
       (if (= (-> self next-state name) 'process-drawable-art-error)
         (begin
           (format 0 "Trying to recover from drawable art error by going to target-indax-start~%")

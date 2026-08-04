@@ -202,6 +202,18 @@
     )
   )
 
+(defstate target-indax-float (target)
+  :event target-indax-handler
+  :enter (-> target-float enter)
+  :exit (behavior ()
+    ((-> target-float exit))
+    (target-indax-exit)
+    )
+  :trans (-> target-float trans)
+  :code (-> target-indax-stance code)
+  :post target-indax-post
+  )
+
 (defstate target-indax-spawn-reset (target)
   :event target-indax-dangerous-event-handler
   :enter (-> target-attack enter)
