@@ -35,7 +35,7 @@
 
 
 (defun target-board-play-daxter-vo ((proc target) (chance float) (vol float) (subtitle-flag symbol))
-  "Play a random Daxter voice-over comment with a specified chance, volume, subtitle configuration, and 3D falloff."
+  "Play a random Daxter voice-over comment with a specified chance, subtitle configuration, and 3D falloff."
   (when (and (mp-target-is-daxter? proc)
              (< (rand-vu) chance)
              proc
@@ -48,8 +48,8 @@
              (vo-key (-> vo-keys idx))
              )
         (let ((s-id (add-process *gui-control* proc (gui-channel daxter) (gui-action play) vo-key 99.0 0)))
-          (set-falloff! *gui-control* s-id #t -1 -1 -1)
-          (set-volume! *gui-control* s-id vol)
+          (set-falloff! *gui-control* s-id #t 20 80 2)
+          (set-volume! *gui-control* s-id 0.2)
           (set-subtitle! *gui-control* s-id subtitle-flag)
           )
         )
@@ -2946,7 +2946,7 @@
              )
         (let ((target-proc (ppointer->process (-> this process))))
           (if (mp-target-is-daxter? target-proc)
-              (target-board-play-daxter-vo target-proc 0.35 0.3 #f)
+              (target-board-play-daxter-vo target-proc 0.35 0.2 #f)
               (sound-play "do-trick")
               )
           )
