@@ -29,7 +29,7 @@
      (the-as uint (mp-hit-sound-id mech-punch))
      )
     (else
-     (the-as uint (mp-hit-sound-id spin))
+     (the-as uint (mp-hit-sound-id none))
      )
     )
   )
@@ -37,7 +37,7 @@
 (defun mp-hit-sound-id-from-attack-info ((info attack-info))
   (if (and info (nonzero? info))
       (mp-hit-sound-id-from-attack-mode (-> info mode))
-      (the-as uint (mp-hit-sound-id spin))
+      (the-as uint (mp-hit-sound-id none))
       )
   )
 
@@ -48,6 +48,9 @@
              (-> e-proc root)
              (nonzero? (-> e-proc root)))
     (case hit-sound-id
+      (((the-as uint (mp-hit-sound-id spin)))
+       (sound-play-by-spec (static-sound-spec "spin-hit" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> e-proc root trans))
+       )
       (((the-as uint (mp-hit-sound-id punch)))
        (sound-play-by-spec (static-sound-spec "punch-hit" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> e-proc root trans))
        )
@@ -62,9 +65,6 @@
        )
       (((the-as uint (mp-hit-sound-id mech-punch)))
        (sound-play-by-spec (static-sound-spec "mech-punch-hit" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> e-proc root trans))
-       )
-      (else
-       (sound-play-by-spec (static-sound-spec "spin-hit" :fo-min 10 :fo-max 80 :fo-curve 2 :mask (trans)) (new-sound-id) (-> e-proc root trans))
        )
       )
     )
