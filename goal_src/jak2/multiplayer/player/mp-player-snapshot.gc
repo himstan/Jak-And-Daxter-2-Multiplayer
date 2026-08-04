@@ -68,13 +68,10 @@
   (let ((weapon (mp-pickup-type->equipped-weapon gun-type)))
     (when (not (zero? weapon))
       (+! *mp-local-gun-shot-seq* 1)
-      (let ((event (new 'stack-no-clear 'mp-player-gun-shot-event)))
-        (mp-event-enqueue!
-          (mp-event-build-player-gun-shot!
-            event
-            (the-as uint weapon)
-            *mp-local-gun-shot-seq*
-            (mp-current-camera-angle-y))))
+      (mp-event-enqueue-player-gun-shot!
+        (the-as uint weapon)
+        *mp-local-gun-shot-seq*
+        (mp-current-camera-angle-y))
       )
     )
   (none)
@@ -404,15 +401,11 @@
         (cond
           ((= local-state (the uint (mp-target-state-id darkjak-get-on)))
            (debug-log *mp-debug-log?* "[MP-Player-Snapshot] Host entering Dark Jak! Broadcasting event...~%")
-           (let ((event (new 'stack-no-clear 'mp-aid-event)))
-             (mp-event-enqueue!
-               (mp-event-build-aid! event MP_EVENT_CHANGE_MODE_DARKJAK (the uint 0))))
+           (mp-event-enqueue-aid! MP_EVENT_CHANGE_MODE_DARKJAK (the uint 0))
            )
           ((= local-state (the uint (mp-target-state-id darkjak-get-off)))
            (debug-log *mp-debug-log?* "[MP-Player-Snapshot] Host exiting Dark Jak! Broadcasting event...~%")
-           (let ((event (new 'stack-no-clear 'mp-aid-event)))
-             (mp-event-enqueue!
-               (mp-event-build-aid! event MP_EVENT_END_MODE_DARKJAK (the uint 0))))
+           (mp-event-enqueue-aid! MP_EVENT_END_MODE_DARKJAK (the uint 0))
            )
           )
         )

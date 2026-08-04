@@ -825,9 +825,7 @@
         )
     (let ((v1-10 (handle->process (-> self target))))
       (if (and v1-10 (= v1-10 *target*))
-          (let ((event (new 'stack-no-clear 'mp-aid-event)))
-            (mp-event-enqueue!
-              (mp-event-build-aid! event MP_EVENT_BREAK (-> self entity aid)))))
+          (mp-event-enqueue-aid! MP_EVENT_BREAK (-> self entity aid)))
       (if (and (and v1-10 (= (-> v1-10 type) target) (focus-test? (the-as process-focusable v1-10) flut tube board pilot))
                (and (!= (-> self fact pickup-type) 10) (not arg0))
                )

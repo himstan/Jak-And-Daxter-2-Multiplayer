@@ -1000,9 +1000,7 @@
            (let ((attacking-proc (find-offending-process-focusable proc (the-as attack-info attack-info))))
              (when attacking-proc
                (if (= attacking-proc *target*)
-                  (let ((event (new 'stack-no-clear 'mp-aid-event)))
-                    (mp-event-enqueue!
-                      (mp-event-build-aid! event MP_EVENT_BREAK (-> self entity aid)))))
+                  (mp-event-enqueue-aid! MP_EVENT_BREAK (-> self entity aid)))
                (forward-up-nopitch->inv-matrix
                  (-> self explode-matrix)
                  (vector-! (new 'stack-no-clear 'vector) (-> attacking-proc root trans) (-> self root trans))

@@ -13,6 +13,7 @@
   "debug-log.o"
   "mp-event-queue.o"
   "mp-event-builders.o"
+  "mp-event-enqueuers.o"
   "euler-h.o"
   "transform-h.o"
   "geometry-h.o"

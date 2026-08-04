@@ -825,14 +825,11 @@
                      (when (and *multi-sync-enabled?* (not *mp-processing-remote-event*))
                        (let ((prim (get-touched-prim a1-26 (-> self root) (the-as touching-shapes-entry gp-3))))
                          (when (and prim (nonzero? prim))
-                           (let ((event (new 'stack-no-clear 'mp-mtn-dice-event)))
-                             (mp-event-enqueue!
-                               (mp-event-build-mtn-dice!
-                                 event
-                                 (-> self entity aid)
-                                 (the-as int (-> prim prim-id))
-                                 (-> (the-as mp-mtn-dice-stub self) rot-axis)
-                                 (-> (the-as mp-mtn-dice-stub self) rot-org))))
+                          (mp-event-enqueue-mtn-dice!
+                            (-> self entity aid)
+                            (the-as int (-> prim prim-id))
+                            (-> (the-as mp-mtn-dice-stub self) rot-axis)
+                            (-> (the-as mp-mtn-dice-stub self) rot-org))
                            )
                          )
                        )

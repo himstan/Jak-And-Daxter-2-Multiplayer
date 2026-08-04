@@ -38,9 +38,7 @@
   (when (and *multi-sync-enabled?*
              (= (pc-multi-get-status) (mp-connection-status in-game))
              (not *mp-processing-remote-event*))
-    (let ((event (new 'stack-no-clear 'mp-stadium-board1-event)))
-      (mp-event-enqueue!
-        (mp-event-build-stadium-board! event evt-id score)))
+    (mp-event-enqueue-stadium-board! evt-id score)
     )
   (none)
   )

@@ -141,9 +141,7 @@
             (sound-play "skill-pickup")
             (+! (-> *game-info* counter) -1.0)
             (krew-collection-mark-consumed! (-> self index))
-            (let ((event (new 'stack-no-clear 'mp-krew-collection-event)))
-              (mp-event-enqueue!
-                (mp-event-build-krew-pickup! event (-> self index))))
+            (mp-event-enqueue-krew-pickup! (-> self index))
             (go-virtual die)
             )
           )

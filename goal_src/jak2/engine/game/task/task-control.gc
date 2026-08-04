@@ -1655,9 +1655,7 @@
                       *multi-sync-enabled?*
                       (= (pc-multi-get-status) (mp-connection-status in-game))
              (not (logtest? (-> self flags) (fail-mission-flags famflags-3))))
-             (let ((event (new 'stack-no-clear 'mp-actor-name-event)))
-               (mp-event-enqueue!
-                 (mp-event-build-actor-name! event MP_EVENT_MISSION_FAILED_RETRY_YES "")))
+             (mp-event-enqueue-actor-name! MP_EVENT_MISSION_FAILED_RETRY_YES "")
              )
            (set! (-> self retry) #t)
            (while (not (process-release? *target*))
@@ -1673,9 +1671,7 @@
            (when (and (mp-is-jak?)
                       *multi-sync-enabled?*
                       (= (pc-multi-get-status) (mp-connection-status in-game)))
-             (let ((event (new 'stack-no-clear 'mp-actor-name-event)))
-               (mp-event-enqueue!
-                 (mp-event-build-actor-name! event MP_EVENT_MISSION_FAILED_RETRY_NO "")))
+           (mp-event-enqueue-actor-name! MP_EVENT_MISSION_FAILED_RETRY_NO "")
              )
            (set! (-> self retry) #f)
            (while (not (process-release? *target*))

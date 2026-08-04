@@ -324,9 +324,7 @@
     (when (and *multi-sync-enabled?*
                (= (pc-multi-get-status) (mp-connection-status in-game))
                (not *mp-processing-remote-event*))
-      (let ((event (new 'stack-no-clear 'mp-actor-name-event)))
-        (mp-event-enqueue!
-          (mp-event-build-actor-name! event MP_EVENT_MISSION_TOMB_BOULDER_COMPLETE "")))
+      (mp-event-enqueue-actor-name! MP_EVENT_MISSION_TOMB_BOULDER_COMPLETE "")
       )
     )
   (none)

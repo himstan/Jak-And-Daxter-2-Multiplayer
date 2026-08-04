@@ -239,12 +239,9 @@ For example for an elevator pre-compute the distance between the first and last 
                        (set! (-> self angle-flip-vel) -10.0)
                        (set-time! (-> self state-time))
                        (when (and *multi-sync-enabled?* (not *mp-processing-remote-event*))
-                         (let ((event (new 'stack-no-clear 'mp-mtn-plat-shoot-event)))
-                           (mp-event-enqueue!
-                             (mp-event-build-mtn-plat-shoot!
-                               event
-                               (-> self entity aid)
-                               (-> (the-as mp-mtn-plat-shoot-stub self) axe-flip))))
+                         (mp-event-enqueue-mtn-plat-shoot!
+                           (-> self entity aid)
+                           (-> (the-as mp-mtn-plat-shoot-stub self) axe-flip))
                          )
                        )
                      )

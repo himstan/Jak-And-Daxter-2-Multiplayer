@@ -1451,20 +1451,13 @@
       (if (handle->process arg1)
           (cond
             ((and (= p-type (pickup-type skill)) (-> self entity) (nonzero? (-> self entity)))
-             (let ((event (new 'stack-no-clear 'mp-aid-event)))
-               (mp-event-enqueue!
-                 (mp-event-build-aid! event MP_EVENT_ORB (the-as uint (-> self entity aid))))))
+             (mp-event-enqueue-aid! MP_EVENT_ORB (the-as uint (-> self entity aid))))
             ((and (= p-type (pickup-type gem)) (nonzero? (-> self enemy-gem-source-id)))
-             (let ((event (new 'stack-no-clear 'mp-enemy-gem-event)))
-               (mp-event-enqueue!
-                 (mp-event-build-enemy-gem!
-                   event
-                   (the-as uint (-> self enemy-gem-source-id))
-                   (the-as uint (-> self enemy-gem-index))))))
+             (mp-event-enqueue-enemy-gem!
+               (the-as uint (-> self enemy-gem-source-id))
+                (the-as uint (-> self enemy-gem-index))))
             ((and (= p-type (pickup-type gem)) (-> self entity) (nonzero? (-> self entity)))
-             (let ((event (new 'stack-no-clear 'mp-aid-event)))
-               (mp-event-enqueue!
-                 (mp-event-build-aid! event MP_EVENT_GEM (the-as uint (-> self entity aid)))))))
+             (mp-event-enqueue-aid! MP_EVENT_GEM (the-as uint (-> self entity aid)))))
       ))
     (process-entity-status! self (entity-perm-status dead) #t)
     )

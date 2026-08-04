@@ -178,9 +178,8 @@
   (set! *mp-tomb-daxter-wait-state* 'local-waiting)
   (mp-tomb-daxter-wait-apply-local! npc)
   (when (and *multi-sync-enabled?* (not *mp-processing-remote-event*))
-    (let ((event (new 'stack-no-clear 'mp-actor-name-event)))
-      (mp-event-enqueue!
-        (mp-event-build-actor-name! event MP_EVENT_MISSION_TOMB_DAXTER_WAIT_START MP_TOMB_DAXTER_WAIT_NPC_NAME)))
+    (mp-event-enqueue-actor-name!
+      MP_EVENT_MISSION_TOMB_DAXTER_WAIT_START MP_TOMB_DAXTER_WAIT_NPC_NAME)
     )
   (none)
   )
@@ -193,9 +192,8 @@
     (mp-tomb-daxter-wait-set-draw! (the-as process-drawable *target*) #f)
     )
   (when (and *multi-sync-enabled?* (not *mp-processing-remote-event*))
-    (let ((event (new 'stack-no-clear 'mp-actor-name-event)))
-      (mp-event-enqueue!
-        (mp-event-build-actor-name! event MP_EVENT_MISSION_TOMB_DAXTER_WAIT_END MP_TOMB_DAXTER_WAIT_NPC_NAME)))
+      (mp-event-enqueue-actor-name!
+        MP_EVENT_MISSION_TOMB_DAXTER_WAIT_END MP_TOMB_DAXTER_WAIT_NPC_NAME)
     )
   (none)
   )

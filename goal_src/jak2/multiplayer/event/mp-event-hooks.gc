@@ -61,9 +61,7 @@
                "[MP-Events] Sending BREAK for process ~A aid=~D~%"
                arg0
                (-> arg0 entity aid))
-    (let ((event (new 'stack-no-clear 'mp-aid-event)))
-      (mp-event-enqueue!
-        (mp-event-build-aid! event MP_EVENT_BREAK (-> arg0 entity aid))))
+    (mp-event-enqueue-aid! MP_EVENT_BREAK (-> arg0 entity aid))
     )
   (none)
   )
@@ -89,14 +87,11 @@
                        (symbol->string (the-as symbol raw-name))))
                 )
               (when (and process-name (!= process-name ""))
-                (let ((event (new 'stack-no-clear 'mp-actor-name-event)))
-                  (mp-event-enqueue!
-                    (mp-event-build-actor-name!
-                      event
-                      (if (= event-message 'leave)
-                          MP_EVENT_MISSION_LEAVE
-                          MP_EVENT_MISSION_PLAY_SCENE)
-                      process-name)))
+                (mp-event-enqueue-actor-name!
+                  (if (= event-message 'leave)
+                      MP_EVENT_MISSION_LEAVE
+                      MP_EVENT_MISSION_PLAY_SCENE)
+                  process-name)
                 )
               )
             )
@@ -167,10 +162,7 @@
                  (nonzero? pole-proc)
                  (-> pole-proc entity)
                  (nonzero? (-> pole-proc entity)))
-        (let ((event (new 'stack-no-clear 'mp-aid-event)))
-          (mp-event-enqueue!
-            (mp-event-build-aid! event MP_EVENT_POLE_GRAB
-                                 (-> pole-proc entity aid))))
+        (mp-event-enqueue-aid! MP_EVENT_POLE_GRAB (-> pole-proc entity aid))
         (set! *mp-last-pole-grab-handle* pole-handle)
         (set! *mp-pole-grab-latched?* #t)
         )
@@ -194,14 +186,11 @@
   (debug-log *mp-debug-log?*
              "[MP-Events] Authoritative Edge Grab broadcast! (Pilot: ~A)~%"
              pilot?)
-  (let ((packed (new 'stack-no-clear 'mp-edge-grab-event-data))
-        (event (new 'stack-no-clear 'mp-event)))
+  (let ((packed (new 'stack-no-clear 'mp-edge-grab-event-data)))
     (mp-pack-edge-grab-info packed *edge-grab-info*)
-    (mp-event-enqueue!
-      (mp-event-build-edge-grab!
-        event
-        (if pilot? MP_EVENT_PILOT_EDGE_GRAB MP_EVENT_EDGE_GRAB)
-        packed))
+    (mp-event-enqueue-edge-grab!
+      (if pilot? MP_EVENT_PILOT_EDGE_GRAB MP_EVENT_EDGE_GRAB)
+      packed)
     )
   (none)
   )
@@ -234,9 +223,7 @@
                 )
               )
             )
-          (let ((event (new 'stack-no-clear 'mp-scene-event)))
-            (mp-event-enqueue!
-              (mp-event-build-scene! event event-type name load-continue)))
+          (mp-event-enqueue-scene! event-type name load-continue)
           )
         (when (= event-type MP_EVENT_SCENE_START)
           (mp-note-connected-scene-broadcast! name))

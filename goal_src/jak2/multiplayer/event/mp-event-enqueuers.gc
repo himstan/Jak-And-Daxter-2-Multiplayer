@@ -1,0 +1,241 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defun mp-event-enqueue-aid! ((event-type uint) (aid uint))
+  "Build and enqueue a short-lived aid event without growing caller frames."
+  (let ((event (new 'stack-no-clear 'mp-aid-event)))
+    (mp-event-enqueue!
+      (mp-event-build-aid! event event-type aid)))
+  (none)
+  )
+
+(defun mp-event-enqueue-enemy-gem! ((source-id uint) (gem-index uint))
+  (let ((event (new 'stack-no-clear 'mp-enemy-gem-event)))
+    (mp-event-enqueue!
+      (mp-event-build-enemy-gem! event source-id gem-index)))
+  (none)
+  )
+
+(defun mp-event-enqueue-actor-name! ((event-type uint) (proc-name string))
+  (let ((event (new 'stack-no-clear 'mp-actor-name-event)))
+    (mp-event-enqueue!
+      (mp-event-build-actor-name! event event-type proc-name)))
+  (none)
+  )
+
+(defun mp-event-enqueue-robotank-trigger! ((proc-name string)
+                                           (trigger-id int)
+                                           (source-pos vector))
+  (let ((event (new 'stack-no-clear 'mp-robotank-trigger-event)))
+    (mp-event-enqueue!
+      (mp-event-build-robotank-trigger! event proc-name trigger-id source-pos)))
+  (none)
+  )
+
+(defun mp-event-enqueue-gungame! ((details mp-gungame-build-data))
+  (let ((event (new 'stack-no-clear 'mp-gungame-event)))
+    (mp-event-enqueue!
+      (mp-event-build-gungame! event details)))
+  (none)
+  )
+
+(defun mp-event-enqueue-krew-pickup! ((bag-index int))
+  (let ((event (new 'stack-no-clear 'mp-krew-collection-event)))
+    (mp-event-enqueue!
+      (mp-event-build-krew-pickup! event bag-index)))
+  (none)
+  )
+
+(defun mp-event-enqueue-shuttle! ((task-node uint)
+                                  (sub-state uint)
+                                  (started? uint)
+                                  (time-limit time-frame)
+                                  (remaining-time time-frame)
+                                  (counter int)
+                                  (sequence uint))
+  (let ((event (new 'stack-no-clear 'mp-shuttle-event)))
+    (mp-event-enqueue!
+      (mp-event-build-shuttle!
+        event task-node sub-state started? time-limit remaining-time counter sequence)))
+  (none)
+  )
+
+(defun mp-event-enqueue-city-power! ((turret-id uint)
+                                     (state uint)
+                                     (source-pos vector))
+  (let ((event (new 'stack-no-clear 'mp-city-power-event)))
+    (mp-event-enqueue!
+      (mp-event-build-city-power! event turret-id state source-pos)))
+  (none)
+  )
+
+(defun mp-event-enqueue-battle! ((details mp-battle-build-data))
+  (let ((event (new 'stack-no-clear 'mp-battle-event)))
+    (mp-event-enqueue!
+      (mp-event-build-battle! event details)))
+  (none)
+  )
+
+(defun mp-event-enqueue-player-gun-shot! ((weapon-type uint)
+                                           (shot-seq uint)
+                                           (cam-angle-y float))
+  (let ((event (new 'stack-no-clear 'mp-player-gun-shot-event)))
+    (mp-event-enqueue!
+      (mp-event-build-player-gun-shot! event weapon-type shot-seq cam-angle-y)))
+  (none)
+  )
+
+(defun mp-event-enqueue-continue! ((name string))
+  (let ((event (new 'stack-no-clear 'mp-continue-event)))
+    (mp-event-enqueue!
+      (mp-event-build-continue! event name)))
+  (none)
+  )
+
+(defun mp-event-enqueue-edge-grab! ((event-type uint)
+                                    (packed mp-edge-grab-event-data))
+  (let ((event (new 'stack-no-clear 'mp-event)))
+    (mp-event-enqueue!
+      (mp-event-build-edge-grab! event event-type packed)))
+  (none)
+  )
+
+(defun mp-event-enqueue-scene! ((event-type uint)
+                                (name string)
+                                (load-continue string))
+  (let ((event (new 'stack-no-clear 'mp-scene-event)))
+    (mp-event-enqueue!
+      (mp-event-build-scene! event event-type name load-continue)))
+  (none)
+  )
+
+(defun mp-event-enqueue-waypoint! ((event-type uint)
+                                   (course-id uint)
+                                   (waypoint-id int)
+                                   (skipped? symbol)
+                                   (waypoint-request int)
+                                   (host-in-scene? symbol)
+                                   (process-name string))
+  (let ((event (new 'stack-no-clear 'mp-waypoint-event)))
+    (mp-event-enqueue!
+      (mp-event-build-waypoint!
+        event
+        event-type
+        course-id
+        waypoint-id
+        skipped?
+        waypoint-request
+        host-in-scene?
+        process-name)))
+  (none)
+  )
+
+(defun mp-event-enqueue-warp-gate! ((gate-aid uint)
+                                    (phase uint)
+                                    (flags uint)
+                                    (continue-name string)
+                                    (start-pos vector)
+                                    (end-pos vector))
+  (let ((event (new 'stack-no-clear 'mp-warp-gate-event)))
+    (mp-event-enqueue!
+      (mp-event-build-warp-gate!
+        event gate-aid phase flags continue-name start-pos end-pos)))
+  (none)
+  )
+
+(defun mp-event-enqueue-mtn-plat-shoot! ((aid uint) (axe-flip vector))
+  (let ((event (new 'stack-no-clear 'mp-mtn-plat-shoot-event)))
+    (mp-event-enqueue!
+      (mp-event-build-mtn-plat-shoot! event aid axe-flip)))
+  (none)
+  )
+
+(defun mp-event-enqueue-mtn-dice! ((aid uint)
+                                   (prim-id int)
+                                   (rot-axis vector)
+                                   (rot-org vector))
+  (let ((event (new 'stack-no-clear 'mp-mtn-dice-event)))
+    (mp-event-enqueue!
+      (mp-event-build-mtn-dice! event aid prim-id rot-axis rot-org)))
+  (none)
+  )
+
+(defun mp-event-enqueue-fort-missile-target! ((target-index uint))
+  (let ((event (new 'stack-no-clear 'mp-fort-missile-target-event)))
+    (mp-event-enqueue!
+      (mp-event-build-fort-missile-target! event target-index)))
+  (none)
+  )
+
+(defun mp-event-enqueue-stadium-board! ((event-type uint) (score int))
+  (let ((event (new 'stack-no-clear 'mp-stadium-board1-event)))
+    (mp-event-enqueue!
+      (mp-event-build-stadium-board! event event-type score)))
+  (none)
+  )
+
+(defun mp-event-enqueue-palace-squid! ((details mp-palace-squid-build-data))
+  (let ((event (new 'stack-no-clear 'mp-palace-squid-event)))
+    (mp-event-enqueue!
+      (mp-event-build-palace-squid! event details)))
+  (none)
+  )
+
+(defun mp-event-enqueue-widow-spydroid! ((spydroid-aid uint)
+                                         (launch-slot int)
+                                         (spawn-trans vector)
+                                         (spawn-quat quaternion)
+                                         (launch-dest vector))
+  (let ((event (new 'stack-no-clear 'mp-widow-spydroid-event)))
+    (mp-event-enqueue!
+      (mp-event-build-widow-spydroid!
+        event spydroid-aid launch-slot spawn-trans spawn-quat launch-dest)))
+  (none)
+  )
+
+(defun mp-event-enqueue-widow-bomb! ((launch-slot int) (launch-dest vector))
+  (let ((event (new 'stack-no-clear 'mp-widow-bomb-event)))
+    (mp-event-enqueue!
+      (mp-event-build-widow-bomb! event launch-slot launch-dest)))
+  (none)
+  )
+
+(defun mp-event-enqueue-widow-bomb-kick! ((slot int)
+                                          (kick-from vector)
+                                          (kick-dest vector)
+                                          (kick-height float))
+  (let ((event (new 'stack-no-clear 'mp-widow-bomb-kick-event)))
+    (mp-event-enqueue!
+      (mp-event-build-widow-bomb-kick!
+        event slot kick-from kick-dest kick-height)))
+  (none)
+  )
+
+(defun mp-event-enqueue-widow-bomb-fizzle! ((slot int) (deadline time-frame))
+  (let ((event (new 'stack-no-clear 'mp-widow-bomb-fizzle-event)))
+    (mp-event-enqueue!
+      (mp-event-build-widow-bomb-fizzle! event slot deadline)))
+  (none)
+  )
+
+(defun mp-event-enqueue-widow-bomb-hit! ((hit-amount int) (hit-position vector))
+  (let ((event (new 'stack-no-clear 'mp-widow-bomb-hit-event)))
+    (mp-event-enqueue!
+      (mp-event-build-widow-bomb-hit! event hit-amount hit-position)))
+  (none)
+  )
+
+(defun mp-event-enqueue-widow-catwalk-hit! ((catwalk-index int))
+  (let ((event (new 'stack-no-clear 'mp-widow-catwalk-hit-event)))
+    (mp-event-enqueue!
+      (mp-event-build-widow-catwalk-hit! event catwalk-index)))
+  (none)
+  )
+
+(defun mp-event-enqueue-actor-attack! ((event-type uint)
+                                       (details mp-actor-attack-build-data))
+  (let ((event (new 'stack-no-clear 'mp-actor-attack-event)))
+    (mp-event-enqueue!
+      (mp-event-build-actor-attack! event event-type details)))
+  (none)
+  )
