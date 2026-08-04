@@ -1437,12 +1437,36 @@
   (quaternion-pseudo-seek (-> this joint quat) (-> this joint quat) *unity-quaternion* (seconds-per-frame))
   )
 
+(defun crimson-guard-level-refresh-remote-target-data! ((this crimson-guard-level))
+  "Refresh target metrics after remote presentation data has been applied."
+  (when (and this
+             (nonzero? this)
+             *local-info*
+             (nonzero? *local-info*))
+    (let ((root (-> this root))
+          (focus (-> this focus))
+          (nav (-> this nav)))
+      (when (and root
+                 (nonzero? root)
+                 focus
+                 (nonzero? focus)
+                 nav
+                 (nonzero? nav)
+                 (not (mp-enemy-authoritative? this)))
+        (crimson-guard-level-method-200 this)
+        )
+      )
+    )
+  (none)
+  )
+
 ;; WARN: Return type mismatch object vs none.
 (defmethod common-post ((this crimson-guard-level))
   "Does a lot of various things relating to interacting with the target
    - tracks when the enemy was last drawn
    - looks at the target and handles attacking
    @TODO Not extremely well understood yet"
+  (mp-enemy-refresh-player-focus! this)
   (let ((t9-0 (method-of-type nav-enemy common-post)))
     (t9-0 this)
     )
@@ -1457,6 +1481,7 @@
          )
      )
     )
+  (crimson-guard-level-refresh-remote-target-data! this)
   (none)
   )
 
