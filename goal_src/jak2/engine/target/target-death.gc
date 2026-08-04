@@ -22,6 +22,7 @@
 (define-extern mp-prepare-remote-spectate-target! (function process-focusable))
 (define-extern mp-should-suppress-local-endlessfall? (function symbol))
 (define-extern mp-begin-local-death-respawn-policy! (function target symbol))
+(define-extern target-daxter-death-voice! (function symbol none :behavior target))
 
 ;; DECOMP BEGINS
 
@@ -1458,9 +1459,7 @@
 
     ;; 2. Handle Local Player
     (when (and (= self *target*) (not (= (-> self tobot?) 'mp-puppet)))
-      (let ((event (new 'stack-no-clear 'mp-aid-event)))
-        (mp-event-enqueue!
-          (mp-event-build-aid! event MP_EVENT_PLAYER_DIED (the-as uint 0))))
+      (mp-event-enqueue-aid! MP_EVENT_PLAYER_DIED (the-as uint 0))
       (when (not use-local-respawn?)
         (mp-clear-local-vehicle-occupancy! self)
         (debug-log *mp-debug-log?* "[Target-Death] Mission Death. Spectating and waiting 20s...~%")
@@ -1514,9 +1513,7 @@
                  (let ((remote (mp-prepare-remote-spectate-target!)))
                    (when (and remote (nonzero? remote))
                       (when (mp-remote-level-ready?)
-                          (let ((event (new 'stack-no-clear 'mp-aid-event)))
-                            (mp-event-enqueue!
-                              (mp-event-build-aid! event MP_EVENT_PLAYER_RESPAWNED (the-as uint 0))))
+                        (mp-event-enqueue-aid! MP_EVENT_PLAYER_RESPAWNED (the-as uint 0))
                         (set! (-> self fact health) (/ (-> self fact health-max) 2.0))
                         (set! *mp-local-player-is-respawning* #t)
                         (remove-setting! 'mode-name)
@@ -1623,7 +1620,9 @@
       )
     )
   :enter (behavior ()
-    (mp-play-local-death-vo)
+    (when (puppet? self)
+      (mp-play-local-death-vo)
+      )
   )
   :exit (behavior ()
     (let ((a0-0 (-> self spool-anim)))
@@ -1656,8 +1655,12 @@
                (mp-should-suppress-local-endlessfall?))
       (debug-log *mp-debug-log?* "[Target-Death] Suppressing cutscene/loading endlessfall for Jak.~%")
       (set! (-> self control transv quad) (the-as uint128 0))
-      (go target-stance)
+      (if (mp-target-is-daxter? self)
+        (go target-stance)
+        (go target-indax-stance)
+        )
       )
+    (target-daxter-death-voice! arg0)
     (set! (-> self control unknown-word04) (the-as uint #f))
     (set! (-> self control did-move-to-pole-or-max-jump-height)
           (the-as float (send-event (handle->process-safe (-> self attack-info attacker)) 'target 'die arg0))
@@ -1858,10 +1861,13 @@
          ((lambda :behavior target
             ()
             (local-vars (v1-24 symbol))
-            (sound-play "death-fall")
-            (set! (-> self control unknown-sound-id00)
-                  (add-process *gui-control* self (gui-channel daxter) (gui-action play) "jakfall" -99.0 0)
-                  )
+            ;; We piggy back on the Jak states for making hoverboard work on Daxter, so we can die as Jak even as Daxter.
+            (when (not (mp-target-is-daxter? self))
+              (sound-play "death-fall")
+              (set! (-> self control unknown-sound-id00)
+                    (add-process *gui-control* self (gui-channel daxter) (gui-action play) "jakfall" -99.0 0)
+                    )
+              )
             (set-falloff! *gui-control* (-> self control unknown-sound-id00) #t -1 100 2)
             (set-setting! 'mode-name 'cam-endlessfall 0.0 0)
             (logclear! (-> self water flags) (water-flags swim-ground))

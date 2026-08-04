@@ -1093,8 +1093,12 @@
   `(or (mp-is-jak?) (not *mp-traffic-suppressed*))
   )
 
+(defun puppet? ((proc process))
+  (and (type? proc target) *mp-puppet* (nonzero? *mp-puppet*) (= proc *mp-puppet*))
+)
+
 (defun not-puppet? ((proc process))
-  (or (not (type? proc target)) (not *mp-puppet*) (!= proc *mp-puppet*))
+  (not (puppet? proc))
 )
 
 (defun mp-generate-battle-enemy-aid ()

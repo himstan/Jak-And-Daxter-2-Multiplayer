@@ -15,6 +15,14 @@
   (the-as mp-aid-event #f)
   )
 
+(defun mp-event-enqueue-aid! ((event-type uint) (aid uint))
+  "Build and enqueue a short-lived aid event without growing death-state frames."
+  (let ((event (new 'stack-no-clear 'mp-aid-event)))
+    (mp-event-enqueue!
+      (mp-event-build-aid! event event-type aid)))
+  (none)
+  )
+
 (defun mp-event-build-enemy-gem! ((event mp-enemy-gem-event)
                                   (source-id uint)
                                   (gem-index uint))

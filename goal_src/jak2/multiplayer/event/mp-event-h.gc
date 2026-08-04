@@ -288,6 +288,7 @@
 ;; The queue owns all pointer/count manipulation. Producers only call these APIs.
 (define-extern mp-event-prepare! (function mp-event uint symbol))
 (define-extern mp-event-enqueue! (function mp-event symbol))
+(define-extern mp-event-enqueue-aid! (function uint uint none))
 (define-extern mp-event-queue-reset! (function none))
 (define-extern mp-event-dispatch! (function mp-event none))
 (define-extern mp-push-local-events (function none))

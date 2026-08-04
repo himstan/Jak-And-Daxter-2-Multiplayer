@@ -1549,7 +1549,8 @@
             (+! *mp-puppet-state-mismatch-count* 1)
             (cond
               ((and (mp-target-death-state? ghost-state)
-                    (not (mp-target-death-state? cur-state)))
+                    (not (mp-target-death-state? cur-state)) 
+                    (not (mp-remote-blocks-respawn?)))
                (debug-log *mp-debug-log?* "[MP-Puppet] Authoritative Death! Bumping ~A -> ~A~%" cur-state ghost-state)
                (set! *remote-player-is-dying* #t)
                (send-event proc 'mp-die)

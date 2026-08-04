@@ -33,7 +33,7 @@
 ;; DECOMP BEGINS
 
 (defbehavior target-board-get-off-to-falling-or-indax target ((arg0 symbol))
-  (if (mp-target-is-daxter? self)
+  (if (target-indax-board? self)
       (go target-indax-start (the handle #f))
       (go target-falling arg0)
       )
@@ -41,9 +41,17 @@
   )
 
 (defbehavior target-board-get-off-to-hit-ground-or-indax target ((arg0 symbol))
-  (if (mp-target-is-daxter? self)
+  (if (target-indax-board? self)
       (go target-indax-start (the handle #f))
       (go target-hit-ground arg0)
+      )
+  (none)
+  )
+
+(defbehavior target-board-go-to-stance target ()
+  (if (target-indax-board? self)
+      (go target-indax-stance)
+      (go target-stance)
       )
   (none)
   )
@@ -416,7 +424,7 @@
                   )
                 )
               (rumble-local-controller self 1 255 (seconds 0.3))
-              (if (mp-target-is-daxter? self)
+              (if (target-indax-board? self)
                   (target-board-play-daxter-vo self 1.0 0.2 #f)
                   (sound-play "board-boost")
                   )
@@ -2827,7 +2835,9 @@
   :event target-board-handler
   :exit (behavior ()
     (when (not (and (-> self next-state) (let ((v1-3 (-> self next-state name)))
-                                           (or (= v1-3 'target-death) (= v1-3 'target-board-get-off))
+                                           (or (= v1-3 'target-death)
+                                               (= v1-3 'target-indax-death)
+                                               (= v1-3 'target-board-get-off))
                                            )
                     )
                )
@@ -2918,7 +2928,7 @@
                    )
                  (set! (-> self control camera-pos quad) (-> self control trans quad))
                  (send-event *camera* 'teleport)
-                 (go target-stance)
+                 (target-board-go-to-stance)
                  )
                 (else
                   (pickup-collectable! (-> self fact) (pickup-type health) -1000.0 (the-as handle #f))
