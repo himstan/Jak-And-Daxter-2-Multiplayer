@@ -5,6 +5,36 @@
 ;; name in dgo: widow2
 ;; dgos: TOA
 
+(defun mp-widow-reset-presentation! ((proc widow))
+  (when (and proc (nonzero? proc))
+    (set! (-> proc presentation-valid) #f)
+    )
+  (none)
+  )
+
+(defun mp-widow-interpolate-presentation! ((proc widow)
+                                           (target-trans vector)
+                                           (target-quat quaternion))
+  (when (and proc (nonzero? proc))
+    (let ((root (-> proc root)))
+      (when (and root (nonzero? root))
+        (mp-actor-update-presentation! (-> proc presentation-trans)
+                                       (-> proc presentation-quat)
+                                       target-trans
+                                       target-quat
+                                       (-> proc presentation-valid)
+                                       #f)
+        (set! (-> proc presentation-valid) #t)
+        (mp-actor-apply-presentation! (the-as collide-shape root)
+                                      (-> proc presentation-trans)
+                                      (-> proc presentation-quat)
+                                      (-> root transv))
+        )
+      )
+    )
+  (none)
+  )
+
 ;; DECOMP BEGINS
 
 (defmethod deal-damage! ((this widow-shot) (arg0 process) (arg1 event-message-block))
@@ -392,6 +422,7 @@
   (set! (-> this last-gun-hit-stage) 0)
   (set! (-> this gun-hits) 0)
   (set! (-> this last-attack-id) (the-as uint 0))
+  (set! (-> this presentation-valid) #f)
   (if (task-node-closed? (game-task-node tomb-boss-resolution))
       (go (method-of-object this beaten))
       (go (method-of-object this hidden))
