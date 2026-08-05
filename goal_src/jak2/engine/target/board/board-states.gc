@@ -1016,7 +1016,7 @@
          (vector-dot (-> self control dynam gravity-normal) (-> self control transv))
          )
        (set! (-> self control unknown-word04) (the-as uint #t))
-       (let ((v1-6 (if (puppet? self) *remote-edge-grab-info* *edge-grab-info*)))
+       (let ((v1-6 (-> self edge-grab-state info)))
          (vector-normalize!
            (vector-! (-> self control edge-grab-edge-dir) (-> v1-6 world-vertex 0) (-> v1-6 world-vertex 1))
            1.0

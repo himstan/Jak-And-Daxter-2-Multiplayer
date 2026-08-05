@@ -1952,7 +1952,7 @@
   )
 
 (defbehavior target-compute-edge target ()
-  (let ((s5-0 (if (puppet? self) *remote-edge-grab-info* *edge-grab-info*)))
+  (let ((s5-0 (-> self edge-grab-state info)))
     (when (not s5-0)
       (return #f)
       )
@@ -2120,7 +2120,7 @@
   )
 
 (defbehavior target-compute-edge-rider target ()
-  (let ((gp-0 (if (puppet? self) *remote-edge-grab-info* *edge-grab-info*)))
+  (let ((gp-0 (-> self edge-grab-state info)))
     (cond
       ((-> gp-0 pilot-edge-grab?)
        (set! (-> self control ground-pat) (new 'static 'pat-surface :material (pat-material metal)))
@@ -3076,6 +3076,10 @@
 
 (defmethod init-target ((this target) (arg0 continue-point) (is-puppet? symbol))
   (local-vars (s1-0 int) (s2-0 int) (s3-0 int) (s4-0 int))
+  (mem-set32!
+    (the-as pointer (-> this edge-grab-state))
+    (/ (size-of mp-target-edge-grab-state) 4)
+    0)
   (set! (-> this puppet?) is-puppet?)
   (set! (-> this mode-cache) #f)
   (set! (-> this color-effect) #f)

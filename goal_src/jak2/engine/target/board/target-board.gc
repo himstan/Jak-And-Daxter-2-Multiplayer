@@ -631,7 +631,7 @@
          (go target-board-clone-anim (process->handle (the-as process (-> arg3 param 0))))
          )
         (('edge-grab)
-         (let ((gp-1 (if (puppet? self) *remote-edge-grab-info* *edge-grab-info*)))
+         (let ((gp-1 (-> self edge-grab-state info)))
            (let ((s5-1 (new 'stack-no-clear 'vector)))
              (vector-normalize!
                (vector-! (-> self control edge-grab-edge-dir) (-> gp-1 world-vertex 1) (-> gp-1 world-vertex 0))
@@ -1393,7 +1393,6 @@
     (set! (-> gp-0 quad) (-> self control transv quad))
     (when (focus-test? self halfpipe)
       (when (-> self control unknown-spool-anim00)
-        *edge-grab-info*
         (let ((v1-9 (new-stack-vector0))
               (f0-1 (vector-dot (-> self control edge-grab-across-edge-dir) (-> self control transv)))
               )
@@ -2145,7 +2144,7 @@
 
 ;; WARN: Found some very strange gotos. Check result carefully, this is not well tested.
 (defbehavior target-board-compute-edge target ()
-  (let ((s4-0 (if (puppet? self) *remote-edge-grab-info* *edge-grab-info*))
+  (let ((s4-0 (-> self edge-grab-state info))
         (gp-0 (new 'stack-no-clear 'vector))
         )
     (set! (-> gp-0 quad) (-> self control trans quad))

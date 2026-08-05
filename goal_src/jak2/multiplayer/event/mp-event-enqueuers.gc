@@ -100,7 +100,7 @@
   )
 
 (defun mp-event-enqueue-edge-grab! ((event-type uint)
-                                    (packed mp-edge-grab-event-data))
+                                    (packed edge-grab-state-event-data))
   (let ((event (new 'stack-no-clear 'mp-event)))
     (mp-event-enqueue!
       (mp-event-build-edge-grab! event event-type packed)))

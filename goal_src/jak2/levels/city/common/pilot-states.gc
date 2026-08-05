@@ -830,7 +830,7 @@
   :event (-> target-edge-grab event)
   :enter (behavior ((arg0 pilot-edge-grab-info))
     (set! (-> self control status) (collide-status))
-    (let ((gp-0 (if (puppet? self) *remote-edge-grab-info* *edge-grab-info*)))
+    (let ((gp-0 (-> self edge-grab-state info)))
       (mem-copy! (the-as pointer (-> gp-0 pilot-edge-grab)) (the-as pointer arg0) 40)
       (set! (-> gp-0 pilot-grab-interp) 0.0)
       (set! (-> gp-0 pilot-start-grab-pos quad) (-> self control trans quad))
@@ -851,7 +851,7 @@
     ;; MP Broadcast: inform others that we grabbed a pilot-ledge
     ;; CRITICAL: Send AFTER we reset interpolation to 0.0!
     (if (and (not-puppet? self) *multi-sync-enabled?*)
-        (mp-event-hook-edge-grab! #t)
+        (mp-event-hook-edge-grab! self #t)
         )
     )
   :exit (-> target-edge-grab exit)

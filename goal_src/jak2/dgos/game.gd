@@ -138,6 +138,7 @@
   "collide-target-h.o"
   "collide-touch-h.o"
   "collide-edge-grab-h.o"
+  "mp-target-edge-grab-h.o"
   "process-drawable-h.o"
   "process-focusable.o"
   "process-taskable-h.o"

@@ -33,7 +33,7 @@
 (define *daxter-edge-grab-height-offset* (meters -0.6))
 
 (defbehavior target-indax-compute-edge target ()
-  (let ((s5-0 (if (puppet? self) *remote-edge-grab-info* *edge-grab-info*)))
+  (let ((s5-0 (-> self edge-grab-state info)))
     (cond
       ((-> s5-0 pilot-edge-grab?)
        (set! (-> self control ground-pat) (new 'static 'pat-surface :material (pat-material metal)))
@@ -169,12 +169,12 @@
     )
   :enter (behavior ()
     (set-time! (-> self state-time))
-    (let ((v1-103 (if (puppet? self) *remote-edge-grab-info* *edge-grab-info*)))
+    (let ((v1-103 (-> self edge-grab-state info)))
       (set! (-> v1-103 pilot-edge-grab?) #f)
     )
     ;; MP Broadcast: inform others that we grabbed an edge.
     (if (and (not-puppet? self) *multi-sync-enabled?*)
-        (mp-event-hook-edge-grab! #f)
+        (mp-event-hook-edge-grab! self #f)
         )
     (set! (-> self control unknown-handle000) (the-as handle #f))
     (set! (-> self control mod-surface) *indax-edge-grab-mods*)
@@ -272,7 +272,7 @@
   :code (behavior ()
     (sound-play "edge-grab")
     (target-indax-compute-edge)
-    (let ((gp-0 (if (puppet? self) *remote-edge-grab-info* *edge-grab-info*)))
+    (let ((gp-0 (-> self edge-grab-state info)))
       (set! (-> self control unknown-handle000) (-> gp-0 actor-handle))
       (set! (-> self control unknown-symbol000) #f)
       (let ((v1-4 (handle->process (-> self control unknown-handle000))))

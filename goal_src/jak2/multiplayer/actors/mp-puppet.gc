@@ -37,6 +37,7 @@
   (set! *mp-puppet-last-gun-log-requested* -1)
   (when (and *mp-puppet*
              (nonzero? *mp-puppet*))
+    (mp-clear-target-edge-grab-pending! *mp-puppet*)
     (deactivate *mp-puppet*)
     (set! *mp-puppet* (the-as target #f))
     )
@@ -1333,6 +1334,7 @@
               ((= cur-state 'process-drawable-art-error)
                 (when (>= *mp-puppet-state-mismatch-count* 10)
                   (debug-log *mp-debug-log?* "[MP-Puppet] Stuck in drawable art error! Forcing exit...~%")
+                  (mp-clear-target-edge-grab-pending! proc)
                   (deactivate proc)
                   (set! *mp-puppet* (the-as target #f))
                   (set! *mp-puppet-state-mismatch-count* 0)
@@ -1525,6 +1527,7 @@
   "Deactivate and clear the remote puppet singleton if the process is still valid."
   (let ((puppet *mp-puppet*))
     (when (and puppet (nonzero? puppet))
+      (mp-clear-target-edge-grab-pending! puppet)
       (deactivate puppet)
       )
     )

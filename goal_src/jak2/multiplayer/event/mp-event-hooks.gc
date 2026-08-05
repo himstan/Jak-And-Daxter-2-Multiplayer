@@ -103,7 +103,7 @@
   )
 
 (defun mp-pack-edge-grab-process-ref!
-       ((dst mp-edge-grab-event-data) (proc process) (pilot? symbol))
+       ((dst edge-grab-state-event-data) (proc process) (pilot? symbol))
   (when (and dst (nonzero? dst))
     (if pilot?
         (begin
@@ -142,7 +142,7 @@
   (none)
   )
 
-(defun mp-pack-edge-grab-info ((dst mp-edge-grab-event-data) (src edge-grab-info))
+(defun mp-pack-edge-grab-info ((dst edge-grab-state-event-data) (src edge-grab-info))
   (when (and dst (nonzero? dst) src (nonzero? src))
     (dotimes (index 8)
       (vector-copy! (-> dst world-vertex index) (-> src world-vertex index))
@@ -209,18 +209,24 @@
   (none)
   )
 
-(defun mp-event-hook-edge-grab! ((pilot? symbol))
+(defun mp-event-hook-edge-grab! ((source target) (pilot? symbol))
   "Pack local edge-grab state and enqueue one typed event."
   (if (or (not *multi-sync-enabled?*) (!= (pc-multi-get-status) (mp-connection-status in-game)))
       (return #f))
-  (debug-log *mp-debug-log?*
-             "[MP-Events] Authoritative Edge Grab broadcast! (Pilot: ~A)~%"
-             pilot?)
-  (let ((packed (new 'stack-no-clear 'mp-edge-grab-event-data)))
-    (mp-pack-edge-grab-info packed *edge-grab-info*)
-    (mp-event-enqueue-edge-grab!
-      (if pilot? MP_EVENT_PILOT_EDGE_GRAB MP_EVENT_EDGE_GRAB)
-      packed)
+  (when (and source (nonzero? source))
+    (debug-log *mp-debug-log?*
+               "[MP-Events] Authoritative Edge Grab broadcast! (Pilot: ~A)~%"
+               pilot?)
+    (let ((packed (new 'stack-no-clear 'edge-grab-state-event-data)))
+      (mem-set32!
+        (the-as pointer packed)
+        (/ (size-of edge-grab-state-event-data) 4)
+        0)
+      (mp-pack-edge-grab-info packed (-> source edge-grab-state info))
+      (mp-event-enqueue-edge-grab!
+        (if pilot? MP_EVENT_PILOT_EDGE_GRAB MP_EVENT_EDGE_GRAB)
+        packed)
+      )
     )
   (none)
   )

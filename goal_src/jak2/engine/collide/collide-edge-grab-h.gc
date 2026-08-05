@@ -198,13 +198,4 @@
 
 (mem-copy! (the-as pointer (-> *collide-edge-work* spec)) (the-as pointer *collide-edge-spec*) 320)
 
-(define-perm *edge-grab-info* edge-grab-info (new 'global 'edge-grab-info))
-(define-perm *remote-edge-grab-info* edge-grab-info (new 'global 'edge-grab-info))
-
-;; Initialize remote info from engine global to ensure valid state/offsets
-(mem-copy! (the-as pointer *remote-edge-grab-info*) (the-as pointer *edge-grab-info*) 464)
-(set! (-> *remote-edge-grab-info* pilot-edge-grab?) #f)
-(set! (-> *remote-edge-grab-info* found-edge?) #f)
-(set! (-> *remote-edge-grab-info* actor-handle) (the-as handle #f))
-
 (kmemclose)

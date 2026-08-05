@@ -1426,7 +1426,7 @@
   (the-as handle #f)
   )
 
-(defun mp-unpack-edge-grab-info ((dst edge-grab-info) (src mp-edge-grab-event-data))
+(defun mp-unpack-edge-grab-info ((dst edge-grab-info) (src edge-grab-state-event-data))
   (when (and dst (nonzero? dst) src (nonzero? src))
     (dotimes (index 8)
       (vector-copy! (-> dst world-vertex index) (-> src world-vertex index))
@@ -1477,81 +1477,116 @@
   #f
   )
 
-(defun mp-clear-pending-pilot-edge-grab! ()
-  (set! *mp-pending-pilot-edge-grab?* #f)
-  (set! *mp-pending-pilot-edge-grab-time* 0)
+(defun mp-standard-edge-grab-ready? ((info edge-grab-info)
+                                     (src edge-grab-state-event-data))
+  (when (and info
+             (nonzero? info)
+             src
+             (nonzero? src))
+    (when (= (-> src actor-kind) (the uint 0))
+      (return #t))
+    (let ((actor-proc (handle->process-safe (-> info actor-handle))))
+      (when (and actor-proc
+                 (nonzero? actor-proc)
+                 (type? actor-proc process-drawable))
+        (return #t))))
+  #f
+  )
+
+(defun mp-edge-grab-ready? ((info edge-grab-info)
+                            (src edge-grab-state-event-data)
+                            (pilot? symbol))
+  (if pilot?
+      (mp-pilot-edge-grab-ready? info)
+      (mp-standard-edge-grab-ready? info src))
+  )
+
+(defun mp-clear-target-edge-grab-pending! ((target target))
+  (when (and target (nonzero? target))
+    (let ((edge-state (-> target edge-grab-state)))
+      (mem-set32!
+        (the-as pointer (-> edge-state pending-data))
+        (/ (size-of edge-grab-state-event-data) 4)
+        0)
+      (set! (-> edge-state pending?) #f)
+      (set! (-> edge-state pending-pilot?) #f)
+      (set! (-> edge-state pending-time) 0)))
   (none)
   )
 
-(defun mp-store-pending-pilot-edge-grab! ((src mp-edge-grab-event-data))
-  (when (and src (nonzero? src))
-    (mem-copy! (the-as pointer *mp-pending-pilot-edge-grab-data*)
-               (the-as pointer src)
-               460)
-    (set! *mp-pending-pilot-edge-grab?* #t)
-    (set! *mp-pending-pilot-edge-grab-time* (current-time)))
+(defun mp-store-pending-edge-grab! ((target target)
+                                    (src edge-grab-state-event-data)
+                                    (pilot? symbol))
+  (when (and target
+             (nonzero? target)
+             src
+             (nonzero? src))
+    (let ((edge-state (-> target edge-grab-state)))
+      (mem-copy! (the-as pointer (-> edge-state pending-data))
+                 (the-as pointer src)
+                 MP_EDGE_GRAB_EVENT_PAYLOAD_SIZE)
+      (set! (-> edge-state pending?) #t)
+      (set! (-> edge-state pending-pilot?) pilot?)
+      (set! (-> edge-state pending-time) (current-time))))
   (none)
   )
 
-(defun mp-dispatch-edge-grab-to-puppet! ((puppet process-drawable) (pilot? symbol))
-  (when (and puppet
-             (nonzero? puppet)
-             (type? puppet target))
-    (let ((control (-> (the-as target puppet) control)))
+(defun mp-dispatch-edge-grab-to-target! ((target target) (pilot? symbol))
+  (when (and target (nonzero? target))
+    (let ((control (-> target control)))
       (when (and control (nonzero? control))
-        (set! (-> (the-as target puppet) control last-successful-compute-edge-time)
-              (current-time)))
-      (send-event puppet (if pilot?
+        (set! (-> control last-successful-compute-edge-time) (current-time)))
+      (send-event target (if pilot?
                             'mp-pilot-edge-grab-synced
                             'mp-edge-grab-synced))))
   (none)
   )
 
-(defun mp-process-pending-pilot-edge-grab! ()
-  (when *mp-pending-pilot-edge-grab?*
-    (if (time-elapsed? *mp-pending-pilot-edge-grab-time* (seconds 1.0))
-        (begin
-          (debug-log *mp-debug-log?*
-                     "[MP-Events] Discarding unresolved pilot edge grab after timeout.~%")
-          (mp-clear-pending-pilot-edge-grab!))
-        (let ((puppet *mp-puppet*))
-          (when (and puppet (nonzero? puppet))
-            (let ((gp-0 *remote-edge-grab-info*))
-              (mp-unpack-edge-grab-info
-                gp-0
-                (the-as mp-edge-grab-event-data *mp-pending-pilot-edge-grab-data*))
-              (when (mp-pilot-edge-grab-ready? gp-0)
-                (mp-clear-pending-pilot-edge-grab!)
-                (mp-dispatch-edge-grab-to-puppet! puppet #t)))))))
-  (none)
-  )
-
-(defun mp-receive-edge-grab-event ((evt mp-aid-event) (pilot? symbol))
-  "Receiver: Apply authoritative edge grab data to the puppet and trigger immediate snapping."
-  (let ((puppet *mp-puppet*))
-    (when (and evt
-               (nonzero? evt)
-               puppet
-               (nonzero? puppet))
-      (debug-log *mp-debug-log?* "[MP-Events] Authoritative Edge Grab received! (Pilot: ~A)~%" pilot?)
-
-      ;; Safe Unpack: De-serialize into the local puppet's remote-edge-grab-info
-      (let ((gp-0 *remote-edge-grab-info*)
-            (src (the-as mp-edge-grab-event-data (-> evt data))))
-        (mp-unpack-edge-grab-info gp-0 src)
-        (if (and pilot? (not (mp-pilot-edge-grab-ready? gp-0)))
+(defun mp-process-pending-edge-grab! ((target target))
+  (when (and target (nonzero? target))
+    (let ((edge-state (-> target edge-grab-state)))
+      (when (-> edge-state pending?)
+        (if (time-elapsed? (-> edge-state pending-time) (seconds 1.0))
             (begin
               (debug-log *mp-debug-log?*
-                         "[MP-Events] Pilot edge grab queued until actor resolves.~%")
-              (mp-store-pending-pilot-edge-grab! src))
-            (begin
-              (when pilot?
-                (mp-clear-pending-pilot-edge-grab!))
-              (mp-dispatch-edge-grab-to-puppet! puppet pilot?)))
-      )
-    )
+                         "[MP-Events] Discarding unresolved edge grab after timeout. (Pilot: ~A)~%"
+                         (-> edge-state pending-pilot?))
+              (mp-clear-target-edge-grab-pending! target))
+            (let ((edge-info (-> edge-state info))
+                  (src (-> edge-state pending-data))
+                  (pilot? (-> edge-state pending-pilot?)))
+              (mp-unpack-edge-grab-info edge-info src)
+              (when (mp-edge-grab-ready? edge-info src pilot?)
+                (mp-clear-target-edge-grab-pending! target)
+                (mp-dispatch-edge-grab-to-target! target pilot?)))))))
   (none)
   )
+
+(defun mp-receive-edge-grab-event ((target target)
+                                   (evt mp-event)
+                                   (pilot? symbol))
+  "Apply authoritative edge-grab data to one target and trigger immediate snapping."
+  (when (and target
+             (nonzero? target)
+             evt
+             (nonzero? evt))
+    (debug-log *mp-debug-log?*
+               "[MP-Events] Authoritative Edge Grab received! (Pilot: ~A)~%"
+               pilot?)
+    (let ((edge-state (-> target edge-grab-state))
+          (src (the-as edge-grab-state-event-data (-> evt data))))
+      (let ((edge-info (-> edge-state info)))
+        (mp-unpack-edge-grab-info edge-info src)
+        (if (mp-edge-grab-ready? edge-info src pilot?)
+            (begin
+              (mp-clear-target-edge-grab-pending! target)
+              (mp-dispatch-edge-grab-to-target! target pilot?))
+            (begin
+              (debug-log *mp-debug-log?*
+                         "[MP-Events] Edge grab queued until actor resolves. (Pilot: ~A)~%"
+                         pilot?)
+              (mp-store-pending-edge-grab! target src pilot?))))))
+  (none)
   )
 
 (defun mp-receive-pole-grab-event ((evt mp-aid-event))
@@ -1723,8 +1758,8 @@
             ((MP_EVENT_ATTACK_PED) (mp-event-handler-attack-ped (the-as mp-actor-attack-event evt)))
             ((MP_EVENT_CHANGE_MODE_DARKJAK) (mp-event-handler-change-mode-darkjak aid))
             ((MP_EVENT_END_MODE_DARKJAK) (mp-event-handler-end-mode-darkjak aid))
-            ((MP_EVENT_EDGE_GRAB) (mp-receive-edge-grab-event (the-as mp-aid-event evt) #f))
-            ((MP_EVENT_PILOT_EDGE_GRAB) (mp-receive-edge-grab-event (the-as mp-aid-event evt) #t))
+            ((MP_EVENT_EDGE_GRAB) (mp-receive-edge-grab-event *mp-puppet* evt #f))
+            ((MP_EVENT_PILOT_EDGE_GRAB) (mp-receive-edge-grab-event *mp-puppet* evt #t))
             ((MP_EVENT_PLAYER_RESPAWNED) (mp-event-remote-player-respawned aid))
             ((MP_EVENT_PLAYER_DIED) (mp-event-remote-player-died aid))
             ((MP_EVENT_CONTINUE_POINT) (mp-receive-continue-event (the-as mp-continue-event evt)))

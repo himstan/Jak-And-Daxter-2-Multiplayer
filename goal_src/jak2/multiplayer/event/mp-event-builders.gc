@@ -227,7 +227,7 @@
 
 (defun mp-event-build-edge-grab! ((event mp-event)
                                   (event-type uint)
-                                  (packed mp-edge-grab-event-data))
+                                  (packed edge-grab-state-event-data))
   (when (and event
              (nonzero? (the-as uint event))
              packed
@@ -235,8 +235,8 @@
              (mp-event-prepare! event event-type))
       (mem-copy! (the-as pointer (-> event data))
                  (the-as pointer packed)
-                 460)
-      (set! (-> event payload-size) (the uint 460))
+                 MP_EDGE_GRAB_EVENT_PAYLOAD_SIZE)
+      (set! (-> event payload-size) (the-as uint MP_EDGE_GRAB_EVENT_PAYLOAD_SIZE))
       (return event)
       )
   (the-as mp-event #f)

@@ -71,7 +71,7 @@
    )
   :size-assert 496)
 
-(deftype mp-edge-grab-event-data (structure)
+(deftype edge-grab-state-event-data (structure)
   ((world-vertex vector 8 :inline)
    (local-vertex vector 8 :inline)
    (status uint64)
@@ -94,11 +94,9 @@
    )
   )
 
-(define-perm *mp-pending-pilot-edge-grab?* symbol #f)
-(define-perm *mp-pending-pilot-edge-grab-data*
-  mp-edge-grab-event-data
-  (new 'static 'mp-edge-grab-event-data))
-(define-perm *mp-pending-pilot-edge-grab-time* time-frame 0)
+;; The GOAL type includes in-memory padding, but the existing network payload
+;; contains only the serialized fields. Keep this contract wire-compatible.
+(defconstant MP_EDGE_GRAB_EVENT_PAYLOAD_SIZE 460)
 
 (deftype mp-aid-event (mp-event)
   ((aid uint32 :overlay-at (-> data 0))))
@@ -391,7 +389,7 @@
 (define-extern mp-event-build-battle! (function mp-battle-event mp-battle-build-data mp-battle-event))
 (define-extern mp-event-build-player-gun-shot! (function mp-player-gun-shot-event uint uint float mp-player-gun-shot-event))
 (define-extern mp-event-build-continue! (function mp-continue-event string mp-continue-event))
-(define-extern mp-event-build-edge-grab! (function mp-event uint mp-edge-grab-event-data mp-event))
+(define-extern mp-event-build-edge-grab! (function mp-event uint edge-grab-state-event-data mp-event))
 (define-extern mp-event-build-scene! (function mp-scene-event uint string string mp-scene-event))
 (define-extern mp-event-build-waypoint! (function mp-waypoint-event uint uint int symbol int symbol string mp-waypoint-event))
 (define-extern mp-event-build-warp-gate! (function mp-warp-gate-event uint uint uint string vector vector mp-warp-gate-event))
@@ -419,7 +417,7 @@
 (define-extern mp-event-enqueue-battle! (function mp-battle-build-data none))
 (define-extern mp-event-enqueue-player-gun-shot! (function uint uint float none))
 (define-extern mp-event-enqueue-continue! (function string none))
-(define-extern mp-event-enqueue-edge-grab! (function uint mp-edge-grab-event-data none))
+(define-extern mp-event-enqueue-edge-grab! (function uint edge-grab-state-event-data none))
 (define-extern mp-event-enqueue-scene! (function uint string string none))
 (define-extern mp-event-enqueue-waypoint! (function uint uint int symbol int symbol string none))
 (define-extern mp-event-enqueue-warp-gate! (function uint uint uint string vector vector none))
@@ -438,7 +436,9 @@
 (define-extern mp-player-queue-gun-shot! (function uint none))
 (define-extern mp-warp-gate-queue-event! (function process-drawable uint symbol vector vector none))
 
-(define-extern mp-event-hook-edge-grab! (function symbol none))
+(define-extern mp-event-hook-edge-grab! (function target symbol none))
+(define-extern mp-clear-target-edge-grab-pending! (function target none))
+(define-extern mp-process-pending-edge-grab! (function target none))
 (define-extern mp-event-hook-pole-grab! (function handle none))
 (define-extern mp-event-hook-scene! (function mp-scene-state string none))
 (define-extern mp-clear-pole-grab-event-latch (function handle none))

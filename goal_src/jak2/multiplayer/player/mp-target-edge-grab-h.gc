@@ -1,0 +1,11 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(deftype mp-target-edge-grab-state (structure)
+  ((info             edge-grab-info        :inline)
+   (pending-data     edge-grab-state-event-data :inline)
+   (pending?         symbol)
+   (pending-pilot?   symbol)
+   (pending-time     time-frame)
+   )
+  )

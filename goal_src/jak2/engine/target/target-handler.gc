@@ -887,24 +887,17 @@
        )
       (('mp-edge-grab-synced)
        ;; Authoritative standard edge grab sync.
-       (let ((gp-0 *remote-edge-grab-info*))
-         (debug-log *mp-debug-log?* "[Target-Handler] Puppet event handler: mp-edge-grab-synced~%")
-         (let ((actor-proc (handle->process-safe (-> gp-0 actor-handle))))
-           (when (and actor-proc
-                      (nonzero? actor-proc)
-                      (type? actor-proc process-drawable))
-             ;; Branch based on character only after the actor handle resolves.
-             (debug-log *mp-debug-log?* "[Target-Handler] Character check and go...~%")
-             (if (focus-test? self indax)
-                 (go target-indax-edge-grab)
-                 (go target-edge-grab)
-                 )))
-         )
+       (debug-log *mp-debug-log?* "[Target-Handler] Puppet event handler: mp-edge-grab-synced~%")
+       ;; Readiness is validated before dispatch. Static world edges intentionally
+       ;; have no actor handle and must still enter the edge-grab state.
+       (if (focus-test? self indax)
+           (go target-indax-edge-grab)
+           (go target-edge-grab))
        (return #t)
        )
       (('mp-pilot-edge-grab-synced)
        ;; Authoritative pilot edge grab sync.
-       (let ((gp-0 *remote-edge-grab-info*))
+       (let ((gp-0 (-> self edge-grab-state info)))
          (debug-log *mp-debug-log?* "[Target-Handler] Puppet event handler: mp-pilot-edge-grab-synced~%")
          (let ((pilot-proc
                  (handle->process-safe (-> gp-0 pilot-edge-grab handle))))

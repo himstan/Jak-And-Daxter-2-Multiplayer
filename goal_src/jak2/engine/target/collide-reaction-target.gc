@@ -549,7 +549,7 @@
     (set! (-> *collide-edge-board-spec* touching-segment) #f)
     (do-edge-grabs self *collide-cache* *collide-edge-board-spec*)
     (logior! (-> *collide-edge-board-spec* flags) (collide-edge-spec-flags send-event))
-    (let ((gp-0 (if (puppet? self) *remote-edge-grab-info* *edge-grab-info*)))
+    (let ((gp-0 (-> self edge-grab-state info)))
       (if (puppet? self)
           (set! (-> *collide-edge-work* cshape) (-> self control))
           )
