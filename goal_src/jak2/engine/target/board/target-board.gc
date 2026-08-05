@@ -2150,11 +2150,8 @@
     (set! (-> gp-0 quad) (-> self control trans quad))
     (let ((s5-0 (new 'stack-no-clear 'vector)))
       (set! (-> s5-0 quad) (-> self control transv quad))
-      
-      (if (puppet? self)
-          (set! (-> *collide-edge-work* cshape) (-> self control))
-          )
-      (when (not (edge-grab-info-method-9 s4-0))
+
+      (when (and (not-puppet? self) (not (edge-grab-info-method-9 s4-0)))
         (format #t "exit update~%")
         (send-event self 'end-mode #f)
         (return (the-as time-frame #f))

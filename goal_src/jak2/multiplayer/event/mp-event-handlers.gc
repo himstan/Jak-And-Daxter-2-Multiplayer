@@ -1433,9 +1433,8 @@
       (vector-copy! (-> dst local-vertex index) (-> src local-vertex index))
       )
     (set! (-> dst status) (-> src status))
-    (set! (-> dst actor-cshape-prim-offset) (-> src actor-cshape-prim-offset))
-    (set! (-> dst actor-handle)
-          (mp-resolve-edge-grab-handle (-> src actor-id) (-> src actor-kind)))
+    (set! (-> dst actor-cshape-prim-offset) 0)
+    (set! (-> dst actor-handle) (the-as handle #f))
     (mem-copy! (the-as pointer (-> dst hanging-matrix))
                (the-as pointer (-> src hanging-matrix))
                64)
@@ -1479,18 +1478,10 @@
 
 (defun mp-standard-edge-grab-ready? ((info edge-grab-info)
                                      (src edge-grab-state-event-data))
-  (when (and info
-             (nonzero? info)
-             src
-             (nonzero? src))
-    (when (= (-> src actor-kind) (the uint 0))
-      (return #t))
-    (let ((actor-proc (handle->process-safe (-> info actor-handle))))
-      (when (and actor-proc
-                 (nonzero? actor-proc)
-                 (type? actor-proc process-drawable))
-        (return #t))))
-  #f
+  (and info
+       (nonzero? info)
+       src
+       (nonzero? src))
   )
 
 (defun mp-edge-grab-ready? ((info edge-grab-info)

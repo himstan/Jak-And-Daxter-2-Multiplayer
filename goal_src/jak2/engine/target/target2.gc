@@ -881,14 +881,22 @@
   :code (behavior ()
     (target-compute-edge)
     (let ((gp-0 (-> self edge-grab-state info)))
-      (set! (-> self control unknown-handle000) (-> gp-0 actor-handle))
-      (set! (-> self control unknown-symbol000) #f)
-      (let ((v1-4 (handle->process (-> self control unknown-handle000))))
-        (if v1-4
-            (logior!
-              (-> (the-as collide-shape-moving (-> (the-as process-drawable v1-4) root)) root-prim prim-core action)
-              (collide-action edge-grabbed)
+      (if (not-puppet? self)
+          (begin
+            (set! (-> self control unknown-handle000) (-> gp-0 actor-handle))
+            (set! (-> self control unknown-symbol000) #f)
+            (let ((v1-4 (handle->process (-> self control unknown-handle000))))
+              (if v1-4
+                  (logior!
+                    (-> (the-as collide-shape-moving (-> (the-as process-drawable v1-4) root)) root-prim prim-core action)
+                    (collide-action edge-grabbed)
+                    )
+                  )
               )
+            )
+          (begin
+            (set! (-> self control unknown-handle000) (the-as handle #f))
+            (set! (-> self control unknown-symbol000) #t)
             )
         )
       (set! (-> self control unknown-word04)

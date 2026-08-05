@@ -437,6 +437,7 @@
 (define-extern mp-warp-gate-queue-event! (function process-drawable uint symbol vector vector none))
 
 (define-extern mp-event-hook-edge-grab! (function target symbol none))
+(define-extern mp-dispatch-edge-grab-to-target! (function target symbol none))
 (define-extern mp-clear-target-edge-grab-pending! (function target none))
 (define-extern mp-process-pending-edge-grab! (function target none))
 (define-extern mp-event-hook-pole-grab! (function handle none))

@@ -39,10 +39,7 @@
        (set! (-> self control ground-pat) (new 'static 'pat-surface :material (pat-material metal)))
        )
       (else
-        (if (puppet? self)
-            (set! (-> *collide-edge-work* cshape) (-> self control))
-            )
-        (if (not (edge-grab-info-method-9 s5-0))
+        (if (and (not-puppet? self) (not (edge-grab-info-method-9 s5-0)))
             (send-event self 'end-mode)
             )
         (set! (-> self control ground-pat) (the-as pat-surface (-> s5-0 edge-tri-pat)))
@@ -55,6 +52,16 @@
           1.0
           )
         )
+      )
+    (when (and (puppet? self) (not (-> s5-0 pilot-edge-grab?)))
+      ;; Standard puppet grabs are positioned by the authoritative ghost.
+      (set! (-> self control hand-to-edge-dist) 0.0)
+      (set! (-> self control last-trans-any-surf quad) (-> self control trans quad))
+      (set-time! (-> self control rider-time))
+      (set-time! (-> self control last-successful-compute-edge-time))
+      (update-anim-data (-> self skel))
+      (do-joint-math (-> self draw) (-> self node-list) (-> self skel))
+      (return #f)
       )
     (let ((gp-2 (vector-cross!
                   (-> self control edge-grab-across-edge-dir)
@@ -273,14 +280,22 @@
     (sound-play "edge-grab")
     (target-indax-compute-edge)
     (let ((gp-0 (-> self edge-grab-state info)))
-      (set! (-> self control unknown-handle000) (-> gp-0 actor-handle))
-      (set! (-> self control unknown-symbol000) #f)
-      (let ((v1-4 (handle->process (-> self control unknown-handle000))))
-        (if v1-4
-            (logior!
-              (-> (the-as collide-shape-moving (-> (the-as process-drawable v1-4) root)) root-prim prim-core action)
-              (collide-action edge-grabbed)
+      (if (not-puppet? self)
+          (begin
+            (set! (-> self control unknown-handle000) (-> gp-0 actor-handle))
+            (set! (-> self control unknown-symbol000) #f)
+            (let ((v1-4 (handle->process (-> self control unknown-handle000))))
+              (if v1-4
+                  (logior!
+                    (-> (the-as collide-shape-moving (-> (the-as process-drawable v1-4) root)) root-prim prim-core action)
+                    (collide-action edge-grabbed)
+                    )
+                  )
               )
+            )
+          (begin
+            (set! (-> self control unknown-handle000) (the-as handle #f))
+            (set! (-> self control unknown-symbol000) #t)
             )
         )
       (set! (-> self control unknown-word04)

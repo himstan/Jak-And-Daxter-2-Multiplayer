@@ -550,10 +550,7 @@
     (do-edge-grabs self *collide-cache* *collide-edge-board-spec*)
     (logior! (-> *collide-edge-board-spec* flags) (collide-edge-spec-flags send-event))
     (let ((gp-0 (-> self edge-grab-state info)))
-      (if (puppet? self)
-          (set! (-> *collide-edge-work* cshape) (-> self control))
-          )
-      (when (edge-grab-info-method-9 gp-0)
+      (when (and (not-puppet? self) (edge-grab-info-method-9 gp-0))
         (vector-normalize!
           (vector-! (-> self control edge-grab-edge-dir) (-> gp-0 world-vertex 0) (-> gp-0 world-vertex 1))
           1.0

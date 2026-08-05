@@ -895,6 +895,50 @@
        )
   )
 
+(defun mp-target-edge-grab-state? ((state symbol))
+  "True for all replicated edge-grab states, including transitions and pilot grabs."
+  (or (= state 'target-edge-grab)
+      (= state 'target-edge-grab-jump)
+      (= state 'target-edge-grab-off)
+      (= state 'target-indax-edge-grab)
+      (= state 'target-indax-edge-grab-jump)
+      (= state 'target-indax-edge-grab-off)
+      (= state 'target-pilot-edge-grab)
+      (= state 'target-indax-pilot-edge-grab)
+      )
+  )
+
+(defun mp-target-pilot-edge-grab-state? ((state symbol))
+  "True for the replicated pilot edge-grab states."
+  (or (= state 'target-pilot-edge-grab)
+      (= state 'target-indax-pilot-edge-grab)
+      )
+  )
+
+(defun mp-puppet-in-edge-grab-state? ((proc target) (cur-state symbol))
+  "True when a puppet is in or transitioning through any edge-grab state."
+  (and proc
+       (nonzero? proc)
+       (or (focus-test? proc edge-grab)
+           (mp-target-edge-grab-state? cur-state))
+       )
+  )
+
+(defun mp-puppet-standard-edge-grab-active? ((proc target) (cur-state symbol))
+  "True when authoritative player snapshots should drive a standard puppet grab."
+  (when (and proc
+             (nonzero? proc)
+             (mp-puppet-in-edge-grab-state? proc cur-state))
+    (let ((edge-state (-> proc edge-grab-state)))
+      (when (and edge-state (nonzero? edge-state))
+        (let ((edge-info (-> edge-state info)))
+          (when (and edge-info
+                     (nonzero? edge-info)
+                     (not (-> edge-info pilot-edge-grab?)))
+            (return #t))))))
+  #f
+  )
+
 (defun mp-puppet-ensure-can-ride! ((proc target) (cur-state symbol))
   "Keep ordinary on-foot puppets eligible for vanilla platform rider detection."
   (when (mp-puppet-preserve-platform-y? proc cur-state)
@@ -937,13 +981,24 @@
              (not (focus-test? proc pilot tube flut mech pole)))
     (mp-puppet-ensure-can-ride! proc cur-state)
     (let* ((control (-> proc control))
-           (platform-y? (and (mp-puppet-preserve-platform-y? proc cur-state)
+           (standard-edge-grab? (mp-puppet-standard-edge-grab-active? proc cur-state))
+           (platform-y? (and (not standard-edge-grab?)
+                             (mp-puppet-preserve-platform-y? proc cur-state)
                              (mp-puppet-platform-rider-active? proc)))
            (dist (vector-vector-distance (-> control trans) (-> ghost trans))))
       (cond
         ((> dist (meters 15.0))
          (vector-copy! (-> control trans) (-> ghost trans))
          (vector-copy! (-> control transv) (-> ghost velocity))
+         )
+        (standard-edge-grab?
+         (let ((cur-pos (-> control trans))
+               (ghost-pos (-> ghost trans))
+               (position-factor 0.2))
+           (set! (-> cur-pos x) (+ (-> cur-pos x) (* (- (-> ghost-pos x) (-> cur-pos x)) position-factor)))
+           (set! (-> cur-pos y) (+ (-> cur-pos y) (* (- (-> ghost-pos y) (-> cur-pos y)) position-factor)))
+           (set! (-> cur-pos z) (+ (-> cur-pos z) (* (- (-> ghost-pos z) (-> cur-pos z)) position-factor)))
+           )
          )
         (else
          (let ((cur-pos (-> control trans))
@@ -1351,23 +1406,23 @@
                    )
                  )
                )
-              ((or (= cur-state 'target-edge-grab)
-                   (= cur-state 'target-indax-edge-grab)
-                   (= cur-state 'target-pilot-edge-grab)
-                   (= cur-state 'target-indax-pilot-edge-grab)
-                   )
-               ;; Puppet is hanging, but ghost is NOT.
-               (when (not (or (= ghost-state 'target-edge-grab)
-                              (= ghost-state 'target-indax-edge-grab)
-                              (= ghost-state 'target-pilot-edge-grab)
-                              (= ghost-state 'target-indax-pilot-edge-grab)
-                              )
-                          )
-                 (when (>= *mp-puppet-state-mismatch-count* 10)
-                   (debug-log *mp-debug-log?* "[MP-Puppet] Stuck in hang! Forcing exit via 'end-mode...~%")
-                   (send-event proc 'end-mode 'edge-grab)
-                   (set! *mp-puppet-state-mismatch-count* 0)
-                   )
+              ((and (mp-target-edge-grab-state? ghost-state)
+                    (not (mp-puppet-in-edge-grab-state? proc cur-state)))
+               ;; Puppet is not hanging, but the authoritative player is.
+               (when (>= *mp-puppet-state-mismatch-count* 10)
+                 (debug-log *mp-debug-log?* "[MP-Puppet] Authoritative Edge Grab! Bumping ~A -> ~A~%" cur-state ghost-state)
+                 (mp-dispatch-edge-grab-to-target!
+                   proc
+                   (mp-target-pilot-edge-grab-state? ghost-state))
+                 (set! *mp-puppet-state-mismatch-count* 0)
+                 )
+               )
+              ((mp-puppet-in-edge-grab-state? proc cur-state)
+               ;; Puppet is hanging, but the authoritative player is not.
+               (when (>= *mp-puppet-state-mismatch-count* 10)
+                 (debug-log *mp-debug-log?* "[MP-Puppet] Stuck in hang! Forcing exit via 'end-mode...~%")
+                 (send-event proc 'end-mode 'edge-grab)
+                 (set! *mp-puppet-state-mismatch-count* 0)
                  )
                )
               )
