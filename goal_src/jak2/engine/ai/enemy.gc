@@ -3486,6 +3486,7 @@
   (mp-battle-note-enemy-death! this)
   (when (not (logtest? (enemy-flag called-dying) (-> this enemy-flags)))
     (set! (-> this enemy-flags) (the-as enemy-flag (logior (enemy-flag called-dying) (-> this enemy-flags))))
+    (mp-enemy-broadcast-death this)
     (play-damage-or-death-sound this 1)
     (when (and (>= (-> this enemy-info gem-joint) 0)
                (not (logtest? (enemy-flag spawn-gem) (-> this enemy-flags)))

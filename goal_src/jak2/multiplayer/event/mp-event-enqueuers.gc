@@ -9,6 +9,13 @@
   (none)
   )
 
+(defun mp-event-enqueue-enemy-death! ((aid uint))
+  (let ((event (new 'stack-no-clear 'mp-enemy-death-event)))
+    (mp-event-enqueue!
+      (mp-event-build-enemy-death! event aid)))
+  (none)
+  )
+
 (defun mp-event-enqueue-enemy-gem! ((source-id uint) (gem-index uint))
   (let ((event (new 'stack-no-clear 'mp-enemy-gem-event)))
     (mp-event-enqueue!

@@ -134,18 +134,8 @@
 (deftype mp-widow-catwalk-hit-event (mp-event)
   ((catwalk-index int32 :overlay-at (-> data 0))))
 
-(defenum mp-enemy-death-hint (uint32)
-  (die 0)
-  (die-falling 1)
-  (die-fast 2)
-  )
-
 (deftype mp-enemy-death-event (mp-event)
-  ((aid uint32 :overlay-at (-> data 0))
-   (death-hint uint32 :overlay-at (-> data 4))
-   (state uint32 :overlay-at (-> data 8))
-   (knocked-type uint32 :overlay-at (-> data 12))
-   (hit-face uint32 :overlay-at (-> data 16))))
+  ((aid uint32 :overlay-at (-> data 0))))
 
 (deftype mp-enemy-gem-event (mp-event)
   ((source-id uint32 :overlay-at (-> data 0))
@@ -390,6 +380,7 @@
   )
 
 (define-extern mp-event-build-aid! (function mp-aid-event uint uint mp-aid-event))
+(define-extern mp-event-build-enemy-death! (function mp-enemy-death-event uint mp-enemy-death-event))
 (define-extern mp-event-build-enemy-gem! (function mp-enemy-gem-event uint uint mp-enemy-gem-event))
 (define-extern mp-event-build-actor-name! (function mp-actor-name-event uint string mp-actor-name-event))
 (define-extern mp-event-build-robotank-trigger! (function mp-robotank-trigger-event string int vector mp-robotank-trigger-event))
@@ -417,6 +408,7 @@
 (define-extern mp-event-build-widow-catwalk-hit! (function mp-widow-catwalk-hit-event int mp-widow-catwalk-hit-event))
 (define-extern mp-event-build-actor-attack! (function mp-actor-attack-event uint mp-actor-attack-build-data mp-actor-attack-event))
 (define-extern mp-event-enqueue-aid! (function uint uint none))
+(define-extern mp-event-enqueue-enemy-death! (function uint none))
 (define-extern mp-event-enqueue-enemy-gem! (function uint uint none))
 (define-extern mp-event-enqueue-actor-name! (function uint string none))
 (define-extern mp-event-enqueue-robotank-trigger! (function string int vector none))
@@ -459,6 +451,7 @@
 (define-extern mp-event-handler-authority-request (function uint none))
 (define-extern mp-event-handler-authority-ack (function uint none))
 (define-extern mp-event-handler-attack-ped (function mp-actor-attack-event none))
+(define-extern mp-event-handler-enemy-death (function mp-enemy-death-event none))
 (define-extern mp-event-handler-ped-death (function mp-ped-death-event none))
 (define-extern mp-event-handler-change-mode-darkjak (function uint none))
 (define-extern mp-event-handler-end-mode-darkjak (function uint none))

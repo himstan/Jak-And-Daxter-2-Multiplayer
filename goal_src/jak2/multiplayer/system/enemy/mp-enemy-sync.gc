@@ -43,31 +43,6 @@
        )
   )
 
-(defun mp-enemy-get-death-hint ((e-proc enemy))
-  "Capture the visual death path the owner is starting."
-  (when (and e-proc (nonzero? e-proc))
-    (let ((cur-state (if (-> e-proc state) (-> e-proc state name) #f))
-          (info (-> e-proc enemy-info)))
-      (cond
-        ((= cur-state 'die-fast)
-         (mp-enemy-death-hint die-fast)
-         )
-        ((and info (nonzero? info)
-              (-> info use-die-falling)
-              (or (= cur-state 'die-falling)
-                  (= cur-state 'knocked)
-                  (= cur-state 'knocked-vicinity)
-                  (!= (-> e-proc incoming knocked-type) (knocked-type knocked-type-0))))
-         (mp-enemy-death-hint die-falling)
-         )
-        (else
-         (mp-enemy-death-hint die)
-         )
-        )
-      )
-    )
-  )
-
 ;; --- State ID Mapping ---
 
 
@@ -472,6 +447,21 @@
       )
     )
   (mp-is-jak?) ;; fallback to host if unknown
+  )
+
+(defun mp-enemy-broadcast-death ((e-proc enemy))
+  "Queue one authoritative enemy death tombstone for the remote peer."
+  (when (and e-proc
+             (nonzero? e-proc)
+             (mp-enemy-authoritative? e-proc))
+    (let ((enemy-aid (mp-get-enemy-aid e-proc)))
+      (when (and (nonzero? enemy-aid)
+                 (not (mp-battle-enemy-id? enemy-aid)))
+        (mp-event-enqueue-enemy-death! enemy-aid)
+        )
+      )
+    )
+  (none)
   )
 
 (defun mp-enemy-awaiting-battle-network-id? ((e-proc enemy))

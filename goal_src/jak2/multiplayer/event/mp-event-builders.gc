@@ -15,6 +15,17 @@
   (the-as mp-aid-event #f)
   )
 
+(defun mp-event-build-enemy-death! ((event mp-enemy-death-event) (aid uint))
+  (when (and event
+             (nonzero? (the-as uint event))
+             (mp-event-prepare! event MP_EVENT_ENEMY_DEATH))
+    (set! (-> event aid) (the-as uint32 aid))
+    (set! (-> event payload-size) (the uint 4))
+    (return event)
+    )
+  (the-as mp-enemy-death-event #f)
+  )
+
 (defun mp-event-build-enemy-gem! ((event mp-enemy-gem-event)
                                   (source-id uint)
                                   (gem-index uint))
