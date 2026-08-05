@@ -471,6 +471,7 @@
   "Restore an enemy's current state transition hook after authority arrives locally."
   (when (and e-proc
              (nonzero? e-proc))
+    (process-mask-clear! (-> e-proc mask) sleep-code)
     (let ((current-state (-> e-proc state)))
       (when (and current-state
                  (nonzero? current-state))
