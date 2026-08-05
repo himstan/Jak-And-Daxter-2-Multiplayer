@@ -555,7 +555,7 @@
     )
   :enter (behavior ((arg0 handle))
     (set! (-> self control anim-handle) arg0)
-    (when (and (!= (-> self tobot?) 'mp-puppet) (not *mp-processing-remote-event*))
+    (when (and (not-puppet? self) (not *mp-processing-remote-event*))
       (mp-event-hook-pole-grab! arg0)
       )
     (set-time! (-> self state-time))
@@ -769,12 +769,12 @@
     )
   :enter (behavior ()
     (set-time! (-> self state-time))
-    (let ((v1-101 (if (= (-> self tobot?) 'mp-puppet) *remote-edge-grab-info* *edge-grab-info*)))
+    (let ((v1-101 (if (puppet? self) *remote-edge-grab-info* *edge-grab-info*)))
       (set! (-> v1-101 pilot-edge-grab?) #f)
     )
     ;; MP Broadcast: inform others that we grabbed an edge.
     ;; Only send if we are NOT in the pilot-edge-grab state (which sends its own event).
-    (if (and (!= (-> self tobot?) 'mp-puppet)
+    (if (and (not-puppet? self)
              *multi-sync-enabled?*
              (!= (-> self state name) 'target-pilot-edge-grab)
              (!= (-> self state name) 'target-indax-pilot-edge-grab))
@@ -834,7 +834,7 @@
              (set! (-> v1-25 action-mask) (collide-action solid))
              )
            ;; CRITICAL: Puppets bypass local probe.
-           (when (or (= (-> self tobot?) 'mp-puppet) (not (fill-and-probe-using-spheres *collide-cache* a1-2)))
+           (when (or (puppet? self) (not (fill-and-probe-using-spheres *collide-cache* a1-2)))
              (if (!= (-> self skel top-anim interp) 0.0)
                  (set! (-> self skel top-anim interp) 1.0)
                  )
@@ -880,7 +880,7 @@
     )
   :code (behavior ()
     (target-compute-edge)
-    (let ((gp-0 (if (= (-> self tobot?) 'mp-puppet) *remote-edge-grab-info* *edge-grab-info*)))
+    (let ((gp-0 (if (puppet? self) *remote-edge-grab-info* *edge-grab-info*)))
       (set! (-> self control unknown-handle000) (-> gp-0 actor-handle))
       (set! (-> self control unknown-symbol000) #f)
       (let ((v1-4 (handle->process (-> self control unknown-handle000))))
@@ -952,7 +952,7 @@
     )
   :exit (-> target-edge-grab exit)
   :code (behavior ((arg0 float) (arg1 float))
-    (let ((v1-102 (if (= (-> self tobot?) 'mp-puppet) *remote-edge-grab-info* *edge-grab-info*)))
+    (let ((v1-102 (if (puppet? self) *remote-edge-grab-info* *edge-grab-info*)))
       (when (-> v1-102 pilot-edge-grab?)
         (set! arg0 (+ 8192.0 arg0))
         (set! arg1 (+ 8192.0 arg1))
@@ -992,7 +992,7 @@
         (when (not (logtest? (-> self align flags) (align-flags disabled)))
           (vector-matrix*! s4-0 (-> self align delta trans) (-> self control c-R-w))
           ;; CRITICAL: Direct position set for puppets.
-          (if (= (-> self tobot?) 'mp-puppet)
+          (if (puppet? self)
               (vector+! (-> self control trans) (-> self control trans) s4-0)
               (move-by-vector! (-> self control) s4-0)
               )
@@ -1076,7 +1076,7 @@
     (target-exit)
     )
   :code (behavior ((arg0 float))
-    (when (and (!= arg0 0.0) (!= (-> self tobot?) 'mp-puppet))
+    (when (and (!= arg0 0.0) (not-puppet? self))
       (let ((f0-5 (the float (the int (+ 1.0 (/ (- arg0 (-> *TARGET-bank* fall-far)) (-> *TARGET-bank* fall-far-inc))))))
             )
         (pickup-collectable!
@@ -1089,7 +1089,7 @@
       (target-timed-invulnerable (the-as time-frame (-> *TARGET-bank* hit-invulnerable-timeout)) self 1)
       )
     (cond
-      ((and (= (-> self game mode) 'play) (>= 0.0 (-> (the-as fact-info-target (-> self fact)) health)) (!= (-> self tobot?) 'mp-puppet))
+      ((and (= (-> self game mode) 'play) (>= 0.0 (-> (the-as fact-info-target (-> self fact)) health)) (not-puppet? self))
        (set! (-> self attack-info attacker) (the-as handle #f))
        (go target-death 'target-hit-ground-hard)
        )

@@ -2185,7 +2185,7 @@
             )
         (matrix-rotate-xyz! gp-0 a1-5)
         (matrix->quaternion s5-0 gp-0)
-        (let ((v1-100 (if (= (-> self tobot?) 'mp-puppet) *remote-edge-grab-info* *edge-grab-info*)))
+        (let ((v1-100 (if (puppet? self) *remote-edge-grab-info* *edge-grab-info*)))
           (vector+! (the-as vector (-> self gun gun-pos)) (-> v1-100 center-hold) s4-0)
           )
         (vector+float*!

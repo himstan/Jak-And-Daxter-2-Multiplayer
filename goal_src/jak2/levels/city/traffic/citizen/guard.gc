@@ -2823,14 +2823,6 @@
     )
   )
 
-(defun mp-crimson-guard-remote-daxter-puppet? ((proc process))
-  (and proc
-       (nonzero? proc)
-       (type? proc target)
-       (= (-> (the-as target proc) tobot?) 'mp-puppet)
-       )
-  )
-
 ;; WARN: Return type mismatch object vs none.
 (defmethod crimson-guard-method-222 ((this crimson-guard))
   (rlet ((acc :class vf)

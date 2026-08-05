@@ -677,7 +677,6 @@
                                                                  water
                                                                  collectable
                                                                  blocking-plane
-                                                                 tobot
                                                                  pusher
                                                                  vehicle-mesh
                                                                  obstacle-for-jak
@@ -937,7 +936,6 @@
                                                                     water
                                                                     collectable
                                                                     blocking-plane
-                                                                    tobot
                                                                     pusher
                                                                     vehicle-mesh
                                                                     obstacle-for-jak
@@ -1093,7 +1091,7 @@
   )
 
 (defbehavior can-play-stance-amibent? target ()
-  (when (= (-> self tobot?) 'mp-puppet)
+  (when (puppet? self)
     (return #f)
     )
   (when *multi-sync-enabled?*
@@ -1128,7 +1126,6 @@
        (not (paused?))
        (not (movie?))
        (>= (- (-> *display* base-clock frame-counter) (-> self control cpad change-time)) (seconds 30))
-       (!= (-> self tobot?) 'tobot)
        (not (-> *setting-control* user-current talking))
        (not (-> *setting-control* user-current spooling))
        (not (-> *setting-control* user-current movie))

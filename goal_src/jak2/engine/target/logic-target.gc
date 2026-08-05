@@ -27,7 +27,6 @@
 (define-extern activate-hud (function target none))
 (define-extern target-generic-event-handler (function process int symbol event-message-block object :behavior target))
 (define-extern target-continue (state continue-point target))
-(define-extern tobot-stance (state target))
 (define-extern mp-should-suppress-local-endlessfall? (function symbol))
 
 ;; DECOMP BEGINS
@@ -1953,7 +1952,7 @@
   )
 
 (defbehavior target-compute-edge target ()
-  (let ((s5-0 (if (= (-> self tobot?) 'mp-puppet) *remote-edge-grab-info* *edge-grab-info*)))
+  (let ((s5-0 (if (puppet? self) *remote-edge-grab-info* *edge-grab-info*)))
     (when (not s5-0)
       (return #f)
       )
@@ -2000,7 +1999,7 @@
          )
        )
       (else
-        (if (= (-> self tobot?) 'mp-puppet)
+        (if (puppet? self)
           (set! (-> *collide-edge-work* cshape) (-> self control))
         )
         (if (not (edge-grab-info-method-9 s5-0))
@@ -2121,7 +2120,7 @@
   )
 
 (defbehavior target-compute-edge-rider target ()
-  (let ((gp-0 (if (= (-> self tobot?) 'mp-puppet) *remote-edge-grab-info* *edge-grab-info*)))
+  (let ((gp-0 (if (puppet? self) *remote-edge-grab-info* *edge-grab-info*)))
     (cond
       ((-> gp-0 pilot-edge-grab?)
        (set! (-> self control ground-pat) (new 'static 'pat-surface :material (pat-material metal)))
@@ -2165,7 +2164,7 @@
          )
        )
       (else
-        (if (not (or (= (-> self tobot?) 'mp-puppet) (edge-grab-info-method-9 gp-0)))
+        (if (not (or (puppet? self) (edge-grab-info-method-9 gp-0)))
             (send-event self 'end-mode)
             )
         (if *display-edge-collision-marks*
@@ -2186,7 +2185,7 @@
       (vector-float*! (-> self control rider-last-move) a1-15 (-> self clock frames-per-second))
       (set-time! (-> self control rider-time))
       ;; CRITICAL: Use direct position set for puppets.
-      (if (= (-> self tobot?) 'mp-puppet)
+      (if (puppet? self)
         (vector+! (-> self control trans) (-> self control trans) a1-15)
         (move-by-vector! (-> self control) a1-15)
       )
@@ -2588,7 +2587,7 @@
           (set! (-> a2-3 action-mask) (collide-action solid))
           (fill-cache-integrate-and-collide (-> self control) (-> self control transv) a2-3 (meters 1))
           )
-          (if (and (!= (-> self tobot?) 'mp-puppet)
+          (if (and (not-puppet? self)
                (logtest? (-> self control root-prim prim-core action) (collide-action check-edge))
                (>= (vector-dot
                      (-> self control dynam gravity-normal)
@@ -2725,7 +2724,7 @@
           (set! (-> a2-0 action-mask) (collide-action solid))
           (fill-cache-integrate-and-collide (-> self control) (-> self control transv) a2-0 (meters 1))
           )
-          (if (and (!= (-> self tobot?) 'mp-puppet)
+          (if (and (not-puppet? self)
                (logtest? (-> self control root-prim prim-core action) (collide-action check-edge))
                (>= (vector-dot
                      (-> self control dynam gravity-normal)
@@ -2853,7 +2852,7 @@
           (set! (-> a2-0 action-mask) (collide-action solid))
           (fill-cache-integrate-and-collide (-> self control) (-> self control transv) a2-0 (meters 1))
           )
-          (if (and (!= (-> self tobot?) 'mp-puppet)
+          (if (and (not-puppet? self)
                (logtest? (-> self control root-prim prim-core action) (collide-action check-edge))
                (>= (vector-dot
                      (-> self control dynam gravity-normal)
@@ -3075,15 +3074,14 @@
   self
   )
 
-(defmethod init-target ((this target) (arg0 continue-point) (arg1 symbol))
+(defmethod init-target ((this target) (arg0 continue-point) (is-puppet? symbol))
   (local-vars (s1-0 int) (s2-0 int) (s3-0 int) (s4-0 int))
-  (set! (-> this tobot?) arg1)
-  (set! (-> this tobot-recorder) #f)
+  (set! (-> this puppet?) is-puppet?)
   (set! (-> this mode-cache) #f)
   (set! (-> this color-effect) #f)
   (set-setting! 'allow-pause #f 0.0 0)
   (set-setting! 'allow-progress #f 0.0 0)
-  (when (not (or (= (-> this tobot?) 'tobot) (= (-> this tobot?) 'mp-puppet)))
+  (when (not is-puppet?)
     (set! (-> *setting-control* cam-default mode-name) 'cam-string)
     (apply-settings *setting-control*)
     )
@@ -3095,20 +3093,10 @@
   (stack-size-set! (-> this main-thread) 2048)
   (logior! (-> this mask) (process-mask target))
   (set! (-> this state-hook) (the-as (function none :behavior target) nothing))
-  (cond
-    ((= (-> this tobot?) 'tobot)
-     (set! s4-0 #x40000)
-     (set! s3-0 #x2183f7f)
-     (set! s2-0 #x40000)
-     (set! s1-0 #x218377e)
-     )
-    (else
-      (set! s4-0 2)
-      (set! s3-0 #x21c3f7d)
-      (set! s2-0 2)
-      (set! s1-0 #x21c377c)
-      )
-    )
+  (set! s4-0 2)
+  (set! s3-0 #x21c3f7d)
+  (set! s2-0 2)
+  (set! s1-0 #x21c377c)
   (let ((s0-0 (new 'process 'control-info this (collide-list-enum hit-by-others))))
     (set! (-> s0-0 dynam) (copy *standard-dynamics* 'process))
     (set! (-> s0-0 reaction) target-collision-reaction)
@@ -3289,12 +3277,12 @@
   (set! (-> this control unknown-sound-id04) (new-sound-id))
   (set! (-> this control bubbles-sound) (new-sound-id))
   (set! (-> this control board-jump-and-swim-sound) (new-sound-id))
-  (if (and *debug-segment* (not (or (= (-> this tobot?) 'tobot) (= (-> this tobot?) 'mp-puppet))))
-      (add-connection *debug-engine* this target-print-stats this *stdcon0* #f)
-      )
-  (if (not (or (= (-> this tobot?) 'tobot) (= (-> this tobot?) 'mp-puppet)))
-      (activate-hud this)
-      )
+  (if (and *debug-segment* (not is-puppet?))
+    (add-connection *debug-engine* this target-print-stats this *stdcon0* #f)
+    )
+  (if (not is-puppet?)
+    (activate-hud this)
+    )
   (set! (-> this fp-hud) (the-as handle #f))
   (set! (-> this burn-proc) (the-as handle #f))
   (set! (-> this water) (new 'process 'water-control this 10 0.0 8192.0 2048.0))
@@ -3324,16 +3312,6 @@
   (none)
   )
 
-;; WARN: Return type mismatch object vs none.
-(defbehavior tobot-init target ((arg0 symbol))
-  (init-target self (the-as continue-point #f) 'tobot)
-  (set! (-> self name) "tobot")
-  (set! (-> self tobot-recorder) (the-as basic arg0))
-  (send-event *target* 'tobot 'tobot)
-  (go tobot-stance)
-  (none)
-  )
-
 (defmethod deactivate ((this target))
   "Make a process dead, clean it up, remove it from the active pool, and return to dead pool."
   (kill-persister *setting-control* (the-as engine-pers 'bg-a-speed) 'bg-a-speed)
@@ -3342,7 +3320,7 @@
         (sound-stop (-> darkjak tone))
         )
     )
-  (when (not (or (= (-> this tobot?) 'tobot) (= (-> this tobot?) 'mp-puppet)))
+  (when (not-puppet? this)
     (set! (-> *setting-control* cam-default mode-name) #f)
     (set-zero! *camera-smush-control*)
     )
@@ -3387,22 +3365,4 @@
         )
     )
   *target*
-  )
-
-;; WARN: Return type mismatch (pointer process) vs target.
-(defun tobot-start ((arg0 symbol))
-  (the-as target (process-spawn
-                   target
-                   :init tobot-init
-                   arg0
-                   :from *target-dead-pool*
-                   :to *target-pool*
-                   :stack *kernel-dram-stack*
-                   )
-          )
-  )
-
-(defun tobot-stop ()
-  (kill-by-name "tobot" *active-pool*)
-  0
   )

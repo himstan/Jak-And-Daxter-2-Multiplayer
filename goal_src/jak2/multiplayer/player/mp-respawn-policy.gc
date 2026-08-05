@@ -114,8 +114,7 @@
              (nonzero? player)
              *target*
              (nonzero? *target*)
-             (= player *target*)
-             (not (= (-> player tobot?) 'mp-puppet))
+             (not-puppet? player)
              (mp-should-use-local-respawn?))
     (mp-prepare-local-respawn! player)
     (return #t)

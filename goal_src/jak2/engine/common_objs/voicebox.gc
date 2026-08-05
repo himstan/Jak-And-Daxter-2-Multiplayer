@@ -545,7 +545,7 @@
   (let ((s5-0 (new 'process 'collide-shape this (collide-list-enum hit-by-player))))
     (let ((v1-2 (new 'process 'collide-shape-prim-sphere s5-0 (the-as uint 0))))
       (set! (-> v1-2 prim-core collide-as) (collide-spec collectable))
-      (set! (-> v1-2 prim-core collide-with) (collide-spec jak player-list tobot))
+      (set! (-> v1-2 prim-core collide-with) (collide-spec jak player-list))
       (set-vector! (-> v1-2 local-sphere) 0.0 0.0 0.0 16384.0)
       (set! (-> s5-0 total-prims) (the-as uint 1))
       (set! (-> s5-0 root-prim) v1-2)

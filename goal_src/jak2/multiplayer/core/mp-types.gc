@@ -121,6 +121,9 @@
 
 ;; --- Helper functions for handle resolution ---
 
+(define-extern puppet? (function process symbol))
+(define-extern not-puppet? (function process symbol))
+
 (define-extern mp-teleport-to-remote (function object))
 (define-extern mp-remote-teleport-ready-or-request! (function symbol))
 (define-extern mp-teleport-local-target-to-remote! (function symbol none))
@@ -1092,13 +1095,7 @@
   `(or (mp-is-jak?) (not *mp-traffic-suppressed*))
   )
 
-(defun puppet? ((proc process))
-  (and (type? proc target) *mp-puppet* (nonzero? *mp-puppet*) (= proc *mp-puppet*))
-)
 
-(defun not-puppet? ((proc process))
-  (not (puppet? proc))
-)
 
 (defun mp-generate-battle-enemy-aid ()
   (+! *mp-battle-spawn-counter* 1)

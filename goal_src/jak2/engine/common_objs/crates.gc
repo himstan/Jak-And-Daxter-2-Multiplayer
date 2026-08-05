@@ -1042,7 +1042,7 @@
           )
     (let ((v1-10 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 0) (the-as uint 0))))
       (set! (-> v1-10 prim-core collide-as) (collide-spec crate notice-blue-eco-powerup))
-      (set! (-> v1-10 prim-core collide-with) (collide-spec jak player-list tobot))
+      (set! (-> v1-10 prim-core collide-with) (collide-spec jak player-list))
       (set! (-> v1-10 prim-core action) (collide-action solid rideable))
       (set! (-> v1-10 transform-index) 3)
       (set-vector! (-> v1-10 local-sphere) 0.0 3072.0 0.0 (-> *CRATE-bank* COLLIDE_RADIUS))

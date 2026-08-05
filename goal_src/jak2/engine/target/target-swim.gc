@@ -843,7 +843,7 @@
               )
         )
       (until #f
-        (when (and (!= (-> self tobot?) 'tobot) (time-elapsed? (-> self state-time) (seconds 0.05)))
+        (when (time-elapsed? (-> self state-time) (seconds 0.05))
           (if (and (or (not (cpad-hold? (-> self control cpad number) circle square)) (-> self control unknown-spool-anim00))
                    (time-elapsed? (-> self state-time) gp-0)
                    )
@@ -947,11 +947,9 @@
             (spawn-ripples (-> self water) 0.2 (-> self control trans) 1 (-> self control transv) #t)
             )
           (if (and (not (logtest? (-> self water flags) (water-flags under-water)))
-                   (and (or (>= (ja-aframe-num 0) 222.0)
-                            (and (!= (-> *cpad-list* cpads (-> self control cpad number) stick0-speed) 0.0) (>= (ja-aframe-num 0) 200.0))
-                            )
-                        (!= (-> self tobot?) 'tobot)
-                        )
+                   (or (>= (ja-aframe-num 0) 222.0)
+                       (and (!= (-> *cpad-list* cpads (-> self control cpad number) stick0-speed) 0.0) (>= (ja-aframe-num 0) 200.0))
+                      )
                    )
               (goto cfg-51)
               )
@@ -978,7 +976,7 @@
           0.0
           0.1
           )
-        (if (and (not (logtest? (-> self water flags) (water-flags under-water))) (!= (-> self tobot?) 'tobot))
+        (if (not (logtest? (-> self water flags) (water-flags under-water)))
             (goto cfg-51)
             )
         (if (cpad-pressed? (-> self control cpad number) x)

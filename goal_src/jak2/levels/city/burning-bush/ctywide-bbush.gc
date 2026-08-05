@@ -1651,7 +1651,7 @@
     (set! (-> s5-0 penetrated-by) (the-as penetrate -1))
     (let ((v1-7 (new 'process 'collide-shape-prim-sphere s5-0 (the-as uint 0))))
       (set! (-> v1-7 prim-core collide-as) (collide-spec collectable))
-      (set! (-> v1-7 prim-core collide-with) (collide-spec jak vehicle-sphere hit-by-others-list player-list tobot))
+      (set! (-> v1-7 prim-core collide-with) (collide-spec jak vehicle-sphere hit-by-others-list player-list))
       (set! (-> v1-7 transform-index) 3)
       (set-vector! (-> v1-7 local-sphere) 0.0 2048.0 0.0 16384.0)
       (set! (-> s5-0 total-prims) (the-as uint 1))

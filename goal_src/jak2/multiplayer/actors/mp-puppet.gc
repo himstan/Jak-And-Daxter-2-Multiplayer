@@ -1509,7 +1509,7 @@
 
 (defbehavior mp-puppet-init target ((arg0 continue-point))
   "Initialize a target process as a remote player puppet. Bypasses continue/title states."
-  (init-target self arg0 'mp-puppet)
+  (init-target self arg0 #t)
   (remove-setting! 'allow-pause)
   (remove-setting! 'allow-progress)
 

@@ -65,7 +65,7 @@
     )
   :enter (behavior ((arg0 handle))
     (set! (-> self control anim-handle) arg0)
-    (when (and (!= (-> self tobot?) 'mp-puppet) (not *mp-processing-remote-event*))
+    (when (and (not-puppet? self) (not *mp-processing-remote-event*))
       (mp-event-hook-pole-grab! arg0)
       )
     (set-time! (-> self state-time))

@@ -631,7 +631,7 @@
          (go target-board-clone-anim (process->handle (the-as process (-> arg3 param 0))))
          )
         (('edge-grab)
-         (let ((gp-1 (if (= (-> self tobot?) 'mp-puppet) *remote-edge-grab-info* *edge-grab-info*)))
+         (let ((gp-1 (if (puppet? self) *remote-edge-grab-info* *edge-grab-info*)))
            (let ((s5-1 (new 'stack-no-clear 'vector)))
              (vector-normalize!
                (vector-! (-> self control edge-grab-edge-dir) (-> gp-1 world-vertex 1) (-> gp-1 world-vertex 0))
@@ -1450,7 +1450,7 @@
       (set! (-> a2-6 action-mask) (collide-action solid))
       (fill-cache-integrate-and-collide v1-30 (-> v1-30 transv) a2-6 (meters 1))
       )
-    (when (and (!= (-> self tobot?) 'mp-puppet) (logtest? (-> self control root-prim prim-core action) (collide-action check-edge)))
+    (when (and (not-puppet? self) (logtest? (-> self control root-prim prim-core action) (collide-action check-edge)))
       (logclear! (-> *collide-edge-board-spec* flags) (collide-edge-spec-flags one))
       (set! (-> *collide-edge-board-spec* touching-segment) #f)
       (do-edge-grabs *target* *collide-cache* *collide-edge-board-spec*)
@@ -2145,14 +2145,14 @@
 
 ;; WARN: Found some very strange gotos. Check result carefully, this is not well tested.
 (defbehavior target-board-compute-edge target ()
-  (let ((s4-0 (if (= (-> self tobot?) 'mp-puppet) *remote-edge-grab-info* *edge-grab-info*))
+  (let ((s4-0 (if (puppet? self) *remote-edge-grab-info* *edge-grab-info*))
         (gp-0 (new 'stack-no-clear 'vector))
         )
     (set! (-> gp-0 quad) (-> self control trans quad))
     (let ((s5-0 (new 'stack-no-clear 'vector)))
       (set! (-> s5-0 quad) (-> self control transv quad))
       
-      (if (= (-> self tobot?) 'mp-puppet)
+      (if (puppet? self)
           (set! (-> *collide-edge-work* cshape) (-> self control))
           )
       (when (not (edge-grab-info-method-9 s4-0))

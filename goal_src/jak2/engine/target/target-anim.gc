@@ -1170,7 +1170,6 @@
           (when (and (>= 25.0 (ja-aframe-num 0))
                      (and (>= (ja-aframe-num 0) 21.0)
                           (and (-> self next-state) (= (-> self next-state name) 'target-flop-hit-ground))
-                          (!= (-> self tobot?) 'tobot)
                           (!= (-> self control unknown-spool-anim00) 'stuck)
                           )
                      )

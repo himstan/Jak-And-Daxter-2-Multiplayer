@@ -55,7 +55,7 @@
          (if (not (and *multi-sync-enabled?* (= (pc-multi-get-status) (mp-connection-status in-game))))
              (set-setting! 'process-mask 'set 0.0 (process-mask enemy platform projectile death))
              )
-         (when (not (or (= (-> self tobot?) 'tobot) (= (-> self tobot?) 'mp-puppet)))
+         (when (not-puppet? self)
            (apply-settings *setting-control*)
            )
          (set! (-> self control transv quad) (the-as uint128 0))
@@ -122,7 +122,7 @@
     (when (and *multi-sync-enabled?*
                (= (pc-multi-get-status) (mp-connection-status in-game)))
     ;; 1. Handle Remote Puppets
-    (when (= (-> self tobot?) 'mp-puppet)
+    (when (puppet? self)
       (debug-log *mp-debug-log?* "[Daxter-Death] Indax Death Sequence Complete. Waiting for remote respawn...~%")
       (loop
         (let ((ghost-state (mp-target-get-state-from-id (-> *mp-puppet-ghost* state-id))))
@@ -140,7 +140,7 @@
       )
 
     ;; 2. Handle Local Player
-    (when (and (= self *target*) (not (= (-> self tobot?) 'mp-puppet)))
+    (when (not-puppet? self)
       (mp-event-enqueue-aid! MP_EVENT_PLAYER_DIED (the-as uint 0))
       (when (not use-local-respawn?)
         (mp-clear-local-vehicle-occupancy! self)

@@ -1,0 +1,10 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defun puppet? ((proc process))
+  (the-as symbol (and proc (nonzero? proc) (type? proc target) (-> (the-as target proc) puppet?)))
+)
+
+(defun not-puppet? ((proc process))
+  (the-as symbol (not (puppet? proc)))
+)
