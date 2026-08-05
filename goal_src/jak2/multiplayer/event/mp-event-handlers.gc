@@ -1,7 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(define-extern *mp-enemy-debug-auth?* symbol)
 (define-extern mp-tomb-scene-transport-suppressed? (function string symbol))
 
 (defun mp-clear-connected-scene-broadcast! ()
@@ -188,36 +187,14 @@
                 (e-proc (the-as enemy proc))
                 (rec (mp-get-enemy-auth net-id)))
             (when (and attacker (nonzero? attacker))
-              (when *mp-enemy-debug-auth?*
-                (debug-log *mp-debug-log?* "[MP-Event-Handlers] attack-replay aid=~D attack=~D owner=~D local=~D~%"
-                        net-id
-                        (-> evt attack-id)
-                        (if rec (-> rec owner) 255)
-                        (if (and *local-info* (nonzero? *local-info*)) (-> *local-info* role) 255)
-                        )
-                (debug-log *mp-debug-log?* "[MP-Event-Handlers] attack-replay state=~A pending=~A hp=~D target-hp=~D~%"
-                        (if (-> e-proc state) (-> e-proc state name) #f)
-                        (if (-> e-proc next-state) (-> e-proc next-state name) #f)
-                        (-> e-proc hit-points)
-                        (-> evt new-hp))
-                )
               (debug-log *mp-debug-log?* "[MP-Event-Handlers] Applying Authoritative hit to ~A from remote attacker ~A nid=~D~%" proc attacker net-id)
               (mp-actor-apply-authoritative-remote-damage! e-proc attacker evt 'enemy)
-              (when *mp-enemy-debug-auth?*
-                (debug-log *mp-debug-log?* "[MP-Event-Handlers] attack-result aid=~D state=~A pending=~A hp=~D~%"
-                        net-id
-                        (if (-> e-proc state) (-> e-proc state name) #f)
-                        (if (-> e-proc next-state) (-> e-proc next-state name) #f)
-                        (-> e-proc hit-points))
-                )
-              ;; Explicitly set focus to the remote attacker
               (if (and attacker
                        (nonzero? attacker)
                        (-> e-proc focus)
                        (nonzero? (-> e-proc focus)))
                   (set! (-> e-proc focus handle) (process->handle attacker))
                   ))
-
             )
           (begin
             (when (and (>= net-id #x60000000) (< net-id #x70000000))
@@ -243,18 +220,6 @@
   )
   (none)
 )
-
-(defun mp-event-handler-player-hit ((aid uint))
-  (let ((local-aid (the uint (+ (-> *local-info* role) 1))))
-    (when (= aid local-aid)
-      (if (and *target* (nonzero? *target*)
-               (not (and (-> *target* next-state) (= (-> *target* next-state name) 'target-ride-along)))
-               (not (= (-> *target* state name) 'target-ride-along)))
-          (begin
-            (debug-log *mp-debug-log?* "[MP-Event-Handlers] Local player hit! Applying authoritative damage.~%")
-            (send-event *target* 'attack #f (static-attack-info ((id (new-attack-id)) (mode 'mp-hit-from-enemy)))))
-          (debug-log *mp-debug-log?* "[MP-Event-Handlers] Local player hit ignored (Riding along).~%"))))
-  (none))
 
 (defun mp-handle-remote-scene-hacks ((scene-name string))
   (case (string->symbol scene-name)
@@ -1749,7 +1714,6 @@
             ((MP_EVENT_GEM) (mp-event-handler-gem aid))
             ((MP_EVENT_BREAK) (mp-event-handler-break aid))
             ((MP_EVENT_ATTACK_ENEMY) (mp-event-handler-attack-enemy (the-as mp-actor-attack-event evt)))
-            ((MP_EVENT_PLAYER_HIT) (mp-event-handler-player-hit aid))
             ((MP_EVENT_ENEMY_AUTHORITY_REQUEST) (mp-event-handler-authority-request aid))
             ((MP_EVENT_ENEMY_AUTHORITY_ACK) (mp-event-handler-authority-ack aid))
             ((MP_EVENT_ATTACK_PED) (mp-event-handler-attack-ped (the-as mp-actor-attack-event evt)))

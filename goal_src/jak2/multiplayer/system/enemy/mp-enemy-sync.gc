@@ -4,7 +4,6 @@
 (define-extern mp-get-enemy-auth (function uint mp-enemy-auth-record))
 (define-extern mp-get-free-enemy-auth (function mp-enemy-auth-record))
 (define-extern mp-enemy-find-remote-slot (function uint mp-enemy-state))
-(define-extern *mp-enemy-debug-auth?* symbol)
 
 (defun is-in-pausable-state? ((state-name symbol))
   (case state-name
@@ -67,19 +66,6 @@
                       (mp-enemy-state-retry-ready? rec))
               (let ((st (method-state (-> e-proc type) (the-as basic target-state))))
                 (when (and st (nonzero? st))
-                  (when *mp-enemy-debug-auth?*
-                    (debug-log *mp-debug-log?* "[MP-Enemy-Sync] state-request aid=~D owner=~D local=~D current=~A~%"
-                            (mp-get-enemy-aid e-proc)
-                            (-> rec owner)
-                            (if (and *local-info* (nonzero? *local-info*)) (-> *local-info* role) 255)
-                            (if (-> e-proc state) (-> e-proc state name) #f)
-                            )
-                    (debug-log *mp-debug-log?* "[MP-Enemy-Sync] state-request pending=~A target=~A incoming=~D last=~D~%"
-                            (if (-> e-proc next-state) (-> e-proc next-state name) #f)
-                            target-state
-                            remote-state-id
-                            (-> rec last-applied-remote-state))
-                    )
                   (set! *mp-processing-remote-event* #t)
                   (send-event e-proc 'go-state target-state)
                   (set! *mp-processing-remote-event* #f)
@@ -91,23 +77,6 @@
             )
         )
       )
-    )
-  (none)
-  )
-
-(defun mp-enemy-log-collision-repair! ((enemy-aid uint)
-                                       (source-state symbol)
-                                       (target-state symbol)
-                                       (restored-as collide-spec)
-                                       (restored-with collide-spec))
-  (when *mp-enemy-debug-auth?*
-    (debug-log *mp-debug-log?*
-      "[MP-Enemy-Sync] collision-repair aid=~D source=~A target=~A as=~D with=~D~%"
-      enemy-aid
-      source-state
-      target-state
-      restored-as
-      restored-with)
     )
   (none)
   )
@@ -146,14 +115,6 @@
             (set! (-> root-prim prim-core collide-with) backup-with)
             (set! restored? #t)
             )
-          (when restored?
-            (mp-enemy-log-collision-repair!
-              (mp-get-enemy-aid e-proc)
-              (-> current-state name)
-              target-state
-              (-> root-prim prim-core collide-as)
-              (-> root-prim prim-core collide-with))
-            )
           restored?
           )
         )
@@ -178,16 +139,6 @@
             (when (!= cur-state target-state)
               (let ((st (method-state (-> e-proc type) (the-as basic target-state))))
                 (when (and st (nonzero? st))
-                  (when *mp-enemy-debug-auth?*
-                    (let ((pending-state (-> e-proc next-state)))
-                      (debug-log *mp-debug-log?* "[MP-Enemy-Sync] state-queue aid=~D current=~A pending=~A target=~A status=~A~%"
-                              enemy-aid
-                              cur-state
-                              (if (and pending-state (nonzero? pending-state)) (-> pending-state name) #f)
-                              target-state
-                              (-> e-proc status))
-                      )
-                    )
                   (mp-enemy-restore-interrupted-root-collision! e-proc target-state)
                   (process-mask-clear! (-> e-proc mask) sleep sleep-code)
                   (set! (-> e-proc next-state) (the-as state st))
@@ -633,23 +584,6 @@
   (none)
   )
 
-(defun mp-enemy-debug-smooth-correction ((e-proc enemy)
-                                         (slot mp-enemy-state)
-                                         (replica-dist float))
-  (when (and *mp-enemy-debug-auth?*
-             e-proc
-             (nonzero? e-proc)
-             slot
-             (nonzero? slot)
-             (> replica-dist (meters 1)))
-    (debug-log *mp-debug-log?* "[MP-Enemy-Sync] replica-smooth aid=~D dist=~F age-ms=~D~%"
-            (mp-get-enemy-aid e-proc)
-            replica-dist
-            (- (pc-multi-get-ticks) (-> slot last-updated)))
-    )
-  (none)
-  )
-
 (defun mp-enemy-smooth-remote-transform! ((e-proc enemy)
                                           (rec mp-enemy-auth-record)
                                           (slot mp-enemy-state))
@@ -668,7 +602,6 @@
       (let ((replica-dist (if (nonzero? (-> rec presentation-valid))
                               (vector-vector-distance (-> rec presentation-trans) predicted-pos)
                               0.0)))
-        (mp-enemy-debug-smooth-correction e-proc slot replica-dist)
         (mp-actor-update-presentation! (-> rec presentation-trans)
                                        (-> rec presentation-quat)
                                        predicted-pos

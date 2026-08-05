@@ -2831,25 +2831,6 @@
        )
   )
 
-(defun mp-crimson-guard-send-remote-zap-hit! ((guard crimson-guard) (proc process))
-  (when (and guard
-             (nonzero? guard)
-             proc
-             (nonzero? proc)
-             *local-info*
-             (nonzero? *local-info*)
-             *multi-sync-enabled?*
-             (= (pc-multi-get-status) (mp-connection-status in-game))
-             (= (-> *local-info* role) 0)
-             (mp-crimson-guard-remote-daxter-puppet? proc)
-             (!= (-> guard mp-last-puppet-zap-attack-id) (-> guard attack-id))
-             )
-    (set! (-> guard mp-last-puppet-zap-attack-id) (-> guard attack-id))
-    (mp-event-enqueue-aid! MP_EVENT_PLAYER_HIT (the uint 2))
-    )
-  (none)
-  )
-
 ;; WARN: Return type mismatch object vs none.
 (defmethod crimson-guard-method-222 ((this crimson-guard))
   (rlet ((acc :class vf)
@@ -2932,7 +2913,6 @@
                  )
              (when (and v1-43 (nonzero? v1-43))
                (set! s1-5 #f)
-               (mp-crimson-guard-send-remote-zap-hit! this (-> v1-43 cshape process))
                (let ((s0-1 (new 'stack-no-clear 'projectile-init-by-other-params)))
                  (set! (-> s0-1 ent) (-> this entity))
                  (set! (-> s0-1 charge) 1.0)

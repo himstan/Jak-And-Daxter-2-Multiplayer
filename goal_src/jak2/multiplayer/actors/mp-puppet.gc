@@ -114,20 +114,6 @@
 
 ;; --- Puppet Sync Logic ---
 
-(defun mp-puppet-start-hit-flash! ((proc target))
-  "Start the vanilla timed-invulnerability blink on a valid remote puppet."
-  (when (and proc
-             (nonzero? proc)
-             (-> proc control)
-             (nonzero? (-> proc control)))
-    (target-timed-invulnerable
-      (the-as time-frame (-> *TARGET-bank* hit-invulnerable-timeout))
-      proc
-      1)
-    )
-  (none)
-  )
-
 
 (defun mp-puppet-update-ghost! ((ghost mp-target-ghost-record) (info remote-player-info))
   "Update the ghost record from incoming remote player info."
@@ -1216,6 +1202,23 @@
         (add-process *gui-control* speaker channel (gui-action play) vo-key -99.0 0)
         )
       )
+    )
+  (none)
+  )
+
+(defun mp-puppet-start-hit-flash! ((proc target))
+  "Start the vanilla timed-invulnerability blink and hit vocal once per remote hit."
+  (when (and proc
+             (nonzero? proc)
+             (-> proc control)
+             (nonzero? (-> proc control))
+             *TARGET-bank*
+             (nonzero? *TARGET-bank*)
+             (not (logtest? (-> proc state-flags) (state-flags tinvul1))))
+    (target-timed-invulnerable
+      (the-as time-frame (-> *TARGET-bank* hit-invulnerable-timeout))
+      proc
+      1)
     )
   (none)
   )
