@@ -1216,6 +1216,7 @@
              (nonzero? v-proc)
              (>= seat-index 0)
              (< seat-index 4))
+    (vehicle-eject-civilian-riders! v-proc)
     (mp-vehicle-clear-seat-occupant! v-proc seat-index proc)
     (remove-rider v-proc proc)
     (send-event proc 'change-mode (mp-puppet-pilot-entry-mode) v-proc seat-index #f)

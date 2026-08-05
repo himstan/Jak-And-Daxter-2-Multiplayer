@@ -257,7 +257,7 @@
         )
       )
     (let ((s4-1 (handle->process (-> s5-0 vehicle))))
-      (when s4-1
+      (when (and s4-1 (nonzero? s4-1))
         (set! (-> s5-0 entity) (-> s4-1 entity))
         (set! (-> s5-0 gun?) (logtest? (-> (the-as vehicle s4-1) info flags) 32))
         (set! (-> s5-0 enable-cam-side-shift) (logtest? (-> (the-as vehicle s4-1) info flags) 128))
@@ -267,8 +267,10 @@
           (the-as vehicle s4-1)
           )
         (set! (-> s5-0 stance) (get-rider-stance (the-as vehicle s4-1)))
-        
-        ;; 1. Determine seat index FIRST (og:preserve-this modified for MP)
+
+        (vehicle-eject-civilian-riders! (the-as vehicle s4-1))
+
+        ;; Determine the seat index using the current multiplayer-aware rules.
         (cond
           ((!= self *target*)
            ;; Puppet boarding: ALWAYS use the authoritative network seat index.
@@ -315,10 +317,6 @@
                   )
                 )
               )
-            )
-          (when (and a0-20 (not (type? a0-20 target)))
-            (send-event a0-20 'knocked-off)
-            (put-rider-in-seat (the-as vehicle s4-1) (-> s5-0 seat-index) (the-as process-focusable #f))
             )
           )
         

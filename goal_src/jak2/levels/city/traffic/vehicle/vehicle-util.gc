@@ -192,6 +192,32 @@
   (none)
   )
 
+(defun vehicle-eject-civilian-riders! ((veh vehicle))
+  "Eject all civilian rider proxies while preserving player occupants."
+  (when (and veh (nonzero? veh))
+    (dotimes (seat-index (get-seat-count veh))
+      (let ((rider-proc (get-rider-in-seat veh seat-index)))
+        (when (and rider-proc
+                   (nonzero? rider-proc)
+                   (or (type? rider-proc citizen-norm-rider)
+                       (type? rider-proc crimson-guard-rider)))
+          (if (mp-is-traffic-authoritative?)
+              (send-event rider-proc 'knocked-off)
+              (begin
+                (send-event rider-proc 'rider-off)
+                (deactivate rider-proc)
+                )
+              )
+          (when (= (get-rider-in-seat veh seat-index) rider-proc)
+            (put-rider-in-seat veh seat-index (the-as process-focusable #f))
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
 (defun vehicle-driver-seat-has-player? ((veh vehicle))
   (when (and veh (nonzero? veh))
     (let ((driver (get-rider-in-seat veh 0)))
