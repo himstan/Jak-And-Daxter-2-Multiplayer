@@ -93,7 +93,7 @@
               )
             (vector-normalize! (-> this finish-dir) 1.0)
             (if (< (vector-vector-distance-squared (-> this start-sphere) (-> this finish-sphere)) (square 163840.0))
-                (logior! (-> gp-0 flags) (race-mesh-flags racemeshflag-0))
+                (logior! (-> gp-0 flags) (race-mesh-flags closed-loop))
                 )
             )
           )
@@ -214,7 +214,7 @@
               (else
                (logclear! (-> this flags) (racer-flags on-track))))
             (cond
-              ((logtest? (-> state info mesh flags) (race-mesh-flags racemeshflag-0))
+              ((logtest? (-> state info mesh flags) (race-mesh-flags closed-loop))
                (when (>= (-> slice slice-id) 0)
                  (let ((quadrant (min 3 (the int (* 4.0 (-> slice lap-dist))))))
                    (when (= quadrant (logand (+ (-> this lap-quadrant) 1) 3))

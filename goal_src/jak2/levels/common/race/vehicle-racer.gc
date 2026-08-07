@@ -44,7 +44,7 @@
 (defmethod race-control-method-11 ((this race-control) (arg0 float))
   (let ((f0-1 (+ (-> this path-t) (* 15.0 arg0))))
     (set! f0-1 (cond
-                 ((logtest? (-> this mesh flags) (race-mesh-flags racemeshflag-0))
+                 ((logtest? (-> this mesh flags) (race-mesh-flags closed-loop))
                   (let ((f1-3 (the float (-> this path sample-count))))
                     (if (>= f0-1 f1-3)
                         (set! f0-1 (- f0-1 f1-3))

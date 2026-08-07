@@ -1,5 +1,6 @@
 ("STD.DGO"
  ("race-h.o"
+  "race-mesh-h.o"
   "race-mesh.o"
   "race-part.o"
   "race-obs.o"
