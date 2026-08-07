@@ -229,6 +229,56 @@
       :start-camera #f
       )
     (new 'static 'race-info
+      :race-mesh-name #f
+      :path-group-name #f
+      :task-node (game-task-node city-keira-delivery-delivery)
+      :ai-min-speed-factor 0.75
+      :ai-max-speed-factor 1.0
+      :ai-spread-factor 0.007
+      :start-sphere (new 'static 'sphere
+                        :x -245760.0
+                        :y 45056.0
+                        :z 5468160.0
+                        :r 122880.0)
+      :start-dir (new 'static 'vector
+                        :x 1.0
+                        :w 1.0)
+       :finish-sphere (new 'static 'sphere
+                       :x 579584.0
+                       :y 49152.0
+                       :z -1985331.2
+                       :r 49152.0)
+      :finish-dir (new 'static 'vector :z 1.0 :w 1.0)
+      :player-intro-pos (new 'static 'vector
+                            :x -245760.0
+                            :y 45056.0
+                            :z 5468160.0
+                            :w 1.0)
+      :flags (race-info-flags city-race complete-immediately destination-race)
+      :score 0
+      :lap-count 1
+      :racer-count 2
+      :turbo-pad-count 0
+      :map-index 0
+      :decision-point-count 0
+      :safe-paths 0
+      :turbo-pad-array #f
+      :racer-array (new 'static 'inline-array race-racer-info 3
+        (new 'static 'race-racer-info :vehicle #x5)
+        (new 'static 'race-racer-info :rider #x1 :vehicle #x5 :seek-offset 1)
+        )
+      :decision-point-array #f
+      :level 'ctyport
+      :borrow-level #f
+      :borrow #f
+      :manager-handle-init-hack #f
+      :hatch-actor-name #f
+      :countdown-scene #f
+      :complete-continue #f
+      :start-camera #f
+      :go-speech 0
+      )
+    (new 'static 'race-info
       :race-mesh-name "race-mesh-1"
       :path-group-name "kierac"
       :task-node (game-task-node stadium-burning-bush-race-class3-resolution)
@@ -660,6 +710,23 @@
       :start-camera "camera-268"
       )
     )
+  )
+
+(defun find-race-info-by-task-node ((task-node game-task-node))
+  (when (or (not *race-info-array*) (zero? *race-info-array*))
+    (debug-log *mp-debug-log?* "[Race] *race-info-array* was unset, returning #f race-info.~%")
+    (return (the-as race-info #f))
+    )
+  (dotimes (i (length *race-info-array*))
+    (when (= (-> *race-info-array* i task-node) task-node)
+      (let ((info (the-as race-info (-> *race-info-array* i))))
+        (debug-log *mp-debug-log?* "[Race] Race info at index ~D was found for task node=~D~%" i task-node)
+        (return info)
+        )
+      )
+    )
+  (debug-log *mp-debug-log?* "[Race] No race-info was found for task node=~D~%" task-node)
+  (the-as race-info #f)
   )
 
 (defmethod set-speech-tables! ((this race-state))
