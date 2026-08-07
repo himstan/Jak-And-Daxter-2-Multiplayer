@@ -501,7 +501,7 @@
   (none)
   )
 
-(defmethod vehicle-racer-method-154 ((this vehicle-city-racer))
+(defmethod update-race-physics-lod! ((this vehicle-city-racer))
   (cond
     ((logtest? (-> this rbody state flags) (rigid-body-flag enable-physics))
      (if (or (< (square 368640.0) (-> this player-dist2))

@@ -1,0 +1,68 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defmethod sync-race-path-to-position! ((this race-control) (position vector))
+  "Project the current race path onto a world position and refresh the sampled path state."
+  (let ((path-t (race-path-project-position (-> this path) position
+                                             (- (-> this path-t) 1.0)
+                                             (+ (-> this path-t) 1.0))))
+    (set! (-> this path-t) path-t)
+    (race-path-sample-at (-> this path) (-> this path-sample) (-> this lin-velocity) path-t))
+  (none))
+
+(defmethod advance-race-path! ((this race-control) (amount float))
+  "Advance along the selected race path and refresh the sampled path state."
+  (let ((path-t (+ (-> this path-t) (* 15.0 amount))))
+    (set! path-t
+          (cond
+            ((logtest? (-> this mesh flags) (race-mesh-flags closed-loop))
+             (let ((sample-count (the float (-> this path sample-count))))
+               (when (>= path-t sample-count)
+                 (set! path-t (- path-t sample-count))))
+             path-t)
+            (else
+             (fmin path-t (the float (+ (-> this path sample-count) -1))))))
+    (set! (-> this path-t) path-t)
+    (race-path-sample-at (-> this path) (-> this path-sample) (-> this lin-velocity) path-t))
+  (vector-reset! (-> this ang-velocity))
+  (none))
+
+(defmethod select-race-path! ((this race-control) (path-index int) (position vector))
+  "Select a race path and initialize its sample position from a world position."
+  (let ((path-count (-> this path-group path-count)))
+    (when (>= path-index path-count)
+      (set! path-index 0))
+    (set! (-> this path-select) path-index)
+
+    (cond
+      ((> path-count 0)
+       (let ((path (-> this path-group paths path-index))
+             (query (new 'stack-no-clear 'race-mesh-slice-query)))
+         (set! (-> this path) path)
+         (set! (-> query search-sphere quad) (-> position quad))
+         (set! (-> query search-sphere r) 61440.0)
+         (race-mesh-query (-> this mesh) (the-as race-mesh-slice-query (&-> query slice-id)))
+
+         (when (!= (-> query slice-id) -1)
+           (let* ((slice (-> this mesh slices (-> query slice-id)))
+                  (start-t (-> (the-as (pointer float)
+                                      (+ (* (-> slice start-edge) 4) (the-as int (-> path edge-infos))))))
+                  (end-t (-> (the-as race-path-edge-info
+                                    (+ (* (-> slice end-edge) 4) (the-as int (-> path edge-infos))))
+                             sample-t)))
+             (when (and (>= start-t 0.0) (>= end-t 0.0))
+               (let ((path-t (race-path-project-position path position start-t end-t)))
+                 (set! (-> this path-t) path-t)
+                 (race-path-sample-at path (-> this path-sample) (-> this lin-velocity) path-t)))))))
+      (else
+       (set! (-> this path) #f))))
+  (none))
+
+(defmethod initialize-race-control! ((this race-control) (state race-state) (racer racer-state))
+  "Attach race-control to a race state and racer state."
+  (set! (-> this state) state)
+  (set! (-> this mesh) (-> state info mesh))
+  (when (-> this mesh)
+    (set! (-> this path-group) (-> this mesh path-groups 0)))
+  (set! (-> this racer-state) racer)
+  (none))
