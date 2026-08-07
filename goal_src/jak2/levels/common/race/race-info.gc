@@ -202,6 +202,7 @@
       :race-mesh-name "race-mesh-1"
       :path-group-name "errol"
       :task-node (game-task-node city-errol-challenge-race)
+      :want-sound 'stadium1
       :ai-min-speed-factor 0.75
       :ai-max-speed-factor 1.0
       :ai-spread-factor 0.007
@@ -221,7 +222,7 @@
       :decision-point-array #f
       :level 'ctyport
       :borrow-level #f
-      :borrow #f
+      :borrow '((hiphog 0 #f #f) (ctyport 0 lracelit special))
       :manager-handle-init-hack #f
       :hatch-actor-name #f
       :countdown-scene #f
@@ -232,6 +233,7 @@
       :race-mesh-name #f
       :path-group-name #f
       :task-node (game-task-node city-keira-delivery-delivery)
+      :want-sound 'stadium1
       :ai-min-speed-factor 0.75
       :ai-max-speed-factor 1.0
       :ai-spread-factor 0.007
@@ -270,7 +272,7 @@
       :decision-point-array #f
       :level 'ctyport
       :borrow-level #f
-      :borrow #f
+      :borrow '((hiphog 0 #f #f) (ctyport 0 lracelit special))
       :manager-handle-init-hack #f
       :hatch-actor-name #f
       :countdown-scene #f

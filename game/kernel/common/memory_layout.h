@@ -15,8 +15,10 @@ constexpr u32 DEBUG_HEAP_SPACE_FOR_STACK = 0x10000;
 //! First free address for the GOAL heap
 constexpr u32 HEAP_START = 0x13fd20;
 
+constexpr u32 PC_GLOBAL_HEAP_EXTRA = 32 * 1024 * 1024;
+
 //! Where to end the global heap so it doesn't overlap with the stack.
-constexpr u32 GLOBAL_HEAP_END = 0x1ffc000 + (BIG_MEMORY ? (0x1ffc000 - HEAP_START) : 0);  // doubled
+constexpr u32 GLOBAL_HEAP_END = 0x1ffc000 + (BIG_MEMORY ? (0x1ffc000 - HEAP_START) + PC_GLOBAL_HEAP_EXTRA : 0);
 
 //! Location of kglobalheap, kdebugheap kheapinfo structures.
 constexpr u32 GLOBAL_HEAP_INFO_ADDR = 0x13AD00;

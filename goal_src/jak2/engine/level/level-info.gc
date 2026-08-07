@@ -5622,7 +5622,7 @@
                   :activate-func 'ctywide-activate
                   :deactivate-func 'ctywide-deactivate
                   :kill-func #f
-                  :borrow-size (new 'static 'array uint16 2 #x17c #x82f)
+                  :borrow-size (new 'static 'array uint16 2 #x320 #x82f)
                   :borrow-level (new 'static 'array symbol 2 #f #f)
                   :borrow-display? (new 'static 'array symbol 2 #f #f)
                   :texture-anim-tfrag #f
@@ -7350,6 +7350,7 @@
     :activate-func #f
     :deactivate-func #f
     :kill-func #f
+    :borrow-size (new 'static 'array uint16 2 #x352 #x0)
     :borrow-level (new 'static 'array symbol 2 #f #f)
     :borrow-display? (new 'static 'array symbol 2 #f #f)
     :texture-anim-tfrag #f
@@ -11669,7 +11670,7 @@
                    :max-rain 1.0
                    :fog-mult 1.0
                    :ocean-alpha 1.0
-                   :extra-sound-bank '((ctywide3 erlchal1))
+                   :extra-sound-bank '((ctywide3 stadium1 erlchal1))
                    )
         )
 

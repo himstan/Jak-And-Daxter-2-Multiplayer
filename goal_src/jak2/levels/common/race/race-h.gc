@@ -132,6 +132,7 @@
    (complete-continue         string)
    (start-camera              string)
    (go-speech                 uint16)
+   (want-sound                symbol)
    )
   (:methods
     (initialize-mesh (_type_) none)
@@ -201,7 +202,7 @@
     (update-rankings (_type_) none)
     (debug-print-rankings (_type_) none)
     (update-racers (_type_) none)
-    (spawn-race-signal (_type_) none)
+    (spawn-race-signal (_type_) symbol)
     (initialize (_type_ process race-info) none)
     (set-speech-tables! (_type_) none)
     (setup-race (_type_) none)
