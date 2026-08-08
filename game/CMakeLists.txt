@@ -373,6 +373,21 @@ set(RUNTIME_SOURCE
         tools/subtitle_editor/subtitle_editor.cpp
         )
 
+list(APPEND RUNTIME_SOURCE
+        multiplayer/multiplayer_port_mapping_route.cpp)
+if(WIN32)
+    list(APPEND RUNTIME_SOURCE
+            multiplayer/multiplayer_port_mapping_route_windows.cpp)
+elseif(APPLE)
+    list(APPEND RUNTIME_SOURCE
+            multiplayer/multiplayer_port_mapping_route_macos.cpp)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    list(APPEND RUNTIME_SOURCE
+            multiplayer/multiplayer_port_mapping_route_linux.cpp)
+else()
+    message(FATAL_ERROR "Automatic port mapping has no route resolver for ${CMAKE_SYSTEM_NAME}")
+endif()
+
 add_subdirectory(sound)
 
 if(WIN32)
@@ -413,9 +428,22 @@ endif()
 # we build the runtime as a static library.
 add_library(runtime STATIC ${RUNTIME_SOURCE} "../third-party/glad/src/glad.c")
 
-target_link_libraries(runtime common fmt enet SDL3::SDL3 imgui discord-rpc sound stb_image libco libcurl)
+set_property(SOURCE multiplayer/multiplayer_port_mapping.cpp APPEND PROPERTY
+        INCLUDE_DIRECTORIES
+        "${PROJECT_SOURCE_DIR}/third-party/miniupnpc/include"
+        "${PROJECT_SOURCE_DIR}/third-party/libnatpmp")
+set_property(SOURCE multiplayer/multiplayer_port_mapping.cpp APPEND PROPERTY
+        COMPILE_DEFINITIONS
+        MINIUPNP_STATICLIB
+        NATPMP_STATICLIB
+        ENABLE_STRNATPMPERR
+        NATPMP_MAX_RETRIES=3)
+
+target_link_libraries(runtime common fmt enet SDL3::SDL3 imgui discord-rpc sound stb_image libco
+        libcurl "$<TARGET_FILE:libminiupnpc-static>" "$<TARGET_FILE:natpmp>")
+add_dependencies(runtime libminiupnpc-static natpmp)
 if(WIN32)
-    target_link_libraries(runtime mman ole32 oleaut32 iphlpapi libsodium)
+    target_link_libraries(runtime mman ole32 iphlpapi ws2_32 libsodium)
 else()
     target_include_directories(runtime PRIVATE "${LIBSODIUM_INCLUDE_DIR}")
     target_link_libraries(runtime pthread dl libsodium)

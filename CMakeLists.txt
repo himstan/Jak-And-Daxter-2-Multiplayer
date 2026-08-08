@@ -254,6 +254,17 @@ build_third_party_lib(libtinyfiledialogs libtinyfiledialogs)
 include_directories(third-party/enet/include)
 build_third_party_lib(enet enet)
 
+# automatic router port mapping
+set(UPNPC_BUILD_STATIC ON CACHE BOOL "" FORCE)
+set(UPNPC_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(UPNPC_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(UPNPC_BUILD_SAMPLE OFF CACHE BOOL "" FORCE)
+set(UPNPC_NO_INSTALL ON CACHE BOOL "" FORCE)
+set(NATPMP_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(NATPMP_NO_INSTALL ON CACHE BOOL "" FORCE)
+build_third_party_lib(miniupnpc libminiupnpc-static)
+build_third_party_lib(libnatpmp natpmp)
+
 # build format library
 include_directories(third-party/fmt/include)
 build_third_party_lib(fmt fmt)

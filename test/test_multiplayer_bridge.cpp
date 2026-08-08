@@ -12,6 +12,8 @@
 #include "game/multiplayer/multiplayer_api.h"
 #include "game/multiplayer/multiplayer_manager.h"
 #include "game/multiplayer/multiplayer_port_mapping.h"
+#include "game/multiplayer/multiplayer_port_mapping_internal.h"
+#include "game/multiplayer/multiplayer_port_mapping_route.h"
 #include "game/multiplayer/multiplayer_scanner.h"
 #include "game/multiplayer/multiplayer_security.h"
 #include "game/multiplayer/multiplayer_session.h"
@@ -451,6 +453,29 @@ TEST(MultiplayerPortMapping, ClassifiesPublicInviteAddresses) {
   EXPECT_FALSE(mp_is_public_ipv4("203.0.113.1"));
   EXPECT_FALSE(mp_is_public_ipv4("224.0.0.1"));
   EXPECT_FALSE(mp_is_public_ipv4("999.0.0.1"));
+}
+
+TEST(MultiplayerPortMapping, FormatsRouteDiagnosticsWithOptionalMetrics) {
+  NetworkAdapterInfo route;
+  route.name = "Ethernet";
+  route.local_ip = "192.168.50.87";
+  route.gateway_ip = "192.168.50.1";
+  route.interface_index = 19;
+  route.interface_metric = 25;
+  EXPECT_EQ(mp_format_port_mapping_route(route),
+            "adapter \"Ethernet\" (interface 19), local 192.168.50.87, gateway 192.168.50.1, "
+            "metrics route/interface n/a/25");
+
+  auto changed_route = route;
+  EXPECT_TRUE(mp_same_port_mapping_route(route, changed_route));
+  changed_route.gateway_ip = "26.0.0.1";
+  EXPECT_FALSE(mp_same_port_mapping_route(route, changed_route));
+}
+
+TEST(MultiplayerPortMapping, TranslatesProtocolErrors) {
+  EXPECT_NE(mp_describe_upnp_result(718).find("ConflictInMappingEntry"), std::string::npos);
+  EXPECT_NE(mp_describe_natpmp_result(-51).find("not authorized"), std::string::npos);
+  EXPECT_NE(mp_describe_natpmp_result(-7).find("does not support"), std::string::npos);
 }
 
 TEST(MultiplayerPortMapping, ProjectsHostInviteLifecycle) {
