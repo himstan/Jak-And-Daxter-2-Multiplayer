@@ -9,6 +9,28 @@
 (define MP_VEHICLE_PARKING_MINIMAP_ATTACHED (the uint8 173))
 (define *mp-vehicle-missing-branch-log-time* (the-as time-frame 0))
 
+(define *mp-race-vehicle-handles* (new 'static 'array handle 10))
+
+(defun mp-race-vehicle-register! ((racer-index int) (vehicle vehicle))
+  (set! (-> *mp-race-vehicle-handles* racer-index)
+        (process->handle vehicle))
+  (none))
+
+(defun mp-race-vehicle-find-by-net-id ((net-id uint))
+  (when (mp-race-vehicle-id? net-id)
+    (let* ((racer-index (mp-race-vehicle-racer-index net-id))
+           (vehicle (handle->process-safe (-> *mp-race-vehicle-handles* racer-index))))
+      (when (and vehicle
+                 (nonzero? vehicle)
+                 (= (-> (the-as vehicle vehicle) net-id) net-id))
+        (return (the-as vehicle vehicle)))))
+  (the-as vehicle #f))
+
+(defun mp-race-clear-vehicle-handles! ()
+  (dotimes (i MP_MAX_RACE_VEHICLES)
+    (set! (-> *mp-race-vehicle-handles* i) (the-as handle #f)))
+  (none))
+
 (defun mp-vehicle-param-nav-branch-ready? ((params traffic-object-spawn-params))
   (and params
        (nonzero? params)
@@ -469,36 +491,44 @@
   (none)
   )
 
+(defun mp-vehicle-remote-driven? ((veh vehicle))
+  (and veh
+       (nonzero? veh)
+       (or (and (nonzero? *mp-remote-driven-vehicle*)
+                (= veh (handle->process-safe *mp-remote-driven-vehicle*)))
+           (let ((pilot (get-rider-in-seat veh 0)))
+             (and pilot
+                  (nonzero? pilot)
+                  (= pilot *mp-puppet*))
+             )
+           (and *remote-info*
+                (nonzero? *remote-info*)
+                (nonzero? (-> veh net-id))
+                (= (-> veh net-id) (-> *remote-info* veh-state net-id)))))
+  )
+
 (defun mp-vehicle-is-local-authoritative? ((veh vehicle))
   "Check if the local machine has authority over this vehicle's physics."
   (if (and veh (nonzero? veh))
       (let ((flags (-> veh flags)))
         (cond
-          ;; 1. Is a remote puppet in the driver seat?
-          ((or (= veh (handle->process *mp-remote-driven-vehicle*))
-               (let ((pilot (get-rider-in-seat veh 0)))
-                 (and pilot (= pilot *mp-puppet*))
-                 )
-               (and *remote-info*
-                    (nonzero? *remote-info*)
-                    (nonzero? (-> veh net-id))
-                    (= (-> veh net-id) (-> *remote-info* veh-state net-id)))
-               )
+          ;; Remote player is driving this vehicle.
+          ((mp-vehicle-remote-driven? veh)
            #f)
 
-          ;; 2. Local machine is driving: We ARE authoritative.
+          ;; Local player is driving this vehicle.
           ((and (logtest? flags (rigid-body-object-flag player-driving))
                 (mp-vehicle-local-target-driving? veh))
            #t)
 
-          ;; 3. Ambient traffic: Only the Host (Jak) is authoritative.
+          ;; Undriven race vehicles and AI racers always belong to the host.
+          ((mp-race-vehicle-id? (-> veh net-id))
+           (mp-is-jak?))
+
+          ;; Ordinary city traffic keeps using the existing authority system.
           (else
-           (mp-is-traffic-authoritative?))
-          )
-        )
-      #f
-      )
-  )
+           (mp-is-traffic-authoritative?))))
+      #f))
 
 (defun mp-should-apply-vehicle-camera? ((veh vehicle))
   "Returns #t if the local camera should follow this vehicle."
@@ -530,6 +560,8 @@
     (when (and (not found-proc) (mp-mission-vehicle-id? net-id))
       (set! found-proc (mp-mission-vehicle-find-by-net-id net-id))
       )
+    (when (and (not found-proc) (mp-race-vehicle-id? net-id))
+      (set! found-proc (mp-race-vehicle-find-by-net-id net-id)))
     found-proc)
 )
 
@@ -850,22 +882,6 @@
   #f
   )
 
-(defun mp-vehicle-remote-driven? ((veh vehicle))
-  (and veh
-       (nonzero? veh)
-       (or (and (nonzero? *mp-remote-driven-vehicle*)
-                (= veh (handle->process-safe *mp-remote-driven-vehicle*)))
-           (let ((pilot (get-rider-in-seat veh 0)))
-             (and pilot
-                  (nonzero? pilot)
-                  (= pilot *mp-puppet*))
-             )
-           (and *remote-info*
-                (nonzero? *remote-info*)
-                (nonzero? (-> veh net-id))
-                (= (-> veh net-id) (-> *remote-info* veh-state net-id)))))
-  )
-
 (defun mp-vehicle-frame-blend ((rate float))
   (fmin 1.0 (fmax 0.0 (* rate (seconds-per-frame))))
   )
@@ -1073,6 +1089,17 @@
                 (('waiting-ambush) (set! st (the-as state (-> (the-as (pointer uint32) (-> this type)) 153))))
                 )
 
+              (when (type? this vehicle-racer)
+                (case target-sym
+                  (('waiting-race)
+                   (set! st (method-of-object (the-as vehicle-racer this) waiting-race)))
+                  (('waiting-for-start)
+                   (set! st (method-of-object (the-as vehicle-racer this) waiting-for-start)))
+                  (('racing)
+                   (set! st (method-of-object (the-as vehicle-racer this) racing)))
+                  (('race-finished)
+                   (set! st (method-of-object (the-as vehicle-racer this) race-finished)))))
+              
               (when (and st (nonzero? st))
                 (set! (-> this next-state) st)
                 (enter-state (the-as object st) (the-as object #f) (the-as object #f) (the-as object #f) (the-as object #f) (the-as object #f))

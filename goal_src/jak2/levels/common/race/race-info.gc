@@ -270,13 +270,14 @@
       :flags (race-info-flags city-race optionally-retryable destination-race)
       :score 0
       :lap-count 1
-      :racer-count 1
+      :racer-count 2
       :turbo-pad-count 0
       :map-index 0
       :decision-point-count 0
       :safe-paths 0
       :turbo-pad-array #f
-      :racer-array (new 'static 'inline-array race-racer-info 1
+      :racer-array (new 'static 'inline-array race-racer-info 2
+        (new 'static 'race-racer-info)
         (new 'static 'race-racer-info)
         )
       :decision-point-array #f

@@ -413,6 +413,10 @@
 
 (defmethod update-ai-racing! ((this vehicle-racer))
   "Update an AI-controlled racer during the active race."
+  (when (and (mp-race-vehicle-id? (-> this net-id)) 
+             (not (mp-vehicle-is-local-authoritative? this)))
+    (none)
+    )
   (set! (-> this camera-dist2) (vector-vector-distance-squared (-> this rbody state position) (camera-pos)))
   (set! (-> this player-dist2) (vector-vector-distance-squared (-> this rbody state position) (target-pos 0)))
 
@@ -427,6 +431,9 @@
 
 (defmethod update-race-finished! ((this vehicle-racer))
   "Update a racer after finishing while it remains attached to a race path."
+  (when (and (mp-race-vehicle-id? (-> this net-id)) 
+             (not (mp-vehicle-is-local-authoritative? this)))
+    (none))
   (set! (-> this camera-dist2) (vector-vector-distance-squared (-> this rbody state position) (camera-pos)))
   (set! (-> this player-dist2) (vector-vector-distance-squared (-> this rbody state position) (target-pos 0)))
   (set! (-> this shortcut-speed-factor) 0.0)

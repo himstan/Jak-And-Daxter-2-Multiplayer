@@ -16,6 +16,10 @@
   (>= net-id MP_MISSION_VEHICLE_ID_BASE)
   )
 
+(defun mp-race-vehicle-id? ((net-id uint))
+  (>= net-id MP_RACE_VEHICLE_ID_BASE)
+  )
+
 (defun mp-mission-vehicle-matches-net-id? ((proc process) (net-id uint))
   (and proc
        (nonzero? proc)
@@ -101,3 +105,13 @@
   (+ MP_RACE_VEHICLE_ID_BASE
      (* race-index MP_MAX_RACE_VEHICLES)
      (+ racer-index 1)))
+
+(defun mp-race-vehicle-race-index ((net-id uint))
+  (the int
+    (/ (- net-id MP_RACE_VEHICLE_ID_BASE 1)
+       MP_MAX_RACE_VEHICLES)))
+
+(defun mp-race-vehicle-racer-index ((net-id uint))
+  (mod
+    (the int (- net-id MP_RACE_VEHICLE_ID_BASE 1))
+    MP_MAX_RACE_VEHICLES))

@@ -1,0 +1,16 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defun mp-race-racer-local-player? ((racer racer-state))
+  (let ((vehicle (handle->process-safe (-> racer racer))))
+    (and vehicle
+         *local-info*
+         (= (-> (the-as vehicle vehicle) net-id)
+            (-> *local-info* riding-veh-id)))))
+
+(defun mp-race-racer-remote-player? ((racer racer-state))
+  (let ((vehicle (handle->process-safe (-> racer racer))))
+    (and vehicle
+         *remote-info*
+         (= (-> (the-as vehicle vehicle) net-id)
+            (-> *remote-info* riding-veh-id)))))

@@ -599,6 +599,7 @@
   "mp-pedestrian-authoritative.o" ;; added
   "mp-pedestrian-state-sync.o" ;; added
   "mp-pedestrian-puppet.o" ;; added
+  "race-h.o" ;; added
   "mp-vehicle-state-mapper.o" ;; added
   "mp-vehicle-authoritative.o" ;; added
   "mp-mission-vehicles.o" ;; added
