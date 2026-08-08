@@ -567,4 +567,37 @@
   (none)
   )
 
+(defun mp-debug-print-target-finish-sphere ()
+  "Print a copy-pasteable zero-radius sphere centered on the current target."
+  (if (and *target* (nonzero? *target*))
+      (let ((target-control (-> *target* control)))
+        (cond
+          ((not (and target-control (nonzero? target-control)))
+           (format 0 "[MP Debug] Target sphere unavailable: target control is null.~%"))
+          ((focus-test? *target* teleporting)
+           (format 0 "[MP Debug] Target sphere unavailable: target is teleporting.~%"))
+          ((and *level*
+                (nonzero? *level*)
+                (-> *level* loading-level)
+                (nonzero? (-> *level* loading-level))
+                (-> *level* default-level)
+                (!= (-> *level* loading-level) (-> *level* default-level)))
+           (format 0 "[MP Debug] Target sphere unavailable: a level is loading.~%"))
+          (else
+           (let ((target-position (target-pos 0)))
+             (if (and target-position (nonzero? target-position))
+                 (format 0
+                         "(new 'static 'sphere~%                       :x ~,,1f~%                       :y ~,,1f~%                       :z ~,,1f~%                       :r 0.0)~%"
+                         (-> target-position x)
+                         (-> target-position y)
+                         (-> target-position z))
+                 (format 0 "[MP Debug] Target sphere unavailable: target position is null.~%"))
+             )
+           )
+        )
+        )
+      (format 0 "[MP Debug] Target sphere unavailable: *target* is null.~%"))
+  (none)
+  )
+
 

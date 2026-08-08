@@ -4143,6 +4143,15 @@
              (flag "Eye Debug View" *mp-eye-debug?* dm-boolean-toggle-pick-func)
              )
            (menu
+             "Race"
+             (function "Print Target Finish Sphere" #f
+                       ,(lambda ()
+                          (mp-debug-print-target-finish-sphere)
+                          (none)
+                          )
+                       )
+             )
+           (menu
              "Log"
              (flag "Debug Log" *mp-debug-log?* dm-boolean-toggle-pick-func)
              )

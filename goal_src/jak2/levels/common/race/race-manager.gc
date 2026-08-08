@@ -76,7 +76,7 @@
   )
 
 (defmethod begin-lap ((this racer-state) (state race-state))
-  (format #t "begin-lap racer ~d~%" (-> this rank))
+  (debug-log *mp-debug-log?* "[Race] begin-lap racer ~d~%" (-> this rank))
   (set! (-> this lap-start) (-> state current-time))
   (logior! (-> this flags) (racer-flags in-race))
   (none)
@@ -84,7 +84,7 @@
 
 (defmethod end-lap ((this racer-state) (state race-state))
   (+! (-> this lap-count) 1)
-  (format #t "end-lap ~d racer ~d~%" (-> this lap-count) (-> this rank))
+  (debug-log *mp-debug-log?* "[Race] end-lap ~d racer ~d~%" (-> this lap-count) (-> this rank))
   (let ((dst-index 4)
         (src-index 3)
         )
@@ -159,63 +159,90 @@
   )
 
 (defmethod update-lap-distance ((this racer-state) (state race-state))
-   (let ((racer (handle->process (-> this racer))))
-     (cond
-       (racer
-        (when (focus-test? (the-as process-focusable racer) dead inactive)
-          (logior! (-> this flags) (racer-flags dead)))
-        (set! (-> this position quad) (-> (the-as process-focusable racer) root trans quad))
-        (when (not (logtest? (-> this flags) (racer-flags finished dead)))
-          (let ((slice (new 'stack-no-clear 'race-mesh-slice-query)))
-            (set! (-> slice search-sphere quad) (-> this position quad))
-            (set! (-> slice search-sphere r) 0.0)
-            (race-mesh-query (-> state info mesh) (the-as race-mesh-slice-query (&-> slice slice-id)))
-            (set! (-> this lap-distance-prev) (-> this lap-distance))
-            (cond
-              ((>= (-> slice slice-id) 0)
-               (set! (-> this lap-distance) (-> slice lap-dist))
-               (when (not (logtest? (-> this flags) (racer-flags on-track)))
-                 (set! (-> this lap-distance-prev) (-> this lap-distance)))
-               (logior! (-> this flags) (racer-flags on-track)))
-              (else
-               (logclear! (-> this flags) (racer-flags on-track))))
-            (cond
-              ((logtest? (-> state info mesh flags) (race-mesh-flags closed-loop))
-               (when (>= (-> slice slice-id) 0)
-                 (let ((quadrant (min 3 (the int (* 4.0 (-> slice lap-dist))))))
-                   (when (= quadrant (logand (+ (-> this lap-quadrant) 1) 3))
-                     (set! (-> this lap-quadrant) quadrant)
-                     (when (zero? quadrant)
-                       (if (logtest? (-> this flags) (racer-flags in-race))
-                           (end-lap this state)
-                           (begin-race state))
-                       (begin-lap this state))))))
-              ((logtest? (-> this flags) (racer-flags in-race))
-               (let ((finish-offset (new 'stack-no-clear 'vector)))
-                 (vector-! finish-offset (-> this position) (the-as vector (-> state info finish-sphere)))
-                 (when (and (< (vector-vector-distance-squared (-> this position) (the-as vector (-> state info finish-sphere)))
-                               (square (-> state info finish-sphere r)))
-                            (> (vector-dot finish-offset (-> state info finish-dir)) 0.0))
-                   (end-lap this state))))
-              (else
-               (when (> (-> this lap-distance) 0.0)
-                 (begin-race state)
-                 (begin-lap this state)))))
-          (let ((target-speed (-> state info ai-max-speed-factor)))
-            (when (< (+ (-> state target-pos) (-> this target-pos-offset)) (-> this pos))
-              (set! target-speed (-> state info ai-min-speed-factor)))
-            (seek! (-> this speed-factor) target-speed (* 0.2 (seconds-per-frame)))))
-        (when (logtest? (-> this flags) (racer-flags finished))
-          (seek! (-> this speed-factor) 0.9 (* 0.2 (seconds-per-frame))))
-        (when (logtest? (-> this flags) (racer-flags in-race))
-          (dotimes (i (-> state info decision-point-count))
-            (let ((decision-point (-> state info decision-point-array i)))
-              (when (and (< (-> this lap-distance-prev) (-> decision-point pos))
-                         (>= (-> this lap-distance) (-> decision-point pos)))
-                (send-event racer 'race-decision-point decision-point))))
-          (set! (-> this pos) (+ (-> this lap-distance) (the float (-> this lap-count))))))
-       (else
-        (logior! (-> this flags) (racer-flags dead)))))
+  (let ((racer (handle->process (-> this racer))))
+    (cond
+      (racer
+       (when (focus-test? (the-as process-focusable racer) dead inactive)
+         (logior! (-> this flags) (racer-flags dead)))
+
+       (set! (-> this position quad) (-> (the-as process-focusable racer) root trans quad))
+
+       (cond
+         ((logtest? (-> state info flags) (race-info-flags destination-race))
+          (when (and (logtest? (-> state flags) (race-flags begun))
+                     (not (logtest? (-> this flags) (racer-flags finished dead))))
+            (when (not (logtest? (-> this flags) (racer-flags in-race)))
+              (begin-lap this state))
+
+            (when (< (vector-vector-distance-squared
+                       (-> this position)
+                       (the-as vector (-> state info finish-sphere)))
+                     (square (-> state info finish-sphere r)))
+              (end-lap this state))))
+
+         (else
+          (when (not (logtest? (-> this flags) (racer-flags finished dead)))
+            (let ((slice (new 'stack-no-clear 'race-mesh-slice-query)))
+              (set! (-> slice search-sphere quad) (-> this position quad))
+              (set! (-> slice search-sphere r) 0.0)
+              (race-mesh-query (-> state info mesh) (the-as race-mesh-slice-query (&-> slice slice-id)))
+              (set! (-> this lap-distance-prev) (-> this lap-distance))
+
+              (cond
+                ((>= (-> slice slice-id) 0)
+                 (set! (-> this lap-distance) (-> slice lap-dist))
+                 (when (not (logtest? (-> this flags) (racer-flags on-track)))
+                   (set! (-> this lap-distance-prev) (-> this lap-distance)))
+                 (logior! (-> this flags) (racer-flags on-track)))
+                (else
+                 (logclear! (-> this flags) (racer-flags on-track))))
+
+              (cond
+                ((logtest? (-> state info mesh flags) (race-mesh-flags closed-loop))
+                 (when (>= (-> slice slice-id) 0)
+                   (let ((quadrant (min 3 (the int (* 4.0 (-> slice lap-dist))))))
+                     (when (= quadrant (logand (+ (-> this lap-quadrant) 1) 3))
+                       (set! (-> this lap-quadrant) quadrant)
+                       (when (zero? quadrant)
+                         (if (logtest? (-> this flags) (racer-flags in-race))
+                             (end-lap this state)
+                             (begin-race state))
+                         (begin-lap this state))))))
+
+                ((logtest? (-> this flags) (racer-flags in-race))
+                 (let ((finish-offset (new 'stack-no-clear 'vector)))
+                   (vector-! finish-offset (-> this position) (the-as vector (-> state info finish-sphere)))
+                   (when (and (< (vector-vector-distance-squared
+                                   (-> this position)
+                                   (the-as vector (-> state info finish-sphere)))
+                                 (square (-> state info finish-sphere r)))
+                              (> (vector-dot finish-offset (-> state info finish-dir)) 0.0))
+                     (end-lap this state))))
+
+                (else
+                 (when (> (-> this lap-distance) 0.0)
+                   (begin-race state)
+                   (begin-lap this state)))))
+
+            (let ((target-speed (-> state info ai-max-speed-factor)))
+              (when (< (+ (-> state target-pos) (-> this target-pos-offset)) (-> this pos))
+                (set! target-speed (-> state info ai-min-speed-factor)))
+              (seek! (-> this speed-factor) target-speed (* 0.2 (seconds-per-frame)))))))
+
+       (when (logtest? (-> this flags) (racer-flags finished))
+         (seek! (-> this speed-factor) 0.9 (* 0.2 (seconds-per-frame))))
+
+       (when (logtest? (-> this flags) (racer-flags in-race))
+         (dotimes (i (-> state info decision-point-count))
+           (let ((decision-point (-> state info decision-point-array i)))
+             (when (and (< (-> this lap-distance-prev) (-> decision-point pos))
+                        (>= (-> this lap-distance) (-> decision-point pos)))
+               (send-event racer 'race-decision-point decision-point))))
+         (set! (-> this pos) (+ (-> this lap-distance) (the float (-> this lap-count))))))
+
+      (else
+       (logior! (-> this flags) (racer-flags dead)))))
+
   (none))
 
 (defmethod print-laps ((this racer-state) (state race-state) (stream string))
@@ -267,7 +294,7 @@
   )
 
 (defmethod begin-race ((this race-state))
-  (format #t "begin-race~%")
+  (debug-log *mp-debug-log?* "[Race] Begin-race~%")
   (when (not (logtest? (-> this flags) (race-flags begun)))
     (logior! (-> this flags) (race-flags begun))
     (set-speech-tables! this)
@@ -471,7 +498,11 @@
            )
          )
        (when ready?
-         (if (spawn-race-signal this)
+         (when (-> this info on-player-ready)
+            (script-eval (-> this info on-player-ready))
+           )
+         (when (spawn-race-signal this)
+            (debug-log *mp-debug-log?* "[Race] Race signal has been spawned!~%")
             (set! ready? (handle->process (-> this race-signal)))
             )
          (setup-race this)
@@ -578,9 +609,6 @@
      )
     (((race-state-enum countdown))
      (let ((countdown-scale 3.0))
-       (when (and (logtest? (-> this info flags) (race-info-flags city-race)) (logtest? (-> this info flags) (race-info-flags destination-race)))
-           (set! countdown-scale 0.2)
-           )
        (let ((countdown-time (+ (the int (* 300.0 countdown-scale)) (- (-> this countdown-start-time) (-> this current-time)))))
          (cond
            ((>= countdown-time (the int (* 225.0 countdown-scale)))
@@ -1027,7 +1055,7 @@
             (while (!= (level-status *level* 'lracelit) 'active)
               (suspend)
               )
-            (debug-log *mp-debug-log?* "[Race] racelit is active")
+            (debug-log *mp-debug-log?* "[Race] racelit is active~%")
             (when (-> info borrow-level)
               (while (!= (level-status *level* (-> info borrow-level)) 'active)
                 (suspend)
@@ -1095,7 +1123,8 @@
         )
       (when (logtest? (-> player-racer flags) (racer-flags in-race))
         (cond
-          ((logtest? (-> player-racer flags) (racer-flags on-track))
+          ((or (logtest? (-> player-racer flags) (racer-flags on-track))
+               (logtest? (-> self race-state info flags) (race-info-flags destination-race)))
            (set-time! (-> self player-on-track-time))
            )
           (else
@@ -1103,7 +1132,8 @@
               (let ((player-vehicle (handle->process (-> player-racer racer))))
                 (when player-vehicle
                   (when (logtest? (-> (the-as vehicle-racer player-vehicle) flags) (rigid-body-object-flag on-ground))
-                    (if (send-event *target* 'attack-invinc #f (static-attack-info ((id (new-attack-id)) (mode 'instant-death))))
+                    (when (send-event *target* 'attack-invinc #f (static-attack-info ((id (new-attack-id)) (mode 'instant-death))))
+                        (debug-log *mp-debug-log?* "[Race] Racer is off the track, failing the race.~%")
                         (go-virtual fail)
                         )
                     )
@@ -1113,7 +1143,8 @@
             )
           )
         )
-      (if (or (logtest? (-> player-racer flags) (racer-flags dead)) (not *target*) (focus-test? *target* dead))
+      (when (or (logtest? (-> player-racer flags) (racer-flags dead)) (not *target*) (focus-test? *target* dead))
+          (debug-log *mp-debug-log?* "[Race] Racer is dead, failing the race.~%")
           (go-virtual fail)
           )
       (when (logtest? (-> player-racer flags) (racer-flags finished))
@@ -1138,6 +1169,17 @@
     )
   )
 
+(defun clear-task-manager-hud-timer-if-present ((manager race-manager))
+  (let ((manager-parent (the-as task-manager (ppointer->process (-> manager parent)))))
+    (when manager-parent (nonzero? manager-parent) (type? manager-parent task-manager)
+      (let ((hud-timer (handle->process (-> (the-as task-manager manager-parent) hud-timer))))
+        (set! (-> manager-parent start-time) 0)
+        (send-event hud-timer 'hide-and-die)
+        )
+      )
+    )
+  )
+
 (defstate win (race-manager)
   :virtual #t
   :event race-manager-event-handler
@@ -1157,12 +1199,14 @@
       (send-event (ppointer->process (-> self parent)) 'complete)
       (sleep-code)
       )
+    (clear-task-manager-hud-timer-if-present self)
     ;; og:preserve-this auto-save when a race is won
     (#when PC_PORT
       (auto-save-user))
     (until #f
       (cond
-        ((logtest? (-> self race-state info flags) (race-info-flags retryable))
+        ((or (logtest? (-> self race-state info flags) (race-info-flags retryable))
+             (logtest? (-> self race-state info flags) (race-info-flags optionally-retryable)))
          (draw-message-retry self)
          (when (time-elapsed? (-> self state-time) (seconds 0.5))
            (cond
@@ -1173,7 +1217,10 @@
               )
              ((cpad-pressed? 0 triangle)
               (stop-speech self)
-              (send-event (ppointer->process (-> self parent)) 'fail-immediately)
+              (if (logtest? (-> self race-state info flags) (race-info-flags optionally-retryable))
+                (go-virtual completed)
+                (send-event (ppointer->process (-> self parent)) 'fail-immediately)
+                )
               (sleep-code)
               )
              )
@@ -1184,8 +1231,7 @@
           (when (time-elapsed? (-> self state-time) (seconds 0.5))
             (when (cpad-pressed? 0 confirm)
               (stop-speech self)
-              (send-event (ppointer->process (-> self parent)) 'complete)
-              (sleep-code)
+              (go-virtual completed)
               )
             )
           )
@@ -1193,6 +1239,24 @@
       (suspend)
       )
     #f
+    )
+  :post (behavior ()
+    (update self)
+    )
+  )
+
+(defmethod all-players-completed? ((this race-manager))
+  #t
+  )
+
+(defstate completed (race-manager)
+  :virtual #t
+  :event race-manager-event-handler
+  :code (behavior ()
+    (when (all-players-completed? self)
+      (send-event (ppointer->process (-> self parent)) 'complete)
+      (sleep-code)
+      )
     )
   :post (behavior ()
     (update self)
@@ -1242,6 +1306,9 @@
 (defstate fail (race-manager)
   :virtual #t
   :event race-manager-event-handler
+  :enter (behavior ()
+    (debug-log *mp-debug-log?* "[Race] Race manager has entered fail.~%")
+    )
   :code (behavior ()
     (send-event (handle->process (-> self race-state hud-timer)) 'force-hide)
     (send-event (handle->process (-> self race-state hud-lap-counter)) 'force-hide)

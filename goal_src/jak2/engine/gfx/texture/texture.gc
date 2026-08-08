@@ -692,7 +692,7 @@ additionally, some texture pages have a chunk system that allows more specific c
 
       ;; check for out of memory.
       (if (< #x3e000 vram-loc)
-          (format 0 "ERROR: Ran out of texture memory for SPRITE ~dk of 992k" (/ vram-loc 64))
+          (format 0 "ERROR: Ran out of texture memory for SPRITE ~dk of 992k~%" (/ vram-loc 64))
           )
       )
     )
@@ -725,7 +725,7 @@ additionally, some texture pages have a chunk system that allows more specific c
         )
       )
     (if (< #x3e000 level-idx)
-        (format 0 "ERROR: Ran out of texture memory for HUD ~dk of 992k" (/ level-idx 64))
+        (format 0 "ERROR: Ran out of texture memory for HUD ~dk of 992k~%" (/ level-idx 64))
         )
     )
   0
@@ -807,7 +807,7 @@ additionally, some texture pages have a chunk system that allows more specific c
         )
       )
     (if (< #xa000 vram-loc)
-        (format 0 "ERROR: Ran out of texture memory for WARP ~dk of 160k" (/ vram-loc 64))
+        (format 0 "ERROR: Ran out of texture memory for WARP ~dk of 160k~%" (/ vram-loc 64))
         )
     )
   0

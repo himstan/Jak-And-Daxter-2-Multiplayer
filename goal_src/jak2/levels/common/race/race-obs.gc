@@ -116,7 +116,7 @@
   )
 
 (defbehavior race-signal-event-handler race-signal ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
-  (format #t "race-signal: got event ~s from ~s~%" arg2 arg0)
+  (debug-log *mp-debug-log?* "[Race] Race-signal: got event ~s from ~s~%" arg2 arg0)
   (cond
     ((= arg2 'ready)
      (set! (-> self dest-y-offset) 0.0)

@@ -234,6 +234,7 @@
       :path-group-name #f
       :task-node (game-task-node city-keira-delivery-delivery)
       :want-sound 'stadium1
+      :on-player-ready '(want-sound 'ctywide1 'ctywide2 'stadium1)
       :ai-min-speed-factor 0.75
       :ai-max-speed-factor 1.0
       :ai-spread-factor 0.007
@@ -245,10 +246,15 @@
       :start-dir (new 'static 'vector
                         :x 1.0
                         :w 1.0)
-       :finish-sphere (new 'static 'sphere
-                       :x 579584.0
-                       :y 49152.0
-                       :z -1985331.2
+;;      :finish-sphere (new 'static 'sphere
+;;                       :x 579584.0
+;;                       :y 49152.0
+;;                       :z -1985331.2
+;;                       :r 49152.0)
+      :finish-sphere (new 'static 'sphere
+                       :x 204329.7
+                       :y 35365.6
+                       :z 5317731.5
                        :r 49152.0)
       :finish-dir (new 'static 'vector :z 1.0 :w 1.0)
       :player-intro-pos (new 'static 'vector
@@ -256,18 +262,17 @@
                             :y 45056.0
                             :z 5468160.0
                             :w 1.0)
-      :flags (race-info-flags city-race complete-immediately destination-race)
+      :flags (race-info-flags city-race optionally-retryable destination-race)
       :score 0
       :lap-count 1
-      :racer-count 2
+      :racer-count 1
       :turbo-pad-count 0
       :map-index 0
       :decision-point-count 0
       :safe-paths 0
       :turbo-pad-array #f
-      :racer-array (new 'static 'inline-array race-racer-info 3
-        (new 'static 'race-racer-info :vehicle #x5)
-        (new 'static 'race-racer-info :rider #x1 :vehicle #x5 :seek-offset 1)
+      :racer-array (new 'static 'inline-array race-racer-info 1
+        (new 'static 'race-racer-info)
         )
       :decision-point-array #f
       :level 'ctyport

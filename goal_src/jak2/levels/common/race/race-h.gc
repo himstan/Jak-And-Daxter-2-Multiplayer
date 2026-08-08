@@ -16,7 +16,7 @@
 
 (defenum race-info-flags
   :bitfield #t
-  :type uint8
+  :type uint16
   (city-race)
   (pidax)
   (complete-immediately)
@@ -25,6 +25,7 @@
   (bbush)
   (show-tutorial)
   (destination-race)
+  (optionally-retryable)
   )
 
 (defenum race-flags
@@ -133,6 +134,7 @@
    (start-camera              string)
    (go-speech                 uint16)
    (want-sound                symbol)
+   (on-player-ready           pair)        
    )
   (:methods
     (initialize-mesh (_type_) none)
@@ -224,6 +226,7 @@
     win
     lose
     die
+    completed
     )
   (:methods
     (update (_type_) int)
@@ -234,6 +237,7 @@
     (draw-message-retry (_type_) none)
     (save-score (_type_ float) none)
     (stop-speech (_type_) none)
+    (all-players-completed? (_type_) symbol)
     )
   )
 

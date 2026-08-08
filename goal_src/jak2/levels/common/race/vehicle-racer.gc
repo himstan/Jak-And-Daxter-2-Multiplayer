@@ -47,6 +47,23 @@
       (sound-play "turbo-boost")))
   (none))
 
+(defun destination-race-vehicle? ((this vehicle-racer))
+  "Return true when this racer belongs to a destination race without a race mesh."
+  (let ((state (-> this race state)))
+    (and state
+         (nonzero? state)
+         (let ((info (-> state info)))
+           (and info
+                (nonzero? info)
+                (logtest? (-> info flags) (race-info-flags destination-race)))))))
+
+(defun wait-for-destination-race-player! ((this vehicle-racer))
+  "Keep an unoccupied destination-race bike available for the local player."
+  (logior! (-> this flags) (rigid-body-object-flag waiting-for-player))
+  (logior! (-> this focus-status) (focus-status grabbed))
+  (go (method-of-object this waiting-race))
+  (none))
+
 (defmethod start-from-spawn-params! ((this vehicle-racer) (params traffic-object-spawn-params))
   (set! (-> this draw lod-set lod 1 dist) 819200.0)
   (set! (-> this draw lod-set lod 2 dist) 1228800.0)
@@ -56,25 +73,28 @@
   (set! (-> this shortcut-speed-factor) 0.0)
   (case (-> params behavior)
     ((10)
-     (when (not (-> this race mesh))
-       (format #t "ERROR: vehicle-racer::go-start-state: no race-mesh found~%")
-       (go (method-of-object this die)))
-
-     (when (-> this race mesh)
-       (select-race-path! (-> this race) (-> this traffic-priority-id) (-> this root trans))
-       (cond
-         ((logtest? (-> params flags) (traffic-spawn-flags spawn-rider))
-          (logior! (-> this flags) (rigid-body-object-flag riding ai-driving))
-          (cond
-            ((-> this race path)
-             (go (method-of-object this waiting-for-start)))
-            (else
-             (format 0 "vehicle-racer::go-start-state: ERROR, no race-paths found~%")
-             (go (method-of-object this die)))))
-         (else
-          (logior! (-> this flags) (rigid-body-object-flag waiting-for-player))
-          (logior! (-> this focus-status) (focus-status grabbed))
-          (go (method-of-object this waiting-race))))))
+     (cond
+       ((-> this race mesh)
+        (select-race-path! (-> this race) (-> this traffic-priority-id) (-> this root trans))
+        (cond
+          ((logtest? (-> params flags) (traffic-spawn-flags spawn-rider))
+           (logior! (-> this flags) (rigid-body-object-flag riding ai-driving))
+           (cond
+             ((-> this race path)
+              (go (method-of-object this waiting-for-start)))
+             (else
+              (format 0 "vehicle-racer::go-start-state: ERROR, no race-paths found~%")
+              (go (method-of-object this die)))))
+          (else
+           (logior! (-> this flags) (rigid-body-object-flag waiting-for-player))
+           (logior! (-> this focus-status) (focus-status grabbed))
+           (go (method-of-object this waiting-race)))))
+       ((and (destination-race-vehicle? this)
+             (not (logtest? (-> params flags) (traffic-spawn-flags spawn-rider))))
+        (wait-for-destination-race-player! this))
+       (else
+        (format #t "ERROR: vehicle-racer::go-start-state: no race-mesh found~%")
+        (go (method-of-object this die)))))
     (else
      ((method-of-type vehicle start-from-spawn-params!) this params)))
   (none))

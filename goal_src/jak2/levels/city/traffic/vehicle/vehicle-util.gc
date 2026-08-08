@@ -493,7 +493,7 @@
                                   (set! (-> boarding-work handles 0) (process->handle this))
                                   (mem-copy! (the-as pointer *pilot-edge-grab-info*) (the-as pointer (-> boarding-work vectors)) 40)
                                   (if (send-event tgt 'pilot-edge-grab *pilot-edge-grab-info*)
-                                      (format 0 "vehicle::check-player-get-on: (send-event tgt 'pilot-edge-grab self)~%")
+                                      (debug-log *mp-debug-log?* "[Vehicle] vehicle::check-player-get-on: (send-event tgt 'pilot-edge-grab self)~%")
                                   )
                                 )
                               )
@@ -720,7 +720,7 @@
       (case (-> impact pat event)
         (((pat-event melt))
          (set! damage (* 10.0 damage))
-         (format #t "vehicle::apply-damage: hit melt (damage ~f)~%" damage)
+         (debug-log *mp-debug-log?* "[Vehicle] vehicle::apply-damage: hit melt (damage ~f)~%" damage)
          )
         )
       (#when PC_PORT
