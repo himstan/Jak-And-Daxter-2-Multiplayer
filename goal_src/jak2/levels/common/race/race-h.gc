@@ -100,7 +100,8 @@
 
 
 (deftype race-info (basic)
-  ((race-mesh-name            string)
+  ((id                        int8)
+   (race-mesh-name            string)
    (path-group-name           string)
    (task-node                 game-task-node)
    (mesh                      race-mesh)

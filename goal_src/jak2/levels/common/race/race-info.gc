@@ -10,6 +10,7 @@
 (define *race-info-array*
   (new 'static 'boxed-array :type race-info
     (new 'static 'race-info
+      :id 1
       :race-mesh-name "race-mesh-1"
       :path-group-name "kierac"
       :task-node (game-task-node stadium-race-class3-race)
@@ -70,6 +71,7 @@
       :start-camera "camera-267"
       )
     (new 'static 'race-info
+      :id 2
       :race-mesh-name "race-mesh-1"
       :path-group-name "kierab"
       :task-node (game-task-node stadium-race-class2-race)
@@ -131,6 +133,7 @@
       :start-camera "camera-265"
       )
     (new 'static 'race-info
+      :id 3
       :race-mesh-name "race-mesh-1"
       :path-group-name "kieraa"
       :task-node (game-task-node stadium-race-class1-race)
@@ -199,6 +202,7 @@
       :go-speech #x17a
       )
     (new 'static 'race-info
+      :id 4
       :race-mesh-name "race-mesh-1"
       :path-group-name "errol"
       :task-node (game-task-node city-errol-challenge-race)
@@ -230,6 +234,7 @@
       :start-camera #f
       )
     (new 'static 'race-info
+      :id 5
       :race-mesh-name #f
       :path-group-name #f
       :task-node (game-task-node city-keira-delivery-delivery)
@@ -286,6 +291,7 @@
       :go-speech 0
       )
     (new 'static 'race-info
+      :id 6
       :race-mesh-name "race-mesh-1"
       :path-group-name "kierac"
       :task-node (game-task-node stadium-burning-bush-race-class3-resolution)
@@ -346,6 +352,7 @@
       :start-camera "camera-267"
       )
     (new 'static 'race-info
+      :id 7
       :race-mesh-name "race-mesh-1"
       :path-group-name "kierab"
       :task-node (game-task-node stadium-burning-bush-race-class2-resolution)
@@ -407,6 +414,7 @@
       :start-camera "camera-265"
       )
     (new 'static 'race-info
+      :id 8
       :race-mesh-name "race-mesh-1"
       :path-group-name "kieraa"
       :task-node (game-task-node stadium-burning-bush-race-class1-resolution)
@@ -474,6 +482,7 @@
       :start-camera "camera-269"
       )
     (new 'static 'race-info
+      :id 9
       :race-mesh-name "race-mesh-1"
       :path-group-name "errol"
       :task-node (game-task-node city-burning-bush-race-errol-resolution)
@@ -504,6 +513,7 @@
       :start-camera #f
       )
     (new 'static 'race-info
+      :id 10
       :race-mesh-name "race-mesh-1"
       :path-group-name "bbushport"
       :task-node (game-task-node city-burning-bush-race-port-resolution)
@@ -534,6 +544,7 @@
       :start-camera #f
       )
     (new 'static 'race-info
+      :id 11
       :race-mesh-name "race-mesh-1"
       :path-group-name "kieracr"
       :task-node (game-task-node stadium-burning-bush-race-class3-r-resolution)
@@ -593,6 +604,7 @@
       :start-camera "camera-266"
       )
     (new 'static 'race-info
+      :id 12
       :race-mesh-name "race-mesh-1"
       :path-group-name "kierabr"
       :task-node (game-task-node stadium-burning-bush-race-class2-r-resolution)
@@ -653,6 +665,7 @@
       :start-camera "camera-264"
       )
     (new 'static 'race-info
+      :id 13
       :race-mesh-name "race-mesh-1"
       :path-group-name "kieraar"
       :task-node (game-task-node stadium-burning-bush-race-class1-r-resolution)

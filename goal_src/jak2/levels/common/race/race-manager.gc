@@ -775,7 +775,8 @@
 (defmethod initialize-state ((this race-manager))
   (rigid-body-queue-manager-spawn *race-rigid-body-queue* this)
   (let* ((state (-> this race-state))
-         (info (-> state info)))
+         (info (-> state info))
+         (race-id (-> info id)))
     (when (or (logtest? (-> info flags) (race-info-flags pidax))
               (logtest? (continue-flags pilot) (-> *game-info* last-continue flags)))
       (logior! (-> state flags) (race-flags pidax)))
@@ -862,6 +863,7 @@
 
              (when (not (and (logtest? (-> state flags) (race-flags sleep))
                              (logtest? (-> racer-info flags) (racer-info-flags hide-in-scene))))
+               (set! (-> spawn params net-id) (mp-race-vehicle-net-id race-id racer-index))
                (let ((vehicle (vehicle-spawn this (type-from-race-vehicle-type (-> racer-info vehicle)) (-> spawn params))))
                  (when vehicle
                    (add-icon! *minimap* vehicle (the-as uint map-icon) (the-as int #f) (the-as vector #t) 0)

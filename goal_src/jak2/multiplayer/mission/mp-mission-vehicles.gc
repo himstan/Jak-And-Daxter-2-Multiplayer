@@ -9,6 +9,8 @@
 (defconstant MP_MISSION_VEHICLE_KEIRA_DELIVERY (the uint #x70000002))
 (defconstant MP_MISSION_VEHICLE_KREW_COLLECTION (the uint #x70000003))
 (defconstant MP_MISSION_VEHICLE_CITY_SHUTTLE (the uint #x70000004))
+(defconstant MP_RACE_VEHICLE_ID_BASE (the uint #x70010000))
+(defconstant MP_MAX_RACE_VEHICLES 10)
 
 (defun mp-mission-vehicle-id? ((net-id uint))
   (>= net-id MP_MISSION_VEHICLE_ID_BASE)
@@ -94,3 +96,8 @@
     found-proc
     )
   )
+
+(defun mp-race-vehicle-net-id ((race-index int) (racer-index int))
+  (+ MP_RACE_VEHICLE_ID_BASE
+     (* race-index MP_MAX_RACE_VEHICLES)
+     (+ racer-index 1)))
