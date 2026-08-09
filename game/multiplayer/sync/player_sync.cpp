@@ -31,10 +31,6 @@ bool valid_player_name(const char* name) {
   return true;
 }
 
-bool valid_character(MPPlayerCharacter character) {
-  return character == MPPlayerCharacter::JAK || character == MPPlayerCharacter::DAXTER;
-}
-
 MPPlayerRecordGOAL* joined_record(MPPlayerControllerGOAL* controller, uint32_t player_id) {
   if (!controller || !mp_valid_player_id(player_id)) {
     return nullptr;
@@ -100,7 +96,7 @@ PacketJoin make_join_packet(const MPPlayerRecordGOAL& local, uint32_t sequence) 
 
 bool valid_join_record(const MPPlayerRecordGOAL& local) {
   return mp_valid_player_id(local.identity.player_id) && local.identity.identity_ready &&
-         local.identity.joined && valid_character(local.identity.character) &&
+         local.identity.joined && mp_valid_player_character(local.identity.character) &&
          valid_player_name(local.identity.name);
 }
 
@@ -180,7 +176,8 @@ bool valid_local_identity_for_send(const MultiplayerData& data, const MPPlayerRe
 
 bool send_join_packet(MultiplayerData& data, const MPPlayerRecordGOAL& local) {
   if (!valid_local_identity_for_send(data, local) ||
-      !mp_valid_player_id(local.identity.player_id) || !valid_character(local.identity.character) ||
+      !mp_valid_player_id(local.identity.player_id) ||
+      !mp_valid_player_character(local.identity.character) ||
       !valid_player_name(local.identity.name)) {
     return false;
   }
@@ -426,12 +423,26 @@ bool mp_handle_turret_state_packet(MultiplayerData& data,
 bool mp_handle_join_packet(MultiplayerData& data,
                            const ENetPacket* packet,
                            uint32_t sender_player_id,
-                           MPPlayerControllerGOAL* controller) {
+                           MPPlayerControllerGOAL* controller,
+                           bool* character_assignment_mismatch) {
+  if (character_assignment_mismatch) {
+    *character_assignment_mismatch = false;
+  }
   const auto join = PacketView(packet).as_exact<PacketJoin>(PacketType::EVENT_JOIN);
+  if (join && data.session_role == 0) {
+    const auto* session = multiplayer_host_peer_for_player_id(data, sender_player_id);
+    if (!session || !mp_valid_player_character(session->character) ||
+        join->character != session->character) {
+      if (character_assignment_mismatch) {
+        *character_assignment_mismatch = true;
+      }
+      return false;
+    }
+  }
   if (!join || !controller || !mp_valid_player_id(join->player_id) ||
       join->player_id == controller->local_player_id || join->player_id == data.local_player_id ||
       !mp_player_id_allowed_from_sender(data, sender_player_id, join->player_id) ||
-      !valid_character(join->character) || !valid_player_name(join->player_name)) {
+      !mp_valid_player_character(join->character) || !valid_player_name(join->player_name)) {
     return false;
   }
   auto& cached = data.player_states[join->player_id];
@@ -450,6 +461,8 @@ bool mp_handle_join_packet(MultiplayerData& data,
   record.identity.joined = 1;
   record.connection.connected = 1;
   memcpy(record.identity.name, join->player_name, sizeof(record.identity.name));
+  lg::info("[MP-Join] Registered player {} with character {}.", join->player_id,
+           static_cast<uint32_t>(join->character));
   if (data.session_role == 0) {
     if (auto* session = multiplayer_host_peer_for_player_id(data, join->player_id)) {
       session->identity_ready = true;
@@ -457,6 +470,8 @@ bool mp_handle_join_packet(MultiplayerData& data,
         session->bootstrap_pending = true;
         session->bootstrap_sent_once = false;
         session->last_bootstrap_send_time = 0;
+        lg::info("[MP-Bootstrap] Armed bootstrap for player {} after identity registration.",
+                 join->player_id);
       }
     }
   }
@@ -599,6 +614,10 @@ void mp_send_player_sync(MultiplayerData& data,
     if (MultiplayerManager::send_to_peer(data, session.peer,
                                          static_cast<int>(MultiplayerChannel::CONTROL), packet,
                                          ENET_PACKET_FLAG_RELIABLE)) {
+      if (!session.bootstrap_sent_once) {
+        lg::info("[MP-Bootstrap] Queued authoritative bootstrap for player {}.",
+                 session.player_id);
+      }
       session.bootstrap_sent_once = true;
     }
   }

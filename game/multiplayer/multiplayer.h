@@ -4,7 +4,16 @@
 void init_multiplayer_pc_port();
 void pc_multi_disconnect();
 
-void pc_multi_setup_host(u32 player_limit);
+void pc_multi_setup_host(u32 player_limit,
+                         u32 character_0,
+                         u32 character_1,
+                         u32 character_2,
+                         u32 character_3);
+void pc_multi_setup_internet_host(u32 player_limit,
+                                  u32 character_0,
+                                  u32 character_1,
+                                  u32 character_2,
+                                  u32 character_3);
 void pc_multi_setup_client(u32 ip_ptr, u32 port);
 int64_t pc_multi_get_status();
 void pc_multi_request_bootstrap();
@@ -18,6 +27,7 @@ u64 pc_multi_get_command_line_arg(u32 str_ptr);
 int pc_multi_get_role();
 u32 pc_multi_get_local_player_id();
 u32 pc_multi_get_host_player_id();
+u32 pc_multi_get_local_player_character();
 void pc_multi_poll(u32 controller_ptr, u32 world_ptr, u32 bootstrap_ptr);
 int pc_multi_flush_packet_window();
 void pc_multi_send_sync(u32 controller_ptr, u32 world_ptr, u32 bootstrap_ptr);

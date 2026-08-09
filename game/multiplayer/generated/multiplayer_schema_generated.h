@@ -39,7 +39,7 @@ inline constexpr std::array<PacketDescriptor, kPacketCount> kPackets = {{
     {10, "AIRLOCK_SYNC", 3, 2, 2, 1024, 0, 0},
     {11, "WIDOW_SYNC", 1, 3, 2, 1024, 0, 0},
     {12, "WORLD_STATE", 1, 2, 2, 256, 0, 0},
-    {13, "SESSION_WELCOME", 1, 0, 5, 12, 0, 0},
+    {13, "SESSION_WELCOME", 1, 0, 5, 16, 0, 0},
 }};
 inline constexpr std::array<EventDescriptor, 57> kEvents = {{
     {1, "ORB"},

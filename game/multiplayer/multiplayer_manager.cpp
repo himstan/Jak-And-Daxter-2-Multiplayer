@@ -1,5 +1,6 @@
 #include "multiplayer_manager.h"
 
+#include <algorithm>
 #include <chrono>
 #include <string>
 #include <utility>
@@ -309,9 +310,19 @@ MultiplayerHostCopyMode multiplayer_host_copy_mode(MultiplayerData& data) {
   return MultiplayerHostCopyMode::ROOM_CODE;
 }
 
-void MultiplayerManager::setup_host(MultiplayerData& data,
-                                    bool internet_host,
-                                    uint32_t player_limit) {
+bool multiplayer_valid_player_character_config(
+    const std::array<MPPlayerCharacter, kMPMaxPlayers>& player_characters) {
+  return std::all_of(player_characters.begin(), player_characters.end(),
+                     [](MPPlayerCharacter character) {
+                       return mp_valid_player_character(character);
+                     });
+}
+
+void MultiplayerManager::setup_host(
+    MultiplayerData& data,
+    bool internet_host,
+    uint32_t player_limit,
+    const std::array<MPPlayerCharacter, kMPMaxPlayers>& player_characters) {
   if (data.host)
     disconnect(data);
 
@@ -329,6 +340,12 @@ void MultiplayerManager::setup_host(MultiplayerData& data,
     data.host_setup_status = static_cast<int>(MultiplayerHostSetupStatus::START_FAILED);
     data.join_status = static_cast<int>(MultiplayerStatus::FAILED);
     lg::error("[Multiplayer] Invalid player limit {}. Expected 2-{}.", player_limit, kMPMaxPlayers);
+    return;
+  }
+  if (!multiplayer_valid_player_character_config(player_characters)) {
+    data.host_setup_status = static_cast<int>(MultiplayerHostSetupStatus::START_FAILED);
+    data.join_status = static_cast<int>(MultiplayerStatus::FAILED);
+    lg::error("[Multiplayer] Invalid host player-character configuration.");
     return;
   }
 
@@ -360,6 +377,8 @@ void MultiplayerManager::setup_host(MultiplayerData& data,
     data.local_player_id = 0;
     data.host_player_id = data.local_player_id;
     data.session_player_limit = player_limit;
+    data.session_player_characters = player_characters;
+    data.local_player_character = player_characters[data.local_player_id];
     multiplayer_host_peer_reset_all(data);
     data.host_game_active = false;
     data.authentication_failures = {};
@@ -454,6 +473,7 @@ void MultiplayerManager::setup_client(MultiplayerData& data, const char* ip, int
     data.local_player_id = kMPInvalidPlayerId;
     data.host_player_id = kMPInvalidPlayerId;
     data.session_player_limit = kMPMaxPlayers;
+    data.local_player_character = MPPlayerCharacter::UNKNOWN;
     data.local_join_identity_sent = false;
     data.join_status = (int)MultiplayerStatus::CONNECTING;
     data.initialized = true;

@@ -25,6 +25,10 @@ enum class MPPlayerCharacter : uint32_t {
   DAXTER = 2,
 };
 
+inline constexpr bool mp_valid_player_character(MPPlayerCharacter character) {
+  return character == MPPlayerCharacter::JAK || character == MPPlayerCharacter::DAXTER;
+}
+
 enum class MultiplayerChannel : uint8_t {
   STATE = 0,
   CONTROL = 1,
@@ -125,8 +129,9 @@ struct PacketSessionWelcome {
   uint32_t player_id;
   uint32_t host_player_id;
   uint32_t player_limit;
+  MPPlayerCharacter character;
 };
-static_assert(sizeof(PacketSessionWelcome) == 17,
+static_assert(sizeof(PacketSessionWelcome) == 21,
               "PacketSessionWelcome wire layout must remain explicit");
 
 enum class MultiplayerLeaveReason : uint8_t {

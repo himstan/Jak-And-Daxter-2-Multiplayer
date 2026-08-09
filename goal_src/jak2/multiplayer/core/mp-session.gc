@@ -10,8 +10,87 @@
 (define-extern mp-demo-guard-tick (function none))
 (define-extern mp-demo-guard-on-local-spawn! (function none))
 
+(defun mp-character-cli-whitespace? ((character uint))
+  (or (= character (the uint 32))
+      (= character (the uint 9))
+      (= character (the uint 13))
+      (= character (the uint 10))))
+
+(defun mp-character-cli-letter? ((character uint) (lowercase uint))
+  (or (= character lowercase)
+      (= character (- lowercase (the uint 32)))))
+
+(defun mp-character-from-cli-token
+       ((token-start (pointer uint8)) (token-end (pointer uint8)))
+  (while (and (< (the-as uint token-start) (the-as uint token-end))
+              (mp-character-cli-whitespace? (the-as uint (-> token-start 0))))
+    (set! token-start (&-> token-start 1)))
+  (while (and (< (the-as uint token-start) (the-as uint token-end))
+              (mp-character-cli-whitespace?
+                (the-as uint (-> token-end -1))))
+    (set! token-end (&-> token-end -1)))
+  (let ((token-length (&- token-end (the-as uint token-start))))
+    (cond
+      ((and (= token-length (the uint 3))
+            (mp-character-cli-letter? (the-as uint (-> token-start 0)) (the uint 106))
+            (mp-character-cli-letter? (the-as uint (-> token-start 1)) (the uint 97))
+            (mp-character-cli-letter? (the-as uint (-> token-start 2)) (the uint 107)))
+       (mp-player-character jak))
+      ((and (= token-length (the uint 6))
+            (mp-character-cli-letter? (the-as uint (-> token-start 0)) (the uint 100))
+            (mp-character-cli-letter? (the-as uint (-> token-start 1)) (the uint 97))
+            (mp-character-cli-letter? (the-as uint (-> token-start 2)) (the uint 120))
+            (mp-character-cli-letter? (the-as uint (-> token-start 3)) (the uint 116))
+            (mp-character-cli-letter? (the-as uint (-> token-start 4)) (the uint 101))
+            (mp-character-cli-letter? (the-as uint (-> token-start 5)) (the uint 114)))
+       (mp-player-character daxter))
+      (else (mp-player-character unknown)))))
+
+(defun mp-parse-session-characters-cli! ((characters-arg string))
+  (when (or (not characters-arg) (zero? (the-as uint characters-arg)))
+    (return #f))
+  (let ((token-start (-> characters-arg data))
+        (cursor (-> characters-arg data))
+        (player-id (the uint 0))
+        (valid? #t)
+        (done? #f))
+    (while (and valid? (not done?))
+      (let ((character (the-as uint (-> cursor 0))))
+        (cond
+          ((or (zero? character) (= character (the uint 44)))
+           (if (>= player-id (the uint MP_MAX_PLAYERS))
+               (set! valid? #f)
+               (let ((player-character
+                       (mp-character-from-cli-token token-start cursor)))
+                 (if (mp-player-character-valid? player-character)
+                     (begin
+                       (mp-set-session-player-character! player-id player-character)
+                       (+! player-id (the uint 1)))
+                     (set! valid? #f))))
+           (if (zero? character)
+               (set! done? #t)
+               (begin
+                 (set! cursor (&-> cursor 1))
+                 (set! token-start cursor))))
+          (else
+           (set! cursor (&-> cursor 1))))))
+    valid?))
+
+(defun mp-load-session-characters-from-cli! ()
+  (mp-reset-session-player-characters!)
+  (let ((characters-arg (pc-multi-get-command-line-arg "-mp-characters")))
+    (when (and characters-arg
+               (nonzero? (the-as uint characters-arg))
+               (not (mp-parse-session-characters-cli! characters-arg)))
+      (mp-reset-session-player-characters!)
+      (format #t
+        "[MP-Session] WARNING: Invalid -mp-characters value; using jak,daxter,jak,daxter.~%")))
+  (none))
+
 (defun mp-client-ready-to-enable-sync-on-spawn? ((status mp-connection-status))
-  (and (mp-local-player-record)
+  (and *mp-bootstrap-state*
+       (nonzero? (the-as uint *mp-bootstrap-state*))
+       (mp-local-player-record)
        (nonzero? (the-as uint (mp-local-player-record)))
        (mp-session-client?)
        (= status (mp-connection-status in-game))
@@ -19,16 +98,75 @@
   )
 
 (defun mp-set-local-sync-flag! ((sync-flag uint))
-  (when (and (mp-local-player-record) (nonzero? (the-as uint (mp-local-player-record))))
+  (when (and *mp-bootstrap-state*
+             (nonzero? (the-as uint *mp-bootstrap-state*))
+             (mp-local-player-record)
+             (nonzero? (the-as uint (mp-local-player-record))))
     (set! (-> *mp-bootstrap-state* phase) (the-as uint sync-flag))
     )
   (none))
 
+(defun mp-session-ensure-local-player! ()
+  (let ((local-player-id (pc-multi-get-local-player-id))
+        (host-player-id (pc-multi-get-host-player-id))
+        (local-character
+          (the-as mp-player-character (pc-multi-get-local-player-character))))
+    (when (and *mp-player-controller*
+               (nonzero? *mp-player-controller*)
+               (mp-player-id-valid? local-player-id)
+               (mp-player-character-valid? local-character))
+      (let ((previous-local-id (-> *mp-player-controller* local-player-id)))
+        (when (and (mp-player-id-valid? previous-local-id)
+                   (!= previous-local-id local-player-id))
+          (mp-player-controller-reassign-local!
+            *mp-player-controller* local-player-id)
+          (debug-log *mp-debug-log?*
+            "[MP-Session] Migrated local player record from ~D to ~D.~%"
+            previous-local-id
+            local-player-id)))
+      (set! (-> *mp-player-controller* local-player-id) local-player-id)
+      (when (mp-player-id-valid? host-player-id)
+        (set! (-> *mp-player-controller* host-player-id) host-player-id))
+      (when (not (mp-local-player-record))
+        (mp-player-controller-register!
+          *mp-player-controller*
+          local-player-id
+          local-character)
+        (debug-log *mp-debug-log?*
+          "[MP-Session] Registered local player ~D (character ~D, role ~D).~%"
+          local-player-id
+          local-character
+          *mp-session-role*))
+      (let ((local-record (mp-local-player-record)))
+        (when (and local-record (nonzero? local-record))
+          (set! (-> local-record identity character) local-character)))
+      (when (and *target* (nonzero? *target*))
+        (mp-player-controller-bind-target!
+          *mp-player-controller*
+          local-player-id
+          *target*))))
+  (none))
+
+(defun mp-session-role-refresh-status? ((status mp-connection-status))
+  (or (= status (mp-connection-status connecting))
+      (= status (mp-connection-status connected-lobby))
+      (= status (mp-connection-status game-starting))
+      (= status (mp-connection-status in-game))
+      (= status (mp-connection-status reconnecting))
+      (= status (mp-connection-status host-left))))
+
+(defun mp-session-refresh-bridge-identity! ((status mp-connection-status))
+  "Refresh role before classifying a spawn, then materialize its assigned local record."
+  (if (mp-session-role-refresh-status? status)
+      (begin
+        (set! *mp-session-role* (the-as mp-session-role (pc-multi-get-role)))
+        (mp-session-ensure-local-player!))
+      (set! *mp-session-role* (mp-session-role none)))
+  (none))
+
 (defun mp-enable-sync-after-spawn! ((status mp-connection-status))
   (cond
-    ((and (mp-local-player-record)
-          (nonzero? (the-as uint (mp-local-player-record)))
-          (mp-session-client?))
+    ((mp-session-client?)
      (if (mp-client-ready-to-enable-sync-on-spawn? status)
          (begin
            (set! *multi-sync-enabled?* #t)
@@ -40,9 +178,18 @@
            )
          )
      )
+    ((mp-session-host?)
+     (if (or (= status (mp-connection-status connecting))
+             (= status (mp-connection-status game-starting))
+             (= status (mp-connection-status in-game)))
+         (begin
+           (set! *multi-sync-enabled?* #t)
+           (debug-log *mp-debug-log?*
+             "[MP-Session] Host player spawned! Enabling multiplayer sync.~%"))
+         (set! *multi-sync-enabled?* #f))
+     )
     (else
-     (set! *multi-sync-enabled?* #t)
-     (debug-log *mp-debug-log?* "[MP-Session] Host player spawned! Enabling multiplayer sync.~%")
+     (set! *multi-sync-enabled?* #f)
      )
     )
   (none))
@@ -51,12 +198,18 @@
   (when (>= status (mp-connection-status connecting))
     (if (mp-session-host?)
         (begin
-          (pc-multi-set-status (mp-connection-status in-game))
+          (when (or (= status (mp-connection-status connecting))
+                    (= status (mp-connection-status game-starting)))
+            (debug-log *mp-debug-log?*
+              "[MP-Session] Host world is ready; activating the session.~%")
+            (pc-multi-set-status (mp-connection-status in-game)))
           (set! *multi-last-send-time* 0)
           (mp-arm-mission-failed-bootstrap-after-spawn)
           )
         (begin
-          (when (and (mp-local-player-record)
+          (when (and *mp-bootstrap-state*
+                     (nonzero? (the-as uint *mp-bootstrap-state*))
+                     (mp-local-player-record)
                      (nonzero? (the-as uint (mp-local-player-record)))
                      (= status (mp-connection-status in-game))
                      (zero? (-> *mp-bootstrap-state* phase)))
@@ -70,12 +223,9 @@
 
 (defun mp-start-host-from-cli! ((internet-host? symbol))
   (debug-log *mp-debug-log?* "[MP-Session] Hosting via CLI argument.~%")
+  (mp-load-session-characters-from-cli!)
   (mp-configure-bridge-version!)
-  (if internet-host?
-      (pc-multi-setup-internet-host *mp-session-player-limit*)
-      (pc-multi-setup-host *mp-session-player-limit*)
-      )
-  (pc-multi-set-status (mp-connection-status in-game))
+  (mp-setup-host-bridge! internet-host?)
   (mp-set-local-sync-flag! (the uint 1))
   (none))
 
@@ -101,8 +251,8 @@
   (mp-configure-bridge-version!)
   (if (and *pc-settings* (nonzero? (the-as uint *pc-settings*))
            (-> *pc-settings* mp-internet-host?))
-      (pc-multi-setup-internet-host *mp-session-player-limit*)
-      (pc-multi-setup-host *mp-session-player-limit*))
+      (mp-setup-host-bridge! #t)
+      (mp-setup-host-bridge! #f))
   (mp-set-local-sync-flag! (the uint 1))
   (none))
 
@@ -128,12 +278,14 @@
   (none))
 
 (defun mp-on-local-spawn! ()
-  (let ((status (pc-multi-get-status)))
-    (mp-bootstrap-controller-start!)
-    (mp-bootstrap-note-local-spawn! status)
-    (mp-enable-sync-after-spawn! status)
-    (mp-arm-spawn-sync-state! status)
-    (mp-auto-start-session-on-spawn! status)
+  (let ((initial-status (pc-multi-get-status)))
+    (mp-auto-start-session-on-spawn! initial-status)
+    (let ((status (pc-multi-get-status)))
+      (mp-session-refresh-bridge-identity! status)
+      (mp-bootstrap-controller-start!)
+      (mp-bootstrap-note-local-spawn! status)
+      (mp-enable-sync-after-spawn! status)
+      (mp-arm-spawn-sync-state! status))
     (mp-demo-guard-on-local-spawn!)
     )
   (none))
@@ -249,31 +401,6 @@
       )
   )
 
-(defun mp-session-ensure-local-player! ()
-  (let ((local-player-id (pc-multi-get-local-player-id))
-        (host-player-id (pc-multi-get-host-player-id)))
-    (when (mp-player-id-valid? local-player-id)
-      (when (and (mp-player-id-valid? (-> *mp-player-controller* local-player-id))
-                 (!= (-> *mp-player-controller* local-player-id) local-player-id))
-        (mp-player-controller-reassign-local!
-          *mp-player-controller* local-player-id))
-      (set! (-> *mp-player-controller* local-player-id) local-player-id)
-      (when (mp-player-id-valid? host-player-id)
-        (set! (-> *mp-player-controller* host-player-id) host-player-id))
-      (when (not (mp-local-player-record))
-        (mp-player-controller-register!
-          *mp-player-controller*
-          local-player-id
-          (if (mp-session-host?)
-              (mp-player-character jak)
-              (mp-player-character daxter))))
-      (when (and *target* (nonzero? *target*))
-        (mp-player-controller-bind-target!
-          *mp-player-controller*
-          local-player-id
-          *target*))))
-  (none))
-
 (defun mp-bootstrap-controller-session-status? ((status mp-connection-status))
   (or (= status (mp-connection-status connected-lobby))
       (= status (mp-connection-status game-starting))
@@ -311,8 +438,8 @@
             (the-as uint *mp-player-controller*)
             (the-as uint *mp-world-state*)
             (the-as uint *mp-bootstrap-state*))
-          (set! *mp-session-role* (the-as mp-session-role (pc-multi-get-role)))
-          (mp-session-ensure-local-player!)
+          (set! status (pc-multi-get-status))
+          (mp-session-refresh-bridge-identity! status)
           (pc-multi-receive-sync
             (the-as uint *mp-player-controller*)
             (the-as uint *mp-world-state*)

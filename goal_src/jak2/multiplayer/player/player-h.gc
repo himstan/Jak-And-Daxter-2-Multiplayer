@@ -48,6 +48,81 @@
   (daxter  2)
   )
 
+(deftype mp-session-character-config (structure)
+  ((player-0 mp-player-character)
+   (player-1 mp-player-character)
+   (player-2 mp-player-character)
+   (player-3 mp-player-character)
+   )
+  :size-assert 16)
+
+(define-perm *mp-session-character-config* mp-session-character-config
+  (new 'static 'mp-session-character-config
+    :player-0 (mp-player-character jak)
+    :player-1 (mp-player-character daxter)
+    :player-2 (mp-player-character jak)
+    :player-3 (mp-player-character daxter)))
+
+(defun mp-player-character-valid? ((character mp-player-character))
+  (or (= character (mp-player-character jak))
+      (= character (mp-player-character daxter))))
+
+(defun mp-reset-session-player-characters! ()
+  "Restore the character choices used by the next hosted session."
+  (when (and *mp-session-character-config*
+             (nonzero? *mp-session-character-config*))
+    (set! (-> *mp-session-character-config* player-0) (mp-player-character jak))
+    (set! (-> *mp-session-character-config* player-1) (mp-player-character daxter))
+    (set! (-> *mp-session-character-config* player-2) (mp-player-character jak))
+    (set! (-> *mp-session-character-config* player-3) (mp-player-character daxter)))
+  (none))
+
+(defun mp-session-player-character ((player-id uint))
+  "Read a character choice for the next hosted session."
+  (if (and *mp-session-character-config*
+           (nonzero? *mp-session-character-config*))
+      (cond
+        ((= player-id (the uint 0)) (-> *mp-session-character-config* player-0))
+        ((= player-id (the uint 1)) (-> *mp-session-character-config* player-1))
+        ((= player-id (the uint 2)) (-> *mp-session-character-config* player-2))
+        ((= player-id (the uint 3)) (-> *mp-session-character-config* player-3))
+        (else (mp-player-character unknown)))
+      (mp-player-character unknown)))
+
+(defun mp-set-session-player-character!
+       ((player-id uint) (character mp-player-character))
+  "Configure one player slot for the next hosted session."
+  (when (or (>= player-id (the uint MP_MAX_PLAYERS))
+            (not (mp-player-character-valid? character))
+            (not *mp-session-character-config*)
+            (zero? *mp-session-character-config*))
+    (return #f))
+  (cond
+    ((= player-id (the uint 0))
+     (set! (-> *mp-session-character-config* player-0) character))
+    ((= player-id (the uint 1))
+     (set! (-> *mp-session-character-config* player-1) character))
+    ((= player-id (the uint 2))
+     (set! (-> *mp-session-character-config* player-2) character))
+    ((= player-id (the uint 3))
+     (set! (-> *mp-session-character-config* player-3) character)))
+  #t)
+
+(defun mp-setup-host-bridge! ((internet-host? object))
+  "Snapshot the next-session GOAL configuration into the network session."
+  (let ((character-0 (the-as uint (mp-session-player-character (the uint 0))))
+        (character-1 (the-as uint (mp-session-player-character (the uint 1))))
+        (character-2 (the-as uint (mp-session-player-character (the uint 2))))
+        (character-3 (the-as uint (mp-session-player-character (the uint 3)))))
+    (if internet-host?
+        (pc-multi-setup-internet-host
+          *mp-session-player-limit*
+          character-0 character-1 character-2 character-3)
+        (pc-multi-setup-host
+          *mp-session-player-limit*
+          character-0 character-1 character-2 character-3)))
+  (none))
+
 (deftype mp-player-identity (structure)
   ((player-id       uint32)
    (character       mp-player-character)

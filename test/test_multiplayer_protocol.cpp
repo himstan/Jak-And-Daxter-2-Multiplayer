@@ -28,6 +28,17 @@ TEST(MultiplayerProtocol, JoinCarriesAValidatedNameReliably) {
   EXPECT_EQ(descriptor->max_payload, 32u);
 }
 
+TEST(MultiplayerProtocol, WelcomeCarriesTheHostAssignedCharacter) {
+  EXPECT_EQ(static_cast<uint8_t>(PacketType::SESSION_WELCOME), 13u);
+  EXPECT_EQ(sizeof(PacketSessionWelcome), 21u);
+
+  const auto* descriptor = multiplayer::schema::packet_descriptor(13);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_STREQ(descriptor->name, "SESSION_WELCOME");
+  EXPECT_EQ(descriptor->allowed_roles, 1u);
+  EXPECT_EQ(descriptor->max_payload, 16u);
+}
+
 TEST(MultiplayerEventCodec, EncodesOnlyTheDeclaredPayloadLength) {
   MPEvent event = {};
   event.etype = 34;

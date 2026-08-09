@@ -7,6 +7,7 @@ void clear_host_peer_session(HostPeerSession& session) {
   session.security.reset();
   session.peer = nullptr;
   session.player_id = kMPInvalidPlayerId;
+  session.character = MPPlayerCharacter::UNKNOWN;
   session.handshake_deadline = 0;
   session.last_receive_time = 0;
   session.last_bootstrap_send_time = 0;
@@ -106,7 +107,12 @@ bool multiplayer_host_peer_authenticate(MultiplayerData& data,
   if (player_id >= kMPMaxPlayers) {
     return false;
   }
+  const MPPlayerCharacter character = data.session_player_characters[player_id];
+  if (!mp_valid_player_character(character)) {
+    return false;
+  }
   session.player_id = player_id;
+  session.character = character;
   session.authenticated = true;
   session.handshake_deadline = 0;
   session.last_receive_time = current_time;

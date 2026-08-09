@@ -51,6 +51,7 @@ struct HostPeerSession {
   struct _ENetPeer* peer = nullptr;
   MultiplayerSecurity security;
   uint32_t player_id = kMPInvalidPlayerId;
+  MPPlayerCharacter character = MPPlayerCharacter::UNKNOWN;
   uint32_t handshake_deadline = 0;
   uint32_t last_receive_time = 0;
   uint32_t last_bootstrap_send_time = 0;
@@ -326,6 +327,10 @@ struct MultiplayerData {
   uint32_t local_player_id = kMPInvalidPlayerId;
   uint32_t host_player_id = kMPInvalidPlayerId;
   uint32_t session_player_limit = kMPMaxPlayers;
+  MPPlayerCharacter local_player_character = MPPlayerCharacter::UNKNOWN;
+  std::array<MPPlayerCharacter, kMPMaxPlayers> session_player_characters = {
+      MPPlayerCharacter::JAK, MPPlayerCharacter::DAXTER, MPPlayerCharacter::JAK,
+      MPPlayerCharacter::DAXTER};
   std::atomic<uint32_t> authenticated_peer_count{0};
   uint32_t sequence_num = 0;
   uint32_t last_out_event_seq = 0;

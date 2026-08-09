@@ -429,10 +429,10 @@
      )
     (('waiting-for-daxter) ;; This state is now bypassed
      (mp-configure-bridge-version!)
-     (if (and *pc-settings* (nonzero? (the-as uint *pc-settings*))
-              (-> *pc-settings* mp-internet-host?))
-         (pc-multi-setup-internet-host *mp-session-player-limit*)
-         (pc-multi-setup-host *mp-session-player-limit*))
+     (mp-setup-host-bridge!
+       (and *pc-settings*
+            (nonzero? (the-as uint *pc-settings*))
+            (-> *pc-settings* mp-internet-host?)))
      (set! (-> obj current-options) *waiting-for-daxter-options-pc*)
      )
     (('title-options)

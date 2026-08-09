@@ -21,7 +21,8 @@ bool mp_handle_turret_state_packet(MultiplayerData& data,
 bool mp_handle_join_packet(MultiplayerData& data,
                            const ENetPacket* packet,
                            uint32_t sender_player_id,
-                           MPPlayerControllerGOAL* controller);
+                           MPPlayerControllerGOAL* controller,
+                           bool* character_assignment_mismatch = nullptr);
 void mp_handle_world_state_packet(MultiplayerData& data,
                                   const ENetPacket* packet,
                                   MPWorldSyncStateGOAL* world);

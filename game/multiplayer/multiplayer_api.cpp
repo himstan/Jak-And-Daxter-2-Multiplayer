@@ -1,5 +1,6 @@
 #include "multiplayer_api.h"
 
+#include <array>
 #include <cstring>
 #include <limits>
 #include <string>
@@ -152,12 +153,14 @@ bool handle_session_welcome(MultiplayerData& data, const ENetPacket* packet) {
   if (data.session_role != 1 || !welcome || !mp_valid_player_id(welcome->player_id) ||
       !mp_valid_player_id(welcome->host_player_id) ||
       welcome->player_id == welcome->host_player_id ||
-      !multiplayer_valid_player_limit(welcome->player_limit)) {
+      !multiplayer_valid_player_limit(welcome->player_limit) ||
+      !mp_valid_player_character(welcome->character)) {
     return false;
   }
   data.local_player_id = welcome->player_id;
   data.host_player_id = welcome->host_player_id;
   data.session_player_limit = welcome->player_limit;
+  data.local_player_character = welcome->character;
   data.local_join_identity_sent = false;
   data.client_handshake_started_time = 0;
   data.server_last_receive_time = enet_time_get();
@@ -165,8 +168,9 @@ bool handle_session_welcome(MultiplayerData& data, const ENetPacket* packet) {
   data.connection_failure = static_cast<int>(MultiplayerConnectionFailure::NONE);
   multiplayer_note_client_reconnect_authenticated(data);
   data.join_status = static_cast<int>(MultiplayerStatus::CONNECTED_LOBBY);
-  lg::info("[Multiplayer] Session assignment received: local={}, host={}, limit={}.",
-           data.local_player_id, data.host_player_id, data.session_player_limit);
+  lg::info("[Multiplayer] Session assignment received: local={}, host={}, limit={}, character={}.",
+           data.local_player_id, data.host_player_id, data.session_player_limit,
+           static_cast<uint32_t>(data.local_player_character));
   return true;
 }
 
@@ -197,6 +201,7 @@ bool handle_receive_packet(MultiplayerData& data,
 
   bool accepted = false;
   bool disconnect_sender_after_relay = false;
+  bool reject_character_mismatch = false;
   switch (packet_type) {
     case PacketType::STATE_UPDATE:
       accepted = mp_handle_player_state_packet(data, packet, sender_player_id, current_time);
@@ -250,7 +255,8 @@ bool handle_receive_packet(MultiplayerData& data,
       break;
     }
     case PacketType::EVENT_JOIN: {
-      accepted = mp_handle_join_packet(data, packet, sender_player_id, controller);
+      accepted = mp_handle_join_packet(data, packet, sender_player_id, controller,
+                                       &reject_character_mismatch);
       if (accepted && data.session_role == 0) {
         mp_seed_peer_roster(data, sender, controller);
       }
@@ -309,6 +315,12 @@ bool handle_receive_packet(MultiplayerData& data,
   }
   if (disconnect_sender_after_relay) {
     enet_peer_disconnect_later(sender, kDisconnectReasonClientClosed);
+  }
+  if (reject_character_mismatch) {
+    lg::warn("[MP-Join] Disconnecting player {} for advertising a character other than the "
+             "host-assigned character.",
+             sender_player_id);
+    enet_peer_disconnect_later(sender, kDisconnectReasonAuthenticationRejected);
   }
   return accepted;
 }
@@ -414,7 +426,8 @@ void poll_network(MultiplayerData& data,
                 {PacketType::SESSION_WELCOME, ++data.sequence_num},
                 session->player_id,
                 data.host_player_id,
-                data.session_player_limit};
+                data.session_player_limit,
+                session->character};
             if (!mp_send_packet_immediately(data, event.peer,
                                             static_cast<int>(MultiplayerChannel::CONTROL), &welcome,
                                             sizeof(welcome), ENET_PACKET_FLAG_RELIABLE)) {
@@ -695,6 +708,10 @@ u32 pc_multi_get_local_player_id() {
 
 u32 pc_multi_get_host_player_id() {
   return multiplayer_data().host_player_id;
+}
+
+u32 pc_multi_get_local_player_character() {
+  return static_cast<u32>(multiplayer_data().local_player_character);
 }
 
 int pc_multi_set_local_version(u32 version_ptr) {
@@ -1011,12 +1028,34 @@ void pc_multi_disconnect() {
   MultiplayerManager::disconnect(multiplayer_data());
 }
 
-void pc_multi_setup_host(u32 player_limit) {
-  MultiplayerManager::setup_host(multiplayer_data(), false, player_limit);
+static std::array<MPPlayerCharacter, kMPMaxPlayers> goal_player_character_config(u32 character_0,
+                                                                                u32 character_1,
+                                                                                u32 character_2,
+                                                                                u32 character_3) {
+  return {static_cast<MPPlayerCharacter>(character_0),
+          static_cast<MPPlayerCharacter>(character_1),
+          static_cast<MPPlayerCharacter>(character_2),
+          static_cast<MPPlayerCharacter>(character_3)};
 }
 
-void pc_multi_setup_internet_host(u32 player_limit) {
-  MultiplayerManager::setup_host(multiplayer_data(), true, player_limit);
+void pc_multi_setup_host(u32 player_limit,
+                         u32 character_0,
+                         u32 character_1,
+                         u32 character_2,
+                         u32 character_3) {
+  MultiplayerManager::setup_host(
+      multiplayer_data(), false, player_limit,
+      goal_player_character_config(character_0, character_1, character_2, character_3));
+}
+
+void pc_multi_setup_internet_host(u32 player_limit,
+                                  u32 character_0,
+                                  u32 character_1,
+                                  u32 character_2,
+                                  u32 character_3) {
+  MultiplayerManager::setup_host(
+      multiplayer_data(), true, player_limit,
+      goal_player_character_config(character_0, character_1, character_2, character_3));
 }
 
 void pc_multi_setup_client(u32 ip_ptr, u32 port) {
@@ -1678,6 +1717,8 @@ void init_multiplayer_pc_port() {
                                     (void*)pc_multi_get_local_player_id);
   jak2::make_function_symbol_from_c("pc-multi-get-host-player-id",
                                     (void*)pc_multi_get_host_player_id);
+  jak2::make_function_symbol_from_c("pc-multi-get-local-player-character",
+                                    (void*)pc_multi_get_local_player_character);
   jak2::make_function_symbol_from_c("pc-multi-disconnect", (void*)pc_multi_disconnect);
   jak2::make_function_symbol_from_c("pc-multi-reconnect", (void*)pc_multi_reconnect);
   jak2::make_function_symbol_from_c("pc-multi-get-command-line-arg",

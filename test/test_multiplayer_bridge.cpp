@@ -370,6 +370,38 @@ TEST(MultiplayerJoin, RejectsMalformedIdentityWithoutMutatingSlot) {
   EXPECT_EQ(controller.records[1].identity.joined, 0u);
 }
 
+TEST(MultiplayerJoin, EnforcesTheHostAssignedCharacter) {
+  MultiplayerData data;
+  data.session_role = 0;
+  data.local_player_id = 0;
+  data.host_player_id = 0;
+  data.host_peer_sessions[0].authenticated = true;
+  data.host_peer_sessions[0].player_id = 1;
+  data.host_peer_sessions[0].character = MPPlayerCharacter::JAK;
+  MPPlayerControllerGOAL controller = {};
+  controller.local_player_id = 0;
+  controller.host_player_id = 0;
+
+  PacketJoin join = {};
+  join.header.type = PacketType::EVENT_JOIN;
+  join.player_id = 1;
+  join.character = MPPlayerCharacter::DAXTER;
+  memcpy(join.player_name, "AssignedOne", sizeof("AssignedOne"));
+  ENetPacket packet = {};
+  packet.data = reinterpret_cast<uint8_t*>(&join);
+  packet.dataLength = sizeof(join);
+
+  bool assignment_mismatch = false;
+  EXPECT_FALSE(mp_handle_join_packet(data, &packet, 1, &controller, &assignment_mismatch));
+  EXPECT_TRUE(assignment_mismatch);
+  EXPECT_EQ(controller.records[1].identity.joined, 0u);
+
+  join.character = MPPlayerCharacter::JAK;
+  EXPECT_TRUE(mp_handle_join_packet(data, &packet, 1, &controller, &assignment_mismatch));
+  EXPECT_FALSE(assignment_mismatch);
+  EXPECT_EQ(controller.records[1].identity.character, MPPlayerCharacter::JAK);
+}
+
 TEST(MultiplayerPlayerRegistry, StateBeforeJoinRemainsVacantUntilIdentityArrives) {
   MultiplayerData data;
   data.local_player_id = 2;
@@ -1208,6 +1240,42 @@ TEST(MultiplayerPeerRegistry, EnforcesRuntimeLimitsAndRejectsInvalidConfiguratio
   EXPECT_FALSE(multiplayer_host_has_open_player_slot(data));
   data.session_player_limit = 3;
   EXPECT_TRUE(multiplayer_host_has_open_player_slot(data));
+
+  const std::array<MPPlayerCharacter, kMPMaxPlayers> alternating = {
+      MPPlayerCharacter::JAK, MPPlayerCharacter::DAXTER, MPPlayerCharacter::JAK,
+      MPPlayerCharacter::DAXTER};
+  EXPECT_TRUE(multiplayer_valid_player_character_config(alternating));
+  auto invalid_characters = alternating;
+  invalid_characters[2] = MPPlayerCharacter::UNKNOWN;
+  EXPECT_FALSE(multiplayer_valid_player_character_config(invalid_characters));
+}
+
+TEST(MultiplayerPeerRegistry, AssignsCharactersByCanonicalPlayerId) {
+  MultiplayerData data;
+  data.session_role = 0;
+  data.local_player_id = 0;
+  data.host_player_id = 0;
+  data.session_player_limit = 4;
+  data.session_player_characters = {MPPlayerCharacter::DAXTER, MPPlayerCharacter::JAK,
+                                    MPPlayerCharacter::JAK, MPPlayerCharacter::DAXTER};
+  std::array<ENetPeer, 3> peers = {};
+  std::array<MultiplayerSecurity, 3> clients;
+  std::string parsed_host;
+  uint16_t parsed_port = 0;
+
+  for (uint32_t index = 0; index < peers.size(); ++index) {
+    auto* session = multiplayer_host_peer_allocate(data, &peers[index], 100 + index);
+    ASSERT_NE(session, nullptr);
+    ASSERT_TRUE(session->security.start_host(26210, "ABC123"));
+    ASSERT_TRUE(session->security.set_local_version("v1.0.0"));
+    ASSERT_TRUE(clients[index].start_client(session->security.invite_for_address("127.0.0.1"),
+                                            parsed_host, parsed_port));
+    ASSERT_TRUE(clients[index].set_local_version("v1.0.0"));
+    authenticate(session->security, clients[index]);
+    ASSERT_TRUE(multiplayer_host_peer_authenticate(data, *session, 200 + index));
+    EXPECT_EQ(session->player_id, index + 1);
+    EXPECT_EQ(session->character, data.session_player_characters[index + 1]);
+  }
 }
 
 TEST(MultiplayerPeerRegistry, KeepsPeerEncryptionSessionsIsolated) {
