@@ -9,7 +9,7 @@ void mp_handle_widow_sync_packet(MultiplayerData& data,
                                  const ENetPacket* packet,
                                  uint32_t current_time) {
   const auto sync = PacketView(packet).as_exact<PacketWidowSync>(PacketType::WIDOW_SYNC);
-  if (!sync || data.local_role == 0 || sync->state.active > 1 || sync->state.state_id > 25 ||
+  if (!sync || data.session_role == 0 || sync->state.active > 1 || sync->state.state_id > 25 ||
       !mp_float_is_finite(sync->state.x) || !mp_float_is_finite(sync->state.y) ||
       !mp_float_is_finite(sync->state.z) ||
       !mp_float_is_finite(sync->state.quat_x) || !mp_float_is_finite(sync->state.quat_y) ||
@@ -33,7 +33,7 @@ void mp_handle_widow_sync_packet(MultiplayerData& data,
 }
 
 void mp_send_widow_sync(MultiplayerData& data, MPWidowSyncBufferGOAL* buffer) {
-  if (!buffer || buffer->local_state.active == 0 || data.local_role != 0) {
+  if (!buffer || buffer->local_state.active == 0 || data.session_role != 0) {
     return;
   }
 
@@ -43,7 +43,7 @@ void mp_send_widow_sync(MultiplayerData& data, MPWidowSyncBufferGOAL* buffer) {
   packet.timestamp = enet_time_get();
   memcpy(&packet.state, &buffer->local_state, sizeof(MPWidowState));
   packet.state.last_updated = packet.timestamp;
-  MultiplayerManager::broadcast(data, data.local_role, packet, ENET_PACKET_FLAG_UNSEQUENCED);
+  MultiplayerManager::broadcast(data, data.session_role, packet, ENET_PACKET_FLAG_UNSEQUENCED);
 }
 
 void mp_receive_widow_sync(MultiplayerData& data, MPWidowSyncBufferGOAL* buffer) {

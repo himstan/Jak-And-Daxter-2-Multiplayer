@@ -1,7 +1,9 @@
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstring>
 #include <limits>
 #include <string>
@@ -21,6 +23,7 @@
 #include "game/multiplayer/multiplayer_session.h"
 #include "game/multiplayer/multiplayer_version.h"
 #include "game/multiplayer/multiplayer_wire_codec.h"
+#include "game/multiplayer/sync/event_sync.h"
 #include "game/multiplayer/sync/player_sync.h"
 #include "third-party/SDL/include/SDL3/SDL.h"
 #include "gtest/gtest.h"
@@ -143,54 +146,298 @@ TEST(MultiplayerPacket, PacketViewRejectsTruncationUnknownTypesAndTrailingData) 
   EXPECT_FALSE(PacketView(&packet).as_exact<PacketPlayerState>(PacketType::STATE_UPDATE));
 }
 
-TEST(MultiplayerJoin, AppliesValidNameToRemoteGoalInfo) {
-  EXPECT_EQ(sizeof(LocalPlayerInfoGOAL), 984u);
-  EXPECT_EQ(sizeof(RemotePlayerInfoGOAL), 984u);
+TEST(MultiplayerPlayerRegistry, GoalLayoutsAndOffsetsMatch) {
+  EXPECT_EQ(sizeof(MPPlayerIdentityGOAL), 48u);
+  EXPECT_EQ(sizeof(MPPlayerConnectionStateGOAL), 16u);
+  EXPECT_EQ(sizeof(MPPlayerTransformStateGOAL), 48u);
+  EXPECT_EQ(sizeof(MPPlayerActionStateGOAL), 32u);
+  EXPECT_EQ(sizeof(MPPlayerInputStateGOAL), 16u);
+  EXPECT_EQ(sizeof(MPPlayerVehicleStateGOAL), 96u);
+  EXPECT_EQ(sizeof(MPTargetGhostRecordGOAL), 96u);
+  EXPECT_EQ(sizeof(MPPlayerRuntimeStateGOAL), 224u);
+  EXPECT_EQ(sizeof(MPPlayerRecordGOAL), 480u);
+  EXPECT_EQ(sizeof(MPPlayerControllerGOAL), 1936u);
+  EXPECT_EQ(sizeof(MPWorldSyncStateGOAL), 176u);
+  EXPECT_EQ(sizeof(MPBootstrapSyncStateGOAL), 592u);
+  EXPECT_EQ(offsetof(MPPlayerIdentityGOAL, character), 4u);
+  EXPECT_EQ(offsetof(MPPlayerIdentityGOAL, identity_ready), 8u);
+  EXPECT_EQ(offsetof(MPPlayerIdentityGOAL, name), 12u);
+  EXPECT_EQ(offsetof(MPPlayerConnectionStateGOAL, latest_state_sequence), 4u);
+  EXPECT_EQ(offsetof(MPPlayerConnectionStateGOAL, connected), 12u);
+  EXPECT_EQ(offsetof(MPPlayerTransformStateGOAL, velocity), 16u);
+  EXPECT_EQ(offsetof(MPPlayerTransformStateGOAL, angle), 32u);
+  EXPECT_EQ(offsetof(MPPlayerTransformStateGOAL, level), 36u);
+  EXPECT_EQ(offsetof(MPPlayerActionStateGOAL, scene_state), 16u);
+  EXPECT_EQ(offsetof(MPPlayerActionStateGOAL, last_replayed_sequence), 20u);
+  EXPECT_EQ(offsetof(MPPlayerInputStateGOAL, camera_angle_y), 8u);
+  EXPECT_EQ(offsetof(MPPlayerVehicleStateGOAL, turret_roty), 8u);
+  EXPECT_EQ(offsetof(MPPlayerVehicleStateGOAL, state), 16u);
+  EXPECT_EQ(offsetof(MPTargetGhostRecordGOAL, state_id), 48u);
+  EXPECT_EQ(offsetof(MPTargetGhostRecordGOAL, buttons), 56u);
+  EXPECT_EQ(offsetof(MPTargetGhostRecordGOAL, camera_angle_y), 64u);
+  EXPECT_EQ(offsetof(MPTargetGhostRecordGOAL, last_update), 72u);
+  EXPECT_EQ(offsetof(MPTargetGhostRecordGOAL, active), 80u);
+  EXPECT_EQ(offsetof(MPPlayerRuntimeStateGOAL, ghost), 16u);
+  EXPECT_EQ(offsetof(MPPlayerRuntimeStateGOAL, presentation_position), 112u);
+  EXPECT_EQ(offsetof(MPPlayerRuntimeStateGOAL, last_fresh_input_time), 144u);
+  EXPECT_EQ(offsetof(MPPlayerRuntimeStateGOAL, last_state_packet_id), 160u);
+  EXPECT_EQ(offsetof(MPPlayerRuntimeStateGOAL, interpolation_angle), 188u);
+  EXPECT_EQ(offsetof(MPPlayerRuntimeStateGOAL, pad_index), 204u);
+  EXPECT_EQ(offsetof(MPPlayerRuntimeStateGOAL, flags), 208u);
+  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, connection), 48u);
+  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, transform), 64u);
+  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, action), 112u);
+  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, input), 144u);
+  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, vehicle), 160u);
+  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, runtime), 256u);
+  EXPECT_EQ(offsetof(MPPlayerControllerGOAL, local_player_id), 1920u);
+  EXPECT_EQ(offsetof(MPPlayerControllerGOAL, host_player_id), 1924u);
+  EXPECT_EQ(offsetof(MPPlayerControllerGOAL, reserved), 1928u);
+  EXPECT_EQ(offsetof(MPWorldSyncStateGOAL, sequence), 12u);
+  EXPECT_EQ(offsetof(MPWorldSyncStateGOAL, clock), 16u);
+  EXPECT_EQ(offsetof(MPWorldSyncStateGOAL, task_mask), 48u);
+  EXPECT_EQ(offsetof(MPBootstrapSyncStateGOAL, host_continue), 16u);
+  EXPECT_EQ(offsetof(MPBootstrapSyncStateGOAL, host_spawn_position), 48u);
+  EXPECT_EQ(offsetof(MPBootstrapSyncStateGOAL, synchronized_aids), 80u);
+}
+
+TEST(MultiplayerEvents, StampsValidatesDecodesAndDispatchesSourcePlayerId) {
+  MultiplayerData outbound;
+  outbound.local_player_id = 3;
+  MPEventBufferGOAL outgoing = {};
+  outgoing.out_count = 1;
+  outgoing.out_events[0].etype = 1;
+  outgoing.out_events[0].payload_size = 4;
+  outgoing.out_events[0].source_player_id = 0;
+  outgoing.out_events[0].data[0] = 0x5a;
+
+  mp_send_game_events(outbound, &outgoing);
+
+  EXPECT_EQ(outgoing.out_count, 0u);
+  EXPECT_EQ(outgoing.out_events[0].source_player_id, 3u);
+
+  MPEvent source_event = {};
+  source_event.etype = 1;
+  source_event.payload_size = 4;
+  source_event.source_player_id = 2;
+  source_event.data[0] = 0xa5;
+  std::vector<uint8_t> encoded;
+  ASSERT_TRUE(mp_encode_game_event(source_event, 17, encoded));
+
+  PacketGameEvent decoded = {};
+  ASSERT_TRUE(mp_decode_game_event(encoded.data(), encoded.size(), decoded));
+  EXPECT_EQ(decoded.header.sequenceNum, 17u);
+  EXPECT_EQ(decoded.source_player_id, 2u);
+  EXPECT_EQ(decoded.event_id, 1u);
+  EXPECT_EQ(decoded.payload[0], 0xa5u);
+
+  MultiplayerData inbound;
+  inbound.local_player_id = 3;
+  inbound.authenticated_player_id = 2;
+  ENetPacket packet = {};
+  packet.data = encoded.data();
+  packet.dataLength = encoded.size();
+  mp_handle_game_event_packet(inbound, &packet);
+
+  MPEventBufferGOAL received = {};
+  mp_receive_game_events(inbound, &received);
+  ASSERT_EQ(received.in_count, 1u);
+  EXPECT_EQ(received.in_events[0].source_player_id, 2u);
+  EXPECT_EQ(received.in_events[0].etype, 1u);
+  EXPECT_EQ(received.in_events[0].data[0], 0xa5u);
+
+  source_event.source_player_id = 1;
+  ASSERT_TRUE(mp_encode_game_event(source_event, 18, encoded));
+  packet.data = encoded.data();
+  packet.dataLength = encoded.size();
+  mp_handle_game_event_packet(inbound, &packet);
+  mp_receive_game_events(inbound, &received);
+  EXPECT_EQ(received.in_count, 1u);
+
+  source_event.source_player_id = kMPInvalidPlayerId;
+  EXPECT_FALSE(mp_encode_game_event(source_event, 19, encoded));
+}
+
+TEST(MultiplayerOwnership, PlayerIdsRemainCanonicalAcrossEnemyPedestrianAndVehicleState) {
+  MPEnemyState enemy = {};
+  enemy.owner_player_id = 3;
+  enemy.focus_player_id = 2;
+  EXPECT_EQ(enemy.owner_player_id, 3u);
+  EXPECT_EQ(enemy.focus_player_id, 2u);
+  EXPECT_EQ(offsetof(MPEnemyState, focus_player_id), 52u);
+  EXPECT_EQ(offsetof(MPEnemyState, owner_player_id), 57u);
+
+  MPPedestrianState pedestrian = {};
+  pedestrian.target_player_id = 3;
+  EXPECT_EQ(pedestrian.target_player_id, 3u);
+  EXPECT_EQ(offsetof(MPPedestrianState, target_player_id), 41u);
+
+  MPVehicleState vehicle = {};
+  vehicle.target_player_id = 3;
+  vehicle.rider_player_ids[0] = 0;
+  vehicle.rider_player_ids[1] = 3;
+  vehicle.rider_player_ids[2] = kMPVehicleCivilianRiderId;
+  vehicle.rider_player_ids[3] = kMPInvalidPlayerId;
+  EXPECT_EQ(vehicle.target_player_id, 3u);
+  EXPECT_EQ(vehicle.rider_player_ids[0], 0u);
+  EXPECT_EQ(vehicle.rider_player_ids[1], 3u);
+  EXPECT_EQ(vehicle.rider_player_ids[2], kMPVehicleCivilianRiderId);
+  EXPECT_EQ(vehicle.rider_player_ids[3], kMPInvalidPlayerId);
+  EXPECT_EQ(offsetof(MPVehicleState, target_player_id), 7u);
+  EXPECT_EQ(offsetof(MPVehicleState, rider_player_ids), 64u);
+}
+
+TEST(MultiplayerOwnership, FourPlayerBattleAidNamespaceIsUnique) {
+  std::array<uint32_t, kMPMaxPlayers> aids = {};
+  for (uint32_t player_id = 0; player_id < kMPMaxPlayers; ++player_id) {
+    aids[player_id] = 0x60000000u | (player_id << 27u) | 1u;
+    EXPECT_EQ(aids[player_id] & 0x60000000u, 0x60000000u);
+  }
+  for (uint32_t left = 0; left < kMPMaxPlayers; ++left) {
+    for (uint32_t right = left + 1; right < kMPMaxPlayers; ++right) {
+      EXPECT_NE(aids[left], aids[right]);
+    }
+  }
+}
+
+TEST(MultiplayerJoin, RegistersPlayerThreeAsDaxterAndAllowsDuplicateCharacters) {
+  MultiplayerData data;
+  data.local_player_id = 1;
+  MPPlayerControllerGOAL controller = {};
+  controller.local_player_id = 1;
+  controller.host_player_id = 1;
+  controller.records[1].identity.joined = 1;
+  controller.records[1].identity.player_id = 1;
+  controller.records[1].identity.character = MPPlayerCharacter::DAXTER;
 
   PacketJoin join = {};
   join.header.type = PacketType::EVENT_JOIN;
-  memcpy(join.player_name, "ABCDEFGHIJKLMNOPQRSTUVW", sizeof("ABCDEFGHIJKLMNOPQRSTUVW"));
-
+  join.player_id = 3;
+  join.character = MPPlayerCharacter::DAXTER;
+  memcpy(join.player_name, "PlayerThree", sizeof("PlayerThree"));
   ENetPacket packet = {};
   packet.data = reinterpret_cast<uint8_t*>(&join);
   packet.dataLength = sizeof(join);
-  RemotePlayerInfoGOAL remote = {};
 
-  mp_handle_join_packet(&packet, &remote);
+  mp_handle_join_packet(data, &packet, &controller);
 
-  EXPECT_STREQ(remote.player_name, "ABCDEFGHIJKLMNOPQRSTUVW");
+  EXPECT_EQ(data.authenticated_player_id, 3u);
+  EXPECT_EQ(controller.records[3].identity.player_id, 3u);
+  EXPECT_EQ(controller.records[3].identity.character, MPPlayerCharacter::DAXTER);
+  EXPECT_EQ(controller.records[3].identity.joined, 1u);
+  EXPECT_STREQ(controller.records[3].identity.name, "PlayerThree");
 }
 
-TEST(MultiplayerJoin, RejectsMalformedNameWithoutMutatingRemoteGoalInfo) {
+TEST(MultiplayerJoin, RejectsMalformedIdentityWithoutMutatingSlot) {
+  MultiplayerData data;
+  data.local_player_id = 1;
+  MPPlayerControllerGOAL controller = {};
+  controller.local_player_id = 1;
+  memcpy(controller.records[3].identity.name, "before", sizeof("before"));
+
   PacketJoin join = {};
   join.header.type = PacketType::EVENT_JOIN;
+  join.player_id = 3;
+  join.character = MPPlayerCharacter::DAXTER;
   memset(join.player_name, 'x', sizeof(join.player_name));
-
   ENetPacket packet = {};
   packet.data = reinterpret_cast<uint8_t*>(&join);
   packet.dataLength = sizeof(join);
-  RemotePlayerInfoGOAL remote = {};
-  memcpy(remote.player_name, "before", sizeof("before"));
 
-  mp_handle_join_packet(&packet, &remote);
+  mp_handle_join_packet(data, &packet, &controller);
+  EXPECT_STREQ(controller.records[3].identity.name, "before");
+  EXPECT_EQ(controller.records[3].identity.joined, 0u);
 
-  EXPECT_STREQ(remote.player_name, "before");
+  memcpy(join.player_name, "bad-name", sizeof("bad-name"));
+  mp_handle_join_packet(data, &packet, &controller);
+  EXPECT_STREQ(controller.records[3].identity.name, "before");
 
-  join.player_name[0] = 'b';
-  join.player_name[1] = 'a';
-  join.player_name[2] = 'd';
-  join.player_name[3] = '-';
-  join.player_name[4] = 'n';
-  join.player_name[5] = 'a';
-  join.player_name[6] = 'm';
-  join.player_name[7] = 'e';
-  join.player_name[8] = '\0';
-  mp_handle_join_packet(&packet, &remote);
-
-  EXPECT_STREQ(remote.player_name, "before");
+  join.player_id = 1;
+  memcpy(join.player_name, "ValidName", sizeof("ValidName"));
+  mp_handle_join_packet(data, &packet, &controller);
+  EXPECT_EQ(controller.records[1].identity.joined, 0u);
 }
 
-TEST(MultiplayerBootstrap, AppliesValidPacketToGoalBuffers) {
+TEST(MultiplayerPlayerRegistry, StateBeforeJoinRemainsVacantUntilIdentityArrives) {
+  MultiplayerData data;
+  data.local_player_id = 2;
+  MPPlayerControllerGOAL controller = {};
+  controller.local_player_id = 2;
+  controller.host_player_id = 2;
+  MPWorldSyncStateGOAL world = {};
+  MPBootstrapSyncStateGOAL bootstrap = {};
+
+  PacketPlayerState state = {};
+  state.header.type = PacketType::STATE_UPDATE;
+  state.header.sequenceNum = 7;
+  state.player_id = 3;
+  state.status = static_cast<uint8_t>(MultiplayerStatus::IN_GAME);
+  state.x = 12.5f;
+  ENetPacket state_packet = {};
+  state_packet.data = reinterpret_cast<uint8_t*>(&state);
+  state_packet.dataLength = sizeof(state);
+  mp_handle_player_state_packet(data, &state_packet, 100);
+  mp_receive_player_sync(data, &controller, &world, &bootstrap);
+
+  EXPECT_TRUE(data.player_states[3].state_ready);
+  EXPECT_EQ(controller.records[3].identity.joined, 0u);
+
+  PacketJoin join = {};
+  join.header.type = PacketType::EVENT_JOIN;
+  join.player_id = 3;
+  join.character = MPPlayerCharacter::DAXTER;
+  memcpy(join.player_name, "DaxterThree", sizeof("DaxterThree"));
+  ENetPacket join_packet = {};
+  join_packet.data = reinterpret_cast<uint8_t*>(&join);
+  join_packet.dataLength = sizeof(join);
+  mp_handle_join_packet(data, &join_packet, &controller);
+  mp_receive_player_sync(data, &controller, &world, &bootstrap);
+
+  EXPECT_EQ(controller.records[3].identity.joined, 1u);
+  EXPECT_EQ(controller.records[3].identity.state_ready, 1u);
+  EXPECT_FLOAT_EQ(controller.records[3].transform.position[0], 12.5f);
+}
+
+TEST(MultiplayerPlayerRegistry, RejectsSpoofsStaleStateAndLocalSlotClear) {
+  MultiplayerData data;
+  data.local_player_id = 3;
+  data.authenticated_player_id = 2;
+  MPPlayerControllerGOAL controller = {};
+  controller.local_player_id = 3;
+  controller.records[2].identity.joined = 1;
+  controller.records[2].identity.player_id = 2;
+  controller.records[3].identity.joined = 1;
+  controller.records[3].identity.player_id = 3;
+
+  PacketPlayerState state = {};
+  state.header.type = PacketType::STATE_UPDATE;
+  state.header.sequenceNum = 10;
+  state.player_id = 1;
+  state.x = 99.0f;
+  ENetPacket packet = {};
+  packet.data = reinterpret_cast<uint8_t*>(&state);
+  packet.dataLength = sizeof(state);
+  mp_handle_player_state_packet(data, &packet, 100);
+  EXPECT_FALSE(data.player_states[1].state_ready);
+
+  state.player_id = 2;
+  state.x = 10.0f;
+  mp_handle_player_state_packet(data, &packet, 101);
+  EXPECT_FLOAT_EQ(data.player_states[2].x, 10.0f);
+  state.header.sequenceNum = 9;
+  state.x = 9.0f;
+  mp_handle_player_state_packet(data, &packet, 102);
+  EXPECT_FLOAT_EQ(data.player_states[2].x, 10.0f);
+
+  mp_clear_player_slot(data, &controller, 3);
+  EXPECT_EQ(controller.records[3].identity.joined, 1u);
+  mp_clear_player_slot(data, &controller, 2);
+  EXPECT_FALSE(data.player_states[2].state_ready);
+  EXPECT_EQ(controller.records[2].identity.player_id, kMPInvalidPlayerId);
+  EXPECT_EQ(data.authenticated_player_id, kMPInvalidPlayerId);
+}
+
+TEST(MultiplayerBootstrap, AppliesValidPacketToWorldAndBootstrapBuffers) {
   PacketBootstrap bootstrap = {};
   bootstrap.header.type = PacketType::BOOTSTRAP;
   bootstrap.header.sequenceNum = 7;
@@ -210,20 +457,20 @@ TEST(MultiplayerBootstrap, AppliesValidPacketToGoalBuffers) {
   ENetPacket packet = {};
   packet.data = reinterpret_cast<uint8_t*>(&bootstrap);
   packet.dataLength = sizeof(bootstrap);
-  LocalPlayerInfoGOAL local = {};
-  RemotePlayerInfoGOAL remote = {};
+  MPWorldSyncStateGOAL world = {};
+  MPBootstrapSyncStateGOAL sync = {};
 
-  mp_handle_bootstrap_packet(&packet, &local, &remote);
+  mp_handle_bootstrap_packet(&packet, &world, &sync);
 
-  EXPECT_FLOAT_EQ(local.sync_money, 12.0f);
-  EXPECT_FLOAT_EQ(local.sync_gems, 3.0f);
-  EXPECT_FLOAT_EQ(local.sync_skill, 4.0f);
-  EXPECT_FLOAT_EQ(remote.x, 1.0f);
-  EXPECT_FLOAT_EQ(remote.y, 2.0f);
-  EXPECT_FLOAT_EQ(remote.z, 3.0f);
-  EXPECT_EQ(local.sync_aids_count, 1u);
-  EXPECT_EQ(local.sync_aids[0], 42u);
-  EXPECT_EQ(local.sync_flag, 1u);
+  EXPECT_FLOAT_EQ(world.money, 12.0f);
+  EXPECT_FLOAT_EQ(world.gems, 3.0f);
+  EXPECT_FLOAT_EQ(world.skill, 4.0f);
+  EXPECT_FLOAT_EQ(sync.host_spawn_position[0], 1.0f);
+  EXPECT_FLOAT_EQ(sync.host_spawn_position[1], 2.0f);
+  EXPECT_FLOAT_EQ(sync.host_spawn_position[2], 3.0f);
+  EXPECT_EQ(sync.synchronized_aid_count, 1u);
+  EXPECT_EQ(sync.synchronized_aids[0], 42u);
+  EXPECT_EQ(sync.phase, 1u);
 }
 
 TEST(MultiplayerBootstrap, RejectsInvalidPacketWithoutMutatingGoalBuffers) {
@@ -235,14 +482,52 @@ TEST(MultiplayerBootstrap, RejectsInvalidPacketWithoutMutatingGoalBuffers) {
   ENetPacket packet = {};
   packet.data = reinterpret_cast<uint8_t*>(&bootstrap);
   packet.dataLength = sizeof(bootstrap);
-  LocalPlayerInfoGOAL local = {};
-  RemotePlayerInfoGOAL remote = {};
+  MPWorldSyncStateGOAL world = {};
+  MPBootstrapSyncStateGOAL sync = {};
 
-  mp_handle_bootstrap_packet(&packet, &local, &remote);
+  mp_handle_bootstrap_packet(&packet, &world, &sync);
 
-  EXPECT_EQ(local.sync_flag, 0u);
-  EXPECT_FLOAT_EQ(local.sync_money, 0.0f);
-  EXPECT_FLOAT_EQ(remote.x, 0.0f);
+  EXPECT_EQ(sync.phase, 0u);
+  EXPECT_FLOAT_EQ(world.money, 0.0f);
+  EXPECT_FLOAT_EQ(sync.host_spawn_position[0], 0.0f);
+}
+
+TEST(MultiplayerWorldState, AcceptsOnlyAuthenticatedHostAndRejectsStaleSequences) {
+  MultiplayerData data;
+  data.session_role = 1;
+  data.local_player_id = 3;
+  data.host_player_id = 2;
+  data.authenticated_player_id = 2;
+  MPWorldSyncStateGOAL world = {};
+  PacketWorldState state = {};
+  state.header.type = PacketType::WORLD_STATE;
+  state.header.sequenceNum = 8;
+  state.player_id = 2;
+  state.clock = 123;
+  state.weather_rain = 0.75f;
+  ENetPacket packet = {};
+  packet.data = reinterpret_cast<uint8_t*>(&state);
+  packet.dataLength = sizeof(state);
+
+  mp_handle_world_state_packet(data, &packet, &world);
+  EXPECT_EQ(world.clock, 123u);
+  EXPECT_FLOAT_EQ(world.weather_rain, 0.75f);
+  EXPECT_EQ(world.sequence, 8u);
+
+  state.header.sequenceNum = 7;
+  state.weather_rain = 0.25f;
+  mp_handle_world_state_packet(data, &packet, &world);
+  EXPECT_FLOAT_EQ(world.weather_rain, 0.75f);
+
+  state.header.sequenceNum = 9;
+  state.player_id = 1;
+  mp_handle_world_state_packet(data, &packet, &world);
+  EXPECT_EQ(world.sequence, 8u);
+
+  data.session_role = 0;
+  state.player_id = 2;
+  mp_handle_world_state_packet(data, &packet, &world);
+  EXPECT_EQ(world.sequence, 8u);
 }
 
 TEST(MultiplayerBootstrap, RequestResetsPendingSendState) {
@@ -283,7 +568,7 @@ TEST(MultiplayerJoin, RetriesAndResendsOncePerAuthenticatedSession) {
 
   MultiplayerSecurity host_security;
   MultiplayerData data;
-  data.local_role = 1;
+  data.session_role = 1;
   ASSERT_TRUE(host_security.start_host(26210));
   std::string parsed_host;
   uint16_t parsed_port = 0;
@@ -291,45 +576,53 @@ TEST(MultiplayerJoin, RetriesAndResendsOncePerAuthenticatedSession) {
                                          parsed_host, parsed_port));
   authenticate(host_security, data.security);
 
-  LocalPlayerInfoGOAL local = {};
-  memcpy(local.player_name, "Ranger", sizeof("Ranger"));
+  MPPlayerControllerGOAL controller = {};
+  controller.local_player_id = 3;
+  controller.host_player_id = 0;
+  auto& local = controller.records[3];
+  local.identity.joined = 1;
+  local.identity.player_id = 3;
+  local.identity.character = MPPlayerCharacter::JAK;
+  memcpy(local.identity.name, "Ranger", sizeof("Ranger"));
+  MPWorldSyncStateGOAL world = {};
+  MPBootstrapSyncStateGOAL bootstrap = {};
 
-  mp_send_player_state(data, &local);
+  mp_send_player_sync(data, &controller, &world, &bootstrap);
   EXPECT_FALSE(data.join_identity_sent);
   EXPECT_EQ(data.packet_scheduler.queued_packet_count(), 0u);
 
   data.host = pair.sender;
   data.server_peer = pair.sender_peer;
-  mp_send_player_state(data, &local);
+  mp_send_player_sync(data, &controller, &world, &bootstrap);
   EXPECT_TRUE(data.join_identity_sent);
   EXPECT_EQ(data.packet_scheduler.queued_packet_count(), 2u);
 
-  mp_send_player_state(data, &local);
+  mp_send_player_sync(data, &controller, &world, &bootstrap);
   EXPECT_EQ(data.packet_scheduler.queued_packet_count(), 2u);
 
   multiplayer_clear_remote_peer_state(data);
   EXPECT_FALSE(data.join_identity_sent);
-  mp_send_player_state(data, &local);
+  mp_send_player_sync(data, &controller, &world, &bootstrap);
   EXPECT_TRUE(data.join_identity_sent);
   EXPECT_EQ(data.packet_scheduler.queued_packet_count(), 2u);
 }
 
 TEST(MultiplayerBootstrap, PlayerStateAcknowledgesSentBootstrap) {
   MultiplayerData data;
-  data.local_role = 0;
+  data.session_role = 0;
   data.pending_bootstrap = true;
   data.pending_bootstrap_sent_once = true;
   PacketPlayerState state = {};
   state.header.type = PacketType::STATE_UPDATE;
   state.header.sequenceNum = 1;
-  state.netId = 1;
+  state.player_id = 1;
   state.status = static_cast<uint8_t>(MultiplayerStatus::IN_GAME);
   ENetPacket packet = {};
   packet.data = reinterpret_cast<uint8_t*>(&state);
   packet.dataLength = sizeof(state);
-  RemotePlayerInfoGOAL remote = {};
-
-  mp_handle_player_state_packet(data, &packet, &remote, 100);
+  data.local_player_id = 0;
+  data.authenticated_player_id = 1;
+  mp_handle_player_state_packet(data, &packet, 100);
 
   EXPECT_FALSE(data.pending_bootstrap);
   EXPECT_FALSE(data.pending_bootstrap_sent_once);
@@ -351,7 +644,8 @@ TEST(MultiplayerPacket, CountedPayloadRejectsOverflowAndTrailingData) {
 TEST(MultiplayerPacket, DirectionPolicyMatchesHostAndClientRoles) {
   for (uint8_t value = 0; value < static_cast<uint8_t>(PacketType::COUNT); ++value) {
     const PacketType type = static_cast<PacketType>(value);
-    const bool host_only = type == PacketType::BOOTSTRAP || type == PacketType::PEDESTRIAN_SYNC ||
+    const bool host_only = type == PacketType::BOOTSTRAP || type == PacketType::WORLD_STATE ||
+                           type == PacketType::PEDESTRIAN_SYNC ||
                            type == PacketType::VEHICLE_SYNC ||
                            type == PacketType::PALACE_SQUID_SYNC || type == PacketType::WIDOW_SYNC;
     EXPECT_TRUE(mp_packet_direction_allowed(type, 0));
@@ -499,7 +793,7 @@ TEST(MultiplayerSecurity, AuthenticatedLeaveCanTravelInBothDirections) {
   ASSERT_TRUE(client.start_client(host.invite_for_address("127.0.0.1"), parsed_host, parsed_port));
   authenticate(host, client);
 
-  PacketLeave client_leave = {{PacketType::EVENT_LEAVE, 1},
+  PacketLeave client_leave = {{PacketType::EVENT_LEAVE, 1}, 1,
                               MultiplayerLeaveReason::CLIENT_RECONNECTING};
   MultiplayerDatagram encrypted_client_leave;
   ASSERT_TRUE(client.seal(1, client_leave.header.type, &client_leave, sizeof(client_leave),
@@ -512,7 +806,8 @@ TEST(MultiplayerSecurity, AuthenticatedLeaveCanTravelInBothDirections) {
   memcpy(&decoded_client_leave, host_result.plaintext.bytes.data(), sizeof(decoded_client_leave));
   EXPECT_EQ(decoded_client_leave.reason, MultiplayerLeaveReason::CLIENT_RECONNECTING);
 
-  PacketLeave host_leave = {{PacketType::EVENT_LEAVE, 2}, MultiplayerLeaveReason::HOST_CLOSED};
+  PacketLeave host_leave = {
+      {PacketType::EVENT_LEAVE, 2}, 0, MultiplayerLeaveReason::HOST_CLOSED};
   MultiplayerDatagram encrypted_host_leave;
   ASSERT_TRUE(host.seal(0, host_leave.header.type, &host_leave, sizeof(host_leave),
                         encrypted_host_leave));
@@ -546,7 +841,7 @@ TEST(MultiplayerDisconnect, SendsOneDirectLeaveDespiteQueuedGameplay) {
   MultiplayerData client_data;
   client_data.host = pair.sender;
   client_data.server_peer = pair.sender_peer;
-  client_data.local_role = 1;
+  client_data.session_role = 1;
   client_data.initialized = true;
   client_data.reconnect_invite = "jad2mp://127.0.0.1:26210/ABC123";
   std::string parsed_host;
@@ -683,7 +978,7 @@ TEST(MultiplayerPortMapping, ProjectsHostCopyModeLifecycle) {
   EXPECT_EQ(multiplayer_host_copy_mode(data), MultiplayerHostCopyMode::UNAVAILABLE);
   ASSERT_TRUE(data.security.start_host(26210));
   data.initialized = true;
-  data.local_role = 0;
+  data.session_role = 0;
   EXPECT_EQ(multiplayer_host_copy_mode(data), MultiplayerHostCopyMode::ROOM_CODE);
 
   data.internet_host = true;
@@ -735,7 +1030,7 @@ TEST(MultiplayerReconnect, StartsFromSavedInviteAndClearsOnDisconnect) {
 
   EXPECT_EQ(pc_multi_reconnect(), 1);
   EXPECT_TRUE(data.initialized);
-  EXPECT_EQ(data.local_role, 1);
+  EXPECT_EQ(data.session_role, 1);
   EXPECT_FALSE(data.reconnect_invite.empty());
 
   pc_multi_disconnect();
@@ -744,7 +1039,8 @@ TEST(MultiplayerReconnect, StartsFromSavedInviteAndClearsOnDisconnect) {
 }
 
 TEST(MultiplayerPacket, LeavePacketUsesOneByteReasonAndExactSchema) {
-  PacketLeave leave = {{PacketType::EVENT_LEAVE, 17}, MultiplayerLeaveReason::CLIENT_RECONNECTING};
+  PacketLeave leave = {
+      {PacketType::EVENT_LEAVE, 17}, 3, MultiplayerLeaveReason::CLIENT_RECONNECTING};
   ENetPacket packet = {};
   packet.data = reinterpret_cast<uint8_t*>(&leave);
   packet.dataLength = sizeof(leave);
@@ -752,7 +1048,7 @@ TEST(MultiplayerPacket, LeavePacketUsesOneByteReasonAndExactSchema) {
   const auto decoded = PacketView(&packet).as_exact<PacketLeave>(PacketType::EVENT_LEAVE);
   ASSERT_TRUE(decoded.has_value());
   EXPECT_EQ(decoded->reason, MultiplayerLeaveReason::CLIENT_RECONNECTING);
-  EXPECT_EQ(sizeof(leave), kPacketHeaderWireSize + 1);
+  EXPECT_EQ(sizeof(leave), kPacketHeaderWireSize + sizeof(uint32_t) + 1);
 
   packet.dataLength -= 1;
   EXPECT_FALSE(PacketView(&packet).as_exact<PacketLeave>(PacketType::EVENT_LEAVE));
@@ -760,7 +1056,7 @@ TEST(MultiplayerPacket, LeavePacketUsesOneByteReasonAndExactSchema) {
 
 TEST(MultiplayerReconnect, UsesAutomaticBackoffUntilCancelled) {
   MultiplayerData data;
-  data.local_role = 1;
+  data.session_role = 1;
   data.join_status = (int)MultiplayerStatus::IN_GAME;
 
   multiplayer_enter_client_reconnect(data, 1000);
@@ -798,7 +1094,7 @@ TEST(MultiplayerReconnect, UsesAutomaticBackoffUntilCancelled) {
 
 TEST(MultiplayerReconnect, HandshakeTimeoutPreservesInviteAndSchedulesRetry) {
   MultiplayerData data;
-  data.local_role = 1;
+  data.session_role = 1;
   data.join_status = (int)MultiplayerStatus::RECONNECTING;
   data.reconnect_invite = "jad2mp://127.0.0.1:26210/ABC123";
   data.reconnect_attempt_active = true;
@@ -814,7 +1110,7 @@ TEST(MultiplayerReconnect, HandshakeTimeoutPreservesInviteAndSchedulesRetry) {
 
 TEST(MultiplayerReconnect, DoesNotCompleteUntilBootstrapRestoresInGameStatus) {
   MultiplayerData data;
-  data.local_role = 1;
+  data.session_role = 1;
   data.join_status = (int)MultiplayerStatus::CONNECTING;
   data.reconnect_attempt_active = true;
   data.reconnect_attempt_count = 2;
@@ -832,7 +1128,7 @@ TEST(MultiplayerReconnect, DoesNotCompleteUntilBootstrapRestoresInGameStatus) {
 
 TEST(MultiplayerReconnect, IgnoresUnauthenticatedPeersForTimeout) {
   MultiplayerData data;
-  data.local_role = 0;
+  data.session_role = 0;
   data.join_status = (int)MultiplayerStatus::IN_GAME;
   data.last_authenticated_receive_time = 100;
 
@@ -853,11 +1149,11 @@ TEST(MultiplayerReconnect, HostRecoveryClearsRemoteStateAndRotatesSecurity) {
   ASSERT_TRUE(client.start_client(invite, parsed_host, parsed_port));
   authenticate(data.security, client);
 
-  data.local_role = 0;
+  data.session_role = 0;
   data.host_game_active = true;
   data.join_status = (int)MultiplayerStatus::IN_GAME;
   data.authenticated_peer = nullptr;
-  data.remote_entity.last_sequence_num = 42;
+  data.player_states[2].last_sequence_num = 42;
   data.pending_bootstrap = true;
   data.inbound_events.push_overwrite({});
   data.reconnect_invite = "client-side-state-must-not-be-cleared-on-host";
@@ -868,7 +1164,7 @@ TEST(MultiplayerReconnect, HostRecoveryClearsRemoteStateAndRotatesSecurity) {
   EXPECT_EQ(data.join_status, (int)MultiplayerStatus::RECONNECTING);
   EXPECT_FALSE(data.security.authenticated());
   EXPECT_EQ(data.security.invite_for_address("127.0.0.1"), invite);
-  EXPECT_EQ(data.remote_entity.last_sequence_num, 0u);
+  EXPECT_EQ(data.player_states[2].last_sequence_num, 0u);
   EXPECT_FALSE(data.pending_bootstrap);
   EXPECT_TRUE(data.inbound_events.empty());
   EXPECT_EQ(data.reconnect_invite, "client-side-state-must-not-be-cleared-on-host");
@@ -891,11 +1187,11 @@ TEST(MultiplayerSession, AcceptsAuthenticatedClientLeaveReasons) {
 
   ENetPeer peer = {};
   peer.state = ENET_PEER_STATE_DISCONNECTED;
-  data.local_role = 0;
+  data.session_role = 0;
   data.authenticated_peer = &peer;
   data.host_game_active = true;
   data.join_status = (int)MultiplayerStatus::IN_GAME;
-  data.remote_entity.last_sequence_num = 42;
+  data.player_states[2].last_sequence_num = 42;
   data.inbound_events.push_overwrite({});
 
   ASSERT_TRUE(multiplayer_handle_client_leave(
@@ -903,7 +1199,7 @@ TEST(MultiplayerSession, AcceptsAuthenticatedClientLeaveReasons) {
   EXPECT_EQ(data.join_status, (int)MultiplayerStatus::RECONNECTING);
   EXPECT_EQ(data.authenticated_peer, nullptr);
   EXPECT_FALSE(data.security.authenticated());
-  EXPECT_EQ(data.remote_entity.last_sequence_num, 0u);
+  EXPECT_EQ(data.player_states[2].last_sequence_num, 0u);
   EXPECT_TRUE(data.inbound_events.empty());
 
   EXPECT_FALSE(multiplayer_handle_client_leave(data, &peer, MultiplayerLeaveReason::HOST_CLOSED));
@@ -923,11 +1219,11 @@ TEST(MultiplayerSession, HostLeaveIsTerminalAndCancelsReconnect) {
 
   ENetPeer peer = {};
   peer.state = ENET_PEER_STATE_DISCONNECTED;
-  data.local_role = 1;
+  data.session_role = 1;
   data.server_peer = &peer;
   data.join_status = (int)MultiplayerStatus::RECONNECTING;
   data.reconnect_attempt_active = true;
-  data.remote_entity.last_sequence_num = 99;
+  data.player_states[2].last_sequence_num = 99;
   data.inbound_events.push_overwrite({});
 
   ASSERT_TRUE(multiplayer_handle_host_leave(data, &peer, MultiplayerLeaveReason::HOST_CLOSED));
@@ -935,7 +1231,7 @@ TEST(MultiplayerSession, HostLeaveIsTerminalAndCancelsReconnect) {
   EXPECT_EQ(data.server_peer, nullptr);
   EXPECT_FALSE(data.security.authenticated());
   EXPECT_FALSE(data.reconnect_attempt_active);
-  EXPECT_EQ(data.remote_entity.last_sequence_num, 0u);
+  EXPECT_EQ(data.player_states[2].last_sequence_num, 0u);
   EXPECT_TRUE(data.inbound_events.empty());
   EXPECT_FALSE(multiplayer_handle_host_leave(data, &peer, MultiplayerLeaveReason::CLIENT_CLOSED));
 }
@@ -1031,7 +1327,7 @@ TEST(MultiplayerSession, ClearsOnlyRemotePeerStateForActiveHost) {
       client.start_client(data.security.invite_for_address("127.0.0.1"), parsed_host, parsed_port));
   authenticate(data.security, client);
   const std::string room_code = data.security.room_code();
-  data.local_role = 0;
+  data.session_role = 0;
   data.join_status = (int)MultiplayerStatus::CONNECTED_LOBBY;
   data.local_version = "dev-366c9e277";
   data.staged_invite = "private-staged-value";
@@ -1040,7 +1336,7 @@ TEST(MultiplayerSession, ClearsOnlyRemotePeerStateForActiveHost) {
   ASSERT_TRUE(data.host_game_active);
   ASSERT_TRUE(data.pending_bootstrap);
 
-  data.remote_entity.last_sequence_num = 42;
+  data.player_states[2].last_sequence_num = 42;
   data.last_authenticated_receive_time = 1234;
   data.last_enemy_sequence = 9;
   data.remote_enemy_buffer.remote_enemies[0].actor_id = 7;
@@ -1059,7 +1355,7 @@ TEST(MultiplayerSession, ClearsOnlyRemotePeerStateForActiveHost) {
   EXPECT_EQ(data.staged_invite, "private-staged-value");
   EXPECT_TRUE(data.internet_host);
   EXPECT_FALSE(data.pending_bootstrap);
-  EXPECT_EQ(data.remote_entity.last_sequence_num, 0u);
+  EXPECT_EQ(data.player_states[2].last_sequence_num, 0u);
   EXPECT_EQ(data.last_authenticated_receive_time, 0u);
   EXPECT_EQ(data.last_enemy_sequence, 0u);
   EXPECT_EQ(data.remote_enemy_buffer.remote_enemies[0].actor_id, 0u);
@@ -1071,7 +1367,7 @@ TEST(MultiplayerSession, ReturnsPregameHostToWaitingForPeer) {
   MultiplayerData data;
   ASSERT_TRUE(data.security.start_host(26210));
   ASSERT_TRUE(data.security.set_local_version("v1.0.0"));
-  data.local_role = 0;
+  data.session_role = 0;
   data.join_status = (int)MultiplayerStatus::CONNECTED_LOBBY;
 
   ASSERT_TRUE(multiplayer_prepare_host_for_next_peer(data));

@@ -36,7 +36,7 @@
 
 (defun target-board-play-daxter-vo ((proc target) (chance float) (vol float) (subtitle-flag symbol))
   "Play a random Daxter voice-over comment with a specified chance, subtitle configuration, and 3D falloff."
-  (when (and (mp-target-is-daxter? proc)
+  (when (and (mp-target-daxter? proc)
              (< (rand-vu) chance)
              proc
              (nonzero? proc)
@@ -765,7 +765,7 @@
   (target-exit)
   (target-indax-board-set!)
   (target-board-setup #t)
-  (when (mp-is-daxter?)
+  (when (mp-target-daxter? self)
     (logior! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
     )
   (set! (-> self board latch?) #f)
@@ -1282,7 +1282,7 @@
       )
     (twist-set! (-> self board upper-body) (the-as float #f) (-> self board upper-body-roty) (the-as float #f))
     )
-  (let ((mp-daxter-board? (mp-target-is-daxter? self)))
+  (let ((mp-daxter-board? (mp-target-daxter? self)))
     (when (and (board-on-ground?)
                (not (or (logtest? (-> self draw status) (draw-control-status no-draw-temp no-draw-bounds))
                         (and (not mp-daxter-board?)
@@ -1576,7 +1576,7 @@
   )
 
 (defbehavior mp-daxter-stowed-board-hidden? target ()
-  (let ((daxter-actor? (mp-target-is-daxter? self))
+  (let ((daxter-actor? (mp-target-daxter? self))
         (in-vehicle? #f)
         (ride-along? #f)
         )
@@ -1622,7 +1622,7 @@
           )
         )
       (unless indax?
-        (if (mp-target-is-daxter? self)
+        (if (mp-target-daxter? self)
           (set-vector! (-> self board board-scale) 0.5 0.5 0.5 1.0)
           (set! (-> self board board-scale quad) (-> self control scale quad))
         )
@@ -2555,7 +2555,7 @@
   )
 
 (defbehavior target-board-ride-post target ()
-  (if (mp-target-is-daxter? self)
+  (if (mp-target-daxter? self)
     (set-vector! (-> self root scale) 0.6 0.6 0.6 1.0)
     (set! (-> self board board-scale quad) (-> self control scale quad))
   )
@@ -2789,7 +2789,7 @@
 
 (defbehavior target-board-post target ()
   (target-board-real-post)
-  (if (mp-target-is-daxter? self)
+  (if (mp-target-daxter? self)
     (set-vector! (-> self root scale) 0.6 0.6 0.6 1.0)
     (set! (-> self board board-scale quad) (-> self control scale quad))
   )
@@ -2935,7 +2935,7 @@
              (s3-1 (the float (* 25 (/ (+ (the int a0-24) 24) 25))))
              )
         (let ((target-proc (ppointer->process (-> this process))))
-          (if (mp-target-is-daxter? target-proc)
+          (if (mp-target-daxter? target-proc)
               (target-board-play-daxter-vo target-proc 0.35 0.2 #f)
               (sound-play "do-trick")
               )

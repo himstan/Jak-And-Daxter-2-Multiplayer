@@ -2679,7 +2679,7 @@
   )
 
 (defbehavior target-post target ()
-  (when (mp-target-is-daxter? self)
+  (when (mp-target-daxter? self)
     (logior! (-> self draw status) (draw-control-status no-draw-bounds2))
     )
   (target-real-post)
@@ -2971,7 +2971,7 @@
       )
     (update-rates! (-> self clock) f30-0)
     )
-  (when (mp-target-is-daxter? self)
+  (when (mp-target-daxter? self)
     (logior! (-> self draw status) (draw-control-status no-draw-bounds2))
     )
   (when *debug-segment*
@@ -3049,7 +3049,7 @@
     (find-overlapping-shapes (-> self control) a1-2)
     )
   (target-calc-camera-pos)
-  (when (mp-target-is-daxter? self)
+  (when (mp-target-daxter? self)
     (logior! (-> self draw status) (draw-control-status no-draw-bounds2))
     )
   (do-target-gspot)
@@ -3089,6 +3089,7 @@
 
 (defmethod init-target ((this target) (arg0 continue-point) (is-puppet? symbol))
   (local-vars (s1-0 int) (s2-0 int) (s3-0 int) (s4-0 int))
+  (set! (-> this player-id) MP_INVALID_PLAYER_ID)
   (mem-set32!
     (the-as pointer (-> this edge-grab-state))
     (/ (size-of mp-target-edge-grab-state) 4)

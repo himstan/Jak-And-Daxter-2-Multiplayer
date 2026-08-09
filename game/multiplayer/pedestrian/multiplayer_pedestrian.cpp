@@ -61,7 +61,9 @@ void handle_pedestrian_sync_packet(const _ENetEvent& event, MultiplayerData& dat
     memcpy(&incoming, event.packet->data + pedestrian_packet_size(0) + i * sizeof(incoming),
            sizeof(incoming));
     if (incoming.net_id == 0) continue;
-    if (!mp_float_is_finite(incoming.x) || !mp_float_is_finite(incoming.y) ||
+    if ((incoming.target_player_id != kMPInvalidCompactPlayerId &&
+         incoming.target_player_id >= kMPMaxPlayers) ||
+        !mp_float_is_finite(incoming.x) || !mp_float_is_finite(incoming.y) ||
         !mp_float_is_finite(incoming.z)) {
       continue;
     }
@@ -82,7 +84,7 @@ void handle_pedestrian_sync_packet(const _ENetEvent& event, MultiplayerData& dat
       state->quat_w = mp_unpack_float_q(incoming.quat[3]);
       state->hp = incoming.hp;
       state->state_id = incoming.state_id;
-      state->target_aid = incoming.target_aid;
+      state->target_player_id = incoming.target_player_id;
       state->animation_profile = incoming.animation_profile;
       state->vehicle_net_id = incoming.vehicle_net_id;
       state->transport_id = incoming.transport_id;
@@ -110,7 +112,7 @@ void send_pedestrian_sync_packets(MultiplayerData& data, MPTrafficSyncBufferGOAL
       dst->quat[2] = mp_pack_float_q(src->quat_z); dst->quat[3] = mp_pack_float_q(src->quat_w);
       dst->hp = src->hp;
       dst->state_id = src->state_id;
-      dst->target_aid = src->target_aid;
+      dst->target_player_id = src->target_player_id;
       dst->animation_profile = src->animation_profile;
       dst->vehicle_net_id = src->vehicle_net_id;
       dst->transport_id = src->transport_id;

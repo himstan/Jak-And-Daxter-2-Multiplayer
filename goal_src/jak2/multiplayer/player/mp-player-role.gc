@@ -4,7 +4,7 @@
 (defun mp-update-role-transformation ()
   "Handle transforming Jak to Daxter (Ride-Along) or vice-versa"
   (if (and *target* (nonzero? *target*)
-           (mp-is-daxter?)
+           (mp-local-player-daxter?)
            (not (logtest? (-> *target* focus-status) (focus-status indax)))
            (not (logtest? (-> *target* focus-status) (focus-status teleporting)))
            (and *level* (nonzero? *level*) (zero? (the-as uint (-> *level* loading-level))))
@@ -18,12 +18,14 @@
   (none))
 
 (defun mp-update-ai-targeting ()
-  "Update player-procs handles for AI targeting"
-  (let ((loc-role (-> *local-info* role))
-        (rem-role (if (mp-is-jak?) 1 0)))
-    (set! (-> *local-info* player-procs loc-role) (process->handle *target*))
-    (let ((proc *mp-puppet*))
-      (if proc
-          (set! (-> *local-info* player-procs rem-role) (process->handle proc))
-          (set! (-> *local-info* player-procs rem-role) (the-as handle #f)))))
+  "Refresh the local registry binding; remote bindings are owned by their managers."
+  (let ((local-record (mp-local-player-record)))
+    (when (and local-record
+               (nonzero? local-record)
+               *target*
+               (nonzero? *target*))
+      (mp-player-controller-bind-target!
+        *mp-player-controller*
+        (-> local-record identity player-id)
+        *target*)))
   (none))

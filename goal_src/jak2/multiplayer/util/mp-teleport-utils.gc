@@ -1,23 +1,39 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(defun mp-remote-teleport-ready-or-request! ()
-  "Request the remote player's levels and return true once they are locally ready."
-  (if (mp-respawn-policy-blocks-remote-placement?)
+(defun mp-teleport-destination-record ()
+  "Resolve the explicit spectate player, otherwise the nearest remote to local target."
+  (let ((spectated (mp-spectated-player-record)))
+    (if (and spectated (nonzero? spectated))
+        spectated
+        (mp-nearest-remote-player-record *target* #f))))
+
+(defun mp-player-teleport-ready-or-request! ((record mp-player-record))
+  "Request an explicit destination player's levels and report readiness."
+  (if (or (mp-respawn-policy-blocks-remote-placement?)
+          (not record)
+          (zero? record))
       #f
       (begin
-        (mp-ensure-remote-level-wanted!)
-        (mp-remote-level-ready?)))
-  )
+        (mp-ensure-player-level-wanted! record)
+        (mp-player-level-ready? record))))
 
-(defun mp-teleport-target-ready? ((player target))
+(defun mp-remote-teleport-ready-or-request! ()
+  "Request the context-selected destination player's levels and report readiness."
+  (mp-player-teleport-ready-or-request! (mp-teleport-destination-record)))
+
+(defun mp-teleport-target-ready-for-record?
+       ((player target) (record mp-player-record))
   (and player
        (nonzero? player)
        (-> player control)
        (nonzero? (-> player control))
-       *remote-info*
-       (nonzero? *remote-info*)
-       )
+       record
+       (nonzero? record))
+  )
+
+(defun mp-teleport-target-ready? ((player target))
+  (mp-teleport-target-ready-for-record? player (mp-teleport-destination-record))
   )
 
 (defun mp-local-scene-teleport-ready? ()
@@ -26,8 +42,8 @@
        (nonzero? *target*)
        (-> *target* control)
        (nonzero? (-> *target* control))
-       *remote-info*
-       (nonzero? *remote-info*)
+       (mp-teleport-destination-record)
+       (nonzero? (mp-teleport-destination-record))
        (not (focus-test? *target* teleporting))
        (not (and (-> *target* state)
                  (= (-> *target* state name) 'target-load-wait)))
@@ -43,10 +59,15 @@
   (none)
   )
 
-(defun mp-teleport-player-to-remote-coords! ((player target) (extra-y float))
-  (when (mp-teleport-target-ready? player)
+(defun mp-teleport-player-to-record-coords!
+       ((player target) (record mp-player-record) (extra-y float))
+  (when (mp-teleport-target-ready-for-record? player record)
     (let ((control (-> player control)))
-      (set-vector! (-> control trans) (-> *remote-info* x) (-> *remote-info* y) (-> *remote-info* z) 1.0)
+      (set-vector! (-> control trans)
+        (-> record transform position x)
+        (-> record transform position y)
+        (-> record transform position z)
+        1.0)
       (+! (-> control trans y) extra-y)
       (set! (-> control transv quad) (the-as uint128 0))
       (vector-copy! (-> control camera-pos) (-> control trans))
@@ -55,6 +76,11 @@
     )
   (none)
   )
+
+(defun mp-teleport-player-to-remote-coords! ((player target) (extra-y float))
+  (mp-teleport-player-to-record-coords!
+    player (mp-teleport-destination-record) extra-y)
+  (none))
 
 (defun mp-teleport-player-to-vehicle! ((player target) (veh vehicle) (extra-x float) (extra-z float))
   (when (and (mp-teleport-target-ready? player)
@@ -119,20 +145,21 @@
   (none)
   )
 
-(defun mp-teleport-local-target-to-remote! ((ride-along? symbol))
-  "Teleport the local target to the remote player, including ride-along and vehicle boarding."
-  (when (mp-teleport-target-ready? *target*)
+(defun mp-teleport-local-target-to-player!
+       ((record mp-player-record) (ride-along? symbol))
+  "Teleport the local target to an explicit player, including vehicle boarding."
+  (when (mp-teleport-target-ready-for-record? *target* record)
     (when (focus-test? *target* pilot)
       (mp-clear-local-vehicle-occupancy! *target*)
       )
     (cond
       ((and ride-along? (focus-test? *target* indax))
        (debug-log *mp-debug-log?* "[MP-Teleport] Daxter player hopping onto Jak (ride-along)~%")
-       (mp-teleport-player-to-remote-coords! *target* 4096.0)
+       (mp-teleport-player-to-record-coords! *target* record 4096.0)
        (go-process *target* target-indax-jump-on)
        )
-      ((nonzero? (-> *remote-info* riding-veh-id))
-       (let ((riding-veh-id (-> *remote-info* riding-veh-id)))
+      ((nonzero? (-> record vehicle vehicle-id))
+       (let ((riding-veh-id (-> record vehicle vehicle-id)))
          (let ((veh (mp-vehicle-find-by-net-id riding-veh-id)))
            (cond
              ((and veh (nonzero? veh) (-> veh root) (nonzero? (-> veh root)))
@@ -151,8 +178,8 @@
                 )
               )
              (else
-              (debug-log *mp-debug-log?* "[MP-Teleport] Vehicle ~D not found. Teleporting to remote player coords.~%" riding-veh-id)
-              (mp-teleport-player-to-remote-coords! *target* 4096.0)
+             (debug-log *mp-debug-log?* "[MP-Teleport] Vehicle ~D not found. Teleporting to remote player coords.~%" riding-veh-id)
+              (mp-teleport-player-to-record-coords! *target* record 4096.0)
               (mp-teleport-reset-local-base-state! *target*)
               )
              )
@@ -161,7 +188,7 @@
        )
       (else
        (debug-log *mp-debug-log?* "[MP-Teleport] Remote player on foot. Teleporting to remote player coords.~%")
-       (mp-teleport-player-to-remote-coords! *target* 4096.0)
+       (mp-teleport-player-to-record-coords! *target* record 4096.0)
        (mp-teleport-reset-local-base-state! *target*)
        )
       )
@@ -169,13 +196,20 @@
   (none)
   )
 
+(defun mp-teleport-local-target-to-remote! ((ride-along? symbol))
+  "Teleport the local target to the context-selected remote player."
+  (mp-teleport-local-target-to-player!
+    (mp-teleport-destination-record) ride-along?)
+  (none))
+
 (defun mp-respawn-local-target-at-remote! ((player target))
   "Respawn the local player at the remote player, using only safe passenger vehicle seats."
   (when (mp-teleport-target-ready? player)
     (mp-clear-local-vehicle-occupancy! player)
+    (let ((record (mp-teleport-destination-record)))
     (cond
-      ((nonzero? (-> *remote-info* riding-veh-id))
-       (let ((riding-veh-id (-> *remote-info* riding-veh-id)))
+      ((nonzero? (-> record vehicle vehicle-id))
+       (let ((riding-veh-id (-> record vehicle vehicle-id)))
          (let ((veh (mp-vehicle-find-by-net-id riding-veh-id)))
            (cond
              ((and veh (nonzero? veh) (-> veh root) (nonzero? (-> veh root)))
@@ -205,7 +239,7 @@
        (mp-teleport-player-to-remote-coords! player 4096.0)
        (mp-respawn-local-target! player)
        )
-      )
+      ))
     )
   (none)
   )

@@ -2,6 +2,7 @@
 
 #include "game/multiplayer/multiplayer_manager.h"
 #include "game/multiplayer/multiplayer_packet.h"
+#include "game/multiplayer/sync/player_sync.h"
 
 #include <cstring>
 
@@ -35,10 +36,10 @@ void unpack_enemy_state(MPEnemyState& state, const MPEnemyStatePacked& incoming,
   state.quat_w = mp_unpack_float_q(incoming.quat[3]);
   state.hp = incoming.hp;
   state.state = incoming.state;
-  state.focus_aid = incoming.focus_aid;
+  state.focus_player_id = incoming.focus_player_id;
   state.attack_flag = (incoming.flags & 1) ? 1 : 0;
-  state.owner = (incoming.flags & 2) ? 1 : 0;
-  state.is_aggro = (incoming.flags & 4) ? 1 : 0;
+  state.owner_player_id = incoming.owner_player_id;
+  state.is_aggro = (incoming.flags & 2) ? 1 : 0;
   state.last_updated = current_time;
 }
 }
@@ -66,7 +67,12 @@ void mp_handle_enemy_sync_packet(MultiplayerData& data, const ENetPacket* packet
   for (uint32_t i = 0; i < encoded_count; i++) {
     MPEnemyStatePacked incoming = {};
     memcpy(&incoming, packet->data + prefix_size + i * sizeof(incoming), sizeof(incoming));
-    if (incoming.actor_id == 0 || !mp_float_is_finite(incoming.x) ||
+    if (incoming.actor_id == 0 ||
+        (incoming.owner_player_id != kMPInvalidCompactPlayerId &&
+         incoming.owner_player_id >= kMPMaxPlayers) ||
+        (incoming.focus_player_id != kMPInvalidPlayerId &&
+         !mp_valid_player_id(incoming.focus_player_id)) ||
+        !mp_float_is_finite(incoming.x) ||
         !mp_float_is_finite(incoming.y) || !mp_float_is_finite(incoming.z)) {
       continue;
     }
@@ -105,12 +111,12 @@ void mp_send_enemy_sync(MultiplayerData& data, MPEnemySyncBufferGOAL* buffer) {
       dst->quat[3] = mp_pack_float_q(src->quat_w);
       dst->hp = src->hp;
       dst->state = src->state;
-      dst->focus_aid = src->focus_aid;
-      dst->flags = (src->attack_flag ? 1 : 0) | (src->owner ? 2 : 0) |
-                   (src->is_aggro ? 4 : 0);
+      dst->focus_player_id = src->focus_player_id;
+      dst->flags = (src->attack_flag ? 1 : 0) | (src->is_aggro ? 2 : 0);
+      dst->owner_player_id = src->owner_player_id;
     }
     MultiplayerManager::broadcast(data,
-                                  data.local_role,
+                                  data.session_role,
                                   &packet,
                                   enemy_packet_size(chunk_size),
                                   ENET_PACKET_FLAG_UNSEQUENCED);

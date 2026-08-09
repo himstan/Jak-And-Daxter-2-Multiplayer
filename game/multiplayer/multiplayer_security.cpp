@@ -309,7 +309,7 @@ void MultiplayerSecurity::make_proof(const char* label,
   crypto_generichash_final(&hash, proof.data(), proof.size());
 }
 
-void MultiplayerSecurity::derive_session_keys(int local_role) {
+void MultiplayerSecurity::derive_session_keys(int session_role) {
   std::array<uint8_t, kKeySize> host_key = {};
   std::array<uint8_t, kKeySize> client_key = {};
   std::array<uint8_t, kKeySize> host_nonce_material = {};
@@ -318,7 +318,7 @@ void MultiplayerSecurity::derive_session_keys(int local_role) {
   make_proof("client-key", client_key);
   make_proof("host-nonce", host_nonce_material);
   make_proof("client-nonce", client_nonce_material);
-  const bool local_is_host = local_role == 0;
+  const bool local_is_host = session_role == 0;
   m_send_key = local_is_host ? host_key : client_key;
   m_receive_key = local_is_host ? client_key : host_key;
   const auto& send_nonce = local_is_host ? host_nonce_material : client_nonce_material;
@@ -331,7 +331,7 @@ void MultiplayerSecurity::derive_session_keys(int local_role) {
   sodium_memzero(client_nonce_material.data(), client_nonce_material.size());
 }
 
-SecurityReceiveResult MultiplayerSecurity::receive(int local_role,
+SecurityReceiveResult MultiplayerSecurity::receive(int session_role,
                                                    const uint8_t* data,
                                                    size_t size) {
   SecurityReceiveResult result;
@@ -339,7 +339,7 @@ SecurityReceiveResult MultiplayerSecurity::receive(int local_role,
     return result;
   }
 
-  if (!m_authenticated && local_role == 1 && valid_base_header(data, size, kServerHello)) {
+  if (!m_authenticated && session_role == 1 && valid_base_header(data, size, kServerHello)) {
     size_t offset = kBaseHeaderSize;
     if (size < offset + m_credential_salt.size() + m_session_id.size() +
                    m_server_nonce.size() + 1 ||
@@ -381,7 +381,7 @@ SecurityReceiveResult MultiplayerSecurity::receive(int local_role,
     return result;
   }
 
-  if (!m_authenticated && local_role == 0 && valid_base_header(data, size, kClientProof)) {
+  if (!m_authenticated && session_role == 0 && valid_base_header(data, size, kClientProof)) {
     size_t offset = kBaseHeaderSize;
     if (size < offset + m_session_id.size() + m_client_nonce.size() + 1 + kKeySize ||
         sodium_memcmp(data + offset, m_session_id.data(), m_session_id.size()) != 0) {
@@ -425,13 +425,13 @@ SecurityReceiveResult MultiplayerSecurity::receive(int local_role,
       result.kind = SecurityReceiveKind::VERSION_MISMATCH;
       return result;
     }
-    derive_session_keys(local_role);
+    derive_session_keys(session_role);
     m_authenticated = true;
     result.kind = SecurityReceiveKind::HANDSHAKE;
     return result;
   }
 
-  if (!m_authenticated && local_role == 1 &&
+  if (!m_authenticated && session_role == 1 &&
       (valid_base_header(data, size, kServerProof) ||
        valid_base_header(data, size, kVersionMismatch))) {
     const bool mismatch = data[4] == kVersionMismatch;
@@ -460,7 +460,7 @@ SecurityReceiveResult MultiplayerSecurity::receive(int local_role,
     if (m_local_version != m_remote_version) {
       return result;
     }
-    derive_session_keys(local_role);
+    derive_session_keys(session_role);
     m_authenticated = true;
     result.kind = SecurityReceiveKind::HANDSHAKE;
     return result;
@@ -471,7 +471,7 @@ SecurityReceiveResult MultiplayerSecurity::receive(int local_role,
       sodium_memcmp(data + 10, m_session_id.data(), m_session_id.size()) != 0) {
     return result;
   }
-  const uint8_t remote_direction = local_role == 0 ? 1 : 0;
+  const uint8_t remote_direction = session_role == 0 ? 1 : 0;
   const uint16_t plaintext_size = multiplayer::wire::load_u16_le(data + 8);
   const uint64_t counter = multiplayer::wire::load_u64_le(data + 26);
   if (data[6] != remote_direction || data[7] >= static_cast<uint8_t>(PacketType::COUNT) ||
@@ -501,7 +501,7 @@ SecurityReceiveResult MultiplayerSecurity::receive(int local_role,
   return result;
 }
 
-bool MultiplayerSecurity::seal(int local_role,
+bool MultiplayerSecurity::seal(int session_role,
                                PacketType packet_type,
                                const void* plaintext,
                                size_t plaintext_size,
@@ -514,7 +514,7 @@ bool MultiplayerSecurity::seal(int local_role,
 
   const uint64_t counter = ++m_send_counter;
   write_base_header(output.bytes.data(), kEncryptedGameplay);
-  output.bytes[6] = static_cast<uint8_t>(local_role);
+  output.bytes[6] = static_cast<uint8_t>(session_role);
   output.bytes[7] = static_cast<uint8_t>(packet_type);
   multiplayer::wire::store_u16_le(output.bytes.data() + 8, static_cast<uint16_t>(plaintext_size));
   memcpy(output.bytes.data() + 10, m_session_id.data(), m_session_id.size());

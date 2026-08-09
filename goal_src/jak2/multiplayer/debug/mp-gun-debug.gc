@@ -85,30 +85,34 @@
 (defun mp-debug-get-sync-weapon-text ((proc target))
   "Return network weapon fields relevant to puppet gun desync debugging."
   (let ((local-weapon (the uint 0))
+        (record (mp-player-process-record proc))
         (remote-weapon (the uint 0))
         (ghost-weapon (the uint 0))
         (pending-weapon (the uint 0)))
-    (when (and *local-info* (nonzero? (the-as uint *local-info*)))
-      (set! local-weapon (the-as uint (-> *local-info* equipped-weapon)))
+    (when (and (mp-local-player-record) (nonzero? (the-as uint (mp-local-player-record))))
+      (set! local-weapon (the-as uint (-> (mp-local-player-record) input equipped-weapon)))
       )
-    (when (and *remote-info* (nonzero? (the-as uint *remote-info*)))
-      (set! remote-weapon (the-as uint (-> *remote-info* equipped-weapon)))
+    (when (and record (nonzero? record))
+      (set! remote-weapon (the-as uint (-> record input equipped-weapon)))
       )
-    (when (and (nonzero? (the-as uint *mp-puppet-ghost*))
-               (-> *mp-puppet-ghost* active?))
-      (set! ghost-weapon (the-as uint (-> *mp-puppet-ghost* equipped-weapon)))
+    (let ((ghost (mp-player-record-ghost record)))
+      (when (and ghost (nonzero? ghost) (-> ghost active?))
+        (set! ghost-weapon (the-as uint (-> ghost equipped-weapon)))))
+    (when (mp-player-runtime-flag? record MP_PLAYER_RUNTIME_PENDING_GUN_SHOT)
+      (set! pending-weapon (-> record runtime pending-gun-shot-weapon))
       )
-    (when *mp-puppet-pending-gun-shot?*
-      (set! pending-weapon *mp-puppet-pending-gun-shot-weapon*)
-      )
-    (if (= proc *mp-puppet*)
+    (if (and record
+             (nonzero? record)
+             (mp-player-record-remote? *mp-player-controller* record))
         (the-as string
                 (format #f
                         "SYNC REMOTE: info=~D ghost=~D pending=~D pending?=~A"
                         remote-weapon
                         ghost-weapon
                         pending-weapon
-                        (mp-debug-bool-string *mp-puppet-pending-gun-shot?*)))
+                        (mp-debug-bool-string
+                          (mp-player-runtime-flag?
+                            record MP_PLAYER_RUNTIME_PENDING_GUN_SHOT))))
         (the-as string
                 (format #f "SYNC LOCAL: local-info=~D" local-weapon)))
     )
@@ -277,8 +281,14 @@
   (when *mp-gun-debug?*
     (when (and *target* (nonzero? *target*))
       (mp-draw-target-gun-debug *target* "LOCAL"))
-    (let ((puppet *mp-puppet*))
-      (when (and puppet (nonzero? puppet))
-        (mp-draw-target-gun-debug puppet "PUPPET")))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let* ((record (mp-player-record-by-id (the-as uint player-id)))
+             (puppet (mp-player-record-target record)))
+        (when (and record
+                   (nonzero? record)
+                   (mp-player-record-remote? *mp-player-controller* record)
+                   puppet
+                   (nonzero? puppet))
+          (mp-draw-target-gun-debug puppet "PUPPET"))))
     )
   (none))

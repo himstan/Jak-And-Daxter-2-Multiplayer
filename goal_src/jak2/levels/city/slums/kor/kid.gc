@@ -186,7 +186,7 @@
   (case arg2
     (('arrest)
      ;; MULTIPLAYER: Only allow arrests on the Host (Jak) to prevent local-guard desync fails
-     (if (not (mp-is-jak?)) (return #f))
+     (if (not (mp-session-host?)) (return #f))
      (let* ((s4-0 (handle->process (-> this arrestor-handle)))
             (v1-4 (if (type? s4-0 process-focusable)
                       s4-0
@@ -203,7 +203,7 @@
      )
     (('instant-arrest)
      ;; MULTIPLAYER: Only allow arrests on the Host (Jak) to prevent local-guard desync fails
-     (if (not (mp-is-jak?)) (return #f))
+     (if (not (mp-session-host?)) (return #f))
      (logior! (-> this bot-flags) (bot-flags bf20))
      (let ((v1-18 (the-as object (-> arg3 param 0))))
        (set! (-> this arrestor-handle) (process->handle (the-as process v1-18)))

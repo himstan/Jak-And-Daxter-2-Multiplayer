@@ -2525,7 +2525,7 @@
       (vector-normalize! s4-0 1.0)
       (vector+float*! s3-0 (-> this root trans) s4-0 16384.0)
       )
-    (when (and (mp-is-jak?) (not *mp-processing-remote-event*))
+    (when (and (mp-session-host?) (not *mp-processing-remote-event*))
       (mp-palace-squid-note-whirlwind-spawn! this)
       )
     (let ((trans (-> this root trans)) (mesh (-> this nav state mesh)))

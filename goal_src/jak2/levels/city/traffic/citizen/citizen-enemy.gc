@@ -2,7 +2,7 @@
 (in-package goal)
 
 (define-extern mp-combat-valid-player-target? (function process-focusable symbol symbol))
-(define-extern mp-combat-best-player-target (function process-focusable process-focusable process-focusable process-focusable process-focusable))
+(define-extern mp-combat-nearest-player-target (function process-focusable process-focusable symbol process-focusable))
 
 ;; name: citizen-enemy.gc
 ;; name in dgo: citizen-enemy
@@ -205,13 +205,9 @@
               )
             )
           )
-        (let ((local-target (if (and *target* (nonzero? *target*) (mp-combat-valid-player-target? *target* #f))
-                                (the-as process-focusable *target*)
-                                (the-as process-focusable #f)))
-              (remote-target (if (and *multi-sync-enabled?* (= (pc-multi-get-status) (mp-connection-status in-game)) *mp-puppet* (nonzero? *mp-puppet*) (mp-combat-valid-player-target? *mp-puppet* #f))
-                                 *mp-puppet*
-                                 (the-as process-focusable #f))))
-          (let ((best-player (mp-combat-best-player-target this (the-as process-focusable #f) local-target remote-target)))
+        (let ((best-player
+                (mp-combat-nearest-player-target
+                  this (the-as process-focusable #f) #f)))
             (when (and best-player (nonzero? best-player))
               (let ((best-root (-> best-player root)))
                 (when (and best-root (nonzero? best-root))
@@ -224,7 +220,6 @@
                 )
               )
             )
-          )
         )
       (when s4-0
         (try-update-focus (-> this focus) (the-as process-focusable s4-0) this)

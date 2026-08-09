@@ -92,8 +92,8 @@
   )
 
 (defun hoverboard-training-manager-get-ride-target ()
-  (if (and *multi-sync-enabled?* (mp-is-daxter?) (mp-target-ride-along? *target*))
-      (let ((ride-target *mp-puppet*))
+  (if (and *multi-sync-enabled?* (mp-target-daxter? *target*) (mp-target-ride-along? *target*))
+      (let ((ride-target (mp-jak-target-for *target*)))
         (if (and ride-target (nonzero? ride-target))
             ride-target
             (the-as target #f)

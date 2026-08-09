@@ -4,31 +4,31 @@
 ;; name: mp-session.gc
 ;; name in dgo: mp-session
 
-(define-extern mp-network-sync-window-tick (function none))
+(define-extern mp-network-sync-window-tick (function object none))
 (define-extern *dproc* process)
 (define-extern activate-progress (function process symbol none))
 (define-extern mp-demo-guard-tick (function none))
 (define-extern mp-demo-guard-on-local-spawn! (function none))
 
 (defun mp-client-ready-to-enable-sync-on-spawn? ((status mp-connection-status))
-  (and *local-info*
-       (nonzero? (the-as uint *local-info*))
-       (= (-> *local-info* role) 1)
+  (and (mp-local-player-record)
+       (nonzero? (the-as uint (mp-local-player-record)))
+       (mp-session-client?)
        (= status (mp-connection-status in-game))
-       (zero? (-> *local-info* sync-flag)))
+       (zero? (-> *mp-bootstrap-state* phase)))
   )
 
 (defun mp-set-local-sync-flag! ((sync-flag uint))
-  (when (and *local-info* (nonzero? (the-as uint *local-info*)))
-    (set! (-> *local-info* sync-flag) (the-as uint sync-flag))
+  (when (and (mp-local-player-record) (nonzero? (the-as uint (mp-local-player-record))))
+    (set! (-> *mp-bootstrap-state* phase) (the-as uint sync-flag))
     )
   (none))
 
 (defun mp-enable-sync-after-spawn! ((status mp-connection-status))
   (cond
-    ((and *local-info*
-          (nonzero? (the-as uint *local-info*))
-          (= (-> *local-info* role) 1))
+    ((and (mp-local-player-record)
+          (nonzero? (the-as uint (mp-local-player-record)))
+          (mp-session-client?))
      (if (mp-client-ready-to-enable-sync-on-spawn? status)
          (begin
            (set! *multi-sync-enabled?* #t)
@@ -42,24 +42,24 @@
      )
     (else
      (set! *multi-sync-enabled?* #t)
-     (debug-log *mp-debug-log?* "[MP-Session] Jak spawned! Enabling multiplayer sync.~%")
+     (debug-log *mp-debug-log?* "[MP-Session] Host player spawned! Enabling multiplayer sync.~%")
      )
     )
   (none))
 
 (defun mp-arm-spawn-sync-state! ((status mp-connection-status))
   (when (>= status (mp-connection-status connecting))
-    (if (mp-is-jak?)
+    (if (mp-session-host?)
         (begin
           (pc-multi-set-status (mp-connection-status in-game))
           (set! *multi-last-send-time* 0)
           (mp-arm-mission-failed-bootstrap-after-spawn)
           )
         (begin
-          (when (and *local-info*
-                     (nonzero? (the-as uint *local-info*))
+          (when (and (mp-local-player-record)
+                     (nonzero? (the-as uint (mp-local-player-record)))
                      (= status (mp-connection-status in-game))
-                     (zero? (-> *local-info* sync-flag)))
+                     (zero? (-> *mp-bootstrap-state* phase)))
             (set! *multi-last-send-time* 0)
             (mp-arm-mission-failed-bootstrap-after-spawn)
             )
@@ -130,6 +130,7 @@
 (defun mp-on-local-spawn! ()
   (let ((status (pc-multi-get-status)))
     (mp-bootstrap-controller-start!)
+    (mp-bootstrap-note-local-spawn! status)
     (mp-enable-sync-after-spawn! status)
     (mp-arm-spawn-sync-state! status)
     (mp-auto-start-session-on-spawn! status)
@@ -165,8 +166,8 @@
 (defun mp-auto-enable-sync-if-ready! ((status mp-connection-status))
   (when (and (= status (mp-connection-status in-game))
              (not *multi-sync-enabled?*)
-             (not (and (mp-is-daxter?) (nonzero? (-> *local-info* sync-flag)))))
-    (if (mp-is-jak?)
+             (not (and (mp-session-client?) (nonzero? (-> *mp-bootstrap-state* phase)))))
+    (if (mp-session-host?)
         (debug-log *mp-debug-log?* "[MP-Session] Auto-enabling sync as Host in game...~%")
         (debug-log *mp-debug-log?* "[MP-Session] Auto-enabling sync as Client in game...~%")
         )
@@ -179,15 +180,17 @@
   (set! *multi-sync-enabled?* #f)
   (mp-reset-puppet-state!)
   (mp-reset-remote-marker-state!)
-  (when (and *remote-info* (nonzero? *remote-info*))
-    (set! (-> *remote-info* status) 0)
-    (set! (-> *remote-info* darkjak-stage) (the uint 0))
-    (set! (-> *remote-info* action-seq) (the uint 0))
-    (set! (-> *remote-info* action-state-id) (the uint 0))
-    (set! (-> *remote-info* buttons) (the-as uint16 0))
-    (set! (-> *remote-info* respawn-flags) (the uint8 0))
-    (set! (-> *remote-info* respawn-pad) (the uint8 0))
-    )
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (when (and record
+                 (nonzero? record)
+                 (mp-player-record-remote? *mp-player-controller* record))
+        (set! (-> record connection status) (mp-connection-status idle))
+        (set! (-> record action darkjak-stage) (the uint 0))
+        (set! (-> record action authoritative-sequence) (the uint 0))
+        (set! (-> record action action-state-id) (the uint 0))
+        (set! (-> record input buttons) (the-as uint16 0))
+        (set! (-> record action respawn-flags) (the uint8 0)))))
   (none)
   )
 
@@ -246,6 +249,42 @@
       )
   )
 
+(defun mp-session-ensure-local-player! ()
+  (let ((local-player-id (pc-multi-get-local-player-id))
+        (host-player-id (pc-multi-get-host-player-id)))
+    (when (mp-player-id-valid? local-player-id)
+      (set! (-> *mp-player-controller* local-player-id) local-player-id)
+      (when (mp-player-id-valid? host-player-id)
+        (set! (-> *mp-player-controller* host-player-id) host-player-id))
+      (when (not (mp-local-player-record))
+        (mp-player-controller-register!
+          *mp-player-controller*
+          local-player-id
+          (if (mp-session-host?)
+              (mp-player-character jak)
+              (mp-player-character daxter))))
+      (when (and *target* (nonzero? *target*))
+        (mp-player-controller-bind-target!
+          *mp-player-controller*
+          local-player-id
+          *target*))))
+  (none))
+
+(defun mp-bootstrap-controller-session-status? ((status mp-connection-status))
+  (or (= status (mp-connection-status connected-lobby))
+      (= status (mp-connection-status game-starting))
+      (= status (mp-connection-status in-game))
+      (= status (mp-connection-status reconnecting))))
+
+(defun mp-session-ensure-bootstrap-controller! ((status mp-connection-status))
+  (let ((local-record (mp-local-player-record)))
+    (when (and (mp-session-client?)
+               (mp-bootstrap-controller-session-status? status)
+               local-record
+               (nonzero? (the-as uint local-record)))
+      (mp-bootstrap-controller-start!)))
+  (none))
+
 (defun mp-session-tick ()
   (let ((status (mp-connect-discovered-host-if-ready! (pc-multi-get-status))))
     (when (not (= status (mp-connection-status in-game)))
@@ -264,10 +303,18 @@
             (= status (mp-connection-status reconnecting))
             (= status (mp-connection-status host-left)))
         (begin
-          (pc-multi-poll (the-as uint *local-info*) (the-as uint *remote-info*))
-          (pc-multi-receive-state (the-as uint *remote-info*))
-          (set! (-> *local-info* role) (pc-multi-get-role))
+          (pc-multi-poll
+            (the-as uint *mp-player-controller*)
+            (the-as uint *mp-world-state*)
+            (the-as uint *mp-bootstrap-state*))
+          (set! *mp-session-role* (the-as mp-session-role (pc-multi-get-role)))
+          (mp-session-ensure-local-player!)
+          (pc-multi-receive-sync
+            (the-as uint *mp-player-controller*)
+            (the-as uint *mp-world-state*)
+            (the-as uint *mp-bootstrap-state*))
           (set! status (pc-multi-get-status))
+          (mp-session-ensure-bootstrap-controller! status)
           (when (not (= status (mp-connection-status in-game)))
             (mp-clear-remote-respawn-policy!)
             )
@@ -278,7 +325,8 @@
           (mp-tomb-boulder-note-session-status! status)
           )
         (begin
-          (set! (-> *local-info* role) -1)
+          (mp-player-controller-reset! *mp-player-controller*)
+          (set! *mp-session-role* (mp-session-role none))
           (return #f)
           )
         )
@@ -333,6 +381,15 @@
     )
   (none))
 
+(defun mp-gameplay-sync-ready? ()
+  (let ((local-record (mp-local-player-record)))
+    (and *multi-sync-enabled?*
+         local-record
+         (nonzero? (the-as uint local-record))
+         (mp-any-remote-player-connected?)
+         *mp-event-buffer*
+         (nonzero? (the-as uint *mp-event-buffer*)))))
+
 (defun mp-send-tick ()
   (mp-sync-clock-host)
   (mp-sync-clock-client)
@@ -344,7 +401,7 @@
                    (the uint64 (/ 1000 *multi-sync-tps*))))
       (mp-update-send-clock! current-ticks)
       (when (mp-network-status-ready? (pc-multi-get-status))
-        (mp-network-sync-window-tick)
+        (mp-network-sync-window-tick (mp-gameplay-sync-ready?))
         (mp-record-sync-window!)
         )
       )
@@ -361,7 +418,7 @@
     (set! (-> *mp-enemy-buffer* last-sync-time) (pc-multi-get-enemy-sync-time))
     )
   (mp-resolve-local-vehicle-seat-conflict!)
-  (mp-manage-remote-puppet)
+  (mp-manage-remote-puppets!)
   (mp-extract-local-stats)
   (mp-stadium-board1-tick)
   (mp-apply-remote-world-state)
@@ -376,7 +433,14 @@
   (mp-tomb-daxter-wait-update!)
   (mp-update-traffic-authority)
   (mp-sync-traffic-update)
-  (mp-process-pending-edge-grab! *mp-puppet*)
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (when (and record
+                 (nonzero? record)
+                 (mp-player-record-remote? *mp-player-controller* record))
+        (let ((player-target (mp-player-record-target record)))
+          (when (and player-target (nonzero? player-target))
+            (mp-process-pending-edge-grab! player-target))))))
   #t
   )
 
@@ -415,12 +479,12 @@
 (defun mp-frame-tick ()
   "High-frequency multiplayer frame scheduler."
   (with-pp
-    (if (or (not *local-info*) (not *remote-info*) (not *mp-event-buffer*))
-        (return #f))
     (if (not (mp-session-tick))
         (return #f))
-    (mp-sync-scene-tick)
     (mp-send-tick)
+    (if (not (mp-gameplay-sync-ready?))
+        (return #f))
+    (mp-sync-scene-tick)
     (mp-receive-tick)
     (mp-debug-draw-tick)
     (none)))

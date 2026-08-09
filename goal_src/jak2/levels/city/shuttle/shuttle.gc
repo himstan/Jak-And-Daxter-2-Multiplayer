@@ -426,19 +426,23 @@
              (set! driver *target*)
              )
             (else
-              (let ((puppet *mp-puppet*))
-                (when (and puppet
-                           (nonzero? puppet)
-                           (focus-test? puppet pilot)
-                           (-> puppet pilot)
-                           (nonzero? (-> puppet pilot))
-                           (let ((v-proc (handle->process-safe (-> puppet pilot vehicle))))
-                             (and v-proc (= v-proc initial-vehicle) (zero? (-> puppet pilot seat-index)))
-                             )
-                           )
-                  (set! driver puppet)
-                  )
-                )
+              (dotimes (player-id MP_MAX_PLAYERS)
+                (let* ((record (mp-player-record-by-id (the-as uint player-id)))
+                       (puppet (mp-player-record-target record)))
+                  (when (and (not driver)
+                             record
+                             (nonzero? record)
+                             (mp-player-record-remote? *mp-player-controller* record)
+                             puppet
+                             (nonzero? puppet)
+                             (focus-test? puppet pilot)
+                             (-> puppet pilot)
+                             (nonzero? (-> puppet pilot))
+                             (let ((v-proc (handle->process-safe (-> puppet pilot vehicle))))
+                               (and v-proc
+                                    (= v-proc initial-vehicle)
+                                    (zero? (-> puppet pilot seat-index)))))
+                    (set! driver puppet))))
               )
             )
           (when driver
@@ -1108,7 +1112,7 @@
 (defun mp-shuttle-local-rebel-dropoff-authority? ()
   "Return true when this client owns shuttle rebel dropoff completion."
   (or (not (and *multi-sync-enabled?* (= (pc-multi-get-status) (mp-connection-status in-game))))
-      (mp-is-jak?)
+      (mp-session-host?)
       )
   )
 
@@ -1270,33 +1274,42 @@
   )
 
 (defun mp-shuttle-check-teleport-left-behind! ()
-  "Check if the local player is left behind by a rebel vehicle driven by the remote player."
+  "Check if the local player is left behind by the nearest remote-driven rebel vehicle."
   (when (and *multi-sync-enabled?*
              (= (pc-multi-get-status) (mp-connection-status in-game))
              *target*
-             (nonzero? *target*)
-             *remote-info*
-             (nonzero? *remote-info*))
+             (nonzero? *target*))
     (let ((condition #f)
-          (veh (the-as vehicle #f)))
+          (destination-record (the-as mp-player-record #f))
+          (best-distance (meters 1000000.0)))
       (when (and (-> *target* control)
                  (nonzero? (-> *target* control))
                  (not (focus-test? *target* dead teleporting)))
-        (let ((riding-veh-id (-> *remote-info* riding-veh-id))
-              (riding-seat-index (-> *remote-info* riding-seat-index)))
-          ;; Remote player must be driving a vehicle (riding-seat-index == 0)
-          (when (and (nonzero? riding-veh-id) (zero? riding-seat-index))
-            (set! veh (mp-vehicle-find-by-net-id riding-veh-id))
-            (when (and veh (nonzero? veh) (-> veh root) (nonzero? (-> veh root)) (mp-shuttle-vehicle-has-rebel? veh))
-              (let ((dist (vector-vector-distance (target-pos 0) (-> veh root trans))))
-                (set! condition (> dist *mp-shuttle-teleport-distance*))
-                )
-              )
-            )
-          )
+        (dotimes (player-id MP_MAX_PLAYERS)
+          (let ((record (mp-player-record-by-id (the-as uint player-id))))
+            (when (and record
+                       (nonzero? record)
+                       (mp-player-record-remote? *mp-player-controller* record)
+                       (nonzero? (-> record vehicle vehicle-id))
+                       (zero? (-> record vehicle seat-index)))
+              (let ((veh (mp-vehicle-find-by-net-id (-> record vehicle vehicle-id))))
+                (when (and veh
+                           (nonzero? veh)
+                           (-> veh root)
+                           (nonzero? (-> veh root))
+                           (mp-shuttle-vehicle-has-rebel? veh))
+                  (let ((distance
+                          (vector-vector-distance (target-pos 0) (-> veh root trans))))
+                    (when (or (not destination-record)
+                              (zero? destination-record)
+                              (< distance best-distance))
+                      (set! destination-record record)
+                      (set! best-distance distance))))))))
+        (when (and destination-record (nonzero? destination-record))
+          (set! condition (> best-distance *mp-shuttle-teleport-distance*)))
         )
       ;; Call the generic left-behind update helper
-      (mp-update-left-behind-teleport! condition #f)
+      (mp-update-left-behind-teleport! condition #f destination-record)
       )
     )
   (none)
@@ -1754,15 +1767,21 @@
                               (set! s4-2 (the-as vehicle (handle->process-safe (-> *target* pilot vehicle))))
                               )
                             (when (not s4-2)
-                              (let ((puppet *mp-puppet*))
-                                (when (and puppet
-                                           (nonzero? puppet)
-                                           (-> puppet pilot)
-                                           (nonzero? (-> puppet pilot))
-                                           (focus-test? puppet pilot))
-                                  (set! s4-2 (the-as vehicle (handle->process-safe (-> puppet pilot vehicle))))
-                                  )
-                                )
+                              (dotimes (player-id MP_MAX_PLAYERS)
+                                (let* ((record (mp-player-record-by-id (the-as uint player-id)))
+                                       (puppet (mp-player-record-target record)))
+                                  (when (and (not s4-2)
+                                             record
+                                             (nonzero? record)
+                                             (mp-player-record-remote? *mp-player-controller* record)
+                                             puppet
+                                             (nonzero? puppet)
+                                             (-> puppet pilot)
+                                             (nonzero? (-> puppet pilot))
+                                             (focus-test? puppet pilot))
+                                    (set! s4-2
+                                      (the-as vehicle
+                                        (handle->process-safe (-> puppet pilot vehicle)))))))
                               )
                             (when (and s4-2 (nonzero? s4-2))
                               (let ((v1-260 (get-best-seat-for-vehicle

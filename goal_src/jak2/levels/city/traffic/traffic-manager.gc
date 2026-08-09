@@ -170,7 +170,7 @@
 (defmethod spawn-all ((this traffic-manager))
 
   (when (and (mp-is-traffic-authoritative?)
-             (or (mp-is-jak?) (mp-is-traffic-spawn-ready?)))
+             (or (mp-session-host?) (mp-is-traffic-spawn-ready?)))
 
     (dotimes (i 21)
       (let ((s4-0 (-> this traffic-engine object-type-info-array i)))
@@ -623,13 +623,8 @@
          )
        )
       (('set-guard-force-visible)
-       (let ((a0-89 (-> arg3 param 0))
-             (v1-34 (-> self traffic-engine alert-state target-status-array))
-             )
-         (if a0-89
-             (logior! (-> v1-34 0 flags) (traffic-target-flag force-visible))
-             (logclear! (-> v1-34 0 flags) (traffic-target-flag force-visible))
-             )
+       (let ((a0-89 (-> arg3 param 0)))
+         (mp-traffic-set-player-targets-force-visible! a0-89)
          )
        )
       (('end-pursuit-by-type)

@@ -650,19 +650,20 @@
 (defmethod remote-wanted-levels-contain-airlock-other-side? ((this com-airlock))
   (let ((level-list (-> this other-side-levels)))
     (when (and level-list
-               (pair? level-list)
-               *remote-info*
-               (nonzero? (the-as uint *remote-info*)))
-      (let ((packed-level (-> *remote-info* level)))
-        (dotimes (packed-idx 4)
-          (let ((level-id (the-as uint (logand (shr packed-level (* packed-idx 8)) #xff))))
-            (when (airlock-level-list-contains-id? this level-list level-id)
-              (return #t)
-              )
-            )
-          )
-        )
-      )
+               (pair? level-list))
+      (dotimes (player-id MP_MAX_PLAYERS)
+        (let ((record (mp-player-record-by-id (the-as uint player-id))))
+          (when (and record
+                     (nonzero? record)
+                     (mp-player-record-remote? *mp-player-controller* record)
+                     (>= (-> record connection status) 4))
+            (let ((packed-level (-> record transform level)))
+              (dotimes (packed-idx 4)
+                (let ((level-id
+                        (the-as uint
+                          (logand (shr packed-level (* packed-idx 8)) #xff))))
+                  (when (airlock-level-list-contains-id? this level-list level-id)
+                    (return #t)))))))))
     )
   #f
   )

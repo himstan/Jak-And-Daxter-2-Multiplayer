@@ -41,7 +41,7 @@ void mp_send_airlock_sync(MultiplayerData& data, MPAirlockSyncBufferGOAL* buffer
                      : MAX_AIRLOCK_SYNC_COUNT;
   memcpy(packet.states, buffer->local_table.states, sizeof(packet.states));
   packet.sequence = buffer->sequence;
-  MultiplayerManager::broadcast(data, data.local_role, packet, ENET_PACKET_FLAG_UNSEQUENCED);
+  MultiplayerManager::broadcast(data, data.session_role, packet, ENET_PACKET_FLAG_UNSEQUENCED);
 }
 
 void mp_receive_airlock_sync(MultiplayerData& data, MPAirlockSyncBufferGOAL* buffer) {

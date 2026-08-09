@@ -139,9 +139,9 @@ bool mp_send_packet(MultiplayerData& data,
                 : static_cast<int>(MultiplayerChannel::STATE);
 
   ENetPeer* target_peer = nullptr;
-  if (data.local_role == 0) {
+  if (data.session_role == 0) {
     target_peer = data.authenticated_peer;
-  } else if (data.local_role == 1) {
+  } else if (data.session_role == 1) {
     target_peer = data.server_peer;
   }
 
@@ -175,7 +175,7 @@ bool mp_send_packet_immediately(MultiplayerData& data,
                 : static_cast<int>(MultiplayerChannel::STATE);
 
   MultiplayerDatagram secured;
-  if (!data.security.seal(data.local_role, packet_type, packet_data, size, secured)) {
+  if (!data.security.seal(data.session_role, packet_type, packet_data, size, secured)) {
     if (packet_type == PacketType::EVENT_LEAVE) {
       lg::warn("[MP-Leave] Secure seal rejected EVENT_LEAVE (peer_state={}, plaintext_bytes={}).",
                static_cast<int>(peer->state), size);
@@ -221,7 +221,7 @@ size_t mp_flush_packet_window(MultiplayerData& data) {
           return false;
         }
         MultiplayerDatagram secured;
-        if (!data.security.seal(data.local_role,
+        if (!data.security.seal(data.session_role,
                                 packet_type,
                                 plaintext,
                                 plaintext_size,

@@ -5,6 +5,7 @@
 #include "game/multiplayer/multiplayer_packet.h"
 #include "game/multiplayer/multiplayer_session.h"
 
+#include <algorithm>
 #include <cstring>
 
 namespace {
@@ -12,21 +13,16 @@ bool valid_player_name(const char* name) {
   if (!name) {
     return false;
   }
-  const auto* terminator = static_cast<const char*>(
-      memchr(name, '\0', kMultiplayerPlayerNameSize));
+  const auto* terminator =
+      static_cast<const char*>(memchr(name, '\0', kMultiplayerPlayerNameSize));
   if (!terminator) {
     return false;
   }
-
-  const size_t length = static_cast<size_t>(terminator - name);
-  for (size_t i = 0; i < length; ++i) {
-    const auto character = static_cast<unsigned char>(name[i]);
-    const bool digit = character >= static_cast<unsigned char>('0') &&
-                       character <= static_cast<unsigned char>('9');
-    const bool uppercase = character >= static_cast<unsigned char>('A') &&
-                           character <= static_cast<unsigned char>('Z');
-    const bool lowercase = character >= static_cast<unsigned char>('a') &&
-                           character <= static_cast<unsigned char>('z');
+  for (const char* it = name; it != terminator; ++it) {
+    const auto value = static_cast<unsigned char>(*it);
+    const bool digit = value >= '0' && value <= '9';
+    const bool uppercase = value >= 'A' && value <= 'Z';
+    const bool lowercase = value >= 'a' && value <= 'z';
     if (!digit && !uppercase && !lowercase) {
       return false;
     }
@@ -34,39 +30,19 @@ bool valid_player_name(const char* name) {
   return true;
 }
 
-PacketJoin make_join_packet(const LocalPlayerInfoGOAL& local, uint32_t sequence_num) {
-  PacketJoin join = {};
-  join.header.type = PacketType::EVENT_JOIN;
-  join.header.sequenceNum = sequence_num;
-  memcpy(join.player_name, local.player_name, sizeof(join.player_name));
-  return join;
+bool valid_character(MPPlayerCharacter character) {
+  return character == MPPlayerCharacter::JAK || character == MPPlayerCharacter::DAXTER;
 }
 
-bool send_join_packet(MultiplayerData& data, const LocalPlayerInfoGOAL& local) {
-  if (data.join_identity_sent || !data.security.authenticated() ||
-      !valid_player_name(local.player_name)) {
-    return data.join_identity_sent;
+MPPlayerRecordGOAL* joined_record(MPPlayerControllerGOAL* controller, uint32_t player_id) {
+  if (!controller || !mp_valid_player_id(player_id)) {
+    return nullptr;
   }
-
-  const auto join = make_join_packet(local, ++data.sequence_num);
-  const bool queued = MultiplayerManager::broadcast(
-      data, static_cast<int>(MultiplayerChannel::CONTROL), join, ENET_PACKET_FLAG_RELIABLE);
-  if (queued) {
-    data.join_identity_sent = true;
+  auto& record = controller->records[player_id];
+  if (!record.identity.joined || record.identity.player_id != player_id) {
+    return nullptr;
   }
-  return queued;
-}
-
-bool has_host_continue(const LocalPlayerInfoGOAL* local) {
-  if (!local) {
-    return false;
-  }
-  for (size_t i = 0; i < sizeof(local->host_continue); ++i) {
-    if (local->host_continue[i] != 0) {
-      return true;
-    }
-  }
-  return false;
+  return &record;
 }
 
 bool finite_vehicle_state(const MPVehicleState& state) {
@@ -79,384 +55,476 @@ bool finite_vehicle_state(const MPVehicleState& state) {
          mp_float_is_finite(state.ang_vel_z);
 }
 
-bool valid_bootstrap_packet(const PacketBootstrap& bootstrap) {
-  return mp_float_is_finite(bootstrap.money) && mp_float_is_finite(bootstrap.gems) &&
-         mp_float_is_finite(bootstrap.skill) && mp_float_is_finite(bootstrap.x) &&
-         mp_float_is_finite(bootstrap.y) && mp_float_is_finite(bootstrap.z) &&
-         mp_float_is_finite(bootstrap.tod_ratio) &&
-         mp_float_is_finite(bootstrap.weather_cloud) &&
-         mp_float_is_finite(bootstrap.weather_fog) &&
-         mp_float_is_finite(bootstrap.weather_rain) &&
-         mp_float_is_finite(bootstrap.cam_angle_y) && bootstrap.sync_aids_count <= 128 &&
-         memchr(bootstrap.host_continue, '\0', sizeof(bootstrap.host_continue)) != nullptr;
+bool valid_player_state(const PacketPlayerState& state) {
+  return mp_valid_player_id(state.player_id) && mp_float_is_finite(state.x) &&
+         mp_float_is_finite(state.y) && mp_float_is_finite(state.z) &&
+         mp_float_is_finite(state.angle) && mp_float_is_finite(state.vel_x) &&
+         mp_float_is_finite(state.vel_y) && mp_float_is_finite(state.vel_z) &&
+         mp_float_is_finite(state.cam_angle_y) && finite_vehicle_state(state.veh_state);
 }
 
-void apply_bootstrap_to_goal(const PacketBootstrap& bootstrap,
-                             LocalPlayerInfoGOAL& local,
-                             RemotePlayerInfoGOAL& remote) {
-  local.sync_money = bootstrap.money;
-  local.sync_gems = bootstrap.gems;
-  local.sync_skill = bootstrap.skill;
-  remote.x = bootstrap.x;
-  remote.y = bootstrap.y;
-  remote.z = bootstrap.z;
-  local.host_task = bootstrap.host_task;
-  local.host_node = bootstrap.host_node;
-  memcpy(local.host_continue, bootstrap.host_continue, sizeof(local.host_continue));
-  memcpy(local.task_mask, bootstrap.task_mask, sizeof(local.task_mask));
-  memcpy(local.active_task_mask, bootstrap.active_task_mask, sizeof(local.active_task_mask));
-  local.sync_aids_count = bootstrap.sync_aids_count;
-  memcpy(local.sync_aids, bootstrap.sync_aids, sizeof(local.sync_aids));
-  local.clock = bootstrap.clock;
-  remote.tod_frame = bootstrap.tod_frame;
-  remote.tod_ratio = bootstrap.tod_ratio;
-  remote.weather_cloud = bootstrap.weather_cloud;
-  remote.weather_fog = bootstrap.weather_fog;
-  remote.weather_rain = bootstrap.weather_rain;
-  if (local.sync_flag <= 1) {
-    local.sync_flag = 1;
+bool valid_world_state(const PacketWorldState& state) {
+  return mp_valid_player_id(state.player_id) && mp_float_is_finite(state.time_of_day_ratio) &&
+         mp_float_is_finite(state.weather_cloud) && mp_float_is_finite(state.weather_fog) &&
+         mp_float_is_finite(state.weather_rain);
+}
+
+bool valid_bootstrap_packet(const PacketBootstrap& packet) {
+  return mp_float_is_finite(packet.money) && mp_float_is_finite(packet.gems) &&
+         mp_float_is_finite(packet.skill) && mp_float_is_finite(packet.x) &&
+         mp_float_is_finite(packet.y) && mp_float_is_finite(packet.z) &&
+         mp_float_is_finite(packet.tod_ratio) && mp_float_is_finite(packet.weather_cloud) &&
+         mp_float_is_finite(packet.weather_fog) && mp_float_is_finite(packet.weather_rain) &&
+         mp_float_is_finite(packet.cam_angle_y) && packet.sync_aids_count <= 128 &&
+         memchr(packet.host_continue, '\0', sizeof(packet.host_continue)) != nullptr;
+}
+
+bool has_host_continue(const MPBootstrapSyncStateGOAL* bootstrap) {
+  if (!bootstrap) {
+    return false;
   }
+  return std::any_of(std::begin(bootstrap->host_continue),
+                     std::end(bootstrap->host_continue),
+                     [](uint8_t value) { return value != 0; });
 }
 
-PacketBootstrap make_bootstrap_packet(const LocalPlayerInfoGOAL& local, uint32_t sequence_num) {
-  PacketBootstrap bootstrap = {};
-  bootstrap.header.type = PacketType::BOOTSTRAP;
-  bootstrap.header.sequenceNum = sequence_num;
-  bootstrap.money = local.money;
-  bootstrap.gems = local.gems;
-  bootstrap.skill = local.skill;
-  bootstrap.x = local.x;
-  bootstrap.y = local.y;
-  bootstrap.z = local.z;
-  bootstrap.host_task = local.host_task;
-  bootstrap.host_node = local.host_node;
-  memcpy(bootstrap.host_continue, local.host_continue, sizeof(bootstrap.host_continue));
-  memcpy(bootstrap.task_mask, local.task_mask, sizeof(bootstrap.task_mask));
-  memcpy(bootstrap.active_task_mask, local.active_task_mask, sizeof(bootstrap.active_task_mask));
-  bootstrap.sync_aids_count = mp_clamp_count(local.sync_aids_count, 128);
-  memcpy(bootstrap.sync_aids, local.sync_aids, sizeof(bootstrap.sync_aids));
-  bootstrap.clock = local.clock;
-  bootstrap.tod_frame = local.tod_frame;
-  bootstrap.tod_ratio = local.tod_ratio;
-  bootstrap.weather_cloud = local.weather_cloud;
-  bootstrap.weather_fog = local.weather_fog;
-  bootstrap.weather_rain = local.weather_rain;
-  return bootstrap;
+PacketJoin make_join_packet(const MPPlayerRecordGOAL& local, uint32_t sequence) {
+  PacketJoin packet = {};
+  packet.header.type = PacketType::EVENT_JOIN;
+  packet.header.sequenceNum = sequence;
+  packet.player_id = local.identity.player_id;
+  packet.character = local.identity.character;
+  memcpy(packet.player_name, local.identity.name, sizeof(packet.player_name));
+  return packet;
 }
+
+bool send_join_packet(MultiplayerData& data, const MPPlayerRecordGOAL& local) {
+  if (data.join_identity_sent || !data.security.authenticated() ||
+      !mp_valid_player_id(local.identity.player_id) ||
+      !valid_character(local.identity.character) || !valid_player_name(local.identity.name)) {
+    return data.join_identity_sent;
+  }
+  const auto packet = make_join_packet(local, ++data.sequence_num);
+  const bool queued = MultiplayerManager::broadcast(
+      data, static_cast<int>(MultiplayerChannel::CONTROL), packet, ENET_PACKET_FLAG_RELIABLE);
+  if (queued) {
+    data.join_identity_sent = true;
+  }
+  return queued;
+}
+
+PacketBootstrap make_bootstrap_packet(const MPPlayerRecordGOAL& local,
+                                      const MPWorldSyncStateGOAL& world,
+                                      const MPBootstrapSyncStateGOAL& bootstrap,
+                                      uint32_t sequence) {
+  PacketBootstrap packet = {};
+  packet.header.type = PacketType::BOOTSTRAP;
+  packet.header.sequenceNum = sequence;
+  packet.money = world.money;
+  packet.gems = world.gems;
+  packet.skill = world.skill;
+  packet.x = bootstrap.host_spawn_position[0];
+  packet.y = bootstrap.host_spawn_position[1];
+  packet.z = bootstrap.host_spawn_position[2];
+  if (packet.x == 0.0f && packet.y == 0.0f && packet.z == 0.0f) {
+    packet.x = local.transform.position[0];
+    packet.y = local.transform.position[1];
+    packet.z = local.transform.position[2];
+  }
+  packet.host_task = bootstrap.host_task;
+  memcpy(packet.host_continue, bootstrap.host_continue, sizeof(packet.host_continue));
+  memcpy(packet.task_mask, world.task_mask, sizeof(packet.task_mask));
+  memcpy(packet.active_task_mask, world.active_task_mask, sizeof(packet.active_task_mask));
+  packet.sync_aids_count = mp_clamp_count(bootstrap.synchronized_aid_count, 128);
+  memcpy(packet.sync_aids, bootstrap.synchronized_aids, sizeof(packet.sync_aids));
+  packet.clock = world.clock;
+  packet.tod_frame = world.time_of_day_frame;
+  packet.tod_ratio = world.time_of_day_ratio;
+  packet.weather_cloud = world.weather_cloud;
+  packet.weather_fog = world.weather_fog;
+  packet.weather_rain = world.weather_rain;
+  packet.cam_angle_y = bootstrap.host_camera_angle_y;
+  return packet;
+}
+
+void send_world_state(MultiplayerData& data,
+                      uint32_t local_player_id,
+                      const MPWorldSyncStateGOAL& world) {
+  if (data.session_role != 0 || !mp_valid_player_id(local_player_id)) {
+    return;
+  }
+  PacketWorldState packet = {};
+  packet.header.type = PacketType::WORLD_STATE;
+  packet.header.sequenceNum = ++data.sequence_num;
+  packet.player_id = local_player_id;
+  packet.clock = world.clock;
+  packet.time_of_day_frame = world.time_of_day_frame;
+  packet.time_of_day_ratio = world.time_of_day_ratio;
+  packet.weather_cloud = world.weather_cloud;
+  packet.weather_fog = world.weather_fog;
+  packet.weather_rain = world.weather_rain;
+  memcpy(packet.task_mask, world.task_mask, sizeof(packet.task_mask));
+  memcpy(packet.active_task_mask, world.active_task_mask, sizeof(packet.active_task_mask));
+  MultiplayerManager::broadcast(data,
+                                static_cast<int>(MultiplayerChannel::STATE),
+                                packet,
+                                ENET_PACKET_FLAG_UNSEQUENCED);
+}
+
+void copy_cached_state_to_record(const CachedPlayerState& cached, MPPlayerRecordGOAL& record) {
+  if (!cached.identity_ready || !cached.state_ready) {
+    return;
+  }
+  record.connection.status = cached.status > 0 ? cached.status : 1;
+  record.connection.latest_state_sequence = cached.last_sequence_num;
+  record.connection.latest_turret_sequence = cached.last_turret_sequence_num;
+  record.connection.connected = 1;
+  record.connection.state_cached = 1;
+  record.identity.state_ready = 1;
+  record.transform.position[0] = cached.x;
+  record.transform.position[1] = cached.y;
+  record.transform.position[2] = cached.z;
+  record.transform.position[3] = 1.0f;
+  record.transform.velocity[0] = cached.vel_x;
+  record.transform.velocity[1] = cached.vel_y;
+  record.transform.velocity[2] = cached.vel_z;
+  record.transform.velocity[3] = 0.0f;
+  record.transform.angle = cached.angle;
+  record.transform.level = cached.level_hash;
+  record.action.target_state_id = cached.state_id;
+  record.action.darkjak_stage = cached.darkjak_stage;
+  record.action.authoritative_sequence = cached.action_seq;
+  record.action.action_state_id = cached.action_state_id;
+  record.action.scene_state = cached.scene_active;
+  record.action.respawn_flags = cached.respawn_flags;
+  record.input.buttons = cached.buttons;
+  record.input.leftx = cached.leftx;
+  record.input.lefty = cached.lefty;
+  record.input.rightx = cached.rightx;
+  record.input.righty = cached.righty;
+  record.input.camera_angle_y = cached.cam_angle_y;
+  record.input.equipped_weapon = cached.equipped_weapon;
+  record.vehicle.vehicle_id = cached.riding_veh_id;
+  record.vehicle.seat_index = cached.riding_seat_index;
+  record.vehicle.turret_active = cached.turret_active;
+  record.vehicle.turret_roty = cached.turret_roty;
+  record.vehicle.turret_rotx = cached.turret_rotx;
+  memcpy(&record.vehicle.state, &cached.veh_state, sizeof(record.vehicle.state));
+}
+}  // namespace
+
+bool mp_valid_player_id(uint32_t player_id) {
+  return player_id < kMPMaxPlayers;
+}
+
+bool mp_player_id_matches_authenticated_peer(const MultiplayerData& data, uint32_t player_id) {
+  return mp_valid_player_id(player_id) && player_id != data.local_player_id &&
+         (!mp_valid_player_id(data.authenticated_player_id) ||
+          player_id == data.authenticated_player_id);
+}
+
+void mp_clear_player_slot(MultiplayerData& data,
+                          MPPlayerControllerGOAL* controller,
+                          uint32_t player_id) {
+  if (!mp_valid_player_id(player_id) || player_id == data.local_player_id) {
+    return;
+  }
+  data.player_states[player_id] = {};
+  if (controller) {
+    auto& record = controller->records[player_id];
+    const auto runtime = record.runtime;
+    record = {};
+    record.runtime = runtime;
+    record.identity.player_id = kMPInvalidPlayerId;
+    record.identity.character = MPPlayerCharacter::UNKNOWN;
+  }
+  if (data.authenticated_player_id == player_id) {
+    data.authenticated_player_id = kMPInvalidPlayerId;
+  }
 }
 
 void mp_handle_player_state_packet(MultiplayerData& data,
                                    const ENetPacket* packet,
-                                   RemotePlayerInfoGOAL* remote,
                                    uint32_t current_time) {
   const auto state = PacketView(packet).as_exact<PacketPlayerState>(PacketType::STATE_UPDATE);
-  if (!state) {
+  if (!state || !valid_player_state(*state) ||
+      !mp_player_id_matches_authenticated_peer(data, state->player_id)) {
     return;
   }
-  if (!mp_float_is_finite(state->x) || !mp_float_is_finite(state->y) ||
-      !mp_float_is_finite(state->z) || !mp_float_is_finite(state->angle) ||
-      !mp_float_is_finite(state->vel_x) || !mp_float_is_finite(state->vel_y) ||
-      !mp_float_is_finite(state->vel_z) || !mp_float_is_finite(state->cam_angle_y) ||
-      !mp_float_is_finite(state->tod_ratio) || !mp_float_is_finite(state->weather_cloud) ||
-      !mp_float_is_finite(state->weather_fog) || !mp_float_is_finite(state->weather_rain) ||
-      !mp_float_is_finite(state->money) || !mp_float_is_finite(state->gems) ||
-      !mp_float_is_finite(state->skill) || !finite_vehicle_state(state->veh_state)) {
+  auto& cached = data.player_states[state->player_id];
+  if (!mp_sequence_is_newer(state->header.sequenceNum, cached.last_sequence_num)) {
     return;
   }
-  if (state->status > static_cast<uint8_t>(MultiplayerStatus::HOST_LEFT) &&
-      state->status != static_cast<uint8_t>(MultiplayerStatus::FAILED)) {
-    return;
-  }
-
-  const uint32_t expected_remote_id = data.local_role == 0 ? 1 : 0;
-  if (state->netId != expected_remote_id) {
-    return;
-  }
-
-  auto& entity = data.remote_entity;
-  if (!mp_sequence_is_newer(state->header.sequenceNum, entity.last_sequence_num)) {
-    return;
-  }
-
-  if (state->netId != data.local_net_id && state->level_hash != 0 &&
-      data.last_remote_traffic_level_hash != 0 &&
-      state->level_hash != data.last_remote_traffic_level_hash) {
-    multiplayer_reset_remote_traffic_buffers(data);
-    multiplayer_reset_remote_palace_squid_state(data);
-    multiplayer_reset_remote_airlock_state(data);
-    lg::info("[Multiplayer] Remote level changed. Cleared traffic sync buffers. old={} new={}",
-             data.last_remote_traffic_level_hash, state->level_hash);
-  }
-  if (state->netId != data.local_net_id && state->level_hash != 0) {
-    data.last_remote_traffic_level_hash = state->level_hash;
-  }
-
-  entity.status = state->status;
-  entity.x = state->x;
-  entity.y = state->y;
-  entity.z = state->z;
-  entity.angle = state->angle;
-  entity.vel_x = state->vel_x;
-  entity.vel_y = state->vel_y;
-  entity.vel_z = state->vel_z;
-  entity.send_tick = state->send_tick;
-  entity.receive_tick = current_time;
-  entity.state_id = state->state_id;
-  entity.level_hash = state->level_hash;
-  entity.darkjak_stage = state->darkjak_stage;
-  entity.clock = state->clock;
-  entity.tod_frame = state->tod_frame;
-  entity.tod_ratio = state->tod_ratio;
-  entity.weather_cloud = state->weather_cloud;
-  entity.weather_fog = state->weather_fog;
-  entity.weather_rain = state->weather_rain;
-  entity.buttons = state->buttons;
-  entity.leftx = state->leftx;
-  entity.lefty = state->lefty;
-  entity.rightx = state->rightx;
-  entity.righty = state->righty;
-  entity.respawn_flags = state->respawn_flags;
-  entity.cam_angle_y = state->cam_angle_y;
-  entity.riding_veh_id = state->riding_veh_id;
-  entity.riding_seat_index = state->riding_seat_index;
-  entity.scene_active = state->scene_active;
-  entity.equipped_weapon = state->equipped_weapon;
-  entity.turret_active = state->turret_active;
-  entity.last_sequence_num = state->header.sequenceNum;
-  entity.action_seq = state->action_seq;
-  entity.action_state_id = state->action_state_id;
-  memcpy(&entity.veh_state, &state->veh_state, sizeof(MPVehicleState));
-
-  if (data.local_role == 0 && state->netId == 1 &&
-      state->status == (uint8_t)MultiplayerStatus::IN_GAME && data.pending_bootstrap &&
-      data.pending_bootstrap_sent_once) {
+  cached.player_id = state->player_id;
+  cached.state_ready = true;
+  cached.status = state->status;
+  cached.x = state->x;
+  cached.y = state->y;
+  cached.z = state->z;
+  cached.angle = state->angle;
+  cached.vel_x = state->vel_x;
+  cached.vel_y = state->vel_y;
+  cached.vel_z = state->vel_z;
+  cached.send_tick = state->send_tick;
+  cached.receive_tick = current_time;
+  cached.state_id = state->state_id;
+  cached.level_hash = state->level_hash;
+  cached.darkjak_stage = state->darkjak_stage;
+  cached.buttons = state->buttons;
+  cached.leftx = state->leftx;
+  cached.lefty = state->lefty;
+  cached.rightx = state->rightx;
+  cached.righty = state->righty;
+  cached.respawn_flags = state->respawn_flags;
+  cached.cam_angle_y = state->cam_angle_y;
+  cached.riding_veh_id = state->riding_veh_id;
+  cached.riding_seat_index = state->riding_seat_index;
+  cached.scene_active = state->scene_active;
+  cached.equipped_weapon = state->equipped_weapon;
+  cached.turret_active = state->turret_active;
+  cached.action_seq = state->action_seq;
+  cached.action_state_id = state->action_state_id;
+  cached.last_sequence_num = state->header.sequenceNum;
+  memcpy(&cached.veh_state, &state->veh_state, sizeof(cached.veh_state));
+  if (data.session_role == 0 && data.pending_bootstrap_sent_once) {
     data.pending_bootstrap = false;
     data.pending_bootstrap_sent_once = false;
-    lg::info("[MP-Reconnect] Client entered game. Bootstrap acknowledged (sequence={}, status={}).",
-             state->header.sequenceNum, state->status);
-  }
-
-  if (remote && state->netId == 0) {
-    remote->money = state->money;
-    remote->gems = state->gems;
-    remote->skill = state->skill;
-    memcpy(remote->task_mask, state->task_mask, sizeof(remote->task_mask));
-    memcpy(remote->active_task_mask, state->active_task_mask, sizeof(remote->active_task_mask));
   }
 }
 
 void mp_handle_turret_state_packet(MultiplayerData& data, const ENetPacket* packet) {
   const auto state = PacketView(packet).as_exact<PacketTurretState>(PacketType::TURRET_SYNC);
-  if (!state) {
+  if (!state || !mp_float_is_finite(state->roty) || !mp_float_is_finite(state->rotx) ||
+      !mp_player_id_matches_authenticated_peer(data, state->player_id)) {
     return;
   }
-  if (!mp_float_is_finite(state->roty) || !mp_float_is_finite(state->rotx)) {
+  auto& cached = data.player_states[state->player_id];
+  if (!mp_sequence_is_newer(state->header.sequenceNum, cached.last_turret_sequence_num)) {
     return;
   }
-
-  const uint32_t expected_remote_id = data.local_role == 0 ? 1 : 0;
-  if (state->netId != expected_remote_id) {
-    return;
-  }
-  auto& entity = data.remote_entity;
-  if (!mp_sequence_is_newer(state->header.sequenceNum, entity.last_turret_sequence_num)) {
-    return;
-  }
-  entity.last_turret_sequence_num = state->header.sequenceNum;
+  cached.last_turret_sequence_num = state->header.sequenceNum;
   if (state->turret_aid != 0) {
-    entity.turret_roty = state->roty;
-    entity.turret_rotx = state->rotx;
+    cached.turret_roty = state->roty;
+    cached.turret_rotx = state->rotx;
   }
 }
 
-void mp_handle_join_packet(const ENetPacket* packet, RemotePlayerInfoGOAL* remote) {
+void mp_handle_join_packet(MultiplayerData& data,
+                           const ENetPacket* packet,
+                           MPPlayerControllerGOAL* controller) {
   const auto join = PacketView(packet).as_exact<PacketJoin>(PacketType::EVENT_JOIN);
-  if (!join || !remote || !valid_player_name(join->player_name)) {
+  if (!join || !controller || !mp_valid_player_id(join->player_id) ||
+      join->player_id == controller->local_player_id || join->player_id == data.local_player_id ||
+      !valid_character(join->character) ||
+      !valid_player_name(join->player_name)) {
     return;
   }
-  memset(remote->player_name, 0, sizeof(remote->player_name));
-  memcpy(remote->player_name, join->player_name, sizeof(join->player_name));
+  if (mp_valid_player_id(data.authenticated_player_id) &&
+      data.authenticated_player_id != join->player_id) {
+    return;
+  }
+  data.authenticated_player_id = join->player_id;
+  if (data.session_role == 1) {
+    data.host_player_id = join->player_id;
+    controller->host_player_id = join->player_id;
+  }
+  auto& cached = data.player_states[join->player_id];
+  cached.identity_ready = true;
+  cached.player_id = join->player_id;
+  cached.character = join->character;
+  memcpy(cached.player_name, join->player_name, sizeof(cached.player_name));
+
+  auto& record = controller->records[join->player_id];
+  const auto runtime = record.runtime;
+  record = {};
+  record.runtime = runtime;
+  record.identity.player_id = join->player_id;
+  record.identity.character = join->character;
+  record.identity.identity_ready = 1;
+  record.identity.joined = 1;
+  record.connection.connected = 1;
+  memcpy(record.identity.name, join->player_name, sizeof(record.identity.name));
+}
+
+void mp_handle_world_state_packet(MultiplayerData& data,
+                                  const ENetPacket* packet,
+                                  MPWorldSyncStateGOAL* world) {
+  const auto state = PacketView(packet).as_exact<PacketWorldState>(PacketType::WORLD_STATE);
+  if (!state || !world || data.session_role != 1 || !valid_world_state(*state) ||
+      !mp_player_id_matches_authenticated_peer(data, state->player_id) ||
+      state->player_id != data.host_player_id ||
+      !mp_sequence_is_newer(state->header.sequenceNum, data.last_world_sequence)) {
+    return;
+  }
+  data.last_world_sequence = state->header.sequenceNum;
+  world->sequence = state->header.sequenceNum;
+  world->clock = state->clock;
+  world->time_of_day_frame = state->time_of_day_frame;
+  world->time_of_day_ratio = state->time_of_day_ratio;
+  world->weather_cloud = state->weather_cloud;
+  world->weather_fog = state->weather_fog;
+  world->weather_rain = state->weather_rain;
+  memcpy(world->task_mask, state->task_mask, sizeof(world->task_mask));
+  memcpy(world->active_task_mask, state->active_task_mask, sizeof(world->active_task_mask));
 }
 
 void mp_handle_bootstrap_packet(const ENetPacket* packet,
-                                LocalPlayerInfoGOAL* local,
-                                RemotePlayerInfoGOAL* remote) {
-  const auto bootstrap = PacketView(packet).as_exact<PacketBootstrap>(PacketType::BOOTSTRAP);
-  if (!bootstrap || !local || !remote) {
+                                MPWorldSyncStateGOAL* world,
+                                MPBootstrapSyncStateGOAL* bootstrap) {
+  const auto state = PacketView(packet).as_exact<PacketBootstrap>(PacketType::BOOTSTRAP);
+  if (!state || !world || !bootstrap || !valid_bootstrap_packet(*state)) {
     return;
   }
-  if (!valid_bootstrap_packet(*bootstrap)) {
-    return;
-  }
-  apply_bootstrap_to_goal(*bootstrap, *local, *remote);
+  world->money = state->money;
+  world->gems = state->gems;
+  world->skill = state->skill;
+  world->clock = state->clock;
+  world->time_of_day_frame = state->tod_frame;
+  world->time_of_day_ratio = state->tod_ratio;
+  world->weather_cloud = state->weather_cloud;
+  world->weather_fog = state->weather_fog;
+  world->weather_rain = state->weather_rain;
+  memcpy(world->task_mask, state->task_mask, sizeof(world->task_mask));
+  memcpy(world->active_task_mask, state->active_task_mask, sizeof(world->active_task_mask));
+  bootstrap->phase = 1;
+  bootstrap->sequence = state->header.sequenceNum;
+  bootstrap->host_task = state->host_task;
+  memcpy(bootstrap->host_continue, state->host_continue, sizeof(bootstrap->host_continue));
+  bootstrap->host_spawn_position[0] = state->x;
+  bootstrap->host_spawn_position[1] = state->y;
+  bootstrap->host_spawn_position[2] = state->z;
+  bootstrap->host_spawn_position[3] = 1.0f;
+  bootstrap->host_camera_angle_y = state->cam_angle_y;
+  bootstrap->synchronized_aid_count = state->sync_aids_count;
+  memcpy(bootstrap->synchronized_aids, state->sync_aids, sizeof(bootstrap->synchronized_aids));
 }
 
-void mp_send_player_state(MultiplayerData& data, LocalPlayerInfoGOAL* local) {
+void mp_send_player_sync(MultiplayerData& data,
+                         MPPlayerControllerGOAL* controller,
+                         MPWorldSyncStateGOAL* world,
+                         MPBootstrapSyncStateGOAL* bootstrap) {
+  if (!controller || !world || !bootstrap ||
+      !mp_valid_player_id(controller->local_player_id)) {
+    return;
+  }
+  data.local_player_id = controller->local_player_id;
+  data.host_player_id = controller->host_player_id;
+  const auto* local = joined_record(controller, controller->local_player_id);
   if (!local) {
     return;
   }
-
   send_join_packet(data, *local);
 
-  PacketPlayerState local_state = {};
-  local_state.header.type = PacketType::STATE_UPDATE;
-  local_state.header.sequenceNum = ++data.sequence_num;
-  local_state.netId = data.local_net_id;
-  local_state.status = (uint8_t)data.join_status;
-  local_state.x = local->x;
-  local_state.y = local->y;
-  local_state.z = local->z;
-  local_state.angle = local->angle;
-  local_state.vel_x = local->velocity[0];
-  local_state.vel_y = local->velocity[1];
-  local_state.vel_z = local->velocity[2];
-  local_state.send_tick = enet_time_get();
-  local->send_tick = local_state.send_tick;
-  local_state.state_id = local->state_id;
-  local_state.level_hash = local->level;
-  data.local_traffic_level_hash = local_state.level_hash;
-  local_state.darkjak_stage = local->darkjak_stage;
-  local_state.clock = local->clock;
-  local_state.tod_frame = local->tod_frame;
-  local_state.tod_ratio = local->tod_ratio;
-  local_state.weather_cloud = local->weather_cloud;
-  local_state.weather_fog = local->weather_fog;
-  local_state.weather_rain = local->weather_rain;
-  local_state.buttons = local->buttons;
-  local_state.leftx = local->leftx;
-  local_state.lefty = local->lefty;
-  local_state.rightx = local->rightx;
-  local_state.righty = local->righty;
-  local_state.respawn_flags = local->respawn_flags;
-  local_state.cam_angle_y = local->cam_angle_y;
-  local_state.riding_veh_id = local->riding_veh_id;
-  local_state.riding_seat_index = local->riding_seat_index;
-  local_state.scene_active = local->scene_active;
-  local_state.equipped_weapon = local->equipped_weapon;
-  local_state.turret_active = local->turret_active;
-  local_state.action_seq = local->action_seq;
-  local_state.action_state_id = local->action_state_id;
-  local_state.money = local->money;
-  local_state.gems = local->gems;
-  local_state.skill = local->skill;
-  memcpy(local_state.task_mask, local->task_mask, sizeof(local_state.task_mask));
-  memcpy(local_state.active_task_mask, local->active_task_mask, sizeof(local_state.active_task_mask));
-  memcpy(&local_state.veh_state, &local->veh_state, sizeof(MPVehicleState));
-  MultiplayerManager::broadcast(data, 0, local_state, ENET_PACKET_FLAG_UNSEQUENCED);
+  PacketPlayerState state = {};
+  state.header.type = PacketType::STATE_UPDATE;
+  state.header.sequenceNum = ++data.sequence_num;
+  state.player_id = data.local_player_id;
+  state.status = static_cast<uint8_t>(data.join_status.load());
+  state.x = local->transform.position[0];
+  state.y = local->transform.position[1];
+  state.z = local->transform.position[2];
+  state.angle = local->transform.angle;
+  state.vel_x = local->transform.velocity[0];
+  state.vel_y = local->transform.velocity[1];
+  state.vel_z = local->transform.velocity[2];
+  state.send_tick = enet_time_get();
+  state.state_id = local->action.target_state_id;
+  state.level_hash = local->transform.level;
+  data.local_traffic_level_hash = state.level_hash;
+  state.darkjak_stage = local->action.darkjak_stage;
+  state.buttons = local->input.buttons;
+  state.leftx = local->input.leftx;
+  state.lefty = local->input.lefty;
+  state.rightx = local->input.rightx;
+  state.righty = local->input.righty;
+  state.respawn_flags = local->action.respawn_flags;
+  state.cam_angle_y = local->input.camera_angle_y;
+  state.riding_veh_id = local->vehicle.vehicle_id;
+  state.riding_seat_index = local->vehicle.seat_index;
+  state.scene_active = local->action.scene_state;
+  state.equipped_weapon = local->input.equipped_weapon;
+  state.turret_active = local->vehicle.turret_active;
+  state.action_seq = local->action.authoritative_sequence;
+  state.action_state_id = local->action.action_state_id;
+  memcpy(&state.veh_state, &local->vehicle.state, sizeof(state.veh_state));
+  MultiplayerManager::broadcast(data,
+                                static_cast<int>(MultiplayerChannel::STATE),
+                                state,
+                                ENET_PACKET_FLAG_UNSEQUENCED);
 
-  if (local->turret_active && local->riding_veh_id != 0) {
-    PacketTurretState turret_state = {};
-    turret_state.header.type = PacketType::TURRET_SYNC;
-    turret_state.header.sequenceNum = ++data.sequence_num;
-    turret_state.netId = data.local_net_id;
-    turret_state.turret_aid = local->riding_veh_id;
-    turret_state.roty = local->turret_roty;
-    turret_state.rotx = local->turret_rotx;
-    MultiplayerManager::broadcast(data, 0, turret_state, ENET_PACKET_FLAG_UNSEQUENCED);
+  if (local->vehicle.turret_active && local->vehicle.vehicle_id != 0) {
+    PacketTurretState turret = {};
+    turret.header.type = PacketType::TURRET_SYNC;
+    turret.header.sequenceNum = ++data.sequence_num;
+    turret.player_id = data.local_player_id;
+    turret.turret_aid = local->vehicle.vehicle_id;
+    turret.roty = local->vehicle.turret_roty;
+    turret.rotx = local->vehicle.turret_rotx;
+    MultiplayerManager::broadcast(data,
+                                  static_cast<int>(MultiplayerChannel::STATE),
+                                  turret,
+                                  ENET_PACKET_FLAG_UNSEQUENCED);
   }
+  send_world_state(data, data.local_player_id, *world);
 
-  if (data.local_role != 0 || !data.pending_bootstrap) {
+  if (data.session_role != 0 || !data.pending_bootstrap || !data.host ||
+      data.host->connectedPeers == 0 ||
+      data.join_status != static_cast<int>(MultiplayerStatus::IN_GAME) ||
+      !has_host_continue(bootstrap)) {
     return;
   }
-
-  uint32_t current_time = enet_time_get();
-  if (!data.host || data.host->connectedPeers == 0) {
+  const uint32_t now = enet_time_get();
+  if (data.last_bootstrap_send_time != 0 && now - data.last_bootstrap_send_time < 500) {
     return;
   }
-  if (data.join_status != (int)MultiplayerStatus::IN_GAME || !has_host_continue(local)) {
-    return;
-  }
-  if (data.last_bootstrap_send_time != 0 && current_time - data.last_bootstrap_send_time < 500) {
-    return;
-  }
-  data.last_bootstrap_send_time = current_time;
-
-  const auto bootstrap = make_bootstrap_packet(*local, ++data.sequence_num);
-  const bool queued = MultiplayerManager::broadcast(data, 1, bootstrap, ENET_PACKET_FLAG_RELIABLE);
+  data.last_bootstrap_send_time = now;
+  const auto packet = make_bootstrap_packet(*local, *world, *bootstrap, ++data.sequence_num);
+  MultiplayerManager::broadcast(data,
+                                static_cast<int>(MultiplayerChannel::CONTROL),
+                                packet,
+                                ENET_PACKET_FLAG_RELIABLE);
   data.pending_bootstrap_sent_once = true;
-  lg::info("[MP-Reconnect] Bootstrap {} for client (sequence={}, pending={}, queued_packets={}, queued_bytes={}).",
-           queued ? "queued" : "rejected", bootstrap.header.sequenceNum,
-           data.pending_bootstrap.load(), data.packet_scheduler.queued_packet_count(),
-           data.packet_scheduler.queued_byte_count());
 }
 
-void mp_sync_remote_player_to_goal(MultiplayerData& data, RemotePlayerInfoGOAL* remote_goal) {
-  if (!remote_goal) {
+void mp_receive_player_sync(MultiplayerData& data,
+                            MPPlayerControllerGOAL* controller,
+                            MPWorldSyncStateGOAL*,
+                            MPBootstrapSyncStateGOAL*) {
+  if (!controller) {
     return;
   }
-
-  uint32_t other_net_id = (data.local_role == 0) ? 1 : 0;
-  if (data.remote_entity.last_sequence_num == 0) {
-    remote_goal->status = 0;
-    remote_goal->scene_active = 0;
-    remote_goal->turret_active = 0;
-    remote_goal->respawn_flags = 0;
-    remote_goal->respawn_pad = 0;
-    remote_goal->turret_roty = 0.0f;
-    remote_goal->turret_rotx = 0.0f;
-    remote_goal->velocity[0] = 0.0f;
-    remote_goal->velocity[1] = 0.0f;
-    remote_goal->velocity[2] = 0.0f;
-    remote_goal->velocity[3] = 0.0f;
-    remote_goal->send_tick = 0;
-    remote_goal->receive_tick = 0;
-    remote_goal->darkjak_stage = 0;
-    remote_goal->riding_veh_id = 0;
-    remote_goal->riding_seat_index = 0;
-    remote_goal->action_seq = 0;
-    remote_goal->action_state_id = 0;
-    return;
+  if (mp_valid_player_id(controller->local_player_id)) {
+    data.local_player_id = controller->local_player_id;
   }
-
-  const auto& remote_state = data.remote_entity;
-  uint64_t age_ms = 0;
-  uint32_t current_time = enet_time_get();
-  if (remote_state.receive_tick != 0 && current_time >= remote_state.receive_tick) {
-    age_ms = current_time - remote_state.receive_tick;
-    if (age_ms > 100) {
-      age_ms = 100;
+  controller->host_player_id = data.host_player_id;
+  for (uint32_t player_id = 0; player_id < kMPMaxPlayers; ++player_id) {
+    if (player_id == data.local_player_id) {
+      continue;
+    }
+    const auto& cached = data.player_states[player_id];
+    if (!cached.identity_ready) {
+      continue;
+    }
+    auto& record = controller->records[player_id];
+    if (!record.identity.joined) {
+      record.identity.player_id = player_id;
+      record.identity.character = cached.character;
+      record.identity.identity_ready = 1;
+      record.identity.joined = 1;
+      record.connection.connected = 1;
+      memcpy(record.identity.name, cached.player_name, sizeof(record.identity.name));
+    }
+    if (cached.state_ready) {
+      CachedPlayerState predicted = cached;
+      const uint32_t now = enet_time_get();
+      const uint32_t age_ms = cached.receive_tick != 0 && now >= cached.receive_tick
+                                  ? std::min<uint32_t>(now - cached.receive_tick, 100)
+                                  : 0;
+      const float dt = static_cast<float>(age_ms) * 0.001f;
+      predicted.x += predicted.vel_x * dt;
+      predicted.y += predicted.vel_y * dt;
+      predicted.z += predicted.vel_z * dt;
+      copy_cached_state_to_record(predicted, record);
     }
   }
-  float predict_dt = (float)age_ms * 0.001f;
-  remote_goal->x = remote_state.x + remote_state.vel_x * predict_dt;
-  remote_goal->y = remote_state.y + remote_state.vel_y * predict_dt;
-  remote_goal->z = remote_state.z + remote_state.vel_z * predict_dt;
-  remote_goal->angle = remote_state.angle;
-  remote_goal->velocity[0] = remote_state.vel_x;
-  remote_goal->velocity[1] = remote_state.vel_y;
-  remote_goal->velocity[2] = remote_state.vel_z;
-  remote_goal->velocity[3] = 0.0f;
-  remote_goal->send_tick = remote_state.send_tick;
-  remote_goal->receive_tick = remote_state.receive_tick;
-  remote_goal->id = other_net_id;
-  remote_goal->role = (int32_t)other_net_id;
-  remote_goal->state_id = remote_state.state_id;
-  remote_goal->level = remote_state.level_hash;
-  remote_goal->status = (remote_state.status > 0) ? (int32_t)remote_state.status : 1;
-  remote_goal->packet_id = remote_state.last_sequence_num;
-  remote_goal->darkjak_stage = remote_state.darkjak_stage;
-  remote_goal->clock = remote_state.clock;
-  remote_goal->tod_frame = remote_state.tod_frame;
-  remote_goal->tod_ratio = remote_state.tod_ratio;
-  remote_goal->weather_cloud = remote_state.weather_cloud;
-  remote_goal->weather_fog = remote_state.weather_fog;
-  remote_goal->weather_rain = remote_state.weather_rain;
-  remote_goal->buttons = remote_state.buttons;
-  remote_goal->leftx = remote_state.leftx;
-  remote_goal->lefty = remote_state.lefty;
-  remote_goal->rightx = remote_state.rightx;
-  remote_goal->righty = remote_state.righty;
-  remote_goal->respawn_flags = remote_state.respawn_flags;
-  remote_goal->respawn_pad = 0;
-  remote_goal->cam_angle_y = remote_state.cam_angle_y;
-  remote_goal->riding_veh_id = remote_state.riding_veh_id;
-  remote_goal->riding_seat_index = remote_state.riding_seat_index;
-  remote_goal->scene_active = remote_state.scene_active;
-  remote_goal->equipped_weapon = remote_state.equipped_weapon;
-  remote_goal->turret_active = remote_state.turret_active;
-  remote_goal->action_seq = remote_state.action_seq;
-  remote_goal->action_state_id = remote_state.action_state_id;
-  remote_goal->turret_roty = remote_state.turret_roty;
-  remote_goal->turret_rotx = remote_state.turret_rotx;
-  memcpy(&remote_goal->veh_state, &remote_state.veh_state, sizeof(MPVehicleState));
 }

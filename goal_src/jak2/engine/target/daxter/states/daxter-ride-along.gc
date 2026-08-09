@@ -8,7 +8,7 @@
   "Use rapid camera tracking only while local Daxter rides with a remote vehicle driver."
   (let ((rapid-tracking-needed?
           (and ride-along-active?
-               (mp-is-daxter?)
+               (mp-local-player-daxter?)
                (mp-target-ride-along? *target*)
                (mp-vehicle-remote-puppet-currently-driving?))))
     (cond
@@ -26,8 +26,8 @@
   )
 
 (defun mp-ride-along-sync-camera-target! ((local-target target) (ride-target target))
-  "Client-side ride-along camera handoff between local Daxter and the remote Jak puppet."
-  (when (and (mp-is-daxter?) *camera* (nonzero? *camera*) local-target (nonzero? local-target))
+  "Ride-along camera handoff between local Daxter and the selected Jak target."
+  (when (and (mp-target-daxter? local-target) *camera* (nonzero? *camera*) local-target (nonzero? local-target))
     (let ((current-target (handle->process (-> *camera* focus handle))))
       (if (and ride-target (nonzero? ride-target))
           (when (!= current-target ride-target)
@@ -52,8 +52,8 @@
     (set! (-> self control root-prim prim-core action) (collide-action))
     (logior! (-> self focus-status) (focus-status indax ignore))
     (logior! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
-    (when (mp-is-daxter?)
-      (let ((jak-proc *mp-puppet*))
+    (when (and (= self *target*) (mp-target-daxter? self))
+      (let ((jak-proc (mp-jak-target-for self)))
         (mp-ride-along-update-camera-speed! #t)
         (mp-ride-along-sync-camera-target! self jak-proc)
         )
@@ -82,8 +82,9 @@
     )
 
   :trans (behavior ()
-    (let ((jak-proc (if (mp-is-jak?) *target* *mp-puppet*)))
-            (when jak-proc
+    (let ((jak-proc (mp-jak-target-for self)))
+            (when (and jak-proc (nonzero? jak-proc)
+                       (-> jak-proc control) (nonzero? (-> jak-proc control)))
                 (quaternion-copy! (-> self control quat) (-> jak-proc control quat))
                 (quaternion-copy! (-> self control dir-targ) (-> jak-proc control quat))
                 )
@@ -93,14 +94,15 @@
                   (set-height! s3-1 80)
                   (set-scale! s3-1 0.5)
                   (set! (-> s3-1 flags) (font-flags shadow kerning large))
-                  (when (and (mp-is-daxter?)
+                  (when (and (= self *target*)
+                             (mp-target-daxter? self)
                              (not (movie?))
                              (not (real-movie?))
                              (not (and *progress-process* (nonzero? *progress-process*))))
                     (print-game-text (lookup-text! *common-text* (text-id press-x-to-hop-off) #f) s3-1 #f 44 (bucket-id progress))
                   )
                 )
-    (if (and (not (real-movie?)) (or (mp-is-daxter?) (not *remote-info*) (zero? (-> *remote-info* scene-active))) (cpad-pressed? (-> self control cpad number) x))
+    (if (and (not (real-movie?)) (cpad-pressed? (-> self control cpad number) x))
         (begin
           (sound-play "jump")
           (debug-log *mp-debug-log?* "[Daxter-Ride-Along] Exiting ride along state...~%")
@@ -124,8 +126,8 @@
     (set! (-> self control gspot-pos quad) (-> self control trans quad))
     (do-joint-math (-> self draw) (-> self node-list) (-> self skel))
     
-    (let ((jak-proc (if (mp-is-jak?) *target* *mp-puppet*)))
-      (when (mp-is-daxter?)
+    (let ((jak-proc (mp-jak-target-for self)))
+      (when (and (= self *target*) (mp-target-daxter? self))
         (mp-ride-along-update-camera-speed! #t)
         (mp-ride-along-sync-camera-target! self jak-proc)
         )
@@ -146,10 +148,10 @@
               )
             )
           (begin
-            ;; Fallback: Network position if Jak is missing
-            (if (mp-is-daxter?)
-                (vector-copy! (-> self control trans) *multi-remote-interp-pos*)
-                )
+            ;; Fallback: use the selected Jak record while its target is unavailable.
+            (let ((jak-record (mp-jak-record-for self)))
+              (when (and jak-record (nonzero? jak-record))
+                (vector-copy! (-> self control trans) (-> jak-record transform position))))
             (when (and (-> self control) (nonzero? (-> self control)))
               (vector-reset! (-> self control transv))
               )
@@ -179,12 +181,14 @@
     (until (ja-done? 0)
       (let ((progress (/ (ja-frame-num 0) (the float (ja-num-frames 0)))))
         (let ((target-pos (new 'stack-no-clear 'vector)))
-           (let ((jak-proc (if (mp-is-jak?) *target* *mp-puppet*)))
+           (let ((jak-proc (mp-jak-target-for self)))
              (if jak-proc
                  (if (and (nonzero? (-> jak-proc node-list)) (> (-> jak-proc node-list length) 23) (nonzero? (-> jak-proc node-list data 23 bone)))
                      (vector-copy! target-pos (-> jak-proc node-list data 23 bone transform trans))
                      (vector-copy! target-pos (-> jak-proc control trans)))
-                 (vector-copy! target-pos *multi-remote-interp-pos*)
+                 (let ((jak-record (mp-jak-record-for self)))
+                   (when (and jak-record (nonzero? jak-record))
+                     (vector-copy! target-pos (-> jak-record transform position))))
                  )
              )
 

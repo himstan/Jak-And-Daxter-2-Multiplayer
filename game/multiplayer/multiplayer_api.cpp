@@ -123,8 +123,9 @@ const char* goal_string_data(u32 ptr) {
 void handle_receive_packet(MultiplayerData& data,
                            ENetPeer* sender,
                            const ENetPacket* packet,
-                           LocalPlayerInfoGOAL* local,
-                           RemotePlayerInfoGOAL* remote,
+                           MPPlayerControllerGOAL* controller,
+                           MPWorldSyncStateGOAL* world,
+                           MPBootstrapSyncStateGOAL* bootstrap,
                            uint32_t current_time) {
   PacketView view(packet);
   if (!view.has_header()) {
@@ -136,14 +137,14 @@ void handle_receive_packet(MultiplayerData& data,
   if (!descriptor || view.size() - kPacketHeaderWireSize > descriptor->max_payload) {
     return;
   }
-  const int sender_role = data.local_role == 0 ? 1 : 0;
+  const int sender_role = data.session_role == 0 ? 1 : 0;
   if (!mp_packet_direction_allowed(packet_type, sender_role)) {
     return;
   }
 
   switch (packet_type) {
     case PacketType::STATE_UPDATE:
-      mp_handle_player_state_packet(data, packet, remote, current_time);
+      mp_handle_player_state_packet(data, packet, current_time);
       break;
     case PacketType::EVENT_GAME:
       mp_handle_game_event_packet(data, packet);
@@ -185,11 +186,11 @@ void handle_receive_packet(MultiplayerData& data,
                  data.reconnect_waiting_for_bootstrap, data.pending_bootstrap.load());
         last_bootstrap_log_time = current_time;
       }
-      mp_handle_bootstrap_packet(packet, local, remote);
+      mp_handle_bootstrap_packet(packet, world, bootstrap);
       break;
     }
     case PacketType::EVENT_JOIN:
-      mp_handle_join_packet(packet, remote);
+      mp_handle_join_packet(data, packet, controller);
       break;
     case PacketType::EVENT_LEAVE: {
       const auto leave = view.as_exact<PacketLeave>(PacketType::EVENT_LEAVE);
@@ -198,20 +199,31 @@ void handle_receive_packet(MultiplayerData& data,
                  enet_peer_endpoint_string(sender), view.size());
         break;
       }
+      if (!mp_player_id_matches_authenticated_peer(data, leave->player_id)) {
+        lg::warn("[MP-Leave] Ignoring spoofed player id {} from {}.", leave->player_id,
+                 enet_peer_endpoint_string(sender));
+        break;
+      }
       const bool authenticated_before = data.security.authenticated();
       const bool expected_peer_before =
-          data.local_role == 0 ? sender == data.authenticated_peer : sender == data.server_peer;
+          data.session_role == 0 ? sender == data.authenticated_peer : sender == data.server_peer;
       bool accepted = false;
-      if (data.local_role == 0) {
+      if (data.session_role == 0) {
         accepted = multiplayer_handle_client_leave(data, sender, leave->reason);
       } else {
         accepted = multiplayer_handle_host_leave(data, sender, leave->reason);
       }
+      if (accepted) {
+        mp_clear_player_slot(data, controller, leave->player_id);
+      }
       lg::info("[MP-Leave] Received EVENT_LEAVE from {} (role={}, reason={}, authenticated={}, expected_peer={}, accepted={}).",
-               enet_peer_endpoint_string(sender), data.local_role, static_cast<int>(leave->reason),
+               enet_peer_endpoint_string(sender), data.session_role, static_cast<int>(leave->reason),
                authenticated_before, expected_peer_before, accepted);
       break;
     }
+    case PacketType::WORLD_STATE:
+      mp_handle_world_state_packet(data, packet, world);
+      break;
     default:
       if (current_time - data.last_traffic_short_packet_debug_time > 2000) {
         lg::warn("[Multiplayer] Ignoring unknown packet type {} ({} bytes).", (int)view.type(),
@@ -222,7 +234,10 @@ void handle_receive_packet(MultiplayerData& data,
   }
 }
 
-void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlayerInfoGOAL* remote) {
+void poll_network(MultiplayerData& data,
+                  MPPlayerControllerGOAL* controller,
+                  MPWorldSyncStateGOAL* world,
+                  MPBootstrapSyncStateGOAL* bootstrap) {
   data.stats.calculate_rates(data.host);
 
   ENetEvent event;
@@ -239,7 +254,7 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
 
     switch (event.type) {
       case ENET_EVENT_TYPE_RECEIVE: {
-        if (data.local_role == 0 && data.authenticated_peer &&
+        if (data.session_role == 0 && data.authenticated_peer &&
             event.peer != data.authenticated_peer) {
           if (current_time - last_security_rejected_log_time >= 2000) {
             lg::warn("[MP-Handshake] Ignoring packet from non-authenticated peer {} while authenticated peer is {}.",
@@ -251,7 +266,7 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
           break;
         }
         SecurityReceiveResult secured =
-            data.security.receive(data.local_role, event.packet->data, event.packet->dataLength);
+            data.security.receive(data.session_role, event.packet->data, event.packet->dataLength);
         if (secured.kind != SecurityReceiveKind::GAMEPLAY) {
           if (secured.kind != SecurityReceiveKind::REJECTED ||
               current_time - last_security_rejected_log_time >= 2000) {
@@ -280,12 +295,12 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
           lg::warn("[MP-Handshake] Disconnecting peer {} because the secure response could not be sent.",
                    enet_peer_endpoint_string(event.peer));
           enet_peer_disconnect_now(event.peer, 0);
-        } else if (secured.kind == SecurityReceiveKind::HANDSHAKE && data.local_role == 1 &&
+        } else if (secured.kind == SecurityReceiveKind::HANDSHAKE && data.session_role == 1 &&
                    !data.security.authenticated()) {
           lg::info("[MP-Handshake] Client received the server challenge from {}; secure proof response accepted by ENet ({} bytes).",
                    enet_peer_endpoint_string(event.peer), secured.response.size);
         } else if (secured.kind == SecurityReceiveKind::VERSION_MISMATCH) {
-          if (data.local_role == 0) {
+          if (data.session_role == 0) {
             lg::info("[MP-Handshake] Rejected client {} with an incompatible mod version (authenticated_peer_exists={}).",
                      enet_peer_endpoint_string(event.peer), data.authenticated_peer != nullptr);
             enet_peer_disconnect_later(event.peer, 0);
@@ -303,7 +318,7 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
                    data.security.authenticated()) {
           lg::info("[MP-Handshake] Secure proof accepted from {}; authenticated peer session is ready.",
                    enet_peer_endpoint_string(event.peer));
-          if (data.local_role == 0) {
+          if (data.session_role == 0) {
             data.authenticated_peer = event.peer;
             disconnect_other_pending_peers(data, event.peer);
             if (data.host_game_active) {
@@ -331,8 +346,9 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
           plaintext_packet.dataLength = secured.plaintext.size;
           data.last_authenticated_receive_time = current_time;
           data.stats.track_recv_bytes(plaintext_packet.data, plaintext_packet.dataLength);
-          handle_receive_packet(data, event.peer, &plaintext_packet, local, remote, current_time);
-        } else if (secured.kind == SecurityReceiveKind::REJECTED && data.local_role == 0 &&
+          handle_receive_packet(
+              data, event.peer, &plaintext_packet, controller, world, bootstrap, current_time);
+        } else if (secured.kind == SecurityReceiveKind::REJECTED && data.session_role == 0 &&
                    !data.authenticated_peer) {
           lg::warn("[MP-Handshake] Host rejected unauthenticated peer {} (pending_handshakes={}, auth_peer_exists={}).",
                    enet_peer_endpoint_string(event.peer), pending_handshake_count(data),
@@ -345,7 +361,7 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
         break;
       }
       case ENET_EVENT_TYPE_CONNECT:
-        if (data.local_role == 1) {
+        if (data.session_role == 1) {
           data.handshake_started_time = current_time;
           data.connection_phase = static_cast<int>(MultiplayerConnectionPhase::AUTHENTICATING);
           lg::info("[MP-Reconnect] Client transport connected to {} (local_port={}, peer_state={}, status={}, reconnect_active={}, attempt={}); awaiting secure authentication.",
@@ -353,7 +369,7 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
                    static_cast<int>(event.peer->state), data.join_status.load(),
                    data.reconnect_attempt_active,
                    data.reconnect_attempt_count);
-        } else if (data.local_role == 0) {
+        } else if (data.session_role == 0) {
           const bool authenticated_peer_exists = data.authenticated_peer != nullptr;
           const bool security_session_exists = data.security.authenticated();
           const bool address_banned =
@@ -387,9 +403,9 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
         break;
       case ENET_EVENT_TYPE_DISCONNECT:
         lg::warn("[MP-Network] Transport disconnected: peer={} reason={} role={} status={} authenticated={} reconnect_active={}.",
-                 enet_peer_endpoint_string(event.peer), event.data, data.local_role,
+                 enet_peer_endpoint_string(event.peer), event.data, data.session_role,
                  data.join_status.load(), data.security.authenticated(), data.reconnect_attempt_active);
-        if (data.local_role == 0) {
+        if (data.session_role == 0) {
           remove_pending_handshake(data, event.peer);
           if (event.peer == data.authenticated_peer) {
             const bool wait_for_reconnect =
@@ -410,7 +426,9 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
                                       data.join_status == (int)MultiplayerStatus::IN_GAME ||
                                       data.join_status == (int)MultiplayerStatus::RECONNECTING ||
                                       data.reconnect_attempt_active;
-          data.remote_entity = {};
+          if (mp_valid_player_id(data.authenticated_player_id)) {
+            mp_clear_player_slot(data, controller, data.authenticated_player_id);
+          }
           if (event.data == kDisconnectReasonHostFull) {
             data.connection_failure = static_cast<int>(MultiplayerConnectionFailure::HOST_FULL);
             data.join_status = static_cast<int>(MultiplayerStatus::FAILED);
@@ -438,7 +456,7 @@ void poll_network(MultiplayerData& data, LocalPlayerInfoGOAL* local, RemotePlaye
     }
   }
 
-  if (data.local_role == 0) {
+  if (data.session_role == 0) {
     expire_pending_handshakes(data, current_time);
   } else if (!data.security.authenticated() && data.handshake_started_time != 0 &&
              current_time - data.handshake_started_time > 5000) {
@@ -555,7 +573,15 @@ void with_goal_buffer(u32 ptr, const char* label, Fn fn) {
 static bool try_saved_reconnect(MultiplayerData& data);
 
 int pc_multi_get_role() {
-  return multiplayer_data().local_role;
+  return multiplayer_data().session_role;
+}
+
+u32 pc_multi_get_local_player_id() {
+  return multiplayer_data().local_player_id;
+}
+
+u32 pc_multi_get_host_player_id() {
+  return multiplayer_data().host_player_id;
 }
 
 int pc_multi_set_local_version(u32 version_ptr) {
@@ -591,7 +617,7 @@ u64 pc_multi_get_required_version() {
   return jak2::make_string_from_c(data.required_version.c_str());
 }
 
-void pc_multi_poll(u32 local_ptr, u32 remote_ptr) {
+void pc_multi_poll(u32 controller_ptr, u32 world_ptr, u32 bootstrap_ptr) {
   try {
     auto& data = multiplayer_data();
     uint32_t current_time = enet_time_get();
@@ -634,14 +660,15 @@ void pc_multi_poll(u32 local_ptr, u32 remote_ptr) {
     }
     last_poll_tick = current_time;
 
-    auto* local = goal_ptr<LocalPlayerInfoGOAL>(local_ptr);
-    auto* remote = goal_ptr<RemotePlayerInfoGOAL>(remote_ptr);
-    if (!local || !remote) {
+    auto* controller = goal_ptr<MPPlayerControllerGOAL>(controller_ptr);
+    auto* world = goal_ptr<MPWorldSyncStateGOAL>(world_ptr);
+    auto* bootstrap = goal_ptr<MPBootstrapSyncStateGOAL>(bootstrap_ptr);
+    if (!controller || !world || !bootstrap) {
       if (reconnect_phase &&
           (last_reconnect_skip_log_time == 0 ||
            current_time - last_reconnect_skip_log_time >= 1000)) {
-        lg::warn("[MP-Reconnect] Poll skipped: GOAL buffers unavailable (local_ptr=0x{:x}, remote_ptr=0x{:x}, local_ok={}, remote_ok={}, status={}).",
-                 local_ptr, remote_ptr, local != nullptr, remote != nullptr,
+        lg::warn("[MP-Reconnect] Poll skipped: GOAL sync buffers unavailable (controller=0x{:x}, world=0x{:x}, bootstrap=0x{:x}, status={}).",
+                 controller_ptr, world_ptr, bootstrap_ptr,
                  data.join_status.load());
         last_reconnect_skip_log_time = current_time;
       }
@@ -662,7 +689,13 @@ void pc_multi_poll(u32 local_ptr, u32 remote_ptr) {
       last_reconnect_skip_log_time = 0;
     }
 
-    poll_network(data, local, remote);
+    if (mp_valid_player_id(controller->local_player_id)) {
+      data.local_player_id = controller->local_player_id;
+    }
+    if (mp_valid_player_id(controller->host_player_id)) {
+      data.host_player_id = controller->host_player_id;
+    }
+    poll_network(data, controller, world, bootstrap);
     current_time = enet_time_get();
     multiplayer_cleanup_stale_sync(data, current_time);
     multiplayer_update_receive_timeout(data, current_time);
@@ -684,25 +717,27 @@ int pc_multi_flush_packet_window() {
   return 0;
 }
 
-void pc_multi_send_state(u32 local_ptr) {
+void pc_multi_send_sync(u32 controller_ptr, u32 world_ptr, u32 bootstrap_ptr) {
   if (multiplayer_debug_receive_stopped()) {
     return;
   }
-  with_goal_buffer<LocalPlayerInfoGOAL>(local_ptr, "pc_multi_send_state", [](auto* local) {
-    auto& data = multiplayer_data();
-    if (data.initialized && data.host) {
-      mp_send_player_state(data, local);
-    }
-  });
+  auto* controller = goal_ptr<MPPlayerControllerGOAL>(controller_ptr);
+  auto* world = goal_ptr<MPWorldSyncStateGOAL>(world_ptr);
+  auto* bootstrap = goal_ptr<MPBootstrapSyncStateGOAL>(bootstrap_ptr);
+  auto& data = multiplayer_data();
+  if (controller && world && bootstrap && data.initialized && data.host) {
+    mp_send_player_sync(data, controller, world, bootstrap);
+  }
 }
 
-void pc_multi_receive_state(u32 remote_ptr) {
-  with_goal_buffer<RemotePlayerInfoGOAL>(remote_ptr, "pc_multi_receive_state", [](auto* remote) {
-    auto& data = multiplayer_data();
-    if (data.initialized && data.host) {
-      mp_sync_remote_player_to_goal(data, remote);
-    }
-  });
+void pc_multi_receive_sync(u32 controller_ptr, u32 world_ptr, u32 bootstrap_ptr) {
+  auto* controller = goal_ptr<MPPlayerControllerGOAL>(controller_ptr);
+  auto* world = goal_ptr<MPWorldSyncStateGOAL>(world_ptr);
+  auto* bootstrap = goal_ptr<MPBootstrapSyncStateGOAL>(bootstrap_ptr);
+  auto& data = multiplayer_data();
+  if (controller && world && bootstrap && data.initialized && data.host) {
+    mp_receive_player_sync(data, controller, world, bootstrap);
+  }
 }
 
 void pc_multi_send_events(u32 event_ptr) {
@@ -843,8 +878,10 @@ u64 pc_multi_get_vehicle_sync_time(u32 net_id) {
   }
 
   const auto& data = multiplayer_data();
-  if (data.remote_entity.veh_state.net_id == net_id) {
-    return data.remote_entity.receive_tick;
+  for (const auto& player : data.player_states) {
+    if (player.state_ready && player.veh_state.net_id == net_id) {
+      return player.receive_tick;
+    }
   }
 
   for (uint32_t slot = 0; slot < MAX_VEHICLE_SYNC_COUNT; ++slot) {
@@ -904,7 +941,7 @@ void pc_multi_set_status(int status) {
 
 void pc_multi_request_bootstrap() {
   auto& data = multiplayer_data();
-  if (data.local_role == 0 && data.join_status == (int)MultiplayerStatus::IN_GAME) {
+  if (data.session_role == 0 && data.join_status == (int)MultiplayerStatus::IN_GAME) {
     multiplayer_request_bootstrap(data);
     lg::info("[Multiplayer] Bootstrap requested by GOAL.");
   }
@@ -971,7 +1008,7 @@ static bool try_saved_reconnect(MultiplayerData& data) {
 
   std::string invite = data.reconnect_invite;
   connect_private_invite(data, invite, true);
-  if (!data.initialized || data.local_role != 1) {
+  if (!data.initialized || data.session_role != 1) {
     return false;
   }
 
@@ -1494,8 +1531,8 @@ void init_multiplayer_pc_port() {
   jak2::make_function_symbol_from_c("pc-multi-poll", (void*)pc_multi_poll);
   jak2::make_function_symbol_from_c("pc-multi-flush-packet-window",
                                     (void*)pc_multi_flush_packet_window);
-  jak2::make_function_symbol_from_c("pc-multi-send-state", (void*)pc_multi_send_state);
-  jak2::make_function_symbol_from_c("pc-multi-receive-state", (void*)pc_multi_receive_state);
+  jak2::make_function_symbol_from_c("pc-multi-send-sync", (void*)pc_multi_send_sync);
+  jak2::make_function_symbol_from_c("pc-multi-receive-sync", (void*)pc_multi_receive_sync);
   jak2::make_function_symbol_from_c("pc-multi-send-events", (void*)pc_multi_send_events);
   jak2::make_function_symbol_from_c("pc-multi-receive-events", (void*)pc_multi_receive_events);
   jak2::make_function_symbol_from_c("pc-multi-send-enemies", (void*)pc_multi_send_enemies);
@@ -1519,6 +1556,10 @@ void init_multiplayer_pc_port() {
   jak2::make_function_symbol_from_c("pc-multi-get-vehicle-sync-time",
                                     (void*)pc_multi_get_vehicle_sync_time);
   jak2::make_function_symbol_from_c("pc-multi-get-role", (void*)pc_multi_get_role);
+  jak2::make_function_symbol_from_c("pc-multi-get-local-player-id",
+                                    (void*)pc_multi_get_local_player_id);
+  jak2::make_function_symbol_from_c("pc-multi-get-host-player-id",
+                                    (void*)pc_multi_get_host_player_id);
   jak2::make_function_symbol_from_c("pc-multi-disconnect", (void*)pc_multi_disconnect);
   jak2::make_function_symbol_from_c("pc-multi-reconnect", (void*)pc_multi_reconnect);
   jak2::make_function_symbol_from_c("pc-multi-get-command-line-arg",

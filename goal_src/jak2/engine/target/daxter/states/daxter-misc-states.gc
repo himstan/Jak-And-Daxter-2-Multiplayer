@@ -1,7 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(define-extern *mp-puppet-ghost* mp-target-ghost-record)
 
 (defstate target-indax-trip (target)
   :event target-indax-jump-event-handler
@@ -233,7 +232,7 @@
                 (vector-reset! (-> ctrl transv))
                 (set! (-> ctrl ctrl-xz-vel) 0.0)
                 
-                (let ((ghost *mp-puppet-ghost*))
+                (let ((ghost (mp-player-record-ghost (mp-player-process-record self))))
                   (when (and ghost (nonzero? ghost) (-> ghost active?))
                     (let ((dist (vector-vector-distance (-> ctrl trans) (-> ghost trans))))
                       (when (or (< 1638400.0 dist) (< 1638400.0 (vector-length (-> ctrl trans))))

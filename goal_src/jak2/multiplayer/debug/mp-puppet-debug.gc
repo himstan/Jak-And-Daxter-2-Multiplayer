@@ -3,62 +3,71 @@
 
 ;; --- Remote Puppet Debugging Module ---
 
-(defun mp-draw-puppet-debug ()
-  "Draw real-time debug visualization for the remote target puppet"
-  (when *mp-puppet-debug?*
-    (let ((proc *mp-puppet*)
-          (ghost *mp-puppet-ghost*)
+(defun mp-draw-player-puppet-debug ((record mp-player-record))
+  "Draw one record's ghost, puppet state, and leased synthetic pad."
+  (when (and record (nonzero? record))
+    (let ((proc (mp-player-record-target record))
+          (ghost (mp-player-record-ghost record))
           (draw-pos (new 'stack-no-clear 'vector)))
-      
-      ;; 1. Visualize the authoritative Ghost
-      (when (-> ghost active?)
-        ;; Draw a sphere at the ghost translation
-        (add-debug-sphere #t (bucket-id debug-no-zbuf1) (-> ghost trans) (meters 0.5) (static-rgba 255 255 0 128))
-        
-        ;; Draw ghost state label
+      (when (and ghost (nonzero? ghost) (-> ghost active?))
+        (add-debug-sphere
+          #t (bucket-id debug-no-zbuf1) (-> ghost trans)
+          (meters 0.5) (static-rgba 255 255 0 128))
         (vector-copy! draw-pos (-> ghost trans))
         (+! (-> draw-pos y) (meters 2.0))
         (let ((state-sym (mp-target-get-state-from-id (-> ghost state-id))))
-          (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
-                            (if state-sym (symbol->string state-sym) "none") 
-                            draw-pos (font-color yellow) (the-as vector2h #f))
-          )
-        (add-debug-text-3d #t (bucket-id debug-no-zbuf1) "GHOST" (-> ghost trans) (font-color yellow) (the-as vector2h #f))
-        )
+          (add-debug-text-3d
+            #t (bucket-id debug-no-zbuf1)
+            (if state-sym (symbol->string state-sym) "none")
+            draw-pos (font-color yellow) (the-as vector2h #f)))
+        (add-debug-text-3d
+          #t (bucket-id debug-no-zbuf1) "GHOST"
+          (-> ghost trans) (font-color yellow) (the-as vector2h #f)))
 
-      ;; 2. Visualize the actual Puppet Process
-      (when proc
+      (when (and proc
+                 (nonzero? proc)
+                 (-> proc control)
+                 (nonzero? (-> proc control)))
         (let ((puppet-pos (-> proc control trans)))
-          ;; Draw actual state label over head
           (vector-copy! draw-pos puppet-pos)
           (+! (-> draw-pos y) (meters 2.5))
           (let ((curr-state (-> proc state)))
-            (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
-                              (if (and curr-state (nonzero? curr-state)) (symbol->string (-> curr-state name)) "unknown")
-                              draw-pos (font-color green) (the-as vector2h #f))
-            )
-          (add-debug-text-3d #t (bucket-id debug-no-zbuf1) "PUPPET" puppet-pos (font-color green) (the-as vector2h #f))
-
-          ;; 3. Visualize Sync Pad Info
+            (add-debug-text-3d
+              #t (bucket-id debug-no-zbuf1)
+              (if (and curr-state (nonzero? curr-state))
+                  (symbol->string (-> curr-state name))
+                  "unknown")
+              draw-pos (font-color green) (the-as vector2h #f)))
+          (add-debug-text-3d
+            #t (bucket-id debug-no-zbuf1) "PUPPET"
+            puppet-pos (font-color green) (the-as vector2h #f))
           (let ((pad (-> proc control cpad))
                 (debug-str *temp-string*))
-            (format debug-str "PAD: BTNS #x~X LX ~D LY ~D RX ~D RY ~D" (-> pad button0) (-> pad leftx) (-> pad lefty) (-> pad rightx) (-> pad righty))
-            (vector-copy! draw-pos puppet-pos)
-            (+! (-> draw-pos y) (meters 1.5))
-            (add-debug-text-3d #t (bucket-id debug-no-zbuf1) debug-str draw-pos (font-color cyan) (the-as vector2h #f))
+            (when (and pad (nonzero? pad))
+              (format debug-str
+                "PAD: BTNS #x~X LX ~D LY ~D RX ~D RY ~D"
+                (-> pad button0) (-> pad leftx) (-> pad lefty)
+                (-> pad rightx) (-> pad righty))
+              (vector-copy! draw-pos puppet-pos)
+              (+! (-> draw-pos y) (meters 1.5))
+              (add-debug-text-3d
+                #t (bucket-id debug-no-zbuf1) debug-str
+                draw-pos (font-color cyan) (the-as vector2h #f))
+              (format debug-str
+                "STK: SPD ~f DIR ~f" (-> pad stick0-speed) (-> pad stick0-dir))
+              (+! (-> draw-pos y) (meters -0.3))
+              (add-debug-text-3d
+                #t (bucket-id debug-no-zbuf1) debug-str
+                draw-pos (font-color cyan) (the-as vector2h #f))))
+          (when (and ghost (nonzero? ghost) (-> ghost active?))
+            (add-debug-line
+              #t (bucket-id debug-no-zbuf1) puppet-pos (-> ghost trans)
+              (static-rgba 255 255 255 128) #f (the-as rgba 0)))))))
+  (none))
 
-            (format debug-str "STK: SPD ~f DIR ~f" (-> pad stick0-speed) (-> pad stick0-dir))
-            (+! (-> draw-pos y) (meters -0.3))
-            (add-debug-text-3d #t (bucket-id debug-no-zbuf1) debug-str draw-pos (font-color cyan) (the-as vector2h #f))
-            )
-          ;; Draw line between puppet and ghost
-
-          (when (-> ghost active?)
-            (add-debug-line #t (bucket-id debug-no-zbuf1) puppet-pos (-> ghost trans) (static-rgba 255 255 255 128) #f (the-as rgba 0))
-            )
-          )
-        )
-      )
-    )
-  (none)
-  )
+(defun mp-draw-puppet-debug ()
+  "Draw real-time debug visualization for every remote target puppet."
+  (when *mp-puppet-debug?*
+    (mp-player-controller-for-each-remote!
+      *mp-player-controller* mp-draw-player-puppet-debug))
+  (none))

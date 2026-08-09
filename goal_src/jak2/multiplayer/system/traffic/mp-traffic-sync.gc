@@ -23,9 +23,9 @@
       ((type? proc vehicle)
        (let ((v-proc (the-as vehicle proc)))
          ;; Only sync if it is NOT inactive, NOT dead, and IS managed by traffic
-         ;; BUDGET: If a remote player is driving this vehicle, SKIP it here (it's synced via piggy-back)
+         ;; Player-owned vehicles are synchronized through their owning records.
          (when (and (nonzero? (-> v-proc net-id))
-                    (!= (-> v-proc net-id) (-> *remote-info* veh-state net-id))
+                    (not (mp-player-record-by-vehicle-id (-> v-proc net-id)))
                     (not (focus-test? v-proc inactive))
                     (< (-> *mp-traffic-buffer* veh-count) (the uint MP_MAX_SYNC_VEHICLES))
                     )
@@ -67,8 +67,8 @@
                 (let ((slave-proc (handle->process-safe (-> task-proc slave slot-idx))))
                   (when (and slave-proc (nonzero? slave-proc) (type? slave-proc vehicle))
                     (let ((vehicle-net-id (-> (the-as vehicle slave-proc) net-id))
-                          (local-driven-id (if (and *local-info* (nonzero? *local-info*))
-                                               (-> *local-info* veh-state net-id)
+                          (local-driven-id (if (and (mp-local-player-record) (nonzero? (mp-local-player-record)))
+                                               (-> (mp-local-player-record) vehicle state net-id)
                                                (the uint 0))))
                       (when (and (nonzero? vehicle-net-id)
                                  (!= vehicle-net-id local-driven-id))
@@ -145,12 +145,7 @@
                (nonzero? veh-proc)
                (nonzero? (-> veh-proc net-id)))
       (let ((veh-net-id (-> veh-proc net-id)))
-        (when (or (and *local-info*
-                       (nonzero? *local-info*)
-                       (= veh-net-id (-> *local-info* veh-state net-id)))
-                  (and *remote-info*
-                       (nonzero? *remote-info*)
-                       (= veh-net-id (-> *remote-info* veh-state net-id))))
+        (when (mp-player-record-by-vehicle-id veh-net-id)
           (set! owned? #t)
           )
         )
@@ -233,7 +228,7 @@
 
 (defun mp-traffic-cleanup-after-sync-exit! ()
   "Client-side cleanup for host-owned traffic after leaving the traffic authority bubble."
-  (when (mp-is-daxter?)
+  (when (mp-session-client?)
     (mp-traffic-clear-buffer!)
     (when (mp-is-traffic-spawn-ready?)
       (mp-pedestrian-apply-remote)
@@ -248,7 +243,7 @@
 (define-perm *mp-traffic-level-settle-log-time* time-frame 0)
 (define-perm *mp-traffic-level-context-change-time* time-frame 0)
 (define-perm *mp-traffic-last-local-primary-level-id* uint (the uint 0))
-(define-perm *mp-traffic-last-remote-primary-level-id* uint (the uint 0))
+(define-perm *mp-traffic-last-authority-level-id* uint (the uint 0))
 (define-perm *mp-traffic-last-remote-apply-ready* symbol #f)
 (define-perm *mp-traffic-refresh-existing-log-time* time-frame 0)
 
@@ -269,7 +264,7 @@
   (set! *mp-traffic-art-context-ped-count* (the uint 0))
   (set! *mp-traffic-art-context-veh-count* (the uint 0))
   (set! *mp-traffic-art-context-local-level* (the uint 0))
-  (set! *mp-traffic-art-context-remote-level* (the uint 0))
+  (set! *mp-traffic-art-context-authority-level* (the uint 0))
   (set! *mp-traffic-art-context-spawn-ready* #f)
   (set! *mp-traffic-art-context-riding* #f)
   (set! *mp-traffic-targeted-prune-log-time* (the-as time-frame 0))
@@ -277,7 +272,7 @@
   (set! *mp-traffic-level-settle-log-time* (the-as time-frame 0))
   (set! *mp-traffic-level-context-change-time* (the-as time-frame 0))
   (set! *mp-traffic-last-local-primary-level-id* (the uint 0))
-  (set! *mp-traffic-last-remote-primary-level-id* (the uint 0))
+  (set! *mp-traffic-last-authority-level-id* (the uint 0))
   (set! *mp-traffic-last-remote-apply-ready* #f)
   (set! *mp-traffic-refresh-existing-log-time* (the-as time-frame 0))
   (mp-traffic-clear-buffer!)
@@ -285,15 +280,16 @@
   (none))
 
 (defun mp-traffic-local-primary-level-id ()
-  (if (and *local-info* (nonzero? *local-info*))
-      (mp-level-packed-primary-id (-> *local-info* level))
+  (if (and (mp-local-player-record) (nonzero? (mp-local-player-record)))
+      (mp-level-packed-primary-id (-> (mp-local-player-record) transform level))
       (the uint 0)
       )
   )
 
-(defun mp-traffic-remote-primary-level-id ()
-  (if (and *remote-info* (nonzero? *remote-info*))
-      (mp-level-packed-primary-id (-> *remote-info* level))
+(defun mp-traffic-authority-primary-level-id ()
+  "Use the host record as the authoritative ambient-traffic level context."
+  (if (and (mp-host-player-record) (nonzero? (mp-host-player-record)))
+      (mp-level-packed-primary-id (-> (mp-host-player-record) transform level))
       (the uint 0)
       )
   )
@@ -336,10 +332,10 @@
 (defun mp-traffic-primary-levels-match? ()
   "Ambient host traffic is valid only when both peers share the same primary city level."
   (let ((local-primary (mp-traffic-local-primary-level-id))
-        (remote-primary (mp-traffic-remote-primary-level-id)))
+        (authority-level-id (mp-traffic-authority-primary-level-id)))
     (and (nonzero? local-primary)
-         (nonzero? remote-primary)
-         (= local-primary remote-primary))
+         (nonzero? authority-level-id)
+         (= local-primary authority-level-id))
     )
   )
 
@@ -416,11 +412,11 @@
 (defun mp-traffic-log-level-gate! ((reason symbol))
   "Emit a compact snapshot of the traffic readiness inputs around zone transitions."
   (debug-log *mp-debug-log?*
-    "[MP-TrafficGate] ~S local-primary=~D local-symbol=~S remote-primary=~D "
+    "[MP-TrafficGate] ~S local-primary=~D local-symbol=~S authority-level=~D "
     reason
     (mp-traffic-local-primary-level-id)
     (mp-traffic-local-primary-level-symbol)
-    (mp-traffic-remote-primary-level-id)
+    (mp-traffic-authority-primary-level-id)
     )
   (debug-log *mp-debug-log?*
     "match=~A ready=~A spawn-ready=~A riding=~A target-level=~S "
@@ -468,24 +464,24 @@
 (defun mp-traffic-note-level-context! ()
   "Track local/remote primary level changes and hold ambient traffic while display settles."
   (let ((local-primary (mp-traffic-local-primary-level-id))
-        (remote-primary (mp-traffic-remote-primary-level-id)))
+        (authority-level-id (mp-traffic-authority-primary-level-id)))
     (when (and (nonzero? local-primary)
-               (nonzero? remote-primary)
+               (nonzero? authority-level-id)
                (or (!= local-primary *mp-traffic-last-local-primary-level-id*)
-                   (!= remote-primary *mp-traffic-last-remote-primary-level-id*)))
+                   (!= authority-level-id *mp-traffic-last-authority-level-id*)))
       (set! *mp-traffic-last-local-primary-level-id* local-primary)
-      (set! *mp-traffic-last-remote-primary-level-id* remote-primary)
+      (set! *mp-traffic-last-authority-level-id* authority-level-id)
       (set! *mp-traffic-level-context-change-time* (current-time))
       (set! *mp-traffic-last-remote-apply-ready* #f)
       (mp-traffic-log-level-gate! 'context-change-before-clear)
-      (if (= local-primary remote-primary)
+      (if (= local-primary authority-level-id)
           (mp-traffic-clear-incoming-remote!)
           (mp-traffic-clear-pending-remote!)
           )
       (debug-log *mp-debug-log?*
-              "[MP-Traffic] Level context changed. Holding ambient traffic local-primary=~D remote-primary=~D~%"
+              "[MP-Traffic] Level context changed. Holding ambient traffic local-primary=~D authority-level=~D~%"
               local-primary
-              remote-primary)
+              authority-level-id)
       )
     )
   (none)
@@ -575,13 +571,12 @@
     )
   )
 
-(defun mp-traffic-refresh-existing-vehicle-slot! ((slot mp-vehicle-state) (remote-driven-id uint) (local-driven-id uint))
+(defun mp-traffic-refresh-existing-vehicle-slot! ((slot mp-vehicle-state))
   (let ((refreshed? #f))
     (when (and slot
                (nonzero? slot)
                (nonzero? (-> slot net-id))
-               (!= (-> slot net-id) remote-driven-id)
-               (!= (-> slot net-id) local-driven-id))
+               (not (mp-player-record-by-vehicle-id (-> slot net-id))))
       (let ((proc (mp-vehicle-find-by-net-id (-> slot net-id))))
         (when (and proc
                    (nonzero? proc))
@@ -594,20 +589,12 @@
   )
 
 (defun mp-traffic-refresh-existing-vehicles! ()
-  (let ((refresh-count (the uint 0))
-        (remote-driven-id (if (and *remote-info* (nonzero? *remote-info*))
-                              (-> *remote-info* veh-state net-id)
-                              (the uint 0)))
-        (local-driven-id (if (and *local-info* (nonzero? *local-info*))
-                             (-> *local-info* veh-state net-id)
-                             (the uint 0))))
+  (let ((refresh-count (the uint 0)))
     (when (and *mp-traffic-buffer*
                (nonzero? (the-as uint *mp-traffic-buffer*)))
       (dotimes (slot-idx (the int MP_MAX_SYNC_VEHICLES))
         (when (mp-traffic-refresh-existing-vehicle-slot!
-                (-> *mp-traffic-buffer* veh-enemies slot-idx)
-                remote-driven-id
-                local-driven-id)
+                (-> *mp-traffic-buffer* veh-enemies slot-idx))
           (+! refresh-count 1)
           )
         )
@@ -689,14 +676,14 @@
              (not (mp-traffic-primary-levels-match?))
              (time-elapsed? *mp-traffic-level-mismatch-log-time* (seconds 1)))
     (debug-log *mp-debug-log?*
-      "[MP-Traffic] Skip remote ambient traffic: local-primary=~D remote-primary=~D~%"
+      "[MP-Traffic] Skip remote ambient traffic: local-primary=~D authority-level=~D~%"
       (mp-traffic-local-primary-level-id)
-      (mp-traffic-remote-primary-level-id)
+      (mp-traffic-authority-primary-level-id)
       )
     (debug-log *mp-debug-log?*
       "[MP-Traffic] packed local=~D remote=~D peds=~D vehs=~D riding=~A~%"
-      (if (and *local-info* (nonzero? *local-info*)) (-> *local-info* level) (the uint 0))
-      (if (and *remote-info* (nonzero? *remote-info*)) (-> *remote-info* level) (the uint 0))
+      (if (and (mp-local-player-record) (nonzero? (mp-local-player-record))) (-> (mp-local-player-record) transform level) (the uint 0))
+      (if (and (mp-host-player-record) (nonzero? (mp-host-player-record))) (-> (mp-host-player-record) transform level) (the uint 0))
       (if (and *mp-traffic-buffer* (nonzero? (the-as uint *mp-traffic-buffer*))) (-> *mp-traffic-buffer* ped-count) (the uint 0))
       (if (and *mp-traffic-buffer* (nonzero? (the-as uint *mp-traffic-buffer*))) (-> *mp-traffic-buffer* veh-count) (the uint 0))
       *mp-traffic-art-context-riding*
@@ -713,9 +700,9 @@
              (not (mp-traffic-local-primary-level-ready?))
              (time-elapsed? *mp-traffic-level-settle-log-time* (seconds 1)))
     (debug-log *mp-debug-log?*
-      "[MP-Traffic] Hold remote ambient traffic until local traffic level is resident: local-primary=~D remote-primary=~D ready-level=~A~%"
+      "[MP-Traffic] Hold remote ambient traffic until local traffic level is resident: local-primary=~D authority-level=~D ready-level=~A~%"
       (mp-traffic-local-primary-level-id)
-      (mp-traffic-remote-primary-level-id)
+      (mp-traffic-authority-primary-level-id)
       (mp-traffic-local-primary-level-ready?)
       )
     (set! *mp-traffic-level-settle-log-time* (current-time))
@@ -756,7 +743,7 @@
               (mp-vehicle-apply-piggyback)
               )
             
-            (if (or (mp-is-jak?) (mp-is-traffic-authoritative?))
+            (if (or (mp-session-host?) (mp-is-traffic-authoritative?))
                 ;; Authoritative Logic: Gather and Pack
                 (begin
                   ;; Reclaim host bookkeeping before current entities request slots.
@@ -776,7 +763,7 @@
                   (mp-sync-mission-traffic-update)
 
                   (when (time-elapsed? (-> *mp-traffic-buffer* last-sync-time) (seconds 2))
-                    (debug-log *mp-debug-log?* "[MP-Traffic] Authoritative Active: ~D peds, ~D vehs ready=~A riding=~A local-level=~D remote-level=~D~%" (-> *mp-traffic-buffer* ped-count) (-> *mp-traffic-buffer* veh-count) *mp-traffic-art-context-spawn-ready* *mp-traffic-art-context-riding* *mp-traffic-art-context-local-level* *mp-traffic-art-context-remote-level*)
+                    (debug-log *mp-debug-log?* "[MP-Traffic] Authoritative Active: ~D peds, ~D vehs ready=~A riding=~A local-level=~D authority-level=~D~%" (-> *mp-traffic-buffer* ped-count) (-> *mp-traffic-buffer* veh-count) *mp-traffic-art-context-spawn-ready* *mp-traffic-art-context-riding* *mp-traffic-art-context-local-level* *mp-traffic-art-context-authority-level*)
                     (set! (-> *mp-traffic-buffer* last-sync-time) (the-as uint (current-time)))
                     )
                   )
@@ -797,7 +784,7 @@
                               (pc-multi-receive-traffic (the-as uint *mp-traffic-buffer*))
                               (mp-traffic-debug-update-frame-context!)
                               (when (time-elapsed? (-> *mp-traffic-buffer* last-sync-time) (seconds 2))
-                                (debug-log *mp-debug-log?* "[MP-Traffic] Puppet Active: ~D peds, ~D vehs ready=~A riding=~A local-level=~D remote-level=~D~%" (-> *mp-traffic-buffer* ped-count) (-> *mp-traffic-buffer* veh-count) *mp-traffic-art-context-spawn-ready* *mp-traffic-art-context-riding* *mp-traffic-art-context-local-level* *mp-traffic-art-context-remote-level*)
+                                (debug-log *mp-debug-log?* "[MP-Traffic] Puppet Active: ~D peds, ~D vehs ready=~A riding=~A local-level=~D authority-level=~D~%" (-> *mp-traffic-buffer* ped-count) (-> *mp-traffic-buffer* veh-count) *mp-traffic-art-context-spawn-ready* *mp-traffic-art-context-riding* *mp-traffic-art-context-local-level* *mp-traffic-art-context-authority-level*)
                                 (set! (-> *mp-traffic-buffer* last-sync-time) (the-as uint (current-time)))
                                 )
                               (when (or (nonzero? (-> *mp-traffic-buffer* ped-count)) (nonzero? (-> *mp-traffic-buffer* veh-count)))
@@ -865,12 +852,9 @@
           (let ((next-ptr (-> curr 0 brother)))
             (when (and proc (nonzero? proc) (type? proc vehicle))
               (let ((v-proc (the-as vehicle proc)))
-                (let ((v-net-id (-> v-proc net-id))
-                      (local-driven-id (if (and *local-info* (nonzero? *local-info*)) (-> *local-info* veh-state net-id) (the uint 0)))
-                      (remote-driven-id (if (and *remote-info* (nonzero? *remote-info*)) (-> *remote-info* veh-state net-id) (the uint 0))))
-                  ;; Do not deactivate the local or remote player's currently driven vehicle!
-                  (when (not (or (and (nonzero? local-driven-id) (= v-net-id local-driven-id))
-                                 (and (nonzero? remote-driven-id) (= v-net-id remote-driven-id))
+                (let ((v-net-id (-> v-proc net-id)))
+                  ;; Do not deactivate any player's currently owned or occupied vehicle.
+                  (when (not (or (mp-player-record-by-vehicle-id v-net-id)
                                  (and *target* 
                                       (nonzero? *target*)
                                       (focus-test? *target* pilot)

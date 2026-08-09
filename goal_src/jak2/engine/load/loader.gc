@@ -14,7 +14,7 @@
 (define-extern *mp-traffic-art-context-ped-count* uint)
 (define-extern *mp-traffic-art-context-veh-count* uint)
 (define-extern *mp-traffic-art-context-local-level* uint)
-(define-extern *mp-traffic-art-context-remote-level* uint)
+(define-extern *mp-traffic-art-context-authority-level* uint)
 (define-extern *mp-traffic-art-context-spawn-ready* symbol)
 (define-extern *mp-traffic-art-context-riding* symbol)
 (define *art-group-load-debug-level* 'none)
@@ -194,7 +194,7 @@
     *mp-traffic-art-context-ped-count*
     *mp-traffic-art-context-veh-count*
     *mp-traffic-art-context-local-level*
-    *mp-traffic-art-context-remote-level*
+    *mp-traffic-art-context-authority-level*
     *mp-traffic-art-context-spawn-ready*
     *mp-traffic-art-context-riding*
     )

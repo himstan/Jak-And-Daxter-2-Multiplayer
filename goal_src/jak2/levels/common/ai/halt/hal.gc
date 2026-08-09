@@ -353,7 +353,7 @@
      (set! (-> this scene-player-handle) (ppointer->handle *scene-player*))
      #t
      )
-    ((mp-is-daxter?)
+    ((mp-session-client?)
      #f
      )
     ((and (process-grab? this #t) (or arg1 (and *target* (nonzero? *target*) (process-grab? *target* #t))))

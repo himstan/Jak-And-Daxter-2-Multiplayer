@@ -73,7 +73,7 @@
                 (= (pc-multi-get-status) (mp-connection-status in-game))))
       (mp-widow-reset-presentation! proc)
       (begin
-        (if (mp-is-jak?)
+        (if (mp-session-host?)
             (begin
               (mp-widow-pack-state! proc (-> *mp-widow-buffer* local-state))
               (mp-widow-bomb-process-kick-events proc)
@@ -97,7 +97,7 @@
                                  (spawn-trans vector)
                                  (spawn-quat quaternion)
                                  (launch-dest vector))
-  (when (and (mp-is-jak?)
+  (when (and (mp-session-host?)
              *multi-sync-enabled?*
              (= (pc-multi-get-status) (mp-connection-status in-game))
              (not *mp-processing-remote-event*)
@@ -123,7 +123,7 @@
   )
 
 (defun mp-widow-queue-bomb! ((launch-slot int) (launch-dest vector))
-  (when (and (mp-is-jak?)
+  (when (and (mp-session-host?)
              *multi-sync-enabled?*
              (= (pc-multi-get-status) (mp-connection-status in-game))
              (not *mp-processing-remote-event*)
@@ -157,7 +157,7 @@
 (defun mp-widow-queue-catwalk-hit! ((catwalk-index int))
   (when (and *multi-sync-enabled?*
              (= (pc-multi-get-status) (mp-connection-status in-game))
-             (mp-is-jak?)
+             (mp-session-host?)
              (not *mp-processing-remote-event*)
              (>= catwalk-index 1)
              (<= catwalk-index 7))

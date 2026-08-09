@@ -39,7 +39,7 @@
 (define-perm *mp-waypoint-scratch-event* mp-waypoint-event (new 'static 'mp-waypoint-event))
 (define-perm *mp-waypoint-debug?* symbol #f)
 (define-perm *mp-waypoint-sync-local-level-id* uint (the uint 0))
-(define-perm *mp-waypoint-sync-remote-level-id* uint (the uint 0))
+(define-perm *mp-waypoint-sync-remote-level-fingerprint* uint (the uint 0))
 
 (define *mp-waypoint-find-course-id* (the uint 0))
 (define *mp-waypoint-find-name* (the-as string #f))
@@ -260,7 +260,7 @@
   (when (mp-waypoint-debug-should-log? evt course-bot)
     (debug-log *mp-debug-log?*
             "[MP-Waypoint] role=~S stage=~S type=~S course=~D wp=~D req=~D"
-            (if (mp-is-jak?) 'host 'client)
+            (if (mp-session-host?) 'host 'client)
             stage
             (mp-waypoint-event-type-name (-> evt etype))
             (-> evt course-id)
@@ -322,19 +322,48 @@
   (set! *mp-waypoint-last-snapshot-time* (the-as time-frame 0))
   (set! *mp-waypoint-applying-remote?* #f)
   (set! *mp-waypoint-sync-local-level-id* (the uint 0))
-  (set! *mp-waypoint-sync-remote-level-id* (the uint 0))
+  (set! *mp-waypoint-sync-remote-level-fingerprint* (the uint 0))
   (none))
+
+(defun mp-waypoint-remote-level-fingerprint ()
+  "Fingerprint every connected remote's primary level in its player-ID byte."
+  (let ((fingerprint (the uint 0)))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (and record
+                   (nonzero? record)
+                   (mp-player-record-remote? *mp-player-controller* record)
+                   (>= (-> record connection status) 4))
+          (set! fingerprint
+            (the-as uint
+              (logior fingerprint
+                (shl
+                  (mp-level-packed-primary-id (-> record transform level))
+                  (* player-id 8))))))))
+    fingerprint))
+
+(defun mp-waypoint-all-connected-levels-match? ((local-level-id uint))
+  (let ((found-remote? #f))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (and record
+                   (nonzero? record)
+                   (mp-player-record-remote? *mp-player-controller* record)
+                   (>= (-> record connection status) 4))
+          (set! found-remote? #t)
+          (when (!= local-level-id
+                    (mp-level-packed-primary-id (-> record transform level)))
+            (return #f)))))
+    found-remote?))
 
 (defun mp-waypoint-update-level-context! ()
   "Track waypoint-only level context and drop stale command buffers on changes."
   (let ((local-level-id (mp-current-active-level-id))
-        (remote-level-id (if (and *remote-info* (nonzero? *remote-info*))
-                             (mp-level-packed-primary-id (-> *remote-info* level))
-                             (the uint 0))))
+        (remote-level-fingerprint (mp-waypoint-remote-level-fingerprint)))
     (when (or (!= local-level-id *mp-waypoint-sync-local-level-id*)
-              (!= remote-level-id *mp-waypoint-sync-remote-level-id*))
+              (!= remote-level-fingerprint *mp-waypoint-sync-remote-level-fingerprint*))
       (set! *mp-waypoint-sync-local-level-id* local-level-id)
-      (set! *mp-waypoint-sync-remote-level-id* remote-level-id)
+      (set! *mp-waypoint-sync-remote-level-fingerprint* remote-level-fingerprint)
       (mp-waypoint-clear-transition-buffers!)
       )
     )
@@ -346,8 +375,8 @@
   (mp-waypoint-update-level-context!)
   (and (mp-waypoint-target-ready?)
        (nonzero? *mp-waypoint-sync-local-level-id*)
-       (nonzero? *mp-waypoint-sync-remote-level-id*)
-       (= *mp-waypoint-sync-local-level-id* *mp-waypoint-sync-remote-level-id*)
+       (mp-waypoint-all-connected-levels-match?
+         *mp-waypoint-sync-local-level-id*)
        )
   )
 
@@ -594,7 +623,7 @@
 (defun mp-waypoint-store-pending-from-receive! ((evt mp-waypoint-event) (snapshot? symbol))
   (when (and evt
              (nonzero? evt)
-             (or snapshot? (not (mp-is-jak?))))
+             (or snapshot? (not (mp-session-host?))))
     (if (and snapshot? (mp-waypoint-pending-command-for-target? evt))
         (mp-waypoint-debug-log! 'pending-snapshot-blocked-by-command evt (the-as bot #f) *mp-waypoint-name-scratch*)
         (mp-waypoint-store-pending! evt)
@@ -749,7 +778,7 @@
   )
 
 (defun mp-waypoint-host-should-drop-inbound? ((evt mp-waypoint-event) (snapshot? symbol))
-  (when (or (not (mp-is-jak?)) snapshot?)
+  (when (or (not (mp-session-host?)) snapshot?)
     (return #f)
     )
   (if (mp-waypoint-recent-inbound-duplicate? evt)
@@ -988,7 +1017,7 @@
 (defun mp-waypoint-send-host-snapshot! ()
   (when (and *multi-sync-enabled?*
              (= (pc-multi-get-status) (mp-connection-status in-game))
-             (mp-is-jak?)
+             (mp-session-host?)
              (mp-waypoint-sync-ready?)
              (>= (- (current-time) *mp-waypoint-last-snapshot-time*) (seconds 1)))
     (set! *mp-waypoint-last-snapshot-time* (current-time))
@@ -1002,7 +1031,7 @@
     (if (not (mp-waypoint-sync-ready?))
         (none)
         (begin
-          (if (mp-is-jak?)
+          (if (mp-session-host?)
               (mp-waypoint-send-host-snapshot!)
               (none)
               )

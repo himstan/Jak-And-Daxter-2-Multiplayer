@@ -1441,8 +1441,8 @@
   "Refresh target metrics after remote presentation data has been applied."
   (when (and this
              (nonzero? this)
-             *local-info*
-             (nonzero? *local-info*))
+             (mp-local-player-record)
+             (nonzero? (mp-local-player-record)))
     (let ((root (-> this root))
           (focus (-> this focus))
           (nav (-> this nav)))

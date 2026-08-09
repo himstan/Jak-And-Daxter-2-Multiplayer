@@ -240,19 +240,19 @@
 
 (defun mp-gungame-local-authority? ()
   (or (not (mp-gungame-sync-active?))
-      (mp-is-jak?)
+      (mp-session-host?)
       )
   )
 
 (defun mp-gungame-red-intro-step-reached? ((step uint))
   (and (mp-gungame-sync-active?)
-       (mp-is-daxter?)
+       (mp-session-client?)
        (>= *mp-gungame-red-intro-step* step)
        )
   )
 
 (defun mp-gungame-red-gun-away-done? ()
-  (if (and (mp-gungame-sync-active?) (mp-is-daxter?))
+  (if (and (mp-gungame-sync-active?) (mp-session-client?))
       (mp-gungame-red-intro-step-reached? (the uint 2))
       (and *target*
            (nonzero? *target*)
@@ -262,7 +262,7 @@
   )
 
 (defun mp-gungame-red-gun-out-done? ()
-  (if (and (mp-gungame-sync-active?) (mp-is-daxter?))
+  (if (and (mp-gungame-sync-active?) (mp-session-client?))
       (mp-gungame-red-intro-step-reached? (the uint 3))
       (and *target*
            (nonzero? *target*)
@@ -272,7 +272,7 @@
   )
 
 (defun mp-gungame-send-red-intro-step! ((step uint))
-  (when (and (mp-gungame-sync-active?) (mp-is-jak?))
+  (when (and (mp-gungame-sync-active?) (mp-session-host?))
     (set! *mp-gungame-red-intro-step* step)
     (let ((details (new 'stack-no-clear 'mp-gungame-build-data)))
       (set! (-> details event-type) MP_EVENT_MISSION_GUNGAME_TUTORIAL_STEP)
@@ -541,7 +541,7 @@
 
 (defun mp-gungame-send-spawned! ((this training-manager) (target-info tpath-info) (spawn-kind int))
   (when (and (mp-gungame-sync-active?)
-             (mp-is-jak?)
+             (mp-session-host?)
              target-info)
     (let ((cid (mp-gungame-course-id (-> this course))))
       (when (nonzero? cid)
@@ -564,7 +564,7 @@
 (defun mp-gungame-send-course-snapshot! ((this training-manager))
   (let ((cid (mp-gungame-course-id (-> this course))))
     (when (and (mp-gungame-sync-active?)
-               (mp-is-jak?)
+               (mp-session-host?)
                (nonzero? cid)
                (time-elapsed? *mp-gungame-last-snapshot-time* (seconds 0.25)))
       (set-time! *mp-gungame-last-snapshot-time*)
@@ -602,7 +602,7 @@
 (defun mp-gungame-send-course-end! ((this training-manager))
   (let ((cid (mp-gungame-course-id (-> this course))))
     (when (and (mp-gungame-sync-active?)
-               (mp-is-jak?)
+               (mp-session-host?)
                (nonzero? cid))
       (dotimes (chunk 4)
         (let ((details (new 'stack-no-clear 'mp-gungame-build-data)))
@@ -1616,7 +1616,7 @@
        (let ((a1-3 (-> block param 0))
              (v1-1 (the-as process-taskable proc))
              )
-         (when (mp-is-jak?)
+         (when (mp-session-host?)
             (+! (-> self score) a1-3)
            )
          (cond
@@ -2645,7 +2645,7 @@
 (defmethod training-manager-method-28 ((this training-manager))
   (cond
     ((and (mp-gungame-sync-active?)
-          (mp-is-daxter?)
+          (mp-session-client?)
           *mp-gungame-pending?*
           (nonzero? *mp-gungame-course-id*)
           (or (= *mp-gungame-event-kind* MP_EVENT_MISSION_GUNGAME_COURSE_SNAPSHOT)
@@ -2668,14 +2668,14 @@
     ((or (task-node-open? (game-task-node city-red-gun-training-try-once))
          (task-node-open? (game-task-node city-red-gun-training-resolution))
          )
-     (when (mp-is-jak?) (set! *mp-gungame-course-id* MP_GUNGAME_COURSE_RED))
+     (when (mp-session-host?) (set! *mp-gungame-course-id* MP_GUNGAME_COURSE_RED))
      (go (method-of-object this red-training))
      )
     ((task-node-open? (game-task-node city-yellow-gun-training-introduction))
      (go (method-of-object this yellow-training-intro))
      )
     ((task-node-open? (game-task-node city-yellow-gun-training-resolution))
-     (when (mp-is-jak?) (set! *mp-gungame-course-id* MP_GUNGAME_COURSE_YELLOW))
+     (when (mp-session-host?) (set! *mp-gungame-course-id* MP_GUNGAME_COURSE_YELLOW))
      (go yellow-training)
      )
     (else

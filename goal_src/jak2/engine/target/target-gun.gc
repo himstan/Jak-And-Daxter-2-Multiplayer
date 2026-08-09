@@ -375,26 +375,28 @@
 
 (defun mp-puppet-weapon-authoritative? ((proc target))
   "Is this target the active remote puppet whose gun state is network-authoritative?"
-  (if (and proc
-           (nonzero? proc)
-           *mp-puppet*
-           (nonzero? *mp-puppet*)
-           (= proc *mp-puppet*)
-           (nonzero? (the-as uint *mp-puppet-ghost*))
-           (-> *mp-puppet-ghost* active?)
-           )
-      #t
-      #f)
+  (let ((record (mp-player-process-record proc)))
+  (let ((ghost (mp-player-record-ghost record)))
+    (if (and proc
+             (nonzero? proc)
+             record
+             (nonzero? record)
+             (mp-player-record-remote? *mp-player-controller* record)
+             ghost
+             (nonzero? ghost)
+             (-> ghost active?))
+        #t
+      #f)))
   )
 
 (defun is-allowed-to-put-gun-away? ((proc target) (force? symbol))
-  (if (and *mp-puppet-ghost*
-           (nonzero? (the-as uint *mp-puppet-ghost*)))
-      (let ((weapon (the-as uint (-> *mp-puppet-ghost* equipped-weapon))))
+  (let ((ghost (mp-player-record-ghost (mp-player-process-record proc))))
+    (if (and ghost (nonzero? ghost))
+      (let ((weapon (the-as uint (-> ghost equipped-weapon))))
         (or force? (not (mp-puppet-weapon-authoritative? proc)) (= weapon 0))
         )
       #t
-      )
+      ))
   )
 
 (defbehavior target-gun-end-mode target ((arg0 symbol))
@@ -2403,12 +2405,18 @@
            (f0-0 (-> self game gun-ammo (+ a1-0 -13)))
            )
       (cond
-        ((or (and *mp-puppet* (= self *mp-puppet*))
+        ((or (let ((record (mp-player-process-record self)))
+               (and record
+                    (nonzero? record)
+                    (mp-player-record-remote? *mp-player-controller* record)))
              (< 0.0 f0-0)
              (logtest? (state-flags sf16) (-> self state-flags))
              (logtest? (-> self game secrets) (game-secrets endless-ammo))
              )
-         (when (not (and *mp-puppet* (= self *mp-puppet*)))
+         (when (not (let ((record (mp-player-process-record self)))
+                      (and record
+                           (nonzero? record)
+                           (mp-player-record-remote? *mp-player-controller* record))))
            (pickup-collectable! (-> self fact) (the-as pickup-type a1-0) -1.0 (the-as handle #f))
            )
          (case (-> gp-0 gun-type)
@@ -2684,14 +2692,22 @@
       (case (-> gp-0 gun-control)
         ((1)
          (when (and 
+           (let ((ride-record
+                   (mp-nearest-player-character-record
+                     self
+                     (mp-player-character daxter)
+                     (mp-player-id-from-process self))))
            (or 
              (cpad-pressed? (-> self control cpad number) r1) 
              (and 
-               (mp-is-jak?) 
-               (focus-test? self pilot-riding) 
-               *mp-puppet* 
-               (mp-target-ride-along? *mp-puppet*) 
-               (cpad-pressed? (-> *mp-puppet* control cpad number) r1)))
+               (mp-target-jak? self)
+               (focus-test? self pilot-riding)
+               ride-record
+               (nonzero? ride-record)
+               (mp-player-record-target ride-record)
+               (mp-target-ride-along? (mp-player-record-target ride-record))
+               (cpad-pressed?
+                 (-> (mp-player-record-target ride-record) control cpad number) r1))))
             (< (the-as time-frame (+ (-> gp-0 fire-delay) -30)) (- (current-time) (-> gp-0 fire-time))))
            (set-time! (-> gp-0 fire-pending-time))
            (if (zero? (-> self gun fire-pending))

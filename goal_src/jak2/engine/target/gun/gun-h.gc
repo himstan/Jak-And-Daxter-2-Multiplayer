@@ -156,7 +156,7 @@
   (local-vars (v1-36 symbol))
   (and (logtest? (-> arg0 game features) (game-feature gun))
        (nonzero? (-> arg0 gun))
-       (time-elapsed? (-> arg0 gun gun-time) (if (mp-is-daxter?) (seconds 0.3) (seconds 0.1)))
+       (time-elapsed? (-> arg0 gun gun-time) (if (mp-target-daxter? arg0) (seconds 0.3) (seconds 0.1)))
        (not (focus-test? arg0 dead hit board mech dark teleporting))
        (not (logtest? (surface-flag gun-inactive gun-hide gun-off) (-> arg0 control current-surface flags)))
        (not (logtest? (state-flags prevent-gun) (-> arg0 state-flags)))

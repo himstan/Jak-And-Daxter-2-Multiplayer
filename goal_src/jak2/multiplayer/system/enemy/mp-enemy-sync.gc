@@ -191,20 +191,15 @@
   ;; State Sync (New state-id based)
   (set! (-> slot state) (mp-enemy-get-state-id e-proc))
   
-  (set! (-> slot focus-aid) (the-as uint32 0))
+  (set! (-> slot focus-player-id) MP_INVALID_PLAYER_ID)
   (let ((focus (the-as process #f)))
     (if (and (-> e-proc focus) (nonzero? (-> e-proc focus)))
         (set! focus (handle->process-safe (-> e-proc focus handle)))
         )
     (when (and focus (nonzero? focus))
-      (if (and *target* (nonzero? *target*) (= focus *target*))
-          (set! (-> slot focus-aid) (the-as uint32 (+ 1 (-> *local-info* role))))
-          (let ((remote *mp-puppet*))
-             (if (and remote (nonzero? remote) (= focus remote))
-                 (set! (-> slot focus-aid) (the-as uint32 (+ 1 (if (= (-> *local-info* role) 0) 1 0))))
-                 )
-             )
-          )
+      (let ((focus-player-id (mp-player-id-from-process focus)))
+        (when (mp-player-id-valid? focus-player-id)
+          (set! (-> slot focus-player-id) (the-as uint32 focus-player-id))))
       )
     )
   (none)
@@ -287,7 +282,7 @@
           (when (and rec (nonzero? rec))
             (mp-enemy-note-remote-transform-sample! rec slot)
             (set! (-> rec ghost-state) (the-as mp-enemy-state-id (-> slot state)))
-            (set! (-> rec ghost-focus-aid) (-> slot focus-aid))
+            (set! (-> rec ghost-focus-player-id) (-> slot focus-player-id))
             )
           )
         )
@@ -373,31 +368,31 @@
 
 (defun mp-enemy-authoritative? ((e-proc enemy))
   (when (mp-enemy-host-only? e-proc)
-    (return (mp-is-jak?))
+    (return (mp-session-host?))
     )
   (when (and e-proc
              (nonzero? e-proc)
-             *local-info*
-             (nonzero? *local-info*))
-    (let ((battle-owner (mp-battle-enemy-owner-role e-proc)))
+             (mp-local-player-record)
+             (nonzero? (mp-local-player-record)))
+    (let ((battle-owner (mp-battle-enemy-owner-player-id e-proc)))
       (when (>= battle-owner 0)
-        (return (= battle-owner (-> *local-info* role)))
+        (return (= battle-owner (-> (mp-local-player-record) identity player-id)))
         )
       )
     )
   (when (type? e-proc bot)
-    (return (mp-is-jak?))
+    (return (mp-session-host?))
   )
   (let ((enemy-aid (mp-get-enemy-aid e-proc)))
     (when (nonzero? enemy-aid)
       (let ((rec (mp-get-enemy-auth enemy-aid)))
         (if rec
-            (return (= (-> rec owner) (-> *local-info* role)))
+            (return (= (-> rec owner-player-id) (-> (mp-local-player-record) identity player-id)))
             )
         )
       )
     )
-  (mp-is-jak?) ;; fallback to host if unknown
+  (mp-session-host?) ;; fallback to host if unknown
   )
 
 (defun mp-enemy-broadcast-death ((e-proc enemy))
@@ -446,9 +441,9 @@
             (if (nonzero? enemy-aid)
                 (let ((rec (mp-get-enemy-auth enemy-aid)))
                   (if (and rec (nonzero? rec))
-                      (if (and *local-info*
-                               (nonzero? *local-info*))
-                          (or (= (-> rec owner) (-> *local-info* role))
+                      (if (and (mp-local-player-record)
+                               (nonzero? (mp-local-player-record)))
+                          (or (= (-> rec owner-player-id) (-> (mp-local-player-record) identity player-id))
                               *mp-processing-remote-event*
                               (mp-enemy-battle-state-unmapped? e-proc rec))
                           #t)
@@ -485,11 +480,12 @@
           (let ((enemy-aid (mp-get-enemy-aid e-proc)))
             (when (nonzero? enemy-aid)
               (let ((rec (mp-get-enemy-auth enemy-aid)))
-                (when (and rec (nonzero? (-> rec ghost-focus-aid)))
-                  (let ((target-role (the-as uint8 (+ -1 (-> rec ghost-focus-aid)))))
-                    (let ((focus-proc (if (= target-role (-> *local-info* role))
-                                          (the-as process-focusable *target*)
-                                          (the-as process-focusable *mp-puppet*))))
+                (when (and rec
+                           (mp-player-id-valid? (the-as uint (-> rec ghost-focus-player-id))))
+                  (let ((target-player-id (the-as uint (-> rec ghost-focus-player-id))))
+                    (let ((focus-proc
+                            (the-as process-focusable
+                              (mp-player-target-by-id target-player-id))))
                       (when (and focus-proc (nonzero? focus-proc))
                         (set! (-> e-proc focus handle) (process->handle focus-proc))
                         )
@@ -524,7 +520,7 @@
   "True when a client-side host-owned bot proxy has been locally suspended/retired."
   (and e-proc
        (nonzero? e-proc)
-       (not (mp-is-jak?))
+       (not (mp-session-host?))
        (type? e-proc bot)
        (= (-> e-proc status) 'suspended)
        )
@@ -551,8 +547,8 @@
              (nonzero? e-proc)
              slot
              (nonzero? slot)
-             *local-info*
-             (nonzero? *local-info*)
+             (mp-local-player-record)
+             (nonzero? (mp-local-player-record))
              (-> e-proc root)
              (nonzero? (-> e-proc root)))
     (let ((enemy-aid (mp-get-enemy-aid e-proc)))
@@ -625,15 +621,14 @@
              (nonzero? e-proc)
              rec
              (nonzero? rec)
-             *local-info*
-             (nonzero? *local-info*)
-             (nonzero? (-> rec ghost-focus-aid))
+             (mp-local-player-record)
+             (nonzero? (mp-local-player-record))
+             (mp-player-id-valid? (the-as uint (-> rec ghost-focus-player-id)))
              (-> e-proc focus)
              (nonzero? (-> e-proc focus)))
-    (let ((target-role (the-as uint8 (+ -1 (-> rec ghost-focus-aid)))))
-      (let ((focus-proc (if (= target-role (-> *local-info* role))
-                            (the-as process-focusable *target*)
-                            (the-as process-focusable *mp-puppet*))))
+    (let ((target-player-id (the-as uint (-> rec ghost-focus-player-id))))
+      (let ((focus-proc
+              (the-as process-focusable (mp-player-target-by-id target-player-id))))
         (when (and focus-proc (nonzero? focus-proc))
           (set! (-> e-proc focus handle) (process->handle focus-proc))
           )
@@ -660,8 +655,8 @@
   "Apply the latest fresh remote slot after local enemy post logic."
   (when (and e-proc
              (nonzero? e-proc)
-             *local-info*
-             (nonzero? *local-info*))
+             (mp-local-player-record)
+             (nonzero? (mp-local-player-record)))
     (let ((enemy-aid (mp-get-enemy-aid e-proc)))
       (when (and (nonzero? enemy-aid)
                  (not (mp-enemy-authoritative? e-proc))
@@ -683,14 +678,20 @@
     (let ((enemy-aid (mp-get-enemy-aid e-proc)))
       (if (nonzero? enemy-aid)
           (let ((rec (mp-get-enemy-auth enemy-aid))
-                (remote-role (the-as uint8 (if (and *local-info* (nonzero? *local-info*) (= (-> *local-info* role) 0)) 1 0))))
+                (battle-owner (mp-battle-enemy-owner-player-id e-proc)))
             (when (not rec)
               (set! rec (mp-get-free-enemy-auth))
               )
             (if rec
                 (begin
                   (set! (-> rec aid) (the-as uint32 enemy-aid))
-                  (set! (-> rec owner) (the-as uint8 (if (mp-enemy-host-only? e-proc) 0 remote-role)))
+                  (set! (-> rec owner-player-id)
+                        (the-as uint8
+                          (if (mp-enemy-host-only? e-proc)
+                              (mp-host-player-id)
+                              (if (>= battle-owner 0)
+                                  (the-as uint battle-owner)
+                                  MP_INVALID_COMPACT_PLAYER_ID))))
                   (set! (-> rec is-aggro) #f)
                   (set! (-> rec last-transfer-time) (current-time))
                   (set! (-> rec last-remote-seen) (current-time))
@@ -708,17 +709,17 @@
                   (set! (-> rec ghost-state) (the-as mp-enemy-state-id (mp-enemy-get-state-id e-proc)))
                   (debug-log *mp-debug-log?*
                     "[MP-BattleSpawn][~A][AUTH-SEED] proc=~A aid=~D owner=~D state=~D root=~A~%"
-                    (if (mp-is-jak?) "HOST" "CLIENT")
+                    (if (mp-session-host?) "HOST" "CLIENT")
                     e-proc
                     enemy-aid
-                    remote-role
+                    (-> rec owner-player-id)
                     (mp-enemy-get-state-id e-proc)
                     (-> e-proc root)
                     )
                   )
                 (debug-log *mp-debug-log?*
                   "[MP-BattleSpawn][~A][AUTH-SEED-FAIL] no free auth record proc=~A aid=~D~%"
-                  (if (mp-is-jak?) "HOST" "CLIENT")
+                  (if (mp-session-host?) "HOST" "CLIENT")
                   e-proc
                   enemy-aid
                   )
@@ -726,7 +727,7 @@
               )
           (debug-log *mp-debug-log?*
             "[MP-BattleSpawn][~A][AUTH-SEED-WAIT] spawned proc has no AID yet proc=~A~%"
-            (if (mp-is-jak?) "HOST" "CLIENT")
+            (if (mp-session-host?) "HOST" "CLIENT")
             e-proc
             )
           )
@@ -758,22 +759,21 @@
   (the-as mp-enemy-state #f)
   )
 
-(defun mp-enemy-copy-remote-player-pos! ((out vector))
-  (when (and out
-             (nonzero? out)
-             *remote-info*
-             (nonzero? *remote-info*))
-    (set! (-> out x) (-> *remote-info* x))
-    (set! (-> out y) (-> *remote-info* y))
-    (set! (-> out z) (-> *remote-info* z))
-    )
+(defun mp-enemy-copy-player-pos!
+       ((out vector) (record mp-player-record))
+  (when (and out (nonzero? out) record (nonzero? record))
+    (let ((position (mp-player-record-position record)))
+      (when (and position (nonzero? position))
+        (set! (-> out x) (-> position x))
+        (set! (-> out y) (-> position y))
+        (set! (-> out z) (-> position z)))))
   (none)
   )
 
 (defun mp-enemy-init-auth-record! ((rec mp-enemy-auth-record)
                                    (e-proc enemy)
                                    (enemy-aid uint)
-                                   (local-role uint))
+                                   (local-player-id uint))
   "Initialize a new enemy authority record from the current local process."
   (when (and rec
              e-proc
@@ -789,7 +789,7 @@
     (set! (-> rec last-applied-remote-state) (the-as mp-enemy-state-id 0))
     (set! (-> rec last-remote-state-bump-time) 0)
     (mp-enemy-reset-remote-motion-sample! rec)
-    (set! (-> rec owner) (the-as uint8 local-role))
+    (set! (-> rec owner-player-id) (the-as uint8 local-player-id))
     (when (and (-> e-proc root)
                (nonzero? (-> e-proc root)))
       (vector-copy! (-> rec ghost-trans) (-> e-proc root trans))
@@ -886,17 +886,33 @@
 
           ;; --- Authority Resolution ---
           (let ((rec (mp-get-enemy-auth enemy-aid))
-                (local-role (the-as uint8 (-> *local-info* role)))
-                (remote-role (the-as uint8 (if (= (-> *local-info* role) 0) 1 0)))
+                (local-player-id (the-as uint8 (-> (mp-local-player-record) identity player-id)))
+                (nearest-record
+                  (if (and (-> e-proc root) (nonzero? (-> e-proc root)))
+                      (mp-nearest-remote-player-record-to-position
+                        (-> e-proc root trans) #f)
+                      (the-as mp-player-record #f)))
+                (nearest-remote-player-id MP_INVALID_COMPACT_PLAYER_ID)
+                (host-player-id (the-as uint8 (mp-host-player-id)))
                 )
+            (when (and nearest-record (nonzero? nearest-record))
+              (set! nearest-remote-player-id
+                    (the-as uint8 (-> nearest-record identity player-id))))
             
             ;; 1. Initialization (Load Order / Remote Claim)
             (when (not rec)
               (set! rec (mp-get-free-enemy-auth))
               (when rec
-                (mp-enemy-init-auth-record! rec e-proc enemy-aid local-role)
+                (mp-enemy-init-auth-record! rec e-proc enemy-aid local-player-id)
 
-                (let ((slot (mp-enemy-find-remote-slot enemy-aid)))
+                (let* ((slot (mp-enemy-find-remote-slot enemy-aid))
+                       (slot-owner-player-id
+                         (if (and slot
+                                  (nonzero? slot)
+                                  (mp-player-id-valid?
+                                    (the-as uint (-> slot owner-player-id))))
+                             (-> slot owner-player-id)
+                             nearest-remote-player-id)))
                   (when (and slot
                              (nonzero? slot)
                              (mp-enemy-remote-slot-fresh? slot))
@@ -904,32 +920,32 @@
                       ;; If they are aggro, we MUST yield.
                       (if (= (-> slot is-aggro) 1)
                           (begin
-                            (set! (-> rec owner) remote-role)
+                            (set! (-> rec owner-player-id) slot-owner-player-id)
                             (set! (-> rec is-aggro) #t)
                             )
                           (begin
                             ;; Proximity tie-breaker on spawn
                             (let ((is-bot (type? e-proc bot)))
                               (if is-bot
-                                  (set! (-> rec owner) (the uint8 0))
+                                  (set! (-> rec owner-player-id) host-player-id)
                                   (let ((local-pos (mp-enemy-local-player-pos)))
                                     (if (and local-pos
                                              (nonzero? local-pos)
                                              (-> e-proc root)
                                              (nonzero? (-> e-proc root))
-                                             *remote-info*
-                                             (nonzero? *remote-info*))
+                                             nearest-record
+                                             (nonzero? nearest-record))
                                         (let ((local-dist (vector-vector-distance (-> e-proc root trans) local-pos))
                                               (rem-pos (new 'stack 'vector)))
-                                          (mp-enemy-copy-remote-player-pos! rem-pos)
+                                          (mp-enemy-copy-player-pos! rem-pos nearest-record)
                                           (let ((remote-dist (vector-vector-distance (-> e-proc root trans) rem-pos)))
-                                            (if (or (and (= local-role 1) (= remote-role 0) (> local-dist remote-dist)) ;; Client yields if further than Host
-                                                    (and (= local-role 0) (= remote-role 1) (> local-dist (+ remote-dist (meters 10))))) ;; Host yields if MUCH further than Client
-                                                (set! (-> rec owner) remote-role)
+                                            (if (or (and (mp-session-client?) (> local-dist remote-dist))
+                                                    (and (mp-session-host?) (> local-dist (+ remote-dist (meters 10)))))
+                                                (set! (-> rec owner-player-id) nearest-remote-player-id)
                                                 )
                                             )
                                           )
-                                        (set! (-> rec owner) remote-role)
+                                        (set! (-> rec owner-player-id) nearest-remote-player-id)
                                         )
                                      )
                                   )
@@ -943,13 +959,20 @@
 
             (when rec
               (when (mp-enemy-host-only? e-proc)
-                (set! (-> rec owner) (the-as uint8 0))
+                (set! (-> rec owner-player-id) host-player-id)
                 )
               ;; 2. Remote Claim Processing
-              (let ((is-bot (type? e-proc bot))
-                    (battle-owner (mp-battle-enemy-owner-role e-proc))
-                    (is-daxter-and-riding-along (mp-target-ride-along? *target*))
-                    (remote-slot (mp-enemy-find-remote-slot enemy-aid)))
+              (let* ((is-bot (type? e-proc bot))
+                     (battle-owner (mp-battle-enemy-owner-player-id e-proc))
+                     (is-daxter-and-riding-along (mp-target-ride-along? *target*))
+                     (remote-slot (mp-enemy-find-remote-slot enemy-aid))
+                     (remote-owner-player-id
+                       (if (and remote-slot
+                                (nonzero? remote-slot)
+                                (mp-player-id-valid?
+                                  (the-as uint (-> remote-slot owner-player-id))))
+                           (-> remote-slot owner-player-id)
+                           nearest-remote-player-id)))
 
                 (when (and remote-slot
                            (nonzero? remote-slot)
@@ -958,15 +981,17 @@
 
                   ;; --- Rule: Dual Authority Resolution (Host Priority) ---
                   (if (>= battle-owner 0)
-                      (set! (-> rec owner) (the-as uint8 battle-owner))
+                      (set! (-> rec owner-player-id) (the-as uint8 battle-owner))
                       (if (or is-bot is-daxter-and-riding-along)
-                      (set! (-> rec owner) (the uint8 0))
-                      (when (and (= local-role 1) (= (-> remote-slot owner) 0) (= (-> rec owner) 1))
+                      (set! (-> rec owner-player-id) host-player-id)
+                      (when (and (mp-session-client?)
+                                 (= (-> remote-slot owner-player-id) host-player-id)
+                                 (= (-> rec owner-player-id) local-player-id))
                         (if (or (and (-> rec is-aggro) (not (= (-> remote-slot is-aggro) 1)))
                                 (< (- (current-time) (-> rec last-transfer-time)) (seconds 2))) ;; Grace period for transition
                             (none)
                             (begin
-                              (set! (-> rec owner) 0)
+                              (set! (-> rec owner-player-id) host-player-id)
                               (set! (-> rec is-aggro) (= (-> remote-slot is-aggro) 1))
                               )
                             )
@@ -977,28 +1002,32 @@
                   (when (and (< battle-owner 0) (not is-bot) (not is-daxter-and-riding-along))
                     (cond
                       ((and (= (-> remote-slot is-aggro) 1) (not (-> rec is-aggro)) (>= (- (current-time) (-> rec last-transfer-time)) (seconds 2)))
-                       (set! (-> rec owner) remote-role)
+                       (set! (-> rec owner-player-id) remote-owner-player-id)
                        (set! (-> rec is-aggro) #t)
                        )
-                      ((and (= (-> remote-slot owner) remote-role) (not (-> rec is-aggro)) (>= (- (current-time) (-> rec last-transfer-time)) (seconds 2)))
+                      ((and (mp-player-id-valid? (the-as uint remote-owner-player-id))
+                            (!= remote-owner-player-id local-player-id)
+                            (not (-> rec is-aggro))
+                            (>= (- (current-time) (-> rec last-transfer-time)) (seconds 2)))
                        (let ((local-pos (mp-enemy-local-player-pos)))
                          (if (and local-pos
                                   (nonzero? local-pos)
                                   (-> e-proc root)
                                   (nonzero? (-> e-proc root))
-                                  *remote-info*
-                                  (nonzero? *remote-info*))
+                                  nearest-record
+                                  (nonzero? nearest-record))
                              (let ((local-dist (vector-vector-distance (-> e-proc root trans) local-pos))
                                    (rem-pos (new 'stack 'vector)))
-                               (mp-enemy-copy-remote-player-pos! rem-pos)
+                               (mp-enemy-copy-player-pos! rem-pos nearest-record)
                                (let ((remote-dist (vector-vector-distance (-> e-proc root trans) rem-pos)))
-                                 (if (or (and (= local-role 1) (= remote-role 0))
-                                         (and (= local-role 0) (> local-dist (+ remote-dist (meters 15)))))
-                                     (set! (-> rec owner) remote-role)
+                                 (if (or (mp-session-client?)
+                                         (and (mp-session-host?)
+                                              (> local-dist (+ remote-dist (meters 15)))))
+                                     (set! (-> rec owner-player-id) remote-owner-player-id)
                                      )
                                  )
                                )
-                             (set! (-> rec owner) remote-role)
+                             (set! (-> rec owner-player-id) remote-owner-player-id)
                              )
                          )
                        )
@@ -1016,7 +1045,7 @@
                              (or (and (-> e-proc focus) (nonzero? (-> e-proc focus)) (>= (the-as int (-> e-proc focus aware)) (the-as int (enemy-aware enemy-aware-3))))
                                  (nonzero? (-> e-proc incoming attack-id)))
                              (mp-enemy-focused-on-local? e-proc))
-                    (if (!= (-> rec owner) local-role)
+                    (if (!= (-> rec owner-player-id) local-player-id)
                         (begin
                           (when (>= (- (current-time) (-> rec last-transfer-time)) (seconds 2))
                             (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Requesting authority over ~A aid=~D nid=~D - Local Aggro Detected!~%" e-proc enemy-aid enemy-nid)
@@ -1044,15 +1073,15 @@
                                  (nonzero? (-> e-proc root))
                                  (-> e-proc enemy-info)
                                  (nonzero? (-> e-proc enemy-info))
-                                 *remote-info*
-                                 (nonzero? *remote-info*))
+                                 nearest-record
+                                 (nonzero? nearest-record))
                         (let ((local-dist (vector-vector-distance (-> e-proc root trans) local-pos))
                               (rem-pos (new 'stack 'vector)))
-                          (mp-enemy-copy-remote-player-pos! rem-pos)
+                          (mp-enemy-copy-player-pos! rem-pos nearest-record)
                           (let ((remote-dist (vector-vector-distance (-> e-proc root trans) rem-pos)))
                             (when (and (< local-dist (-> e-proc enemy-info notice-distance))
                                        (< local-dist (- remote-dist (meters 10))))
-                              (when (!= (-> rec owner) local-role)
+                              (when (!= (-> rec owner-player-id) local-player-id)
                                 (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Requesting authority over ~A aid=~D nid=~D via proximity.~%" e-proc enemy-aid enemy-nid)
                                 (mp-event-enqueue-aid! MP_EVENT_ENEMY_AUTHORITY_REQUEST enemy-aid)
                                 (set! (-> rec last-transfer-time) (current-time))
@@ -1067,17 +1096,19 @@
                 
                 (if (mp-enemy-host-only? e-proc)
                     (begin
-                      (set! (-> rec owner) (the-as uint8 0))
+                      (set! (-> rec owner-player-id) host-player-id)
                       (set! (-> rec just-taken-authority) #f)
                       )
                     (when (>= battle-owner 0)
-                      (set! (-> rec owner) (the-as uint8 battle-owner))
+                      (set! (-> rec owner-player-id) (the-as uint8 battle-owner))
                       (set! (-> rec just-taken-authority) #f)
                       )
                     )
 
-                (when (and (< battle-owner 0) is-bot (!= (-> rec owner) (the uint8 0)))
-                  (set! (-> rec owner) (the uint8 0))
+                (when (and (< battle-owner 0)
+                           is-bot
+                           (!= (-> rec owner-player-id) host-player-id))
+                  (set! (-> rec owner-player-id) host-player-id)
                   )
                 
                 ;; --- Sync Execution ---
@@ -1086,7 +1117,7 @@
                       (set! (-> rec just-taken-authority) #f)
                       (logior! (-> e-proc enemy-flags) (enemy-flag stop-syncing))
                       )
-                    (if (= (-> rec owner) local-role)
+                    (if (= (-> rec owner-player-id) local-player-id)
                     (begin
                       (when (-> rec just-taken-authority)
                         (mp-enemy-restore-local-state-transition! e-proc)
@@ -1099,7 +1130,7 @@
                                  (< (-> *mp-enemy-buffer* local-count) (the-as uint MP_MAX_SYNC_ENEMIES)))
                         (let ((slot (-> *mp-enemy-buffer* local-enemies (-> *mp-enemy-buffer* local-count))))
                           (mp-enemy-pack-state e-proc slot enemy-aid)
-                          (set! (-> slot owner) local-role)
+                          (set! (-> slot owner-player-id) local-player-id)
                           (set! (-> slot is-aggro) (the-as uint (if (-> rec is-aggro) 1 0)))
                         )
                         (+! (-> *mp-enemy-buffer* local-count) 1)
@@ -1132,29 +1163,29 @@
                               ((or (logtest? (-> e-proc enemy-flags) (enemy-flag death-start))
                                    (and remote-slot (= (-> remote-slot state) 2)))
                                (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Remote sync stale for ~A aid=~D nid=~D during DEATH. Severing sync and killing locally.~%" e-proc enemy-aid enemy-nid)
-                               (set! (-> rec owner) local-role)
+                               (set! (-> rec owner-player-id) local-player-id)
                                (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death))
                                (set! (-> e-proc hit-points) 0)
                                (send-event e-proc 'die)
                                )
                               ((>= battle-owner 0)
-                               (set! (-> rec owner) (the-as uint8 battle-owner))
+                               (set! (-> rec owner-player-id) (the-as uint8 battle-owner))
                                (set! (-> rec just-taken-authority) #f)
                                )
-                              ((and is-bot (not (mp-is-jak?)))
-                               (set! (-> rec owner) (the uint8 0))
+                              ((and is-bot (not (mp-session-host?)))
+                               (set! (-> rec owner-player-id) host-player-id)
                                (set! (-> rec just-taken-authority) #f)
                                )
                               ((logtest? (-> e-proc enemy-flags) (enemy-flag boss-spawned))
                                (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Remote sync stale for ~A aid=~D nid=~D. Severing sync and killing locally since it's a boss spawned enemy.~%" e-proc enemy-aid enemy-nid)
-                               (set! (-> rec owner) (the uint8 0))
+                               (set! (-> rec owner-player-id) host-player-id)
                                (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death))
                                (set! (-> e-proc hit-points) 0)
                                (send-event e-proc 'die)
                                )
                               (else
                                (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Remote sync stale for ~A aid=~D nid=~D. Reclaiming authority.~%" e-proc enemy-aid enemy-nid)
-                               (set! (-> rec owner) local-role)
+                               (set! (-> rec owner-player-id) local-player-id)
                                (set! (-> rec just-taken-authority) #t)
                                )
                               )
@@ -1168,9 +1199,9 @@
             )
 
           ;; Check for remote death aids to cleanly despawn
-          (when (= (-> *local-info* role) 1)
-            (dotimes (i (the-as int (-> *remote-info* sync-aids-count)))
-              (when (= (-> *remote-info* sync-aids i) (the-as uint32 enemy-aid))
+          (when (mp-session-client?)
+            (dotimes (i (the-as int (-> *mp-bootstrap-state* synchronized-aid-count)))
+              (when (= (-> *mp-bootstrap-state* synchronized-aids i) (the-as uint32 enemy-aid))
                 (let ((ent (-> e-proc entity)))
                   (if (and ent (nonzero? ent)) (logior! (-> ent extra perm status) (entity-perm-status dead)))
                   )

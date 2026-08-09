@@ -8,8 +8,8 @@
   ((active?             symbol)
    (claim-sent?         symbol)
    (start-applied?      symbol)
-   (owner-role          int32)
-   (pending-owner-role  int32)
+   (owner-player-id          int32)
+   (pending-owner-player-id  int32)
    (epoch               uint32)
    (roster-generation   uint32)
    (receiving-generation uint32)
@@ -135,8 +135,8 @@
 
 ;; --- Registry lookup ---
 
-(defun mp-battle-owner-role-valid? ((owner-role int))
-  (and (>= owner-role 0) (<= owner-role 1))
+(defun mp-battle-owner-player-id-valid? ((owner-player-id int))
+  (and (>= owner-player-id 0) (< owner-player-id MP_MAX_PLAYERS))
   )
 
 (defun mp-battle-record-allocated? ((record mp-battle-sync-record))
@@ -148,7 +148,7 @@
 (defun mp-battle-record-authoritative? ((record mp-battle-sync-record))
   (and (mp-battle-record-allocated? record)
        (= (-> record active?) #t)
-       (mp-battle-owner-role-valid? (-> record owner-role))
+       (mp-battle-owner-player-id-valid? (-> record owner-player-id))
        (> (-> record epoch) 0))
   )
 
@@ -156,8 +156,8 @@
   (and (mp-battle-record-allocated? record)
        (= (-> record active?) #t)
        (= (-> record claim-sent?) #t)
-       (= (-> record owner-role) -1)
-       (= (-> record pending-owner-role) 1))
+       (= (-> record owner-player-id) -1)
+       (mp-battle-owner-player-id-valid? (-> record pending-owner-player-id)))
   )
 
 (defun mp-battle-find-record ((name string))
@@ -179,8 +179,8 @@
     (set! (-> record active?) #f)
     (set! (-> record claim-sent?) #f)
     (set! (-> record start-applied?) #f)
-    (set! (-> record owner-role) -1)
-    (set! (-> record pending-owner-role) -1)
+    (set! (-> record owner-player-id) -1)
+    (set! (-> record pending-owner-player-id) -1)
     (set! (-> record epoch) (the uint32 0))
     (set! (-> record roster-generation) (the uint32 0))
     (set! (-> record receiving-generation) (the uint32 0))
@@ -311,10 +311,10 @@
       (set! (-> details breed-index) breed-index)
       (set! (-> details initial?) initial?)
       (set! (-> details enemy-aid) enemy-aid)
-      (set! (-> details owner-role)
+      (set! (-> details owner-player-id)
             (if (= battle-evt MP_BATTLE_EVT_CLAIM)
-                (-> record pending-owner-role)
-                (-> record owner-role)))
+                (-> record pending-owner-player-id)
+                (-> record owner-player-id)))
       (set! (-> details epoch) (-> record epoch))
       (set! (-> details roster-generation) roster-generation)
       (set! event
@@ -332,10 +332,10 @@
 
 ;; --- Ownership ---
 
-(defun mp-battle-owner-role ((battle-proc battle))
+(defun mp-battle-owner-player-id ((battle-proc battle))
   (let ((record (mp-battle-record-for-process battle-proc)))
     (if (mp-battle-record-authoritative? record)
-        (the-as int (-> record owner-role))
+        (the-as int (-> record owner-player-id))
         (the-as int -1)
         )
     )
@@ -361,9 +361,8 @@
     )
   (when (and battle-proc
              (nonzero? battle-proc)
-             *local-info*
-             (nonzero? *local-info*))
-    (return (= (mp-battle-owner-role battle-proc) (-> *local-info* role)))
+             (mp-player-id-valid? (mp-local-player-id)))
+    (return (= (mp-battle-owner-player-id battle-proc) (mp-local-player-id)))
     )
   #f
   )
@@ -383,12 +382,12 @@
   (none)
   )
 
-(defun mp-battle-grant-owner! ((record mp-battle-sync-record) (owner-role int))
+(defun mp-battle-grant-owner! ((record mp-battle-sync-record) (owner-player-id int))
   (when (and record (nonzero? record))
     (set! (-> record active?) #t)
     (set! (-> record claim-sent?) #f)
-    (set! (-> record owner-role) owner-role)
-    (set! (-> record pending-owner-role) -1)
+    (set! (-> record owner-player-id) owner-player-id)
+    (set! (-> record pending-owner-player-id) -1)
     (+! (-> record epoch) (the uint32 1))
     (when (zero? (-> record epoch))
       (set! (-> record epoch) (the uint32 1))
@@ -397,7 +396,7 @@
     (mp-battle-update-spawn-epochs! record)
     (mp-battle-queue-record-event! record MP_BATTLE_EVT_START 0 0 #f (the uint 0) (the uint 0))
     (debug-log *mp-debug-log?* "[MP-BattleSync] Granted battle owner=~D epoch=~D.~%"
-            owner-role
+            owner-player-id
             (-> record epoch))
     )
   (none)
@@ -410,39 +409,38 @@
     )
   (when (not (and battle-proc
                   (nonzero? battle-proc)
-                  *local-info*
-                  (nonzero? *local-info*)))
+                  (mp-player-id-valid? (mp-local-player-id))))
     (return #f)
     )
   (let ((record (mp-battle-get-or-create-record! (mp-battle-process-name battle-proc)))
-        (local-role (-> *local-info* role)))
+        (local-player-id (the-as int (mp-local-player-id))))
     (when (not (and record (nonzero? record)))
       (return #f)
       )
     (when (mp-battle-record-authoritative? record)
-      (return (= (-> record owner-role) local-role))
+      (return (= (-> record owner-player-id) local-player-id))
       )
-    (if (= local-role 0)
+    (if (mp-session-host?)
         (begin
-          (mp-battle-grant-owner! record 0)
+          (mp-battle-grant-owner! record (the-as int local-player-id))
           (set! (-> record start-applied?) #t)
           )
         (when (not (-> record claim-sent?))
           (set! (-> record active?) #t)
-          (set! (-> record owner-role) -1)
-          (set! (-> record pending-owner-role) 1)
+          (set! (-> record owner-player-id) -1)
+          (set! (-> record pending-owner-player-id) (the-as int local-player-id))
           (set! (-> record claim-sent?) #t)
           (mp-battle-queue-record-event! record MP_BATTLE_EVT_CLAIM 0 0 #f (the uint 0) (the uint 0))
           (format
             0
             "[MP-BattleSync][CLAIM-WAIT] owner=~D epoch=~D local=~D dispatch=LOCAL~%"
-            (-> record owner-role)
+            (-> record owner-player-id)
             (-> record epoch)
-            local-role
+            local-player-id
             )
           )
         )
-    (= (-> record owner-role) local-role)
+    (= (-> record owner-player-id) local-player-id)
     )
   )
 
@@ -556,9 +554,8 @@
   (mp-battle-ensure-initialized!)
   (let ((record (mp-battle-record-for-process battle-proc)))
     (when (and (mp-battle-record-authoritative? record)
-               *local-info*
-               (nonzero? *local-info*)
-               (= (-> record owner-role) (-> *local-info* role)))
+               (mp-player-id-valid? (mp-local-player-id))
+               (= (-> record owner-player-id) (mp-local-player-id)))
       (mp-battle-queue-record-event! record MP_BATTLE_EVT_END 0 0 #f (the uint 0) (the uint 0))
       (set! (-> record active?) #f)
       )
@@ -587,15 +584,11 @@
   )
 
 (defun mp-battle-remote-death-aid-index ((enemy-aid uint))
-  (when (and *remote-info* (nonzero? *remote-info*))
-    (let ((sync-aid-count (min 128 (the-as int (-> *remote-info* sync-aids-count)))))
-      (dotimes (idx sync-aid-count)
-        (when (= (-> *remote-info* sync-aids idx) (the-as uint32 enemy-aid))
-          (return idx)
-          )
-        )
-      )
-    )
+  (let ((sync-aid-count
+          (min 128 (the-as int (-> *mp-bootstrap-state* synchronized-aid-count)))))
+    (dotimes (idx sync-aid-count)
+      (when (= (-> *mp-bootstrap-state* synchronized-aids idx) (the-as uint32 enemy-aid))
+        (return idx))))
   -1
   )
 
@@ -613,7 +606,7 @@
                 (mp-enemy-remote-slot-fresh? remote-slot)
                 (-> remote-slot hp)
                 (-> remote-slot state)
-                (-> remote-slot owner))
+                (-> remote-slot owner-player-id))
               (debug-log *mp-debug-log?*
                 "[MP-BattleSync][RECOVER-DIAG][REMOTE] aid=~D aggro=~D updated=~D.~%"
                 enemy-aid
@@ -628,9 +621,7 @@
           "[MP-BattleSync][RECOVER-DIAG][REMOTE] aid=~D sync-aids-index=~D sync-aids-count=~D.~%"
           enemy-aid
           death-aid-index
-          (if (and *remote-info* (nonzero? *remote-info*))
-              (min 128 (the-as int (-> *remote-info* sync-aids-count)))
-              0))
+          (min 128 (the-as int (-> *mp-bootstrap-state* synchronized-aid-count))))
         )
       )
     )
@@ -811,9 +802,8 @@
         (mp-battle-copy-record-name! *mp-battle-name-scratch* (-> spawn-record battle-name))
         (let ((record (mp-battle-find-record *mp-battle-name-scratch*)))
           (when (and (mp-battle-record-authoritative? record)
-                     *local-info*
-                     (nonzero? *local-info*)
-                     (= (-> record owner-role) (-> *local-info* role)))
+                     (mp-player-id-valid? (mp-local-player-id))
+                     (= (-> record owner-player-id) (mp-local-player-id)))
             (mp-battle-queue-record-event! record
                                            MP_BATTLE_EVT_DESPAWN
                                            (-> spawn-record spawner-index)
@@ -882,13 +872,12 @@
   (mp-battle-ensure-initialized!)
   (when (and (or (zero? *mp-battle-last-roster-request*)
                  (>= (- (current-time) *mp-battle-last-roster-request*) (seconds 1)))
-             *local-info*
-             (nonzero? *local-info*))
+             (mp-player-id-valid? (mp-local-player-id)))
     (set! *mp-battle-last-roster-request* (current-time))
     (dotimes (idx MP_MAX_BATTLE_RECORDS)
       (let ((record (-> *mp-battle-records* idx)))
         (when (and (mp-battle-record-authoritative? record)
-                   (!= (-> record owner-role) (-> *local-info* role)))
+                   (!= (-> record owner-player-id) (mp-local-player-id)))
           (mp-battle-queue-record-event! record MP_BATTLE_EVT_ROSTER_REQUEST 0 0 #f (the uint 0) (the uint 0))
           )
         )
@@ -917,11 +906,11 @@
              (nonzero? name)
              (> (length name) 0))
     (let ((battle-evt (the-as uint (-> evt battle-evt)))
-          (owner-role (the-as int (-> evt owner-role))))
+          (owner-player-id (the-as int (-> evt owner-player-id))))
       (if (= battle-evt MP_BATTLE_EVT_CLAIM)
-          (return (= owner-role 1))
+          (return (mp-battle-owner-player-id-valid? owner-player-id))
           (when (and (mp-battle-lifecycle-event-type? battle-evt)
-                     (mp-battle-owner-role-valid? owner-role)
+                     (mp-battle-owner-player-id-valid? owner-player-id)
                      (> (-> evt epoch) 0))
             (return #t)
             )
@@ -934,12 +923,11 @@
 (defun mp-battle-accept-owner-event! ((record mp-battle-sync-record) (evt mp-battle-event))
   (when (and record (nonzero? record) evt (nonzero? evt))
     (when (and (> (-> evt epoch) 0)
-               (>= (-> evt owner-role) 0)
-               (<= (-> evt owner-role) 1)
+               (mp-battle-owner-player-id-valid? (-> evt owner-player-id))
                (>= (-> evt epoch) (-> record epoch)))
       (set! (-> record active?) #t)
       (set! (-> record claim-sent?) #f)
-      (set! (-> record owner-role) (-> evt owner-role))
+      (set! (-> record owner-player-id) (-> evt owner-player-id))
       (set! (-> record epoch) (-> evt epoch))
       (set! (-> record missing-since) (the-as time-frame 0))
       (return #t)
@@ -953,10 +941,9 @@
        evt
        (nonzero? evt)
        (= (-> evt epoch) (-> record epoch))
-       (= (-> evt owner-role) (-> record owner-role))
-       *local-info*
-       (nonzero? *local-info*)
-       (!= (-> record owner-role) (-> *local-info* role))
+       (= (-> evt owner-player-id) (-> record owner-player-id))
+       (mp-player-id-valid? (mp-local-player-id))
+       (!= (-> record owner-player-id) (mp-local-player-id))
        )
   )
 
@@ -965,13 +952,12 @@
              (nonzero? record)
              evt
              (nonzero? evt)
-             *local-info*
-             (nonzero? *local-info*)
-             (= (-> *local-info* role) 0)
-             (= (-> evt owner-role) 1))
+             (mp-session-host?)
+             (mp-player-id-valid? (mp-local-player-id))
+             (!= (-> evt owner-player-id) (mp-local-player-id)))
     (if (mp-battle-record-authoritative? record)
         (mp-battle-queue-record-event! record MP_BATTLE_EVT_START 0 0 #f (the uint 0) (the uint 0))
-        (mp-battle-grant-owner! record (-> evt owner-role))
+        (mp-battle-grant-owner! record (-> evt owner-player-id))
         )
     )
   (none)
@@ -979,9 +965,8 @@
 
 (defun mp-battle-handle-start! ((record mp-battle-sync-record)
                                 (evt mp-battle-event))
-  (when (and *local-info*
-             (nonzero? *local-info*)
-             (= (-> *local-info* role) 1)
+  (when (and (mp-player-id-valid? (mp-local-player-id))
+             (!= (-> evt owner-player-id) (mp-local-player-id))
              (mp-battle-accept-owner-event! record evt))
     (let ((battle-proc (mp-battle-process-for-record record)))
       (if (and battle-proc (nonzero? battle-proc))
@@ -1003,7 +988,7 @@
         (debug-log *mp-debug-log?*
           "[MP-BattleSync] Rejecting invalid spawn aid=~D owner=~D epoch=~D.~%"
           (-> evt enemy-aid)
-          (-> evt owner-role)
+          (-> evt owner-player-id)
           (-> evt epoch))
         (when (mp-battle-event-current? record evt)
           (mp-battle-store-spawn! record
@@ -1076,10 +1061,9 @@
 (defun mp-battle-handle-release! ((record mp-battle-sync-record)
                                   (evt mp-battle-event))
   (when (and (mp-battle-event-current? record evt)
-             *local-info*
-             (nonzero? *local-info*))
-    (if (= (-> *local-info* role) 0)
-        (mp-battle-grant-owner! record 0)
+             (mp-player-id-valid? (mp-local-player-id)))
+    (if (mp-session-host?)
+        (mp-battle-grant-owner! record (the-as int (mp-local-player-id)))
         (set! (-> record active?) #f)
         )
     )
@@ -1111,10 +1095,9 @@
           ((MP_BATTLE_EVT_ROSTER_REQUEST)
            (when (and (mp-battle-record-authoritative? record)
                       (= (-> evt epoch) (-> record epoch))
-                      (= (-> evt owner-role) (-> record owner-role))
-                      *local-info*
-                      (nonzero? *local-info*)
-                      (= (-> record owner-role) (-> *local-info* role)))
+                      (= (-> evt owner-player-id) (-> record owner-player-id))
+                      (mp-player-id-valid? (mp-local-player-id))
+                      (= (-> record owner-player-id) (mp-local-player-id)))
              (mp-battle-send-roster! record)
              )
            )
@@ -1138,16 +1121,15 @@
   (when (and (mp-battle-record-authoritative? record)
              battle-proc
              (nonzero? battle-proc)
-             *local-info*
-             (nonzero? *local-info*))
+             (mp-player-id-valid? (mp-local-player-id)))
     (let ((previous-remote-event? *mp-processing-remote-event*)
-          (local-role (-> *local-info* role)))
-      (let ((local-owner? (= (-> record owner-role) local-role)))
+          (local-player-id (mp-local-player-id)))
+      (let ((local-owner? (= (-> record owner-player-id) local-player-id)))
         (debug-log *mp-debug-log?*
           "[MP-BattleSync] START owner=~D epoch=~D local=~D dispatch=~A previous-remote=~A.~%"
-          (-> record owner-role)
+          (-> record owner-player-id)
           (-> record epoch)
-          local-role
+          local-player-id
           (if local-owner? "OWNER" "REPLICA")
           previous-remote-event?)
         (set! *mp-processing-remote-event* (not local-owner?))
@@ -1159,7 +1141,7 @@
   (none)
   )
 
-(defun mp-battle-enemy-owner-role ((enemy-proc enemy))
+(defun mp-battle-enemy-owner-player-id ((enemy-proc enemy))
   (when (and enemy-proc
              (nonzero? enemy-proc)
              (logtest? (-> enemy-proc enemy-flags) (enemy-flag mp-battle-enemy)))
@@ -1168,7 +1150,7 @@
         (mp-battle-copy-record-name! *mp-battle-name-scratch* (-> spawn-record battle-name))
         (let ((record (mp-battle-find-record *mp-battle-name-scratch*)))
           (when (mp-battle-record-authoritative? record)
-            (return (the-as int (-> record owner-role)))
+            (return (the-as int (-> record owner-player-id)))
             )
           )
         )
@@ -1192,10 +1174,9 @@
 
 (defun mp-battle-note-missing-owner-process! ((record mp-battle-sync-record))
   (when (and (mp-battle-record-authoritative? record)
-             *local-info*
-             (nonzero? *local-info*)
+             (mp-player-id-valid? (mp-local-player-id))
              (= (-> record start-applied?) #t)
-             (= (-> record owner-role) (-> *local-info* role)))
+             (= (-> record owner-player-id) (mp-local-player-id)))
     (let ((battle-proc (mp-battle-process-for-record record)))
       (if (and battle-proc (nonzero? battle-proc))
           (set! (-> record missing-since) (the-as time-frame 0))
@@ -1217,14 +1198,13 @@
 
 (defun mp-battle-host-adopt-disconnected-client! ((status mp-connection-status))
   (when (and (= status (mp-connection-status reconnecting))
-             *local-info*
-             (nonzero? *local-info*)
-             (= (-> *local-info* role) 0))
+             (mp-session-host?)
+             (mp-player-id-valid? (mp-local-player-id)))
     (dotimes (idx MP_MAX_BATTLE_RECORDS)
       (let ((record (-> *mp-battle-records* idx)))
         (when (and (mp-battle-record-authoritative? record)
-                   (= (-> record owner-role) 1))
-          (mp-battle-grant-owner! record 0)
+                   (!= (-> record owner-player-id) (mp-local-player-id)))
+          (mp-battle-grant-owner! record (the-as int (mp-local-player-id)))
           )
         )
       )

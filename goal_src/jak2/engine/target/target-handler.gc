@@ -66,10 +66,8 @@
         (s2-0 arg0)
         )
     (if (and (= self *target*)
-             (mp-is-daxter?)
              (mp-target-ride-along? self)
-             (not *remote-player-is-dead*)
-             (not *remote-player-is-dying*)
+             (mp-any-live-remote-player?)
              (not (attack-mode-is-invinc s4-0))
              )
         (return #f)
@@ -860,8 +858,10 @@
 
 (defbehavior target-standard-event-handler target ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   ;; --- MP PUPPET HIJACK ---
-  ;; Ensure *mp-puppet* is defined and not #f before comparing.
-  (when (and *mp-puppet* (= self *mp-puppet*))
+  (let ((record (mp-player-process-record self)))
+  (when (and record
+             (nonzero? record)
+             (mp-player-record-remote? *mp-player-controller* record))
     (case arg2
       (('mp-hit)
        ;; Trigger a hit reaction without health loss. 
@@ -937,7 +937,7 @@
         (target-gun-end-mode #t)
        )
       )
-    )
+    ))
   ;; --- END MP PUPPET HIJACK ---
 
   (local-vars (at-0 int) (s3-0 type))
@@ -966,7 +966,7 @@
             )
         (b! #t cfg-291 :delay (nop!))
         (label cfg-7)
-        (b! (or (!= v1-0 'shove) (and (= self *target*) (mp-is-daxter?) (mp-target-ride-along? self))) cfg-21 :delay (nop!))
+        (b! (or (!= v1-0 'shove) (and (= self *target*) (mp-target-ride-along? self))) cfg-21 :delay (nop!))
         (set! v0-0 (when (not (and (-> self next-state) (= (-> self next-state name) 'target-hit)))
                      (mem-copy! (the-as pointer (-> self attack-info-rec)) (the-as pointer (-> arg3 param 1)) 160)
                      (when (not (logtest? (-> self attack-info-rec mask) (attack-mask attacker)))
@@ -1016,7 +1016,7 @@
                            (or (logtest? (-> self state-flags) (state-flags sf1))
                                (focus-test? self dead dangerous hit grabbed in-head edge-grab pole flut tube board pilot mech)
                                (>= (the-as time-frame (-> self no-load-wait)) (current-time))
-                               (and (= self *target*) (mp-is-daxter?) (mp-target-ride-along? self))
+                               (and (= self *target*) (mp-target-ride-along? self))
                                )
                            )
                        )
@@ -1029,7 +1029,7 @@
         (set! v0-0 #t)
         (b! #t cfg-291 :delay (nop!))
         (label cfg-46)
-        (b! (or (!= v1-0 'change-mode) (and (= self *target*) (mp-is-daxter?) (mp-target-ride-along? self))) cfg-191 :delay (nop!))
+        (b! (or (!= v1-0 'change-mode) (and (= self *target*) (mp-target-ride-along? self))) cfg-191 :delay (nop!))
         (let ((v1-45 (-> arg3 param 0)))
           (set! v0-0
                 (cond
@@ -1123,7 +1123,7 @@
                      )
                    )
                   ((= v1-45 'indax)
-                   (if (mp-target-is-daxter? self)
+                   (if (mp-target-daxter? self)
                       (go target-indax-start (process->handle (the-as process (-> arg3 param 1))))
                      )
                    )
@@ -1239,7 +1239,7 @@
         (b! (!= v1-0 'pole-grab) cfg-256 :delay (nop!))
         (set! v0-0
               (if (and (not (focus-test? self dead hit grabbed pole))
-                       (not (and (= self *target*) (mp-is-daxter?) (mp-target-ride-along? self)))
+                       (not (and (= self *target*) (mp-target-ride-along? self)))
                        ((method-of-type touching-shapes-entry prims-touching?)
                         (the-as touching-shapes-entry (-> arg3 param 0))
                         (-> self control)

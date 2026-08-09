@@ -5,9 +5,8 @@
 ;; name in dgo: enemy
 ;; dgos: GAME, COMMON
 
-(define-extern mp-combat-local-player-target (function symbol process-focusable))
-(define-extern mp-combat-remote-player-target (function symbol process-focusable))
-(define-extern mp-combat-best-player-target (function process-focusable process-focusable process-focusable process-focusable process-focusable))
+(define-extern mp-combat-nearest-player-target
+  (function process-focusable process-focusable symbol process-focusable))
 (define-extern mp-actor-broadcast-attack (function enemy process event-message-block symbol))
 (define-extern mp-actor-handle-attack-hijack (function symbol enemy process event-message-block symbol))
 (define-extern mp-enemy-authoritative? (function enemy symbol))
@@ -55,9 +54,8 @@
       (when (and current-target
                  (nonzero? current-target)
                  (type? current-target target))
-        (let* ((local-target (mp-combat-local-player-target #f))
-               (remote-target (mp-combat-remote-player-target #f))
-               (next-target (mp-combat-best-player-target this current-target local-target remote-target)))
+        (let ((next-target
+                (mp-combat-nearest-player-target this current-target #f)))
           (cond
             ((and next-target (nonzero? next-target) (!= next-target current-target))
              (try-update-focus (-> this focus) next-target this)
@@ -66,10 +64,10 @@
              (set! (-> this focus handle) (the-as handle #f))
              )
             )
-          )
         )
       )
     )
+  )
   (none)
   )
 
@@ -444,7 +442,12 @@
   (let ((s4-0 (the-as touching-shapes-entry (-> arg1 param 0))))
     (when (and s4-0
                (nonzero? s4-0)
-               (!= s4-0 *mp-puppet*)
+               (not
+                 (let ((record
+                         (mp-player-process-record (the-as process s4-0))))
+                   (and record
+                        (nonzero? record)
+                        (mp-player-record-remote? *mp-player-controller* record))))
                (and (logtest? (-> this incoming penetrate-using) (penetrate board))
                     (not (logtest? (-> this incoming penetrate-using) (penetrate spin)))
                     )
@@ -1711,8 +1714,12 @@
               )
             (send-event (ppointer->process (-> this parent)) 'child-hit)
             0
-            (when (and *mp-puppet* (nonzero? *mp-puppet*) (= (-> info mode) 'mp-hit-remote))
-                (set! (-> this incoming attacker-handle) (process->handle *mp-puppet*))
+            (when (= (-> info mode) 'mp-hit-remote)
+              (let ((remote-attacker
+                      (mp-player-target-by-id *mp-current-event-source-player-id*)))
+                (when (and remote-attacker (nonzero? remote-attacker))
+                  (set! (-> this incoming attacker-handle)
+                    (process->handle remote-attacker))))
                 (set! (-> this incoming penetrate-using) (-> info penetrate-using))
               )
             (when (not *debug-unkillable*)

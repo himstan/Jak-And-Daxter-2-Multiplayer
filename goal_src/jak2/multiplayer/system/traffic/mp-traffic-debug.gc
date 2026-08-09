@@ -80,10 +80,7 @@
       ((not rider) "E")
       ((type? rider target)
        (let ((is-local (= rider *target*)))
-         (if (= (-> *local-info* role) 0) ;; Local is Jak
-             (if is-local "JAK" "DAX")
-             (if is-local "DAX" "JAK") ;; Local is Daxter
-             )
+         (if (mp-target-jak? (the-as process-focusable rider)) "JAK" "DAX")
          )
        )
       (else "PED")
@@ -91,23 +88,28 @@
     )
   )
 
-(defun mp-debug-get-net-seat-occupier-str ((aid uint))
-  (case aid
-    ((1) "JAK")
-    ((2) "DAX")
-    ((3) "PED")
-    (else "E")
-    )
+(defun mp-debug-get-net-seat-occupier-str ((player-id uint))
+  (cond
+    ((= player-id MP_VEHICLE_RIDER_CIVILIAN_ID) "PED")
+    ((= player-id MP_INVALID_PLAYER_ID) "E")
+    (else
+      (let ((record (mp-player-record-by-id player-id)))
+        (cond
+          ((mp-player-jak? record) "JAK")
+          ((mp-player-daxter? record) "DAX")
+          (else "?")))))
   )
 
-(defun mp-debug-append-seat-info ((proc vehicle) (seat-str string) (is-local-driven symbol) (is-remote-driven symbol))
+(defun mp-debug-append-seat-info
+       ((proc vehicle) (seat-str string) (driver-record mp-player-record))
   (let ((tmp *mp-veh-debug-tmp-str*))
     (dotimes (i (-> proc info seat-count))
       (let ((local-occupant (mp-debug-get-seat-occupier-str proc i)))
         (clear tmp)
-        (if (or is-local-driven is-remote-driven)
-            (let ((net-aid (if is-local-driven (-> *local-info* veh-state rider-aids i) (-> *remote-info* veh-state rider-aids i))))
-              (format tmp " S~D:L:~S/N:~S" i local-occupant (mp-debug-get-net-seat-occupier-str net-aid))
+        (if (and driver-record (nonzero? driver-record))
+            (let ((net-player-id
+                    (-> driver-record vehicle state rider-player-ids i)))
+              (format tmp " S~D:L:~S/N:~S" i local-occupant (mp-debug-get-net-seat-occupier-str net-player-id))
               )
             (format tmp " S~D:L:~S" i local-occupant)
             )
@@ -132,13 +134,23 @@
   (when (and proc (nonzero? proc))
     (let ((net-id (-> proc net-id)))
       (when (nonzero? net-id)
-        (let ((is-remote-driven (and (nonzero? *remote-info*) (= net-id (-> *remote-info* veh-state net-id))))
-              (is-local-driven (and (nonzero? *local-info*) (= net-id (-> *local-info* veh-state net-id))))
+        (let* ((driver-record (mp-player-record-by-vehicle-id net-id))
+               (is-local-driven
+                 (and driver-record
+                      (nonzero? driver-record)
+                      (= (-> driver-record identity player-id) (mp-local-player-id))))
+               (is-remote-driven
+                 (and driver-record
+                      (nonzero? driver-record)
+                      (mp-player-record-remote? *mp-player-controller* driver-record)))
               (type-str (symbol->string (-> proc type symbol)))
               (cur-state (if (-> proc state) (-> proc state name) 'none)))
           (let ((is-owner (or is-local-driven (and (not is-remote-driven) (mp-is-traffic-authoritative?)))))
             (let ((status-str (if is-owner "OWNER" "PUPPET"))
-                  (pad-idx (cond (is-local-driven 0) (is-remote-driven 1) (else (-> proc pad-index)))))
+                  (pad-idx
+                    (if (and driver-record (nonzero? driver-record))
+                        (-> driver-record runtime pad-index)
+                        (-> proc pad-index))))
               
               (if is-local-driven
                   (set! status-str "LOCAL-DRIVEN")
@@ -152,7 +164,7 @@
                     (tmp *mp-veh-debug-tmp-str*))
                 (when (and text-str (type? text-str string) seat-str (type? seat-str string) tmp (type? tmp string))
                   (clear seat-str)
-                  (mp-debug-append-seat-info proc seat-str is-local-driven is-remote-driven)
+                  (mp-debug-append-seat-info proc seat-str driver-record)
                   (if is-owner
                       (begin
                         (clear text-str)
@@ -219,8 +231,15 @@
               (set! (-> draw-pos y) (+ (-> draw-pos y) (meters 2.0)))
 
               (let* ((text-str *mp-veh-debug-text-str*)
-                     (is-remote-driven (and (nonzero? net-id) (nonzero? *remote-info*) (= net-id (-> *remote-info* veh-state net-id))))
-                     (is-local-driven (and (nonzero? net-id) (nonzero? *local-info*) (= net-id (-> *local-info* veh-state net-id))))
+                     (driver-record (mp-player-record-by-vehicle-id net-id))
+                     (is-remote-driven
+                       (and driver-record
+                            (nonzero? driver-record)
+                            (mp-player-record-remote? *mp-player-controller* driver-record)))
+                     (is-local-driven
+                       (and driver-record
+                            (nonzero? driver-record)
+                            (= (-> driver-record identity player-id) (mp-local-player-id))))
                      (is-owner (or is-local-driven (and (not is-remote-driven) (mp-is-traffic-authoritative?)))))
                 (clear text-str)
                 (mp-format-generic-veh-info proc text-str)
@@ -264,25 +283,25 @@
 (defun mp-draw-traffic-authority-bubbles ()
   (when (and *mp-traffic-bubble-debug?*
              (mp-connection-status-active? (pc-multi-get-status))
-             *target*
-             (nonzero? *target*)
-             (-> *target* control)
-             (nonzero? (-> *target* control)))
-    (let ((local-pos (-> *target* control trans))
-          (remote-pos *multi-remote-render-pos*))
-      (let ((host-pos (if (mp-is-jak?) local-pos remote-pos))
-            (client-pos (if (mp-is-jak?) remote-pos local-pos)))
+             (mp-host-player-record)
+             (nonzero? (mp-host-player-record)))
+    (let ((host-pos (mp-player-record-position (mp-host-player-record))))
+      (when (and host-pos (nonzero? host-pos))
         (mp-draw-traffic-bubble-ring host-pos MP_TRAFFIC_HOST_SYNC_DISTANCE (static-rgba 0 128 255 160) "HOST SYNC <250m")
         (mp-draw-traffic-bubble-ring host-pos MP_TRAFFIC_CLIENT_SYNC_DISTANCE (static-rgba 0 255 0 160) "CLIENT SYNC <300m / EXIT >300m")
         (mp-draw-traffic-bubble-ring host-pos MP_TRAFFIC_CLIENT_LOCAL_CLEAR_DISTANCE (static-rgba 128 255 0 160) "CLEAR LOCAL VEHICLES <310m")
         (mp-draw-traffic-bubble-ring host-pos MP_TRAFFIC_CLIENT_DRAIN_ENTER_DISTANCE (static-rgba 255 128 0 160) "CLIENT DRAIN <350m")
         (mp-draw-traffic-bubble-ring host-pos MP_TRAFFIC_CLIENT_DRAIN_EXIT_DISTANCE (static-rgba 255 0 0 160) "CLIENT RESUME >400m")
         (add-debug-sphere #t (bucket-id debug-no-zbuf1) host-pos (meters 2.0) (static-rgba 0 128 255 180))
-        (add-debug-sphere #t (bucket-id debug-no-zbuf1) client-pos (meters 2.0) (static-rgba 255 255 255 180))
-        (add-debug-line #t (bucket-id debug-no-zbuf1) host-pos client-pos (static-rgba 255 255 255 128) #f (the-as rgba 0))
-        )
-      )
-    )
+        (dotimes (player-id MP_MAX_PLAYERS)
+          (let ((record (mp-player-record-by-id (the-as uint player-id))))
+            (when (and record
+                       (nonzero? record)
+                       (!= (-> record identity player-id) (mp-host-player-id)))
+              (let ((player-pos (mp-player-record-position record)))
+                (when (and player-pos (nonzero? player-pos))
+                  (add-debug-sphere #t (bucket-id debug-no-zbuf1) player-pos (meters 2.0) (static-rgba 255 255 255 180))
+                  (add-debug-line #t (bucket-id debug-no-zbuf1) host-pos player-pos (static-rgba 255 255 255 128) #f (the-as rgba 0))))))))))
   (none)
   )
 
@@ -299,16 +318,27 @@
     (format *stdcon* "AUTHORITATIVE: ~S~%" (if (mp-is-traffic-authoritative?) "YES" "NO"))
     (format *stdcon* "-------------------------~%")
 
-    (let ((dist (if (and *target* (nonzero? *target*) (-> *target* control) (nonzero? (-> *target* control))) (vector-vector-distance (-> *target* control trans) *multi-remote-render-pos*) 0.0)))
     (format *stdcon* "~0k--- MP TRAFFIC STATUS ---~%")
     (format *stdcon* "SYNC: ~S  SUPPRESSED: ~S~%"
             (if *mp-traffic-sync-active* "YES" "NO")
             (if *mp-traffic-suppressed* "YES" "NO"))
     (format *stdcon* "SPAWNING: ~S~%"
             (if *mp-traffic-host-spawning-active* "YES" "NO"))
-    (format *stdcon* "REMOTE DIST: ~m~%" dist)
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (and record
+                   (nonzero? record)
+                   (mp-player-record-remote? *mp-player-controller* record)
+                   *target*
+                   (nonzero? *target*)
+                   (-> *target* root)
+                   (nonzero? (-> *target* root)))
+          (let ((position (mp-player-record-position record)))
+            (when (and position (nonzero? position))
+              (format *stdcon* "PLAYER ~D DIST: ~m~%"
+                player-id
+                (vector-vector-distance (-> *target* root trans) position)))))))
     (format *stdcon* "-------------------------~%")
-    )
   )
 
   (mp-draw-traffic-authority-bubbles)

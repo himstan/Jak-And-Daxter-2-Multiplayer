@@ -753,7 +753,7 @@
         (('touch 'bonk 'attack)
          (let ((a1-3 (new 'stack-no-clear 'event-message-block)))
            (set! (-> a1-3 from) (process->ppointer pp))
-           (if (and (mp-is-daxter?) 
+           (if (and (mp-local-player-daxter?)
                    (logtest? (-> this enemy-flags) (enemy-flag boss-spawned))
                    (is-proc-related-to-target? this))
             (return #f)

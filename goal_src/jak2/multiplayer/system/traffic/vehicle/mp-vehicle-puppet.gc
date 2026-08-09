@@ -3,13 +3,50 @@
 
 ;; --- Vehicle Sync Logic (Ghost Authority) ---
 
-;; Global handle to the vehicle currently being driven by the remote puppet.
-;; Using a handle is memory-safe; it resolves to #f if the vehicle is deactivated.
-(define *mp-remote-driven-vehicle* (the-as handle #f))
 (define MP_VEHICLE_PARKING_MINIMAP_ATTACHED (the uint8 173))
 (define *mp-vehicle-missing-branch-log-time* (the-as time-frame 0))
 
 (define *mp-race-vehicle-handles* (new 'static 'array handle 10))
+
+(defun mp-player-record-current-vehicle ((record mp-player-record))
+  (if (and record (nonzero? record))
+      (the-as vehicle
+        (handle->process-safe (-> record runtime vehicle-handle)))
+      (the-as vehicle #f)))
+
+(defun mp-player-record-owns-vehicle? ((record mp-player-record) (veh vehicle))
+  (and record
+       (nonzero? record)
+       veh
+       (nonzero? veh)
+       (or (= veh (mp-player-record-current-vehicle record))
+           (and (nonzero? (-> veh net-id))
+                (= (-> veh net-id) (-> record vehicle state net-id)))
+           (= (get-rider-in-seat veh 0) (mp-player-record-target record)))))
+
+(defun mp-vehicle-player-record ((veh vehicle) (remote-only? symbol))
+  (when (and veh (nonzero? veh))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (and record
+                   (nonzero? record)
+                   (or (not remote-only?)
+                       (mp-player-record-remote? *mp-player-controller* record))
+                   (mp-player-record-owns-vehicle? record veh))
+          (return record)))))
+  (the-as mp-player-record #f))
+
+(defun mp-vehicle-net-id-player-owned? ((net-id uint) (remote-only? symbol))
+  (when (nonzero? net-id)
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (and record
+                   (nonzero? record)
+                   (or (not remote-only?)
+                       (mp-player-record-remote? *mp-player-controller* record))
+                   (= net-id (-> record vehicle state net-id)))
+          (return #t)))))
+  #f)
 
 (defun mp-race-vehicle-register! ((racer-index int) (vehicle vehicle))
   (set! (-> *mp-race-vehicle-handles* racer-index)
@@ -107,7 +144,7 @@
       (mp-vehicle-param-nav-branch-ready? params)
       *mp-traffic-art-context-riding*
       *mp-traffic-art-context-local-level*
-      *mp-traffic-art-context-remote-level*
+      *mp-traffic-art-context-authority-level*
       )
     (debug-log *mp-debug-log?*
       "peds=~D vehs=~D slot0-linked=~A slot0-active=~D "
@@ -137,12 +174,12 @@
   )
 
 (defun mp-vehicle-get-pad-index ((this vehicle))
-  "Returns 0 for local player, 1 for remote puppet."
+  "Return the actual physical or leased pad for this vehicle's driver."
   (let ((pilot (get-rider-in-seat this 0)))
-    (if (and pilot (= pilot *mp-puppet*))
-        1
-        0
-        )
+    (let ((record (mp-player-process-record pilot)))
+      (if (and record (nonzero? record))
+          (the-as int (-> record runtime pad-index))
+          0))
     )
   )
 
@@ -186,43 +223,35 @@
   )
 
 (defun mp-vehicle-remote-puppet-driving? ((veh vehicle))
-  "True only while the remote puppet legitimately owns this vehicle's driver seat."
-  (and veh
-       (nonzero? veh)
-       *mp-puppet*
-       (nonzero? *mp-puppet*)
-       (= (get-rider-in-seat veh 0) *mp-puppet*)
-       (or (and (nonzero? *mp-remote-driven-vehicle*)
-                (= veh (handle->process-safe *mp-remote-driven-vehicle*)))
-           (and *remote-info*
-                (nonzero? *remote-info*)
-                (nonzero? (-> veh net-id))
-                (= (-> veh net-id) (-> *remote-info* veh-state net-id)))
-           )
-       )
+  "True while any non-local record legitimately owns this driver seat."
+  (let ((record (mp-vehicle-player-record veh #t)))
+    (and record
+         (nonzero? record)
+         (= (get-rider-in-seat veh 0) (mp-player-record-target record))))
   )
 
 (defun mp-vehicle-remote-puppet-currently-driving? ()
-  "True while the remote puppet is safely attached to a valid vehicle's driver seat."
-  (when (and *mp-puppet*
-             (nonzero? *mp-puppet*)
-             (focus-test? *mp-puppet* pilot))
-    (let ((pilot-info (-> *mp-puppet* pilot)))
-      (when (and pilot-info
-                 (nonzero? pilot-info)
-                 (zero? (-> pilot-info seat-index)))
-        (let ((vehicle-proc (handle->process-safe (-> pilot-info vehicle))))
-          (when (and vehicle-proc
-                     (nonzero? vehicle-proc)
-                     (type? vehicle-proc vehicle))
-            (return
-              (the-as symbol
-                (mp-vehicle-remote-puppet-driving? (the-as vehicle vehicle-proc))))
-            )
-          )
-        )
-      )
-    )
+  "True while any remote target is safely attached to a driver seat."
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (when (and record
+                 (nonzero? record)
+                 (mp-player-record-remote? *mp-player-controller* record))
+        (let ((puppet (mp-player-record-target record)))
+          (when (and puppet
+                     (nonzero? puppet)
+                     (focus-test? puppet pilot)
+                     (-> puppet pilot)
+                     (nonzero? (-> puppet pilot))
+                     (zero? (-> puppet pilot seat-index)))
+            (let ((vehicle-process
+                    (handle->process-safe (-> puppet pilot vehicle))))
+              (when (and vehicle-process
+                         (nonzero? vehicle-process)
+                         (type? vehicle-process vehicle)
+                         (mp-vehicle-remote-puppet-driving?
+                           (the-as vehicle vehicle-process)))
+                (return #t))))))))
   (the-as symbol #f)
   )
 
@@ -233,12 +262,12 @@
     (let ((driver (get-rider-in-seat veh 0)))
       (when (and driver
                  (nonzero? driver)
-                 (or (= driver *target*)
-                     (= driver *mp-puppet*)))
-        (return (not (or (and (= driver *target*)
-                              (mp-vehicle-local-target-driving? veh))
-                         (and (= driver *mp-puppet*)
-                              (mp-vehicle-remote-puppet-driving? veh)))))
+                 (mp-player-process-record driver))
+        (let ((record (mp-player-process-record driver)))
+          (return
+            (not (if (= (-> record identity player-id) (mp-local-player-id))
+                     (mp-vehicle-local-target-driving? veh)
+                     (mp-vehicle-remote-puppet-driving? veh)))))
         )
       )
     )
@@ -256,15 +285,7 @@
 (defun mp-vehicle-sync-owned? ((veh vehicle))
   "True when a vehicle is currently claimed by either player's driver sync slot."
   (if (and veh (nonzero? veh) (nonzero? (-> veh net-id)))
-      (let ((net-id (-> veh net-id)))
-        (or (and *remote-info*
-                 (nonzero? *remote-info*)
-                 (= net-id (-> *remote-info* veh-state net-id)))
-            (and *local-info*
-                 (nonzero? *local-info*)
-                 (= net-id (-> *local-info* veh-state net-id)))
-            )
-        )
+      (mp-vehicle-net-id-player-owned? (-> veh net-id) #f)
       #f
       )
   )
@@ -384,8 +405,7 @@
            (set! (-> veh rider-array seat-index) (the-as handle #f))
            )
           ((and (nonzero? rider-proc)
-                (!= rider-proc *target*)
-                (!= rider-proc *mp-puppet*))
+                (not (mp-player-process-record rider-proc)))
            (cond
              ((type? rider-proc vehicle-rider)
               (send-event rider-proc 'rider-off)
@@ -412,10 +432,9 @@
   (when (and veh
              (nonzero? veh)
              (not (mp-vehicle-local-target-riding? veh)))
-    (when (and (nonzero? *mp-remote-driven-vehicle*)
-               (= veh (handle->process *mp-remote-driven-vehicle*)))
-      (set! *mp-remote-driven-vehicle* (the-as handle #f))
-      )
+    (let ((owner-record (mp-vehicle-player-record veh #t)))
+      (when (and owner-record (nonzero? owner-record))
+        (set! (-> owner-record runtime vehicle-handle) (the-as handle #f))))
     (mp-vehicle-remove-guard-minimap! veh)
     (mp-vehicle-remove-parking-minimap! veh)
     (mp-vehicle-clear-local-riders! veh)
@@ -492,19 +511,8 @@
   )
 
 (defun mp-vehicle-remote-driven? ((veh vehicle))
-  (and veh
-       (nonzero? veh)
-       (or (and (nonzero? *mp-remote-driven-vehicle*)
-                (= veh (handle->process-safe *mp-remote-driven-vehicle*)))
-           (let ((pilot (get-rider-in-seat veh 0)))
-             (and pilot
-                  (nonzero? pilot)
-                  (= pilot *mp-puppet*))
-             )
-           (and *remote-info*
-                (nonzero? *remote-info*)
-                (nonzero? (-> veh net-id))
-                (= (-> veh net-id) (-> *remote-info* veh-state net-id)))))
+  (let ((record (mp-vehicle-player-record veh #t)))
+    (and record (nonzero? record)))
   )
 
 (defun mp-vehicle-is-local-authoritative? ((veh vehicle))
@@ -523,7 +531,7 @@
 
           ;; Undriven race vehicles and AI racers always belong to the host.
           ((mp-race-vehicle-id? (-> veh net-id))
-           (mp-is-jak?))
+           (mp-session-host?))
 
           ;; Ordinary city traffic keeps using the existing authority system.
           (else
@@ -573,7 +581,7 @@
         (set! (-> rec net-id) (the uint 0))
         (set! (-> rec entity-kind) (the uint8 0))
         (set! (-> rec ghost-state-id) (the uint8 0))
-        (set! (-> rec ghost-target-aid) (the uint8 0))
+        (set! (-> rec ghost-aux-state) (the uint8 0))
         (set! (-> rec last-applied-state-id) (the uint32 0))
         (set! (-> rec last-state-bump-time) 0)
         (set! (-> rec authorized-trans-state-id) (the uint32 0))
@@ -637,14 +645,7 @@
       (when (or (mp-vehicle-local-target-driving? veh)
                 (mp-vehicle-local-target-riding? veh)
                 (mp-vehicle-remote-puppet-driving? veh)
-                (and (nonzero? v-net-id)
-                     *remote-info*
-                     (nonzero? *remote-info*)
-                     (= v-net-id (-> *remote-info* veh-state net-id)))
-                (and (nonzero? v-net-id)
-                     *local-info*
-                     (nonzero? *local-info*)
-                     (= v-net-id (-> *local-info* veh-state net-id))))
+                (mp-vehicle-net-id-player-owned? v-net-id #f))
         (return #t)
         )
       )
@@ -655,9 +656,7 @@
 (defun mp-vehicle-handle-event! ((this vehicle) (arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   (let ((v-net-id (-> this net-id)))
     (when (and (nonzero? v-net-id)
-               *remote-info*
-               (nonzero? *remote-info*)
-               (= v-net-id (-> *remote-info* veh-state net-id)))
+               (mp-vehicle-net-id-player-owned? v-net-id #t))
       ;; If this is the remote player's vehicle, ignore damage events from local machine
       (case arg2
         (('attack 'touch 'impulse)
@@ -706,8 +705,7 @@
        (type? veh vehicle-guard)
        (logtest? (-> veh flags) (rigid-body-object-flag player-driving))
        (or (mp-vehicle-local-target-driving? veh)
-           (= veh (handle->process *mp-remote-driven-vehicle*))
-           )
+           (mp-vehicle-remote-puppet-driving? veh))
        )
   )
 
@@ -749,7 +747,7 @@
   "Give a Daxter-owned local traffic vehicle a network identity once driven."
   (when (and veh
              (nonzero? veh)
-             (mp-is-daxter?)
+             (mp-local-player-daxter?)
              *target*
              (nonzero? *target*)
              (-> *target* control)
@@ -773,17 +771,17 @@
   "Make vanilla vehicle input see the local driver immediately after hijack."
   (when (and veh
              (nonzero? veh)
-             *local-info*
-             (nonzero? *local-info*)
+             (mp-local-player-record)
+             (nonzero? (mp-local-player-record))
              *target*
              (nonzero? *target*)
              (-> *target* control)
              (nonzero? (-> *target* control))
              (nonzero? (-> veh net-id))
              (mp-vehicle-local-target-driving? veh))
-    (set! (-> *local-info* riding-veh-id) (-> veh net-id))
-    (set! (-> *local-info* riding-seat-index) (the uint8 0))
-    (mp-vehicle-pack veh (-> *local-info* veh-state))
+    (set! (-> (mp-local-player-record) vehicle vehicle-id) (-> veh net-id))
+    (set! (-> (mp-local-player-record) vehicle seat-index) (the uint8 0))
+    (mp-vehicle-pack veh (-> (mp-local-player-record) vehicle state))
     (logior! (-> veh flags) (rigid-body-object-flag player-driving riding))
     (logclear! (-> veh flags) (rigid-body-object-flag ai-driving alert in-pursuit target-in-sight rammed-target))
     (set! (-> veh pad-index) (the-as uint (-> *target* control cpad number)))
@@ -793,8 +791,8 @@
 
 (defun mp-vehicle-pack-local-player-snapshot! ()
   "Pack the local target's current vehicle occupancy into local-info."
-  (when (and *local-info*
-             (nonzero? *local-info*)
+  (when (and (mp-local-player-record)
+             (nonzero? (mp-local-player-record))
              *target*
              (nonzero? *target*)
              (focus-test? *target* pilot)
@@ -812,11 +810,11 @@
         )
       (when (and v-proc (nonzero? v-proc) (nonzero? (-> v-proc net-id)))
         ;; Set occupancy info before pilot-riding so remote puppets can play get-on.
-        (set! (-> *local-info* riding-veh-id) (-> v-proc net-id))
-        (set! (-> *local-info* riding-seat-index) (the uint8 (-> pilot-info seat-index)))
+        (set! (-> (mp-local-player-record) vehicle vehicle-id) (-> v-proc net-id))
+        (set! (-> (mp-local-player-record) vehicle seat-index) (the uint8 (-> pilot-info seat-index)))
         ;; Only broadcast vehicle physics if we are the driver.
         (when (zero? (-> pilot-info seat-index))
-          (mp-vehicle-pack v-proc (-> *local-info* veh-state))
+          (mp-vehicle-pack v-proc (-> (mp-local-player-record) vehicle state))
           )
         )
       )
@@ -829,14 +827,17 @@
              (nonzero? veh)
              (not (mp-vehicle-is-local-authoritative? veh)))
     (logior! (-> veh flags) (rigid-body-object-flag alert in-pursuit target-in-sight persistent))
-    (cond
-      ((and *mp-puppet* (nonzero? *mp-puppet*))
-       (handle-offending-process! veh *mp-puppet*)
+    (let ((owner-record (mp-vehicle-player-record veh #t)))
+      (cond
+      ((and owner-record
+            (nonzero? owner-record)
+            (mp-player-record-target owner-record))
+       (handle-offending-process! veh (mp-player-record-target owner-record))
        )
       ((and *target* (nonzero? *target*))
        (handle-offending-process! veh *target*)
        )
-      )
+      ))
     )
   (none)
   )
@@ -856,9 +857,7 @@
 
   (let ((v-net-id (-> this net-id)))
     (when (and (nonzero? v-net-id)
-               *remote-info*
-               (nonzero? *remote-info*)
-               (= v-net-id (-> *remote-info* veh-state net-id)))
+               (mp-vehicle-net-id-player-owned? v-net-id #t))
       (case arg2
         (('attack 'touch 'impulse)
          (return 'block)
@@ -1063,7 +1062,7 @@
     (let ((rec (mp-get-traffic-ghost (-> this net-id))))
       (when rec
         (when (= (-> rec entity-kind) (the uint8 1))
-          (mp-vehicle-apply-authoritative-flight-level! this (-> rec ghost-target-aid) (nonzero? (-> rec last-seen)))
+          (mp-vehicle-apply-authoritative-flight-level! this (-> rec ghost-aux-state) (nonzero? (-> rec last-seen)))
           )
         (let ((target-sym (mp-veh-get-state-from-id (the uint (-> rec ghost-state-id)))))
           (when (and (type? this vehicle-guard)
@@ -1130,13 +1129,16 @@
   )
 
 (defun mp-vehicle-run-puppet-input! ((this vehicle))
-  "Run puppet-driver input for vehicles using pad 1. Returns true when vanilla input should stop."
+  "Run vehicle input from the owning remote record's leased pad."
   (mp-vehicle-claim-local-driver-sync! this)
   (let ((pad-idx (mp-vehicle-get-pad-index this)))
-    (if (= pad-idx 1)
+    (if (and (> pad-idx 0)
+             (< pad-idx MP_MAX_PLAYERS)
+             *cpad-list*
+             (nonzero? *cpad-list*))
         ;; Puppet is driving: implement generic vehicle control
         (begin
-          (let ((pad (-> *cpad-list* cpads 1)))
+          (let ((pad (-> *cpad-list* cpads pad-idx)))
             (let ((s5-0 (new 'stack-no-clear 'vector)))
               (set! (-> s5-0 x) (analog-input (the-as int (-> pad leftx)) 128.0 48.0 110.0 -1.0))
               (set! (-> s5-0 w) (analog-input (the-as int (-> pad lefty)) 128.0 48.0 110.0 -1.0))
@@ -1144,10 +1146,12 @@
               (set! (-> s5-0 z) (fmin 1.0 (* 0.023529412 (the float (-> pad abutton (abutton-idx square))))))
               (vehicle-method-95 this (the-as vector (&-> s5-0 x)))
               )
-            (if (or (cpad-hold? 1 l1) (and (logtest? (-> this info flags) 512) (cpad-hold? 1 r1)))
+            (if (or (cpad-hold? pad-idx l1)
+                    (and (logtest? (-> this info flags) 512)
+                         (cpad-hold? pad-idx r1)))
                 (start-jump this)
                 )
-            (if (cpad-pressed? 1 circle) (activate-turbo-boost! this))
+            (if (cpad-pressed? pad-idx circle) (activate-turbo-boost! this))
             )
           #t
           )
@@ -1159,10 +1163,10 @@
 (defun mp-vehicle-remote-needs-physics? ((this vehicle))
   (let ((rec (mp-get-traffic-ghost (-> this net-id))))
     (if rec
-        (logtest? (-> rec ghost-target-aid) MP_VEHICLE_STATE_FLAG_PHYSICS)
+        (logtest? (-> rec ghost-aux-state) MP_VEHICLE_STATE_FLAG_PHYSICS)
         (or (nonzero? (-> this net-id))
             (and (-> this state) (= (-> this state name) 'player-control))
-            (mp-is-daxter?)
+            (mp-local-player-daxter?)
             )
         )
     )
@@ -1195,8 +1199,7 @@
     (when (and client-rider-proc
                (nonzero? client-rider-proc)
                (!= client-rider-proc replacement)
-               (!= client-rider-proc *target*)
-               (!= client-rider-proc *mp-puppet*))
+               (not (mp-player-process-record client-rider-proc)))
       (cond
         ((type? client-rider-proc vehicle-rider)
          (send-event client-rider-proc 'rider-off)
@@ -1219,9 +1222,9 @@
   "Spawn or despawn civilian riders on a puppet vehicle to match the host's state."
   (dotimes (i 4)
     (let ((client-rider-proc (handle->process (-> proc rider-array i)))
-          (host-rider-type (-> slot rider-aids i)))
+          (host-rider-type (-> slot rider-player-ids i)))
       (cond
-        ((and (= host-rider-type 3) (not client-rider-proc))
+        ((and (= host-rider-type MP_VEHICLE_RIDER_CIVILIAN_ID) (not client-rider-proc))
          ;; Host has a civilian rider, client does not.
          (when (and (= i 0) (mp-traffic-type-loaded? (the-as traffic-type (-> slot vehicle-type))))
            ;; HIJACK GUARD: Don't spawn if local player is currently hijacking this vehicle.
@@ -1301,10 +1304,10 @@
             (set-vector! (-> rec ghost-linvel) (-> slot lin-vel-x) (-> slot lin-vel-y) (-> slot lin-vel-z) 0.0)
             (set-vector! (-> rec ghost-angvel) (-> slot ang-vel-x) (-> slot ang-vel-y) (-> slot ang-vel-z) 0.0)
             (set! (-> rec ghost-state-id) (-> slot state-id))
-            (set! (-> rec ghost-target-aid) (-> slot state-flags))
+            (set! (-> rec ghost-aux-state) (-> slot state-flags))
             (set! (-> rec last-correction-time) sample-time)
             (set! (-> rec last-seen) (current-time))
-            (mp-vehicle-apply-authoritative-flight-level! proc (-> rec ghost-target-aid) had-remote-sample?)
+            (mp-vehicle-apply-authoritative-flight-level! proc (-> rec ghost-aux-state) had-remote-sample?)
             (set! fresh-sample? #t)
             )
           )
@@ -1378,7 +1381,7 @@
                 (when *mp-traffic-art-context-riding*
                   (mp-vehicle-log-spawn-params! 'before-spawn slot params)
                   )
-                (if (nonzero? (-> slot rider-aids 0))
+                (if (= (-> slot rider-player-ids 0) MP_VEHICLE_RIDER_CIVILIAN_ID)
                     (set! (-> params flags) (traffic-spawn-flags spawn-rider))
                     (set! (-> params flags) (the-as traffic-spawn-flags 0))
                     )
@@ -1411,41 +1414,40 @@
            (not (mp-mission-vehicle-id? net-id))))
   )
 
-(defun mp-vehicle-apply-piggyback ()
-  (if (not (and *remote-info*
-                (nonzero? *remote-info*)
-                (mp-is-traffic-existing-update-ready?)))
-      (begin
-        (set! *mp-remote-driven-vehicle* (the-as handle #f))
-        (return #f)
-        )
-      )
+(defun mp-vehicle-apply-player-piggyback ((record mp-player-record))
+  "Apply one remote record's independently owned vehicle state."
+  (when (or (not record)
+            (zero? record)
+            (not (mp-is-traffic-existing-update-ready?)))
+    (when (and record (nonzero? record))
+      (set! (-> record runtime vehicle-handle) (the-as handle #f)))
+    (return #f))
   (let ((spawn-ready? (mp-is-traffic-spawn-ready?))
-        (driven-net-id (-> *remote-info* veh-state net-id))
-        (old-veh (handle->process *mp-remote-driven-vehicle*)))
-    (when (and (nonzero? *mp-remote-driven-vehicle*) 
+        (driven-net-id (-> record vehicle state net-id))
+        (old-veh (mp-player-record-current-vehicle record)))
+    (when (and (nonzero? (-> record runtime vehicle-handle))
                (or (not old-veh)
                    (zero? old-veh)
                    (!= driven-net-id (-> (the-as vehicle old-veh) net-id))))
       (when (and old-veh (nonzero? old-veh))
         (mp-vehicle-release-stale-player-control! (the-as vehicle old-veh))
         )
-      (set! *mp-remote-driven-vehicle* (the-as handle #f))
+      (set! (-> record runtime vehicle-handle) (the-as handle #f))
       )
     (when (nonzero? driven-net-id)
       (let ((proc (mp-vehicle-find-by-net-id driven-net-id))
             (vehicle-can-spawn? (mp-vehicle-can-spawn-puppet? driven-net-id)))
         (if (and proc (nonzero? proc))
             (begin
-              (set! *mp-remote-driven-vehicle* (process->handle proc))
+              (set! (-> record runtime vehicle-handle) (process->handle proc))
               (logior! (-> proc flags) (rigid-body-object-flag persistent))
               (logclear! (-> proc mask) (process-mask pause sleep actor-pause))
-              (if (<= (-> *remote-info* veh-state state-id) 2)
+              (if (<= (-> record vehicle state state-id) 2)
                   (when vehicle-can-spawn?
                     (mp-vehicle-force-cull-local! proc)
                     )
                   (begin
-                    (mp-vehicle-apply-ghost-state proc (-> *remote-info* veh-state))
+                    (mp-vehicle-apply-ghost-state proc (-> record vehicle state))
                     (when spawn-ready?
                       (mp-vehicle-ensure-guard-minimap! proc)
                       )
@@ -1454,16 +1456,24 @@
             )
             (when (and spawn-ready?
                        vehicle-can-spawn?
-                       (> (-> *remote-info* veh-state state-id) 2)
-                       (not *mp-puppet-was-far?*))
-              (debug-log *mp-debug-log?* "[MP-Traffic] Missing driven vehicle ~D! Spawning...~%" driven-net-id)
-              (mp-vehicle-spawn-puppet (-> *remote-info* veh-state))
+                       (> (-> record vehicle state state-id) 2)
+                       (not (mp-player-runtime-flag?
+                              record MP_PLAYER_RUNTIME_WAS_FAR)))
+              (debug-log *mp-debug-log?*
+                "[MP-Traffic] Missing player ~D vehicle ~D; spawning.~%"
+                (-> record identity player-id) driven-net-id)
+              (when (mp-vehicle-spawn-puppet (-> record vehicle state))
+                (let ((spawned-vehicle
+                        (mp-vehicle-find-by-net-id driven-net-id)))
+                  (when (and spawned-vehicle (nonzero? spawned-vehicle))
+                    (set! (-> record runtime vehicle-handle)
+                          (process->handle spawned-vehicle)))))
             )
           )
         )
       )
     (when (zero? driven-net-id)
-      (set! *mp-remote-driven-vehicle* (the-as handle #f))
+      (set! (-> record runtime vehicle-handle) (the-as handle #f))
       )
     (when (and old-veh (nonzero? old-veh))
       (mp-vehicle-release-stale-player-control! (the-as vehicle old-veh))
@@ -1472,13 +1482,22 @@
   (none)
 )
 
+(defun mp-vehicle-apply-piggyback ()
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (when (and record
+                 (nonzero? record)
+                 (mp-player-record-remote? *mp-player-controller* record))
+        (mp-vehicle-apply-player-piggyback record))))
+  (none))
+
 (defun mp-vehicle-apply-remote ()
-  (let ((spawn-budget 2)
-        (driven-net-id (-> *remote-info* veh-state net-id))
-        (local-driven-net-id (-> *local-info* veh-state net-id)))
+  (let ((spawn-budget 2))
     (dotimes (i (the int MP_MAX_SYNC_VEHICLES))
       (let ((slot (-> *mp-traffic-buffer* veh-enemies i)))
-        (when (and (nonzero? (-> slot net-id)) (!= (-> slot net-id) driven-net-id) (!= (-> slot net-id) local-driven-net-id))
+        (when (and (nonzero? (-> slot net-id))
+                   (not (mp-vehicle-net-id-player-owned?
+                          (-> slot net-id) #f)))
           (let ((proc (mp-vehicle-find-by-net-id (-> slot net-id))))
             (if (and proc (nonzero? proc))
                 (if (<= (-> slot state-id) 2)
@@ -1515,11 +1534,8 @@
                          (nonzero? (-> (the-as vehicle proc) net-id)))
                 (let ((found-in-buffer? #f)
                       (v-net-id (-> (the-as vehicle proc) net-id)))
-                  (if (or (= v-net-id driven-net-id) (= v-net-id local-driven-net-id))
+                  (if (mp-vehicle-net-id-player-owned? v-net-id #f)
                       (begin 
-                        (when (mp-is-daxter?)
-                          (mp-clear-traffic-ghost-by-net-id! local-driven-net-id)
-                        )
                         (set! found-in-buffer? #t)
                       )
                       (dotimes (i (the int MP_MAX_SYNC_VEHICLES))

@@ -17,9 +17,9 @@
   )
 
 (defun mp-pack-local-respawn-policy! ()
-  (when (and *local-info* (nonzero? *local-info*))
-    (set! (-> *local-info* respawn-flags) (mp-local-respawn-policy-flags))
-    (set! (-> *local-info* respawn-pad) (the uint8 0))
+  (when (and (mp-local-player-record) (nonzero? (mp-local-player-record)))
+    (set! (-> (mp-local-player-record) action respawn-flags)
+          (mp-local-respawn-policy-flags))
     )
   (none)
   )
@@ -45,39 +45,53 @@
 (defun mp-reset-respawn-policy! ()
   (set! *mp-block-remote-respawn-on-me?* #f)
   (set! *mp-block-local-respawn-on-remote?* #f)
-  (when (and *local-info* (nonzero? *local-info*))
-    (set! (-> *local-info* respawn-flags) (the uint8 0))
-    (set! (-> *local-info* respawn-pad) (the uint8 0))
+  (let ((local (mp-local-player-record)))
+    (when (and local (nonzero? local))
+      (set! (-> local action respawn-flags) (the uint8 0))
+      )
     )
-  (when (and *remote-info* (nonzero? *remote-info*))
-    (set! (-> *remote-info* respawn-flags) (the uint8 0))
-    (set! (-> *remote-info* respawn-pad) (the uint8 0))
-    )
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (when (and record
+                 (nonzero? record)
+                 (mp-player-record-remote? *mp-player-controller* record))
+        (set! (-> record action respawn-flags) (the uint8 0)))))
   (none)
   )
 
 (defun mp-clear-remote-respawn-policy! ()
-  (when (and *remote-info* (nonzero? *remote-info*))
-    (set! (-> *remote-info* respawn-flags) (the uint8 0))
-    (set! (-> *remote-info* respawn-pad) (the uint8 0))
-    )
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (when (and record
+                 (nonzero? record)
+                 (mp-player-record-remote? *mp-player-controller* record))
+        (set! (-> record action respawn-flags) (the uint8 0)))))
   (none)
   )
 
-(defun mp-remote-blocks-respawn? ()
+(defun mp-player-blocks-respawn? ((record mp-player-record))
   (the symbol
-       (and *remote-info*
-            (nonzero? *remote-info*)
-            (>= (-> *remote-info* status) 4)
-            (logtest? (-> *remote-info* respawn-flags)
-                      MP_RESPAWN_FLAG_BLOCK_REMOTE_ON_ME)))
-  )
+       (and record
+            (nonzero? record)
+            (>= (-> record connection status) 4)
+            (logtest? (-> record action respawn-flags)
+                      MP_RESPAWN_FLAG_BLOCK_REMOTE_ON_ME))))
+
+(defun mp-any-remote-blocks-respawn? ()
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (when (and record
+                 (nonzero? record)
+                 (mp-player-record-remote? *mp-player-controller* record)
+                 (mp-player-blocks-respawn? record))
+        (return #t))))
+  #f)
 
 (defun mp-respawn-policy-blocks-remote-placement? ()
   "True when either player has forbidden remote placement."
   (the symbol
        (or *mp-block-local-respawn-on-remote?*
-           (mp-remote-blocks-respawn?)))
+           (mp-any-remote-blocks-respawn?)))
   )
 
 (defun mp-should-use-local-respawn? ()
@@ -89,9 +103,16 @@
 
 (defun mp-prepare-local-respawn! ((player target))
   (set! *mp-spectator-countdown-active?* #f)
-  (set! *mp-force-remote-puppet-for-spectate?* #f)
   (set! *mp-spectating?* #f)
-  (set! *mp-local-player-is-respawning* #f)
+  (let ((local-record (mp-local-player-record)))
+    (when (and local-record (nonzero? local-record))
+      (mp-player-runtime-clear-flag!
+        local-record MP_PLAYER_RUNTIME_RESPAWNING)))
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (when (and record (nonzero? record))
+        (mp-player-runtime-clear-flag!
+          record MP_PLAYER_RUNTIME_FORCE_PRESENTATION))))
   (when (and player (nonzero? player))
     (mp-clear-local-vehicle-occupancy! player)
     (let ((control (-> player control)))

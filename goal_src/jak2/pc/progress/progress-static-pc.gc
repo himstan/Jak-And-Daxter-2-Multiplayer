@@ -1186,7 +1186,8 @@ This gives us more freedom to write code how we want.
   )
 
 (defun mp-progress-host-peer-ready? ()
-  (= (pc-multi-get-status) (mp-connection-status connected-lobby))
+  (and (= (pc-multi-get-status) (mp-connection-status connected-lobby))
+       (mp-any-remote-player-connected?))
   )
 
 (defun mp-progress-advance-host-if-ready! ((p progress))
@@ -1197,8 +1198,8 @@ This gives us more freedom to write code how we want.
       (begin
         (sound-play "generic-beep")
         (pc-multi-set-status (mp-connection-status game-starting))
-        (when (and *local-info* (nonzero? (the-as uint *local-info*)))
-          (set! (-> *local-info* sync-flag) (the-as uint 0)))
+        (when (and (mp-local-player-record) (nonzero? (the-as uint (mp-local-player-record))))
+          (set! (-> *mp-bootstrap-state* phase) (the-as uint 0)))
 
         (debug-log *mp-debug-log?* "[MP-Host] Remote joined. Transitioning to engine loading flow...~%")
         (when (and *bigmap* (nonzero? *bigmap*))
@@ -1316,7 +1317,7 @@ This gives us more freedom to write code how we want.
       (cond
         ((= status (mp-connection-status connected-lobby)) ;; Connected
          (sound-play "generic-beep")
-         (set! *multi-sync-enabled?* #t)
+         (set! *multi-sync-enabled?* #f)
          )
         )
       )

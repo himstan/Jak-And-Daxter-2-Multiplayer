@@ -347,7 +347,7 @@
   )
 
 (defbehavior spydroid-launch-with-aid widow ((aid-override uint))
-  (when (and (not (mp-is-jak?)) (zero? aid-override))
+  (when (and (not (mp-session-host?)) (zero? aid-override))
     (if (and (= (widow-bomb-slots-full) 7)
              (zero? (-> self remote-spydroid-count)))
         (return 0)
@@ -369,7 +369,7 @@
      0
      )
     ((>= (-> self next-launch) 0)
-     (when (and (or (mp-is-daxter?) (>= (- (current-time) (-> self state-time)) (seconds 0.25)))
+     (when (and (or (mp-session-client?) (>= (- (current-time) (-> self state-time)) (seconds 0.25)))
                 (let ((v1-24 (ja-group)))
                   (not (and v1-24 (= v1-24 (-> self draw art-group data 18))))
                   )
@@ -442,7 +442,7 @@
                                            (when (and s4-1 (nonzero? s4-1))
                                              (logior! (-> (the-as enemy s4-1) enemy-flags) (enemy-flag boss-spawned))
                                              )
-                                          (when (and (mp-is-jak?) (nonzero? s4-1))
+                                          (when (and (mp-session-host?) (nonzero? s4-1))
                                             (mp-widow-queue-spydroid!
                                               (-> (the-as enemy s4-1) net-id)
                                               (-> self next-launch)
@@ -595,7 +595,7 @@
   )
 
 (defun mp-widow-spydroid-process-queue ((self widow))
-  (when (and self (nonzero? self) (not (mp-is-jak?))
+  (when (and self (nonzero? self) (not (mp-session-host?))
              (> (-> self remote-spydroid-count) 0))
     (cond
       ((>= (-> self bomb-hits) 4)
@@ -640,7 +640,7 @@
 (defbehavior widow-bomb-launch-with-args widow
   ((arg0 symbol) (arg1 symbol) (arg2 symbol)
    (launch-slot-override int) (launch-dest-override vector))
-  (when (and (not (mp-is-jak?)) (< launch-slot-override 0))
+  (when (and (not (mp-session-host?)) (< launch-slot-override 0))
     (if (and (= (widow-bomb-slots-full) 7)
              (zero? (-> self remote-bomb-count)))
         (return 0)
@@ -664,7 +664,7 @@
      0
      )
     ((>= (-> self next-launch) 0)
-     (when (and (or (mp-is-daxter?) (>= (- (current-time) (-> self state-time)) (seconds 0.25)))
+     (when (and (or (mp-session-client?) (>= (- (current-time) (-> self state-time)) (seconds 0.25)))
                 (let ((v1-8 (ja-group)))
                   (not (and v1-8 (= v1-8 (-> self draw art-group data 18))))
                   )
@@ -712,7 +712,7 @@
                    )
              )
            (when (handle->process (-> self bomb (-> self next-launch)))
-             (when (mp-is-jak?)
+             (when (mp-session-host?)
                (mp-widow-queue-bomb!
                  (-> self next-launch)
                  (-> self launch-dest))
@@ -887,7 +887,7 @@
 (defun mp-widow-bomb-process-queue ((self widow))
   (when (and self
              (nonzero? self)
-             (not (mp-is-jak?))
+             (not (mp-session-host?))
              (> (-> self remote-bomb-count) 0))
     (cond
       ((>= (-> self bomb-hits) 4)
@@ -1421,7 +1421,7 @@
           )
       )
     (widow-common)
-    (when (not (mp-is-daxter?))
+    (when (not (mp-session-client?))
       (widow-calc-root-from-osc 0.0)
       )
     (widow-debug)
@@ -2476,20 +2476,29 @@
       ((and (= (-> self movie-handle) #f) (not (task-node-closed? (game-task-node tomb-boss-introduction))))
        (when (and (not *scene-player*)
                   (not *progress-process*)
-                  (task-node-closed? (game-task-node tomb-boss-door))
-                  (or 
-                    (and *target* (not (mp-target-is-daxter? *target*))) 
-                    (and *mp-puppet* (not (mp-target-is-daxter? *mp-puppet*)))))
-         (let ((target-dist (if (mp-target-is-daxter? *target*) (get-target-dist-from-widow self *mp-puppet*) (get-target-dist-from-widow self *target*))))
-           (cond
-             ((< target-dist 376832.0)
-              (set! (-> self movie-handle)
-                    (ppointer->handle (process-spawn scene-player :init scene-player-init "tomb-boss-intro" #t #f))
-                    )
-              )
-             ((< target-dist 409600.0)
-              (script-eval '(want-anim "tomb-boss-intro"))
-              )
+                  (task-node-closed? (game-task-node tomb-boss-door)))
+         (let ((jak-record
+                 (mp-nearest-player-character-record
+                   *target* (mp-player-character jak) MP_INVALID_PLAYER_ID)))
+           (when (and jak-record (nonzero? jak-record))
+             (let ((jak-target (mp-player-record-target jak-record)))
+               (when (and jak-target (nonzero? jak-target))
+                 (let ((target-dist (get-target-dist-from-widow self jak-target)))
+                   (cond
+                     ((< target-dist 376832.0)
+                      (set! (-> self movie-handle)
+                            (ppointer->handle
+                              (process-spawn
+                                scene-player :init scene-player-init
+                                "tomb-boss-intro" #t #f)))
+                      )
+                     ((< target-dist 409600.0)
+                      (script-eval '(want-anim "tomb-boss-intro"))
+                      )
+                     )
+                   )
+                 )
+               )
              )
            )
          )

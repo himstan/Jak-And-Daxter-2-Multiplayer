@@ -4,13 +4,14 @@
 (defun mp-race-racer-local-player? ((racer racer-state))
   (let ((vehicle (handle->process-safe (-> racer racer))))
     (and vehicle
-         *local-info*
+         (mp-local-player-record)
          (= (-> (the-as vehicle vehicle) net-id)
-            (-> *local-info* riding-veh-id)))))
+            (-> (mp-local-player-record) vehicle vehicle-id)))))
 
 (defun mp-race-racer-remote-player? ((racer racer-state))
   (let ((vehicle (handle->process-safe (-> racer racer))))
     (and vehicle
-         *remote-info*
-         (= (-> (the-as vehicle vehicle) net-id)
-            (-> *remote-info* riding-veh-id)))))
+         (nonzero? vehicle)
+         (nonzero?
+           (mp-remote-player-record-by-vehicle-id
+             (-> (the-as vehicle vehicle) net-id))))))

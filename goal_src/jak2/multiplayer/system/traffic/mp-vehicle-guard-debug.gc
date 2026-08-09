@@ -134,8 +134,15 @@
               (let* ((text-str *mp-guard-veh-debug-text-str*)
                      (tmp *mp-guard-veh-debug-tmp-str*))
                 (when (and text-str (type? text-str string) tmp (type? tmp string))
-                  (let* ((is-remote-driven (and (nonzero? net-id) (nonzero? *remote-info*) (= net-id (-> *remote-info* veh-state net-id))))
-                         (is-local-driven (and (nonzero? net-id) (nonzero? *local-info*) (= net-id (-> *local-info* veh-state net-id))))
+                  (let* ((driver-record (mp-player-record-by-vehicle-id net-id))
+                         (is-remote-driven
+                           (and driver-record
+                                (nonzero? driver-record)
+                                (mp-player-record-remote? *mp-player-controller* driver-record)))
+                         (is-local-driven
+                           (and driver-record
+                                (nonzero? driver-record)
+                                (= (-> driver-record identity player-id) (mp-local-player-id))))
                          (is-owner (or is-local-driven (and (not is-remote-driven) (mp-is-traffic-authoritative?)))))
                     
                     (clear text-str)

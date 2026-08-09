@@ -20,9 +20,7 @@
     (or *scene-player*
         (movie?)
         (real-movie?)
-        (and *remote-info*
-             (nonzero? *remote-info*)
-             (nonzero? (-> *remote-info* scene-active)))
+        (mp-any-remote-player-scene-active?)
         )
     )
   )

@@ -13,6 +13,7 @@
 (defconstant MP_PACKET_PALACE_SQUID_SYNC (the uint 9))
 (defconstant MP_PACKET_AIRLOCK_SYNC (the uint 10))
 (defconstant MP_PACKET_WIDOW_SYNC (the uint 11))
+(defconstant MP_PACKET_WORLD_STATE (the uint 12))
 
 (defconstant MP_EVENT_ORB (the uint 1))
 (defconstant MP_EVENT_GEM (the uint 2))
@@ -72,7 +73,7 @@
 (defconstant MP_EVENT_MISSION_TOMB_DAXTER_WAIT_START (the uint 56))
 (defconstant MP_EVENT_MISSION_TOMB_DAXTER_WAIT_END (the uint 57))
 
-(defconstant MP_PACKET_COUNT (the uint 12))
+(defconstant MP_PACKET_COUNT (the uint 13))
 
 (defun mp-schema-packet-name ((idx int))
   (cond
@@ -88,6 +89,7 @@
     ((= idx 9) "PALACE_SQUID_SYNC")
     ((= idx 10) "AIRLOCK_SYNC")
     ((= idx 11) "WIDOW_SYNC")
+    ((= idx 12) "WORLD_STATE")
     (else "UNKNOWN")
     )
   )

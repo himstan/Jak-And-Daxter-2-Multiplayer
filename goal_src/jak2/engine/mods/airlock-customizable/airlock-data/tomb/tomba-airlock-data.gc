@@ -4,9 +4,9 @@
 (define *tomba-airlock-data* (new 'static 'boxed-array :type airlock-data
               (static-airlock-data
                 :airlock-name "tomb-boss-door-1"
-                :on-notice '(cond ((task-closed? "tomb-boss-resolution") (if (send-event self 'front) #f '(tombboss))) ((task-closed? "tomb-boss-introduction") #f) ((task-closed? "tomb-boss-door") '(tombboss)) ((and (task-closed? "tomb-poles-resolution") (task-closed? "tomb-water-resolution") (mp-is-jak?)) '(tombboss)))
-                :on-activate '(when (and (not (task-closed? "tomb-boss-resolution")) (or (task-closed? "tomb-boss-door") (and (task-closed? "tomb-poles-resolution") (task-closed? "tomb-water-resolution") (mp-is-jak?)))) (want-load 'tomba 'tombboss 'tombext))
-                :on-enter '(begin (want-display 'tombboss 'display) (want-display 'tombext 'special) (when (and (not (task-closed? "tomb-boss-door")) (task-closed? "tomb-poles-resolution") (task-closed? "tomb-water-resolution") (mp-is-jak?)) (scene-play "tomb-boss-open")))
+                :on-notice '(cond ((task-closed? "tomb-boss-resolution") (if (send-event self 'front) #f '(tombboss))) ((task-closed? "tomb-boss-introduction") #f) ((task-closed? "tomb-boss-door") '(tombboss)) ((and (task-closed? "tomb-poles-resolution") (task-closed? "tomb-water-resolution") (mp-session-host?)) '(tombboss)))
+                :on-activate '(when (and (not (task-closed? "tomb-boss-resolution")) (or (task-closed? "tomb-boss-door") (and (task-closed? "tomb-poles-resolution") (task-closed? "tomb-water-resolution") (mp-session-host?)))) (want-load 'tomba 'tombboss 'tombext))
+                :on-enter '(begin (want-display 'tombboss 'display) (want-display 'tombext 'special) (when (and (not (task-closed? "tomb-boss-door")) (task-closed? "tomb-poles-resolution") (task-closed? "tomb-water-resolution") (mp-session-host?)) (scene-play "tomb-boss-open")))
                 :on-reconcile '((want-load 'tomba 'tombboss 'tombext) (begin (want-display 'tombboss 'display) (want-display 'tombext 'special)))
                 :on-exit '(begin (want-display 'tombboss #f) (want-display 'tombext #f))
                 :on-cross #f

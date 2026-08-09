@@ -193,7 +193,7 @@
   )
 
 (defun stadium-board1-hud-local-green? ()
-  (and *multi-sync-enabled?* (mp-is-daxter?))
+  (and *multi-sync-enabled?* (mp-local-player-daxter?))
   )
 
 (defun stadium-board1-hud-local-color ()
@@ -241,7 +241,7 @@
   )
 
 (defun mp-stadium-board1-set-result! ()
-  (let ((local-jak? (mp-is-jak?))
+  (let ((local-jak? (mp-local-player-jak?))
         (local-score *mp-stadium-board1-local-score*)
         (remote-score *mp-stadium-board1-remote-score*))
     (cond

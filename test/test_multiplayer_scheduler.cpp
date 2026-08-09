@@ -189,6 +189,7 @@ TEST(MultiplayerPacketScheduler, CoversEveryApplicationPacketTypeAndRejectsCount
   EXPECT_FALSE(scheduler.enqueue(peer, 0, make_packet(PacketType::COUNT, 99),
                                  PacketType::COUNT, sizeof(PacketHeader),
                                  ENET_PACKET_FLAG_RELIABLE));
-  EXPECT_EQ(scheduler.flush(stats, recording_sender(sent)), 12u);
-  EXPECT_EQ(sent.size(), 12u);
+  EXPECT_EQ(scheduler.flush(stats, recording_sender(sent)),
+            static_cast<size_t>(PacketType::COUNT));
+  EXPECT_EQ(sent.size(), static_cast<size_t>(PacketType::COUNT));
 }

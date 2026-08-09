@@ -5,20 +5,19 @@
 (define-extern mp-tomb-scene-transport-suppressed? (function string symbol))
 
 (defun mp-teleport-to-remote ()
-  (when (and *target*
-             (nonzero? *target*)
-             (-> *target* control)
-             (nonzero? (-> *target* control))
-             *remote-info*
-             (nonzero? *remote-info*))
-    (set! (-> *target* control trans x) (-> *remote-info* x))
-    (set! (-> *target* control trans y) (-> *remote-info* y))
-    (set! (-> *target* control trans z) (-> *remote-info* z))
-    (set! (-> *target* control camera-pos quad) (-> *target* control trans quad))
-    (when (and *camera* (nonzero? *camera*))
-      (send-event *camera* 'teleport)
-      )
-    )
+  (let ((record (mp-teleport-destination-record)))
+    (when (and *target*
+               (nonzero? *target*)
+               (-> *target* control)
+               (nonzero? (-> *target* control))
+               record
+               (nonzero? record))
+      (set! (-> *target* control trans x) (-> record transform position x))
+      (set! (-> *target* control trans y) (-> record transform position y))
+      (set! (-> *target* control trans z) (-> record transform position z))
+      (set! (-> *target* control camera-pos quad) (-> *target* control trans quad))
+      (when (and *camera* (nonzero? *camera*))
+        (send-event *camera* 'teleport))))
   (none)
   )
 
@@ -39,9 +38,7 @@
   (none))
 
 (defun mp-scene-catchup-client-connected? ()
-  (and *remote-info*
-       (nonzero? *remote-info*)
-       (>= (-> *remote-info* status) 4))
+  (mp-any-remote-player-connected?)
   )
 
 (defun mp-connected-scene-broadcast-current? ((scene-name string))
@@ -55,7 +52,7 @@
 
 (defun mp-note-connected-scene-broadcast! ((scene-name string))
   "Remember that the active scene was announced after the client connected."
-  (when (and (mp-is-jak?)
+  (when (and (mp-session-host?)
              (mp-scene-catchup-client-connected?)
              scene-name
              (nonzero? scene-name)
@@ -68,7 +65,7 @@
 
 (defun mp-replay-active-scene-for-connected-client! ()
   "Catch up a client that connected after this scene-player started."
-  (when (and (mp-is-jak?)
+  (when (and (mp-session-host?)
              *multi-sync-enabled?*
              (= (pc-multi-get-status) (mp-connection-status in-game))
              (mp-scene-catchup-client-connected?)
@@ -96,30 +93,30 @@
   (none)
   )
 
-(defun mp-clear-remote-scene-latch! ()
-  (set! *mp-last-remote-scene-active* (the uint 0))
-  (set! *mp-remote-scene-start-packet-id* (the uint 0))
+(defun mp-clear-player-scene-latch! ((record mp-player-record))
+  (when (and record (nonzero? record))
+    (set! (-> record action scene-latched?) (the uint8 0))
+    (set! (-> record action last-replayed-sequence) (the uint 0)))
   (none)
   )
 
 (defun mp-reconcile-remote-scene-latch! ()
-  "Let a fresh player-state heartbeat retire the remote scene-start latch."
-  (when (and (nonzero? *mp-last-remote-scene-active*)
-             (not *mp-pending-scene-sync?*))
-    (cond
-      ((or (not *remote-info*)
-           (not (nonzero? *remote-info*))
-           (zero? (-> *remote-info* status)))
-       (debug-log *mp-debug-log?* "[MP-Scene-Transition] Clearing remote scene latch: remote player is unavailable.~%")
-       (mp-clear-remote-scene-latch!)
-       )
-      ((and (zero? (-> *remote-info* scene-active))
-            (!= (-> *remote-info* packet-id) *mp-remote-scene-start-packet-id*))
-       (debug-log *mp-debug-log?* "[MP-Scene-Transition] Fresh heartbeat reports remote scene inactive; clearing latch.~%")
-       (mp-clear-remote-scene-latch!)
-       )
-      )
-    )
+  "Let each player's fresh heartbeat retire only that player's scene latch."
+  (when (not *mp-pending-scene-sync?*)
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (and record
+                   (nonzero? record)
+                   (mp-player-record-remote? *mp-player-controller* record)
+                   (nonzero? (-> record action scene-latched?))
+                   (or (zero? (-> record connection status))
+                       (and (zero? (-> record action scene-state))
+                            (!= (-> record connection latest-state-sequence)
+                                (-> record action last-replayed-sequence)))))
+          (debug-log *mp-debug-log?*
+            "[MP-Scene-Transition] Clearing player ~D scene latch after fresh inactive heartbeat.~%"
+            player-id)
+          (mp-clear-player-scene-latch! record)))))
   (none)
   )
 
@@ -138,7 +135,7 @@
     ;; 1. Handle Exiting Scene
     (when (and *mp-last-scene-player*
                (not in-scene?))
-      (when (mp-is-daxter?)
+      (when (mp-session-client?)
         (mp-restore-local-target-after-scene!)
         )
       (mp-scene-sync-after-local-end! *mp-active-local-scene-name*)

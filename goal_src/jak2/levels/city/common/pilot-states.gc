@@ -655,7 +655,7 @@
     (local-vars (f30-0 float))
     (when (and *multi-sync-enabled?*
                (= (pc-multi-get-status) (mp-connection-status in-game))
-               (mp-is-daxter?)
+               (mp-target-daxter? self)
                (-> self pilot)
                (nonzero? (-> self pilot))
                (nonzero? (-> self pilot vehicle)))

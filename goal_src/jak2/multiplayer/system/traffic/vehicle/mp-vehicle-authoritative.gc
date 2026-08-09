@@ -36,7 +36,7 @@
   (set! (-> slot vehicle-type) (the uint8 (-> v-proc traffic-type)))
   (set! (-> slot color-index) (mp-vehicle-get-color-index v-proc))
   (set! (-> slot state-id) (the uint8 (mp-veh-get-state-id v-proc)))
-  (set! (-> slot target-aid) (the uint8 0))
+  (set! (-> slot target-player-id) MP_INVALID_COMPACT_PLAYER_ID)
 
   (set! (-> slot x) (-> v-proc root trans x))
   (set! (-> slot y) (-> v-proc root trans y))
@@ -77,21 +77,23 @@
       (cond
         ((and rider-proc (nonzero? rider-proc) (type? rider-proc target))
          ;; Player (Jak or Daxter)
-         (let ((aid (the uint 0)))
-           (if (= rider-proc *target*)
-               (set! aid (the uint (+ 1 (-> *local-info* role))))
-               (set! aid (the uint (if (= (-> *local-info* role) 0) 2 1)))
-               )
-           (set! (-> slot rider-aids i) aid)
-           (if (zero? i) (set! (-> slot target-aid) (the uint8 aid)))
-           )
+         (let ((rider-record
+                 (mp-player-controller-target-record
+                   *mp-player-controller*
+                   (the-as target rider-proc))))
+           (if (and rider-record (nonzero? rider-record))
+               (let ((player-id (-> rider-record identity player-id)))
+                 (set! (-> slot rider-player-ids i) player-id)
+                 (if (zero? i)
+                     (set! (-> slot target-player-id) (the-as uint8 player-id))))
+               (set! (-> slot rider-player-ids i) MP_INVALID_PLAYER_ID)))
          )
         ((and rider-proc (nonzero? rider-proc) (type? rider-proc vehicle-rider))
          ;; Civilian
-         (set! (-> slot rider-aids i) (the uint 3))
+         (set! (-> slot rider-player-ids i) MP_VEHICLE_RIDER_CIVILIAN_ID)
          )
         (else
-         (set! (-> slot rider-aids i) (the uint 0))
+         (set! (-> slot rider-player-ids i) MP_INVALID_PLAYER_ID)
          )
         )
       )

@@ -9,6 +9,27 @@
 #include <cstring>
 
 namespace {
+bool valid_compact_player_id(uint8_t player_id) {
+  return player_id < kMPMaxPlayers || player_id == kMPInvalidCompactPlayerId;
+}
+
+bool valid_vehicle_rider_id(uint32_t player_id) {
+  return player_id < kMPMaxPlayers || player_id == kMPInvalidPlayerId ||
+         player_id == kMPVehicleCivilianRiderId;
+}
+
+bool valid_vehicle_occupants(const MPVehicleStatePacked& state) {
+  if (!valid_compact_player_id(state.target_player_id)) {
+    return false;
+  }
+  for (const auto player_id : state.rider_player_ids) {
+    if (!valid_vehicle_rider_id(player_id)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 size_t vehicle_packet_size(uint32_t count) {
   return offsetof(PacketVehicleSync, vehs) + (sizeof(MPVehicleStatePacked) * count);
 }
@@ -60,7 +81,7 @@ void handle_vehicle_sync_packet(const _ENetEvent& event, MultiplayerData& data) 
     MPVehicleStatePacked incoming = {};
     memcpy(&incoming, event.packet->data + vehicle_packet_size(0) + i * sizeof(incoming),
            sizeof(incoming));
-    if (incoming.net_id == 0) continue;
+    if (incoming.net_id == 0 || !valid_vehicle_occupants(incoming)) continue;
     if (!mp_float_is_finite(incoming.x) || !mp_float_is_finite(incoming.y) ||
         !mp_float_is_finite(incoming.z)) {
       continue;
@@ -83,7 +104,7 @@ void handle_vehicle_sync_packet(const _ENetEvent& event, MultiplayerData& data) 
       state->vehicle_type = incoming.vehicle_type;
       state->color_index = incoming.color_index;
       state->state_id = incoming.state_id;
-      state->target_aid = incoming.target_aid;
+      state->target_player_id = incoming.target_player_id;
       state->x = incoming.x; state->y = incoming.y; state->z = incoming.z;
       state->quat_x = mp_unpack_float_q(incoming.quat[0]);
       state->quat_y = mp_unpack_float_q(incoming.quat[1]);
@@ -96,7 +117,8 @@ void handle_vehicle_sync_packet(const _ENetEvent& event, MultiplayerData& data) 
       state->ang_vel_y = mp_unpack_float_q(incoming.ang_vel[1]) * 10.0f;
       state->ang_vel_z = mp_unpack_float_q(incoming.ang_vel[2]) * 10.0f;
       state->state_flags = incoming.state_flags;
-      memcpy(state->rider_aids, incoming.rider_aids, sizeof(state->rider_aids));
+      memcpy(state->rider_player_ids, incoming.rider_player_ids,
+             sizeof(state->rider_player_ids));
       data.veh_last_updated[slot] = current_time;
       data.veh_last_sequence[slot] = header.sequenceNum;
     }
@@ -115,7 +137,7 @@ void send_vehicle_sync_packets(MultiplayerData& data, MPTrafficSyncBufferGOAL* b
     for (uint32_t i = 0; i < chunk_size; i++) {
       auto* src = &buffer->vehicles[sent_vehs + i]; auto* dst = &packet.vehs[i];
       dst->net_id = src->net_id; dst->vehicle_type = src->vehicle_type; dst->color_index = src->color_index;
-      dst->state_id = src->state_id; dst->target_aid = src->target_aid;
+      dst->state_id = src->state_id; dst->target_player_id = src->target_player_id;
       dst->x = src->x; dst->y = src->y; dst->z = src->z;
       dst->quat[0] = mp_pack_float_q(src->quat_x); dst->quat[1] = mp_pack_float_q(src->quat_y);
       dst->quat[2] = mp_pack_float_q(src->quat_z); dst->quat[3] = mp_pack_float_q(src->quat_w);
@@ -123,7 +145,8 @@ void send_vehicle_sync_packets(MultiplayerData& data, MPTrafficSyncBufferGOAL* b
       dst->lin_vel[1] = mp_pack_float_scaled(src->lin_vel_y, 10.0f);
       dst->lin_vel[2] = mp_pack_float_scaled(src->lin_vel_z, 10.0f);
       dst->ang_vel[0] = mp_pack_float_q(src->ang_vel_x / 10.0f); dst->ang_vel[1] = mp_pack_float_q(src->ang_vel_y / 10.0f); dst->ang_vel[2] = mp_pack_float_q(src->ang_vel_z / 10.0f);
-      dst->state_flags = src->state_flags; memcpy(dst->rider_aids, src->rider_aids, 16);
+      dst->state_flags = src->state_flags;
+      memcpy(dst->rider_player_ids, src->rider_player_ids, 16);
     }
     size_t packet_size = vehicle_packet_size(chunk_size);
     MultiplayerManager::broadcast(data, exclude_peer, &packet, packet_size, ENET_PACKET_FLAG_UNSEQUENCED);

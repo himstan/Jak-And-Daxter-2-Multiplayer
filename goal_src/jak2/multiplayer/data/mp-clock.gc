@@ -3,17 +3,17 @@
 
 (defun mp-sync-clock-host ()
   "Update Host Clock BEFORE sync"
-  (if (mp-is-jak?)
-      (set! (-> *local-info* clock) (-> *display* shared-clock frame-counter)))
+  (if (mp-session-host?)
+      (set! (-> *mp-world-state* clock) (-> *display* shared-clock frame-counter)))
   (none))
 
 (defun mp-sync-clock-client ()
   "Update Client Clock AFTER sync - GUARDED to avoid black screen during load"
   (with-pp
-    (if (and (mp-is-daxter?)
+    (if (and (mp-session-client?)
              (= (pc-multi-get-status) (mp-connection-status in-game))
              *multi-sync-enabled?*
-             (zero? (-> *local-info* sync-flag))
+             (zero? (-> *mp-bootstrap-state* phase))
              *target*
              (nonzero? *target*)
              (-> *target* control)
@@ -23,7 +23,7 @@
              (nonzero? *level*)
              (= (-> *level* loading-level) (-> *level* default-level))
              (not (load-in-progress? *level*)))
-        (let* ((host-clock (-> *remote-info* clock))
+        (let* ((host-clock (-> *mp-world-state* clock))
                (diff (- host-clock (-> *display* shared-clock frame-counter))))
           ;; Only sync if Host clock is AHEAD of local clock to avoid jittering/stalling
           ;; Also sync if we are vastly ahead (e.g. host started game after us)

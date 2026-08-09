@@ -3,13 +3,15 @@
 #include "common/common_types.h"
 
 int pc_multi_get_role();
+u32 pc_multi_get_local_player_id();
+u32 pc_multi_get_host_player_id();
 int pc_multi_set_local_version(u32 version_ptr);
 u64 pc_multi_get_local_version();
 u64 pc_multi_get_required_version();
-void pc_multi_poll(u32 local_ptr, u32 remote_ptr);
+void pc_multi_poll(u32 controller_ptr, u32 world_ptr, u32 bootstrap_ptr);
 int pc_multi_flush_packet_window();
-void pc_multi_send_state(u32 local_ptr);
-void pc_multi_receive_state(u32 remote_ptr);
+void pc_multi_send_sync(u32 controller_ptr, u32 world_ptr, u32 bootstrap_ptr);
+void pc_multi_receive_sync(u32 controller_ptr, u32 world_ptr, u32 bootstrap_ptr);
 void pc_multi_send_events(u32 event_ptr);
 void pc_multi_receive_events(u32 event_ptr);
 void pc_multi_send_enemies(u32 buffer_ptr);

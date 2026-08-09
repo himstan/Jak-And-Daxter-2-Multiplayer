@@ -21,25 +21,25 @@
        (not (focus-test? *target* teleporting)))
   )
 
-(defun mp-network-log-active-sync! ((status mp-connection-status) (role int))
-  (when (and *local-info*
-             (nonzero? (the-as uint *local-info*))
+(defun mp-network-log-active-sync! ((status mp-connection-status) (role mp-session-role))
+  (when (and (mp-local-player-record)
+             (nonzero? (the-as uint (mp-local-player-record)))
              (>= (- (current-time) *multi-last-sync-frame*) (seconds 5)))
     (debug-log *mp-debug-log?* "[MP-Network] Active and Syncing! (Status ~D, Role ~D, SyncFlag ~D)~%"
             status
             role
-            (-> *local-info* sync-flag))
+            (-> *mp-bootstrap-state* phase))
     (set! *multi-last-sync-frame* (current-time))
     )
   (none))
 
 (defun mp-network-pack-local-frame! ((status mp-connection-status))
-  (when (and *local-info*
-             (nonzero? (the-as uint *local-info*)))
+  (when (and (mp-local-player-record)
+             (nonzero? (the-as uint (mp-local-player-record))))
     (mp-pack-local-player-name!)
-    (let ((role (-> *local-info* role)))
+    (let ((role *mp-session-role*))
       (when (and (= status (mp-connection-status in-game))
-                 (or (zero? role) *multi-sync-enabled?*))
+                 (or (mp-session-host?) *multi-sync-enabled?*))
         (mp-extract-environment-state)
         (when (mp-local-frame-target-ready?)
           (mp-network-log-active-sync! status role)
@@ -52,9 +52,12 @@
   (none))
 
 (defun mp-local-state-send-tick ()
-  (when (and *local-info*
-             (nonzero? (the-as uint *local-info*)))
-    (pc-multi-send-state (the-as uint *local-info*))
+  (when (and (mp-local-player-record)
+             (nonzero? (the-as uint (mp-local-player-record))))
+    (pc-multi-send-sync
+      (the-as uint *mp-player-controller*)
+      (the-as uint *mp-world-state*)
+      (the-as uint *mp-bootstrap-state*))
     )
   (none))
 
@@ -77,24 +80,26 @@
   (none))
 
 (defun mp-traffic-send-tick ()
-  (when (and (mp-is-jak?)
+  (when (and (mp-session-host?)
              *mp-traffic-buffer*
              (nonzero? (the-as uint *mp-traffic-buffer*)))
     (pc-multi-send-traffic (the-as uint *mp-traffic-buffer*))
     )
   (none))
 
-(defun mp-network-sync-window-tick ()
-  "Network sync window scheduler. Packs local state and sends each subsystem payload."
+(defun mp-network-sync-window-tick ((gameplay-ready? object))
+  "Send session identity/state before remote readiness and gameplay payloads after it."
   (let ((status (pc-multi-get-status)))
     (if (not (mp-network-status-ready? status))
         (return #f))
     (mp-network-pack-local-frame! status)
     (mp-local-state-send-tick)
-    (mp-event-send-tick)
-    (mp-airlock-send-tick)
-    (mp-enemy-send-tick)
-    (mp-traffic-send-tick)
+    (when gameplay-ready?
+      (mp-event-send-tick)
+      (mp-airlock-send-tick)
+      (mp-enemy-send-tick)
+      (mp-traffic-send-tick)
+      )
     (pc-multi-flush-packet-window)
     )
   (none))

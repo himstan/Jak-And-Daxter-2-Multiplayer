@@ -1,0 +1,40 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defconstant MP_MAX_BOOTSTRAP_AIDS 128)
+
+(deftype mp-world-sync-state (structure)
+  ((money                 float)
+   (gems                  float)
+   (skill                 float)
+   (sequence              uint32)
+   (clock                 time-frame)
+   (time-of-day-frame     time-frame)
+   (time-of-day-ratio     float)
+   (weather-cloud         float)
+   (weather-fog           float)
+   (weather-rain          float)
+   (task-mask             uint8 64)
+   (active-task-mask      uint8 64)
+   )
+  :size-assert 176)
+
+(deftype mp-bootstrap-sync-state (structure)
+  ((phase                 uint32)
+   (sequence              uint32)
+   (host-task             uint32)
+   (reserved              uint32)
+   (host-continue         uint8 32)
+   (host-spawn-position   vector :inline)
+   (host-spawn-angle      float)
+   (host-camera-angle-y   float)
+   (synchronized-aid-count uint32)
+   (pad-before-aids       uint32)
+   (synchronized-aids     uint32 MP_MAX_BOOTSTRAP_AIDS)
+   )
+  :size-assert 592)
+
+(define-perm *mp-world-state* mp-world-sync-state
+  (new 'static 'mp-world-sync-state))
+(define-perm *mp-bootstrap-state* mp-bootstrap-sync-state
+  (new 'static 'mp-bootstrap-sync-state))

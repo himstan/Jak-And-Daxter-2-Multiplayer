@@ -186,7 +186,7 @@
   (case arg2
     (('arrest)
      ;; MULTIPLAYER: Only allow arrests on the Host (Jak) to prevent local-guard desync fails
-     (if (not (mp-is-jak?)) (return #f))
+     (if (not (mp-session-host?)) (return #f))
      (let ((v1-4 (the-as process (as-type (handle->process (-> this arrestor-handle)) process-focusable))))
        (when (or (not v1-4) (= v1-4 arg0) (and (!= v1-4 arg0) (time-elapsed? (-> this arrest-attempt-time) (seconds 0.1))))
          (set! (-> this arrestor-handle) (process->handle arg0))

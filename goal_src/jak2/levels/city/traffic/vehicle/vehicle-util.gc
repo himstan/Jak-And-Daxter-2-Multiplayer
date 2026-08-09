@@ -54,7 +54,7 @@
              (= tgt *target*)
              *target*
              (nonzero? *target*)
-             (and (mp-is-daxter?) (mp-target-ride-along? *target*)))
+             (mp-target-ride-along? *target*))
       ;; Block guard vehicles for now, they're different from regular vehicles and the player driven guard vehicle puppets are broken.
       ;; TODO: to fix the guard vehicle handling
       (and veh (nonzero? veh) (type? veh vehicle-guard))

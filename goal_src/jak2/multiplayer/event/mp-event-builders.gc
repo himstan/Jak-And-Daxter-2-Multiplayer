@@ -180,7 +180,7 @@
       (set! (-> event breed-index) (the-as uint32 (-> details breed-index)))
       (set! (-> event initial?) (if (-> details initial?) 1 0))
       (set! (-> event enemy-aid) (the-as uint32 (-> details enemy-aid)))
-      (set! (-> event owner-role) (the-as int32 (-> details owner-role)))
+      (set! (-> event owner-player-id) (the-as int32 (-> details owner-player-id)))
       (set! (-> event epoch) (the-as uint32 (-> details epoch)))
       (set! (-> event roster-generation) (the-as uint32 (-> details roster-generation)))
       (set! (-> event payload-size) (the uint 64))

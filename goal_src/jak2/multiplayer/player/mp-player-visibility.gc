@@ -1,73 +1,85 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(defun mp-jak-has-riding-daxter? ((jak-target target))
+  "Return true when a live Daxter record contextually resolves to this Jak."
+  (when (and jak-target (nonzero? jak-target))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (and record
+                   (nonzero? record)
+                   (mp-player-daxter? record))
+          (let ((daxter-target (mp-player-record-target record)))
+            (when (and daxter-target
+                       (nonzero? daxter-target)
+                       (mp-target-ride-along? daxter-target)
+                       (= (mp-jak-target-for daxter-target) jak-target))
+              (return #t)))))))
+  #f)
+
+(defun mp-update-player-target-visibility!
+       ((player-target target) (in-movie? symbol))
+  (when (and player-target
+             (nonzero? player-target)
+             (-> player-target draw)
+             (nonzero? (-> player-target draw)))
+    (if in-movie?
+        (logior! (-> player-target draw status) (draw-control-status no-draw))
+        (logclear!
+          (-> player-target draw status)
+          (if (mp-target-jak? player-target)
+              (draw-control-status no-draw no-draw-bounds2)
+              (draw-control-status no-draw no-draw-bounds)))))
+  (none))
+
+(defun mp-update-player-sidekick-visibility!
+       ((player-target target) (in-movie? symbol))
+  (when (and player-target
+             (nonzero? player-target)
+             (-> player-target sidekick)
+             (nonzero? (-> player-target sidekick)))
+    (let ((sidekick-proc
+            (the-as sidekick (ppointer->process (-> player-target sidekick)))))
+      (when (and sidekick-proc
+                 (nonzero? sidekick-proc)
+                 (-> sidekick-proc draw)
+                 (nonzero? (-> sidekick-proc draw)))
+        (if (or in-movie?
+                (and (mp-target-jak? player-target)
+                     (not (mp-jak-has-riding-daxter? player-target)))
+                (and (mp-target-daxter? player-target)
+                     (mp-target-ride-along? player-target)))
+            (logior! (-> sidekick-proc draw status) (draw-control-status no-draw))
+            (logclear! (-> sidekick-proc draw status) (draw-control-status no-draw))))))
+  (none))
+
 (defun mp-update-player-visibility ()
-  "Ensure local player and puppet are visible, and manage sidekick visibility"
-  (let ((in-movie? (or (movie?) *scene-player*)))
-    (if (not in-movie?)
-        (begin
-          (mp-sync-enemies-update)
-          ;; 1. Local Player Visibility
-          (when (and (not *visibility-overriden?*) *target* (nonzero? *target*) (-> *target* draw) (nonzero? (-> *target* draw)))
-              (logclear! (-> *target* draw status) (if (mp-is-jak?) (draw-control-status no-draw no-draw-bounds2) (draw-control-status no-draw no-draw-bounds))))
+  "Update every bound player target and its contextual sidekick presentation."
+  (let ((in-movie? (if (or (movie?) *scene-player*) #t #f)))
+    (when (not in-movie?)
+      (mp-sync-enemies-update))
 
-          ;; 2. Remote Puppet Visibility (Clearing no-draw stuck from target-continue)
-          (let ((puppet *mp-puppet*))
-            (when (and puppet (nonzero? puppet) (-> puppet draw) (nonzero? (-> puppet draw)))
-              ;; Always ensure the puppet's Jak model is drawn if it exists
-              (logclear! (-> puppet draw status) (if (mp-is-jak?) (draw-control-status no-draw no-draw-bounds) (draw-control-status no-draw no-draw-bounds2)))
-              )
-            )
-          )
-        (begin
-          ;; HIDE puppets during movies
-          (let ((puppet *mp-puppet*))
-            (when (and puppet (nonzero? puppet) (-> puppet draw))
-              (logior! (-> puppet draw status) (draw-control-status no-draw))
-              )
-            )
-          )
-        )
+    ;; Preserve vanilla local visibility overrides, then handle every remote record.
+    (when (and *target*
+               (nonzero? *target*)
+               (or in-movie? (not *visibility-overriden?*)))
+      (mp-update-player-target-visibility! *target* in-movie?))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (and record
+                   (nonzero? record)
+                   (mp-player-record-remote? *mp-player-controller* record))
+          (let ((player-target (mp-player-record-target record)))
+            (when (and player-target (nonzero? player-target))
+              (mp-update-player-target-visibility! player-target in-movie?))))))
 
-    ;; 3. Sidekick visibility management (Hide if not riding or in movie)
     (when (mp-connection-status-active? (pc-multi-get-status))
-      ;; Local Sidekick (The Daxter on your shoulder)
-      (when (and *target* (nonzero? *target*) (-> *target* sidekick) (nonzero? (-> *target* sidekick)))
-        (let ((sk (the-as sidekick (ppointer->process (-> *target* sidekick)))))
-          (when (and sk (nonzero? sk) (-> sk draw) (nonzero? (-> sk draw)))
-            ;; HIDE if in movie, or if the remote counterpart is NOT riding (or disconnected/inactive).
-            (if (or in-movie?
-                    (or (and (mp-is-jak?)
-                             (or (not (and *remote-info* (nonzero? *remote-info*)))
-                                 (< (-> *remote-info* status) 4)
-                                 (not (mp-target-ride-along? *mp-puppet*))))
-                        (and (mp-is-daxter?) (mp-target-ride-along? *target*))))
-                (logior! (-> sk draw status) (draw-control-status no-draw))
-                (logclear! (-> sk draw status) (draw-control-status no-draw)))
-            )
-          )
-        )
-
-      ;; Puppet Sidekick (The Daxter on the remote Jak puppet's shoulder)
-      (let ((puppet *mp-puppet*))
-        (when (and puppet (nonzero? puppet) (-> puppet sidekick) (nonzero? (-> puppet sidekick)))
-          (let ((sk (the-as sidekick (ppointer->process (-> puppet sidekick)))))
-            (when (and sk (nonzero? sk) (-> sk draw) (nonzero? (-> sk draw)))
-              ;; Puppet Jak's sidekick visibility depends on the counterpart (Local Daxter)'s riding state.
-              ;; HIDE if in movie, or if counterpart isn't riding.
-              (if (or in-movie?
-                      (not (or (and (mp-is-jak?)
-                                    *remote-info*
-                                    (nonzero? *remote-info*)
-                                    (not (mp-target-ride-along? *mp-puppet*)))
-                               (and (mp-is-daxter?) (mp-target-ride-along? *target*)))))
-                  (logior! (-> sk draw status) (draw-control-status no-draw))
-                  (logclear! (-> sk draw status) (draw-control-status no-draw)))
-              )
-            )
-          )
-        )
-      )
+      (dotimes (player-id MP_MAX_PLAYERS)
+        (let ((record (mp-player-record-by-id (the-as uint player-id))))
+          (when (and record (nonzero? record))
+            (let ((player-target (mp-player-record-target record)))
+              (when (and player-target (nonzero? player-target))
+                (mp-update-player-sidekick-visibility!
+                  player-target in-movie?)))))))
     )
-
   (none))

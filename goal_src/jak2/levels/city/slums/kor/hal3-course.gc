@@ -76,7 +76,7 @@
   (case arg2
     (('fail)
      ;; MULTIPLAYER: Only allow failures on the Host (Jak)
-     (if (not (mp-is-jak?)) (return #f))
+     (if (not (mp-session-host?)) (return #f))
      (set! v0-0 (logior (-> this bot-task-bits) (bot-task-bits botbits-0)))
      (set! (-> this bot-task-bits) (the-as bot-task-bits v0-0))
      v0-0
@@ -132,7 +132,7 @@
   )
 
 (defun hal-help-kid-host-scene-release-ready? ((arg0 hal-help-kid))
-  (and (mp-is-jak?)
+  (and (mp-session-host?)
        arg0
        (nonzero? arg0)
        (scene-release? arg0)

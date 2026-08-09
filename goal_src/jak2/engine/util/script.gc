@@ -2497,30 +2497,6 @@
         )
   )
 
-(let ((v1-127 (-> *script-form* 85)))
-  (set! (-> v1-127 name) 'mp-is-jak?)
-  (set! (-> v1-127 spec) '((return macro (boolean)) (function macro (symbol))))
-  (set! (-> v1-127 func)
-        (lambda ((arg0 script-context))
-          (the-as object
-                  (and *local-info*
-                       (nonzero? *local-info*)
-                       (= (-> *local-info* role) 0))))
-        )
-  )
-
-(let ((v1-129 (-> *script-form* 86)))
-  (set! (-> v1-129 name) 'mp-is-daxter?)
-  (set! (-> v1-129 spec) '((return macro (boolean)) (function macro (symbol))))
-  (set! (-> v1-129 func)
-        (lambda ((arg0 script-context))
-          (the-as object
-                  (and *local-info*
-                       (nonzero? *local-info*)
-                       (= (-> *local-info* role) 1))))
-        )
-  )
-
 (let ((v1-131 (-> *script-form* 87)))
   (set! (-> v1-131 name) 'set-continue!)
   (set! (-> v1-131 spec)

@@ -2,6 +2,7 @@
 
 #include "game/multiplayer/multiplayer_manager.h"
 #include "game/multiplayer/multiplayer_packet.h"
+#include "game/multiplayer/sync/player_sync.h"
 
 #include <cstring>
 
@@ -10,8 +11,8 @@ void mp_handle_palace_squid_sync_packet(MultiplayerData& data,
                                         uint32_t current_time) {
   const auto sync =
       PacketView(packet).as_exact<PacketPalaceSquidSync>(PacketType::PALACE_SQUID_SYNC);
-  if (!sync || data.local_role == 0 || sync->state.active > 1 || sync->state.state_id > 15 ||
-      (sync->state.target_role != 0 && sync->state.target_role != 1) ||
+  if (!sync || data.session_role == 0 || sync->state.active > 1 || sync->state.state_id > 15 ||
+      !mp_valid_player_id(static_cast<uint32_t>(sync->state.target_player_id)) ||
       !mp_float_is_finite(sync->state.shield_hit_points) ||
       !mp_float_is_finite(sync->state.x) || !mp_float_is_finite(sync->state.y) ||
       !mp_float_is_finite(sync->state.z) || !mp_float_is_finite(sync->state.quat_x) ||
@@ -33,7 +34,7 @@ void mp_handle_palace_squid_sync_packet(MultiplayerData& data,
 }
 
 void mp_send_palace_squid_sync(MultiplayerData& data, MPPalaceSquidSyncBufferGOAL* buffer) {
-  if (!buffer || buffer->local_state.active == 0 || data.local_role != 0) {
+  if (!buffer || buffer->local_state.active == 0 || data.session_role != 0) {
     return;
   }
 
@@ -43,7 +44,7 @@ void mp_send_palace_squid_sync(MultiplayerData& data, MPPalaceSquidSyncBufferGOA
   packet.timestamp = enet_time_get();
   memcpy(&packet.state, &buffer->local_state, sizeof(MPPalaceSquidState));
   packet.state.last_updated = packet.timestamp;
-  MultiplayerManager::broadcast(data, data.local_role, packet, ENET_PACKET_FLAG_UNSEQUENCED);
+  MultiplayerManager::broadcast(data, data.session_role, packet, ENET_PACKET_FLAG_UNSEQUENCED);
 }
 
 void mp_receive_palace_squid_sync(MultiplayerData& data, MPPalaceSquidSyncBufferGOAL* buffer) {

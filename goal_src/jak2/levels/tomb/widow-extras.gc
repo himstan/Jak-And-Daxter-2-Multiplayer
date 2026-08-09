@@ -169,7 +169,7 @@
          )
       )
       (('green-hit)
-       (when (and (mp-is-daxter?) (not *mp-processing-remote-event*))
+       (when (and (mp-session-client?) (not *mp-processing-remote-event*))
          (return #f)
          )
        (when (nonzero? (-> self which-look))
@@ -717,7 +717,7 @@
   (let ((deadline 0))
     (when (and bomb
                (nonzero? bomb)
-               (or (not *multi-sync-enabled?*) (mp-is-jak?)))
+               (or (not *multi-sync-enabled?*) (mp-session-host?)))
       (let* ((current-frame (current-time))
              (fizzle-duration 600.0)
              (random-value (/ (the-as int (rand-uint31-gen *random-generator*)) 256))
@@ -729,7 +729,7 @@
                      (the int (* fizzle-duration
                                  (+ -1.0 (the-as float random-bits))))))))
         (set! (-> bomb fizzle-timer) deadline)
-        (when (and (mp-is-jak?)
+        (when (and (mp-session-host?)
                    (-> bomb parent)
                    (nonzero? (-> bomb parent)))
           (let ((slot (widow-bomb-slot bomb)))
@@ -868,7 +868,11 @@
        ((and arg0
              (nonzero? arg0)
              (= (-> arg0 type) target)
-             (!= arg0 *mp-puppet*))
+             (let ((record (mp-player-process-record arg0)))
+               (or (not record)
+                   (zero? record)
+                   (not (mp-player-record-remote?
+                          *mp-player-controller* record)))))
         (let ((kick-from (new 'stack-no-clear 'vector))
               (kick-dest (new 'stack-no-clear 'vector)))
           (set! (-> kick-from quad) (-> self root trans quad))
@@ -892,7 +896,11 @@
        ((and arg0
              (nonzero? arg0)
              (= (-> arg0 type) target)
-             (= arg0 *mp-puppet*))
+             (let ((record (mp-player-process-record arg0)))
+               (and record
+                    (nonzero? record)
+                    (mp-player-record-remote?
+                      *mp-player-controller* record))))
         (return #f)
         )
        (else

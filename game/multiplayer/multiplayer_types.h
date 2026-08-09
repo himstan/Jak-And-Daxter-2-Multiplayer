@@ -15,7 +15,12 @@
 #include "multiplayer_security.h"
 #include "multiplayer_stats.h"
 
-struct RemoteEntityState {
+struct CachedPlayerState {
+  bool identity_ready = false;
+  bool state_ready = false;
+  uint32_t player_id = kMPInvalidPlayerId;
+  MPPlayerCharacter character = MPPlayerCharacter::UNKNOWN;
+  char player_name[kMultiplayerPlayerNameSize] = {};
   uint8_t status;
   float x, y, z, angle;
   float vel_x, vel_y, vel_z;
@@ -24,16 +29,9 @@ struct RemoteEntityState {
   uint32_t state_id;
   uint32_t level_hash;
   uint32_t darkjak_stage;
-  uint64_t clock;
-  uint64_t tod_frame;
-  float tod_ratio;
-  float weather_cloud;
-  float weather_fog;
-  float weather_rain;
   uint16_t buttons;
   uint8_t leftx, lefty, rightx, righty;
   uint8_t respawn_flags;
-  uint8_t respawn_pad;
   float cam_angle_y;
   uint32_t riding_veh_id;
   uint8_t riding_seat_index;
@@ -48,12 +46,12 @@ struct RemoteEntityState {
   uint32_t last_turret_sequence_num = 0;
   MPVehicleState veh_state;
 };
-static_assert(sizeof(RemoteEntityState) == 224, "RemoteEntityState layout must remain stable");
 
 struct MPEvent {
   uint32_t etype;
   uint32_t payload_size;
-  uint8_t pad[8];
+  uint32_t source_player_id;
+  uint8_t pad[4];
   uint8_t data[480];
 };
 static_assert(sizeof(MPEvent) == 496, "MPEvent must match GOAL mp-event");
@@ -68,114 +66,167 @@ struct MPEventBufferGOAL {
 };
 static_assert(sizeof(MPEventBufferGOAL) == 15904, "MPEventBufferGOAL must match GOAL");
 
-struct RemotePlayerInfoGOAL {
-  float x, y, z, angle;
-  float velocity[4];
-  uint64_t send_tick;
-  uint64_t receive_tick;
-  uint32_t id;
-  int32_t role;
-  uint32_t state_id;
-  uint32_t level;
-  int32_t status;
-  uint32_t packet_id;
-  uint32_t darkjak_stage;
-  uint64_t clock;
-  uint64_t tod_frame;
-  float tod_ratio;
-  float weather_cloud;
-  float weather_fog;
-  float weather_rain;
-  uint16_t buttons;
-  uint8_t leftx, lefty, rightx, righty;
-  uint8_t respawn_flags;
-  uint8_t respawn_pad;
-  float cam_angle_y;
-  uint32_t riding_veh_id;
-  uint8_t riding_seat_index;
-  uint8_t scene_active;
-  uint8_t equipped_weapon;
-  uint8_t turret_active;
-  // World Sync Fields (Mirrored from local-player-info)
-  float money;
-  float gems;
-  float skill;
-  float sync_money;
-  float sync_gems;
-  float sync_skill;
-  uint32_t sync_flag;
-  uint32_t host_task;
-  uint32_t host_node;
-  uint8_t host_continue[32];
-  uint8_t task_mask[64];
-  uint8_t active_task_mask[64];
-  uint32_t sync_aids_count;
-  uint32_t sync_aids[128];
-  float turret_roty;
-  float turret_rotx;
-  uint32_t action_seq;
-  uint32_t action_state_id;
-  uint64_t player_procs[2];
-  MPVehicleState veh_state;
-  char player_name[kMultiplayerPlayerNameSize];
+struct MPPlayerIdentityGOAL {
+  uint32_t player_id;
+  MPPlayerCharacter character;
+  uint8_t identity_ready;
+  uint8_t state_ready;
+  uint8_t joined;
+  uint8_t reserved;
+  char name[kMultiplayerPlayerNameSize];
+  uint8_t pad[12];
 };
-static_assert(sizeof(RemotePlayerInfoGOAL) == 984,
-              "RemotePlayerInfoGOAL must match remote-player-info");
+static_assert(sizeof(MPPlayerIdentityGOAL) == 48);
 
-struct LocalPlayerInfoGOAL {
-  float x, y, z, angle;
+struct MPPlayerConnectionStateGOAL {
+  int32_t status;
+  uint32_t latest_state_sequence;
+  uint32_t latest_turret_sequence;
+  uint8_t connected;
+  uint8_t state_cached;
+  uint8_t pad[2];
+};
+static_assert(sizeof(MPPlayerConnectionStateGOAL) == 16);
+
+struct MPPlayerTransformStateGOAL {
+  float position[4];
   float velocity[4];
-  uint64_t send_tick;
-  uint64_t receive_tick;
-  uint32_t id;  // Placeholder
-  int32_t role;
-  uint32_t state_id;
+  float angle;
   uint32_t level;
-  int32_t status;  // Placeholder
-  uint32_t packet_id;
+  uint32_t reserved[2];
+};
+static_assert(sizeof(MPPlayerTransformStateGOAL) == 48);
+
+struct MPPlayerActionStateGOAL {
+  uint32_t target_state_id;
   uint32_t darkjak_stage;
-  uint64_t clock;
-  uint64_t tod_frame;
-  float tod_ratio;
-  float weather_cloud;
-  float weather_fog;
-  float weather_rain;
+  uint32_t authoritative_sequence;
+  uint32_t action_state_id;
+  uint8_t scene_state;
+  uint8_t respawn_flags;
+  uint8_t death_state;
+  uint8_t scene_latched;
+  uint32_t last_replayed_sequence;
+  uint32_t reserved[2];
+};
+static_assert(sizeof(MPPlayerActionStateGOAL) == 32);
+
+struct MPPlayerInputStateGOAL {
   uint16_t buttons;
   uint8_t leftx, lefty, rightx, righty;
-  uint8_t respawn_flags;
-  uint8_t respawn_pad;
-  float cam_angle_y;
-  uint32_t riding_veh_id;
-  uint8_t riding_seat_index;
-  uint8_t scene_active;
   uint8_t equipped_weapon;
+  uint8_t reserved;
+  float camera_angle_y;
+  uint32_t pad;
+};
+static_assert(sizeof(MPPlayerInputStateGOAL) == 16);
+
+struct MPPlayerVehicleStateGOAL {
+  uint32_t vehicle_id;
+  uint8_t seat_index;
   uint8_t turret_active;
-  // Global World Sync (Outgoing)
+  uint8_t reserved[2];
+  float turret_roty;
+  float turret_rotx;
+  MPVehicleState state;
+};
+static_assert(sizeof(MPPlayerVehicleStateGOAL) == 96);
+
+struct MPTargetGhostRecordGOAL {
+  float trans[4];
+  float quat[4];
+  float velocity[4];
+  uint32_t state_id;
+  uint8_t equipped_weapon;
+  uint8_t pad_reserved[3];
+  uint16_t buttons;
+  uint8_t leftx, lefty, rightx, righty;
+  uint8_t pad_before_camera[2];
+  float camera_angle_y;
+  float health;
+  uint64_t last_update;
+  uint32_t active;
+  uint8_t pad[12];
+};
+static_assert(sizeof(MPTargetGhostRecordGOAL) == 96);
+
+struct MPPlayerRuntimeStateGOAL {
+  uint64_t target_handle;
+  uint64_t vehicle_handle;
+  MPTargetGhostRecordGOAL ghost;
+  float presentation_position[4];
+  float presentation_quaternion[4];
+  uint64_t last_fresh_input_time;
+  uint64_t action_warmup_start;
+  uint32_t last_state_packet_id;
+  uint32_t last_action_sequence;
+  int32_t state_mismatch_count;
+  uint32_t death_state;
+  uint32_t pending_gun_shot_sequence;
+  uint32_t last_gun_shot_sequence;
+  uint32_t last_gun_replay_debug_sequence;
+  float interpolation_angle;
+  float pending_gun_shot_camera_angle;
+  int32_t last_gun_log_active;
+  int32_t last_gun_log_requested;
+  uint8_t pad_index;
+  uint8_t puppet_lifecycle;
+  uint8_t pending_gun_shot_weapon;
+  uint8_t reserved_byte;
+  uint32_t flags;
+  uint32_t reserved[3];
+};
+static_assert(sizeof(MPPlayerRuntimeStateGOAL) == 224);
+
+struct MPPlayerRecordGOAL {
+  MPPlayerIdentityGOAL identity;
+  MPPlayerConnectionStateGOAL connection;
+  MPPlayerTransformStateGOAL transform;
+  MPPlayerActionStateGOAL action;
+  MPPlayerInputStateGOAL input;
+  MPPlayerVehicleStateGOAL vehicle;
+  MPPlayerRuntimeStateGOAL runtime;
+};
+static_assert(sizeof(MPPlayerRecordGOAL) == 480);
+
+struct MPPlayerControllerGOAL {
+  MPPlayerRecordGOAL records[kMPMaxPlayers];
+  uint32_t local_player_id;
+  uint32_t host_player_id;
+  uint32_t reserved[2];
+};
+static_assert(sizeof(MPPlayerControllerGOAL) == 1936);
+
+struct MPWorldSyncStateGOAL {
   float money;
   float gems;
   float skill;
-  // Global World Sync (Incoming)
-  float sync_money;
-  float sync_gems;
-  float sync_skill;
-  uint32_t sync_flag;
-  uint32_t host_task;
-  uint32_t host_node;
-  uint8_t host_continue[32];
+  uint32_t sequence;
+  uint64_t clock;
+  uint64_t time_of_day_frame;
+  float time_of_day_ratio;
+  float weather_cloud;
+  float weather_fog;
+  float weather_rain;
   uint8_t task_mask[64];
   uint8_t active_task_mask[64];
-  uint32_t sync_aids_count;
-  uint32_t sync_aids[128];
-  float turret_roty;
-  float turret_rotx;
-  uint32_t action_seq;
-  uint32_t action_state_id;
-  uint64_t player_procs[2];
-  MPVehicleState veh_state;
-  char player_name[kMultiplayerPlayerNameSize];
 };
-static_assert(sizeof(LocalPlayerInfoGOAL) == 984,
-              "LocalPlayerInfoGOAL must match local-player-info");
+static_assert(sizeof(MPWorldSyncStateGOAL) == 176);
+
+struct MPBootstrapSyncStateGOAL {
+  uint32_t phase;
+  uint32_t sequence;
+  uint32_t host_task;
+  uint32_t reserved;
+  uint8_t host_continue[32];
+  float host_spawn_position[4];
+  float host_spawn_angle;
+  float host_camera_angle_y;
+  uint32_t synchronized_aid_count;
+  uint32_t pad_before_aids;
+  uint32_t synchronized_aids[128];
+};
+static_assert(sizeof(MPBootstrapSyncStateGOAL) == 592);
 
 struct MPEnemySyncBufferGOAL {
   uint32_t local_count;
@@ -264,8 +315,10 @@ struct MultiplayerData {
   struct _ENetHost* host = nullptr;
   struct _ENetPeer* server_peer = nullptr;         // Only used if we are a client
   struct _ENetPeer* authenticated_peer = nullptr;  // Only used if we are a host
-  int local_role = -1;
-  uint32_t local_net_id = 0;
+  int session_role = -1;
+  uint32_t local_player_id = kMPInvalidPlayerId;
+  uint32_t host_player_id = kMPInvalidPlayerId;
+  uint32_t authenticated_player_id = kMPInvalidPlayerId;
   uint32_t sequence_num = 0;
   uint32_t last_out_event_seq = 0;
   MultiplayerSecurity security;
@@ -286,7 +339,8 @@ struct MultiplayerData {
   std::atomic<int> connection_phase{static_cast<int>(MultiplayerConnectionPhase::IDLE)};
   std::atomic<int> connection_failure{static_cast<int>(MultiplayerConnectionFailure::NONE)};
 
-  RemoteEntityState remote_entity = {};
+  std::array<CachedPlayerState, kMPMaxPlayers> player_states = {};
+  uint32_t last_world_sequence = 0;
   MultiplayerRingBuffer<PacketGameEvent, 64> inbound_events;
   MPEnemySyncBufferGOAL remote_enemy_buffer;
   uint32_t last_enemy_sync_time = 0;

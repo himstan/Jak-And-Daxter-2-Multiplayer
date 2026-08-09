@@ -104,7 +104,9 @@ void multiplayer_clear_remote_peer_state(MultiplayerData& data) {
   data.last_authenticated_receive_time = 0;
   data.authenticated_peer = nullptr;
   data.inbound_events.clear();
-  data.remote_entity = {};
+  data.player_states = {};
+  data.authenticated_player_id = kMPInvalidPlayerId;
+  data.last_world_sequence = 0;
   memset(&data.remote_enemy_buffer, 0, sizeof(data.remote_enemy_buffer));
   data.last_enemy_sync_time = 0;
   data.last_enemy_sequence = 0;
@@ -157,7 +159,7 @@ bool multiplayer_begin_host_reconnect(MultiplayerData& data) {
 bool multiplayer_handle_client_leave(MultiplayerData& data,
                                       ENetPeer* sender,
                                       MultiplayerLeaveReason reason) {
-  if (data.local_role != 0 || !sender || sender != data.authenticated_peer ||
+  if (data.session_role != 0 || !sender || sender != data.authenticated_peer ||
       !data.security.authenticated() ||
       (reason != MultiplayerLeaveReason::CLIENT_RECONNECTING &&
        reason != MultiplayerLeaveReason::CLIENT_CLOSED)) {
@@ -186,7 +188,7 @@ bool multiplayer_handle_client_leave(MultiplayerData& data,
 bool multiplayer_handle_host_leave(MultiplayerData& data,
                                    ENetPeer* sender,
                                    MultiplayerLeaveReason reason) {
-  if (data.local_role != 1 || !sender || sender != data.server_peer ||
+  if (data.session_role != 1 || !sender || sender != data.server_peer ||
       !data.security.authenticated() || reason != MultiplayerLeaveReason::HOST_CLOSED) {
     return false;
   }
@@ -246,12 +248,12 @@ void multiplayer_set_status(MultiplayerData& data, int status) {
   if (old_status != status) {
     lg::info("[Multiplayer] Status transition: {} -> {}", old_status, status);
   }
-  if (data.local_role == 0 && status == (int)MultiplayerStatus::IN_GAME &&
+  if (data.session_role == 0 && status == (int)MultiplayerStatus::IN_GAME &&
       old_status != (int)MultiplayerStatus::IN_GAME) {
     data.host_game_active = true;
     multiplayer_request_bootstrap(data);
   }
-  if (data.local_role == 1 && status == (int)MultiplayerStatus::IN_GAME &&
+  if (data.session_role == 1 && status == (int)MultiplayerStatus::IN_GAME &&
       data.reconnect_waiting_for_bootstrap) {
     multiplayer_note_client_reconnect_completed(data);
   }
@@ -272,7 +274,7 @@ void multiplayer_enter_client_reconnect(MultiplayerData& data, uint32_t current_
 }
 
 bool multiplayer_client_reconnect_due(const MultiplayerData& data, uint32_t current_time) {
-  return data.local_role == 1 && data.join_status == (int)MultiplayerStatus::RECONNECTING &&
+  return data.session_role == 1 && data.join_status == (int)MultiplayerStatus::RECONNECTING &&
          !data.reconnect_attempt_active && data.reconnect_next_attempt_time != 0 &&
          time_reached(current_time, data.reconnect_next_attempt_time);
 }
@@ -356,21 +358,21 @@ void multiplayer_cleanup_stale_sync(MultiplayerData& data, uint32_t current_time
 
 void multiplayer_update_receive_timeout(MultiplayerData& data, uint32_t current_time) {
   const bool has_authenticated_peer =
-      data.local_role == 0
+      data.session_role == 0
           ? data.authenticated_peer &&
                 data.authenticated_peer->state != ENET_PEER_STATE_DISCONNECTED &&
                 data.security.authenticated()
           : data.server_peer && data.server_peer->state != ENET_PEER_STATE_DISCONNECTED &&
                 data.security.authenticated();
   const bool client_waiting_for_bootstrap =
-      data.local_role == 1 && data.reconnect_waiting_for_bootstrap &&
+      data.session_role == 1 && data.reconnect_waiting_for_bootstrap &&
       (data.join_status == (int)MultiplayerStatus::CONNECTED_LOBBY ||
        data.join_status == (int)MultiplayerStatus::GAME_STARTING);
   const bool should_check_timeout =
       data.join_status == (int)MultiplayerStatus::IN_GAME || client_waiting_for_bootstrap;
   if (should_check_timeout && has_authenticated_peer && data.last_authenticated_receive_time != 0 &&
       current_time - data.last_authenticated_receive_time > kReceiveTimeoutMilliseconds) {
-    if (data.local_role == 0) {
+    if (data.session_role == 0) {
       multiplayer_begin_host_reconnect(data);
     } else {
       multiplayer_enter_client_reconnect(data, current_time);

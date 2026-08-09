@@ -143,7 +143,8 @@
 (defun mp-traffic-local-interest-pos ()
   "Return the local position traffic authority should reason about."
   (when *mp-spectator-countdown-active?*
-    (let ((puppet *mp-puppet*))
+    (let ((spectated-record (mp-spectated-player-record)))
+      (let ((puppet (mp-player-record-target spectated-record)))
       (when (and puppet
                  (nonzero? puppet)
                  (-> puppet root)
@@ -151,9 +152,10 @@
         (return (-> puppet root trans))
         )
       )
-    (when (and *multi-remote-render-pos*
-               (nonzero? *multi-remote-render-pos*))
-      (return *multi-remote-render-pos*)
+    (let ((presentation-pos
+            (mp-player-record-presentation-position spectated-record)))
+      (when (and presentation-pos (nonzero? presentation-pos))
+        (return presentation-pos)))
       )
     )
   (when (and *target*
@@ -167,17 +169,20 @@
 
 (defun mp-traffic-authority-distance ()
   "Distance between the local traffic interest point and remote player."
-  (when (or *remote-player-is-dead* *remote-player-is-dying*)
+  (when (not (mp-any-live-remote-player?))
     (return 0.0)
     )
   (let ((local-pos (mp-traffic-local-interest-pos)))
-    (if (and local-pos
-             (nonzero? local-pos)
-             *multi-remote-render-pos*
-             (nonzero? *multi-remote-render-pos*))
-        (vector-vector-distance (the-as vector local-pos) *multi-remote-render-pos*)
-        1000000000.0
-        )
+    (when (and local-pos (nonzero? local-pos))
+      (let ((nearest-record
+              (mp-nearest-remote-player-record-to-position
+                (the-as vector local-pos) #t)))
+        (let ((presentation-pos
+                (mp-player-record-presentation-position nearest-record)))
+          (when (and presentation-pos (nonzero? presentation-pos))
+            (return (vector-vector-distance
+                      (the-as vector local-pos) presentation-pos))))))
+    1000000000.0
     )
   )
 
@@ -193,15 +198,15 @@
         (begin
           (let ((was-suppressed? *mp-traffic-suppressed*))
             ;; GLOBAL HOST RESET: Ensure Host never has suppressed traffic
-            (if (mp-is-jak?) ;; Host Side
+            (if (mp-session-host?) ;; Host Side
                 (set! *mp-traffic-suppressed* #f)
                 )
-            (if (mp-is-daxter?) ;; Client Side
+            (if (mp-session-client?) ;; Client Side
                 (when (not (and *target* (nonzero? *target*) (-> *target* control) (nonzero? (-> *target* control))))
                   (set! *mp-traffic-suppressed* #t)
                   )
                 )
-            (if (mp-is-daxter?) ;; Client Side
+            (if (mp-session-client?) ;; Client Side
                 (if (mp-multiplayer-level-load-active?)
                     (begin
                       (set! *mp-traffic-suppressed* #t)
@@ -230,7 +235,7 @@
                       )
                     )
                 (let ((dist (mp-traffic-authority-distance)))
-                  ;; Host Side (mp-is-jak? was handled above for suppression)
+                  ;; Host-side authority transfer was handled above for suppression.
                   (set! *mp-traffic-host-spawning-active* #f)
                   (if *mp-traffic-sync-active*
                       (mp-traffic-evaluate-authority-rule! *mp-traffic-host-sync-exit-rule* dist)

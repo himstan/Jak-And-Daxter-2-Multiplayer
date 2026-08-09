@@ -802,7 +802,7 @@
            )
        (debug-log *mp-debug-log?*
          "[MP-BattleSpawn][~A][EVENT] battle=~A spawner=~D spawner-ok=~A breed=~D aid=~D~%"
-         (if (mp-is-jak?) "HOST" "CLIENT")
+         (if (mp-session-host?) "HOST" "CLIENT")
          self
          (the-as int (-> arg3 param 0))
          s0-0
@@ -811,7 +811,7 @@
          )
        (debug-log *mp-debug-log?*
          "[MP-BattleSpawn][~A][EVENT] initial=~A initial-raw=~D beaten=~A aid=~D~%"
-         (if (mp-is-jak?) "HOST" "CLIENT")
+         (if (mp-session-host?) "HOST" "CLIENT")
          s2-0
          (the-as int (-> arg3 param 2))
          (logtest? (-> self flags) (battle-flags beaten))
@@ -1269,7 +1269,7 @@
         )
       (debug-log *mp-debug-log?*
         "[MP-BattleSpawn][~A][TRY] battle=~A spawner=~D breed=~D initial=~A aid=~D~%"
-        (if (mp-is-jak?) "HOST" "CLIENT")
+        (if (mp-session-host?) "HOST" "CLIENT")
         this
         arg1
         arg3
@@ -1278,10 +1278,10 @@
         )
       (debug-log *mp-debug-log?*
         "[MP-BattleSpawn][~A][CTX] owner=~D epoch=~D local=~D mode=~A remote-flag=~A "
-        (if (mp-is-jak?) "HOST" "CLIENT")
-        (mp-battle-owner-role this)
+        (if (mp-session-host?) "HOST" "CLIENT")
+        (mp-battle-owner-player-id this)
         (mp-battle-epoch this)
-        (if (and *local-info* (nonzero? *local-info*)) (-> *local-info* role) -1)
+        (if (and (mp-local-player-record) (nonzero? (mp-local-player-record))) (-> (mp-local-player-record) identity player-id) -1)
         (if local-owner? "OWNER" (if replica-spawn? "REPLICA" "BLOCKED"))
         *mp-processing-remote-event*)
       (debug-log *mp-debug-log?*
@@ -1289,7 +1289,7 @@
               (-> s1-1 aid-override))
       (debug-log *mp-debug-log?*
         "[MP-BattleSpawn][~A][TRY] intro-path=~A breed-ok=~A aid=~D~%"
-        (if (mp-is-jak?) "HOST" "CLIENT")
+        (if (mp-session-host?) "HOST" "CLIENT")
         s2-0
         s0-1
         )
@@ -1301,7 +1301,7 @@
                   (begin
                     (debug-log *mp-debug-log?*
                       "[MP-BattleSpawn][~A][SPAWNED] proc=~A aid=~D spawner=~D breed=~D remote=~A~%"
-                      (if (mp-is-jak?) "HOST" "CLIENT")
+                      (if (mp-session-host?) "HOST" "CLIENT")
                       spawned-proc
                       (mp-get-enemy-aid spawned-proc)
                       arg1
@@ -1320,7 +1320,7 @@
                     )
                   (debug-log *mp-debug-log?*
                     "[MP-BattleSpawn][~A][FAIL] spawn-from-breed returned no valid process spawner=~D breed=~D~%"
-                    (if (mp-is-jak?) "HOST" "CLIENT")
+                    (if (mp-session-host?) "HOST" "CLIENT")
                     arg1
                     arg3
                     )
@@ -1330,12 +1330,12 @@
           (if s0-1
               (debug-log *mp-debug-log?*
                 "[MP-BattleSpawn][~A][REJECT] non-owner local spawn spawner=~D breed=~D.~%"
-                (if (mp-is-jak?) "HOST" "CLIENT")
+                (if (mp-session-host?) "HOST" "CLIENT")
                 arg1
                 arg3)
               (debug-log *mp-debug-log?*
                 "[MP-BattleSpawn][~A][FAIL] invalid breed index spawner=~D breed=~D~%"
-                (if (mp-is-jak?) "HOST" "CLIENT")
+                (if (mp-session-host?) "HOST" "CLIENT")
                 arg1
                 arg3)
               )
@@ -1590,9 +1590,9 @@
     (let ((local-owner? (mp-battle-local-owner? self)))
       (debug-log *mp-debug-log?*
         "[MP-BattleState][NOTICE-ENTER] owner=~D epoch=~D local=~D dispatch=~A~%"
-        (mp-battle-owner-role self)
+        (mp-battle-owner-player-id self)
         (mp-battle-epoch self)
-        (if (and *local-info* (nonzero? *local-info*)) (-> *local-info* role) -1)
+        (if (and (mp-local-player-record) (nonzero? (mp-local-player-record))) (-> (mp-local-player-record) identity player-id) -1)
         (if *mp-processing-remote-event* "REMOTE" "LOCAL")
         )
       (if (and local-owner? (-> self spawn-initial-creatures?))

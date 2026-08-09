@@ -241,23 +241,20 @@
   )
 
 (defun mp-pedestrian-ghost-focus-proc ((rec mp-traffic-ghost-record))
-  "Resolve a synced pedestrian target role to the local process that represents it."
-  (when (and *local-info*
-             (nonzero? *local-info*)
-             (nonzero? (-> rec ghost-target-aid)))
-    (let ((target-role (the-as uint8 (+ -1 (-> rec ghost-target-aid)))))
-      (if (= target-role (-> *local-info* role))
-          (return (the-as process-focusable *target*))
-          (return (the-as process-focusable *mp-puppet*))
-          )
-      )
-    )
+  "Resolve a synced pedestrian target ID through the player controller."
+  (when (and rec
+             (nonzero? rec)
+             (mp-player-id-valid? (the-as uint (-> rec ghost-aux-state))))
+    (return
+      (the-as process-focusable
+        (mp-player-target-by-id (the-as uint (-> rec ghost-aux-state))))))
   (the-as process-focusable #f)
   )
 
 (defun mp-pedestrian-sync-guard-target! ((this citizen) (rec mp-traffic-ghost-record))
   "Mirror authoritative crimson-guard targeting before local AI chooses a target."
-  (when (and *mp-set-guard-target* (nonzero? (-> rec ghost-target-aid)))
+  (when (and *mp-set-guard-target*
+             (mp-player-id-valid? (the-as uint (-> rec ghost-aux-state))))
     (let ((focus-proc (mp-pedestrian-ghost-focus-proc rec)))
       (when (mp-guard-target-debug-ready? (-> rec net-id))
         (let ((focus-handle (the-as handle #f)))
@@ -267,7 +264,7 @@
           (debug-log *mp-debug-log?*
                   "[MP-GuardTarget] nid=~D phase=set state=pre aid=~D focus=~S focus-type=~S "
                   (-> rec net-id)
-                  (-> rec ghost-target-aid)
+                  (-> rec ghost-aux-state)
                   (mp-guard-target-debug-handle-label focus-handle)
                   (mp-guard-target-debug-handle-type focus-handle)
                   )
@@ -297,7 +294,7 @@
             (debug-log *mp-debug-log?*
                     "[MP-GuardTarget] nid=~D phase=set state=post aid=~D focus=~S focus-type=~S "
                     (-> rec net-id)
-                    (-> rec ghost-target-aid)
+                    (-> rec ghost-aux-state)
                     (mp-guard-target-debug-handle-label focus-handle)
                     (mp-guard-target-debug-handle-type focus-handle)
                     )

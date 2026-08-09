@@ -40,10 +40,10 @@ bool mp_accept_traffic_level(MultiplayerData& data,
 }
 
 void mp_send_traffic_sync(MultiplayerData& data, MPTrafficSyncBufferGOAL* buffer) {
-  if (!buffer || data.local_role != 0) {
+  if (!buffer || data.session_role != 0) {
     return;
   }
-  int exclude_peer = data.local_role;
+  int exclude_peer = data.session_role;
   send_pedestrian_sync_packets(data, buffer, exclude_peer);
   send_vehicle_sync_packets(data, buffer, exclude_peer);
 }

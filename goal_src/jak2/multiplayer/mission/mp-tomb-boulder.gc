@@ -69,7 +69,7 @@
 
 (defun level-auto-continue-protected? ((current continue-point) (candidate continue-point))
   (the symbol
-       (and (mp-is-daxter?)
+       (and (mp-local-player-daxter?)
             current
             (nonzero? current)
             candidate
@@ -87,10 +87,10 @@
   )
 
 (defun mp-tomb-boulder-ignore-remote-continue? ((continue-name string))
-  (when (mp-is-jak?)
+  (when (mp-local-player-jak?)
     (return (mp-tomb-boulder-chase-continue? continue-name))
     )
-  (when (mp-is-daxter?)
+  (when (mp-local-player-daxter?)
     (let ((local-continue (mp-tomb-boulder-current-continue-name)))
       (return (mp-tomb-boulder-chase-continue? local-continue))
       )
@@ -108,7 +108,7 @@
                  (string= (-> scene-obj name) "tomb-boulder-start"))
         (set! (-> scene-obj end-point-obj)
               (if (mp-tomb-boulder-split-active?)
-                  (if (mp-is-jak?) "tomb-boulder-end" "tomb-boulder")
+                  (if (mp-local-player-jak?) "tomb-boulder-end" "tomb-boulder")
                   "tomb-boulder"))
         )
       )
@@ -118,7 +118,7 @@
 
 (defun mp-tomb-boulder-local-only-scene? ((scene-name string))
   (the symbol
-       (and (mp-is-daxter?)
+       (and (mp-local-player-daxter?)
             scene-name
             (nonzero? scene-name)
             (string= scene-name "tomb-spider-scare")))
@@ -134,19 +134,19 @@
 
 (defun mp-tomb-scene-local-blocked? ((scene-name string))
   (the symbol
-       (and (mp-is-daxter?)
+       (and (mp-local-player-daxter?)
             (mp-tomb-scene-transport-suppressed? scene-name)))
   )
 
 (defun mp-tomb-scene-sync-suppressed? ()
   (the symbol
-       (and (mp-is-daxter?)
+       (and (mp-local-player-daxter?)
             (should-player-block-remote-respawn?)))
   )
 
 (defun mp-tomb-boss-intro-local-blocked? ()
   (the symbol
-       (mp-is-daxter?))
+       (mp-local-player-daxter?))
   )
 
 (defun mp-tomb-boulder-ignore-remote-scene? ((scene-name string))
@@ -155,7 +155,7 @@
             (nonzero? scene-name)
             (or (string= scene-name "tomb-spider-scare")
                 (mp-tomb-scene-sync-suppressed?)
-                (and (mp-is-jak?)
+                (and (mp-local-player-jak?)
                      (string= scene-name "tomb-boss-intro")))))
   )
 
@@ -200,17 +200,12 @@
   )
 
 (defun mp-tomb-boulder-snapshot-task-closed? ((node game-task-node))
-  (when (and *remote-info* (nonzero? *remote-info*))
-    (let ((node-index (the-as int node)))
-      (when (and (>= node-index 0) (< node-index 512))
-        (let ((byte-index (/ node-index 8))
-              (bit-index (logand node-index 7)))
-          (return (logtest? (-> *remote-info* task-mask byte-index)
-                            (ash 1 bit-index)))
-          )
-        )
-      )
-    )
+  (let ((node-index (the-as int node)))
+    (when (and (>= node-index 0) (< node-index 512))
+      (let ((byte-index (/ node-index 8))
+            (bit-index (logand node-index 7)))
+        (return (logtest? (-> *mp-world-state* task-mask byte-index)
+                          (ash 1 bit-index))))))
   #f
   )
 
@@ -229,7 +224,7 @@
   )
 
 (defun mp-tomb-boulder-suppress-bootstrap? ()
-  (and (mp-is-daxter?)
+  (and (mp-local-player-daxter?)
        (or (mp-tomb-boulder-bootstrap-isolated?) (tomb-poles-boulder-closed-and-boss-door-not-closed?))
        (not *mp-tomb-boulder-reconnect-restart?*))
   )
@@ -257,7 +252,7 @@
 (defun mp-tomb-boulder-skip-bootstrap-host-teleport? ()
   (the symbol
        (and *mp-tomb-boulder-bootstrap-local-placement?*
-            (mp-is-daxter?)
+            (mp-local-player-daxter?)
             (mp-tomb-boulder-bootstrap-isolated?)))
   )
 
@@ -277,9 +272,7 @@
   )
 
 (defun mp-tomb-boulder-consume-bootstrap! ()
-  (when (and *local-info* (nonzero? *local-info*))
-    (set! (-> *local-info* sync-flag) (the-as uint 0))
-    )
+  (set! (-> *mp-bootstrap-state* phase) (the uint32 0))
   (set! *multi-sync-enabled?* #t)
   (pc-multi-set-status (mp-connection-status in-game))
   (debug-log *mp-debug-log?* "[MP-TombBoulder] Ignored host bootstrap during the isolated Daxter chase.~%")
@@ -291,7 +284,7 @@
   )
 
 (defun mp-tomb-boulder-bootstrap-complete! ()
-  (when (mp-is-daxter?)
+  (when (mp-local-player-daxter?)
     (set! *mp-tomb-boulder-reconnect-restart?* #f)
     (set! *mp-tomb-boulder-bootstrap-local-placement?* #f)
     (mp-tomb-boulder-set-respawn-policy! (should-player-block-remote-respawn?))
@@ -300,7 +293,7 @@
   )
 
 (defun mp-tomb-boulder-note-session-status! ((status mp-connection-status))
-  (when (and (mp-is-daxter?)
+  (when (and (mp-local-player-daxter?)
              (or (= status (mp-connection-status reconnecting))
                  (= status (mp-connection-status host-left))))
     (set! *mp-tomb-boulder-reconnect-restart?* #t)
@@ -314,7 +307,7 @@
   )
 
 (defun mp-tomb-boulder-finish-daxter-chase! ()
-  (when (mp-is-daxter?)
+  (when (mp-local-player-daxter?)
     (mp-tomb-boulder-finish-intro!)
     (set! *mp-tomb-boulder-completion-pending?* #t)
     (mp-tomb-boulder-set-respawn-policy! (should-player-block-remote-respawn?))
@@ -331,7 +324,7 @@
   )
 
 (defun mp-tomb-boulder-receive-completion! ()
-  (when (and (mp-is-jak?)
+  (when (and (mp-local-player-jak?)
              (mp-tomb-boulder-started?))
     (mp-tomb-boulder-set-respawn-policy! #f)
     (when (not (mp-tomb-boulder-complete?))
@@ -353,7 +346,7 @@
 
 (defun mp-tomb-boulder-block-remote-task-open? ((node-index int))
   (the symbol
-       (and (mp-is-daxter?)
+       (and (mp-local-player-daxter?)
             *mp-tomb-boulder-completion-pending?*
             (= node-index (the-as int (game-task-node tomb-poles-boulder)))))
   )

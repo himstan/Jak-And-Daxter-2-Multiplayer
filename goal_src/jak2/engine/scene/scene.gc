@@ -260,11 +260,7 @@
   (and *multi-sync-enabled?*
        (= (pc-multi-get-status) (mp-connection-status in-game))
        (or *mp-pending-scene-sync?*
-           (nonzero? *mp-last-remote-scene-active*)
-           (and *remote-info*
-                (nonzero? *remote-info*)
-                (nonzero? (-> *remote-info* status))
-                (nonzero? (-> *remote-info* scene-active)))))
+           (mp-any-remote-player-scene-active?)))
   )
 
 (defun mp-abort-local-scene! ((scene-proc scene-player))

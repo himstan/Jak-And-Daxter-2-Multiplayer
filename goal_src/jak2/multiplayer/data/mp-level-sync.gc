@@ -88,20 +88,22 @@
             (!= (pc-multi-get-status) (mp-connection-status in-game)))
     (return #t)
     )
-  (when (not (and *load-state*
-                  (nonzero? *load-state*)
-                  *remote-info*
-                  (nonzero? *remote-info*)))
-    (return #t)
-    )
-  (let ((local-level-id (mp-level-symbol->id (-> *load-state* vis-nick)))
-        (remote-level-id (mp-level-packed-primary-id (-> *remote-info* level))))
-    (if (or (zero? local-level-id)
-            (zero? remote-level-id))
-        #t
-        (= local-level-id remote-level-id))
-    )
-  )
+  (when (not (and *load-state* (nonzero? *load-state*)))
+    (return #t))
+  (let ((local-level-id (mp-level-symbol->id (-> *load-state* vis-nick))))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (and record
+                   (nonzero? record)
+                   (mp-player-record-remote? *mp-player-controller* record)
+                   (>= (-> record connection status) 4))
+          (let ((remote-level-id
+                  (mp-level-packed-primary-id (-> record transform level))))
+            (when (and (nonzero? local-level-id)
+                       (nonzero? remote-level-id)
+                       (!= local-level-id remote-level-id))
+              (return #f))))))
+  #t))
 
 (defun mp-level-packed-extra-id ((packed-level uint))
   (the-as uint (logand (shr packed-level 8) #xff))
@@ -389,10 +391,10 @@
       )
   )
 
-(defun mp-level-sync-log-unknown! ()
+(defun mp-level-sync-log-unknown! ((packed-level uint))
   (when (>= (current-time) *mp-level-sync-next-unknown-log-time*)
     (debug-log *mp-debug-log?* "[MP-LevelSync] Remote level id ~D is unknown. Falling back to current teleport behavior.~%"
-            (if (and *remote-info* (nonzero? *remote-info*)) (-> *remote-info* level) (the uint 0)))
+            packed-level)
     (set! *mp-level-sync-next-unknown-log-time* (+ (current-time) (seconds 2)))
     )
   (none)
@@ -468,26 +470,26 @@
   (none)
   )
 
-(defun mp-ensure-remote-level-wanted! ()
-  "Request the remote player's levels before direct MP teleports/respawns."
-  (when (and *remote-info* (nonzero? *remote-info*))
-    (let ((packed (-> *remote-info* level)))
+(defun mp-ensure-player-level-wanted! ((record mp-player-record))
+  "Request one player's levels before direct multiplayer teleports or spectating."
+  (when (and record (nonzero? record))
+    (let ((packed (-> record transform level)))
       (if (> packed 0)
           (let ((symbols (new 'stack-no-clear 'array 'symbol 4)))
             (mp-remote-level-symbols-for-teleport! packed symbols)
             (mp-want-multiple-levels-for-remote-teleport! symbols)
             )
-          (mp-level-sync-log-unknown!)
+          (mp-level-sync-log-unknown! packed)
           )
       )
     )
   (none)
   )
 
-(defun mp-remote-level-ready? ()
-  "Check if all remote loaded levels are currently active on our side."
-  (when (and *remote-info* (nonzero? *remote-info*))
-    (let ((packed (-> *remote-info* level)))
+(defun mp-player-level-ready? ((record mp-player-record))
+  "Check if one player's packed levels are currently active on our side."
+  (when (and record (nonzero? record))
+    (let ((packed (-> record transform level)))
       (if (> packed 0)
           (let ((symbols (new 'stack-no-clear 'array 'symbol 4)))
             (mp-remote-level-symbols-for-teleport! packed symbols)

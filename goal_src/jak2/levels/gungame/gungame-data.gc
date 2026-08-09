@@ -12125,19 +12125,19 @@ For example `20` would mean 4 red gun pickups, or 2 yellow gun pickups"
 
 (defun mp-gungame-local-authority? ()
   (or (not (mp-gungame-sync-active?))
-      (mp-is-jak?)
+      (mp-session-host?)
       )
   )
 
 (defun mp-gungame-red-intro-step-reached? ((step uint))
   (and (mp-gungame-sync-active?)
-       (mp-is-daxter?)
+       (mp-session-client?)
        (>= *mp-gungame-red-intro-step* step)
        )
   )
 
 (defun mp-gungame-red-gun-away-done? ()
-  (if (and (mp-gungame-sync-active?) (mp-is-daxter?))
+  (if (and (mp-gungame-sync-active?) (mp-session-client?))
       (mp-gungame-red-intro-step-reached? (the uint 2))
       (and *target*
            (nonzero? *target*)
@@ -12147,7 +12147,7 @@ For example `20` would mean 4 red gun pickups, or 2 yellow gun pickups"
   )
 
 (defun mp-gungame-red-gun-out-done? ()
-  (if (and (mp-gungame-sync-active?) (mp-is-daxter?))
+  (if (and (mp-gungame-sync-active?) (mp-session-client?))
       (mp-gungame-red-intro-step-reached? (the uint 3))
       (and *target*
            (nonzero? *target*)
@@ -12157,7 +12157,7 @@ For example `20` would mean 4 red gun pickups, or 2 yellow gun pickups"
   )
 
 (defun mp-gungame-send-red-intro-step! ((step uint))
-  (when (and (mp-gungame-sync-active?) (mp-is-jak?))
+  (when (and (mp-gungame-sync-active?) (mp-session-host?))
     (set! *mp-gungame-red-intro-step* step)
     (let ((details (new 'stack-no-clear 'mp-gungame-build-data)))
       (set! (-> details event-type) MP_EVENT_MISSION_GUNGAME_TUTORIAL_STEP)
@@ -12175,13 +12175,13 @@ For example `20` would mean 4 red gun pickups, or 2 yellow gun pickups"
 
 (defun mp-gungame-yellow-intro-step-reached? ((step uint))
   (and (mp-gungame-sync-active?)
-       (mp-is-daxter?)
+       (mp-session-client?)
        (>= *mp-gungame-yellow-intro-step* step)
        )
   )
 
 (defun mp-gungame-yellow-gun-away-done? ()
-  (if (and (mp-gungame-sync-active?) (mp-is-daxter?))
+  (if (and (mp-gungame-sync-active?) (mp-session-client?))
       (mp-gungame-yellow-intro-step-reached? (the uint 2))
       (and *target*
            (nonzero? *target*)
@@ -12191,7 +12191,7 @@ For example `20` would mean 4 red gun pickups, or 2 yellow gun pickups"
   )
 
 (defun mp-gungame-yellow-gun-out-done? ()
-  (if (and (mp-gungame-sync-active?) (mp-is-daxter?))
+  (if (and (mp-gungame-sync-active?) (mp-session-client?))
       (mp-gungame-yellow-intro-step-reached? (the uint 3))
       (and *target*
            (nonzero? *target*)
@@ -12201,7 +12201,7 @@ For example `20` would mean 4 red gun pickups, or 2 yellow gun pickups"
   )
 
 (defun mp-gungame-send-yellow-intro-step! ((step uint))
-  (when (and (mp-gungame-sync-active?) (mp-is-jak?))
+  (when (and (mp-gungame-sync-active?) (mp-session-host?))
     (set! *mp-gungame-yellow-intro-step* step)
       (let ((details (new 'stack-no-clear 'mp-gungame-build-data)))
         (set! (-> details event-type) MP_EVENT_MISSION_GUNGAME_TUTORIAL_STEP)

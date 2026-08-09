@@ -363,7 +363,7 @@
 (defbehavior target-indax-board-set! target ()
   (when (and self
              (nonzero? self)
-             (mp-target-is-daxter? self)
+             (mp-target-daxter? self)
              )
     (let ((indax-info (-> self indax)))
       (when (and indax-info (nonzero? indax-info))
@@ -390,7 +390,7 @@
            (nonzero? tgt)
            *multi-sync-enabled?*
            (> (-> tgt fact health) 0.0)
-           (or *mp-local-player-is-respawning* (not reset-velocity?))
+           (or (mp-local-player-respawning?) (not reset-velocity?))
            )
       #f
       #t
@@ -420,7 +420,7 @@
       (set! (-> self fact health) (-> self fact health-max))
       )
   (when (not-puppet? self)
-    (set! *mp-local-player-is-respawning* #f)
+    (mp-set-local-player-respawning! #f)
     )
   (set-time! (-> self indax indax-start-time))
   (target-indax-update-art-group-backup!)
@@ -562,7 +562,7 @@
           (target-collide-set! 'normal 0.0)
 
           ;; Restore hand cspaces to Jak defaults
-          (when (mp-is-jak?)
+          (when (mp-target-jak? self)
             (set! (-> self control lhand-cspace) (-> self node-list data 45))
             (set! (-> self control rhand-cspace) (-> self node-list data 46))
             )
@@ -698,28 +698,22 @@
   (none))
 
 (defbehavior target-indax-ride-along-check target ()
-  (let ((remote-pos (new 'stack-no-clear 'vector)))
-    (if (mp-is-daxter?)
-        (begin
-          (set! (-> remote-pos x) (-> *remote-info* x))
-          (set! (-> remote-pos y) (-> *remote-info* y))
-          (set! (-> remote-pos z) (-> *remote-info* z))
-        )
-        (begin
-          (set! (-> remote-pos x) (-> *local-info* x))
-          (set! (-> remote-pos y) (-> *local-info* y))
-          (set! (-> remote-pos z) (-> *local-info* z))
-        )
-    )
-    (set! (-> remote-pos w) 1.0)
-    (let ((dist (vector-vector-distance (-> self control trans) remote-pos)))
-      (when (and (< dist (meters 2.0)) (not (real-movie?)) (or (mp-is-daxter?) (not *remote-info*) (zero? (-> *remote-info* scene-active))))
+  (let ((jak-record (mp-jak-record-for self)))
+    (when (and jak-record (nonzero? jak-record))
+      (let ((remote-pos (new 'stack-no-clear 'vector)))
+        (vector-copy! remote-pos (-> jak-record transform position))
+        (set! (-> remote-pos w) 1.0)
+        (let ((dist (vector-vector-distance (-> self control trans) remote-pos)))
+          (when (and (< dist (meters 2.0))
+                     (not (real-movie?))
+                     (zero? (-> jak-record action scene-state)))
         (let ((s3-1 (new 'stack 'font-context *font-default-matrix* 32 320 0.0 (font-color default) (font-flags shadow kerning))))
           (set-width! s3-1 440)
           (set-height! s3-1 80)
           (set-scale! s3-1 0.5)
           (set! (-> s3-1 flags) (font-flags shadow kerning large))
-          (when (and (mp-is-daxter?)
+          (when (and (= self *target*)
+                     (mp-target-daxter? self)
                      (not (and *progress-process* (nonzero? *progress-process*))))
             (print-game-text (lookup-text! *common-text* (text-id press-triangle-to-hop-on) #f) s3-1 #f 44 (bucket-id progress))
           )
@@ -727,9 +721,7 @@
         (if (recently-pressed? triangle)
             (go target-indax-jump-on)
             )
-        )
-      )
-    )
+            )))))
   (none)
   )
 
@@ -754,8 +746,7 @@
 (defbehavior target-ride-along-handler target ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   (case arg2
     (('attack 'attack-or-shove 'attack-invinc 'shove 'touched 'bonk)
-     (if (or *remote-player-is-dead*
-             *remote-player-is-dying*)
+     (if (not (mp-any-live-remote-player?))
          (target-indax-handler arg0 arg1 arg2 arg3)
          (the-as object #t)
          )

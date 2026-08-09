@@ -31,12 +31,12 @@
      "LOCAL"
      )
     (else
-      (let ((remote *mp-puppet*))
-        (if (and remote (nonzero? remote) (= focus-proc remote))
+      (let ((record (mp-player-process-record focus-proc)))
+        (if (and record
+                 (nonzero? record)
+                 (mp-player-record-remote? *mp-player-controller* record))
             "REMOTE"
-            "OTHER"
-            )
-        )
+            "OTHER"))
       )
     )
   )
@@ -55,14 +55,14 @@
   (the-as process #f)
   )
 
-(defun mp-enemy-debug-focus-aid-label ((focus-aid uint))
+(defun mp-enemy-debug-focus-player-id-label ((focus-player-id uint))
   (cond
-    ((zero? focus-aid)
+    ((zero? focus-player-id)
      "NONE"
      )
-    ((and *local-info*
-          (nonzero? *local-info*)
-          (= focus-aid (the uint (+ 1 (-> *local-info* role)))))
+    ((and (mp-local-player-record)
+          (nonzero? (mp-local-player-record))
+          (= focus-player-id (the uint (+ 1 (-> (mp-local-player-record) identity player-id)))))
      "LOCAL"
      )
     (else
@@ -74,9 +74,9 @@
 (defun mp-enemy-debug-owner? ((rec mp-enemy-auth-record))
   (and rec
        (nonzero? rec)
-       *local-info*
-       (nonzero? *local-info*)
-       (= (-> rec owner) (-> *local-info* role)))
+       (mp-local-player-record)
+       (nonzero? (mp-local-player-record))
+       (= (-> rec owner-player-id) (-> (mp-local-player-record) identity player-id)))
   )
 
 (defun mp-enemy-debug-text-color ((rec mp-enemy-auth-record))
@@ -147,9 +147,9 @@
           (format text-str
                   "GHOST AID: ~D OWNER: ~D~%STATE: ~S FOCUS: ~A"
                   (-> rec aid)
-                  (-> rec owner)
+                  (-> rec owner-player-id)
                   (mp-enemy-debug-ghost-state rec)
-                  (mp-enemy-debug-focus-aid-label (the-as uint (-> rec ghost-focus-aid))))
+                  (mp-enemy-debug-focus-player-id-label (the-as uint (-> rec ghost-focus-player-id))))
           (format text-str
                   "~%SLOT: STATE ~S HP ~D ATTACK ~D AGE ~Dms"
                   (mp-enemy-debug-slot-state remote-slot)
@@ -160,9 +160,9 @@
         (format text-str
                 "GHOST AID: ~D OWNER: ~D~%STATE: ~S FOCUS: ~A~%SLOT NONE"
                 (-> rec aid)
-                (-> rec owner)
+                (-> rec owner-player-id)
                 (mp-enemy-debug-ghost-state rec)
-                (mp-enemy-debug-focus-aid-label (the-as uint (-> rec ghost-focus-aid))))
+                (mp-enemy-debug-focus-player-id-label (the-as uint (-> rec ghost-focus-player-id))))
         )
     )
   (none)
@@ -250,9 +250,9 @@
              (nonzero? e-proc)
              rec
              (nonzero? rec)
-             *local-info*
-             (nonzero? *local-info*)
-             (!= (-> rec owner) (-> *local-info* role)))
+             (mp-local-player-record)
+             (nonzero? (mp-local-player-record))
+             (!= (-> rec owner-player-id) (-> (mp-local-player-record) identity player-id)))
     (let ((ghost-color (static-rgba 255 255 0 160)))
       (add-debug-circle #t
                         (bucket-id debug-no-zbuf1)
@@ -344,8 +344,8 @@
 
 (defun-debug mp-enemy-debug-draw ()
   (when (and *mp-enemy-debug-auth?*
-             *local-info*
-             (nonzero? *local-info*))
+             (mp-local-player-record)
+             (nonzero? (mp-local-player-record)))
     (iterate-process-tree *active-pool* mp-enemy-debug-draw-callback *kernel-context*)
     )
   (none)

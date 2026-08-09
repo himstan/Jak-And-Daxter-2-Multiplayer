@@ -12,7 +12,7 @@
 (defun mp-oracle-darkjak-training-participant? ()
   "Single-player and Jak perform Oracle training; Daxter observes host progress."
   (or (not (mp-darkjak-session-active?))
-      (mp-is-jak?)
+      (mp-local-player-jak?)
       )
   )
 
@@ -47,12 +47,12 @@
 
 (defun mp-darkjak-emit-spatial-feedback! ((source target) (observer target) (outer-dist float) (strength float))
   (when (and (mp-darkjak-session-active?)
-             (mp-is-daxter?)
              source
              (nonzero? source)
-             (= source *mp-puppet*)
+             (mp-target-jak? source)
              observer
-             (nonzero? observer))
+             (nonzero? observer)
+             (mp-target-daxter? observer))
     (let ((feedback (* strength (mp-darkjak-feedback-factor source observer outer-dist))))
       (when (> feedback 0.0)
         (when (and *camera-smush-control*
@@ -110,10 +110,9 @@
   (if (and (logtest? raw-stage (darkjak-stage active))
            (logtest? raw-stage (darkjak-stage giant)))
       (when (and (mp-darkjak-session-active?)
-                 (mp-is-daxter?)
                  puppet
                  (nonzero? puppet)
-                 (= puppet *mp-puppet*)
+                 (mp-target-jak? puppet)
                  observer
                  (nonzero? observer)
                  (focus-test? puppet dark)
@@ -142,10 +141,9 @@
 (defun mp-darkjak-apply-remote-stage! ((puppet target) (raw-stage uint))
   "Converge the Jak puppet after dropped transform events, reconnects, or late spawns."
   (when (and (mp-darkjak-session-active?)
-             (mp-is-daxter?)
              puppet
              (nonzero? puppet)
-             (= puppet *mp-puppet*))
+             (mp-target-jak? puppet))
     (let ((stage (mp-darkjak-persistent-stage raw-stage))
           (state-name (if (and (-> puppet state)
                                (nonzero? (-> puppet state)))

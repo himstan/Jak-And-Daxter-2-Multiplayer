@@ -254,7 +254,7 @@ bool send_leave_notice(MultiplayerData& data, MultiplayerLeaveReason reason) {
     return false;
   }
 
-  ENetPeer* peer = data.local_role == 0 ? data.authenticated_peer : data.server_peer;
+  ENetPeer* peer = data.session_role == 0 ? data.authenticated_peer : data.server_peer;
   if (!peer || peer->state != ENET_PEER_STATE_CONNECTED) {
     lg::warn(
         "[MP-Leave] Could not send EVENT_LEAVE (reason {}): peer unavailable (peer={}, state={}, "
@@ -269,11 +269,12 @@ bool send_leave_notice(MultiplayerData& data, MultiplayerLeaveReason reason) {
       "[MP-Leave] Sending EVENT_LEAVE directly to {} (role={}, reason={}, peer_state={}, "
       "queued_packets={}, queued_bytes={}, reliable_in_transit={}, waiting_data={}, "
       "outgoing_data={}, packets_sent={}).",
-      enet_peer_endpoint_string(peer), data.local_role, static_cast<int>(reason),
+      enet_peer_endpoint_string(peer), data.session_role, static_cast<int>(reason),
       static_cast<int>(peer->state), data.packet_scheduler.queued_packet_count(),
       data.packet_scheduler.queued_byte_count(), peer->reliableDataInTransit,
       peer->totalWaitingData, peer->outgoingDataTotal, peer->packetsSent);
-  PacketLeave leave = {{PacketType::EVENT_LEAVE, ++data.sequence_num}, reason};
+  PacketLeave leave = {
+      {PacketType::EVENT_LEAVE, ++data.sequence_num}, data.local_player_id, reason};
   if (!mp_send_packet_immediately(data, peer, static_cast<int>(MultiplayerChannel::CONTROL), &leave,
                                   sizeof(leave), ENET_PACKET_FLAG_RELIABLE)) {
     lg::warn("[MP-Leave] Could not encrypt or send EVENT_LEAVE (reason={}) to {}.",
@@ -295,7 +296,7 @@ bool send_leave_notice(MultiplayerData& data, MultiplayerLeaveReason reason) {
 }  // namespace
 
 MultiplayerHostCopyMode multiplayer_host_copy_mode(MultiplayerData& data) {
-  if (!data.initialized || data.local_role != 0 || data.security.room_code().empty()) {
+  if (!data.initialized || data.session_role != 0 || data.security.room_code().empty()) {
     return MultiplayerHostCopyMode::UNAVAILABLE;
   }
   if (data.internet_host) {
@@ -345,8 +346,10 @@ void MultiplayerManager::setup_host(MultiplayerData& data, bool internet_host) {
   if (data.host) {
     lg::info("[Multiplayer] Listen server started on port {}.", address.port);
 
-    data.local_role = 0;
-    data.local_net_id = 0;
+    data.session_role = 0;
+    data.local_player_id = 0;
+    data.host_player_id = data.local_player_id;
+    data.authenticated_player_id = kMPInvalidPlayerId;
     data.authenticated_peer = nullptr;
     data.host_game_active = false;
     data.pending_handshakes = {};
@@ -439,8 +442,10 @@ void MultiplayerManager::setup_client(MultiplayerData& data, const char* ip, int
         ip ? ip : "<null>", server_address.port, enet_local_port(data.host),
         static_cast<int>(data.server_peer->state), data.reconnect_attempt_active);
     lg::info("[Multiplayer] Client connecting...");
-    data.local_role = 1;
-    data.local_net_id = 1;
+    data.session_role = 1;
+    data.local_player_id = 1;
+    data.host_player_id = 0;
+    data.authenticated_player_id = kMPInvalidPlayerId;
     data.join_status = (int)MultiplayerStatus::CONNECTING;
     data.initialized = true;
   } else {
@@ -477,14 +482,14 @@ void MultiplayerManager::disconnect(MultiplayerData& data, bool preserve_reconne
   }
 
   if (data.host) {
-    if (data.local_role == 1 && data.server_peer) {
+    if (data.session_role == 1 && data.server_peer) {
       const bool leave_sent = send_leave_notice(
           data, preserve_reconnect_state ? MultiplayerLeaveReason::CLIENT_RECONNECTING
                                          : MultiplayerLeaveReason::CLIENT_CLOSED);
       disconnect_peer_after_leave(data.host, data.server_peer,
                                   preserve_reconnect_state ? 0 : kDisconnectReasonClientClosed,
                                   leave_sent);
-    } else if (data.local_role == 0) {
+    } else if (data.session_role == 0) {
       const bool leave_sent = send_leave_notice(data, MultiplayerLeaveReason::HOST_CLOSED);
       ENetPeer* authenticated_peer = data.authenticated_peer;
       for (size_t i = 0; i < data.host->peerCount; ++i) {

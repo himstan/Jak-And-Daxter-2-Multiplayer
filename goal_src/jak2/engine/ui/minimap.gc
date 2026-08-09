@@ -1371,6 +1371,17 @@
     )
   )
 
+(defun mp-remote-player-marker-hidden? ((connection connection-minimap))
+  "Hide only the Daxter record represented by this marker while it is riding along."
+  (let* ((record (mp-player-record-by-marker-key (-> connection key)))
+         (player-target (mp-player-record-target record)))
+    (and record
+         (nonzero? record)
+         (mp-player-daxter? record)
+         player-target
+         (nonzero? player-target)
+         (mp-target-ride-along? player-target))))
+
 ;; WARN: Return type mismatch pointer vs none.
 (defmethod draw-racer-2 ((this minimap) (arg0 minimap-draw-work) (arg1 connection-minimap))
   (local-vars
@@ -2211,7 +2222,7 @@
             (adgif-shader<-texture-simple! (the-as adgif-shader (&-> (the-as (pointer uint128) s3-2) 2)) s2-1)
             (set! (-> (the-as (pointer uint128) s3-2) 7) (-> this draw-tmpl dma-vif quad))
             (set! (-> (the-as (pointer uint128) s3-2) 8) (-> this draw-tmpl quad 1))
-            (if (mp-is-daxter?)
+            (if (mp-local-player-daxter?)
                 (set-vector! (-> (the-as (inline-array vector4w) s3-2) 9) 255 128 0 128)
                 (set-vector! (-> (the-as (inline-array vector4w) s3-2) 9) 0 255 255 128)
                 )
@@ -2266,6 +2277,7 @@
 ;; WARN: Return type mismatch pointer vs none.
 (defun draw-minimap-remote-player-marker ((this minimap) (arg0 minimap-draw-work) (arg1 connection-minimap) (arg2 vector))
   (let* ((remote-proc (handle->process (-> arg1 handle)))
+         (remote-record (mp-player-record-by-marker-key (-> arg1 key)))
          (remote-target (if (type? remote-proc target)
                             (the-as target remote-proc)
                             )
@@ -2283,7 +2295,11 @@
                  (-> remote-target control)
                  (nonzero? (-> remote-target control)))
             (vector-z-quaternion! remote-dir (-> remote-target control quat))
-            (vector-z-quaternion! remote-dir (the-as quaternion *multi-remote-render-quat*))
+            (let ((presentation-quat
+                    (mp-player-record-presentation-quaternion remote-record)))
+              (if (and presentation-quat (nonzero? presentation-quat))
+                  (vector-z-quaternion! remote-dir presentation-quat)
+                  (set-vector! remote-dir 0.0 0.0 1.0 0.0)))
             )
         (vector-xz-normalize! remote-dir 1.0)
         (set! (-> remote-dir y) 0.0)
@@ -2304,7 +2320,7 @@
         (vector-matrix*! (-> arg0 corner 2) (-> arg0 corner 2) marker-mat)
         (vector-matrix*! (-> arg0 corner 3) (-> arg0 corner 3) marker-mat)
         (let* ((s3-0 (the-as object (-> arg0 buf base)))
-               (a1-0 (if (mp-is-daxter?)
+               (a1-0 (if (mp-player-jak? remote-record)
                          (static-rgba 0 255 255 128)
                          (-> arg1 class color)
                          )
@@ -2565,7 +2581,7 @@
       (if (logtest? (-> arg1 class flags) (minimap-flag goal))
           (set! (-> arg1 class icon-xy x) (the-as uint (mod (the int (-> this goal-time)) 6)))
           )
-      (when (not (and (mp-is-jak?) (mp-target-ride-along? *mp-puppet*)))
+      (when (not (mp-remote-player-marker-hidden? arg1))
         (when (and (not s2-0) (string= (the-as string (-> arg1 class name)) "remote-player"))
           (vector-matrix*! s3-2 s3-2 (-> arg0 mat))
           (draw-minimap-remote-player-marker this arg0 arg1 s3-2)

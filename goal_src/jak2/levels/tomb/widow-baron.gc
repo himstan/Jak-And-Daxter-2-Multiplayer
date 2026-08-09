@@ -1013,10 +1013,10 @@
      v0-0
      )
     (('bomb-hit)
-     (when (and (mp-is-daxter?) (or (< (-> arg3 num-params) 3) (!= (-> arg3 param 2) 'mp-replica)))
+     (when (and (mp-session-client?) (or (< (-> arg3 num-params) 3) (!= (-> arg3 param 2) 'mp-replica)))
        (return #f)
        )
-     (when (mp-is-jak?)
+     (when (mp-session-host?)
        (mp-widow-queue-bomb-hit! (the-as int (-> arg3 param 1)) (the-as vector (-> arg3 param 0)))
        )
      (set! (-> self bomb-hits) (min 4 (+ (-> self bomb-hits) (-> arg3 param 1))))

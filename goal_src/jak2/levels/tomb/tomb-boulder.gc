@@ -767,7 +767,7 @@
        )
       ((10 11 12 13 14)
        (remove-setting! 'music)
-       (if (mp-is-daxter?)
+       (if (mp-session-client?)
            (mp-tomb-boulder-finish-daxter-chase!)
            (task-node-close! (game-task-node tomb-poles-boulder))
            )
@@ -775,7 +775,7 @@
        (if (and *target* (not (logtest? (-> *target* focus-status) (focus-status dead))))
            (start 'play (get-continue-by-name
                           *game-info*
-                          (if (mp-is-daxter?) "tombboss-spider-end" "tomb-boulder-end")))
+                          (if (mp-session-client?) "tombboss-spider-end" "tomb-boulder-end")))
            )
        (logior! (-> self mask) (process-mask sleep))
        (suspend)

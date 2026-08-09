@@ -261,7 +261,7 @@
           )
          (('board)
           (set! v0-0 (-> self node-list data))
-          (if (not (mp-target-is-daxter? (-> self parent 0)))
+          (if (not (mp-target-daxter? (-> self parent 0)))
             (begin
               (set! (-> (the-as (inline-array cspace) v0-0) 0 param0)
                 (the-as (function cspace transformq none) cspace<-cspace-normalized!)

@@ -18,6 +18,7 @@
 (define-perm *mp-tomb-daxter-wait-state* symbol 'inactive)
 (define-perm *mp-tomb-daxter-wait-position* vector (new 'global 'vector))
 (define-perm *mp-tomb-daxter-wait-position-valid?* symbol #f)
+(define-perm *mp-tomb-daxter-wait-player-id* uint MP_INVALID_PLAYER_ID)
 
 (defun mp-tomb-daxter-wait-npc ()
   (let ((proc (process-by-ename MP_TOMB_DAXTER_WAIT_NPC_NAME)))
@@ -77,7 +78,7 @@
 
 (defun mp-tomb-daxter-wait-local-ready? ()
   (and *multi-sync-enabled?*
-       (mp-is-daxter?)
+       (mp-local-player-daxter?)
        *target*
        (nonzero? *target*)
        (-> *target* control)
@@ -149,21 +150,19 @@
   )
 
 (defun mp-tomb-daxter-wait-apply-remote! ((npc process-taskable))
-  (when (and (not *mp-tomb-daxter-wait-position-valid?*)
-             *mp-puppet*
-             (nonzero? *mp-puppet*)
-             (-> *mp-puppet* root)
-             (nonzero? (-> *mp-puppet* root)))
-    (vector-copy! *mp-tomb-daxter-wait-position* (-> *mp-puppet* root trans))
-    (set! *mp-tomb-daxter-wait-position-valid?* #t)
-    )
-  (when *mp-tomb-daxter-wait-position-valid?*
-    (mp-tomb-daxter-wait-place! npc *mp-tomb-daxter-wait-position*)
-    (daxter-npc-set-draw! npc #f)
-    )
-  (when (and *mp-puppet* (nonzero? *mp-puppet*))
-    (mp-tomb-daxter-wait-set-draw! (the-as process-drawable *mp-puppet*) #t)
-    )
+  (let ((remote-target (mp-player-target-by-id *mp-tomb-daxter-wait-player-id*)))
+    (when (and (not *mp-tomb-daxter-wait-position-valid?*)
+               remote-target
+               (nonzero? remote-target)
+               (-> remote-target root)
+               (nonzero? (-> remote-target root)))
+      (vector-copy! *mp-tomb-daxter-wait-position* (-> remote-target root trans))
+      (set! *mp-tomb-daxter-wait-position-valid?* #t))
+    (when *mp-tomb-daxter-wait-position-valid?*
+      (mp-tomb-daxter-wait-place! npc *mp-tomb-daxter-wait-position*)
+      (daxter-npc-set-draw! npc #f))
+    (when (and remote-target (nonzero? remote-target))
+      (mp-tomb-daxter-wait-set-draw! (the-as process-drawable remote-target) #t)))
   (none)
   )
 
@@ -176,6 +175,7 @@
     (set! *mp-tomb-daxter-wait-position-valid?* #t)
     )
   (set! *mp-tomb-daxter-wait-state* 'local-waiting)
+  (set! *mp-tomb-daxter-wait-player-id* (mp-local-player-id))
   (mp-tomb-daxter-wait-apply-local! npc)
   (when (and *multi-sync-enabled?* (not *mp-processing-remote-event*))
     (mp-event-enqueue-actor-name!
@@ -198,9 +198,10 @@
   (none)
   )
 
-(defun mp-tomb-daxter-wait-receive-start! ()
+(defun mp-tomb-daxter-wait-receive-start! ((source-player-id uint))
   (set! *mp-tomb-daxter-wait-position-valid?* #f)
   (set! *mp-tomb-daxter-wait-state* 'remote-waiting)
+  (set! *mp-tomb-daxter-wait-player-id* source-player-id)
   (let ((npc (mp-tomb-daxter-wait-npc)))
     (when npc
       (mp-tomb-daxter-wait-apply-remote! npc)
@@ -215,23 +216,29 @@
   (let ((npc (mp-tomb-daxter-wait-npc)))
     (daxter-npc-set-draw! npc #t)
     )
-  (when (and *mp-puppet* (nonzero? *mp-puppet*))
-    (mp-tomb-daxter-wait-set-draw! (the-as process-drawable *mp-puppet*) #f)
-    )
+  (let ((remote-target (mp-player-target-by-id *mp-tomb-daxter-wait-player-id*)))
+    (when (and remote-target (nonzero? remote-target))
+      (mp-tomb-daxter-wait-set-draw! (the-as process-drawable remote-target) #f)))
+  (set! *mp-tomb-daxter-wait-player-id* MP_INVALID_PLAYER_ID)
   (none)
   )
 
 (defun mp-tomb-daxter-wait-reset! ()
   (set! *mp-tomb-daxter-wait-state* 'inactive)
   (set! *mp-tomb-daxter-wait-position-valid?* #f)
+  (set! *mp-tomb-daxter-wait-player-id* MP_INVALID_PLAYER_ID)
   (let ((npc (mp-tomb-daxter-wait-npc)))
     (daxter-npc-set-draw! npc #t)
     (mp-tomb-daxter-wait-disable-collision! npc)
     )
-  (if (mp-is-jak?)
-      (when (and *mp-puppet* (nonzero? *mp-puppet*))
-        (mp-tomb-daxter-wait-set-draw! (the-as process-drawable *mp-puppet*) #f)
-        )
+  (if (mp-local-player-jak?)
+      (dotimes (player-id MP_MAX_PLAYERS)
+        (let ((remote-target (mp-player-target-by-id (the-as uint player-id))))
+          (when (and remote-target
+                     (nonzero? remote-target)
+                     (mp-target-daxter? remote-target))
+            (mp-tomb-daxter-wait-set-draw!
+              (the-as process-drawable remote-target) #f))))
       (when (and *target* (nonzero? *target*))
         (mp-tomb-daxter-wait-set-draw! (the-as process-drawable *target*) #f)
         )
@@ -253,7 +260,7 @@
                  )
              )
             (('remote-waiting)
-             (if (mp-is-jak?)
+             (if (mp-local-player-jak?)
                  (mp-tomb-daxter-wait-apply-remote! npc)
                  (mp-tomb-daxter-wait-receive-end!)
                  )

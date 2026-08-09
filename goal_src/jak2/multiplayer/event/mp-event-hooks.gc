@@ -50,7 +50,7 @@
                        (the-as int (logior (entity-perm-status dead)
                                            (entity-perm-status subtask-complete))))
              (not *mp-processing-remote-event*)
-             (mp-is-jak?)
+             (mp-session-host?)
              arg0
              (nonzero? arg0)
              (-> arg0 entity)
@@ -72,7 +72,7 @@
     (let ((event-message (-> msg message)))
       (when (and (or (= event-message 'leave) (= event-message 'play-scene))
                  *multi-sync-enabled?*
-                 (mp-is-jak?)
+                 (mp-session-host?)
                  (not *mp-processing-remote-event*)
                  (valid? proc process (the-as string #f) #f 0))
         (let ((name-pointer (-> proc name)))

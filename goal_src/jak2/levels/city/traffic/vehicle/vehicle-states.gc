@@ -211,7 +211,7 @@
                    (!= (-> self crash-level) 3)
                    )
           (let ((driver (get-rider-in-seat self 0)))
-            (when (and (send-event *target* 'end-mode) (or (mp-is-jak?) (and driver (nonzero? driver) (= driver *target*))))
+            (when (and (send-event *target* 'end-mode) (or (mp-session-host?) (and driver (nonzero? driver) (= driver *target*))))
                           (go-virtual waiting)
                           ))
           )

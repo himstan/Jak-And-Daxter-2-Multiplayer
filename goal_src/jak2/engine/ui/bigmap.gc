@@ -436,6 +436,7 @@
 
 (defun draw-bigmap-remote-player-marker ((this bigmap) (arg0 dma-buffer) (arg1 connection-minimap) (arg2 vector) (arg3 float))
   (let* ((remote-proc (handle->process (-> arg1 handle)))
+         (remote-record (mp-player-record-by-marker-key (-> arg1 key)))
          (remote-target (if (type? remote-proc target)
                             (the-as target remote-proc)
                             )
@@ -452,7 +453,11 @@
                  (-> remote-target control)
                  (nonzero? (-> remote-target control)))
             (vector-z-quaternion! remote-dir (-> remote-target control quat))
-            (vector-z-quaternion! remote-dir (the-as quaternion *multi-remote-render-quat*))
+            (let ((presentation-quat
+                    (mp-player-record-presentation-quaternion remote-record)))
+              (if (and presentation-quat (nonzero? presentation-quat))
+                  (vector-z-quaternion! remote-dir presentation-quat)
+                  (set-vector! remote-dir 0.0 0.0 1.0 0.0)))
             )
         (vector-xz-normalize! remote-dir -1.0)
         (set! (-> remote-dir y) 0.0)
@@ -470,7 +475,7 @@
         (vector-matrix*! (-> this corner 2) (-> this corner 2) marker-mat)
         (vector-matrix*! (-> this corner 3) (-> this corner 3) marker-mat)
         (let* ((s3-0 (-> arg0 base))
-               (a1-0 (if (mp-is-daxter?)
+               (a1-0 (if (mp-player-jak? remote-record)
                          (static-rgba 0 255 255 128)
                          (-> arg1 class color)
                          )
@@ -603,7 +608,7 @@
           )
         )
       (if (string= (the-as string (-> arg1 class name)) "remote-player")
-          (when (not (and (mp-is-jak?) (mp-target-ride-along? *mp-puppet*)))
+          (when (not (mp-remote-player-marker-hidden? arg1))
             (draw-bigmap-remote-player-marker
               this
               arg0
@@ -968,7 +973,7 @@
               (adgif-shader<-texture-simple! (the-as adgif-shader (&+ sv-96 32)) sv-100)
               (set! (-> (the-as (pointer uint128) sv-96) 7) (-> this draw-tmpl dma-vif quad))
               (set! (-> (the-as (pointer uint128) sv-96) 8) (-> this draw-tmpl quad 1))
-              (if (mp-is-daxter?)
+              (if (mp-local-player-daxter?)
                   (set-vector! (the-as vector4w (&+ sv-96 144)) 255 128 0 128)
                   (set-vector! (the-as vector4w (&+ sv-96 144)) 0 255 255 128)
                   )

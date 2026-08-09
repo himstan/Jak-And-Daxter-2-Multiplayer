@@ -2293,7 +2293,7 @@
           (sound-play "score-bad")
           )
       (when (and (mp-gungame-dummy-sync-active?)
-                 (mp-is-jak?)
+                 (mp-session-host?)
                  (not *mp-processing-remote-event*))
         (let ((details (new 'stack-no-clear 'mp-gungame-build-data)))
           (set! (-> details event-type) MP_EVENT_MISSION_GUNGAME_TARGET_BROKEN)

@@ -150,6 +150,8 @@
   "projectile-h.o"
   "find-nearest-h.o"
   "target-h.o"
+  "player-h.o"
+  "mp-world-h.o"
   "target-helper.o"
   "stats-h.o"
   "bsp-h.o"

@@ -163,20 +163,36 @@
   )
 
 ;; WARN: Return type mismatch int vs sound-id.
+(defun mp-talker-player-record-for-channel
+       ((position vector) (channel gui-channel))
+  "Resolve character speech to the nearest matching player, with player-ID tie breaks."
+  (let ((character (mp-player-character unknown)))
+    (cond
+      ((= channel (gui-channel jak))
+       (set! character (mp-player-character jak)))
+      ((= channel (gui-channel daxter))
+       (set! character (mp-player-character daxter))))
+    (if (!= character (mp-player-character unknown))
+        (mp-nearest-player-character-record-to-position
+          position character MP_INVALID_PLAYER_ID)
+        (the-as mp-player-record #f))))
+
 (defun talker-spawn-func ((arg0 talker-speech-class) (arg1 process-tree) (arg2 vector) (arg3 region))
   (local-vars (s2-0 int))
   (when (or (not arg0) (zero? (-> arg0 speech)) (not (talker-speech-class-method-9 arg0)))
     (set! s2-0 0)
     (goto cfg-27)
     )
-  (let ((puppet *mp-puppet*))
-    (when (and puppet (nonzero? puppet))
+  (let* ((speaker-record
+           (mp-talker-player-record-for-channel arg2 (-> arg0 channel)))
+         (puppet (mp-player-record-target speaker-record)))
+    (when (and puppet
+               (nonzero? puppet)
+               speaker-record
+               (nonzero? speaker-record))
       (let ((root-control (-> (the-as process-drawable puppet) root)))
         (when (and root-control (nonzero? root-control))
-          (if (or (and (mp-is-jak?) (= (-> arg0 channel) (gui-channel daxter)))
-                  (and (mp-is-daxter?) (= (-> arg0 channel) (gui-channel jak))))
-              (set! arg2 (-> root-control trans))
-              )
+          (set! arg2 (-> root-control trans))
           )
         )
       )
@@ -229,13 +245,13 @@
              )
         (let ((play-on-puppet? #f)
               (puppet (the process #f)))
-          (when (or (and (mp-is-jak?) (= (-> arg0 channel) (gui-channel daxter)))
-                    (and (mp-is-daxter?) (= (-> arg0 channel) (gui-channel jak))))
-            (set! puppet *mp-puppet*)
-            (if (and puppet (nonzero? puppet))
-                (set! play-on-puppet? #t)
-                )
-            )
+          (let ((speaker-record
+                  (mp-talker-player-record-for-channel
+                    (-> self trans) (-> arg0 channel))))
+            (when (and speaker-record (nonzero? speaker-record))
+              (set! puppet (mp-player-record-target speaker-record))
+              (if (and puppet (nonzero? puppet))
+                  (set! play-on-puppet? #t))))
           (set! (-> self voice-id)
                 (add-process *gui-control* (if play-on-puppet? puppet self) (-> arg0 channel) (gui-action queue) (-> arg0 name) 81920.0 0)
                 )

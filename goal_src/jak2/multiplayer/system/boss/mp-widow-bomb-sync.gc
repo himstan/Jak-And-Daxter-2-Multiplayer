@@ -68,7 +68,7 @@
 (defun mp-widow-bomb-queue-fizzle! ((slot int) (deadline time-frame))
   (when (and (mp-widow-bomb-slot-valid? slot)
              (> deadline 0)
-             (mp-is-jak?)
+             (mp-session-host?)
              *multi-sync-enabled?*
              (= (pc-multi-get-status) (mp-connection-status in-game))
              (not *mp-processing-remote-event*))

@@ -25,6 +25,44 @@
   (mp-schema-packet-name idx)
   )
 
+(defun mp-debug-session-role-name ()
+  (cond
+    ((mp-session-host?) "HOST")
+    ((mp-session-client?) "CLIENT")
+    (else "OFFLINE")))
+
+(defun mp-debug-player-character-name ((record mp-player-record))
+  (cond
+    ((mp-player-jak? record) "JAK")
+    ((mp-player-daxter? record) "DAXTER")
+    (else "UNKNOWN")))
+
+(defun mp-draw-player-registry-debug ()
+  (format *stdcon* "SESSION: ~S LOCAL: ~D HOST: ~D~%"
+          (mp-debug-session-role-name)
+          (mp-local-player-id)
+          (mp-host-player-id))
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (let ((record
+            (mp-player-controller-record
+              *mp-player-controller*
+              (the-as uint player-id))))
+      (if (and record (nonzero? record))
+          (let ((player-target (mp-player-record-target record)))
+            (format *stdcon*
+                    "PLAYER ~D: char=~S status=~D joined=~D connected=~D pad=~D "
+                    player-id
+                    (mp-debug-player-character-name record)
+                    (-> record connection status)
+                    (-> record identity joined?)
+                    (-> record connection connected?)
+                    (-> record runtime pad-index))
+            (format *stdcon*
+                    "target=~S~%"
+                    (if (and player-target (nonzero? player-target)) "BOUND" "NONE")))
+          (format *stdcon* "PLAYER ~D: VACANT~%" player-id))))
+  (none))
+
 (defun mp-draw-network-debug ()
   "Display ENet wire health, sync TPS, and packet-category statistics."
   (when *mp-debug-network*
@@ -41,16 +79,11 @@
           (recv-rate (pc-multi-get-recv-rate))
           (send-packet-rate (pc-multi-get-send-packet-rate))
           (recv-packet-rate (pc-multi-get-recv-packet-rate))
-          (role-str "OFFLINE")
+          (role-str (mp-debug-session-role-name))
           )
-      (when (and *local-info* (nonzero? *local-info*))
-        (cond
-          ((= (-> *local-info* role) 0) (set! role-str "HOST (JAK)"))
-          ((= (-> *local-info* role) 1) (set! role-str "CLIENT (DAXTER)"))
-          )
-        )
       (format *stdcon* "~0k--- MP NETWORK DEBUG ---~%")
       (format *stdcon* "ROLE:      ~S~%" role-str)
+      (mp-draw-player-registry-debug)
       (if (> (pc-multi-get-status) (mp-connection-status connecting))
           (format *stdcon* "PEER:      CONNECTED~%")
           (format *stdcon* "PEER:      NONE~%")
@@ -262,7 +295,7 @@
         (+! (-> draw-pos y) (meters 8.0))
         (if (and *mp-widow-buffer*
                  (nonzero? (the-as uint *mp-widow-buffer*)))
-            (let ((snapshot-state (if (mp-is-jak?)
+            (let ((snapshot-state (if (mp-session-host?)
                                       (-> *mp-widow-buffer* local-state)
                                       (-> *mp-widow-buffer* remote-state))))
               (if (mp-widow-debug-slot-active? snapshot-state)
@@ -302,15 +335,9 @@
   "Overlay real-time boss synchronization state."
   (when *mp-debug-boss*
     (format *stdcon* "~0k--- MP BOSS DEBUG ---~%")
-    (let ((role "UNKNOWN"))
-      (when (and *local-info* (nonzero? *local-info*))
-        (cond
-          ((= (-> *local-info* role) 0) (set! role "HOST (JAK)"))
-          ((= (-> *local-info* role) 1) (set! role "CLIENT (DAXTER)"))
-          )
-        )
-      (format *stdcon* "ROLE: ~S~%" role)
-      )
+    (format *stdcon* "ROLE: ~S CHARACTER: ~S~%"
+            (mp-debug-session-role-name)
+            (mp-debug-player-character-name (mp-local-player-record)))
     (let ((squid-ready? (and *multi-sync-enabled?*
                              (= (pc-multi-get-status) (mp-connection-status in-game))
                              *mp-palace-squid-buffer*
@@ -377,7 +404,7 @@
           (vector-copy! draw-pos (-> proc root trans))
           (+! (-> draw-pos y) (meters 8.0))
 
-          (let ((is-jak? (mp-is-jak?)))
+          (let ((is-jak? (mp-local-player-jak?)))
             (let ((color (if is-jak? (font-color green) (font-color yellow)))
                   (role-str (if is-jak? "JAK(AUTH)" "DAX(PUPPET)")))
 
@@ -402,7 +429,7 @@
                               local-state-name
                               (-> local-state hit-points)
                               (-> local-state stage)
-                              (-> local-state target-role)
+                              (-> local-state target-player-id)
                               (-> local-state action-seq)
                               ))
                           draw-pos
@@ -421,7 +448,7 @@
                                 (-> remote-state state-id)
                                 (-> remote-state hit-points)
                                 (-> remote-state stage)
-                                (-> remote-state target-role)
+                                (-> remote-state target-player-id)
                                 (-> remote-state action-seq)
                                 ))
                             remote-pos

@@ -83,20 +83,26 @@
   #f
   )
 
-(defun mp-is-remote-attacker? ((proc process))
-  "Is the process either the remote puppet or in its parentage (e.g., projectile)?"
-  (if (or (not proc) (zero? proc)) (return #f))
-  (let ((puppet *mp-puppet*))
-    (if (not puppet) (return #f))
+(defun mp-remote-attacker-record ((proc process))
+  "Resolve a remote player record through an attacker or projectile parent chain."
+  (when (and proc (nonzero? proc))
     (let ((curr proc))
       (while (and curr (nonzero? curr))
-        (if (= curr puppet) (return #t))
-        (set! curr (if (and (-> curr parent) (nonzero? (-> curr parent))) (the-as process (ppointer->process (-> curr parent))) (the-as process #f)))
-        )
-      )
-    )
-  #f
-  )
+        (let ((record (mp-player-process-record curr)))
+          (when (and record
+                     (nonzero? record)
+                     (mp-player-record-remote? *mp-player-controller* record))
+            (return record)))
+        (set! curr
+              (if (and (-> curr parent) (nonzero? (-> curr parent)))
+                  (the-as process (ppointer->process (-> curr parent)))
+                  (the-as process #f))))))
+  (the-as mp-player-record #f))
+
+(defun mp-is-remote-attacker? ((proc process))
+  "True when an attacker or projectile parent chain belongs to any remote record."
+  (let ((record (mp-remote-attacker-record proc)))
+    (if (and record (nonzero? record)) #t #f)))
 
 (defun mp-actor-event-attack-info ((msg event-message-block))
   "Return the attack-info payload from an event-message-block, or #f."
@@ -488,14 +494,9 @@
       (when (mp-actor-remote-attacker-blocked? attacker remote-replay?)
         (return 'block)
         )
-      (let ((puppet *mp-puppet*))
-        (when (and (not remote-replay?)
-                   puppet
-                   (nonzero? puppet)
-                   (= attacker puppet))
-          (return 'block)
-          )
-        )
+      (when (and (not remote-replay?)
+                 (mp-is-remote-attacker? attacker))
+        (return 'block))
       (cond
         ((= actor-kind 'pedestrian)
          (when (or (and *mp-traffic-suppressed* (= (-> e-proc net-id) 0))
@@ -520,7 +521,7 @@
            )
          (let ((cur-state (if (-> e-proc state) (-> e-proc state name) #f)))
            (when (and (not remote-replay?)
-                      (not (mp-is-jak?))
+                      (not (mp-session-host?))
                       local-attacker?
                       (or (= cur-state 'hit)
                           (= cur-state 'knocked)

@@ -9,6 +9,7 @@
 
 (defun mp-reset-event-state! ()
   (set! *mp-processing-remote-event* #f)
+  (set! *mp-current-event-source-player-id* MP_INVALID_PLAYER_ID)
   (set! *mp-remote-wants-skip* #f)
   (set! *mp-local-wants-skip* #f)
   (set! *multi-last-in-event-seq* (the-as uint 0))
@@ -60,7 +61,10 @@
   (set! *mp-city-power-state-3* (the uint 0))
   (set! *mp-city-power-state-4* (the uint 0))
   (set! *mp-local-gun-shot-seq* (the uint 0))
-  (set! *mp-last-remote-gun-shot-seq* (the uint 0))
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (when (and record (nonzero? record))
+        (set! (-> record runtime last-gun-shot-sequence) (the uint 0)))))
   (when (and *mp-event-buffer*
              (nonzero? (the-as uint *mp-event-buffer*)))
     (mem-set32! (the-as pointer *mp-event-buffer*) (/ (size-of mp-event-buffer) 4) 0)
@@ -77,7 +81,7 @@
 (defun mp-inbound-waypoint-has-later-command? ((evt mp-event)
                                                (start-idx int)
                                                (total-count int))
-  (when (or (not (mp-is-jak?))
+  (when (or (not (mp-session-host?))
             (not (mp-inbound-waypoint-command? evt)))
     (return #f))
   (let ((scan-index (+ start-idx 1))

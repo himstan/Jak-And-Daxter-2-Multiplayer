@@ -1,192 +1,216 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(defconstant MP_REMOTE_PLAYER_MARKER_KEY (the-as int #x4d50524d))
+(defun mp-remote-player-marker-key ((record mp-player-record))
+  (+ MP_REMOTE_PLAYER_MARKER_KEY_BASE
+     (the-as int
+       (mp-player-controller-record-id *mp-player-controller* record))))
 
 (defun mp-reset-remote-marker-state! ()
   (when (and *minimap*
              (nonzero? *minimap*)
              (-> *minimap* engine)
              (nonzero? (-> *minimap* engine)))
-    (kill-by-key (-> *minimap* engine) MP_REMOTE_PLAYER_MARKER_KEY)
-    )
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (kill-by-key
+        (-> *minimap* engine)
+        (+ MP_REMOTE_PLAYER_MARKER_KEY_BASE player-id))))
   (none))
 
-(defun mp-update-remote-transform ()
-  "Consolidated logic for calculating the remote player's visual and physical transform"
-  (when (not (and *remote-info* (nonzero? *remote-info*)))
-    (return #f)
-    )
-  (let ((remote-pos (new 'stack-no-clear 'vector)))
-    (set-vector! remote-pos (-> *remote-info* x) (-> *remote-info* y) (-> *remote-info* z) 1.0)
+(defun mp-update-player-transform! ((record mp-player-record))
+  "Update one record's presentation transform from its latest network transform."
+  (when (and record (nonzero? record))
+    (let ((network-position (-> record transform position))
+          (presentation-position (mp-player-record-presentation-position record))
+          (presentation-quaternion (mp-player-record-presentation-quaternion record)))
+      (when (and presentation-position
+                 (nonzero? presentation-position)
+                 presentation-quaternion
+                 (nonzero? presentation-quaternion))
+        (when (or (not (mp-player-runtime-flag?
+                         record MP_PLAYER_RUNTIME_INTERP_INITIALIZED))
+                  (> (vector-vector-distance presentation-position network-position)
+                     (meters 20.0)))
+          (vector-copy! presentation-position network-position)
+          (set! (-> record runtime interpolation-angle) (-> record transform angle))
+          (mp-player-runtime-set-flag!
+            record MP_PLAYER_RUNTIME_INTERP_INITIALIZED))
+        (vector-lerp!
+          presentation-position
+          presentation-position
+          network-position
+          (* 15.0 (seconds-per-frame)))
+        (set! (-> record runtime interpolation-angle)
+              (deg-seek
+                (-> record runtime interpolation-angle)
+                (-> record transform angle)
+                (* (degrees 1080) (seconds-per-frame))))
+        (quaternion-identity! presentation-quaternion)
+        (quaternion-rotate-y!
+          presentation-quaternion
+          presentation-quaternion
+          (-> record runtime interpolation-angle)))))
+  (none))
 
-    ;; 1. Smooth Interpolation
-    (if (or *multi-remote-first-seen?* 
-            (> (vector-vector-distance *multi-remote-interp-pos* remote-pos) (meters 20.0)))
-        (begin
-          (vector-copy! *multi-remote-interp-pos* remote-pos)
-          (set! *multi-remote-interp-angle* (-> *remote-info* angle))
-          (set! *multi-remote-first-seen?* #f)
-          )
-        )
+(defun mp-remote-player-marker-kill! ((record mp-player-record))
+  (when (and record
+             (nonzero? record)
+             *minimap*
+             (nonzero? *minimap*)
+             (-> *minimap* engine)
+             (nonzero? (-> *minimap* engine)))
+    (kill-by-key (-> *minimap* engine) (mp-remote-player-marker-key record)))
+  (none))
 
-    (let ((interp-factor (* 15.0 (seconds-per-frame))))
-      (vector-lerp! *multi-remote-interp-pos* *multi-remote-interp-pos* remote-pos interp-factor))
-    (set! *multi-remote-interp-angle* (deg-seek *multi-remote-interp-angle* (-> *remote-info* angle) (* (degrees 1080) (seconds-per-frame))))
-    (vector-copy! *multi-remote-render-pos* *multi-remote-interp-pos*)
-    (quaternion-identity! (the-as quaternion *multi-remote-render-quat*))
-    (quaternion-rotate-y! (the-as quaternion *multi-remote-render-quat*) (the-as quaternion *multi-remote-render-quat*) *multi-remote-interp-angle*)
-  )
-  (none)
-)
+(defun mp-remote-player-marker-update! ((record mp-player-record))
+  "Keep a stable marker for one remote player, including while its puppet is culled."
+  (when (and record
+             (nonzero? record)
+             *minimap*
+             (nonzero? *minimap*)
+             *target*
+             (nonzero? *target*))
+    (let ((puppet (mp-player-record-target record)))
+      (if (mp-puppet-valid? puppet)
+          (add-icon!
+            *minimap*
+            puppet
+            (the-as uint (minimap-class remote-player))
+            (mp-remote-player-marker-key record)
+            (the-as vector #t)
+            0)
+          (let ((presentation-position
+                  (mp-player-record-presentation-position record)))
+            (when (and presentation-position (nonzero? presentation-position))
+              (add-icon!
+                *minimap*
+                *target*
+                (the-as uint (minimap-class remote-player))
+                (mp-remote-player-marker-key record)
+                presentation-position
+                0))))))
+  (none))
 
-(defun mp-remote-player-marker-kill! ()
-  "Remove the stable remote-player map marker connection."
-  (when (and *minimap* (nonzero? *minimap*) (-> *minimap* engine))
-    (kill-by-key (-> *minimap* engine) MP_REMOTE_PLAYER_MARKER_KEY)
-    )
-  (none)
-  )
+(defun mp-player-puppet-update-ghost! ((record mp-player-record))
+  (let ((ghost (mp-player-record-ghost record)))
+    (when (and ghost (nonzero? ghost))
+      (mp-puppet-update-ghost! ghost record)))
+  (none))
 
-(defun mp-remote-player-marker-update! ((proc target))
-  "Keep one remote-player marker alive, using the puppet when active or the ghost position when far."
-  (when (and *minimap* (nonzero? *minimap*) *target* (nonzero? *target*))
-    (if (mp-puppet-valid? proc)
-        (add-icon! *minimap* proc (the-as uint (minimap-class remote-player)) MP_REMOTE_PLAYER_MARKER_KEY (the-as vector #t) 0)
-        (add-icon! *minimap* *target* (the-as uint (minimap-class remote-player)) MP_REMOTE_PLAYER_MARKER_KEY *multi-remote-render-pos* 0)
-        )
-    )
-  (none)
-  )
+(defun mp-player-puppet-distance-from-local ((record mp-player-record))
+  (let ((presentation-position (mp-player-record-presentation-position record)))
+    (if (and presentation-position
+             (nonzero? presentation-position)
+             *target*
+             (nonzero? *target*)
+             (-> *target* control)
+             (nonzero? (-> *target* control)))
+        (vector-vector-distance
+          (-> *target* control trans)
+          presentation-position)
+        (meters 0.0))))
 
-(defun mp-manage-remote-puppet ()
-  "Spawn, update, or deactivate the remote player puppet using the actual target process"
-  (when (not (and *remote-info* (nonzero? *remote-info*)))
-    (return #f)
-    )
-  (let ((remote-status (-> *remote-info* status)))
+(defun mp-player-puppet-preserve-vehicle! ((record mp-player-record))
+  (let ((vehicle-net-id (-> record vehicle state net-id)))
+    (when (nonzero? vehicle-net-id)
+      (let ((vehicle-process (mp-vehicle-find-by-net-id vehicle-net-id)))
+        (when (and vehicle-process (nonzero? vehicle-process))
+          (set! (-> record runtime vehicle-handle)
+                (process->handle vehicle-process))
+          (logior! (-> vehicle-process flags) (rigid-body-object-flag persistent))
+          (logclear!
+            (-> vehicle-process mask)
+            (process-mask pause sleep actor-pause))))))
+  (none))
+
+(defun mp-player-puppet-presentation-allowed? ((record mp-player-record))
+  "Apply independent culling and return whether this record should own a live puppet."
+  (let ((distance (mp-player-puppet-distance-from-local record))
+        (force-presentation?
+          (mp-player-runtime-flag? record MP_PLAYER_RUNTIME_FORCE_PRESENTATION)))
     (cond
-      ((>= remote-status 4) ;; Connected, Starting, or In-Game
-       (begin
-         ;; 1. Calculate current transform once
-         (mp-update-remote-transform)
-         (mp-puppet-note-remote-packet! *remote-info*)
-
-         ;; 2. Update the Ghost Record for the Target Puppet
-         (let ((ghost *mp-puppet-ghost*))
-           (when (and ghost (nonzero? ghost))
-             (vector-copy! (-> ghost trans) *multi-remote-render-pos*)
-             (quaternion-copy! (-> ghost quat) (the-as quaternion *multi-remote-render-quat*))
-             (vector-copy! (-> ghost velocity) (-> *remote-info* velocity))
-             (set! (-> ghost state-id) (-> *remote-info* state-id))
-             (set! (-> ghost equipped-weapon) (-> *remote-info* equipped-weapon))
-             (set! (-> ghost buttons) (-> *remote-info* buttons))
-             (set! (-> ghost leftx) (-> *remote-info* leftx))
-             (set! (-> ghost lefty) (-> *remote-info* lefty))
-             (set! (-> ghost rightx) (-> *remote-info* rightx))
-             (set! (-> ghost righty) (-> *remote-info* righty))
-             (set! (-> ghost cam-angle-y) (-> *remote-info* cam-angle-y))
-             (set! (-> ghost active?) #t)
-             )
-           )
-
-         (when (and *mp-puppet*
-                    (nonzero? *mp-puppet*)
-                    (not (mp-puppet-valid? *mp-puppet*)))
-           (debug-log *mp-debug-log?* "[MP-Remote] Clearing stale dead puppet pointer before respawn.~%")
-           (mp-puppet-clear-stale!)
-           )
-
-         ;; 2.5 Distance check for force respawn
-         (let ((dist (meters 0.0)))
-           (when (and *target*
-                      (nonzero? *target*))
-             (let ((target-control (-> *target* control)))
-               (when (and target-control
-                          (nonzero? target-control))
-                 (set! dist (vector-vector-distance (-> target-control trans) *multi-remote-render-pos*))
-                 )
-               )
-             )
-             (when (and (> dist (meters 250.0))
-                        (not *mp-force-remote-puppet-for-spectate?*))
-               (when (mp-puppet-valid? *mp-puppet*)
-                 (debug-log *mp-debug-log?* "[MP-Remote] Remote player is far (~m). Deactivating puppet...~%" dist)
-                 (mp-puppet-deactivate!)
-                 )
-               (set! *mp-puppet-was-far?* #t)
-               )
-             (when (and (> dist (meters 250.0))
-                        *mp-force-remote-puppet-for-spectate?*
-                        (not *mp-puppet-is-warping?*)
-                        (mp-remote-level-ready?))
-               (when *mp-puppet-was-far?*
-                 (debug-log *mp-debug-log?* "[MP-Remote] Remote player is far, but spectate needs puppet. Allowing respawn...~%")
-                 )
-               (set! *mp-puppet-was-far?* #f)
-               )
-             (when (and (< dist (meters 250.0)) *mp-puppet-was-far?* (not *mp-puppet-is-warping?*))
-                (debug-log *mp-debug-log?* "[MP-Remote] Remote player returned to proximity (~m). Forcing respawn...~%" dist)
-
-                ;; 1. Keep their vehicle alive if any.
-                ;; Deactivating it here causes the traffic layer to respawn the remote-driven
-                ;; vehicle, which can rebuild seats and knock out mission passengers.
-                (let ((v-net-id (-> *remote-info* veh-state net-id)))
-                  (when (nonzero? v-net-id)
-                    (let ((v-proc (mp-vehicle-find-by-net-id v-net-id)))
-                      (when (and v-proc (nonzero? v-proc))
-                        (debug-log *mp-debug-log?* "[MP-Remote] Preserving remote vehicle ~D during puppet respawn.~%" v-net-id)
-                        (set! *mp-remote-driven-vehicle* (process->handle v-proc))
-                        (logior! (-> v-proc flags) (rigid-body-object-flag persistent))
-                        (logclear! (-> v-proc mask) (process-mask pause sleep actor-pause))
-                        )
-                      )
-                    )
-                  )
-
-                ;; 2. Deactivate the Puppet (if any)
-                (mp-puppet-deactivate!)
-                (set! *mp-puppet-was-far?* #f)
-              )
-           )
-
-         ;; 3. Manage process lifecycle
-         (let ((proc *mp-puppet*))
-           (if (not (mp-puppet-valid? proc))
-               (begin
-                (when (and (not *mp-puppet-is-warping?*)
-                           (or (not *mp-puppet-was-far?*)
-                               (and *mp-force-remote-puppet-for-spectate?*
-                                    (mp-remote-level-ready?))))
-                 (debug-log *mp-debug-log?* "[MP-Remote] Spawning new target puppet for Status ~D...~%" remote-status)
-                 (mp-puppet-spawn (the-as uint (-> *remote-info* id)))
-                )
-               )
-               (begin
-                 ;; 4. Apply correction & sync
-                 (mp-puppet-apply-ghost-correction! proc)
-                 )
-               )
-           (mp-remote-player-marker-update! *mp-puppet*)
-           )
-         )
-       )
+      ((and (> distance (meters 250.0))
+            (not force-presentation?))
+       (when (mp-puppet-valid? (mp-player-record-target record))
+         (mp-puppet-deactivate! record))
+       (mp-player-runtime-set-flag! record MP_PLAYER_RUNTIME_WAS_FAR)
+       #f)
+      ((and (> distance (meters 250.0))
+            force-presentation?
+            (not (mp-player-level-ready? record)))
+       (when (mp-puppet-valid? (mp-player-record-target record))
+         (mp-puppet-deactivate! record))
+       #f)
+      ((and (<= distance (meters 250.0))
+            (mp-player-runtime-flag? record MP_PLAYER_RUNTIME_WAS_FAR)
+            (not (mp-player-runtime-flag? record MP_PLAYER_RUNTIME_WARPING)))
+       (mp-player-puppet-preserve-vehicle! record)
+       (mp-puppet-deactivate! record)
+       (mp-player-runtime-clear-flag! record MP_PLAYER_RUNTIME_WAS_FAR)
+       #t)
       (else
-       (begin
-         (mp-remote-player-marker-kill!)
-         (let ((proc *mp-puppet*))
-           (when proc
-             (debug-log *mp-debug-log?* "[MP-Remote] Deactivating puppet (Remote Status ~D)~%" remote-status)
-             (mp-puppet-deactivate!)
-             (set! *mp-puppet-last-fresh-input-time* (the-as time-frame 0))
-             (set! *mp-puppet-was-far?* #f)
-             )
-           )
-         (set! *mp-force-remote-puppet-for-spectate?* #f)
-         (set! *multi-remote-first-seen?* #t)
-         )
-       )
-      )
-    )
+       (when (and force-presentation? (mp-player-level-ready? record))
+         (mp-player-runtime-clear-flag! record MP_PLAYER_RUNTIME_WAS_FAR))
+       #t))))
+
+(defun mp-manage-player-puppet! ((record mp-player-record))
+  "Advance one non-local record's presentation and target process."
+  (when (and record
+             (nonzero? record)
+             (mp-player-record-remote? *mp-player-controller* record))
+    (let ((remote-status (-> record connection status)))
+      (if (>= remote-status 4)
+          (begin
+            (mp-update-player-transform! record)
+            (mp-puppet-note-remote-packet! record)
+            (mp-player-puppet-update-ghost! record)
+            (let ((puppet (mp-player-record-target record)))
+              (when (and puppet
+                         (nonzero? puppet)
+                         (not (mp-puppet-valid? puppet)))
+                (mp-puppet-clear-stale! record)))
+            (when (and (mp-player-puppet-presentation-allowed? record)
+                       (not (mp-player-runtime-flag?
+                              record MP_PLAYER_RUNTIME_WARPING)))
+              (let ((puppet (mp-player-record-target record)))
+                (when (not (mp-puppet-valid? puppet))
+                  (mp-puppet-spawn record))
+                (set! puppet (mp-player-record-target record))
+                (when (mp-puppet-valid? puppet)
+                  (set! (-> record runtime puppet-lifecycle)
+                        MP_PUPPET_LIFECYCLE_ACTIVE)
+                  (mp-puppet-apply-ghost-correction! puppet))))
+            (mp-remote-player-marker-update! record))
+          (begin
+            (mp-remote-player-marker-kill! record)
+            (when (mp-player-record-target record)
+              (mp-puppet-deactivate! record))
+            (set! (-> record runtime last-fresh-input-time)
+                  (the-as time-frame 0))
+            (mp-player-runtime-clear-flag!
+              record MP_PLAYER_RUNTIME_WAS_FAR)))))
   (none))
 
+(defun mp-cleanup-stale-player-presentation! ((record mp-player-record))
+  "Release presentation resources retained across C++ slot invalidation."
+  (when (and record (nonzero? record))
+    (mp-remote-player-marker-kill! record)
+    (when (nonzero? (-> record runtime target-handle))
+      (mp-puppet-deactivate! record))
+    (set! (-> record runtime vehicle-handle) (the-as handle #f))
+    (mp-player-controller-release-pad! *mp-player-controller* record)
+    (mp-player-record-reset! record))
+  (none))
+
+(defun mp-manage-remote-puppets! ()
+  "Advance every joined non-local player without selecting a privileged remote."
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (when (and record
+                 (nonzero? record)
+                 (mp-player-record-remote? *mp-player-controller* record))
+        (mp-manage-player-puppet! record))))
+  (mp-player-controller-for-each-stale-remote!
+    *mp-player-controller*
+    mp-cleanup-stale-player-presentation!)
+  (none))

@@ -1,22 +1,22 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(defun mp-vehicle-seat-reservation-levels-match? ()
-  "Only consume seat reservations while both players are in the same primary level."
-  (when (and *local-info*
-             (nonzero? *local-info*)
-             *remote-info*
-             (nonzero? *remote-info*)
-             (= (pc-multi-get-status) (mp-connection-status in-game))
-             (= (-> *remote-info* status) 6))
-    (let ((local-level (mp-level-packed-primary-id (-> *local-info* level)))
-          (remote-level (mp-level-packed-primary-id (-> *remote-info* level))))
-      (return (and (nonzero? local-level)
-                   (= local-level remote-level)))
-      )
-    )
-  #f
-  )
+(defun mp-player-seat-reservation-levels-match? ((record mp-player-record))
+  "Only consume a record's seat reservation in the local player's primary level."
+  (let ((local-record (mp-local-player-record)))
+    (when (and record
+               (nonzero? record)
+               local-record
+               (nonzero? local-record)
+               (= (pc-multi-get-status) (mp-connection-status in-game))
+               (= (-> record connection status) 6))
+      (let ((local-level
+              (mp-level-packed-primary-id (-> local-record transform level)))
+            (remote-level
+              (mp-level-packed-primary-id (-> record transform level))))
+        (when (and (nonzero? local-level) (= local-level remote-level))
+          (return #t)))))
+  #f)
 
 (defun mp-local-vehicle-seat-claim? ((veh vehicle) (seat-index int))
   "True while the local target is entering or occupying this exact vehicle seat."
@@ -44,41 +44,52 @@
   #f
   )
 
-(defun mp-remote-vehicle-seat-claim? ((veh vehicle) (seat-index int))
-  "Validate the remote snapshot's claim against a live vehicle and seat."
-  (when (and veh
-             (nonzero? veh)
-             (-> veh info)
-             (nonzero? (-> veh info))
-             *remote-info*
-             (nonzero? *remote-info*)
-             (mp-vehicle-seat-reservation-levels-match?)
-             (>= seat-index 0)
-             (< seat-index (-> veh info seat-count))
-             (nonzero? (-> veh net-id))
-             (= (-> *remote-info* riding-veh-id) (-> veh net-id))
-             (= (the int (-> *remote-info* riding-seat-index)) seat-index))
-    (return #t)
-    )
-  #f
-  )
+(defun mp-player-vehicle-seat-claim?
+       ((record mp-player-record) (veh vehicle) (seat-index int))
+  "Validate one remote record's snapshot claim against a live vehicle and seat."
+  (if (and record
+           (nonzero? record)
+           (mp-player-record-remote? *mp-player-controller* record)
+           veh
+           (nonzero? veh)
+           (-> veh info)
+           (nonzero? (-> veh info))
+           (mp-player-seat-reservation-levels-match? record)
+           (>= seat-index 0)
+           (< seat-index (-> veh info seat-count))
+           (nonzero? (-> veh net-id))
+           (= (-> record vehicle vehicle-id) (-> veh net-id))
+           (= (the int (-> record vehicle seat-index)) seat-index))
+      #t
+      #f))
+
+(defun mp-remote-vehicle-seat-claimant
+       ((veh vehicle) (seat-index int))
+  "Return the lowest-ID remote claimant for a contested seat."
+  (let ((claimant (the-as mp-player-record #f)))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (and (mp-player-vehicle-seat-claim? record veh seat-index)
+                   (or (not claimant)
+                       (zero? claimant)
+                       (< (-> record identity player-id)
+                          (-> claimant identity player-id))))
+          (set! claimant record))))
+    claimant))
 
 (defun mp-remote-seat-claim-wins? ((veh vehicle) (seat-index int))
-  "An earlier visible remote claim wins; simultaneous claims use the lower role (host)."
-  (when (mp-remote-vehicle-seat-claim? veh seat-index)
-    (when (not (mp-local-vehicle-seat-claim? veh seat-index))
-      (return #t)
-      )
-    (when (and *local-info*
-               (nonzero? *local-info*)
-               *remote-info*
-               (nonzero? *remote-info*)
-               (< (-> *remote-info* role) (-> *local-info* role)))
-      (return #t)
-      )
-    )
-  #f
-  )
+  "An observed remote claim wins; simultaneous claims use the lowest player ID."
+  (let ((claimant (mp-remote-vehicle-seat-claimant veh seat-index))
+        (local-record (mp-local-player-record)))
+    (if (and claimant
+             (nonzero? claimant)
+             (or (not (mp-local-vehicle-seat-claim? veh seat-index))
+                 (and local-record
+                      (nonzero? local-record)
+                      (< (-> claimant identity player-id)
+                         (-> local-record identity player-id)))))
+        #t
+        #f)))
 
 (defun mp-vehicle-seat-reserved-by-remote? ((veh vehicle) (seat-index int))
   "Return whether local boarding and puppet reconciliation should honor the remote claim."
@@ -89,8 +100,8 @@
   "Cancel the local client when both players claimed the same seat before either observed it."
   (when (and *target*
              (nonzero? *target*)
-             *local-info*
-             (nonzero? *local-info*)
+             (mp-local-player-record)
+             (nonzero? (mp-local-player-record))
              (-> *target* pilot)
              (nonzero? (-> *target* pilot)))
     (let* ((pilot-info (-> *target* pilot))
@@ -104,7 +115,7 @@
                 "[MP-Vehicle] Seat conflict on vehicle ~D seat ~D; local role ~D yielding.~%"
                 (-> vehicle-proc net-id)
                 seat-index
-                (-> *local-info* role))
+                (-> (mp-local-player-record) identity player-id))
         (send-event *target* 'end-mode)
         )
       )

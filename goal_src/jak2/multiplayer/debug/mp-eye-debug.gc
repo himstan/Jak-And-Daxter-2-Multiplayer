@@ -209,11 +209,17 @@
                (nonzero? (-> *target* control))
                (not (focus-test? *target* teleporting)))
       (mp-draw-target-eye-debug *target* "LOCAL" (meters 4.0) (font-color yellow)))
-    (let ((puppet *mp-puppet*))
-      (when (and puppet
-                 (nonzero? puppet)
-                 (-> puppet control)
-                 (nonzero? (-> puppet control))
-                 (not (focus-test? puppet teleporting)))
-        (mp-draw-target-eye-debug puppet "PUPPET" (meters 5.5) (font-color green)))))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let* ((record (mp-player-record-by-id (the-as uint player-id)))
+             (puppet (mp-player-record-target record)))
+        (when (and record
+                   (nonzero? record)
+                   (mp-player-record-remote? *mp-player-controller* record)
+                   puppet
+                   (nonzero? puppet)
+                   (-> puppet control)
+                   (nonzero? (-> puppet control))
+                   (not (focus-test? puppet teleporting)))
+          (mp-draw-target-eye-debug
+            puppet "PUPPET" (meters 5.5) (font-color green))))))
   (none))

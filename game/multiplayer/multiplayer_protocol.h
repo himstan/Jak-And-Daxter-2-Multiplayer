@@ -10,8 +10,19 @@
 const int DISCOVERY_PORT = 26211;
 const char* const DISCOVERY_MAGIC = "OG_MP_DISCOVERY";
 inline constexpr size_t kPacketHeaderWireSize = sizeof(uint8_t) + sizeof(uint32_t);
-inline constexpr size_t kEventEnvelopeHeaderWireSize = kPacketHeaderWireSize + sizeof(uint32_t) + sizeof(uint16_t);
+inline constexpr size_t kEventEnvelopeHeaderWireSize =
+    kPacketHeaderWireSize + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint16_t);
 inline constexpr size_t kMultiplayerPlayerNameSize = 24;
+inline constexpr uint32_t kMPMaxPlayers = 4;
+inline constexpr uint32_t kMPInvalidPlayerId = 0xffffffffu;
+inline constexpr uint32_t kMPVehicleCivilianRiderId = 0xfffffffeu;
+inline constexpr uint8_t kMPInvalidCompactPlayerId = 0xffu;
+
+enum class MPPlayerCharacter : uint32_t {
+  UNKNOWN = 0,
+  JAK = 1,
+  DAXTER = 2,
+};
 
 enum class MultiplayerChannel : uint8_t {
   STATE = 0,
@@ -90,7 +101,8 @@ enum class PacketType : uint8_t {
   PALACE_SQUID_SYNC = 9,
   AIRLOCK_SYNC = 10,
   WIDOW_SYNC = 11,
-  COUNT = 12
+  WORLD_STATE = 12,
+  COUNT = 13
 };
 
 struct PacketHeader {
@@ -100,9 +112,11 @@ struct PacketHeader {
 
 struct PacketJoin {
   PacketHeader header;
+  uint32_t player_id;
+  MPPlayerCharacter character;
   char player_name[kMultiplayerPlayerNameSize];
 };
-static_assert(sizeof(PacketJoin) == 29, "PacketJoin must contain a 24-byte player name");
+static_assert(sizeof(PacketJoin) == 37, "PacketJoin identity wire layout must remain explicit");
 
 enum class MultiplayerLeaveReason : uint8_t {
   CLIENT_RECONNECTING = 1,
@@ -112,29 +126,30 @@ enum class MultiplayerLeaveReason : uint8_t {
 
 struct PacketLeave {
   PacketHeader header;
+  uint32_t player_id;
   MultiplayerLeaveReason reason;
 };
 
-static_assert(sizeof(PacketLeave) == 6, "PacketLeave must contain a one-byte reason");
+static_assert(sizeof(PacketLeave) == 10, "PacketLeave identity wire layout must remain explicit");
 
 struct MPVehicleState {
   uint32_t net_id;
   uint8_t vehicle_type;
   uint8_t color_index;
   uint8_t state_id;
-  uint8_t target_aid;
+  uint8_t target_player_id;
   float x, y, z;
   float quat_x, quat_y, quat_z, quat_w;
   float lin_vel_x, lin_vel_y, lin_vel_z;
   float ang_vel_x, ang_vel_y, ang_vel_z;
   uint8_t state_flags;
   uint8_t pad[3];
-  uint32_t rider_aids[4];
+  uint32_t rider_player_ids[4];
 };
 
 struct PacketPlayerState {
   PacketHeader header;
-  uint32_t netId;
+  uint32_t player_id;
   uint8_t status;
   float x, y, z, angle;
   float vel_x, vel_y, vel_z;
@@ -142,12 +157,6 @@ struct PacketPlayerState {
   uint32_t state_id;
   uint32_t level_hash;
   uint32_t darkjak_stage;
-  uint64_t clock;
-  uint64_t tod_frame;
-  float tod_ratio;
-  float weather_cloud;
-  float weather_fog;
-  float weather_rain;
   uint16_t buttons;
   uint8_t leftx, lefty, rightx, righty;
   uint8_t respawn_flags;
@@ -157,22 +166,16 @@ struct PacketPlayerState {
   uint8_t scene_active;
   uint8_t equipped_weapon;
   uint8_t turret_active;
-  // World Sync Fields (Continuous Sync)
-  float money;
-  float gems;
-  float skill;
-  uint8_t task_mask[64];
-  uint8_t active_task_mask[64];
   MPVehicleState veh_state;
   uint32_t action_seq;
   uint32_t action_state_id;
 };
-static_assert(sizeof(PacketPlayerState) == 337,
+static_assert(sizeof(PacketPlayerState) == 165,
               "PacketPlayerState wire layout must remain explicit");
 
 struct PacketTurretState {
   PacketHeader header;
-  uint32_t netId;
+  uint32_t player_id;
   uint32_t turret_aid;
   float roty;
   float rotx;
@@ -180,10 +183,26 @@ struct PacketTurretState {
 
 struct PacketGameEvent {
   PacketHeader header;
+  uint32_t source_player_id = kMPInvalidPlayerId;
   uint32_t event_id = 0;
   uint16_t payload_size = 0;
   uint8_t payload[480] = {};
 };
+
+struct PacketWorldState {
+  PacketHeader header;
+  uint32_t player_id;
+  uint64_t clock;
+  uint64_t time_of_day_frame;
+  float time_of_day_ratio;
+  float weather_cloud;
+  float weather_fog;
+  float weather_rain;
+  uint8_t task_mask[64];
+  uint8_t active_task_mask[64];
+};
+static_assert(sizeof(PacketWorldState) == 169,
+              "PacketWorldState wire layout must remain explicit");
 
 #define MAX_ENEMY_SYNC_COUNT 128
 #define MAX_ENEMIES_PER_PACKET 30
@@ -195,9 +214,9 @@ struct MPEnemyState {
   float pad1[3];  // Removed anim_index, anim_frame, last_anim_frame
   int32_t hp;
   uint32_t state;
-  uint32_t focus_aid;
+  uint32_t focus_player_id;
   uint8_t attack_flag;
-  uint8_t owner;
+  uint8_t owner_player_id;
   uint8_t is_aggro;
   uint8_t pad[5];
   uint64_t last_updated;  // Cross-referenced with C++ enet_time_get()
@@ -211,9 +230,9 @@ struct MPEnemyStatePacked {
   int16_t quat[4];
   int32_t hp;
   uint8_t state;
-  uint32_t focus_aid;
-  uint8_t flags;   // Bitmask: [0: attack_flag, 1: owner, 2: is_aggro]
-  uint8_t pad[1];  // Total size: 32 bytes (4-byte aligned)
+  uint32_t focus_player_id;
+  uint8_t flags;            // Bitmask: [0: attack_flag, 1: is_aggro]
+  uint8_t owner_player_id;  // 0xff is invalid/unowned
 };
 
 struct PacketEnemySync {
@@ -239,7 +258,7 @@ struct MPPedestrianState {
   float quat_x, quat_y, quat_z, quat_w;
   int32_t hp;
   uint8_t flags;
-  uint8_t target_aid;  // 0 = none, 1 = Host, 2 = Client
+  uint8_t target_player_id;  // 0xff = invalid; otherwise canonical player ID
   uint8_t context_align[2];
   uint32_t animation_profile;
   uint32_t vehicle_net_id;
@@ -257,7 +276,7 @@ struct MPPedestrianStatePacked {
   int16_t quat[4];
   int32_t hp;
   uint8_t state_id;    // Replaces int16_t anim_index
-  uint8_t target_aid;  // Replaces int16_t anim_speed
+  uint8_t target_player_id;
   uint32_t animation_profile;
   uint32_t vehicle_net_id;
   uint32_t transport_id;
@@ -280,13 +299,13 @@ struct MPVehicleStatePacked {
   uint8_t vehicle_type;
   uint8_t color_index;
   uint8_t state_id;
-  uint8_t target_aid;
+  uint8_t target_player_id;
   float x, y, z;
   int16_t quat[4];
   int16_t lin_vel[3];  // Downcast
   int16_t ang_vel[3];  // Downcast
   uint8_t state_flags;
-  uint32_t rider_aids[4];
+  uint32_t rider_player_ids[4];
 };
 
 struct PacketVehicleSync {
@@ -303,7 +322,7 @@ struct MPPalaceSquidState {
   int32_t stage;
   int32_t hit_points;
   float shield_hit_points;
-  int32_t target_role;
+  int32_t target_player_id;
   uint32_t draw_force_fade;
   uint32_t action_seq;
   float x, y, z;
@@ -368,7 +387,6 @@ struct PacketBootstrap {
   float skill;
   float x, y, z;
   uint32_t host_task;
-  uint32_t host_node;
   char host_continue[32];
   uint8_t task_mask[64];
   uint8_t active_task_mask[64];

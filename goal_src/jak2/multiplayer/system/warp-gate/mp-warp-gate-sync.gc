@@ -55,7 +55,7 @@
                                   (phase uint)
                                   (as-indax? symbol)
                                   (evt mp-warp-gate-event))
-  (let ((puppet *mp-puppet*)
+  (let ((puppet (mp-player-target-by-id (-> evt source-player-id)))
         (target-state (mp-warp-gate-target-state phase as-indax?)))
     (when (and puppet
                (nonzero? puppet)
@@ -127,9 +127,11 @@
         (phase (the-as uint (-> evt phase)))
         (as-indax? (mp-warp-gate-indax? evt)))
     (when (= phase MP_WARP_GATE_PHASE_ARRIVE)
-      (set! *mp-puppet-is-warping?* #f)
+      (let ((record (mp-player-record-by-id (-> evt source-player-id))))
+        (when (and record (nonzero? record))
+          (mp-player-runtime-clear-flag! record MP_PLAYER_RUNTIME_WARPING)))
     )
-    (when (and (mp-is-daxter?)
+    (when (and (mp-session-client?)
                (mp-target-ride-along? *target*)
                (= phase MP_WARP_GATE_PHASE_BEGIN)
                gate-proc

@@ -11,7 +11,7 @@
 (define *mp-palace-squid-last-action-seq* (the uint 0))
 (define *mp-palace-squid-pending-resolution-seq* (the uint 0))
 (define *mp-palace-squid-applying-action* #f)
-(define *mp-palace-squid-target-role* -1)
+(define *mp-palace-squid-target-player-id* (the-as int MP_INVALID_PLAYER_ID))
 ;; Tracks the last known squid state name for local vs remote change detection
 (define *mp-palace-squid-last-state-name* (the-as symbol 'none))
 
@@ -33,54 +33,66 @@
        )
   )
 
-(defun mp-palace-squid-remote-player-valid? ()
-  (let ((remote *mp-puppet*))
-    (and remote
-         (nonzero? remote)
-         (-> remote root)
-         (nonzero? (-> remote root))
-         (not (logtest? (-> remote mask) (process-mask sleep)))
-         )
+(defun mp-palace-squid-remote-player-valid? ((record mp-player-record))
+  (let ((remote (mp-player-record-target record)))
+    (if (and remote
+             (nonzero? remote)
+             (-> remote root)
+             (nonzero? (-> remote root))
+             (not (logtest? (-> remote mask) (process-mask sleep))))
+        #t
+        #f)
     )
   )
 
 (defun mp-palace-squid-target-pos! ((proc squid) (out vector))
-  (let ((remote *mp-puppet*)
+  (let ((remote-record
+          (if (and (-> proc root) (nonzero? (-> proc root)))
+              (mp-nearest-remote-player-record-to-position
+                (-> proc root trans) #t)
+              (the-as mp-player-record #f)))
+        (remote (the-as target #f))
         (local-ok? (mp-palace-squid-local-player-valid?))
-        (remote-ok? (mp-palace-squid-remote-player-valid?))
+        (remote-ok? #f)
         )
+    (when (and remote-record (nonzero? remote-record))
+      (set! remote (mp-player-record-target remote-record))
+      (set! remote-ok? (mp-palace-squid-remote-player-valid? remote-record)))
     (cond
-      ((and (mp-is-jak?) local-ok? remote-ok?)
+      ((and (mp-session-host?) local-ok? remote-ok?)
        (let ((local-dist (vector-vector-distance-squared (-> proc root trans) (-> *target* control trans)))
              (remote-dist (vector-vector-distance-squared (-> proc root trans) (-> remote root trans)))
              )
          (if (< remote-dist local-dist)
              (begin
-               (set! *mp-palace-squid-target-role* 1)
+               (set! *mp-palace-squid-target-player-id*
+                     (the-as int (-> remote-record identity player-id)))
                (vector-copy! out (-> remote root trans))
                )
              (begin
-               (set! *mp-palace-squid-target-role* 0)
+               (set! *mp-palace-squid-target-player-id* (the-as int (mp-local-player-id)))
                (set! (-> out quad) (-> (get-trans *target* 3) quad))
                )
              )
          )
        )
-      ((and (mp-is-jak?) remote-ok?)
-       (set! *mp-palace-squid-target-role* 1)
+      ((and (mp-session-host?) remote-ok?)
+       (set! *mp-palace-squid-target-player-id*
+             (the-as int (-> remote-record identity player-id)))
        (vector-copy! out (-> remote root trans))
        )
-      ((and (mp-is-jak?) local-ok?)
-       (set! *mp-palace-squid-target-role* 0)
+      ((and (mp-session-host?) local-ok?)
+       (set! *mp-palace-squid-target-player-id* (the-as int (mp-local-player-id)))
        (set! (-> out quad) (-> (get-trans *target* 3) quad))
        )
-      ((and (not (mp-is-jak?))
+      ((and (not (mp-session-host?))
             (mp-palace-squid-ready?)
-            (= (-> *mp-palace-squid-buffer* remote-state target-role) (-> *local-info* role))
+            (= (-> *mp-palace-squid-buffer* remote-state target-player-id)
+               (the-as int (mp-local-player-id)))
             local-ok?)
        (set! (-> out quad) (-> (get-trans *target* 3) quad))
        )
-      ((and (not (mp-is-jak?)) remote-ok?)
+      ((and (not (mp-session-host?)) remote-ok?)
        (vector-copy! out (-> remote root trans))
        )
       (else
@@ -108,7 +120,7 @@
   (set! (-> slot stage) (-> proc stage))
   (set! (-> slot hit-points) (-> proc hit-points))
   (set! (-> slot shield-hit-points) (-> proc shield-hit-points))
-  (set! (-> slot target-role) *mp-palace-squid-target-role*)
+  (set! (-> slot target-player-id) *mp-palace-squid-target-player-id*)
   (set! (-> slot draw-force-fade) (if (and (-> proc draw) (nonzero? (-> proc draw))) (-> proc draw force-fade) (the uint 0)))
   (set! (-> slot action-seq) *mp-palace-squid-last-action-seq*)
   (set! (-> slot x) (-> proc trans x))
@@ -179,7 +191,7 @@
 
 (defun mp-palace-squid-local-action-authorized? ()
   (or (not (mp-palace-squid-ready?))
-      (mp-is-jak?)
+      (mp-session-host?)
       *mp-palace-squid-applying-action*
       )
   )
@@ -231,7 +243,7 @@
 
 (defun mp-palace-squid-should-swallow-attack? ((proc squid) (attacker process) (msg event-message-block))
   (if (and (mp-palace-squid-ready?)
-           (not (mp-is-jak?))
+           (not (mp-session-host?))
            (not *mp-processing-remote-event*)
            proc
            (nonzero? proc))
@@ -250,7 +262,7 @@
   )
 
 (defun mp-palace-squid-apply-hit-request! ((evt mp-palace-squid-event))
-  (when (mp-is-jak?)
+  (when (mp-session-host?)
     (let ((proc *mp-palace-squid-proc*))
       (when (and proc (nonzero? proc) (!= *mp-palace-squid-last-hit-request* (-> evt sequence)))
         (set! *mp-palace-squid-last-hit-request* (-> evt sequence))
@@ -258,7 +270,7 @@
         (send-event
           proc
           'attack
-          *mp-puppet*
+          (mp-player-target-by-id (-> evt source-player-id))
           (static-attack-info ((id (-> evt param0)) (mode 'mp-hit-remote) (shove-back (meters 2)) (shove-up (meters 0.5)))))
         (set! *mp-processing-remote-event* #f)
         )
@@ -268,7 +280,7 @@
   )
 
 (defun mp-palace-squid-note-grenade-spawn! ((proc squid) (joint-id int) (holder-index int) (charge float) (holder squid-grenade-holder))
-  (when (and (mp-palace-squid-ready?) (mp-is-jak?) proc (nonzero? proc) holder)
+  (when (and (mp-palace-squid-ready?) (mp-session-host?) proc (nonzero? proc) holder)
     (+! *mp-palace-squid-last-action-seq* 1)
     (mp-palace-squid-queue-event!
       MP_PALACE_SQUID_EVT_GRENADE
@@ -285,7 +297,7 @@
   )
 
 (defun mp-palace-squid-note-whirlwind-spawn! ((proc squid))
-  (when (and (mp-palace-squid-ready?) (mp-is-jak?) proc (nonzero? proc))
+  (when (and (mp-palace-squid-ready?) (mp-session-host?) proc (nonzero? proc))
     (+! *mp-palace-squid-last-action-seq* 1)
     (mp-palace-squid-queue-event!
       MP_PALACE_SQUID_EVT_WHIRLWIND
@@ -302,7 +314,7 @@
   )
 
 (defun mp-palace-squid-note-resolution! ((proc squid))
-  (when (and (mp-palace-squid-ready?) (mp-is-jak?) proc (nonzero? proc))
+  (when (and (mp-palace-squid-ready?) (mp-session-host?) proc (nonzero? proc))
     (+! *mp-palace-squid-last-action-seq* 1)
     (mp-palace-squid-queue-event!
       MP_PALACE_SQUID_EVT_RESOLUTION
@@ -369,7 +381,7 @@
   )
 
 (defun mp-palace-squid-poll-resolution! ()
-  (when (and (not (mp-is-jak?)) (> *mp-palace-squid-pending-resolution-seq* *mp-palace-squid-last-action-seq*))
+  (when (and (not (mp-session-host?)) (> *mp-palace-squid-pending-resolution-seq* *mp-palace-squid-last-action-seq*))
     (mp-palace-squid-apply-resolution-event! *mp-palace-squid-pending-resolution-seq*)
     )
   (none)
@@ -378,7 +390,7 @@
 (defun mp-palace-squid-tick ((proc squid))
   (set! *mp-palace-squid-proc* proc)
   (when (mp-palace-squid-ready?)
-    (if (mp-is-jak?)
+    (if (mp-session-host?)
         (begin
           (mp-palace-squid-pack-state! proc (-> *mp-palace-squid-buffer* local-state))
           (pc-multi-send-palace-squid (the-as uint *mp-palace-squid-buffer*))

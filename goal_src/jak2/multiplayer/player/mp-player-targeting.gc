@@ -8,7 +8,7 @@
   (and target-proc
        (nonzero? target-proc)
        (type? target-proc target)
-       (mp-target-is-daxter? target-proc)
+       (mp-target-daxter? target-proc)
        (or (and (-> (the-as target target-proc) state)
                 (nonzero? (-> (the-as target target-proc) state))
                 (= (-> (the-as target target-proc) state name) 'target-ride-along))
@@ -27,7 +27,7 @@
        (-> target-proc root)
        (nonzero? (-> target-proc root))
        (or (not (mp-target-ride-along? target-proc))
-           (let ((partner-jak (if (mp-is-daxter?) *mp-puppet* *target*)))
+           (let ((partner-jak (mp-jak-target-for (the-as target target-proc))))
              (and partner-jak
                   (nonzero? partner-jak)
                   (focus-test? partner-jak dead)
@@ -50,73 +50,53 @@
       )
   )
 
-(defun mp-combat-remote-player-target ((require-control? symbol))
-  "Return the remote player if multiplayer is live and they are valid for combat targeting."
-  (if (and *multi-sync-enabled?*
-           (= (pc-multi-get-status) (mp-connection-status in-game))
-           *local-info*
-           (nonzero? *local-info*))
-      (let ((remote-proc *mp-puppet*))
-        (if (and remote-proc
-                 (nonzero? remote-proc)
-                 (mp-combat-valid-player-target? remote-proc require-control?))
-            remote-proc
-            (the-as process-focusable #f)
-            )
-        )
-      (the-as process-focusable #f)
-      )
-  )
-
-(defun mp-combat-best-player-target ((source process-focusable)
-                                     (current-target process-focusable)
-                                     (local-target process-focusable)
-                                     (remote-target process-focusable))
-  "Pick a stable player combat target, preferring the current one unless the other is meaningfully closer."
-  (cond
-    ((and local-target
-          (nonzero? local-target)
-          remote-target
-          (nonzero? remote-target)
-          source
-          (nonzero? source)
-          (-> source root)
-          (nonzero? (-> source root)))
-     (let ((local-dist (vector-vector-distance (-> source root trans) (-> local-target root trans)))
-           (remote-dist (vector-vector-distance (-> source root trans) (-> remote-target root trans))))
-       (cond
-         ((= current-target local-target)
-          (if (< remote-dist (- local-dist *mp-combat-retarget-distance-bias*))
-              remote-target
-              local-target
-              )
-          )
-         ((= current-target remote-target)
-          (if (< local-dist (- remote-dist *mp-combat-retarget-distance-bias*))
-              local-target
-              remote-target
-              )
-          )
-         ((< remote-dist local-dist)
-          remote-target
-          )
-         (else
-           local-target
-           )
-         )
-       )
-     )
-    ((and local-target (nonzero? local-target))
-     local-target
-     )
-    ((and remote-target (nonzero? remote-target))
-     remote-target
-     )
-    (else
-      (the-as process-focusable #f)
-      )
-    )
-  )
+(defun mp-combat-nearest-player-target ((source process-focusable)
+                                        (current-target process-focusable)
+                                        (require-control? symbol))
+  "Select across every valid player while retaining the current-target bias."
+  (when (or (not source)
+            (zero? source)
+            (not (-> source root))
+            (zero? (-> source root)))
+    (return (the-as process-focusable #f)))
+  (let ((best-target (the-as process-focusable #f))
+        (best-distance (meters 1000000.0)))
+    (when (mp-combat-valid-player-target? current-target require-control?)
+      (set! best-target current-target)
+      (set! best-distance
+            (vector-vector-distance
+              (-> source root trans) (-> current-target root trans))))
+    ;; Preserve vanilla/offline behavior before a multiplayer record is bound.
+    (when (and (or (not best-target) (zero? best-target))
+               (mp-combat-valid-player-target? *target* require-control?))
+      (set! best-target *target*)
+      (set! best-distance
+            (vector-vector-distance
+              (-> source root trans) (-> *target* root trans))))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (and record (nonzero? record))
+          (let ((candidate (mp-player-record-target record)))
+            (when (and (mp-combat-valid-player-target?
+                         candidate require-control?)
+                       (!= candidate best-target))
+              (let ((candidate-distance
+                      (vector-vector-distance
+                        (-> source root trans) (-> candidate root trans))))
+                (when (or (not best-target)
+                          (zero? best-target)
+                          (if (= best-target current-target)
+                              (< candidate-distance
+                                 (- best-distance
+                                    *mp-combat-retarget-distance-bias*))
+                              (or (< candidate-distance best-distance)
+                                  (and (= candidate-distance best-distance)
+                                       (< player-id
+                                          (mp-player-id-from-process
+                                            best-target))))))
+                  (set! best-target candidate)
+                  (set! best-distance candidate-distance))))))))
+    best-target))
 
 (defun mp-target-death-state? ((state-name symbol))
   "Return true for target states that should be treated as player death."
@@ -151,15 +131,11 @@
 (defun mp-guard-target-debug-process-label ((proc process))
   (cond
     ((or (not proc) (zero? proc)) 'NONE)
-    ((= proc *target*) 'LOCAL)
-    (else
-      (let ((remote *mp-puppet*))
-        (if (and remote (= proc remote))
-            'REMOTE-PUPPET
-            'OTHER
-            )
-        )
-      )
+    ((mp-player-process-record proc)
+     (if (= (mp-player-id-from-process proc) (mp-local-player-id))
+         'LOCAL
+         'REMOTE-PUPPET))
+    (else 'OTHER)
     )
   )
 
@@ -198,17 +174,19 @@
         (set! near? #t)
         )
       (when (not near?)
-        (let ((puppet *mp-puppet*))
-          (when (and puppet
-                     (nonzero? puppet)
-                     (focus-test? puppet pilot)
-                     (-> puppet root)
-                     (nonzero? (-> puppet root))
-                     (< (vector-vector-distance-squared (-> veh root trans) (-> puppet root trans)) dist-sq))
-            (set! near? #t)
-            )
-          )
-        )
+        (dotimes (player-id MP_MAX_PLAYERS)
+          (let ((record (mp-player-record-by-id (the-as uint player-id))))
+            (when (and record (nonzero? record))
+              (let ((player-target (mp-player-record-target record)))
+                (when (and player-target
+                           (nonzero? player-target)
+                           (focus-test? player-target pilot)
+                           (-> player-target root)
+                           (nonzero? (-> player-target root))
+                           (< (vector-vector-distance-squared
+                                (-> veh root trans) (-> player-target root trans))
+                              dist-sq))
+                  (set! near? #t)))))))
       )
     near?
     )
@@ -235,32 +213,14 @@
         (set! near? #t)
         )
       (when (not near?)
-        (let ((puppet *mp-puppet*))
-          (when (and puppet
-                     (nonzero? puppet)
-                     (-> puppet root)
-                     (nonzero? (-> puppet root))
-                     (mp-point-near-pos-xz? (-> puppet root trans) pos radius))
-            (set! near? #t)
-            )
-          )
-        )
-      (when (and (not near?)
-                 *multi-remote-render-pos*
-                 (nonzero? *multi-remote-render-pos*)
-                 (mp-point-near-pos-xz? *multi-remote-render-pos* pos radius))
-        (set! near? #t)
-        )
-      (when (and (not near?)
-                 *remote-info*
-                 (nonzero? *remote-info*))
-        (let ((remote-pos (new 'stack-no-clear 'vector)))
-          (set-vector! remote-pos (-> *remote-info* x) (-> *remote-info* y) (-> *remote-info* z) 1.0)
-          (when (mp-point-near-pos-xz? remote-pos pos radius)
-            (set! near? #t)
-            )
-          )
-        )
+        (dotimes (player-id MP_MAX_PLAYERS)
+          (let ((record (mp-player-record-by-id (the-as uint player-id))))
+            (when (and record (nonzero? record))
+              (let ((player-pos (mp-player-record-position record)))
+                (when (and player-pos
+                           (nonzero? player-pos)
+                           (mp-point-near-pos-xz? player-pos pos radius))
+                  (set! near? #t)))))))
       )
     near?
     )
@@ -277,28 +237,14 @@
       (set! high-enough? #t)
       )
     (when (not high-enough?)
-      (let ((puppet *mp-puppet*))
-        (when (and puppet
-                   (nonzero? puppet)
-                   (-> puppet root)
-                   (nonzero? (-> puppet root))
-                   (>= (-> puppet root trans y) min-y))
-          (set! high-enough? #t)
-          )
-        )
-      )
-    (when (and (not high-enough?)
-               *multi-remote-render-pos*
-               (nonzero? *multi-remote-render-pos*)
-               (>= (-> *multi-remote-render-pos* y) min-y))
-      (set! high-enough? #t)
-      )
-    (when (and (not high-enough?)
-               *remote-info*
-               (nonzero? *remote-info*)
-               (>= (-> *remote-info* y) min-y))
-      (set! high-enough? #t)
-      )
+      (dotimes (player-id MP_MAX_PLAYERS)
+        (let ((record (mp-player-record-by-id (the-as uint player-id))))
+          (when (and record (nonzero? record))
+            (let ((player-pos (mp-player-record-position record)))
+              (when (and player-pos
+                         (nonzero? player-pos)
+                         (>= (-> player-pos y) min-y))
+                (set! high-enough? #t)))))))
     high-enough?
     )
   )

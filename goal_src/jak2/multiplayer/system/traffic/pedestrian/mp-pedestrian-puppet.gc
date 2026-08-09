@@ -53,7 +53,7 @@
     (debug-log *mp-debug-log?*
       "local-level=~D remote-level=~D peds=~D vehs=~D "
       *mp-traffic-art-context-local-level*
-      *mp-traffic-art-context-remote-level*
+      *mp-traffic-art-context-authority-level*
       *mp-traffic-art-context-ped-count*
       *mp-traffic-art-context-veh-count*
       )
@@ -88,7 +88,7 @@
       (mp-pedestrian-param-nav-branch-ready? params)
       *mp-traffic-art-context-riding*
       *mp-traffic-art-context-local-level*
-      *mp-traffic-art-context-remote-level*
+      *mp-traffic-art-context-authority-level*
       )
     (debug-log *mp-debug-log?*
       "proc-state=~S pos=(~f,~f,~f)~%"
@@ -514,13 +514,13 @@
       (set! (-> rec ghost-state-id) (mp-pedestrian-effective-remote-state-id proc slot))
       (set! (-> rec ghost-animation-profile) (-> slot animation-profile))
       (set! (-> rec ghost-hp) (-> slot hp))
-      (set! (-> rec ghost-target-aid) (-> slot target-aid))
+      (set! (-> rec ghost-aux-state) (-> slot target-player-id))
       (when (mp-guard-target-debug-ready? (-> slot net-id))
         (debug-log *mp-debug-log?*
                 "[MP-GuardTarget] nid=~D phase=recv state=~S aid=~D "
                 (-> slot net-id)
                 (mp-ped-get-state-from-id (the uint (-> slot state-id)))
-                (-> rec ghost-target-aid)
+                (-> rec ghost-aux-state)
                 )
         (debug-log *mp-debug-log?*
                 "focus=~S focus-type=~S traffic=~S traffic-type=~S lock=0~%"

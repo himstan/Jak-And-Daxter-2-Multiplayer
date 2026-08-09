@@ -1,0 +1,804 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; Player identity is independent from transport role and avatar choice.
+(defconstant MP_MAX_PLAYERS 4)
+(defconstant MP_INVALID_PLAYER_ID (the uint #xffffffff))
+(defconstant MP_INVALID_COMPACT_PLAYER_ID (the uint8 #xff))
+(defconstant MP_INVALID_PAD_INDEX (the uint8 #xff))
+(defconstant MP_REMOTE_PLAYER_MARKER_KEY_BASE (the int #x4d505240))
+
+(defconstant MP_PLAYER_RUNTIME_DYING              (the uint 1))
+(defconstant MP_PLAYER_RUNTIME_DEAD               (the uint 2))
+(defconstant MP_PLAYER_RUNTIME_RESPAWNING         (the uint 4))
+(defconstant MP_PLAYER_RUNTIME_INTERP_INITIALIZED (the uint 8))
+(defconstant MP_PLAYER_RUNTIME_WAS_FAR            (the uint 16))
+(defconstant MP_PLAYER_RUNTIME_WARPING             (the uint 32))
+(defconstant MP_PLAYER_RUNTIME_RECOVERING          (the uint 64))
+(defconstant MP_PLAYER_RUNTIME_FORCE_PRESENTATION  (the uint 128))
+(defconstant MP_PLAYER_RUNTIME_PENDING_GUN_SHOT    (the uint 256))
+
+(defconstant MP_PUPPET_LIFECYCLE_NONE     (the uint8 0))
+(defconstant MP_PUPPET_LIFECYCLE_SPAWNING (the uint8 1))
+(defconstant MP_PUPPET_LIFECYCLE_ACTIVE   (the uint8 2))
+(defconstant MP_PUPPET_LIFECYCLE_CULLED   (the uint8 3))
+
+(defenum mp-session-role
+  :type int32
+  (none   -1)
+  (host    0)
+  (client  1)
+  )
+
+(defenum mp-player-character
+  :type uint32
+  (unknown 0)
+  (jak     1)
+  (daxter  2)
+  )
+
+(deftype mp-player-identity (structure)
+  ((player-id       uint32)
+   (character       mp-player-character)
+   (identity-ready? uint8)
+   (state-ready?    uint8)
+   (joined?         uint8)
+   (reserved        uint8)
+   (name            uint8 24)
+   (pad             uint8 12)
+   )
+  :size-assert 48)
+
+(deftype mp-player-connection-state (structure)
+  ((status                 mp-connection-status)
+   (latest-state-sequence  uint32)
+   (latest-turret-sequence uint32)
+   (connected?             uint8)
+   (state-cached?          uint8)
+   (pad                    uint8 2)
+   )
+  :size-assert 16)
+
+(deftype mp-player-transform-state (structure)
+  ((position vector :inline)
+   (velocity vector :inline)
+   (angle    float)
+   (level    uint32)
+   (reserved uint32 2)
+   )
+  :size-assert 48)
+
+(deftype mp-player-action-state (structure)
+  ((target-state-id       uint32)
+   (darkjak-stage         uint32)
+   (authoritative-sequence uint32)
+   (action-state-id       uint32)
+   (scene-state           uint8)
+   (respawn-flags         uint8)
+   (death-state           uint8)
+   (scene-latched?        uint8)
+   (last-replayed-sequence uint32)
+   (reserved              uint32 2)
+   )
+  :size-assert 32)
+
+(deftype mp-player-input-state (structure)
+  ((buttons         uint16)
+   (leftx           uint8)
+   (lefty           uint8)
+   (rightx          uint8)
+   (righty          uint8)
+   (equipped-weapon uint8)
+   (reserved        uint8)
+   (camera-angle-y  float)
+   (pad             uint32)
+   )
+  :size-assert 16)
+
+(deftype mp-player-vehicle-state (structure)
+  ((vehicle-id uint32)
+   (seat-index uint8)
+   (turret-active? uint8)
+   (reserved uint8 2)
+   (turret-roty float)
+   (turret-rotx float)
+   (state mp-vehicle-state :inline)
+   )
+  :size-assert 96)
+
+(deftype mp-target-ghost-record (structure)
+  ((trans           vector     :inline)
+   (quat            quaternion :inline)
+   (velocity        vector     :inline)
+   (state-id        uint32)
+   (equipped-weapon uint8)
+   (pad-reserved    uint8 3)
+   (buttons         uint16)
+   (leftx           uint8)
+   (lefty           uint8)
+   (rightx          uint8)
+   (righty          uint8)
+   (cam-angle-y     float)
+   (health          float)
+   (last-update     time-frame)
+   (active?         symbol)
+   (pad             uint8 12)
+   )
+  :size-assert 96)
+
+(deftype mp-player-runtime-state (structure)
+  ((target-handle handle)
+   (vehicle-handle handle)
+   (ghost mp-target-ghost-record :inline)
+   (presentation-position vector :inline)
+   (presentation-quaternion quaternion :inline)
+   (last-fresh-input-time time-frame)
+   (action-warmup-start time-frame)
+   (last-state-packet-id uint32)
+   (last-action-sequence uint32)
+   (state-mismatch-count int32)
+   (death-state uint32)
+   (pending-gun-shot-sequence uint32)
+   (last-gun-shot-sequence uint32)
+   (last-gun-replay-debug-sequence uint32)
+   (interpolation-angle float)
+   (pending-gun-shot-camera-angle float)
+   (last-gun-log-active int32)
+   (last-gun-log-requested int32)
+   (pad-index uint8)
+   (puppet-lifecycle uint8)
+   (pending-gun-shot-weapon uint8)
+   (reserved-byte uint8)
+   (flags uint32)
+   (reserved uint32 3)
+   )
+  :size-assert 224)
+
+(deftype mp-player-record (structure)
+  ((identity   mp-player-identity :inline)
+   (connection mp-player-connection-state :inline)
+   (transform  mp-player-transform-state :inline)
+   (action     mp-player-action-state :inline)
+   (input      mp-player-input-state :inline)
+   (vehicle    mp-player-vehicle-state :inline)
+   (runtime    mp-player-runtime-state :inline)
+   )
+  :size-assert 480)
+
+(deftype mp-player-controller (structure)
+  ((records                  mp-player-record MP_MAX_PLAYERS :inline)
+   (local-player-id          uint32)
+   (host-player-id           uint32)
+   (reserved                 uint32 2)
+   )
+  :size-assert 1936)
+
+(define-perm *mp-player-controller* mp-player-controller
+  (new 'static 'mp-player-controller))
+(define-perm *mp-session-role* mp-session-role (mp-session-role none))
+
+(define-extern mp-puppet-update-ghost!
+  (function mp-target-ghost-record mp-player-record none))
+(define-extern mp-puppet-apply-weapon-state!
+  (function target mp-target-ghost-record none))
+(define-extern mp-puppet-flush-pending-gun-shot!
+  (function target mp-target-ghost-record none))
+(define-extern mp-puppet-clear-stale! (function mp-player-record none))
+(define-extern mp-puppet-spawn (function mp-player-record target))
+(define-extern mp-puppet-deactivate! (function mp-player-record none))
+(define-extern mp-play-remote-death-vo (function mp-player-record none))
+
+(defun mp-player-id-valid? ((player-id uint))
+  (< player-id (the uint MP_MAX_PLAYERS)))
+
+;; This private slot accessor is the only place outside reset/iteration that
+;; indexes the inline registry. Public lookup additionally requires occupancy.
+(defun mp-player-controller-slot ((controller mp-player-controller) (player-id uint))
+  (if (and controller
+           (nonzero? controller)
+           (mp-player-id-valid? player-id))
+      (-> controller records player-id)
+      (the-as mp-player-record #f)))
+
+(defun mp-player-pad-reset! ((pad-index uint))
+  (when (and (> pad-index (the uint 0))
+             (< pad-index (the uint MP_MAX_PLAYERS))
+             *cpad-list*
+             (nonzero? *cpad-list*)
+             *cpad-history-list*
+             (nonzero? *cpad-history-list*))
+    (let ((pad (-> *cpad-list* cpads pad-index))
+          (history (-> *cpad-history-list* cpads pad-index)))
+      (when (and pad (nonzero? pad))
+        (cpad-invalid! pad)
+        (set! (-> pad number) (the-as int pad-index)))
+      (when (and history (nonzero? history))
+        (dotimes (history-index 15)
+          (set! (-> history button0-abs history-index) (pad-buttons))
+          (set! (-> history button0-rel history-index) (pad-buttons)))))))
+
+(defun mp-player-controller-pad-in-use?
+       ((controller mp-player-controller) (pad-index uint) (excluded-player-id uint))
+  (let ((in-use? #f))
+    (when (and controller (nonzero? controller))
+      (dotimes (player-id MP_MAX_PLAYERS)
+        (let ((record (mp-player-controller-slot controller (the-as uint player-id))))
+          (when (and record
+                     (nonzero? record)
+                     (!= (-> record identity player-id) excluded-player-id)
+                     (= (the-as uint (-> record runtime pad-index)) pad-index))
+            (set! in-use? #t)))))
+    in-use?))
+
+(defun mp-player-controller-lease-pad!
+       ((controller mp-player-controller) (record mp-player-record))
+  (when (and controller (nonzero? controller) record (nonzero? record))
+    (let ((player-id (the-as uint (-> record identity player-id)))
+          (current-pad (the-as uint (-> record runtime pad-index))))
+      (when (= player-id (-> controller local-player-id))
+        (set! (-> record runtime pad-index) (the uint8 0))
+        (return (the uint 0)))
+      (when (and (> current-pad (the uint 0))
+                 (< current-pad (the uint MP_MAX_PLAYERS)))
+        (return current-pad))
+      (dotimes (pad-offset (- MP_MAX_PLAYERS 1))
+        (let ((candidate-pad (the-as uint (+ pad-offset 1))))
+          (when (not (mp-player-controller-pad-in-use?
+                       controller candidate-pad player-id))
+            (mp-player-pad-reset! candidate-pad)
+            (set! (-> record runtime pad-index) (the-as uint8 candidate-pad))
+            (return candidate-pad))))))
+  (the-as uint MP_INVALID_PAD_INDEX))
+
+(defun mp-player-controller-release-pad!
+       ((controller mp-player-controller) (record mp-player-record))
+  (when (and controller (nonzero? controller) record (nonzero? record))
+    (let ((pad-index (the-as uint (-> record runtime pad-index))))
+      (when (and (> pad-index (the uint 0))
+                 (< pad-index (the uint MP_MAX_PLAYERS)))
+        (mp-player-pad-reset! pad-index))
+      (set! (-> record runtime pad-index) MP_INVALID_PAD_INDEX))))
+
+(defun mp-player-record-reset! ((record mp-player-record))
+  (when (and record (nonzero? record))
+    (let ((old-target (the-as target (handle->process-safe (-> record runtime target-handle)))))
+      (when (and old-target (nonzero? old-target))
+        (set! (-> old-target player-id) MP_INVALID_PLAYER_ID)))
+    (mem-set32!
+      (the-as pointer record)
+      (/ (size-of mp-player-record) 4)
+      0)
+    (set! (-> record identity player-id) MP_INVALID_PLAYER_ID)
+    (set! (-> record identity character) (mp-player-character unknown))
+    (set! (-> record runtime pad-index) MP_INVALID_PAD_INDEX)
+    (set! (-> record runtime last-gun-log-active) -1)
+    (set! (-> record runtime last-gun-log-requested) -1)))
+
+(defun mp-player-controller-reset! ((controller mp-player-controller))
+  (when (and controller (nonzero? controller))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (-> controller records player-id)))
+        (mp-player-controller-release-pad! controller record)
+        (mp-player-record-reset! record)))
+    (set! (-> controller local-player-id) MP_INVALID_PLAYER_ID)
+    (set! (-> controller host-player-id) MP_INVALID_PLAYER_ID)
+    (set! (-> controller reserved 0) (the uint 0))
+    (set! (-> controller reserved 1) (the uint 0))))
+
+(defun mp-player-controller-register!
+       ((controller mp-player-controller) (player-id uint) (character mp-player-character))
+  (let ((record (mp-player-controller-slot controller player-id)))
+    (when (and record (nonzero? record))
+      (mp-player-controller-release-pad! controller record)
+      (mp-player-record-reset! record)
+      (set! (-> record identity player-id) (the-as uint32 player-id))
+      (set! (-> record identity character) character)
+      (set! (-> record identity identity-ready?) (the uint8 1))
+      (set! (-> record identity joined?) (the uint8 1))
+      (set! (-> record connection connected?) (the uint8 1)))
+    record))
+
+(defun mp-player-controller-unregister!
+       ((controller mp-player-controller) (player-id uint))
+  (let ((record (mp-player-controller-slot controller player-id)))
+    (when (and record (nonzero? record))
+      (mp-player-controller-release-pad! controller record)
+      (mp-player-record-reset! record))
+    (when (and controller (nonzero? controller))
+      (when (= (-> controller local-player-id) player-id)
+        (set! (-> controller local-player-id) MP_INVALID_PLAYER_ID))
+      (when (= (-> controller host-player-id) player-id)
+        (set! (-> controller host-player-id) MP_INVALID_PLAYER_ID))
+      )))
+
+(defun mp-player-controller-record
+       ((controller mp-player-controller) (player-id uint))
+  (let ((record (mp-player-controller-slot controller player-id)))
+    (if (and record
+             (nonzero? record)
+             (nonzero? (-> record identity joined?)))
+        record
+        (the-as mp-player-record #f))))
+
+(defun mp-player-controller-record-id
+       ((controller mp-player-controller) (record mp-player-record))
+  "Resolve a record's array slot even while its vacant identity uses the invalid sentinel."
+  (when (and controller (nonzero? controller) record (nonzero? record))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (when (= record (mp-player-controller-slot controller (the-as uint player-id)))
+        (return (the-as uint player-id)))))
+  MP_INVALID_PLAYER_ID)
+
+(defun mp-player-controller-local-record ((controller mp-player-controller))
+  (if (and controller (nonzero? controller))
+      (mp-player-controller-record controller (-> controller local-player-id))
+      (the-as mp-player-record #f)))
+
+(defun mp-player-controller-host-record ((controller mp-player-controller))
+  (if (and controller (nonzero? controller))
+      (mp-player-controller-record controller (-> controller host-player-id))
+      (the-as mp-player-record #f)))
+
+(defun mp-player-controller-target-record
+       ((controller mp-player-controller) (player-target target))
+  (if (and player-target (nonzero? player-target))
+      (mp-player-controller-record controller (-> player-target player-id))
+      (the-as mp-player-record #f)))
+
+(defun mp-player-process-record ((player-process process))
+  (if (and player-process
+           (nonzero? player-process)
+           (type? player-process target))
+      (mp-player-controller-target-record
+        *mp-player-controller*
+        (the-as target player-process))
+      (the-as mp-player-record #f)))
+
+(defun mp-player-id-from-process ((player-process process))
+  (let ((record (mp-player-process-record player-process)))
+    (if (and record (nonzero? record))
+        (the-as uint (-> record identity player-id))
+        MP_INVALID_PLAYER_ID)))
+
+(defun mp-player-controller-target-pad-index
+       ((controller mp-player-controller) (player-id uint) (leased-pad-index uint))
+  "Use the neutral sink when a menu owns the local physical pad."
+  (if (and controller
+           (nonzero? controller)
+           (= player-id (-> controller local-player-id))
+           (or (= *master-mode* 'menu)
+               (= *master-mode* 'progress)
+               (= *master-mode* 'pause)
+               (= *master-mode* 'freeze)))
+      (the uint CPAD_TARGET_INPUT_SINK_INDEX)
+      leased-pad-index))
+
+(defun mp-player-controller-bind-target!
+       ((controller mp-player-controller) (player-id uint) (player-target target))
+  (when (and controller
+             (nonzero? controller)
+             player-target
+             (nonzero? player-target))
+    (let ((record (mp-player-controller-record controller player-id)))
+      (when (and record (nonzero? record))
+        (let* ((bound-target
+                 (the-as target
+                   (handle->process-safe (-> record runtime target-handle))))
+               (control (-> player-target control))
+               (target-already-bound?
+                 (and bound-target
+                      (nonzero? bound-target)
+                      (= bound-target player-target))))
+          (set! (-> player-target player-id) (the-as uint32 player-id))
+          (set! (-> record runtime target-handle) (process->handle player-target))
+          (let* ((leased-pad-index
+                   (mp-player-controller-lease-pad! controller record))
+                 (target-pad-index
+                   (mp-player-controller-target-pad-index
+                     controller player-id leased-pad-index)))
+            (when (and (<= target-pad-index
+                            (the uint CPAD_TARGET_INPUT_SINK_INDEX))
+                       control
+                       (nonzero? control)
+                       *cpad-list*
+                       (nonzero? *cpad-list*)
+                       (or (not target-already-bound?)
+                           (not (and (-> control cpad)
+                                     (nonzero? (-> control cpad))))))
+              (set! (-> control cpad)
+                    (-> *cpad-list* cpads target-pad-index)))))))))
+
+(defun mp-player-controller-unbind-target!
+       ((controller mp-player-controller) (player-id uint))
+  (let ((record (mp-player-controller-record controller player-id)))
+    (when (and record (nonzero? record))
+      (let ((player-target
+              (the-as target (handle->process-safe (-> record runtime target-handle)))))
+        (when (and player-target (nonzero? player-target))
+          (set! (-> player-target player-id) MP_INVALID_PLAYER_ID)))
+      (set! (-> record runtime target-handle) (the-as handle #f)))))
+
+(defun mp-player-controller-unbind-record-target!
+       ((controller mp-player-controller) (record mp-player-record))
+  "Clear a target binding even after networking has marked its slot vacant."
+  (when (and controller (nonzero? controller) record (nonzero? record))
+    (let ((player-target
+            (the-as target (handle->process-safe (-> record runtime target-handle)))))
+      (when (and player-target (nonzero? player-target))
+        (set! (-> player-target player-id) MP_INVALID_PLAYER_ID)))
+    (set! (-> record runtime target-handle) (the-as handle #f))))
+
+(defun mp-player-controller-for-each-active!
+       ((controller mp-player-controller) (callback (function mp-player-record none)))
+  (when (and controller (nonzero? controller) callback (nonzero? callback))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-controller-record controller (the-as uint player-id))))
+        (when (and record (nonzero? record))
+          (callback record))))))
+
+(defun mp-player-record-remote? ((controller mp-player-controller) (record mp-player-record))
+  (and controller
+       (nonzero? controller)
+       record
+       (nonzero? record)
+       (!= (-> record identity player-id) (-> controller local-player-id))))
+
+(defun mp-player-controller-for-each-remote!
+       ((controller mp-player-controller) (callback (function mp-player-record none)))
+  (when (and controller (nonzero? controller) callback (nonzero? callback))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-controller-record controller (the-as uint player-id))))
+        (when (and record
+                   (nonzero? record)
+                   (mp-player-record-remote? controller record))
+          (callback record))))))
+
+(defun mp-player-controller-for-each-stale-remote!
+       ((controller mp-player-controller) (callback (function mp-player-record none)))
+  "Visit vacant slots that still own GOAL presentation resources."
+  (when (and controller (nonzero? controller) callback (nonzero? callback))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-controller-slot controller (the-as uint player-id))))
+        (when (and record
+                   (nonzero? record)
+                   (zero? (-> record identity joined?))
+                   (!= (the-as uint player-id) (-> controller local-player-id))
+                   (or (nonzero? (-> record runtime target-handle))
+                       (nonzero? (-> record runtime vehicle-handle))
+                       (< (the-as uint (-> record runtime pad-index))
+                          (the uint MP_MAX_PLAYERS))))
+          (callback record))))))
+
+(defun mp-local-player-record ()
+  (mp-player-controller-local-record *mp-player-controller*))
+
+(defun mp-host-player-record ()
+  (mp-player-controller-host-record *mp-player-controller*))
+
+(defun mp-player-record-by-id ((player-id uint))
+  (mp-player-controller-record *mp-player-controller* player-id))
+
+(defun mp-player-record-by-marker-key ((marker-key object))
+  "Resolve a per-player minimap key without depending on the marker's process handle."
+  (let ((player-id
+          (- (the-as int marker-key) MP_REMOTE_PLAYER_MARKER_KEY_BASE)))
+    (if (and (>= player-id 0) (< player-id MP_MAX_PLAYERS))
+        (mp-player-record-by-id (the-as uint player-id))
+        (the-as mp-player-record #f))))
+
+(defun mp-local-player-id ()
+  (if (mp-player-id-valid? (-> *mp-player-controller* local-player-id))
+      (the-as uint (-> *mp-player-controller* local-player-id))
+      MP_INVALID_PLAYER_ID))
+
+(defun mp-host-player-id ()
+  (if (mp-player-id-valid? (-> *mp-player-controller* host-player-id))
+      (the-as uint (-> *mp-player-controller* host-player-id))
+      MP_INVALID_PLAYER_ID))
+
+(defun mp-player-record-target ((record mp-player-record))
+  (if (and record (nonzero? record))
+      (the-as target (handle->process-safe (-> record runtime target-handle)))
+      (the-as target #f)))
+
+(defun mp-player-record-ghost ((record mp-player-record))
+  (if (and record (nonzero? record))
+      (-> record runtime ghost)
+      (the-as mp-target-ghost-record #f)))
+
+(defun mp-player-record-presentation-position ((record mp-player-record))
+  (if (and record (nonzero? record))
+      (-> record runtime presentation-position)
+      (the-as vector #f)))
+
+(defun mp-player-record-presentation-quaternion ((record mp-player-record))
+  (if (and record (nonzero? record))
+      (-> record runtime presentation-quaternion)
+      (the-as quaternion #f)))
+
+(defun mp-player-target-by-id ((player-id uint))
+  (mp-player-record-target (mp-player-record-by-id player-id)))
+
+(defun mp-player-record-by-vehicle-id ((vehicle-id uint))
+  "Resolve canonical vehicle ownership or occupancy to the lowest player ID."
+  (when (nonzero? vehicle-id)
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (and record
+                   (nonzero? record)
+                   (or (= (-> record vehicle vehicle-id) vehicle-id)
+                       (= (-> record vehicle state net-id) vehicle-id)))
+          (return record)))))
+  (the-as mp-player-record #f))
+
+(defun mp-remote-player-record-by-vehicle-id ((vehicle-id uint))
+  "Resolve a vehicle to a non-local owner or occupant record."
+  (when (nonzero? vehicle-id)
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (and record
+                   (nonzero? record)
+                   (mp-player-record-remote? *mp-player-controller* record)
+                   (or (= (-> record vehicle vehicle-id) vehicle-id)
+                       (= (-> record vehicle state net-id) vehicle-id)))
+          (return record)))))
+  (the-as mp-player-record #f))
+
+(defun mp-player-runtime-flag? ((record mp-player-record) (flag uint))
+  (if (and record
+           (nonzero? record)
+           (logtest? (-> record runtime flags) flag))
+      #t
+      #f))
+
+(defun mp-player-runtime-set-flag! ((record mp-player-record) (flag uint))
+  (when (and record (nonzero? record))
+    (logior! (-> record runtime flags) flag)))
+
+(defun mp-player-runtime-clear-flag! ((record mp-player-record) (flag uint))
+  (when (and record (nonzero? record))
+    (logclear! (-> record runtime flags) flag)))
+
+(defun mp-player-record-dead-or-dying? ((record mp-player-record))
+  (and record
+       (nonzero? record)
+       (or (mp-player-runtime-flag? record MP_PLAYER_RUNTIME_DYING)
+           (mp-player-runtime-flag? record MP_PLAYER_RUNTIME_DEAD))))
+
+(defun mp-any-live-remote-player? ()
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (when (and record
+                 (nonzero? record)
+                 (mp-player-record-remote? *mp-player-controller* record)
+                 (>= (-> record connection status) 4)
+                 (not (mp-player-record-dead-or-dying? record)))
+        (return #t))))
+  #f)
+
+(defun mp-all-remote-players-dead? ()
+  (let ((found-remote? #f))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (and record
+                   (nonzero? record)
+                   (mp-player-record-remote? *mp-player-controller* record)
+                   (>= (-> record connection status) 4))
+          (set! found-remote? #t)
+          (when (not (mp-player-runtime-flag? record MP_PLAYER_RUNTIME_DEAD))
+            (return #f)))))
+    found-remote?))
+
+(defun mp-any-remote-player-connected? ()
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (when (and record
+                 (nonzero? record)
+                 (mp-player-record-remote? *mp-player-controller* record)
+                 (>= (-> record connection status) 4))
+        (return #t))))
+  #f)
+
+(defun mp-any-remote-player-scene-active? ()
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (when (and record
+                 (nonzero? record)
+                 (mp-player-record-remote? *mp-player-controller* record)
+                 (>= (-> record connection status) 4)
+                 (or (nonzero? (-> record action scene-state))
+                     (nonzero? (-> record action scene-latched?))))
+        (return #t))))
+  #f)
+
+(defun mp-all-connected-remote-players-scene-ready? ()
+  "Vacant and disconnected slots do not participate in the scene barrier."
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (when (and record
+                 (nonzero? record)
+                 (mp-player-record-remote? *mp-player-controller* record)
+                 (>= (-> record connection status) 4)
+                 (zero? (-> record action scene-state))
+                 (zero? (-> record action scene-latched?)))
+        (return #f))))
+  #t)
+
+(defun mp-local-player-respawning? ()
+  (mp-player-runtime-flag?
+    (mp-local-player-record) MP_PLAYER_RUNTIME_RESPAWNING))
+
+(defun mp-set-local-player-respawning! ((respawning? symbol))
+  (let ((record (mp-local-player-record)))
+    (when (and record (nonzero? record))
+      (if respawning?
+          (mp-player-runtime-set-flag! record MP_PLAYER_RUNTIME_RESPAWNING)
+          (mp-player-runtime-clear-flag! record MP_PLAYER_RUNTIME_RESPAWNING))))
+  (none))
+
+(defun mp-player-record-position ((record mp-player-record))
+  (when (and record (nonzero? record))
+    (let ((player-target (mp-player-record-target record)))
+      (when (and player-target
+                 (nonzero? player-target)
+                 (-> player-target root)
+                 (nonzero? (-> player-target root)))
+        (return (-> player-target root trans))))
+    (when (mp-player-runtime-flag? record MP_PLAYER_RUNTIME_INTERP_INITIALIZED)
+      (return (-> record runtime presentation-position)))
+    (return (-> record transform position)))
+  (the-as vector #f))
+
+(defun mp-nearest-remote-player-record-to-position
+       ((origin-pos vector) (require-live-target? symbol))
+  "Return the nearest non-local record to an explicit world position."
+  (let ((best-record (the-as mp-player-record #f))
+        (best-distance (meters 1000000.0)))
+    (when (or (not origin-pos) (zero? origin-pos))
+      (return best-record))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (and record
+                   (nonzero? record)
+                   (mp-player-record-remote? *mp-player-controller* record)
+                   (or (not require-live-target?)
+                       (let ((player-target (mp-player-record-target record)))
+                         (and (not (mp-player-record-dead-or-dying? record))
+                              player-target
+                              (nonzero? player-target)
+                              (!= (-> player-target status) 'dead)))))
+          (let ((record-pos (mp-player-record-position record)))
+            (when (and record-pos (nonzero? record-pos))
+              (let ((distance (vector-vector-distance origin-pos record-pos)))
+                (when (or (not best-record)
+                          (zero? best-record)
+                          (< distance best-distance)
+                          (and (= distance best-distance)
+                               (< (-> record identity player-id)
+                                  (-> best-record identity player-id))))
+                  (set! best-record record)
+                  (set! best-distance distance))))))))
+    best-record))
+
+(defun mp-nearest-remote-player-record
+       ((origin target) (require-live-target? symbol))
+  "Return the nearest non-local record to an explicit target context."
+  (if (and origin
+           (nonzero? origin)
+           (-> origin root)
+           (nonzero? (-> origin root)))
+      (mp-nearest-remote-player-record-to-position
+        (-> origin root trans) require-live-target?)
+      (the-as mp-player-record #f)))
+
+(defun mp-nearest-remote-player-target ((origin target))
+  (mp-player-record-target (mp-nearest-remote-player-record origin #t)))
+
+(defun mp-nearest-player-character-record-to-position
+       ((origin-pos vector)
+        (character mp-player-character)
+        (excluded-player-id uint))
+  "Return the nearest active matching character to a position; ties use player ID."
+  (let ((best-record (the-as mp-player-record #f))
+        (best-distance (meters 1000000.0)))
+    (when (or (not origin-pos) (zero? origin-pos))
+      (return best-record))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (and record
+                   (nonzero? record)
+                   (!= (-> record identity player-id) excluded-player-id)
+                   (= (-> record identity character) character))
+          (let ((record-pos (mp-player-record-position record)))
+            (when (and record-pos (nonzero? record-pos))
+              (let ((distance (vector-vector-distance origin-pos record-pos)))
+                (when (or (not best-record)
+                          (zero? best-record)
+                          (< distance best-distance)
+                          (and (= distance best-distance)
+                               (< (-> record identity player-id)
+                                  (-> best-record identity player-id))))
+                  (set! best-record record)
+                  (set! best-distance distance))))))))
+    best-record))
+
+(defun mp-nearest-player-character-record
+       ((origin target) (character mp-player-character) (excluded-player-id uint))
+  "Return the nearest active matching character to a target context."
+  (if (and origin
+           (nonzero? origin)
+           (-> origin root)
+           (nonzero? (-> origin root)))
+      (mp-nearest-player-character-record-to-position
+        (-> origin root trans) character excluded-player-id)
+      (the-as mp-player-record #f)))
+
+(defun mp-jak-record-for ((player-target target))
+  (let ((excluded-player-id
+          (if (and player-target (nonzero? player-target))
+              (the-as uint (-> player-target player-id))
+              MP_INVALID_PLAYER_ID)))
+    (mp-nearest-player-character-record
+      player-target
+      (mp-player-character jak)
+      excluded-player-id)))
+
+(defun mp-jak-target-for ((player-target target))
+  "Find an active Jak target other than player-target."
+  (mp-player-record-target (mp-jak-record-for player-target)))
+
+(defun mp-player-jak? ((record mp-player-record))
+  (and record
+       (nonzero? record)
+       (= (-> record identity character) (mp-player-character jak))))
+
+(defun mp-player-daxter? ((record mp-player-record))
+  (and record
+       (nonzero? record)
+       (= (-> record identity character) (mp-player-character daxter))))
+
+(defun mp-target-jak? ((player-target process-focusable))
+  (let ((record
+          (if (and player-target (nonzero? player-target) (type? player-target target))
+              (mp-player-controller-target-record
+                *mp-player-controller*
+                (the-as target player-target))
+              (the-as mp-player-record #f))))
+    (if (and record (nonzero? record))
+        (mp-player-jak? record)
+        #t)))
+
+(defun mp-target-daxter? ((player-target process-focusable))
+  (let ((record
+          (if (and player-target (nonzero? player-target) (type? player-target target))
+              (mp-player-controller-target-record
+                *mp-player-controller*
+                (the-as target player-target))
+              (the-as mp-player-record #f))))
+    (and record (nonzero? record) (mp-player-daxter? record))))
+
+(defun mp-local-player-jak? ()
+  (mp-player-jak? (mp-local-player-record)))
+
+(defun mp-local-player-daxter? ()
+  (mp-player-daxter? (mp-local-player-record)))
+
+(defun mp-session-host? ()
+  (= *mp-session-role* (mp-session-role host)))
+
+(defun mp-session-client? ()
+  (= *mp-session-role* (mp-session-role client)))
+
+(defun mp-generate-battle-enemy-aid ()
+  (+! *mp-battle-spawn-counter* 1)
+  (when (>= *mp-battle-spawn-counter* #x08000000)
+    (set! *mp-battle-spawn-counter* (the uint 1)))
+  (let ((local-record (mp-local-player-record)))
+    (when (or (not local-record) (zero? local-record))
+      (return (the uint 0)))
+    (let ((player-bits
+            (ash (logand (-> local-record identity player-id) (the uint 3)) 27)))
+      (the-as uint
+        (logior #x60000000 player-bits *mp-battle-spawn-counter*)))))
+
+(mp-player-controller-reset! *mp-player-controller*)

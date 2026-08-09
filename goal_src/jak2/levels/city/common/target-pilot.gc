@@ -186,7 +186,7 @@
     (if (and (-> self pilot as-daxter?) (not (focus-test? self indax)))
         (target-pilot-pidax-exit)
         )
-    (when (and (mp-is-daxter?) (not (focus-test? self indax)))
+    (when (and (mp-target-daxter? self) (not (focus-test? self indax)))
       (logclear! (-> self draw status) (draw-control-status no-draw-bounds2))
       )
     (let ((v1-11 (-> self pilot)))
@@ -237,14 +237,18 @@
     (set! (-> s5-0 backup-nav-radius) (-> self control nav-radius))
     (set! (-> s5-0 gun?) #t)
     (set! (-> s5-0 enable-cam-side-shift) #f)
-    ;; og:preserve-this Automatically detect Daxter mode for puppets/remote clients
-    (set! (-> s5-0 as-daxter?) (or arg1 (and (= self *mp-puppet*) (focus-test? self indax))))
+    ;; og:preserve-this Resolve avatar mode from this target's bound player record.
+    (set! (-> s5-0 as-daxter?)
+          (if (or arg1
+                  (and (mp-target-daxter? self) (focus-test? self indax)))
+              #t
+              #f))
     (set! (-> s5-0 entity) #f)
     (set! (-> s5-0 cam-side-shift) 0.0)
     (if (and (-> self pilot as-daxter?) (not (focus-test? self indax)))
         (target-pilot-pidax-enter)
         )
-    (when (and (mp-is-daxter?) (not (focus-test? self indax)))
+    (when (and (mp-target-daxter? self) (not (focus-test? self indax)))
       (logior! (-> self draw status) (draw-control-status no-draw-bounds2))
       )
     (cond
@@ -272,10 +276,15 @@
 
         ;; Determine the seat index using the current multiplayer-aware rules.
         (cond
-          ((!= self *target*)
-           ;; Puppet boarding: ALWAYS use the authoritative network seat index.
-           ;; This prevents the puppet from locally choosing Seat 0 if the driver seat is empty.
-           (set! (-> s5-0 seat-index) (the int (-> *remote-info* riding-seat-index)))
+          ((let ((record (mp-player-process-record self)))
+             (and record
+                  (nonzero? record)
+                  (mp-player-record-remote? *mp-player-controller* record)))
+           ;; Each puppet uses the authoritative seat stored in its own record.
+           (let ((record (mp-player-process-record self)))
+             (when (and record (nonzero? record))
+               (set! (-> s5-0 seat-index)
+                     (the int (-> record vehicle seat-index)))))
            )
           ((!= *mp-shuttle-override-seat-index* -1)
            ;; Teleport-boarding override for shuttle mission

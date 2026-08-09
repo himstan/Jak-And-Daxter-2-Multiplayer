@@ -4,7 +4,6 @@
 ;; decomp begins
 
 (define *footstep-surface* (new 'static 'pat-surface :material (pat-material grass)))
-(define-extern *mp-puppet* target)
 
 (define *debug-effect-control* #f)
 
@@ -1063,14 +1062,17 @@
         (* 0.000656168 (the float (-> (the-as sound-spec gp-0) pitch-mod)))
         )
       )
-    (when (and *mp-puppet* (= (-> this process) *mp-puppet*))
+    (let ((record (mp-player-process-record (-> this process))))
+    (when (and record
+               (nonzero? record)
+               (mp-player-record-remote? *mp-player-controller* record))
       (when (and (not s5-0) (nonzero? (-> this process)))
         (let ((root-control (-> (the-as process-drawable (-> this process)) root)))
           (when (and root-control (nonzero? root-control))
             (set! s5-0 (-> root-control trans))
             )
           )
-        )
+        ))
       (when s5-0
         (logior! (-> (the-as sound-spec gp-0) mask) (sound-mask fo-min fo-max))
         (set! (-> (the-as sound-spec gp-0) fo-min) 10)

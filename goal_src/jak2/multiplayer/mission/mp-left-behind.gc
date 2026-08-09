@@ -1,9 +1,10 @@
 ;-*-Lisp-*-
 (in-package goal)
 
-(defun mp-left-behind-teleport-player! ((ride-along? symbol))
+(defun mp-left-behind-teleport-player!
+       ((ride-along? symbol) (destination-record mp-player-record))
   "Teleport the local player through the shared MP teleport utility."
-  (mp-teleport-local-target-to-remote! ride-along?)
+  (mp-teleport-local-target-to-player! destination-record ride-along?)
   (none)
   )
 
@@ -25,7 +26,10 @@
   (none)
   )
 
-(defun mp-update-left-behind-teleport! ((condition symbol) (ride-along? symbol))
+(defun mp-update-left-behind-teleport!
+       ((condition symbol)
+        (ride-along? symbol)
+        (destination-record mp-player-record))
   "Manages the countdown timer and text warning for the left-behind state, executing the generic teleportation logic upon countdown completion."
   (when (and *multi-sync-enabled?*
              (= (pc-multi-get-status) (mp-connection-status in-game))
@@ -33,8 +37,8 @@
              (nonzero? *target*)
              (-> *target* control)
              (nonzero? (-> *target* control))
-             *remote-info*
-             (nonzero? *remote-info*)
+             destination-record
+             (nonzero? destination-record)
              (not (focus-test? *target* dead teleporting)))
     (cond
       (condition
@@ -46,12 +50,12 @@
               (time-limit (seconds 3)))
          (cond
            ((>= elapsed time-limit)
-            (if (mp-remote-teleport-ready-or-request!)
+            (if (mp-player-teleport-ready-or-request! destination-record)
                 (begin
                   ;; Reset timer
                   (set! *mp-left-behind-start-time* (the-as time-frame 0))
                   ;; Execute generic teleportation
-                  (mp-left-behind-teleport-player! ride-along?)
+                  (mp-left-behind-teleport-player! ride-along? destination-record)
                   )
                 (mp-left-behind-draw-teleport-text! elapsed #t)
                 )

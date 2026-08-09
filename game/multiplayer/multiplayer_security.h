@@ -45,8 +45,8 @@ class MultiplayerSecurity {
   std::string invite_for_address(const std::string& address) const;
 
   bool make_server_hello(MultiplayerDatagram& output) const;
-  SecurityReceiveResult receive(int local_role, const uint8_t* data, size_t size);
-  bool seal(int local_role,
+  SecurityReceiveResult receive(int session_role, const uint8_t* data, size_t size);
+  bool seal(int session_role,
             PacketType packet_type,
             const void* plaintext,
             size_t plaintext_size,
@@ -63,7 +63,7 @@ class MultiplayerSecurity {
   bool initialize_sodium();
   bool parse_invite(const std::string& invite, std::string& host, uint16_t& port);
   bool derive_room_code_key(std::string_view room_code);
-  void derive_session_keys(int local_role);
+  void derive_session_keys(int session_role);
   void make_proof(const char* label, std::array<uint8_t, kKeySize>& proof) const;
   bool accept_counter(uint64_t counter);
   void clear_peer_secrets();
