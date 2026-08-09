@@ -5,6 +5,8 @@
 (define *mp-spectator-countdown-active?* #f)
 (define *mp-spectated-player-id* (the uint MP_INVALID_PLAYER_ID))
 (define *mp-spectate-camera-player-id* (the uint MP_INVALID_PLAYER_ID))
+(define *mp-spectate-level-request-player-id* (the uint MP_INVALID_PLAYER_ID))
+(define *mp-spectate-level-request-packed* (the uint 0))
 
 (defun mp-valid-remote-spectate-puppet? ((puppet target))
   (and puppet
@@ -25,6 +27,11 @@
        (nonzero? (-> record transform level))
        (not (mp-player-record-dead-or-dying? record))))
 
+(defun mp-clear-spectate-level-request! ()
+  (set! *mp-spectate-level-request-player-id* MP_INVALID_PLAYER_ID)
+  (set! *mp-spectate-level-request-packed* (the uint 0))
+  (none))
+
 (defun mp-clear-spectated-player! ()
   (let ((record (mp-spectated-player-record)))
     (when (and record (nonzero? record))
@@ -32,10 +39,11 @@
         record MP_PLAYER_RUNTIME_FORCE_PRESENTATION)))
   (set! *mp-spectated-player-id* MP_INVALID_PLAYER_ID)
   (set! *mp-spectate-camera-player-id* MP_INVALID_PLAYER_ID)
+  (mp-clear-spectate-level-request!)
   (none))
 
-(defun mp-nearest-eligible-spectate-record ()
-  "Choose the nearest eligible living remote, breaking equal distances by player ID."
+(defun mp-nearest-eligible-spectate-record-for-scope ((same-primary-only? symbol))
+  "Choose the nearest eligible remote, optionally restricted to the local primary level."
   (let ((best-record (the-as mp-player-record #f))
         (best-distance (meters 1000000.0)))
     (when (and *target*
@@ -44,7 +52,9 @@
                (nonzero? (-> *target* root)))
       (dotimes (player-id MP_MAX_PLAYERS)
         (let ((record (mp-player-record-by-id (the-as uint player-id))))
-          (when (mp-spectate-record-eligible? record)
+          (when (and (mp-spectate-record-eligible? record)
+                     (or (not same-primary-only?)
+                         (mp-player-primary-level-matches-local? record)))
             (let ((position (mp-player-record-position record)))
               (when (and position (nonzero? position))
                 (let ((distance
@@ -60,8 +70,19 @@
                     (set! best-distance distance)))))))))
     best-record))
 
+(defun mp-nearest-eligible-spectate-record ()
+  "Prefer the nearest same-level player, then fall back to the nearest player anywhere."
+  (let ((same-level-record
+          (mp-nearest-eligible-spectate-record-for-scope #t)))
+    (if (and same-level-record (nonzero? same-level-record))
+        same-level-record
+        (mp-nearest-eligible-spectate-record-for-scope #f)
+        )
+    )
+  )
+
 (defun mp-select-spectated-player! ()
-  "Keep the selected player until invalid, then choose the nearest living remote."
+  "Keep the selected player until invalid, preferring same-level candidates on failover."
   (let ((current (mp-spectated-player-record)))
     (when (mp-spectate-record-eligible? current)
       (return current)))
@@ -75,32 +96,43 @@
       (return candidate)))
   (the-as mp-player-record #f))
 
+(defun mp-request-selected-spectate-levels-if-needed! ((record mp-player-record))
+  "Issue one exact cross-level request for the selected player and packed level."
+  (when (and record (nonzero? record))
+    (if (mp-player-primary-level-matches-local? record)
+        (mp-clear-spectate-level-request!)
+        (let ((player-id (the-as uint (-> record identity player-id)))
+              (packed-level (-> record transform level)))
+          (when (and *load-state*
+                     (nonzero? *load-state*)
+                     (not (mp-respawn-policy-blocks-remote-placement?))
+                     (or (!= player-id *mp-spectate-level-request-player-id*)
+                         (!= packed-level *mp-spectate-level-request-packed*)))
+            (set! *mp-spectate-level-request-player-id* player-id)
+            (set! *mp-spectate-level-request-packed* packed-level)
+            (mp-request-player-spectate-levels! record)
+            )
+          )
+        )
+    )
+  (none))
+
 (defun mp-prepare-remote-spectate-target! ()
-  "Load and present only the sticky, explicitly selected spectate player."
-  (let ((dead? (and *target*
-                    (nonzero? *target*)
-                    (-> *target* state)
-                    (nonzero? (-> *target* state))
-                    (mp-target-death-state? (-> *target* state name)))))
-    (when (not (and dead? *mp-spectator-countdown-active?*))
-      (mp-clear-spectated-player!)
+  "Resolve the selected spectate puppet without selecting players or requesting levels."
+  (let ((record (mp-spectated-player-record)))
+    (when (or (not (mp-spectate-record-eligible? record))
+              (not (mp-player-spectate-level-ready? record)))
       (return (the-as process-focusable #f)))
-    (let ((record (mp-select-spectated-player!)))
-      (when (or (not record) (zero? record))
-        (return (the-as process-focusable #f)))
-      (mp-ensure-player-level-wanted! record)
-      (when (not (mp-player-level-ready? record))
-        (return (the-as process-focusable #f)))
-      (let ((puppet (mp-player-record-target record)))
-        (if (mp-valid-remote-spectate-puppet? puppet)
-            (the-as process-focusable puppet)
-            (the-as process-focusable #f))))))
+    (let ((puppet (mp-player-record-target record)))
+      (if (mp-valid-remote-spectate-puppet? puppet)
+          (the-as process-focusable puppet)
+          (the-as process-focusable #f)))))
 
 (defun mp-region-target-pos ()
   "Follow the selected spectate record, including while its target is spawning."
   (when *mp-spectator-countdown-active?*
-    (let ((record (mp-select-spectated-player!)))
-      (when (and record (nonzero? record))
+    (let ((record (mp-spectated-player-record)))
+      (when (mp-spectate-record-eligible? record)
         (let ((puppet (mp-player-record-target record)))
           (when (and puppet
                      (nonzero? puppet)
@@ -135,42 +167,80 @@
       (send-event *camera* 'teleport)))
   (none))
 
+(defun mp-spectate-focus-local-target! ()
+  "Keep the death camera local while the selected remote is unavailable or loading."
+  (when (and *mp-spectating?*
+             *camera*
+             (nonzero? *camera*)
+             *target*
+             (nonzero? *target*))
+    (send-event *camera* 'change-target *target*)
+    (send-event *camera* 'teleport)
+    )
+  (set! *mp-spectating?* #f)
+  (set! *mp-spectate-camera-player-id* MP_INVALID_PLAYER_ID)
+  (none))
+
+(defun mp-spectate-repair-camera-distance! ((remote-process process-focusable))
+  "Teleport a badly separated camera back to the selected remote puppet."
+  (when (and remote-process
+             (nonzero? remote-process)
+             (-> remote-process root)
+             (nonzero? (-> remote-process root))
+             *math-camera*
+             (nonzero? *math-camera*))
+    (let ((camera-distance
+            (vector-vector-distance
+              (-> *math-camera* trans)
+              (-> remote-process root trans))))
+      (when (> camera-distance (meters 100.0))
+        (when (and *target*
+                   (nonzero? *target*)
+                   (-> *target* control)
+                   (nonzero? (-> *target* control)))
+          (vector-copy!
+            (-> *target* control camera-pos)
+            (-> remote-process root trans)))
+        (when (and *camera* (nonzero? *camera*))
+          (send-event *camera* 'teleport))
+        )
+      )
+    )
+  (none))
+
+(defun mp-spectate-follow-ready-player! ((remote-process process-focusable))
+  (mp-spectate-focus-selected-player! remote-process)
+  (set! *mp-spectating?* #t)
+  (mp-spectate-repair-camera-distance! remote-process)
+  (none))
+
 (defun mp-update-death-spectate ()
-  "Maintain sticky spectating and fail over when the selected player is invalid."
+  "Own spectate selection, exact level requests, presentation, and camera focus."
   (let ((dead? (and *target*
                     (nonzero? *target*)
                     (-> *target* state)
                     (nonzero? (-> *target* state))
                     (mp-target-death-state? (-> *target* state name)))))
     (if (and dead? *mp-spectator-countdown-active?*)
-        (let ((remote-process (mp-prepare-remote-spectate-target!)))
-          (when (and remote-process
-                     (nonzero? remote-process)
-                     (-> remote-process root)
-                     (nonzero? (-> remote-process root)))
-            (mp-spectate-focus-selected-player! remote-process)
-            (set! *mp-spectating?* #t)
-            (when (and *math-camera* (nonzero? *math-camera*))
-              (let ((camera-distance
-                      (vector-vector-distance
-                        (-> *math-camera* trans)
-                        (-> remote-process root trans))))
-                (when (> camera-distance (meters 100.0))
-                  (when (and *target*
-                             (nonzero? *target*)
-                             (-> *target* control)
-                             (nonzero? (-> *target* control)))
-                    (vector-copy!
-                      (-> *target* control camera-pos)
-                      (-> remote-process root trans)))
-                  (when (and *camera* (nonzero? *camera*))
-                    (send-event *camera* 'teleport)))))))
+        (let ((record (mp-select-spectated-player!)))
+          (if (and record (nonzero? record))
+              (begin
+                (mp-request-selected-spectate-levels-if-needed! record)
+                (let ((remote-process (mp-prepare-remote-spectate-target!)))
+                  (if (and remote-process
+                           (nonzero? remote-process)
+                           (-> remote-process root)
+                           (nonzero? (-> remote-process root)))
+                      (mp-spectate-follow-ready-player! remote-process)
+                      (mp-spectate-focus-local-target!)
+                      )
+                  )
+                )
+              (mp-spectate-focus-local-target!)
+              )
+          )
         (begin
-          (when *mp-spectating?*
-            (when (and *camera* (nonzero? *camera*) *target* (nonzero? *target*))
-              (send-event *camera* 'change-target *target*)
-              (send-event *camera* 'teleport)))
-          (set! *mp-spectating?* #f)
+          (mp-spectate-focus-local-target!)
           (set! *mp-spectator-countdown-active?* #f)
           (mp-clear-spectated-player!))))
   (none))

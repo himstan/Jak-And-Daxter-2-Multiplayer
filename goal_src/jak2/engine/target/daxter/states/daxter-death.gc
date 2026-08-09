@@ -5,7 +5,7 @@
 (define-extern *mp-spectator-countdown-active?* symbol)
 (define-extern mp-spectated-player-record (function mp-player-record))
 (define-extern mp-clear-spectated-player! (function none))
-(define-extern mp-player-level-ready? (function mp-player-record symbol))
+(define-extern mp-player-spectate-level-ready? (function mp-player-record symbol))
 (define-extern mp-prepare-remote-spectate-target! (function process-focusable))
 (define-extern mp-should-suppress-local-endlessfall? (function symbol))
 (define-extern mp-begin-local-death-respawn-policy! (function target symbol))
@@ -159,22 +159,6 @@
           (loop
             (let ((elapsed (- (-> *display* game-clock frame-counter) start-time)))
   
-              ;; Spectate Teammate
-              (let ((remote (mp-prepare-remote-spectate-target!)))
-                (let ((current-target (handle->process (-> *camera* focus handle))))
-                  (if (and remote (nonzero? remote))
-                      (begin
-                        (when (!= remote current-target)
-                          (send-event *camera* 'change-target remote)
-                          )
-                        )
-                      (when (!= self current-target)
-                        (send-event *camera* 'change-target self)
-                        )
-                      )
-                  )
-                )
-  
               ;; Draw Countdown UI
               (let ((remaining (/ (- (seconds 20) elapsed) (seconds 1))))
                 (when (and (>= remaining 0) (mp-any-live-remote-player?))
@@ -199,7 +183,7 @@
                          (mp-any-live-remote-player?))
                 (let ((remote (mp-prepare-remote-spectate-target!)))
                   (when (and remote (nonzero? remote))
-                    (when (mp-player-level-ready? (mp-spectated-player-record))
+                    (when (mp-player-spectate-level-ready? (mp-spectated-player-record))
                       (mp-event-enqueue-aid! MP_EVENT_PLAYER_RESPAWNED (the-as uint 0))
                       (remove-setting! 'mode-name)
                       (send-event *camera* 'change-target self)

@@ -391,6 +391,39 @@
       )
   )
 
+(defun mp-player-primary-level-id ((record mp-player-record))
+  "Return one player's advertised primary level id."
+  (if (and record (nonzero? record))
+      (mp-level-packed-primary-id (-> record transform level))
+      (the uint 0)
+      )
+  )
+
+(defun mp-player-primary-level-matches-local? ((record mp-player-record))
+  "True when the player and local target occupy the same advertised primary level."
+  (let ((remote-primary-id (mp-player-primary-level-id record))
+        (local-primary-id (mp-current-active-level-id)))
+    (the symbol
+         (and (> remote-primary-id 0)
+              (> local-primary-id 0)
+              (= remote-primary-id local-primary-id)))
+    )
+  )
+
+(defun mp-player-primary-level-ready? ((record mp-player-record))
+  "Check only the player's primary level, ignoring advertised neighboring levels."
+  (let ((primary-id (mp-player-primary-level-id record)))
+    (when (> primary-id 0)
+      (let ((primary-level (mp-level-id->symbol primary-id)))
+        (when primary-level
+          (return (mp-level-active? primary-level))
+          )
+        )
+      )
+    )
+  #f
+  )
+
 (defun mp-level-sync-log-unknown! ((packed-level uint))
   (when (>= (current-time) *mp-level-sync-next-unknown-log-time*)
     (debug-log *mp-debug-log?* "[MP-LevelSync] Remote level id ~D is unknown. Falling back to current teleport behavior.~%"
@@ -401,7 +434,7 @@
   )
 
 (defun mp-want-multiple-levels-for-remote-teleport! ((levels (pointer symbol)))
-  "Request and load multiple level symbols for spectating/teleporting."
+  "Request expanded level context for intentional multiplayer teleports."
   (when (mp-respawn-policy-blocks-remote-placement?)
     (mp-level-sync-log-policy-blocked!)
     )
@@ -470,8 +503,70 @@
   (none)
   )
 
+(defun mp-want-exact-levels-for-spectate! ((levels (pointer symbol)))
+  "Request only the levels advertised by the selected spectate player."
+  (when (mp-respawn-policy-blocks-remote-placement?)
+    (mp-level-sync-log-policy-blocked!)
+    )
+  (when (and (not (mp-respawn-policy-blocks-remote-placement?))
+             levels
+             (nonzero? levels)
+             *load-state*
+             (nonzero? *load-state*))
+    (let ((desired-levels (new 'stack-no-clear 'array 'symbol 6))
+          (desired-count 0))
+      (dotimes (idx 6)
+        (set! (-> desired-levels idx) #f)
+        )
+      (dotimes (idx 4)
+        (let ((level-name (-> levels idx)))
+          (when level-name
+            (set! desired-count
+                  (mp-add-desired-level-if-room!
+                    desired-levels desired-count level-name))
+            )
+          )
+        )
+      (when (> desired-count 0)
+        (want-levels *load-state* desired-levels)
+        (dotimes (idx desired-count)
+          (let ((level-name (-> desired-levels idx)))
+            (when level-name
+              (want-display-level *load-state* level-name 'display)
+              )
+            )
+          )
+        (let ((primary-level (-> levels 0)))
+          (when primary-level
+            (want-vis-level *load-state* primary-level)
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-request-player-spectate-levels! ((record mp-player-record))
+  "Request an exact cross-level spectate context without inventing city levels."
+  (when (and record
+             (nonzero? record)
+             (not (mp-player-primary-level-matches-local? record)))
+    (let ((packed-level (-> record transform level)))
+      (if (> packed-level 0)
+          (let ((levels (new 'stack-no-clear 'array 'symbol 4)))
+            (mp-remote-level-symbols-for-teleport! packed-level levels)
+            (mp-want-exact-levels-for-spectate! levels)
+            )
+          (mp-level-sync-log-unknown! packed-level)
+          )
+      )
+    )
+  (none)
+  )
+
 (defun mp-ensure-player-level-wanted! ((record mp-player-record))
-  "Request one player's levels before direct multiplayer teleports or spectating."
+  "Request expanded level context before an intentional multiplayer teleport."
   (when (and record (nonzero? record))
     (let ((packed (-> record transform level)))
       (if (> packed 0)
@@ -506,5 +601,22 @@
       )
     )
   #t
+  )
+
+(defun mp-player-spectate-level-ready? ((record mp-player-record))
+  "Use primary-only readiness locally and exact advertised readiness cross-level."
+  (when (and record (nonzero? record))
+    (let ((primary-id (mp-player-primary-level-id record)))
+      (when (and (> primary-id 0)
+                 (mp-level-id->symbol primary-id))
+        (return
+          (if (mp-player-primary-level-matches-local? record)
+              (mp-player-primary-level-ready? record)
+              (mp-player-level-ready? record)
+              ))
+        )
+      )
+    )
+  #f
   )
 

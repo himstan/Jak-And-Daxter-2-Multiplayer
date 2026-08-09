@@ -311,6 +311,7 @@
   (set! *mp-reconnect-process* (the-as handle #f))
   (set! *multi-last-send-time* (the-as time-frame 0))
   (mp-reset-tps-counter!)
+  (mp-clear-spectated-player!)
   (mp-reset-respawn-policy!)
   (mp-tomb-boulder-reset-state!)
   (none))
