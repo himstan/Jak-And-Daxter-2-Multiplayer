@@ -8,31 +8,31 @@
 #include <string_view>
 
 #include "game/multiplayer/multiplayer_version.h"
+#include "game/multiplayer/multiplayer_preferences.h"
 #include "game/multiplayer/multiplayer_wire_codec.h"
 
 namespace {
 constexpr std::array<uint8_t, 4> kMagic = {'O', 'G', 'M', '1'};
-constexpr uint16_t kWireRevision = multiplayer::schema::kWireRevision;
+constexpr std::string_view kRoomCodeAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 constexpr uint8_t kServerHello = 1;
 constexpr uint8_t kClientProof = 2;
 constexpr uint8_t kServerProof = 3;
 constexpr uint8_t kVersionMismatch = 4;
 constexpr uint8_t kEncryptedGameplay = 5;
-constexpr size_t kBaseHeaderSize = 8;
-constexpr size_t kEncryptedHeaderSize = 36;
+constexpr size_t kBaseHeaderSize = 6;
+constexpr size_t kEncryptedHeaderSize = 34;
 constexpr size_t kAeadTagSize = crypto_aead_xchacha20poly1305_ietf_ABYTES;
 
 void write_base_header(uint8_t* output, uint8_t kind) {
   memcpy(output, kMagic.data(), kMagic.size());
-  multiplayer::wire::store_u16_le(output + 4, kWireRevision);
-  output[6] = kind;
-  output[7] = 0;
+  output[4] = kind;
+  output[5] = 0;
 }
 
 bool valid_base_header(const uint8_t* data, size_t size, uint8_t kind) {
   return data && size >= kBaseHeaderSize &&
          sodium_memcmp(data, kMagic.data(), kMagic.size()) == 0 &&
-         multiplayer::wire::load_u16_le(data + 4) == kWireRevision && data[6] == kind;
+         data[4] == kind;
 }
 
 bool append_version(MultiplayerDatagram& datagram, size_t& offset, const std::string& version) {
@@ -118,23 +118,45 @@ bool MultiplayerSecurity::initialize_sodium() {
   return initialized;
 }
 
-bool MultiplayerSecurity::start_host(uint16_t port) {
+bool MultiplayerSecurity::start_host(uint16_t port, const std::string& room_code) {
   reset();
   if (!initialize_sodium() || port == 0) {
     return false;
   }
   m_host = true;
   m_port = port;
-  randombytes_buf(m_token.data(), m_token.size());
   randombytes_buf(m_session_id.data(), m_session_id.size());
   randombytes_buf(m_server_nonce.data(), m_server_nonce.size());
+  randombytes_buf(m_credential_salt.data(), m_credential_salt.size());
 
-  std::array<char, sodium_base64_ENCODED_LEN(kTokenSize, sodium_base64_VARIANT_URLSAFE_NO_PADDING)>
-      encoded = {};
-  sodium_bin2base64(encoded.data(), encoded.size(), m_token.data(), m_token.size(),
-                    sodium_base64_VARIANT_URLSAFE_NO_PADDING);
-  m_encoded_token = encoded.data();
+  std::string selected_room_code;
+  if (!room_code.empty()) {
+    if (!mp_normalize_room_code(room_code, selected_room_code, false)) {
+      reset();
+      return false;
+    }
+  } else {
+    selected_room_code.resize(kMultiplayerRoomCodeLength);
+    for (char& character : selected_room_code) {
+      character = kRoomCodeAlphabet[randombytes_uniform(
+          static_cast<uint32_t>(kRoomCodeAlphabet.size()))];
+    }
+  }
+
+  if (!derive_room_code_key(selected_room_code)) {
+    mp_secure_clear_string(selected_room_code);
+    reset();
+    return false;
+  }
+  m_room_code = std::move(selected_room_code);
   return true;
+}
+
+bool MultiplayerSecurity::derive_room_code_key(std::string_view room_code) {
+  return crypto_pwhash(m_credential_key.data(), m_credential_key.size(), room_code.data(),
+                       room_code.size(),
+                       m_credential_salt.data(), crypto_pwhash_OPSLIMIT_INTERACTIVE,
+                       crypto_pwhash_MEMLIMIT_INTERACTIVE, crypto_pwhash_ALG_ARGON2ID13) == 0;
 }
 
 bool MultiplayerSecurity::start_client(const std::string& invite,
@@ -161,7 +183,7 @@ bool MultiplayerSecurity::set_local_version(const std::string& version) {
 }
 
 bool MultiplayerSecurity::rotate_host_peer_session() {
-  if (!m_host || m_encoded_token.empty() || !mp_valid_compatibility_identity(m_local_version) ||
+  if (!m_host || m_room_code.empty() || !mp_valid_compatibility_identity(m_local_version) ||
       !initialize_sodium()) {
     return false;
   }
@@ -189,7 +211,8 @@ void MultiplayerSecurity::reset() {
   m_session_id.fill(0);
   m_server_nonce.fill(0);
   m_client_nonce.fill(0);
-  m_encoded_token.clear();
+  m_room_code.clear();
+  m_credential_salt.fill(0);
   m_local_version.clear();
   mp_secure_clear_string(m_remote_version);
 }
@@ -198,8 +221,8 @@ bool MultiplayerSecurity::authenticated() const {
   return m_authenticated;
 }
 
-const std::string& MultiplayerSecurity::invite_token() const {
-  return m_encoded_token;
+const std::string& MultiplayerSecurity::room_code() const {
+  return m_room_code;
 }
 
 const std::string& MultiplayerSecurity::remote_version() const {
@@ -207,29 +230,31 @@ const std::string& MultiplayerSecurity::remote_version() const {
 }
 
 std::string MultiplayerSecurity::invite_for_address(const std::string& address) const {
-  if (address.empty() || m_encoded_token.empty() || m_port == 0) {
+  if (address.empty() || m_room_code.empty() || m_port == 0) {
     return {};
   }
-  return address + ":" + std::to_string(m_port) + "/" + m_encoded_token;
+  return "jad2mp://" + address + ":" + std::to_string(m_port) + "/" + m_room_code;
 }
 
 bool MultiplayerSecurity::parse_invite(const std::string& invite,
                                        std::string& host,
                                        uint16_t& port) {
-  constexpr size_t encoded_token_size = 22;
-  if (invite.empty() || invite.size() > 43 || invite.starts_with("ogmp://")) {
+  constexpr std::string_view prefix = "jad2mp://";
+  constexpr size_t kMaximumInviteLength = 37;
+  if (!invite.starts_with(prefix) || invite.size() > kMaximumInviteLength) {
     return false;
   }
-  const size_t token_separator = invite.find('/');
-  const size_t port_separator = invite.rfind(':', token_separator);
-  if (token_separator == std::string::npos || port_separator == std::string::npos ||
-      port_separator == 0 || invite.find('/', token_separator + 1) != std::string::npos) {
+  const size_t room_code_separator = invite.find('/', prefix.size());
+  const size_t port_separator = invite.rfind(':', room_code_separator);
+  if (room_code_separator == std::string::npos || port_separator == std::string::npos ||
+      port_separator == prefix.size() ||
+      invite.find('/', room_code_separator + 1) != std::string::npos) {
     return false;
   }
 
-  host = invite.substr(0, port_separator);
+  host = invite.substr(prefix.size(), port_separator - prefix.size());
   const std::string_view port_text(invite.data() + port_separator + 1,
-                                   token_separator - port_separator - 1);
+                                   room_code_separator - port_separator - 1);
   uint32_t parsed_port = 0;
   const auto port_result =
       std::from_chars(port_text.data(), port_text.data() + port_text.size(), parsed_port);
@@ -239,32 +264,29 @@ bool MultiplayerSecurity::parse_invite(const std::string& invite,
     return false;
   }
 
-  const std::string_view token_text(invite.data() + token_separator + 1,
-                                    invite.size() - token_separator - 1);
-  if (token_text.size() != encoded_token_size) {
+  const std::string_view room_code_text(invite.data() + room_code_separator + 1,
+                                        invite.size() - room_code_separator - 1);
+  std::string normalized;
+  if (!mp_normalize_room_code(room_code_text, normalized, false)) {
     return false;
   }
-  size_t decoded_size = 0;
-  if (sodium_base642bin(m_token.data(), m_token.size(), token_text.data(), token_text.size(),
-                        nullptr, &decoded_size, nullptr,
-                        sodium_base64_VARIANT_URLSAFE_NO_PADDING) != 0 ||
-      decoded_size != m_token.size()) {
-    return false;
-  }
-  m_encoded_token.assign(token_text);
+  m_room_code = std::move(normalized);
   port = static_cast<uint16_t>(parsed_port);
   return true;
 }
 
 bool MultiplayerSecurity::make_server_hello(MultiplayerDatagram& output) const {
-  if (!m_host || m_encoded_token.empty() || !mp_valid_compatibility_identity(m_local_version)) {
+  if (!m_host || m_room_code.empty() || !mp_valid_compatibility_identity(m_local_version)) {
     return false;
   }
-  size_t offset = kBaseHeaderSize + m_session_id.size() + m_server_nonce.size();
+  size_t offset = kBaseHeaderSize;
   write_base_header(output.bytes.data(), kServerHello);
-  memcpy(output.bytes.data() + kBaseHeaderSize, m_session_id.data(), m_session_id.size());
-  memcpy(output.bytes.data() + kBaseHeaderSize + m_session_id.size(), m_server_nonce.data(),
-         m_server_nonce.size());
+  memcpy(output.bytes.data() + offset, m_credential_salt.data(), m_credential_salt.size());
+  offset += m_credential_salt.size();
+  memcpy(output.bytes.data() + offset, m_session_id.data(), m_session_id.size());
+  offset += m_session_id.size();
+  memcpy(output.bytes.data() + offset, m_server_nonce.data(), m_server_nonce.size());
+  offset += m_server_nonce.size();
   if (!append_version(output, offset, m_local_version)) {
     return false;
   }
@@ -275,7 +297,7 @@ bool MultiplayerSecurity::make_server_hello(MultiplayerDatagram& output) const {
 void MultiplayerSecurity::make_proof(const char* label,
                                      std::array<uint8_t, kKeySize>& proof) const {
   crypto_generichash_state hash = {};
-  crypto_generichash_init(&hash, m_token.data(), m_token.size(), proof.size());
+  crypto_generichash_init(&hash, m_credential_key.data(), m_credential_key.size(), proof.size());
   crypto_generichash_update(&hash, reinterpret_cast<const uint8_t*>(label), strlen(label));
   crypto_generichash_update(&hash, m_session_id.data(), m_session_id.size());
   crypto_generichash_update(&hash, m_server_nonce.data(), m_server_nonce.size());
@@ -319,8 +341,14 @@ SecurityReceiveResult MultiplayerSecurity::receive(int local_role,
 
   if (!m_authenticated && local_role == 1 && valid_base_header(data, size, kServerHello)) {
     size_t offset = kBaseHeaderSize;
-    if (size < offset + m_session_id.size() + m_server_nonce.size() + 1 ||
+    if (size < offset + m_credential_salt.size() + m_session_id.size() +
+                   m_server_nonce.size() + 1 ||
         !mp_valid_compatibility_identity(m_local_version)) {
+      return result;
+    }
+    memcpy(m_credential_salt.data(), data + offset, m_credential_salt.size());
+    offset += m_credential_salt.size();
+    if (!derive_room_code_key(m_room_code)) {
       return result;
     }
     memcpy(m_session_id.data(), data + offset, m_session_id.size());
@@ -406,7 +434,7 @@ SecurityReceiveResult MultiplayerSecurity::receive(int local_role,
   if (!m_authenticated && local_role == 1 &&
       (valid_base_header(data, size, kServerProof) ||
        valid_base_header(data, size, kVersionMismatch))) {
-    const bool mismatch = data[6] == kVersionMismatch;
+    const bool mismatch = data[4] == kVersionMismatch;
     size_t offset = kBaseHeaderSize;
     if (size < offset + m_session_id.size() + 1 + kKeySize ||
         sodium_memcmp(data + offset, m_session_id.data(), m_session_id.size()) != 0) {
@@ -440,13 +468,13 @@ SecurityReceiveResult MultiplayerSecurity::receive(int local_role,
 
   if (!m_authenticated || !valid_base_header(data, size, kEncryptedGameplay) ||
       size < kEncryptedHeaderSize + kAeadTagSize ||
-      sodium_memcmp(data + 12, m_session_id.data(), m_session_id.size()) != 0) {
+      sodium_memcmp(data + 10, m_session_id.data(), m_session_id.size()) != 0) {
     return result;
   }
   const uint8_t remote_direction = local_role == 0 ? 1 : 0;
-  const uint16_t plaintext_size = multiplayer::wire::load_u16_le(data + 10);
-  const uint64_t counter = multiplayer::wire::load_u64_le(data + 28);
-  if (data[8] != remote_direction || data[9] >= static_cast<uint8_t>(PacketType::COUNT) ||
+  const uint16_t plaintext_size = multiplayer::wire::load_u16_le(data + 8);
+  const uint64_t counter = multiplayer::wire::load_u64_le(data + 26);
+  if (data[6] != remote_direction || data[7] >= static_cast<uint8_t>(PacketType::COUNT) ||
       plaintext_size > result.plaintext.bytes.size() ||
       size != kEncryptedHeaderSize + plaintext_size + kAeadTagSize) {
     return result;
@@ -464,7 +492,7 @@ SecurityReceiveResult MultiplayerSecurity::receive(int local_role,
     result.plaintext.size = 0;
     return result;
   }
-  if (decrypted_size < sizeof(PacketHeader) || result.plaintext.bytes[0] != data[9]) {
+  if (decrypted_size < sizeof(PacketHeader) || result.plaintext.bytes[0] != data[7]) {
     result.plaintext.size = 0;
     return result;
   }
@@ -486,11 +514,11 @@ bool MultiplayerSecurity::seal(int local_role,
 
   const uint64_t counter = ++m_send_counter;
   write_base_header(output.bytes.data(), kEncryptedGameplay);
-  output.bytes[8] = static_cast<uint8_t>(local_role);
-  output.bytes[9] = static_cast<uint8_t>(packet_type);
-  multiplayer::wire::store_u16_le(output.bytes.data() + 10, static_cast<uint16_t>(plaintext_size));
-  memcpy(output.bytes.data() + 12, m_session_id.data(), m_session_id.size());
-  multiplayer::wire::store_u64_le(output.bytes.data() + 28, counter);
+  output.bytes[6] = static_cast<uint8_t>(local_role);
+  output.bytes[7] = static_cast<uint8_t>(packet_type);
+  multiplayer::wire::store_u16_le(output.bytes.data() + 8, static_cast<uint16_t>(plaintext_size));
+  memcpy(output.bytes.data() + 10, m_session_id.data(), m_session_id.size());
+  multiplayer::wire::store_u64_le(output.bytes.data() + 26, counter);
 
   std::array<uint8_t, crypto_aead_xchacha20poly1305_ietf_NPUBBYTES> nonce = {};
   memcpy(nonce.data(), m_send_nonce_prefix.data(), m_send_nonce_prefix.size());
@@ -539,9 +567,10 @@ void MultiplayerSecurity::clear_peer_secrets() {
 
 void MultiplayerSecurity::clear_secrets() {
   clear_peer_secrets();
-  sodium_memzero(m_token.data(), m_token.size());
-  if (!m_encoded_token.empty()) {
-    sodium_memzero(m_encoded_token.data(), m_encoded_token.size());
+  sodium_memzero(m_credential_key.data(), m_credential_key.size());
+  sodium_memzero(m_credential_salt.data(), m_credential_salt.size());
+  if (!m_room_code.empty()) {
+    sodium_memzero(m_room_code.data(), m_room_code.size());
   }
 }
 

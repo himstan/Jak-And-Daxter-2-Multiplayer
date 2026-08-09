@@ -278,9 +278,11 @@ struct MultiplayerData {
   std::string reconnect_invite;
   std::array<char, 16> direct_address = {};
   std::array<char, 6> direct_port = {};
-  std::array<char, 23> direct_token = {};
+  std::array<char, 7> direct_room_code = {};
   std::string local_version;
   std::string required_version;
+  std::atomic<int> connection_phase{static_cast<int>(MultiplayerConnectionPhase::IDLE)};
+  std::atomic<int> connection_failure{static_cast<int>(MultiplayerConnectionFailure::NONE)};
 
   RemoteEntityState remote_entity = {};
   MultiplayerRingBuffer<PacketGameEvent, 64> inbound_events;
@@ -350,6 +352,7 @@ struct MultiplayerData {
   uint16_t port_mapping_local_port = 0;
   uint16_t port_mapping_external_port = 0;
   std::string port_mapping_external_ip;
+  std::atomic<int> host_setup_status{static_cast<int>(MultiplayerHostSetupStatus::IDLE)};
   // Rate tracking and statistics
   MultiplayerPacketScheduler packet_scheduler;
   MultiplayerStats stats;

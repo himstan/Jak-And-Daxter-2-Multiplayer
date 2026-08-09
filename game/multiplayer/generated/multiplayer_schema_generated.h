@@ -23,7 +23,6 @@ struct EventDescriptor {
   const char* name;
 };
 
-inline constexpr uint16_t kWireRevision = 4;
 inline constexpr size_t kPacketCount = 12;
 inline constexpr size_t kMaxPacketSize = 2048;
 inline constexpr std::array<PacketDescriptor, kPacketCount> kPackets = {{

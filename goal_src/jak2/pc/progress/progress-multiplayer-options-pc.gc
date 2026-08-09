@@ -1,0 +1,118 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+#|@file
+Dedicated Multiplayer Options page. Persistent values live in the C++
+multiplayer-settings.json store and are committed when editing finishes.
+|#
+
+(defun-extern pc-get-last-key uint)
+(defun-extern draw-generic-highlight int int float pointer)
+(defun-extern draw-generic-simple-string-option menu-generic-option progress font-context int string none)
+
+(deftype menu-multiplayer-setting-field-option (menu-generic-option)
+  ((field int32)))
+
+(define *mp-preference-port-display* (the-as string #f))
+(define *mp-preference-room-code-display* (the-as string #f))
+
+(defun mp-refresh-preference-field! ((field int))
+  (let ((display (pc-multi-get-preference-field field)))
+    (when (and display (nonzero? (the-as uint display)))
+      (if (= field 0)
+          (set! *mp-preference-port-display* display)
+          (set! *mp-preference-room-code-display* display))
+      )
+    )
+  (none))
+
+(defun mp-refresh-preference-fields! ()
+  (mp-refresh-preference-field! 0)
+  (mp-refresh-preference-field! 1)
+  (none))
+
+(defun mp-load-multiplayer-options! ()
+  (pc-multi-discard-preference-edits)
+  (mp-refresh-preference-fields!)
+  (none))
+
+(defun mp-preference-field-display ((field int))
+  (if (= field 0)
+      *mp-preference-port-display*
+      *mp-preference-room-code-display*))
+
+(defun mp-preference-field-label ((field int))
+  (if (= field 0)
+      (text-id progress-multiplayer-network-port)
+      (text-id progress-multiplayer-room-code)))
+
+(defun mp-commit-preference-field! ((field int) (p progress))
+  (when (and p (nonzero? (the-as uint p)))
+    (if (= (pc-multi-commit-preference-field field) 1)
+        (begin
+          (mp-refresh-preference-field! field)
+          (set! (-> p selected-option) #f)
+          (sound-play "generic-beep"))
+        (sound-play "menu-error"))
+    )
+  (none))
+
+(defmethod respond-progress ((obj menu-multiplayer-setting-field-option)
+                             (p progress) (selected? symbol))
+  (when (and selected?
+             obj (nonzero? (the-as uint obj))
+             p (nonzero? (the-as uint p)))
+    (let ((field (-> obj field))
+          (key (pc-get-last-key)))
+      (cond
+        ((cpad-pressed? 0 confirm)
+         (mp-commit-preference-field! field p))
+        ((or (= key #x0d) (= key #x0a))
+         (mp-commit-preference-field! field p))
+        ((nonzero? key)
+         (when (= (pc-multi-edit-preference-field field key) 1)
+           (mp-refresh-preference-field! field)))
+        )
+      )
+    )
+  0)
+
+(defmethod draw-option ((obj menu-multiplayer-setting-field-option)
+                        (p progress) (font-ctx font-context)
+                        (option-index int) (selected? symbol))
+  (when (and obj (nonzero? (the-as uint obj))
+             p (nonzero? (the-as uint p))
+             font-ctx (nonzero? (the-as uint font-ctx)))
+    (let ((display (mp-preference-field-display (-> obj field)))
+          (label (mp-preference-field-label (-> obj field))))
+      (when (and display (nonzero? (the-as uint display)))
+        (format (clear *temp-string*) "~S: ~S"
+                (lookup-text! *common-text* label #f)
+                display)
+        (draw-generic-simple-string-option obj p font-ctx option-index *temp-string*)
+        )
+      )
+    )
+  (none))
+
+(define *multiplayer-options-pc*
+  (progress-new-generic-scrolling-page (text-id progress-multiplayer-options)
+    (new 'static 'menu-multiplayer-setting-field-option
+      :name (text-id progress-multiplayer-network-port)
+      :field 0)
+    (new 'static 'menu-multiplayer-setting-field-option
+      :name (text-id progress-multiplayer-room-code)
+      :field 1)
+    (new 'static 'menu-generic-boolean-option
+      :name (text-id progress-multiplayer-auto-port-mapping)
+      :truthy-text (text-id progress-on)
+      :falsey-text (text-id progress-off)
+      :get-value-fn (lambda () (= (pc-multi-get-automatic-port-mapping) 1))
+      :on-confirm (lambda ((value symbol))
+        (pc-multi-set-automatic-port-mapping (if value 1 0))))
+    (new 'static 'menu-generic-button-option
+      :name (text-id progress-multiplayer-reset-defaults)
+      :on-confirm (lambda ((the-progress progress))
+        (pc-multi-reset-preferences)
+        (mp-refresh-preference-fields!)
+        (none)))))

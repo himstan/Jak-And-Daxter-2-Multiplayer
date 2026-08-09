@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <atomic>
 #include <chrono>
@@ -14,6 +15,7 @@
 #include "game/multiplayer/multiplayer_port_mapping.h"
 #include "game/multiplayer/multiplayer_port_mapping_internal.h"
 #include "game/multiplayer/multiplayer_port_mapping_route.h"
+#include "game/multiplayer/multiplayer_preferences.h"
 #include "game/multiplayer/multiplayer_scanner.h"
 #include "game/multiplayer/multiplayer_security.h"
 #include "game/multiplayer/multiplayer_session.h"
@@ -283,14 +285,85 @@ TEST(MultiplayerSecurity, InviteRoundTripAndMutualAuthentication) {
   MultiplayerSecurity client;
   ASSERT_TRUE(host.start_host(26210));
   const std::string invite = host.invite_for_address("127.0.0.1");
-  EXPECT_EQ(invite.size(), 38);
-  EXPECT_EQ(invite.substr(invite.rfind('/') + 1).size(), 22);
+  EXPECT_EQ(invite.size(), 31);
+  EXPECT_TRUE(invite.starts_with("jad2mp://"));
+  EXPECT_EQ(host.room_code().size(), kMultiplayerRoomCodeLength);
+  EXPECT_TRUE(std::all_of(host.room_code().begin(), host.room_code().end(), [](char character) {
+    return (character >= 'A' && character <= 'Z') ||
+           (character >= '0' && character <= '9');
+  }));
+  EXPECT_EQ(invite.substr(invite.rfind('/') + 1), host.room_code());
   std::string parsed_host;
   uint16_t parsed_port = 0;
   ASSERT_TRUE(client.start_client(invite, parsed_host, parsed_port));
   EXPECT_EQ(parsed_host, "127.0.0.1");
   EXPECT_EQ(parsed_port, 26210);
   authenticate(host, client);
+}
+
+TEST(MultiplayerSecurity, PersistentRoomCodeOverridesGeneratedRoomCode) {
+  MultiplayerSecurity host;
+  MultiplayerSecurity client;
+  ASSERT_TRUE(host.start_host(31415, "i0o1az"));
+  EXPECT_EQ(host.room_code(), "I0O1AZ");
+  EXPECT_EQ(host.invite_for_address("127.0.0.1"), "jad2mp://127.0.0.1:31415/I0O1AZ");
+
+  std::string parsed_host;
+  uint16_t parsed_port = 0;
+  ASSERT_TRUE(client.start_client(host.invite_for_address("127.0.0.1"), parsed_host, parsed_port));
+  EXPECT_EQ(client.room_code(), "I0O1AZ");
+  authenticate(host, client);
+}
+
+TEST(MultiplayerSecurity, RoomCodeUsesFreshSaltAndRejectsWrongCode) {
+  MultiplayerSecurity first_host;
+  MultiplayerSecurity second_host;
+  ASSERT_TRUE(first_host.start_host(26210, "ABC123"));
+  ASSERT_TRUE(second_host.start_host(26210, "ABC123"));
+  ASSERT_TRUE(first_host.set_local_version("v1.0.0"));
+  ASSERT_TRUE(second_host.set_local_version("v1.0.0"));
+  MultiplayerDatagram first_hello;
+  MultiplayerDatagram second_hello;
+  ASSERT_TRUE(first_host.make_server_hello(first_hello));
+  ASSERT_TRUE(second_host.make_server_hello(second_hello));
+  EXPECT_NE(memcmp(first_hello.bytes.data() + 6, second_hello.bytes.data() + 6, 16), 0);
+  EXPECT_EQ(first_hello.bytes[4], 1);
+
+  MultiplayerSecurity wrong_client;
+  std::string parsed_host;
+  uint16_t parsed_port = 0;
+  ASSERT_TRUE(wrong_client.start_client("jad2mp://127.0.0.1:26210/ABC124", parsed_host,
+                                        parsed_port));
+  ASSERT_TRUE(wrong_client.set_local_version("v1.0.0"));
+  const auto wrong_proof =
+      wrong_client.receive(1, first_hello.bytes.data(), first_hello.size);
+  ASSERT_EQ(wrong_proof.kind, SecurityReceiveKind::HANDSHAKE);
+  EXPECT_EQ(first_host.receive(0, wrong_proof.response.bytes.data(), wrong_proof.response.size).kind,
+            SecurityReceiveKind::REJECTED);
+}
+
+TEST(MultiplayerPreferences, ValidatesPortsRoomCodesAndIndependentFallbacks) {
+  EXPECT_TRUE(mp_valid_gameplay_port(1024));
+  EXPECT_TRUE(mp_valid_gameplay_port(65535));
+  EXPECT_FALSE(mp_valid_gameplay_port(1023));
+  EXPECT_FALSE(mp_valid_gameplay_port(kMultiplayerDiscoveryPort));
+
+  std::string normalized;
+  EXPECT_TRUE(mp_normalize_room_code("i0o1az", normalized, false));
+  EXPECT_EQ(normalized, "I0O1AZ");
+  EXPECT_FALSE(mp_normalize_room_code("SHORT", normalized, false));
+
+  const auto valid = mp_parse_multiplayer_preferences(
+      R"({"network_port":31415,"room_code":"i0o1az","automatic_port_mapping":false})");
+  EXPECT_EQ(valid.network_port, 31415);
+  EXPECT_EQ(valid.room_code, "I0O1AZ");
+  EXPECT_FALSE(valid.automatic_port_mapping);
+
+  const auto fallback = mp_parse_multiplayer_preferences(
+      R"({"network_port":26211,"room_code":"bad!","automatic_port_mapping":false})");
+  EXPECT_EQ(fallback.network_port, kDefaultMultiplayerPort);
+  EXPECT_TRUE(fallback.room_code.empty());
+  EXPECT_FALSE(fallback.automatic_port_mapping);
 }
 
 TEST(MultiplayerSecurity, AuthenticatedLeaveCanTravelInBothDirections) {
@@ -351,7 +424,7 @@ TEST(MultiplayerDisconnect, SendsOneDirectLeaveDespiteQueuedGameplay) {
   client_data.server_peer = pair.sender_peer;
   client_data.local_role = 1;
   client_data.initialized = true;
-  client_data.reconnect_invite = "127.0.0.1:26210/AAAAAAAAAAAAAAAAAAAAAA";
+  client_data.reconnect_invite = "jad2mp://127.0.0.1:26210/ABC123";
   std::string parsed_host;
   uint16_t parsed_port = 0;
   ASSERT_TRUE(client_data.security.start_client(
@@ -405,21 +478,24 @@ TEST(MultiplayerDisconnect, SendsOneDirectLeaveDespiteQueuedGameplay) {
   EXPECT_EQ(leave_count.load(), 1);
 }
 
-TEST(MultiplayerDiscovery, RequiresExactBoundedTokenResponse) {
-  const std::string valid = std::string(DISCOVERY_MAGIC) + "|AAAAAAAAAAAAAAAAAAAAAA";
-  std::string token;
-  ASSERT_TRUE(mp_parse_discovery_response(valid.data(), valid.size(), token));
-  EXPECT_EQ(token, "AAAAAAAAAAAAAAAAAAAAAA");
-  EXPECT_FALSE(mp_parse_discovery_response(valid.data(), valid.size() - 1, token));
-  EXPECT_FALSE(mp_parse_discovery_response((valid + "x").data(), valid.size() + 1, token));
+TEST(MultiplayerDiscovery, RequiresPortAndExactRoomCode) {
+  const std::string valid = std::string(DISCOVERY_MAGIC) + "|26210|I0O1AZ";
+  MPDiscoveryResponse response;
+  ASSERT_TRUE(mp_parse_discovery_response(valid.data(), valid.size(), response));
+  EXPECT_EQ(response.port, 26210);
+  EXPECT_EQ(response.room_code, "I0O1AZ");
+  EXPECT_FALSE(mp_parse_discovery_response(valid.data(), valid.size() - 1, response));
+  EXPECT_FALSE(mp_parse_discovery_response((valid + "x").data(), valid.size() + 1, response));
   std::string invalid = valid;
   invalid.back() = '/';
-  EXPECT_FALSE(mp_parse_discovery_response(invalid.data(), invalid.size(), token));
+  EXPECT_FALSE(mp_parse_discovery_response(invalid.data(), invalid.size(), response));
+  const std::string old_mode_layout = std::string(DISCOVERY_MAGIC) + "|31415|C|I0O1AZ";
+  EXPECT_FALSE(mp_parse_discovery_response(old_mode_layout.data(), old_mode_layout.size(), response));
 }
 
 TEST(MultiplayerDiscovery, CancellationClearsPrivateResultState) {
   MultiplayerData data;
-  data.found_ip = "25.1.2.3:26210/AAAAAAAAAAAAAAAAAAAAAA";
+  data.found_ip = "jad2mp://25.1.2.3:26210/ABC123";
   data.directed_discovery = true;
   data.directed_discovery_address = 1;
   data.directed_discovery_game_port = 26210;
@@ -478,25 +554,30 @@ TEST(MultiplayerPortMapping, TranslatesProtocolErrors) {
   EXPECT_NE(mp_describe_natpmp_result(-7).find("does not support"), std::string::npos);
 }
 
-TEST(MultiplayerPortMapping, ProjectsHostInviteLifecycle) {
+TEST(MultiplayerPortMapping, ProjectsHostCopyModeLifecycle) {
   MultiplayerData data;
+  EXPECT_EQ(multiplayer_host_copy_mode(data), MultiplayerHostCopyMode::UNAVAILABLE);
   ASSERT_TRUE(data.security.start_host(26210));
   data.initialized = true;
   data.local_role = 0;
-  EXPECT_EQ(multiplayer_host_invite_status(data), 1);
+  EXPECT_EQ(multiplayer_host_copy_mode(data), MultiplayerHostCopyMode::ROOM_CODE);
 
   data.internet_host = true;
   data.port_mapping_state = MPPortMappingState::PENDING;
-  EXPECT_EQ(multiplayer_host_invite_status(data), 0);
+  EXPECT_EQ(multiplayer_host_copy_mode(data), MultiplayerHostCopyMode::ROOM_CODE);
   data.port_mapping_state = MPPortMappingState::FAILED;
-  EXPECT_EQ(multiplayer_host_invite_status(data), -1);
+  EXPECT_EQ(multiplayer_host_copy_mode(data), MultiplayerHostCopyMode::ROOM_CODE);
   data.port_mapping_state = MPPortMappingState::READY;
-  EXPECT_EQ(multiplayer_host_invite_status(data), 0);
+  EXPECT_EQ(multiplayer_host_copy_mode(data), MultiplayerHostCopyMode::ROOM_CODE);
   data.port_mapping_external_ip = "8.8.8.8";
-  EXPECT_EQ(multiplayer_host_invite_status(data), 1);
+  EXPECT_EQ(multiplayer_host_copy_mode(data), MultiplayerHostCopyMode::INVITE);
+  data.host_setup_status = static_cast<int>(MultiplayerHostSetupStatus::MAPPING_DISABLED);
+  data.port_mapping_state = MPPortMappingState::IDLE;
+  data.port_mapping_external_ip.clear();
+  EXPECT_EQ(multiplayer_host_copy_mode(data), MultiplayerHostCopyMode::ROOM_CODE);
 }
 
-TEST(MultiplayerDirectConnect, ValidatesOptionalTokenAndClearsDraft) {
+TEST(MultiplayerDirectConnect, ValidatesOptionalRoomCodeAndClearsDraft) {
   auto& data = multiplayer_data();
   pc_multi_reset_direct_connect();
   EXPECT_STREQ(data.direct_port.data(), "26210");
@@ -505,17 +586,18 @@ TEST(MultiplayerDirectConnect, ValidatesOptionalTokenAndClearsDraft) {
   }
   EXPECT_EQ(pc_multi_direct_connect_ready(), 1);
   EXPECT_EQ(pc_multi_edit_direct_field(2, static_cast<u32>('/')), 0);
-  const std::string token = "AAAAAAAAAAAAAAAAAAAAAA";
-  EXPECT_EQ(pc_multi_edit_direct_field(2, static_cast<u32>(token[0])), 1);
+  const std::string room_code = "I0O1AZ";
+  EXPECT_EQ(pc_multi_edit_direct_field(2, static_cast<u32>(room_code[0])), 1);
   EXPECT_EQ(pc_multi_direct_connect_ready(), 0);
-  for (const char character : token.substr(1)) {
+  for (const char character : room_code.substr(1)) {
     EXPECT_EQ(pc_multi_edit_direct_field(2, static_cast<u32>(character)), 1);
   }
   EXPECT_EQ(pc_multi_direct_connect_ready(), 1);
+  EXPECT_STREQ(data.direct_room_code.data(), "I0O1AZ");
   pc_multi_clear_direct_connect();
   EXPECT_EQ(data.direct_address[0], '\0');
   EXPECT_EQ(data.direct_port[0], '\0');
-  EXPECT_EQ(data.direct_token[0], '\0');
+  EXPECT_EQ(data.direct_room_code[0], '\0');
 }
 
 TEST(MultiplayerReconnect, StartsFromSavedInviteAndClearsOnDisconnect) {
@@ -594,7 +676,7 @@ TEST(MultiplayerReconnect, HandshakeTimeoutPreservesInviteAndSchedulesRetry) {
   MultiplayerData data;
   data.local_role = 1;
   data.join_status = (int)MultiplayerStatus::RECONNECTING;
-  data.reconnect_invite = "127.0.0.1:26210/AAAAAAAAAAAAAAAAAAAAAA";
+  data.reconnect_invite = "jad2mp://127.0.0.1:26210/ABC123";
   data.reconnect_attempt_active = true;
 
   multiplayer_handle_client_handshake_timeout(data, 5000);
@@ -602,7 +684,8 @@ TEST(MultiplayerReconnect, HandshakeTimeoutPreservesInviteAndSchedulesRetry) {
   EXPECT_EQ(data.join_status, (int)MultiplayerStatus::RECONNECTING);
   EXPECT_FALSE(data.reconnect_attempt_active);
   EXPECT_EQ(data.reconnect_next_attempt_time, 5500u);
-  EXPECT_EQ(data.reconnect_invite, "127.0.0.1:26210/AAAAAAAAAAAAAAAAAAAAAA");
+  EXPECT_EQ(data.reconnect_invite,
+            "jad2mp://127.0.0.1:26210/ABC123");
 }
 
 TEST(MultiplayerReconnect, DoesNotCompleteUntilBootstrapRestoresInGameStatus) {
@@ -747,13 +830,14 @@ TEST(MultiplayerSecurity, RejectsMalformedAndNonIpv4Invites) {
   std::string host;
   uint16_t port = 0;
   EXPECT_FALSE(client.start_client("127.0.0.1:26210", host, port));
-  EXPECT_FALSE(client.start_client("ogmp://127.0.0.1:26210/AAAAAAAAAAAAAAAAAAAAAA", host, port));
-  EXPECT_FALSE(client.start_client("example.com:26210/AAAAAAAAAAAAAAAAAAAAAA", host, port));
-  EXPECT_FALSE(client.start_client("999.0.0.1:26210/AAAAAAAAAAAAAAAAAAAAAA", host, port));
-  EXPECT_FALSE(client.start_client("127.0.0.1:0/AAAAAAAAAAAAAAAAAAAAAA", host, port));
-  EXPECT_FALSE(client.start_client("127.0.0.1:26210/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  EXPECT_FALSE(client.start_client("127.0.0.1:26210/ABC123", host, port));
+  EXPECT_FALSE(client.start_client("ogmp://127.0.0.1:26210/ABC123", host, port));
+  EXPECT_FALSE(client.start_client("jad2mp://example.com:26210/ABC123", host, port));
+  EXPECT_FALSE(client.start_client("jad2mp://999.0.0.1:26210/ABC123", host, port));
+  EXPECT_FALSE(client.start_client("jad2mp://127.0.0.1:0/ABC123", host, port));
+  EXPECT_FALSE(client.start_client("jad2mp://127.0.0.1:26210/AAAAAAAAAAAAAAAAAAAAAA",
                                    host, port));
-  EXPECT_FALSE(client.start_client("127.0.0.1:26210/AAAAAAAAAAAAAAAAAAAAAA/trailing", host, port));
+  EXPECT_FALSE(client.start_client("jad2mp://127.0.0.1:26210/ABC123/trailing", host, port));
 }
 
 TEST(MultiplayerSecurity, EncryptsAuthenticatesAndRejectsReplay) {
@@ -822,7 +906,7 @@ TEST(MultiplayerSession, ClearsOnlyRemotePeerStateForActiveHost) {
   ASSERT_TRUE(
       client.start_client(data.security.invite_for_address("127.0.0.1"), parsed_host, parsed_port));
   authenticate(data.security, client);
-  const std::string invite_token = data.security.invite_token();
+  const std::string room_code = data.security.room_code();
   data.local_role = 0;
   data.join_status = (int)MultiplayerStatus::CONNECTED_LOBBY;
   data.local_version = "dev-366c9e277";
@@ -846,7 +930,7 @@ TEST(MultiplayerSession, ClearsOnlyRemotePeerStateForActiveHost) {
   EXPECT_TRUE(data.host_game_active);
   EXPECT_EQ(data.join_status, (int)MultiplayerStatus::IN_GAME);
   EXPECT_FALSE(data.security.authenticated());
-  EXPECT_EQ(data.security.invite_token(), invite_token);
+  EXPECT_EQ(data.security.room_code(), room_code);
   EXPECT_EQ(data.local_version, "dev-366c9e277");
   EXPECT_EQ(data.staged_invite, "private-staged-value");
   EXPECT_TRUE(data.internet_host);
@@ -873,13 +957,13 @@ TEST(MultiplayerSession, ReturnsPregameHostToWaitingForPeer) {
   EXPECT_FALSE(data.security.authenticated());
 }
 
-TEST(MultiplayerSecurity, RejectsTamperingAndWrongInviteToken) {
+TEST(MultiplayerSecurity, RejectsTamperingAndWrongRoomCode) {
   MultiplayerSecurity host;
   MultiplayerSecurity client;
   ASSERT_TRUE(host.start_host(26210));
   std::string invite = host.invite_for_address("127.0.0.1");
-  const size_t token_offset = invite.find('/') + 1;
-  invite[token_offset] = invite[token_offset] == 'A' ? 'B' : 'A';
+  const size_t room_code_offset = invite.rfind('/') + 1;
+  invite[room_code_offset] = invite[room_code_offset] == 'A' ? 'B' : 'A';
   std::string parsed_host;
   uint16_t parsed_port = 0;
   ASSERT_TRUE(client.start_client(invite, parsed_host, parsed_port));
@@ -968,7 +1052,7 @@ TEST(MultiplayerSecurity, RejectsTruncatedVersionBeforeCopying) {
 
   MultiplayerDatagram hello;
   ASSERT_TRUE(host.make_server_hello(hello));
-  constexpr size_t version_length_offset = 8 + 16 + 32;
+  constexpr size_t version_length_offset = 6 + 16 + 16 + 32;
   hello.bytes[version_length_offset] = 64;
   EXPECT_EQ(client.receive(1, hello.bytes.data(), hello.size).kind, SecurityReceiveKind::REJECTED);
 }

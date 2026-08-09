@@ -7,7 +7,6 @@
 
 TEST(MultiplayerProtocol, BootstrapKeepsWireIdentityAndLayout) {
   EXPECT_EQ(static_cast<uint8_t>(PacketType::BOOTSTRAP), 4u);
-  EXPECT_EQ(kMultiplayerWireRevision, 4u);
   EXPECT_EQ(sizeof(PacketBootstrap), 765u);
 
   const auto* descriptor = multiplayer::schema::packet_descriptor(4);

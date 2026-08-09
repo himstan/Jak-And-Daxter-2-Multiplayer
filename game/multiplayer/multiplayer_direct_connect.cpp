@@ -8,6 +8,7 @@
 #include <sodium.h>
 
 #include "game/multiplayer/multiplayer_manager.h"
+#include "game/multiplayer/multiplayer_preferences.h"
 #include "game/multiplayer/multiplayer_scanner.h"
 #include "game/multiplayer/multiplayer_security.h"
 #include "game/multiplayer/multiplayer_session.h"
@@ -17,9 +18,8 @@
 namespace {
 constexpr int kAddressField = 0;
 constexpr int kPortField = 1;
-constexpr int kTokenField = 2;
-constexpr std::string_view kDefaultPort = "26210";
-constexpr const char* kValidationToken = "AAAAAAAAAAAAAAAAAAAAAA";
+constexpr int kRoomCodeField = 2;
+constexpr const char* kValidationRoomCode = "ABC123";
 
 uint16_t port_value(const MultiplayerData& data) {
   const std::string_view text(data.direct_port.data());
@@ -32,15 +32,17 @@ uint16_t port_value(const MultiplayerData& data) {
   return static_cast<uint16_t>(value);
 }
 
-bool valid_parts(const std::string& address, uint16_t port, const std::string& token) {
-  if (address.empty() || port == 0 || (!token.empty() && token.size() != 22)) {
+bool valid_parts(const std::string& address, uint16_t port, const std::string& room_code) {
+  std::string normalized;
+  if (address.empty() || !mp_valid_gameplay_port(port) ||
+      !mp_normalize_room_code(room_code, normalized)) {
     return false;
   }
   MultiplayerSecurity validator;
   std::string parsed_address;
   uint16_t parsed_port = 0;
-  std::string invite = address + ":" + std::to_string(port) + "/" +
-                       (token.empty() ? kValidationToken : token);
+  std::string invite = "jad2mp://" + address + ":" + std::to_string(port) + "/" +
+                       (normalized.empty() ? kValidationRoomCode : normalized);
   const bool valid = validator.start_client(invite, parsed_address, parsed_port);
   mp_secure_clear_string(invite);
   return valid && parsed_address == address && parsed_port == port;
@@ -62,10 +64,11 @@ bool valid_clipboard_field(int field, const std::string& value) {
     }
     uint32_t port = 0;
     const auto result = std::from_chars(value.data(), value.data() + value.size(), port);
-    return result.ec == std::errc() && result.ptr == value.data() + value.size() && port > 0 &&
-           port <= (std::numeric_limits<uint16_t>::max)();
+    return result.ec == std::errc() && result.ptr == value.data() + value.size() &&
+           mp_valid_gameplay_port(port);
   }
-  return field == kTokenField && value.size() == 22 && valid_parts("127.0.0.1", 1, value);
+  std::string normalized;
+  return field == kRoomCodeField && mp_normalize_room_code(value, normalized, false);
 }
 
 bool paste_field(MultiplayerData& data, int field) {
@@ -73,7 +76,7 @@ bool paste_field(MultiplayerData& data, int field) {
   if (!clipboard) {
     return false;
   }
-  constexpr size_t kMaximumComponentSize = 22;
+  constexpr size_t kMaximumComponentSize = 15;
   size_t length = 0;
   while (length <= kMaximumComponentSize && clipboard[length] != '\0') {
     ++length;
@@ -94,7 +97,11 @@ bool paste_field(MultiplayerData& data, int field) {
   } else if (field == kPortField) {
     replace_field(data.direct_port, value);
   } else {
-    replace_field(data.direct_token, value);
+    std::string normalized;
+    if (!mp_normalize_room_code(value, normalized, false)) {
+      return false;
+    }
+    replace_field(data.direct_room_code, normalized);
   }
   mp_secure_clear_string(value);
   return true;
@@ -125,7 +132,7 @@ void mp_direct_connect_clear(MultiplayerData& data) {
 
 void mp_direct_connect_reset(MultiplayerData& data) {
   mp_direct_connect_clear(data);
-  replace_field(data.direct_port, std::string(kDefaultPort));
+  replace_field(data.direct_port, std::to_string(mp_multiplayer_preferences().network_port));
 }
 
 std::string mp_direct_connect_display(const MultiplayerData& data, int field) {
@@ -135,8 +142,8 @@ std::string mp_direct_connect_display(const MultiplayerData& data, int field) {
   if (field == kPortField) {
     return data.direct_port.data();
   }
-  if (field == kTokenField) {
-    return std::string(strnlen(data.direct_token.data(), data.direct_token.size()), '*');
+  if (field == kRoomCodeField) {
+    return data.direct_room_code.data();
   }
   return {};
 }
@@ -150,20 +157,18 @@ int mp_direct_connect_edit(MultiplayerData& data, int field, uint32_t key) {
   char character = key <= 0x7f ? static_cast<char>(key) : '\0';
   if ((modifiers & SDL_KMOD_SHIFT) != 0 && character >= 'a' && character <= 'z') {
     character = static_cast<char>(character - 'a' + 'A');
-  } else if ((modifiers & SDL_KMOD_SHIFT) != 0 && character == '-' && field == kTokenField) {
-    character = '_';
+  } else if (character >= 'a' && character <= 'z' && field == kRoomCodeField) {
+    character = static_cast<char>(character - 'a' + 'A');
   }
   if (!backspace) {
     const bool address_character =
         field == kAddressField &&
         ((character >= '0' && character <= '9') || character == '.');
     const bool port_character = field == kPortField && character >= '0' && character <= '9';
-    const bool token_character =
-        field == kTokenField &&
-        ((character >= 'A' && character <= 'Z') ||
-         (character >= 'a' && character <= 'z') ||
-         (character >= '0' && character <= '9') || character == '-' || character == '_');
-    if (!address_character && !port_character && !token_character) {
+    const bool room_code_character =
+        field == kRoomCodeField &&
+        ((character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9'));
+    if (!address_character && !port_character && !room_code_character) {
       return 0;
     }
   }
@@ -173,14 +178,14 @@ int mp_direct_connect_edit(MultiplayerData& data, int field, uint32_t key) {
   if (field == kPortField) {
     return edit_buffer(data.direct_port, character, backspace) ? 1 : 0;
   }
-  if (field == kTokenField) {
-    return edit_buffer(data.direct_token, character, backspace) ? 1 : 0;
+  if (field == kRoomCodeField) {
+    return edit_buffer(data.direct_room_code, character, backspace) ? 1 : 0;
   }
   return 0;
 }
 
 bool mp_direct_connect_ready(const MultiplayerData& data) {
-  return valid_parts(data.direct_address.data(), port_value(data), data.direct_token.data());
+  return valid_parts(data.direct_address.data(), port_value(data), data.direct_room_code.data());
 }
 
 bool mp_direct_connect_start(MultiplayerData& data) {
@@ -189,13 +194,13 @@ bool mp_direct_connect_start(MultiplayerData& data) {
   }
   const std::string address(data.direct_address.data());
   const uint16_t port = port_value(data);
-  std::string token(data.direct_token.data());
-  if (token.empty()) {
+  std::string room_code(data.direct_room_code.data());
+  if (room_code.empty()) {
     return MultiplayerScanner::start_direct_search(data, address, port);
   }
 
-  std::string invite = address + ":" + std::to_string(port) + "/" + token;
-  mp_secure_clear_string(token);
+  std::string invite = "jad2mp://" + address + ":" + std::to_string(port) + "/" + room_code;
+  mp_secure_clear_string(room_code);
   mp_direct_connect_clear(data);
   MultiplayerManager::disconnect(data);
   std::string parsed_address;

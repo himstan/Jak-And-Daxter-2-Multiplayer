@@ -1,7 +1,13 @@
 #pragma once
 
 #include "multiplayer_types.h"
+#include "multiplayer_security.h"
 #include <thread>
+
+struct MPDiscoveryResponse {
+  uint16_t port = 0;
+  std::string room_code;
+};
 
 class MultiplayerScanner {
  public:
@@ -16,4 +22,4 @@ class MultiplayerScanner {
   static void scan_thread_func(MultiplayerData* data);
 };
 
-bool mp_parse_discovery_response(const char* bytes, size_t size, std::string& token);
+bool mp_parse_discovery_response(const char* bytes, size_t size, MPDiscoveryResponse& response);

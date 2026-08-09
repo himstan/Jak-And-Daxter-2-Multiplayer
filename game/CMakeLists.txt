@@ -352,6 +352,7 @@ set(RUNTIME_SOURCE
         multiplayer/multiplayer_packet.cpp
         multiplayer/multiplayer_packet_scheduler.cpp
         multiplayer/multiplayer_port_mapping.cpp
+        multiplayer/multiplayer_preferences.cpp
         multiplayer/multiplayer_scanner.cpp
         multiplayer/multiplayer_security.cpp
         multiplayer/multiplayer_version.cpp

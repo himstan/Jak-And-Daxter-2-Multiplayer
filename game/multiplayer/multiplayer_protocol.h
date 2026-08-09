@@ -10,7 +10,6 @@
 const int DISCOVERY_PORT = 26211;
 const char* const DISCOVERY_MAGIC = "OG_MP_DISCOVERY";
 inline constexpr size_t kPacketHeaderWireSize = sizeof(uint8_t) + sizeof(uint32_t);
-inline constexpr uint16_t kMultiplayerWireRevision = multiplayer::schema::kWireRevision;
 inline constexpr size_t kEventEnvelopeHeaderWireSize = kPacketHeaderWireSize + sizeof(uint32_t) + sizeof(uint16_t);
 
 enum class MultiplayerChannel : uint8_t {
@@ -30,7 +29,43 @@ enum class MultiplayerStatus : int32_t {
   HOST_LEFT = 8,
   FAILED = -1,
   VERSION_MISMATCH = -2,
-  TOKEN_DISCOVERY_FAILED = -3
+  CREDENTIAL_DISCOVERY_FAILED = -3
+};
+
+enum class MultiplayerConnectionPhase : int32_t {
+  IDLE = 0,
+  VALIDATING = 1,
+  CONTACTING_HOST = 2,
+  AUTHENTICATING = 3,
+  CONNECTED = 4,
+};
+
+enum class MultiplayerConnectionFailure : int32_t {
+  NONE = 0,
+  INVALID_INVITE = 1,
+  HOST_UNREACHABLE = 2,
+  ROOM_CODE_REJECTED = 3,
+  HOST_FULL = 4,
+  VERSION_MISMATCH = 5,
+  LAN_TIMEOUT = 6,
+  CREDENTIAL_DISCOVERY_FAILED = 7,
+};
+
+enum class MultiplayerHostSetupStatus : int32_t {
+  IDLE = 0,
+  STARTING = 1,
+  CONFIGURING_ROUTER = 2,
+  READY = 3,
+  MAPPING_DISABLED = 4,
+  MAPPING_FAILED = -1,
+  BIND_FAILED = -2,
+  START_FAILED = -3,
+};
+
+enum class MultiplayerHostCopyMode : int32_t {
+  UNAVAILABLE = 0,
+  INVITE = 1,
+  ROOM_CODE = 2,
 };
 
 // ENet disconnect data distinguishes an intentional session shutdown from a
@@ -38,6 +73,8 @@ enum class MultiplayerStatus : int32_t {
 // itself and by reconnect recovery.
 inline constexpr uint32_t kDisconnectReasonHostClosed = 1;
 inline constexpr uint32_t kDisconnectReasonClientClosed = 2;
+inline constexpr uint32_t kDisconnectReasonHostFull = 3;
+inline constexpr uint32_t kDisconnectReasonAuthenticationRejected = 4;
 
 enum class PacketType : uint8_t {
   STATE_UPDATE = 0,

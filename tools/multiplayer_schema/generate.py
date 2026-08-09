@@ -79,7 +79,6 @@ struct EventDescriptor {
   const char* name;
 };
 
-inline constexpr uint16_t kWireRevision = %d;
 inline constexpr size_t kPacketCount = %d;
 inline constexpr size_t kMaxPacketSize = %d;
 inline constexpr std::array<PacketDescriptor, kPacketCount> kPackets = {{
@@ -103,7 +102,7 @@ inline const EventDescriptor* event_descriptor(uint32_t id) {
 }
 
 }  // namespace multiplayer::schema
-""" % (manifest["wire_revision"], len(manifest["packets"]), manifest["max_packet_size"],
+""" % (len(manifest["packets"]), manifest["max_packet_size"],
        "\n".join(packet_rows), len(manifest["events"]), "\n".join(event_rows))
 
 

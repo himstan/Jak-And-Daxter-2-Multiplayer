@@ -1,11 +1,15 @@
 #include "multiplayer_scanner.h"
 #include "multiplayer_protocol.h"
 #include "multiplayer_security.h"
+#include "multiplayer_preferences.h"
 #include "common/cross_sockets/XSocket.h"
 #include "common/log/log.h"
+#include <charconv>
 #include <chrono>
 #include <cstring>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #ifdef _WIN32
@@ -90,24 +94,31 @@ std::vector<sockaddr_in> get_lan_discovery_targets() {
 }
 }  // namespace
 
-bool mp_parse_discovery_response(const char* bytes, size_t size, std::string& token) {
+bool mp_parse_discovery_response(const char* bytes, size_t size, MPDiscoveryResponse& response) {
   const std::string prefix = std::string(DISCOVERY_MAGIC) + "|";
-  constexpr size_t kEncodedTokenSize = 22;
-  if (!bytes || size != prefix.size() + kEncodedTokenSize ||
-      memcmp(bytes, prefix.data(), prefix.size()) != 0) {
+  if (!bytes || size <= prefix.size() || memcmp(bytes, prefix.data(), prefix.size()) != 0) {
     return false;
   }
-  for (size_t index = prefix.size(); index < size; ++index) {
-    const char character = bytes[index];
-    const bool valid = (character >= 'A' && character <= 'Z') ||
-                       (character >= 'a' && character <= 'z') ||
-                       (character >= '0' && character <= '9') || character == '-' ||
-                       character == '_';
-    if (!valid) {
-      return false;
-    }
+  const std::string_view payload(bytes + prefix.size(), size - prefix.size());
+  const size_t port_separator = payload.find('|');
+  if (port_separator == std::string_view::npos ||
+      payload.find('|', port_separator + 1) != std::string_view::npos) {
+    return false;
   }
-  token.assign(bytes + prefix.size(), kEncodedTokenSize);
+  uint32_t parsed_port = 0;
+  const std::string_view port_text = payload.substr(0, port_separator);
+  const auto port_result =
+      std::from_chars(port_text.data(), port_text.data() + port_text.size(), parsed_port);
+  if (port_result.ec != std::errc() || port_result.ptr != port_text.data() + port_text.size() ||
+      !mp_valid_gameplay_port(parsed_port)) {
+    return false;
+  }
+  std::string normalized_room_code;
+  if (!mp_normalize_room_code(payload.substr(port_separator + 1), normalized_room_code, false)) {
+    return false;
+  }
+  response.port = static_cast<uint16_t>(parsed_port);
+  response.room_code = std::move(normalized_room_code);
   return true;
 }
 
@@ -115,6 +126,8 @@ void MultiplayerScanner::start_search(MultiplayerData& data) {
   if (data.join_status == (int)MultiplayerStatus::SEARCHING) return;
   
   data.stop_search = false;
+  data.connection_phase = static_cast<int>(MultiplayerConnectionPhase::CONTACTING_HOST);
+  data.connection_failure = static_cast<int>(MultiplayerConnectionFailure::NONE);
   {
     std::lock_guard<std::mutex> lock(data.discovery_result_mutex);
     data.found_ip.clear();
@@ -141,6 +154,8 @@ bool MultiplayerScanner::start_direct_search(MultiplayerData& data,
     data.scanner_thread.join();
   }
   data.stop_search = false;
+  data.connection_phase = static_cast<int>(MultiplayerConnectionPhase::CONTACTING_HOST);
+  data.connection_failure = static_cast<int>(MultiplayerConnectionFailure::NONE);
   {
     std::lock_guard<std::mutex> lock(data.discovery_result_mutex);
     data.found_ip.clear();
@@ -173,7 +188,7 @@ void MultiplayerScanner::scan_thread_func(MultiplayerData* data) {
   data->join_status = (int)MultiplayerStatus::SEARCHING;
   bool directed = false;
   uint32_t directed_address = 0;
-  uint16_t game_port = 26210;
+  uint16_t game_port = kDefaultMultiplayerPort;
   {
     std::lock_guard<std::mutex> lock(data->discovery_result_mutex);
     directed = data->directed_discovery;
@@ -186,6 +201,8 @@ void MultiplayerScanner::scan_thread_func(MultiplayerData* data) {
   int sock = open_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
   if (sock < 0) {
     data->join_status = (int)MultiplayerStatus::FAILED;
+    data->connection_failure =
+        static_cast<int>(MultiplayerConnectionFailure::HOST_UNREACHABLE);
     return;
   }
 
@@ -222,19 +239,21 @@ void MultiplayerScanner::scan_thread_func(MultiplayerData* data) {
     
     int bytes_received = recvfrom(sock, buffer, sizeof(buffer) - 1, 0, (sockaddr*)&from_addr, &from_len);
     if (bytes_received > 0) {
-      std::string token;
+      MPDiscoveryResponse response;
       const bool expected_source = ntohs(from_addr.sin_port) == DISCOVERY_PORT &&
                                    (!directed || from_addr.sin_addr.s_addr == directed_address);
       if (expected_source &&
-          mp_parse_discovery_response(buffer, static_cast<size_t>(bytes_received), token)) {
+          mp_parse_discovery_response(buffer, static_cast<size_t>(bytes_received), response) &&
+          (!directed || response.port == game_port)) {
         const std::string found_ip = address_to_string(from_addr);
-        std::string found_invite = found_ip + ":" + std::to_string(game_port) + "/" + token;
+        std::string found_invite = "jad2mp://" + found_ip + ":" +
+                                   std::to_string(response.port) + "/" + response.room_code;
         {
           std::lock_guard<std::mutex> lock(data->discovery_result_mutex);
           data->found_ip = found_invite;
         }
         mp_secure_clear_string(found_invite);
-        mp_secure_clear_string(token);
+        mp_secure_clear_string(response.room_code);
         lg::info("[Multiplayer] Found a compatible discovery responder.");
         data->join_status = (int)MultiplayerStatus::FOUND;
         close_socket(sock);
@@ -245,8 +264,11 @@ void MultiplayerScanner::scan_thread_func(MultiplayerData* data) {
 
   lg::info("[Multiplayer] Discovery timed out.");
   if (data->join_status == (int)MultiplayerStatus::SEARCHING) {
-    data->join_status = directed ? (int)MultiplayerStatus::TOKEN_DISCOVERY_FAILED
+    data->join_status = directed ? (int)MultiplayerStatus::CREDENTIAL_DISCOVERY_FAILED
                                  : (int)MultiplayerStatus::FAILED;
+    data->connection_failure = static_cast<int>(
+        directed ? MultiplayerConnectionFailure::CREDENTIAL_DISCOVERY_FAILED
+                 : MultiplayerConnectionFailure::LAN_TIMEOUT);
   }
   close_socket(sock);
 }

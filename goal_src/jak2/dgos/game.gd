@@ -382,6 +382,7 @@
   "hud.o"
   "hud-classes.o"
   "progress-static.o"
+  "progress-multiplayer-options-pc.o" ;; added
   "progress-static-pc.o" ;; added
   "progress.o"
   "progress-pc.o" ;; added

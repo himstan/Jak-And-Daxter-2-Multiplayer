@@ -6,6 +6,7 @@
 
 #include "multiplayer_packet.h"
 #include "multiplayer_port_mapping.h"
+#include "multiplayer_preferences.h"
 #include "multiplayer_protocol.h"
 #include "multiplayer_session.h"
 
@@ -81,6 +82,7 @@ void start_port_mapping_worker(MultiplayerData& data, uint16_t local_port, uint1
     data.port_mapping_external_port = external_port;
     data.port_mapping_external_ip.clear();
   }
+  data.host_setup_status = static_cast<int>(MultiplayerHostSetupStatus::CONFIGURING_ROUTER);
 
   data.port_mapping_thread = std::thread([&data, local_port, external_port]() {
     if (wait_for_mapping_stop(data, std::chrono::seconds(1))) {
@@ -123,8 +125,10 @@ void start_port_mapping_worker(MultiplayerData& data, uint16_t local_port, uint1
     }
 
     if (usable_mapping) {
+      data.host_setup_status = static_cast<int>(MultiplayerHostSetupStatus::READY);
       lg::info("[Multiplayer] Temporary UDP port mapping active for port {}.", external_port);
     } else {
+      data.host_setup_status = static_cast<int>(MultiplayerHostSetupStatus::MAPPING_FAILED);
       lg::warn("[Multiplayer] Automatic UDP port mapping failed: {}.",
                mapping.error.empty() ? "unknown failure" : mapping.error);
       return;
@@ -163,6 +167,7 @@ void start_port_mapping_worker(MultiplayerData& data, uint16_t local_port, uint1
     data.port_mapping_method = MPPortMappingMethod::NONE;
     data.port_mapping_external_ip.clear();
     if (refresh_failed) {
+      data.host_setup_status = static_cast<int>(MultiplayerHostSetupStatus::MAPPING_FAILED);
       lg::warn("[Multiplayer] Automatic UDP port mapping refresh failed: {}.",
                refresh_error.empty() ? "unknown failure" : refresh_error);
     }
@@ -289,27 +294,49 @@ bool send_leave_notice(MultiplayerData& data, MultiplayerLeaveReason reason) {
 }
 }  // namespace
 
+MultiplayerHostCopyMode multiplayer_host_copy_mode(MultiplayerData& data) {
+  if (!data.initialized || data.local_role != 0 || data.security.room_code().empty()) {
+    return MultiplayerHostCopyMode::UNAVAILABLE;
+  }
+  if (data.internet_host) {
+    std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
+    if (data.port_mapping_state == MPPortMappingState::READY &&
+        mp_is_public_ipv4(data.port_mapping_external_ip)) {
+      return MultiplayerHostCopyMode::INVITE;
+    }
+  }
+  return MultiplayerHostCopyMode::ROOM_CODE;
+}
+
 void MultiplayerManager::setup_host(MultiplayerData& data, bool internet_host) {
   if (data.host)
     disconnect(data);
 
   if (!data.enet_initialized) {
-    if (enet_initialize() != 0)
+    if (enet_initialize() != 0) {
+      data.host_setup_status = static_cast<int>(MultiplayerHostSetupStatus::START_FAILED);
+      data.join_status = static_cast<int>(MultiplayerStatus::FAILED);
+      lg::error("[Multiplayer] Could not initialize the network transport.");
       return;
+    }
     data.enet_initialized = true;
   }
 
+  data.host_setup_status = static_cast<int>(MultiplayerHostSetupStatus::STARTING);
   ENetAddress address;
   address.host = ENET_HOST_ANY;
-  address.port = 26210;
+  address.port = mp_resolved_host_port();
 
-  if (!data.security.start_host(address.port)) {
+  if (!data.security.start_host(address.port, mp_multiplayer_preferences().room_code)) {
     lg::error("[Multiplayer] Could not initialize secure handshake.");
+    data.host_setup_status = static_cast<int>(MultiplayerHostSetupStatus::START_FAILED);
+    data.join_status = static_cast<int>(MultiplayerStatus::FAILED);
     return;
   }
   if (!data.security.set_local_version(data.local_version)) {
     lg::error("[Multiplayer] Cannot host without a valid mod version.");
     data.security.reset();
+    data.host_setup_status = static_cast<int>(MultiplayerHostSetupStatus::START_FAILED);
     data.join_status = (int)MultiplayerStatus::FAILED;
     return;
   }
@@ -333,50 +360,29 @@ void MultiplayerManager::setup_host(MultiplayerData& data, bool internet_host) {
     data.host_discovery_active = true;
     data.discovery_thread = std::thread(discovery_responder_func, &data);
     if (internet_host) {
-      start_port_mapping_worker(data, address.port, address.port);
+      if (mp_multiplayer_preferences().automatic_port_mapping) {
+        start_port_mapping_worker(data, address.port, address.port);
+      } else {
+        data.host_setup_status =
+            static_cast<int>(MultiplayerHostSetupStatus::MAPPING_DISABLED);
+        lg::info(
+            "[Multiplayer] Automatic UDP port mapping disabled; public reachability is "
+            "unverified.");
+      }
+    } else {
+      data.host_setup_status = static_cast<int>(MultiplayerHostSetupStatus::READY);
     }
   } else {
     data.security.reset();
+    data.host_setup_status = static_cast<int>(MultiplayerHostSetupStatus::BIND_FAILED);
+    data.join_status = static_cast<int>(MultiplayerStatus::FAILED);
+    lg::error("[Multiplayer] Could not bind UDP port {}. It may already be in use.", address.port);
   }
-}
-
-bool MultiplayerManager::retry_online_setup(MultiplayerData& data) {
-  uint16_t local_port = 0;
-  uint16_t external_port = 0;
-  {
-    std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
-    if (!data.initialized || data.local_role != 0 || !data.internet_host ||
-        data.port_mapping_state != MPPortMappingState::FAILED) {
-      return false;
-    }
-    local_port = data.port_mapping_local_port;
-    external_port = data.port_mapping_external_port;
-  }
-  if (local_port == 0 || external_port == 0) {
-    return false;
-  }
-  start_port_mapping_worker(data, local_port, external_port);
-  return true;
-}
-
-int multiplayer_host_invite_status(MultiplayerData& data) {
-  if (!data.initialized || data.local_role != 0 || data.security.invite_token().empty()) {
-    return 0;
-  }
-  if (!data.internet_host) {
-    return 1;
-  }
-  std::lock_guard<std::mutex> lock(data.port_mapping_mutex);
-  if (data.port_mapping_state == MPPortMappingState::FAILED) {
-    return -1;
-  }
-  return data.port_mapping_state == MPPortMappingState::READY &&
-                 !data.port_mapping_external_ip.empty()
-             ? 1
-             : 0;
 }
 
 void MultiplayerManager::setup_client(MultiplayerData& data, const char* ip, int port) {
+  data.connection_phase = static_cast<int>(MultiplayerConnectionPhase::CONTACTING_HOST);
+  data.connection_failure = static_cast<int>(MultiplayerConnectionFailure::NONE);
   lg::info(
       "[MP-Reconnect] Creating client transport for target {}:{} (reconnect_active={}, attempt={}, "
       "status={}).",
@@ -388,6 +394,8 @@ void MultiplayerManager::setup_client(MultiplayerData& data, const char* ip, int
   if (!data.enet_initialized) {
     if (enet_initialize() != 0) {
       lg::error("[MP-Reconnect] ENet initialization failed while creating client transport.");
+      data.connection_failure = static_cast<int>(MultiplayerConnectionFailure::HOST_UNREACHABLE);
+      data.join_status = static_cast<int>(MultiplayerStatus::FAILED);
       return;
     }
     data.enet_initialized = true;
@@ -396,6 +404,7 @@ void MultiplayerManager::setup_client(MultiplayerData& data, const char* ip, int
   if (!data.security.set_local_version(data.local_version)) {
     lg::error("[Multiplayer] Cannot connect without a valid mod version.");
     data.join_status = (int)MultiplayerStatus::FAILED;
+    data.connection_failure = static_cast<int>(MultiplayerConnectionFailure::INVALID_INVITE);
     return;
   }
 
@@ -403,6 +412,8 @@ void MultiplayerManager::setup_client(MultiplayerData& data, const char* ip, int
   if (!data.host) {
     lg::error("[MP-Reconnect] ENet client host creation failed for target {}:{}.",
               ip ? ip : "<null>", port);
+    data.connection_failure = static_cast<int>(MultiplayerConnectionFailure::HOST_UNREACHABLE);
+    data.join_status = static_cast<int>(MultiplayerStatus::FAILED);
     return;
   }
 
@@ -437,6 +448,8 @@ void MultiplayerManager::setup_client(MultiplayerData& data, const char* ip, int
               ip ? ip : "<null>", server_address.port, enet_local_port(data.host));
     enet_host_destroy(data.host);
     data.host = nullptr;
+    data.connection_failure = static_cast<int>(MultiplayerConnectionFailure::HOST_UNREACHABLE);
+    data.join_status = static_cast<int>(MultiplayerStatus::FAILED);
   }
 }
 
@@ -451,6 +464,7 @@ void MultiplayerManager::disconnect(MultiplayerData& data, bool preserve_reconne
   }
 
   stop_port_mapping_worker(data);
+  data.host_setup_status = static_cast<int>(MultiplayerHostSetupStatus::IDLE);
 
   if (!data.initialized) {
     data.packet_scheduler.clear();
@@ -550,7 +564,9 @@ void MultiplayerManager::discovery_responder_func(MultiplayerData* data) {
     if (bytes_received > 0) {
       buffer[bytes_received] = '\0';
       if (std::string(buffer) == DISCOVERY_MAGIC) {
-        std::string reply = std::string(DISCOVERY_MAGIC) + "|" + data->security.invite_token();
+        const uint16_t port = enet_local_port(data->host);
+        std::string reply = std::string(DISCOVERY_MAGIC) + "|" + std::to_string(port) + "|" +
+                            data->security.room_code();
         sendto(sock, reply.c_str(), reply.size(), 0, (sockaddr*)&from_addr, from_len);
         mp_secure_clear_string(reply);
       }

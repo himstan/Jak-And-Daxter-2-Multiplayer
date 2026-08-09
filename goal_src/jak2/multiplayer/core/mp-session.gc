@@ -85,7 +85,7 @@
              (nonzero? (the-as uint port-arg))
              (nonzero? (-> port-arg allocated-length)))
         (string->int port-arg)
-        26210)
+        (pc-multi-get-host-port))
     )
   )
 

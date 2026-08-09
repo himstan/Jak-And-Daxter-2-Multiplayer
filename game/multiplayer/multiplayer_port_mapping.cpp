@@ -220,10 +220,13 @@ PortMappingAttemptResult upnp_add_mapping(const NetworkAdapterInfo& route,
       devices.get(), urls.get(), &data, discovered_local_address, sizeof(discovered_local_address),
       discovered_wan_address, sizeof(discovered_wan_address));
   if (igd_status != UPNP_CONNECTED_IGD && igd_status != UPNP_PRIVATEIP_IGD) {
-    return {false, {}, describe_igd_status(igd_status), {}};
+    return {false, discovered_wan_address, describe_igd_status(igd_status), {}};
   }
   if (!urls.get()->controlURL || !*urls.get()->controlURL || !*data.first.servicetype) {
-    return {false, {}, "the selected UPnP IGD returned no usable control endpoint", {}};
+    return {false,
+            discovered_wan_address,
+            "the selected UPnP IGD returned no usable control endpoint",
+            {}};
   }
 
   const std::string local_port_text = std::to_string(local_port);
@@ -234,7 +237,7 @@ PortMappingAttemptResult upnp_add_mapping(const NetworkAdapterInfo& route,
                           route.local_ip.c_str(), "OpenGOAL Jak II Multiplayer", "UDP", "", "0");
   if (add_result != UPNPCOMMAND_SUCCESS) {
     return {false,
-            {},
+            discovered_wan_address,
             "adding UDP " + external_port_text + " -> " + route.local_ip + ":" + local_port_text +
                 " failed: " + mp_describe_upnp_result(add_result),
             {}};
@@ -594,7 +597,11 @@ MPPortMappingResult mp_open_udp_port_mapping(uint16_t local_port, uint16_t exter
     context->method = MPPortMappingMethod::NAT_PMP;
     context->route = route;
     auto external_address = natpmp_query_external_ip(route);
-    return {true, MPPortMappingMethod::NAT_PMP, std::move(external_address.external_ip),
+    std::string discovered_external_ip = std::move(external_address.external_ip);
+    if (!mp_is_public_ipv4(discovered_external_ip) && mp_is_public_ipv4(upnp.external_ip)) {
+      discovered_external_ip = std::move(upnp.external_ip);
+    }
+    return {true, MPPortMappingMethod::NAT_PMP, std::move(discovered_external_ip),
             external_address.success
                 ? std::string()
                 : "mapping succeeded, but querying the external IPv4 address failed: " +
@@ -607,7 +614,7 @@ MPPortMappingResult mp_open_udp_port_mapping(uint16_t local_port, uint16_t exter
       natpmp.error.empty() ? "unknown failure" : std::move(natpmp.error);
   return {false,
           MPPortMappingMethod::NONE,
-          {},
+          mp_is_public_ipv4(upnp.external_ip) ? std::move(upnp.external_ip) : std::string(),
           "UPnP IGD: " + upnp_error + "; NAT-PMP: " + natpmp_error,
           {}};
 }

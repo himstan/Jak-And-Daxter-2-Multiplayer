@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 #include "game/multiplayer/multiplayer_protocol.h"
 
@@ -32,14 +33,14 @@ class MultiplayerSecurity {
   MultiplayerSecurity() = default;
   ~MultiplayerSecurity();
 
-  bool start_host(uint16_t port);
+  bool start_host(uint16_t port, const std::string& room_code = {});
   bool start_client(const std::string& invite, std::string& host, uint16_t& port);
   bool set_local_version(const std::string& version);
   bool rotate_host_peer_session();
   void reset();
 
   bool authenticated() const;
-  const std::string& invite_token() const;
+  const std::string& room_code() const;
   const std::string& remote_version() const;
   std::string invite_for_address(const std::string& address) const;
 
@@ -52,7 +53,8 @@ class MultiplayerSecurity {
             MultiplayerDatagram& output);
 
  private:
-  static constexpr size_t kTokenSize = 16;
+  static constexpr size_t kCredentialKeySize = 32;
+  static constexpr size_t kCredentialSaltSize = 16;
   static constexpr size_t kSessionIdSize = 16;
   static constexpr size_t kNonceSize = 32;
   static constexpr size_t kKeySize = 32;
@@ -60,6 +62,7 @@ class MultiplayerSecurity {
 
   bool initialize_sodium();
   bool parse_invite(const std::string& invite, std::string& host, uint16_t& port);
+  bool derive_room_code_key(std::string_view room_code);
   void derive_session_keys(int local_role);
   void make_proof(const char* label, std::array<uint8_t, kKeySize>& proof) const;
   bool accept_counter(uint64_t counter);
@@ -72,7 +75,8 @@ class MultiplayerSecurity {
   uint64_t m_send_counter = 0;
   uint64_t m_highest_received_counter = 0;
   std::array<uint64_t, 4> m_replay_window = {};
-  std::array<uint8_t, kTokenSize> m_token = {};
+  std::array<uint8_t, kCredentialKeySize> m_credential_key = {};
+  std::array<uint8_t, kCredentialSaltSize> m_credential_salt = {};
   std::array<uint8_t, kSessionIdSize> m_session_id = {};
   std::array<uint8_t, kNonceSize> m_server_nonce = {};
   std::array<uint8_t, kNonceSize> m_client_nonce = {};
@@ -80,7 +84,7 @@ class MultiplayerSecurity {
   std::array<uint8_t, kKeySize> m_receive_key = {};
   std::array<uint8_t, kNoncePrefixSize> m_send_nonce_prefix = {};
   std::array<uint8_t, kNoncePrefixSize> m_receive_nonce_prefix = {};
-  std::string m_encoded_token;
+  std::string m_room_code;
   std::string m_local_version;
   std::string m_remote_version;
 };

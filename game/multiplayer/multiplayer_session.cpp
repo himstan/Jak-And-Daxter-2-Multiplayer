@@ -116,7 +116,7 @@ void multiplayer_clear_remote_peer_state(MultiplayerData& data) {
 void multiplayer_clear_direct_connect_draft(MultiplayerData& data) {
   sodium_memzero(data.direct_address.data(), data.direct_address.size());
   sodium_memzero(data.direct_port.data(), data.direct_port.size());
-  sodium_memzero(data.direct_token.data(), data.direct_token.size());
+  sodium_memzero(data.direct_room_code.data(), data.direct_room_code.size());
 }
 
 bool multiplayer_prepare_host_for_next_peer(MultiplayerData& data, bool wait_for_reconnect) {
@@ -324,6 +324,8 @@ void multiplayer_handle_client_handshake_timeout(MultiplayerData& data,
     MultiplayerManager::disconnect(data, true);
     multiplayer_note_client_reconnect_failed(data, current_time);
   } else {
+    data.connection_failure =
+        static_cast<int>(MultiplayerConnectionFailure::HOST_UNREACHABLE);
     MultiplayerManager::disconnect(data);
   }
 }
