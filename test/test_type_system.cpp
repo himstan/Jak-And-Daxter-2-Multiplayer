@@ -525,4 +525,32 @@ TEST(Deftype, deftype) {
   EXPECT_EQ(f5.is_inline(), false);
 }
 
+TEST(Deftype, IntegerConstantArraySizeAndSizeAssert) {
+  TypeSystem ts;
+  ts.add_builtin_types(GameVersion::Jak1);
+  goos::Reader reader;
+  goos::EnvironmentMap constants;
+  const auto max_players_symbol = reader.read_from_string("MP_MAX_PLAYERS").as_symbol();
+  const auto slot_count_symbol = reader.read_from_string("MP_SLOT_COUNT").as_symbol();
+  const auto controller_size_symbol = reader.read_from_string("MP_CONTROLLER_SIZE").as_symbol();
+  constants.set(max_players_symbol, goos::Object::make_integer(8));
+  constants.set(slot_count_symbol, reader.read_from_string("(+ MP_MAX_PLAYERS 1)"));
+  constants.set(controller_size_symbol, reader.read_from_string("(+ (* 4 MP_SLOT_COUNT) 4)"));
+
+  const auto parse = [&](const std::string& source) {
+    auto& form = reader.read_from_string(source).as_pair()->cdr.as_pair()->car.as_pair()->cdr;
+    return parse_deftype(form, &ts, &constants);
+  };
+  const auto result = parse(
+      "(deftype capacity-test (structure) "
+      "((slots uint32 MP_SLOT_COUNT) (trailer uint32)) "
+      ":size-assert MP_CONTROLLER_SIZE)");
+  EXPECT_EQ(ts.lookup_type(result.type)->get_size_in_memory(), 40);
+
+  EXPECT_THROW(
+      parse("(deftype bad-capacity-test (structure) ((slots uint32 MP_SLOT_COUNT)) "
+            ":size-assert MP_MAX_PLAYERS)"),
+      std::runtime_error);
+}
+
 // TODO - a big test to make sure all the builtin types are what we expect.

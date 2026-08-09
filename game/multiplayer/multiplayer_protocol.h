@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
@@ -14,7 +15,7 @@ inline constexpr size_t kEventEnvelopeHeaderWireSize =
     kPacketHeaderWireSize + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint16_t);
 inline constexpr size_t kMultiplayerPlayerNameSize = 24;
 inline constexpr uint32_t kMPMaxPlayers = 4;
-inline constexpr size_t kMPMaxHostTransportPeers = 8;
+inline constexpr size_t kMPMaxHostTransportPeers = kMPMaxPlayers * 2;
 inline constexpr uint32_t kMPInvalidPlayerId = 0xffffffffu;
 inline constexpr uint32_t kMPVehicleCivilianRiderId = 0xfffffffeu;
 inline constexpr uint8_t kMPInvalidCompactPlayerId = 0xffu;
@@ -24,6 +25,31 @@ enum class MPPlayerCharacter : uint32_t {
   JAK = 1,
   DAXTER = 2,
 };
+
+static_assert(kMPMaxPlayers >= 2 && kMPMaxPlayers <= 32,
+              "multiplayer player capacity must be between 2 and 32");
+
+inline constexpr std::array<MPPlayerCharacter, kMPMaxPlayers>
+mp_default_player_character_config() {
+  std::array<MPPlayerCharacter, kMPMaxPlayers> characters = {};
+  for (uint32_t player_id = 0; player_id < kMPMaxPlayers; ++player_id) {
+    characters[player_id] =
+        (player_id & 1u) == 0 ? MPPlayerCharacter::JAK : MPPlayerCharacter::DAXTER;
+  }
+  return characters;
+}
+
+inline constexpr uint32_t mp_player_id_bit_count(uint32_t capacity) {
+  uint32_t bits = 0;
+  for (uint32_t highest_id = capacity - 1; highest_id != 0; highest_id >>= 1u) {
+    ++bits;
+  }
+  return bits;
+}
+
+inline constexpr uint32_t kMPPlayerIdBits = mp_player_id_bit_count(kMPMaxPlayers);
+inline constexpr uint32_t kMPBattleSpawnCounterBits = 28u - kMPPlayerIdBits;
+inline constexpr uint32_t kMPBattleSpawnCounterLimit = 1u << kMPBattleSpawnCounterBits;
 
 inline constexpr bool mp_valid_player_character(MPPlayerCharacter character) {
   return character == MPPlayerCharacter::JAK || character == MPPlayerCharacter::DAXTER;

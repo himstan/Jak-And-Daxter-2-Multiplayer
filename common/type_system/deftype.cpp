@@ -75,6 +75,58 @@ int64_t get_int(const goos::Object& obj) {
   throw std::runtime_error(obj.print() + " was supposed to be an integer, but isn't");
 }
 
+int64_t get_constant_int(const goos::Object& obj,
+                         goos::EnvironmentMap* constants,
+                         int recursion_depth = 0) {
+  if (recursion_depth > 64) {
+    throw std::runtime_error("integer constant expression exceeded the recursion limit");
+  }
+  if (obj.is_int()) {
+    return obj.integer_obj.value;
+  }
+  if (obj.is_symbol() && constants) {
+    if (const auto* value = constants->lookup(obj.as_symbol())) {
+      return get_constant_int(*value, constants, recursion_depth + 1);
+    }
+  }
+  if (!obj.is_pair()) {
+    throw std::runtime_error(obj.print() + " was supposed to be an integer constant, but isn't");
+  }
+
+  const auto& operation = obj.as_pair()->car;
+  if (!operation.is_symbol()) {
+    throw std::runtime_error(obj.print() + " has an invalid integer constant operation");
+  }
+  const std::string operation_name = operation.as_symbol().name_ptr;
+  const auto* arguments = &obj.as_pair()->cdr;
+  if (operation_name == "+" || operation_name == "*") {
+    int64_t result = operation_name == "+" ? 0 : 1;
+    while (!arguments->is_empty_list()) {
+      const int64_t value =
+          get_constant_int(car(arguments), constants, recursion_depth + 1);
+      result = operation_name == "+" ? result + value : result * value;
+      arguments = cdr(arguments);
+    }
+    return result;
+  }
+  if (operation_name == "-") {
+    if (arguments->is_empty_list()) {
+      throw std::runtime_error("- requires at least one integer constant argument");
+    }
+    int64_t result = get_constant_int(car(arguments), constants, recursion_depth + 1);
+    arguments = cdr(arguments);
+    if (arguments->is_empty_list()) {
+      return -result;
+    }
+    while (!arguments->is_empty_list()) {
+      result -= get_constant_int(car(arguments), constants, recursion_depth + 1);
+      arguments = cdr(arguments);
+    }
+    return result;
+  }
+  throw std::runtime_error("unsupported integer constant operation " + operation_name);
+}
+
 double get_float(const goos::Object& obj) {
   if (obj.is_int()) {
     return obj.integer_obj.value;
@@ -112,7 +164,7 @@ void add_field(StructureType* structure,
       array_size = car(rest).integer_obj.value;
       rest = cdr(rest);
     } else if (car(rest).is_symbol() && constants && constants->lookup((car(rest)).as_symbol())) {
-      array_size = get_int(*constants->lookup((car(rest)).as_symbol()));
+      array_size = get_constant_int(car(rest), constants);
       rest = cdr(rest);
     }
 
@@ -583,7 +635,7 @@ StructureDefResult parse_structure_def(StructureType* type,
       rest = cdr(rest);
 
       if (opt_name == ":size-assert") {
-        size_assert = get_int(car(rest));
+        size_assert = get_constant_int(car(rest), constants);
         if (size_assert == -1) {
           throw std::runtime_error("Cannot use -1 as size-assert");
         }

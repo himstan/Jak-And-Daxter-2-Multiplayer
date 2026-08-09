@@ -2,7 +2,6 @@
 (in-package goal)
 
 ;; Player identity is independent from transport role and avatar choice.
-(defconstant MP_MAX_PLAYERS 4)
 (define-perm *mp-session-player-limit* uint (the uint MP_MAX_PLAYERS))
 
 (defun mp-set-session-player-limit! ((player-limit uint))
@@ -48,20 +47,14 @@
   (daxter  2)
   )
 
+(defconstant MP_SESSION_CHARACTER_CONFIG_SIZE (* 4 MP_MAX_PLAYERS))
+
 (deftype mp-session-character-config (structure)
-  ((player-0 mp-player-character)
-   (player-1 mp-player-character)
-   (player-2 mp-player-character)
-   (player-3 mp-player-character)
-   )
-  :size-assert 16)
+  ((characters mp-player-character MP_MAX_PLAYERS))
+  :size-assert MP_SESSION_CHARACTER_CONFIG_SIZE)
 
 (define-perm *mp-session-character-config* mp-session-character-config
-  (new 'static 'mp-session-character-config
-    :player-0 (mp-player-character jak)
-    :player-1 (mp-player-character daxter)
-    :player-2 (mp-player-character jak)
-    :player-3 (mp-player-character daxter)))
+  (new 'static 'mp-session-character-config))
 
 (defun mp-player-character-valid? ((character mp-player-character))
   (or (= character (mp-player-character jak))
@@ -71,22 +64,19 @@
   "Restore the character choices used by the next hosted session."
   (when (and *mp-session-character-config*
              (nonzero? *mp-session-character-config*))
-    (set! (-> *mp-session-character-config* player-0) (mp-player-character jak))
-    (set! (-> *mp-session-character-config* player-1) (mp-player-character daxter))
-    (set! (-> *mp-session-character-config* player-2) (mp-player-character jak))
-    (set! (-> *mp-session-character-config* player-3) (mp-player-character daxter)))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (set! (-> *mp-session-character-config* characters player-id)
+            (if (zero? (logand player-id 1))
+                (mp-player-character jak)
+                (mp-player-character daxter)))))
   (none))
 
 (defun mp-session-player-character ((player-id uint))
   "Read a character choice for the next hosted session."
   (if (and *mp-session-character-config*
-           (nonzero? *mp-session-character-config*))
-      (cond
-        ((= player-id (the uint 0)) (-> *mp-session-character-config* player-0))
-        ((= player-id (the uint 1)) (-> *mp-session-character-config* player-1))
-        ((= player-id (the uint 2)) (-> *mp-session-character-config* player-2))
-        ((= player-id (the uint 3)) (-> *mp-session-character-config* player-3))
-        (else (mp-player-character unknown)))
+           (nonzero? *mp-session-character-config*)
+           (< player-id (the uint MP_MAX_PLAYERS)))
+      (-> *mp-session-character-config* characters player-id)
       (mp-player-character unknown)))
 
 (defun mp-set-session-player-character!
@@ -97,30 +87,22 @@
             (not *mp-session-character-config*)
             (zero? *mp-session-character-config*))
     (return #f))
-  (cond
-    ((= player-id (the uint 0))
-     (set! (-> *mp-session-character-config* player-0) character))
-    ((= player-id (the uint 1))
-     (set! (-> *mp-session-character-config* player-1) character))
-    ((= player-id (the uint 2))
-     (set! (-> *mp-session-character-config* player-2) character))
-    ((= player-id (the uint 3))
-     (set! (-> *mp-session-character-config* player-3) character)))
+  (set! (-> *mp-session-character-config* characters player-id) character)
   #t)
+
+(mp-reset-session-player-characters!)
 
 (defun mp-setup-host-bridge! ((internet-host? object))
   "Snapshot the next-session GOAL configuration into the network session."
-  (let ((character-0 (the-as uint (mp-session-player-character (the uint 0))))
-        (character-1 (the-as uint (mp-session-player-character (the uint 1))))
-        (character-2 (the-as uint (mp-session-player-character (the uint 2))))
-        (character-3 (the-as uint (mp-session-player-character (the uint 3)))))
+  (when (and *mp-session-character-config*
+             (nonzero? *mp-session-character-config*))
     (if internet-host?
         (pc-multi-setup-internet-host
           *mp-session-player-limit*
-          character-0 character-1 character-2 character-3)
+          (the-as uint *mp-session-character-config*))
         (pc-multi-setup-host
           *mp-session-player-limit*
-          character-0 character-1 character-2 character-3)))
+          (the-as uint *mp-session-character-config*))))
   (none))
 
 (deftype mp-player-identity (structure)
@@ -248,8 +230,10 @@
    (input      mp-player-input-state :inline)
    (vehicle    mp-player-vehicle-state :inline)
    (runtime    mp-player-runtime-state :inline)
-   )
+  )
   :size-assert 480)
+
+(defconstant MP_PLAYER_CONTROLLER_SIZE (+ (* 480 MP_MAX_PLAYERS) 16))
 
 (deftype mp-player-controller (structure)
   ((records                  mp-player-record MP_MAX_PLAYERS :inline)
@@ -257,7 +241,7 @@
    (host-player-id           uint32)
    (reserved                 uint32 2)
    )
-  :size-assert 1936)
+  :size-assert MP_PLAYER_CONTROLLER_SIZE)
 
 (define-perm *mp-player-controller* mp-player-controller
   (new 'static 'mp-player-controller))
@@ -346,6 +330,7 @@
       (set! (-> record runtime pad-index) MP_INVALID_PAD_INDEX))))
 
 (defun mp-player-record-reset! ((record mp-player-record))
+  "Clear record data after its owned presentation resources have been released."
   (when (and record (nonzero? record))
     (let ((old-target (the-as target (handle->process-safe (-> record runtime target-handle)))))
       (when (and old-target (nonzero? old-target))
@@ -360,12 +345,27 @@
     (set! (-> record runtime last-gun-log-active) -1)
     (set! (-> record runtime last-gun-log-requested) -1)))
 
+(defun mp-player-controller-release-slot!
+       ((controller mp-player-controller) (player-id uint))
+  "Release presentation ownership before clearing one controller slot."
+  (when (and controller
+             (nonzero? controller)
+             (mp-player-id-valid? player-id))
+    (let ((record (mp-player-controller-slot controller player-id)))
+      (when (and record (nonzero? record))
+        ;; The local process is engine-owned and must survive registry teardown.
+        (when (and (!= player-id (-> controller local-player-id))
+                   (nonzero? (-> record runtime target-handle)))
+          (mp-puppet-deactivate! record))
+        (set! (-> record runtime vehicle-handle) (the-as handle #f))
+        (mp-player-controller-release-pad! controller record)
+        (mp-player-record-reset! record))))
+  (none))
+
 (defun mp-player-controller-reset! ((controller mp-player-controller))
   (when (and controller (nonzero? controller))
     (dotimes (player-id MP_MAX_PLAYERS)
-      (let ((record (-> controller records player-id)))
-        (mp-player-controller-release-pad! controller record)
-        (mp-player-record-reset! record)))
+      (mp-player-controller-release-slot! controller (the-as uint player-id)))
     (set! (-> controller local-player-id) MP_INVALID_PLAYER_ID)
     (set! (-> controller host-player-id) MP_INVALID_PLAYER_ID)
     (set! (-> controller reserved 0) (the uint 0))
@@ -375,8 +375,7 @@
        ((controller mp-player-controller) (player-id uint) (character mp-player-character))
   (let ((record (mp-player-controller-slot controller player-id)))
     (when (and record (nonzero? record))
-      (mp-player-controller-release-pad! controller record)
-      (mp-player-record-reset! record)
+      (mp-player-controller-release-slot! controller player-id)
       (set! (-> record identity player-id) (the-as uint32 player-id))
       (set! (-> record identity character) character)
       (set! (-> record identity identity-ready?) (the uint8 1))
@@ -388,8 +387,7 @@
        ((controller mp-player-controller) (player-id uint))
   (let ((record (mp-player-controller-slot controller player-id)))
     (when (and record (nonzero? record))
-      (mp-player-controller-release-pad! controller record)
-      (mp-player-record-reset! record))
+      (mp-player-controller-release-slot! controller player-id))
     (when (and controller (nonzero? controller))
       (when (= (-> controller local-player-id) player-id)
         (set! (-> controller local-player-id) MP_INVALID_PLAYER_ID))
@@ -512,8 +510,7 @@
             (let ((local-target
                     (the-as target
                       (handle->process-safe (-> old-record runtime target-handle)))))
-              (mp-player-controller-release-pad! controller new-record)
-              (mp-player-record-reset! new-record)
+              (mp-player-controller-release-slot! controller new-player-id)
               (mem-copy!
                 (the-as pointer new-record)
                 (the-as pointer old-record)
@@ -900,14 +897,16 @@
 
 (defun mp-generate-battle-enemy-aid ()
   (+! *mp-battle-spawn-counter* 1)
-  (when (>= *mp-battle-spawn-counter* #x08000000)
+  (when (>= *mp-battle-spawn-counter* MP_BATTLE_SPAWN_COUNTER_LIMIT)
     (set! *mp-battle-spawn-counter* (the uint 1)))
   (let ((local-record (mp-local-player-record)))
     (when (or (not local-record) (zero? local-record))
       (return (the uint 0)))
-    (let ((player-bits
-            (ash (logand (-> local-record identity player-id) (the uint 3)) 27)))
+    (let ((player-id (-> local-record identity player-id)))
+      (when (>= player-id (the uint MP_MAX_PLAYERS))
+        (return (the uint 0)))
+      (let ((player-bits (ash player-id MP_BATTLE_SPAWN_COUNTER_BITS)))
       (the-as uint
-        (logior #x60000000 player-bits *mp-battle-spawn-counter*)))))
+          (logior #x60000000 player-bits *mp-battle-spawn-counter*))))))
 
 (mp-player-controller-reset! *mp-player-controller*)

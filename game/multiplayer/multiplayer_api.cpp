@@ -1028,34 +1028,39 @@ void pc_multi_disconnect() {
   MultiplayerManager::disconnect(multiplayer_data());
 }
 
-static std::array<MPPlayerCharacter, kMPMaxPlayers> goal_player_character_config(u32 character_0,
-                                                                                u32 character_1,
-                                                                                u32 character_2,
-                                                                                u32 character_3) {
-  return {static_cast<MPPlayerCharacter>(character_0),
-          static_cast<MPPlayerCharacter>(character_1),
-          static_cast<MPPlayerCharacter>(character_2),
-          static_cast<MPPlayerCharacter>(character_3)};
+static bool read_goal_player_character_config(
+    u32 character_config_ptr,
+    std::array<MPPlayerCharacter, kMPMaxPlayers>& characters) {
+  const auto* goal_config = goal_ptr<MPPlayerCharacterConfigGOAL>(character_config_ptr);
+  if (!goal_config) {
+    lg::error("[Multiplayer] Invalid GOAL player character configuration pointer 0x{:x}.",
+              character_config_ptr);
+    return false;
+  }
+  for (uint32_t player_id = 0; player_id < kMPMaxPlayers; ++player_id) {
+    const auto character = goal_config->characters[player_id];
+    if (!mp_valid_player_character(character)) {
+      lg::error("[Multiplayer] Invalid character {} configured for player {}.",
+                static_cast<uint32_t>(character), player_id);
+      return false;
+    }
+    characters[player_id] = character;
+  }
+  return true;
 }
 
-void pc_multi_setup_host(u32 player_limit,
-                         u32 character_0,
-                         u32 character_1,
-                         u32 character_2,
-                         u32 character_3) {
-  MultiplayerManager::setup_host(
-      multiplayer_data(), false, player_limit,
-      goal_player_character_config(character_0, character_1, character_2, character_3));
+void pc_multi_setup_host(u32 player_limit, u32 character_config_ptr) {
+  std::array<MPPlayerCharacter, kMPMaxPlayers> characters = {};
+  if (read_goal_player_character_config(character_config_ptr, characters)) {
+    MultiplayerManager::setup_host(multiplayer_data(), false, player_limit, characters);
+  }
 }
 
-void pc_multi_setup_internet_host(u32 player_limit,
-                                  u32 character_0,
-                                  u32 character_1,
-                                  u32 character_2,
-                                  u32 character_3) {
-  MultiplayerManager::setup_host(
-      multiplayer_data(), true, player_limit,
-      goal_player_character_config(character_0, character_1, character_2, character_3));
+void pc_multi_setup_internet_host(u32 player_limit, u32 character_config_ptr) {
+  std::array<MPPlayerCharacter, kMPMaxPlayers> characters = {};
+  if (read_goal_player_character_config(character_config_ptr, characters)) {
+    MultiplayerManager::setup_host(multiplayer_data(), true, player_limit, characters);
+  }
 }
 
 void pc_multi_setup_client(u32 ip_ptr, u32 port) {

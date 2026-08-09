@@ -2,6 +2,7 @@
  ("gcommon.o"
   "gstring-h.o"
   "gkernel-h.o"
+  "mp-capacity-h.o"
   "gkernel.o"
   "pskernel.o"
   "gstring.o"

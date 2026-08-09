@@ -30,16 +30,8 @@ u64 pc_multi_get_enemy_sync_time();
 u64 pc_multi_get_vehicle_sync_time(u32 net_id);
 void pc_multi_disconnect();
 int pc_multi_reconnect();
-void pc_multi_setup_host(u32 player_limit,
-                         u32 character_0,
-                         u32 character_1,
-                         u32 character_2,
-                         u32 character_3);
-void pc_multi_setup_internet_host(u32 player_limit,
-                                  u32 character_0,
-                                  u32 character_1,
-                                  u32 character_2,
-                                  u32 character_3);
+void pc_multi_setup_host(u32 player_limit, u32 character_config_ptr);
+void pc_multi_setup_internet_host(u32 player_limit, u32 character_config_ptr);
 void pc_multi_setup_client(u32 ip_ptr, u32 port);
 int64_t pc_multi_get_status();
 void pc_multi_set_status(int status);

@@ -1,0 +1,17 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; Compile-time player capacity shared by the kernel, input service, and multiplayer runtime.
+;; Keep this value in sync with kMPMaxPlayers in multiplayer_protocol.h.
+(defconstant MP_MAX_PLAYERS 4)
+
+;; Battle-generated AIDs reserve the low 28 bits below the 0x6 namespace prefix.
+(defconstant MP_PLAYER_ID_BITS
+  (cond
+    ((<= MP_MAX_PLAYERS 2) 1)
+    ((<= MP_MAX_PLAYERS 4) 2)
+    ((<= MP_MAX_PLAYERS 8) 3)
+    ((<= MP_MAX_PLAYERS 16) 4)
+    (else 5)))
+(defconstant MP_BATTLE_SPAWN_COUNTER_BITS (- 28 MP_PLAYER_ID_BITS))
+(defconstant MP_BATTLE_SPAWN_COUNTER_LIMIT (ash 1 MP_BATTLE_SPAWN_COUNTER_BITS))

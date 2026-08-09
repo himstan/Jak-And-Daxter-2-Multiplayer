@@ -204,13 +204,19 @@ struct MPPlayerRecordGOAL {
 };
 static_assert(sizeof(MPPlayerRecordGOAL) == 480);
 
+struct MPPlayerCharacterConfigGOAL {
+  MPPlayerCharacter characters[kMPMaxPlayers];
+};
+static_assert(sizeof(MPPlayerCharacterConfigGOAL) == sizeof(uint32_t) * kMPMaxPlayers);
+
 struct MPPlayerControllerGOAL {
   MPPlayerRecordGOAL records[kMPMaxPlayers];
   uint32_t local_player_id;
   uint32_t host_player_id;
   uint32_t reserved[2];
 };
-static_assert(sizeof(MPPlayerControllerGOAL) == 1936);
+static_assert(sizeof(MPPlayerControllerGOAL) ==
+              sizeof(MPPlayerRecordGOAL) * kMPMaxPlayers + sizeof(uint32_t) * 4);
 
 struct MPWorldSyncStateGOAL {
   float money;
@@ -328,9 +334,8 @@ struct MultiplayerData {
   uint32_t host_player_id = kMPInvalidPlayerId;
   uint32_t session_player_limit = kMPMaxPlayers;
   MPPlayerCharacter local_player_character = MPPlayerCharacter::UNKNOWN;
-  std::array<MPPlayerCharacter, kMPMaxPlayers> session_player_characters = {
-      MPPlayerCharacter::JAK, MPPlayerCharacter::DAXTER, MPPlayerCharacter::JAK,
-      MPPlayerCharacter::DAXTER};
+  std::array<MPPlayerCharacter, kMPMaxPlayers> session_player_characters =
+      mp_default_player_character_config();
   std::atomic<uint32_t> authenticated_peer_count{0};
   uint32_t sequence_num = 0;
   uint32_t last_out_event_seq = 0;

@@ -2441,7 +2441,7 @@
 
 (kmemopen global "process-buffers")
 
-(defconstant NUM_MAX_TARGET 6)
+(defconstant NUM_MAX_TARGET (+ 2 MP_MAX_PLAYERS))
 
 ;; set up the listener process to run functions sent from the REPL.
 (let ((this (define *listener-process* (new 'global 'process "listener" 2048))))
@@ -2462,9 +2462,9 @@
 (define *8k-dead-pool* (new 'global 'dead-pool  NUM_MAX_TARGET (* 8192  NUM_MAX_TARGET) "*8k-dead-pool*"))
 (define *4k-dead-pool* (new 'global 'dead-pool  NUM_MAX_TARGET (* 4096  NUM_MAX_TARGET) "*4k-dead-pool*"))
 ;; special dead pools
-(define *target-dead-pool* (new 'global 'dead-pool NUM_MAX_TARGET (* #xc000 NUM_MAX_TARGET) "*target-dead-pool*"))
+(define *target-dead-pool* (new 'global 'dead-pool NUM_MAX_TARGET #xc000 "*target-dead-pool*"))
 (define *camera-dead-pool* (new 'global 'dead-pool 7 4096 "*camera-dead-pool*"))
-(define *camera-master-dead-pool* (new 'global 'dead-pool  NUM_MAX_TARGET 8192 "*camera-master-dead-pool*"))
+(define *camera-master-dead-pool* (new 'global 'dead-pool 1 8192 "*camera-master-dead-pool*"))
 ;; heap dead pools
 (when *debug-segment*
   (define *debug-dead-pool* (new 'debug 'dead-pool-heap "*debug-dead-pool*" 768 #x100000))

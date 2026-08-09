@@ -8,15 +8,32 @@
 (define *mp-puppet-input-stale-time* (seconds 0.2))
 (define *mp-puppet-action-warmup-time* (seconds 0.3))
 
-(defun mp-reset-player-puppet-state! ((record mp-player-record))
+(defun mp-puppet-process-live? ((puppet target))
+  "True when a target process has not already returned to its dead pool."
+  (and puppet
+       (nonzero? puppet)
+       (!= (-> puppet status) 'dead)
+       (!= (-> puppet parent) *target-dead-pool*)))
+
+(defun mp-puppet-unbind-record-safe! ((record mp-player-record))
+  "Drop one binding without ever modifying the engine-owned local target."
   (when (and record (nonzero? record))
     (let ((puppet (mp-player-record-target record)))
-      (when (and puppet (nonzero? puppet))
-        (mp-clear-target-edge-grab-pending! puppet)
-        (deactivate puppet)))
-    (mp-player-controller-unbind-target!
-      *mp-player-controller*
-      (-> record identity player-id))
+      (if (and puppet
+               (nonzero? puppet)
+               *target*
+               (nonzero? *target*)
+               (= puppet *target*))
+          (set! (-> record runtime target-handle) (the-as handle #f))
+          (mp-player-controller-unbind-record-target!
+            *mp-player-controller* record))))
+  (none))
+
+(defun mp-reset-player-puppet-state! ((record mp-player-record))
+  (when (and record (nonzero? record))
+    (when (nonzero? (-> record runtime target-handle))
+      (mp-puppet-deactivate! record))
+    (mp-puppet-unbind-record-safe! record)
     (let ((ghost (mp-player-record-ghost record)))
       (when (and ghost (nonzero? ghost))
         (mem-set32! (the-as pointer ghost) (/ (size-of mp-target-ghost-record) 4) 0)))
@@ -38,12 +55,21 @@
   (none))
 
 (defun mp-reset-puppet-state! ()
-  (dotimes (player-id MP_MAX_PLAYERS)
-    (let ((record (mp-player-record-by-id (the-as uint player-id))))
-      (when (and record
-                 (nonzero? record)
-                 (mp-player-record-remote? *mp-player-controller* record))
-        (mp-reset-player-puppet-state! record))))
+  (when (and *mp-player-controller* (nonzero? *mp-player-controller*))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (-> *mp-player-controller* records player-id)))
+        (when (and record
+                   (nonzero? record)
+                   (!= (the-as uint player-id)
+                       (-> *mp-player-controller* local-player-id))
+                   (or (nonzero? (-> record runtime target-handle))
+                       (nonzero? (-> record runtime vehicle-handle))
+                       (< (the-as uint (-> record runtime pad-index))
+                          (the uint MP_MAX_PLAYERS))))
+          (mp-reset-player-puppet-state! record)))))
+  ;; Recover targets orphaned by older lifecycle code after tracked records are clean.
+  (when (and *target-pool* (nonzero? *target-pool*))
+    (kill-by-name "mp-puppet" *target-pool*))
   (when (and *target*
              (nonzero? *target*)
              (-> *target* sidekick)
@@ -61,24 +87,23 @@
 
 (defun mp-puppet-valid? ((proc target))
   "True when a puppet pointer still names a live target process."
-  (if (and proc
-           (nonzero? proc)
-           (!= (-> proc status) 'dead)
+  (if (and (mp-puppet-process-live? proc)
            (-> proc control)
            (nonzero? (-> proc control))
            (-> proc state)
-           (nonzero? (-> proc state))
-           (!= (-> proc parent) *target-dead-pool*))
+           (nonzero? (-> proc state)))
       #t
       #f
       )
   )
 
 (defun mp-puppet-clear-stale! ((record mp-player-record))
-  "Clear one stale puppet binding without touching an already-dead process."
+  "Release a live-but-invalid puppet before clearing its stale binding."
   (when (and record (nonzero? record))
-    (mp-player-controller-unbind-record-target!
-      *mp-player-controller* record)
+    (let ((puppet (mp-player-record-target record)))
+      (if (mp-puppet-process-live? puppet)
+          (mp-puppet-deactivate! record)
+          (mp-puppet-unbind-record-safe! record)))
     (mp-player-runtime-clear-flag! record MP_PLAYER_RUNTIME_PENDING_GUN_SHOT)
     (set! (-> record runtime pending-gun-shot-weapon) (the uint8 0))
     (set! (-> record runtime pending-gun-shot-sequence) (the uint 0))
@@ -1635,22 +1660,29 @@
 (defun mp-puppet-deactivate! ((record mp-player-record))
   "Deactivate one record's puppet while retaining its network and pad state."
   (when (and record (nonzero? record))
-  (let ((puppet (mp-player-record-target record)))
-    (when (and puppet (nonzero? puppet))
-      (mp-clear-target-edge-grab-pending! puppet)
-      (deactivate puppet)
-      )
-    )
-  (mp-player-controller-unbind-record-target!
-    *mp-player-controller* record)
-  (mp-player-runtime-clear-flag! record MP_PLAYER_RUNTIME_PENDING_GUN_SHOT)
-  (set! (-> record runtime pending-gun-shot-weapon) (the uint8 0))
-  (set! (-> record runtime pending-gun-shot-sequence) (the uint 0))
-  (set! (-> record runtime pending-gun-shot-camera-angle) 0.0)
-  (set! (-> record runtime action-warmup-start) (the-as time-frame 0))
-  (set! (-> record runtime puppet-lifecycle) MP_PUPPET_LIFECYCLE_CULLED))
+    (let ((puppet (mp-player-record-target record)))
+      (when (and (mp-puppet-process-live? puppet)
+                 (or (not *target*)
+                     (zero? *target*)
+                     (!= puppet *target*)))
+        (mp-clear-target-edge-grab-pending! puppet)
+        (deactivate puppet)))
+    (mp-puppet-unbind-record-safe! record)
+    (mp-player-runtime-clear-flag! record MP_PLAYER_RUNTIME_PENDING_GUN_SHOT)
+    (set! (-> record runtime pending-gun-shot-weapon) (the uint8 0))
+    (set! (-> record runtime pending-gun-shot-sequence) (the uint 0))
+    (set! (-> record runtime pending-gun-shot-camera-angle) 0.0)
+    (set! (-> record runtime action-warmup-start) (the-as time-frame 0))
+    (set! (-> record runtime puppet-lifecycle) MP_PUPPET_LIFECYCLE_CULLED))
   (none)
   )
+
+(defun mp-target-pool-slot-available? ()
+  "Keep target allocation inside the capacity-sized target dead pool."
+  (if (and *target-dead-pool* (nonzero? *target-dead-pool*))
+      (let ((free-slot (-> *target-dead-pool* child)))
+        (and free-slot (nonzero? free-slot)))
+      #f))
 
 (defun mp-puppet-spawn ((record mp-player-record))
   "Spawn a new puppet target using native engine initialization."
@@ -1668,6 +1700,14 @@
                       (and (-> *target* state) (or (= (-> *target* state name) 'target-title)
                                                    (= (-> *target* state name) 'target-demo))))))
     (let ((id (the-as uint (-> record identity player-id))))
+    (when (not (mp-target-pool-slot-available?))
+      (when (!= (-> record runtime puppet-lifecycle)
+                MP_PUPPET_LIFECYCLE_SPAWNING)
+        (format 0
+          "[MP-Puppet] Target pool exhausted; deferring player ~D spawn.~%"
+          id))
+      (set! (-> record runtime puppet-lifecycle) MP_PUPPET_LIFECYCLE_SPAWNING)
+      (return (the-as target #f)))
     (set! (-> record runtime puppet-lifecycle) MP_PUPPET_LIFECYCLE_SPAWNING)
     (debug-log *mp-debug-log?* "[MP-Puppet] Spawning new target puppet with ID ~D...~%" id)
     (let ((p (process-spawn target :init mp-puppet-init (-> *game-info* current-continue) id :from *target-dead-pool* :to *target-pool* :stack *kernel-dram-stack*)))

@@ -158,7 +158,9 @@ TEST(MultiplayerPlayerRegistry, GoalLayoutsAndOffsetsMatch) {
   EXPECT_EQ(sizeof(MPTargetGhostRecordGOAL), 96u);
   EXPECT_EQ(sizeof(MPPlayerRuntimeStateGOAL), 224u);
   EXPECT_EQ(sizeof(MPPlayerRecordGOAL), 480u);
-  EXPECT_EQ(sizeof(MPPlayerControllerGOAL), 1936u);
+  EXPECT_EQ(sizeof(MPPlayerCharacterConfigGOAL), sizeof(uint32_t) * kMPMaxPlayers);
+  EXPECT_EQ(sizeof(MPPlayerControllerGOAL),
+            sizeof(MPPlayerRecordGOAL) * kMPMaxPlayers + sizeof(uint32_t) * 4);
   EXPECT_EQ(sizeof(MPWorldSyncStateGOAL), 176u);
   EXPECT_EQ(sizeof(MPBootstrapSyncStateGOAL), 592u);
   EXPECT_EQ(offsetof(MPPlayerIdentityGOAL, character), 4u);
@@ -192,9 +194,12 @@ TEST(MultiplayerPlayerRegistry, GoalLayoutsAndOffsetsMatch) {
   EXPECT_EQ(offsetof(MPPlayerRecordGOAL, input), 144u);
   EXPECT_EQ(offsetof(MPPlayerRecordGOAL, vehicle), 160u);
   EXPECT_EQ(offsetof(MPPlayerRecordGOAL, runtime), 256u);
-  EXPECT_EQ(offsetof(MPPlayerControllerGOAL, local_player_id), 1920u);
-  EXPECT_EQ(offsetof(MPPlayerControllerGOAL, host_player_id), 1924u);
-  EXPECT_EQ(offsetof(MPPlayerControllerGOAL, reserved), 1928u);
+  const size_t controller_record_bytes = sizeof(MPPlayerRecordGOAL) * kMPMaxPlayers;
+  EXPECT_EQ(offsetof(MPPlayerControllerGOAL, local_player_id), controller_record_bytes);
+  EXPECT_EQ(offsetof(MPPlayerControllerGOAL, host_player_id),
+            controller_record_bytes + sizeof(uint32_t));
+  EXPECT_EQ(offsetof(MPPlayerControllerGOAL, reserved),
+            controller_record_bytes + sizeof(uint32_t) * 2);
   EXPECT_EQ(offsetof(MPWorldSyncStateGOAL, sequence), 12u);
   EXPECT_EQ(offsetof(MPWorldSyncStateGOAL, clock), 16u);
   EXPECT_EQ(offsetof(MPWorldSyncStateGOAL, task_mask), 48u);
@@ -300,11 +305,18 @@ TEST(MultiplayerOwnership, PlayerIdsRemainCanonicalAcrossEnemyPedestrianAndVehic
   EXPECT_EQ(offsetof(MPVehicleState, rider_player_ids), 64u);
 }
 
-TEST(MultiplayerOwnership, FourPlayerBattleAidNamespaceIsUnique) {
+TEST(MultiplayerOwnership, BattleAidNamespaceScalesWithPlayerCapacity) {
+  EXPECT_EQ(mp_player_id_bit_count(2), 1u);
+  EXPECT_EQ(mp_player_id_bit_count(4), 2u);
+  EXPECT_EQ(mp_player_id_bit_count(8), 3u);
+  EXPECT_EQ(mp_player_id_bit_count(16), 4u);
+  EXPECT_EQ(mp_player_id_bit_count(32), 5u);
+
   std::array<uint32_t, kMPMaxPlayers> aids = {};
   for (uint32_t player_id = 0; player_id < kMPMaxPlayers; ++player_id) {
-    aids[player_id] = 0x60000000u | (player_id << 27u) | 1u;
-    EXPECT_EQ(aids[player_id] & 0x60000000u, 0x60000000u);
+    aids[player_id] = 0x60000000u | (player_id << kMPBattleSpawnCounterBits) | 1u;
+    EXPECT_GE(aids[player_id], 0x60000000u);
+    EXPECT_LT(aids[player_id], 0x70000000u);
   }
   for (uint32_t left = 0; left < kMPMaxPlayers; ++left) {
     for (uint32_t right = left + 1; right < kMPMaxPlayers; ++right) {
@@ -1179,8 +1191,8 @@ TEST(MultiplayerReconnect, DoesNotCompleteUntilBootstrapRestoresInGameStatus) {
 TEST(MultiplayerPeerRegistry, AssignsLowestFreeIdsForArbitraryHostIdAndReusesSlots) {
   MultiplayerData data;
   data.session_role = 0;
-  data.host_player_id = 3;
-  data.local_player_id = 3;
+  data.host_player_id = kMPMaxPlayers - 1;
+  data.local_player_id = kMPMaxPlayers - 1;
   data.session_player_limit = 4;
   std::array<ENetPeer, 3> peers = {};
   std::array<HostPeerSession*, 3> sessions = {};
@@ -1229,7 +1241,8 @@ TEST(MultiplayerPeerRegistry, EnforcesRuntimeLimitsAndRejectsInvalidConfiguratio
   EXPECT_TRUE(multiplayer_valid_player_limit(2));
   EXPECT_TRUE(multiplayer_valid_player_limit(3));
   EXPECT_TRUE(multiplayer_valid_player_limit(4));
-  EXPECT_FALSE(multiplayer_valid_player_limit(5));
+  EXPECT_TRUE(multiplayer_valid_player_limit(kMPMaxPlayers));
+  EXPECT_FALSE(multiplayer_valid_player_limit(kMPMaxPlayers + 1));
 
   MultiplayerData data;
   data.session_role = 0;
@@ -1241,9 +1254,7 @@ TEST(MultiplayerPeerRegistry, EnforcesRuntimeLimitsAndRejectsInvalidConfiguratio
   data.session_player_limit = 3;
   EXPECT_TRUE(multiplayer_host_has_open_player_slot(data));
 
-  const std::array<MPPlayerCharacter, kMPMaxPlayers> alternating = {
-      MPPlayerCharacter::JAK, MPPlayerCharacter::DAXTER, MPPlayerCharacter::JAK,
-      MPPlayerCharacter::DAXTER};
+  const auto alternating = mp_default_player_character_config();
   EXPECT_TRUE(multiplayer_valid_player_character_config(alternating));
   auto invalid_characters = alternating;
   invalid_characters[2] = MPPlayerCharacter::UNKNOWN;
@@ -1256,8 +1267,11 @@ TEST(MultiplayerPeerRegistry, AssignsCharactersByCanonicalPlayerId) {
   data.local_player_id = 0;
   data.host_player_id = 0;
   data.session_player_limit = 4;
-  data.session_player_characters = {MPPlayerCharacter::DAXTER, MPPlayerCharacter::JAK,
-                                    MPPlayerCharacter::JAK, MPPlayerCharacter::DAXTER};
+  data.session_player_characters = mp_default_player_character_config();
+  data.session_player_characters[0] = MPPlayerCharacter::DAXTER;
+  data.session_player_characters[1] = MPPlayerCharacter::JAK;
+  data.session_player_characters[2] = MPPlayerCharacter::JAK;
+  data.session_player_characters[3] = MPPlayerCharacter::DAXTER;
   std::array<ENetPeer, 3> peers = {};
   std::array<MultiplayerSecurity, 3> clients;
   std::string parsed_host;

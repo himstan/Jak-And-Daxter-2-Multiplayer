@@ -22,6 +22,10 @@ tasks:
     desc: "Verify GOAL multiplayer event ownership boundaries"
     cmds:
       - "{{.PYTHON}} ./tools/multiplayer_schema/check_event_architecture.py"
+  check-multiplayer-capacity:
+    desc: "Verify GOAL and C++ multiplayer capacities match"
+    cmds:
+      - "{{.PYTHON}} ./tools/check_multiplayer_capacity.py"
   # SETTINGS / CONFIGURATION
   settings:
     - "{{.PYTHON}} ./scripts/tasks/update-env.py --info"
@@ -75,6 +79,20 @@ tasks:
         msg: "Couldn't locate runtime executable in '{{.GK_BIN_RELEASE_DIR}}/gk'"
     cmds:
       - '{{.GK_BIN_RELEASE_DIR}}/gk --port 8120 -v --game {{.GAME}} -- -boot -debug -fakeiso -mp-client 127.0.0.1'
+  boot-game-peers:
+    desc: "Boots multiple multiplayer client peers on sequential listener ports"
+    deps: [check-multiplayer-capacity]
+    vars:
+      PEERS: '{{default "" .PEERS}}'
+    preconditions:
+      - sh: test -f {{.GK_BIN_RELEASE_DIR}}/gk{{.EXE_FILE_EXTENSION}}
+        msg: "Couldn't locate runtime executable in '{{.GK_BIN_RELEASE_DIR}}/gk'"
+    cmds:
+      - cmd: >-
+          {{.PYTHON}} ./scripts/tasks/launch-multiplayer-peers.py
+          --peers "{{.PEERS}}"
+          --executable "{{.GK_BIN_RELEASE_DIR}}/gk{{.EXE_FILE_EXTENSION}}"
+          --game "{{.GAME}}"
   boot-game-retail:
     desc: "Boots the game without debug mode, it will fail if it's not already compiled!"
     preconditions:
@@ -116,18 +134,22 @@ tasks:
       - "cmake {{.CMAKE_GEN_BUILD_DIR_DEBUG}} --preset={{.DEFAULT_CMAKE_DEBUG_PRESET}}"
   build:
     desc: "Build the project using the generated CMake"
+    deps: [check-multiplayer-capacity]
     cmds:
       - "cmake {{.CMAKE_BUILD_DIR_DEBUG}} --parallel 8"
   build-release:
     desc: "Build the project using the generated CMake"
+    deps: [check-multiplayer-capacity]
     cmds:
       - "cmake {{.CMAKE_BUILD_DIR_RELEASE}} --parallel 8"
   build-debug:
     desc: "Build the project using the generated CMake"
+    deps: [check-multiplayer-capacity]
     cmds:
       - "cmake {{.CMAKE_BUILD_DIR_DEBUG}} --parallel 8"
   build-mi:
     desc: "Compiles all .gc files using (mi) safely with a delay and user profile"
+    deps: [check-multiplayer-capacity]
     preconditions:
       - sh: test -f {{.GOALC_BIN_RELEASE_DIR}}/goalc{{.EXE_FILE_EXTENSION}}
         msg: "Couldn't locate compiler executable in '{{.GOALC_BIN_RELEASE_DIR}}/goalc'"
@@ -265,6 +287,7 @@ tasks:
       - "{{.GOALCTEST_BIN_DEBUG_DIR}}/goalc-test{{.EXE_FILE_EXTENSION}} {{.TEST_FILTER}}"
   multiplayer-tests:
     desc: "Runs the multiplayer bridge and netem tests"
+    deps: [check-multiplayer-capacity]
     preconditions:
       - sh: test -f {{.GOALCTEST_BIN_DEBUG_DIR}}/multiplayer-test{{.EXE_FILE_EXTENSION}}
         msg: "Couldn't locate multiplayer-test executable in '{{.GOALCTEST_BIN_DEBUG_DIR}}'"

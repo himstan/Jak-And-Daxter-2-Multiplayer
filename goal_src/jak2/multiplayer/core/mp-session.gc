@@ -84,7 +84,7 @@
                (not (mp-parse-session-characters-cli! characters-arg)))
       (mp-reset-session-player-characters!)
       (format #t
-        "[MP-Session] WARNING: Invalid -mp-characters value; using jak,daxter,jak,daxter.~%")))
+        "[MP-Session] WARNING: Invalid -mp-characters value; using alternating defaults.~%")))
   (none))
 
 (defun mp-client-ready-to-enable-sync-on-spawn? ((status mp-connection-status))

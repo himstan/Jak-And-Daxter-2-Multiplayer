@@ -223,13 +223,14 @@ The cpad-set-buzz! function can be used for vibration.
     )
   )
 
-;; Pad 4 is a neutral input sink for a live local target while a menu owns pad 0.
-(defconstant CPAD_TARGET_INPUT_SINK_INDEX 4)
+;; The slot after the player pads is a neutral sink while a menu owns physical pad 0.
+(defconstant CPAD_TARGET_INPUT_SINK_INDEX MP_MAX_PLAYERS)
+(defconstant CPAD_INTERNAL_SLOT_COUNT (+ MP_MAX_PLAYERS 1))
 
-;; List of controller inputs. Pad 0 is local; multiplayer may synthesize pads 1-3.
+;; Pad 0 is local; multiplayer may synthesize pads 1 through MP_MAX_PLAYERS - 1.
 (deftype cpad-list (basic)
   ((num-cpads  int32)
-   (cpads      cpad-info  5)
+   (cpads      cpad-info CPAD_INTERNAL_SLOT_COUNT)
    )
   (:methods
     (new (symbol type) _type_)
@@ -237,16 +238,12 @@ The cpad-set-buzz! function can be used for vibration.
   )
 
 (defmethod new cpad-list ((allocation symbol) (type-to-make type))
-  "Create one hardware pad, three synthetic pads, and one neutral target-input sink."
+  "Create the hardware, synthetic, and neutral target-input pads."
   (let ((gp-0 (object-new allocation type-to-make (the-as int (-> type-to-make size)))))
-    ;; service-cpads must poll only physical pad 0; puppet replay updates pads 1-3.
+    ;; service-cpads polls only physical pad 0; puppet replay updates the synthetic pads.
     (set! (-> gp-0 num-cpads) 1)
-    (set! (-> gp-0 cpads 0) (new 'global 'cpad-info 0))
-    (set! (-> gp-0 cpads 1) (new 'global 'cpad-info 1))
-    (set! (-> gp-0 cpads 2) (new 'global 'cpad-info 2))
-    (set! (-> gp-0 cpads 3) (new 'global 'cpad-info 3))
-    (set! (-> gp-0 cpads CPAD_TARGET_INPUT_SINK_INDEX)
-          (new 'global 'cpad-info CPAD_TARGET_INPUT_SINK_INDEX))
+    (dotimes (pad-index CPAD_INTERNAL_SLOT_COUNT)
+      (set! (-> gp-0 cpads pad-index) (new 'global 'cpad-info pad-index)))
     gp-0
     )
   )
@@ -258,10 +255,10 @@ The cpad-set-buzz! function can be used for vibration.
   )
 )
 
-;; Extended history includes the four player pads and the neutral input sink.
+;; Extended history includes every player pad and the neutral input sink.
 (deftype cpad-history-list (basic)
   ((num-cpads  int32)
-   (cpads cpad-history 5)
+   (cpads cpad-history CPAD_INTERNAL_SLOT_COUNT)
    )
   (:methods
    (new (symbol type) _type_)
@@ -269,14 +266,11 @@ The cpad-set-buzz! function can be used for vibration.
   )
 
 (defmethod new cpad-history-list ((allocation symbol) (type-to-make type))
-  "Create history for four player pads and the neutral target-input sink."
+  "Create history for every player pad and the neutral target-input sink."
   (let ((this (object-new allocation type-to-make (the-as int (-> type-to-make size)))))
-    (set! (-> this num-cpads) 5)
-    (set! (-> this cpads 0) (new 'global 'cpad-history))
-    (set! (-> this cpads 1) (new 'global 'cpad-history))
-    (set! (-> this cpads 2) (new 'global 'cpad-history))
-    (set! (-> this cpads 3) (new 'global 'cpad-history))
-    (set! (-> this cpads CPAD_TARGET_INPUT_SINK_INDEX) (new 'global 'cpad-history))
+    (set! (-> this num-cpads) CPAD_INTERNAL_SLOT_COUNT)
+    (dotimes (pad-index CPAD_INTERNAL_SLOT_COUNT)
+      (set! (-> this cpads pad-index) (new 'global 'cpad-history)))
     this
     )
   )
