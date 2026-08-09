@@ -8,6 +8,55 @@
 #include <cstring>
 
 namespace {
+bool valid_player_name(const char* name) {
+  if (!name) {
+    return false;
+  }
+  const auto* terminator = static_cast<const char*>(
+      memchr(name, '\0', kMultiplayerPlayerNameSize));
+  if (!terminator) {
+    return false;
+  }
+
+  const size_t length = static_cast<size_t>(terminator - name);
+  for (size_t i = 0; i < length; ++i) {
+    const auto character = static_cast<unsigned char>(name[i]);
+    const bool digit = character >= static_cast<unsigned char>('0') &&
+                       character <= static_cast<unsigned char>('9');
+    const bool uppercase = character >= static_cast<unsigned char>('A') &&
+                           character <= static_cast<unsigned char>('Z');
+    const bool lowercase = character >= static_cast<unsigned char>('a') &&
+                           character <= static_cast<unsigned char>('z');
+    if (!digit && !uppercase && !lowercase) {
+      return false;
+    }
+  }
+  return true;
+}
+
+PacketJoin make_join_packet(const LocalPlayerInfoGOAL& local, uint32_t sequence_num) {
+  PacketJoin join = {};
+  join.header.type = PacketType::EVENT_JOIN;
+  join.header.sequenceNum = sequence_num;
+  memcpy(join.player_name, local.player_name, sizeof(join.player_name));
+  return join;
+}
+
+bool send_join_packet(MultiplayerData& data, const LocalPlayerInfoGOAL& local) {
+  if (data.join_identity_sent || !data.security.authenticated() ||
+      !valid_player_name(local.player_name)) {
+    return data.join_identity_sent;
+  }
+
+  const auto join = make_join_packet(local, ++data.sequence_num);
+  const bool queued = MultiplayerManager::broadcast(
+      data, static_cast<int>(MultiplayerChannel::CONTROL), join, ENET_PACKET_FLAG_RELIABLE);
+  if (queued) {
+    data.join_identity_sent = true;
+  }
+  return queued;
+}
+
 bool has_host_continue(const LocalPlayerInfoGOAL* local) {
   if (!local) {
     return false;
@@ -220,6 +269,15 @@ void mp_handle_turret_state_packet(MultiplayerData& data, const ENetPacket* pack
   }
 }
 
+void mp_handle_join_packet(const ENetPacket* packet, RemotePlayerInfoGOAL* remote) {
+  const auto join = PacketView(packet).as_exact<PacketJoin>(PacketType::EVENT_JOIN);
+  if (!join || !remote || !valid_player_name(join->player_name)) {
+    return;
+  }
+  memset(remote->player_name, 0, sizeof(remote->player_name));
+  memcpy(remote->player_name, join->player_name, sizeof(join->player_name));
+}
+
 void mp_handle_bootstrap_packet(const ENetPacket* packet,
                                 LocalPlayerInfoGOAL* local,
                                 RemotePlayerInfoGOAL* remote) {
@@ -237,6 +295,8 @@ void mp_send_player_state(MultiplayerData& data, LocalPlayerInfoGOAL* local) {
   if (!local) {
     return;
   }
+
+  send_join_packet(data, *local);
 
   PacketPlayerState local_state = {};
   local_state.header.type = PacketType::STATE_UPDATE;

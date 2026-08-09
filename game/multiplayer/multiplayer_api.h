@@ -52,6 +52,7 @@ int pc_multi_edit_direct_field(int field, u32 key);
 int pc_multi_direct_connect_ready();
 int pc_multi_connect_direct();
 u64 pc_multi_get_preference_field(int field);
+u64 pc_multi_get_player_name();
 int pc_multi_edit_preference_field(int field, u32 key);
 int pc_multi_commit_preference_field(int field);
 void pc_multi_discard_preference_edits();

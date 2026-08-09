@@ -100,6 +100,7 @@ void multiplayer_reset_remote_airlock_state(MultiplayerData& data) {
 void multiplayer_clear_remote_peer_state(MultiplayerData& data) {
   data.packet_scheduler.clear();
   reset_bootstrap_request_state(data, false);
+  data.join_identity_sent = false;
   data.last_authenticated_receive_time = 0;
   data.authenticated_peer = nullptr;
   data.inbound_events.clear();

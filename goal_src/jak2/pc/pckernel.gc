@@ -329,7 +329,7 @@
   ((method-of-type pc-settings initialize) obj)
   (when (or (zero? (the-as uint (-> obj username))) (= (length (-> obj username)) 0))
     (set! (-> obj username) (new 'global 'string 64 (the-as string #f)))
-    (copy-string<-string (-> obj username) "player")
+    (clear (-> obj username))
     )
   (when (or (zero? (the-as uint (-> obj mp-join-ip)))
             (< (-> (-> obj mp-join-ip) allocated-length) 128))

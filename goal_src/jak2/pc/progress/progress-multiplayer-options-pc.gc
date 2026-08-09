@@ -10,18 +10,22 @@ multiplayer-settings.json store and are committed when editing finishes.
 (defun-extern draw-generic-highlight int int float pointer)
 (defun-extern draw-generic-simple-string-option menu-generic-option progress font-context int string none)
 
+(deftype menu-multiplayer-player-name-option (menu-generic-option) ())
 (deftype menu-multiplayer-setting-field-option (menu-generic-option)
   ((field int32)))
 
 (define *mp-preference-port-display* (the-as string #f))
 (define *mp-preference-room-code-display* (the-as string #f))
+(define *mp-preference-player-name-display* (the-as string #f))
 
 (defun mp-refresh-preference-field! ((field int))
   (let ((display (pc-multi-get-preference-field field)))
     (when (and display (nonzero? (the-as uint display)))
       (if (= field 0)
           (set! *mp-preference-port-display* display)
-          (set! *mp-preference-room-code-display* display))
+          (if (= field 1)
+              (set! *mp-preference-room-code-display* display)
+              (set! *mp-preference-player-name-display* display)))
       )
     )
   (none))
@@ -29,11 +33,63 @@ multiplayer-settings.json store and are committed when editing finishes.
 (defun mp-refresh-preference-fields! ()
   (mp-refresh-preference-field! 0)
   (mp-refresh-preference-field! 1)
+  (mp-refresh-preference-field! 2)
   (none))
 
 (defun mp-load-multiplayer-options! ()
   (pc-multi-discard-preference-edits)
   (mp-refresh-preference-fields!)
+  (none))
+
+(defun mp-player-name-finish-edit! ((p progress))
+  (when (and p (nonzero? (the-as uint p)))
+    (if (= (pc-multi-commit-preference-field 2) 1)
+        (begin
+          (mp-refresh-preference-field! 2)
+          (set! (-> p selected-option) #f)
+          (sound-play "generic-beep"))
+        (sound-play "menu-error"))
+    )
+  (none))
+
+(defun mp-player-name-edit! ((p progress) (key uint))
+  (when (and p
+             (nonzero? (the-as uint p))
+             (= (pc-multi-edit-preference-field 2 key) 1))
+    (mp-refresh-preference-field! 2)
+    )
+  (none))
+
+(defmethod respond-progress ((obj menu-multiplayer-player-name-option)
+                             (p progress) (selected? symbol))
+  (when (and selected?
+             obj (nonzero? (the-as uint obj))
+             p (nonzero? (the-as uint p)))
+    (let ((key (pc-get-last-key)))
+      (cond
+        ((cpad-pressed? 0 confirm)
+         (mp-player-name-finish-edit! p))
+        ((or (= key #x0d) (= key #x0a))
+         (mp-player-name-finish-edit! p))
+        ((nonzero? key)
+         (mp-player-name-edit! p key)))
+      )
+    )
+  0)
+
+(defmethod draw-option ((obj menu-multiplayer-player-name-option)
+                        (p progress) (font-ctx font-context)
+                        (option-index int) (selected? symbol))
+  (when (and obj (nonzero? (the-as uint obj))
+             p (nonzero? (the-as uint p))
+             font-ctx (nonzero? (the-as uint font-ctx))
+             *mp-preference-player-name-display*
+             (nonzero? (the-as uint *mp-preference-player-name-display*)))
+    (format (clear *temp-string*) "~S: ~S"
+            (lookup-text! *common-text* (text-id progress-username) #f)
+            *mp-preference-player-name-display*)
+    (draw-generic-simple-string-option obj p font-ctx option-index *temp-string*)
+      )
   (none))
 
 (defun mp-preference-field-display ((field int))
@@ -97,6 +153,8 @@ multiplayer-settings.json store and are committed when editing finishes.
 
 (define *multiplayer-options-pc*
   (progress-new-generic-scrolling-page (text-id progress-multiplayer-options)
+    (new 'static 'menu-multiplayer-player-name-option
+      :name (text-id progress-username))
     (new 'static 'menu-multiplayer-setting-field-option
       :name (text-id progress-multiplayer-network-port)
       :field 0)

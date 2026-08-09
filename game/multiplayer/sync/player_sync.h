@@ -11,6 +11,7 @@ void mp_handle_player_state_packet(MultiplayerData& data,
                                    RemotePlayerInfoGOAL* remote,
                                    uint32_t current_time);
 void mp_handle_turret_state_packet(MultiplayerData& data, const ENetPacket* packet);
+void mp_handle_join_packet(const ENetPacket* packet, RemotePlayerInfoGOAL* remote);
 void mp_handle_bootstrap_packet(const ENetPacket* packet,
                                 LocalPlayerInfoGOAL* local,
                                 RemotePlayerInfoGOAL* remote);

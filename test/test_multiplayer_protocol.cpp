@@ -17,6 +17,18 @@ TEST(MultiplayerProtocol, BootstrapKeepsWireIdentityAndLayout) {
   EXPECT_EQ(descriptor->max_payload, 2048u);
 }
 
+TEST(MultiplayerProtocol, JoinCarriesAValidatedNameReliably) {
+  EXPECT_EQ(static_cast<uint8_t>(PacketType::EVENT_JOIN), 1u);
+  EXPECT_EQ(sizeof(PacketJoin), 29u);
+
+  const auto* descriptor = multiplayer::schema::packet_descriptor(1);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_STREQ(descriptor->name, "EVENT_JOIN");
+  EXPECT_EQ(descriptor->allowed_roles, 3u);
+  EXPECT_EQ(descriptor->priority, 0u);
+  EXPECT_EQ(descriptor->max_payload, 24u);
+}
+
 TEST(MultiplayerEventCodec, EncodesOnlyTheDeclaredPayloadLength) {
   MPEvent event = {};
   event.etype = 34;

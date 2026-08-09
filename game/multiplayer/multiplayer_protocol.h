@@ -11,6 +11,7 @@ const int DISCOVERY_PORT = 26211;
 const char* const DISCOVERY_MAGIC = "OG_MP_DISCOVERY";
 inline constexpr size_t kPacketHeaderWireSize = sizeof(uint8_t) + sizeof(uint32_t);
 inline constexpr size_t kEventEnvelopeHeaderWireSize = kPacketHeaderWireSize + sizeof(uint32_t) + sizeof(uint16_t);
+inline constexpr size_t kMultiplayerPlayerNameSize = 24;
 
 enum class MultiplayerChannel : uint8_t {
   STATE = 0,
@@ -96,6 +97,12 @@ struct PacketHeader {
   PacketType type;
   uint32_t sequenceNum;
 };
+
+struct PacketJoin {
+  PacketHeader header;
+  char player_name[kMultiplayerPlayerNameSize];
+};
+static_assert(sizeof(PacketJoin) == 29, "PacketJoin must contain a 24-byte player name");
 
 enum class MultiplayerLeaveReason : uint8_t {
   CLIENT_RECONNECTING = 1,

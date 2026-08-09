@@ -12,11 +12,13 @@ inline constexpr size_t kMultiplayerRoomCodeLength = 6;
 struct MultiplayerPreferences {
   uint16_t network_port = kDefaultMultiplayerPort;
   std::string room_code;
+  std::string player_name;
   bool automatic_port_mapping = true;
 };
 
 bool mp_valid_gameplay_port(uint32_t port);
 bool mp_normalize_room_code(std::string_view input, std::string& output, bool allow_empty = true);
+bool mp_normalize_player_name(std::string_view input, std::string& output, bool allow_empty = true);
 MultiplayerPreferences mp_parse_multiplayer_preferences(std::string_view contents);
 
 void mp_load_multiplayer_preferences();

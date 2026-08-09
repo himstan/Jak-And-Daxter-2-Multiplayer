@@ -117,8 +117,9 @@ struct RemotePlayerInfoGOAL {
   uint32_t action_state_id;
   uint64_t player_procs[2];
   MPVehicleState veh_state;
+  char player_name[kMultiplayerPlayerNameSize];
 };
-static_assert(sizeof(RemotePlayerInfoGOAL) == 960,
+static_assert(sizeof(RemotePlayerInfoGOAL) == 984,
               "RemotePlayerInfoGOAL must match remote-player-info");
 
 struct LocalPlayerInfoGOAL {
@@ -171,8 +172,9 @@ struct LocalPlayerInfoGOAL {
   uint32_t action_state_id;
   uint64_t player_procs[2];
   MPVehicleState veh_state;
+  char player_name[kMultiplayerPlayerNameSize];
 };
-static_assert(sizeof(LocalPlayerInfoGOAL) == 960,
+static_assert(sizeof(LocalPlayerInfoGOAL) == 984,
               "LocalPlayerInfoGOAL must match local-player-info");
 
 struct MPEnemySyncBufferGOAL {
@@ -330,6 +332,7 @@ struct MultiplayerData {
   std::thread scanner_thread;
   std::atomic<bool> host_discovery_active{false};
   std::atomic<bool> pending_bootstrap{false};
+  bool join_identity_sent = false;
   bool pending_bootstrap_sent_once = false;
   uint32_t last_bootstrap_send_time = 0;
   uint32_t last_event_queue_debug_time = 0;

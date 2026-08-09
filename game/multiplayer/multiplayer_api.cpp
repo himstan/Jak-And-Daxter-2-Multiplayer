@@ -188,6 +188,9 @@ void handle_receive_packet(MultiplayerData& data,
       mp_handle_bootstrap_packet(packet, local, remote);
       break;
     }
+    case PacketType::EVENT_JOIN:
+      mp_handle_join_packet(packet, remote);
+      break;
     case PacketType::EVENT_LEAVE: {
       const auto leave = view.as_exact<PacketLeave>(PacketType::EVENT_LEAVE);
       if (!leave) {
@@ -209,7 +212,6 @@ void handle_receive_packet(MultiplayerData& data,
                authenticated_before, expected_peer_before, accepted);
       break;
     }
-    case PacketType::EVENT_JOIN:
     default:
       if (current_time - data.last_traffic_short_packet_debug_time > 2000) {
         lg::warn("[Multiplayer] Ignoring unknown packet type {} ({} bytes).", (int)view.type(),
@@ -1028,6 +1030,10 @@ u64 pc_multi_get_preference_field(int field) {
   return jak2::make_string_from_c(display.c_str());
 }
 
+u64 pc_multi_get_player_name() {
+  return jak2::make_string_from_c(mp_multiplayer_preferences().player_name.c_str());
+}
+
 int pc_multi_edit_preference_field(int field, u32 key) {
   return mp_edit_multiplayer_preference(field, key);
 }
@@ -1465,6 +1471,7 @@ void init_multiplayer_pc_port() {
                                     (void*)pc_multi_connect_direct);
   jak2::make_function_symbol_from_c("pc-multi-get-preference-field",
                                     (void*)pc_multi_get_preference_field);
+  jak2::make_function_symbol_from_c("pc-multi-get-player-name", (void*)pc_multi_get_player_name);
   jak2::make_function_symbol_from_c("pc-multi-edit-preference-field",
                                     (void*)pc_multi_edit_preference_field);
   jak2::make_function_symbol_from_c("pc-multi-commit-preference-field",

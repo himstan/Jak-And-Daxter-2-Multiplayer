@@ -7,17 +7,20 @@
 #include "common/util/FileUtil.h"
 #include "common/util/json_util.h"
 #include "game/runtime.h"
+#include "game/multiplayer/multiplayer_protocol.h"
 
 #include "third-party/SDL/include/SDL3/SDL.h"
 
 namespace {
 constexpr int kNetworkPortField = 0;
 constexpr int kRoomCodeField = 1;
+constexpr int kPlayerNameField = 2;
 constexpr std::string_view kSettingsFileName = "multiplayer-settings.json";
 
 MultiplayerPreferences g_preferences;
 std::string g_port_draft = std::to_string(kDefaultMultiplayerPort);
 std::string g_room_code_draft;
+std::string g_player_name_draft;
 
 fs::path settings_path() {
   return file_util::get_user_settings_dir(g_game_version) / std::string(kSettingsFileName);
@@ -85,6 +88,27 @@ bool mp_normalize_room_code(std::string_view input, std::string& output, bool al
   return true;
 }
 
+bool mp_normalize_player_name(std::string_view input, std::string& output, bool allow_empty) {
+  output.clear();
+  if (input.empty()) {
+    return allow_empty;
+  }
+  if (input.size() >= kMultiplayerPlayerNameSize) {
+    return false;
+  }
+  for (const char character : input) {
+    const bool valid = (character >= 'A' && character <= 'Z') ||
+                       (character >= 'a' && character <= 'z') ||
+                       (character >= '0' && character <= '9');
+    if (!valid) {
+      output.clear();
+      return false;
+    }
+  }
+  output.assign(input);
+  return true;
+}
+
 MultiplayerPreferences mp_parse_multiplayer_preferences(std::string_view contents) {
   MultiplayerPreferences parsed;
   try {
@@ -99,6 +123,12 @@ MultiplayerPreferences mp_parse_multiplayer_preferences(std::string_view content
       std::string normalized;
       if (mp_normalize_room_code(root.at("room_code").get<std::string>(), normalized)) {
         parsed.room_code = std::move(normalized);
+      }
+    }
+    if (root.contains("player_name") && root.at("player_name").is_string()) {
+      std::string normalized;
+      if (mp_normalize_player_name(root.at("player_name").get<std::string>(), normalized)) {
+        parsed.player_name = std::move(normalized);
       }
     }
     if (root.contains("automatic_port_mapping") &&
@@ -132,6 +162,7 @@ void mp_save_multiplayer_preferences() {
   json root;
   root["network_port"] = g_preferences.network_port;
   root["room_code"] = g_preferences.room_code;
+  root["player_name"] = g_preferences.player_name;
   root["automatic_port_mapping"] = g_preferences.automatic_port_mapping;
   const auto path = settings_path();
   file_util::create_dir_if_needed_for_file(path);
@@ -139,7 +170,9 @@ void mp_save_multiplayer_preferences() {
 }
 
 void mp_reset_multiplayer_preferences() {
+  const std::string player_name = g_preferences.player_name;
   g_preferences = {};
+  g_preferences.player_name = player_name;
   mp_discard_multiplayer_preference_edits();
   save_after_edit();
 }
@@ -163,6 +196,9 @@ std::string mp_multiplayer_preference_display(int field) {
   if (field == kRoomCodeField) {
     return g_room_code_draft;
   }
+  if (field == kPlayerNameField) {
+    return g_player_name_draft;
+  }
   return {};
 }
 
@@ -182,7 +218,31 @@ int mp_edit_multiplayer_preference(int field, uint32_t key) {
   }
 
   if (field != kRoomCodeField) {
-    return 0;
+    if (field != kPlayerNameField) {
+      return 0;
+    }
+    if (backspace) {
+      if (g_player_name_draft.empty()) {
+        return 0;
+      }
+      g_player_name_draft.pop_back();
+      return 1;
+    }
+    char character = key <= 0x7f ? static_cast<char>(key) : '\0';
+    const SDL_Keymod modifiers = SDL_GetModState();
+    const bool uppercase = ((modifiers & SDL_KMOD_SHIFT) != 0) !=
+                            ((modifiers & SDL_KMOD_CAPS) != 0);
+    if (uppercase && character >= 'a' && character <= 'z') {
+      character = static_cast<char>(character - 'a' + 'A');
+    }
+    const bool valid = (character >= 'A' && character <= 'Z') ||
+                       (character >= 'a' && character <= 'z') ||
+                       (character >= '0' && character <= '9');
+    if (!valid || g_player_name_draft.size() >= kMultiplayerPlayerNameSize - 1) {
+      return 0;
+    }
+    g_player_name_draft.push_back(character);
+    return 1;
   }
   if (backspace) {
     if (g_room_code_draft.empty()) {
@@ -224,12 +284,23 @@ bool mp_commit_multiplayer_preference(int field) {
     save_after_edit();
     return true;
   }
+  if (field == kPlayerNameField) {
+    std::string normalized;
+    if (!mp_normalize_player_name(g_player_name_draft, normalized)) {
+      return false;
+    }
+    g_preferences.player_name = std::move(normalized);
+    g_player_name_draft = g_preferences.player_name;
+    save_after_edit();
+    return true;
+  }
   return false;
 }
 
 void mp_discard_multiplayer_preference_edits() {
   g_port_draft = std::to_string(g_preferences.network_port);
   g_room_code_draft = g_preferences.room_code;
+  g_player_name_draft = g_preferences.player_name;
 }
 
 bool mp_set_automatic_port_mapping(bool enabled) {

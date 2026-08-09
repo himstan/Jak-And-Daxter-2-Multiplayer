@@ -36,6 +36,7 @@
 (defun mp-network-pack-local-frame! ((status mp-connection-status))
   (when (and *local-info*
              (nonzero? (the-as uint *local-info*)))
+    (mp-pack-local-player-name!)
     (let ((role (-> *local-info* role)))
       (when (and (= status (mp-connection-status in-game))
                  (or (zero? role) *multi-sync-enabled?*))

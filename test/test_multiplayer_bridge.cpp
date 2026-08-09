@@ -22,6 +22,7 @@
 #include "game/multiplayer/multiplayer_version.h"
 #include "game/multiplayer/multiplayer_wire_codec.h"
 #include "game/multiplayer/sync/player_sync.h"
+#include "third-party/SDL/include/SDL3/SDL.h"
 #include "gtest/gtest.h"
 
 namespace {
@@ -142,6 +143,53 @@ TEST(MultiplayerPacket, PacketViewRejectsTruncationUnknownTypesAndTrailingData) 
   EXPECT_FALSE(PacketView(&packet).as_exact<PacketPlayerState>(PacketType::STATE_UPDATE));
 }
 
+TEST(MultiplayerJoin, AppliesValidNameToRemoteGoalInfo) {
+  EXPECT_EQ(sizeof(LocalPlayerInfoGOAL), 984u);
+  EXPECT_EQ(sizeof(RemotePlayerInfoGOAL), 984u);
+
+  PacketJoin join = {};
+  join.header.type = PacketType::EVENT_JOIN;
+  memcpy(join.player_name, "ABCDEFGHIJKLMNOPQRSTUVW", sizeof("ABCDEFGHIJKLMNOPQRSTUVW"));
+
+  ENetPacket packet = {};
+  packet.data = reinterpret_cast<uint8_t*>(&join);
+  packet.dataLength = sizeof(join);
+  RemotePlayerInfoGOAL remote = {};
+
+  mp_handle_join_packet(&packet, &remote);
+
+  EXPECT_STREQ(remote.player_name, "ABCDEFGHIJKLMNOPQRSTUVW");
+}
+
+TEST(MultiplayerJoin, RejectsMalformedNameWithoutMutatingRemoteGoalInfo) {
+  PacketJoin join = {};
+  join.header.type = PacketType::EVENT_JOIN;
+  memset(join.player_name, 'x', sizeof(join.player_name));
+
+  ENetPacket packet = {};
+  packet.data = reinterpret_cast<uint8_t*>(&join);
+  packet.dataLength = sizeof(join);
+  RemotePlayerInfoGOAL remote = {};
+  memcpy(remote.player_name, "before", sizeof("before"));
+
+  mp_handle_join_packet(&packet, &remote);
+
+  EXPECT_STREQ(remote.player_name, "before");
+
+  join.player_name[0] = 'b';
+  join.player_name[1] = 'a';
+  join.player_name[2] = 'd';
+  join.player_name[3] = '-';
+  join.player_name[4] = 'n';
+  join.player_name[5] = 'a';
+  join.player_name[6] = 'm';
+  join.player_name[7] = 'e';
+  join.player_name[8] = '\0';
+  mp_handle_join_packet(&packet, &remote);
+
+  EXPECT_STREQ(remote.player_name, "before");
+}
+
 TEST(MultiplayerBootstrap, AppliesValidPacketToGoalBuffers) {
   PacketBootstrap bootstrap = {};
   bootstrap.header.type = PacketType::BOOTSTRAP;
@@ -210,6 +258,62 @@ TEST(MultiplayerBootstrap, RequestResetsPendingSendState) {
   EXPECT_EQ(data.last_bootstrap_send_time, 0u);
 }
 
+TEST(MultiplayerJoin, DisconnectResetsSentState) {
+  MultiplayerData data;
+  data.join_identity_sent = true;
+
+  multiplayer_clear_remote_peer_state(data);
+
+  EXPECT_FALSE(data.join_identity_sent);
+}
+
+TEST(MultiplayerJoin, RetriesAndResendsOncePerAuthenticatedSession) {
+  struct ScopedEnet {
+    bool initialized = enet_initialize() == 0;
+    ~ScopedEnet() {
+      if (initialized) {
+        enet_deinitialize();
+      }
+    }
+  } enet;
+  ASSERT_TRUE(enet.initialized);
+
+  LocalEnetPair pair;
+  ASSERT_TRUE(connect_local_enet_pair(pair));
+
+  MultiplayerSecurity host_security;
+  MultiplayerData data;
+  data.local_role = 1;
+  ASSERT_TRUE(host_security.start_host(26210));
+  std::string parsed_host;
+  uint16_t parsed_port = 0;
+  ASSERT_TRUE(data.security.start_client(host_security.invite_for_address("127.0.0.1"),
+                                         parsed_host, parsed_port));
+  authenticate(host_security, data.security);
+
+  LocalPlayerInfoGOAL local = {};
+  memcpy(local.player_name, "Ranger", sizeof("Ranger"));
+
+  mp_send_player_state(data, &local);
+  EXPECT_FALSE(data.join_identity_sent);
+  EXPECT_EQ(data.packet_scheduler.queued_packet_count(), 0u);
+
+  data.host = pair.sender;
+  data.server_peer = pair.sender_peer;
+  mp_send_player_state(data, &local);
+  EXPECT_TRUE(data.join_identity_sent);
+  EXPECT_EQ(data.packet_scheduler.queued_packet_count(), 2u);
+
+  mp_send_player_state(data, &local);
+  EXPECT_EQ(data.packet_scheduler.queued_packet_count(), 2u);
+
+  multiplayer_clear_remote_peer_state(data);
+  EXPECT_FALSE(data.join_identity_sent);
+  mp_send_player_state(data, &local);
+  EXPECT_TRUE(data.join_identity_sent);
+  EXPECT_EQ(data.packet_scheduler.queued_packet_count(), 2u);
+}
+
 TEST(MultiplayerBootstrap, PlayerStateAcknowledgesSentBootstrap) {
   MultiplayerData data;
   data.local_role = 0;
@@ -250,9 +354,8 @@ TEST(MultiplayerPacket, DirectionPolicyMatchesHostAndClientRoles) {
     const bool host_only = type == PacketType::BOOTSTRAP || type == PacketType::PEDESTRIAN_SYNC ||
                            type == PacketType::VEHICLE_SYNC ||
                            type == PacketType::PALACE_SQUID_SYNC || type == PacketType::WIDOW_SYNC;
-    const bool gameplay = type != PacketType::EVENT_JOIN;
-    EXPECT_EQ(mp_packet_direction_allowed(type, 0), gameplay);
-    EXPECT_EQ(mp_packet_direction_allowed(type, 1), gameplay && !host_only);
+    EXPECT_TRUE(mp_packet_direction_allowed(type, 0));
+    EXPECT_EQ(mp_packet_direction_allowed(type, 1), !host_only);
   }
   EXPECT_FALSE(mp_packet_direction_allowed(PacketType::STATE_UPDATE, -1));
   EXPECT_FALSE(mp_packet_direction_allowed(PacketType::COUNT, 0));
@@ -352,17 +455,38 @@ TEST(MultiplayerPreferences, ValidatesPortsRoomCodesAndIndependentFallbacks) {
   EXPECT_TRUE(mp_normalize_room_code("i0o1az", normalized, false));
   EXPECT_EQ(normalized, "I0O1AZ");
   EXPECT_FALSE(mp_normalize_room_code("SHORT", normalized, false));
+  EXPECT_TRUE(mp_normalize_player_name("Player123", normalized, false));
+  EXPECT_EQ(normalized, "Player123");
+  EXPECT_TRUE(mp_normalize_player_name("", normalized));
+  EXPECT_TRUE(normalized.empty());
+  EXPECT_FALSE(mp_normalize_player_name("Player-Name", normalized));
+  EXPECT_FALSE(mp_normalize_player_name("ABCDEFGHIJKLMNOPQRSTUVWX", normalized));
+
+  mp_discard_multiplayer_preference_edits();
+  SDL_SetModState(SDL_KMOD_SHIFT);
+  EXPECT_EQ(mp_edit_multiplayer_preference(2, 'a'), 1);
+  EXPECT_EQ(mp_multiplayer_preference_display(2), "A");
+  SDL_SetModState(SDL_KMOD_CAPS);
+  EXPECT_EQ(mp_edit_multiplayer_preference(2, 'b'), 1);
+  EXPECT_EQ(mp_multiplayer_preference_display(2), "AB");
+  SDL_SetModState(static_cast<SDL_Keymod>(SDL_KMOD_SHIFT | SDL_KMOD_CAPS));
+  EXPECT_EQ(mp_edit_multiplayer_preference(2, 'c'), 1);
+  EXPECT_EQ(mp_multiplayer_preference_display(2), "ABc");
+  SDL_SetModState(SDL_KMOD_NONE);
+  mp_discard_multiplayer_preference_edits();
 
   const auto valid = mp_parse_multiplayer_preferences(
-      R"({"network_port":31415,"room_code":"i0o1az","automatic_port_mapping":false})");
+      R"({"network_port":31415,"room_code":"i0o1az","player_name":"Player123","automatic_port_mapping":false})");
   EXPECT_EQ(valid.network_port, 31415);
   EXPECT_EQ(valid.room_code, "I0O1AZ");
+  EXPECT_EQ(valid.player_name, "Player123");
   EXPECT_FALSE(valid.automatic_port_mapping);
 
   const auto fallback = mp_parse_multiplayer_preferences(
-      R"({"network_port":26211,"room_code":"bad!","automatic_port_mapping":false})");
+      R"({"network_port":26211,"room_code":"bad!","player_name":"bad-name","automatic_port_mapping":false})");
   EXPECT_EQ(fallback.network_port, kDefaultMultiplayerPort);
   EXPECT_TRUE(fallback.room_code.empty());
+  EXPECT_TRUE(fallback.player_name.empty());
   EXPECT_FALSE(fallback.automatic_port_mapping);
 }
 
