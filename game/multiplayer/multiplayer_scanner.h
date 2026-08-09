@@ -1,12 +1,15 @@
 #pragma once
 
-#include "multiplayer_types.h"
-#include "multiplayer_security.h"
 #include <thread>
+
+#include "multiplayer_security.h"
+#include "multiplayer_types.h"
 
 struct MPDiscoveryResponse {
   uint16_t port = 0;
   std::string room_code;
+  uint32_t current_players = 0;
+  uint32_t player_limit = 0;
 };
 
 class MultiplayerScanner {

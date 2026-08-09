@@ -14,6 +14,7 @@ inline constexpr size_t kEventEnvelopeHeaderWireSize =
     kPacketHeaderWireSize + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint16_t);
 inline constexpr size_t kMultiplayerPlayerNameSize = 24;
 inline constexpr uint32_t kMPMaxPlayers = 4;
+inline constexpr size_t kMPMaxHostTransportPeers = 8;
 inline constexpr uint32_t kMPInvalidPlayerId = 0xffffffffu;
 inline constexpr uint32_t kMPVehicleCivilianRiderId = 0xfffffffeu;
 inline constexpr uint8_t kMPInvalidCompactPlayerId = 0xffu;
@@ -102,7 +103,8 @@ enum class PacketType : uint8_t {
   AIRLOCK_SYNC = 10,
   WIDOW_SYNC = 11,
   WORLD_STATE = 12,
-  COUNT = 13
+  SESSION_WELCOME = 13,
+  COUNT = 14
 };
 
 struct PacketHeader {
@@ -117,6 +119,15 @@ struct PacketJoin {
   char player_name[kMultiplayerPlayerNameSize];
 };
 static_assert(sizeof(PacketJoin) == 37, "PacketJoin identity wire layout must remain explicit");
+
+struct PacketSessionWelcome {
+  PacketHeader header;
+  uint32_t player_id;
+  uint32_t host_player_id;
+  uint32_t player_limit;
+};
+static_assert(sizeof(PacketSessionWelcome) == 17,
+              "PacketSessionWelcome wire layout must remain explicit");
 
 enum class MultiplayerLeaveReason : uint8_t {
   CLIENT_RECONNECTING = 1,
@@ -201,8 +212,7 @@ struct PacketWorldState {
   uint8_t task_mask[64];
   uint8_t active_task_mask[64];
 };
-static_assert(sizeof(PacketWorldState) == 169,
-              "PacketWorldState wire layout must remain explicit");
+static_assert(sizeof(PacketWorldState) == 169, "PacketWorldState wire layout must remain explicit");
 
 #define MAX_ENEMY_SYNC_COUNT 128
 #define MAX_ENEMIES_PER_PACKET 30
@@ -275,7 +285,7 @@ struct MPPedestrianStatePacked {
   float x, y, z;
   int16_t quat[4];
   int32_t hp;
-  uint8_t state_id;    // Replaces int16_t anim_index
+  uint8_t state_id;  // Replaces int16_t anim_index
   uint8_t target_player_id;
   uint32_t animation_profile;
   uint32_t vehicle_net_id;

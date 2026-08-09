@@ -1,9 +1,5 @@
 #include "multiplayer_scanner.h"
-#include "multiplayer_protocol.h"
-#include "multiplayer_security.h"
-#include "multiplayer_preferences.h"
-#include "common/cross_sockets/XSocket.h"
-#include "common/log/log.h"
+
 #include <charconv>
 #include <chrono>
 #include <cstring>
@@ -12,13 +8,22 @@
 #include <utility>
 #include <vector>
 
+#include "multiplayer_peer_registry.h"
+#include "multiplayer_preferences.h"
+#include "multiplayer_protocol.h"
+#include "multiplayer_security.h"
+
+#include "common/cross_sockets/XSocket.h"
+#include "common/log/log.h"
+
 #ifdef _WIN32
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
-#include <WinSock2.h>
-#include <WS2tcpip.h>
 #include <iphlpapi.h>
+
+#include <WS2tcpip.h>
+#include <WinSock2.h>
 #endif
 
 namespace {
@@ -36,17 +41,15 @@ std::vector<sockaddr_in> get_lan_discovery_targets() {
   std::vector<uint8_t> adapter_buffer(buffer_size);
   auto* adapters = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(adapter_buffer.data());
 
-  ULONG result = GetAdaptersAddresses(AF_INET,
-                                      GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST |
-                                          GAA_FLAG_SKIP_DNS_SERVER,
-                                      nullptr, adapters, &buffer_size);
+  ULONG result = GetAdaptersAddresses(
+      AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER, nullptr,
+      adapters, &buffer_size);
   if (result == ERROR_BUFFER_OVERFLOW) {
     adapter_buffer.resize(buffer_size);
     adapters = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(adapter_buffer.data());
-    result = GetAdaptersAddresses(AF_INET,
-                                  GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST |
-                                      GAA_FLAG_SKIP_DNS_SERVER,
-                                  nullptr, adapters, &buffer_size);
+    result = GetAdaptersAddresses(
+        AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+        nullptr, adapters, &buffer_size);
   }
   if (result != NO_ERROR) {
     lg::warn("[Multiplayer] Could not enumerate LAN adapters for directed broadcast: {}", result);
@@ -101,8 +104,11 @@ bool mp_parse_discovery_response(const char* bytes, size_t size, MPDiscoveryResp
   }
   const std::string_view payload(bytes + prefix.size(), size - prefix.size());
   const size_t port_separator = payload.find('|');
-  if (port_separator == std::string_view::npos ||
-      payload.find('|', port_separator + 1) != std::string_view::npos) {
+  const size_t room_separator = payload.find('|', port_separator + 1);
+  const size_t current_separator = payload.find('|', room_separator + 1);
+  if (port_separator == std::string_view::npos || room_separator == std::string_view::npos ||
+      current_separator == std::string_view::npos ||
+      payload.find('|', current_separator + 1) != std::string_view::npos) {
     return false;
   }
   uint32_t parsed_port = 0;
@@ -114,17 +120,38 @@ bool mp_parse_discovery_response(const char* bytes, size_t size, MPDiscoveryResp
     return false;
   }
   std::string normalized_room_code;
-  if (!mp_normalize_room_code(payload.substr(port_separator + 1), normalized_room_code, false)) {
+  if (!mp_normalize_room_code(
+          payload.substr(port_separator + 1, room_separator - port_separator - 1),
+          normalized_room_code, false)) {
+    return false;
+  }
+  uint32_t current_players = 0;
+  const std::string_view current_text =
+      payload.substr(room_separator + 1, current_separator - room_separator - 1);
+  const auto current_result = std::from_chars(
+      current_text.data(), current_text.data() + current_text.size(), current_players);
+  uint32_t player_limit = 0;
+  const std::string_view limit_text = payload.substr(current_separator + 1);
+  const auto limit_result =
+      std::from_chars(limit_text.data(), limit_text.data() + limit_text.size(), player_limit);
+  if (current_result.ec != std::errc() ||
+      current_result.ptr != current_text.data() + current_text.size() ||
+      limit_result.ec != std::errc() || limit_result.ptr != limit_text.data() + limit_text.size() ||
+      current_players < 1 || !multiplayer_valid_player_limit(player_limit) ||
+      current_players > player_limit) {
     return false;
   }
   response.port = static_cast<uint16_t>(parsed_port);
   response.room_code = std::move(normalized_room_code);
+  response.current_players = current_players;
+  response.player_limit = player_limit;
   return true;
 }
 
 void MultiplayerScanner::start_search(MultiplayerData& data) {
-  if (data.join_status == (int)MultiplayerStatus::SEARCHING) return;
-  
+  if (data.join_status == (int)MultiplayerStatus::SEARCHING)
+    return;
+
   data.stop_search = false;
   data.connection_phase = static_cast<int>(MultiplayerConnectionPhase::CONTACTING_HOST);
   data.connection_failure = static_cast<int>(MultiplayerConnectionFailure::NONE);
@@ -197,19 +224,18 @@ void MultiplayerScanner::scan_thread_func(MultiplayerData* data) {
       game_port = data->directed_discovery_game_port;
     }
   }
-  
+
   int sock = open_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
   if (sock < 0) {
     data->join_status = (int)MultiplayerStatus::FAILED;
-    data->connection_failure =
-        static_cast<int>(MultiplayerConnectionFailure::HOST_UNREACHABLE);
+    data->connection_failure = static_cast<int>(MultiplayerConnectionFailure::HOST_UNREACHABLE);
     return;
   }
 
   // Enable broadcasting
   int broadcast_enable = 1;
   set_socket_option(sock, SOL_SOCKET, SO_BROADCAST, &broadcast_enable, sizeof(broadcast_enable));
-  set_socket_timeout(sock, 500000); // 500ms timeout
+  set_socket_timeout(sock, 500000);  // 500ms timeout
 
   std::vector<sockaddr_in> discovery_targets;
   if (directed) {
@@ -236,18 +262,20 @@ void MultiplayerScanner::scan_thread_func(MultiplayerData* data) {
     char buffer[128];
     sockaddr_in from_addr;
     socklen_t from_len = sizeof(from_addr);
-    
-    int bytes_received = recvfrom(sock, buffer, sizeof(buffer) - 1, 0, (sockaddr*)&from_addr, &from_len);
+
+    int bytes_received =
+        recvfrom(sock, buffer, sizeof(buffer) - 1, 0, (sockaddr*)&from_addr, &from_len);
     if (bytes_received > 0) {
       MPDiscoveryResponse response;
       const bool expected_source = ntohs(from_addr.sin_port) == DISCOVERY_PORT &&
                                    (!directed || from_addr.sin_addr.s_addr == directed_address);
       if (expected_source &&
           mp_parse_discovery_response(buffer, static_cast<size_t>(bytes_received), response) &&
-          (!directed || response.port == game_port)) {
+          (!directed || response.port == game_port) &&
+          (directed || response.current_players < response.player_limit)) {
         const std::string found_ip = address_to_string(from_addr);
-        std::string found_invite = "jad2mp://" + found_ip + ":" +
-                                   std::to_string(response.port) + "/" + response.room_code;
+        std::string found_invite =
+            "jad2mp://" + found_ip + ":" + std::to_string(response.port) + "/" + response.room_code;
         {
           std::lock_guard<std::mutex> lock(data->discovery_result_mutex);
           data->found_ip = found_invite;
@@ -266,9 +294,9 @@ void MultiplayerScanner::scan_thread_func(MultiplayerData* data) {
   if (data->join_status == (int)MultiplayerStatus::SEARCHING) {
     data->join_status = directed ? (int)MultiplayerStatus::CREDENTIAL_DISCOVERY_FAILED
                                  : (int)MultiplayerStatus::FAILED;
-    data->connection_failure = static_cast<int>(
-        directed ? MultiplayerConnectionFailure::CREDENTIAL_DISCOVERY_FAILED
-                 : MultiplayerConnectionFailure::LAN_TIMEOUT);
+    data->connection_failure =
+        static_cast<int>(directed ? MultiplayerConnectionFailure::CREDENTIAL_DISCOVERY_FAILED
+                                  : MultiplayerConnectionFailure::LAN_TIMEOUT);
   }
   close_socket(sock);
 }

@@ -3,13 +3,14 @@
 #include <algorithm>
 #include <cstring>
 #include <iterator>
-#include <string>
 #include <sodium.h>
+#include <string>
 
 #include "common/log/log.h"
 
 #include "enet/enet.h"
 #include "game/multiplayer/multiplayer_manager.h"
+#include "game/multiplayer/multiplayer_peer_registry.h"
 #include "game/multiplayer/multiplayer_protocol.h"
 
 namespace {
@@ -39,21 +40,6 @@ uint32_t reconnect_delay_for_attempt(uint32_t attempt_count) {
 
 bool time_reached(uint32_t current_time, uint32_t deadline) {
   return static_cast<int32_t>(current_time - deadline) >= 0;
-}
-
-void disconnect_pending_handshakes(MultiplayerData& data) {
-  for (auto& pending : data.pending_handshakes) {
-    if (pending.peer && pending.peer->state != ENET_PEER_STATE_DISCONNECTED) {
-      enet_peer_disconnect_now(pending.peer, 0);
-    }
-    pending = {};
-  }
-}
-
-void reset_bootstrap_request_state(MultiplayerData& data, bool pending) {
-  data.pending_bootstrap = pending;
-  data.pending_bootstrap_sent_once = false;
-  data.last_bootstrap_send_time = 0;
 }
 
 void clear_reconnect_tracking(MultiplayerData& data) {
@@ -94,22 +80,20 @@ void multiplayer_reset_remote_palace_squid_state(MultiplayerData& data) {
 void multiplayer_reset_remote_airlock_state(MultiplayerData& data) {
   memset(&data.remote_airlock_table, 0, sizeof(data.remote_airlock_table));
   data.last_airlock_sync_time = 0;
-  data.last_remote_airlock_sequence = 0;
+  data.last_airlock_sequence_by_player = {};
 }
 
 void multiplayer_clear_remote_peer_state(MultiplayerData& data) {
   data.packet_scheduler.clear();
-  reset_bootstrap_request_state(data, false);
-  data.join_identity_sent = false;
-  data.last_authenticated_receive_time = 0;
-  data.authenticated_peer = nullptr;
+  data.local_join_identity_sent = false;
+  data.server_last_receive_time = 0;
   data.inbound_events.clear();
+  data.last_event_sequence_by_player = {};
   data.player_states = {};
-  data.authenticated_player_id = kMPInvalidPlayerId;
   data.last_world_sequence = 0;
   memset(&data.remote_enemy_buffer, 0, sizeof(data.remote_enemy_buffer));
   data.last_enemy_sync_time = 0;
-  data.last_enemy_sequence = 0;
+  data.last_enemy_sequence_by_player = {};
   data.last_remote_traffic_level_hash = 0;
   multiplayer_reset_remote_traffic_buffers(data);
   multiplayer_reset_remote_palace_squid_state(data);
@@ -120,69 +104,6 @@ void multiplayer_clear_direct_connect_draft(MultiplayerData& data) {
   sodium_memzero(data.direct_address.data(), data.direct_address.size());
   sodium_memzero(data.direct_port.data(), data.direct_port.size());
   sodium_memzero(data.direct_room_code.data(), data.direct_room_code.size());
-}
-
-bool multiplayer_prepare_host_for_next_peer(MultiplayerData& data, bool wait_for_reconnect) {
-  disconnect_pending_handshakes(data);
-  multiplayer_clear_remote_peer_state(data);
-  if (!data.security.rotate_host_peer_session()) {
-    data.join_status = (int)MultiplayerStatus::FAILED;
-    return false;
-  }
-  if (wait_for_reconnect) {
-    data.join_status = (int)MultiplayerStatus::RECONNECTING;
-  } else {
-    data.join_status = data.host_game_active ? (int)MultiplayerStatus::IN_GAME
-                                              : (int)MultiplayerStatus::CONNECTING;
-  }
-  return true;
-}
-
-bool multiplayer_begin_host_reconnect(MultiplayerData& data) {
-  const auto peer_endpoint = enet_peer_endpoint_string(data.authenticated_peer);
-  lg::warn("[MP-Reconnect] Host authenticated-peer timeout detected (peer={}, status={}, last_receive={}, now={}, peer_state={}, security_authenticated={}).",
-           peer_endpoint, data.join_status.load(), data.last_authenticated_receive_time,
-           enet_time_get(), data.authenticated_peer ? static_cast<int>(data.authenticated_peer->state) : -1,
-           data.security.authenticated());
-  if (data.authenticated_peer &&
-      data.authenticated_peer->state != ENET_PEER_STATE_DISCONNECTED) {
-    enet_peer_disconnect_now(data.authenticated_peer, 0);
-  }
-  if (!multiplayer_prepare_host_for_next_peer(data, true)) {
-    lg::error("[Multiplayer] Failed to reset host peer state for reconnect.");
-    return false;
-  }
-  lg::warn("[Multiplayer] Authenticated client timed out; waiting for reconnect.");
-  return true;
-}
-
-bool multiplayer_handle_client_leave(MultiplayerData& data,
-                                      ENetPeer* sender,
-                                      MultiplayerLeaveReason reason) {
-  if (data.session_role != 0 || !sender || sender != data.authenticated_peer ||
-      !data.security.authenticated() ||
-      (reason != MultiplayerLeaveReason::CLIENT_RECONNECTING &&
-       reason != MultiplayerLeaveReason::CLIENT_CLOSED)) {
-    return false;
-  }
-
-  const bool wait_for_reconnect = reason == MultiplayerLeaveReason::CLIENT_RECONNECTING &&
-                                  data.host_game_active;
-  if (sender->state != ENET_PEER_STATE_DISCONNECTED) {
-    enet_peer_disconnect_now(sender,
-                             wait_for_reconnect ? 0 : kDisconnectReasonClientClosed);
-  }
-  if (!multiplayer_prepare_host_for_next_peer(data, wait_for_reconnect)) {
-    lg::error("[Multiplayer] Failed to recover host state after client LEAVE.");
-    return false;
-  }
-
-  if (wait_for_reconnect) {
-    lg::warn("[Multiplayer] Client requested reconnect; waiting for replacement peer.");
-  } else {
-    lg::info("[Multiplayer] Client closed the session; host remains available.");
-  }
-  return true;
 }
 
 bool multiplayer_handle_host_leave(MultiplayerData& data,
@@ -198,9 +119,8 @@ bool multiplayer_handle_host_leave(MultiplayerData& data,
   }
   multiplayer_clear_remote_peer_state(data);
   multiplayer_cancel_client_reconnect(data);
-  data.handshake_started_time = 0;
+  data.client_handshake_started_time = 0;
   data.server_peer = nullptr;
-  data.pending_handshakes = {};
   data.security.reset();
   data.join_status = (int)MultiplayerStatus::HOST_LEFT;
   lg::warn("[Multiplayer] Host closed the session.");
@@ -214,6 +134,7 @@ void multiplayer_clear_session_state(MultiplayerData& data, bool preserve_reconn
   }
 
   multiplayer_clear_remote_peer_state(data);
+  multiplayer_host_peer_reset_all(data);
   data.stats.reset();
   data.host_game_active = false;
   data.server_peer = nullptr;
@@ -239,7 +160,9 @@ void multiplayer_clear_session_state(MultiplayerData& data, bool preserve_reconn
 }
 
 void multiplayer_request_bootstrap(MultiplayerData& data) {
-  reset_bootstrap_request_state(data, true);
+  if (data.session_role == 0) {
+    multiplayer_host_request_bootstrap_for_all(data);
+  }
 }
 
 void multiplayer_set_status(MultiplayerData& data, int status) {
@@ -298,8 +221,7 @@ void multiplayer_note_client_reconnect_failed(MultiplayerData& data, uint32_t cu
 }
 
 void multiplayer_note_client_reconnect_authenticated(MultiplayerData& data) {
-  const bool reconnecting = data.reconnect_attempt_active ||
-                            data.reconnect_waiting_for_bootstrap;
+  const bool reconnecting = data.reconnect_attempt_active || data.reconnect_waiting_for_bootstrap;
   data.reconnect_attempt_active = false;
   data.reconnect_waiting_for_bootstrap = reconnecting;
   if (!reconnecting) {
@@ -316,19 +238,17 @@ void multiplayer_cancel_client_reconnect(MultiplayerData& data) {
   clear_reconnect_tracking(data);
 }
 
-void multiplayer_handle_client_handshake_timeout(MultiplayerData& data,
-                                                   uint32_t current_time) {
-  lg::warn("[MP-Handshake] Handling client handshake timeout (peer={}, now={}, status={}, reconnect_active={}, attempt_count={}, invite_saved={}).",
-           enet_peer_endpoint_string(data.server_peer), current_time, data.join_status.load(),
-           data.reconnect_attempt_active, data.reconnect_attempt_count,
-           !data.reconnect_invite.empty());
-  if (data.reconnect_attempt_active ||
-      data.join_status == (int)MultiplayerStatus::RECONNECTING) {
+void multiplayer_handle_client_handshake_timeout(MultiplayerData& data, uint32_t current_time) {
+  lg::warn(
+      "[MP-Handshake] Handling client handshake timeout (peer={}, now={}, status={}, "
+      "reconnect_active={}, attempt_count={}, invite_saved={}).",
+      enet_peer_endpoint_string(data.server_peer), current_time, data.join_status.load(),
+      data.reconnect_attempt_active, data.reconnect_attempt_count, !data.reconnect_invite.empty());
+  if (data.reconnect_attempt_active || data.join_status == (int)MultiplayerStatus::RECONNECTING) {
     MultiplayerManager::disconnect(data, true);
     multiplayer_note_client_reconnect_failed(data, current_time);
   } else {
-    data.connection_failure =
-        static_cast<int>(MultiplayerConnectionFailure::HOST_UNREACHABLE);
+    data.connection_failure = static_cast<int>(MultiplayerConnectionFailure::HOST_UNREACHABLE);
     MultiplayerManager::disconnect(data);
   }
 }
@@ -357,25 +277,16 @@ void multiplayer_cleanup_stale_sync(MultiplayerData& data, uint32_t current_time
 }
 
 void multiplayer_update_receive_timeout(MultiplayerData& data, uint32_t current_time) {
-  const bool has_authenticated_peer =
-      data.session_role == 0
-          ? data.authenticated_peer &&
-                data.authenticated_peer->state != ENET_PEER_STATE_DISCONNECTED &&
-                data.security.authenticated()
-          : data.server_peer && data.server_peer->state != ENET_PEER_STATE_DISCONNECTED &&
-                data.security.authenticated();
+  const bool has_authenticated_peer = data.session_role == 1 && data.server_peer &&
+                                      data.server_peer->state != ENET_PEER_STATE_DISCONNECTED &&
+                                      data.security.authenticated();
   const bool client_waiting_for_bootstrap =
-      data.session_role == 1 && data.reconnect_waiting_for_bootstrap &&
-      (data.join_status == (int)MultiplayerStatus::CONNECTED_LOBBY ||
-       data.join_status == (int)MultiplayerStatus::GAME_STARTING);
+      data.session_role == 1 && (data.join_status == (int)MultiplayerStatus::CONNECTED_LOBBY ||
+                                 data.join_status == (int)MultiplayerStatus::GAME_STARTING);
   const bool should_check_timeout =
       data.join_status == (int)MultiplayerStatus::IN_GAME || client_waiting_for_bootstrap;
-  if (should_check_timeout && has_authenticated_peer && data.last_authenticated_receive_time != 0 &&
-      current_time - data.last_authenticated_receive_time > kReceiveTimeoutMilliseconds) {
-    if (data.session_role == 0) {
-      multiplayer_begin_host_reconnect(data);
-    } else {
-      multiplayer_enter_client_reconnect(data, current_time);
-    }
+  if (should_check_timeout && has_authenticated_peer && data.server_last_receive_time != 0 &&
+      current_time - data.server_last_receive_time > kReceiveTimeoutMilliseconds) {
+    multiplayer_enter_client_reconnect(data, current_time);
   }
 }

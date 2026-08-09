@@ -1,10 +1,10 @@
 #include "enemy_sync.h"
 
+#include <cstring>
+
 #include "game/multiplayer/multiplayer_manager.h"
 #include "game/multiplayer/multiplayer_packet.h"
 #include "game/multiplayer/sync/player_sync.h"
-
-#include <cstring>
 
 namespace {
 size_t enemy_packet_size(uint32_t count) {
@@ -25,7 +25,9 @@ MPEnemyState* find_enemy_slot(MPEnemySyncBufferGOAL& buffer, uint32_t actor_id) 
   return empty_slot;
 }
 
-void unpack_enemy_state(MPEnemyState& state, const MPEnemyStatePacked& incoming, uint32_t current_time) {
+void unpack_enemy_state(MPEnemyState& state,
+                        const MPEnemyStatePacked& incoming,
+                        uint32_t current_time) {
   state.actor_id = incoming.actor_id;
   state.x = incoming.x;
   state.y = incoming.y;
@@ -42,14 +44,17 @@ void unpack_enemy_state(MPEnemyState& state, const MPEnemyStatePacked& incoming,
   state.is_aggro = (incoming.flags & 2) ? 1 : 0;
   state.last_updated = current_time;
 }
-}
+}  // namespace
 
-void mp_handle_enemy_sync_packet(MultiplayerData& data, const ENetPacket* packet, uint32_t current_time) {
+bool mp_handle_enemy_sync_packet(MultiplayerData& data,
+                                 const ENetPacket* packet,
+                                 uint32_t sender_player_id,
+                                 uint32_t current_time) {
   constexpr size_t prefix_size = sizeof(PacketHeader) + sizeof(uint32_t) + sizeof(uint64_t);
   PacketView view(packet);
   if (!view.has_header() || view.type() != PacketType::ENEMY_SYNC ||
       packet->dataLength < prefix_size) {
-    return;
+    return false;
   }
 
   uint32_t encoded_count = 0;
@@ -58,30 +63,40 @@ void mp_handle_enemy_sync_packet(MultiplayerData& data, const ENetPacket* packet
   memcpy(&encoded_count, packet->data + sizeof(PacketHeader), sizeof(encoded_count));
   if (encoded_count > MAX_ENEMIES_PER_PACKET ||
       !view.has_counted_payload(encoded_count, sizeof(MPEnemyStatePacked), prefix_size) ||
-      !mp_sequence_is_newer(header.sequenceNum, data.last_enemy_sequence)) {
-    return;
+      !mp_valid_player_id(sender_player_id) ||
+      !mp_sequence_is_newer(header.sequenceNum,
+                            data.last_enemy_sequence_by_player[sender_player_id])) {
+    return false;
   }
 
-  data.last_enemy_sequence = header.sequenceNum;
-  data.last_enemy_sync_time = current_time;
   for (uint32_t i = 0; i < encoded_count; i++) {
     MPEnemyStatePacked incoming = {};
     memcpy(&incoming, packet->data + prefix_size + i * sizeof(incoming), sizeof(incoming));
     if (incoming.actor_id == 0 ||
         (incoming.owner_player_id != kMPInvalidCompactPlayerId &&
          incoming.owner_player_id >= kMPMaxPlayers) ||
+        (data.session_role == 0 && incoming.owner_player_id != kMPInvalidCompactPlayerId &&
+         incoming.owner_player_id != sender_player_id) ||
         (incoming.focus_player_id != kMPInvalidPlayerId &&
          !mp_valid_player_id(incoming.focus_player_id)) ||
-        !mp_float_is_finite(incoming.x) ||
-        !mp_float_is_finite(incoming.y) || !mp_float_is_finite(incoming.z)) {
-      continue;
+        !mp_float_is_finite(incoming.x) || !mp_float_is_finite(incoming.y) ||
+        !mp_float_is_finite(incoming.z)) {
+      return false;
     }
+  }
+
+  data.last_enemy_sequence_by_player[sender_player_id] = header.sequenceNum;
+  data.last_enemy_sync_time = current_time;
+  for (uint32_t i = 0; i < encoded_count; i++) {
+    MPEnemyStatePacked incoming = {};
+    memcpy(&incoming, packet->data + prefix_size + i * sizeof(incoming), sizeof(incoming));
     MPEnemyState* slot = find_enemy_slot(data.remote_enemy_buffer, incoming.actor_id);
     if (slot) {
       unpack_enemy_state(*slot, incoming, current_time);
     }
   }
   data.remote_enemy_buffer.remote_count = MAX_ENEMY_SYNC_COUNT;
+  return true;
 }
 
 void mp_send_enemy_sync(MultiplayerData& data, MPEnemySyncBufferGOAL* buffer) {
@@ -115,10 +130,7 @@ void mp_send_enemy_sync(MultiplayerData& data, MPEnemySyncBufferGOAL* buffer) {
       dst->flags = (src->attack_flag ? 1 : 0) | (src->is_aggro ? 2 : 0);
       dst->owner_player_id = src->owner_player_id;
     }
-    MultiplayerManager::broadcast(data,
-                                  data.session_role,
-                                  &packet,
-                                  enemy_packet_size(chunk_size),
+    MultiplayerManager::broadcast(data, data.session_role, &packet, enemy_packet_size(chunk_size),
                                   ENET_PACKET_FLAG_UNSEQUENCED);
     sent_count += chunk_size;
   }
@@ -129,8 +141,7 @@ void mp_receive_enemy_sync(MultiplayerData& data, MPEnemySyncBufferGOAL* buffer)
     return;
   }
   buffer->remote_count = data.remote_enemy_buffer.remote_count;
-  memcpy(buffer->remote_enemies,
-         data.remote_enemy_buffer.remote_enemies,
+  memcpy(buffer->remote_enemies, data.remote_enemy_buffer.remote_enemies,
          sizeof(MPEnemyState) * MAX_ENEMY_SYNC_COUNT);
   buffer->last_sync_time = data.last_enemy_sync_time;
 }

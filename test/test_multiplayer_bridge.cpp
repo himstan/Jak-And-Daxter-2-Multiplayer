@@ -1,8 +1,8 @@
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstring>
 #include <limits>
@@ -11,9 +11,10 @@
 #include <vector>
 
 #include "enet/enet.h"
-#include "game/multiplayer/multiplayer_packet.h"
 #include "game/multiplayer/multiplayer_api.h"
 #include "game/multiplayer/multiplayer_manager.h"
+#include "game/multiplayer/multiplayer_packet.h"
+#include "game/multiplayer/multiplayer_peer_registry.h"
 #include "game/multiplayer/multiplayer_port_mapping.h"
 #include "game/multiplayer/multiplayer_port_mapping_internal.h"
 #include "game/multiplayer/multiplayer_port_mapping_route.h"
@@ -25,8 +26,9 @@
 #include "game/multiplayer/multiplayer_wire_codec.h"
 #include "game/multiplayer/sync/event_sync.h"
 #include "game/multiplayer/sync/player_sync.h"
-#include "third-party/SDL/include/SDL3/SDL.h"
 #include "gtest/gtest.h"
+
+#include "third-party/SDL/include/SDL3/SDL.h"
 
 namespace {
 struct LocalEnetPair {
@@ -232,12 +234,12 @@ TEST(MultiplayerEvents, StampsValidatesDecodesAndDispatchesSourcePlayerId) {
   EXPECT_EQ(decoded.payload[0], 0xa5u);
 
   MultiplayerData inbound;
+  inbound.session_role = 0;
   inbound.local_player_id = 3;
-  inbound.authenticated_player_id = 2;
   ENetPacket packet = {};
   packet.data = encoded.data();
   packet.dataLength = encoded.size();
-  mp_handle_game_event_packet(inbound, &packet);
+  ASSERT_TRUE(mp_handle_game_event_packet(inbound, &packet, 2));
 
   MPEventBufferGOAL received = {};
   mp_receive_game_events(inbound, &received);
@@ -246,13 +248,24 @@ TEST(MultiplayerEvents, StampsValidatesDecodesAndDispatchesSourcePlayerId) {
   EXPECT_EQ(received.in_events[0].etype, 1u);
   EXPECT_EQ(received.in_events[0].data[0], 0xa5u);
 
+  EXPECT_FALSE(mp_handle_game_event_packet(inbound, &packet, 2));
+  mp_receive_game_events(inbound, &received);
+  EXPECT_EQ(received.in_count, 1u);
+
   source_event.source_player_id = 1;
+  ASSERT_TRUE(mp_encode_game_event(source_event, 1, encoded));
+  packet.data = encoded.data();
+  packet.dataLength = encoded.size();
+  ASSERT_TRUE(mp_handle_game_event_packet(inbound, &packet, 1));
+  mp_receive_game_events(inbound, &received);
+  EXPECT_EQ(received.in_count, 2u);
+
   ASSERT_TRUE(mp_encode_game_event(source_event, 18, encoded));
   packet.data = encoded.data();
   packet.dataLength = encoded.size();
-  mp_handle_game_event_packet(inbound, &packet);
+  EXPECT_FALSE(mp_handle_game_event_packet(inbound, &packet, 2));
   mp_receive_game_events(inbound, &received);
-  EXPECT_EQ(received.in_count, 1u);
+  EXPECT_EQ(received.in_count, 2u);
 
   source_event.source_player_id = kMPInvalidPlayerId;
   EXPECT_FALSE(mp_encode_game_event(source_event, 19, encoded));
@@ -319,9 +332,8 @@ TEST(MultiplayerJoin, RegistersPlayerThreeAsDaxterAndAllowsDuplicateCharacters) 
   packet.data = reinterpret_cast<uint8_t*>(&join);
   packet.dataLength = sizeof(join);
 
-  mp_handle_join_packet(data, &packet, &controller);
+  mp_handle_join_packet(data, &packet, 3, &controller);
 
-  EXPECT_EQ(data.authenticated_player_id, 3u);
   EXPECT_EQ(controller.records[3].identity.player_id, 3u);
   EXPECT_EQ(controller.records[3].identity.character, MPPlayerCharacter::DAXTER);
   EXPECT_EQ(controller.records[3].identity.joined, 1u);
@@ -344,17 +356,17 @@ TEST(MultiplayerJoin, RejectsMalformedIdentityWithoutMutatingSlot) {
   packet.data = reinterpret_cast<uint8_t*>(&join);
   packet.dataLength = sizeof(join);
 
-  mp_handle_join_packet(data, &packet, &controller);
+  mp_handle_join_packet(data, &packet, 3, &controller);
   EXPECT_STREQ(controller.records[3].identity.name, "before");
   EXPECT_EQ(controller.records[3].identity.joined, 0u);
 
   memcpy(join.player_name, "bad-name", sizeof("bad-name"));
-  mp_handle_join_packet(data, &packet, &controller);
+  mp_handle_join_packet(data, &packet, 3, &controller);
   EXPECT_STREQ(controller.records[3].identity.name, "before");
 
   join.player_id = 1;
   memcpy(join.player_name, "ValidName", sizeof("ValidName"));
-  mp_handle_join_packet(data, &packet, &controller);
+  mp_handle_join_packet(data, &packet, 1, &controller);
   EXPECT_EQ(controller.records[1].identity.joined, 0u);
 }
 
@@ -376,7 +388,7 @@ TEST(MultiplayerPlayerRegistry, StateBeforeJoinRemainsVacantUntilIdentityArrives
   ENetPacket state_packet = {};
   state_packet.data = reinterpret_cast<uint8_t*>(&state);
   state_packet.dataLength = sizeof(state);
-  mp_handle_player_state_packet(data, &state_packet, 100);
+  mp_handle_player_state_packet(data, &state_packet, 3, 100);
   mp_receive_player_sync(data, &controller, &world, &bootstrap);
 
   EXPECT_TRUE(data.player_states[3].state_ready);
@@ -390,7 +402,7 @@ TEST(MultiplayerPlayerRegistry, StateBeforeJoinRemainsVacantUntilIdentityArrives
   ENetPacket join_packet = {};
   join_packet.data = reinterpret_cast<uint8_t*>(&join);
   join_packet.dataLength = sizeof(join);
-  mp_handle_join_packet(data, &join_packet, &controller);
+  mp_handle_join_packet(data, &join_packet, 3, &controller);
   mp_receive_player_sync(data, &controller, &world, &bootstrap);
 
   EXPECT_EQ(controller.records[3].identity.joined, 1u);
@@ -400,8 +412,8 @@ TEST(MultiplayerPlayerRegistry, StateBeforeJoinRemainsVacantUntilIdentityArrives
 
 TEST(MultiplayerPlayerRegistry, RejectsSpoofsStaleStateAndLocalSlotClear) {
   MultiplayerData data;
+  data.session_role = 0;
   data.local_player_id = 3;
-  data.authenticated_player_id = 2;
   MPPlayerControllerGOAL controller = {};
   controller.local_player_id = 3;
   controller.records[2].identity.joined = 1;
@@ -417,16 +429,16 @@ TEST(MultiplayerPlayerRegistry, RejectsSpoofsStaleStateAndLocalSlotClear) {
   ENetPacket packet = {};
   packet.data = reinterpret_cast<uint8_t*>(&state);
   packet.dataLength = sizeof(state);
-  mp_handle_player_state_packet(data, &packet, 100);
+  mp_handle_player_state_packet(data, &packet, 2, 100);
   EXPECT_FALSE(data.player_states[1].state_ready);
 
   state.player_id = 2;
   state.x = 10.0f;
-  mp_handle_player_state_packet(data, &packet, 101);
+  mp_handle_player_state_packet(data, &packet, 2, 101);
   EXPECT_FLOAT_EQ(data.player_states[2].x, 10.0f);
   state.header.sequenceNum = 9;
   state.x = 9.0f;
-  mp_handle_player_state_packet(data, &packet, 102);
+  mp_handle_player_state_packet(data, &packet, 2, 102);
   EXPECT_FLOAT_EQ(data.player_states[2].x, 10.0f);
 
   mp_clear_player_slot(data, &controller, 3);
@@ -434,7 +446,6 @@ TEST(MultiplayerPlayerRegistry, RejectsSpoofsStaleStateAndLocalSlotClear) {
   mp_clear_player_slot(data, &controller, 2);
   EXPECT_FALSE(data.player_states[2].state_ready);
   EXPECT_EQ(controller.records[2].identity.player_id, kMPInvalidPlayerId);
-  EXPECT_EQ(data.authenticated_player_id, kMPInvalidPlayerId);
 }
 
 TEST(MultiplayerBootstrap, AppliesValidPacketToWorldAndBootstrapBuffers) {
@@ -497,7 +508,6 @@ TEST(MultiplayerWorldState, AcceptsOnlyAuthenticatedHostAndRejectsStaleSequences
   data.session_role = 1;
   data.local_player_id = 3;
   data.host_player_id = 2;
-  data.authenticated_player_id = 2;
   MPWorldSyncStateGOAL world = {};
   PacketWorldState state = {};
   state.header.type = PacketType::WORLD_STATE;
@@ -532,24 +542,27 @@ TEST(MultiplayerWorldState, AcceptsOnlyAuthenticatedHostAndRejectsStaleSequences
 
 TEST(MultiplayerBootstrap, RequestResetsPendingSendState) {
   MultiplayerData data;
-  data.pending_bootstrap = false;
-  data.pending_bootstrap_sent_once = true;
-  data.last_bootstrap_send_time = 99;
+  data.session_role = 0;
+  data.host_peer_sessions[0].authenticated = true;
+  data.host_peer_sessions[0].identity_ready = true;
+  data.host_peer_sessions[0].bootstrap_pending = false;
+  data.host_peer_sessions[0].bootstrap_sent_once = true;
+  data.host_peer_sessions[0].last_bootstrap_send_time = 99;
 
   multiplayer_request_bootstrap(data);
 
-  EXPECT_TRUE(data.pending_bootstrap);
-  EXPECT_FALSE(data.pending_bootstrap_sent_once);
-  EXPECT_EQ(data.last_bootstrap_send_time, 0u);
+  EXPECT_TRUE(data.host_peer_sessions[0].bootstrap_pending);
+  EXPECT_FALSE(data.host_peer_sessions[0].bootstrap_sent_once);
+  EXPECT_EQ(data.host_peer_sessions[0].last_bootstrap_send_time, 0u);
 }
 
 TEST(MultiplayerJoin, DisconnectResetsSentState) {
   MultiplayerData data;
-  data.join_identity_sent = true;
+  data.local_join_identity_sent = true;
 
   multiplayer_clear_remote_peer_state(data);
 
-  EXPECT_FALSE(data.join_identity_sent);
+  EXPECT_FALSE(data.local_join_identity_sent);
 }
 
 TEST(MultiplayerJoin, RetriesAndResendsOncePerAuthenticatedSession) {
@@ -569,11 +582,13 @@ TEST(MultiplayerJoin, RetriesAndResendsOncePerAuthenticatedSession) {
   MultiplayerSecurity host_security;
   MultiplayerData data;
   data.session_role = 1;
+  data.local_player_id = 3;
+  data.host_player_id = 0;
   ASSERT_TRUE(host_security.start_host(26210));
   std::string parsed_host;
   uint16_t parsed_port = 0;
-  ASSERT_TRUE(data.security.start_client(host_security.invite_for_address("127.0.0.1"),
-                                         parsed_host, parsed_port));
+  ASSERT_TRUE(data.security.start_client(host_security.invite_for_address("127.0.0.1"), parsed_host,
+                                         parsed_port));
   authenticate(host_security, data.security);
 
   MPPlayerControllerGOAL controller = {};
@@ -581,6 +596,7 @@ TEST(MultiplayerJoin, RetriesAndResendsOncePerAuthenticatedSession) {
   controller.host_player_id = 0;
   auto& local = controller.records[3];
   local.identity.joined = 1;
+  local.identity.identity_ready = 1;
   local.identity.player_id = 3;
   local.identity.character = MPPlayerCharacter::JAK;
   memcpy(local.identity.name, "Ranger", sizeof("Ranger"));
@@ -588,30 +604,32 @@ TEST(MultiplayerJoin, RetriesAndResendsOncePerAuthenticatedSession) {
   MPBootstrapSyncStateGOAL bootstrap = {};
 
   mp_send_player_sync(data, &controller, &world, &bootstrap);
-  EXPECT_FALSE(data.join_identity_sent);
+  EXPECT_FALSE(data.local_join_identity_sent);
   EXPECT_EQ(data.packet_scheduler.queued_packet_count(), 0u);
 
   data.host = pair.sender;
   data.server_peer = pair.sender_peer;
   mp_send_player_sync(data, &controller, &world, &bootstrap);
-  EXPECT_TRUE(data.join_identity_sent);
+  EXPECT_TRUE(data.local_join_identity_sent);
   EXPECT_EQ(data.packet_scheduler.queued_packet_count(), 2u);
 
   mp_send_player_sync(data, &controller, &world, &bootstrap);
   EXPECT_EQ(data.packet_scheduler.queued_packet_count(), 2u);
 
   multiplayer_clear_remote_peer_state(data);
-  EXPECT_FALSE(data.join_identity_sent);
+  EXPECT_FALSE(data.local_join_identity_sent);
   mp_send_player_sync(data, &controller, &world, &bootstrap);
-  EXPECT_TRUE(data.join_identity_sent);
+  EXPECT_TRUE(data.local_join_identity_sent);
   EXPECT_EQ(data.packet_scheduler.queued_packet_count(), 2u);
 }
 
 TEST(MultiplayerBootstrap, PlayerStateAcknowledgesSentBootstrap) {
   MultiplayerData data;
   data.session_role = 0;
-  data.pending_bootstrap = true;
-  data.pending_bootstrap_sent_once = true;
+  data.host_peer_sessions[0].authenticated = true;
+  data.host_peer_sessions[0].player_id = 1;
+  data.host_peer_sessions[0].bootstrap_pending = true;
+  data.host_peer_sessions[0].bootstrap_sent_once = true;
   PacketPlayerState state = {};
   state.header.type = PacketType::STATE_UPDATE;
   state.header.sequenceNum = 1;
@@ -621,11 +639,10 @@ TEST(MultiplayerBootstrap, PlayerStateAcknowledgesSentBootstrap) {
   packet.data = reinterpret_cast<uint8_t*>(&state);
   packet.dataLength = sizeof(state);
   data.local_player_id = 0;
-  data.authenticated_player_id = 1;
-  mp_handle_player_state_packet(data, &packet, 100);
+  mp_handle_player_state_packet(data, &packet, 1, 100);
 
-  EXPECT_FALSE(data.pending_bootstrap);
-  EXPECT_FALSE(data.pending_bootstrap_sent_once);
+  EXPECT_FALSE(data.host_peer_sessions[0].bootstrap_pending);
+  EXPECT_FALSE(data.host_peer_sessions[0].bootstrap_sent_once);
 }
 
 TEST(MultiplayerPacket, CountedPayloadRejectsOverflowAndTrailingData) {
@@ -645,6 +662,7 @@ TEST(MultiplayerPacket, DirectionPolicyMatchesHostAndClientRoles) {
   for (uint8_t value = 0; value < static_cast<uint8_t>(PacketType::COUNT); ++value) {
     const PacketType type = static_cast<PacketType>(value);
     const bool host_only = type == PacketType::BOOTSTRAP || type == PacketType::WORLD_STATE ||
+                           type == PacketType::SESSION_WELCOME ||
                            type == PacketType::PEDESTRIAN_SYNC ||
                            type == PacketType::VEHICLE_SYNC ||
                            type == PacketType::PALACE_SQUID_SYNC || type == PacketType::WIDOW_SYNC;
@@ -686,8 +704,7 @@ TEST(MultiplayerSecurity, InviteRoundTripAndMutualAuthentication) {
   EXPECT_TRUE(invite.starts_with("jad2mp://"));
   EXPECT_EQ(host.room_code().size(), kMultiplayerRoomCodeLength);
   EXPECT_TRUE(std::all_of(host.room_code().begin(), host.room_code().end(), [](char character) {
-    return (character >= 'A' && character <= 'Z') ||
-           (character >= '0' && character <= '9');
+    return (character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9');
   }));
   EXPECT_EQ(invite.substr(invite.rfind('/') + 1), host.room_code());
   std::string parsed_host;
@@ -729,14 +746,14 @@ TEST(MultiplayerSecurity, RoomCodeUsesFreshSaltAndRejectsWrongCode) {
   MultiplayerSecurity wrong_client;
   std::string parsed_host;
   uint16_t parsed_port = 0;
-  ASSERT_TRUE(wrong_client.start_client("jad2mp://127.0.0.1:26210/ABC124", parsed_host,
-                                        parsed_port));
+  ASSERT_TRUE(
+      wrong_client.start_client("jad2mp://127.0.0.1:26210/ABC124", parsed_host, parsed_port));
   ASSERT_TRUE(wrong_client.set_local_version("v1.0.0"));
-  const auto wrong_proof =
-      wrong_client.receive(1, first_hello.bytes.data(), first_hello.size);
+  const auto wrong_proof = wrong_client.receive(1, first_hello.bytes.data(), first_hello.size);
   ASSERT_EQ(wrong_proof.kind, SecurityReceiveKind::HANDSHAKE);
-  EXPECT_EQ(first_host.receive(0, wrong_proof.response.bytes.data(), wrong_proof.response.size).kind,
-            SecurityReceiveKind::REJECTED);
+  EXPECT_EQ(
+      first_host.receive(0, wrong_proof.response.bytes.data(), wrong_proof.response.size).kind,
+      SecurityReceiveKind::REJECTED);
 }
 
 TEST(MultiplayerPreferences, ValidatesPortsRoomCodesAndIndependentFallbacks) {
@@ -793,8 +810,8 @@ TEST(MultiplayerSecurity, AuthenticatedLeaveCanTravelInBothDirections) {
   ASSERT_TRUE(client.start_client(host.invite_for_address("127.0.0.1"), parsed_host, parsed_port));
   authenticate(host, client);
 
-  PacketLeave client_leave = {{PacketType::EVENT_LEAVE, 1}, 1,
-                              MultiplayerLeaveReason::CLIENT_RECONNECTING};
+  PacketLeave client_leave = {
+      {PacketType::EVENT_LEAVE, 1}, 1, MultiplayerLeaveReason::CLIENT_RECONNECTING};
   MultiplayerDatagram encrypted_client_leave;
   ASSERT_TRUE(client.seal(1, client_leave.header.type, &client_leave, sizeof(client_leave),
                           encrypted_client_leave));
@@ -806,11 +823,10 @@ TEST(MultiplayerSecurity, AuthenticatedLeaveCanTravelInBothDirections) {
   memcpy(&decoded_client_leave, host_result.plaintext.bytes.data(), sizeof(decoded_client_leave));
   EXPECT_EQ(decoded_client_leave.reason, MultiplayerLeaveReason::CLIENT_RECONNECTING);
 
-  PacketLeave host_leave = {
-      {PacketType::EVENT_LEAVE, 2}, 0, MultiplayerLeaveReason::HOST_CLOSED};
+  PacketLeave host_leave = {{PacketType::EVENT_LEAVE, 2}, 0, MultiplayerLeaveReason::HOST_CLOSED};
   MultiplayerDatagram encrypted_host_leave;
-  ASSERT_TRUE(host.seal(0, host_leave.header.type, &host_leave, sizeof(host_leave),
-                        encrypted_host_leave));
+  ASSERT_TRUE(
+      host.seal(0, host_leave.header.type, &host_leave, sizeof(host_leave), encrypted_host_leave));
   const auto client_result =
       client.receive(1, encrypted_host_leave.bytes.data(), encrypted_host_leave.size);
   ASSERT_EQ(client_result.kind, SecurityReceiveKind::GAMEPLAY);
@@ -846,8 +862,8 @@ TEST(MultiplayerDisconnect, SendsOneDirectLeaveDespiteQueuedGameplay) {
   client_data.reconnect_invite = "jad2mp://127.0.0.1:26210/ABC123";
   std::string parsed_host;
   uint16_t parsed_port = 0;
-  ASSERT_TRUE(client_data.security.start_client(
-      host_security.invite_for_address("127.0.0.1"), parsed_host, parsed_port));
+  ASSERT_TRUE(client_data.security.start_client(host_security.invite_for_address("127.0.0.1"),
+                                                parsed_host, parsed_port));
   authenticate(host_security, client_data.security);
 
   PacketHeader queued_gameplay = {PacketType::EVENT_GAME, 99};
@@ -897,19 +913,22 @@ TEST(MultiplayerDisconnect, SendsOneDirectLeaveDespiteQueuedGameplay) {
   EXPECT_EQ(leave_count.load(), 1);
 }
 
-TEST(MultiplayerDiscovery, RequiresPortAndExactRoomCode) {
-  const std::string valid = std::string(DISCOVERY_MAGIC) + "|26210|I0O1AZ";
+TEST(MultiplayerDiscovery, RequiresPortRoomCodeAndValidCapacity) {
+  const std::string valid = std::string(DISCOVERY_MAGIC) + "|26210|I0O1AZ|3|4";
   MPDiscoveryResponse response;
   ASSERT_TRUE(mp_parse_discovery_response(valid.data(), valid.size(), response));
   EXPECT_EQ(response.port, 26210);
   EXPECT_EQ(response.room_code, "I0O1AZ");
+  EXPECT_EQ(response.current_players, 3u);
+  EXPECT_EQ(response.player_limit, 4u);
   EXPECT_FALSE(mp_parse_discovery_response(valid.data(), valid.size() - 1, response));
   EXPECT_FALSE(mp_parse_discovery_response((valid + "x").data(), valid.size() + 1, response));
-  std::string invalid = valid;
-  invalid.back() = '/';
-  EXPECT_FALSE(mp_parse_discovery_response(invalid.data(), invalid.size(), response));
+  const std::string invalid_capacity = std::string(DISCOVERY_MAGIC) + "|26210|I0O1AZ|4|3";
+  EXPECT_FALSE(
+      mp_parse_discovery_response(invalid_capacity.data(), invalid_capacity.size(), response));
   const std::string old_mode_layout = std::string(DISCOVERY_MAGIC) + "|31415|C|I0O1AZ";
-  EXPECT_FALSE(mp_parse_discovery_response(old_mode_layout.data(), old_mode_layout.size(), response));
+  EXPECT_FALSE(
+      mp_parse_discovery_response(old_mode_layout.data(), old_mode_layout.size(), response));
 }
 
 TEST(MultiplayerDiscovery, CancellationClearsPrivateResultState) {
@@ -1104,8 +1123,7 @@ TEST(MultiplayerReconnect, HandshakeTimeoutPreservesInviteAndSchedulesRetry) {
   EXPECT_EQ(data.join_status, (int)MultiplayerStatus::RECONNECTING);
   EXPECT_FALSE(data.reconnect_attempt_active);
   EXPECT_EQ(data.reconnect_next_attempt_time, 5500u);
-  EXPECT_EQ(data.reconnect_invite,
-            "jad2mp://127.0.0.1:26210/ABC123");
+  EXPECT_EQ(data.reconnect_invite, "jad2mp://127.0.0.1:26210/ABC123");
 }
 
 TEST(MultiplayerReconnect, DoesNotCompleteUntilBootstrapRestoresInGameStatus) {
@@ -1126,83 +1144,95 @@ TEST(MultiplayerReconnect, DoesNotCompleteUntilBootstrapRestoresInGameStatus) {
   EXPECT_EQ(data.reconnect_attempt_count, 0u);
 }
 
-TEST(MultiplayerReconnect, IgnoresUnauthenticatedPeersForTimeout) {
+TEST(MultiplayerPeerRegistry, AssignsLowestFreeIdsForArbitraryHostIdAndReusesSlots) {
   MultiplayerData data;
   data.session_role = 0;
-  data.join_status = (int)MultiplayerStatus::IN_GAME;
-  data.last_authenticated_receive_time = 100;
-
-  multiplayer_update_receive_timeout(data, 10101);
-
-  EXPECT_EQ(data.join_status, (int)MultiplayerStatus::IN_GAME);
-  EXPECT_EQ(data.last_authenticated_receive_time, 100u);
-}
-
-TEST(MultiplayerReconnect, HostRecoveryClearsRemoteStateAndRotatesSecurity) {
-  MultiplayerData data;
-  MultiplayerSecurity client;
-  ASSERT_TRUE(data.security.start_host(26210));
-  ASSERT_TRUE(data.security.set_local_version("v1.0.0"));
-  const std::string invite = data.security.invite_for_address("127.0.0.1");
+  data.host_player_id = 3;
+  data.local_player_id = 3;
+  data.session_player_limit = 4;
+  std::array<ENetPeer, 3> peers = {};
+  std::array<HostPeerSession*, 3> sessions = {};
+  std::array<MultiplayerSecurity, 3> clients;
   std::string parsed_host;
   uint16_t parsed_port = 0;
-  ASSERT_TRUE(client.start_client(invite, parsed_host, parsed_port));
-  authenticate(data.security, client);
 
-  data.session_role = 0;
-  data.host_game_active = true;
-  data.join_status = (int)MultiplayerStatus::IN_GAME;
-  data.authenticated_peer = nullptr;
-  data.player_states[2].last_sequence_num = 42;
-  data.pending_bootstrap = true;
-  data.inbound_events.push_overwrite({});
-  data.reconnect_invite = "client-side-state-must-not-be-cleared-on-host";
+  for (size_t index = 0; index < peers.size(); ++index) {
+    sessions[index] = multiplayer_host_peer_allocate(data, &peers[index], 100);
+    ASSERT_NE(sessions[index], nullptr);
+  }
+  EXPECT_EQ(multiplayer_host_pending_peer_count(data), 3u);
 
-  ASSERT_TRUE(multiplayer_begin_host_reconnect(data));
+  for (size_t index = 0; index < peers.size(); ++index) {
+    auto* session = sessions[index];
+    ASSERT_TRUE(session->security.start_host(26210, "ABC123"));
+    ASSERT_TRUE(session->security.set_local_version("v1.0.0"));
+    ASSERT_TRUE(clients[index].start_client(session->security.invite_for_address("127.0.0.1"),
+                                            parsed_host, parsed_port));
+    ASSERT_TRUE(clients[index].set_local_version("v1.0.0"));
+    authenticate(session->security, clients[index]);
+    ASSERT_TRUE(multiplayer_host_peer_authenticate(data, *session, 101));
+    EXPECT_EQ(session->player_id, index);
+  }
+  EXPECT_EQ(multiplayer_host_authenticated_peer_count(data), 3u);
+  EXPECT_FALSE(multiplayer_host_has_open_player_slot(data));
 
-  EXPECT_TRUE(data.host_game_active);
-  EXPECT_EQ(data.join_status, (int)MultiplayerStatus::RECONNECTING);
-  EXPECT_FALSE(data.security.authenticated());
-  EXPECT_EQ(data.security.invite_for_address("127.0.0.1"), invite);
-  EXPECT_EQ(data.player_states[2].last_sequence_num, 0u);
-  EXPECT_FALSE(data.pending_bootstrap);
-  EXPECT_TRUE(data.inbound_events.empty());
-  EXPECT_EQ(data.reconnect_invite, "client-side-state-must-not-be-cleared-on-host");
-
+  multiplayer_host_peer_release(data, &peers[1]);
+  ENetPeer replacement = {};
   MultiplayerSecurity replacement_client;
-  ASSERT_TRUE(replacement_client.start_client(invite, parsed_host, parsed_port));
-  authenticate(data.security, replacement_client);
+  auto* replacement_session = multiplayer_host_peer_allocate(data, &replacement, 200);
+  ASSERT_NE(replacement_session, nullptr);
+  ASSERT_TRUE(replacement_session->security.start_host(26210, "ABC123"));
+  ASSERT_TRUE(replacement_session->security.set_local_version("v1.0.0"));
+  ASSERT_TRUE(replacement_client.start_client(
+      replacement_session->security.invite_for_address("127.0.0.1"), parsed_host, parsed_port));
+  ASSERT_TRUE(replacement_client.set_local_version("v1.0.0"));
+  authenticate(replacement_session->security, replacement_client);
+  ASSERT_TRUE(multiplayer_host_peer_authenticate(data, *replacement_session, 201));
+  EXPECT_EQ(replacement_session->player_id, 1u);
 }
 
-TEST(MultiplayerSession, AcceptsAuthenticatedClientLeaveReasons) {
+TEST(MultiplayerPeerRegistry, EnforcesRuntimeLimitsAndRejectsInvalidConfiguration) {
+  EXPECT_FALSE(multiplayer_valid_player_limit(0));
+  EXPECT_FALSE(multiplayer_valid_player_limit(1));
+  EXPECT_TRUE(multiplayer_valid_player_limit(2));
+  EXPECT_TRUE(multiplayer_valid_player_limit(3));
+  EXPECT_TRUE(multiplayer_valid_player_limit(4));
+  EXPECT_FALSE(multiplayer_valid_player_limit(5));
+
   MultiplayerData data;
-  MultiplayerSecurity client;
-  ASSERT_TRUE(data.security.start_host(26210));
-  ASSERT_TRUE(data.security.set_local_version("v1.0.0"));
+  data.session_role = 0;
+  data.local_player_id = 0;
+  data.host_player_id = 0;
+  data.session_player_limit = 2;
+  data.authenticated_peer_count = 1;
+  EXPECT_FALSE(multiplayer_host_has_open_player_slot(data));
+  data.session_player_limit = 3;
+  EXPECT_TRUE(multiplayer_host_has_open_player_slot(data));
+}
+
+TEST(MultiplayerPeerRegistry, KeepsPeerEncryptionSessionsIsolated) {
+  MultiplayerSecurity first_host;
+  MultiplayerSecurity second_host;
+  MultiplayerSecurity first_client;
+  MultiplayerSecurity second_client;
   std::string parsed_host;
   uint16_t parsed_port = 0;
-  ASSERT_TRUE(client.start_client(data.security.invite_for_address("127.0.0.1"), parsed_host,
-                                  parsed_port));
-  authenticate(data.security, client);
+  ASSERT_TRUE(first_host.start_host(26210, "ABC123"));
+  ASSERT_TRUE(second_host.start_host(26210, "ABC123"));
+  ASSERT_TRUE(first_client.start_client(first_host.invite_for_address("127.0.0.1"), parsed_host,
+                                        parsed_port));
+  ASSERT_TRUE(second_client.start_client(second_host.invite_for_address("127.0.0.1"), parsed_host,
+                                         parsed_port));
+  authenticate(first_host, first_client);
+  authenticate(second_host, second_client);
 
-  ENetPeer peer = {};
-  peer.state = ENET_PEER_STATE_DISCONNECTED;
-  data.session_role = 0;
-  data.authenticated_peer = &peer;
-  data.host_game_active = true;
-  data.join_status = (int)MultiplayerStatus::IN_GAME;
-  data.player_states[2].last_sequence_num = 42;
-  data.inbound_events.push_overwrite({});
-
-  ASSERT_TRUE(multiplayer_handle_client_leave(
-      data, &peer, MultiplayerLeaveReason::CLIENT_RECONNECTING));
-  EXPECT_EQ(data.join_status, (int)MultiplayerStatus::RECONNECTING);
-  EXPECT_EQ(data.authenticated_peer, nullptr);
-  EXPECT_FALSE(data.security.authenticated());
-  EXPECT_EQ(data.player_states[2].last_sequence_num, 0u);
-  EXPECT_TRUE(data.inbound_events.empty());
-
-  EXPECT_FALSE(multiplayer_handle_client_leave(data, &peer, MultiplayerLeaveReason::HOST_CLOSED));
+  const PacketHeader header = {PacketType::STATE_UPDATE, 7};
+  MultiplayerDatagram encrypted;
+  ASSERT_TRUE(first_client.seal(1, header.type, &header, sizeof(header), encrypted));
+  EXPECT_EQ(first_host.receive(0, encrypted.bytes.data(), encrypted.size).kind,
+            SecurityReceiveKind::GAMEPLAY);
+  EXPECT_EQ(second_host.receive(0, encrypted.bytes.data(), encrypted.size).kind,
+            SecurityReceiveKind::REJECTED);
 }
 
 TEST(MultiplayerSession, HostLeaveIsTerminalAndCancelsReconnect) {
@@ -1211,8 +1241,8 @@ TEST(MultiplayerSession, HostLeaveIsTerminalAndCancelsReconnect) {
   ASSERT_TRUE(host.start_host(26210));
   std::string parsed_host;
   uint16_t parsed_port = 0;
-  ASSERT_TRUE(data.security.start_client(host.invite_for_address("127.0.0.1"), parsed_host,
-                                         parsed_port));
+  ASSERT_TRUE(
+      data.security.start_client(host.invite_for_address("127.0.0.1"), parsed_host, parsed_port));
   ASSERT_TRUE(data.security.set_local_version("v1.0.0"));
   ASSERT_TRUE(host.set_local_version("v1.0.0"));
   authenticate(host, data.security);
@@ -1255,8 +1285,7 @@ TEST(MultiplayerSecurity, RejectsMalformedAndNonIpv4Invites) {
   EXPECT_FALSE(client.start_client("jad2mp://example.com:26210/ABC123", host, port));
   EXPECT_FALSE(client.start_client("jad2mp://999.0.0.1:26210/ABC123", host, port));
   EXPECT_FALSE(client.start_client("jad2mp://127.0.0.1:0/ABC123", host, port));
-  EXPECT_FALSE(client.start_client("jad2mp://127.0.0.1:26210/AAAAAAAAAAAAAAAAAAAAAA",
-                                   host, port));
+  EXPECT_FALSE(client.start_client("jad2mp://127.0.0.1:26210/AAAAAAAAAAAAAAAAAAAAAA", host, port));
   EXPECT_FALSE(client.start_client("jad2mp://127.0.0.1:26210/ABC123/trailing", host, port));
 }
 
@@ -1317,64 +1346,52 @@ TEST(MultiplayerSecurity, RotatesHostPeerSessionAndPreservesInvite) {
             SecurityReceiveKind::GAMEPLAY);
 }
 
-TEST(MultiplayerSession, ClearsOnlyRemotePeerStateForActiveHost) {
+TEST(MultiplayerBootstrap, TracksDeliveryIndependentlyForEachAuthenticatedPeer) {
   MultiplayerData data;
-  MultiplayerSecurity client;
-  ASSERT_TRUE(data.security.start_host(26210));
-  std::string parsed_host;
-  uint16_t parsed_port = 0;
-  ASSERT_TRUE(
-      client.start_client(data.security.invite_for_address("127.0.0.1"), parsed_host, parsed_port));
-  authenticate(data.security, client);
-  const std::string room_code = data.security.room_code();
   data.session_role = 0;
-  data.join_status = (int)MultiplayerStatus::CONNECTED_LOBBY;
-  data.local_version = "dev-366c9e277";
-  data.staged_invite = "private-staged-value";
-  data.internet_host = true;
-  multiplayer_set_status(data, (int)MultiplayerStatus::IN_GAME);
-  ASSERT_TRUE(data.host_game_active);
-  ASSERT_TRUE(data.pending_bootstrap);
+  for (uint32_t index = 0; index < 3; ++index) {
+    auto& session = data.host_peer_sessions[index];
+    session.authenticated = true;
+    session.identity_ready = true;
+    session.player_id = index + 1;
+    session.bootstrap_sent_once = true;
+    session.last_bootstrap_send_time = 99 + index;
+  }
 
-  data.player_states[2].last_sequence_num = 42;
-  data.last_authenticated_receive_time = 1234;
-  data.last_enemy_sequence = 9;
-  data.remote_enemy_buffer.remote_enemies[0].actor_id = 7;
-  data.traffic_buffer.vehicles[0].net_id = 11;
-  PacketGameEvent event = {};
-  event.header.type = PacketType::EVENT_GAME;
-  data.inbound_events.push_overwrite(event);
+  multiplayer_request_bootstrap(data);
 
-  ASSERT_TRUE(multiplayer_prepare_host_for_next_peer(data));
-
-  EXPECT_TRUE(data.host_game_active);
-  EXPECT_EQ(data.join_status, (int)MultiplayerStatus::IN_GAME);
-  EXPECT_FALSE(data.security.authenticated());
-  EXPECT_EQ(data.security.room_code(), room_code);
-  EXPECT_EQ(data.local_version, "dev-366c9e277");
-  EXPECT_EQ(data.staged_invite, "private-staged-value");
-  EXPECT_TRUE(data.internet_host);
-  EXPECT_FALSE(data.pending_bootstrap);
-  EXPECT_EQ(data.player_states[2].last_sequence_num, 0u);
-  EXPECT_EQ(data.last_authenticated_receive_time, 0u);
-  EXPECT_EQ(data.last_enemy_sequence, 0u);
-  EXPECT_EQ(data.remote_enemy_buffer.remote_enemies[0].actor_id, 0u);
-  EXPECT_EQ(data.traffic_buffer.vehicles[0].net_id, 0u);
-  EXPECT_TRUE(data.inbound_events.empty());
+  for (uint32_t index = 0; index < 3; ++index) {
+    const auto& session = data.host_peer_sessions[index];
+    EXPECT_TRUE(session.bootstrap_pending);
+    EXPECT_FALSE(session.bootstrap_sent_once);
+    EXPECT_EQ(session.last_bootstrap_send_time, 0u);
+  }
+  data.host_peer_sessions[1].bootstrap_pending = false;
+  EXPECT_TRUE(data.host_peer_sessions[0].bootstrap_pending);
+  EXPECT_FALSE(data.host_peer_sessions[1].bootstrap_pending);
+  EXPECT_TRUE(data.host_peer_sessions[2].bootstrap_pending);
 }
 
-TEST(MultiplayerSession, ReturnsPregameHostToWaitingForPeer) {
+TEST(MultiplayerPeerRegistry, ReleaseDoesNotClearUnaffectedSessions) {
   MultiplayerData data;
-  ASSERT_TRUE(data.security.start_host(26210));
-  ASSERT_TRUE(data.security.set_local_version("v1.0.0"));
   data.session_role = 0;
-  data.join_status = (int)MultiplayerStatus::CONNECTED_LOBBY;
+  std::array<ENetPeer, 2> peers = {};
+  for (uint32_t index = 0; index < 2; ++index) {
+    auto& session = data.host_peer_sessions[index];
+    session.peer = &peers[index];
+    session.authenticated = true;
+    session.player_id = index + 1;
+  }
+  data.authenticated_peer_count = 2;
 
-  ASSERT_TRUE(multiplayer_prepare_host_for_next_peer(data));
+  multiplayer_host_peer_release(data, &peers[0]);
 
-  EXPECT_FALSE(data.host_game_active);
-  EXPECT_EQ(data.join_status, (int)MultiplayerStatus::CONNECTING);
-  EXPECT_FALSE(data.security.authenticated());
+  EXPECT_EQ(multiplayer_host_authenticated_peer_count(data), 1u);
+  EXPECT_EQ(multiplayer_host_peer_find(data, &peers[0]), nullptr);
+  const auto* remaining = multiplayer_host_peer_find(data, &peers[1]);
+  ASSERT_NE(remaining, nullptr);
+  EXPECT_TRUE(remaining->authenticated);
+  EXPECT_EQ(remaining->player_id, 2u);
 }
 
 TEST(MultiplayerSecurity, RejectsTamperingAndWrongRoomCode) {

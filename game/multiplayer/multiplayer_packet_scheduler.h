@@ -1,22 +1,23 @@
 #pragma once
 
-#include "game/multiplayer/multiplayer_protocol.h"
-#include "enet/enet.h"
-
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <deque>
+#include <functional>
+#include <optional>
 #include <vector>
+
+#include "enet/enet.h"
+#include "game/multiplayer/multiplayer_protocol.h"
 
 struct MultiplayerStats;
 
 class MultiplayerPacketScheduler {
  public:
   using PacketSender = std::function<bool(ENetPeer*, int, ENetPacket*)>;
-  using PlainPacketSender =
-      std::function<bool(ENetPeer*, int, const uint8_t*, size_t, PacketType, size_t, ENetPacketFlag)>;
+  using PlainPacketSender = std::function<
+      bool(ENetPeer*, int, const uint8_t*, size_t, PacketType, size_t, ENetPacketFlag)>;
 
   static constexpr size_t kDefaultMaxPackets = 256;
   static constexpr size_t kDefaultMaxBytes = 2 * 1024 * 1024;
@@ -42,7 +43,8 @@ class MultiplayerPacketScheduler {
                      size_t size,
                      PacketType type,
                      size_t application_size,
-                     ENetPacketFlag flags);
+                     ENetPacketFlag flags,
+                     std::optional<uint32_t> stream_key_override = std::nullopt);
 
   size_t flush(MultiplayerStats& stats);
   size_t flush(MultiplayerStats& stats, const PacketSender& sender);
@@ -64,6 +66,7 @@ class MultiplayerPacketScheduler {
     ENetPeer* peer = nullptr;
     std::vector<uint8_t> data;
     PacketType type = PacketType::COUNT;
+    uint32_t stream_key = 0;
     size_t application_size = 0;
     int channel = 0;
     ENetPacketFlag flags = static_cast<ENetPacketFlag>(0);
@@ -75,7 +78,8 @@ class MultiplayerPacketScheduler {
 
   bool make_room(size_t packet_bytes);
   bool drop_oldest_unreliable();
-  bool remove_coalesced_packet(PacketType type);
+  static uint32_t coalescing_stream_key(PacketType type, const void* packet_data, size_t size);
+  bool remove_coalesced_packet(PacketType type, ENetPeer* peer, uint32_t stream_key);
   void destroy_packet(QueuedPacket& packet);
 
   std::array<std::deque<QueuedPacket>, 4> queues_;

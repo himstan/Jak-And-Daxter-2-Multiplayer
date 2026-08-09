@@ -4,7 +4,7 @@
 void init_multiplayer_pc_port();
 void pc_multi_disconnect();
 
-void pc_multi_setup_host();
+void pc_multi_setup_host(u32 player_limit);
 void pc_multi_setup_client(u32 ip_ptr, u32 port);
 int64_t pc_multi_get_status();
 void pc_multi_request_bootstrap();

@@ -3,6 +3,17 @@
 
 ;; Player identity is independent from transport role and avatar choice.
 (defconstant MP_MAX_PLAYERS 4)
+(define-perm *mp-session-player-limit* uint (the uint MP_MAX_PLAYERS))
+
+(defun mp-set-session-player-limit! ((player-limit uint))
+  "Configure the total player limit for the next hosted session."
+  (set! *mp-session-player-limit*
+        (cond
+          ((< player-limit (the uint 2)) (the uint 2))
+          ((> player-limit (the uint MP_MAX_PLAYERS)) (the uint MP_MAX_PLAYERS))
+          (else player-limit)))
+  *mp-session-player-limit*)
+
 (defconstant MP_INVALID_PLAYER_ID (the uint #xffffffff))
 (defconstant MP_INVALID_COMPACT_PLAYER_ID (the uint8 #xff))
 (defconstant MP_INVALID_PAD_INDEX (the uint8 #xff))
@@ -407,6 +418,42 @@
                                      (nonzero? (-> control cpad))))))
               (set! (-> control cpad)
                     (-> *cpad-list* cpads target-pad-index)))))))))
+
+(defun mp-player-controller-reassign-local!
+       ((controller mp-player-controller) (new-player-id uint))
+  "Move the local record to a newly assigned reusable session slot."
+  (when (and controller
+             (nonzero? controller)
+             (mp-player-id-valid? new-player-id))
+    (let ((old-player-id (the-as uint (-> controller local-player-id))))
+      (when (and (mp-player-id-valid? old-player-id)
+                 (!= old-player-id new-player-id))
+        (let ((old-record (mp-player-controller-record controller old-player-id))
+              (new-record (mp-player-controller-slot controller new-player-id)))
+          (when (and old-record
+                     (nonzero? old-record)
+                     new-record
+                     (nonzero? new-record))
+            (let ((local-target
+                    (the-as target
+                      (handle->process-safe (-> old-record runtime target-handle)))))
+              (mp-player-controller-release-pad! controller new-record)
+              (mp-player-record-reset! new-record)
+              (mem-copy!
+                (the-as pointer new-record)
+                (the-as pointer old-record)
+                (size-of mp-player-record))
+              (mp-player-record-reset! old-record)
+              (set! (-> new-record identity player-id) (the-as uint32 new-player-id))
+              (set! (-> new-record runtime pad-index) (the uint8 0))
+              (set! (-> controller local-player-id) (the-as uint32 new-player-id))
+              (when (and local-target (nonzero? local-target))
+                (set! (-> local-target player-id) (the-as uint32 new-player-id))
+                (set! (-> new-record runtime target-handle)
+                      (process->handle local-target))
+                (mp-player-controller-bind-target!
+                  controller new-player-id local-target))))))))
+  (mp-player-controller-local-record controller))
 
 (defun mp-player-controller-unbind-target!
        ((controller mp-player-controller) (player-id uint))

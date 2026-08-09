@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "multiplayer_packet.h"
+#include "multiplayer_peer_registry.h"
 #include "multiplayer_port_mapping.h"
 #include "multiplayer_preferences.h"
 #include "multiplayer_protocol.h"
@@ -16,7 +17,6 @@
 #include "enet/enet.h"
 
 namespace {
-constexpr size_t kMaxGameplayPeers = 8;
 constexpr auto kPortMappingRefreshInterval = std::chrono::hours(1);
 constexpr auto kPortMappingRefreshRetryDelay = std::chrono::seconds(5);
 constexpr int kPortMappingRefreshAttempts = 3;
@@ -243,18 +243,18 @@ void disconnect_peer_after_leave(ENetHost* host,
       peer->outgoingDataTotal, peer->packetsSent);
 }
 
-bool send_leave_notice(MultiplayerData& data, MultiplayerLeaveReason reason) {
-  if (!data.initialized || !data.host || !data.security.authenticated()) {
+bool send_leave_notice(MultiplayerData& data, ENetPeer* peer, MultiplayerLeaveReason reason) {
+  auto* security = multiplayer_security_for_peer(data, peer);
+  if (!data.initialized || !data.host || !security || !security->authenticated()) {
     lg::warn(
         "[MP-Leave] Could not send EVENT_LEAVE (reason {}): authenticated transport unavailable "
         "(initialized={}, host={}, security_authenticated={}, queued_packets={}, queued_bytes={}).",
         static_cast<int>(reason), data.initialized, data.host != nullptr,
-        data.security.authenticated(), data.packet_scheduler.queued_packet_count(),
+        security && security->authenticated(), data.packet_scheduler.queued_packet_count(),
         data.packet_scheduler.queued_byte_count());
     return false;
   }
 
-  ENetPeer* peer = data.session_role == 0 ? data.authenticated_peer : data.server_peer;
   if (!peer || peer->state != ENET_PEER_STATE_CONNECTED) {
     lg::warn(
         "[MP-Leave] Could not send EVENT_LEAVE (reason {}): peer unavailable (peer={}, state={}, "
@@ -309,7 +309,9 @@ MultiplayerHostCopyMode multiplayer_host_copy_mode(MultiplayerData& data) {
   return MultiplayerHostCopyMode::ROOM_CODE;
 }
 
-void MultiplayerManager::setup_host(MultiplayerData& data, bool internet_host) {
+void MultiplayerManager::setup_host(MultiplayerData& data,
+                                    bool internet_host,
+                                    uint32_t player_limit) {
   if (data.host)
     disconnect(data);
 
@@ -321,6 +323,13 @@ void MultiplayerManager::setup_host(MultiplayerData& data, bool internet_host) {
       return;
     }
     data.enet_initialized = true;
+  }
+
+  if (!multiplayer_valid_player_limit(player_limit)) {
+    data.host_setup_status = static_cast<int>(MultiplayerHostSetupStatus::START_FAILED);
+    data.join_status = static_cast<int>(MultiplayerStatus::FAILED);
+    lg::error("[Multiplayer] Invalid player limit {}. Expected 2-{}.", player_limit, kMPMaxPlayers);
+    return;
   }
 
   data.host_setup_status = static_cast<int>(MultiplayerHostSetupStatus::STARTING);
@@ -342,17 +351,17 @@ void MultiplayerManager::setup_host(MultiplayerData& data, bool internet_host) {
     return;
   }
 
-  data.host = enet_host_create(&address, kMaxGameplayPeers, 2, 0, 0);
+  data.host = enet_host_create(&address, kMPMaxHostTransportPeers, 2, 0, 0);
   if (data.host) {
-    lg::info("[Multiplayer] Listen server started on port {}.", address.port);
+    lg::info("[Multiplayer] Listen server started on port {} for up to {} players.", address.port,
+             player_limit);
 
     data.session_role = 0;
     data.local_player_id = 0;
     data.host_player_id = data.local_player_id;
-    data.authenticated_player_id = kMPInvalidPlayerId;
-    data.authenticated_peer = nullptr;
+    data.session_player_limit = player_limit;
+    multiplayer_host_peer_reset_all(data);
     data.host_game_active = false;
-    data.pending_handshakes = {};
     data.authentication_failures = {};
     data.next_authentication_failure_slot = 0;
     data.internet_host = internet_host;
@@ -366,8 +375,7 @@ void MultiplayerManager::setup_host(MultiplayerData& data, bool internet_host) {
       if (mp_multiplayer_preferences().automatic_port_mapping) {
         start_port_mapping_worker(data, address.port, address.port);
       } else {
-        data.host_setup_status =
-            static_cast<int>(MultiplayerHostSetupStatus::MAPPING_DISABLED);
+        data.host_setup_status = static_cast<int>(MultiplayerHostSetupStatus::MAPPING_DISABLED);
         lg::info(
             "[Multiplayer] Automatic UDP port mapping disabled; public reachability is "
             "unverified.");
@@ -443,9 +451,10 @@ void MultiplayerManager::setup_client(MultiplayerData& data, const char* ip, int
         static_cast<int>(data.server_peer->state), data.reconnect_attempt_active);
     lg::info("[Multiplayer] Client connecting...");
     data.session_role = 1;
-    data.local_player_id = 1;
-    data.host_player_id = 0;
-    data.authenticated_player_id = kMPInvalidPlayerId;
+    data.local_player_id = kMPInvalidPlayerId;
+    data.host_player_id = kMPInvalidPlayerId;
+    data.session_player_limit = kMPMaxPlayers;
+    data.local_join_identity_sent = false;
     data.join_status = (int)MultiplayerStatus::CONNECTING;
     data.initialized = true;
   } else {
@@ -483,20 +492,20 @@ void MultiplayerManager::disconnect(MultiplayerData& data, bool preserve_reconne
 
   if (data.host) {
     if (data.session_role == 1 && data.server_peer) {
-      const bool leave_sent = send_leave_notice(
-          data, preserve_reconnect_state ? MultiplayerLeaveReason::CLIENT_RECONNECTING
-                                         : MultiplayerLeaveReason::CLIENT_CLOSED);
+      const bool leave_sent =
+          send_leave_notice(data, data.server_peer,
+                            preserve_reconnect_state ? MultiplayerLeaveReason::CLIENT_RECONNECTING
+                                                     : MultiplayerLeaveReason::CLIENT_CLOSED);
       disconnect_peer_after_leave(data.host, data.server_peer,
                                   preserve_reconnect_state ? 0 : kDisconnectReasonClientClosed,
                                   leave_sent);
     } else if (data.session_role == 0) {
-      const bool leave_sent = send_leave_notice(data, MultiplayerLeaveReason::HOST_CLOSED);
-      ENetPeer* authenticated_peer = data.authenticated_peer;
       for (size_t i = 0; i < data.host->peerCount; ++i) {
         ENetPeer* peer = &data.host->peers[i];
         if (peer->state == ENET_PEER_STATE_CONNECTED) {
-          disconnect_peer_after_leave(data.host, peer, kDisconnectReasonHostClosed,
-                                      peer == authenticated_peer && leave_sent);
+          const bool leave_sent =
+              send_leave_notice(data, peer, MultiplayerLeaveReason::HOST_CLOSED);
+          disconnect_peer_after_leave(data.host, peer, kDisconnectReasonHostClosed, leave_sent);
         }
       }
     }
@@ -509,9 +518,8 @@ void MultiplayerManager::disconnect(MultiplayerData& data, bool preserve_reconne
   data.initialized = false;
   data.internet_host = false;
   data.host_game_active = false;
-  data.handshake_started_time = 0;
-  data.authenticated_peer = nullptr;
-  data.pending_handshakes = {};
+  data.client_handshake_started_time = 0;
+  multiplayer_host_peer_reset_all(data);
   data.authentication_failures = {};
   data.next_authentication_failure_slot = 0;
   data.security.reset();
@@ -531,12 +539,35 @@ bool MultiplayerManager::broadcast(MultiplayerData& data,
   return mp_send_packet(data, channel, packet_data, size, flags);
 }
 
-void MultiplayerManager::send_to_peer(ENetPeer* peer,
+bool MultiplayerManager::broadcast_except(MultiplayerData& data,
+                                          ENetPeer* excluded_peer,
+                                          int channel,
+                                          const void* packet_data,
+                                          size_t size,
+                                          ENetPacketFlag flags,
+                                          std::optional<uint32_t> stream_key_override) {
+  if (data.session_role != 0) {
+    return false;
+  }
+  bool queued = false;
+  for (auto& session : data.host_peer_sessions) {
+    if (!session.authenticated || session.peer == excluded_peer || !session.peer ||
+        session.peer->state != ENET_PEER_STATE_CONNECTED) {
+      continue;
+    }
+    queued |= mp_queue_packet_to_peer(data, session.peer, channel, packet_data, size, flags,
+                                      stream_key_override);
+  }
+  return queued;
+}
+
+bool MultiplayerManager::send_to_peer(MultiplayerData& data,
+                                      ENetPeer* peer,
                                       int channel,
                                       const void* packet_data,
                                       size_t size,
                                       ENetPacketFlag flags) {
-  mp_send_packet_to_peer(peer, channel, packet_data, size, flags);
+  return mp_queue_packet_to_peer(data, peer, channel, packet_data, size, flags);
 }
 
 void MultiplayerManager::discovery_responder_func(MultiplayerData* data) {
@@ -570,8 +601,10 @@ void MultiplayerManager::discovery_responder_func(MultiplayerData* data) {
       buffer[bytes_received] = '\0';
       if (std::string(buffer) == DISCOVERY_MAGIC) {
         const uint16_t port = enet_local_port(data->host);
+        const uint32_t current_players = data->authenticated_peer_count.load() + 1;
         std::string reply = std::string(DISCOVERY_MAGIC) + "|" + std::to_string(port) + "|" +
-                            data->security.room_code();
+                            data->security.room_code() + "|" + std::to_string(current_players) +
+                            "|" + std::to_string(data->session_player_limit);
         sendto(sock, reply.c_str(), reply.size(), 0, (sockaddr*)&from_addr, from_len);
         mp_secure_clear_string(reply);
       }

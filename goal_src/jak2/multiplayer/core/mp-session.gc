@@ -72,8 +72,8 @@
   (debug-log *mp-debug-log?* "[MP-Session] Hosting via CLI argument.~%")
   (mp-configure-bridge-version!)
   (if internet-host?
-      (pc-multi-setup-internet-host)
-      (pc-multi-setup-host)
+      (pc-multi-setup-internet-host *mp-session-player-limit*)
+      (pc-multi-setup-host *mp-session-player-limit*)
       )
   (pc-multi-set-status (mp-connection-status in-game))
   (mp-set-local-sync-flag! (the uint 1))
@@ -101,8 +101,8 @@
   (mp-configure-bridge-version!)
   (if (and *pc-settings* (nonzero? (the-as uint *pc-settings*))
            (-> *pc-settings* mp-internet-host?))
-      (pc-multi-setup-internet-host)
-      (pc-multi-setup-host))
+      (pc-multi-setup-internet-host *mp-session-player-limit*)
+      (pc-multi-setup-host *mp-session-player-limit*))
   (mp-set-local-sync-flag! (the uint 1))
   (none))
 
@@ -253,6 +253,10 @@
   (let ((local-player-id (pc-multi-get-local-player-id))
         (host-player-id (pc-multi-get-host-player-id)))
     (when (mp-player-id-valid? local-player-id)
+      (when (and (mp-player-id-valid? (-> *mp-player-controller* local-player-id))
+                 (!= (-> *mp-player-controller* local-player-id) local-player-id))
+        (mp-player-controller-reassign-local!
+          *mp-player-controller* local-player-id))
       (set! (-> *mp-player-controller* local-player-id) local-player-id)
       (when (mp-player-id-valid? host-player-id)
         (set! (-> *mp-player-controller* host-player-id) host-player-id))

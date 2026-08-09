@@ -1,11 +1,9 @@
-#include "game/multiplayer/multiplayer_packet_scheduler.h"
-
-#include "game/multiplayer/multiplayer_stats.h"
-
 #include <cstring>
 #include <vector>
 
 #include "enet/enet.h"
+#include "game/multiplayer/multiplayer_packet_scheduler.h"
+#include "game/multiplayer/multiplayer_stats.h"
 #include "gtest/gtest.h"
 
 namespace {
@@ -44,11 +42,8 @@ TEST(MultiplayerPacketScheduler, HoldsPacketsUntilTheWindowFlushes) {
   std::vector<SentPacket> sent;
   auto* peer = reinterpret_cast<ENetPeer*>(1);
 
-  ASSERT_TRUE(scheduler.enqueue(peer,
-                                0,
-                                make_packet(PacketType::EVENT_GAME, 1),
-                                PacketType::EVENT_GAME,
-                                sizeof(PacketHeader),
+  ASSERT_TRUE(scheduler.enqueue(peer, 0, make_packet(PacketType::EVENT_GAME, 1),
+                                PacketType::EVENT_GAME, sizeof(PacketHeader),
                                 ENET_PACKET_FLAG_RELIABLE));
   EXPECT_TRUE(sent.empty());
   EXPECT_EQ(stats.sent_packets_by_type[static_cast<size_t>(PacketType::EVENT_GAME)], 0u);
@@ -108,6 +103,56 @@ TEST(MultiplayerPacketScheduler, CoalescesOnlyLatestFixedSizeSnapshot) {
   EXPECT_EQ(sent[0].sequence, 2u);
 }
 
+TEST(MultiplayerPacketScheduler, CoalescesPerTargetPeerAndPlayerStream) {
+  MultiplayerPacketScheduler scheduler;
+  MultiplayerStats stats;
+  std::vector<SentPacket> sent;
+  auto* first_peer = reinterpret_cast<ENetPeer*>(1);
+  auto* second_peer = reinterpret_cast<ENetPeer*>(2);
+  PacketPlayerState state = {};
+  state.header.type = PacketType::STATE_UPDATE;
+
+  state.header.sequenceNum = 1;
+  state.player_id = 1;
+  ASSERT_TRUE(scheduler.enqueue_plain(first_peer, 0, &state, sizeof(state), state.header.type,
+                                      sizeof(state), ENET_PACKET_FLAG_UNSEQUENCED));
+  state.header.sequenceNum = 2;
+  state.player_id = 2;
+  ASSERT_TRUE(scheduler.enqueue_plain(first_peer, 0, &state, sizeof(state), state.header.type,
+                                      sizeof(state), ENET_PACKET_FLAG_UNSEQUENCED));
+  state.header.sequenceNum = 3;
+  state.player_id = 1;
+  ASSERT_TRUE(scheduler.enqueue_plain(second_peer, 0, &state, sizeof(state), state.header.type,
+                                      sizeof(state), ENET_PACKET_FLAG_UNSEQUENCED));
+  state.header.sequenceNum = 4;
+  state.player_id = 1;
+  ASSERT_TRUE(scheduler.enqueue_plain(first_peer, 0, &state, sizeof(state), state.header.type,
+                                      sizeof(state), ENET_PACKET_FLAG_UNSEQUENCED));
+
+  EXPECT_EQ(scheduler.queued_packet_count(), 3u);
+  EXPECT_EQ(scheduler.flush(stats, recording_sender(sent)), 3u);
+}
+
+TEST(MultiplayerPacketScheduler, KeepsRelayedImplicitStreamsIndependent) {
+  MultiplayerPacketScheduler scheduler;
+  MultiplayerStats stats;
+  std::vector<SentPacket> sent;
+  auto* peer = reinterpret_cast<ENetPeer*>(1);
+  PacketHeader airlock = {PacketType::AIRLOCK_SYNC, 1};
+
+  ASSERT_TRUE(scheduler.enqueue_plain(peer, 0, &airlock, sizeof(airlock), airlock.type,
+                                      sizeof(airlock), ENET_PACKET_FLAG_UNSEQUENCED, 1));
+  airlock.sequenceNum = 2;
+  ASSERT_TRUE(scheduler.enqueue_plain(peer, 0, &airlock, sizeof(airlock), airlock.type,
+                                      sizeof(airlock), ENET_PACKET_FLAG_UNSEQUENCED, 2));
+  airlock.sequenceNum = 3;
+  ASSERT_TRUE(scheduler.enqueue_plain(peer, 0, &airlock, sizeof(airlock), airlock.type,
+                                      sizeof(airlock), ENET_PACKET_FLAG_UNSEQUENCED, 1));
+
+  EXPECT_EQ(scheduler.queued_packet_count(), 2u);
+  EXPECT_EQ(scheduler.flush(stats, recording_sender(sent)), 2u);
+}
+
 TEST(MultiplayerPacketScheduler, PreservesChunkPacketOrder) {
   MultiplayerPacketScheduler scheduler;
   MultiplayerStats stats;
@@ -157,19 +202,14 @@ TEST(MultiplayerPacketScheduler, CountsAcceptedPacketsOnly) {
   const size_t index = static_cast<size_t>(PacketType::AIRLOCK_SYNC);
 
   ASSERT_TRUE(scheduler.enqueue(peer, 0, make_packet(PacketType::AIRLOCK_SYNC, 1),
-                                PacketType::AIRLOCK_SYNC, 42,
-                                ENET_PACKET_FLAG_UNSEQUENCED));
+                                PacketType::AIRLOCK_SYNC, 42, ENET_PACKET_FLAG_UNSEQUENCED));
   EXPECT_EQ(stats.sent_packets_by_type[index], 0u);
 
-  EXPECT_EQ(scheduler.flush(stats, [](ENetPeer*, int, ENetPacket* packet) {
-              return false;
-            }),
-            0u);
+  EXPECT_EQ(scheduler.flush(stats, [](ENetPeer*, int, ENetPacket* packet) { return false; }), 0u);
   EXPECT_EQ(stats.sent_packets_by_type[index], 0u);
 
   ASSERT_TRUE(scheduler.enqueue(peer, 0, make_packet(PacketType::AIRLOCK_SYNC, 2),
-                                PacketType::AIRLOCK_SYNC, 42,
-                                ENET_PACKET_FLAG_UNSEQUENCED));
+                                PacketType::AIRLOCK_SYNC, 42, ENET_PACKET_FLAG_UNSEQUENCED));
   EXPECT_EQ(scheduler.flush(stats, recording_sender(sent)), 1u);
   EXPECT_EQ(stats.sent_packets_by_type[index], 1u);
   EXPECT_EQ(stats.sent_bytes_by_type[index], 42u);
@@ -183,13 +223,11 @@ TEST(MultiplayerPacketScheduler, CoversEveryApplicationPacketTypeAndRejectsCount
 
   for (uint8_t value = 0; value < static_cast<uint8_t>(PacketType::COUNT); ++value) {
     const auto type = static_cast<PacketType>(value);
-    ASSERT_TRUE(scheduler.enqueue(peer, 0, make_packet(type, value), type,
-                                  sizeof(PacketHeader), ENET_PACKET_FLAG_RELIABLE));
+    ASSERT_TRUE(scheduler.enqueue(peer, 0, make_packet(type, value), type, sizeof(PacketHeader),
+                                  ENET_PACKET_FLAG_RELIABLE));
   }
-  EXPECT_FALSE(scheduler.enqueue(peer, 0, make_packet(PacketType::COUNT, 99),
-                                 PacketType::COUNT, sizeof(PacketHeader),
-                                 ENET_PACKET_FLAG_RELIABLE));
-  EXPECT_EQ(scheduler.flush(stats, recording_sender(sent)),
-            static_cast<size_t>(PacketType::COUNT));
+  EXPECT_FALSE(scheduler.enqueue(peer, 0, make_packet(PacketType::COUNT, 99), PacketType::COUNT,
+                                 sizeof(PacketHeader), ENET_PACKET_FLAG_RELIABLE));
+  EXPECT_EQ(scheduler.flush(stats, recording_sender(sent)), static_cast<size_t>(PacketType::COUNT));
   EXPECT_EQ(sent.size(), static_cast<size_t>(PacketType::COUNT));
 }

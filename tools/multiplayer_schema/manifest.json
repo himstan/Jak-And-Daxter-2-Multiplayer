@@ -13,7 +13,8 @@
     {"name": "PALACE_SQUID_SYNC", "id": 9, "direction": "host_to_client", "reliability": "unreliable", "priority": "traffic", "coalescing": "latest", "chunks": "replace", "max_payload": 1024},
     {"name": "AIRLOCK_SYNC", "id": 10, "direction": "both", "reliability": "unreliable", "priority": "snapshot", "coalescing": "latest", "chunks": "replace", "max_payload": 1024},
     {"name": "WIDOW_SYNC", "id": 11, "direction": "host_to_client", "reliability": "unreliable", "priority": "traffic", "coalescing": "latest", "chunks": "replace", "max_payload": 1024},
-    {"name": "WORLD_STATE", "id": 12, "direction": "host_to_client", "reliability": "unreliable", "priority": "snapshot", "coalescing": "latest", "chunks": "replace", "max_payload": 256}
+    {"name": "WORLD_STATE", "id": 12, "direction": "host_to_client", "reliability": "unreliable", "priority": "snapshot", "coalescing": "latest", "chunks": "replace", "max_payload": 256},
+    {"name": "SESSION_WELCOME", "id": 13, "direction": "host_to_client", "reliability": "reliable", "priority": "reliable", "coalescing": "never", "chunks": "preserve", "max_payload": 12}
   ],
   "events": [
     {"name": "ORB"},

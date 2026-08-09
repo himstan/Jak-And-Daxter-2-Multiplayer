@@ -1,16 +1,18 @@
 #include "multiplayer_packet.h"
 
+#include <cmath>
+#include <limits>
+
 #include "common/log/log.h"
+
 #include "game/multiplayer/generated/multiplayer_schema_generated.h"
+#include "game/multiplayer/multiplayer_peer_registry.h"
 #include "game/multiplayer/multiplayer_protocol.h"
 #include "game/multiplayer/multiplayer_security.h"
 #include "game/multiplayer/multiplayer_session.h"
 #include "game/multiplayer/multiplayer_stats.h"
 #include "game/multiplayer/multiplayer_types.h"
 #include "game/multiplayer/multiplayer_wire_codec.h"
-
-#include <cmath>
-#include <limits>
 
 int16_t mp_pack_float_q(float value) {
   if (!std::isfinite(value)) {
@@ -77,9 +79,8 @@ PacketType PacketView::type() const {
     return PacketType::COUNT;
   }
   const uint8_t raw_type = m_packet->data[0];
-  return raw_type < static_cast<uint8_t>(PacketType::COUNT)
-             ? static_cast<PacketType>(raw_type)
-             : PacketType::COUNT;
+  return raw_type < static_cast<uint8_t>(PacketType::COUNT) ? static_cast<PacketType>(raw_type)
+                                                            : PacketType::COUNT;
 }
 
 uint32_t PacketView::sequence_num() const {
@@ -129,28 +130,56 @@ bool mp_send_packet(MultiplayerData& data,
   }
 
   const PacketType packet_type = static_cast<PacketType>(*static_cast<const uint8_t*>(packet_data));
-  const auto* descriptor = multiplayer::schema::packet_descriptor(static_cast<uint8_t>(packet_type));
+  const auto* descriptor =
+      multiplayer::schema::packet_descriptor(static_cast<uint8_t>(packet_type));
   if (!descriptor || size - kPacketHeaderWireSize > descriptor->max_payload) {
     return false;
   }
 
-  channel = (flags & ENET_PACKET_FLAG_RELIABLE)
-                ? static_cast<int>(MultiplayerChannel::CONTROL)
-                : static_cast<int>(MultiplayerChannel::STATE);
+  channel = (flags & ENET_PACKET_FLAG_RELIABLE) ? static_cast<int>(MultiplayerChannel::CONTROL)
+                                                : static_cast<int>(MultiplayerChannel::STATE);
 
-  ENetPeer* target_peer = nullptr;
-  if (data.session_role == 0) {
-    target_peer = data.authenticated_peer;
-  } else if (data.session_role == 1) {
-    target_peer = data.server_peer;
+  if (data.session_role == 1) {
+    return mp_queue_packet_to_peer(data, data.server_peer, channel, packet_data, size, flags);
   }
-
-  if (!target_peer || target_peer->state != ENET_PEER_STATE_CONNECTED) {
+  if (data.session_role != 0) {
     return false;
   }
 
-  return data.packet_scheduler.enqueue_plain(
-      target_peer, channel, packet_data, size, packet_type, size, flags);
+  bool queued_any = false;
+  for (auto& session : data.host_peer_sessions) {
+    if (!session.authenticated || !session.peer ||
+        session.peer->state != ENET_PEER_STATE_CONNECTED) {
+      continue;
+    }
+    queued_any = mp_queue_packet_to_peer(data, session.peer, channel, packet_data, size, flags) ||
+                 queued_any;
+  }
+  return queued_any;
+}
+
+bool mp_queue_packet_to_peer(MultiplayerData& data,
+                             ENetPeer* peer,
+                             int channel,
+                             const void* packet_data,
+                             size_t size,
+                             ENetPacketFlag flags,
+                             std::optional<uint32_t> stream_key_override) {
+  if (!data.host || !peer || peer->state != ENET_PEER_STATE_CONNECTED || !packet_data ||
+      size < kPacketHeaderWireSize || size > multiplayer::schema::kMaxPacketSize ||
+      !multiplayer_peer_is_authenticated(data, peer)) {
+    return false;
+  }
+  const PacketType packet_type = static_cast<PacketType>(*static_cast<const uint8_t*>(packet_data));
+  const auto* descriptor =
+      multiplayer::schema::packet_descriptor(static_cast<uint8_t>(packet_type));
+  if (!descriptor || size - kPacketHeaderWireSize > descriptor->max_payload) {
+    return false;
+  }
+  channel = (flags & ENET_PACKET_FLAG_RELIABLE) ? static_cast<int>(MultiplayerChannel::CONTROL)
+                                                : static_cast<int>(MultiplayerChannel::STATE);
+  return data.packet_scheduler.enqueue_plain(peer, channel, packet_data, size, packet_type, size,
+                                             flags, stream_key_override);
 }
 
 bool mp_send_packet_immediately(MultiplayerData& data,
@@ -165,17 +194,18 @@ bool mp_send_packet_immediately(MultiplayerData& data,
   }
 
   const PacketType packet_type = static_cast<PacketType>(*static_cast<const uint8_t*>(packet_data));
-  const auto* descriptor = multiplayer::schema::packet_descriptor(static_cast<uint8_t>(packet_type));
+  const auto* descriptor =
+      multiplayer::schema::packet_descriptor(static_cast<uint8_t>(packet_type));
   if (!descriptor || size - kPacketHeaderWireSize > descriptor->max_payload) {
     return false;
   }
 
-  channel = (flags & ENET_PACKET_FLAG_RELIABLE)
-                ? static_cast<int>(MultiplayerChannel::CONTROL)
-                : static_cast<int>(MultiplayerChannel::STATE);
+  channel = (flags & ENET_PACKET_FLAG_RELIABLE) ? static_cast<int>(MultiplayerChannel::CONTROL)
+                                                : static_cast<int>(MultiplayerChannel::STATE);
 
+  auto* security = multiplayer_security_for_peer(data, peer);
   MultiplayerDatagram secured;
-  if (!data.security.seal(data.session_role, packet_type, packet_data, size, secured)) {
+  if (!security || !security->seal(data.session_role, packet_type, packet_data, size, secured)) {
     if (packet_type == PacketType::EVENT_LEAVE) {
       lg::warn("[MP-Leave] Secure seal rejected EVENT_LEAVE (peer_state={}, plaintext_bytes={}).",
                static_cast<int>(peer->state), size);
@@ -194,9 +224,11 @@ bool mp_send_packet_immediately(MultiplayerData& data,
 
   const int send_result = enet_peer_send(peer, channel, packet);
   if (packet_type == PacketType::EVENT_LEAVE) {
-    lg::info("[MP-Leave] enet_peer_send(EVENT_LEAVE) result={} (channel={}, secure_bytes={}, peer_state={}, reliable_in_transit_before_flush={}, waiting_data={}).",
-             send_result, channel, secured.size, static_cast<int>(peer->state),
-             peer->reliableDataInTransit, peer->totalWaitingData);
+    lg::info(
+        "[MP-Leave] enet_peer_send(EVENT_LEAVE) result={} (channel={}, secure_bytes={}, "
+        "peer_state={}, reliable_in_transit_before_flush={}, waiting_data={}).",
+        send_result, channel, secured.size, static_cast<int>(peer->state),
+        peer->reliableDataInTransit, peer->totalWaitingData);
   }
   if (send_result != 0) {
     enet_packet_destroy(packet);
@@ -210,22 +242,16 @@ bool mp_send_packet_immediately(MultiplayerData& data,
 size_t mp_flush_packet_window(MultiplayerData& data) {
   return data.packet_scheduler.flush_plain(
       data.stats,
-      [&data](ENetPeer* peer,
-              int channel,
-              const uint8_t* plaintext,
-              size_t plaintext_size,
-              PacketType packet_type,
-              size_t,
-              ENetPacketFlag flags) {
-        if (!peer || peer->state != ENET_PEER_STATE_CONNECTED || !plaintext || plaintext_size == 0) {
+      [&data](ENetPeer* peer, int channel, const uint8_t* plaintext, size_t plaintext_size,
+              PacketType packet_type, size_t, ENetPacketFlag flags) {
+        if (!peer || peer->state != ENET_PEER_STATE_CONNECTED || !plaintext ||
+            plaintext_size == 0) {
           return false;
         }
+        auto* security = multiplayer_security_for_peer(data, peer);
         MultiplayerDatagram secured;
-        if (!data.security.seal(data.session_role,
-                                packet_type,
-                                plaintext,
-                                plaintext_size,
-                                secured)) {
+        if (!security ||
+            !security->seal(data.session_role, packet_type, plaintext, plaintext_size, secured)) {
           return false;
         }
         ENetPacket* packet = enet_packet_create(secured.bytes.data(), secured.size, flags);
@@ -238,14 +264,6 @@ size_t mp_flush_packet_window(MultiplayerData& data) {
         }
         return true;
       });
-}
-
-bool mp_send_packet_to_peer(ENetPeer* peer,
-                            int channel,
-                            const void* packet_data,
-                            size_t size,
-                            ENetPacketFlag flags) {
-  return mp_send_raw_packet_to_peer(peer, channel, packet_data, size, flags);
 }
 
 bool mp_send_raw_packet_to_peer(ENetPeer* peer,

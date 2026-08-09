@@ -1,9 +1,8 @@
+#include <vector>
+
 #include "game/multiplayer/multiplayer_protocol.h"
 #include "game/multiplayer/sync/event_sync.h"
-
 #include "gtest/gtest.h"
-
-#include <vector>
 
 TEST(MultiplayerProtocol, BootstrapKeepsWireIdentityAndLayout) {
   EXPECT_EQ(static_cast<uint8_t>(PacketType::BOOTSTRAP), 4u);
@@ -79,8 +78,8 @@ TEST(MultiplayerEventCodec, ZeroLengthUsesTheFixedPayload) {
 
 TEST(MultiplayerEventCodec, StampsLocalSourceAndRejectsSpoofedInboundSources) {
   MultiplayerData data;
+  data.session_role = 0;
   data.local_player_id = 3;
-  data.authenticated_player_id = 2;
   MPEventBufferGOAL events = {};
   events.out_count = 1;
   events.out_events[0].etype = 11;
@@ -99,14 +98,14 @@ TEST(MultiplayerEventCodec, StampsLocalSourceAndRejectsSpoofedInboundSources) {
   ENetPacket packet = {};
   packet.data = encoded.data();
   packet.dataLength = encoded.size();
-  mp_handle_game_event_packet(data, &packet);
+  mp_handle_game_event_packet(data, &packet, 2);
   EXPECT_EQ(data.inbound_events.size(), 1u);
 
   remote.source_player_id = 1;
   ASSERT_TRUE(mp_encode_game_event(remote, 8, encoded));
   packet.data = encoded.data();
   packet.dataLength = encoded.size();
-  mp_handle_game_event_packet(data, &packet);
+  mp_handle_game_event_packet(data, &packet, 2);
   EXPECT_EQ(data.inbound_events.size(), 1u);
 
   MPEventBufferGOAL received = {};

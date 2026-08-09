@@ -1,11 +1,10 @@
-#include "game/multiplayer/multiplayer_stats.h"
-
 #include <array>
 #include <cstdint>
 #include <cstring>
 #include <limits>
 
 #include "enet/enet.h"
+#include "game/multiplayer/multiplayer_stats.h"
 #include "gtest/gtest.h"
 
 TEST(MultiplayerStats, UsesElapsedWireRateWindowsAndAccumulatesTotals) {
@@ -85,7 +84,8 @@ TEST(MultiplayerStats, WireTotalsRemain64BitAcrossLongSessions) {
 TEST(MultiplayerStats, TracksWidowSyncAndUsesPacketTypeCountBounds) {
   EXPECT_TRUE(multiplayer_stats_valid_packet_type(11));
   EXPECT_TRUE(multiplayer_stats_valid_packet_type(12));
-  EXPECT_FALSE(multiplayer_stats_valid_packet_type(13));
+  EXPECT_TRUE(multiplayer_stats_valid_packet_type(13));
+  EXPECT_FALSE(multiplayer_stats_valid_packet_type(14));
   EXPECT_FALSE(multiplayer_stats_valid_packet_type(-1));
 
   PacketHeader header = {PacketType::WIDOW_SYNC, 17};

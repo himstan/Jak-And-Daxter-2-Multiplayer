@@ -8,8 +8,8 @@
 #include <string>
 #include <thread>
 
-#include "multiplayer_port_mapping.h"
 #include "multiplayer_packet_scheduler.h"
+#include "multiplayer_port_mapping.h"
 #include "multiplayer_protocol.h"
 #include "multiplayer_ring_buffer.h"
 #include "multiplayer_security.h"
@@ -45,6 +45,20 @@ struct CachedPlayerState {
   uint32_t last_sequence_num = 0;
   uint32_t last_turret_sequence_num = 0;
   MPVehicleState veh_state;
+};
+
+struct HostPeerSession {
+  struct _ENetPeer* peer = nullptr;
+  MultiplayerSecurity security;
+  uint32_t player_id = kMPInvalidPlayerId;
+  uint32_t handshake_deadline = 0;
+  uint32_t last_receive_time = 0;
+  uint32_t last_bootstrap_send_time = 0;
+  bool authenticated = false;
+  bool identity_ready = false;
+  bool local_identity_sent = false;
+  bool bootstrap_pending = false;
+  bool bootstrap_sent_once = false;
 };
 
 struct MPEvent {
@@ -267,8 +281,7 @@ struct MPWidowSyncBufferGOAL {
   uint64_t last_sync_time;
   uint8_t pad[8];
 };
-static_assert(sizeof(MPWidowSyncBufferGOAL) == 112,
-              "MPWidowSyncBufferGOAL must match GOAL");
+static_assert(sizeof(MPWidowSyncBufferGOAL) == 112, "MPWidowSyncBufferGOAL must match GOAL");
 
 struct MPAirlockStateGOAL {
   uint32_t airlock_aid;
@@ -305,29 +318,25 @@ struct MultiplayerData {
     uint8_t count = 0;
   };
 
-  struct PendingHandshake {
-    struct _ENetPeer* peer = nullptr;
-    uint32_t deadline = 0;
-  };
-
   bool initialized = false;
   bool enet_initialized = false;
   struct _ENetHost* host = nullptr;
-  struct _ENetPeer* server_peer = nullptr;         // Only used if we are a client
-  struct _ENetPeer* authenticated_peer = nullptr;  // Only used if we are a host
+  struct _ENetPeer* server_peer = nullptr;  // Only used if we are a client
   int session_role = -1;
   uint32_t local_player_id = kMPInvalidPlayerId;
   uint32_t host_player_id = kMPInvalidPlayerId;
-  uint32_t authenticated_player_id = kMPInvalidPlayerId;
+  uint32_t session_player_limit = kMPMaxPlayers;
+  std::atomic<uint32_t> authenticated_peer_count{0};
   uint32_t sequence_num = 0;
   uint32_t last_out_event_seq = 0;
+  std::array<uint32_t, kMPMaxPlayers> last_event_sequence_by_player = {};
   MultiplayerSecurity security;
+  std::array<HostPeerSession, kMPMaxHostTransportPeers> host_peer_sessions = {};
   bool internet_host = false;
   bool host_game_active = false;
-  uint32_t handshake_started_time = 0;
+  uint32_t client_handshake_started_time = 0;
   std::array<AuthenticationFailure, 16> authentication_failures = {};
   size_t next_authentication_failure_slot = 0;
-  std::array<PendingHandshake, 8> pending_handshakes = {};
   std::string staged_invite;
   int staged_invite_status = 0;
   std::string reconnect_invite;
@@ -344,7 +353,7 @@ struct MultiplayerData {
   MultiplayerRingBuffer<PacketGameEvent, 64> inbound_events;
   MPEnemySyncBufferGOAL remote_enemy_buffer;
   uint32_t last_enemy_sync_time = 0;
-  uint32_t last_enemy_sequence = 0;
+  std::array<uint32_t, kMPMaxPlayers> last_enemy_sequence_by_player = {};
 
   MPTrafficSyncBufferGOAL traffic_buffer;
   uint32_t last_traffic_sync_time = 0;
@@ -369,7 +378,7 @@ struct MultiplayerData {
 
   MPAirlockStateTableGOAL remote_airlock_table = {};
   uint32_t last_airlock_sync_time = 0;
-  uint32_t last_remote_airlock_sequence = 0;
+  std::array<uint32_t, kMPMaxPlayers> last_airlock_sequence_by_player = {};
 
   // New fields for joining/searching
   std::atomic<int> join_status{
@@ -385,15 +394,12 @@ struct MultiplayerData {
   std::thread discovery_thread;
   std::thread scanner_thread;
   std::atomic<bool> host_discovery_active{false};
-  std::atomic<bool> pending_bootstrap{false};
-  bool join_identity_sent = false;
-  bool pending_bootstrap_sent_once = false;
-  uint32_t last_bootstrap_send_time = 0;
+  bool local_join_identity_sent = false;
   uint32_t last_event_queue_debug_time = 0;
   uint32_t last_event_receive_debug_time = 0;
 
   // Reconnection tracking
-  uint32_t last_authenticated_receive_time = 0;
+  uint32_t server_last_receive_time = 0;
   bool reconnect_attempt_active = false;
   bool reconnect_waiting_for_bootstrap = false;
   uint32_t reconnect_attempt_count = 0;

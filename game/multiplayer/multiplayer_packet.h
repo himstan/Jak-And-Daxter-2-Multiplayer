@@ -1,14 +1,13 @@
 #pragma once
 
-#include "game/multiplayer/multiplayer_protocol.h"
-#include "game/multiplayer/multiplayer_types.h"
-
-#include "enet/enet.h"
-
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <optional>
+
+#include "enet/enet.h"
+#include "game/multiplayer/multiplayer_protocol.h"
+#include "game/multiplayer/multiplayer_types.h"
 
 int16_t mp_pack_float_q(float value);
 float mp_unpack_float_q(int16_t value);
@@ -61,6 +60,13 @@ bool mp_send_packet(MultiplayerData& data,
                     const void* packet_data,
                     size_t size,
                     ENetPacketFlag flags);
+bool mp_queue_packet_to_peer(MultiplayerData& data,
+                             ENetPeer* peer,
+                             int channel,
+                             const void* packet_data,
+                             size_t size,
+                             ENetPacketFlag flags,
+                             std::optional<uint32_t> stream_key_override = std::nullopt);
 bool mp_send_packet_immediately(MultiplayerData& data,
                                 ENetPeer* peer,
                                 int channel,
@@ -68,11 +74,6 @@ bool mp_send_packet_immediately(MultiplayerData& data,
                                 size_t size,
                                 ENetPacketFlag flags);
 size_t mp_flush_packet_window(MultiplayerData& data);
-bool mp_send_packet_to_peer(ENetPeer* peer,
-                            int channel,
-                            const void* packet_data,
-                            size_t size,
-                            ENetPacketFlag flags);
 bool mp_send_raw_packet_to_peer(ENetPeer* peer,
                                 int channel,
                                 const void* packet_data,

@@ -3,6 +3,7 @@
 #include <cstring>
 #include <limits>
 #include <string>
+#include <vector>
 
 #include "common/cross_sockets/XSocket.h"
 #include "common/goal_constants.h"
@@ -16,6 +17,7 @@
 #include "game/multiplayer/multiplayer_direct_connect.h"
 #include "game/multiplayer/multiplayer_manager.h"
 #include "game/multiplayer/multiplayer_packet.h"
+#include "game/multiplayer/multiplayer_peer_registry.h"
 #include "game/multiplayer/multiplayer_port_mapping.h"
 #include "game/multiplayer/multiplayer_preferences.h"
 #include "game/multiplayer/multiplayer_protocol.h"
@@ -28,9 +30,9 @@
 #include "game/multiplayer/sync/enemy_sync.h"
 #include "game/multiplayer/sync/event_sync.h"
 #include "game/multiplayer/sync/palace_squid_sync.h"
-#include "game/multiplayer/sync/widow_sync.h"
 #include "game/multiplayer/sync/player_sync.h"
 #include "game/multiplayer/sync/traffic_sync.h"
+#include "game/multiplayer/sync/widow_sync.h"
 #include "game/multiplayer/vehicle/multiplayer_vehicle.h"
 
 #include "third-party/SDL/include/SDL3/SDL.h"
@@ -40,10 +42,7 @@ constexpr u32 kMinGoalPointer = 0x1000;
 
 bool authentication_address_banned(MultiplayerData& data, uint32_t address, uint32_t now);
 void record_authentication_failure(MultiplayerData& data, uint32_t address, uint32_t now);
-void add_pending_handshake(MultiplayerData& data, ENetPeer* peer, uint32_t now);
-void remove_pending_handshake(MultiplayerData& data, ENetPeer* peer);
 void expire_pending_handshakes(MultiplayerData& data, uint32_t now);
-void disconnect_other_pending_peers(MultiplayerData& data, ENetPeer* authenticated);
 
 std::string enet_endpoint_string(const ENetAddress& address) {
   char host[64] = {};
@@ -58,13 +57,7 @@ std::string enet_peer_endpoint_string(const ENetPeer* peer) {
 }
 
 size_t pending_handshake_count(const MultiplayerData& data) {
-  size_t count = 0;
-  for (const auto& pending : data.pending_handshakes) {
-    if (pending.peer) {
-      ++count;
-    }
-  }
-  return count;
+  return multiplayer_host_pending_peer_count(data);
 }
 
 uint16_t enet_local_port(const ENetHost* host) {
@@ -120,43 +113,106 @@ const char* goal_string_data(u32 ptr) {
   return value[str->len] == '\0' ? value : nullptr;
 }
 
-void handle_receive_packet(MultiplayerData& data,
+bool packet_is_host_relayed(PacketType type) {
+  switch (type) {
+    case PacketType::STATE_UPDATE:
+    case PacketType::EVENT_GAME:
+    case PacketType::ENEMY_SYNC:
+    case PacketType::TURRET_SYNC:
+    case PacketType::AIRLOCK_SYNC:
+    case PacketType::EVENT_JOIN:
+    case PacketType::EVENT_LEAVE:
+      return true;
+    default:
+      return false;
+  }
+}
+
+void relay_client_packet(MultiplayerData& data,
+                         ENetPeer* sender,
+                         uint32_t sender_player_id,
+                         int channel,
+                         const ENetPacket* packet) {
+  if (!packet || packet->dataLength < kPacketHeaderWireSize) {
+    return;
+  }
+  std::vector<uint8_t> relayed(packet->data, packet->data + packet->dataLength);
+  const uint32_t relay_sequence = ++data.sequence_num;
+  memcpy(relayed.data() + sizeof(uint8_t), &relay_sequence, sizeof(relay_sequence));
+  MultiplayerManager::broadcast_except(data, sender, channel, relayed.data(), relayed.size(),
+                                       (packet->flags & ENET_PACKET_FLAG_RELIABLE)
+                                           ? ENET_PACKET_FLAG_RELIABLE
+                                           : ENET_PACKET_FLAG_UNSEQUENCED,
+                                       sender_player_id);
+}
+
+bool handle_session_welcome(MultiplayerData& data, const ENetPacket* packet) {
+  const auto welcome =
+      PacketView(packet).as_exact<PacketSessionWelcome>(PacketType::SESSION_WELCOME);
+  if (data.session_role != 1 || !welcome || !mp_valid_player_id(welcome->player_id) ||
+      !mp_valid_player_id(welcome->host_player_id) ||
+      welcome->player_id == welcome->host_player_id ||
+      !multiplayer_valid_player_limit(welcome->player_limit)) {
+    return false;
+  }
+  data.local_player_id = welcome->player_id;
+  data.host_player_id = welcome->host_player_id;
+  data.session_player_limit = welcome->player_limit;
+  data.local_join_identity_sent = false;
+  data.client_handshake_started_time = 0;
+  data.server_last_receive_time = enet_time_get();
+  data.connection_phase = static_cast<int>(MultiplayerConnectionPhase::CONNECTED);
+  data.connection_failure = static_cast<int>(MultiplayerConnectionFailure::NONE);
+  multiplayer_note_client_reconnect_authenticated(data);
+  data.join_status = static_cast<int>(MultiplayerStatus::CONNECTED_LOBBY);
+  lg::info("[Multiplayer] Session assignment received: local={}, host={}, limit={}.",
+           data.local_player_id, data.host_player_id, data.session_player_limit);
+  return true;
+}
+
+bool handle_receive_packet(MultiplayerData& data,
                            ENetPeer* sender,
+                           uint32_t sender_player_id,
                            const ENetPacket* packet,
                            MPPlayerControllerGOAL* controller,
                            MPWorldSyncStateGOAL* world,
                            MPBootstrapSyncStateGOAL* bootstrap,
-                           uint32_t current_time) {
+                           uint32_t current_time,
+                           int channel) {
   PacketView view(packet);
   if (!view.has_header()) {
-    return;
+    return false;
   }
 
   const PacketType packet_type = view.type();
-  const auto* descriptor = multiplayer::schema::packet_descriptor(static_cast<uint8_t>(packet_type));
+  const auto* descriptor =
+      multiplayer::schema::packet_descriptor(static_cast<uint8_t>(packet_type));
   if (!descriptor || view.size() - kPacketHeaderWireSize > descriptor->max_payload) {
-    return;
+    return false;
   }
   const int sender_role = data.session_role == 0 ? 1 : 0;
   if (!mp_packet_direction_allowed(packet_type, sender_role)) {
-    return;
+    return false;
   }
 
+  bool accepted = false;
+  bool disconnect_sender_after_relay = false;
   switch (packet_type) {
     case PacketType::STATE_UPDATE:
-      mp_handle_player_state_packet(data, packet, current_time);
+      accepted = mp_handle_player_state_packet(data, packet, sender_player_id, current_time);
       break;
     case PacketType::EVENT_GAME:
-      mp_handle_game_event_packet(data, packet);
+      accepted = mp_handle_game_event_packet(data, packet, sender_player_id);
       break;
     case PacketType::ENEMY_SYNC:
-      mp_handle_enemy_sync_packet(data, packet, current_time);
+      accepted = mp_handle_enemy_sync_packet(data, packet, sender_player_id, current_time);
       break;
     case PacketType::PEDESTRIAN_SYNC: {
       ENetEvent traffic_event = {};
       traffic_event.type = ENET_EVENT_TYPE_RECEIVE;
       traffic_event.packet = const_cast<ENetPacket*>(packet);
       handle_pedestrian_sync_packet(traffic_event, data);
+      accepted = true;
       break;
     }
     case PacketType::VEHICLE_SYNC: {
@@ -164,34 +220,42 @@ void handle_receive_packet(MultiplayerData& data,
       traffic_event.type = ENET_EVENT_TYPE_RECEIVE;
       traffic_event.packet = const_cast<ENetPacket*>(packet);
       handle_vehicle_sync_packet(traffic_event, data);
+      accepted = true;
       break;
     }
     case PacketType::TURRET_SYNC:
-      mp_handle_turret_state_packet(data, packet);
+      accepted = mp_handle_turret_state_packet(data, packet, sender_player_id);
       break;
     case PacketType::PALACE_SQUID_SYNC:
       mp_handle_palace_squid_sync_packet(data, packet, current_time);
+      accepted = true;
       break;
     case PacketType::WIDOW_SYNC:
       mp_handle_widow_sync_packet(data, packet, current_time);
+      accepted = true;
       break;
     case PacketType::AIRLOCK_SYNC:
-      mp_handle_airlock_sync_packet(data, packet, current_time);
+      accepted = mp_handle_airlock_sync_packet(data, packet, sender_player_id, current_time);
       break;
     case PacketType::BOOTSTRAP: {
       static uint32_t last_bootstrap_log_time = 0;
       if (last_bootstrap_log_time == 0 || current_time - last_bootstrap_log_time >= 1000) {
-        lg::info("[MP-Reconnect] Received BOOTSTRAP from {} (status={}, reconnect_waiting={}, pending={}).",
+        lg::info("[MP-Reconnect] Received BOOTSTRAP from {} (status={}, reconnect_waiting={}).",
                  enet_peer_endpoint_string(sender), data.join_status.load(),
-                 data.reconnect_waiting_for_bootstrap, data.pending_bootstrap.load());
+                 data.reconnect_waiting_for_bootstrap);
         last_bootstrap_log_time = current_time;
       }
       mp_handle_bootstrap_packet(packet, world, bootstrap);
+      accepted = true;
       break;
     }
-    case PacketType::EVENT_JOIN:
-      mp_handle_join_packet(data, packet, controller);
+    case PacketType::EVENT_JOIN: {
+      accepted = mp_handle_join_packet(data, packet, sender_player_id, controller);
+      if (accepted && data.session_role == 0) {
+        mp_seed_peer_roster(data, sender, controller);
+      }
       break;
+    }
     case PacketType::EVENT_LEAVE: {
       const auto leave = view.as_exact<PacketLeave>(PacketType::EVENT_LEAVE);
       if (!leave) {
@@ -199,30 +263,38 @@ void handle_receive_packet(MultiplayerData& data,
                  enet_peer_endpoint_string(sender), view.size());
         break;
       }
-      if (!mp_player_id_matches_authenticated_peer(data, leave->player_id)) {
+      if (!mp_player_id_allowed_from_sender(data, sender_player_id, leave->player_id)) {
         lg::warn("[MP-Leave] Ignoring spoofed player id {} from {}.", leave->player_id,
                  enet_peer_endpoint_string(sender));
         break;
       }
-      const bool authenticated_before = data.security.authenticated();
-      const bool expected_peer_before =
-          data.session_role == 0 ? sender == data.authenticated_peer : sender == data.server_peer;
-      bool accepted = false;
-      if (data.session_role == 0) {
-        accepted = multiplayer_handle_client_leave(data, sender, leave->reason);
-      } else {
+      if (data.session_role == 1 && leave->player_id == data.host_player_id) {
         accepted = multiplayer_handle_host_leave(data, sender, leave->reason);
+      } else {
+        accepted = true;
       }
       if (accepted) {
         mp_clear_player_slot(data, controller, leave->player_id);
+        if (data.session_role == 0) {
+          if (auto* session = multiplayer_host_peer_find(data, sender)) {
+            session->identity_ready = false;
+            disconnect_sender_after_relay = true;
+          }
+        }
       }
-      lg::info("[MP-Leave] Received EVENT_LEAVE from {} (role={}, reason={}, authenticated={}, expected_peer={}, accepted={}).",
-               enet_peer_endpoint_string(sender), data.session_role, static_cast<int>(leave->reason),
-               authenticated_before, expected_peer_before, accepted);
+      lg::info(
+          "[MP-Leave] Received EVENT_LEAVE from {} (role={}, reason={}, authenticated={}, "
+          "expected_peer={}, accepted={}).",
+          enet_peer_endpoint_string(sender), data.session_role, static_cast<int>(leave->reason),
+          true, true, accepted);
       break;
     }
     case PacketType::WORLD_STATE:
       mp_handle_world_state_packet(data, packet, world);
+      accepted = true;
+      break;
+    case PacketType::SESSION_WELCOME:
+      accepted = handle_session_welcome(data, packet);
       break;
     default:
       if (current_time - data.last_traffic_short_packet_debug_time > 2000) {
@@ -232,6 +304,13 @@ void handle_receive_packet(MultiplayerData& data,
       }
       break;
   }
+  if (accepted && data.session_role == 0 && packet_is_host_relayed(packet_type)) {
+    relay_client_packet(data, sender, sender_player_id, channel, packet);
+  }
+  if (disconnect_sender_after_relay) {
+    enet_peer_disconnect_later(sender, kDisconnectReasonClientClosed);
+  }
+  return accepted;
 }
 
 void poll_network(MultiplayerData& data,
@@ -240,7 +319,7 @@ void poll_network(MultiplayerData& data,
                   MPBootstrapSyncStateGOAL* bootstrap) {
   data.stats.calculate_rates(data.host);
 
-  ENetEvent event;
+  ENetEvent event = {};
   uint32_t current_time = enet_time_get();
   static uint32_t last_security_rejected_log_time = 0;
 
@@ -254,26 +333,22 @@ void poll_network(MultiplayerData& data,
 
     switch (event.type) {
       case ENET_EVENT_TYPE_RECEIVE: {
-        if (data.session_role == 0 && data.authenticated_peer &&
-            event.peer != data.authenticated_peer) {
-          if (current_time - last_security_rejected_log_time >= 2000) {
-            lg::warn("[MP-Handshake] Ignoring packet from non-authenticated peer {} while authenticated peer is {}.",
-                     enet_peer_endpoint_string(event.peer),
-                     enet_peer_endpoint_string(data.authenticated_peer));
-            last_security_rejected_log_time = current_time;
-          }
+        auto* security = multiplayer_security_for_peer(data, event.peer);
+        if (!security) {
           enet_packet_destroy(event.packet);
           break;
         }
         SecurityReceiveResult secured =
-            data.security.receive(data.session_role, event.packet->data, event.packet->dataLength);
+            security->receive(data.session_role, event.packet->data, event.packet->dataLength);
         if (secured.kind != SecurityReceiveKind::GAMEPLAY) {
           if (secured.kind != SecurityReceiveKind::REJECTED ||
               current_time - last_security_rejected_log_time >= 2000) {
-            lg::info("[MP-Handshake] Received {} packet from {} (bytes={}, response={}, authenticated={}, status={}, reconnect_active={}).",
-                     security_receive_kind_name(secured.kind), enet_peer_endpoint_string(event.peer),
-                     event.packet->dataLength, secured.response.size, data.security.authenticated(),
-                     data.join_status.load(), data.reconnect_attempt_active);
+            lg::info(
+                "[MP-Handshake] Received {} packet from {} (bytes={}, response={}, "
+                "authenticated={}, status={}, reconnect_active={}).",
+                security_receive_kind_name(secured.kind), enet_peer_endpoint_string(event.peer),
+                event.packet->dataLength, secured.response.size, security->authenticated(),
+                data.join_status.load(), data.reconnect_attempt_active);
             if (secured.kind == SecurityReceiveKind::REJECTED) {
               last_security_rejected_log_time = current_time;
             }
@@ -285,140 +360,194 @@ void poll_network(MultiplayerData& data,
               event.peer, static_cast<int>(MultiplayerChannel::CONTROL),
               secured.response.bytes.data(), secured.response.size, ENET_PACKET_FLAG_RELIABLE);
           if (!response_sent) {
-            lg::warn("[MP-Handshake] Failed sending {} response to {} ({} bytes, peer_state={}, reliable_in_transit={}).",
-                     security_receive_kind_name(secured.kind), enet_peer_endpoint_string(event.peer),
-                     secured.response.size, static_cast<int>(event.peer->state),
-                     event.peer->reliableDataInTransit);
+            lg::warn(
+                "[MP-Handshake] Failed sending {} response to {} ({} bytes, peer_state={}, "
+                "reliable_in_transit={}).",
+                security_receive_kind_name(secured.kind), enet_peer_endpoint_string(event.peer),
+                secured.response.size, static_cast<int>(event.peer->state),
+                event.peer->reliableDataInTransit);
           }
         }
         if (!response_sent) {
-          lg::warn("[MP-Handshake] Disconnecting peer {} because the secure response could not be sent.",
-                   enet_peer_endpoint_string(event.peer));
+          lg::warn(
+              "[MP-Handshake] Disconnecting peer {} because the secure response could not be sent.",
+              enet_peer_endpoint_string(event.peer));
           enet_peer_disconnect_now(event.peer, 0);
         } else if (secured.kind == SecurityReceiveKind::HANDSHAKE && data.session_role == 1 &&
-                   !data.security.authenticated()) {
-          lg::info("[MP-Handshake] Client received the server challenge from {}; secure proof response accepted by ENet ({} bytes).",
-                   enet_peer_endpoint_string(event.peer), secured.response.size);
+                   !security->authenticated()) {
+          lg::info(
+              "[MP-Handshake] Client received the server challenge from {}; secure proof response "
+              "accepted by ENet ({} bytes).",
+              enet_peer_endpoint_string(event.peer), secured.response.size);
         } else if (secured.kind == SecurityReceiveKind::VERSION_MISMATCH) {
           if (data.session_role == 0) {
-            lg::info("[MP-Handshake] Rejected client {} with an incompatible mod version (authenticated_peer_exists={}).",
-                     enet_peer_endpoint_string(event.peer), data.authenticated_peer != nullptr);
+            lg::info("[MP-Handshake] Rejected client {} with an incompatible mod version.",
+                     enet_peer_endpoint_string(event.peer));
             enet_peer_disconnect_later(event.peer, 0);
-            remove_pending_handshake(data, event.peer);
+            multiplayer_host_peer_release(data, event.peer);
           } else {
-            data.required_version = data.security.remote_version();
-            data.handshake_started_time = 0;
+            data.required_version = security->remote_version();
+            data.client_handshake_started_time = 0;
             data.join_status = (int)MultiplayerStatus::VERSION_MISMATCH;
             data.connection_failure =
                 static_cast<int>(MultiplayerConnectionFailure::VERSION_MISMATCH);
             lg::warn("[MP-Handshake] Host {} requires a different mod version.",
                      enet_peer_endpoint_string(event.peer));
           }
-        } else if (secured.kind == SecurityReceiveKind::HANDSHAKE &&
-                   data.security.authenticated()) {
-          lg::info("[MP-Handshake] Secure proof accepted from {}; authenticated peer session is ready.",
-                   enet_peer_endpoint_string(event.peer));
+        } else if (secured.kind == SecurityReceiveKind::HANDSHAKE && security->authenticated()) {
+          lg::info(
+              "[MP-Handshake] Secure proof accepted from {}; authenticated peer session is ready.",
+              enet_peer_endpoint_string(event.peer));
           if (data.session_role == 0) {
-            data.authenticated_peer = event.peer;
-            disconnect_other_pending_peers(data, event.peer);
-            if (data.host_game_active) {
-              data.join_status = (int)MultiplayerStatus::IN_GAME;
-              multiplayer_request_bootstrap(data);
-              lg::info("[MP-Reconnect] Host is requesting bootstrap from replacement client {}.",
+            auto* session = multiplayer_host_peer_find(data, event.peer);
+            if (!session || !multiplayer_host_peer_authenticate(data, *session, current_time)) {
+              lg::warn("[MP-Handshake] Host is full; rejecting authenticated peer {}.",
                        enet_peer_endpoint_string(event.peer));
-            } else {
+              enet_peer_disconnect_later(event.peer, kDisconnectReasonHostFull);
+              if (session) {
+                multiplayer_host_peer_release(data, *session);
+              }
+              enet_packet_destroy(event.packet);
+              break;
+            }
+            const PacketSessionWelcome welcome = {
+                {PacketType::SESSION_WELCOME, ++data.sequence_num},
+                session->player_id,
+                data.host_player_id,
+                data.session_player_limit};
+            if (!mp_send_packet_immediately(data, event.peer,
+                                            static_cast<int>(MultiplayerChannel::CONTROL), &welcome,
+                                            sizeof(welcome), ENET_PACKET_FLAG_RELIABLE)) {
+              enet_peer_disconnect_now(event.peer, 0);
+              multiplayer_host_peer_release(data, *session);
+              enet_packet_destroy(event.packet);
+              break;
+            }
+            if (!data.host_game_active &&
+                data.join_status == static_cast<int>(MultiplayerStatus::CONNECTING)) {
               data.join_status = (int)MultiplayerStatus::CONNECTED_LOBBY;
             }
+            lg::info("[MP-Handshake] Assigned player {} to {} (players={}/{}).", session->player_id,
+                     enet_peer_endpoint_string(event.peer),
+                     multiplayer_host_authenticated_peer_count(data) + 1,
+                     data.session_player_limit);
           } else {
-            multiplayer_note_client_reconnect_authenticated(data);
-            data.join_status = (int)MultiplayerStatus::CONNECTED_LOBBY;
-            lg::info("[MP-Reconnect] Client secure handshake complete; waiting for bootstrap={}.",
-                     data.reconnect_waiting_for_bootstrap);
+            lg::info("[MP-Handshake] Client authenticated; waiting for SESSION_WELCOME.");
           }
-          data.handshake_started_time = 0;
-          data.last_authenticated_receive_time = current_time;
-          data.connection_phase = static_cast<int>(MultiplayerConnectionPhase::CONNECTED);
+          data.client_handshake_started_time = 0;
+          data.server_last_receive_time = current_time;
           data.connection_failure = static_cast<int>(MultiplayerConnectionFailure::NONE);
           lg::info("[Multiplayer] Secure handshake peer authenticated.");
         } else if (secured.kind == SecurityReceiveKind::GAMEPLAY) {
+          uint32_t sender_player_id = multiplayer_authenticated_sender_player_id(data, event.peer);
+          const bool is_pre_assignment_welcome =
+              data.session_role == 1 && secured.plaintext.size >= kPacketHeaderWireSize &&
+              secured.plaintext.bytes[0] == static_cast<uint8_t>(PacketType::SESSION_WELCOME);
+          if (!mp_valid_player_id(sender_player_id) && !is_pre_assignment_welcome) {
+            enet_packet_destroy(event.packet);
+            break;
+          }
+          if (is_pre_assignment_welcome) {
+            sender_player_id = 0;
+          }
           ENetPacket plaintext_packet = {};
           plaintext_packet.data = secured.plaintext.bytes.data();
           plaintext_packet.dataLength = secured.plaintext.size;
-          data.last_authenticated_receive_time = current_time;
+          plaintext_packet.flags = event.packet->flags;
+          if (data.session_role == 0) {
+            if (auto* session = multiplayer_host_peer_find(data, event.peer)) {
+              session->last_receive_time = current_time;
+            }
+          } else {
+            data.server_last_receive_time = current_time;
+          }
           data.stats.track_recv_bytes(plaintext_packet.data, plaintext_packet.dataLength);
-          handle_receive_packet(
-              data, event.peer, &plaintext_packet, controller, world, bootstrap, current_time);
+          handle_receive_packet(data, event.peer, sender_player_id, &plaintext_packet, controller,
+                                world, bootstrap, current_time, event.channelID);
         } else if (secured.kind == SecurityReceiveKind::REJECTED && data.session_role == 0 &&
-                   !data.authenticated_peer) {
-          lg::warn("[MP-Handshake] Host rejected unauthenticated peer {} (pending_handshakes={}, auth_peer_exists={}).",
-                   enet_peer_endpoint_string(event.peer), pending_handshake_count(data),
-                   data.authenticated_peer != nullptr);
+                   !multiplayer_peer_is_authenticated(data, event.peer)) {
+          lg::warn("[MP-Handshake] Host rejected unauthenticated peer {}.",
+                   enet_peer_endpoint_string(event.peer));
           record_authentication_failure(data, event.peer->address.host, current_time);
           enet_peer_disconnect_later(event.peer, kDisconnectReasonAuthenticationRejected);
-          remove_pending_handshake(data, event.peer);
+          multiplayer_host_peer_release(data, event.peer);
         }
         enet_packet_destroy(event.packet);
         break;
       }
       case ENET_EVENT_TYPE_CONNECT:
         if (data.session_role == 1) {
-          data.handshake_started_time = current_time;
+          data.client_handshake_started_time = current_time;
           data.connection_phase = static_cast<int>(MultiplayerConnectionPhase::AUTHENTICATING);
-          lg::info("[MP-Reconnect] Client transport connected to {} (local_port={}, peer_state={}, status={}, reconnect_active={}, attempt={}); awaiting secure authentication.",
-                   enet_peer_endpoint_string(event.peer), enet_local_port(data.host),
-                   static_cast<int>(event.peer->state), data.join_status.load(),
-                   data.reconnect_attempt_active,
-                   data.reconnect_attempt_count);
+          lg::info(
+              "[MP-Reconnect] Client transport connected to {} (local_port={}, peer_state={}, "
+              "status={}, reconnect_active={}, attempt={}); awaiting secure authentication.",
+              enet_peer_endpoint_string(event.peer), enet_local_port(data.host),
+              static_cast<int>(event.peer->state), data.join_status.load(),
+              data.reconnect_attempt_active, data.reconnect_attempt_count);
         } else if (data.session_role == 0) {
-          const bool authenticated_peer_exists = data.authenticated_peer != nullptr;
-          const bool security_session_exists = data.security.authenticated();
           const bool address_banned =
               authentication_address_banned(data, event.peer->address.host, current_time);
-          if (authenticated_peer_exists || security_session_exists || address_banned) {
-            lg::warn("[MP-Handshake] Rejecting transport connection from {} (authenticated_peer_exists={}, security_session_exists={}, address_banned={}).",
-                     enet_peer_endpoint_string(event.peer), authenticated_peer_exists,
-                     security_session_exists, address_banned);
-            enet_peer_disconnect_later(
-                event.peer, authenticated_peer_exists || security_session_exists
-                                ? kDisconnectReasonHostFull
-                                : kDisconnectReasonAuthenticationRejected);
+          if (address_banned) {
+            enet_peer_disconnect_later(event.peer, kDisconnectReasonAuthenticationRejected);
             break;
           }
-          add_pending_handshake(data, event.peer, current_time);
+          auto* session = multiplayer_host_peer_allocate(data, event.peer, current_time);
+          const bool security_started =
+              session &&
+              session->security.start_host(enet_local_port(data.host), data.security.room_code()) &&
+              session->security.set_local_version(data.local_version);
           MultiplayerDatagram hello;
-          const bool hello_created = data.security.make_server_hello(hello);
-          const bool hello_sent = hello_created &&
-                                  mp_send_raw_packet_to_peer(
-                                      event.peer, static_cast<int>(MultiplayerChannel::CONTROL),
-                                      hello.bytes.data(), hello.size, ENET_PACKET_FLAG_RELIABLE);
+          const bool hello_created = security_started && session->security.make_server_hello(hello);
+          const bool hello_sent =
+              hello_created &&
+              mp_send_raw_packet_to_peer(event.peer, static_cast<int>(MultiplayerChannel::CONTROL),
+                                         hello.bytes.data(), hello.size, ENET_PACKET_FLAG_RELIABLE);
           if (!hello_sent) {
-            lg::warn("[MP-Handshake] Failed sending server challenge to {} (created={}, bytes={}, pending_handshakes={}).",
-                     enet_peer_endpoint_string(event.peer), hello_created, hello.size,
-                     pending_handshake_count(data));
+            lg::warn(
+                "[MP-Handshake] Failed sending server challenge to {} (created={}, bytes={}, "
+                "pending_handshakes={}).",
+                enet_peer_endpoint_string(event.peer), hello_created, hello.size,
+                pending_handshake_count(data));
+            if (session) {
+              multiplayer_host_peer_release(data, *session);
+            }
+            enet_peer_disconnect_later(event.peer, kDisconnectReasonAuthenticationRejected);
           }
-          lg::info("[MP-Handshake] Host transport connected from {} (peer_state={}, status={}, pending_handshakes={}); challenge_sent={}",
-                   enet_peer_endpoint_string(event.peer), static_cast<int>(event.peer->state),
-                   data.join_status.load(), pending_handshake_count(data), hello_sent);
+          lg::info(
+              "[MP-Handshake] Host transport connected from {} (peer_state={}, status={}, "
+              "pending_handshakes={}); challenge_sent={}",
+              enet_peer_endpoint_string(event.peer), static_cast<int>(event.peer->state),
+              data.join_status.load(), pending_handshake_count(data), hello_sent);
         }
         break;
       case ENET_EVENT_TYPE_DISCONNECT:
-        lg::warn("[MP-Network] Transport disconnected: peer={} reason={} role={} status={} authenticated={} reconnect_active={}.",
-                 enet_peer_endpoint_string(event.peer), event.data, data.session_role,
-                 data.join_status.load(), data.security.authenticated(), data.reconnect_attempt_active);
+        lg::warn(
+            "[MP-Network] Transport disconnected: peer={} reason={} role={} status={} "
+            "authenticated={} reconnect_active={}.",
+            enet_peer_endpoint_string(event.peer), event.data, data.session_role,
+            data.join_status.load(), multiplayer_peer_is_authenticated(data, event.peer),
+            data.reconnect_attempt_active);
         if (data.session_role == 0) {
-          remove_pending_handshake(data, event.peer);
-          if (event.peer == data.authenticated_peer) {
-            const bool wait_for_reconnect =
-                event.data != kDisconnectReasonClientClosed && data.host_game_active;
-            if (multiplayer_prepare_host_for_next_peer(data, wait_for_reconnect)) {
-              if (wait_for_reconnect) {
-                lg::warn("[Multiplayer] Authenticated client disconnected; waiting for reconnect.");
-              } else {
-                lg::info("[Multiplayer] Authenticated client disconnected; host remains available.");
-              }
-            } else {
-              lg::error("[Multiplayer] Failed to prepare the host for another client.");
-            }
+          auto* session = multiplayer_host_peer_find(data, event.peer);
+          if (session && session->authenticated && session->identity_ready &&
+              mp_valid_player_id(session->player_id)) {
+            const uint32_t departed_player_id = session->player_id;
+            PacketLeave leave = {{PacketType::EVENT_LEAVE, ++data.sequence_num},
+                                 departed_player_id,
+                                 MultiplayerLeaveReason::CLIENT_CLOSED};
+            mp_clear_player_slot(data, controller, departed_player_id);
+            MultiplayerManager::broadcast_except(data, event.peer,
+                                                 static_cast<int>(MultiplayerChannel::CONTROL),
+                                                 &leave, sizeof(leave), ENET_PACKET_FLAG_RELIABLE);
+            lg::info("[Multiplayer] Player {} disconnected; host remains available.",
+                     departed_player_id);
+          }
+          multiplayer_host_peer_release(data, event.peer);
+          if (!data.host_game_active &&
+              data.join_status == static_cast<int>(MultiplayerStatus::CONNECTED_LOBBY) &&
+              multiplayer_host_authenticated_peer_count(data) == 0) {
+            data.join_status = static_cast<int>(MultiplayerStatus::CONNECTING);
           }
         } else {
           const bool active_session = data.join_status == (int)MultiplayerStatus::CONNECTED_LOBBY ||
@@ -426,8 +555,10 @@ void poll_network(MultiplayerData& data,
                                       data.join_status == (int)MultiplayerStatus::IN_GAME ||
                                       data.join_status == (int)MultiplayerStatus::RECONNECTING ||
                                       data.reconnect_attempt_active;
-          if (mp_valid_player_id(data.authenticated_player_id)) {
-            mp_clear_player_slot(data, controller, data.authenticated_player_id);
+          for (uint32_t player_id = 0; player_id < kMPMaxPlayers; ++player_id) {
+            if (player_id != data.local_player_id) {
+              mp_clear_player_slot(data, controller, player_id);
+            }
           }
           if (event.data == kDisconnectReasonHostFull) {
             data.connection_failure = static_cast<int>(MultiplayerConnectionFailure::HOST_FULL);
@@ -458,12 +589,24 @@ void poll_network(MultiplayerData& data,
 
   if (data.session_role == 0) {
     expire_pending_handshakes(data, current_time);
-  } else if (!data.security.authenticated() && data.handshake_started_time != 0 &&
-             current_time - data.handshake_started_time > 5000) {
-    lg::warn("[MP-Handshake] Secure handshake timed out (peer={}, started={}, now={}, status={}, reconnect_active={}, local_port={}).",
-             enet_peer_endpoint_string(data.server_peer), data.handshake_started_time,
-             current_time, data.join_status.load(), data.reconnect_attempt_active,
-             enet_local_port(data.host));
+    for (auto& session : data.host_peer_sessions) {
+      if (!session.authenticated || !session.peer || session.last_receive_time == 0 ||
+          current_time - session.last_receive_time <= 10000) {
+        continue;
+      }
+      lg::warn("[MP-Network] Player {} timed out; closing only that peer session.",
+               session.player_id);
+      enet_peer_disconnect_later(session.peer, 0);
+      session.last_receive_time = current_time;
+    }
+  } else if (!data.security.authenticated() && data.client_handshake_started_time != 0 &&
+             current_time - data.client_handshake_started_time > 5000) {
+    lg::warn(
+        "[MP-Handshake] Secure handshake timed out (peer={}, started={}, now={}, status={}, "
+        "reconnect_active={}, local_port={}).",
+        enet_peer_endpoint_string(data.server_peer), data.client_handshake_started_time,
+        current_time, data.join_status.load(), data.reconnect_attempt_active,
+        enet_local_port(data.host));
     multiplayer_handle_client_handshake_timeout(data, current_time);
   }
 }
@@ -511,49 +654,19 @@ void record_authentication_failure(MultiplayerData& data, uint32_t address, uint
   }
 }
 
-void add_pending_handshake(MultiplayerData& data, ENetPeer* peer, uint32_t now) {
-  for (auto& pending : data.pending_handshakes) {
-    if (!pending.peer) {
-      pending.peer = peer;
-      pending.deadline = now + 5000;
-      lg::info("[MP-Handshake] Tracking pending peer {} until {} (pending_handshakes={}).",
-               enet_peer_endpoint_string(peer), pending.deadline, pending_handshake_count(data));
-      return;
-    }
-  }
-  lg::warn("[MP-Handshake] No pending-handshake slot for {}; disconnecting it.",
-           enet_peer_endpoint_string(peer));
-  enet_peer_disconnect_later(peer, kDisconnectReasonHostFull);
-}
-
-void remove_pending_handshake(MultiplayerData& data, ENetPeer* peer) {
-  for (auto& pending : data.pending_handshakes) {
-    if (pending.peer == peer) {
-      pending = {};
-      return;
-    }
-  }
-}
-
 void expire_pending_handshakes(MultiplayerData& data, uint32_t now) {
-  for (auto& pending : data.pending_handshakes) {
-    if (pending.peer && static_cast<int32_t>(now - pending.deadline) >= 0) {
-      lg::warn("[MP-Handshake] Pending handshake expired for {} (now={}, deadline={}, pending_handshakes={}).",
-               enet_peer_endpoint_string(pending.peer), now, pending.deadline,
-               pending_handshake_count(data));
-      record_authentication_failure(data, pending.peer->address.host, now);
-      enet_peer_disconnect_later(pending.peer, kDisconnectReasonAuthenticationRejected);
-      pending = {};
+  for (auto& session : data.host_peer_sessions) {
+    if (session.peer && !session.authenticated &&
+        static_cast<int32_t>(now - session.handshake_deadline) >= 0) {
+      lg::warn(
+          "[MP-Handshake] Pending handshake expired for {} (now={}, deadline={}, "
+          "pending_handshakes={}).",
+          enet_peer_endpoint_string(session.peer), now, session.handshake_deadline,
+          pending_handshake_count(data));
+      record_authentication_failure(data, session.peer->address.host, now);
+      enet_peer_disconnect_later(session.peer, kDisconnectReasonAuthenticationRejected);
+      multiplayer_host_peer_release(data, session);
     }
-  }
-}
-
-void disconnect_other_pending_peers(MultiplayerData& data, ENetPeer* authenticated) {
-  for (auto& pending : data.pending_handshakes) {
-    if (pending.peer && pending.peer != authenticated) {
-      enet_peer_disconnect_later(pending.peer, kDisconnectReasonHostFull);
-    }
-    pending = {};
   }
 }
 
@@ -640,13 +753,14 @@ void pc_multi_poll(u32 controller_ptr, u32 world_ptr, u32 bootstrap_ptr) {
       last_reconnect_skip_log_time = 0;
     }
     if (!data.initialized || !data.host) {
-      if (reconnect_phase &&
-          (last_reconnect_skip_log_time == 0 ||
-           current_time - last_reconnect_skip_log_time >= 1000)) {
-        lg::warn("[MP-Reconnect] Poll skipped: transport unavailable (initialized={}, host={}, status={}, attempt_active={}, waiting_bootstrap={}, invite_saved={}).",
-                 data.initialized, data.host != nullptr, data.join_status.load(),
-                 data.reconnect_attempt_active, data.reconnect_waiting_for_bootstrap,
-                 !data.reconnect_invite.empty());
+      if (reconnect_phase && (last_reconnect_skip_log_time == 0 ||
+                              current_time - last_reconnect_skip_log_time >= 1000)) {
+        lg::warn(
+            "[MP-Reconnect] Poll skipped: transport unavailable (initialized={}, host={}, "
+            "status={}, attempt_active={}, waiting_bootstrap={}, invite_saved={}).",
+            data.initialized, data.host != nullptr, data.join_status.load(),
+            data.reconnect_attempt_active, data.reconnect_waiting_for_bootstrap,
+            !data.reconnect_invite.empty());
         last_reconnect_skip_log_time = current_time;
       }
       return;
@@ -664,35 +778,37 @@ void pc_multi_poll(u32 controller_ptr, u32 world_ptr, u32 bootstrap_ptr) {
     auto* world = goal_ptr<MPWorldSyncStateGOAL>(world_ptr);
     auto* bootstrap = goal_ptr<MPBootstrapSyncStateGOAL>(bootstrap_ptr);
     if (!controller || !world || !bootstrap) {
-      if (reconnect_phase &&
-          (last_reconnect_skip_log_time == 0 ||
-           current_time - last_reconnect_skip_log_time >= 1000)) {
-        lg::warn("[MP-Reconnect] Poll skipped: GOAL sync buffers unavailable (controller=0x{:x}, world=0x{:x}, bootstrap=0x{:x}, status={}).",
-                 controller_ptr, world_ptr, bootstrap_ptr,
-                 data.join_status.load());
+      if (reconnect_phase && (last_reconnect_skip_log_time == 0 ||
+                              current_time - last_reconnect_skip_log_time >= 1000)) {
+        lg::warn(
+            "[MP-Reconnect] Poll skipped: GOAL sync buffers unavailable (controller=0x{:x}, "
+            "world=0x{:x}, bootstrap=0x{:x}, status={}).",
+            controller_ptr, world_ptr, bootstrap_ptr, data.join_status.load());
         last_reconnect_skip_log_time = current_time;
       }
       return;
     }
 
-    if (reconnect_phase &&
-        (last_reconnect_heartbeat_time == 0 ||
-         current_time - last_reconnect_heartbeat_time >= 1000)) {
-      lg::info("[MP-Reconnect] Poll servicing reconnect (status={}, initialized={}, local_port={}, peer={}, peer_state={}, handshake_started={}, authenticated={}, attempt_active={}, waiting_bootstrap={}, attempt={}, pending_handshakes={}).",
-               data.join_status.load(), data.initialized, enet_local_port(data.host),
-               enet_peer_endpoint_string(data.server_peer),
-               data.server_peer ? static_cast<int>(data.server_peer->state) : -1,
-               data.handshake_started_time, data.security.authenticated(),
-               data.reconnect_attempt_active, data.reconnect_waiting_for_bootstrap,
-               data.reconnect_attempt_count, pending_handshake_count(data));
+    if (reconnect_phase && (last_reconnect_heartbeat_time == 0 ||
+                            current_time - last_reconnect_heartbeat_time >= 1000)) {
+      lg::info(
+          "[MP-Reconnect] Poll servicing reconnect (status={}, initialized={}, local_port={}, "
+          "peer={}, peer_state={}, handshake_started={}, authenticated={}, attempt_active={}, "
+          "waiting_bootstrap={}, attempt={}, pending_handshakes={}).",
+          data.join_status.load(), data.initialized, enet_local_port(data.host),
+          enet_peer_endpoint_string(data.server_peer),
+          data.server_peer ? static_cast<int>(data.server_peer->state) : -1,
+          data.client_handshake_started_time, data.security.authenticated(),
+          data.reconnect_attempt_active, data.reconnect_waiting_for_bootstrap,
+          data.reconnect_attempt_count, pending_handshake_count(data));
       last_reconnect_heartbeat_time = current_time;
       last_reconnect_skip_log_time = 0;
     }
 
-    if (mp_valid_player_id(controller->local_player_id)) {
+    if (data.session_role == 0 && mp_valid_player_id(controller->local_player_id)) {
       data.local_player_id = controller->local_player_id;
     }
-    if (mp_valid_player_id(controller->host_player_id)) {
+    if (data.session_role == 0 && mp_valid_player_id(controller->host_player_id)) {
       data.host_player_id = controller->host_player_id;
     }
     poll_network(data, controller, world, bootstrap);
@@ -836,13 +952,12 @@ void pc_multi_send_widow(u32 buffer_ptr) {
 }
 
 void pc_multi_receive_widow(u32 buffer_ptr) {
-  with_goal_buffer<MPWidowSyncBufferGOAL>(buffer_ptr, "pc_multi_receive_widow",
-                                         [](auto* buffer) {
-                                           auto& data = multiplayer_data();
-                                           if (data.initialized) {
-                                             mp_receive_widow_sync(data, buffer);
-                                           }
-                                         });
+  with_goal_buffer<MPWidowSyncBufferGOAL>(buffer_ptr, "pc_multi_receive_widow", [](auto* buffer) {
+    auto& data = multiplayer_data();
+    if (data.initialized) {
+      mp_receive_widow_sync(data, buffer);
+    }
+  });
 }
 
 void pc_multi_send_airlock_state(u32 buffer_ptr) {
@@ -896,12 +1011,12 @@ void pc_multi_disconnect() {
   MultiplayerManager::disconnect(multiplayer_data());
 }
 
-void pc_multi_setup_host() {
-  MultiplayerManager::setup_host(multiplayer_data(), false);
+void pc_multi_setup_host(u32 player_limit) {
+  MultiplayerManager::setup_host(multiplayer_data(), false, player_limit);
 }
 
-void pc_multi_setup_internet_host() {
-  MultiplayerManager::setup_host(multiplayer_data(), true);
+void pc_multi_setup_internet_host(u32 player_limit) {
+  MultiplayerManager::setup_host(multiplayer_data(), true, player_limit);
 }
 
 void pc_multi_setup_client(u32 ip_ptr, u32 port) {
@@ -977,9 +1092,11 @@ u64 pc_multi_get_command_line_arg(u32 str_ptr) {
 static void connect_private_invite(MultiplayerData& data,
                                    std::string& invite,
                                    bool reconnect_attempt) {
-  lg::info("[MP-Reconnect] Connection request (reconnect={}, status={}, attempt_active={}, attempt_count={}, invite_saved={}).",
-           reconnect_attempt, data.join_status.load(), data.reconnect_attempt_active,
-           data.reconnect_attempt_count, !data.reconnect_invite.empty());
+  lg::info(
+      "[MP-Reconnect] Connection request (reconnect={}, status={}, attempt_active={}, "
+      "attempt_count={}, invite_saved={}).",
+      reconnect_attempt, data.join_status.load(), data.reconnect_attempt_active,
+      data.reconnect_attempt_count, !data.reconnect_invite.empty());
   MultiplayerManager::disconnect(data, reconnect_attempt);
   std::string host;
   uint16_t port = 0;
@@ -1018,10 +1135,11 @@ static bool try_saved_reconnect(MultiplayerData& data) {
 
 int pc_multi_reconnect() {
   auto& data = multiplayer_data();
-  lg::info("[MP-Reconnect] Manual reconnect requested (status={}, attempt_active={}, waiting_bootstrap={}, attempt_count={}, invite_saved={}).",
-           data.join_status.load(), data.reconnect_attempt_active,
-           data.reconnect_waiting_for_bootstrap, data.reconnect_attempt_count,
-           !data.reconnect_invite.empty());
+  lg::info(
+      "[MP-Reconnect] Manual reconnect requested (status={}, attempt_active={}, "
+      "waiting_bootstrap={}, attempt_count={}, invite_saved={}).",
+      data.join_status.load(), data.reconnect_attempt_active, data.reconnect_waiting_for_bootstrap,
+      data.reconnect_attempt_count, !data.reconnect_invite.empty());
   if (data.reconnect_invite.empty()) {
     lg::warn("[Multiplayer] Reconnect requested without a saved client invite.");
     data.join_status = (int)MultiplayerStatus::FAILED;
@@ -1240,7 +1358,8 @@ int pc_multi_get_ping() {
   uint64_t total = 0;
   uint32_t count = 0;
   for (size_t i = 0; i < data.host->peerCount; i++) {
-    if (data.host->peers[i].state == ENET_PEER_STATE_CONNECTED &&
+    if (multiplayer_peer_is_authenticated(data, &data.host->peers[i]) &&
+        data.host->peers[i].state == ENET_PEER_STATE_CONNECTED &&
         multiplayer_enet_rtt_sample_valid(data.host->peers[i])) {
       total += data.host->peers[i].roundTripTime;
       count++;
@@ -1266,7 +1385,8 @@ int pc_multi_get_ping_valid() {
   }
 
   for (size_t i = 0; i < data.host->peerCount; i++) {
-    if (data.host->peers[i].state == ENET_PEER_STATE_CONNECTED &&
+    if (multiplayer_peer_is_authenticated(data, &data.host->peers[i]) &&
+        data.host->peers[i].state == ENET_PEER_STATE_CONNECTED &&
         multiplayer_enet_rtt_sample_valid(data.host->peers[i])) {
       return 1;
     }
@@ -1289,13 +1409,13 @@ float pc_multi_get_packet_loss_percent() {
   uint64_t total = 0;
   uint32_t count = 0;
   for (size_t i = 0; i < data.host->peerCount; i++) {
-    if (data.host->peers[i].state == ENET_PEER_STATE_CONNECTED) {
+    if (multiplayer_peer_is_authenticated(data, &data.host->peers[i]) &&
+        data.host->peers[i].state == ENET_PEER_STATE_CONNECTED) {
       total += data.host->peers[i].packetLoss;
       count++;
     }
   }
-  return count > 0 ? multiplayer_enet_ratio_to_percent(static_cast<uint32_t>(total / count))
-                   : 0.0f;
+  return count > 0 ? multiplayer_enet_ratio_to_percent(static_cast<uint32_t>(total / count)) : 0.0f;
 }
 
 float pc_multi_get_packet_loss_variance_percent() {
@@ -1313,13 +1433,13 @@ float pc_multi_get_packet_loss_variance_percent() {
   uint64_t total = 0;
   uint32_t count = 0;
   for (size_t i = 0; i < data.host->peerCount; i++) {
-    if (data.host->peers[i].state == ENET_PEER_STATE_CONNECTED) {
+    if (multiplayer_peer_is_authenticated(data, &data.host->peers[i]) &&
+        data.host->peers[i].state == ENET_PEER_STATE_CONNECTED) {
       total += data.host->peers[i].packetLossVariance;
       count++;
     }
   }
-  return count > 0 ? multiplayer_enet_ratio_to_percent(static_cast<uint32_t>(total / count))
-                   : 0.0f;
+  return count > 0 ? multiplayer_enet_ratio_to_percent(static_cast<uint32_t>(total / count)) : 0.0f;
 }
 
 int pc_multi_get_ping_variance() {
@@ -1335,7 +1455,8 @@ int pc_multi_get_ping_variance() {
   uint64_t total = 0;
   uint32_t count = 0;
   for (size_t i = 0; i < data.host->peerCount; i++) {
-    if (data.host->peers[i].state == ENET_PEER_STATE_CONNECTED &&
+    if (multiplayer_peer_is_authenticated(data, &data.host->peers[i]) &&
+        data.host->peers[i].state == ENET_PEER_STATE_CONNECTED &&
         multiplayer_enet_rtt_sample_valid(data.host->peers[i])) {
       total += data.host->peers[i].roundTripTimeVariance;
       count++;
@@ -1484,8 +1605,7 @@ void init_multiplayer_pc_port() {
                                     (void*)pc_multi_connect_found_host);
   jak2::make_function_symbol_from_c("pc-multi-get-host-copy-mode",
                                     (void*)pc_multi_get_host_copy_mode);
-  jak2::make_function_symbol_from_c("pc-multi-copy-host-access",
-                                    (void*)pc_multi_copy_host_access);
+  jak2::make_function_symbol_from_c("pc-multi-copy-host-access", (void*)pc_multi_copy_host_access);
   jak2::make_function_symbol_from_c("pc-multi-stage-clipboard-invite",
                                     (void*)pc_multi_stage_clipboard_invite);
   jak2::make_function_symbol_from_c("pc-multi-get-staged-invite-status",
@@ -1498,14 +1618,12 @@ void init_multiplayer_pc_port() {
                                     (void*)pc_multi_clear_direct_connect);
   jak2::make_function_symbol_from_c("pc-multi-reset-direct-connect",
                                     (void*)pc_multi_reset_direct_connect);
-  jak2::make_function_symbol_from_c("pc-multi-get-direct-field",
-                                    (void*)pc_multi_get_direct_field);
+  jak2::make_function_symbol_from_c("pc-multi-get-direct-field", (void*)pc_multi_get_direct_field);
   jak2::make_function_symbol_from_c("pc-multi-edit-direct-field",
                                     (void*)pc_multi_edit_direct_field);
   jak2::make_function_symbol_from_c("pc-multi-direct-connect-ready",
                                     (void*)pc_multi_direct_connect_ready);
-  jak2::make_function_symbol_from_c("pc-multi-connect-direct",
-                                    (void*)pc_multi_connect_direct);
+  jak2::make_function_symbol_from_c("pc-multi-connect-direct", (void*)pc_multi_connect_direct);
   jak2::make_function_symbol_from_c("pc-multi-get-preference-field",
                                     (void*)pc_multi_get_preference_field);
   jak2::make_function_symbol_from_c("pc-multi-get-player-name", (void*)pc_multi_get_player_name);

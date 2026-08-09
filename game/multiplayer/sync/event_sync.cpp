@@ -1,13 +1,14 @@
 #include "event_sync.h"
 
+#include <cstring>
+#include <vector>
+
 #include "common/log/log.h"
+
 #include "game/multiplayer/multiplayer_manager.h"
 #include "game/multiplayer/multiplayer_packet.h"
 #include "game/multiplayer/multiplayer_wire_codec.h"
 #include "game/multiplayer/sync/player_sync.h"
-
-#include <cstring>
-#include <vector>
 
 namespace {
 constexpr uint32_t kMaxGoalEvents = 16;
@@ -28,9 +29,8 @@ bool decode_game_event_bytes(const void* data, size_t size, PacketGameEvent& out
   if (!reader.read_u8(type) || type != static_cast<uint8_t>(PacketType::EVENT_GAME) ||
       !reader.read_u32(sequence) || !reader.read_u32(source_player_id) ||
       !mp_valid_player_id(source_player_id) || !reader.read_u32(event_id) ||
-      !multiplayer::schema::event_descriptor(event_id) ||
-      !reader.read_u16(payload_size) || payload_size > kMaxEventPayload ||
-      reader.remaining() != payload_size) {
+      !multiplayer::schema::event_descriptor(event_id) || !reader.read_u16(payload_size) ||
+      payload_size > kMaxEventPayload || reader.remaining() != payload_size) {
     return false;
   }
 
@@ -62,8 +62,7 @@ bool encode_game_event_bytes(const MPEvent& event,
   multiplayer::wire::Writer writer(output.data(), output.size());
   if (!writer.write_u8(static_cast<uint8_t>(PacketType::EVENT_GAME)) ||
       !writer.write_u32(sequence) || !writer.write_u32(event.source_player_id) ||
-      !writer.write_u32(event.etype) ||
-      !writer.write_u16(static_cast<uint16_t>(payload_size)) ||
+      !writer.write_u32(event.etype) || !writer.write_u16(static_cast<uint16_t>(payload_size)) ||
       !writer.write_bytes(event.data, payload_size)) {
     return false;
   }
@@ -72,9 +71,7 @@ bool encode_game_event_bytes(const MPEvent& event,
 }
 }  // namespace
 
-bool mp_encode_game_event(const MPEvent& event,
-                          uint32_t sequence,
-                          std::vector<uint8_t>& output) {
+bool mp_encode_game_event(const MPEvent& event, uint32_t sequence, std::vector<uint8_t>& output) {
   return encode_game_event_bytes(event, sequence, output);
 }
 
@@ -82,19 +79,23 @@ bool mp_decode_game_event(const void* data, size_t size, PacketGameEvent& output
   return decode_game_event_bytes(data, size, output);
 }
 
-void mp_handle_game_event_packet(MultiplayerData& data, const ENetPacket* packet) {
+bool mp_handle_game_event_packet(MultiplayerData& data,
+                                 const ENetPacket* packet,
+                                 uint32_t sender_player_id) {
   PacketView view(packet);
   PacketGameEvent event = {};
   if (!view.has_header() || view.type() != PacketType::EVENT_GAME ||
       !mp_decode_game_event(view.data(), view.size(), event) ||
-      !mp_player_id_matches_authenticated_peer(data, event.source_player_id)) {
-    return;
+      !mp_player_id_allowed_from_sender(data, sender_player_id, event.source_player_id) ||
+      !mp_sequence_is_newer(event.header.sequenceNum,
+                            data.last_event_sequence_by_player[event.source_player_id])) {
+    return false;
   }
+  data.last_event_sequence_by_player[event.source_player_id] = event.header.sequenceNum;
 
   const uint32_t now = enet_time_get();
   if (now - data.last_event_receive_debug_time > 2000) {
-    lg::info("[Multiplayer] Receiving game event {} ({} bytes)",
-             event.event_id,
+    lg::info("[Multiplayer] Receiving game event {} ({} bytes)", event.event_id,
              event.payload_size);
     data.last_event_receive_debug_time = now;
   }
@@ -105,6 +106,7 @@ void mp_handle_game_event_packet(MultiplayerData& data, const ENetPacket* packet
       data.last_event_queue_debug_time = now;
     }
   }
+  return true;
 }
 
 void mp_send_game_events(MultiplayerData& data, MPEventBufferGOAL* events) {
@@ -120,10 +122,7 @@ void mp_send_game_events(MultiplayerData& data, MPEventBufferGOAL* events) {
       lg::warn("[Multiplayer] Dropping oversized event {}.", events->out_events[i].etype);
       continue;
     }
-    if (MultiplayerManager::broadcast(data,
-                                      data.session_role,
-                                      encoded.data(),
-                                      encoded.size(),
+    if (MultiplayerManager::broadcast(data, data.session_role, encoded.data(), encoded.size(),
                                       ENET_PACKET_FLAG_RELIABLE)) {
       lg::debug("[Multiplayer] Submitted event id={}", events->out_events[i].etype);
     }
