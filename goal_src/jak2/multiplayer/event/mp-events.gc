@@ -10,8 +10,6 @@
 (defun mp-reset-event-state! ()
   (set! *mp-processing-remote-event* #f)
   (set! *mp-current-event-source-player-id* MP_INVALID_PLAYER_ID)
-  (set! *mp-remote-wants-skip* #f)
-  (set! *mp-local-wants-skip* #f)
   (set! *multi-last-in-event-seq* (the-as uint 0))
   (mp-event-queue-reset!)
   (set! *mp-mission-failed-bootstrap-pending?* #f)

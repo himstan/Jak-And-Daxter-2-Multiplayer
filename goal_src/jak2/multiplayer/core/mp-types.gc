@@ -31,7 +31,6 @@
 (define-perm *mp-last-scene-player* symbol #f)
 (define-perm *mp-was-riding-before-scene* symbol #f)
 (define-perm *mp-last-scene-name* string (new 'global 'string 64 ""))
-(define-perm *mp-connected-scene-broadcast-name* string (new 'global 'string 64 ""))
 (define-perm *mp-pending-scene-sync?* symbol #f)
 (define-perm *mp-pending-scene-sync-name* string (new 'global 'string 64 ""))
 (define-perm *mp-pending-scene-sync-continue-name* string (new 'global 'string 64 ""))
@@ -119,7 +118,6 @@
 (define-extern mp-teleport-to-remote (function object))
 (define-extern mp-remote-teleport-ready-or-request! (function symbol))
 (define-extern mp-teleport-local-target-to-remote! (function symbol none))
-(define-extern mp-scene-sync-teleport-to-remote! (function none))
 (define-extern mp-is-traffic-spawn-ready? (function object))
 
 (defun handle->process-safe ((h handle))
@@ -839,8 +837,6 @@
 (define *mp-current-event-source-player-id* (the uint #xffffffff))
 (define-perm *mp-last-pole-grab-handle* handle (the-as handle #f))
 (define-perm *mp-pole-grab-latched?* symbol #f)
-(define *mp-remote-wants-skip* #f)
-(define *mp-local-wants-skip* #f)
 
 (define-perm *multi-sync-enabled?* symbol #f)
 (define-perm *multi-last-sync-frame* time-frame (seconds 0))

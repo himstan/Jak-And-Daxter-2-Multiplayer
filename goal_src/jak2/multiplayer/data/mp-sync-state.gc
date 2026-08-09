@@ -631,7 +631,9 @@
                   ;; 2.2.1 PROTECTION: If we are in a scene and the remote wants to skip,
                   ;; or we are in the middle of a remote skip event, don't re-open task managers.
                   (let ((should-open? #t))
-                    (when (or *mp-remote-wants-skip* *mp-local-wants-skip* *mp-processing-remote-event* *scene-player*)
+                    (when (or (mp-scene-coordinator-vote-active?)
+                              *mp-processing-remote-event*
+                              *scene-player*)
                       (set! should-open? #f))
                     (when (mp-tomb-boulder-block-remote-task-open? i)
                       (set! should-open? #f))

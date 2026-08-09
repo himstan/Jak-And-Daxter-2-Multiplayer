@@ -3,6 +3,9 @@
 
 ;; Engine integration that produces events but is not itself a payload factory.
 
+(define-extern mp-scene-coordinator-note-start-broadcast!
+  (function string none))
+
 (declare-type squid-grenade projectile)
 (declare-type metalhead-shot projectile)
 (declare-type parking-spot process-drawable)
@@ -262,7 +265,7 @@
           (mp-event-enqueue-scene! event-type name load-continue)
           )
         (when (= event-type MP_EVENT_SCENE_START)
-          (mp-note-connected-scene-broadcast! name))
+          (mp-scene-coordinator-note-start-broadcast! name))
         )
       )
     )

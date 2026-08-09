@@ -628,6 +628,7 @@
   "mp-tomb-daxter-wait.o" ;; added
   "mp-task-sync-hooks.o" ;; added
   "mp-scene-sync-hooks.o" ;; added
+  "mp-scene-coordinator.o" ;; added
   "mp-sync-state.o" ;; added
   "mp-scene-transition.o" ;; added
   "mp-stadium-board1-patch.o" ;; added

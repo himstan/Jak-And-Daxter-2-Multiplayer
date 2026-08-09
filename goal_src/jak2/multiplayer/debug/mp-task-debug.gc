@@ -1,6 +1,10 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern *mp-scene-coordinator-name* string)
+(define-extern mp-scene-coordinator-vote-count (function int))
+(define-extern mp-scene-coordinator-participant-count (function int))
+
 (define *mp-task-debug-course-count* 0)
 
 (defun mp-task-debug-draw-bot-course ((course-bot bot))
@@ -111,7 +115,10 @@
             )
           
           ;; 6. Recent Activity
-          (format *stdcon* "~%SCENE: ~S, R-SKIP: ~S~%" *mp-last-scene-name* (if *mp-remote-wants-skip* "YES" "NO"))
+          (format *stdcon* "~%SCENE: ~S, SKIP VOTES: ~D/~D~%"
+                  *mp-scene-coordinator-name*
+                  (mp-scene-coordinator-vote-count)
+                  (mp-scene-coordinator-participant-count))
           )
         )
       )

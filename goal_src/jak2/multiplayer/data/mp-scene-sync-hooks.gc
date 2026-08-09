@@ -2,7 +2,6 @@
 (in-package goal)
 
 (define-perm *mp-active-local-scene-name* string (new 'global 'string 64 ""))
-(define-perm *mp-aborted-scene-catchup-logged?* symbol #f)
 
 (defun mp-local-scene-aborted? ()
   "True while the active scene-player is tearing down after a skip/abort."

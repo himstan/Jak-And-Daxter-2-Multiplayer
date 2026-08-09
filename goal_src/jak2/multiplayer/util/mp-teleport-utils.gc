@@ -36,14 +36,15 @@
   (mp-teleport-target-ready-for-record? player (mp-teleport-destination-record))
   )
 
-(defun mp-local-scene-teleport-ready? ()
+(defun mp-local-scene-teleport-ready-for-record?
+       ((record mp-player-record))
   "True when the local target is stable enough for a scene-sync teleport."
   (and *target*
        (nonzero? *target*)
        (-> *target* control)
        (nonzero? (-> *target* control))
-       (mp-teleport-destination-record)
-       (nonzero? (mp-teleport-destination-record))
+       record
+       (nonzero? record)
        (not (focus-test? *target* teleporting))
        (not (and (-> *target* state)
                  (= (-> *target* state name) 'target-load-wait)))
@@ -244,11 +245,13 @@
   (none)
   )
 
-(defun mp-scene-sync-teleport-to-remote! ()
-  "Snap the local target to the remote player for scene sync without vehicle boarding."
-  (when (mp-local-scene-teleport-ready?)
-    (debug-log *mp-debug-log?* "[MP-SceneTeleport] Snapping to remote position for scene load.~%")
-    (mp-teleport-player-to-remote-coords! *target* 4096.0)
+(defun mp-scene-sync-teleport-to-player! ((record mp-player-record))
+  "Snap the local target to the initiating scene player without vehicle boarding."
+  (when (mp-local-scene-teleport-ready-for-record? record)
+    (debug-log *mp-debug-log?*
+      "[MP-SceneTeleport] Snapping to scene initiator player ~D.~%"
+      (-> record identity player-id))
+    (mp-teleport-player-to-record-coords! *target* record 4096.0)
     )
   (none)
   )

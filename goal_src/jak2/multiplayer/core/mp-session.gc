@@ -425,7 +425,7 @@
     (when (or (< status (mp-connection-status connecting))
               (= status (mp-connection-status reconnecting))
               (= status (mp-connection-status host-left)))
-      (mp-clear-connected-scene-broadcast!)
+      (mp-scene-coordinator-clear-catchup-audience!)
       )
     (mp-auto-enable-sync-if-ready! status)
     (if (or (= status (mp-connection-status connecting))
@@ -469,6 +469,8 @@
   (mp-handle-scene-transition)
   (mp-process-pending-scene-sync!)
   (mp-process-scene-sync-target-hold!)
+  (mp-scene-coordinator-tick!)
+  (mp-complete-active-host-scene-skip-if-ready!)
   (none))
 
 (defun mp-update-debug-loss! ()

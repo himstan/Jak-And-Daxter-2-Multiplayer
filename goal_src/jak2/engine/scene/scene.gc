@@ -6,8 +6,15 @@
 ;; dgos: ENGINE, GAME
 
 (define-extern string-crc32 (function string uint))
-(define-extern *mp-processing-remote-event* symbol)
 (define-extern mp-event-hook-scene! (function mp-scene-state string none))
+(define-extern mp-arm-intro-skip-bootstrap! (function string none))
+(define-extern mp-scene-coordinator-note-local-start! (function string symbol))
+(define-extern mp-scene-coordinator-note-local-vote! (function string symbol))
+(define-extern mp-scene-coordinator-host-skip-ready? (function symbol))
+(define-extern mp-scene-coordinator-mark-finalized! (function none))
+(define-extern mp-scene-coordinator-vote-count (function int))
+(define-extern mp-scene-coordinator-participant-count (function int))
+(define-extern mp-scene-coordinator-draw-votes! (function none))
 (define-extern mp-tomb-boulder-adjust-scene! (function scene-player none))
 (define-extern mp-tomb-boulder-before-scene-abort! (function scene-player none))
 (define-extern mp-tomb-boulder-local-only-scene? (function string symbol))
@@ -256,13 +263,6 @@
   (none)
   )
 
-(defun mp-remote-scene-active? ()
-  (and *multi-sync-enabled?*
-       (= (pc-multi-get-status) (mp-connection-status in-game))
-       (or *mp-pending-scene-sync?*
-           (mp-any-remote-player-scene-active?)))
-  )
-
 (defun mp-abort-local-scene! ((scene-proc scene-player))
   (mp-tomb-boulder-before-scene-abort! scene-proc)
   (set! (-> scene-proc aborted?) #t)
@@ -277,17 +277,28 @@
        (time-elapsed? (-> scene-proc scene-start-time) (seconds 1)))
   )
 
-(defun mp-complete-local-skip-if-remote-inactive! ((scene-proc scene-player))
-  "Complete an outstanding local vote when the remote heartbeat leaves its scene."
-  (when (and scene-proc
-             (nonzero? scene-proc)
-             *multi-sync-enabled?*
-             *mp-local-wants-skip*
-             (not (-> scene-proc aborted?))
-             (not (mp-remote-scene-active?)))
-    (debug-log *mp-debug-log?* "[MP-Scene] Remote scene became inactive; completing local skip vote.~%")
-    (mp-abort-local-scene! scene-proc)
-    )
+(defun mp-complete-active-host-scene-skip-if-ready! ()
+  "Let the host finalize one unanimous vote for its matching active scene."
+  (when (and (mp-scene-coordinator-host-skip-ready?)
+             *scene-player*
+             (nonzero? *scene-player*))
+    (let ((scene-proc (the-as scene-player (ppointer->process *scene-player*))))
+      (when (and scene-proc
+                 (nonzero? scene-proc)
+                 (not (-> scene-proc aborted?))
+                 (-> scene-proc scene)
+                 (nonzero? (-> scene-proc scene))
+                 (-> scene-proc scene name)
+                 (nonzero? (-> scene-proc scene name)))
+        (debug-log *mp-debug-log?*
+          "[MP-Scene] Unanimous skip vote reached (~D/~D).~%"
+          (mp-scene-coordinator-vote-count)
+          (mp-scene-coordinator-participant-count))
+        (mp-scene-coordinator-mark-finalized!)
+        (mp-abort-local-scene! scene-proc)
+        (mp-arm-intro-skip-bootstrap! (-> scene-proc scene name))
+        (mp-event-hook-scene!
+          (mp-scene-state skipped) (-> scene-proc scene name)))))
   (none)
   )
 
@@ -1308,34 +1319,31 @@
           (function process-drawable symbol)
           (if (-> self scene abort)
               (lambda :behavior scene-player ()
-                (mp-complete-local-skip-if-remote-inactive! self)
                 (when (and (cpad-pressed? 0 triangle)
                            (mp-scene-skip-ready? self))
                   (cond
                     ((not *multi-sync-enabled?*)
                      (mp-abort-local-scene! self)
                      )
-                    (*mp-remote-wants-skip*
-                     ;; Both want to skip.
-                     (mp-abort-local-scene! self)
-                     (when (and *multi-sync-enabled?*
-                                (not (mp-tomb-scene-transport-suppressed? (-> self scene name))))
-                       (mp-event-hook-scene! (mp-scene-state skipped) (-> self scene name))
-                       )
-                     )
-                    ((not (mp-remote-scene-active?))
-                     (debug-log *mp-debug-log?* "[MP-Scene] Remote scene inactive. Skipping locally without vote.~%")
-                     (mp-abort-local-scene! self)
-                     )
                     (else
-                      ;; Local player wants to skip, but remote hasn't yet
-                      (set! *mp-local-wants-skip* #t)
-                      (when (not (mp-tomb-scene-transport-suppressed? (-> self scene name)))
-                        (mp-event-hook-scene! (mp-scene-state request-skip) (-> self scene name)))
-                      )
+                     (when (and (-> self scene)
+                                (nonzero? (-> self scene))
+                                (-> self scene name)
+                                (nonzero? (-> self scene name))
+                                (mp-scene-coordinator-note-local-vote!
+                                  (-> self scene name))
+                                (not (mp-tomb-scene-transport-suppressed?
+                                       (-> self scene name))))
+                       (mp-event-hook-scene!
+                         (mp-scene-state request-skip) (-> self scene name)))
+                     (mp-complete-active-host-scene-skip-if-ready!)
+                     )
                     )
-                  (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons triangle))
-                  (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons triangle))
+                  (when (and *cpad-list* (nonzero? *cpad-list*))
+                    (logclear! (-> *cpad-list* cpads 0 button0-abs 0)
+                               (pad-buttons triangle))
+                    (logclear! (-> *cpad-list* cpads 0 button0-rel 0)
+                               (pad-buttons triangle)))
                   )
                 (-> self aborted?)
                 )
@@ -1361,25 +1369,12 @@
           )
         )
       )
-    (set! *mp-local-wants-skip* #f)
-    (set! *mp-remote-wants-skip* #f)
     (if (and (-> self wait) *target* (focus-test? *target* grabbed))
         (go-virtual release)
         )
     )
   :post (behavior ()
-    (when (and *multi-sync-enabled?* (or *mp-local-wants-skip* *mp-remote-wants-skip*))
-      (let ((gp-context
-              (new 'stack 'font-context *font-default-matrix* 20 20 0.0 (font-color default) (font-flags shadow kerning))
-              )
-            )
-        (set! (-> gp-context width) (the float 472))
-        (set! (-> gp-context height) (the float 40))
-        (set! (-> gp-context scale) 0.6)
-        (set! (-> gp-context flags) (font-flags shadow kerning middle large))
-        (print-game-text "1/2 PLAYERS WANT TO SKIP" gp-context #f 44 (bucket-id subtitle))
-        )
-      )
+    (mp-scene-coordinator-draw-votes!)
     (when (-> self scene)
       (let ((gp-0 (-> self scene cut-list))
             (s5-0 (-> self skel root-channel 0 frame-group))
@@ -1750,8 +1745,10 @@
     (copy-string<-string *mp-last-scene-name* (-> self scene name))
     )
 
-  (when (and (not (or *mp-processing-remote-event* *mp-remote-wants-skip* *mp-local-wants-skip*))
-             (-> self scene)
+  (when (and (-> self scene)
+             (nonzero? (-> self scene))
+             (-> self scene name)
+             (nonzero? (-> self scene name))
              (not (-> self aborted?))
              (not (mp-tomb-boulder-local-only-scene? (-> self scene name)))
              (not (mp-tomb-scene-transport-suppressed? (-> self scene name)))
@@ -1759,11 +1756,11 @@
              (not (mp-tomb-scene-local-blocked? (-> self scene name)))
              (not (and (string= (-> self scene name) "tomb-boss-intro")
                        (mp-tomb-boss-intro-local-blocked?))))
-    (debug-log *mp-debug-log?* "[MP-Scene] Broadcasting scene start: ~S~%" (-> self scene name))
-    (mp-event-hook-scene! (mp-scene-state started) (-> self scene name)))
-
-  (set! *mp-local-wants-skip* #f)
-  (set! *mp-remote-wants-skip* #f)
+    (when (mp-scene-coordinator-note-local-start! (-> self scene name))
+      (debug-log *mp-debug-log?*
+        "[MP-Scene] Broadcasting scene entry: ~S~%" (-> self scene name))
+      (mp-event-hook-scene!
+        (mp-scene-state started) (-> self scene name))))
 
   (set! *display-entity-errors* #f)
   (set-setting! 'speech-control #f 0.0 0)

@@ -1,0 +1,419 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; Runtime-only scene membership. Network identity and scene activity still
+;; travel through mp-event.source-player-id and mp-player-record.action.
+(define-perm *mp-scene-coordinator-name* string (new 'global 'string 64 ""))
+(define-perm *mp-scene-coordinator-generation* uint (the uint 0))
+(define-perm *mp-scene-coordinator-initiator-id* uint MP_INVALID_PLAYER_ID)
+(define-perm *mp-scene-coordinator-entered-mask* uint (the uint 0))
+(define-perm *mp-scene-coordinator-vote-mask* uint (the uint 0))
+(define-perm *mp-scene-coordinator-catchup-mask* uint (the uint 0))
+(define-perm *mp-scene-coordinator-active?* symbol #f)
+(define-perm *mp-scene-coordinator-finalized?* symbol #f)
+(define-perm *mp-scene-coordinator-finalized-time* time-frame (the-as time-frame 0))
+(define-perm *mp-scene-vote-text* string (new 'global 'string 64 ""))
+
+(defun mp-scene-player-bit ((player-id uint))
+  (if (mp-player-id-valid? player-id)
+      (the-as uint (ash 1 player-id))
+      (the uint 0)))
+
+(defun mp-scene-clear-name! ((scene-name string))
+  (when (and scene-name (nonzero? scene-name))
+    (set! (-> scene-name data 0) (the uint 0))
+    (set! (-> scene-name data -4) (the-as uint 0)))
+  (none))
+
+(defun mp-scene-coordinator-name-matches? ((scene-name string))
+  (and *mp-scene-coordinator-active?*
+       scene-name
+       (nonzero? scene-name)
+       *mp-scene-coordinator-name*
+       (nonzero? *mp-scene-coordinator-name*)
+       (nonzero? (length scene-name))
+       (string= scene-name *mp-scene-coordinator-name*)))
+
+(defun mp-scene-current-local-name-matches? ((scene-name string))
+  (when (and scene-name
+             (nonzero? scene-name)
+             *scene-player*
+             (nonzero? *scene-player*))
+    (let ((scene-proc (the-as scene-player (ppointer->process *scene-player*))))
+      (when (and scene-proc
+                 (nonzero? scene-proc)
+                 (-> scene-proc scene)
+                 (nonzero? (-> scene-proc scene))
+                 (-> scene-proc scene name)
+                 (nonzero? (-> scene-proc scene name)))
+        (return (string= scene-name (-> scene-proc scene name))))))
+  #f)
+
+(defun mp-scene-player-record-joined? ((record mp-player-record))
+  (and record
+       (nonzero? record)
+       (nonzero? (-> record identity joined?))
+       (nonzero? (-> record identity identity-ready?))
+       (nonzero? (-> record connection connected?))))
+
+(defun mp-scene-local-player-record-ready? ((record mp-player-record))
+  (and (mp-scene-player-record-joined? record)
+       *mp-player-controller*
+       (nonzero? *mp-player-controller*)
+       (= (-> record identity player-id)
+          (-> *mp-player-controller* local-player-id))
+       *multi-sync-enabled?*
+       (= (pc-multi-get-status) (mp-connection-status in-game))))
+
+(defun mp-scene-remote-player-record-connected? ((record mp-player-record))
+  (and (mp-scene-player-record-joined? record)
+       (mp-player-record-remote? *mp-player-controller* record)
+       (>= (-> record connection status)
+           (mp-connection-status connected-lobby))))
+
+(defun mp-scene-player-record-session-active? ((record mp-player-record))
+  (when (not (mp-scene-player-record-joined? record))
+    (return #f))
+  (if (and *mp-player-controller*
+           (nonzero? *mp-player-controller*)
+           (= (-> record identity player-id)
+              (-> *mp-player-controller* local-player-id)))
+      (mp-scene-local-player-record-ready? record)
+      (mp-scene-remote-player-record-connected? record)))
+
+(defun mp-scene-connected-remote-mask ()
+  (let ((connected-mask (the uint 0)))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (mp-scene-remote-player-record-connected? record)
+          (set! connected-mask
+                (logior connected-mask
+                        (mp-scene-player-bit (the-as uint player-id)))))))
+    connected-mask))
+
+(defun mp-scene-coordinator-clear-player! ((player-id uint))
+  (let ((player-bit (mp-scene-player-bit player-id)))
+    (when (nonzero? player-bit)
+      (set! *mp-scene-coordinator-entered-mask*
+            (logand *mp-scene-coordinator-entered-mask* (lognot player-bit)))
+      (set! *mp-scene-coordinator-vote-mask*
+            (logand *mp-scene-coordinator-vote-mask* (lognot player-bit)))
+      (set! *mp-scene-coordinator-catchup-mask*
+            (logand *mp-scene-coordinator-catchup-mask* (lognot player-bit)))))
+  (none))
+
+(defun mp-scene-coordinator-clear-record-latches! ()
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (when (and record (nonzero? record))
+        (set! (-> record action scene-latched?) (the uint8 0))
+        (set! (-> record action last-replayed-sequence) (the uint 0)))))
+  (none))
+
+(defun mp-scene-coordinator-clear-catchup-audience! ()
+  (set! *mp-scene-coordinator-catchup-mask* (the uint 0))
+  (none))
+
+(defun mp-scene-coordinator-reset! ()
+  (mp-scene-coordinator-clear-record-latches!)
+  (mp-scene-clear-name! *mp-scene-coordinator-name*)
+  (set! *mp-scene-coordinator-initiator-id* MP_INVALID_PLAYER_ID)
+  (set! *mp-scene-coordinator-entered-mask* (the uint 0))
+  (set! *mp-scene-coordinator-vote-mask* (the uint 0))
+  (set! *mp-scene-coordinator-catchup-mask* (the uint 0))
+  (set! *mp-scene-coordinator-active?* #f)
+  (set! *mp-scene-coordinator-finalized?* #f)
+  (set! *mp-scene-coordinator-finalized-time* (the-as time-frame 0))
+  (none))
+
+(defun mp-scene-coordinator-begin! ((scene-name string) (initiator-id uint))
+  (mp-scene-coordinator-reset!)
+  (+! *mp-scene-coordinator-generation* (the uint 1))
+  (copy-string<-string *mp-scene-coordinator-name* scene-name)
+  (set! *mp-scene-coordinator-initiator-id* initiator-id)
+  (set! *mp-scene-coordinator-active?* #t)
+  (debug-log *mp-debug-log?*
+    "[MP-Scene] Cohort ~D started for ~S by player ~D.~%"
+    *mp-scene-coordinator-generation*
+    scene-name
+    initiator-id)
+  (none))
+
+(defun mp-scene-coordinator-ensure-scene!
+       ((scene-name string) (initiator-id uint))
+  (when (or (not scene-name)
+            (zero? scene-name)
+            (zero? (length scene-name))
+            (not (mp-player-id-valid? initiator-id)))
+    (return #f))
+  (when (not *mp-scene-coordinator-active?*)
+    (mp-scene-coordinator-begin! scene-name initiator-id))
+  (and (not *mp-scene-coordinator-finalized?*)
+       (mp-scene-coordinator-name-matches? scene-name)))
+
+(defun mp-scene-coordinator-note-local-start! ((scene-name string))
+  (when (or (not *mp-player-controller*)
+            (zero? *mp-player-controller*))
+    (return #f))
+  (let* ((local-player-id (mp-local-player-id))
+         (local-record (mp-player-record-by-id local-player-id)))
+    (when (or (not (mp-scene-local-player-record-ready? local-record))
+              (not (mp-scene-coordinator-ensure-scene!
+                     scene-name local-player-id)))
+      (return #f))
+    (set! *mp-scene-coordinator-entered-mask*
+          (logior *mp-scene-coordinator-entered-mask*
+                  (mp-scene-player-bit local-player-id)))
+    #t))
+
+(defun mp-scene-coordinator-note-remote-start!
+       ((player-id uint) (scene-name string))
+  (let ((record (mp-player-record-by-id player-id)))
+    (when (or (not (mp-scene-remote-player-record-connected? record))
+              (not (mp-scene-coordinator-ensure-scene!
+                     scene-name player-id)))
+      (return #f))
+    (set! *mp-scene-coordinator-entered-mask*
+          (logior *mp-scene-coordinator-entered-mask*
+                  (mp-scene-player-bit player-id)))
+    (set! (-> record action scene-latched?) (the uint8 1))
+    (set! (-> record action last-replayed-sequence)
+          (-> record connection latest-state-sequence))
+    #t))
+
+(defun mp-scene-coordinator-note-vote!
+       ((player-id uint) (scene-name string))
+  (let ((record (mp-player-record-by-id player-id))
+        (player-bit (mp-scene-player-bit player-id)))
+    (when (or *mp-scene-coordinator-finalized?*
+              (zero? player-bit)
+              (not (mp-scene-coordinator-name-matches? scene-name))
+              (not (mp-scene-player-record-session-active? record)))
+      (return #f))
+    (let ((new-vote? (not (logtest? *mp-scene-coordinator-vote-mask* player-bit))))
+      (set! *mp-scene-coordinator-entered-mask*
+            (logior *mp-scene-coordinator-entered-mask* player-bit))
+      (set! *mp-scene-coordinator-vote-mask*
+            (logior *mp-scene-coordinator-vote-mask* player-bit))
+      (when (!= player-id (mp-local-player-id))
+        (set! (-> record action scene-latched?) (the uint8 1))
+        (set! (-> record action last-replayed-sequence)
+              (-> record connection latest-state-sequence)))
+      new-vote?)))
+
+(defun mp-scene-coordinator-note-local-vote! ((scene-name string))
+  (when (or (not *mp-player-controller*)
+            (zero? *mp-player-controller*))
+    (debug-log *mp-debug-log?*
+      "[MP-Scene] Rejected local skip vote: player controller is unavailable.~%")
+    (return #f))
+  (let* ((local-player-id (mp-local-player-id))
+         (local-record (mp-player-record-by-id local-player-id))
+         (player-bit (mp-scene-player-bit local-player-id)))
+    (when (and (nonzero? player-bit)
+               (logtest? *mp-scene-coordinator-vote-mask* player-bit))
+      (return #f))
+    (when (not (mp-scene-local-player-record-ready? local-record))
+      (debug-log *mp-debug-log?*
+        "[MP-Scene] Rejected local skip vote: player ~D is not session-ready (status ~D, sync ~A).~%"
+        local-player-id
+        (pc-multi-get-status)
+        *multi-sync-enabled?*)
+      (return #f))
+    (when (or *mp-scene-coordinator-finalized?*
+              (not (mp-scene-coordinator-name-matches? scene-name)))
+      (debug-log *mp-debug-log?*
+        "[MP-Scene] Rejected local skip vote for ~S (cohort-active ~A, finalized ~A).~%"
+        scene-name
+        *mp-scene-coordinator-active?*
+        *mp-scene-coordinator-finalized?*)
+      (return #f))
+    (mp-scene-coordinator-note-vote! local-player-id scene-name)))
+
+(defun mp-scene-coordinator-note-remote-vote!
+       ((player-id uint) (scene-name string))
+  (mp-scene-coordinator-note-vote! player-id scene-name))
+
+(defun mp-scene-player-active-in-cohort? ((player-id uint))
+  (let ((player-bit (mp-scene-player-bit player-id))
+        (record (mp-player-record-by-id player-id)))
+    (when (or (zero? player-bit)
+              (not (logtest? *mp-scene-coordinator-entered-mask* player-bit))
+              (not (mp-scene-player-record-session-active? record)))
+      (return #f))
+    (if (= player-id (mp-local-player-id))
+        (mp-scene-current-local-name-matches? *mp-scene-coordinator-name*)
+        (or (nonzero? (-> record action scene-state))
+            (nonzero? (-> record action scene-latched?))))))
+
+(defun mp-scene-coordinator-participant-mask ()
+  (let ((participant-mask (the uint 0)))
+    (when (and *mp-scene-coordinator-active?*
+               (not *mp-scene-coordinator-finalized?*))
+      (dotimes (player-id MP_MAX_PLAYERS)
+        (when (mp-scene-player-active-in-cohort? (the-as uint player-id))
+          (set! participant-mask
+                (logior participant-mask
+                        (mp-scene-player-bit (the-as uint player-id)))))))
+    participant-mask))
+
+(defun mp-scene-count-mask ((player-mask uint))
+  (let ((count 0))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (when (logtest? player-mask (mp-scene-player-bit (the-as uint player-id)))
+        (+! count 1)))
+    count))
+
+(defun mp-scene-coordinator-participant-count ()
+  (mp-scene-count-mask (mp-scene-coordinator-participant-mask)))
+
+(defun mp-scene-coordinator-vote-count ()
+  (mp-scene-count-mask
+    (logand *mp-scene-coordinator-vote-mask*
+            (mp-scene-coordinator-participant-mask))))
+
+(defun mp-scene-coordinator-vote-active? ()
+  (nonzero?
+    (logand *mp-scene-coordinator-vote-mask*
+            (mp-scene-coordinator-participant-mask))))
+
+(defun mp-scene-coordinator-host-skip-ready? ()
+  (let ((participant-mask (mp-scene-coordinator-participant-mask)))
+    (and (mp-session-host?)
+         *mp-scene-coordinator-active?*
+         (not *mp-scene-coordinator-finalized?*)
+         (nonzero? participant-mask)
+         (mp-scene-current-local-name-matches? *mp-scene-coordinator-name*)
+         (= (logand *mp-scene-coordinator-vote-mask* participant-mask)
+            participant-mask))))
+
+(defun mp-scene-coordinator-mark-finalized! ()
+  (when *mp-scene-coordinator-active?*
+    (set! *mp-scene-coordinator-finalized?* #t)
+    (set! *mp-scene-coordinator-finalized-time* (current-time))
+    (set! *mp-scene-coordinator-vote-mask* (the uint 0))
+    (mp-scene-coordinator-clear-record-latches!))
+  (none))
+
+(defun mp-scene-coordinator-accept-host-skip!
+       ((source-player-id uint) (scene-name string))
+  (when (or *mp-scene-coordinator-finalized?*
+            (!= source-player-id (mp-host-player-id))
+            (not (mp-scene-coordinator-name-matches? scene-name)))
+    (return #f))
+  (mp-scene-coordinator-mark-finalized!)
+  #t)
+
+(defun mp-scene-coordinator-entry-record-ready? ((record mp-player-record))
+  (and (mp-scene-remote-player-record-connected? record)
+       (nonzero? (-> record identity state-ready?))
+       (logtest? *mp-scene-coordinator-entered-mask*
+                 (mp-scene-player-bit (-> record identity player-id)))))
+
+(defun mp-scene-coordinator-source-record ()
+  (let ((initiator-record
+          (mp-player-record-by-id *mp-scene-coordinator-initiator-id*)))
+    (when (and (mp-scene-coordinator-entry-record-ready? initiator-record)
+               (mp-player-record-remote? *mp-player-controller* initiator-record))
+      (return initiator-record)))
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (when (and (mp-scene-coordinator-entry-record-ready? record)
+                 (mp-player-record-remote? *mp-player-controller* record))
+        (return record))))
+  (the-as mp-player-record #f))
+
+(defun mp-scene-coordinator-has-connected-entry? ()
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (when (and (mp-scene-remote-player-record-connected? record)
+                 (logtest? *mp-scene-coordinator-entered-mask*
+                           (mp-scene-player-bit (the-as uint player-id))))
+        (return #t))))
+  #f)
+
+(defun mp-scene-coordinator-note-start-broadcast! ((scene-name string))
+  (when (and (mp-session-host?)
+             (mp-scene-coordinator-name-matches? scene-name))
+    (set! *mp-scene-coordinator-catchup-mask*
+          (mp-scene-connected-remote-mask)))
+  (none))
+
+(defun mp-scene-coordinator-replay-for-late-joins! ()
+  (when (and (mp-session-host?)
+             *multi-sync-enabled?*
+             (= (pc-multi-get-status) (mp-connection-status in-game))
+             *mp-scene-coordinator-active?*
+             (not *mp-scene-coordinator-finalized?*)
+             (mp-scene-current-local-name-matches? *mp-scene-coordinator-name*)
+             (not (mp-local-scene-aborted?))
+             (not (mp-tomb-scene-transport-suppressed?
+                    *mp-scene-coordinator-name*)))
+    (let ((connected-mask (mp-scene-connected-remote-mask)))
+      (set! *mp-scene-coordinator-catchup-mask*
+            (logand *mp-scene-coordinator-catchup-mask* connected-mask))
+      (when (nonzero?
+              (logand connected-mask
+                      (lognot *mp-scene-coordinator-catchup-mask*)))
+        (debug-log *mp-debug-log?*
+          "[MP-Scene] Broadcasting active scene ~S to newly joined players.~%"
+          *mp-scene-coordinator-name*)
+        (mp-event-hook-scene!
+          (mp-scene-state started) *mp-scene-coordinator-name*))))
+  (none))
+
+(defun mp-scene-coordinator-reconcile-player! ((player-id uint))
+  (let ((record (mp-player-record-by-id player-id)))
+    (when (not (mp-scene-player-record-session-active? record))
+      (mp-scene-coordinator-clear-player! player-id)
+      (return #f))
+    (if (= player-id (mp-local-player-id))
+        (when (not (mp-scene-current-local-name-matches?
+                     *mp-scene-coordinator-name*))
+          (mp-scene-coordinator-clear-player! player-id))
+        (when (and (zero? (-> record action scene-state))
+                   (or (zero? (-> record action scene-latched?))
+                       (!= (-> record connection latest-state-sequence)
+                           (-> record action last-replayed-sequence))))
+          (set! (-> record action scene-latched?) (the uint8 0))
+          (set! (-> record action last-replayed-sequence) (the uint 0))
+          (mp-scene-coordinator-clear-player! player-id))))
+  #t)
+
+(defun mp-scene-coordinator-tick! ()
+  (when *mp-scene-coordinator-active?*
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (mp-scene-coordinator-reconcile-player! (the-as uint player-id)))
+    (mp-scene-coordinator-replay-for-late-joins!)
+    (when (and (not *scene-player*)
+               (not *mp-pending-scene-sync?*)
+               (if *mp-scene-coordinator-finalized?*
+                   (and (not (mp-any-remote-player-scene-active?))
+                        (time-elapsed?
+                          *mp-scene-coordinator-finalized-time* (seconds 1)))
+                   (zero? (mp-scene-coordinator-participant-mask))))
+      (mp-scene-coordinator-reset!)))
+  (none))
+
+(defun mp-scene-coordinator-draw-votes! ()
+  (let ((participant-count (mp-scene-coordinator-participant-count))
+        (vote-count (mp-scene-coordinator-vote-count)))
+    (when (and *multi-sync-enabled?*
+               (> participant-count 0)
+               (> vote-count 0)
+               *mp-scene-vote-text*
+               (nonzero? *mp-scene-vote-text*))
+      (let ((font-ctx
+              (new 'stack 'font-context *font-default-matrix* 20 20 0.0
+                   (font-color default) (font-flags shadow kerning))))
+        (when (and font-ctx (nonzero? font-ctx))
+          (set! (-> font-ctx width) (the float 472))
+          (set! (-> font-ctx height) (the float 40))
+          (set! (-> font-ctx scale) 0.6)
+          (set! (-> font-ctx flags) (font-flags shadow kerning middle large))
+          (clear *mp-scene-vote-text*)
+          (format *mp-scene-vote-text* "SKIP VOTES: ~D/~D"
+                  vote-count participant-count)
+          (print-game-text *mp-scene-vote-text* font-ctx #f 44
+                           (bucket-id subtitle))))))
+  (none))

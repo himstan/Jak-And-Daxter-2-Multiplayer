@@ -445,10 +445,8 @@
 (define-extern mp-event-hook-pole-grab! (function handle none))
 (define-extern mp-event-hook-scene! (function mp-scene-state string none))
 (define-extern mp-clear-pole-grab-event-latch (function handle none))
-(define-extern mp-clear-connected-scene-broadcast! (function none))
 (define-extern mp-request-intro-skip-bootstrap-when-ready! (function none))
 (define-extern mp-hold-intro-skip-blackout! (function none))
-(define-extern mp-note-connected-scene-broadcast! (function string none))
 
 ;; Centralized dispatch and subsystem application hooks.
 (define-extern mp-event-handler-authority-request (function uint uint none))
@@ -459,7 +457,7 @@
 (define-extern mp-event-handler-change-mode-darkjak (function uint uint none))
 (define-extern mp-event-handler-end-mode-darkjak (function uint uint none))
 (define-extern mp-event-handler-scene-start (function mp-scene-event none))
-(define-extern mp-event-handler-scene-request-skip (function uint none))
+(define-extern mp-event-handler-scene-request-skip (function mp-scene-event none))
 (define-extern mp-event-handler-scene-skipped (function mp-scene-event none))
 (define-extern mp-tomb-scene-sync-suppressed? (function symbol))
 (define-extern mp-tomb-scene-transport-suppressed? (function string symbol))

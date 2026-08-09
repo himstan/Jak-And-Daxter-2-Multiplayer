@@ -733,19 +733,6 @@
         (return #t))))
   #f)
 
-(defun mp-all-connected-remote-players-scene-ready? ()
-  "Vacant and disconnected slots do not participate in the scene barrier."
-  (dotimes (player-id MP_MAX_PLAYERS)
-    (let ((record (mp-player-record-by-id (the-as uint player-id))))
-      (when (and record
-                 (nonzero? record)
-                 (mp-player-record-remote? *mp-player-controller* record)
-                 (>= (-> record connection status) 4)
-                 (zero? (-> record action scene-state))
-                 (zero? (-> record action scene-latched?)))
-        (return #f))))
-  #t)
-
 (defun mp-local-player-respawning? ()
   (mp-player-runtime-flag?
     (mp-local-player-record) MP_PLAYER_RUNTIME_RESPAWNING))
