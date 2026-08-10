@@ -1458,7 +1458,7 @@
                        vehicle-can-spawn?
                        (> (-> record vehicle state state-id) 2)
                        (not (mp-player-runtime-flag?
-                              record MP_PLAYER_RUNTIME_WAS_FAR)))
+                              record (mp-player-runtime-flags was-far))))
               (debug-log *mp-debug-log?*
                 "[MP-Traffic] Missing player ~D vehicle ~D; spawning.~%"
                 (-> record identity player-id) driven-net-id)

@@ -98,7 +98,7 @@
     (let ((ghost (mp-player-record-ghost record)))
       (when (and ghost (nonzero? ghost) (-> ghost active?))
         (set! ghost-weapon (the-as uint (-> ghost equipped-weapon)))))
-    (when (mp-player-runtime-flag? record MP_PLAYER_RUNTIME_PENDING_GUN_SHOT)
+    (when (mp-player-runtime-flag? record (mp-player-runtime-flags pending-gun-shot))
       (set! pending-weapon (-> record runtime pending-gun-shot-weapon))
       )
     (if (and record
@@ -112,7 +112,7 @@
                         pending-weapon
                         (mp-debug-bool-string
                           (mp-player-runtime-flag?
-                            record MP_PLAYER_RUNTIME_PENDING_GUN_SHOT))))
+                            record (mp-player-runtime-flags pending-gun-shot)))))
         (the-as string
                 (format #f "SYNC LOCAL: local-info=~D" local-weapon)))
     )

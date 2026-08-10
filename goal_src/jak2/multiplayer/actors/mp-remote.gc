@@ -28,13 +28,13 @@
                  presentation-quaternion
                  (nonzero? presentation-quaternion))
         (when (or (not (mp-player-runtime-flag?
-                         record MP_PLAYER_RUNTIME_INTERP_INITIALIZED))
+                         record (mp-player-runtime-flags interp-initialized)))
                   (> (vector-vector-distance presentation-position network-position)
                      (meters 20.0)))
           (vector-copy! presentation-position network-position)
           (set! (-> record runtime interpolation-angle) (-> record transform angle))
           (mp-player-runtime-set-flag!
-            record MP_PLAYER_RUNTIME_INTERP_INITIALIZED))
+            record (mp-player-runtime-flags interp-initialized)))
         (vector-lerp!
           presentation-position
           presentation-position
@@ -127,13 +127,13 @@
   "Apply independent culling and return whether this record should own a live puppet."
   (let ((distance (mp-player-puppet-distance-from-local record))
         (force-presentation?
-          (mp-player-runtime-flag? record MP_PLAYER_RUNTIME_FORCE_PRESENTATION)))
+          (mp-player-runtime-flag? record (mp-player-runtime-flags force-presentation))))
     (cond
       ((and (> distance (meters 250.0))
             (not force-presentation?))
        (when (mp-puppet-valid? (mp-player-record-target record))
          (mp-puppet-deactivate! record))
-       (mp-player-runtime-set-flag! record MP_PLAYER_RUNTIME_WAS_FAR)
+       (mp-player-runtime-set-flag! record (mp-player-runtime-flags was-far))
        #f)
       ((and (> distance (meters 250.0))
             force-presentation?
@@ -142,15 +142,15 @@
          (mp-puppet-deactivate! record))
        #f)
       ((and (<= distance (meters 250.0))
-            (mp-player-runtime-flag? record MP_PLAYER_RUNTIME_WAS_FAR)
-            (not (mp-player-runtime-flag? record MP_PLAYER_RUNTIME_WARPING)))
+            (mp-player-runtime-flag? record (mp-player-runtime-flags was-far))
+            (not (mp-player-runtime-flag? record (mp-player-runtime-flags warping))))
        (mp-player-puppet-preserve-vehicle! record)
        (mp-puppet-deactivate! record)
-       (mp-player-runtime-clear-flag! record MP_PLAYER_RUNTIME_WAS_FAR)
+       (mp-player-runtime-clear-flag! record (mp-player-runtime-flags was-far))
        #t)
       (else
        (when (and force-presentation? (mp-player-level-ready? record))
-         (mp-player-runtime-clear-flag! record MP_PLAYER_RUNTIME_WAS_FAR))
+         (mp-player-runtime-clear-flag! record (mp-player-runtime-flags was-far)))
        #t))))
 
 (defun mp-manage-player-puppet! ((record mp-player-record))
@@ -171,14 +171,14 @@
                 (mp-puppet-clear-stale! record)))
             (when (and (mp-player-puppet-presentation-allowed? record)
                        (not (mp-player-runtime-flag?
-                              record MP_PLAYER_RUNTIME_WARPING)))
+                              record (mp-player-runtime-flags warping))))
               (let ((puppet (mp-player-record-target record)))
                 (when (not (mp-puppet-valid? puppet))
                   (mp-puppet-spawn record))
                 (set! puppet (mp-player-record-target record))
                 (when (mp-puppet-valid? puppet)
                   (set! (-> record runtime puppet-lifecycle)
-                        MP_PUPPET_LIFECYCLE_ACTIVE)
+                        (mp-puppet-lifecycle active))
                   (mp-puppet-apply-ghost-correction! puppet))))
             (mp-remote-player-marker-update! record))
           (begin
@@ -188,7 +188,7 @@
             (set! (-> record runtime last-fresh-input-time)
                   (the-as time-frame 0))
             (mp-player-runtime-clear-flag!
-              record MP_PLAYER_RUNTIME_WAS_FAR)))))
+              record (mp-player-runtime-flags was-far))))))
   (none))
 
 (defun mp-cleanup-stale-player-presentation! ((record mp-player-record))

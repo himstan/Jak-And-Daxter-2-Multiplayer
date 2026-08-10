@@ -37,14 +37,14 @@
 ;; --- Event Handlers ---
 (defun mp-event-remote-player-respawned ((source-record mp-player-record))
   (when (and source-record (nonzero? source-record))
-    (mp-player-runtime-clear-flag! source-record MP_PLAYER_RUNTIME_DYING)
-    (mp-player-runtime-clear-flag! source-record MP_PLAYER_RUNTIME_DEAD))
+    (mp-player-runtime-clear-flag! source-record (mp-player-runtime-flags dying))
+    (mp-player-runtime-clear-flag! source-record (mp-player-runtime-flags dead)))
   (none))
 
 (defun mp-event-remote-player-died ((source-record mp-player-record))
   (when (and source-record (nonzero? source-record))
-    (mp-player-runtime-clear-flag! source-record MP_PLAYER_RUNTIME_DYING)
-    (mp-player-runtime-set-flag! source-record MP_PLAYER_RUNTIME_DEAD))
+    (mp-player-runtime-clear-flag! source-record (mp-player-runtime-flags dying))
+    (mp-player-runtime-set-flag! source-record (mp-player-runtime-flags dead)))
   (none))
 
 (defun mp-event-handler-enemy-death ((evt mp-enemy-death-event))

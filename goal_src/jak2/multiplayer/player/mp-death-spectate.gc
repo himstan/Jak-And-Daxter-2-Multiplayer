@@ -36,7 +36,7 @@
   (let ((record (mp-spectated-player-record)))
     (when (and record (nonzero? record))
       (mp-player-runtime-clear-flag!
-        record MP_PLAYER_RUNTIME_FORCE_PRESENTATION)))
+        record (mp-player-runtime-flags force-presentation))))
   (set! *mp-spectated-player-id* MP_INVALID_PLAYER_ID)
   (set! *mp-spectate-camera-player-id* MP_INVALID_PLAYER_ID)
   (mp-clear-spectate-level-request!)
@@ -92,7 +92,7 @@
       (set! *mp-spectated-player-id*
             (the-as uint (-> candidate identity player-id)))
       (mp-player-runtime-set-flag!
-        candidate MP_PLAYER_RUNTIME_FORCE_PRESENTATION)
+        candidate (mp-player-runtime-flags force-presentation))
       (return candidate)))
   (the-as mp-player-record #f))
 

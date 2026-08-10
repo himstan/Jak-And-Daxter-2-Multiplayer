@@ -129,7 +129,7 @@
     (when (= phase MP_WARP_GATE_PHASE_ARRIVE)
       (let ((record (mp-player-record-by-id (-> evt source-player-id))))
         (when (and record (nonzero? record))
-          (mp-player-runtime-clear-flag! record MP_PLAYER_RUNTIME_WARPING)))
+          (mp-player-runtime-clear-flag! record (mp-player-runtime-flags warping))))
     )
     (when (and (mp-session-client?)
                (mp-target-ride-along? *target*)

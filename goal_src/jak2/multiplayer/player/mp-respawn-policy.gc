@@ -107,12 +107,12 @@
   (let ((local-record (mp-local-player-record)))
     (when (and local-record (nonzero? local-record))
       (mp-player-runtime-clear-flag!
-        local-record MP_PLAYER_RUNTIME_RESPAWNING)))
+        local-record (mp-player-runtime-flags respawning))))
   (dotimes (player-id MP_MAX_PLAYERS)
     (let ((record (mp-player-record-by-id (the-as uint player-id))))
       (when (and record (nonzero? record))
         (mp-player-runtime-clear-flag!
-          record MP_PLAYER_RUNTIME_FORCE_PRESENTATION))))
+          record (mp-player-runtime-flags force-presentation)))))
   (when (and player (nonzero? player))
     (mp-clear-local-vehicle-occupancy! player)
     (let ((control (-> player control)))

@@ -18,20 +18,27 @@
 (defconstant MP_INVALID_PAD_INDEX (the uint8 #xff))
 (defconstant MP_REMOTE_PLAYER_MARKER_KEY_BASE (the int #x4d505240))
 
-(defconstant MP_PLAYER_RUNTIME_DYING              (the uint 1))
-(defconstant MP_PLAYER_RUNTIME_DEAD               (the uint 2))
-(defconstant MP_PLAYER_RUNTIME_RESPAWNING         (the uint 4))
-(defconstant MP_PLAYER_RUNTIME_INTERP_INITIALIZED (the uint 8))
-(defconstant MP_PLAYER_RUNTIME_WAS_FAR            (the uint 16))
-(defconstant MP_PLAYER_RUNTIME_WARPING             (the uint 32))
-(defconstant MP_PLAYER_RUNTIME_RECOVERING          (the uint 64))
-(defconstant MP_PLAYER_RUNTIME_FORCE_PRESENTATION  (the uint 128))
-(defconstant MP_PLAYER_RUNTIME_PENDING_GUN_SHOT    (the uint 256))
+(defenum mp-player-runtime-flags
+  :type uint32
+  :bitfield #t
+  (dying               0)
+  (dead                1)
+  (respawning          2)
+  (interp-initialized  3)
+  (was-far             4)
+  (warping             5)
+  (recovering          6)
+  (force-presentation  7)
+  (pending-gun-shot    8)
+  )
 
-(defconstant MP_PUPPET_LIFECYCLE_NONE     (the uint8 0))
-(defconstant MP_PUPPET_LIFECYCLE_SPAWNING (the uint8 1))
-(defconstant MP_PUPPET_LIFECYCLE_ACTIVE   (the uint8 2))
-(defconstant MP_PUPPET_LIFECYCLE_CULLED   (the uint8 3))
+(defenum mp-puppet-lifecycle
+  :type uint8
+  (none      0)
+  (spawning  1)
+  (active    2)
+  (culled    3)
+  )
 
 (defenum mp-session-role
   :type int32
@@ -214,10 +221,10 @@
    (last-gun-log-active int32)
    (last-gun-log-requested int32)
    (pad-index uint8)
-   (puppet-lifecycle uint8)
+   (puppet-lifecycle mp-puppet-lifecycle)
    (pending-gun-shot-weapon uint8)
    (reserved-byte uint8)
-   (flags uint32)
+   (flags mp-player-runtime-flags)
    (reserved uint32 3)
    )
   :size-assert 224)
@@ -663,26 +670,26 @@
           (return record)))))
   (the-as mp-player-record #f))
 
-(defun mp-player-runtime-flag? ((record mp-player-record) (flag uint))
+(defun mp-player-runtime-flag? ((record mp-player-record) (flag mp-player-runtime-flags))
   (if (and record
            (nonzero? record)
            (logtest? (-> record runtime flags) flag))
       #t
       #f))
 
-(defun mp-player-runtime-set-flag! ((record mp-player-record) (flag uint))
+(defun mp-player-runtime-set-flag! ((record mp-player-record) (flag mp-player-runtime-flags))
   (when (and record (nonzero? record))
     (logior! (-> record runtime flags) flag)))
 
-(defun mp-player-runtime-clear-flag! ((record mp-player-record) (flag uint))
+(defun mp-player-runtime-clear-flag! ((record mp-player-record) (flag mp-player-runtime-flags))
   (when (and record (nonzero? record))
     (logclear! (-> record runtime flags) flag)))
 
 (defun mp-player-record-dead-or-dying? ((record mp-player-record))
   (and record
        (nonzero? record)
-       (or (mp-player-runtime-flag? record MP_PLAYER_RUNTIME_DYING)
-           (mp-player-runtime-flag? record MP_PLAYER_RUNTIME_DEAD))))
+       (or (mp-player-runtime-flag? record (mp-player-runtime-flags dying))
+           (mp-player-runtime-flag? record (mp-player-runtime-flags dead)))))
 
 (defun mp-any-live-remote-player? ()
   (dotimes (player-id MP_MAX_PLAYERS)
@@ -704,7 +711,7 @@
                    (mp-player-record-remote? *mp-player-controller* record)
                    (>= (-> record connection status) 4))
           (set! found-remote? #t)
-          (when (not (mp-player-runtime-flag? record MP_PLAYER_RUNTIME_DEAD))
+          (when (not (mp-player-runtime-flag? record (mp-player-runtime-flags dead)))
             (return #f)))))
     found-remote?))
 
@@ -732,14 +739,14 @@
 
 (defun mp-local-player-respawning? ()
   (mp-player-runtime-flag?
-    (mp-local-player-record) MP_PLAYER_RUNTIME_RESPAWNING))
+    (mp-local-player-record) (mp-player-runtime-flags respawning)))
 
 (defun mp-set-local-player-respawning! ((respawning? symbol))
   (let ((record (mp-local-player-record)))
     (when (and record (nonzero? record))
       (if respawning?
-          (mp-player-runtime-set-flag! record MP_PLAYER_RUNTIME_RESPAWNING)
-          (mp-player-runtime-clear-flag! record MP_PLAYER_RUNTIME_RESPAWNING))))
+          (mp-player-runtime-set-flag! record (mp-player-runtime-flags respawning))
+          (mp-player-runtime-clear-flag! record (mp-player-runtime-flags respawning)))))
   (none))
 
 (defun mp-player-record-position ((record mp-player-record))
@@ -750,7 +757,7 @@
                  (-> player-target root)
                  (nonzero? (-> player-target root)))
         (return (-> player-target root trans))))
-    (when (mp-player-runtime-flag? record MP_PLAYER_RUNTIME_INTERP_INITIALIZED)
+    (when (mp-player-runtime-flag? record (mp-player-runtime-flags interp-initialized))
       (return (-> record runtime presentation-position)))
     (return (-> record transform position)))
   (the-as vector #f))
