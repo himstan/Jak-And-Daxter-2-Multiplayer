@@ -26,26 +26,20 @@
 
 (defun mp-vehicle-player-record ((veh vehicle) (remote-only? symbol))
   (when (and veh (nonzero? veh))
-    (dotimes (player-id MP_MAX_PLAYERS)
-      (let ((record (mp-player-record-by-id (the-as uint player-id))))
-        (when (and record
-                   (nonzero? record)
-                   (or (not remote-only?)
-                       (mp-player-record-remote? *mp-player-controller* record))
-                   (mp-player-record-owns-vehicle? record veh))
-          (return record)))))
+    (mp-for-each-player-record (player-id record)
+      (when (and (or (not remote-only?)
+                     (mp-player-record-remote? *mp-player-controller* record))
+                 (mp-player-record-owns-vehicle? record veh))
+        (return record))))
   (the-as mp-player-record #f))
 
 (defun mp-vehicle-net-id-player-owned? ((net-id uint) (remote-only? symbol))
   (when (nonzero? net-id)
-    (dotimes (player-id MP_MAX_PLAYERS)
-      (let ((record (mp-player-record-by-id (the-as uint player-id))))
-        (when (and record
-                   (nonzero? record)
-                   (or (not remote-only?)
-                       (mp-player-record-remote? *mp-player-controller* record))
-                   (= net-id (-> record vehicle state net-id)))
-          (return #t)))))
+    (mp-for-each-player-record (player-id record)
+      (when (and (or (not remote-only?)
+                     (mp-player-record-remote? *mp-player-controller* record))
+                 (= net-id (-> record vehicle state net-id)))
+        (return #t))))
   #f)
 
 (defun mp-race-vehicle-register! ((racer-index int) (vehicle vehicle))
@@ -232,26 +226,20 @@
 
 (defun mp-vehicle-remote-puppet-currently-driving? ()
   "True while any remote target is safely attached to a driver seat."
-  (dotimes (player-id MP_MAX_PLAYERS)
-    (let ((record (mp-player-record-by-id (the-as uint player-id))))
-      (when (and record
-                 (nonzero? record)
-                 (mp-player-record-remote? *mp-player-controller* record))
-        (let ((puppet (mp-player-record-target record)))
-          (when (and puppet
-                     (nonzero? puppet)
-                     (focus-test? puppet pilot)
-                     (-> puppet pilot)
-                     (nonzero? (-> puppet pilot))
-                     (zero? (-> puppet pilot seat-index)))
-            (let ((vehicle-process
-                    (handle->process-safe (-> puppet pilot vehicle))))
-              (when (and vehicle-process
-                         (nonzero? vehicle-process)
-                         (type? vehicle-process vehicle)
-                         (mp-vehicle-remote-puppet-driving?
-                           (the-as vehicle vehicle-process)))
-                (return #t))))))))
+  (mp-for-each-player-target (player-id record puppet)
+    (when (and (mp-player-record-remote? *mp-player-controller* record)
+               (focus-test? puppet pilot)
+               (-> puppet pilot)
+               (nonzero? (-> puppet pilot))
+               (zero? (-> puppet pilot seat-index)))
+      (let ((vehicle-process
+              (handle->process-safe (-> puppet pilot vehicle))))
+        (when (and vehicle-process
+                   (nonzero? vehicle-process)
+                   (type? vehicle-process vehicle)
+                   (mp-vehicle-remote-puppet-driving?
+                     (the-as vehicle vehicle-process)))
+          (return #t)))))
   (the-as symbol #f)
   )
 
@@ -1483,12 +1471,9 @@
 )
 
 (defun mp-vehicle-apply-piggyback ()
-  (dotimes (player-id MP_MAX_PLAYERS)
-    (let ((record (mp-player-record-by-id (the-as uint player-id))))
-      (when (and record
-                 (nonzero? record)
-                 (mp-player-record-remote? *mp-player-controller* record))
-        (mp-vehicle-apply-player-piggyback record))))
+  (mp-for-each-player-record (player-id record)
+    (when (mp-player-record-remote? *mp-player-controller* record)
+      (mp-vehicle-apply-player-piggyback record)))
   (none))
 
 (defun mp-vehicle-apply-remote ()

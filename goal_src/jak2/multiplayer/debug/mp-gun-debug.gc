@@ -281,14 +281,8 @@
   (when *mp-gun-debug?*
     (when (and *target* (nonzero? *target*))
       (mp-draw-target-gun-debug *target* "LOCAL"))
-    (dotimes (player-id MP_MAX_PLAYERS)
-      (let* ((record (mp-player-record-by-id (the-as uint player-id)))
-             (puppet (mp-player-record-target record)))
-        (when (and record
-                   (nonzero? record)
-                   (mp-player-record-remote? *mp-player-controller* record)
-                   puppet
-                   (nonzero? puppet))
-          (mp-draw-target-gun-debug puppet "PUPPET"))))
+    (mp-for-each-player-target (player-id record puppet)
+      (when (mp-player-record-remote? *mp-player-controller* record)
+        (mp-draw-target-gun-debug puppet "PUPPET")))
     )
   (none))

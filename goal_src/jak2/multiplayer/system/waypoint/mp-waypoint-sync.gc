@@ -328,32 +328,26 @@
 (defun mp-waypoint-remote-level-fingerprint ()
   "Fingerprint every connected remote's primary level in its player-ID byte."
   (let ((fingerprint (the uint 0)))
-    (dotimes (player-id MP_MAX_PLAYERS)
-      (let ((record (mp-player-record-by-id (the-as uint player-id))))
-        (when (and record
-                   (nonzero? record)
-                   (mp-player-record-remote? *mp-player-controller* record)
-                   (>= (-> record connection status) 4))
-          (set! fingerprint
-            (the-as uint
-              (logior fingerprint
-                (shl
-                  (mp-level-packed-primary-id (-> record transform level))
-                  (* player-id 8))))))))
+    (mp-for-each-player-record (player-id record)
+      (when (and (mp-player-record-remote? *mp-player-controller* record)
+                 (>= (-> record connection status) 4))
+        (set! fingerprint
+          (the-as uint
+            (logior fingerprint
+              (shl
+                (mp-level-packed-primary-id (-> record transform level))
+                (* player-id 8)))))))
     fingerprint))
 
 (defun mp-waypoint-all-connected-levels-match? ((local-level-id uint))
   (let ((found-remote? #f))
-    (dotimes (player-id MP_MAX_PLAYERS)
-      (let ((record (mp-player-record-by-id (the-as uint player-id))))
-        (when (and record
-                   (nonzero? record)
-                   (mp-player-record-remote? *mp-player-controller* record)
-                   (>= (-> record connection status) 4))
-          (set! found-remote? #t)
-          (when (!= local-level-id
-                    (mp-level-packed-primary-id (-> record transform level)))
-            (return #f)))))
+    (mp-for-each-player-record (player-id record)
+      (when (and (mp-player-record-remote? *mp-player-controller* record)
+                 (>= (-> record connection status) 4))
+        (set! found-remote? #t)
+        (when (!= local-level-id
+                  (mp-level-packed-primary-id (-> record transform level)))
+          (return #f))))
     found-remote?))
 
 (defun mp-waypoint-update-level-context! ()

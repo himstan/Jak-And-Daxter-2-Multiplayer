@@ -866,7 +866,6 @@
 (define-perm *mp-tps-timer* time-frame 0)
 (define-perm *mp-tps-window-active?* symbol #f)
 (define-perm *mp-puppet-debug?* symbol #f)
-(define-perm *mp-eye-debug?* symbol #f)
 (define-perm *mp-traffic-debug?* symbol #f)
 (define-perm *mp-traffic-ped-debug?* symbol #f)
 (define-perm *mp-traffic-veh-debug?* symbol #f)
@@ -895,7 +894,6 @@
 (define-perm *mp-airlock-last-local-level-id* uint (the uint 0))
 
 (define-extern mp-draw-puppet-debug (function none))
-(define-extern mp-draw-eye-debug (function none))
 (define-extern mp-draw-network-debug (function none))
 (define-extern mp-draw-airlock-debug (function none))
 (define-extern mp-draw-elevator-debug (function none))

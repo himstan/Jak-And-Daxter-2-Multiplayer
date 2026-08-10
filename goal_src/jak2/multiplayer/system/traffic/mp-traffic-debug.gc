@@ -293,17 +293,14 @@
         (mp-draw-traffic-bubble-ring host-pos MP_TRAFFIC_CLIENT_DRAIN_ENTER_DISTANCE (static-rgba 255 128 0 160) "CLIENT DRAIN <350m")
         (mp-draw-traffic-bubble-ring host-pos MP_TRAFFIC_CLIENT_DRAIN_EXIT_DISTANCE (static-rgba 255 0 0 160) "CLIENT RESUME >400m")
         (add-debug-sphere #t (bucket-id debug-no-zbuf1) host-pos (meters 2.0) (static-rgba 0 128 255 180))
-        (dotimes (player-id MP_MAX_PLAYERS)
-          (let ((record (mp-player-record-by-id (the-as uint player-id))))
-            (when (and record
-                       (nonzero? record)
-                       (!= (-> record identity player-id) (mp-host-player-id)))
-              (let ((player-pos (mp-player-record-position record)))
-                (when (and player-pos (nonzero? player-pos))
-                  (add-debug-sphere #t (bucket-id debug-no-zbuf1) player-pos (meters 2.0) (static-rgba 255 255 255 180))
-                  (add-debug-line #t (bucket-id debug-no-zbuf1) host-pos player-pos (static-rgba 255 255 255 128) #f (the-as rgba 0))))))))))
+        (mp-for-each-player-record (player-id record)
+          (when (!= (-> record identity player-id) (mp-host-player-id))
+            (let ((player-pos (mp-player-record-position record)))
+              (when (and player-pos (nonzero? player-pos))
+                (add-debug-sphere #t (bucket-id debug-no-zbuf1) player-pos (meters 2.0) (static-rgba 255 255 255 180))
+                (add-debug-line #t (bucket-id debug-no-zbuf1) host-pos player-pos (static-rgba 255 255 255 128) #f (the-as rgba 0))))))))
   (none)
-  )
+  ))
 
 ;; --- Master High-Level Call ---
 
@@ -324,20 +321,17 @@
             (if *mp-traffic-suppressed* "YES" "NO"))
     (format *stdcon* "SPAWNING: ~S~%"
             (if *mp-traffic-host-spawning-active* "YES" "NO"))
-    (dotimes (player-id MP_MAX_PLAYERS)
-      (let ((record (mp-player-record-by-id (the-as uint player-id))))
-        (when (and record
-                   (nonzero? record)
-                   (mp-player-record-remote? *mp-player-controller* record)
-                   *target*
-                   (nonzero? *target*)
-                   (-> *target* root)
-                   (nonzero? (-> *target* root)))
-          (let ((position (mp-player-record-position record)))
-            (when (and position (nonzero? position))
-              (format *stdcon* "PLAYER ~D DIST: ~m~%"
-                player-id
-                (vector-vector-distance (-> *target* root trans) position)))))))
+    (mp-for-each-player-record (player-id record)
+      (when (and (mp-player-record-remote? *mp-player-controller* record)
+                 *target*
+                 (nonzero? *target*)
+                 (-> *target* root)
+                 (nonzero? (-> *target* root)))
+        (let ((position (mp-player-record-position record)))
+          (when (and position (nonzero? position))
+            (format *stdcon* "PLAYER ~D DIST: ~m~%"
+              player-id
+              (vector-vector-distance (-> *target* root trans) position))))))
     (format *stdcon* "-------------------------~%")
   )
 

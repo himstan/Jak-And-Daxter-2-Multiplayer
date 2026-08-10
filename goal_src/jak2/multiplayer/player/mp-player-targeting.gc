@@ -73,29 +73,26 @@
       (set! best-distance
             (vector-vector-distance
               (-> source root trans) (-> *target* root trans))))
-    (dotimes (player-id MP_MAX_PLAYERS)
-      (let ((record (mp-player-record-by-id (the-as uint player-id))))
-        (when (and record (nonzero? record))
-          (let ((candidate (mp-player-record-target record)))
-            (when (and (mp-combat-valid-player-target?
-                         candidate require-control?)
-                       (!= candidate best-target))
-              (let ((candidate-distance
-                      (vector-vector-distance
-                        (-> source root trans) (-> candidate root trans))))
-                (when (or (not best-target)
-                          (zero? best-target)
-                          (if (= best-target current-target)
-                              (< candidate-distance
-                                 (- best-distance
-                                    *mp-combat-retarget-distance-bias*))
-                              (or (< candidate-distance best-distance)
-                                  (and (= candidate-distance best-distance)
-                                       (< player-id
-                                          (mp-player-id-from-process
-                                            best-target))))))
-                  (set! best-target candidate)
-                  (set! best-distance candidate-distance))))))))
+    (mp-for-each-player-target (player-id record candidate)
+      (when (and (mp-combat-valid-player-target?
+                   candidate require-control?)
+                 (!= candidate best-target))
+        (let ((candidate-distance
+                (vector-vector-distance
+                  (-> source root trans) (-> candidate root trans))))
+          (when (or (not best-target)
+                    (zero? best-target)
+                    (if (= best-target current-target)
+                        (< candidate-distance
+                           (- best-distance
+                              *mp-combat-retarget-distance-bias*))
+                        (or (< candidate-distance best-distance)
+                            (and (= candidate-distance best-distance)
+                                 (< player-id
+                                    (mp-player-id-from-process
+                                      best-target))))))
+            (set! best-target candidate)
+            (set! best-distance candidate-distance)))))
     best-target))
 
 (defun mp-target-death-state? ((state-name symbol))
@@ -174,19 +171,15 @@
         (set! near? #t)
         )
       (when (not near?)
-        (dotimes (player-id MP_MAX_PLAYERS)
-          (let ((record (mp-player-record-by-id (the-as uint player-id))))
-            (when (and record (nonzero? record))
-              (let ((player-target (mp-player-record-target record)))
-                (when (and player-target
-                           (nonzero? player-target)
-                           (focus-test? player-target pilot)
-                           (-> player-target root)
-                           (nonzero? (-> player-target root))
-                           (< (vector-vector-distance-squared
-                                (-> veh root trans) (-> player-target root trans))
-                              dist-sq))
-                  (set! near? #t)))))))
+        (mp-for-each-player-target (player-id record player-target)
+          (when (and (focus-test? player-target pilot)
+                     (-> player-target root)
+                     (nonzero? (-> player-target root))
+                     (< (vector-vector-distance-squared
+                          (-> veh root trans) (-> player-target root trans))
+                        dist-sq))
+            (set! near? #t)))
+        )
       )
     near?
     )
@@ -213,14 +206,13 @@
         (set! near? #t)
         )
       (when (not near?)
-        (dotimes (player-id MP_MAX_PLAYERS)
-          (let ((record (mp-player-record-by-id (the-as uint player-id))))
-            (when (and record (nonzero? record))
-              (let ((player-pos (mp-player-record-position record)))
-                (when (and player-pos
-                           (nonzero? player-pos)
-                           (mp-point-near-pos-xz? player-pos pos radius))
-                  (set! near? #t)))))))
+        (mp-for-each-player-record (player-id record)
+          (let ((player-pos (mp-player-record-position record)))
+            (when (and player-pos
+                       (nonzero? player-pos)
+                       (mp-point-near-pos-xz? player-pos pos radius))
+              (set! near? #t))))
+        )
       )
     near?
     )
@@ -237,14 +229,13 @@
       (set! high-enough? #t)
       )
     (when (not high-enough?)
-      (dotimes (player-id MP_MAX_PLAYERS)
-        (let ((record (mp-player-record-by-id (the-as uint player-id))))
-          (when (and record (nonzero? record))
-            (let ((player-pos (mp-player-record-position record)))
-              (when (and player-pos
-                         (nonzero? player-pos)
-                         (>= (-> player-pos y) min-y))
-                (set! high-enough? #t)))))))
+      (mp-for-each-player-record (player-id record)
+        (let ((player-pos (mp-player-record-position record)))
+          (when (and player-pos
+                     (nonzero? player-pos)
+                     (>= (-> player-pos y) min-y))
+            (set! high-enough? #t))))
     high-enough?
     )
+  )
   )

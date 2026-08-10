@@ -64,22 +64,13 @@
                (nonzero? *target*)
                (or in-movie? (not *visibility-overriden?*)))
       (mp-update-player-target-visibility! *target* in-movie?))
-    (dotimes (player-id MP_MAX_PLAYERS)
-      (let ((record (mp-player-record-by-id (the-as uint player-id))))
-        (when (and record
-                   (nonzero? record)
-                   (mp-player-record-remote? *mp-player-controller* record))
-          (let ((player-target (mp-player-record-target record)))
-            (when (and player-target (nonzero? player-target))
-              (mp-update-player-target-visibility! player-target in-movie?))))))
+    (mp-for-each-player-target (player-id record player-target)
+      (when (mp-player-record-remote? *mp-player-controller* record)
+        (mp-update-player-target-visibility! player-target in-movie?)))
 
     (when (mp-connection-status-active? (pc-multi-get-status))
-      (dotimes (player-id MP_MAX_PLAYERS)
-        (let ((record (mp-player-record-by-id (the-as uint player-id))))
-          (when (and record (nonzero? record))
-            (let ((player-target (mp-player-record-target record)))
-              (when (and player-target (nonzero? player-target))
-                (mp-update-player-sidekick-visibility!
-                  player-target in-movie?)))))))
+      (mp-for-each-player-target (player-id record player-target)
+        (mp-update-player-sidekick-visibility!
+          player-target in-movie?)))
     )
   (none))

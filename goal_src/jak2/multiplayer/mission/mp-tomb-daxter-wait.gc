@@ -232,13 +232,10 @@
     (mp-tomb-daxter-wait-disable-collision! npc)
     )
   (if (mp-local-player-jak?)
-      (dotimes (player-id MP_MAX_PLAYERS)
-        (let ((remote-target (mp-player-target-by-id (the-as uint player-id))))
-          (when (and remote-target
-                     (nonzero? remote-target)
-                     (mp-target-daxter? remote-target))
-            (mp-tomb-daxter-wait-set-draw!
-              (the-as process-drawable remote-target) #f))))
+      (mp-for-each-player-target (player-id record remote-target)
+        (when (mp-target-daxter? remote-target)
+          (mp-tomb-daxter-wait-set-draw!
+            (the-as process-drawable remote-target) #f)))
       (when (and *target* (nonzero? *target*))
         (mp-tomb-daxter-wait-set-draw! (the-as process-drawable *target*) #f)
         )

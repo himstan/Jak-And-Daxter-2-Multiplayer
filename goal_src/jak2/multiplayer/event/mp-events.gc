@@ -59,10 +59,8 @@
   (set! *mp-city-power-state-3* (the uint 0))
   (set! *mp-city-power-state-4* (the uint 0))
   (set! *mp-local-gun-shot-seq* (the uint 0))
-  (dotimes (player-id MP_MAX_PLAYERS)
-    (let ((record (mp-player-record-by-id (the-as uint player-id))))
-      (when (and record (nonzero? record))
-        (set! (-> record runtime last-gun-shot-sequence) (the uint 0)))))
+  (mp-for-each-player-record (player-id record)
+    (set! (-> record runtime last-gun-shot-sequence) (the uint 0)))
   (when (and *mp-event-buffer*
              (nonzero? (the-as uint *mp-event-buffer*)))
     (mem-set32! (the-as pointer *mp-event-buffer*) (/ (size-of mp-event-buffer) 4) 0)

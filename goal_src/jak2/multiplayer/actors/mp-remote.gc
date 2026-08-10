@@ -204,12 +204,9 @@
 
 (defun mp-manage-remote-puppets! ()
   "Advance every joined non-local player without selecting a privileged remote."
-  (dotimes (player-id MP_MAX_PLAYERS)
-    (let ((record (mp-player-record-by-id (the-as uint player-id))))
-      (when (and record
-                 (nonzero? record)
-                 (mp-player-record-remote? *mp-player-controller* record))
-        (mp-manage-player-puppet! record))))
+  (mp-for-each-player-record (player-id record)
+    (when (mp-player-record-remote? *mp-player-controller* record)
+      (mp-manage-player-puppet! record)))
   (mp-player-controller-for-each-stale-remote!
     *mp-player-controller*
     mp-cleanup-stale-player-presentation!)

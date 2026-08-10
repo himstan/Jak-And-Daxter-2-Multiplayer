@@ -83,12 +83,11 @@
 
 (defun mp-scene-connected-remote-mask ()
   (let ((connected-mask (the uint 0)))
-    (dotimes (player-id MP_MAX_PLAYERS)
-      (let ((record (mp-player-record-by-id (the-as uint player-id))))
-        (when (mp-scene-remote-player-record-connected? record)
-          (set! connected-mask
-                (logior connected-mask
-                        (mp-scene-player-bit (the-as uint player-id)))))))
+    (mp-for-each-player-record (player-id record)
+      (when (mp-scene-remote-player-record-connected? record)
+        (set! connected-mask
+              (logior connected-mask
+                      (mp-scene-player-bit (the-as uint player-id))))))
     connected-mask))
 
 (defun mp-scene-coordinator-clear-player! ((player-id uint))
@@ -103,11 +102,9 @@
   (none))
 
 (defun mp-scene-coordinator-clear-record-latches! ()
-  (dotimes (player-id MP_MAX_PLAYERS)
-    (let ((record (mp-player-record-by-id (the-as uint player-id))))
-      (when (and record (nonzero? record))
-        (set! (-> record action scene-latched?) (the uint8 0))
-        (set! (-> record action last-replayed-sequence) (the uint 0)))))
+  (mp-for-each-player-record (player-id record)
+    (set! (-> record action scene-latched?) (the uint8 0))
+    (set! (-> record action last-replayed-sequence) (the uint 0)))
   (none))
 
 (defun mp-scene-coordinator-clear-catchup-audience! ()
@@ -316,20 +313,18 @@
     (when (and (mp-scene-coordinator-entry-record-ready? initiator-record)
                (mp-player-record-remote? *mp-player-controller* initiator-record))
       (return initiator-record)))
-  (dotimes (player-id MP_MAX_PLAYERS)
-    (let ((record (mp-player-record-by-id (the-as uint player-id))))
-      (when (and (mp-scene-coordinator-entry-record-ready? record)
-                 (mp-player-record-remote? *mp-player-controller* record))
-        (return record))))
+  (mp-for-each-player-record (player-id record)
+    (when (and (mp-scene-coordinator-entry-record-ready? record)
+               (mp-player-record-remote? *mp-player-controller* record))
+      (return record)))
   (the-as mp-player-record #f))
 
 (defun mp-scene-coordinator-has-connected-entry? ()
-  (dotimes (player-id MP_MAX_PLAYERS)
-    (let ((record (mp-player-record-by-id (the-as uint player-id))))
-      (when (and (mp-scene-remote-player-record-connected? record)
-                 (logtest? *mp-scene-coordinator-entered-mask*
-                           (mp-scene-player-bit (the-as uint player-id))))
-        (return #t))))
+  (mp-for-each-player-record (player-id record)
+    (when (and (mp-scene-remote-player-record-connected? record)
+               (logtest? *mp-scene-coordinator-entered-mask*
+                         (mp-scene-player-bit (the-as uint player-id))))
+      (return #t)))
   #f)
 
 (defun mp-scene-coordinator-note-start-broadcast! ((scene-name string))

@@ -50,22 +50,16 @@
       (set! (-> local action respawn-flags) (the uint8 0))
       )
     )
-  (dotimes (player-id MP_MAX_PLAYERS)
-    (let ((record (mp-player-record-by-id (the-as uint player-id))))
-      (when (and record
-                 (nonzero? record)
-                 (mp-player-record-remote? *mp-player-controller* record))
-        (set! (-> record action respawn-flags) (the uint8 0)))))
+  (mp-for-each-player-record (player-id record)
+    (when (mp-player-record-remote? *mp-player-controller* record)
+      (set! (-> record action respawn-flags) (the uint8 0))))
   (none)
   )
 
 (defun mp-clear-remote-respawn-policy! ()
-  (dotimes (player-id MP_MAX_PLAYERS)
-    (let ((record (mp-player-record-by-id (the-as uint player-id))))
-      (when (and record
-                 (nonzero? record)
-                 (mp-player-record-remote? *mp-player-controller* record))
-        (set! (-> record action respawn-flags) (the uint8 0)))))
+  (mp-for-each-player-record (player-id record)
+    (when (mp-player-record-remote? *mp-player-controller* record)
+      (set! (-> record action respawn-flags) (the uint8 0))))
   (none)
   )
 
@@ -78,13 +72,10 @@
                       MP_RESPAWN_FLAG_BLOCK_REMOTE_ON_ME))))
 
 (defun mp-any-remote-blocks-respawn? ()
-  (dotimes (player-id MP_MAX_PLAYERS)
-    (let ((record (mp-player-record-by-id (the-as uint player-id))))
-      (when (and record
-                 (nonzero? record)
-                 (mp-player-record-remote? *mp-player-controller* record)
-                 (mp-player-blocks-respawn? record))
-        (return #t))))
+  (mp-for-each-player-record (player-id record)
+    (when (and (mp-player-record-remote? *mp-player-controller* record)
+               (mp-player-blocks-respawn? record))
+      (return #t)))
   #f)
 
 (defun mp-respawn-policy-blocks-remote-placement? ()
@@ -108,11 +99,9 @@
     (when (and local-record (nonzero? local-record))
       (mp-player-runtime-clear-flag!
         local-record (mp-player-runtime-flags respawning))))
-  (dotimes (player-id MP_MAX_PLAYERS)
-    (let ((record (mp-player-record-by-id (the-as uint player-id))))
-      (when (and record (nonzero? record))
-        (mp-player-runtime-clear-flag!
-          record (mp-player-runtime-flags force-presentation)))))
+  (mp-for-each-player-record (player-id record)
+    (mp-player-runtime-clear-flag!
+      record (mp-player-runtime-flags force-presentation)))
   (when (and player (nonzero? player))
     (mp-clear-local-vehicle-occupancy! player)
     (let ((control (-> player control)))

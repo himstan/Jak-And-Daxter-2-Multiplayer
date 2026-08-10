@@ -91,18 +91,15 @@
   (when (not (and *load-state* (nonzero? *load-state*)))
     (return #t))
   (let ((local-level-id (mp-level-symbol->id (-> *load-state* vis-nick))))
-    (dotimes (player-id MP_MAX_PLAYERS)
-      (let ((record (mp-player-record-by-id (the-as uint player-id))))
-        (when (and record
-                   (nonzero? record)
-                   (mp-player-record-remote? *mp-player-controller* record)
-                   (>= (-> record connection status) 4))
-          (let ((remote-level-id
-                  (mp-level-packed-primary-id (-> record transform level))))
-            (when (and (nonzero? local-level-id)
-                       (nonzero? remote-level-id)
-                       (!= local-level-id remote-level-id))
-              (return #f))))))
+    (mp-for-each-player-record (player-id record)
+      (when (and (mp-player-record-remote? *mp-player-controller* record)
+                 (>= (-> record connection status) 4))
+        (let ((remote-level-id
+                (mp-level-packed-primary-id (-> record transform level))))
+          (when (and (nonzero? local-level-id)
+                     (nonzero? remote-level-id)
+                     (!= local-level-id remote-level-id))
+            (return #f)))))
   #t))
 
 (defun mp-level-packed-extra-id ((packed-level uint))
