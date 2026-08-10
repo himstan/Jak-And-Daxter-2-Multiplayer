@@ -134,7 +134,7 @@
               (let* ((text-str *mp-guard-veh-debug-text-str*)
                      (tmp *mp-guard-veh-debug-tmp-str*))
                 (when (and text-str (type? text-str string) tmp (type? tmp string))
-                  (let* ((driver-record (mp-player-record-by-vehicle-id net-id))
+                  (let* ((driver-record (mp-player-driver-record-by-vehicle-id net-id))
                          (is-remote-driven
                            (and driver-record
                                 (nonzero? driver-record)

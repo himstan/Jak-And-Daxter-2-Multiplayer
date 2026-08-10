@@ -4,9 +4,115 @@
 ;; --- Vehicle Sync Logic (Ghost Authority) ---
 
 (define MP_VEHICLE_PARKING_MINIMAP_ATTACHED (the uint8 173))
+(define MP_VEHICLE_AUTHORITY_HANDOFF_GRACE (seconds 1))
+(define MP_MAX_VEHICLE_AUTHORITY_HANDOFFS 8)
 (define *mp-vehicle-missing-branch-log-time* (the-as time-frame 0))
 
 (define *mp-race-vehicle-handles* (new 'static 'array handle 10))
+
+(deftype mp-vehicle-authority-handoff (structure)
+  ((net-id               uint32)
+   (pad                  uint32)
+   (start-time           time-frame)
+   (last-owner-sync-time uint64)
+   )
+  :size-assert 24)
+
+(define-perm *mp-vehicle-authority-handoffs*
+  (inline-array mp-vehicle-authority-handoff)
+  (new 'static 'inline-array mp-vehicle-authority-handoff 8))
+
+(define *mp-vehicle-last-driver-net-ids*
+  (new 'static 'array uint32 MP_MAX_PLAYERS))
+
+(defun mp-vehicle-reset-authority-handoffs! ()
+  (dotimes (player-id MP_MAX_PLAYERS)
+    (set! (-> *mp-vehicle-last-driver-net-ids* player-id) (the uint32 0)))
+  (dotimes (slot-idx MP_MAX_VEHICLE_AUTHORITY_HANDOFFS)
+    (let ((handoff (-> *mp-vehicle-authority-handoffs* slot-idx)))
+      (set! (-> handoff net-id) (the uint32 0))
+      (set! (-> handoff start-time) 0)
+      (set! (-> handoff last-owner-sync-time) (the uint64 0))))
+  (none))
+
+(defun mp-vehicle-begin-authority-handoff! ((net-id uint))
+  "Keep a formerly player-driven vehicle materialized until host traffic resumes."
+  (when (nonzero? net-id)
+    (let ((free-slot -1)
+          (already-active? #f))
+      (dotimes (slot-idx MP_MAX_VEHICLE_AUTHORITY_HANDOFFS)
+        (let ((handoff (-> *mp-vehicle-authority-handoffs* slot-idx)))
+          (when (= (-> handoff net-id) net-id)
+            (set! already-active? #t))
+          (when (and (< free-slot 0) (zero? (-> handoff net-id)))
+            (set! free-slot slot-idx))))
+      (when (and (not already-active?) (>= free-slot 0))
+        (let ((handoff (-> *mp-vehicle-authority-handoffs* free-slot))
+              (ghost (mp-get-traffic-ghost net-id))
+              (received-time (pc-multi-get-vehicle-sync-time net-id)))
+          (set! (-> handoff net-id) net-id)
+          (set! (-> handoff start-time) (current-time))
+          (set! (-> handoff last-owner-sync-time)
+                (if (and ghost
+                         (nonzero? ghost)
+                         (> (-> ghost last-correction-time) received-time))
+                    (-> ghost last-correction-time)
+                    received-time))))))
+  (none))
+
+(defun mp-vehicle-clear-authority-handoff! ((net-id uint))
+  (when (nonzero? net-id)
+    (dotimes (slot-idx MP_MAX_VEHICLE_AUTHORITY_HANDOFFS)
+      (let ((handoff (-> *mp-vehicle-authority-handoffs* slot-idx)))
+        (when (= (-> handoff net-id) net-id)
+          (set! (-> handoff net-id) (the uint32 0))
+          (set! (-> handoff start-time) 0)
+          (set! (-> handoff last-owner-sync-time) (the uint64 0))))))
+  (none))
+
+(defun mp-vehicle-update-authority-handoff! ((record mp-player-record))
+  "Register a handoff whenever this record's explicit driver claim changes."
+  (when (and record (nonzero? record))
+    (let ((player-id (-> record identity player-id)))
+      (when (< player-id (the uint MP_MAX_PLAYERS))
+        (let* ((previous-net-id (-> *mp-vehicle-last-driver-net-ids* player-id))
+               (current-net-id (-> record vehicle state net-id)))
+          (when (!= previous-net-id current-net-id)
+            (when (nonzero? previous-net-id)
+              (mp-vehicle-begin-authority-handoff! previous-net-id))
+            (set! (-> *mp-vehicle-last-driver-net-ids* player-id)
+                  current-net-id))))))
+  (none))
+
+(defun mp-vehicle-complete-authority-handoff-if-fresh! ((net-id uint))
+  "Clear a handoff only after traffic has produced a newer sample than its driver."
+  (when (nonzero? net-id)
+    (let ((received-time (pc-multi-get-vehicle-sync-time net-id)))
+      (when (nonzero? received-time)
+        (dotimes (slot-idx MP_MAX_VEHICLE_AUTHORITY_HANDOFFS)
+          (let ((handoff (-> *mp-vehicle-authority-handoffs* slot-idx)))
+            (when (and (= (-> handoff net-id) net-id)
+                       (> received-time (-> handoff last-owner-sync-time)))
+              (mp-vehicle-clear-authority-handoff! net-id)))))))
+  (none))
+
+(defun mp-vehicle-authority-handoff-active? ((net-id uint))
+  (when (nonzero? net-id)
+    (dotimes (slot-idx MP_MAX_VEHICLE_AUTHORITY_HANDOFFS)
+      (let ((handoff (-> *mp-vehicle-authority-handoffs* slot-idx)))
+        (when (= (-> handoff net-id) net-id)
+          (return #t)))))
+  #f)
+
+(defun mp-vehicle-authority-handoff-pending? ((net-id uint))
+  (when (nonzero? net-id)
+    (dotimes (slot-idx MP_MAX_VEHICLE_AUTHORITY_HANDOFFS)
+      (let ((handoff (-> *mp-vehicle-authority-handoffs* slot-idx)))
+        (when (= (-> handoff net-id) net-id)
+          (return
+            (not (time-elapsed? (-> handoff start-time)
+                                MP_VEHICLE_AUTHORITY_HANDOFF_GRACE)))))))
+  #f)
 
 (defun mp-player-record-current-vehicle ((record mp-player-record))
   (if (and record (nonzero? record))
@@ -14,26 +120,24 @@
         (handle->process-safe (-> record runtime vehicle-handle)))
       (the-as vehicle #f)))
 
-(defun mp-player-record-owns-vehicle? ((record mp-player-record) (veh vehicle))
+(defun mp-player-record-drives-vehicle? ((record mp-player-record) (veh vehicle))
   (and record
        (nonzero? record)
        veh
        (nonzero? veh)
-       (or (= veh (mp-player-record-current-vehicle record))
-           (and (nonzero? (-> veh net-id))
-                (= (-> veh net-id) (-> record vehicle state net-id)))
-           (= (get-rider-in-seat veh 0) (mp-player-record-target record)))))
+       (nonzero? (-> veh net-id))
+       (= (-> veh net-id) (-> record vehicle state net-id))))
 
 (defun mp-vehicle-player-record ((veh vehicle) (remote-only? symbol))
   (when (and veh (nonzero? veh))
     (mp-for-each-player-record (player-id record)
       (when (and (or (not remote-only?)
                      (mp-player-record-remote? *mp-player-controller* record))
-                 (mp-player-record-owns-vehicle? record veh))
+                 (mp-player-record-drives-vehicle? record veh))
         (return record))))
   (the-as mp-player-record #f))
 
-(defun mp-vehicle-net-id-player-owned? ((net-id uint) (remote-only? symbol))
+(defun mp-vehicle-net-id-player-driven? ((net-id uint) (remote-only? symbol))
   (when (nonzero? net-id)
     (mp-for-each-player-record (player-id record)
       (when (and (or (not remote-only?)
@@ -168,14 +272,13 @@
   )
 
 (defun mp-vehicle-get-pad-index ((this vehicle))
-  "Return the actual physical or leased pad for this vehicle's driver."
-  (let ((pilot (get-rider-in-seat this 0)))
-    (let ((record (mp-player-process-record pilot)))
-      (if (and record (nonzero? record))
-          (the-as int (-> record runtime pad-index))
-          0))
-    )
-  )
+  "Return the leased pad for the explicit remote driver authority claim."
+  (if (and this (nonzero? this))
+      (let ((record (mp-vehicle-player-record this #t)))
+        (if (and record (nonzero? record))
+            (the-as int (-> record runtime pad-index))
+            0))
+      0))
 
 (defun mp-vehicle-local-target-driving? ((veh vehicle))
   "True only while the local player is actually attached to driver seat 0."
@@ -270,10 +373,10 @@
   (none)
   )
 
-(defun mp-vehicle-sync-owned? ((veh vehicle))
+(defun mp-vehicle-driver-sync-claimed? ((veh vehicle))
   "True when a vehicle is currently claimed by either player's driver sync slot."
   (if (and veh (nonzero? veh) (nonzero? (-> veh net-id)))
-      (mp-vehicle-net-id-player-owned? (-> veh net-id) #f)
+      (mp-vehicle-net-id-player-driven? (-> veh net-id) #f)
       #f
       )
   )
@@ -284,7 +387,7 @@
              (nonzero? veh)
              (-> veh state)
              (= (-> veh state name) 'player-control)
-             (not (mp-vehicle-sync-owned? veh))
+             (not (mp-vehicle-driver-sync-claimed? veh))
              (not (mp-vehicle-local-target-driving? veh)))
     (let ((current-pilot (get-rider-in-seat veh 0)))
       (if current-pilot
@@ -627,13 +730,14 @@
 ;; --- Hijack Implementations ---
 
 (defun mp-vehicle-refuse-traffic-off? ((veh vehicle))
-  "True when traffic cleanup must leave a player-driven vehicle active."
+  "True when traffic cleanup must preserve a player-associated vehicle or handoff."
   (when (and veh (nonzero? veh))
     (let ((v-net-id (-> veh net-id)))
       (when (or (mp-vehicle-local-target-driving? veh)
                 (mp-vehicle-local-target-riding? veh)
                 (mp-vehicle-remote-puppet-driving? veh)
-                (mp-vehicle-net-id-player-owned? v-net-id #f))
+                (mp-player-record-by-vehicle-id v-net-id)
+                (mp-vehicle-authority-handoff-pending? v-net-id))
         (return #t)
         )
       )
@@ -644,7 +748,7 @@
 (defun mp-vehicle-handle-event! ((this vehicle) (arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   (let ((v-net-id (-> this net-id)))
     (when (and (nonzero? v-net-id)
-               (mp-vehicle-net-id-player-owned? v-net-id #t))
+               (mp-vehicle-net-id-player-driven? v-net-id #t))
       ;; If this is the remote player's vehicle, ignore damage events from local machine
       (case arg2
         (('attack 'touch 'impulse)
@@ -845,7 +949,7 @@
 
   (let ((v-net-id (-> this net-id)))
     (when (and (nonzero? v-net-id)
-               (mp-vehicle-net-id-player-owned? v-net-id #t))
+               (mp-vehicle-net-id-player-driven? v-net-id #t))
       (case arg2
         (('attack 'touch 'impulse)
          (return 'block)
@@ -1116,37 +1220,70 @@
   (none)
   )
 
-(defun mp-vehicle-run-puppet-input! ((this vehicle))
-  "Run vehicle input from the owning remote record's leased pad."
-  (mp-vehicle-claim-local-driver-sync! this)
-  (let ((pad-idx (mp-vehicle-get-pad-index this)))
-    (if (and (> pad-idx 0)
+(defun mp-vehicle-apply-neutral-input! ((this vehicle))
+  "Consume a stale player-control frame without falling back to vanilla pad 1."
+  (if (and this (nonzero? this))
+      (let ((input (new 'stack-no-clear 'vector)))
+        (set-vector! input 0.0 0.0 0.0 0.0)
+        (vehicle-method-95 this (the-as vector (&-> input x)))
+        #t)
+      #f))
+
+(defun mp-vehicle-apply-leased-pad-input! ((this vehicle) (pad-idx int))
+  "Apply the explicit remote driver's leased pad to this vehicle."
+  (when (and this
+             (nonzero? this)
+             (> pad-idx 0)
              (< pad-idx MP_MAX_PLAYERS)
              *cpad-list*
              (nonzero? *cpad-list*))
-        ;; Puppet is driving: implement generic vehicle control
-        (begin
-          (let ((pad (-> *cpad-list* cpads pad-idx)))
-            (let ((s5-0 (new 'stack-no-clear 'vector)))
-              (set! (-> s5-0 x) (analog-input (the-as int (-> pad leftx)) 128.0 48.0 110.0 -1.0))
-              (set! (-> s5-0 w) (analog-input (the-as int (-> pad lefty)) 128.0 48.0 110.0 -1.0))
-              (set! (-> s5-0 y) (fmin 1.0 (* 0.023529412 (the float (-> pad abutton (abutton-idx x))))))
-              (set! (-> s5-0 z) (fmin 1.0 (* 0.023529412 (the float (-> pad abutton (abutton-idx square))))))
-              (vehicle-method-95 this (the-as vector (&-> s5-0 x)))
-              )
-            (if (or (cpad-hold? pad-idx l1)
-                    (and (logtest? (-> this info flags) 512)
-                         (cpad-hold? pad-idx r1)))
-                (start-jump this)
-                )
-            (if (cpad-pressed? pad-idx circle) (activate-turbo-boost! this))
-            )
-          #t
-          )
-        #f
-        )
-    )
-  )
+    (let ((pad (-> *cpad-list* cpads pad-idx)))
+      (when (and pad (nonzero? pad))
+        (let ((input (new 'stack-no-clear 'vector)))
+          (set! (-> input x) (analog-input (the-as int (-> pad leftx)) 128.0 48.0 110.0 -1.0))
+          (set! (-> input w) (analog-input (the-as int (-> pad lefty)) 128.0 48.0 110.0 -1.0))
+          (set! (-> input y) (fmin 1.0 (* 0.023529412 (the float (-> pad abutton (abutton-idx x))))))
+          (set! (-> input z) (fmin 1.0 (* 0.023529412 (the float (-> pad abutton (abutton-idx square))))))
+          (vehicle-method-95 this (the-as vector (&-> input x))))
+        (when (or (cpad-hold? pad-idx l1)
+                  (and (-> this info)
+                       (nonzero? (-> this info))
+                       (logtest? (-> this info flags) 512)
+                       (cpad-hold? pad-idx r1)))
+          (start-jump this))
+        (when (cpad-pressed? pad-idx circle)
+          (activate-turbo-boost! this))
+        (return #t))))
+  #f)
+
+(defun mp-vehicle-stale-input-release-needed? ((this vehicle))
+  "Detect a lingering player-driving/player-control state with no driver claim."
+  (and this
+       (nonzero? this)
+       (not (mp-vehicle-local-target-driving? this))
+       (not (mp-vehicle-driver-sync-claimed? this))
+       (or (logtest? (-> this flags) (rigid-body-object-flag player-driving))
+           (and (-> this state)
+                (nonzero? (-> this state))
+                (= (-> this state name) 'player-control)))))
+
+(defun mp-vehicle-run-puppet-input! ((this vehicle))
+  "Run explicit remote driver input and safely consume stale control frames."
+  (when (and this (nonzero? this))
+    (mp-vehicle-claim-local-driver-sync! this)
+    (let ((release-input? (mp-vehicle-stale-input-release-needed? this)))
+      (mp-vehicle-clear-stale-player-driver! this)
+      (mp-vehicle-release-stale-player-control! this)
+      (let ((pad-idx (mp-vehicle-get-pad-index this))
+            (remote-driver (mp-vehicle-player-record this #t)))
+        (cond
+          ((mp-vehicle-apply-leased-pad-input! this pad-idx)
+           (return #t))
+          ((and remote-driver (nonzero? remote-driver))
+           (return (mp-vehicle-apply-neutral-input! this)))
+          (release-input?
+           (return (mp-vehicle-apply-neutral-input! this)))))))
+  #f)
 
 (defun mp-vehicle-remote-needs-physics? ((this vehicle))
   (let ((rec (mp-get-traffic-ghost (-> this net-id))))
@@ -1410,6 +1547,7 @@
     (when (and record (nonzero? record))
       (set! (-> record runtime vehicle-handle) (the-as handle #f)))
     (return #f))
+  (mp-vehicle-update-authority-handoff! record)
   (let ((spawn-ready? (mp-is-traffic-spawn-ready?))
         (driven-net-id (-> record vehicle state net-id))
         (old-veh (mp-player-record-current-vehicle record)))
@@ -1418,6 +1556,7 @@
                    (zero? old-veh)
                    (!= driven-net-id (-> (the-as vehicle old-veh) net-id))))
       (when (and old-veh (nonzero? old-veh))
+        (mp-vehicle-clear-stale-player-driver! (the-as vehicle old-veh))
         (mp-vehicle-release-stale-player-control! (the-as vehicle old-veh))
         )
       (set! (-> record runtime vehicle-handle) (the-as handle #f))
@@ -1481,27 +1620,30 @@
     (dotimes (i (the int MP_MAX_SYNC_VEHICLES))
       (let ((slot (-> *mp-traffic-buffer* veh-enemies i)))
         (when (and (nonzero? (-> slot net-id))
-                   (not (mp-vehicle-net-id-player-owned?
+                   (not (mp-vehicle-net-id-player-driven?
                           (-> slot net-id) #f)))
-          (let ((proc (mp-vehicle-find-by-net-id (-> slot net-id))))
-            (if (and proc (nonzero? proc))
-                (if (<= (-> slot state-id) 2)
-                    (begin
-                      (mp-vehicle-force-cull-local! proc)
+          (mp-vehicle-complete-authority-handoff-if-fresh! (-> slot net-id))
+          (when (not (mp-vehicle-authority-handoff-active? (-> slot net-id)))
+            (let ((proc (mp-vehicle-find-by-net-id (-> slot net-id))))
+              (if (and proc (nonzero? proc))
+                  (if (<= (-> slot state-id) 2)
+                      (begin
+                        (mp-vehicle-force-cull-local! proc)
+                        )
+                      (begin
+                        (mp-vehicle-apply-ghost-state proc slot)
+                        (mp-vehicle-ensure-guard-minimap! proc)
+                        )
                       )
-                    (begin
-                      (mp-vehicle-apply-ghost-state proc slot)
-                      (mp-vehicle-ensure-guard-minimap! proc)
+                  (when (and (> spawn-budget 0)
+                             (> (-> slot state-id) 2)
+                             (mp-vehicle-can-spawn-puppet? (-> slot net-id)))
+                    (when (mp-vehicle-spawn-puppet slot)
+                      (-! spawn-budget 1)
                       )
-                    )
-                (when (and (> spawn-budget 0)
-                           (> (-> slot state-id) 2)
-                           (mp-vehicle-can-spawn-puppet? (-> slot net-id)))
-                  (when (mp-vehicle-spawn-puppet slot)
-                    (-! spawn-budget 1)
                     )
                   )
-                )
+              )
             )
           )
         )
@@ -1519,16 +1661,20 @@
                          (nonzero? (-> (the-as vehicle proc) net-id)))
                 (let ((found-in-buffer? #f)
                       (v-net-id (-> (the-as vehicle proc) net-id)))
-                  (if (mp-vehicle-net-id-player-owned? v-net-id #f)
-                      (begin 
-                        (set! found-in-buffer? #t)
-                      )
-                      (dotimes (i (the int MP_MAX_SYNC_VEHICLES))
-                        (if (= (-> *mp-traffic-buffer* veh-enemies i net-id) v-net-id) (set! found-in-buffer? #t))
-                        )
-                  )
+                  (cond
+                    ((or (mp-player-record-by-vehicle-id v-net-id)
+                         (mp-vehicle-authority-handoff-pending? v-net-id))
+                     (set! found-in-buffer? #t)
+                     )
+                    ((not (mp-vehicle-authority-handoff-active? v-net-id))
+                     (dotimes (i (the int MP_MAX_SYNC_VEHICLES))
+                       (when (= (-> *mp-traffic-buffer* veh-enemies i net-id) v-net-id)
+                         (set! found-in-buffer? #t)))
+                     )
+                    )
                   (when (not found-in-buffer?)
                     (mp-vehicle-force-cull-local! (the-as vehicle proc))
+                    (mp-vehicle-clear-authority-handoff! v-net-id)
                     )
                   )
                 )

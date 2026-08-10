@@ -23,9 +23,9 @@
       ((type? proc vehicle)
        (let ((v-proc (the-as vehicle proc)))
          ;; Only sync if it is NOT inactive, NOT dead, and IS managed by traffic
-         ;; Player-owned vehicles are synchronized through their owning records.
+         ;; Only explicit drivers synchronize vehicles through their player records.
          (when (and (nonzero? (-> v-proc net-id))
-                    (not (mp-player-record-by-vehicle-id (-> v-proc net-id)))
+                    (not (mp-player-driver-record-by-vehicle-id (-> v-proc net-id)))
                     (not (focus-test? v-proc inactive))
                     (< (-> *mp-traffic-buffer* veh-count) (the uint MP_MAX_SYNC_VEHICLES))
                     )
@@ -139,18 +139,19 @@
   (none)
   )
 
-(defun mp-traffic-vehicle-player-owned? ((veh-proc vehicle))
-  (let ((owned? #f))
+(defun mp-traffic-vehicle-player-associated? ((veh-proc vehicle))
+  "Keep occupied vehicles out of invalid-puppet cleanup regardless of seat."
+  (let ((associated? #f))
     (when (and veh-proc
                (nonzero? veh-proc)
                (nonzero? (-> veh-proc net-id)))
       (let ((veh-net-id (-> veh-proc net-id)))
         (when (mp-player-record-by-vehicle-id veh-net-id)
-          (set! owned? #t)
+          (set! associated? #t)
           )
         )
       )
-    owned?
+    associated?
     )
   )
 
@@ -159,7 +160,7 @@
   (and veh-proc
        (nonzero? veh-proc)
        (nonzero? (-> veh-proc net-id))
-       (not (mp-traffic-vehicle-player-owned? veh-proc))
+       (not (mp-traffic-vehicle-player-associated? veh-proc))
        (or (focus-test? veh-proc inactive)
            (= (-> veh-proc status) 'dead)
            (logtest? (-> veh-proc flags) (rigid-body-object-flag dead))))
@@ -275,6 +276,7 @@
   (set! *mp-traffic-last-authority-level-id* (the uint 0))
   (set! *mp-traffic-last-remote-apply-ready* #f)
   (set! *mp-traffic-refresh-existing-log-time* (the-as time-frame 0))
+  (mp-vehicle-reset-authority-handoffs!)
   (mp-traffic-clear-buffer!)
   (mp-cleanup-traffic-ghosts)
   (none))
@@ -576,11 +578,14 @@
     (when (and slot
                (nonzero? slot)
                (nonzero? (-> slot net-id))
-               (not (mp-player-record-by-vehicle-id (-> slot net-id))))
-      (let ((proc (mp-vehicle-find-by-net-id (-> slot net-id))))
-        (when (and proc
-                   (nonzero? proc))
-          (set! refreshed? (mp-traffic-refresh-existing-vehicle-ghost! proc slot))
+               (not (mp-player-driver-record-by-vehicle-id (-> slot net-id))))
+      (mp-vehicle-complete-authority-handoff-if-fresh! (-> slot net-id))
+      (when (not (mp-vehicle-authority-handoff-active? (-> slot net-id)))
+        (let ((proc (mp-vehicle-find-by-net-id (-> slot net-id))))
+          (when (and proc
+                     (nonzero? proc))
+            (set! refreshed? (mp-traffic-refresh-existing-vehicle-ghost! proc slot))
+            )
           )
         )
       )

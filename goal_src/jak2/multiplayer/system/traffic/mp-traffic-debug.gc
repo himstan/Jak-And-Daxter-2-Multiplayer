@@ -134,7 +134,7 @@
   (when (and proc (nonzero? proc))
     (let ((net-id (-> proc net-id)))
       (when (nonzero? net-id)
-        (let* ((driver-record (mp-player-record-by-vehicle-id net-id))
+        (let* ((driver-record (mp-player-driver-record-by-vehicle-id net-id))
                (is-local-driven
                  (and driver-record
                       (nonzero? driver-record)
@@ -231,7 +231,7 @@
               (set! (-> draw-pos y) (+ (-> draw-pos y) (meters 2.0)))
 
               (let* ((text-str *mp-veh-debug-text-str*)
-                     (driver-record (mp-player-record-by-vehicle-id net-id))
+                     (driver-record (mp-player-driver-record-by-vehicle-id net-id))
                      (is-remote-driven
                        (and driver-record
                             (nonzero? driver-record)
