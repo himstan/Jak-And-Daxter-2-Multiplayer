@@ -408,6 +408,7 @@
   (if (zero? (-> self indax))
       (set! (-> self indax) (new 'process 'indax-info))
       )
+  (set! (-> self riding-along-player-id) MP_INVALID_PLAYER_ID)
   (set! (-> self control reaction) target-collision-reaction)
   (when reset-velocity?
     (set! (-> self control transv quad) (the-as uint128 0))
@@ -697,9 +698,16 @@
   (daxter-gun-update-eco-aura!)
   (none))
 
+(defun has-no-daxter-riding-on ((jak-record mp-player-record))
+  (let ((jak-target (mp-player-record-target jak-record)))
+    (return (the-as symbol (and jak-target (nonzero? jak-target) (= MP_INVALID_PLAYER_ID (-> jak-target riding-along-player-id)))))
+    )
+  #f
+  )
+
 (defbehavior target-indax-ride-along-check target ()
   (let ((jak-record (mp-jak-record-for self)))
-    (when (and jak-record (nonzero? jak-record))
+    (when (and jak-record (nonzero? jak-record) (has-no-daxter-riding-on jak-record))
       (let ((remote-pos (new 'stack-no-clear 'vector)))
         (vector-copy! remote-pos (-> jak-record transform position))
         (set! (-> remote-pos w) 1.0)
@@ -719,7 +727,7 @@
           )
         )
         (if (recently-pressed? triangle)
-            (go target-indax-jump-on)
+            (go target-indax-jump-on (-> jak-record identity player-id))
             )
             )))))
   (none)

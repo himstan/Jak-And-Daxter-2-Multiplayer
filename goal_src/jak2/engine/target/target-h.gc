@@ -195,6 +195,7 @@
    (edge-grab-state          mp-target-edge-grab-state :inline)
    ;; Multiplayer registry binding. Vanilla/offline targets keep the invalid ID.
    (player-id                uint32)
+   (riding-along-player-id   uint32)
    )
   (:methods
     (do-edge-grabs (_type_ collide-cache collide-edge-spec) none)

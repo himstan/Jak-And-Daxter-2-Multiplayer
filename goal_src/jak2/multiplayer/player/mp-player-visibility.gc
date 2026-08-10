@@ -3,18 +3,18 @@
 
 (defun mp-jak-has-riding-daxter? ((jak-target target))
   "Return true when a live Daxter record contextually resolves to this Jak."
-  (when (and jak-target (nonzero? jak-target))
-    (dotimes (player-id MP_MAX_PLAYERS)
-      (let ((record (mp-player-record-by-id (the-as uint player-id))))
-        (when (and record
-                   (nonzero? record)
-                   (mp-player-daxter? record))
-          (let ((daxter-target (mp-player-record-target record)))
-            (when (and daxter-target
-                       (nonzero? daxter-target)
-                       (mp-target-ride-along? daxter-target)
-                       (= (mp-jak-target-for daxter-target) jak-target))
-              (return #t)))))))
+  (when (and jak-target (nonzero? jak-target) (!= MP_INVALID_PLAYER_ID (-> jak-target riding-along-player-id)))
+    (let ((record (mp-player-record-by-id (-> jak-target riding-along-player-id))))
+      (when (and record
+                 (nonzero? record)
+                 (mp-player-daxter? record))
+        (let ((daxter-target (mp-player-record-target record)))
+          (when (and daxter-target
+                     (nonzero? daxter-target)
+                     (mp-target-ride-along? daxter-target)
+                     (!= MP_INVALID_PLAYER_ID (-> daxter-target riding-along-player-id))
+                     (= (mp-player-target-by-id (-> daxter-target riding-along-player-id)) jak-target))
+            (return #t))))))
   #f)
 
 (defun mp-update-player-target-visibility!

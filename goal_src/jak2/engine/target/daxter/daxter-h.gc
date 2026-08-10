@@ -57,7 +57,7 @@
 (define-extern target-indax-pole-flip-forward (state float float float target))
 (define-extern target-indax-pole-flip-forward-jump (state float float target))
 (define-extern target-ride-along (state target))
-(define-extern target-indax-jump-on (state target))
+(define-extern target-indax-jump-on (state uint target))
 (define-extern target-no-move-post (function none :behavior target))
 (define-extern target-indax-spawn-reset (state target))
 
@@ -80,9 +80,9 @@
 (define-extern skel-sidekick skeleton-group)
 
 (deftype indax-info (basic)
-  ((indax-start-time  time-frame)
-   (indax-time        time-frame)
-   (indax-board?      symbol)
-   (art-group-backup  art-group)
+  ((indax-start-time              time-frame)
+   (indax-time                    time-frame)
+   (indax-board?                  symbol)
+   (art-group-backup              art-group)
    )
   )

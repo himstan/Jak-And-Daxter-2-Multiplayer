@@ -157,7 +157,7 @@
       ((and ride-along? (focus-test? *target* indax))
        (debug-log *mp-debug-log?* "[MP-Teleport] Daxter player hopping onto Jak (ride-along)~%")
        (mp-teleport-player-to-record-coords! *target* record 4096.0)
-       (go-process *target* target-indax-jump-on)
+       (go-process *target* target-indax-jump-on (-> record identity player-id))
        )
       ((nonzero? (-> record vehicle vehicle-id))
        (let ((riding-veh-id (-> record vehicle vehicle-id)))
