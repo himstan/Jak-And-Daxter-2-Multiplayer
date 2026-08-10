@@ -53,7 +53,11 @@ bool finite_vehicle_state(const MPVehicleState& state) {
 }
 
 bool valid_player_state(const PacketPlayerState& state) {
-  return mp_valid_player_id(state.player_id) && mp_float_is_finite(state.x) &&
+  return mp_valid_player_id(state.player_id) &&
+         (state.riding_along_player_id == kMPInvalidPlayerId ||
+          (mp_valid_player_id(state.riding_along_player_id) &&
+           state.riding_along_player_id != state.player_id)) &&
+         mp_float_is_finite(state.x) &&
          mp_float_is_finite(state.y) && mp_float_is_finite(state.z) &&
          mp_float_is_finite(state.angle) && mp_float_is_finite(state.vel_x) &&
          mp_float_is_finite(state.vel_y) && mp_float_is_finite(state.vel_z) &&
@@ -165,6 +169,7 @@ PacketPlayerState make_cached_state_packet(const CachedPlayerState& cached, uint
   state.turret_active = cached.turret_active;
   state.action_seq = cached.action_seq;
   state.action_state_id = cached.action_state_id;
+  state.riding_along_player_id = cached.riding_along_player_id;
   memcpy(&state.veh_state, &cached.veh_state, sizeof(state.veh_state));
   return state;
 }
@@ -264,6 +269,7 @@ void copy_cached_state_to_record(const CachedPlayerState& cached, MPPlayerRecord
   record.action.darkjak_stage = cached.darkjak_stage;
   record.action.authoritative_sequence = cached.action_seq;
   record.action.action_state_id = cached.action_state_id;
+  record.action.riding_along_player_id = cached.riding_along_player_id;
   record.action.scene_state = cached.scene_active;
   record.action.respawn_flags = cached.respawn_flags;
   record.input.buttons = cached.buttons;
@@ -310,6 +316,7 @@ void mp_clear_player_slot(MultiplayerData& data,
     record.runtime = runtime;
     record.identity.player_id = kMPInvalidPlayerId;
     record.identity.character = MPPlayerCharacter::UNKNOWN;
+    record.action.riding_along_player_id = kMPInvalidPlayerId;
   }
 }
 
@@ -389,6 +396,7 @@ bool mp_handle_player_state_packet(MultiplayerData& data,
   cached.turret_active = state->turret_active;
   cached.action_seq = state->action_seq;
   cached.action_state_id = state->action_state_id;
+  cached.riding_along_player_id = state->riding_along_player_id;
   cached.last_sequence_num = state->header.sequenceNum;
   memcpy(&cached.veh_state, &state->veh_state, sizeof(cached.veh_state));
   if (data.session_role == 0 && state->status == static_cast<uint8_t>(MultiplayerStatus::IN_GAME)) {
@@ -460,6 +468,7 @@ bool mp_handle_join_packet(MultiplayerData& data,
   record.identity.identity_ready = 1;
   record.identity.joined = 1;
   record.connection.connected = 1;
+  record.action.riding_along_player_id = kMPInvalidPlayerId;
   memcpy(record.identity.name, join->player_name, sizeof(record.identity.name));
   lg::info("[MP-Join] Registered player {} with character {}.", join->player_id,
            static_cast<uint32_t>(join->character));
@@ -580,6 +589,7 @@ void mp_send_player_sync(MultiplayerData& data,
   state.turret_active = local->vehicle.turret_active;
   state.action_seq = local->action.authoritative_sequence;
   state.action_state_id = local->action.action_state_id;
+  state.riding_along_player_id = local->action.riding_along_player_id;
   memcpy(&state.veh_state, &local->vehicle.state, sizeof(state.veh_state));
   MultiplayerManager::broadcast(data, static_cast<int>(MultiplayerChannel::STATE), state,
                                 ENET_PACKET_FLAG_UNSEQUENCED);

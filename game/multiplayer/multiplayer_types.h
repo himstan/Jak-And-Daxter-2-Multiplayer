@@ -40,6 +40,7 @@ struct CachedPlayerState {
   uint8_t turret_active;
   uint32_t action_seq;
   uint32_t action_state_id;
+  uint32_t riding_along_player_id = kMPInvalidPlayerId;
   float turret_roty;
   float turret_rotx;
   uint32_t last_sequence_num = 0;
@@ -122,7 +123,8 @@ struct MPPlayerActionStateGOAL {
   uint8_t death_state;
   uint8_t scene_latched;
   uint32_t last_replayed_sequence;
-  uint32_t reserved[2];
+  uint32_t riding_along_player_id;
+  uint32_t reserved;
 };
 static_assert(sizeof(MPPlayerActionStateGOAL) == 32);
 

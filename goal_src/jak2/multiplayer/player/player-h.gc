@@ -153,7 +153,8 @@
    (death-state           uint8)
    (scene-latched?        uint8)
    (last-replayed-sequence uint32)
-   (reserved              uint32 2)
+   (riding-along-player-id uint32)
+   (reserved              uint32)
    )
   :size-assert 32)
 
@@ -348,6 +349,7 @@
       0)
     (set! (-> record identity player-id) MP_INVALID_PLAYER_ID)
     (set! (-> record identity character) (mp-player-character unknown))
+    (set! (-> record action riding-along-player-id) MP_INVALID_PLAYER_ID)
     (set! (-> record runtime pad-index) MP_INVALID_PAD_INDEX)
     (set! (-> record runtime last-gun-log-active) -1)
     (set! (-> record runtime last-gun-log-requested) -1)))

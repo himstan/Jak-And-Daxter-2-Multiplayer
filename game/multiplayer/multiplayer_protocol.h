@@ -211,8 +211,9 @@ struct PacketPlayerState {
   MPVehicleState veh_state;
   uint32_t action_seq;
   uint32_t action_state_id;
+  uint32_t riding_along_player_id;
 };
-static_assert(sizeof(PacketPlayerState) == 165,
+static_assert(sizeof(PacketPlayerState) == 169,
               "PacketPlayerState wire layout must remain explicit");
 
 struct PacketTurretState {

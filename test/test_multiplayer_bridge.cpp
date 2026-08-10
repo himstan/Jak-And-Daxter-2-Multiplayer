@@ -131,6 +131,7 @@ TEST(MultiplayerPacket, SequenceComparisonHandlesWraparound) {
 TEST(MultiplayerPacket, PacketViewRejectsTruncationUnknownTypesAndTrailingData) {
   PacketPlayerState state = {};
   state.header.type = PacketType::STATE_UPDATE;
+  EXPECT_EQ(sizeof(PacketPlayerState), 169u);
   std::vector<uint8_t> bytes(sizeof(state) + 1);
   memcpy(bytes.data(), &state, sizeof(state));
   ENetPacket packet = {};
@@ -173,6 +174,7 @@ TEST(MultiplayerPlayerRegistry, GoalLayoutsAndOffsetsMatch) {
   EXPECT_EQ(offsetof(MPPlayerTransformStateGOAL, level), 36u);
   EXPECT_EQ(offsetof(MPPlayerActionStateGOAL, scene_state), 16u);
   EXPECT_EQ(offsetof(MPPlayerActionStateGOAL, last_replayed_sequence), 20u);
+  EXPECT_EQ(offsetof(MPPlayerActionStateGOAL, riding_along_player_id), 24u);
   EXPECT_EQ(offsetof(MPPlayerInputStateGOAL, camera_angle_y), 8u);
   EXPECT_EQ(offsetof(MPPlayerVehicleStateGOAL, turret_roty), 8u);
   EXPECT_EQ(offsetof(MPPlayerVehicleStateGOAL, state), 16u);
@@ -429,6 +431,7 @@ TEST(MultiplayerPlayerRegistry, StateBeforeJoinRemainsVacantUntilIdentityArrives
   state.player_id = 3;
   state.status = static_cast<uint8_t>(MultiplayerStatus::IN_GAME);
   state.x = 12.5f;
+  state.riding_along_player_id = 1;
   ENetPacket state_packet = {};
   state_packet.data = reinterpret_cast<uint8_t*>(&state);
   state_packet.dataLength = sizeof(state);
@@ -452,6 +455,7 @@ TEST(MultiplayerPlayerRegistry, StateBeforeJoinRemainsVacantUntilIdentityArrives
   EXPECT_EQ(controller.records[3].identity.joined, 1u);
   EXPECT_EQ(controller.records[3].identity.state_ready, 1u);
   EXPECT_FLOAT_EQ(controller.records[3].transform.position[0], 12.5f);
+  EXPECT_EQ(controller.records[3].action.riding_along_player_id, 1u);
 }
 
 TEST(MultiplayerPlayerRegistry, RejectsSpoofsStaleStateAndLocalSlotClear) {
@@ -485,11 +489,18 @@ TEST(MultiplayerPlayerRegistry, RejectsSpoofsStaleStateAndLocalSlotClear) {
   mp_handle_player_state_packet(data, &packet, 2, 102);
   EXPECT_FLOAT_EQ(data.player_states[2].x, 10.0f);
 
+  state.header.sequenceNum = 11;
+  state.riding_along_player_id = 2;
+  EXPECT_FALSE(mp_handle_player_state_packet(data, &packet, 2, 103));
+  state.riding_along_player_id = kMPMaxPlayers;
+  EXPECT_FALSE(mp_handle_player_state_packet(data, &packet, 2, 104));
+
   mp_clear_player_slot(data, &controller, 3);
   EXPECT_EQ(controller.records[3].identity.joined, 1u);
   mp_clear_player_slot(data, &controller, 2);
   EXPECT_FALSE(data.player_states[2].state_ready);
   EXPECT_EQ(controller.records[2].identity.player_id, kMPInvalidPlayerId);
+  EXPECT_EQ(controller.records[2].action.riding_along_player_id, kMPInvalidPlayerId);
 }
 
 TEST(MultiplayerBootstrap, AppliesValidPacketToWorldAndBootstrapBuffers) {

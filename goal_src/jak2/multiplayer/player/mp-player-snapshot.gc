@@ -392,12 +392,17 @@
              (nonzero? (mp-local-player-record)))
     (let ((local-state 0))
       (set! (-> (mp-local-player-record) action darkjak-stage) (the uint 0))
+      (set! (-> (mp-local-player-record) action riding-along-player-id)
+            MP_INVALID_PLAYER_ID)
       (if (and *target*
                (nonzero? *target*)
                (-> *target* state)
                (nonzero? (-> *target* state)))
           (set! local-state (the int (mp-target-get-id-from-state (-> *target* state name))))
           )
+      (when (and *target* (nonzero? *target*))
+        (set! (-> (mp-local-player-record) action riding-along-player-id)
+              (-> *target* riding-along-player-id)))
       (when (and *target*
                  (nonzero? *target*)
                  (focus-test? *target* dark)
