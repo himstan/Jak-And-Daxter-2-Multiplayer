@@ -2332,6 +2332,9 @@
         (set! (-> remote-dir y) 0.0)
         (set! (-> remote-dir w) 0.0)
         (vector-matrix*! remote-dir remote-dir (-> arg0 mat))
+        (#when PC_PORT
+          (*! (-> remote-dir x) (/ 1.0 f30-0))
+          )
         (set-vector! (-> marker-mat vector 0) (* (-> remote-dir z) f30-0) 0.0 (- (-> remote-dir x)) 0.0)
         (set-vector! (-> marker-mat vector 1) 0.0 1.0 0.0 0.0)
         (set-vector! (-> marker-mat vector 2) (* (-> remote-dir x) f30-0) 0.0 (-> remote-dir z) 1.0)
