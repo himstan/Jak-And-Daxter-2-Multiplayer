@@ -830,7 +830,7 @@
                                  :name "remote-player"
                                  :icon-xy (new 'static 'vector2ub :data (new 'static 'array uint8 2 #x0 #x1))
                                  :scale 1.0
-                                 :color (new 'static 'rgba :r #xff :g #x80 :b #x00 :a #x80)
+                                 :color (new 'static 'rgba :r #xff :g #x8c :b #x00 :a #x80)
                                  )
                                )
         )
@@ -1381,6 +1381,29 @@
          player-target
          (nonzero? player-target)
          (mp-target-ride-along? player-target))))
+
+(defun mp-player-marker-color-by-id ((player-id int) (fallback-color rgba))
+  "Resolve a player marker color from its zero-based player slot."
+  (cond
+    ((= player-id 0) (static-rgba 0 229 255 128))
+    ((= player-id 1) (static-rgba 255 140 0 128))
+    ((= player-id 2) (static-rgba 118 255 3 128))
+    ((= player-id 3) (static-rgba 255 46 209 128))
+    ((= player-id 4) (static-rgba 54 92 255 128))
+    ((= player-id 5) (static-rgba 255 230 0 128))
+    ((= player-id 6) (static-rgba 155 77 255 128))
+    ((= player-id 7) (static-rgba 255 92 138 128))
+    (else fallback-color)))
+
+(defun mp-player-marker-color ((marker-key object) (fallback-color rgba))
+  (mp-player-marker-color-by-id
+    (- (the-as int marker-key) MP_REMOTE_PLAYER_MARKER_KEY_BASE)
+    fallback-color))
+
+(defun mp-local-player-marker-color ()
+  (mp-player-marker-color-by-id
+    (the-as int (mp-local-player-id))
+    (static-rgba 0 229 255 128)))
 
 ;; WARN: Return type mismatch pointer vs none.
 (defmethod draw-racer-2 ((this minimap) (arg0 minimap-draw-work) (arg1 connection-minimap))
@@ -2222,10 +2245,14 @@
             (adgif-shader<-texture-simple! (the-as adgif-shader (&-> (the-as (pointer uint128) s3-2) 2)) s2-1)
             (set! (-> (the-as (pointer uint128) s3-2) 7) (-> this draw-tmpl dma-vif quad))
             (set! (-> (the-as (pointer uint128) s3-2) 8) (-> this draw-tmpl quad 1))
-            (if (mp-local-player-daxter?)
-                (set-vector! (-> (the-as (inline-array vector4w) s3-2) 9) 255 128 0 128)
-                (set-vector! (-> (the-as (inline-array vector4w) s3-2) 9) 0 255 255 128)
-                )
+            (let ((marker-color (mp-local-player-marker-color)))
+              (when (and marker-color (nonzero? marker-color))
+                (set-vector!
+                  (-> (the-as (inline-array vector4w) s3-2) 9)
+                  (the int (-> marker-color r))
+                  (the int (-> marker-color g))
+                  (the int (-> marker-color b))
+                  (the int (-> marker-color a)))))
             (set-vector! (-> (the-as (inline-array vector4w) s3-2) 10) 0 0 #xffffff 0)
             (set-vector!
               (-> (the-as (inline-array vector4w) s3-2) 11)
@@ -2320,11 +2347,7 @@
         (vector-matrix*! (-> arg0 corner 2) (-> arg0 corner 2) marker-mat)
         (vector-matrix*! (-> arg0 corner 3) (-> arg0 corner 3) marker-mat)
         (let* ((s3-0 (the-as object (-> arg0 buf base)))
-               (a1-0 (if (mp-player-jak? remote-record)
-                         (static-rgba 0 255 255 128)
-                         (-> arg1 class color)
-                         )
-                     )
+               (a1-0 (mp-player-marker-color (-> arg1 key) (-> arg1 class color)))
                (a1-1 (copy-and-set-field a1-0 r (shr (* (-> a1-0 r) (the-as uint (-> this color x))) 7)))
                (a1-2 (copy-and-set-field a1-1 g (shr (* (-> a1-1 g) (the-as uint (-> this color y))) 7)))
                (a1-3
