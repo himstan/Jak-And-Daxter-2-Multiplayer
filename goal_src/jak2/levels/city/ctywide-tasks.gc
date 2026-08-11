@@ -403,7 +403,7 @@
   (lambda :behavior task-manager
     ()
     (set-setting! 'exclusive-task #f 0.0 (-> self node-info task))
-    (set! (-> self begin-pos quad) (-> (new 'static 'vector :x -245760.0 :y 45056.0 :z 5468160.0 :w 1.0) quad))
+    (set! (-> self begin-pos quad) (-> (new 'static 'vector :x -217960.0 :y 31618.0 :z 5517732.0 :w 1.0) quad))
     (set! (-> self end-pos quad) (-> (new 'static 'vector :x 579584.0 :y 49152.0 :z -1985331.2 :w 1.0) quad))
     (set-setting! 'minimap 'clear 0.0 (minimap-flag task-graph))
     (if *keira-race-enabled*

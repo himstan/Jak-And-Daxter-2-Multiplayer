@@ -147,18 +147,30 @@
   #f)
 
 (defun mp-race-vehicle-register! ((racer-index int) (vehicle vehicle))
-  (set! (-> *mp-race-vehicle-handles* racer-index)
-        (process->handle vehicle))
+  (when (and (>= racer-index 0)
+             (< racer-index MP_MAX_RACE_VEHICLES)
+             vehicle
+             (nonzero? vehicle)
+             *mp-race-vehicle-handles*
+             (nonzero? *mp-race-vehicle-handles*))
+    (set! (-> *mp-race-vehicle-handles* racer-index)
+          (process->handle vehicle)))
   (none))
 
 (defun mp-race-vehicle-find-by-net-id ((net-id uint))
   (when (mp-race-vehicle-id? net-id)
-    (let* ((racer-index (mp-race-vehicle-racer-index net-id))
-           (vehicle (handle->process-safe (-> *mp-race-vehicle-handles* racer-index))))
-      (when (and vehicle
-                 (nonzero? vehicle)
-                 (= (-> (the-as vehicle vehicle) net-id) net-id))
-        (return (the-as vehicle vehicle)))))
+    (let ((racer-index (mp-race-vehicle-racer-index net-id)))
+      (when (and (>= racer-index 0)
+                 (< racer-index MP_MAX_RACE_VEHICLES)
+                 *mp-race-vehicle-handles*
+                 (nonzero? *mp-race-vehicle-handles*))
+        (let ((vehicle
+                (handle->process-safe
+                  (-> *mp-race-vehicle-handles* racer-index))))
+          (when (and vehicle
+                     (nonzero? vehicle)
+                     (= (-> (the-as vehicle vehicle) net-id) net-id))
+            (return (the-as vehicle vehicle)))))))
   (the-as vehicle #f))
 
 (defun mp-race-clear-vehicle-handles! ()

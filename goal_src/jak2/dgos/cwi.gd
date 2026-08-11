@@ -40,7 +40,6 @@
   "ctywide-texture.o"
   "ctywide-part.o"
   "ctywide-obs.o"
-  "race-mp-sync.o"
   "race-mesh.o"
   "race-part.o"
   "race-obs.o"

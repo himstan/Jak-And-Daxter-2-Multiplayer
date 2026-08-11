@@ -41,7 +41,7 @@ inline constexpr std::array<PacketDescriptor, kPacketCount> kPackets = {{
     {12, "WORLD_STATE", 1, 2, 2, 256, 0, 0},
     {13, "SESSION_WELCOME", 1, 0, 5, 16, 0, 0},
 }};
-inline constexpr std::array<EventDescriptor, 57> kEvents = {{
+inline constexpr std::array<EventDescriptor, 58> kEvents = {{
     {1, "ORB"},
     {2, "GEM"},
     {3, "BREAK"},
@@ -99,6 +99,7 @@ inline constexpr std::array<EventDescriptor, 57> kEvents = {{
     {55, "MISSION_TOMB_BOULDER_COMPLETE"},
     {56, "MISSION_TOMB_DAXTER_WAIT_START"},
     {57, "MISSION_TOMB_DAXTER_WAIT_END"},
+    {58, "RACE"},
 }};
 
 inline const PacketDescriptor* packet_descriptor(uint8_t id) {

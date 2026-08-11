@@ -1,6 +1,5 @@
 ("STB.DGO"
  ("race-h.o"
-  "race-mp-sync.o"
   "race-mesh.o"
   "race-part.o"
   "race-obs.o"

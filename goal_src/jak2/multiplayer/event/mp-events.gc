@@ -59,6 +59,7 @@
   (set! *mp-city-power-state-3* (the uint 0))
   (set! *mp-city-power-state-4* (the uint 0))
   (set! *mp-local-gun-shot-seq* (the uint 0))
+  (mp-race-reset-all!)
   (mp-for-each-player-record (player-id record)
     (set! (-> record runtime last-gun-shot-sequence) (the uint 0)))
   (when (and *mp-event-buffer*

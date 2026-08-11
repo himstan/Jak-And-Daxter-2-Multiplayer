@@ -1,6 +1,34 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(defun mp-event-build-race! ((event mp-race-event)
+                             (details mp-race-event-data))
+  (when (and event
+             (nonzero? (the-as uint event))
+             details
+             (nonzero? (the-as uint details))
+             (mp-event-prepare! event MP_EVENT_RACE))
+    (set! (-> event action) (-> details action))
+    (set! (-> event generation) (-> details generation))
+    (set! (-> event race-id) (-> details race-id))
+    (set! (-> event racer-index) (-> details racer-index))
+    (set! (-> event player-id) (-> details player-id))
+    (set! (-> event participant-mask) (-> details participant-mask))
+    (set! (-> event open-racer-mask) (-> details open-racer-mask))
+    (set! (-> event value0) (-> details value0))
+    (set! (-> event value1) (-> details value1))
+    (set! (-> event sequence) (-> details sequence))
+    (set! (-> event event-time) (-> details event-time))
+    (set! (-> event payload-size) (the uint 48))
+    (return event))
+  (the-as mp-race-event #f))
+
+(defun mp-event-enqueue-race! ((details mp-race-event-data))
+  (when (and details (nonzero? (the-as uint details)))
+    (let ((event (new 'stack-no-clear 'mp-race-event)))
+      (mp-event-enqueue! (mp-event-build-race! event details))))
+  (none))
+
 ;; Typed outbound event builders. Callers own the event storage and pass the
 ;; populated result to mp-event-enqueue!.
 
