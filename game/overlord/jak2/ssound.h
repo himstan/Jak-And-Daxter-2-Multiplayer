@@ -14,6 +14,11 @@ void ReleaseBufferMem();
 void SetMusicVol();
 void UpdateLocation(Sound* sound);
 void SetEarTrans(Vec3w* ear_trans0, Vec3w* ear_trans1, Vec3w* cam_trans, s32 cam_angle);
+VolumePair CalculateSpatializedVolume(Vec3w* position,
+                                      s32 volume,
+                                      s32 fo_curve,
+                                      s32 fo_min,
+                                      s32 fo_max);
 void InitSound_overlord();
 extern s32 StreamThread;
 extern VolumePair gPanTable[361];

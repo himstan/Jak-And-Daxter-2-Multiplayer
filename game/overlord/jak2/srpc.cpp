@@ -8,6 +8,7 @@
 #include "game/overlord/common/soundcommon.h"
 #include "game/overlord/common/srpc.h"
 #include "game/overlord/common/ssound.h"
+#include "game/overlord/jak2/custom_audio_stream.h"
 #include "game/overlord/jak2/iso_api.h"
 #include "game/overlord/jak2/spustreams.h"
 #include "game/overlord/jak2/ssound.h"
@@ -169,6 +170,9 @@ void* RPC_Player(unsigned int /*fno*/, void* data, int size) {
         }
       } break;
       case Jak2SoundCommand::pause_sound: {
+        if (PauseCustomAudioStream(cmd->sound_id.sound_id)) {
+          break;
+        }
         Sound* sound = LookupSound(cmd->sound_id.sound_id);
         if (sound != nullptr) {
           snd_PauseSound(sound->sound_handle);
@@ -180,6 +184,9 @@ void* RPC_Player(unsigned int /*fno*/, void* data, int size) {
         }
       } break;
       case Jak2SoundCommand::stop_sound: {
+        if (StopCustomAudioStream(nullptr, cmd->sound_id.sound_id)) {
+          break;
+        }
         Sound* sound = LookupSound(cmd->sound_id.sound_id);
         if (sound != nullptr) {
           snd_StopSound(sound->sound_handle);
@@ -191,6 +198,9 @@ void* RPC_Player(unsigned int /*fno*/, void* data, int size) {
         }
       } break;
       case Jak2SoundCommand::continue_sound: {
+        if (ContinueCustomAudioStream(cmd->sound_id.sound_id)) {
+          break;
+        }
         Sound* sound = LookupSound(cmd->sound_id.sound_id);
         if (sound != nullptr) {
           snd_ContinueSound(sound->sound_handle);
@@ -265,6 +275,9 @@ void* RPC_Player(unsigned int /*fno*/, void* data, int size) {
             snd_SetSoundReg(sound->sound_handle, 2, cmd->param.parms.reg[2]);
           }
         } else {
+          if (SetCustomAudioStreamParams(cmd->param.sound_id, cmd->param.parms)) {
+            break;
+          }
           auto* vs = FindVagStreamId(cmd->param.sound_id);
           if (vs) {
             if (mask & 0x2) {
@@ -307,6 +320,9 @@ void* RPC_Player(unsigned int /*fno*/, void* data, int size) {
             }
           }
         }
+        if (group & 4) {
+          UpdateCustomAudioStreams();
+        }
       } break;
       case Jak2SoundCommand::pause_group: {
         snd_PauseAllSoundsInGroup(cmd->group.group);
@@ -315,6 +331,7 @@ void* RPC_Player(unsigned int /*fno*/, void* data, int size) {
         }
         if (cmd->group.group & 4) {
           PauseVagStreams();
+          PauseCustomAudioStreams();
         }
       } break;
       case Jak2SoundCommand::stop_group: {
@@ -330,6 +347,7 @@ void* RPC_Player(unsigned int /*fno*/, void* data, int size) {
           local_178.id = 0;
           local_178.priority = 0;
           StopVagStream(&local_178, 1);
+          StopCustomAudioStreams();
         }
       } break;
       case Jak2SoundCommand::continue_group: {
@@ -339,6 +357,7 @@ void* RPC_Player(unsigned int /*fno*/, void* data, int size) {
         }
         if (cmd->group.group & 4) {
           UnPauseVagStreams();
+          ContinueCustomAudioStreams();
         }
       } break;
       case Jak2SoundCommand::set_midi_reg: {
@@ -358,8 +377,10 @@ void* RPC_Player(unsigned int /*fno*/, void* data, int size) {
       case Jak2SoundCommand::set_ear_trans: {
         SetEarTrans(&cmd->ear_trans_j2.ear_trans0, &cmd->ear_trans_j2.ear_trans1,
                     &cmd->ear_trans_j2.cam_trans, cmd->ear_trans_j2.cam_angle);
+        UpdateCustomAudioStreams();
       } break;
       case Jak2SoundCommand::shutdown: {
+        StopCustomAudioStreams();
         gSoundEnable = 0;
       } break;
       case Jak2SoundCommand::set_fps: {

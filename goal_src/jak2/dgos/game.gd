@@ -575,6 +575,7 @@
   "entity-debug.o" ;; added
   "mod-settings.o" ;; added ;;mod-base-change
   "mod-common-functions.o" ;; added
+  "mp-custom-spatial-audio.o" ;; added
   "orb-placer.o"  ;; added
   "mp-event-hooks.o" ;; added
   "mp-scene-state.o" ;; added

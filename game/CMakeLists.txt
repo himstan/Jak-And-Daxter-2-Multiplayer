@@ -101,6 +101,7 @@ set(RUNTIME_SOURCE
         kernel/common/kdsnetm.cpp
         kernel/common/klink.cpp
         kernel/common/klisten.cpp
+        kernel/common/custom_audio.cpp
         kernel/common/kmachine.cpp
         kernel/common/kmalloc.cpp
         kernel/common/kmemcard.cpp
@@ -267,6 +268,7 @@ set(RUNTIME_SOURCE
         overlord/jak2/overlord.cpp
         overlord/jak2/pages.cpp
         overlord/jak2/989_plugins/plugin_strv.cpp
+        overlord/jak2/custom_audio_stream.cpp
         overlord/jak2/spustreams.cpp
         overlord/jak2/srpc.cpp
         overlord/jak2/ssound.cpp

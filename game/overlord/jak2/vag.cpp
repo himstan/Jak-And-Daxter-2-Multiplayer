@@ -784,20 +784,11 @@ void CalculateVAGVolumes(VagCmd* cmd, u32* l_out, u32* r_out) {
     *l_out = vol;
     *r_out = vol;
   } else {
-    int fo_vol =
-        CalculateFalloffVolume(&cmd->vec3, (u32)(cmd->vol_multiplier * MasterVolume[2]) >> 10,
-                               cmd->fo_curve, cmd->fo_min, cmd->fo_max);
-
-    auto* pan = &gPanTable[(630 - CalculateAngle(&cmd->vec3)) % 360];
-    *l_out = (pan->left * fo_vol) >> 10;
-    *r_out = (pan->right * fo_vol) >> 10;
-
-    if (*l_out >= 0x4000) {
-      *l_out = 0x3fff;
-    }
-    if (*r_out >= 0x4000) {
-      *r_out = 0x3fff;
-    }
+    const auto volume = CalculateSpatializedVolume(
+        &cmd->vec3, (u32)(cmd->vol_multiplier * MasterVolume[2]) >> 10, cmd->fo_curve,
+        cmd->fo_min, cmd->fo_max);
+    *l_out = volume.left;
+    *r_out = volume.right;
   }
 }
 

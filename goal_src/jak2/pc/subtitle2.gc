@@ -359,6 +359,9 @@
   "get the str position for this sound id in a 30/sec measurement"
   (if (and (-> self movie-mode?) (= id (-> self movie-gui id)))
       (return (-> self movie-pos)))
+  (let ((custom-pos (pc-custom-spatial-audio-position (the-as int id))))
+    (when (>= custom-pos 0)
+      (return (the float custom-pos))))
   (let ((pos (the float (current-str-pos id))))
     (if (< pos 0.0) -1.0 (/ pos (/ 1024.0 30)))))
 

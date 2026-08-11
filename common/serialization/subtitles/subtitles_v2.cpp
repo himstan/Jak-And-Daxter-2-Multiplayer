@@ -91,7 +91,8 @@ const std::unordered_map<std::string, u16> jak2_speaker_name_to_enum_val = {
     {"oracle", 33},
     {"precursor", 34},
     {"metalkor-before-consite", 35},
-    {"metalkor-intro", 36}};
+    {"metalkor-intro", 36},
+    {"baron-question", 37}};
 
 // matches enum in `subtitle3-h.gc` with "none" (first) and "max" (last and removed)
 const std::unordered_map<std::string, u16> jak3_speaker_name_to_enum_val = {

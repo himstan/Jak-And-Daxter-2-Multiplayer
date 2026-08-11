@@ -2436,6 +2436,28 @@
                          )
         )
 
+(define *propa-custom-spatial-audio-pool*
+  (new 'static 'boxed-array :type custom-spatial-audio-entry
+    (new 'static 'custom-spatial-audio-entry
+      :key "problem-is-the-war"
+      :path "jad2mp/the-problem-is-the-war.mp3"
+      :probability 1
+      )
+    )
+  )
+
+(define *propa-custom-spatial-audio-pool-valid?*
+  (register-custom-spatial-audio-pool! *propa-custom-spatial-audio-pool*))
+
+(defun propa-announcement-name ((vanilla-name string))
+  (let ((custom-name (if *propa-custom-spatial-audio-pool-valid?*
+                         (choose-custom-spatial-audio *propa-custom-spatial-audio-pool*)
+                         (the-as string #f)
+                         )))
+    (if custom-name custom-name vanilla-name)
+    )
+  )
+
 (define *propa-sounds-class-3* (new 'static 'boxed-array :type string "cityv177"))
 
 (define *propa-sounds-class-2* (new 'static 'boxed-array :type string "cityv176"))
@@ -2635,7 +2657,8 @@
                                      self
                                      (gui-channel alert)
                                      (gui-action play)
-                                     (-> *propa-sounds* (-> self sound-index))
+                                     (propa-announcement-name
+                                       (-> *propa-sounds* (-> self sound-index)))
                                      -99.0
                                      0
                                      )

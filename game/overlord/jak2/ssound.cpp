@@ -1,5 +1,7 @@
 #include "ssound.h"
 
+#include <algorithm>
+
 #include "common/util/Assert.h"
 
 #include "989_plugins/plugin_strv.h"
@@ -109,6 +111,21 @@ void SetMusicVol() {
   int vol = (MasterVolume[1] * gMusicFade >> 0x10) * gMusicTweak >> 7;
   snd_SetMasterVolume(1, vol);
   snd_SetMasterVolume(2, vol);
+}
+
+VolumePair CalculateSpatializedVolume(Vec3w* position,
+                                      s32 volume,
+                                      s32 fo_curve,
+                                      s32 fo_min,
+                                      s32 fo_max) {
+  const s32 falloff_volume =
+      CalculateFalloffVolume(position, volume, fo_curve, fo_min, fo_max);
+  const auto& pan = gPanTable[(630 - CalculateAngle(position)) % 360];
+  VolumePair result{
+      static_cast<s16>(std::clamp((pan.left * falloff_volume) >> 10, 0, 0x3fff)),
+      static_cast<s16>(std::clamp((pan.right * falloff_volume) >> 10, 0, 0x3fff)),
+  };
+  return result;
 }
 
 void UpdateLocation(Sound* sound) {

@@ -1555,6 +1555,17 @@
            (((gui-action queue) (gui-action play) (gui-action playing) (gui-action fade) (gui-action stop))
             (cond
               (gp-0
+                ;; Only playback actions guarantee that param2 contains a stream name.
+                (when (nonzero? (-> gp-0 name))
+                  (case (pc-custom-spatial-audio-status
+                          (-> gp-0 name)
+                          (the-as int (-> gp-0 id)))
+                    ((1) (return (gui-status ready)))
+                    ((2) (return (gui-status pending)))
+                    ((3) (return (gui-status active)))
+                    ((4) (return (gui-status stop)))
+                    )
+                  )
                 (dotimes (s4-0 4)
                   (when (and (string-charp= (-> gp-0 name) (-> *sound-iop-info* stream-name s4-0 name))
                              (or (= (-> gp-0 id) (-> *sound-iop-info* stream-id s4-0)) (zero? (-> *sound-iop-info* stream-id s4-0)))

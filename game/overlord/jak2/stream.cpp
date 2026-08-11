@@ -9,6 +9,7 @@
 #include "game/overlord/common/iso.h"
 #include "game/overlord/common/iso_api.h"
 #include "game/overlord/common/isocommon.h"
+#include "game/overlord/jak2/custom_audio_stream.h"
 #include "game/overlord/jak2/iso.h"
 #include "game/overlord/jak2/iso_api.h"
 #include "game/overlord/jak2/streamlist.h"
@@ -156,6 +157,9 @@ void* RPC_PLAY([[maybe_unused]] unsigned int fno, void* _cmd, int size) {
     if (cmd_result == 1) {
       for (int s = 0; s < 4; s++) {
         if (cmd_iter->names[s].chars[0]) {
+          if (StopCustomAudioStream(cmd_iter->names[s].chars, cmd_iter->id[s])) {
+            continue;
+          }
           strncpy(list_node.name, cmd_iter->names[s].chars, 0x30);
           list_node.id = cmd_iter->id[s];
           WaitSema(EEStreamsList.sema);
@@ -172,11 +176,20 @@ void* RPC_PLAY([[maybe_unused]] unsigned int fno, void* _cmd, int size) {
       if (cmd_result == 2) {
         // uVar7 = 0;
         // iVar6 = 0x20;
+        const char* queue_names[4] = {
+            cmd_iter->names[0].chars,
+            cmd_iter->names[1].chars,
+            cmd_iter->names[2].chars,
+            cmd_iter->names[3].chars,
+        };
+        const u32 custom_slot_mask =
+            UpdateCustomAudioStreamQueue(queue_names, cmd_iter->id, 4);
         WaitSema(EEStreamsList.sema);
         EmptyVagStreamList(&EEStreamsList);
 
         for (int s = 0; s < 4; s++) {
-          if (cmd_iter->names[s].chars[0] && cmd_iter->id[s]) {
+          if (!(custom_slot_mask & (1u << s)) && cmd_iter->names[s].chars[0] &&
+              cmd_iter->id[s]) {
             // printf("got queue command %d: %s %d\n", s, cmd_iter->names[s].chars,
             // cmd_iter->id[s]);
             strncpy(list_node.name, cmd_iter->names[s].chars, 0x30);
@@ -247,6 +260,9 @@ void* RPC_PLAY([[maybe_unused]] unsigned int fno, void* _cmd, int size) {
 
         for (int s = 0; s < 4; s++) {
           if (cmd_iter->names[s].chars[0] && cmd_iter->id[s]) {
+            if (StartCustomAudioStream(cmd_iter->names[s].chars, cmd_iter->id[s])) {
+              continue;
+            }
             // __src = (char*)((int)cmd_iter->id + iVar10 + -0x10);
             strncpy(list_node.name, cmd_iter->names[s].chars, 0x30);
             list_node.id = cmd_iter->id[s];
