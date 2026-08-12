@@ -124,6 +124,14 @@
      (and (-> this next-state)
           (= (-> this next-state name) 'waiting-for-start)
           (logtest? (-> this flags) (rigid-body-object-flag riding))))
+    
+    (('pilot-on)
+      (let ((icon (-> this minimap)))
+        (when icon
+          (logior! (-> icon flags) (minimap-flag fade-out))
+          (set! (-> this minimap) #f)))
+      ((method-of-type vehicle rigid-body-object-method-46) this sender event-id event message)
+      ) 
 
     (('begin-race)
      (logclear! (-> this focus-status) (focus-status grabbed))

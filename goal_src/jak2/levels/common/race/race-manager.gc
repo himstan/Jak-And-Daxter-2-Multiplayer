@@ -647,15 +647,13 @@
      )
     (((race-state-enum player-get-on))
      (let ((intro-t (* 0.0033333334 (the float (- (-> this current-time) (-> this countdown-start-time)))))
-           (player-vehicle
-             (the-as process (as-type (handle->process (-> this racer-array (-> this i-player) racer)) process-focusable))
-             )
+           (player-vehicle (the-as process-focusable (handle->process (-> this racer-array (-> this i-player) racer))))
            )
        (cond
          ((< intro-t 1.0)
           (when player-vehicle
-            (cubic-curve-method-10 (-> this player-intro-curve) (-> (the-as process-focusable player-vehicle) root trans) intro-t)
-            (cubic-curve-method-11 (-> this player-intro-curve) (-> (the-as process-focusable player-vehicle) root transv) intro-t)
+            (cubic-curve-method-10 (-> this player-intro-curve) (-> player-vehicle root trans) intro-t)
+            (cubic-curve-method-11 (-> this player-intro-curve) (-> player-vehicle root transv) intro-t)
             (when (< 0.4 intro-t)
               (when (-> this info start-camera)
                 (set-setting! 'entity-name (-> this info start-camera) 0.0 0)
@@ -673,12 +671,9 @@
        )
      )
     (((race-state-enum player-set-pos))
-     (let ((player-vehicle
-             (the-as process (as-type (handle->process (-> this racer-array (-> this i-player) racer)) process-focusable))
-             )
-           )
+     (let ((player-vehicle (the-as process-focusable (handle->process (-> this racer-array (-> this i-player) racer)))))
        (when player-vehicle
-         (cubic-curve-method-10 (-> this player-intro-curve) (-> (the-as process-focusable player-vehicle) root trans) 1.0)
+         (cubic-curve-method-10 (-> this player-intro-curve) (-> player-vehicle root trans) 1.0)
          (vector-reset! (-> (the-as process-focusable player-vehicle) root transv))
          )
        )
@@ -981,10 +976,10 @@
                   (open-racer? (mp-race-racer-open? racer-index))
                   (map-icon
                     (cond
-                      (open-racer? 37)
-                      ((or (zero? rider) (= rider 1)) 37)
-                      ((= rider 2) 38)
-                      (else 36))))
+                      (open-racer? (minimap-class racer-target))
+                      ((or (zero? rider) (= rider 1)) (minimap-class none))
+                      ((= rider 2) (minimap-class racer-errol))
+                      (else (minimap-class racer)))))
 
              (set! (-> spawn params position quad) (-> racer-state start-position quad))
              (set! (-> spawn params id) (the-as uint racer-index))
@@ -1001,7 +996,9 @@
                (let ((vehicle (vehicle-spawn this (type-from-race-vehicle-type (-> racer-info vehicle)) (-> spawn params))))
                  (when vehicle
                    (mp-race-vehicle-register! racer-index (the-as vehicle vehicle))
-                   (add-icon! *minimap* vehicle (the-as uint map-icon) (the-as int #f) (the-as vector #t) 0)
+                   (when (type? vehicle vehicle-racer)
+                      (set! (-> (the-as vehicle-racer vehicle) minimap) (add-icon! *minimap* vehicle (the-as uint map-icon) (the-as int #f) (the-as vector #t) 0))
+                      )
                    (init-racer! racer-state vehicle)
                    (set! (-> racer-state rider)
                          (if open-racer? (the uint8 0) rider))
