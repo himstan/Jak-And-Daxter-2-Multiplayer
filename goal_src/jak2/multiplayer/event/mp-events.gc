@@ -12,6 +12,7 @@
   (set! *mp-current-event-source-player-id* MP_INVALID_PLAYER_ID)
   (set! *multi-last-in-event-seq* (the-as uint 0))
   (mp-event-queue-reset!)
+  (set! *mp-mission-failed-pending-choice* (the uint 0))
   (set! *mp-mission-failed-bootstrap-pending?* #f)
   (set! *mp-mission-failed-bootstrap-await-spawn?* #f)
   (set! *mp-mission-failed-bootstrap-ready-time* (the-as time-frame 0))

@@ -458,7 +458,7 @@
 (define-extern mp-event-enqueue-aid! (function uint uint none))
 (define-extern mp-event-enqueue-enemy-death! (function uint none))
 (define-extern mp-event-enqueue-enemy-gem! (function uint uint none))
-(define-extern mp-event-enqueue-actor-name! (function uint string none))
+(define-extern mp-event-enqueue-actor-name! (function uint string symbol))
 (define-extern mp-event-enqueue-robotank-trigger! (function string int vector none))
 (define-extern mp-event-enqueue-gungame! (function mp-gungame-build-data none))
 (define-extern mp-event-enqueue-krew-pickup! (function int none))

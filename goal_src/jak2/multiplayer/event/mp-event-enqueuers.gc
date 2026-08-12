@@ -26,8 +26,8 @@
 (defun mp-event-enqueue-actor-name! ((event-type uint) (proc-name string))
   (let ((event (new 'stack-no-clear 'mp-actor-name-event)))
     (mp-event-enqueue!
-      (mp-event-build-actor-name! event event-type proc-name)))
-  (none)
+      (mp-event-build-actor-name! event event-type proc-name))
+    )
   )
 
 (defun mp-event-enqueue-robotank-trigger! ((proc-name string)
