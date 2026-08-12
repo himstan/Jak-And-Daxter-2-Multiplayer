@@ -221,9 +221,10 @@
       :turbo-pad-array #f
       :racer-array (new 'static 'inline-array race-racer-info 4
         (new 'static 'race-racer-info :flags (racer-info-flags multiplayer-human))
-        (new 'static 'race-racer-info :rider #x2 :vehicle #x1 :flags (racer-info-flags multiplayer-human) :seek-offset 1)
-        (new 'static 'race-racer-info :rider #x3 :vehicle #x1 :flags (racer-info-flags multiplayer-human multiplayer-only) :seek-offset 2)
-        (new 'static 'race-racer-info :rider #x4 :vehicle #x1 :flags (racer-info-flags multiplayer-human multiplayer-only) :seek-offset 3)
+        (new 'static 'race-racer-info :rider #x2 :vehicle #x1 :seek-offset 1)
+        (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags multiplayer-human multiplayer-only) :seek-offset 2)
+        (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags multiplayer-human multiplayer-only) :seek-offset 3)
+        (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags multiplayer-human multiplayer-only) :seek-offset 4)
         )
       :decision-point-array #f
       :level 'ctyport
@@ -254,16 +255,16 @@
                         :x 0.8
                         :z -0.45
                         :w 1.0)
-;;      :finish-sphere (new 'static 'sphere
-;;                       :x 579584.0
-;;                       :y 49152.0
-;;                       :z -1985331.2
-;;                       :r 49152.0)
       :finish-sphere (new 'static 'sphere
-                       :x 204329.7
-                       :y 35365.6
-                       :z 5317731.5
+                       :x 579584.0
+                       :y 49152.0
+                       :z -1985331.2
                        :r 49152.0)
+;;      :finish-sphere (new 'static 'sphere
+;;                       :x 204329.7
+;;                       :y 35365.6
+;;                       :z 5317731.5
+;;                       :r 49152.0)
       :finish-dir (new 'static 'vector :z 1.0 :w 1.0)
       :player-intro-pos (new 'static 'vector
                             :x -245760.0
@@ -506,9 +507,10 @@
       :turbo-pad-array #f
       :racer-array (new 'static 'inline-array race-racer-info 4
         (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags multiplayer-human))
-        (new 'static 'race-racer-info :rider #x3 :flags (racer-info-flags multiplayer-human) :seek-offset 1)
-        (new 'static 'race-racer-info :rider #x4 :flags (racer-info-flags multiplayer-human multiplayer-only) :seek-offset 2)
-        (new 'static 'race-racer-info :rider #x5 :flags (racer-info-flags multiplayer-human multiplayer-only) :seek-offset 3)
+        (new 'static 'race-racer-info :rider #x3 :seek-offset 1)
+        (new 'static 'race-racer-info :flags (racer-info-flags multiplayer-human multiplayer-only) :seek-offset 2)
+        (new 'static 'race-racer-info :flags (racer-info-flags multiplayer-human multiplayer-only) :seek-offset 3)
+        (new 'static 'race-racer-info :flags (racer-info-flags multiplayer-human multiplayer-only) :seek-offset 4)
         )
       :decision-point-array #f
       :level 'ctyport
