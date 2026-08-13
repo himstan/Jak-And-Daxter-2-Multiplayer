@@ -11,21 +11,46 @@
   (end-on-scene         4)
   )
 
+(defenum mp-spectate-layout-conditions
+  :type uint32
+  :bitfield #t
+  (has-selection     0)
+  (show-player-name  1)
+  (waiting           2)
+  (loading           3)
+  (custom-text       4)
+  (can-cycle         5)
+  )
+
+(defenum mp-spectate-layout-widget
+  :type uint32
+  (custom-text   0)
+  (waiting       1)
+  (loading       2)
+  (previous      3)
+  (player-name   4)
+  (player-number 5)
+  (next          6)
+  )
+
+(defenum mp-spectate-layout-integer-binding
+  :type uint32
+  (selected-player-number 0)
+  (custom-value           1)
+  )
+
+(defenum mp-spectate-layout-string-binding
+  :type uint32
+  (selected-player-name 0)
+  )
+
 (deftype mp-spectate-options (structure)
   ((flags                mp-spectate-flags)
    (preferred-player-id  uint32)
    (eligible-player-mask uint32)
-   (overlay-x            int32)
-   (overlay-y            int32)
-   (overlay-width        float)
-   (overlay-height       float)
-   (overlay-scale        float)
-   (overlay-color        uint32)
-   (overlay-font-flags   uint32)
-   (overlay-bucket       uint32)
-   (line-spacing         int32)
-   )
-  :size-assert 48)
+   (custom-widget-index   uint32)
+   (layout                mp-overlay-layout :inline)
+   ))
 
 (defenum mp-spectate-phase
   :type uint32
@@ -62,6 +87,7 @@
    (selected-player-id       uint32)
    (camera-player-id         uint32)
    (level-request-owned?     symbol)
+   (overlay                   (pointer mp-overlay-layout-process))
    (anchor                   mp-spectate-anchor-state :inline)
    (custom-text-id           text-id)
    (custom-param-kind        mp-spectate-text-param-kind)

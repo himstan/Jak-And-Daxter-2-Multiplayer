@@ -7,12 +7,76 @@
 
 ;; DECOMP BEGINS
 
+(defun hud-map-sprite-screen-width ((sprite hud-sprite))
+  (when (and sprite
+             (nonzero? sprite)
+             (-> sprite tex)
+             (nonzero? (-> sprite tex))
+             *video-params*
+             (nonzero? *video-params*))
+    (return
+      (the int
+        (ceil
+          (* (the float (-> sprite tex w))
+             (-> sprite scale-x)
+             (-> *video-params* relative-x-scale))))))
+  0)
+
+(defun hud-map-sprite-screen-height ((sprite hud-sprite))
+  (when (and sprite
+             (nonzero? sprite)
+             (-> sprite tex)
+             (nonzero? (-> sprite tex)))
+    (return
+      (the int
+        (ceil (* (the float (-> sprite tex h)) (-> sprite scale-y))))))
+  0)
+
+(defun hud-map-overlay-safe-y
+       ((this hud-map) (base-x int) (base-y int))
+  (when (and this (nonzero? this))
+    (let* ((ring (-> this sprites 1))
+           (ring-width (hud-map-sprite-screen-width ring))
+           (ring-height (hud-map-sprite-screen-height ring)))
+      (when (and (> ring-width 0) (> ring-height 0))
+        (let ((footprint-left (- base-x ring-width))
+              (footprint-top base-y)
+              (footprint-right base-x)
+              (footprint-bottom (+ base-y ring-height))
+              (alarm (-> this sprites 0)))
+          (when (and alarm (nonzero? alarm))
+            (let ((alarm-height (hud-map-sprite-screen-height alarm)))
+              ;; The ring supplies the horizontal collision span so its
+              ;; transparent alarm margin does not collide with center text.
+              ;; The alarm still expands the vertical clearance envelope.
+              (when (> alarm-height 0)
+                (let ((alarm-top (- base-y 11)))
+                  (set! footprint-top (min footprint-top alarm-top))
+                  (set! footprint-bottom
+                        (max footprint-bottom (+ alarm-top alarm-height)))))))
+          (let ((safe-top
+                  (mp-overlay-layout-avoid-rect-y
+                    footprint-left
+                    footprint-top
+                    (- footprint-right footprint-left)
+                    (- footprint-bottom footprint-top)
+                    8
+                    16)))
+            (return (+ base-y (- safe-top footprint-top))))))))
+  base-y)
+
 (defmethod draw ((this hud-map))
-  (set-hud-piece-position!
-    (-> this sprites 1)
-    (the int (+ 492.0 (* 140.0 (-> this offset))))
-    (the int (+ 281.0 (* 140.0 (-> this offset))))
-    )
+  (let ((base-x (the int (+ 492.0 (* 140.0 (-> this offset)))))
+        (base-y (the int (+ 281.0 (* 140.0 (-> this offset)))))
+        (standard-minimap?
+          (< (-> *setting-control* user-current race-minimap) 0)))
+    (set! (-> this sprites 0 scale-x) 1.0)
+    (set! (-> this sprites 0 scale-y) 1.0)
+    (when standard-minimap?
+      (set! (-> this sprites 1 scale-x) 0.85)
+      (set! (-> this sprites 1 scale-y) 0.85)
+      (set! base-y (hud-map-overlay-safe-y this base-x base-y)))
+    (set-hud-piece-position! (-> this sprites 1) base-x base-y))
   (set-as-offset-from! (-> this sprites 0) (-> this sprites 1 pos) 11 -11)
   (set! (-> this sprites 0 color w)
         (the int (+ 70.0 (* 70.0 (sin (* 182.04445 (the float (-> this values 1 current)))))))
@@ -23,8 +87,6 @@
   (set! (-> *minimap* color z)
         (the int (- 96.0 (* 32.0 (sin (* 182.04445 (the float (-> this values 1 current)))))))
         )
-  (set! (-> this sprites 0 scale-x) 1.0)
-  (set! (-> this sprites 0 scale-y) 1.0)
   (when (>= (-> *setting-control* user-current race-minimap) 0)
     (set! (-> this sprites 0 scale-x) 0.0)
     (set! (-> this sprites 0 scale-y) 0.0)

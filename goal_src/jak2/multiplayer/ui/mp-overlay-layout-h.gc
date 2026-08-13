@@ -1,0 +1,112 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defconstant MP_OVERLAY_MAX_WIDGETS 12)
+(defconstant MP_OVERLAY_INTEGER_BINDING_COUNT 4)
+(defconstant MP_OVERLAY_STRING_BINDING_COUNT 4)
+(defconstant MP_OVERLAY_INVALID_WIDGET_INDEX #xffffffff)
+(defconstant MP_OVERLAY_OCCUPIED_RECT_COUNT 64)
+(defconstant MP_OVERLAY_OCCUPANCY_FRAME_COUNT 2)
+
+(defenum mp-overlay-parameter-kind
+  :type uint32
+  (none    0)
+  (integer 1)
+  (string  2)
+  )
+
+(defenum mp-overlay-horizontal-anchor
+  :type uint32
+  (left   0)
+  (center 1)
+  (right  2)
+  )
+
+(defenum mp-overlay-vertical-anchor
+  :type uint32
+  (top    0)
+  (middle 1)
+  (bottom 2)
+  )
+
+(deftype mp-overlay-widget (structure)
+  ((enabled?             symbol)
+   (text                 text-id)
+   (parameter-kind       mp-overlay-parameter-kind)
+   (parameter-index      uint32)
+   (required-conditions  uint32)
+   (forbidden-conditions uint32)
+   (horizontal-anchor    mp-overlay-horizontal-anchor)
+   (vertical-anchor      mp-overlay-vertical-anchor)
+   (offset-x             int32)
+   (offset-y             int32)
+   (width                float)
+   (height               float)
+   (scale                float)
+   (color                uint32)
+   (font-flags           uint32)
+   (bucket               uint32)
+   (prefix-glyph         int32)
+   (suffix-glyph         int32)
+   ))
+
+(deftype mp-overlay-layout (structure)
+  ((bounds-x     int32)
+   (bounds-y     int32)
+   (bounds-width float)
+   (bounds-height float)
+   (widget-count uint32)
+   (widgets      mp-overlay-widget MP_OVERLAY_MAX_WIDGETS :inline)
+   ))
+
+(deftype mp-overlay-occupied-rect (structure)
+  ((left   int32)
+   (top    int32)
+   (right  int32)
+   (bottom int32)
+   ))
+
+(deftype mp-overlay-occupancy-frame (structure)
+  ((frame-number uint32)
+   (rect-count   uint32)
+   (rects        mp-overlay-occupied-rect MP_OVERLAY_OCCUPIED_RECT_COUNT :inline)
+   ))
+
+(deftype mp-overlay-occupancy-snapshot (structure)
+  ((frames mp-overlay-occupancy-frame MP_OVERLAY_OCCUPANCY_FRAME_COUNT :inline)
+   ))
+
+(deftype mp-overlay-layout-process (process)
+  ((layout            mp-overlay-layout :inline)
+   (conditions        uint32)
+   (integer-bindings  int32 MP_OVERLAY_INTEGER_BINDING_COUNT)
+   (string-resolver   (function process uint string symbol))
+   )
+  (:state-methods
+    mp-overlay-layout-active-state))
+
+(define-extern mp-overlay-widget-default!
+  (function mp-overlay-widget mp-overlay-widget))
+(define-extern mp-overlay-layout-clear!
+  (function mp-overlay-layout mp-overlay-layout))
+(define-extern mp-overlay-layout-copy!
+  (function mp-overlay-layout mp-overlay-layout mp-overlay-layout))
+(define-extern mp-overlay-layout-add-widget!
+  (function mp-overlay-layout mp-overlay-widget uinteger))
+
+(define-extern mp-overlay-layout-start!
+  (function process mp-overlay-layout (function process uint string symbol)
+            (pointer mp-overlay-layout-process)))
+(define-extern mp-overlay-layout-stop!
+  (function (pointer mp-overlay-layout-process) process symbol))
+(define-extern mp-overlay-layout-active?
+  (function (pointer mp-overlay-layout-process) process symbol))
+(define-extern mp-overlay-layout-set-conditions!
+  (function (pointer mp-overlay-layout-process) process uint symbol))
+(define-extern mp-overlay-layout-set-integer!
+  (function (pointer mp-overlay-layout-process) process uint int symbol))
+(define-extern mp-overlay-layout-set-widget-content!
+  (function (pointer mp-overlay-layout-process)
+            process uint text-id mp-overlay-parameter-kind uint symbol))
+(define-extern mp-overlay-layout-avoid-rect-y
+  (function int int int int int int int))

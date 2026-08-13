@@ -17,7 +17,6 @@
           (logclear! (-> options flags)
                      (mp-spectate-flags
                        end-on-scene inert-local-anchor roster-only-presence))
-          (set! (-> options overlay-y) 128)
           (mp-spectate-start! 'death options))
         #f)))
 

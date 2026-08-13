@@ -151,6 +151,7 @@
   "find-nearest-h.o"
   "target-h.o"
   "player-h.o"
+  "mp-overlay-layout-h.o"
   "mp-spectate-h.o"
   "mp-world-h.o"
   "target-helper.o"
@@ -642,6 +643,7 @@
   "mp-remote.o" ;; added
   "mp-player-role.o" ;; added
   "mp-player-visibility.o" ;; added
+  "mp-overlay-layout.o" ;; added
   "mp-spectate.o" ;; added
   "mp-death-spectate.o" ;; added
   "mp-network.o" ;; added

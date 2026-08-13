@@ -1,0 +1,566 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; HUD processes can draw before overlay children in the process tree. Retaining
+;; two frame snapshots makes the most recent complete set available either way.
+(define-perm *mp-overlay-occupancy*
+             mp-overlay-occupancy-snapshot
+             (new 'static 'mp-overlay-occupancy-snapshot))
+
+(defun mp-overlay-current-real-frame ()
+  (if (and *display* (nonzero? *display*))
+      (the-as uint (-> *display* real-clock integral-frame-counter))
+      (the uint 0)))
+
+(defun mp-overlay-occupancy-write-frame ((frame-number uint))
+  (when (and *mp-overlay-occupancy*
+             (nonzero? *mp-overlay-occupancy*))
+    (let* ((frame-index
+             (the int
+               (mod frame-number
+                    (the uint MP_OVERLAY_OCCUPANCY_FRAME_COUNT))))
+           (frame (-> *mp-overlay-occupancy* frames frame-index)))
+      (when (and frame (nonzero? frame))
+        (when (!= (-> frame frame-number) frame-number)
+          (set! (-> frame frame-number) frame-number)
+          (set! (-> frame rect-count) (the uint32 0)))
+        (return frame))))
+  (the-as mp-overlay-occupancy-frame #f))
+
+(defun mp-overlay-publish-occupied-rect!
+       ((left int) (top int) (right int) (bottom int))
+  (when (and (< left right) (< top bottom))
+    (let ((frame
+            (mp-overlay-occupancy-write-frame
+              (mp-overlay-current-real-frame))))
+      (when (and frame
+                 (nonzero? frame)
+                 (< (-> frame rect-count) MP_OVERLAY_OCCUPIED_RECT_COUNT))
+        (let ((rect (-> frame rects (-> frame rect-count))))
+          (when (and rect (nonzero? rect))
+            (set! (-> rect left) left)
+            (set! (-> rect top) top)
+            (set! (-> rect right) right)
+            (set! (-> rect bottom) bottom)
+            (+! (-> frame rect-count) 1))))))
+  (none))
+
+(defun mp-overlay-occupied-rect-intersects?
+       ((left int)
+        (top int)
+        (right int)
+        (bottom int)
+        (occupied mp-overlay-occupied-rect))
+  (and occupied
+       (nonzero? occupied)
+       (< left (-> occupied right))
+       (> right (-> occupied left))
+       (< top (-> occupied bottom))
+       (> bottom (-> occupied top))))
+
+(defun mp-overlay-occupancy-frame-current?
+       ((frame mp-overlay-occupancy-frame) (current-frame uint))
+  (and frame
+       (nonzero? frame)
+       (or (= (-> frame frame-number) current-frame)
+           (and (> current-frame (the uint 0))
+                (= (-> frame frame-number) (- current-frame 1))))))
+
+(defun mp-overlay-layout-avoid-rect-y
+       ((left int)
+        (top int)
+        (width int)
+        (height int)
+        (gap int)
+        (minimum-y int))
+  (when (or (<= width 0)
+            (<= height 0)
+            (not *mp-overlay-occupancy*)
+            (zero? *mp-overlay-occupancy*))
+    (return top))
+  (let ((adjusted-y top)
+        (right (+ left width))
+        (safe-gap (max gap 0))
+        (current-frame (mp-overlay-current-real-frame))
+        (changed? #t)
+        (iteration 0))
+    (while (and changed?
+                (< iteration
+                   (* MP_OVERLAY_OCCUPIED_RECT_COUNT
+                      MP_OVERLAY_OCCUPANCY_FRAME_COUNT)))
+      (set! changed? #f)
+      ;; Moving above one rectangle can expose another collision, so repeat
+      ;; until a complete pass leaves the candidate unchanged.
+      (dotimes (frame-index MP_OVERLAY_OCCUPANCY_FRAME_COUNT)
+        (let ((frame (-> *mp-overlay-occupancy* frames frame-index)))
+          (when (mp-overlay-occupancy-frame-current? frame current-frame)
+            (dotimes (rect-index (-> frame rect-count))
+              (let ((occupied (-> frame rects rect-index)))
+                (when (mp-overlay-occupied-rect-intersects?
+                        left adjusted-y right (+ adjusted-y height) occupied)
+                  (let ((next-y
+                          (max minimum-y
+                               (- (-> occupied top) safe-gap height))))
+                    (when (< next-y adjusted-y)
+                      (set! adjusted-y next-y)
+                      (set! changed? #t)))))))))
+      (+! iteration 1))
+    adjusted-y))
+
+(defun mp-overlay-parameter-kind-valid?
+       ((kind mp-overlay-parameter-kind))
+  (or (= kind (mp-overlay-parameter-kind none))
+      (= kind (mp-overlay-parameter-kind integer))
+      (= kind (mp-overlay-parameter-kind string))))
+
+(defun mp-overlay-horizontal-anchor-valid?
+       ((anchor mp-overlay-horizontal-anchor))
+  (or (= anchor (mp-overlay-horizontal-anchor left))
+      (= anchor (mp-overlay-horizontal-anchor center))
+      (= anchor (mp-overlay-horizontal-anchor right))))
+
+(defun mp-overlay-vertical-anchor-valid?
+       ((anchor mp-overlay-vertical-anchor))
+  (or (= anchor (mp-overlay-vertical-anchor top))
+      (= anchor (mp-overlay-vertical-anchor middle))
+      (= anchor (mp-overlay-vertical-anchor bottom))))
+
+(defun mp-overlay-parameter-index-valid?
+       ((kind mp-overlay-parameter-kind) (index uint))
+  (cond
+    ((= kind (mp-overlay-parameter-kind none)) #t)
+    ((= kind (mp-overlay-parameter-kind integer))
+     (< index (the uint MP_OVERLAY_INTEGER_BINDING_COUNT)))
+    ((= kind (mp-overlay-parameter-kind string))
+     (< index (the uint MP_OVERLAY_STRING_BINDING_COUNT)))
+    (else #f)))
+
+(defun mp-overlay-widget-default! ((widget mp-overlay-widget))
+  (when (and widget (nonzero? widget))
+    (set! (-> widget enabled?) #t)
+    (set! (-> widget text) (text-id null))
+    (set! (-> widget parameter-kind) (mp-overlay-parameter-kind none))
+    (set! (-> widget parameter-index) (the uint32 0))
+    (set! (-> widget required-conditions) (the uint32 0))
+    (set! (-> widget forbidden-conditions) (the uint32 0))
+    (set! (-> widget horizontal-anchor) (mp-overlay-horizontal-anchor center))
+    (set! (-> widget vertical-anchor) (mp-overlay-vertical-anchor middle))
+    (set! (-> widget offset-x) 0)
+    (set! (-> widget offset-y) 0)
+    (set! (-> widget width) 0.0)
+    (set! (-> widget height) 40.0)
+    (set! (-> widget scale) 0.8)
+    (set! (-> widget color) (the-as uint32 (font-color default)))
+    (set! (-> widget font-flags)
+          (the-as uint32 (font-flags shadow kerning middle large)))
+    (set! (-> widget bucket) (the-as uint32 (bucket-id subtitle)))
+    (set! (-> widget prefix-glyph) 0)
+    (set! (-> widget suffix-glyph) 0))
+  widget)
+
+(defun mp-overlay-layout-clear! ((layout mp-overlay-layout))
+  (when (and layout (nonzero? layout))
+    (set! (-> layout bounds-x) 20)
+    (set! (-> layout bounds-y) 16)
+    (set! (-> layout bounds-width) 472.0)
+    (set! (-> layout bounds-height) 384.0)
+    (set! (-> layout widget-count) (the uint32 0))
+    (dotimes (widget-index MP_OVERLAY_MAX_WIDGETS)
+      (let ((widget (-> layout widgets widget-index)))
+        (when (and widget (nonzero? widget))
+          (mp-overlay-widget-default! widget)
+          (set! (-> widget enabled?) #f)))))
+  layout)
+
+(defun mp-overlay-layout-copy!
+       ((destination mp-overlay-layout) (source mp-overlay-layout))
+  (when (and destination
+             (nonzero? destination)
+             source
+             (nonzero? source))
+    (mem-copy!
+      (the-as pointer destination)
+      (the-as pointer source)
+      (psize-of mp-overlay-layout)))
+  destination)
+
+(defun mp-overlay-widget-valid? ((widget mp-overlay-widget))
+  (and widget
+       (nonzero? widget)
+       (!= (-> widget text) (text-id null))
+       (mp-overlay-parameter-kind-valid? (-> widget parameter-kind))
+       (mp-overlay-parameter-index-valid?
+         (-> widget parameter-kind)
+         (the-as uint (-> widget parameter-index)))
+       (mp-overlay-horizontal-anchor-valid? (-> widget horizontal-anchor))
+       (mp-overlay-vertical-anchor-valid? (-> widget vertical-anchor))
+       (>= (-> widget width) 0.0)
+       (> (-> widget height) 0.0)
+       (> (-> widget scale) 0.0)))
+
+(defun mp-overlay-layout-valid? ((layout mp-overlay-layout))
+  (when (and layout
+             (nonzero? layout)
+             (> (-> layout bounds-width) 0.0)
+             (> (-> layout bounds-height) 0.0)
+             (<= (-> layout widget-count) MP_OVERLAY_MAX_WIDGETS))
+    (dotimes (widget-index (-> layout widget-count))
+      (when (not (mp-overlay-widget-valid?
+                   (-> layout widgets widget-index)))
+        (return #f)))
+    (return #t))
+  #f)
+
+(defun mp-overlay-layout-add-widget!
+       ((layout mp-overlay-layout) (source mp-overlay-widget))
+  (when (and layout
+             (nonzero? layout)
+             (mp-overlay-widget-valid? source)
+             (< (-> layout widget-count) MP_OVERLAY_MAX_WIDGETS))
+    (let* ((widget-index (-> layout widget-count))
+           (destination (-> layout widgets widget-index)))
+      (when (and destination (nonzero? destination))
+        (mem-copy!
+          (the-as pointer destination)
+          (the-as pointer source)
+          (psize-of mp-overlay-widget))
+        (+! (-> layout widget-count) 1)
+        (return (the-as uint32 widget-index)))))
+  (the uint32 MP_OVERLAY_INVALID_WIDGET_INDEX))
+
+(defun mp-overlay-layout-needs-string-resolver?
+       ((layout mp-overlay-layout))
+  (when (and layout (nonzero? layout))
+    (dotimes (widget-index (-> layout widget-count))
+      (let ((widget (-> layout widgets widget-index)))
+        (when (and widget
+                   (nonzero? widget)
+                   (= (-> widget parameter-kind)
+                      (mp-overlay-parameter-kind string)))
+          (return #t)))))
+  #f)
+
+(defun mp-overlay-layout-process-from-ppointer
+       ((overlay-ppointer (pointer mp-overlay-layout-process)))
+  (when (and overlay-ppointer (nonzero? overlay-ppointer))
+    (let ((overlay (ppointer->process overlay-ppointer)))
+      (when (and overlay
+                 (nonzero? overlay)
+                 (type? overlay mp-overlay-layout-process))
+        (return (the-as mp-overlay-layout-process overlay)))))
+  (the-as mp-overlay-layout-process #f))
+
+(defun mp-overlay-layout-owned-process
+       ((overlay-ppointer (pointer mp-overlay-layout-process))
+        (owner process))
+  (when (and owner (nonzero? owner))
+    (let ((overlay (mp-overlay-layout-process-from-ppointer overlay-ppointer)))
+      (when (and overlay
+                 (nonzero? overlay)
+                 (-> overlay parent)
+                 (nonzero? (-> overlay parent)))
+        (let ((parent (ppointer->process (-> overlay parent))))
+          (when (and parent (nonzero? parent) (= parent owner))
+            (return overlay))))))
+  (the-as mp-overlay-layout-process #f))
+
+(defun mp-overlay-layout-active?
+       ((overlay-ppointer (pointer mp-overlay-layout-process))
+        (owner process))
+  (let ((overlay (mp-overlay-layout-owned-process overlay-ppointer owner)))
+    (the symbol (and overlay (nonzero? overlay)))))
+
+(defun mp-overlay-widget-conditions-met?
+       ((overlay mp-overlay-layout-process) (widget mp-overlay-widget))
+  (and overlay
+       (nonzero? overlay)
+       widget
+       (nonzero? widget)
+       (-> widget enabled?)
+       (= (logand (-> overlay conditions) (-> widget required-conditions))
+          (-> widget required-conditions))
+       (zero? (logand (-> overlay conditions)
+                      (-> widget forbidden-conditions)))))
+
+(defun mp-overlay-layout-owner
+       ((overlay mp-overlay-layout-process))
+  (when (and overlay
+             (nonzero? overlay)
+             (-> overlay parent)
+             (nonzero? (-> overlay parent)))
+    (let ((owner (ppointer->process (-> overlay parent))))
+      (when (and owner (nonzero? owner))
+        (return (the-as process owner)))))
+  (the-as process #f))
+
+(defun mp-overlay-localized-text ((id text-id))
+  (when (and (!= id (text-id null))
+             *common-text*
+             (nonzero? *common-text*))
+    (return (lookup-text! *common-text* id #t)))
+  (the-as string #f))
+
+(defun mp-overlay-append-widget-value!
+       ((overlay mp-overlay-layout-process)
+        (widget mp-overlay-widget)
+        (owner process)
+        (template string))
+  (when (and overlay
+             (nonzero? overlay)
+             widget
+             (nonzero? widget)
+             owner
+             (nonzero? owner)
+             template
+             (nonzero? template)
+             *temp-string*
+             (nonzero? *temp-string*))
+    (cond
+      ((= (-> widget parameter-kind) (mp-overlay-parameter-kind none))
+       (format *temp-string* "~S" template)
+       (return #t))
+      ((= (-> widget parameter-kind) (mp-overlay-parameter-kind integer))
+       (format
+         *temp-string*
+         template
+         (-> overlay integer-bindings (-> widget parameter-index)))
+       (return #t))
+      ((and (= (-> widget parameter-kind) (mp-overlay-parameter-kind string))
+            (-> overlay string-resolver)
+            *string-tmp-str*
+            (nonzero? *string-tmp-str*))
+       (clear *string-tmp-str*)
+       (when ((-> overlay string-resolver)
+              owner
+              (the-as uint (-> widget parameter-index))
+              *string-tmp-str*)
+         (format *temp-string* template *string-tmp-str*)
+         (return #t)))))
+  #f)
+
+(defun mp-overlay-compose-widget-text!
+       ((overlay mp-overlay-layout-process)
+        (widget mp-overlay-widget)
+        (owner process))
+  (when (and overlay
+             (nonzero? overlay)
+             widget
+             (nonzero? widget)
+             *temp-string*
+             (nonzero? *temp-string*))
+    (let ((template (mp-overlay-localized-text (-> widget text))))
+      (when (and template (nonzero? template))
+        (clear *temp-string*)
+        (when (nonzero? (-> widget prefix-glyph))
+          (format *temp-string* "~C" (-> widget prefix-glyph)))
+        (when (mp-overlay-append-widget-value!
+                overlay widget owner template)
+          (when (nonzero? (-> widget suffix-glyph))
+            (format *temp-string* "~C" (-> widget suffix-glyph)))
+          (return *temp-string*)))))
+  (the-as string #f))
+
+(defun mp-overlay-widget-width
+       ((layout mp-overlay-layout) (widget mp-overlay-widget))
+  (if (> (-> widget width) 0.0)
+      (-> widget width)
+      (-> layout bounds-width)))
+
+(defun mp-overlay-widget-origin-x
+       ((layout mp-overlay-layout) (widget mp-overlay-widget))
+  (let ((widget-width (mp-overlay-widget-width layout widget)))
+    (the int
+      (+ (the float (-> layout bounds-x))
+         (the float (-> widget offset-x))
+         (cond
+           ((= (-> widget horizontal-anchor)
+               (mp-overlay-horizontal-anchor center))
+            (/ (- (-> layout bounds-width) widget-width) 2.0))
+           ((= (-> widget horizontal-anchor)
+               (mp-overlay-horizontal-anchor right))
+            (- (-> layout bounds-width) widget-width))
+           (else 0.0))))))
+
+(defun mp-overlay-widget-text-origin-x
+       ((layout mp-overlay-layout) (widget mp-overlay-widget))
+  (let ((box-origin (mp-overlay-widget-origin-x layout widget)))
+    (if (logtest? (the-as font-flags (-> widget font-flags))
+                  (font-flags right))
+        (+ box-origin (the int (ceil (mp-overlay-widget-width layout widget))))
+        box-origin)))
+
+(defun mp-overlay-widget-origin-y
+       ((layout mp-overlay-layout) (widget mp-overlay-widget))
+  (the int
+    (+ (the float (-> layout bounds-y))
+       (the float (-> widget offset-y))
+       (cond
+         ((= (-> widget vertical-anchor)
+             (mp-overlay-vertical-anchor middle))
+          (/ (- (-> layout bounds-height) (-> widget height)) 2.0))
+         ((= (-> widget vertical-anchor)
+             (mp-overlay-vertical-anchor bottom))
+          (- (-> layout bounds-height) (-> widget height)))
+         (else 0.0)))))
+
+(defun mp-overlay-publish-widget-rect!
+       ((layout mp-overlay-layout) (widget mp-overlay-widget))
+  (when (and layout
+             (nonzero? layout)
+             widget
+             (nonzero? widget))
+    (let* ((left (mp-overlay-widget-origin-x layout widget))
+           (top (mp-overlay-widget-origin-y layout widget))
+           (width (the int (ceil (mp-overlay-widget-width layout widget))))
+           (height (the int (ceil (-> widget height)))))
+      (mp-overlay-publish-occupied-rect!
+        left top (+ left width) (+ top height))))
+  (none))
+
+(defun mp-overlay-draw-widget!
+       ((overlay mp-overlay-layout-process)
+        (widget mp-overlay-widget)
+        (owner process))
+  (when (and overlay
+             (nonzero? overlay)
+             widget
+             (nonzero? widget)
+             owner
+             (nonzero? owner)
+             (mp-overlay-widget-conditions-met? overlay widget))
+    (let ((text (mp-overlay-compose-widget-text! overlay widget owner)))
+      (when (and text (nonzero? text) (> (length text) 0))
+        (let* ((layout (-> overlay layout))
+               (context
+                 (new 'stack 'font-context
+                   *font-default-matrix*
+                   (mp-overlay-widget-text-origin-x layout widget)
+                   (mp-overlay-widget-origin-y layout widget)
+                   0.0
+                   (the-as font-color (-> widget color))
+                   (the-as font-flags (-> widget font-flags)))))
+          (when (and context (nonzero? context))
+            (set! (-> context width)
+                  (mp-overlay-widget-width layout widget))
+            (set! (-> context height) (-> widget height))
+            (set! (-> context scale) (-> widget scale))
+            (set! (-> context flags)
+                  (the-as font-flags (-> widget font-flags)))
+            (mp-overlay-publish-widget-rect! layout widget)
+            (print-game-text
+              text context #f 44
+              (the-as bucket-id (-> widget bucket))))))))
+  (none))
+
+(defun mp-overlay-layout-draw!
+       ((overlay mp-overlay-layout-process))
+  (when (and overlay (nonzero? overlay))
+    (let ((owner (mp-overlay-layout-owner overlay))
+          (layout (-> overlay layout)))
+      (when (and owner
+                 (nonzero? owner)
+                 layout
+                 (nonzero? layout))
+        (dotimes (widget-index (-> layout widget-count))
+          (mp-overlay-draw-widget!
+            overlay
+            (-> layout widgets widget-index)
+            owner)))))
+  (none))
+
+(defstate mp-overlay-layout-active-state (mp-overlay-layout-process)
+  :virtual #t
+  :code (behavior ()
+    (until #f
+      (mp-overlay-layout-draw! self)
+      (suspend))
+    #f))
+
+(defbehavior mp-overlay-layout-init mp-overlay-layout-process
+             ((layout mp-overlay-layout)
+              (string-resolver (function process uint string symbol)))
+  (mp-overlay-layout-copy! (-> self layout) layout)
+  (set! (-> self conditions) (the uint32 0))
+  (dotimes (binding-index MP_OVERLAY_INTEGER_BINDING_COUNT)
+    (set! (-> self integer-bindings binding-index) 0))
+  (set! (-> self string-resolver) string-resolver)
+  (change-to-last-brother self)
+  (go-virtual mp-overlay-layout-active-state)
+  (none))
+
+(defun mp-overlay-layout-start!
+       ((owner process)
+        (layout mp-overlay-layout)
+        (string-resolver (function process uint string symbol)))
+  (when (or (not owner)
+            (zero? owner)
+            (not layout)
+            (zero? layout)
+            (not (mp-overlay-layout-valid? layout))
+            (and (mp-overlay-layout-needs-string-resolver? layout)
+                 (not string-resolver)))
+    (return (the-as (pointer mp-overlay-layout-process) #f)))
+  (let ((spawned
+          (process-spawn mp-overlay-layout-process
+            :init mp-overlay-layout-init layout string-resolver
+            :to owner)))
+    (if (and spawned (nonzero? spawned))
+        (the-as (pointer mp-overlay-layout-process) spawned)
+        (the-as (pointer mp-overlay-layout-process) #f))))
+
+(defun mp-overlay-layout-stop!
+       ((overlay-ppointer (pointer mp-overlay-layout-process))
+        (owner process))
+  (let ((overlay (mp-overlay-layout-owned-process overlay-ppointer owner)))
+    (when (or (not overlay) (zero? overlay))
+      (return #f))
+    (deactivate overlay))
+  #t)
+
+(defun mp-overlay-layout-set-conditions!
+       ((overlay-ppointer (pointer mp-overlay-layout-process))
+        (owner process)
+        (conditions uint))
+  (let ((overlay (mp-overlay-layout-owned-process overlay-ppointer owner)))
+    (when (or (not overlay) (zero? overlay))
+      (return #f))
+    (set! (-> overlay conditions) conditions))
+  #t)
+
+(defun mp-overlay-layout-set-integer!
+       ((overlay-ppointer (pointer mp-overlay-layout-process))
+        (owner process)
+        (binding-index uint)
+        (value int))
+  (when (>= binding-index MP_OVERLAY_INTEGER_BINDING_COUNT)
+    (return #f))
+  (let ((overlay (mp-overlay-layout-owned-process overlay-ppointer owner)))
+    (when (or (not overlay) (zero? overlay))
+      (return #f))
+    (set! (-> overlay integer-bindings binding-index) value))
+  #t)
+
+(defun mp-overlay-layout-set-widget-content!
+       ((overlay-ppointer (pointer mp-overlay-layout-process))
+        (owner process)
+        (widget-index uint)
+        (id text-id)
+        (kind mp-overlay-parameter-kind)
+        (parameter-index uint))
+  (when (or (= id (text-id null))
+            (not (mp-overlay-parameter-kind-valid? kind))
+            (not (mp-overlay-parameter-index-valid?
+                   kind (the-as uint parameter-index))))
+    (return #f))
+  (let ((overlay (mp-overlay-layout-owned-process overlay-ppointer owner)))
+    (when (or (not overlay)
+              (zero? overlay)
+              (>= widget-index (-> overlay layout widget-count)))
+      (return #f))
+    (let ((widget (-> overlay layout widgets widget-index)))
+      (when (or (not widget) (zero? widget))
+        (return #f))
+      (set! (-> widget text) id)
+      (set! (-> widget parameter-kind) kind)
+      (set! (-> widget parameter-index) parameter-index)))
+  #t)
