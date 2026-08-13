@@ -8,6 +8,7 @@
 ;; DECOMP BEGINS
 
 (define-extern mp-region-target-pos (function vector))
+(define-extern mp-spectate-owns-level-request? (function symbol))
 
 (define-extern region-script-has-load-command? (function object symbol))
 
@@ -703,14 +704,52 @@
   (none)
   )
 
+(defun region-copy-level-request!
+       ((destination (inline-array level-buffer-state))
+        (source (inline-array level-buffer-state)))
+  (when (and destination
+             (nonzero? destination)
+             source
+             (nonzero? source))
+    (dotimes (level-index LEVEL_MAX)
+      (mem-copy!
+        (the-as pointer (-> destination level-index))
+        (the-as pointer (-> source level-index))
+        (psize-of level-buffer-state))))
+  (none))
+
+(defun region-execute-trees! ()
+  (when (and *level* (nonzero? *level*))
+    (if (and (mp-spectate-owns-level-request?)
+             *load-state*
+             (nonzero? *load-state*))
+        (let ((saved-want
+                (new 'stack-no-clear
+                     'inline-array 'level-buffer-state LEVEL_MAX))
+              (saved-vis-nick (-> *load-state* vis-nick)))
+          (region-copy-level-request!
+            saved-want (-> *load-state* want))
+          (region-tree-execute
+            'camera (-> *level* camera-pos 1) (-> *level* camera-pos 0))
+          (region-tree-execute
+            'target (-> *level* target-pos 1) (-> *level* target-pos 0))
+          (region-copy-level-request!
+            (-> *load-state* want) saved-want)
+          (set! (-> *load-state* vis-nick) saved-vis-nick))
+        (begin
+          (region-tree-execute
+            'camera (-> *level* camera-pos 1) (-> *level* camera-pos 0))
+          (region-tree-execute
+            'target (-> *level* target-pos 1) (-> *level* target-pos 0)))))
+  (none))
+
 (defun region-execute ()
   (set! (-> *level* camera-pos 1 quad) (-> *level* camera-pos 0 quad))
   (set! (-> *level* camera-pos 0 quad) (-> (camera-pos) quad))
   (set! (-> *level* target-pos 1 quad) (-> *level* target-pos 0 quad))
   (set! (-> *level* target-pos 0 quad) (-> (mp-region-target-pos) quad))
   (when (and *execute-regions* (-> *setting-control* user-current region-mode) (not (paused?)))
-    (region-tree-execute 'camera (-> *level* camera-pos 1) (-> *level* camera-pos 0))
-    (region-tree-execute 'target (-> *level* target-pos 1) (-> *level* target-pos 0))
+    (region-execute-trees!)
     )
   (region-custom-tick)
   0

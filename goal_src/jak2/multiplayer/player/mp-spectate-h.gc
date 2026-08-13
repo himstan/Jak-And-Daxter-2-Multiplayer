@@ -1,0 +1,107 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defenum mp-spectate-flags
+  :type uint32
+  :bitfield #t
+  (allow-switch         0)
+  (show-player-name     1)
+  (inert-local-anchor   2)
+  (roster-only-presence 3)
+  (end-on-scene         4)
+  )
+
+(deftype mp-spectate-options (structure)
+  ((flags                mp-spectate-flags)
+   (preferred-player-id  uint32)
+   (eligible-player-mask uint32)
+   (overlay-x            int32)
+   (overlay-y            int32)
+   (overlay-width        float)
+   (overlay-height       float)
+   (overlay-scale        float)
+   (overlay-color        uint32)
+   (overlay-font-flags   uint32)
+   (overlay-bucket       uint32)
+   (line-spacing         int32)
+   )
+  :size-assert 48)
+
+(defenum mp-spectate-phase
+  :type uint32
+  (pending  0)
+  (active   1)
+  (stopping 2)
+  )
+
+(defenum mp-spectate-text-param-kind
+  :type uint32
+  (none                   0)
+  (integer                1)
+  (selected-player-name   2)
+  (selected-player-number 3)
+  )
+
+(deftype mp-spectate-anchor-state (structure)
+  ((saved?                symbol)
+   (position              vector :inline)
+   (process-mask          uint32)
+   (focus-status          uint32)
+   (draw-status           uint32)
+   (collide-as            uint32)
+   (collide-with          uint32)
+   (cpad                   cpad-info)
+   (sidekick-draw-saved?  symbol)
+   (sidekick-draw-status  uint32)
+   ))
+
+(deftype mp-spectate-manager (process)
+  ((owner                    symbol)
+   (phase                    mp-spectate-phase)
+   (options                  mp-spectate-options :inline)
+   (selected-player-id       uint32)
+   (camera-player-id         uint32)
+   (level-request-owned?     symbol)
+   (anchor                   mp-spectate-anchor-state :inline)
+   (custom-text-id           text-id)
+   (custom-param-kind        mp-spectate-text-param-kind)
+   (custom-param-value       int32)
+   )
+  (:state-methods
+    mp-spectate-pending-state
+    mp-spectate-active-state)
+  (:methods
+    (mp-spectate-manager-finish! (_type_ symbol symbol) none)
+    ))
+
+(define-extern mp-spectate-default-options!
+  (function mp-spectate-options mp-spectate-options))
+(define-extern mp-spectate-join-options!
+  (function mp-spectate-options mp-spectate-options))
+(define-extern mp-spectate-start!
+  (function symbol mp-spectate-options symbol))
+(define-extern mp-spectate-set-custom-text!
+  (function symbol text-id mp-spectate-text-param-kind int symbol))
+(define-extern mp-spectate-clear-custom-text!
+  (function symbol symbol))
+(define-extern mp-spectate-cycle!
+  (function symbol int symbol))
+(define-extern mp-spectate-stop!
+  (function symbol symbol symbol))
+(define-extern mp-spectate-stop-at-selected!
+  (function symbol symbol symbol))
+(define-extern mp-spectate-requested? (function symbol))
+(define-extern mp-spectate-active? (function symbol))
+(define-extern mp-spectate-selected-player-record
+  (function mp-player-record))
+(define-extern mp-spectate-last-stop-reason (function symbol))
+
+;; Internal query used to protect the manager's level request from region scripts.
+(define-extern mp-spectate-owns-level-request? (function symbol))
+(define-extern mp-spectate-reset! (function none))
+
+;; Compatibility-facing helpers retained for existing callers.
+(define-extern mp-spectated-player-record (function mp-player-record))
+(define-extern mp-prepare-remote-spectate-target!
+  (function process-focusable))
+(define-extern mp-region-target-pos (function vector))

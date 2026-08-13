@@ -438,9 +438,10 @@
             local-player-id
             *target*)
           (vector-copy! (-> control camera-pos) (-> control trans))
-          (set! *external-cam-mode* #f)
-          (send-event *camera* 'change-target *target*)
-          (send-event *camera* 'teleport)
+          (when (not (mp-spectate-requested?))
+            (set! *external-cam-mode* #f)
+            (send-event *camera* 'change-target *target*)
+            (send-event *camera* 'teleport))
           (cam-master-activate-slave #t)
           (debug-log *mp-debug-log?*
                      "[MP-Bootstrap] Camera restored to local player ~D.~%"

@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(define-extern *mp-spectator-countdown-active?* symbol)
-(define-extern *mp-spectating?* symbol)
 
 (defconstant MP_RESPAWN_FLAG_BLOCK_REMOTE_ON_ME #x1)
 
@@ -93,8 +91,7 @@
   )
 
 (defun mp-prepare-local-respawn! ((player target))
-  (set! *mp-spectator-countdown-active?* #f)
-  (set! *mp-spectating?* #f)
+  (mp-spectate-reset!)
   (let ((local-record (mp-local-player-record)))
     (when (and local-record (nonzero? local-record))
       (mp-player-runtime-clear-flag!

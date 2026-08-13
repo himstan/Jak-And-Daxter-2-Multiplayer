@@ -407,20 +407,6 @@
     )
   )
 
-(defun mp-player-primary-level-ready? ((record mp-player-record))
-  "Check only the player's primary level, ignoring advertised neighboring levels."
-  (let ((primary-id (mp-player-primary-level-id record)))
-    (when (> primary-id 0)
-      (let ((primary-level (mp-level-id->symbol primary-id)))
-        (when primary-level
-          (return (mp-level-active? primary-level))
-          )
-        )
-      )
-    )
-  #f
-  )
-
 (defun mp-level-sync-log-unknown! ((packed-level uint))
   (when (>= (current-time) *mp-level-sync-next-unknown-log-time*)
     (debug-log *mp-debug-log?* "[MP-LevelSync] Remote level id ~D is unknown. Falling back to current teleport behavior.~%"
@@ -511,9 +497,11 @@
              *load-state*
              (nonzero? *load-state*))
     (let ((desired-levels (new 'stack-no-clear 'array 'symbol 6))
+          (want-levels-input (new 'stack-no-clear 'array 'symbol 6))
           (desired-count 0))
       (dotimes (idx 6)
         (set! (-> desired-levels idx) #f)
+        (set! (-> want-levels-input idx) #f)
         )
       (dotimes (idx 4)
         (let ((level-name (-> levels idx)))
@@ -525,7 +513,10 @@
           )
         )
       (when (> desired-count 0)
-        (want-levels *load-state* desired-levels)
+        (dotimes (idx desired-count)
+          (set! (-> want-levels-input idx) (-> desired-levels idx))
+          )
+        (want-levels *load-state* want-levels-input)
         (dotimes (idx desired-count)
           (let ((level-name (-> desired-levels idx)))
             (when level-name
@@ -545,10 +536,8 @@
   )
 
 (defun mp-request-player-spectate-levels! ((record mp-player-record))
-  "Request an exact cross-level spectate context without inventing city levels."
-  (when (and record
-             (nonzero? record)
-             (not (mp-player-primary-level-matches-local? record)))
+  "Request the selected player's exact advertised context without inventing levels."
+  (when (and record (nonzero? record))
     (let ((packed-level (-> record transform level)))
       (if (> packed-level 0)
           (let ((levels (new 'stack-no-clear 'array 'symbol 4)))
@@ -601,16 +590,12 @@
   )
 
 (defun mp-player-spectate-level-ready? ((record mp-player-record))
-  "Use primary-only readiness locally and exact advertised readiness cross-level."
+  "Require every advertised selected-player level before taking camera ownership."
   (when (and record (nonzero? record))
     (let ((primary-id (mp-player-primary-level-id record)))
       (when (and (> primary-id 0)
                  (mp-level-id->symbol primary-id))
-        (return
-          (if (mp-player-primary-level-matches-local? record)
-              (mp-player-primary-level-ready? record)
-              (mp-player-level-ready? record)
-              ))
+        (return (mp-player-level-ready? record))
         )
       )
     )

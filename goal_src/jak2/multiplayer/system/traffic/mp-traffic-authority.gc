@@ -142,22 +142,19 @@
 
 (defun mp-traffic-local-interest-pos ()
   "Return the local position traffic authority should reason about."
-  (when *mp-spectator-countdown-active?*
+  (when (mp-spectate-active?)
     (let ((spectated-record (mp-spectated-player-record)))
-      (let ((puppet (mp-player-record-target spectated-record)))
-      (when (and puppet
-                 (nonzero? puppet)
-                 (-> puppet root)
-                 (nonzero? (-> puppet root)))
-        (return (-> puppet root trans))
-        )
-      )
-    (let ((presentation-pos
-            (mp-player-record-presentation-position spectated-record)))
-      (when (and presentation-pos (nonzero? presentation-pos))
-        (return presentation-pos)))
-      )
-    )
+      (when (and spectated-record (nonzero? spectated-record))
+        (let ((puppet (mp-player-record-target spectated-record)))
+          (when (and puppet
+                     (nonzero? puppet)
+                     (-> puppet root)
+                     (nonzero? (-> puppet root)))
+            (return (-> puppet root trans))))
+        (let ((presentation-pos
+                (mp-player-record-presentation-position spectated-record)))
+          (when (and presentation-pos (nonzero? presentation-pos))
+            (return presentation-pos))))))
   (when (and *target*
              (nonzero? *target*)
              (-> *target* control)

@@ -32,6 +32,7 @@ struct CachedPlayerState {
   uint16_t buttons;
   uint8_t leftx, lefty, rightx, righty;
   uint8_t respawn_flags;
+  uint8_t spectator_only = 0;
   float cam_angle_y;
   uint32_t riding_veh_id;
   uint8_t riding_seat_index;
@@ -88,7 +89,7 @@ struct MPPlayerIdentityGOAL {
   uint8_t identity_ready;
   uint8_t state_ready;
   uint8_t joined;
-  uint8_t reserved;
+  uint8_t spectator_only;
   char name[kMultiplayerPlayerNameSize];
   uint8_t pad[12];
 };

@@ -54,6 +54,7 @@ bool finite_vehicle_state(const MPVehicleState& state) {
 
 bool valid_player_state(const PacketPlayerState& state) {
   return mp_valid_player_id(state.player_id) &&
+         state.spectator_only <= 1 &&
          (state.riding_along_player_id == kMPInvalidPlayerId ||
           (mp_valid_player_id(state.riding_along_player_id) &&
            state.riding_along_player_id != state.player_id)) &&
@@ -161,6 +162,7 @@ PacketPlayerState make_cached_state_packet(const CachedPlayerState& cached, uint
   state.rightx = cached.rightx;
   state.righty = cached.righty;
   state.respawn_flags = cached.respawn_flags;
+  state.spectator_only = cached.spectator_only;
   state.cam_angle_y = cached.cam_angle_y;
   state.riding_veh_id = cached.riding_veh_id;
   state.riding_seat_index = cached.riding_seat_index;
@@ -255,6 +257,7 @@ void copy_cached_state_to_record(const CachedPlayerState& cached, MPPlayerRecord
   record.connection.connected = 1;
   record.connection.state_cached = 1;
   record.identity.state_ready = 1;
+  record.identity.spectator_only = cached.spectator_only;
   record.transform.position[0] = cached.x;
   record.transform.position[1] = cached.y;
   record.transform.position[2] = cached.z;
@@ -388,6 +391,7 @@ bool mp_handle_player_state_packet(MultiplayerData& data,
   cached.rightx = state->rightx;
   cached.righty = state->righty;
   cached.respawn_flags = state->respawn_flags;
+  cached.spectator_only = state->spectator_only;
   cached.cam_angle_y = state->cam_angle_y;
   cached.riding_veh_id = state->riding_veh_id;
   cached.riding_seat_index = state->riding_seat_index;
@@ -581,6 +585,7 @@ void mp_send_player_sync(MultiplayerData& data,
   state.rightx = local->input.rightx;
   state.righty = local->input.righty;
   state.respawn_flags = local->action.respawn_flags;
+  state.spectator_only = local->identity.spectator_only;
   state.cam_angle_y = local->input.camera_angle_y;
   state.riding_veh_id = local->vehicle.vehicle_id;
   state.riding_seat_index = local->vehicle.seat_index;
@@ -594,7 +599,8 @@ void mp_send_player_sync(MultiplayerData& data,
   MultiplayerManager::broadcast(data, static_cast<int>(MultiplayerChannel::STATE), state,
                                 ENET_PACKET_FLAG_UNSEQUENCED);
 
-  if (local->vehicle.turret_active && local->vehicle.vehicle_id != 0) {
+  if (!local->identity.spectator_only && local->vehicle.turret_active &&
+      local->vehicle.vehicle_id != 0) {
     PacketTurretState turret = {};
     turret.header.type = PacketType::TURRET_SYNC;
     turret.header.sequenceNum = ++data.sequence_num;

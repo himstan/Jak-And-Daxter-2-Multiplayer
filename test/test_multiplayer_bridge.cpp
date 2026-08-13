@@ -131,7 +131,7 @@ TEST(MultiplayerPacket, SequenceComparisonHandlesWraparound) {
 TEST(MultiplayerPacket, PacketViewRejectsTruncationUnknownTypesAndTrailingData) {
   PacketPlayerState state = {};
   state.header.type = PacketType::STATE_UPDATE;
-  EXPECT_EQ(sizeof(PacketPlayerState), 169u);
+  EXPECT_EQ(sizeof(PacketPlayerState), 170u);
   std::vector<uint8_t> bytes(sizeof(state) + 1);
   memcpy(bytes.data(), &state, sizeof(state));
   ENetPacket packet = {};
@@ -166,6 +166,7 @@ TEST(MultiplayerPlayerRegistry, GoalLayoutsAndOffsetsMatch) {
   EXPECT_EQ(sizeof(MPBootstrapSyncStateGOAL), 592u);
   EXPECT_EQ(offsetof(MPPlayerIdentityGOAL, character), 4u);
   EXPECT_EQ(offsetof(MPPlayerIdentityGOAL, identity_ready), 8u);
+  EXPECT_EQ(offsetof(MPPlayerIdentityGOAL, spectator_only), 11u);
   EXPECT_EQ(offsetof(MPPlayerIdentityGOAL, name), 12u);
   EXPECT_EQ(offsetof(MPPlayerConnectionStateGOAL, latest_state_sequence), 4u);
   EXPECT_EQ(offsetof(MPPlayerConnectionStateGOAL, connected), 12u);
@@ -430,6 +431,7 @@ TEST(MultiplayerPlayerRegistry, StateBeforeJoinRemainsVacantUntilIdentityArrives
   state.header.sequenceNum = 7;
   state.player_id = 3;
   state.status = static_cast<uint8_t>(MultiplayerStatus::IN_GAME);
+  state.spectator_only = 1;
   state.x = 12.5f;
   state.riding_along_player_id = 1;
   ENetPacket state_packet = {};
@@ -454,6 +456,7 @@ TEST(MultiplayerPlayerRegistry, StateBeforeJoinRemainsVacantUntilIdentityArrives
 
   EXPECT_EQ(controller.records[3].identity.joined, 1u);
   EXPECT_EQ(controller.records[3].identity.state_ready, 1u);
+  EXPECT_EQ(controller.records[3].identity.spectator_only, 1u);
   EXPECT_FLOAT_EQ(controller.records[3].transform.position[0], 12.5f);
   EXPECT_EQ(controller.records[3].action.riding_along_player_id, 1u);
 }
@@ -490,10 +493,14 @@ TEST(MultiplayerPlayerRegistry, RejectsSpoofsStaleStateAndLocalSlotClear) {
   EXPECT_FLOAT_EQ(data.player_states[2].x, 10.0f);
 
   state.header.sequenceNum = 11;
-  state.riding_along_player_id = 2;
+  state.spectator_only = 2;
   EXPECT_FALSE(mp_handle_player_state_packet(data, &packet, 2, 103));
-  state.riding_along_player_id = kMPMaxPlayers;
+  state.spectator_only = 0;
+  state.header.sequenceNum = 12;
+  state.riding_along_player_id = 2;
   EXPECT_FALSE(mp_handle_player_state_packet(data, &packet, 2, 104));
+  state.riding_along_player_id = kMPMaxPlayers;
+  EXPECT_FALSE(mp_handle_player_state_packet(data, &packet, 2, 105));
 
   mp_clear_player_slot(data, &controller, 3);
   EXPECT_EQ(controller.records[3].identity.joined, 1u);
@@ -676,6 +683,105 @@ TEST(MultiplayerJoin, RetriesAndResendsOncePerAuthenticatedSession) {
   mp_send_player_sync(data, &controller, &world, &bootstrap);
   EXPECT_TRUE(data.local_join_identity_sent);
   EXPECT_EQ(data.packet_scheduler.queued_packet_count(), 2u);
+}
+
+TEST(MultiplayerJoin, SpectatorOnlyStateSurvivesSendReceiveReplayAndClear) {
+  struct ScopedEnet {
+    bool initialized = enet_initialize() == 0;
+    ~ScopedEnet() {
+      if (initialized) {
+        enet_deinitialize();
+      }
+    }
+  } enet;
+  ASSERT_TRUE(enet.initialized);
+
+  LocalEnetPair pair;
+  ASSERT_TRUE(connect_local_enet_pair(pair));
+  MultiplayerSecurity host_security;
+  ASSERT_TRUE(host_security.start_host(26210));
+
+  MultiplayerData sender;
+  sender.host = pair.sender;
+  sender.server_peer = pair.sender_peer;
+  sender.session_role = 1;
+  sender.local_player_id = 3;
+  sender.host_player_id = 0;
+  std::string parsed_host;
+  uint16_t parsed_port = 0;
+  ASSERT_TRUE(sender.security.start_client(host_security.invite_for_address("127.0.0.1"),
+                                           parsed_host, parsed_port));
+  authenticate(host_security, sender.security);
+
+  MPPlayerControllerGOAL sender_controller = {};
+  sender_controller.local_player_id = 3;
+  sender_controller.host_player_id = 0;
+  auto& local = sender_controller.records[3];
+  local.identity.player_id = 3;
+  local.identity.character = MPPlayerCharacter::JAK;
+  local.identity.identity_ready = 1;
+  local.identity.joined = 1;
+  local.identity.spectator_only = 1;
+  local.transform.position[0] = 32.0f;
+  memcpy(local.identity.name, "Observer", sizeof("Observer"));
+  MPWorldSyncStateGOAL sender_world = {};
+  MPBootstrapSyncStateGOAL sender_bootstrap = {};
+  mp_send_player_sync(sender, &sender_controller, &sender_world, &sender_bootstrap);
+
+  PacketPlayerState sent_state = {};
+  bool saw_state = false;
+  sender.packet_scheduler.flush_plain(
+      sender.stats,
+      [&](ENetPeer*, int, const uint8_t* bytes, size_t size, PacketType type, size_t,
+          ENetPacketFlag) {
+        if (type == PacketType::STATE_UPDATE) {
+          EXPECT_EQ(size, sizeof(PacketPlayerState));
+          if (size == sizeof(PacketPlayerState)) {
+            memcpy(&sent_state, bytes, sizeof(sent_state));
+          }
+          saw_state = true;
+        }
+        return true;
+      });
+  ASSERT_TRUE(saw_state);
+  EXPECT_EQ(sent_state.spectator_only, 1u);
+
+  MultiplayerData receiver;
+  receiver.local_player_id = 2;
+  MPPlayerControllerGOAL receiver_controller = {};
+  receiver_controller.local_player_id = 2;
+  PacketJoin join = {};
+  join.header.type = PacketType::EVENT_JOIN;
+  join.player_id = 3;
+  join.character = MPPlayerCharacter::JAK;
+  memcpy(join.player_name, "Observer", sizeof("Observer"));
+  ENetPacket join_packet = {};
+  join_packet.data = reinterpret_cast<uint8_t*>(&join);
+  join_packet.dataLength = sizeof(join);
+  ASSERT_TRUE(mp_handle_join_packet(receiver, &join_packet, 3, &receiver_controller));
+
+  ENetPacket state_packet = {};
+  state_packet.data = reinterpret_cast<uint8_t*>(&sent_state);
+  state_packet.dataLength = sizeof(sent_state);
+  ASSERT_TRUE(mp_handle_player_state_packet(receiver, &state_packet, 3, 100));
+  MPWorldSyncStateGOAL receiver_world = {};
+  MPBootstrapSyncStateGOAL receiver_bootstrap = {};
+  mp_receive_player_sync(receiver, &receiver_controller, &receiver_world, &receiver_bootstrap);
+  EXPECT_EQ(receiver_controller.records[3].identity.spectator_only, 1u);
+
+  MPPlayerControllerGOAL replay_controller = {};
+  replay_controller.local_player_id = 2;
+  mp_receive_player_sync(receiver, &replay_controller, &receiver_world, &receiver_bootstrap);
+  EXPECT_EQ(replay_controller.records[3].identity.spectator_only, 1u);
+
+  sent_state.header.sequenceNum += 1;
+  sent_state.spectator_only = 0;
+  sent_state.x = 64.0f;
+  ASSERT_TRUE(mp_handle_player_state_packet(receiver, &state_packet, 3, 101));
+  mp_receive_player_sync(receiver, &receiver_controller, &receiver_world, &receiver_bootstrap);
+  EXPECT_EQ(receiver_controller.records[3].identity.spectator_only, 0u);
+  EXPECT_EQ(receiver_controller.records[3].identity.state_ready, 1u);
+  EXPECT_FLOAT_EQ(receiver_controller.records[3].transform.position[0], 64.0f);
 }
 
 TEST(MultiplayerBootstrap, PlayerStateAcknowledgesSentBootstrap) {

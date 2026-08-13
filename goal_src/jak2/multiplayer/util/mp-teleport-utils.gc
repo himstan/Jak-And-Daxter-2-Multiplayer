@@ -203,11 +203,11 @@
     (mp-teleport-destination-record) ride-along?)
   (none))
 
-(defun mp-respawn-local-target-at-remote! ((player target))
-  "Respawn the local player at the remote player, using only safe passenger vehicle seats."
-  (when (mp-teleport-target-ready? player)
+(defun mp-respawn-local-target-at-player!
+       ((player target) (record mp-player-record))
+  "Respawn locally at an explicit player, using only safe passenger vehicle seats."
+  (when (mp-teleport-target-ready-for-record? player record)
     (mp-clear-local-vehicle-occupancy! player)
-    (let ((record (mp-teleport-destination-record)))
     (cond
       ((nonzero? (-> record vehicle vehicle-id))
        (let ((riding-veh-id (-> record vehicle vehicle-id)))
@@ -225,10 +225,10 @@
                     (mp-respawn-local-target! player)
                     )
                 )
-              )
+             )
              (else
               (debug-log *mp-debug-log?* "[MP-Death] Remote vehicle ~D not found. Respawning at remote coords.~%" riding-veh-id)
-              (mp-teleport-player-to-remote-coords! player 4096.0)
+              (mp-teleport-player-to-record-coords! player record 4096.0)
               (mp-respawn-local-target! player)
               )
              )
@@ -237,10 +237,20 @@
        )
       (else
        (debug-log *mp-debug-log?* "[MP-Death] Remote player on foot. Respawning at remote coords.~%")
-       (mp-teleport-player-to-remote-coords! player 4096.0)
+       (mp-teleport-player-to-record-coords! player record 4096.0)
        (mp-respawn-local-target! player)
        )
-      ))
+      )
+    )
+  (none)
+  )
+
+(defun mp-respawn-local-target-at-remote! ((player target))
+  "Respawn at the context-selected remote player."
+  (let ((record (mp-teleport-destination-record)))
+    (when (and record (nonzero? record))
+      (mp-respawn-local-target-at-player! player record)
+      )
     )
   (none)
   )

@@ -158,6 +158,14 @@
   (when (and record
              (nonzero? record)
              (mp-player-record-remote? *mp-player-controller* record))
+    (when (nonzero? (-> record identity spectator-only?))
+      (mp-remote-player-marker-kill! record)
+      (when (nonzero? (-> record runtime target-handle))
+        (mp-puppet-deactivate! record))
+      (set! (-> record runtime last-fresh-input-time) (the-as time-frame 0))
+      (mp-player-runtime-clear-flag!
+        record (mp-player-runtime-flags was-far force-presentation))
+      (return #f))
     (let ((remote-status (-> record connection status)))
       (if (>= remote-status 4)
           (begin

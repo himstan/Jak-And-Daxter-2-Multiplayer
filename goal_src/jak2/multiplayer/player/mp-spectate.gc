@@ -1,0 +1,1019 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(define-perm *mp-spectate-manager*
+             (pointer mp-spectate-manager)
+             (the-as (pointer mp-spectate-manager) #f))
+(define-perm *mp-spectate-stop-reason* symbol #f)
+
+(defun mp-spectate-manager-process ()
+  (when (and *mp-spectate-manager* (nonzero? *mp-spectate-manager*))
+    (let ((manager (ppointer->process *mp-spectate-manager*)))
+      (when (and manager
+                 (nonzero? manager)
+                 (type? manager mp-spectate-manager))
+        (return (the-as mp-spectate-manager manager)))))
+  (set! *mp-spectate-manager*
+        (the-as (pointer mp-spectate-manager) #f))
+  (the-as mp-spectate-manager #f))
+
+(defun mp-spectate-requested? ()
+  (let ((manager (mp-spectate-manager-process)))
+    (the symbol
+      (and manager
+           (nonzero? manager)
+           (!= (-> manager phase) (mp-spectate-phase stopping))))))
+
+(defun mp-spectate-active? ()
+  (let ((manager (mp-spectate-manager-process)))
+    (the symbol
+      (and manager
+           (nonzero? manager)
+           (= (-> manager phase) (mp-spectate-phase active))))))
+
+(defun mp-spectate-owns-level-request? ()
+  (let ((manager (mp-spectate-manager-process)))
+    (the symbol
+      (and manager
+           (nonzero? manager)
+           (= (-> manager phase) (mp-spectate-phase active))
+           (-> manager level-request-owned?)))))
+
+(defun mp-spectate-last-stop-reason ()
+  *mp-spectate-stop-reason*)
+
+(defun mp-spectate-copy-options!
+       ((dst mp-spectate-options) (src mp-spectate-options))
+  (when (and dst (nonzero? dst) src (nonzero? src))
+    (set! (-> dst flags) (-> src flags))
+    (set! (-> dst preferred-player-id) (-> src preferred-player-id))
+    (set! (-> dst eligible-player-mask) (-> src eligible-player-mask))
+    (set! (-> dst overlay-x) (-> src overlay-x))
+    (set! (-> dst overlay-y) (-> src overlay-y))
+    (set! (-> dst overlay-width) (-> src overlay-width))
+    (set! (-> dst overlay-height) (-> src overlay-height))
+    (set! (-> dst overlay-scale) (-> src overlay-scale))
+    (set! (-> dst overlay-color) (-> src overlay-color))
+    (set! (-> dst overlay-font-flags) (-> src overlay-font-flags))
+    (set! (-> dst overlay-bucket) (-> src overlay-bucket))
+    (set! (-> dst line-spacing) (-> src line-spacing)))
+  dst)
+
+(defun mp-spectate-clear-options! ((options mp-spectate-options))
+  (when (and options (nonzero? options))
+    (set! (-> options flags) (mp-spectate-flags))
+    (set! (-> options preferred-player-id) MP_INVALID_PLAYER_ID)
+    (set! (-> options eligible-player-mask) (the uint32 0))
+    (set! (-> options overlay-x) 0)
+    (set! (-> options overlay-y) 0)
+    (set! (-> options overlay-width) 0.0)
+    (set! (-> options overlay-height) 0.0)
+    (set! (-> options overlay-scale) 0.0)
+    (set! (-> options overlay-color) (the uint32 0))
+    (set! (-> options overlay-font-flags) (the uint32 0))
+    (set! (-> options overlay-bucket) (the uint32 0))
+    (set! (-> options line-spacing) 0))
+  (none))
+
+(defun mp-spectate-default-options! ((options mp-spectate-options))
+  (when (and options (nonzero? options))
+    (set! (-> options flags)
+          (mp-spectate-flags allow-switch show-player-name end-on-scene))
+    (set! (-> options preferred-player-id) MP_INVALID_PLAYER_ID)
+    (set! (-> options eligible-player-mask) (the uint32 #xffffffff))
+    (set! (-> options overlay-x) 20)
+    (set! (-> options overlay-y) 128)
+    (set! (-> options overlay-width) 472.0)
+    (set! (-> options overlay-height) 40.0)
+    (set! (-> options overlay-scale) 0.8)
+    (set! (-> options overlay-color) (the-as uint32 (font-color default)))
+    (set! (-> options overlay-font-flags)
+          (the-as uint32 (font-flags shadow kerning middle large)))
+    (set! (-> options overlay-bucket) (the-as uint32 (bucket-id subtitle)))
+    (set! (-> options line-spacing) 32))
+  options)
+
+(defun mp-spectate-join-options! ((options mp-spectate-options))
+  (mp-spectate-default-options! options)
+  (when (and options (nonzero? options))
+    (logior! (-> options flags)
+             (mp-spectate-flags inert-local-anchor roster-only-presence)))
+  options)
+
+(defun mp-spectate-text-param-kind-valid?
+       ((kind mp-spectate-text-param-kind))
+  (or (= kind (mp-spectate-text-param-kind none))
+      (= kind (mp-spectate-text-param-kind integer))
+      (= kind (mp-spectate-text-param-kind selected-player-name))
+      (= kind (mp-spectate-text-param-kind selected-player-number))))
+
+(defun mp-spectate-clear-custom-text-state!
+       ((manager mp-spectate-manager))
+  (when (and manager (nonzero? manager))
+    (set! (-> manager custom-text-id) (text-id null))
+    (set! (-> manager custom-param-kind)
+          (mp-spectate-text-param-kind none))
+    (set! (-> manager custom-param-value) 0))
+  (none))
+
+(defun mp-spectate-selected-record-for-manager
+       ((manager mp-spectate-manager))
+  (if (and manager (nonzero? manager))
+      (mp-player-record-by-id (-> manager selected-player-id))
+      (the-as mp-player-record #f)))
+
+(defun mp-spectate-selected-player-record ()
+  (mp-spectate-selected-record-for-manager
+    (mp-spectate-manager-process)))
+
+(defun mp-spectated-player-record ()
+  (mp-spectate-selected-player-record))
+
+(defun mp-spectate-clear-selection! ((manager mp-spectate-manager))
+  (when (and manager (nonzero? manager))
+    (let ((record (mp-spectate-selected-record-for-manager manager)))
+      (when (and record (nonzero? record))
+        (mp-player-runtime-clear-flag!
+          record (mp-player-runtime-flags force-presentation))))
+    (set! (-> manager selected-player-id) MP_INVALID_PLAYER_ID))
+  (none))
+
+(defun mp-spectate-player-allowed-by-mask?
+       ((manager mp-spectate-manager) (player-id uint))
+  (and manager
+       (nonzero? manager)
+       (< player-id (the uint MP_MAX_PLAYERS))
+       (logtest? (ash (the uint 1) player-id)
+                 (-> manager options eligible-player-mask))))
+
+(defun mp-spectate-record-eligible-for-manager?
+       ((manager mp-spectate-manager) (record mp-player-record))
+  (and manager
+       (nonzero? manager)
+       record
+       (nonzero? record)
+       *mp-player-controller*
+       (nonzero? *mp-player-controller*)
+       (mp-player-record-remote? *mp-player-controller* record)
+       (mp-spectate-player-allowed-by-mask?
+         manager (the-as uint (-> record identity player-id)))
+       (nonzero? (-> record identity identity-ready?))
+       (nonzero? (-> record identity state-ready?))
+       (= (-> record identity spectator-only?) 0)
+       (>= (-> record connection status) 4)
+       (nonzero? (-> record transform level))
+       (not (mp-player-record-dead-or-dying? record))))
+
+(defun mp-spectate-distance-anchor ()
+  (if (and *target*
+           (nonzero? *target*)
+           (-> *target* root)
+           (nonzero? (-> *target* root)))
+      (-> *target* root trans)
+      (the-as vector #f)))
+
+(defun mp-spectate-nearest-record-for-scope
+       ((manager mp-spectate-manager) (same-primary-only? symbol))
+  (let ((anchor (mp-spectate-distance-anchor))
+        (best-record (the-as mp-player-record #f))
+        (best-distance (meters 1000000.0)))
+    (when (and manager
+               (nonzero? manager)
+               anchor
+               (nonzero? anchor))
+      (mp-for-each-player-record (player-id record)
+        (when (and (mp-spectate-record-eligible-for-manager? manager record)
+                   (or (not same-primary-only?)
+                       (mp-player-primary-level-matches-local? record)))
+          (let ((position (mp-player-record-position record)))
+            (when (and position (nonzero? position))
+              (let ((distance (vector-vector-distance anchor position)))
+                (when (or (not best-record)
+                          (zero? best-record)
+                          (< distance best-distance)
+                          (and (= distance best-distance)
+                               (< player-id (-> best-record identity player-id))))
+                  (set! best-record record)
+                  (set! best-distance distance))))))))
+    best-record))
+
+(defun mp-spectate-nearest-record ((manager mp-spectate-manager))
+  (let ((same-level
+          (mp-spectate-nearest-record-for-scope manager #t)))
+    (if (and same-level (nonzero? same-level))
+        same-level
+        (mp-spectate-nearest-record-for-scope manager #f))))
+
+(defun mp-spectate-record-after-id
+       ((manager mp-spectate-manager) (player-id uint) (direction int))
+  (when (and manager (nonzero? manager))
+    (dotimes (offset MP_MAX_PLAYERS)
+      (let* ((step (+ offset 1))
+             (candidate-id
+               (if (< direction 0)
+                   (the uint
+                     (mod (+ player-id MP_MAX_PLAYERS (- step)) MP_MAX_PLAYERS))
+                   (the uint (mod (+ player-id step) MP_MAX_PLAYERS))))
+             (candidate (mp-player-record-by-id candidate-id)))
+        (when (mp-spectate-record-eligible-for-manager? manager candidate)
+          (return candidate)))))
+  (the-as mp-player-record #f))
+
+(defun mp-spectate-select-record!
+       ((manager mp-spectate-manager) (record mp-player-record))
+  (when (and manager (nonzero? manager))
+    (mp-spectate-clear-selection! manager)
+    (when (mp-spectate-record-eligible-for-manager? manager record)
+      (set! (-> manager selected-player-id)
+            (the-as uint (-> record identity player-id)))
+      (mp-player-runtime-set-flag!
+        record (mp-player-runtime-flags force-presentation))
+      (return record)))
+  (the-as mp-player-record #f))
+
+(defun mp-spectate-select-initial! ((manager mp-spectate-manager))
+  (when (and manager (nonzero? manager))
+    (let* ((preferred-id
+             (the-as uint (-> manager options preferred-player-id)))
+           (preferred (mp-player-record-by-id preferred-id)))
+      (if (mp-spectate-record-eligible-for-manager? manager preferred)
+          (return (mp-spectate-select-record! manager preferred))
+          (return
+            (mp-spectate-select-record!
+              manager (mp-spectate-nearest-record manager))))))
+  (the-as mp-player-record #f))
+
+(defun mp-spectate-maintain-selection! ((manager mp-spectate-manager))
+  (when (and manager (nonzero? manager))
+    (let ((current (mp-spectate-selected-record-for-manager manager)))
+      (when (mp-spectate-record-eligible-for-manager? manager current)
+        (return current))
+      (if (!= (-> manager selected-player-id) MP_INVALID_PLAYER_ID)
+          (return
+            (mp-spectate-select-record!
+              manager
+              (mp-spectate-record-after-id
+                manager (-> manager selected-player-id) 1)))
+          (return (mp-spectate-select-initial! manager)))))
+  (the-as mp-player-record #f))
+
+(defun mp-spectate-cycle! ((owner symbol) (direction int))
+  (let ((manager (mp-spectate-manager-process)))
+    (when (or (not manager)
+              (zero? manager)
+              (!= (-> manager phase) (mp-spectate-phase active))
+              (!= owner (-> manager owner))
+              (not (logtest? (-> manager options flags)
+                             (mp-spectate-flags allow-switch))))
+      (return #f))
+    (let* ((start-id
+             (if (= (-> manager selected-player-id) MP_INVALID_PLAYER_ID)
+                 (the uint 0)
+                 (-> manager selected-player-id)))
+           (candidate
+             (mp-spectate-record-after-id manager start-id direction)))
+      (when (mp-spectate-record-eligible-for-manager? manager candidate)
+        (mp-spectate-select-record! manager candidate)
+        (return #t))))
+  #f)
+
+(defun mp-valid-remote-spectate-puppet? ((puppet target))
+  (and puppet
+       (nonzero? puppet)
+       (-> puppet root)
+       (nonzero? (-> puppet root))
+       (-> puppet control)
+       (nonzero? (-> puppet control))))
+
+(defun mp-prepare-remote-spectate-target! ()
+  (let ((manager (mp-spectate-manager-process)))
+    (when (and manager (nonzero? manager))
+      (let ((record (mp-spectate-selected-record-for-manager manager)))
+        (when (and (mp-spectate-record-eligible-for-manager? manager record)
+                   (mp-player-spectate-level-ready? record))
+          (let ((puppet (mp-player-record-target record)))
+            (when (mp-valid-remote-spectate-puppet? puppet)
+              (return (the-as process-focusable puppet))))))))
+  (the-as process-focusable #f))
+
+(defun mp-region-target-pos ()
+  (let ((manager (mp-spectate-manager-process)))
+    (when (and manager
+               (nonzero? manager)
+               (= (-> manager phase) (mp-spectate-phase active)))
+      (let ((record (mp-spectate-selected-record-for-manager manager)))
+        (when (mp-spectate-record-eligible-for-manager? manager record)
+          (let ((puppet (mp-player-record-target record)))
+            (when (and puppet
+                       (nonzero? puppet)
+                       (-> puppet root)
+                       (nonzero? (-> puppet root)))
+              (return (-> puppet root trans))))
+          (let ((position (mp-player-record-presentation-position record)))
+            (when (and position (nonzero? position))
+              (return position)))))))
+  (target-pos 0))
+
+(defun mp-spectate-focus-local-target-if-needed!
+       ((manager mp-spectate-manager))
+  (when (and manager
+             (nonzero? manager)
+             (!= (-> manager camera-player-id) MP_INVALID_PLAYER_ID))
+    (when (and *camera*
+               (nonzero? *camera*)
+               *target*
+               (nonzero? *target*))
+      (send-event *camera* 'change-target *target*)
+      (send-event *camera* 'teleport))
+    (set! (-> manager camera-player-id) MP_INVALID_PLAYER_ID))
+  (none))
+
+(defun mp-spectate-restore-local-camera! ()
+  (when (and *camera*
+             (nonzero? *camera*)
+             *target*
+             (nonzero? *target*))
+    (send-event *camera* 'change-target *target*)
+    (send-event *camera* 'teleport))
+  (none))
+
+(defun mp-spectate-focus-selected-player!
+       ((manager mp-spectate-manager) (remote process-focusable))
+  (when (and manager
+             (nonzero? manager)
+             remote
+             (nonzero? remote)
+             (!= (-> manager camera-player-id)
+                 (-> manager selected-player-id)))
+    (when (and *camera* (nonzero? *camera*))
+      (send-event *camera* 'change-target remote))
+    (set! (-> manager camera-player-id)
+          (-> manager selected-player-id))
+    (when (and *target*
+               (nonzero? *target*)
+               (-> *target* control)
+               (nonzero? (-> *target* control))
+               (-> remote root)
+               (nonzero? (-> remote root)))
+      (vector-copy! (-> *target* control camera-pos) (-> remote root trans)))
+    (when (and *camera* (nonzero? *camera*))
+      (send-event *camera* 'teleport)))
+  (none))
+
+(defun mp-spectate-repair-camera-distance! ((remote process-focusable))
+  (when (and remote
+             (nonzero? remote)
+             (-> remote root)
+             (nonzero? (-> remote root))
+             *math-camera*
+             (nonzero? *math-camera*)
+             (> (vector-vector-distance
+                  (-> *math-camera* trans) (-> remote root trans))
+                (meters 100.0)))
+    (when (and *target*
+               (nonzero? *target*)
+               (-> *target* control)
+               (nonzero? (-> *target* control)))
+      (vector-copy! (-> *target* control camera-pos) (-> remote root trans)))
+    (when (and *camera* (nonzero? *camera*))
+      (send-event *camera* 'teleport)))
+  (none))
+
+(defun mp-spectate-sidekick-process ()
+  (when (and *target*
+             (nonzero? *target*)
+             (-> *target* sidekick)
+             (nonzero? (-> *target* sidekick)))
+    (let ((sidekick-proc (ppointer->process (-> *target* sidekick))))
+      (when (and sidekick-proc (nonzero? sidekick-proc))
+        (return (the-as sidekick sidekick-proc)))))
+  (the-as sidekick #f))
+
+(defun mp-spectate-snapshot-anchor! ((manager mp-spectate-manager))
+  (when (and manager
+             (nonzero? manager)
+             (not (-> manager anchor saved?))
+             *target*
+             (nonzero? *target*)
+             (-> *target* root)
+             (nonzero? (-> *target* root))
+             (-> *target* control)
+             (nonzero? (-> *target* control)))
+    (let ((control (-> *target* control)))
+      (vector-copy! (-> manager anchor position) (-> *target* root trans))
+      (set! (-> manager anchor process-mask)
+            (the-as uint32 (-> *target* mask)))
+      (set! (-> manager anchor focus-status)
+            (the-as uint32 (-> *target* focus-status)))
+      (when (and (-> *target* draw) (nonzero? (-> *target* draw)))
+        (set! (-> manager anchor draw-status)
+              (the-as uint32 (-> *target* draw status))))
+      (let ((sidekick-proc (mp-spectate-sidekick-process)))
+        (when (and sidekick-proc
+                   (nonzero? sidekick-proc)
+                   (-> sidekick-proc draw)
+                   (nonzero? (-> sidekick-proc draw)))
+          (set! (-> manager anchor sidekick-draw-status)
+                (the-as uint (-> sidekick-proc draw status)))
+          (set! (-> manager anchor sidekick-draw-saved?) #t)))
+      (set! (-> manager anchor cpad) (-> control cpad))
+      (when (and (-> control root-prim) (nonzero? (-> control root-prim)))
+        (set! (-> manager anchor collide-as)
+              (the-as uint32 (-> control root-prim prim-core collide-as)))
+        (set! (-> manager anchor collide-with)
+              (the-as uint32 (-> control root-prim prim-core collide-with))))
+      (mp-clear-local-vehicle-occupancy! *target*)
+      (set! (-> manager anchor saved?) #t)))
+  (none))
+
+(defun mp-spectate-enforce-inert-anchor! ((manager mp-spectate-manager))
+  (when (and manager (nonzero? manager))
+    (mp-spectate-snapshot-anchor! manager)
+    (when (and (-> manager anchor saved?)
+               *target*
+               (nonzero? *target*)
+               (-> *target* root)
+               (nonzero? (-> *target* root))
+               (-> *target* control)
+               (nonzero? (-> *target* control)))
+      (let ((control (-> *target* control)))
+        (vector-copy! (-> *target* root trans) (-> manager anchor position))
+        (vector-copy! (-> control trans) (-> manager anchor position))
+        (set! (-> control transv quad) (the-as uint128 0))
+        (logior! (-> *target* focus-status) (focus-status ignore))
+        (when (and (-> *target* draw) (nonzero? (-> *target* draw)))
+          (logior! (-> *target* draw status) (draw-control-status no-draw)))
+        (when (and *cpad-list* (nonzero? *cpad-list*))
+          (set! (-> control cpad)
+                (-> *cpad-list* cpads CPAD_TARGET_INPUT_SINK_INDEX)))
+        (when (and (-> control root-prim) (nonzero? (-> control root-prim)))
+          (set! (-> control root-prim prim-core collide-as) (collide-spec))
+          (set! (-> control root-prim prim-core collide-with) (collide-spec)))
+        (let ((sidekick-proc (mp-spectate-sidekick-process)))
+          (when (and sidekick-proc
+                     (nonzero? sidekick-proc)
+                     (-> sidekick-proc draw)
+                     (nonzero? (-> sidekick-proc draw)))
+            (logior! (-> sidekick-proc draw status)
+                     (draw-control-status no-draw)))))))
+  (none))
+
+(defun mp-spectate-restore-anchor-state!
+       ((manager mp-spectate-manager) (restore-position? symbol))
+  (when (and manager
+             (nonzero? manager)
+             (-> manager anchor saved?))
+    (when (and *target*
+               (nonzero? *target*)
+               (-> *target* root)
+               (nonzero? (-> *target* root))
+               (-> *target* control)
+               (nonzero? (-> *target* control)))
+      (let ((control (-> *target* control)))
+        (when restore-position?
+          (vector-copy! (-> *target* root trans) (-> manager anchor position))
+          (vector-copy! (-> control trans) (-> manager anchor position)))
+        (set! (-> control transv quad) (the-as uint128 0))
+        (set! (-> *target* mask)
+              (the-as process-mask (-> manager anchor process-mask)))
+        (set! (-> *target* focus-status)
+              (the-as focus-status (-> manager anchor focus-status)))
+        (logclear! (-> *target* focus-status)
+                   (focus-status pilot pilot-riding ignore))
+        (when (and (-> *target* draw) (nonzero? (-> *target* draw)))
+          (set! (-> *target* draw status)
+                (the-as draw-control-status (-> manager anchor draw-status))))
+        (let ((sidekick-proc (mp-spectate-sidekick-process)))
+          (when (and (-> manager anchor sidekick-draw-saved?)
+                     sidekick-proc
+                     (nonzero? sidekick-proc)
+                     (-> sidekick-proc draw)
+                     (nonzero? (-> sidekick-proc draw)))
+            (set! (-> sidekick-proc draw status)
+                  (the-as draw-control-status
+                          (-> manager anchor sidekick-draw-status)))))
+        (set! (-> control cpad) (-> manager anchor cpad))
+        (when (and (-> control root-prim) (nonzero? (-> control root-prim)))
+          (set! (-> control root-prim prim-core collide-as)
+                (the-as collide-spec (-> manager anchor collide-as)))
+          (set! (-> control root-prim prim-core collide-with)
+                (the-as collide-spec (-> manager anchor collide-with))))))
+    (set! (-> manager anchor saved?) #f)
+    (set! (-> manager anchor sidekick-draw-saved?) #f))
+  (none))
+
+(defun mp-spectate-clear-local-presence! ()
+  (let ((local (mp-local-player-record)))
+    (when (and local (nonzero? local))
+      (set! (-> local identity spectator-only?) (the uint8 0))))
+  (none))
+
+(defun mp-spectate-apply-presence! ((manager mp-spectate-manager))
+  (when (and manager (nonzero? manager))
+    (let ((local (mp-local-player-record)))
+      (when (and local (nonzero? local))
+        (set! (-> local identity spectator-only?)
+              (if (logtest? (-> manager options flags)
+                            (mp-spectate-flags roster-only-presence))
+                  (the uint8 1)
+                  (the uint8 0))))))
+  (none))
+
+(defun mp-spectate-manager-can-activate? ((manager mp-spectate-manager))
+  (let ((local (mp-local-player-record)))
+    (and manager
+         (nonzero? manager)
+         local
+         (nonzero? local)
+         *target*
+         (nonzero? *target*)
+         (-> *target* root)
+         (nonzero? (-> *target* root))
+         (-> *target* control)
+         (nonzero? (-> *target* control)))))
+
+(defbehavior mp-spectate-manager-enter-active! mp-spectate-manager ()
+  (when (and (= (-> self phase) (mp-spectate-phase pending))
+             (mp-spectate-manager-can-activate? self))
+    (set! (-> self phase) (mp-spectate-phase active))
+    (go-virtual mp-spectate-active-state)
+    )
+  (none))
+
+(defun mp-spectate-manager-inert? ((manager mp-spectate-manager))
+  (and manager
+       (nonzero? manager)
+       (logtest? (-> manager options flags)
+                 (mp-spectate-flags inert-local-anchor))))
+
+(defun mp-spectate-input-available? ()
+  (and (= *master-mode* 'game)
+       (not *scene-player*)
+       (not (movie?))))
+
+(defun mp-spectate-update-input! ((manager mp-spectate-manager))
+  (when (and manager
+             (nonzero? manager)
+             (mp-spectate-input-available?)
+             (logtest? (-> manager options flags)
+                       (mp-spectate-flags allow-switch)))
+    (cond
+      ((cpad-pressed? 0 left l-analog-left)
+       (mp-spectate-cycle! (-> manager owner) -1)
+       (cpad-clear! 0 left)
+       (cpad-clear! 0 l-analog-left))
+      ((cpad-pressed? 0 right l-analog-right)
+       (mp-spectate-cycle! (-> manager owner) 1)
+       (cpad-clear! 0 right)
+       (cpad-clear! 0 l-analog-right))))
+  (none))
+
+(defun mp-spectate-localized-text ((id text-id))
+  (when (and (!= id (text-id null))
+             *common-text*
+             (nonzero? *common-text*))
+    (return (lookup-text! *common-text* id #t)))
+  (the-as string #f))
+
+(defun mp-spectate-copy-player-name-for-draw!
+       ((dst string) (record mp-player-record))
+  (when (and dst (nonzero? dst))
+    (clear dst)
+    (when (and record (nonzero? record))
+      (let ((src (-> record identity name))
+            (dst-data (-> dst data))
+            (copy-length 0))
+        (while (and (< copy-length 23)
+                    (nonzero? (-> src copy-length)))
+          (set! (-> dst-data copy-length) (-> src copy-length))
+          (+! copy-length 1))
+        (set! (-> dst-data copy-length) (the uint8 0)))))
+  dst)
+
+(defun mp-spectate-draw-line!
+       ((manager mp-spectate-manager) (text string) (line-index int))
+  (when (and manager
+             (nonzero? manager)
+             text
+             (nonzero? text)
+             (> (length text) 0))
+    (let ((context
+            (new 'stack 'font-context
+              *font-default-matrix*
+              (-> manager options overlay-x)
+              (+ (-> manager options overlay-y)
+                 (* line-index (-> manager options line-spacing)))
+              0.0
+              (the-as font-color (-> manager options overlay-color))
+              (the-as font-flags (-> manager options overlay-font-flags)))))
+      (when (and context (nonzero? context))
+        (set! (-> context width) (-> manager options overlay-width))
+        (set! (-> context height) (-> manager options overlay-height))
+        (set! (-> context scale) (-> manager options overlay-scale))
+        (set! (-> context flags)
+              (the-as font-flags (-> manager options overlay-font-flags)))
+        (print-game-text
+          text context #f 44
+          (the-as bucket-id (-> manager options overlay-bucket))))))
+  (none))
+
+(defun mp-spectate-draw-localized-static!
+       ((manager mp-spectate-manager) (id text-id) (line-index int))
+  (let ((text (mp-spectate-localized-text id)))
+    (when (and text (nonzero? text))
+      (mp-spectate-draw-line! manager text line-index)
+      (return #t)))
+  #f)
+
+(defun mp-spectate-draw-localized-integer!
+       ((manager mp-spectate-manager)
+        (id text-id)
+        (value int)
+        (line-index int))
+  (let ((template (mp-spectate-localized-text id)))
+    (when (and template
+               (nonzero? template)
+               *temp-string*
+               (nonzero? *temp-string*))
+      (format (clear *temp-string*) template value)
+      (mp-spectate-draw-line! manager *temp-string* line-index)
+      (return #t)))
+  #f)
+
+(defun mp-spectate-draw-localized-player-name!
+       ((manager mp-spectate-manager)
+        (id text-id)
+        (record mp-player-record)
+        (line-index int))
+  (when (and record
+             (nonzero? record)
+             *temp-string*
+             (nonzero? *temp-string*)
+             *string-tmp-str*
+             (nonzero? *string-tmp-str*))
+    (mp-spectate-copy-player-name-for-draw! *string-tmp-str* record)
+    (when (> (length *string-tmp-str*) 0)
+      (let ((template (mp-spectate-localized-text id)))
+        (when (and template (nonzero? template))
+          (format (clear *temp-string*) template *string-tmp-str*)
+          (mp-spectate-draw-line! manager *temp-string* line-index)
+          (return #t)))))
+  #f)
+
+(defun mp-spectate-draw-localized-player-number!
+       ((manager mp-spectate-manager)
+        (id text-id)
+        (record mp-player-record)
+        (line-index int))
+  (when (and record (nonzero? record))
+    (return
+      (mp-spectate-draw-localized-integer!
+        manager
+        id
+        (the-as int (+ (-> record identity player-id) 1))
+        line-index)))
+  #f)
+
+(defun mp-spectate-draw-localized-parameter!
+       ((manager mp-spectate-manager)
+        (id text-id)
+        (kind mp-spectate-text-param-kind)
+        (value int)
+        (record mp-player-record)
+        (line-index int))
+  (cond
+    ((= kind (mp-spectate-text-param-kind none))
+     (mp-spectate-draw-localized-static! manager id line-index))
+    ((= kind (mp-spectate-text-param-kind integer))
+     (mp-spectate-draw-localized-integer! manager id value line-index))
+    ((= kind (mp-spectate-text-param-kind selected-player-name))
+     (mp-spectate-draw-localized-player-name!
+       manager id record line-index))
+    ((= kind (mp-spectate-text-param-kind selected-player-number))
+     (mp-spectate-draw-localized-player-number!
+       manager id record line-index))
+    (else #f)))
+
+(defun mp-spectate-draw-title!
+       ((manager mp-spectate-manager)
+        (record mp-player-record)
+        (line-index int))
+  (when (and manager (nonzero? manager))
+    (return
+      (if (and record (nonzero? record))
+          (if (and (logtest? (-> manager options flags)
+                             (mp-spectate-flags show-player-name))
+                   (mp-spectate-draw-localized-player-name!
+                     manager
+                     (text-id mp-spectate-player-name)
+                     record
+                     line-index))
+              #t
+              (mp-spectate-draw-localized-player-number!
+                manager
+                (text-id mp-spectate-player-number)
+                record
+                line-index))
+          (mp-spectate-draw-localized-static!
+            manager (text-id mp-spectate-title) line-index))))
+  #f)
+
+(defun mp-spectate-draw-custom-text!
+       ((manager mp-spectate-manager)
+        (record mp-player-record)
+        (line-index int))
+  (when (and manager
+             (nonzero? manager)
+             (!= (-> manager custom-text-id) (text-id null)))
+    (mp-spectate-draw-localized-parameter!
+      manager
+      (-> manager custom-text-id)
+      (-> manager custom-param-kind)
+      (-> manager custom-param-value)
+      record
+      line-index))
+  (none))
+
+(defun mp-spectate-draw-overlay!
+       ((manager mp-spectate-manager) (record mp-player-record))
+  (when (and manager (nonzero? manager))
+    (let ((line-index 0))
+      (mp-spectate-draw-title! manager record line-index)
+      (+! line-index 1)
+      (when (or (not record) (zero? record))
+        (mp-spectate-draw-localized-static!
+          manager (text-id mp-spectate-waiting) line-index)
+        (+! line-index 1))
+      (when (and record
+                 (nonzero? record)
+                 (not (mp-player-spectate-level-ready? record)))
+        (mp-spectate-draw-localized-static!
+          manager (text-id mp-spectate-loading) line-index)
+        (+! line-index 1))
+      (mp-spectate-draw-custom-text! manager record line-index)))
+  (none))
+
+(defun mp-spectate-manager-clear-session! ((manager mp-spectate-manager))
+  (when (and manager (nonzero? manager))
+    (set! (-> manager level-request-owned?) #f)
+    (mp-spectate-clear-options! (-> manager options))
+    (set! (-> manager owner) #f)
+    (set! (-> manager selected-player-id) MP_INVALID_PLAYER_ID)
+    (set! (-> manager camera-player-id) MP_INVALID_PLAYER_ID)
+    (set! (-> manager anchor saved?) #f)
+    (set! (-> manager anchor cpad) (the-as cpad-info #f))
+    (set! (-> manager anchor sidekick-draw-saved?) #f)
+    (mp-spectate-clear-custom-text-state! manager))
+  (none))
+
+(defun mp-spectate-clear-flags! ((flags mp-spectate-flags))
+  (let ((manager (mp-spectate-manager-process)))
+    (when (and manager 
+               (nonzero? manager))
+      (logclear! (-> manager options flags) flags)
+      )
+    )
+  )
+
+(defbehavior mp-spectate-manager-pending-update! mp-spectate-manager ()
+  (when (= (-> self phase) (mp-spectate-phase pending))
+    (set! (-> self level-request-owned?) #f)
+    (mp-spectate-apply-presence! self)
+    (when (mp-spectate-manager-inert? self)
+      (mp-spectate-enforce-inert-anchor! self))
+    (mp-spectate-manager-enter-active!))
+  (none))
+
+(defun mp-spectate-record-has-valid-level-request?
+       ((record mp-player-record))
+  (when (and record (nonzero? record))
+    (let ((primary-id (mp-player-primary-level-id record)))
+      (when (and (> primary-id 0)
+                 (mp-level-id->symbol primary-id))
+        (return #t))))
+  #f)
+
+(defun mp-spectate-manager-apply-level-request!
+       ((manager mp-spectate-manager) (record mp-player-record))
+  (when (and manager (nonzero? manager))
+    (set! (-> manager level-request-owned?) #f)
+    (when (and (= (-> manager phase) (mp-spectate-phase active))
+               (mp-spectate-record-eligible-for-manager? manager record)
+               *load-state*
+               (nonzero? *load-state*)
+               (not (mp-respawn-policy-blocks-remote-placement?))
+               (mp-spectate-record-has-valid-level-request? record))
+      (mp-request-player-spectate-levels! record)
+      (set! (-> manager level-request-owned?) #t)))
+  (none))
+
+(defun mp-spectate-manager-update-view!
+       ((manager mp-spectate-manager))
+  (when (and manager (nonzero? manager))
+    (mp-spectate-update-input! manager)
+    (let ((record (mp-spectate-maintain-selection! manager)))
+      (mp-spectate-manager-apply-level-request! manager record)
+      (if (and record (nonzero? record))
+          (let ((remote (mp-prepare-remote-spectate-target!)))
+            (if (and remote (nonzero? remote))
+                (begin
+                  (mp-spectate-focus-selected-player! manager remote)
+                  (mp-spectate-repair-camera-distance! remote))
+                (mp-spectate-focus-local-target-if-needed! manager)))
+          (mp-spectate-focus-local-target-if-needed! manager))
+      (mp-spectate-draw-overlay! manager record)))
+  (none))
+
+(defun mp-spectate-manager-active-update!
+       ((manager mp-spectate-manager))
+  (when (and manager
+             (nonzero? manager)
+             (= (-> manager phase) (mp-spectate-phase active)))
+    (set! (-> manager level-request-owned?) #f)
+    (if (and (logtest? (-> manager options flags)
+                       (mp-spectate-flags end-on-scene))
+             *scene-player*)
+        (mp-spectate-stop! (-> manager owner) 'scene-started)
+        (begin
+          (mp-spectate-apply-presence! manager)
+          (when (mp-spectate-manager-inert? manager)
+            (mp-spectate-enforce-inert-anchor! manager))
+          (mp-spectate-manager-update-view! manager))))
+  (none))
+
+(defmethod mp-spectate-manager-finish!
+           ((this mp-spectate-manager)
+            (reason symbol)
+            (restore-position? symbol))
+  (when (and this
+             (nonzero? this)
+             (!= (-> this phase) (mp-spectate-phase stopping)))
+    (let ((restore-base-state?
+            (and restore-position? (-> this anchor saved?))))
+      (set! (-> this phase) (mp-spectate-phase stopping))
+      (mp-spectate-clear-local-presence!)
+      (mp-spectate-restore-anchor-state! this restore-position?)
+      (mp-spectate-restore-local-camera!)
+      (when (and restore-base-state?
+                 *target*
+                 (nonzero? *target*))
+        (mp-teleport-reset-local-base-state! *target*))
+      (mp-spectate-clear-selection! this)
+      (set! *mp-spectate-stop-reason* reason)
+      (mp-spectate-manager-clear-session! this)
+      (set! *mp-spectate-manager*
+            (the-as (pointer mp-spectate-manager) #f))
+      (deactivate this)))
+  (none))
+
+(defmethod deactivate ((this mp-spectate-manager))
+  (when (and this
+             (nonzero? this)
+             (!= (-> this phase) (mp-spectate-phase stopping)))
+    (let ((restore-base-state? (-> this anchor saved?)))
+      (set! (-> this phase) (mp-spectate-phase stopping))
+      (mp-spectate-clear-local-presence!)
+      (mp-spectate-restore-anchor-state! this #t)
+      (mp-spectate-restore-local-camera!)
+      (when (and restore-base-state?
+                 *target*
+                 (nonzero? *target*))
+        (mp-teleport-reset-local-base-state! *target*))
+      (mp-spectate-clear-selection! this)
+      (set! *mp-spectate-stop-reason* 'controller-deactivated)
+      (mp-spectate-manager-clear-session! this)))
+  (set! *mp-spectate-manager*
+        (the-as (pointer mp-spectate-manager) #f))
+  ((method-of-type process deactivate) this)
+  (none))
+
+(defstate mp-spectate-pending-state (mp-spectate-manager)
+  :virtual #t
+  :enter (behavior ()
+    (debug-log *mp-debug-log?* "[Spectate] Entered mp-spectate-pending-state~%")
+    )
+  :code (behavior ()
+    (until #f
+      (mp-spectate-manager-pending-update!)
+      (suspend))
+    #f))
+
+(defstate mp-spectate-active-state (mp-spectate-manager)
+  :virtual #t
+  :enter (behavior ()
+    (debug-log *mp-debug-log?* "[Spectate] Entered mp-spectate-active-state~%")
+    )
+  :code (behavior ()
+    (until #f
+      (mp-spectate-manager-active-update! self)
+      (suspend))
+    #f))
+
+(defbehavior mp-spectate-manager-init mp-spectate-manager
+             ((owner symbol) (options mp-spectate-options))
+  (logclear! (-> self mask)
+             (process-mask freeze pause menu progress))
+  (change-to-last-brother self)
+  (set! (-> self owner) owner)
+  (set! (-> self phase) (mp-spectate-phase pending))
+  (mp-spectate-copy-options! (-> self options) options)
+  (set! (-> self selected-player-id) MP_INVALID_PLAYER_ID)
+  (set! (-> self camera-player-id) MP_INVALID_PLAYER_ID)
+  (set! (-> self level-request-owned?) #f)
+  (set! (-> self anchor saved?) #f)
+  (set! (-> self anchor cpad) (the-as cpad-info #f))
+  (set! (-> self anchor sidekick-draw-saved?) #f)
+  (mp-spectate-clear-custom-text-state! self)
+  (mp-spectate-apply-presence! self)
+  (when (mp-spectate-manager-inert? self)
+    (mp-spectate-enforce-inert-anchor! self))
+  (if (mp-spectate-manager-can-activate? self)
+      (begin
+        (set! (-> self phase) (mp-spectate-phase active))
+        (go-virtual mp-spectate-active-state))
+      (go-virtual mp-spectate-pending-state))
+  (none))
+
+(defun mp-spectate-start!
+       ((owner symbol) (options mp-spectate-options))
+  (when (or (not owner)
+            (not options)
+            (zero? options))
+    (return #f))
+  (let ((manager (mp-spectate-manager-process)))
+    (when (and manager (nonzero? manager))
+      (return (= owner (-> manager owner)))))
+  (when (or (not *target-pool*) (zero? *target-pool*))
+    (return #f))
+  (let ((spawned
+          (process-spawn mp-spectate-manager
+            :init mp-spectate-manager-init owner options
+            :to *target-pool*)))
+    (when (or (not spawned) (zero? spawned))
+      (return #f))
+    (set! *mp-spectate-manager*
+          (the-as (pointer mp-spectate-manager) spawned))
+    (set! *mp-spectate-stop-reason* #f))
+  #t)
+
+(defun mp-spectate-set-custom-text!
+       ((owner symbol)
+        (id text-id)
+        (kind mp-spectate-text-param-kind)
+        (value int))
+  (let ((manager (mp-spectate-manager-process)))
+    (when (or (not manager)
+              (zero? manager)
+              (= (-> manager phase) (mp-spectate-phase stopping))
+              (!= owner (-> manager owner)))
+      (return #f))
+    (when (not (mp-spectate-text-param-kind-valid? kind))
+      (return #f))
+    (if (= id (text-id null))
+        (mp-spectate-clear-custom-text-state! manager)
+        (begin
+          (set! (-> manager custom-text-id) id)
+          (set! (-> manager custom-param-kind) kind)
+          (set! (-> manager custom-param-value) value))))
+  #t)
+
+(defun mp-spectate-clear-custom-text! ((owner symbol))
+  (mp-spectate-set-custom-text!
+    owner
+    (text-id null)
+    (mp-spectate-text-param-kind none)
+    0))
+
+(defun mp-spectate-stop! ((owner symbol) (reason symbol))
+  (let ((manager (mp-spectate-manager-process)))
+    (when (or (not manager)
+              (zero? manager)
+              (= (-> manager phase) (mp-spectate-phase stopping))
+              (!= owner (-> manager owner)))
+      (return #f))
+    (mp-spectate-manager-finish! manager reason #t))
+  #t)
+
+(defun mp-spectate-stop-at-selected! ((owner symbol) (reason symbol))
+  (let ((manager (mp-spectate-manager-process)))
+    (when (or (not manager)
+              (zero? manager)
+              (= (-> manager phase) (mp-spectate-phase stopping))
+              (!= owner (-> manager owner)))
+      (return #f))
+    (let ((record (mp-spectate-selected-record-for-manager manager)))
+      (when (or (not (mp-spectate-record-eligible-for-manager? manager record))
+                (not (mp-player-spectate-level-ready? record)))
+        (return #f))
+      (mp-spectate-manager-finish! manager reason #f)
+      (mp-teleport-local-target-to-player! record #f)))
+  #t)
+
+(defun mp-spectate-reset! ()
+  (let ((manager (mp-spectate-manager-process)))
+    (if (and manager (nonzero? manager))
+        (mp-spectate-manager-finish! manager 'session-reset #t)
+        (begin
+          (mp-spectate-clear-local-presence!)
+          (mp-spectate-restore-local-camera!))))
+  (none))

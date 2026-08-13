@@ -1,9 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(define-extern *mp-spectator-countdown-active?* symbol)
-(define-extern *mp-spectating?* symbol)
-
 (defstate target-indax-hit (target)
   :event target-indax-handler
   :exit (behavior ()
@@ -14,8 +11,7 @@
             (when (and (not *pause-lock*)
                        (cpad-hold? (-> self control cpad number) r2)
                        (not (focus-test? self dead))
-                       (not *mp-spectator-countdown-active?*)
-                       (not *mp-spectating?*)
+                       (not (mp-spectate-requested?))
                        (let ((state-name (and (-> self state) (-> self state name))))
                          (not (or (= state-name 'target-death)
                                   (= state-name 'target-indax-death)
