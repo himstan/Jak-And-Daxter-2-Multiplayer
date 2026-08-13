@@ -647,6 +647,64 @@
 (defun mp-player-target-by-id ((player-id uint))
   (mp-player-record-target (mp-player-record-by-id player-id)))
 
+(define-perm *mp-player-name-scratch* string (new 'global 'string 64 (the-as string #f)))
+
+(defun mp-player-name-equal? ((name-a (pointer uint8)) (name-b (pointer uint8)))
+  "Check if two 24-byte player name buffers are equal."
+  (when (and name-a (nonzero? name-a) name-b (nonzero? name-b))
+    (dotimes (i 24)
+      (let ((char-a (-> name-a i))
+            (char-b (-> name-b i)))
+        (when (!= char-a char-b)
+          (return #f))
+        (when (zero? char-a)
+          (return #t))))
+    (return #t))
+  #f)
+
+(defun mp-player-name-duplicate? ((player-id uint))
+  "Check if another joined player shares the same non-empty name."
+  (let ((record (mp-player-record-by-id player-id)))
+    (when (and record
+               (nonzero? record)
+               (nonzero? (-> record identity joined?))
+               (nonzero? (-> record identity name 0)))
+      (let ((our-name (-> record identity name)))
+        (dotimes (other-id MP_MAX_PLAYERS)
+          (when (!= other-id player-id)
+            (let ((other-rec (mp-player-record-by-id (the-as uint other-id))))
+              (when (and other-rec
+                         (nonzero? other-rec)
+                         (nonzero? (-> other-rec identity joined?))
+                         (nonzero? (-> other-rec identity name 0))
+                         (mp-player-name-equal? our-name (-> other-rec identity name)))
+                (return #t))))))))
+  #f)
+
+(defun mp-player-copy-name! ((dst string) (player-id uint))
+  "Populate dst with player name. If empty, falls back to 'PLAYER <id+1>'.
+   If the name collides with another active player, appends ' (<id+1>)'."
+  (when (and dst (nonzero? dst))
+    (clear dst)
+    (let ((record (mp-player-record-by-id player-id)))
+      (cond
+        ((and record
+              (nonzero? record)
+              (nonzero? (-> record identity name 0)))
+         (let ((src (-> record identity name))
+               (dst-data (-> dst data))
+               (copy-len 0))
+           (while (and (< copy-len 23)
+                       (nonzero? (-> src copy-len)))
+             (set! (-> dst-data copy-len) (-> src copy-len))
+             (+! copy-len 1))
+           (set! (-> dst-data copy-len) (the uint8 0)))
+         (when (mp-player-name-duplicate? player-id)
+           (format dst " (~D)" (+ player-id 1))))
+        (else
+         (format dst "PLAYER ~D" (+ player-id 1))))))
+  dst)
+
 (defmacro mp-for-each-player-record (bindings &rest body)
   "Execute body for every active player record.
    Bindings are (player-id record)."

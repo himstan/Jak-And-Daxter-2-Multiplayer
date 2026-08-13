@@ -676,16 +676,9 @@
 (defun mp-spectate-copy-player-name-for-draw!
        ((dst string) (record mp-player-record))
   (when (and dst (nonzero? dst))
-    (clear dst)
-    (when (and record (nonzero? record))
-      (let ((src (-> record identity name))
-            (dst-data (-> dst data))
-            (copy-length 0))
-        (while (and (< copy-length 23)
-                    (nonzero? (-> src copy-length)))
-          (set! (-> dst-data copy-length) (-> src copy-length))
-          (+! copy-length 1))
-        (set! (-> dst-data copy-length) (the uint8 0)))))
+    (if (and record (nonzero? record))
+        (mp-player-copy-name! dst (the-as uint (-> record identity player-id)))
+        (clear dst)))
   dst)
 
 (defun mp-spectate-overlay-process

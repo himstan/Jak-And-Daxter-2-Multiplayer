@@ -4,26 +4,13 @@
 (defun mp-player-list-copy-name! ((dst string) (player-id uint))
   "Populate destination string with player display name and host/local tags."
   (when (and dst (nonzero? dst))
-    (clear dst)
-    (let ((record (mp-player-record-by-id player-id))
-          (is-local? (and *mp-player-controller*
+    (mp-player-copy-name! dst player-id)
+    (let ((is-local? (and *mp-player-controller*
                           (nonzero? *mp-player-controller*)
                           (= player-id (-> *mp-player-controller* local-player-id))))
           (is-host? (and *mp-player-controller*
                          (nonzero? *mp-player-controller*)
                          (= player-id (-> *mp-player-controller* host-player-id)))))
-      (if (and record
-               (nonzero? record)
-               (nonzero? (-> record identity name 0)))
-          (let ((src (-> record identity name))
-                (dst-data (-> dst data))
-                (copy-length 0))
-            (while (and (< copy-length 23)
-                        (nonzero? (-> src copy-length)))
-              (set! (-> dst-data copy-length) (-> src copy-length))
-              (+! copy-length 1))
-            (set! (-> dst-data copy-length) (the uint8 0)))
-          (format dst "PLAYER ~D" (+ player-id 1)))
       (cond
         ((and is-local? is-host?)
          (format dst " (YOU/HOST)"))
