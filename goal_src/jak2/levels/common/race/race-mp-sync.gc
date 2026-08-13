@@ -15,6 +15,8 @@
    (pending-progress-mask  uint32)
    (dnf-request-mask       uint32)
    (sequence               uint32)
+   (catchup-player-mask    uint32)
+   (last-host-config-sequence uint32)
    (manager-generation     uint32)
    (last-manager-generation uint32)
    (active-racer-count     int32)
@@ -92,6 +94,8 @@
       (set! (-> sync pending-progress-mask) (the uint 0))
       (set! (-> sync dnf-request-mask) (the uint 0))
       (set! (-> sync sequence) (the uint 0))
+      (set! (-> sync catchup-player-mask) (the uint 0))
+      (set! (-> sync last-host-config-sequence) (the uint 0))
       (set! (-> sync active-racer-count) 0)
       (set! (-> sync start-authorized?) (the uint 0))
       (set! (-> sync results-ready?) (the uint 0))
@@ -212,6 +216,18 @@
                       (mp-race-player-bit (the-as uint player-id))))))
     participant-mask))
 
+(defun mp-race-connected-remote-mask ()
+  (let ((connected-mask (the uint 0)))
+    (mp-for-each-player-record (player-id record)
+      (when (and (mp-race-record-connected? record)
+                 (= (-> record connection status)
+                    (mp-connection-status in-game))
+                 (mp-player-record-remote? *mp-player-controller* record))
+        (set! connected-mask
+              (logior connected-mask
+                      (mp-race-player-bit (the-as uint player-id))))))
+    connected-mask))
+
 (defun mp-race-human-capable? ((racer-info race-racer-info))
   (and racer-info
        (nonzero? racer-info)
@@ -293,6 +309,8 @@
           (mp-race-multiplayer-racer-count info open-mask))
     (set! (-> *mp-race-sync-state* manager-generation)
           *mp-race-generation-counter*)
+    (set! (-> *mp-race-sync-state* catchup-player-mask)
+          (mp-race-connected-remote-mask))
     (mp-race-enqueue-event!
       MP_RACE_ACTION_CONFIG
       (the uint MP_RACE_INVALID_INDEX)
@@ -355,6 +373,15 @@
   (and (mp-race-sync-active?)
        (logtest? (-> *mp-race-sync-state* retired-racer-mask)
                  (mp-race-racer-bit racer-index))))
+
+(defun mp-race-local-participant? ()
+  (let ((player-id (mp-local-player-id)))
+    (and (mp-race-sync-active?)
+         *mp-race-sync-state*
+         (nonzero? *mp-race-sync-state*)
+         (< player-id (the uint MP_MAX_PLAYERS))
+         (logtest? (-> *mp-race-sync-state* participant-mask)
+                   (mp-race-player-bit player-id)))))
 
 (defun mp-race-racer-local-player? ((racer racer-state))
   (when (and racer (nonzero? racer))
@@ -594,10 +621,13 @@
       (mp-race-current-clock)))
   (none))
 
-(defun mp-race-host-schedule-go! ()
+(defun mp-race-host-schedule-go! ((state race-state))
   (when (and (mp-session-host?)
+             state
+             (nonzero? state)
              (nonzero? (-> *mp-race-sync-state* start-authorized?))
-             (zero? (-> *mp-race-sync-state* start-time)))
+             (zero? (-> *mp-race-sync-state* start-time))
+             (mp-race-host-all-ready? state))
     (set! (-> *mp-race-sync-state* start-time)
           (+ (mp-race-current-clock)
              MP_RACE_COUNTDOWN_FRAMES
@@ -825,12 +855,162 @@
       (mp-race-current-clock)))
   #t)
 
+(defun mp-race-host-enqueue-config-snapshot! ()
+  (let ((participant-count
+          (mp-race-count-participants
+            (-> *mp-race-sync-state* participant-mask))))
+    (mp-race-enqueue-event!
+      MP_RACE_ACTION_CONFIG
+      (the uint MP_RACE_INVALID_INDEX)
+      MP_INVALID_PLAYER_ID
+      (-> *mp-race-sync-state* active-racer-count)
+      participant-count
+      (mp-race-current-clock)))
+  (none))
+
+(defun mp-race-host-enqueue-binding-snapshot! ()
+  (dotimes (racer-index (-> *mp-race-sync-state* active-racer-count))
+    (let ((player-id (mp-race-bound-player-id racer-index)))
+      (when (< player-id (the uint MP_MAX_PLAYERS))
+        (mp-race-enqueue-event!
+          MP_RACE_ACTION_BIND_COMMIT
+          (the-as uint racer-index)
+          player-id
+          0
+          0
+          (mp-race-current-clock)))))
+  (none))
+
+(defun mp-race-host-enqueue-participant-snapshot! ((state race-state))
+  (dotimes (player-index MP_MAX_PLAYERS)
+    (let* ((player-id (the-as uint player-index))
+           (player-bit (mp-race-player-bit player-id)))
+      (when (logtest? (-> *mp-race-sync-state* participant-mask)
+                      player-bit)
+        (let ((racer-index (mp-race-bound-racer-index player-id)))
+          (if (= (the-as uint
+                   (-> *mp-race-sync-state* player-status player-index))
+                 MP_RACE_STATUS_DNF)
+              (mp-race-enqueue-event!
+                MP_RACE_ACTION_DNF
+                (the-as uint racer-index)
+                player-id
+                (the-as int MP_RACE_STATUS_DNF)
+                0
+                (mp-race-current-clock))
+              (when (and (>= racer-index 0)
+                         (< racer-index (-> state racer-count)))
+                (mp-race-host-publish-progress! state racer-index)))))))
+  (none))
+
+(defun mp-race-host-enqueue-start-snapshot! ()
+  (when (nonzero? (-> *mp-race-sync-state* start-authorized?))
+    (let ((start-time (-> *mp-race-sync-state* start-time)))
+      (mp-race-enqueue-event!
+        MP_RACE_ACTION_START
+        (the uint MP_RACE_INVALID_INDEX)
+        MP_INVALID_PLAYER_ID
+        (if (nonzero? start-time) 1 0)
+        0
+        (if (nonzero? start-time)
+            start-time
+            (mp-race-current-clock)))))
+  (none))
+
+(defun mp-race-host-enqueue-results-snapshot! ()
+  (when (nonzero? (-> *mp-race-sync-state* results-ready?))
+    (dotimes (player-index MP_MAX_PLAYERS)
+      (let* ((player-id (the-as uint player-index))
+             (player-bit (mp-race-player-bit player-id)))
+        (when (logtest? (-> *mp-race-sync-state* participant-mask)
+                        player-bit)
+          (mp-race-enqueue-event!
+            MP_RACE_ACTION_RESULTS
+            (the-as uint (mp-race-bound-racer-index player-id))
+            player-id
+            (the-as int
+              (-> *mp-race-sync-state* player-status player-index))
+            (the-as int
+              (-> *mp-race-sync-state* result-place player-index))
+            (-> *mp-race-sync-state* result-finish-time player-index)))))
+    (mp-race-enqueue-event!
+      MP_RACE_ACTION_RESULTS
+      (the uint MP_RACE_INVALID_INDEX)
+      MP_INVALID_PLAYER_ID
+      (if (nonzero? (-> *mp-race-sync-state* overall-success?)) 1 0)
+      0
+      (mp-race-current-clock)))
+  (none))
+
+(defun mp-race-host-enqueue-decision-snapshot! ()
+  (let ((decision (-> *mp-race-sync-state* decision)))
+    (when (!= decision MP_RACE_DECISION_NONE)
+      (mp-race-enqueue-event!
+        MP_RACE_ACTION_DECISION
+        (the uint MP_RACE_INVALID_INDEX)
+        MP_INVALID_PLAYER_ID
+        (the-as int decision)
+        0
+        (mp-race-current-clock))))
+  (none))
+
+(defun mp-race-host-publish-snapshot! ((state race-state))
+  (when (and state (nonzero? state))
+    (mp-race-host-enqueue-config-snapshot!)
+    (mp-race-host-enqueue-binding-snapshot!)
+    (mp-race-host-enqueue-participant-snapshot! state)
+    (mp-race-host-enqueue-start-snapshot!)
+    (mp-race-host-enqueue-results-snapshot!)
+    (mp-race-host-enqueue-decision-snapshot!))
+  (none))
+
+(defun mp-race-host-refresh-roster! ((state race-state))
+  (when (and state
+             (nonzero? state)
+             (zero? (-> *mp-race-sync-state* start-time)))
+    (let* ((info (-> state info))
+           (current-mask (-> *mp-race-sync-state* participant-mask))
+           (candidate-mask (logior current-mask
+                                   (mp-race-build-participant-mask))))
+      (when (and info
+                 (nonzero? info)
+                 (!= candidate-mask current-mask))
+        (let* ((participant-count
+                 (mp-race-count-participants candidate-mask))
+               (open-mask
+                 (mp-race-select-open-racers info participant-count)))
+          (when (nonzero? open-mask)
+            (set! (-> *mp-race-sync-state* participant-mask) candidate-mask)
+            (set! (-> *mp-race-sync-state* open-racer-mask) open-mask)
+            (set! (-> *mp-race-sync-state* active-racer-count)
+                  (mp-race-multiplayer-racer-count info open-mask))
+            (mp-race-host-publish-snapshot! state)
+            (set! (-> *mp-race-sync-state* catchup-player-mask)
+                  (mp-race-connected-remote-mask)))))))
+  (none))
+
+(defun mp-race-host-replay-for-late-joins! ((state race-state))
+  (let ((connected-mask (mp-race-connected-remote-mask)))
+    (set! (-> *mp-race-sync-state* catchup-player-mask)
+          (logand (-> *mp-race-sync-state* catchup-player-mask)
+                  connected-mask))
+    (when (nonzero?
+            (logand connected-mask
+                    (lognot
+                      (-> *mp-race-sync-state* catchup-player-mask))))
+      (mp-race-host-publish-snapshot! state)
+      (set! (-> *mp-race-sync-state* catchup-player-mask)
+            connected-mask)))
+  (none))
+
 (defun mp-race-host-tick! ((state race-state))
   (when (and (mp-race-sync-active?)
              (mp-session-host?)
              (mp-race-world-ready?)
              state
              (nonzero? state))
+    (mp-race-host-refresh-roster! state)
+    (mp-race-host-replay-for-late-joins! state)
     (mp-race-host-update-disconnects! state)
     (mp-race-apply-bindings! state)
     (mp-race-host-observe-checkpoints! state)
@@ -919,21 +1099,39 @@
 (defun mp-race-receive-config! ((event mp-race-event))
   (when (or (not (mp-race-event-from-host? event))
             (mp-session-host?)
-            (not (mp-race-config-valid? event))
-            (<= (-> event generation)
-                (-> *mp-race-sync-state* last-manager-generation))
-            (<= (-> event generation)
-                (-> *mp-race-sync-state* generation)))
+            (not (mp-race-world-ready?))
+            (not (mp-race-config-valid? event)))
     (return #f))
-  (mp-race-reset-runtime!)
-  (set! (-> *mp-race-sync-state* generation) (-> event generation))
-  (set! (-> *mp-race-sync-state* race-id) (-> event race-id))
-  (set! (-> *mp-race-sync-state* participant-mask)
-        (-> event participant-mask))
-  (set! (-> *mp-race-sync-state* open-racer-mask)
-        (-> event open-racer-mask))
-  (set! (-> *mp-race-sync-state* active-racer-count)
-        (-> event value0))
+  (let ((current-generation (-> *mp-race-sync-state* generation)))
+    (cond
+      ((> (-> event generation) current-generation)
+       (when (<= (-> event generation)
+                 (-> *mp-race-sync-state* last-manager-generation))
+         (return #f))
+       (mp-race-reset-runtime!)
+       (set! (-> *mp-race-sync-state* generation) (-> event generation))
+       (set! (-> *mp-race-sync-state* race-id) (-> event race-id)))
+      ((or (!= (-> event generation) current-generation)
+           (!= (-> event race-id) (-> *mp-race-sync-state* race-id))
+           (<= (-> event sequence)
+               (-> *mp-race-sync-state* last-host-config-sequence))
+           (!= (logand (-> event participant-mask)
+                       (-> *mp-race-sync-state* participant-mask))
+               (-> *mp-race-sync-state* participant-mask))
+           (!= (logand (-> event open-racer-mask)
+                       (-> *mp-race-sync-state* open-racer-mask))
+               (-> *mp-race-sync-state* open-racer-mask))
+           (< (-> event value0)
+              (-> *mp-race-sync-state* active-racer-count)))
+       (return #f)))
+    (set! (-> *mp-race-sync-state* participant-mask)
+          (-> event participant-mask))
+    (set! (-> *mp-race-sync-state* open-racer-mask)
+          (-> event open-racer-mask))
+    (set! (-> *mp-race-sync-state* active-racer-count)
+          (-> event value0))
+    (set! (-> *mp-race-sync-state* last-host-config-sequence)
+          (-> event sequence)))
   #t)
 
 (defun mp-race-receive-bind! ((event mp-race-event))
