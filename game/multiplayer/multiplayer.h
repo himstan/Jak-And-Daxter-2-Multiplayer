@@ -28,6 +28,7 @@ void pc_multi_send_events(u32 event_ptr);
 void pc_multi_receive_events(u32 event_ptr);
 u64 pc_multi_get_ticks();
 int pc_multi_get_ping();
+int pc_multi_get_player_ping(u32 player_id);
 int pc_multi_get_packet_loss();
 int pc_multi_get_ping_valid();
 float pc_multi_get_packet_loss_percent();

@@ -1,0 +1,19 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(deftype mp-player-list-manager (structure)
+  ((layout             mp-overlay-layout :inline)
+   (overlay            (pointer mp-overlay-layout-process))
+   (initialized?       symbol)
+   (visible?           symbol)
+   )
+  )
+
+(define-perm *mp-player-list* mp-player-list-manager
+  (new 'static 'mp-player-list-manager))
+
+(define-extern mp-player-list-init! (function symbol))
+(define-extern mp-player-list-update! (function symbol))
+(define-extern mp-player-list-show! (function symbol))
+(define-extern mp-player-list-hide! (function symbol))
+(define-extern mp-player-list-visible? (function symbol))

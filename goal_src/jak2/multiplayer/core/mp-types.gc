@@ -955,12 +955,12 @@
   )
 
 
-
 ;; --- Extern Declarations ---
 
 (define-extern pc-multi-debug-stop-receive (function uint none))
 (define-extern pc-multi-get-ticks (function uint64))
 (define-extern pc-multi-get-ping (function uint))
+(define-extern pc-multi-get-player-ping (function uint int))
 (define-extern pc-multi-get-ping-valid (function int))
 (define-extern pc-multi-get-vehicle-sync-time (function uint uint64))
 (define-extern pc-multi-get-packet-loss (function uint))

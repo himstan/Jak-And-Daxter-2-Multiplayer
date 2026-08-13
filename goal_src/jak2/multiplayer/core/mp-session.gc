@@ -609,5 +609,6 @@
     (when (mp-gameplay-sync-ready?)
       (mp-sync-scene-tick)
       (mp-receive-tick))
+    (mp-player-list-update!)
     (mp-debug-draw-tick)
     (none)))

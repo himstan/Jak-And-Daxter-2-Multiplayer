@@ -1397,27 +1397,34 @@ u64 pc_multi_get_ticks() {
   return enet_time_get();
 }
 
-int pc_multi_get_ping() {
+int pc_multi_get_player_ping(u32 player_id) {
   auto& data = multiplayer_data();
   if (!data.host) {
     return 0;
   }
+  if (data.session_role == 0) {
+    if (player_id == data.local_player_id) {
+      return 0;
+    }
+    auto* session = multiplayer_host_peer_for_player_id(data, player_id);
+    if (session && session->peer && session->authenticated &&
+        session->peer->state == ENET_PEER_STATE_CONNECTED &&
+        multiplayer_enet_rtt_sample_valid(*session->peer)) {
+      return session->peer->roundTripTime;
+    }
+    return 0;
+  }
+
   if (data.server_peer && data.server_peer->state == ENET_PEER_STATE_CONNECTED &&
       multiplayer_enet_rtt_sample_valid(*data.server_peer)) {
     return data.server_peer->roundTripTime;
   }
+  return 0;
+}
 
-  uint64_t total = 0;
-  uint32_t count = 0;
-  for (size_t i = 0; i < data.host->peerCount; i++) {
-    if (multiplayer_peer_is_authenticated(data, &data.host->peers[i]) &&
-        data.host->peers[i].state == ENET_PEER_STATE_CONNECTED &&
-        multiplayer_enet_rtt_sample_valid(data.host->peers[i])) {
-      total += data.host->peers[i].roundTripTime;
-      count++;
-    }
-  }
-  return count > 0 ? (total / count) : 0;
+int pc_multi_get_ping() {
+  auto& data = multiplayer_data();
+  return pc_multi_get_player_ping(data.local_player_id);
 }
 
 int pc_multi_get_packet_loss() {
@@ -1742,6 +1749,7 @@ void init_multiplayer_pc_port() {
                                     (void*)pc_multi_debug_stop_receive);
   jak2::make_function_symbol_from_c("pc-multi-get-ticks", (void*)pc_multi_get_ticks);
   jak2::make_function_symbol_from_c("pc-multi-get-ping", (void*)pc_multi_get_ping);
+  jak2::make_function_symbol_from_c("pc-multi-get-player-ping", (void*)pc_multi_get_player_ping);
   jak2::make_function_symbol_from_c("pc-multi-get-packet-loss", (void*)pc_multi_get_packet_loss);
   jak2::make_function_symbol_from_c("pc-multi-get-ping-valid", (void*)pc_multi_get_ping_valid);
   jak2::make_function_symbol_from_c("pc-multi-get-packet-loss-percent",

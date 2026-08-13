@@ -1,0 +1,215 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defun mp-player-list-copy-name! ((dst string) (player-id uint))
+  "Populate destination string with player display name and host/local tags."
+  (when (and dst (nonzero? dst))
+    (clear dst)
+    (let ((record (mp-player-record-by-id player-id))
+          (is-local? (and *mp-player-controller*
+                          (nonzero? *mp-player-controller*)
+                          (= player-id (-> *mp-player-controller* local-player-id))))
+          (is-host? (and *mp-player-controller*
+                         (nonzero? *mp-player-controller*)
+                         (= player-id (-> *mp-player-controller* host-player-id)))))
+      (if (and record
+               (nonzero? record)
+               (nonzero? (-> record identity name 0)))
+          (let ((src (-> record identity name))
+                (dst-data (-> dst data))
+                (copy-length 0))
+            (while (and (< copy-length 23)
+                        (nonzero? (-> src copy-length)))
+              (set! (-> dst-data copy-length) (-> src copy-length))
+              (+! copy-length 1))
+            (set! (-> dst-data copy-length) (the uint8 0)))
+          (format dst "PLAYER ~D" (+ player-id 1)))
+      (cond
+        ((and is-local? is-host?)
+         (format dst " (YOU/HOST)"))
+        (is-local?
+         (format dst " (YOU)"))
+        (is-host?
+         (format dst " (HOST)")))))
+  dst)
+
+(defun mp-player-list-string-resolver!
+       ((owner process) (binding-index uint) (destination string))
+  "String resolver callback for overlay layout player names."
+  (when (and destination (nonzero? destination))
+    (clear destination)
+    (when (< binding-index (the uint MP_MAX_PLAYERS))
+      (mp-player-list-copy-name! destination binding-index)
+      (return (> (length destination) 0))))
+  #f)
+
+(defun mp-player-list-build-layout! ((layout mp-overlay-layout))
+  "Configure the 2-column player list and latency overlay layout."
+  (when (and layout (nonzero? layout))
+    (mp-overlay-layout-clear! layout)
+    (let ((box-height (+ 50.0 (* 22.0 (the float MP_MAX_PLAYERS))))
+          (center-flags (the-as uint32 (font-flags shadow kerning middle large)))
+          (left-flags (the-as uint32 (font-flags shadow kerning large)))
+          (right-flags (the-as uint32 (font-flags shadow kerning right large)))
+          (widget (new 'stack 'mp-overlay-widget)))
+      (set! (-> layout bounds-x) 56)
+      (set! (-> layout bounds-y) 50)
+      (set! (-> layout bounds-width) 400.0)
+      (set! (-> layout bounds-height) box-height)
+
+      ;; Title widget
+      (when (and widget (nonzero? widget))
+        (mp-overlay-widget-default! widget)
+        (set! (-> widget text) (text-id mp-player-list-title))
+        (set! (-> widget horizontal-anchor) (mp-overlay-horizontal-anchor center))
+        (set! (-> widget vertical-anchor) (mp-overlay-vertical-anchor top))
+        (set! (-> widget offset-y) 6)
+        (set! (-> widget width) 400.0)
+        (set! (-> widget height) 20.0)
+        (set! (-> widget scale) 0.75)
+        (set! (-> widget color) (the-as uint32 (font-color yellow)))
+        (set! (-> widget font-flags) center-flags)
+        (mp-overlay-layout-add-widget! layout widget)
+
+        ;; Header: Column 1 - PLAYER
+        (mp-overlay-widget-default! widget)
+        (set! (-> widget text) (text-id mp-player-list-header-player))
+        (set! (-> widget horizontal-anchor) (mp-overlay-horizontal-anchor left))
+        (set! (-> widget vertical-anchor) (mp-overlay-vertical-anchor top))
+        (set! (-> widget offset-x) 20)
+        (set! (-> widget offset-y) 28)
+        (set! (-> widget width) 240.0)
+        (set! (-> widget height) 16.0)
+        (set! (-> widget scale) 0.60)
+        (set! (-> widget color) (the-as uint32 (font-color flat-yellow)))
+        (set! (-> widget font-flags) left-flags)
+        (mp-overlay-layout-add-widget! layout widget)
+
+        ;; Header: Column 2 - PING
+        (mp-overlay-widget-default! widget)
+        (set! (-> widget text) (text-id mp-player-list-header-ping))
+        (set! (-> widget horizontal-anchor) (mp-overlay-horizontal-anchor right))
+        (set! (-> widget vertical-anchor) (mp-overlay-vertical-anchor top))
+        (set! (-> widget offset-x) -20)
+        (set! (-> widget offset-y) 28)
+        (set! (-> widget width) 120.0)
+        (set! (-> widget height) 16.0)
+        (set! (-> widget scale) 0.60)
+        (set! (-> widget color) (the-as uint32 (font-color flat-yellow)))
+        (set! (-> widget font-flags) right-flags)
+        (mp-overlay-layout-add-widget! layout widget)
+
+        ;; Per-player rows (Name & Ping)
+        (dotimes (i MP_MAX_PLAYERS)
+          (let ((row-y (+ 48 (* i 20)))
+                (condition-mask (the uint32 (ash 1 i))))
+            ;; Column 1: Player Name
+            (mp-overlay-widget-default! widget)
+            (set! (-> widget text) (text-id mp-player-list-name-format))
+            (set! (-> widget parameter-kind) (mp-overlay-parameter-kind string))
+            (set! (-> widget parameter-index) (the uint32 i))
+            (set! (-> widget required-conditions) condition-mask)
+            (set! (-> widget horizontal-anchor) (mp-overlay-horizontal-anchor left))
+            (set! (-> widget vertical-anchor) (mp-overlay-vertical-anchor top))
+            (set! (-> widget offset-x) 20)
+            (set! (-> widget offset-y) row-y)
+            (set! (-> widget width) 240.0)
+            (set! (-> widget height) 16.0)
+            (set! (-> widget scale) 0.62)
+            (set! (-> widget color) (the-as uint32 (mp-player-font-color-by-id i)))
+            (set! (-> widget font-flags) left-flags)
+            (mp-overlay-layout-add-widget! layout widget)
+
+            ;; Column 2: Ping
+            (mp-overlay-widget-default! widget)
+            (set! (-> widget text) (text-id mp-player-list-ping-format))
+            (set! (-> widget parameter-kind) (mp-overlay-parameter-kind integer))
+            (set! (-> widget parameter-index) (the uint32 i))
+            (set! (-> widget required-conditions) condition-mask)
+            (set! (-> widget horizontal-anchor) (mp-overlay-horizontal-anchor right))
+            (set! (-> widget vertical-anchor) (mp-overlay-vertical-anchor top))
+            (set! (-> widget offset-x) -20)
+            (set! (-> widget offset-y) row-y)
+            (set! (-> widget width) 120.0)
+            (set! (-> widget height) 16.0)
+            (set! (-> widget scale) 0.62)
+            (set! (-> widget color) (the-as uint32 (font-color default)))
+            (set! (-> widget font-flags) right-flags)
+            (mp-overlay-layout-add-widget! layout widget))))))
+  layout)
+
+(defun mp-player-list-visible? ()
+  (the symbol (and *mp-player-list*
+                   (nonzero? *mp-player-list*)
+                   (-> *mp-player-list* visible?))))
+
+(defun mp-player-list-show! ()
+  (when (and *mp-player-list*
+             (nonzero? *mp-player-list*)
+             *target-pool*
+             (nonzero? *target-pool*))
+    (when (not (-> *mp-player-list* visible?))
+      (mp-player-list-build-layout! (-> *mp-player-list* layout))
+      (let ((overlay (mp-overlay-layout-start!
+                       (the-as process *target-pool*)
+                       (-> *mp-player-list* layout)
+                       mp-player-list-string-resolver!)))
+        (when (and overlay (nonzero? overlay))
+          (set! (-> *mp-player-list* overlay) overlay)
+          (set! (-> *mp-player-list* visible?) #t)
+          (return #t)))))
+  #f)
+
+(defun mp-player-list-hide! ()
+  (when (and *mp-player-list*
+             (nonzero? *mp-player-list*)
+             (-> *mp-player-list* visible?))
+    (when (and (-> *mp-player-list* overlay)
+               (nonzero? (-> *mp-player-list* overlay))
+               *target-pool*
+               (nonzero? *target-pool*))
+      (mp-overlay-layout-stop! (-> *mp-player-list* overlay) (the-as process *target-pool*)))
+    (set! (-> *mp-player-list* overlay) (the-as (pointer mp-overlay-layout-process) #f))
+    (set! (-> *mp-player-list* visible?) #f)
+    (return #t))
+  #f)
+
+(defun mp-player-list-update! ()
+  "Per-frame tick for the popup player list. Displays when SELECT is held."
+  (let ((select-held? (and *cpad-list*
+                           (nonzero? *cpad-list*)
+                           (cpad-hold? 0 select)
+                           (not (cpad-hold? 0 l3)))))
+    (if select-held?
+        (begin
+          (when (not (mp-player-list-visible?))
+            (mp-player-list-show!))
+          (when (and (mp-player-list-visible?)
+                     (-> *mp-player-list* overlay)
+                     (nonzero? (-> *mp-player-list* overlay))
+                     *target-pool*
+                     (nonzero? *target-pool*))
+            (let ((conditions (the uint32 0))
+                  (local-id (if (and *mp-player-controller* (nonzero? *mp-player-controller*))
+                                (-> *mp-player-controller* local-player-id)
+                                (the uint 0))))
+              (dotimes (i MP_MAX_PLAYERS)
+                (let ((record (mp-player-record-by-id (the uint i))))
+                  (when (or (= (the uint i) local-id)
+                            (and record
+                                 (nonzero? record)
+                                 (nonzero? (-> record identity identity-ready?))))
+                    (logior! conditions (ash 1 i))
+                    (let ((ping (pc-multi-get-player-ping (the uint i))))
+                      (mp-overlay-layout-set-integer!
+                        (-> *mp-player-list* overlay)
+                        (the-as process *target-pool*)
+                        (the uint i)
+                        ping)))))
+              (mp-overlay-layout-set-conditions!
+                (-> *mp-player-list* overlay)
+                (the-as process *target-pool*)
+                conditions))))
+        (when (mp-player-list-visible?)
+          (mp-player-list-hide!))))
+  #t)

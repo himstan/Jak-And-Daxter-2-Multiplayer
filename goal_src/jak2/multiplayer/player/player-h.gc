@@ -925,4 +925,40 @@
       (the-as uint
           (logior #x60000000 player-bits *mp-battle-spawn-counter*))))))
 
+(defun mp-player-marker-color-by-id ((player-id int) (fallback-color rgba))
+  "Resolve a player marker RGBA color from its zero-based player slot."
+  (cond
+    ((= player-id 0) (static-rgba 0 229 255 128))
+    ((= player-id 1) (static-rgba 255 140 0 128))
+    ((= player-id 2) (static-rgba 118 255 3 128))
+    ((= player-id 3) (static-rgba 255 46 209 128))
+    ((= player-id 4) (static-rgba 54 92 255 128))
+    ((= player-id 5) (static-rgba 255 230 0 128))
+    ((= player-id 6) (static-rgba 155 77 255 128))
+    ((= player-id 7) (static-rgba 255 92 138 128))
+    (else fallback-color)))
+
+(defun mp-player-font-color-by-id ((player-id int))
+  "Resolve the font color corresponding to the player's marker color."
+  (case player-id
+    ((0) (font-color cyan))
+    ((1) (font-color orange))
+    ((2) (font-color green))
+    ((3) (font-color pink))
+    ((4) (font-color blue))
+    ((5) (font-color yellow))
+    ((6) (font-color pink))
+    ((7) (font-color red))
+    (else (font-color default))))
+
+(defun mp-player-marker-color ((marker-key object) (fallback-color rgba))
+  (mp-player-marker-color-by-id
+    (- (the-as int marker-key) MP_REMOTE_PLAYER_MARKER_KEY_BASE)
+    fallback-color))
+
+(defun mp-local-player-marker-color ()
+  (mp-player-marker-color-by-id
+    (the-as int (mp-local-player-id))
+    (static-rgba 0 229 255 128)))
+
 (mp-player-controller-reset! *mp-player-controller*)
