@@ -198,20 +198,29 @@
   (none))
 
 (defun mp-event-handler-attack-ped ((evt mp-actor-attack-event))
-  "Host receives hit request from Client for a pedestrian."
-  (let ((net-id (-> evt net-id)))
-    (let ((proc (mp-pedestrian-find-by-net-id net-id)))
-      (if (and proc (nonzero? proc))
-        (begin
-          (debug-log *mp-debug-log?* "[MP-Event-Handlers] Applying authoritative pedestrian hit from client context nid=~D attack-id=~D~%" net-id (-> evt attack-id))
-          (mp-pedestrian-apply-remote-attack! evt)
+  "Apply authority damage or replay its presentation on current followers."
+  (when (and evt
+             (nonzero? evt))
+    (let ((target-authority (-> evt traffic-authority-player-id))
+          (local-player-id (mp-local-player-id)))
+      (when (< target-authority (the uint MP_MAX_PLAYERS))
+        (cond
+          ((and (= target-authority local-player-id)
+                (mp-is-traffic-authoritative?))
+           (mp-pedestrian-apply-remote-attack! evt)
+           )
+          ((and (= target-authority *mp-traffic-selected-authority-id*)
+                (!= target-authority local-player-id)
+                (!= (-> evt source-player-id) local-player-id)
+                (not (mp-is-traffic-authoritative?)))
+           (mp-pedestrian-replay-remote-attack! evt)
+          )
         )
-        (debug-log *mp-debug-log?* "[MP-Event-Handlers] ERROR: Could not find pedestrian for hit! nid=~D~%" net-id)
       )
     )
   )
   (none)
-)
+  )
 
 (defun mp-handle-remote-scene-hacks ((scene-name string))
   (case (string->symbol scene-name)

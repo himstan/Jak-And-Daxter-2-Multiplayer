@@ -195,6 +195,9 @@
                                                     (evt mp-actor-attack-event)
                                                     (label symbol))
   "Apply an authoritative actor hit without duplicating pedestrian/enemy hit logic."
+  (when (or (not evt) (not (nonzero? evt)))
+    (return #f)
+    )
   (when (or (not e-proc) (not (nonzero? e-proc)))
     (debug-log *mp-debug-log?* "[MP-ActorHit] Remote ~A hit blocked: missing proc nid=~D attack-id=~D~%"
             label
@@ -224,7 +227,9 @@
     (return #f)
     )
   (let ((atk (new 'stack-no-clear 'attack-info))
-        (old-hp (-> e-proc hit-points)))
+        (old-hp (-> e-proc hit-points))
+        (old-remote-context *mp-processing-remote-event*)
+        (old-attack-event *mp-actor-remote-attack-event*))
     (mp-actor-fill-attack-info-from-event! atk evt)
     (set! (-> atk damage) (the float (max 0 (- old-hp (-> evt new-hp)))))
     (set! *mp-actor-remote-attack-event* evt)
@@ -261,8 +266,8 @@
               old-hp
               (-> e-proc hit-points))
       )
-    (set! *mp-processing-remote-event* #f)
-    (set! *mp-actor-remote-attack-event* (the-as mp-actor-attack-event #f))
+    (set! *mp-processing-remote-event* old-remote-context)
+    (set! *mp-actor-remote-attack-event* old-attack-event)
     )
   #t
   )
@@ -417,6 +422,10 @@
     (set! (-> details penetrate) (the-as uint penetrate))
     (set! event (mp-event-build-actor-attack! event event-type details))
     (when event
+      (when (= event-type MP_EVENT_ATTACK_PED)
+        (set! (-> event traffic-authority-player-id)
+              (the-as uint32 *mp-traffic-selected-authority-id*))
+        (set! (-> event payload-size) (the uint 76)))
       (mp-actor-capture-source-pos! event e-proc attacker info)
       (mp-actor-capture-attack-dir! event e-proc info)
       (debug-log *mp-debug-log?*

@@ -648,29 +648,89 @@
   )
   )
 
+(defconstant MP_TRAFFIC_NET_ID_KIND_PEDESTRIAN (the uint 0))
+(defconstant MP_TRAFFIC_NET_ID_KIND_VEHICLE (the uint 1))
+
+(defun mp-traffic-authority-net-id-active? ()
+  "True when local traffic belongs to an elected in-game authority root."
+  (and (= (pc-multi-get-status) (mp-connection-status in-game))
+       (mp-is-traffic-authoritative?))
+  )
+
+(defun mp-traffic-allocate-net-id! ((entity-kind uint))
+  "Allocate the next traffic NetID in the elected root's immutable namespace."
+  (let ((sequence (the uint 0))
+        (class-base (the uint 0)))
+    (cond
+      ((= entity-kind MP_TRAFFIC_NET_ID_KIND_VEHICLE)
+       (set! sequence *mp-vehicle-net-id-counter*)
+       (set! class-base MP_TRAFFIC_VEHICLE_NET_ID_BASE)
+       (+! *mp-vehicle-net-id-counter* 1)
+       (when (>= *mp-vehicle-net-id-counter* (the uint 65535))
+         (set! *mp-vehicle-net-id-counter* (the uint 32768))))
+      ((= entity-kind MP_TRAFFIC_NET_ID_KIND_PEDESTRIAN)
+       (set! sequence *mp-pedestrian-net-id-counter*)
+       (set! class-base MP_TRAFFIC_PEDESTRIAN_NET_ID_BASE)
+       (+! *mp-pedestrian-net-id-counter* 1)
+       (when (>= *mp-pedestrian-net-id-counter* (the uint 65535))
+         (set! *mp-pedestrian-net-id-counter* (the uint 1))))
+      )
+    (mp-traffic-build-net-id class-base (mp-local-player-id) sequence)
+    )
+  )
+
+(defun mp-traffic-assign-spawn-net-id!
+       ((tracker traffic-tracker) (params traffic-object-spawn-params))
+  "Assign a NetID to traffic activated by the elected local root."
+  (when (and tracker
+             (nonzero? tracker)
+             params
+             (nonzero? params)
+             (mp-traffic-authority-net-id-active?)
+             (zero? (-> params net-id)))
+    (let* ((entity-kind
+             (if (= (-> tracker id) 0)
+                 MP_TRAFFIC_NET_ID_KIND_VEHICLE
+                 MP_TRAFFIC_NET_ID_KIND_PEDESTRIAN))
+           (net-id (mp-traffic-allocate-net-id! entity-kind)))
+      (when (nonzero? net-id)
+        (set! (-> params net-id) net-id)
+        (debug-log *mp-debug-log?*
+          "[Traffic-Engine] Authority assigned nid=~D to traffic-type=~D~%"
+          net-id
+          (-> params object-type))))
+    )
+  (none)
+  )
+
+(defun mp-traffic-ensure-process-net-id! ((proc process))
+  "Backfill NetIDs on traffic that was already active before local root election."
+  (when (and proc
+             (nonzero? proc)
+             (mp-traffic-authority-net-id-active?))
+    (cond
+      ((type? proc citizen)
+       (let ((ped-proc (the-as citizen proc)))
+         (when (zero? (-> ped-proc net-id))
+           (set! (-> ped-proc net-id)
+                 (mp-traffic-allocate-net-id!
+                   MP_TRAFFIC_NET_ID_KIND_PEDESTRIAN)))))
+      ((type? proc vehicle)
+       (let ((vehicle-proc (the-as vehicle proc)))
+         (when (zero? (-> vehicle-proc net-id))
+           (set! (-> vehicle-proc net-id)
+                 (mp-traffic-allocate-net-id!
+                   MP_TRAFFIC_NET_ID_KIND_VEHICLE))))))
+    )
+  (none)
+  )
+
 (defmethod activate-from-params ((this traffic-tracker) (arg0 traffic-object-spawn-params))
   "Get a reserved process, and activate with the given params."
   (let ((gp-0 (-> arg0 object-type)))
     (set! (-> arg0 proc) #f)
     (set! (-> arg0 net-id) (the uint 0))
-
-    ;; MULTIPLAYER: Assign unique NetID if we are the Host AND one isn't already provided
-    (when (mp-session-host?)
-      (if (= (-> this id) 0) ;; Vehicle (Tracker ID 0)
-          (begin
-            (set! (-> arg0 net-id) *mp-vehicle-net-id-counter*)
-            (debug-log *mp-debug-log?* "[Traffic-Engine] Assigned nid=~D to veh-type=~D~%" *mp-vehicle-net-id-counter* (-> arg0 object-type))
-            (+! *mp-vehicle-net-id-counter* 1)
-            (if (>= *mp-vehicle-net-id-counter* (the uint16 65535)) (set! *mp-vehicle-net-id-counter* (the uint16 32768)))
-            )
-          (begin ;; Pedestrian (Tracker ID 1)
-            (set! (-> arg0 net-id) *mp-pedestrian-net-id-counter*)
-            (debug-log *mp-debug-log?* "[Traffic-Engine] Assigned nid=~D to ped-type=~D~%" *mp-pedestrian-net-id-counter* (-> arg0 object-type))
-            (+! *mp-pedestrian-net-id-counter* 1)
-            (if (>= *mp-pedestrian-net-id-counter* (the uint16 65535)) (set! *mp-pedestrian-net-id-counter* (the uint16 1)))
-            )
-          )
-      )
+    (mp-traffic-assign-spawn-net-id! this arg0)
 
     (let ((v1-2 (-> this traffic object-type-info-array gp-0)))
       (when (and (> (-> v1-2 inactive-count) 0) (> (-> v1-2 reserve-count) 0))
@@ -771,24 +831,8 @@
   "Activate, using the handle in the params."
   (let ((gp-0 (-> arg0 object-type)))
     (set! (-> arg0 proc) #f)
-    (set! (-> arg0 net-id) (the uint 0)) 
-    ;; MULTIPLAYER: Assign unique NetID if we are the Host AND one isn't already provided
-    (when (mp-session-host?)
-      (if (= (-> this id) 0) ;; Vehicle (Tracker ID 0)
-          (begin
-            (set! (-> arg0 net-id) *mp-vehicle-net-id-counter*)
-            (debug-log *mp-debug-log?* "[Traffic-Engine] Assigned nid=~D to veh-type=~D~%" *mp-vehicle-net-id-counter* (-> arg0 object-type))
-            (+! *mp-vehicle-net-id-counter* 1)
-            (if (>= *mp-vehicle-net-id-counter* (the uint16 65535)) (set! *mp-vehicle-net-id-counter* (the uint16 32768)))
-            )
-          (begin ;; Pedestrian (Tracker ID 1)
-            (set! (-> arg0 net-id) *mp-pedestrian-net-id-counter*)
-            (debug-log *mp-debug-log?* "[Traffic-Engine] Assigned nid=~D to ped-type=~D~%" *mp-pedestrian-net-id-counter* (-> arg0 object-type))
-            (+! *mp-pedestrian-net-id-counter* 1)
-            (if (>= *mp-pedestrian-net-id-counter* (the uint16 65535)) (set! *mp-pedestrian-net-id-counter* (the uint16 1)))
-            )
-          )
-      )
+    (set! (-> arg0 net-id) (the uint 0))
+    (mp-traffic-assign-spawn-net-id! this arg0)
 
     (when (> (-> this traffic object-type-info-array gp-0 inactive-count) 0)
       (let* ((sv-16 (get-from-inactive-by-handle this gp-0 (-> arg0 handle)))

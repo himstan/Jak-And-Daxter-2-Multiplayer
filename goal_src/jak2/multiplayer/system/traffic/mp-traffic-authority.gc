@@ -1,250 +1,232 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(deftype mp-traffic-authority-rule (structure)
-  ((start-distance      float)
-   (end-distance        float)
-   (start-bounded?      symbol)
-   (end-bounded?        symbol)
-   (start-inclusive?    symbol)
-   (end-inclusive?      symbol)
-   (action               symbol)
-   )
+(defconstant MP_TRAFFIC_AUTHORITY_ACQUIRE_DISTANCE (meters 250.0))
+(defconstant MP_TRAFFIC_AUTHORITY_RETAIN_DISTANCE (meters 310.0))
+
+(defun mp-traffic-authority-for-player ((authority-map uint) (player-id uint))
+  "Read one compact source ID from a locally calculated authority map."
+  (if (< player-id (the uint MP_MAX_PLAYERS))
+      (let ((compact-source
+              (the-as uint (logand (shr authority-map (* player-id 8)) #xff))))
+        (if (= compact-source #xff)
+            MP_INVALID_PLAYER_ID
+            compact-source))
+      MP_INVALID_PLAYER_ID)
   )
 
-(defconstant MP_TRAFFIC_HOST_SYNC_DISTANCE (meters 250.0))
-(defconstant MP_TRAFFIC_CLIENT_SYNC_DISTANCE (meters 260.0))
-(defconstant MP_TRAFFIC_CLIENT_LOCAL_CLEAR_DISTANCE (meters 270.0))
-(defconstant MP_TRAFFIC_CLIENT_DRAIN_ENTER_DISTANCE (meters 300.0))
-(defconstant MP_TRAFFIC_CLIENT_DRAIN_EXIT_DISTANCE (meters 310.0))
-
-(define *mp-traffic-client-sync-enter-rule*
-  (new 'static 'mp-traffic-authority-rule
-       :start-distance 0.0
-       :end-distance MP_TRAFFIC_CLIENT_SYNC_DISTANCE
-       :start-bounded? #f
-       :end-bounded? #t
-       :start-inclusive? #t
-       :end-inclusive? #f
-       :action 'client-sync-enter))
-
-(define *mp-traffic-client-sync-exit-rule*
-  (new 'static 'mp-traffic-authority-rule
-       :start-distance MP_TRAFFIC_CLIENT_SYNC_DISTANCE
-       :end-distance 0.0
-       :start-bounded? #t
-       :end-bounded? #f
-       :start-inclusive? #f
-       :end-inclusive? #f
-       :action 'client-sync-exit))
-
-(define *mp-traffic-client-local-clear-rule*
-  (new 'static 'mp-traffic-authority-rule
-       :start-distance 0.0
-       :end-distance MP_TRAFFIC_CLIENT_LOCAL_CLEAR_DISTANCE
-       :start-bounded? #f
-       :end-bounded? #t
-       :start-inclusive? #t
-       :end-inclusive? #f
-       :action 'client-local-clear))
-
-(define *mp-traffic-client-drain-enter-rule*
-  (new 'static 'mp-traffic-authority-rule
-       :start-distance 0.0
-       :end-distance MP_TRAFFIC_CLIENT_DRAIN_ENTER_DISTANCE
-       :start-bounded? #f
-       :end-bounded? #t
-       :start-inclusive? #t
-       :end-inclusive? #f
-       :action 'client-drain-enter))
-
-(define *mp-traffic-client-drain-exit-rule*
-  (new 'static 'mp-traffic-authority-rule
-       :start-distance MP_TRAFFIC_CLIENT_DRAIN_EXIT_DISTANCE
-       :end-distance 0.0
-       :start-bounded? #t
-       :end-bounded? #f
-       :start-inclusive? #f
-       :end-inclusive? #f
-       :action 'client-drain-exit))
-
-(define *mp-traffic-host-sync-enter-rule*
-  (new 'static 'mp-traffic-authority-rule
-       :start-distance 0.0
-       :end-distance MP_TRAFFIC_HOST_SYNC_DISTANCE
-       :start-bounded? #f
-       :end-bounded? #t
-       :start-inclusive? #t
-       :end-inclusive? #f
-       :action 'host-sync-enter))
-
-(define *mp-traffic-host-sync-exit-rule*
-  (new 'static 'mp-traffic-authority-rule
-       :start-distance MP_TRAFFIC_HOST_SYNC_DISTANCE
-       :end-distance 0.0
-       :start-bounded? #t
-       :end-bounded? #f
-       :start-inclusive? #f
-       :end-inclusive? #f
-       :action 'host-sync-exit))
-
-(defun mp-traffic-authority-rule-active? ((rule mp-traffic-authority-rule) (dist float))
-  "Return whether a traffic authority rule contains the current distance."
-  (when (and rule (nonzero? rule))
-    (let ((after-start? (if (-> rule start-bounded?)
-                           (if (-> rule start-inclusive?)
-                               (>= dist (-> rule start-distance))
-                               (> dist (-> rule start-distance)))
-                           #t))
-          (before-end? (if (-> rule end-bounded?)
-                          (if (-> rule end-inclusive?)
-                              (<= dist (-> rule end-distance))
-                              (< dist (-> rule end-distance)))
-                          #t)))
-      (and after-start? before-end?)
-      )
-    )
+(defun mp-traffic-set-authority-for-player
+       ((authority-map uint) (player-id uint) (source-player-id uint))
+  "Return an authority map with one compact source ID replaced."
+  (when (>= player-id (the uint MP_MAX_PLAYERS))
+    (return authority-map))
+  (let ((shift (* player-id 8))
+        (compact-source (logand source-player-id #xff)))
+    (the-as uint
+      (logior
+        (logand authority-map (lognot (shl #xff shift)))
+        (shl compact-source shift))))
   )
 
-(defun mp-traffic-apply-authority-rule! ((rule mp-traffic-authority-rule))
-  "Apply the action described by a matching traffic authority rule."
-  (when (and rule (nonzero? rule))
-    (case (-> rule action)
-      (('client-sync-enter)
-       (set! *mp-traffic-sync-active* #t))
-      (('client-sync-exit)
-       (set! *mp-traffic-sync-active* #f)
-       (mp-traffic-cleanup-after-sync-exit!))
-      (('client-local-clear)
-       (mp-traffic-force-clear-local-vehicles!))
-      (('client-drain-enter)
-       (set! *mp-traffic-drain-active* #t)
-       (set! *mp-traffic-suppressed* #t))
-      (('client-drain-exit)
-       (set! *mp-traffic-drain-active* #f)
-       (set! *mp-traffic-suppressed* #f))
-      (('host-sync-enter)
-       (set! *mp-traffic-sync-active* #t))
-      (('host-sync-exit)
-       (set! *mp-traffic-sync-active* #f))
-      )
-    )
-  (none)
+(defun mp-traffic-player-eligible? ((record mp-player-record))
+  "True when a synchronized player can participate in traffic election."
+  (when (or (not record) (zero? record))
+    (return #f))
+  (let ((player-id (-> record identity player-id))
+        (position (mp-player-record-position record))
+        (primary-level-id (mp-player-primary-level-id record)))
+    (and (< player-id (the uint MP_MAX_PLAYERS))
+         (nonzero? (-> record identity identity-ready?))
+         (nonzero? (-> record identity joined?))
+         (= (-> record identity spectator-only?) 0)
+         (or (= player-id (mp-local-player-id))
+             (= (-> record connection status) (mp-connection-status in-game)))
+         (not (mp-player-record-dead-or-dying? record))
+         (or (!= player-id (mp-local-player-id))
+             (not (mp-spectate-active?)))
+         (nonzero? primary-level-id)
+         position
+         (nonzero? position)))
   )
 
-(defun mp-traffic-evaluate-authority-rule! ((rule mp-traffic-authority-rule) (dist float))
-  "Apply a traffic authority rule when its distance range matches."
-  (when (mp-traffic-authority-rule-active? rule dist)
-    (mp-traffic-apply-authority-rule! rule)
-    )
-  (none)
+(defun mp-traffic-records-within?
+       ((record mp-player-record) (root-record mp-player-record) (radius float))
+  "True when two eligible players share a primary level and are within radius."
+  (when (or (not (mp-traffic-player-eligible? record))
+            (not (mp-traffic-player-eligible? root-record)))
+    (return #f))
+  (let ((record-level (mp-player-primary-level-id record))
+        (root-level (mp-player-primary-level-id root-record))
+        (record-pos (mp-player-record-position record))
+        (root-pos (mp-player-record-position root-record)))
+    (and (nonzero? record-level)
+         (= record-level root-level)
+         record-pos
+         (nonzero? record-pos)
+         root-pos
+         (nonzero? root-pos)
+         (<= (vector-vector-distance record-pos root-pos) radius)))
   )
 
-(defun mp-traffic-local-interest-pos ()
-  "Return the local position traffic authority should reason about."
+(defun mp-traffic-find-acquire-root
+       ((player-id uint) (record mp-player-record) (root-mask uint))
+  "Find the highest-ranked established root inside the acquisition radius."
+  (dotimes (root-id player-id)
+    (when (logtest? root-mask (ash 1 root-id))
+      (let ((root-record (mp-player-record-by-id (the-as uint root-id))))
+        (when (and (mp-traffic-records-within?
+                     record root-record MP_TRAFFIC_AUTHORITY_ACQUIRE_DISTANCE)
+                   (< (vector-vector-distance
+                        (mp-player-record-position record)
+                        (mp-player-record-position root-record))
+                      MP_TRAFFIC_AUTHORITY_ACQUIRE_DISTANCE))
+          (return (the-as uint root-id))))))
+  MP_INVALID_PLAYER_ID
+  )
+
+(defun mp-traffic-retained-root
+       ((player-id uint)
+        (record mp-player-record)
+        (previous-map uint)
+        (root-mask uint))
+  "Retain the prior direct root while it remains established within 310 meters."
+  (let ((previous-source (mp-traffic-authority-for-player previous-map player-id)))
+    (when (and (< previous-source player-id)
+               (logtest? root-mask (ash 1 previous-source)))
+      (let ((root-record (mp-player-record-by-id previous-source)))
+        (when (mp-traffic-records-within?
+                record root-record MP_TRAFFIC_AUTHORITY_RETAIN_DISTANCE)
+          (return previous-source)))))
+  MP_INVALID_PLAYER_ID
+  )
+
+(defun mp-traffic-build-authority-map ((previous-map uint))
+  "Build direct ranked bubbles in ascending canonical player-ID order."
+  (let ((authority-map (the uint #xffffffff))
+        (root-mask (the uint 0)))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (mp-traffic-player-eligible? record)
+          (let ((source-player-id
+                  (mp-traffic-find-acquire-root
+                    (the-as uint player-id) record root-mask)))
+            (when (= source-player-id MP_INVALID_PLAYER_ID)
+              (set! source-player-id
+                    (mp-traffic-retained-root
+                      (the-as uint player-id) record previous-map root-mask)))
+            (when (= source-player-id MP_INVALID_PLAYER_ID)
+              (set! source-player-id (the-as uint player-id))
+              (logior! root-mask (ash 1 player-id)))
+            (set! authority-map
+                  (mp-traffic-set-authority-for-player
+                    authority-map (the-as uint player-id) source-player-id))))))
+    authority-map)
+  )
+
+(defun mp-traffic-interest-player-id ()
+  "Resolve the local player whose traffic bubble is currently being viewed."
   (when (mp-spectate-active?)
     (let ((spectated-record (mp-spectated-player-record)))
       (when (and spectated-record (nonzero? spectated-record))
-        (let ((puppet (mp-player-record-target spectated-record)))
-          (when (and puppet
-                     (nonzero? puppet)
-                     (-> puppet root)
-                     (nonzero? (-> puppet root)))
-            (return (-> puppet root trans))))
-        (let ((presentation-pos
-                (mp-player-record-presentation-position spectated-record)))
-          (when (and presentation-pos (nonzero? presentation-pos))
-            (return presentation-pos))))))
-  (when (and *target*
-             (nonzero? *target*)
-             (-> *target* control)
-             (nonzero? (-> *target* control)))
-    (return (-> *target* control trans))
-    )
+        (let ((spectated-id (-> spectated-record identity player-id)))
+          (when (< spectated-id (the uint MP_MAX_PLAYERS))
+            (return spectated-id))))))
+  (mp-local-player-id)
+  )
+
+(defun mp-traffic-selected-authority-record ()
+  "Return the player record that owns traffic for the local interest bubble."
+  (if (< *mp-traffic-selected-authority-id* (the uint MP_MAX_PLAYERS))
+      (mp-player-record-by-id *mp-traffic-selected-authority-id*)
+      (the-as mp-player-record #f))
+  )
+
+(defun mp-traffic-map-has-follower? ((authority-map uint) (root-player-id uint))
+  (when (< root-player-id (the uint MP_MAX_PLAYERS))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (when (and (!= (the-as uint player-id) root-player-id)
+                 (= (mp-traffic-authority-for-player
+                      authority-map (the-as uint player-id))
+                    root-player-id))
+        (return #t))))
   #f
   )
 
-(defun mp-traffic-authority-distance ()
-  "Distance between the local traffic interest point and remote player."
-  (when (not (mp-any-live-remote-player?))
-    (return 0.0)
-    )
-  (let ((local-pos (mp-traffic-local-interest-pos)))
-    (when (and local-pos (nonzero? local-pos))
-      (let ((nearest-record
-              (mp-nearest-remote-player-record-to-position
-                (the-as vector local-pos) #t)))
-        (let ((presentation-pos
-                (mp-player-record-presentation-position nearest-record)))
-          (when (and presentation-pos (nonzero? presentation-pos))
-            (return (vector-vector-distance
-                      (the-as vector local-pos) presentation-pos))))))
-    1000000000.0
-    )
+(defun mp-traffic-cleanup-authority-handoff! ()
+  "Remove snapshots and materialized ghosts owned by the previous traffic root."
+  (mp-traffic-cleanup-after-sync-exit!)
+  (none)
+  )
+
+(defun mp-traffic-apply-authority-map! ((authority-map uint))
+  "Apply the locally calculated assignment and perform one clean handoff."
+  (let* ((local-player-id (mp-local-player-id))
+         (interest-player-id (mp-traffic-interest-player-id))
+         (selected-source
+           (mp-traffic-authority-for-player authority-map interest-player-id))
+         (local-authoritative?
+           (and (< local-player-id (the uint MP_MAX_PLAYERS))
+                (= interest-player-id local-player-id)
+                (= selected-source local-player-id)
+                (not (mp-spectate-active?))))
+         (has-followers?
+           (and local-authoritative?
+                (mp-traffic-map-has-follower? authority-map local-player-id)))
+         (source-changed?
+           (!= selected-source *mp-traffic-selected-authority-id*)))
+    (when source-changed?
+      (mp-traffic-cleanup-authority-handoff!))
+    (set! *mp-traffic-authority-assignments* authority-map)
+    (set! *mp-traffic-selected-authority-id* selected-source)
+    (set! *mp-traffic-local-authoritative?* local-authoritative?)
+    (set! *mp-traffic-local-root-has-followers?* has-followers?)
+    (set! *mp-traffic-sync-active*
+          (and (< selected-source (the uint MP_MAX_PLAYERS))
+               (or (not local-authoritative?) has-followers?)))
+    (set! *mp-traffic-suppressed* (not local-authoritative?))
+    (set! *mp-traffic-drain-active* (not local-authoritative?))
+    (set! *mp-traffic-host-spawning-active* #f)
+    (pc-multi-set-traffic-authority-map authority-map selected-source)
+    (when source-changed?
+      (if local-authoritative?
+          (mp-traffic-refill-local-active-cells!)
+          (when (and *traffic-manager* (nonzero? *traffic-manager*))
+            (mp-traffic-force-clear-local-vehicles!)))))
+  (none)
+  )
+
+(defun mp-traffic-reset-offline-authority! ()
+  "Restore vanilla local traffic and clear bridge-only authority state."
+  (let ((was-authoritative? *mp-traffic-local-authoritative?*)
+        (had-source?
+          (< *mp-traffic-selected-authority-id* (the uint MP_MAX_PLAYERS))))
+    (when had-source?
+      (mp-traffic-cleanup-authority-handoff!))
+    (set! *mp-traffic-authority-assignments* (the uint #xffffffff))
+    (set! *mp-traffic-selected-authority-id* MP_INVALID_PLAYER_ID)
+    (set! *mp-traffic-local-authoritative?* #t)
+    (set! *mp-traffic-local-root-has-followers?* #f)
+    (set! *mp-traffic-suppressed* #f)
+    (set! *mp-traffic-sync-active* #f)
+    (set! *mp-traffic-drain-active* #f)
+    (set! *mp-traffic-host-spawning-active* #f)
+    (pc-multi-set-traffic-authority-map
+      (the uint #xffffffff)
+      (the uint MP_INVALID_PLAYER_ID))
+    (when (and (not was-authoritative?)
+               *traffic-manager*
+               (nonzero? *traffic-manager*))
+      (mp-traffic-refill-local-active-cells!)))
+  (none)
   )
 
 (defun mp-update-traffic-authority ()
-  "Determine who owns the open-world traffic and suppress local spawning if needed"
-  (let ((is-active? (mp-connection-status-active? (pc-multi-get-status))))
-    (if (or (not is-active?) (not *traffic-manager*) (zero? *traffic-manager*))
-        (begin ;; Offline, fallback, or no active traffic manager
-          (set! *mp-traffic-suppressed* #f)
-          (set! *mp-traffic-sync-active* #f)
-          (set! *mp-traffic-host-spawning-active* #f)
-          )
-        (begin
-          (let ((was-suppressed? *mp-traffic-suppressed*))
-            ;; GLOBAL HOST RESET: Ensure Host never has suppressed traffic
-            (if (mp-session-host?) ;; Host Side
-                (set! *mp-traffic-suppressed* #f)
-                )
-            (if (mp-session-client?) ;; Client Side
-                (when (not (and *target* (nonzero? *target*) (-> *target* control) (nonzero? (-> *target* control))))
-                  (set! *mp-traffic-suppressed* #t)
-                  )
-                )
-            (if (mp-session-client?) ;; Client Side
-                (if (mp-multiplayer-level-load-active?)
-                    (begin
-                      (set! *mp-traffic-suppressed* #t)
-                      (set! *mp-traffic-drain-active* #t)
-                      )
-                    (let ((dist (mp-traffic-authority-distance)))
-                      (if *mp-traffic-sync-active*
-                          (mp-traffic-evaluate-authority-rule! *mp-traffic-client-sync-exit-rule* dist)
-                          (begin
-                            (mp-traffic-evaluate-authority-rule! *mp-traffic-client-sync-enter-rule* dist)
-                            (mp-traffic-evaluate-authority-rule! *mp-traffic-client-local-clear-rule* dist)
-                            )
-                          )
-                      (cond
-                        (*mp-traffic-sync-active*
-                         (set! *mp-traffic-suppressed* #t)
-                         (set! *mp-traffic-drain-active* #t)
-                         )
-                        ((mp-traffic-authority-rule-active? *mp-traffic-client-drain-enter-rule* dist)
-                         (mp-traffic-apply-authority-rule! *mp-traffic-client-drain-enter-rule*)
-                         )
-                        ((mp-traffic-authority-rule-active? *mp-traffic-client-drain-exit-rule* dist)
-                         (mp-traffic-apply-authority-rule! *mp-traffic-client-drain-exit-rule*)
-                         )
-                        )
-                      )
-                    )
-                (let ((dist (mp-traffic-authority-distance)))
-                  ;; Host-side authority transfer was handled above for suppression.
-                  (set! *mp-traffic-host-spawning-active* #f)
-                  (if *mp-traffic-sync-active*
-                      (mp-traffic-evaluate-authority-rule! *mp-traffic-host-sync-exit-rule* dist)
-                      (mp-traffic-evaluate-authority-rule! *mp-traffic-host-sync-enter-rule* dist)
-                      )
-                  )
-                )
-            (when (and was-suppressed? (not *mp-traffic-suppressed*) (not *mp-traffic-sync-active*))
-              (mp-traffic-refill-local-active-cells!)
-              )
-            )
-          )
-        )
-    )
-  (none))
+  "Elect deterministic direct traffic bubbles from canonical player IDs."
+  (if (or (!= (pc-multi-get-status) (mp-connection-status in-game))
+          (not *traffic-manager*)
+          (zero? *traffic-manager*))
+      (mp-traffic-reset-offline-authority!)
+      (mp-traffic-apply-authority-map!
+        (mp-traffic-build-authority-map *mp-traffic-authority-assignments*)))
+  (none)
+  )

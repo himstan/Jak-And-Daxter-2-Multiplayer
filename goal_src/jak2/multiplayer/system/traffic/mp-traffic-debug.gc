@@ -280,27 +280,72 @@
   (none)
   )
 
+(defun mp-traffic-debug-root-color ((player-id uint))
+  (cond
+    ((= player-id 0) (static-rgba 0 128 255 180))
+    ((= player-id 1) (static-rgba 0 255 128 180))
+    ((= player-id 2) (static-rgba 255 192 0 180))
+    (else (static-rgba 255 64 192 180)))
+  )
+
+(defun mp-draw-traffic-player-authority-label
+       ((position vector) (player-id uint) (source-player-id uint))
+  (when (and position (nonzero? position))
+    (let ((label-pos (new 'stack-no-clear 'vector)))
+      (vector-copy! label-pos position)
+      (set! (-> label-pos y) (+ (-> label-pos y) (meters 3.0)))
+      (add-debug-text-3d
+        #t
+        (bucket-id debug-no-zbuf1)
+        (the-as string (format #f "P~D -> ROOT P~D" player-id source-player-id))
+        label-pos
+        (font-color white)
+        (the-as vector2h #f))))
+  (none)
+  )
+
 (defun mp-draw-traffic-authority-bubbles ()
   (when (and *mp-traffic-bubble-debug?*
-             (mp-connection-status-active? (pc-multi-get-status))
-             (mp-host-player-record)
-             (nonzero? (mp-host-player-record)))
-    (let ((host-pos (mp-player-record-position (mp-host-player-record))))
-      (when (and host-pos (nonzero? host-pos))
-        (mp-draw-traffic-bubble-ring host-pos MP_TRAFFIC_HOST_SYNC_DISTANCE (static-rgba 0 128 255 160) "HOST SYNC <250m")
-        (mp-draw-traffic-bubble-ring host-pos MP_TRAFFIC_CLIENT_SYNC_DISTANCE (static-rgba 0 255 0 160) "CLIENT SYNC <300m / EXIT >300m")
-        (mp-draw-traffic-bubble-ring host-pos MP_TRAFFIC_CLIENT_LOCAL_CLEAR_DISTANCE (static-rgba 128 255 0 160) "CLEAR LOCAL VEHICLES <310m")
-        (mp-draw-traffic-bubble-ring host-pos MP_TRAFFIC_CLIENT_DRAIN_ENTER_DISTANCE (static-rgba 255 128 0 160) "CLIENT DRAIN <350m")
-        (mp-draw-traffic-bubble-ring host-pos MP_TRAFFIC_CLIENT_DRAIN_EXIT_DISTANCE (static-rgba 255 0 0 160) "CLIENT RESUME >400m")
-        (add-debug-sphere #t (bucket-id debug-no-zbuf1) host-pos (meters 2.0) (static-rgba 0 128 255 180))
-        (mp-for-each-player-record (player-id record)
-          (when (!= (-> record identity player-id) (mp-host-player-id))
-            (let ((player-pos (mp-player-record-position record)))
-              (when (and player-pos (nonzero? player-pos))
-                (add-debug-sphere #t (bucket-id debug-no-zbuf1) player-pos (meters 2.0) (static-rgba 255 255 255 180))
-                (add-debug-line #t (bucket-id debug-no-zbuf1) host-pos player-pos (static-rgba 255 255 255 128) #f (the-as rgba 0))))))))
+             (= (pc-multi-get-status) (mp-connection-status in-game)))
+    (mp-for-each-player-record (player-id record)
+      (let ((player-pos (mp-player-record-position record))
+            (source-player-id
+              (mp-traffic-authority-for-player
+                *mp-traffic-authority-assignments* (the-as uint player-id))))
+        (when (and player-pos
+                   (nonzero? player-pos)
+                   (< source-player-id (the uint MP_MAX_PLAYERS)))
+          (let ((root-color (mp-traffic-debug-root-color source-player-id)))
+            (add-debug-sphere
+              #t (bucket-id debug-no-zbuf1) player-pos (meters 2.0) root-color)
+            (mp-draw-traffic-player-authority-label
+              player-pos (the-as uint player-id) source-player-id)
+            (if (= source-player-id (the-as uint player-id))
+                (begin
+                  (mp-draw-traffic-bubble-ring
+                    player-pos
+                    MP_TRAFFIC_AUTHORITY_ACQUIRE_DISTANCE
+                    root-color
+                    "ACQUIRE <250m")
+                  (mp-draw-traffic-bubble-ring
+                    player-pos
+                    MP_TRAFFIC_AUTHORITY_RETAIN_DISTANCE
+                    (static-rgba 255 255 255 96)
+                    "RETAIN <=310m"))
+                (let ((root-record (mp-player-record-by-id source-player-id)))
+                  (when (and root-record (nonzero? root-record))
+                    (let ((root-pos (mp-player-record-position root-record)))
+                      (when (and root-pos (nonzero? root-pos))
+                        (add-debug-line
+                          #t
+                          (bucket-id debug-no-zbuf1)
+                          player-pos
+                          root-pos
+                          root-color
+                          #f
+                          (the-as rgba 0))))))))))))
   (none)
-  ))
+  )
 
 ;; --- Master High-Level Call ---
 

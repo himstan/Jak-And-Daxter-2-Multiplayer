@@ -369,8 +369,11 @@ struct MultiplayerData {
   std::array<uint32_t, kMPMaxPlayers> last_enemy_sequence_by_player = {};
 
   MPTrafficSyncBufferGOAL traffic_buffer;
+  uint32_t traffic_authority_map = 0xffffffffu;
+  uint8_t selected_traffic_authority = kMPInvalidCompactPlayerId;
   uint32_t last_traffic_sync_time = 0;
-  uint32_t last_pedestrian_sequence = 0;
+  std::array<uint32_t, kMPMaxPlayers> last_pedestrian_sequence_by_source = {};
+  std::array<uint32_t, kMPMaxPlayers> last_vehicle_sequence_by_source = {};
   uint32_t local_traffic_level_hash = 0;
   uint32_t last_remote_traffic_level_hash = 0;
   uint32_t remote_traffic_buffer_level_hash = 0;

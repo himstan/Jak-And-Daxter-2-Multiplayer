@@ -8,31 +8,32 @@
     (cond
       ((type? proc citizen)
        (let ((e-proc (the-as citizen proc)))
-         ;; Only sync if it has a NetID and is NOT in the inactive/pooled state
-         (when (and (nonzero? (-> e-proc net-id)) 
-                    (not (focus-test? e-proc inactive)))
+         (when (not (focus-test? e-proc inactive))
+           (mp-traffic-ensure-process-net-id! e-proc)
+           ;; Only active authoritative traffic with a NetID is synchronized.
+           (when (nonzero? (-> e-proc net-id))
              (when (< (-> *mp-traffic-buffer* ped-count) (the uint MP_MAX_SYNC_PEDESTRIANS))
                (let ((slot (-> *mp-traffic-buffer* ped-enemies (-> *mp-traffic-buffer* ped-count))))
                  (mp-pedestrian-pack e-proc slot)
                  (+! (-> *mp-traffic-buffer* ped-count) 1)
                  )
                )
+             )
            )
          )
        )
       ((type? proc vehicle)
        (let ((v-proc (the-as vehicle proc)))
-         ;; Only sync if it is NOT inactive, NOT dead, and IS managed by traffic
-         ;; Only explicit drivers synchronize vehicles through their player records.
-         (when (and (nonzero? (-> v-proc net-id))
-                    (not (mp-player-driver-record-by-vehicle-id (-> v-proc net-id)))
-                    (not (focus-test? v-proc inactive))
-                    (< (-> *mp-traffic-buffer* veh-count) (the uint MP_MAX_SYNC_VEHICLES))
-                    )
-
-           (let ((slot (-> *mp-traffic-buffer* veh-enemies (-> *mp-traffic-buffer* veh-count))))
-             (mp-vehicle-pack v-proc slot)
-             (+! (-> *mp-traffic-buffer* veh-count) 1)
+         (when (not (focus-test? v-proc inactive))
+           (mp-traffic-ensure-process-net-id! v-proc)
+           ;; Explicit player drivers synchronize through player records instead.
+           (when (and (nonzero? (-> v-proc net-id))
+                      (not (mp-player-driver-record-by-vehicle-id (-> v-proc net-id)))
+                      (< (-> *mp-traffic-buffer* veh-count) (the uint MP_MAX_SYNC_VEHICLES)))
+             (let ((slot (-> *mp-traffic-buffer* veh-enemies (-> *mp-traffic-buffer* veh-count))))
+               (mp-vehicle-pack v-proc slot)
+               (+! (-> *mp-traffic-buffer* veh-count) 1)
+               )
              )
            )
          )
@@ -228,15 +229,14 @@
   )
 
 (defun mp-traffic-cleanup-after-sync-exit! ()
-  "Client-side cleanup for host-owned traffic after leaving the traffic authority bubble."
-  (when (mp-session-client?)
-    (mp-traffic-clear-buffer!)
-    (when (mp-is-traffic-spawn-ready?)
-      (mp-pedestrian-apply-remote)
-      (mp-vehicle-apply-remote)
-      )
-      (mp-traffic-clear-ghosts!)
+  "Clear traffic materialized from the previously selected ranked authority."
+  (mp-traffic-clear-buffer!)
+  (when (mp-is-traffic-spawn-ready?)
+    (mp-pedestrian-apply-remote)
+    (mp-vehicle-apply-remote)
     )
+  (mp-traffic-clear-ghosts!)
+  (pc-multi-clear-remote-traffic)
   (none)
   )
 
@@ -253,6 +253,10 @@
   (set! *mp-traffic-sync-active* #f)
   (set! *mp-traffic-drain-active* #f)
   (set! *mp-traffic-host-spawning-active* #f)
+  (set! *mp-traffic-local-authoritative?* #t)
+  (set! *mp-traffic-local-root-has-followers?* #f)
+  (set! *mp-traffic-authority-assignments* (the uint #xffffffff))
+  (set! *mp-traffic-selected-authority-id* MP_INVALID_PLAYER_ID)
   (set! *mp-pedestrian-net-id-counter* (the uint 1))
   (set! *mp-vehicle-net-id-counter* (the uint 32768))
   (set! *mp-client-vehicle-net-id-counter* MP_CLIENT_VEHICLE_NET_ID_BASE)
@@ -276,6 +280,9 @@
   (set! *mp-traffic-last-authority-level-id* (the uint 0))
   (set! *mp-traffic-last-remote-apply-ready* #f)
   (set! *mp-traffic-refresh-existing-log-time* (the-as time-frame 0))
+  (pc-multi-set-traffic-authority-map
+    (the uint #xffffffff)
+    (the uint MP_INVALID_PLAYER_ID))
   (mp-vehicle-reset-authority-handoffs!)
   (mp-traffic-clear-buffer!)
   (mp-cleanup-traffic-ghosts)
@@ -289,11 +296,11 @@
   )
 
 (defun mp-traffic-authority-primary-level-id ()
-  "Use the host record as the authoritative ambient-traffic level context."
-  (if (and (mp-host-player-record) (nonzero? (mp-host-player-record)))
-      (mp-level-packed-primary-id (-> (mp-host-player-record) transform level))
-      (the uint 0)
-      )
+  "Use the selected ranked root as the ambient-traffic level context."
+  (let ((authority-record (mp-traffic-selected-authority-record)))
+    (if (and authority-record (nonzero? authority-record))
+        (mp-level-packed-primary-id (-> authority-record transform level))
+        (the uint 0)))
   )
 
 (defun mp-traffic-local-primary-level-symbol ()
@@ -748,7 +755,7 @@
               (mp-vehicle-apply-piggyback)
               )
             
-            (if (or (mp-session-host?) (mp-is-traffic-authoritative?))
+            (if (mp-is-traffic-authoritative?)
                 ;; Authoritative Logic: Gather and Pack
                 (begin
                   ;; Reclaim host bookkeeping before current entities request slots.

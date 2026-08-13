@@ -217,7 +217,8 @@
    (hit-sound-id uint32 :overlay-at (-> data 28))
    (source-pos vector :inline :overlay-at (-> data 32))
    (attack-dir vector :inline :overlay-at (-> data 48))
-   (penetrate uint64 :overlay-at (-> data 64))))
+   (penetrate uint64 :overlay-at (-> data 64))
+   (traffic-authority-player-id uint32 :overlay-at (-> data 72))))
 
 (deftype mp-ped-death-event (mp-event)
   ((net-id uint32 :overlay-at (-> data 0))

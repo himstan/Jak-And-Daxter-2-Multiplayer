@@ -595,6 +595,7 @@
       (set-vector! (-> event source-pos) 0.0 0.0 0.0 1.0)
       (set-vector! (-> event attack-dir) 0.0 0.0 1.0 0.0)
       (set! (-> event penetrate) (the-as uint (-> details penetrate)))
+      (set! (-> event traffic-authority-player-id) (the uint32 #xffffffff))
       (set! (-> event payload-size) (the uint 72))
       (return event)
       )

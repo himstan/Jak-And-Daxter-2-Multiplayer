@@ -121,6 +121,8 @@ bool packet_is_host_relayed(PacketType type) {
     case PacketType::ENEMY_SYNC:
     case PacketType::TURRET_SYNC:
     case PacketType::AIRLOCK_SYNC:
+    case PacketType::PEDESTRIAN_SYNC:
+    case PacketType::VEHICLE_SYNC:
     case PacketType::EVENT_JOIN:
     case PacketType::EVENT_LEAVE:
       return true;
@@ -216,16 +218,14 @@ bool handle_receive_packet(MultiplayerData& data,
       ENetEvent traffic_event = {};
       traffic_event.type = ENET_EVENT_TYPE_RECEIVE;
       traffic_event.packet = const_cast<ENetPacket*>(packet);
-      handle_pedestrian_sync_packet(traffic_event, data);
-      accepted = true;
+      accepted = handle_pedestrian_sync_packet(traffic_event, data, sender_player_id);
       break;
     }
     case PacketType::VEHICLE_SYNC: {
       ENetEvent traffic_event = {};
       traffic_event.type = ENET_EVENT_TYPE_RECEIVE;
       traffic_event.packet = const_cast<ENetPacket*>(packet);
-      handle_vehicle_sync_packet(traffic_event, data);
-      accepted = true;
+      accepted = handle_vehicle_sync_packet(traffic_event, data, sender_player_id);
       break;
     }
     case PacketType::TURRET_SYNC:
@@ -936,6 +936,14 @@ void pc_multi_clear_remote_traffic() {
     multiplayer_reset_remote_traffic_buffers(multiplayer_data());
   } catch (...) {
     lg::error("[Multiplayer] Exception in pc_multi_clear_remote_traffic");
+  }
+}
+
+void pc_multi_set_traffic_authority_map(u32 authority_map, u32 selected_authority) {
+  try {
+    mp_set_traffic_authority_map(multiplayer_data(), authority_map, selected_authority);
+  } catch (...) {
+    lg::error("[Multiplayer] Exception in pc_multi_set_traffic_authority_map");
   }
 }
 
@@ -1703,6 +1711,8 @@ void init_multiplayer_pc_port() {
   jak2::make_function_symbol_from_c("pc-multi-receive-traffic", (void*)pc_multi_receive_traffic);
   jak2::make_function_symbol_from_c("pc-multi-clear-remote-traffic",
                                     (void*)pc_multi_clear_remote_traffic);
+  jak2::make_function_symbol_from_c("pc-multi-set-traffic-authority-map",
+                                    (void*)pc_multi_set_traffic_authority_map);
   jak2::make_function_symbol_from_c("pc-multi-send-palace-squid",
                                     (void*)pc_multi_send_palace_squid);
   jak2::make_function_symbol_from_c("pc-multi-receive-palace-squid",

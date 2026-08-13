@@ -26,6 +26,7 @@
 #include "game/multiplayer/multiplayer_wire_codec.h"
 #include "game/multiplayer/sync/event_sync.h"
 #include "game/multiplayer/sync/player_sync.h"
+#include "game/multiplayer/sync/traffic_sync.h"
 #include "gtest/gtest.h"
 
 #include "third-party/SDL/include/SDL3/SDL.h"
@@ -824,14 +825,101 @@ TEST(MultiplayerPacket, DirectionPolicyMatchesHostAndClientRoles) {
     const PacketType type = static_cast<PacketType>(value);
     const bool host_only = type == PacketType::BOOTSTRAP || type == PacketType::WORLD_STATE ||
                            type == PacketType::SESSION_WELCOME ||
-                           type == PacketType::PEDESTRIAN_SYNC ||
-                           type == PacketType::VEHICLE_SYNC ||
                            type == PacketType::PALACE_SQUID_SYNC || type == PacketType::WIDOW_SYNC;
     EXPECT_TRUE(mp_packet_direction_allowed(type, 0));
     EXPECT_EQ(mp_packet_direction_allowed(type, 1), !host_only);
   }
   EXPECT_FALSE(mp_packet_direction_allowed(PacketType::STATE_UPDATE, -1));
   EXPECT_FALSE(mp_packet_direction_allowed(PacketType::COUNT, 0));
+}
+
+TEST(MultiplayerTraffic, RankedSourceValidationUsesLocalAuthorityMap) {
+  MultiplayerData host;
+  host.session_role = 0;
+  host.local_player_id = 0;
+  host.host_player_id = 0;
+  mp_set_traffic_authority_map(host, 0x02020000u, 0);  // [0, 0, 2, 2]
+
+  EXPECT_TRUE(mp_validate_traffic_source(host, 0, 0));
+  EXPECT_TRUE(mp_validate_traffic_source(host, 2, 2));
+  EXPECT_FALSE(mp_validate_traffic_source(host, 1, 1));
+  EXPECT_FALSE(mp_validate_traffic_source(host, 2, 1));
+
+  MultiplayerData client;
+  client.session_role = 1;
+  client.local_player_id = 3;
+  client.host_player_id = 0;
+  mp_set_traffic_authority_map(client, 0xff02ff00u, 2);  // Spectator selects root 2.
+
+  EXPECT_TRUE(mp_validate_traffic_source(client, 2, 0));
+  EXPECT_FALSE(mp_validate_traffic_source(client, 0, 0));
+  EXPECT_FALSE(mp_validate_traffic_source(client, 2, 2));
+}
+
+TEST(MultiplayerTraffic, TrafficNetIdsEncodeClassOriginAndSequence) {
+  for (uint8_t player_id = 0; player_id < kMPMaxPlayers; ++player_id) {
+    const uint32_t ped_id = mp_make_traffic_net_id(
+        kMPTrafficPedestrianNetIdClass, player_id, 1u);
+    const uint32_t vehicle_id = mp_make_traffic_net_id(
+        kMPTrafficVehicleNetIdClass, player_id, 32768u);
+    const uint32_t player_vehicle_id = mp_make_traffic_net_id(
+        kMPPlayerVehicleNetIdClass, player_id, kMPTrafficNetIdSequenceMask);
+
+    EXPECT_EQ(mp_traffic_net_id_class(ped_id), kMPTrafficPedestrianNetIdClass);
+    EXPECT_EQ(mp_traffic_net_id_origin(ped_id), player_id);
+    EXPECT_EQ(mp_traffic_net_id_sequence(ped_id), 1u);
+    EXPECT_NE(ped_id, vehicle_id);
+    EXPECT_NE(vehicle_id, player_vehicle_id);
+    EXPECT_TRUE(mp_validate_pedestrian_net_id(ped_id, player_id));
+    EXPECT_TRUE(mp_validate_vehicle_net_id(vehicle_id));
+    EXPECT_TRUE(mp_validate_vehicle_net_id(player_vehicle_id));
+  }
+
+  EXPECT_EQ(mp_make_traffic_net_id(kMPTrafficPedestrianNetIdClass, kMPMaxPlayers, 1u), 0u);
+  EXPECT_EQ(mp_make_traffic_net_id(0x30000000u, 0, 1u), 0u);
+  EXPECT_EQ(mp_make_traffic_net_id(
+                kMPTrafficVehicleNetIdClass, 0, kMPTrafficNetIdSequenceMask + 1u),
+            0u);
+}
+
+TEST(MultiplayerTraffic, TrafficNetIdValidationRejectsSpoofedAndLegacyIds) {
+  EXPECT_TRUE(mp_validate_pedestrian_net_id(0x13000001u, 3));
+  EXPECT_FALSE(mp_validate_pedestrian_net_id(0x13000001u, 2));
+  EXPECT_FALSE(mp_validate_pedestrian_net_id(0x14000001u, 0));
+  EXPECT_FALSE(mp_validate_pedestrian_net_id(1u, 0));
+  EXPECT_FALSE(mp_validate_pedestrian_net_id(0x10000000u, 0));
+  EXPECT_TRUE(mp_validate_pedestrian_net_id(0x1300fffeu, 3));
+  EXPECT_FALSE(mp_validate_pedestrian_net_id(0x1300ffffu, 3));
+  EXPECT_TRUE(mp_validate_pedestrian_net_id(0x71000001u, 0));
+  EXPECT_FALSE(mp_validate_pedestrian_net_id(0x72000001u, 0));
+
+  EXPECT_TRUE(mp_validate_vehicle_net_id(0x20008000u));
+  EXPECT_TRUE(mp_validate_vehicle_net_id(0x2300fffeu));
+  EXPECT_FALSE(mp_validate_vehicle_net_id(0x2300ffffu));
+  EXPECT_TRUE(mp_validate_vehicle_net_id(0x41000000u));
+  EXPECT_TRUE(mp_validate_vehicle_net_id(0x70000004u));
+  EXPECT_FALSE(mp_validate_vehicle_net_id(0x71000001u));
+  EXPECT_FALSE(mp_validate_vehicle_net_id(0x70000000u));
+  EXPECT_FALSE(mp_validate_vehicle_net_id(0x24008000u));
+  EXPECT_FALSE(mp_validate_vehicle_net_id(32768u));
+  EXPECT_FALSE(mp_validate_vehicle_net_id(0x20007fffu));
+}
+
+TEST(MultiplayerTraffic, SourceHandoffClearsRemoteTrafficState) {
+  MultiplayerData data;
+  data.local_player_id = 3;
+  mp_set_traffic_authority_map(data, 0x02020000u, 2);  // Player 3 follows player 2.
+  data.traffic_buffer.pedestrians[0].net_id = 7;
+  data.traffic_buffer.vehicles[0].net_id = 9;
+  data.last_pedestrian_sequence_by_source[2] = 10;
+  data.last_vehicle_sequence_by_source[2] = 11;
+
+  mp_set_traffic_authority_map(data, 0x00000000u, 0);  // Everyone follows player 0.
+
+  EXPECT_EQ(data.traffic_buffer.pedestrians[0].net_id, 0u);
+  EXPECT_EQ(data.traffic_buffer.vehicles[0].net_id, 0u);
+  EXPECT_EQ(data.last_pedestrian_sequence_by_source[2], 0u);
+  EXPECT_EQ(data.last_vehicle_sequence_by_source[2], 0u);
 }
 
 TEST(MultiplayerWireCodec, UsesLittleEndianAndRequiresExactConsumption) {

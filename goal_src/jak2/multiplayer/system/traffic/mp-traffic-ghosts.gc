@@ -33,6 +33,7 @@
     (set! (-> rec ghost-state-id) (the uint8 0))
     (set! (-> rec ghost-aux-state) MP_INVALID_COMPACT_PLAYER_ID)
     (set! (-> rec presentation-valid) (the uint8 0))
+    (set! (-> rec last-attack-source-player-id) MP_INVALID_COMPACT_PLAYER_ID)
     (set! (-> rec ghost-animation-profile) (the uint32 0))
     (set! (-> rec last-applied-animation-profile) (the uint32 0))
     (set! (-> rec last-attack-id) (the uint32 0))

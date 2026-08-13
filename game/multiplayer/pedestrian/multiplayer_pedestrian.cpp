@@ -13,9 +13,11 @@ size_t pedestrian_packet_size(uint32_t count) {
 }
 }
 
-void handle_pedestrian_sync_packet(const _ENetEvent& event, MultiplayerData& data) {
+bool handle_pedestrian_sync_packet(const _ENetEvent& event,
+                                   MultiplayerData& data,
+                                   uint32_t sender_player_id) {
   if (!event.packet) {
-    return;
+    return false;
   }
   uint32_t current_time = enet_time_get();
   if (!event.packet->data || event.packet->dataLength < pedestrian_packet_size(0)) {
@@ -24,19 +26,24 @@ void handle_pedestrian_sync_packet(const _ENetEvent& event, MultiplayerData& dat
                event.packet->dataLength, pedestrian_packet_size(0));
       data.last_traffic_short_packet_debug_time = current_time;
     }
-    return;
+    return false;
   }
-  constexpr size_t count_offset = sizeof(PacketHeader);
-  constexpr size_t level_offset = sizeof(PacketHeader) + sizeof(uint32_t) + sizeof(uint64_t);
+  constexpr size_t source_offset = sizeof(PacketHeader);
+  constexpr size_t count_offset = source_offset + sizeof(uint8_t) + 3;
+  constexpr size_t level_offset = count_offset + sizeof(uint32_t) + sizeof(uint64_t);
+  uint8_t source_player_id = kMPInvalidCompactPlayerId;
   uint32_t ped_count = 0;
   uint32_t level_hash = 0;
   PacketHeader header = {};
   memcpy(&header, event.packet->data, sizeof(header));
+  memcpy(&source_player_id, event.packet->data + source_offset, sizeof(source_player_id));
   memcpy(&ped_count, event.packet->data + count_offset, sizeof(ped_count));
   memcpy(&level_hash, event.packet->data + level_offset, sizeof(level_hash));
   if (header.type != PacketType::PEDESTRIAN_SYNC || ped_count > MAX_PEDESTRIANS_PER_PACKET ||
-      !mp_sequence_is_newer(header.sequenceNum, data.last_pedestrian_sequence)) {
-    return;
+      !mp_validate_traffic_source(data, source_player_id, sender_player_id) ||
+      !mp_sequence_is_newer(header.sequenceNum,
+                            data.last_pedestrian_sequence_by_source[source_player_id])) {
+    return false;
   }
   if (event.packet->dataLength != pedestrian_packet_size(ped_count)) {
     if (current_time - data.last_traffic_short_packet_debug_time > 2000) {
@@ -44,12 +51,27 @@ void handle_pedestrian_sync_packet(const _ENetEvent& event, MultiplayerData& dat
                event.packet->dataLength, ped_count, pedestrian_packet_size(ped_count));
       data.last_traffic_short_packet_debug_time = current_time;
     }
-    return;
+    return false;
+  }
+  for (uint32_t i = 0; i < ped_count; ++i) {
+    MPPedestrianStatePacked incoming = {};
+    memcpy(&incoming, event.packet->data + pedestrian_packet_size(0) + i * sizeof(incoming),
+           sizeof(incoming));
+    if (!mp_validate_pedestrian_net_id(incoming.net_id, source_player_id) ||
+        (incoming.vehicle_net_id != 0 &&
+         !mp_validate_vehicle_net_id(incoming.vehicle_net_id))) {
+      return false;
+    }
+  }
+  if (data.selected_traffic_authority != source_player_id) {
+    data.last_pedestrian_sequence_by_source[source_player_id] = header.sequenceNum;
+    return true;
   }
   if (!mp_accept_traffic_level(data, level_hash, ped_count, "pedestrian", current_time)) {
-    return;
+    data.last_pedestrian_sequence_by_source[source_player_id] = header.sequenceNum;
+    return true;
   }
-  data.last_pedestrian_sequence = header.sequenceNum;
+  data.last_pedestrian_sequence_by_source[source_player_id] = header.sequenceNum;
   if (current_time - data.last_ped_traffic_debug_time > 2000) {
     lg::info("[Multiplayer] Accepted pedestrian traffic. packetLevel={} remoteLevel={} count={}",
              level_hash, data.last_remote_traffic_level_hash, ped_count);
@@ -93,15 +115,19 @@ void handle_pedestrian_sync_packet(const _ENetEvent& event, MultiplayerData& dat
       data.ped_last_updated[slot] = current_time;
     }
   }
+  return true;
 }
 
-void send_pedestrian_sync_packets(MultiplayerData& data, MPTrafficSyncBufferGOAL* buffer, int exclude_peer) {
+void send_pedestrian_sync_packets(MultiplayerData& data,
+                                  MPTrafficSyncBufferGOAL* buffer,
+                                  int channel) {
   uint32_t total_peds = (buffer->ped_count < MAX_PEDESTRIAN_SYNC_COUNT) ? buffer->ped_count : MAX_PEDESTRIAN_SYNC_COUNT;
   uint32_t sent_peds = 0;
   while (sent_peds < total_peds) {
     uint32_t chunk_size = (total_peds - sent_peds < MAX_PEDESTRIANS_PER_PACKET) ? (total_peds - sent_peds) : MAX_PEDESTRIANS_PER_PACKET;
-    PacketPedestrianSync packet; packet.header.type = PacketType::PEDESTRIAN_SYNC;
+    PacketPedestrianSync packet = {}; packet.header.type = PacketType::PEDESTRIAN_SYNC;
     packet.header.sequenceNum = ++data.sequence_num;
+    packet.source_player_id = static_cast<uint8_t>(data.local_player_id);
     packet.count = chunk_size; packet.timestamp = enet_time_get();
     packet.level_hash = data.local_traffic_level_hash;
     for (uint32_t i = 0; i < chunk_size; i++) {
@@ -122,7 +148,7 @@ void send_pedestrian_sync_packets(MultiplayerData& data, MPTrafficSyncBufferGOAL
       dst->pad[1] = 0;
     }
     size_t packet_size = pedestrian_packet_size(chunk_size);
-    MultiplayerManager::broadcast(data, exclude_peer, &packet, packet_size, ENET_PACKET_FLAG_UNSEQUENCED);
+    MultiplayerManager::broadcast(data, channel, &packet, packet_size, ENET_PACKET_FLAG_UNSEQUENCED);
     sent_peds += chunk_size;
   }
 }

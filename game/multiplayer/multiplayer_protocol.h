@@ -331,11 +331,15 @@ static_assert(sizeof(MPPedestrianStatePacked) == 48, "MPPedestrianStatePacked mu
 
 struct PacketPedestrianSync {
   PacketHeader header;
+  uint8_t source_player_id;
+  uint8_t source_pad[3];
   uint32_t count;
   uint64_t timestamp;
   uint32_t level_hash;
   MPPedestrianStatePacked peds[MAX_PEDESTRIANS_PER_PACKET];
 };
+static_assert(offsetof(PacketPedestrianSync, peds) == 25,
+              "PacketPedestrianSync prefix must remain explicit");
 
 struct MPVehicleStatePacked {
   uint32_t net_id;
@@ -353,11 +357,15 @@ struct MPVehicleStatePacked {
 
 struct PacketVehicleSync {
   PacketHeader header;
+  uint8_t source_player_id;
+  uint8_t source_pad[3];
   uint32_t count;
   uint64_t timestamp;
   uint32_t level_hash;
   MPVehicleStatePacked vehs[MAX_VEHICLES_PER_PACKET];
 };
+static_assert(offsetof(PacketVehicleSync, vehs) == 25,
+              "PacketVehicleSync prefix must remain explicit");
 
 struct MPPalaceSquidState {
   uint32_t active;

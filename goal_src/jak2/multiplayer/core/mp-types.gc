@@ -45,8 +45,18 @@
 (define-perm *mp-traffic-sync-active* symbol #f)
 (define-perm *mp-traffic-drain-active* symbol #f)
 (define-perm *mp-traffic-host-spawning-active* symbol #f)
+(define-perm *mp-traffic-local-authoritative?* symbol #t)
+(define-perm *mp-traffic-local-root-has-followers?* symbol #f)
+(define-perm *mp-traffic-authority-assignments* uint (the uint #xffffffff))
+(define-perm *mp-traffic-selected-authority-id* uint (the uint #xffffffff))
 (define-perm *mp-pedestrian-net-id-counter* uint (the uint 1))
 (define-perm *mp-vehicle-net-id-counter* uint (the uint 32768))
+(defconstant MP_TRAFFIC_NET_ID_CLASS_MASK (the uint #xf0000000))
+(defconstant MP_TRAFFIC_NET_ID_ORIGIN_MASK (the uint #x0f000000))
+(defconstant MP_TRAFFIC_NET_ID_SEQUENCE_MASK (the uint #x00ffffff))
+(defconstant MP_TRAFFIC_NET_ID_ORIGIN_SHIFT 24)
+(defconstant MP_TRAFFIC_PEDESTRIAN_NET_ID_BASE (the uint #x10000000))
+(defconstant MP_TRAFFIC_VEHICLE_NET_ID_BASE (the uint #x20000000))
 (defconstant MP_CLIENT_VEHICLE_NET_ID_BASE (the uint #x40000000))
 (defconstant MP_CLIENT_VEHICLE_NET_ID_END (the uint #x50000000))
 (define-perm *mp-client-vehicle-net-id-counter* uint MP_CLIENT_VEHICLE_NET_ID_BASE)
@@ -54,6 +64,32 @@
 (define-perm *mp-battle-spawn-counter* uint (the uint 0))
 (defconstant MP_MISSION_ENEMY_ATOLL_ASHELIN (the uint #x6f000001))
 (define *multi-sync-tps* 30)
+
+(defun mp-traffic-net-id-class ((net-id uint))
+  (logand net-id MP_TRAFFIC_NET_ID_CLASS_MASK)
+  )
+
+(defun mp-traffic-net-id-origin ((net-id uint))
+  (logand (shr net-id MP_TRAFFIC_NET_ID_ORIGIN_SHIFT) (the uint #xf))
+  )
+
+(defun mp-traffic-net-id-sequence ((net-id uint))
+  (logand net-id MP_TRAFFIC_NET_ID_SEQUENCE_MASK)
+  )
+
+(defun mp-traffic-build-net-id ((class-base uint) (player-id uint) (sequence uint))
+  "Encode a traffic entity class, immutable origin player, and local sequence."
+  (if (and (< player-id (the uint MP_MAX_PLAYERS))
+           (<= sequence MP_TRAFFIC_NET_ID_SEQUENCE_MASK)
+           (or (= class-base MP_TRAFFIC_PEDESTRIAN_NET_ID_BASE)
+               (= class-base MP_TRAFFIC_VEHICLE_NET_ID_BASE)
+               (= class-base MP_CLIENT_VEHICLE_NET_ID_BASE)))
+      (logior class-base
+              (shl player-id MP_TRAFFIC_NET_ID_ORIGIN_SHIFT)
+              sequence)
+      (the uint 0)
+      )
+  )
 
 (define-perm *mp-last-local-continue-name* string (new 'global 'string 32 ""))
 (define-perm *mp-mission-failed-bootstrap-pending?* symbol #f)
@@ -654,7 +690,7 @@
    (ghost-state-id  uint8)           ;; Pedestrian state ID; unused for vehicles
    (ghost-aux-state uint8)                 ;; Pedestrian target player ID or vehicle state flags
    (presentation-valid uint8)        ;; Client-only presentation transform has been initialized
-   (presentation-pad uint8)
+   (last-attack-source-player-id uint8)
    (ghost-animation-profile uint32)  ;; Latest authoritative pedestrian animation selection
    (last-applied-animation-profile uint32)
    (last-attack-id   uint32)
@@ -914,8 +950,8 @@
   )
 
 (defmacro mp-is-traffic-authoritative? ()
-  "Is the local player authoritative over traffic? (Host-only OR Client outside bubble)"
-  `(or (mp-session-host?) (not *mp-traffic-suppressed*))
+  "Is the local player the elected root of its ranked traffic bubble?"
+  `(and *mp-traffic-local-authoritative?* #t)
   )
 
 

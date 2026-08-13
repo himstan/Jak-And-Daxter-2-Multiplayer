@@ -6,14 +6,41 @@
 
 ;; --- Pedestrian Packing (Authoritative Side) ---
 
+(defun mp-pedestrian-remote-attack-duplicate? ((rec mp-traffic-ghost-record)
+                                                (evt mp-actor-attack-event))
+  (and rec
+       (nonzero? rec)
+       evt
+       (nonzero? evt)
+       (nonzero? (-> evt attack-id))
+       (= (-> evt attack-id) (-> rec last-attack-id))
+       (= (-> evt source-player-id)
+          (the uint (-> rec last-attack-source-player-id))))
+  )
+
+(defun mp-pedestrian-note-remote-attack! ((rec mp-traffic-ghost-record)
+                                          (evt mp-actor-attack-event))
+  (when (and rec
+             (nonzero? rec)
+             evt
+             (nonzero? evt)
+             (nonzero? (-> evt attack-id)))
+    (set! (-> rec last-attack-id) (-> evt attack-id))
+    (set! (-> rec last-attack-source-player-id)
+          (the-as uint8 (-> evt source-player-id)))
+    )
+  (none)
+  )
+
 (defun mp-pedestrian-apply-remote-attack! ((evt mp-actor-attack-event))
   "Apply a client-requested pedestrian hit on the traffic authority."
+  (when (or (not evt) (not (nonzero? evt)))
+    (return #f)
+    )
   (let ((e-proc (mp-pedestrian-find-by-net-id (-> evt net-id))))
     (when (and e-proc (nonzero? e-proc))
       (let ((rec (mp-get-traffic-ghost (-> evt net-id))))
-        (when (and rec
-                   (nonzero? (-> evt attack-id))
-                   (= (-> evt attack-id) (-> rec last-attack-id)))
+        (when (mp-pedestrian-remote-attack-duplicate? rec evt)
           (debug-log *mp-debug-log?* "[MP-Traffic] Blocking duplicate remote attack ID ~D on nid=~D~%" (-> evt attack-id) (-> evt net-id))
           (return #f)
           )
@@ -22,15 +49,42 @@
             (when (not (mp-actor-apply-authoritative-remote-damage! (the-as enemy e-proc) attacker evt 'pedestrian))
               (return #f)
               )
-            (when (and rec (nonzero? (-> evt attack-id)))
-              (set! (-> rec last-attack-id) (-> evt attack-id))
-              )
+            (mp-pedestrian-note-remote-attack! rec evt)
             )
           )
         )
       )
     )
   (none)
+  )
+
+(defun mp-pedestrian-replay-remote-attack! ((evt mp-actor-attack-event))
+  "Apply an authority-approved pedestrian hit on a traffic follower."
+  (when (or (not evt) (not (nonzero? evt)))
+    (return #f)
+    )
+  (let ((e-proc (mp-pedestrian-find-by-net-id (-> evt net-id))))
+    (when (and e-proc (nonzero? e-proc))
+      (let ((rec (mp-get-traffic-ghost (-> evt net-id))))
+        (when (mp-pedestrian-remote-attack-duplicate? rec evt)
+          (return #f)
+          )
+        (let ((attacker (mp-player-target-by-id (-> evt source-player-id))))
+          (when (and attacker
+                     (nonzero? attacker)
+                     (mp-actor-apply-authoritative-remote-damage!
+                       (the-as enemy e-proc)
+                       attacker
+                       evt
+                       'pedestrian))
+            (mp-pedestrian-note-remote-attack! rec evt)
+            (return #t)
+            )
+          )
+        )
+      )
+    )
+  #f
   )
 
 (defun mp-pedestrian-target-player-id-from-process ((focus process))

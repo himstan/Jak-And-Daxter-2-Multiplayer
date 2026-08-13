@@ -20,6 +20,7 @@ void pc_multi_receive_enemies(u32 buffer_ptr);
 void pc_multi_send_traffic(u32 buffer_ptr);
 void pc_multi_receive_traffic(u32 buffer_ptr);
 void pc_multi_clear_remote_traffic();
+void pc_multi_set_traffic_authority_map(u32 authority_map, u32 selected_authority);
 void pc_multi_send_palace_squid(u32 buffer_ptr);
 void pc_multi_receive_palace_squid(u32 buffer_ptr);
 void pc_multi_send_widow(u32 buffer_ptr);
