@@ -153,14 +153,18 @@
             (zero? *mp-player-controller*))
     (return #f))
   (let* ((local-player-id (mp-local-player-id))
-         (local-record (mp-player-record-by-id local-player-id)))
+         (local-record (mp-player-record-by-id local-player-id))
+         (player-bit (mp-scene-player-bit local-player-id)))
     (when (or (not (mp-scene-local-player-record-ready? local-record))
+              (zero? player-bit)
               (not (mp-scene-coordinator-ensure-scene!
                      scene-name local-player-id)))
       (return #f))
+    (when (logtest? *mp-scene-coordinator-entered-mask* player-bit)
+      (return #f))
     (set! *mp-scene-coordinator-entered-mask*
           (logior *mp-scene-coordinator-entered-mask*
-                  (mp-scene-player-bit local-player-id)))
+                  player-bit))
     #t))
 
 (defun mp-scene-coordinator-note-remote-start!
@@ -225,7 +229,16 @@
         *mp-scene-coordinator-active?*
         *mp-scene-coordinator-finalized?*)
       (return #f))
-    (mp-scene-coordinator-note-vote! local-player-id scene-name)))
+    (let ((new-vote?
+            (mp-scene-coordinator-note-vote! local-player-id scene-name)))
+      (when new-vote?
+        (debug-log *mp-debug-log?*
+          "[MP-Scene] Local player ~D voted to skip ~S (~D/~D).~%"
+          local-player-id
+          scene-name
+          (mp-scene-coordinator-vote-count)
+          (mp-scene-coordinator-participant-count)))
+      new-vote?)))
 
 (defun mp-scene-coordinator-note-remote-vote!
        ((player-id uint) (scene-name string))

@@ -405,8 +405,10 @@ bool mp_handle_player_state_packet(MultiplayerData& data,
   memcpy(&cached.veh_state, &state->veh_state, sizeof(cached.veh_state));
   if (data.session_role == 0 && state->status == static_cast<uint8_t>(MultiplayerStatus::IN_GAME)) {
     if (auto* session = multiplayer_host_peer_for_player_id(data, state->player_id)) {
-      session->bootstrap_pending = false;
-      session->bootstrap_sent_once = false;
+      if (session->bootstrap_sent_once) {
+        session->bootstrap_pending = false;
+        session->bootstrap_sent_once = false;
+      }
     }
   }
   return true;

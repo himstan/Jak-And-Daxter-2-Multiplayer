@@ -807,6 +807,28 @@ TEST(MultiplayerBootstrap, PlayerStateAcknowledgesSentBootstrap) {
   EXPECT_FALSE(data.host_peer_sessions[0].bootstrap_sent_once);
 }
 
+TEST(MultiplayerBootstrap, PlayerStateDoesNotAcknowledgeUnsentBootstrap) {
+  MultiplayerData data;
+  data.session_role = 0;
+  data.host_peer_sessions[0].authenticated = true;
+  data.host_peer_sessions[0].player_id = 1;
+  data.host_peer_sessions[0].bootstrap_pending = true;
+  data.host_peer_sessions[0].bootstrap_sent_once = false;
+  PacketPlayerState state = {};
+  state.header.type = PacketType::STATE_UPDATE;
+  state.header.sequenceNum = 1;
+  state.player_id = 1;
+  state.status = static_cast<uint8_t>(MultiplayerStatus::IN_GAME);
+  ENetPacket packet = {};
+  packet.data = reinterpret_cast<uint8_t*>(&state);
+  packet.dataLength = sizeof(state);
+  data.local_player_id = 0;
+  mp_handle_player_state_packet(data, &packet, 1, 100);
+
+  EXPECT_TRUE(data.host_peer_sessions[0].bootstrap_pending);
+  EXPECT_FALSE(data.host_peer_sessions[0].bootstrap_sent_once);
+}
+
 TEST(MultiplayerPacket, CountedPayloadRejectsOverflowAndTrailingData) {
   std::array<uint8_t, 32> bytes = {};
   ENetPacket packet = {};

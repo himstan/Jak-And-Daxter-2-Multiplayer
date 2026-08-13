@@ -277,6 +277,35 @@
        (time-elapsed? (-> scene-proc scene-start-time) (seconds 1)))
   )
 
+(defun mp-register-local-scene-if-ready! ((scene-proc scene-player))
+  "Register or recover the local player's membership in its live scene cohort."
+  (when (or (not scene-proc)
+            (zero? scene-proc)
+            (-> scene-proc aborted?))
+    (return #f))
+  (let ((scene-obj (-> scene-proc scene)))
+    (when (or (not scene-obj)
+              (zero? scene-obj))
+      (return #f))
+    (let ((scene-name (-> scene-obj name)))
+      (when (or (not scene-name)
+                (zero? scene-name)
+                (zero? (length scene-name))
+                (mp-tomb-boulder-local-only-scene? scene-name)
+                (mp-tomb-scene-transport-suppressed? scene-name)
+                (mp-tomb-scene-sync-suppressed?)
+                (mp-tomb-scene-local-blocked? scene-name)
+                (and (string= scene-name "tomb-boss-intro")
+                     (mp-tomb-boss-intro-local-blocked?)))
+        (return #f))
+      (when (mp-scene-coordinator-note-local-start! scene-name)
+        (debug-log *mp-debug-log?*
+          "[MP-Scene] Registered/recovered local scene entry for ~S; broadcasting.~%"
+          scene-name)
+        (mp-event-hook-scene! (mp-scene-state started) scene-name)
+        (return #t))))
+  #f)
+
 (defun mp-complete-active-host-scene-skip-if-ready! ()
   "Let the host finalize one unanimous vote for its matching active scene."
   (when (and (mp-scene-coordinator-host-skip-ready?)
@@ -1374,6 +1403,7 @@
         )
     )
   :post (behavior ()
+    (mp-register-local-scene-if-ready! self)
     (mp-scene-coordinator-draw-votes!)
     (when (-> self scene)
       (let ((gp-0 (-> self scene cut-list))
@@ -1632,22 +1662,7 @@
     (copy-string<-string *mp-last-scene-name* (-> self scene name))
     )
 
-  (when (and (-> self scene)
-             (nonzero? (-> self scene))
-             (-> self scene name)
-             (nonzero? (-> self scene name))
-             (not (-> self aborted?))
-             (not (mp-tomb-boulder-local-only-scene? (-> self scene name)))
-             (not (mp-tomb-scene-transport-suppressed? (-> self scene name)))
-             (not (mp-tomb-scene-sync-suppressed?))
-             (not (mp-tomb-scene-local-blocked? (-> self scene name)))
-             (not (and (string= (-> self scene name) "tomb-boss-intro")
-                       (mp-tomb-boss-intro-local-blocked?))))
-    (when (mp-scene-coordinator-note-local-start! (-> self scene name))
-      (debug-log *mp-debug-log?*
-        "[MP-Scene] Broadcasting scene entry: ~S~%" (-> self scene name))
-      (mp-event-hook-scene!
-        (mp-scene-state started) (-> self scene name))))
+  (mp-register-local-scene-if-ready! self)
 
   (set! *display-entity-errors* #f)
   (set-setting! 'speech-control #f 0.0 0)
