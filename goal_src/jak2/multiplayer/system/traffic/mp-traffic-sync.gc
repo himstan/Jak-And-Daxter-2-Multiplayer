@@ -1,16 +1,21 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; --- Sync Update Callback ---
+(defun mp-traffic-ped-valid-for-authoritative-sync? ((proc citizen))
+  (and proc
+       (nonzero? proc)
+       (not (focus-test? proc inactive))
+       (!= (-> proc status) 'dead)
+       (-> proc draw)
+       (nonzero? (-> proc draw))))
 
 (defun mp-sync-traffic-update-callback ((proc process))
   (when (and proc (nonzero? proc))
     (cond
       ((type? proc citizen)
        (let ((e-proc (the-as citizen proc)))
-         (when (not (focus-test? e-proc inactive))
+         (when (mp-traffic-ped-valid-for-authoritative-sync? e-proc)
            (mp-traffic-ensure-process-net-id! e-proc)
-           ;; Only active authoritative traffic with a NetID is synchronized.
            (when (nonzero? (-> e-proc net-id))
              (when (< (-> *mp-traffic-buffer* ped-count) (the uint MP_MAX_SYNC_PEDESTRIANS))
                (let ((slot (-> *mp-traffic-buffer* ped-enemies (-> *mp-traffic-buffer* ped-count))))
@@ -114,9 +119,9 @@
   (and ped-proc
        (nonzero? ped-proc)
        (nonzero? (-> ped-proc net-id))
-       (or (focus-test? ped-proc inactive)
-           (= (-> ped-proc status) 'dead)
-           (zero? (-> ped-proc controller branch))))
+       (or
+         (focus-test? ped-proc inactive)
+         (= (-> ped-proc status) 'dead)))
   )
 
 (defun mp-traffic-cull-illegal-ped! ((ped-proc citizen))
@@ -252,7 +257,6 @@
   (set! *mp-traffic-suppressed* #f)
   (set! *mp-traffic-sync-active* #f)
   (set! *mp-traffic-drain-active* #f)
-  (set! *mp-traffic-host-spawning-active* #f)
   (set! *mp-traffic-local-authoritative?* #t)
   (set! *mp-traffic-local-root-has-followers?* #f)
   (set! *mp-traffic-authority-assignments* (the uint #xffffffff))
@@ -459,6 +463,19 @@
   (none)
   )
 
+(defun mp-traffic-clear-authoritative-slots! ()
+  "Clear published traffic slots before rebuilding an authoritative snapshot."
+  (dotimes (i (the int MP_MAX_SYNC_PEDESTRIANS))
+    (set! (-> *mp-traffic-buffer* ped-enemies i net-id) (the uint 0))
+    )
+  (dotimes (i (the int MP_MAX_SYNC_VEHICLES))
+    (set! (-> *mp-traffic-buffer* veh-enemies i net-id) (the uint 0))
+    )
+  (set! (-> *mp-traffic-buffer* ped-count) (the uint 0))
+  (set! (-> *mp-traffic-buffer* veh-count) (the uint 0))
+  (none)
+  )
+
 (defun mp-traffic-local-city-loaded? ()
   "True when this client has a stable local city traffic context. Otherwise ignore traffic packets."
   (and (mp-local-world-ready-for-remote-sync?)
@@ -541,7 +558,7 @@
   (let ((refresh-count (the uint 0)))
     (when (and *mp-traffic-buffer*
                (nonzero? (the-as uint *mp-traffic-buffer*)))
-      (dotimes (slot-idx (the int MP_MAX_SYNC_PEDESTRIANS))
+      (dotimes (slot-idx (the-as int (-> *mp-traffic-buffer* ped-count)))
         (when (mp-traffic-refresh-existing-ped-slot! (-> *mp-traffic-buffer* ped-enemies slot-idx))
           (+! refresh-count 1)
           )
@@ -604,7 +621,7 @@
   (let ((refresh-count (the uint 0)))
     (when (and *mp-traffic-buffer*
                (nonzero? (the-as uint *mp-traffic-buffer*)))
-      (dotimes (slot-idx (the int MP_MAX_SYNC_VEHICLES))
+      (dotimes (slot-idx (the-as int (-> *mp-traffic-buffer* veh-count)))
         (when (mp-traffic-refresh-existing-vehicle-slot!
                 (-> *mp-traffic-buffer* veh-enemies slot-idx))
           (+! refresh-count 1)
@@ -741,8 +758,7 @@
           (if (not (mp-is-traffic-ready?))
           (begin
             (set! *mp-traffic-last-remote-apply-ready* #f)
-            (set! (-> *mp-traffic-buffer* ped-count) (the uint 0))
-            (set! (-> *mp-traffic-buffer* veh-count) (the uint 0))
+            (mp-traffic-clear-authoritative-slots!)
             (when (time-elapsed? (-> *mp-traffic-buffer* last-sync-time) (seconds 5))
                (debug-log *mp-debug-log?* "[MP-Traffic] Waiting for Traffic Manager & Levels...~%")
                (set! (-> *mp-traffic-buffer* last-sync-time) (the-as uint (current-time)))
@@ -760,8 +776,7 @@
                 (begin
                   ;; Reclaim host bookkeeping before current entities request slots.
                   (mp-cleanup-authoritative-traffic-ghosts!)
-                  (set! (-> *mp-traffic-buffer* ped-count) (the uint 0))
-                  (set! (-> *mp-traffic-buffer* veh-count) (the uint 0))
+                  (mp-traffic-clear-authoritative-slots!)
                   
                   ;; Efficient iteration: Only check children of the traffic trackers
                   (let ((curr (-> *traffic-manager* child)))
@@ -799,12 +814,9 @@
                                 (debug-log *mp-debug-log?* "[MP-Traffic] Puppet Active: ~D peds, ~D vehs ready=~A riding=~A local-level=~D authority-level=~D~%" (-> *mp-traffic-buffer* ped-count) (-> *mp-traffic-buffer* veh-count) *mp-traffic-art-context-spawn-ready* *mp-traffic-art-context-riding* *mp-traffic-art-context-local-level* *mp-traffic-art-context-authority-level*)
                                 (set! (-> *mp-traffic-buffer* last-sync-time) (the-as uint (current-time)))
                                 )
-                              (when (or (nonzero? (-> *mp-traffic-buffer* ped-count)) (nonzero? (-> *mp-traffic-buffer* veh-count)))
-                                (mp-pedestrian-apply-remote)
-                                (mp-pedestrian-run-external-sync-pass)
-                                (mp-vehicle-apply-remote)
-                                )
-                              ;; Periodically clear stale ghost records for despawned traffic
+                              (mp-pedestrian-apply-remote)
+                              (mp-pedestrian-run-external-sync-pass)
+                              (mp-vehicle-apply-remote)
                               (mp-cleanup-traffic-ghosts)
                               )
                             (begin

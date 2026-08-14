@@ -386,7 +386,7 @@
   )
 
 (defun mp-vehicle-driver-sync-claimed? ((veh vehicle))
-  "True when a vehicle is currently claimed by either player's driver sync slot."
+  "True when a vehicle is currently claimed by any player's driver sync state."
   (if (and veh (nonzero? veh) (nonzero? (-> veh net-id)))
       (mp-vehicle-net-id-player-driven? (-> veh net-id) #f)
       #f
@@ -836,7 +836,7 @@
   )
 
 (defun mp-client-vehicle-next-net-id ()
-  "Allocate an ID from Daxter's client-only ambient vehicle range."
+  "Allocate an ID from the local client's ambient vehicle range."
   (let ((local-base (mp-client-vehicle-local-net-id-base))
         (attempts 0)
         (candidate *mp-client-vehicle-net-id-counter*))
@@ -862,10 +862,10 @@
   )
 
 (defun mp-vehicle-promote-local-driver! ((veh vehicle))
-  "Give a Daxter-owned local traffic vehicle a network identity once driven."
+  "Give a client-owned local traffic vehicle a network identity once driven."
   (when (and veh
              (nonzero? veh)
-             (mp-local-player-daxter?)
+             (mp-session-client?)
              *target*
              (nonzero? *target*)
              (-> *target* control)
@@ -878,7 +878,7 @@
         (logior! (-> veh flags) (rigid-body-object-flag persistent player-driving riding))
         (logclear! (-> veh flags) (rigid-body-object-flag ai-driving alert in-pursuit target-in-sight rammed-target))
         (set! (-> veh pad-index) (the-as uint (-> *target* control cpad number)))
-        (debug-log *mp-debug-log?* "[MP-Traffic] Promoted Daxter-driven local vehicle to nid=~D.~%" new-net-id)
+        (debug-log *mp-debug-log?* "[MP-Traffic] Promoted client-driven local vehicle to nid=~D for player=~D.~%" new-net-id (mp-local-player-id))
         )
       )
     )
@@ -1317,7 +1317,7 @@
         (logtest? (-> rec ghost-aux-state) MP_VEHICLE_STATE_FLAG_PHYSICS)
         (or (nonzero? (-> this net-id))
             (and (-> this state) (= (-> this state name) 'player-control))
-            (mp-local-player-daxter?)
+            (mp-session-client?)
             )
         )
     )
@@ -1370,27 +1370,35 @@
   )
 
 (defun mp-vehicle-update-riders ((proc vehicle) (slot mp-vehicle-state))
-  "Spawn or despawn civilian riders on a puppet vehicle to match the host's state."
+  "Spawn or despawn civilian riders on a puppet vehicle to match the authoritative state."
   (dotimes (i 4)
     (let ((client-rider-proc (handle->process (-> proc rider-array i)))
-          (host-rider-type (-> slot rider-player-ids i)))
+          (host-rider-id (-> slot rider-player-ids i)))
       (cond
-        ((and (= host-rider-type MP_VEHICLE_RIDER_CIVILIAN_ID) (not client-rider-proc))
-         ;; Host has a civilian rider, client does not.
-         (when (and (= i 0) (mp-traffic-type-loaded? (the-as traffic-type (-> slot vehicle-type))))
-           ;; HIJACK GUARD: Don't spawn if local player is currently hijacking this vehicle.
-           (let ((is-local-hijacking? (and *target* 
-                                          (nonzero? (-> *target* pilot))
-                                          (nonzero? (-> *target* pilot vehicle))
-                                          (= (handle->process (-> *target* pilot vehicle)) proc))))
+        ((and (= host-rider-id MP_VEHICLE_RIDER_CIVILIAN_ID)
+              (not client-rider-proc))
+         (when (and (= i 0)
+                    (mp-traffic-type-loaded?
+                      (the-as traffic-type (-> slot vehicle-type))))
+           (let ((is-local-hijacking?
+                   (and *target*
+                        (nonzero? *target*)
+                        (-> *target* pilot)
+                        (nonzero? (-> *target* pilot))
+                        (nonzero? (-> *target* pilot vehicle))
+                        (= (handle->process (-> *target* pilot vehicle))
+                           proc))))
              (when (not is-local-hijacking?)
-               (let ((params (new 'stack 'traffic-object-spawn-params)))
+               (let ((params
+                       (new 'stack 'traffic-object-spawn-params)))
                  (mp-traffic-art-context!
                    'veh-rider-spawn
                    (-> slot net-id)
                    (the uint (-> slot vehicle-type))
                    (the uint (-> slot state-id)))
-                 (set! (-> params object-type) (the-as traffic-type (-> slot vehicle-type)))
+
+                 (set! (-> params object-type)
+                       (the-as traffic-type (-> slot vehicle-type)))
                  (set! (-> params behavior) (the uint64 0))
                  (set! (-> params id) (the uint32 0))
                  (set! (-> params nav-mesh) #f)
@@ -1398,38 +1406,67 @@
                  (set! (-> params proc) #f)
                  (set! (-> params handle) (the-as handle #f))
                  (set! (-> params user-data) (the uint 0))
-                 (set! (-> params flags) (traffic-spawn-flags skip-lwide-entity-hack spawn-rider))
+                 (set! (-> params flags)
+                       (traffic-spawn-flags
+                         skip-lwide-entity-hack
+                         spawn-rider))
                  (set! (-> params guard-type) (the uint8 0))
-                 (set-vector! (-> params position) (-> slot x) (-> slot y) (-> slot z) 1.0)
-                 (quaternion-set! (-> params rotation) (-> slot quat-x) (-> slot quat-y) (-> slot quat-z) (-> slot quat-w))
-                 (set-vector! (-> params velocity) 0.0 0.0 0.0 1.0)
+
+                 (set-vector!
+                   (-> params position)
+                   (-> slot x)
+                   (-> slot y)
+                   (-> slot z)
+                   1.0)
+
+                 (quaternion-set!
+                   (-> params rotation)
+                   (-> slot quat-x)
+                   (-> slot quat-y)
+                   (-> slot quat-z)
+                   (-> slot quat-w))
+
+                 (set-vector!
+                   (-> params velocity)
+                   0.0
+                   0.0
+                   0.0
+                   1.0)
+
                  (spawn-default-vehicle-rider! proc params)
                  )
                )
              )
            )
          )
-        ((and (zero? host-rider-type) client-rider-proc (type? client-rider-proc vehicle-rider))
-         ;; Seat is empty on host, but has a civilian locally. Kill them.
-         (when (and client-rider-proc (nonzero? client-rider-proc) 
-                    (not (logtest? (-> client-rider-proc mask) (process-mask sleep)))
-                    (!= (-> client-rider-proc status) 'dead))
-            (send-event client-rider-proc 'rider-off)
-            (deactivate client-rider-proc)
-            )
-         (set! (-> proc rider-array i) (the-as handle #f))
-         )
-        ((and (or (= host-rider-type 1) (= host-rider-type 2))
+        ((and (= host-rider-id MP_INVALID_PLAYER_ID)
               client-rider-proc
               (type? client-rider-proc vehicle-rider))
-         ;; Host has a player here. Remove any stale civilian rider before the puppet attaches.
-         (mp-vehicle-clear-seat-occupant! proc i (the-as object #f))
+         (when (and client-rider-proc
+                    (nonzero? client-rider-proc)
+                    (not
+                      (logtest?
+                        (-> client-rider-proc mask)
+                        (process-mask sleep)))
+                    (!= (-> client-rider-proc status) 'dead))
+           (send-event client-rider-proc 'rider-off)
+           (deactivate client-rider-proc)
+           )
+         (set! (-> proc rider-array i) (the-as handle #f))
+         )
+        ((and (mp-player-id-valid? host-rider-id)
+              client-rider-proc
+              (type? client-rider-proc vehicle-rider))
+         (mp-vehicle-clear-seat-occupant!
+           proc
+           i
+           (the-as object #f))
          )
         )
       )
     )
   (none)
-)
+  )
 
 (defun mp-vehicle-record-ghost-sample! ((proc vehicle) (slot mp-vehicle-state) (rec mp-traffic-ghost-record))
   "Record movement only when the network sample for this vehicle advances."
@@ -1643,7 +1680,7 @@
 
 (defun mp-vehicle-apply-remote ()
   (let ((spawn-budget 2))
-    (dotimes (i (the int MP_MAX_SYNC_VEHICLES))
+    (dotimes (i (the-as int (-> *mp-traffic-buffer* veh-count)))
       (let ((slot (-> *mp-traffic-buffer* veh-enemies i)))
         (when (and (nonzero? (-> slot net-id))
                    (not (mp-vehicle-net-id-player-driven?
@@ -1693,7 +1730,7 @@
                      (set! found-in-buffer? #t)
                      )
                     ((not (mp-vehicle-authority-handoff-active? v-net-id))
-                     (dotimes (i (the int MP_MAX_SYNC_VEHICLES))
+                     (dotimes (i (the-as int (-> *mp-traffic-buffer* veh-count)))
                        (when (= (-> *mp-traffic-buffer* veh-enemies i net-id) v-net-id)
                          (set! found-in-buffer? #t)))
                      )

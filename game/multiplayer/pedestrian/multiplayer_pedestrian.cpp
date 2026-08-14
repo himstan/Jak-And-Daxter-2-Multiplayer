@@ -39,10 +39,12 @@ bool handle_pedestrian_sync_packet(const _ENetEvent& event,
   memcpy(&source_player_id, event.packet->data + source_offset, sizeof(source_player_id));
   memcpy(&ped_count, event.packet->data + count_offset, sizeof(ped_count));
   memcpy(&level_hash, event.packet->data + level_offset, sizeof(level_hash));
-  if (header.type != PacketType::PEDESTRIAN_SYNC || ped_count > MAX_PEDESTRIANS_PER_PACKET ||
+  if (header.type != PacketType::PEDESTRIAN_SYNC ||
+      ped_count > MAX_PEDESTRIANS_PER_PACKET ||
       !mp_validate_traffic_source(data, source_player_id, sender_player_id) ||
-      !mp_sequence_is_newer(header.sequenceNum,
-                            data.last_pedestrian_sequence_by_source[source_player_id])) {
+      !mp_sequence_is_current_or_newer(
+          header.sequenceNum,
+          data.last_pedestrian_sequence_by_source[source_player_id])) {
     return false;
   }
   if (event.packet->dataLength != pedestrian_packet_size(ped_count)) {
@@ -121,21 +123,47 @@ bool handle_pedestrian_sync_packet(const _ENetEvent& event,
 void send_pedestrian_sync_packets(MultiplayerData& data,
                                   MPTrafficSyncBufferGOAL* buffer,
                                   int channel) {
-  uint32_t total_peds = (buffer->ped_count < MAX_PEDESTRIAN_SYNC_COUNT) ? buffer->ped_count : MAX_PEDESTRIAN_SYNC_COUNT;
+  const uint32_t total_peds =
+      (buffer->ped_count < MAX_PEDESTRIAN_SYNC_COUNT)
+          ? buffer->ped_count
+          : MAX_PEDESTRIAN_SYNC_COUNT;
+
+  if (total_peds == 0) {
+    return;
+  }
+
+  const uint32_t snapshot_sequence = ++data.sequence_num;
+
   uint32_t sent_peds = 0;
+
   while (sent_peds < total_peds) {
-    uint32_t chunk_size = (total_peds - sent_peds < MAX_PEDESTRIANS_PER_PACKET) ? (total_peds - sent_peds) : MAX_PEDESTRIANS_PER_PACKET;
-    PacketPedestrianSync packet = {}; packet.header.type = PacketType::PEDESTRIAN_SYNC;
-    packet.header.sequenceNum = ++data.sequence_num;
+    const uint32_t chunk_size =
+        (total_peds - sent_peds < MAX_PEDESTRIANS_PER_PACKET)
+            ? (total_peds - sent_peds)
+            : MAX_PEDESTRIANS_PER_PACKET;
+
+    PacketPedestrianSync packet = {};
+    packet.header.type = PacketType::PEDESTRIAN_SYNC;
+    packet.header.sequenceNum = snapshot_sequence;
     packet.source_player_id = static_cast<uint8_t>(data.local_player_id);
-    packet.count = chunk_size; packet.timestamp = enet_time_get();
+    packet.count = chunk_size;
+    packet.timestamp = enet_time_get();
     packet.level_hash = data.local_traffic_level_hash;
+
     for (uint32_t i = 0; i < chunk_size; i++) {
-      auto* src = &buffer->pedestrians[sent_peds + i]; auto* dst = &packet.peds[i];
-      dst->net_id = src->net_id; dst->object_type = src->object_type; dst->object_variance = src->object_variance;
-      dst->x = src->x; dst->y = src->y; dst->z = src->z;
-      dst->quat[0] = mp_pack_float_q(src->quat_x); dst->quat[1] = mp_pack_float_q(src->quat_y);
-      dst->quat[2] = mp_pack_float_q(src->quat_z); dst->quat[3] = mp_pack_float_q(src->quat_w);
+      auto* src = &buffer->pedestrians[sent_peds + i];
+      auto* dst = &packet.peds[i];
+
+      dst->net_id = src->net_id;
+      dst->object_type = src->object_type;
+      dst->object_variance = src->object_variance;
+      dst->x = src->x;
+      dst->y = src->y;
+      dst->z = src->z;
+      dst->quat[0] = mp_pack_float_q(src->quat_x);
+      dst->quat[1] = mp_pack_float_q(src->quat_y);
+      dst->quat[2] = mp_pack_float_q(src->quat_z);
+      dst->quat[3] = mp_pack_float_q(src->quat_w);
       dst->hp = src->hp;
       dst->state_id = src->state_id;
       dst->target_player_id = src->target_player_id;
@@ -147,19 +175,41 @@ void send_pedestrian_sync_packets(MultiplayerData& data,
       dst->pad[0] = 0;
       dst->pad[1] = 0;
     }
-    size_t packet_size = pedestrian_packet_size(chunk_size);
-    MultiplayerManager::broadcast(data, channel, &packet, packet_size, ENET_PACKET_FLAG_UNSEQUENCED);
+
+    const size_t packet_size = pedestrian_packet_size(chunk_size);
+
+    MultiplayerManager::broadcast(
+        data,
+        channel,
+        &packet,
+        packet_size,
+        ENET_PACKET_FLAG_UNSEQUENCED);
+
     sent_peds += chunk_size;
   }
 }
 
-void receive_pedestrian_sync_data(MultiplayerData& data, MPTrafficSyncBufferGOAL* buffer) {
-  uint32_t active_count = 0;
-  for (uint32_t i = 0; i < MAX_PEDESTRIAN_SYNC_COUNT; i++) {
-    if (data.traffic_buffer.pedestrians[i].net_id != 0) {
-      active_count++;
-    }
+void receive_pedestrian_sync_data(MultiplayerData& data,
+                                  MPTrafficSyncBufferGOAL* buffer) {
+  if (!buffer) {
+    return;
   }
-  buffer->ped_count = active_count;
-  memcpy(buffer->pedestrians, data.traffic_buffer.pedestrians, sizeof(MPPedestrianState) * MAX_PEDESTRIAN_SYNC_COUNT);
+
+  uint32_t out_count = 0;
+
+  for (uint32_t i = 0; i < MAX_PEDESTRIAN_SYNC_COUNT; ++i) {
+    const auto& src = data.traffic_buffer.pedestrians[i];
+
+    if (src.net_id == 0) {
+      continue;
+    }
+
+    buffer->pedestrians[out_count++] = src;
+  }
+
+  for (uint32_t i = out_count; i < MAX_PEDESTRIAN_SYNC_COUNT; ++i) {
+    buffer->pedestrians[i].net_id = 0;
+  }
+
+  buffer->ped_count = out_count;
 }

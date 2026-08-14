@@ -185,7 +185,6 @@
                (or (not local-authoritative?) has-followers?)))
     (set! *mp-traffic-suppressed* (not local-authoritative?))
     (set! *mp-traffic-drain-active* (not local-authoritative?))
-    (set! *mp-traffic-host-spawning-active* #f)
     (pc-multi-set-traffic-authority-map authority-map selected-source)
     (when source-changed?
       (if local-authoritative?
@@ -209,7 +208,6 @@
     (set! *mp-traffic-suppressed* #f)
     (set! *mp-traffic-sync-active* #f)
     (set! *mp-traffic-drain-active* #f)
-    (set! *mp-traffic-host-spawning-active* #f)
     (pc-multi-set-traffic-authority-map
       (the uint #xffffffff)
       (the uint MP_INVALID_PLAYER_ID))

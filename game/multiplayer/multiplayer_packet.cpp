@@ -68,6 +68,12 @@ bool mp_sequence_is_newer(uint32_t incoming, uint32_t previous) {
   return previous == 0 || static_cast<int32_t>(incoming - previous) > 0;
 }
 
+bool mp_sequence_is_current_or_newer(uint32_t incoming, uint32_t previous) {
+  return previous == 0 ||
+         incoming == previous ||
+         static_cast<int32_t>(incoming - previous) > 0;
+}
+
 PacketView::PacketView(const ENetPacket* packet) : m_packet(packet) {}
 
 bool PacketView::has_header() const {

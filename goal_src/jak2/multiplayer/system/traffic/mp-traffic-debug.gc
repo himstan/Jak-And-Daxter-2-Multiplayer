@@ -364,8 +364,6 @@
     (format *stdcon* "SYNC: ~S  SUPPRESSED: ~S~%"
             (if *mp-traffic-sync-active* "YES" "NO")
             (if *mp-traffic-suppressed* "YES" "NO"))
-    (format *stdcon* "SPAWNING: ~S~%"
-            (if *mp-traffic-host-spawning-active* "YES" "NO"))
     (mp-for-each-player-record (player-id record)
       (when (and (mp-player-record-remote? *mp-player-controller* record)
                  *target*

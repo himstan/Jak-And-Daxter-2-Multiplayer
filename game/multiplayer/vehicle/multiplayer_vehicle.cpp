@@ -64,8 +64,9 @@ bool handle_vehicle_sync_packet(const _ENetEvent& event,
   memcpy(&level_hash, event.packet->data + level_offset, sizeof(level_hash));
   if (header.type != PacketType::VEHICLE_SYNC || veh_count > MAX_VEHICLES_PER_PACKET ||
       !mp_validate_traffic_source(data, source_player_id, sender_player_id) ||
-      !mp_sequence_is_newer(header.sequenceNum,
-                            data.last_vehicle_sequence_by_source[source_player_id])) {
+      !mp_sequence_is_current_or_newer(
+          header.sequenceNum,
+          data.last_vehicle_sequence_by_source[source_player_id])) {
     return false;
   }
   if (event.packet->dataLength != vehicle_packet_size(veh_count)) {
@@ -151,14 +152,30 @@ bool handle_vehicle_sync_packet(const _ENetEvent& event,
 void send_vehicle_sync_packets(MultiplayerData& data,
                                MPTrafficSyncBufferGOAL* buffer,
                                int channel) {
-  uint32_t total_vehs = (buffer->veh_count < MAX_VEHICLE_SYNC_COUNT) ? buffer->veh_count : MAX_VEHICLE_SYNC_COUNT;
+  const uint32_t total_vehs =
+        (buffer->veh_count < MAX_VEHICLE_SYNC_COUNT)
+            ? buffer->veh_count
+            : MAX_VEHICLE_SYNC_COUNT;
+  if (total_vehs == 0) {
+    return;
+  }
+
+  const uint32_t snapshot_sequence = ++data.sequence_num;
+
   uint32_t sent_vehs = 0;
+
   while (sent_vehs < total_vehs) {
-    uint32_t chunk_size = (total_vehs - sent_vehs < MAX_VEHICLES_PER_PACKET) ? (total_vehs - sent_vehs) : MAX_VEHICLES_PER_PACKET;
-    PacketVehicleSync packet = {}; packet.header.type = PacketType::VEHICLE_SYNC;
-    packet.header.sequenceNum = ++data.sequence_num;
+    const uint32_t chunk_size =
+        (total_vehs - sent_vehs < MAX_VEHICLES_PER_PACKET)
+            ? (total_vehs - sent_vehs)
+            : MAX_VEHICLES_PER_PACKET;
+
+    PacketVehicleSync packet = {};
+    packet.header.type = PacketType::VEHICLE_SYNC;
+    packet.header.sequenceNum = snapshot_sequence;
     packet.source_player_id = static_cast<uint8_t>(data.local_player_id);
-    packet.count = chunk_size; packet.timestamp = enet_time_get();
+    packet.count = chunk_size;
+    packet.timestamp = enet_time_get();
     packet.level_hash = data.local_traffic_level_hash;
     for (uint32_t i = 0; i < chunk_size; i++) {
       auto* src = &buffer->vehicles[sent_vehs + i]; auto* dst = &packet.vehs[i];
@@ -174,19 +191,41 @@ void send_vehicle_sync_packets(MultiplayerData& data,
       dst->state_flags = src->state_flags;
       memcpy(dst->rider_player_ids, src->rider_player_ids, 16);
     }
-    size_t packet_size = vehicle_packet_size(chunk_size);
-    MultiplayerManager::broadcast(data, channel, &packet, packet_size, ENET_PACKET_FLAG_UNSEQUENCED);
+    const size_t packet_size = vehicle_packet_size(chunk_size);
+    
+    MultiplayerManager::broadcast(
+        data,
+        channel,
+        &packet,
+        packet_size,
+        ENET_PACKET_FLAG_UNSEQUENCED);
+
     sent_vehs += chunk_size;
   }
 }
 
-void receive_vehicle_sync_data(MultiplayerData& data, MPTrafficSyncBufferGOAL* buffer) {
-  uint32_t active_count = 0;
-  for (uint32_t i = 0; i < MAX_VEHICLE_SYNC_COUNT; i++) {
-    if (data.traffic_buffer.vehicles[i].net_id != 0) {
-      active_count++;
-    }
+void receive_vehicle_sync_data(MultiplayerData& data,
+                               MPTrafficSyncBufferGOAL* buffer) {
+  if (!buffer) {
+    return;
   }
-  buffer->veh_count = active_count;
-  memcpy(buffer->vehicles, data.traffic_buffer.vehicles, sizeof(MPVehicleState) * MAX_VEHICLE_SYNC_COUNT);
+
+  uint32_t out_count = 0;
+
+  for (uint32_t i = 0; i < MAX_VEHICLE_SYNC_COUNT; ++i) {
+    const auto& src = data.traffic_buffer.vehicles[i];
+
+    if (src.net_id == 0) {
+      continue;
+    }
+
+    buffer->vehicles[out_count] = src;
+    ++out_count;
+  }
+
+  for (uint32_t i = out_count; i < MAX_VEHICLE_SYNC_COUNT; ++i) {
+    buffer->vehicles[i].net_id = 0;
+  }
+
+  buffer->veh_count = out_count;
 }

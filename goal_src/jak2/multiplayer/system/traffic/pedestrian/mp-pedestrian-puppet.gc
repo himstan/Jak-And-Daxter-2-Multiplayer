@@ -484,6 +484,28 @@
     )
   )
 
+(defun mp-pedestrian-despawn-puppet! ((proc citizen))
+  (when (and proc (nonzero? proc) (nonzero? (-> proc net-id)))
+    (let ((old-net-id (-> proc net-id)))
+      (debug-log
+        *mp-debug-log?*
+        "[MP-PedCleanup] Retiring ~A nid=~D pid=~D inactive=~A status=~A~%"
+        (-> proc name)
+        old-net-id
+        (-> proc pid)
+        (focus-test? proc inactive)
+        (-> proc status))
+      (logclear! (-> proc flags) (citizen-flag persistent))
+      (set! (-> proc net-id) (the uint 0))
+      (when (not (focus-test? proc inactive))
+        (send-event proc 'traffic-off-force)
+        )
+      (deactivate proc)
+      )
+    )
+  (none)
+  )
+
 (defun mp-pedestrian-apply-ghost-state ((proc citizen) (slot mp-pedestrian-state))
   "Update the ghost record for a pedestrian from the latest remote data.
    The actual position correction runs each frame from citizen common-post."
@@ -539,7 +561,8 @@
     (cond
       ((and (not (logtest? (-> proc enemy-flags) (enemy-flag stop-syncing))) (or (focus-test? proc inactive) (= (-> proc status) 'dead)))
        (debug-log *mp-debug-log?* "[MP-Pedestrian-Puppet] Cleaning up ~A nid=~D pid=~D inactive=~A status=~A because it was dead/inactive~%" (-> proc name) (-> proc net-id) (-> proc pid) (focus-test? proc inactive) (-> proc status))
-       (set! (-> proc net-id) (the uint 0))
+       (mp-pedestrian-despawn-puppet! proc)
+       (return #f)
        )
       (else
         (mp-pedestrian-apply-vehicle-context! proc slot)
@@ -557,9 +580,6 @@
             (set-vector! (-> params position) (-> slot x) (-> slot y) (-> slot z) 1.0)
             (mp-pedestrian-log-branchless-proc! 'ghost-update proc params)
             )
-          (send-event proc 'traffic-off-force)
-          (debug-log *mp-debug-log?* "[MP-Pedestrian-Puppet] Force traffic off ~A nid=~D pid=~D inactive=~A status=~A because it was dead/inactive~%" (-> proc name) (-> proc net-id) (-> proc pid) (focus-test? proc inactive) (-> proc status))
-          (set! (-> proc net-id) (the uint 0))
           )
 
         (when (nonzero? (-> proc net-id))
@@ -576,20 +596,17 @@
     )
   (none)
 )
+
 (defun mp-pedestrian-apply-remote ()
   (let ((spawn-budget 2))
-    (dotimes (i (the int MP_MAX_SYNC_PEDESTRIANS))
+    (dotimes (i (the-as int (-> *mp-traffic-buffer* ped-count)))
       (let ((slot (-> *mp-traffic-buffer* ped-enemies i)))
         (when (nonzero? (-> slot net-id))
           (let ((proc (mp-pedestrian-find-by-net-id (-> slot net-id))))
             (if proc
-                ;; Update ghost record for existing pedestrian (P-controller handles correction)
                 (mp-pedestrian-apply-ghost-state proc slot)
                 (when (> spawn-budget 0)
-                  ;; Spawn new pedestrian (stays in normal AI state)
                   (when (mp-pedestrian-spawn-puppet slot)
-                    ;; Also initialise the ghost record immediately after spawn so the
-                    ;; P-controller can start correcting from the first frame.
                     (let ((new-proc (mp-pedestrian-find-by-net-id (-> slot net-id))))
                       (when new-proc
                         (mp-pedestrian-apply-ghost-state new-proc slot)
@@ -617,14 +634,15 @@
                        (type? proc citizen)
                        (nonzero? (-> (the-as citizen proc) net-id)))
               (let ((found-in-buffer? #f))
-                (dotimes (i (the int MP_MAX_SYNC_PEDESTRIANS))
-                  (if (= (-> *mp-traffic-buffer* ped-enemies i net-id) (-> (the-as citizen proc) net-id))
-                      (set! found-in-buffer? #t)
-                      )
+                (dotimes
+                  (i (the-as int (-> *mp-traffic-buffer* ped-count)))
+                  (when (= (-> *mp-traffic-buffer* ped-enemies i net-id) (-> (the-as citizen proc) net-id))
+                    (set! found-in-buffer? #t)
+                    )
                   )
+
                 (when (not found-in-buffer?)
-                  (logclear! (-> (the-as citizen proc) flags) (citizen-flag persistent))
-                  (send-event proc 'traffic-off-force)
+                  (mp-pedestrian-despawn-puppet! (the-as citizen proc))
                   )
                 )
               )
@@ -635,4 +653,4 @@
       )
     )
   (none)
-)
+  )

@@ -17,6 +17,7 @@ bool mp_float_is_finite(float value);
 uint32_t mp_clamp_count(uint32_t count, uint32_t max_count);
 size_t mp_counted_packet_size(uint32_t count, size_t element_size);
 bool mp_sequence_is_newer(uint32_t incoming, uint32_t previous);
+bool mp_sequence_is_current_or_newer(uint32_t incoming, uint32_t previous);
 bool mp_packet_direction_allowed(PacketType type, int sender_role);
 
 class PacketView {
