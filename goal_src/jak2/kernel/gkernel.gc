@@ -2458,11 +2458,11 @@
 ;; the default clock
 (define *kernel-clock* (new 'static 'clock))
 ;; fixed size dead-pools.
-(define *16k-dead-pool* (new 'global 'dead-pool NUM_MAX_TARGET (* #x4000 NUM_MAX_TARGET) "*16k-dead-pool*"))
-(define *8k-dead-pool* (new 'global 'dead-pool  NUM_MAX_TARGET (* 8192  NUM_MAX_TARGET) "*8k-dead-pool*"))
-(define *4k-dead-pool* (new 'global 'dead-pool  NUM_MAX_TARGET (* 4096  NUM_MAX_TARGET) "*4k-dead-pool*"))
+(define *16k-dead-pool* (new 'global 'dead-pool (+ NUM_MAX_TARGET 2) #x4000 "*16k-dead-pool*"))
+(define *8k-dead-pool* (new 'global 'dead-pool (* 2 (+ NUM_MAX_TARGET 2)) 8192 "*8k-dead-pool*"))
+(define *4k-dead-pool* (new 'global 'dead-pool (+ NUM_MAX_TARGET 2) 4096 "*4k-dead-pool*"))
 ;; special dead pools
-(define *target-dead-pool* (new 'global 'dead-pool NUM_MAX_TARGET #xc000 "*target-dead-pool*"))
+(define *target-dead-pool* (new 'global 'dead-pool (+ NUM_MAX_TARGET 2) #xc000 "*target-dead-pool*"))
 (define *camera-dead-pool* (new 'global 'dead-pool 7 4096 "*camera-dead-pool*"))
 (define *camera-master-dead-pool* (new 'global 'dead-pool 1 8192 "*camera-master-dead-pool*"))
 ;; heap dead pools
