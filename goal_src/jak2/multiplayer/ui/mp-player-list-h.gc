@@ -12,7 +12,13 @@
 (define-perm *mp-player-list* mp-player-list-manager
   (new 'static 'mp-player-list-manager))
 
-(define-extern mp-player-list-init! (function symbol))
+(defconstant MP_PLAYER_NAMETAG_MAX_DIST (meters 50.0))
+(defconstant MP_PLAYER_NAMETAG_SCALE_MIN_DIST (meters 3.0))
+(defconstant MP_PLAYER_NAMETAG_MAX_SCALE 1.15)
+(defconstant MP_PLAYER_NAMETAG_MIN_SCALE 0.35)
+(defconstant MP_PLAYER_NAMETAG_Y_OFFSET_JAK (meters 2.3))
+(defconstant MP_PLAYER_NAMETAG_Y_OFFSET_DAXTER (meters 1.15))
+
 (define-extern mp-player-list-update! (function symbol))
 (define-extern mp-player-list-show! (function symbol))
 (define-extern mp-player-list-hide! (function symbol))

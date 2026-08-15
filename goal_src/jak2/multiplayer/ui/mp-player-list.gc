@@ -161,6 +161,83 @@
     (return #t))
   #f)
 
+(defun mp-player-nametag-draw! ((record mp-player-record) (local-pos vector))
+  (let ((player-target (mp-player-record-target record)))
+    (when (and player-target
+               (nonzero? player-target)
+               (-> player-target root)
+               (nonzero? (-> player-target root)))
+      (let* ((target-pos (-> player-target root trans))
+             (dist (vector-vector-distance local-pos target-pos)))
+        (when (<= dist MP_PLAYER_NAMETAG_MAX_DIST)
+          (let ((draw-pos (new 'stack-no-clear 'vector))
+                (screen-pos (new 'stack-no-clear 'vector4w))
+                (player-id (the-as uint (-> record identity player-id))))
+            (vector-copy! draw-pos target-pos)
+
+            (+! (-> draw-pos y)
+                (if (= (-> record identity character)
+                       (mp-player-character daxter))
+                    MP_PLAYER_NAMETAG_Y_OFFSET_DAXTER
+                    MP_PLAYER_NAMETAG_Y_OFFSET_JAK))
+
+            (when (transform-point-qword! screen-pos draw-pos)
+              (let ((font-ctx
+                      (new 'stack 'font-context
+                        *font-default-matrix*
+                        0 0 0.0
+                        (mp-player-font-color-by-id (the int player-id))
+                        (font-flags shadow kerning))))
+
+                (set-origin!
+                  font-ctx
+                  (+ (/ (-> screen-pos x) 16) -1792)
+                  (+ (/ (-> screen-pos y) 16) -1855))
+
+                (set-depth! font-ctx (/ (-> screen-pos z) 16))
+
+                (set-scale!
+                  font-ctx
+                  (lerp-scale
+                    MP_PLAYER_NAMETAG_MAX_SCALE
+                    MP_PLAYER_NAMETAG_MIN_SCALE
+                    dist
+                    MP_PLAYER_NAMETAG_SCALE_MIN_DIST
+                    MP_PLAYER_NAMETAG_MAX_DIST))
+
+                (mp-player-copy-name! *mp-nametag-string* player-id)
+
+                (let ((str-res
+                        (get-string-length *mp-nametag-string* font-ctx)))
+                  (-! (-> font-ctx origin x)
+                      (/ (-> str-res length) 2.0)))
+
+                (with-dma-buffer-add-bucket
+                  ((buf (-> *display* frames
+                            (-> *display* on-screen)
+                            debug-buf))
+                   (bucket-id debug-no-zbuf1))
+                  (draw-string *mp-nametag-string* buf font-ctx)))))))))
+  (none))
+
+(defun mp-player-nametags-update! ()
+  (let ((local-target
+          (mp-player-record-target (mp-local-player-record))))
+    (when (and local-target
+               (nonzero? local-target)
+               (-> local-target root)
+               (nonzero? (-> local-target root)))
+      (let ((local-pos (-> local-target root trans)))
+        (dotimes (i MP_MAX_PLAYERS)
+          (let ((record (mp-player-record-by-id (the uint i))))
+            (when (and record
+                       (nonzero? record)
+                       (mp-player-record-remote?
+                         *mp-player-controller*
+                         record))
+              (mp-player-nametag-draw! record local-pos)))))))
+  (none))
+
 (defun mp-player-list-update! ()
   "Per-frame tick for the popup player list. Displays when SELECT is held."
   (let ((select-held? (and *cpad-list*
@@ -171,6 +248,7 @@
         (begin
           (when (not (mp-player-list-visible?))
             (mp-player-list-show!))
+          (mp-player-nametags-update!)
           (when (and (mp-player-list-visible?)
                      (-> *mp-player-list* overlay)
                      (nonzero? (-> *mp-player-list* overlay))
