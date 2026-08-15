@@ -606,7 +606,7 @@
     (if (not (mp-session-tick))
         (return #f))
     (mp-send-tick)
-    (when (mp-gameplay-sync-ready?)
+    (when *multi-sync-enabled?*
       (mp-sync-scene-tick)
       (mp-receive-tick))
     (mp-player-list-update!)
