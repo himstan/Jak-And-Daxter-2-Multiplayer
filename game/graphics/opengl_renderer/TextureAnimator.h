@@ -4,6 +4,7 @@
 #include <set>
 #include <unordered_map>
 #include <vector>
+#include <array>
 
 #include "common/custom_data/Tfrag3Data.h"
 #include "common/dma/dma_chain_read.h"
@@ -74,6 +75,7 @@ class ClutBlender {
               const tfrag3::Level* level,
               OpenGLTexturePool* tpool);
   GLuint run(const float* weights);
+  GLuint make_source_texture(int source_idx) const;
   GLuint texture() const { return m_texture; }
   bool at_default() const { return m_current_weights[0] == 1.f && m_current_weights[1] == 0.f; }
 
@@ -284,6 +286,9 @@ class TextureAnimator {
   GLuint get_by_slot(int idx);
   void draw_debug_window();
   const std::vector<GLuint>* slots() { return &m_public_output_slots; }
+  const std::vector<std::array<GLuint, 2>>* darkjak_slots() const {
+    return &m_darkjak_output_slots;
+  }
   void clear_stale_textures(u64 frame_idx);
 
  private:
@@ -291,6 +296,8 @@ class TextureAnimator {
   void setup_texture_anims_common();
   void setup_texture_anims_jak2();
   void setup_texture_anims_jak3();
+  
+  void setup_darkjak_per_instance_textures();
 
   void setup_sky();
   void handle_upload_clut_16_16(const DmaTransfer& tf, const u8* ee_mem);
@@ -389,6 +396,7 @@ class TextureAnimator {
 
   std::vector<GLuint> m_private_output_slots;
   std::vector<GLuint> m_public_output_slots;
+  std::vector<std::array<GLuint, 2>> m_darkjak_output_slots;
   std::vector<int> m_skip_tbps;
 
   struct Bool {

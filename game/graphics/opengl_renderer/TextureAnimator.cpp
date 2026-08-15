@@ -423,6 +423,23 @@ GLuint ClutBlender::run(const float* weights) {
   return m_texture;
 }
 
+GLuint ClutBlender::make_source_texture(int source_idx) const {
+  ASSERT(source_idx >= 0 && source_idx < 2);
+
+  std::vector<u32> rgba(m_dest->index_data.size());
+
+  for (size_t i = 0; i < m_dest->index_data.size(); i++) {
+    const u8 palette_idx = m_dest->index_data[i];
+    memcpy(&rgba[i], (*m_cluts[source_idx])[palette_idx].data(), sizeof(u32));
+  }
+
+  GLuint texture = 0;
+  glGenTextures(1, &texture);
+  opengl_upload_texture(texture, rgba.data(), m_dest->w, m_dest->h);
+
+  return texture;
+}
+
 /*!
  * Utility class to show what happens if you take a PSM32 texture, upload it as PSM32, then read it
  * back as PSM8. Byte i from the input data ends up in destinations_per_byte[i].
@@ -603,11 +620,17 @@ TextureAnimator::TextureAnimator(ShaderLibrary& shaders,
   m_private_output_slots = m_public_output_slots;
   m_output_debug_flags.resize(animated_texture_slots(m_version).size());
 
+  m_darkjak_output_slots.resize(animated_texture_slots(m_version).size());
+  for (auto& pair : m_darkjak_output_slots) {
+    pair = {0, 0};
+  }
+
   // animation-specific stuff
   setup_texture_anims_common();
   switch (m_version) {
     case GameVersion::Jak2:
       setup_texture_anims_jak2();
+      setup_darkjak_per_instance_textures();
       break;
     case GameVersion::Jak3:
     case GameVersion::JakX:
@@ -783,7 +806,32 @@ void TextureAnimator::add_to_clut_blender_group(int idx,
   }
 }
 
+void TextureAnimator::setup_darkjak_per_instance_textures() {
+  ASSERT(m_darkjak_clut_blender_idx >= 0);
+
+  auto& group = m_clut_blender_groups.at(m_darkjak_clut_blender_idx);
+
+  ASSERT(group.blenders.size() == group.outputs.size());
+
+  for (size_t i = 0; i < group.blenders.size(); i++) {
+    const int slot = group.outputs[i];
+
+    auto& endpoints = m_darkjak_output_slots.at(slot);
+
+    endpoints[0] = group.blenders[i].make_source_texture(0);  // normal
+    endpoints[1] = group.blenders[i].make_source_texture(1);  // dark
+  }
+}
+
 TextureAnimator::~TextureAnimator() {
+  for (const auto& endpoints : m_darkjak_output_slots) {
+    for (GLuint texture : endpoints) {
+      if (texture != 0) {
+        glDeleteTextures(1, &texture);
+      }
+    }
+  }
+
   glDeleteVertexArrays(1, &m_vao);
   glDeleteBuffers(1, &m_vertex_buffer);
   glDeleteTextures(1, &m_dummy_texture);

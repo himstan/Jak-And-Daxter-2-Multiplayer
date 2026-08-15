@@ -144,7 +144,10 @@ OpenGLRenderer::OpenGLRenderer(std::shared_ptr<TexturePool> texture_pool,
       ASSERT(false);
   }
 
-  m_merc2 = std::make_shared<Merc2>(m_render_state.shaders, anim_slot_array());
+  m_merc2 = std::make_shared<Merc2>(
+      m_render_state.shaders,
+      anim_slot_array(),
+      m_texture_animator ? m_texture_animator->darkjak_slots() : nullptr);
   m_generic2 = std::make_shared<Generic2>(m_render_state.shaders);
 
   // initialize all renderers

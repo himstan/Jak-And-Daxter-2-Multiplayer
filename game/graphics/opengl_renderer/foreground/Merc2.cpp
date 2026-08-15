@@ -1,5 +1,7 @@
 #include "Merc2.h"
 
+#include <algorithm>
+
 #include "common/global_profiler/GlobalProfiler.h"
 #include "common/util/fnv.h"
 #include "common/util/simd_util.h"
@@ -48,8 +50,12 @@
 
 std::mutex g_merc_data_mutex;
 
-Merc2::Merc2(ShaderLibrary& shaders, const std::vector<GLuint>* anim_slot_array)
-    : m_anim_slot_array(anim_slot_array) {
+Merc2::Merc2(
+    ShaderLibrary& shaders,
+    const std::vector<GLuint>* anim_slot_array,
+    const std::vector<std::array<GLuint, 2>>* darkjak_slot_array)
+    : m_anim_slot_array(anim_slot_array),
+      m_darkjak_slot_array(darkjak_slot_array) {
   ASSERT(fnv64("the quick brown fox jumps over the lazy dog") == 0x7404cea13ff89bb0);
 
   // Set up main vertex array. This will point to the data stored in the .FR3 level file, and will
@@ -529,8 +535,14 @@ void Merc2::handle_pc_model(const DmaTransfer& setup,
     u64 ignore_alpha_mask;
     u8 effect_count;
     u8 bitflags;
+    u16 pad;
+    float darkjak_interp;
   };
+  
+  static_assert(offsetof(PcMercFlags, darkjak_interp) == 20);
+  static_assert(sizeof(PcMercFlags) == 24);
   auto* flags = (const PcMercFlags*)input_data;
+  const bool model_uses_darkjak_instance_morph = flags->bitflags & 32;
   int num_effects = flags->effect_count;  // mostly just a sanity check
   ASSERT(num_effects < kMaxEffect);
   u64 current_ignore_alpha_bits = flags->ignore_alpha_mask;  // shader settings
@@ -630,6 +642,8 @@ void Merc2::handle_pc_model(const DmaTransfer& setup,
   args.lights = lights;
   args.first_bone = first_bone;
   args.no_texture = render_state->version == GameVersion::Jak3 && model_no_texture;
+  args.darkjak_interp =
+      model_uses_darkjak_instance_morph ? flags->darkjak_interp : -1.f;
 
   // loop over effects, creating draws for each
   for (size_t ei = 0; ei < model->effects.size(); ei++) {
@@ -751,6 +765,13 @@ void Merc2::init_shader_common(Shader& shader, Uniforms* uniforms, bool include_
   uniforms->ignore_alpha = glGetUniformLocation(id, "ignore_alpha");
 
   uniforms->gfx_hack_no_tex = glGetUniformLocation(id, "gfx_hack_no_tex");
+  
+  if (include_lights) {
+    uniforms->darkjak_interp = glGetUniformLocation(id, "darkjak_interp");
+    uniforms->darkjak_texture = glGetUniformLocation(id, "tex_T1");
+    glUniform1i(uniforms->darkjak_texture, 1);
+    glUniform1f(uniforms->darkjak_interp, -1.f);
+  }
 }
 
 void Merc2::switch_to_merc2(SharedRenderState* render_state) {
@@ -1092,6 +1113,7 @@ Merc2::Draw* Merc2::alloc_normal_draw(const tfrag3::MercDraw& mdraw, const DrawA
   draw->index_count = mdraw.index_count;
   draw->mode = mdraw.mode;
   draw->hash = args.hash;
+  draw->darkjak_interp = args.darkjak_interp;
   if (args.jak1_water_mode) {
     draw->mode.set_ab(true);
     draw->mode.disable_depth_write();
@@ -1256,32 +1278,79 @@ void Merc2::do_draws(const Draw* draw_array,
       fog_on = true;
     }
     bool use_mipmaps_for_filtering = true;
-    if (draw.texture != last_tex) {
-      if (draw.texture < (int)lev->textures.size() && draw.texture >= 0) {
-        glBindTexture(GL_TEXTURE_2D, lev->textures.at(draw.texture));
-      } else if ((draw.texture & 0xffffff00) == 0xefffff00) {
-        if (render_state->version == GameVersion::Jak3 ||
-            render_state->version == GameVersion::JakX) {
-          auto maybe_eye =
-              render_state->eye_renderer->lookup_eye_texture_hash(draw.hash, (draw.texture & 1));
-          if (maybe_eye) {
-            glBindTexture(GL_TEXTURE_2D, *maybe_eye);
-          }
-        } else {
-          auto maybe_eye = render_state->eye_renderer->lookup_eye_texture(draw.texture & 0xff);
-          if (maybe_eye) {
-            glBindTexture(GL_TEXTURE_2D, *maybe_eye);
-          }
-        }
-
-        use_mipmaps_for_filtering = false;
-      } else if (draw.texture < 0) {
-        int slot = -(draw.texture + 1);
-        glBindTexture(GL_TEXTURE_2D, m_anim_slot_array->at(slot));
-      } else {
-        fmt::print("Invalid draw.texture is {}, would have crashed.\n", draw.texture);
+    
+    bool use_darkjak_override = false;
+    int darkjak_slot = -1;
+    
+    if (!set_fade &&
+        draw.darkjak_interp >= 0.f &&
+        draw.texture < 0 &&
+        m_darkjak_slot_array) {
+      darkjak_slot = -(draw.texture + 1);
+    
+      if (darkjak_slot >= 0 &&
+          darkjak_slot < (int)m_darkjak_slot_array->size()) {
+        const auto& endpoints = m_darkjak_slot_array->at(darkjak_slot);
+    
+        use_darkjak_override =
+            endpoints[0] != 0 &&
+            endpoints[1] != 0;
       }
-      last_tex = draw.texture;
+    }
+    
+    if (use_darkjak_override) {
+      const auto& endpoints = m_darkjak_slot_array->at(darkjak_slot);
+    
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, endpoints[0]);
+
+      glActiveTexture(GL_TEXTURE1);
+      glBindTexture(GL_TEXTURE_2D, endpoints[1]);
+    
+      glActiveTexture(GL_TEXTURE0);
+    
+      glUniform1f(
+          uniforms.darkjak_interp,
+          std::clamp(draw.darkjak_interp, 0.f, 1.f));
+    
+      last_tex = INT32_MIN;
+    } else {
+      if (!set_fade) {
+        glUniform1f(uniforms.darkjak_interp, -1.f);
+      }
+    
+      if (draw.texture != last_tex) {
+        if (draw.texture < (int)lev->textures.size() && draw.texture >= 0) {
+          glBindTexture(GL_TEXTURE_2D, lev->textures.at(draw.texture));
+        } else if ((draw.texture & 0xffffff00) == 0xefffff00) {
+          if (render_state->version == GameVersion::Jak3 ||
+              render_state->version == GameVersion::JakX) {
+            auto maybe_eye =
+                render_state->eye_renderer->lookup_eye_texture_hash(
+                    draw.hash, (draw.texture & 1));
+            if (maybe_eye) {
+              glBindTexture(GL_TEXTURE_2D, *maybe_eye);
+            }
+          } else {
+            auto maybe_eye =
+                render_state->eye_renderer->lookup_eye_texture(draw.texture & 0xff);
+            if (maybe_eye) {
+              glBindTexture(GL_TEXTURE_2D, *maybe_eye);
+            }
+          }
+    
+          use_mipmaps_for_filtering = false;
+        } else if (draw.texture < 0) {
+          int slot = -(draw.texture + 1);
+          glBindTexture(GL_TEXTURE_2D, m_anim_slot_array->at(slot));
+        } else {
+          fmt::print(
+              "Invalid draw.texture is {}\n",
+              draw.texture);
+        }
+    
+        last_tex = draw.texture;
+      }
     }
 
     if ((int)draw.light_idx != last_light && !set_fade) {

@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include "game/graphics/opengl_renderer/BucketRenderer.h"
 
 struct MercDebugStats {
@@ -40,7 +41,9 @@ struct MercDebugStats {
 
 class Merc2 {
  public:
-  Merc2(ShaderLibrary& shaders, const std::vector<GLuint>* anim_slot_array);
+  Merc2(ShaderLibrary& shaders,
+        const std::vector<GLuint>* anim_slot_array,
+        const std::vector<std::array<GLuint, 2>>* darkjak_slot_array);
   ~Merc2();
   void draw_debug_window(MercDebugStats* stats);
   void render(DmaFollower& dma,
@@ -51,6 +54,7 @@ class Merc2 {
 
  private:
   const std::vector<GLuint>* m_anim_slot_array;
+  const std::vector<std::array<GLuint, 2>>* m_darkjak_slot_array;
   enum MercDataMemory {
     LOW_MEMORY = 0,
     BUFFER_BASE = 442,
@@ -133,7 +137,10 @@ class Merc2 {
     GLuint decal;
 
     GLuint gfx_hack_no_tex;
-
+    
+    GLuint darkjak_interp;
+    GLuint darkjak_texture;
+    
     GLuint fade;
   };
 
@@ -194,6 +201,7 @@ class Merc2 {
     // no strip hack for custom models
     u8 no_strip;
     u64 hash;
+    float darkjak_interp = -1.f;
   };
 
   struct LevelDrawBucket {
@@ -220,6 +228,7 @@ class Merc2 {
     u64 hash;
     u32 lights;
     u32 first_bone;
+    float darkjak_interp = -1.f;
   };
 
   Draw* alloc_normal_draw(const tfrag3::MercDraw& mdraw, const DrawArgs& args);

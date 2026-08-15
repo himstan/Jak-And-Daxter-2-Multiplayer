@@ -6,6 +6,9 @@ in vec2 vtx_st;
 in float fog;
 
 uniform sampler2D tex_T0;
+uniform sampler2D tex_T1;
+
+uniform float darkjak_interp;
 
 uniform vec4 fog_color;
 uniform int ignore_alpha;
@@ -19,6 +22,11 @@ uniform int gfx_hack_no_tex;
 void main() {
   if (gfx_hack_no_tex == 0) {
     vec4 T0 = texture(tex_T0, vtx_st);
+  
+    if (darkjak_interp >= 0.0) {
+      vec4 darkT0 = texture(tex_T1, vtx_st);
+      T0 = mix(T0, darkT0, clamp(darkjak_interp, 0.0, 1.0));
+    }
     // all merc is tcc=rgba and modulate
     if (decal_enable == 0) {
       color = vtx_color * T0 * 2;

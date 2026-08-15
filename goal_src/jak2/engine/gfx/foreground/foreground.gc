@@ -954,6 +954,7 @@
   (disable-fog 1)
   (pc-blerc 2)
   (disable-envmap 3)
+  (darkjak-instance-morph 5)
   )
 
 (deftype pc-merc-flags (structure)
@@ -961,6 +962,8 @@
    (ignore-alpha-mask uint64)
    (effect-count uint8)
    (bit-flags pc-merc-bits)
+   (pad               uint16)
+   (darkjak-interp    float)
    )
   )
 
@@ -1059,6 +1062,12 @@
           (let ((flags (the (pc-merc-flags) dma-buf)))
             (set! (-> flags effect-count) (-> merc-ctrl header effect-count))
             (set! (-> flags bit-flags) (the pc-merc-bits 0))
+            (set! (-> flags darkjak-interp) (-> dc pc-darkjak-interp))
+          
+            (when (>= (-> dc pc-darkjak-interp) 0.0)
+              (logior! (-> flags bit-flags)
+                       (pc-merc-bits darkjak-instance-morph))
+              )
             (when update-verts
               (if (= update-verts 'blerc)
                   (logior! (-> flags bit-flags) (pc-merc-bits pc-blerc))
