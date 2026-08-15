@@ -964,6 +964,8 @@
    (bit-flags pc-merc-bits)
    (pad               uint16)
    (darkjak-interp    float)
+   (player-tint-color    uint32)
+   (player-tint-strength float)
    )
   )
 
@@ -1068,6 +1070,8 @@
               (logior! (-> flags bit-flags)
                        (pc-merc-bits darkjak-instance-morph))
               )
+            (set! (-> flags player-tint-color) (-> dc pc-player-tint-color))
+            (set! (-> flags player-tint-strength) (-> dc pc-player-tint-strength))
             (when update-verts
               (if (= update-verts 'blerc)
                   (logior! (-> flags bit-flags) (pc-merc-bits pc-blerc))

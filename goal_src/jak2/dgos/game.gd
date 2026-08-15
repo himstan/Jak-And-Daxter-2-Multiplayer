@@ -151,6 +151,7 @@
   "find-nearest-h.o"
   "target-h.o"
   "player-h.o"
+  "player.o"
   "mp-overlay-layout-h.o"
   "mp-spectate-h.o"
   "mp-player-list-h.o"

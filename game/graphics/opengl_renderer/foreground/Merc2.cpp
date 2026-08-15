@@ -537,10 +537,14 @@ void Merc2::handle_pc_model(const DmaTransfer& setup,
     u8 bitflags;
     u16 pad;
     float darkjak_interp;
+    u32 player_tint_color;
+    float player_tint_strength;
   };
   
   static_assert(offsetof(PcMercFlags, darkjak_interp) == 20);
-  static_assert(sizeof(PcMercFlags) == 24);
+  static_assert(offsetof(PcMercFlags, player_tint_color) == 24);
+  static_assert(offsetof(PcMercFlags, player_tint_strength) == 28);
+  static_assert(sizeof(PcMercFlags) == 32);
   auto* flags = (const PcMercFlags*)input_data;
   const bool model_uses_darkjak_instance_morph = flags->bitflags & 32;
   int num_effects = flags->effect_count;  // mostly just a sanity check
@@ -642,6 +646,11 @@ void Merc2::handle_pc_model(const DmaTransfer& setup,
   args.lights = lights;
   args.first_bone = first_bone;
   args.no_texture = render_state->version == GameVersion::Jak3 && model_no_texture;
+  args.player_tint_color = flags->player_tint_color;
+  args.player_tint_strength = flags->player_tint_strength;
+  if (args.player_tint_strength > 0.f) {
+    args.player_tint_texture_mask = &get_player_tint_texture_mask(lev);
+  }
   args.darkjak_interp =
       model_uses_darkjak_instance_morph ? flags->darkjak_interp : -1.f;
 
@@ -771,6 +780,12 @@ void Merc2::init_shader_common(Shader& shader, Uniforms* uniforms, bool include_
     uniforms->darkjak_texture = glGetUniformLocation(id, "tex_T1");
     glUniform1i(uniforms->darkjak_texture, 1);
     glUniform1f(uniforms->darkjak_interp, -1.f);
+    uniforms->player_tint_color = glGetUniformLocation(id, "player_tint_color");
+    uniforms->player_tint_enabled = glGetUniformLocation(id, "player_tint_enabled");
+    uniforms->player_tint_strength = glGetUniformLocation(id, "player_tint_strength");
+    glUniform1f(uniforms->player_tint_strength, 0.f);
+    glUniform3f(uniforms->player_tint_color, 1.f, 0.f, 0.f);
+    glUniform1i(uniforms->player_tint_enabled, 0);
   }
 }
 
@@ -1106,6 +1121,35 @@ Merc2::Draw* Merc2::try_alloc_envmap_draw(const tfrag3::MercDraw& mdraw,
   return draw;
 }
 
+const std::vector<u8>& Merc2::get_player_tint_texture_mask(const LevelData* level) {
+  auto [it, inserted] = m_player_tint_texture_masks.try_emplace(level);
+  auto& mask = it->second;
+
+  if (!inserted) {
+    return mask;
+  }
+  
+  const auto& textures = level->level->textures;
+  mask.assign(textures.size(), PLAYER_TINT_NONE);
+  static const u64 kJakJacketBody = fnv64("jakbsmall-jacketbody");
+  static const u64 kJakJacketSleeve = fnv64("jakbsmall-jacketsleeve");
+  static const u64 kJakBlackStrap = fnv64("jakbsmall-blackstrap");
+  static const u64 kDaxterLeather = fnv64("bam-leather-belt");
+
+  for (size_t i = 0; i < textures.size(); ++i) {
+    const u64 texture_hash = fnv64(textures[i].debug_name);
+    if (texture_hash == kJakJacketBody ||
+        texture_hash == kJakJacketSleeve ||
+        texture_hash == kJakBlackStrap) {
+      mask[i] |= PLAYER_TINT_GENERIC;
+    }
+    if (texture_hash == kDaxterLeather) {
+      mask[i] |= PLAYER_TINT_DAXTER_ONLY;
+    }
+  }
+  return mask;
+}
+
 Merc2::Draw* Merc2::alloc_normal_draw(const tfrag3::MercDraw& mdraw, const DrawArgs& args) {
   Draw* draw = &args.lev_bucket->draws[args.lev_bucket->next_free_draw++];
   draw->flags = 0;
@@ -1114,6 +1158,8 @@ Merc2::Draw* Merc2::alloc_normal_draw(const tfrag3::MercDraw& mdraw, const DrawA
   draw->mode = mdraw.mode;
   draw->hash = args.hash;
   draw->darkjak_interp = args.darkjak_interp;
+  draw->player_tint_color = args.player_tint_color;
+  draw->player_tint_strength = args.player_tint_strength;
   if (args.jak1_water_mode) {
     draw->mode.set_ab(true);
     draw->mode.disable_depth_write();
@@ -1125,6 +1171,18 @@ Merc2::Draw* Merc2::alloc_normal_draw(const tfrag3::MercDraw& mdraw, const DrawA
   }
 
   draw->texture = mdraw.eye_id == 0xff ? mdraw.tree_tex_id : (0xefffff00 | mdraw.eye_id);
+  if (args.player_tint_texture_mask && mdraw.eye_id == 0xff 
+      && mdraw.tree_tex_id >= 0 && static_cast<size_t>(mdraw.tree_tex_id) < args.player_tint_texture_mask->size()) {
+  
+    const u8 tint_rule = (*args.player_tint_texture_mask)[mdraw.tree_tex_id];
+    static const u64 kDaxterLod0Hash = fnv64("daxter-lod0");
+    const bool tint_generic = tint_rule & PLAYER_TINT_GENERIC;
+    const bool tint_daxter = (tint_rule & PLAYER_TINT_DAXTER_ONLY) && args.hash == kDaxterLod0Hash;
+  
+    if (tint_generic || tint_daxter) {
+      draw->flags |= PLAYER_TINT_TEXTURE;
+    }
+  }
   draw->first_bone = args.first_bone;
   draw->light_idx = args.lights;
   draw->num_triangles = mdraw.num_triangles;
@@ -1265,6 +1323,24 @@ void Merc2::do_draws(const Draw* draw_array,
       }
     }
     glUniform1i(uniforms.ignore_alpha, draw.flags & DrawFlags::IGNORE_ALPHA);
+
+    if (!set_fade) {
+      const bool use_player_tint = (draw.flags & PLAYER_TINT_TEXTURE) && draw.player_tint_strength > 0.f;
+      glUniform1i(uniforms.player_tint_enabled, use_player_tint ? 1 : 0);
+    
+      glUniform1f(uniforms.player_tint_strength, 
+        use_player_tint ? std::clamp(draw.player_tint_strength, 0.f, 1.f) : 0.f);
+    
+      if (use_player_tint) {
+        const u32 packed = draw.player_tint_color;
+    
+        const float r = ((packed >> 16) & 0xff) / 255.f;
+        const float g = ((packed >> 8) & 0xff) / 255.f;
+        const float b = (packed & 0xff) / 255.f;
+    
+        glUniform3f(uniforms.player_tint_color, r, g, b);
+      }
+    }
 
     if (fog_on && !draw.mode.get_fog_enable()) {
       // on -> off

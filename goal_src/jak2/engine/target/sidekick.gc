@@ -403,6 +403,16 @@
       (let ((v1-89 (-> self parent 0 draw color-emissive quad)))
         (set! (-> self draw color-emissive quad) v1-89)
         )
+      (if (and (mp-target-jak? (-> self parent 0)) (!= MP_INVALID_PLAYER_ID (-> self parent 0 riding-along-player-id)))
+        (begin
+          (set! (-> self draw pc-player-tint-color) (mp-player-render-tint-color-by-id (the-as int (-> self parent 0 riding-along-player-id))))
+          (set! (-> self draw pc-player-tint-strength) (mp-player-render-tint-strength-by-id (the-as int (-> self parent 0 riding-along-player-id))))
+          )
+        (begin
+          (set! (-> self draw pc-player-tint-color) (-> self parent 0 draw pc-player-tint-color))
+          (set! (-> self draw pc-player-tint-strength) (-> self parent 0 draw pc-player-tint-strength))
+          )
+        )
       (set! (-> self draw force-fade) (-> self parent 0 draw force-fade))
       (set! (-> self draw death-vertex-skip) (-> self parent 0 draw death-vertex-skip))
       (set! (-> self draw death-effect) (-> self parent 0 draw death-effect))

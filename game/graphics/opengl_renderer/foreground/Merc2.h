@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <unordered_map>
 #include "game/graphics/opengl_renderer/BucketRenderer.h"
 
 struct MercDebugStats {
@@ -141,6 +142,10 @@ class Merc2 {
     GLuint darkjak_interp;
     GLuint darkjak_texture;
     
+    GLuint player_tint_color;
+    GLuint player_tint_enabled;
+    GLuint player_tint_strength;
+    
     GLuint fade;
   };
 
@@ -185,6 +190,13 @@ class Merc2 {
     IGNORE_ALPHA = 1,
     MOD_VTX = 2,
     NO_TEXTURE = 4,
+    PLAYER_TINT_TEXTURE = 8,
+  };
+  
+  enum PlayerTintTextureRule : u8 {
+    PLAYER_TINT_NONE = 0,
+    PLAYER_TINT_GENERIC = 1,
+    PLAYER_TINT_DAXTER_ONLY = 2,
   };
 
   struct Draw {
@@ -202,6 +214,8 @@ class Merc2 {
     u8 no_strip;
     u64 hash;
     float darkjak_interp = -1.f;
+    u32 player_tint_color = 0;
+    float player_tint_strength = 0.f;
   };
 
   struct LevelDrawBucket {
@@ -229,7 +243,16 @@ class Merc2 {
     u32 lights;
     u32 first_bone;
     float darkjak_interp = -1.f;
+    u32 player_tint_color = 0;
+    float player_tint_strength = 0.f;
+    const std::vector<u8>* player_tint_texture_mask = nullptr;
   };
+  
+  const std::vector<u8>& get_player_tint_texture_mask(
+      const LevelData* level);
+  
+  std::unordered_map<const LevelData*, std::vector<u8>>
+      m_player_tint_texture_masks;
 
   Draw* alloc_normal_draw(const tfrag3::MercDraw& mdraw, const DrawArgs& args);
 

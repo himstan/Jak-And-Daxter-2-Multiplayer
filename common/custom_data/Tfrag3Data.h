@@ -18,7 +18,7 @@ namespace tfrag3 {
 // - if changing any large things (vertices, vis, bvh, colors, textures) update get_memory_usage
 // - if adding a new category to the memory usage, update extract_level to print it.
 
-constexpr int TFRAG3_VERSION = 43;
+constexpr int TFRAG3_VERSION = 44;
 
 enum MemoryUsageCategory {
   TEXTURE,
@@ -547,10 +547,15 @@ struct alignas(32) MercVertex {
 };
 static_assert(sizeof(MercVertex) == 64);
 
+enum MercDrawFlags : u8 {
+  MERC_DRAW_PLAYER_TINT = 1 << 0,
+};
+
 struct MercDraw {
   DrawMode mode;
   s32 tree_tex_id = 0;  // the texture that should be bound for the draw (negative for anim slot)
   u8 eye_id = 0xff;     // 0xff if not eyes, (slot << 1) | (is_r)
+  u8 flags = 0;
   u32 first_index;
   u32 index_count;
   u32 num_triangles;
