@@ -384,7 +384,6 @@
   "Reject malformed network commands before process-tree lookup or bot mutation."
   (and evt
        (nonzero? evt)
-       (> (-> evt course-id) 0)
        (>= (-> evt waypoint-request) 0)
        (or (not (= (-> evt etype) MP_EVENT_WAYPOINT_BUMP))
            (>= (-> evt waypoint-id) 0))

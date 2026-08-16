@@ -17,24 +17,29 @@
               (add-debug-x #t (bucket-id debug-no-zbuf1) draw-pos (new 'static 'rgba :r #xff :g #x80 :b #x0 :a #x80))
               
               ;; Draw battle stats
-              (let ((s5-0 (the-as int (-> b-proc max-count))))
+              (let ((s5-0 (the-as int (-> b-proc max-count)))
+                    (owner-player-id (mp-battle-owner-player-id b-proc)))
                 (if (= (the-as uint s5-0) #x20000000)
                     (set! s5-0 0)
                     )
-                (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
-                                  (the-as string 
-                                  (format #f "BATTLE: ~S~%STATE: ~S~%COUNT: ~D / ~D~%CHILDREN: ~D~%ALLIES: ~D" 
-                                          (-> b-proc name)
-                                          (if (-> b-proc state) (-> b-proc state name) "NONE")
-                                          (-> b-proc count)
-                                          s5-0
-                                          (-> b-proc stat-child-count)
-                                          (-> b-proc allies length)
-                                          )
-                                  )
-                                  draw-pos 
-                                  (font-color orange) 
-                                  (the-as vector2h #f))
+              
+                (add-debug-text-3d
+                  #t
+                  (bucket-id debug-no-zbuf1)
+                  (the-as string
+                    (format #f
+                            "BATTLE: ~S~%OWNER: ~S~%STATE: ~S~%COUNT: ~D / ~D~%CHILDREN: ~D"
+                            (-> b-proc name)
+                            (if (mp-battle-owner-player-id-valid? owner-player-id)
+                                (format #f "PLAYER ~D" owner-player-id)
+                                "NONE")
+                            (if (-> b-proc state) (-> b-proc state name) "NONE")
+                            (-> b-proc count)
+                            s5-0
+                            (-> b-proc stat-child-count)))
+                  draw-pos
+                  (font-color orange)
+                  (the-as vector2h #f))
                 )
               
               ;; Draw spawners
