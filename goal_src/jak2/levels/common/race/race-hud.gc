@@ -275,8 +275,7 @@
         (format (clear destination) "~D. " (+ place 1))
         (format (clear destination) "--  "))
     (when (and *mp-player-name-scratch* (nonzero? *mp-player-name-scratch*))
-      (mp-player-copy-name! *mp-player-name-scratch* player-id)
-      (format destination "~S" (-> *mp-player-name-scratch* data))))
+      (format destination "~S" (mp-player-copy-name! *mp-player-name-scratch* player-id))))
   (none))
 
 (defun mp-race-clear-final-result-strings! ((this hud-race-final-stats))
