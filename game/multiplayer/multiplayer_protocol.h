@@ -134,7 +134,8 @@ enum class PacketType : uint8_t {
   WIDOW_SYNC = 11,
   WORLD_STATE = 12,
   SESSION_WELCOME = 13,
-  COUNT = 14
+  LOBBY_ACTION = 14,
+  COUNT = 15
 };
 
 struct PacketHeader {
@@ -159,6 +160,21 @@ struct PacketSessionWelcome {
 };
 static_assert(sizeof(PacketSessionWelcome) == 21,
               "PacketSessionWelcome wire layout must remain explicit");
+
+enum class MPLobbyActionType : uint8_t {
+  SET_CHARACTER = 1,
+  START_GAME = 2,
+};
+
+struct PacketLobbyAction {
+  PacketHeader header;
+  uint32_t player_id;
+  uint8_t action_type;
+  uint8_t value;
+  uint8_t pad[2];
+};
+static_assert(sizeof(PacketLobbyAction) == 13,
+              "PacketLobbyAction wire layout must remain explicit");
 
 enum class MultiplayerLeaveReason : uint8_t {
   CLIENT_RECONNECTING = 1,

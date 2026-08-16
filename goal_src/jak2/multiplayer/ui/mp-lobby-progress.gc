@@ -1,0 +1,447 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Multiplayer pre-game lobby
+;;
+;; Uses the visual language/layout of the normal four-slot menu, but is a
+;; completely separate menu-option type with its own input behavior. Selecting
+;; a player slot never invokes save/load slot handling.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define *mp-lobby-player-options* (the-as (array menu-option) #f))
+(define *mp-lobby-name-tag* (new 'global 'string 128 (the-as string #f)))
+(define-extern mp-progress-intro-start! (function symbol int))
+
+(deftype menu-lobby-player-option (menu-option)
+  ()
+  )
+
+(defun mp-lobby-character-name ((character mp-player-character))
+  (cond
+    ((= character (mp-player-character jak))
+     (lookup-text! *common-text* (text-id progress-multiplayer-char-jak) #f))
+    ((= character (mp-player-character daxter))
+     (lookup-text! *common-text* (text-id progress-multiplayer-char-daxter) #f))
+    (else
+     "Unknown"))
+  )
+
+(defun mp-lobby-copy-host-access! ()
+  (when (= (pc-multi-is-lobby-host) 1)
+    (let ((copy-mode (pc-multi-get-host-copy-mode)))
+      (when (!= copy-mode 0)
+        (if (= (pc-multi-copy-host-access) 1)
+            (sound-play "generic-beep")
+            (sound-play "menu-error")))))
+  (none))
+
+(defun mp-lobby-host-status-text ((font-ctx font-context))
+  (let ((setup-status (pc-multi-get-host-setup-status)))
+    (cond
+      ((and *pc-settings* (nonzero? (the-as uint *pc-settings*)) (not (-> *pc-settings* mp-internet-host?)))
+       (set-color! font-ctx (font-color green))
+       (lookup-text! *common-text* (text-id progress-lobby-nat-lan) #f))
+      ((or (= setup-status 1) (= setup-status 2))
+       (set-color! font-ctx (font-color progress))
+       (lookup-text! *common-text* (text-id progress-lobby-nat-checking) #f))
+      ((= setup-status 3)
+       (set-color! font-ctx (font-color green))
+       (lookup-text! *common-text* (text-id progress-lobby-nat-open) #f))
+      ((or (= setup-status 4) (= setup-status -1))
+       (set-color! font-ctx (font-color yellow))
+       (lookup-text! *common-text* (text-id progress-lobby-nat-strict-or-lan) #f))
+      ((or (= setup-status -2) (= setup-status -3))
+       (set-color! font-ctx (font-color red))
+       (lookup-text! *common-text* (text-id progress-lobby-nat-failed) #f))
+      (else
+       (set-color! font-ctx (font-color progress))
+       (lookup-text! *common-text* (text-id progress-lobby-nat-status) #f)))))
+
+(defun mp-lobby-toggle-local-character! ()
+  (let* ((current-character (the-as mp-player-character (pc-multi-get-local-player-character)))
+         (next-character (if (= current-character (mp-player-character jak))
+                             (mp-player-character daxter)
+                             (mp-player-character jak))))
+    (if (nonzero? (pc-multi-lobby-set-character (the-as uint next-character)))
+        (begin
+          (let ((local-record (mp-local-player-record)))
+            (when (and local-record (nonzero? (the-as uint local-record)))
+              (set! (-> local-record identity character) next-character)))
+          (sound-play "generic-beep"))
+        (sound-play "menu-error")))
+  (none)
+  )
+
+(defun mp-lobby-launch-game! ((p progress))
+  (when (and p (nonzero? (the-as uint p)))
+    (sound-play "generic-beep")
+    (pc-multi-lobby-start-game)
+
+    (when (and (mp-local-player-record) (nonzero? (the-as uint (mp-local-player-record))))
+      (set! (-> *mp-bootstrap-state* phase) (the-as uint 0)))
+
+    (when (and *bigmap* (nonzero? *bigmap*))
+      (set! (-> *bigmap* drawing-flag) #t))
+
+    (cond
+      ((and *pc-settings* (nonzero? (the-as uint *pc-settings*)) (-> *pc-settings* mp-is-new-game?)
+            (< (-> *pc-settings* mp-selected-save-slot) 4))
+       (set-next-state p 'saving 0))
+      ((and *pc-settings* (nonzero? (the-as uint *pc-settings*)) (-> *pc-settings* mp-is-new-game?))
+       (if (and *game-info* (nonzero? (the-as uint *game-info*)))
+           (mp-progress-intro-start! (logtest? (-> *game-info* purchase-secrets) (game-secrets hero-mode)))
+           (mp-progress-intro-start! #f)))
+      (else
+       (set-next-state p 'loading 0))))
+  (none)
+  )
+
+(defun mp-lobby-leave! ((p progress))
+  (when (and p (nonzero? (the-as uint p)))
+    (sound-play "menu-back")
+    (pc-multi-disconnect)
+    (pc-multi-set-status (mp-connection-status idle))
+    (set! *multi-sync-enabled?* #f)
+    (set-next-state p 'multiplayer 0))
+  (none)
+  )
+
+(defun draw-lobby-box ((option menu-option) (min-x float) (max-x float) (min-y float) (max-y float))
+  (set! (-> option box 0 min x) min-x)
+  (set! (-> option box 0 max x) max-x)
+  (set! (-> option box 0 min y) min-y)
+  (set! (-> option box 0 max y) max-y)
+
+  (with-dma-buffer-add-bucket ((buffer (-> *display* frames (-> *display* on-screen) global-buf))
+                               (bucket-id progress))
+    ((method-of-type hud-box draw-box-prim-only) (the-as hud-box (-> option box)) buffer))
+  )
+
+(defun draw-lobby-decoration ((option menu-option) (font-ctx font-context) (alpha float))
+  (let ((left-x 69)
+        (details-x 245)
+        (top-y 110)
+        (total-width 375)
+        (details-width 200)
+        (panel-height 218))
+
+    (case (get-aspect-ratio)
+      (('aspect16x9)
+       (set! left-x 79)
+       (set! total-width 355)
+       (set! details-width 190)
+       (set! panel-height 248)))
+
+    (#when PC_PORT
+      (when (not (-> *pc-settings* use-vis?))
+        (set! left-x (the int (adjust-game-x (the float left-x))))
+        (set! details-x (the int (adjust-game-x (the float details-x))))
+        (set! total-width (the int (* (-> *pc-settings* aspect-ratio-reciprocal) total-width)))
+        (set! details-width (the int (* (-> *pc-settings* aspect-ratio-reciprocal) details-width)))))
+
+    (set-scale! font-ctx 0.65)
+    (set-color! font-ctx (font-color progress))
+    (set-flags! font-ctx (font-flags kerning middle large))
+    (set! (-> font-ctx origin x) (the float left-x))
+    (set! (-> font-ctx origin y) 80.0)
+    (set-width! font-ctx total-width)
+    (set-height! font-ctx 30)
+    (print-game-text (lookup-text! *common-text* (text-id progress-lobby-title) #f) font-ctx #f 44 (bucket-id progress))
+
+    (set-vector! (-> option box 0 color) 64 128 128 (the int (* 128.0 alpha)))
+    (draw-lobby-box option (the float left-x) (the float (+ left-x total-width)) (the float top-y) (the float top-y))
+
+    (with-dma-buffer-add-bucket ((buffer (-> *display* frames (-> *display* on-screen) global-buf))
+                                 (bucket-id particles))
+      (draw-sprite2d-xy buffer details-x top-y details-width panel-height
+                        (new 'static 'rgba :r #x40 :g #x40 :b #x40 :a (the int (* 64.0 alpha)))))
+    )
+  )
+
+(defun draw-lobby-player-selection ((option menu-option) (player-index int) (alpha float))
+  (let ((left-x 69)
+        (top-y 110)
+        (list-width 176)
+        (row-height 54)
+        (max-players 4))
+
+    (case (get-aspect-ratio)
+      (('aspect16x9)
+       (set! left-x 79)
+       (set! list-width 166)
+       (set! row-height 62)))
+
+    (#when PC_PORT
+      (when (not (-> *pc-settings* use-vis?))
+        (set! left-x (the int (adjust-game-x (the float left-x))))
+        (set! list-width (the int (* (-> *pc-settings* aspect-ratio-reciprocal) list-width)))))
+
+    (set-vector! (-> option box 0 color) 64 128 128 (the int (* 128.0 alpha)))
+
+    (draw-lobby-box option
+                    (the float left-x)
+                    (the float (+ left-x list-width))
+                    (the float (+ top-y (* row-height player-index)))
+                    (the float (+ top-y (* row-height player-index))))
+
+    (draw-lobby-box option
+                    (the float left-x)
+                    (the float (+ left-x list-width))
+                    (the float (+ top-y row-height (* row-height player-index)))
+                    (the float (+ top-y row-height (* row-height player-index))))
+
+    (when (> player-index 0)
+      (draw-lobby-box option
+                      (the float (+ left-x list-width))
+                      (the float (+ left-x list-width))
+                      (the float top-y)
+                      (the float (+ top-y (* row-height player-index)))))
+
+    (when (< player-index (+ max-players -1))
+      (draw-lobby-box option
+                      (the float (+ left-x list-width))
+                      (the float (+ left-x list-width))
+                      (the float (+ top-y row-height (* row-height player-index)))
+                      (the float (+ top-y (* row-height max-players)))))
+
+    (with-dma-buffer-add-bucket ((buffer (-> *display* frames (-> *display* on-screen) global-buf))
+                                 (bucket-id particles))
+      (draw-sprite2d-xy buffer left-x (+ top-y (* row-height player-index)) list-width row-height
+                        (new 'static 'rgba :r #x40 :g #x40 :b #x40 :a (the int (* 64.0 alpha)))))
+    )
+  )
+
+(defun get-player-name ((player-index int))
+  (let ((record (mp-player-record-by-id (the-as uint player-index))))
+    (if (and record (nonzero? (the-as uint record)) (nonzero? (-> record identity identity-ready?)))
+      (mp-player-copy-name! *mp-lobby-name-tag* (the-as uint player-index))
+      #f
+      )
+    )
+  )
+
+(defun draw-lobby-player-name ((font-ctx font-context) (player-index int) (selected? symbol))
+  (let ((text-x 84)
+        (text-y (+ 128 (* 54 player-index)))
+        (limit (the int (pc-multi-get-session-player-limit)))
+        (local-id (the int (pc-multi-get-local-player-id)))
+        (player-name (get-player-name player-index)))
+
+    (case (get-aspect-ratio)
+      (('aspect16x9)
+       (set! text-x 94)
+       (set! text-y (+ 134 (* 60 player-index)))))
+
+    (#when PC_PORT
+      (when (not (-> *pc-settings* use-vis?))
+        (set! text-x (the int (adjust-game-x (the float text-x))))))
+
+    (set! (-> font-ctx origin x) (the float text-x))
+    (set! (-> font-ctx origin y) (the float text-y))
+    (set-height! font-ctx 42)
+    (set-flags! font-ctx (font-flags kerning large))
+
+    (cond
+      ((>= player-index limit)
+       (set-scale! font-ctx 0.6)
+       (set-color! font-ctx (font-color progress-option-off))
+       (format (clear *temp-string*) (lookup-text! *common-text* (text-id progress-lobby-slot-closed) #f) (+ player-index 1)))
+      (player-name
+       (set-scale! font-ctx 0.6)
+       (set-color! font-ctx (if (= player-index local-id) (font-color progress-force-selected) (font-color progress)))
+       (format (clear *temp-string*) "~S" player-name))
+      (else
+       (set-scale! font-ctx 0.45)
+       (set-color! font-ctx (font-color progress-option-off))
+       (format (clear *temp-string*) (lookup-text! *common-text* (text-id progress-lobby-slot-open) #f) (+ player-index 1))))
+
+    (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
+    )
+  )
+
+(defun draw-lobby-player-details ((font-ctx font-context) (player-index int) (alpha float))
+  (let ((limit (the int (pc-multi-get-session-player-limit)))
+        (setup-status (pc-multi-get-host-setup-status))
+        (player-name (get-player-name player-index))
+        (record (mp-player-record-by-id (the-as uint player-index)))
+        (details-x 265)
+        (details-width 160))
+
+    (#when PC_PORT
+          (when (not (-> *pc-settings* use-vis?))
+            (set! details-x (the int (adjust-game-x (the float details-x))))
+            (set! details-width (the int (* (-> *pc-settings* aspect-ratio-reciprocal) details-width)))))
+
+    (set! (-> font-ctx alpha) alpha)
+    (set! (-> font-ctx origin x) (the float details-x))
+    (set! (-> font-ctx origin y) 130.0)
+    (set-width! font-ctx details-width)
+    (set-height! font-ctx 30)
+    (set-flags! font-ctx (font-flags kerning large))
+    (set-color! font-ctx (font-color progress))
+
+    (cond
+      ((>= player-index limit)
+       (set-scale! font-ctx 0.6)
+       (set-color! font-ctx (font-color progress-option-off))
+       (format (clear *temp-string*) (lookup-text! *common-text* (text-id progress-lobby-slot-closed) #f) (+ player-index 1))
+       (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress)))
+
+      ((and record (nonzero? record))
+       (set-scale! font-ctx 0.7)
+       (set-color! font-ctx (font-color progress-force-selected))
+       (format (clear *temp-string*) "~S" player-name)
+       (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
+        
+       (+! (-> font-ctx origin y) 34.0)
+       (set-scale! font-ctx 0.5)
+       (set-color! font-ctx (font-color progress))
+       (format (clear *temp-string*) "~S" (mp-lobby-character-name (-> record identity character)))
+       (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress)))
+
+      (else
+       (set-scale! font-ctx 0.6)
+       (format (clear *temp-string*) (lookup-text! *common-text* (text-id progress-lobby-slot-open) #f) (+ player-index 1))
+       (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))))
+    
+    (if (= (pc-multi-is-lobby-host) 1)
+      (begin
+        (set! (-> font-ctx origin y) 240.0)
+        (set-scale! font-ctx 0.42)
+        (format (clear *temp-string*) (lookup-text! *common-text* (text-id progress-lobby-nat-status) #f) (mp-lobby-host-status-text font-ctx))
+        (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
+        
+        (set! (-> font-ctx origin y) 260.0)
+        (set-color! font-ctx (font-color progress))
+        (set-scale! font-ctx 0.42)
+        (when (or (= setup-status 1) (= setup-status 2))
+          (set-color! font-ctx (font-color progress-option-off))
+          )
+        (let ((copy-mode (pc-multi-get-host-copy-mode)))
+          (when (!= copy-mode 0)
+            (if (= copy-mode 1)
+              (print-game-text (lookup-text! *common-text* (text-id progress-lobby-copy-invite) #f) font-ctx #f 44 (bucket-id progress))
+              (print-game-text (lookup-text! *common-text* (text-id progress-lobby-copy-room-code) #f) font-ctx #f 44 (bucket-id progress))
+              )
+            )
+          )
+        
+        (set! (-> font-ctx origin y) 280.0)
+        (set-color! font-ctx (font-color progress))
+        (set-scale! font-ctx 0.42)
+        (print-game-text (lookup-text! *common-text* (text-id progress-lobby-switch-char) #f) font-ctx #f 44 (bucket-id progress))
+        
+        (set! (-> font-ctx origin y) 300.0)
+        (print-game-text (lookup-text! *common-text* (text-id progress-lobby-start-game) #f) font-ctx #f 44 (bucket-id progress))
+        )
+      (begin
+        (set! (-> font-ctx origin y) 300.0)
+        (set-color! font-ctx (font-color progress))
+        (set-scale! font-ctx 0.42)
+        (print-game-text (lookup-text! *common-text* (text-id progress-lobby-switch-char) #f) font-ctx #f 44 (bucket-id progress))
+        )
+      )
+    )
+  )
+
+(defmethod respond-progress ((this menu-lobby-player-option) (p progress) (selected? symbol))
+  ;; Keep the normal progress-menu up/down navigation, but own all actions that
+  ;; could otherwise make a player slot behave like a save slot.
+  (when (and p (nonzero? (the-as uint p)))
+    (set! (-> p selected-option) #f)
+    (let ((setup-status (pc-multi-get-host-setup-status)))
+      (cond
+        ((cpad-pressed? 0 triangle)
+         (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons triangle))
+         (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons triangle))
+         (mp-lobby-leave! p))
+  
+        ((cpad-pressed? 0 circle)
+         (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons circle))
+         (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons circle))
+         (mp-lobby-toggle-local-character!))
+  
+        ((cpad-pressed? 0 square)
+         (if (= (pc-multi-is-lobby-host) 1)
+             (mp-lobby-launch-game! p)))
+  
+        ((cpad-pressed? 0 confirm)
+         (when (and (!= setup-status 1) (!= setup-status 2))
+           (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons confirm))
+           (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons confirm))
+           (mp-lobby-copy-host-access!))
+          )
+        )
+      )
+    )
+  0
+  )
+
+(defmethod draw-option ((this menu-lobby-player-option)
+                        (p progress)
+                        (font-ctx font-context)
+                        (player-index int)
+                        (selected? symbol))
+  (local-vars (old-x float) (old-y float) (old-width float) (old-height float) (old-scale float) (old-alpha float))
+
+  (let ((alpha (* 2.0 (- 0.5 (-> p menu-transition))))
+        (selected-player (-> p option-index)))
+
+    (when (< alpha 0.0)
+      (set! alpha 0.0))
+
+    (set! old-x (-> font-ctx origin x))
+    (set! old-y (-> font-ctx origin y))
+    (set! old-width (-> font-ctx width))
+    (set! old-height (-> font-ctx height))
+    (set! old-scale (-> font-ctx scale))
+    (set! old-alpha (-> font-ctx alpha))
+    (set! (-> font-ctx alpha) alpha)
+
+    (when (zero? player-index)
+      (draw-lobby-decoration this font-ctx alpha))
+
+    (when (= player-index selected-player)
+      (draw-lobby-player-selection this player-index alpha))
+
+    (draw-lobby-player-name font-ctx player-index (= player-index selected-player))
+
+    (when (= player-index selected-player)
+      (draw-lobby-player-details font-ctx player-index alpha))
+
+    (set! (-> font-ctx origin x) old-x)
+    (set! (-> font-ctx origin y) old-y)
+    (set! (-> font-ctx width) old-width)
+    (set! (-> font-ctx height) old-height)
+    (set! (-> font-ctx scale) old-scale)
+    (set! (-> font-ctx alpha) old-alpha))
+  0
+  (none)
+  )
+
+(defun mp-lobby-build-player-options! ()
+  (let ((player-limit (the int (pc-multi-get-session-player-limit))))
+    (set! *mp-lobby-player-options*
+          (the-as (array menu-option)
+            ((method-of-type array new) 'global array menu-option player-limit)))
+    (dotimes (i player-limit)
+      (set! (-> *mp-lobby-player-options* i)
+            (new 'static 'menu-lobby-player-option :name (text-id progress-lobby-slot-open)))))
+  (none))
+
+(define *mp-lobby-options-pc*
+  (new 'static 'menu-option-list
+    :y-center #xbe
+    :y-space 26
+    :scale 0.76
+    :options #f
+    )
+  )
+
+(defun mp-lobby-setup-options! ((p progress))
+  (mp-lobby-build-player-options!)
+  (set! (-> *mp-lobby-options-pc* options) *mp-lobby-player-options*)
+  (set! (-> p current-options) *mp-lobby-options-pc*)
+  (set! (-> p option-index) 0)
+  (none))

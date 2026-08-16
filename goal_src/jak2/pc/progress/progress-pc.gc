@@ -427,13 +427,18 @@
      (set! (-> *pc-settings* mp-hosting-mode?) #t)
      (set! (-> obj current-options) *load-save-options*)
      )
-    (('waiting-for-daxter) ;; This state is now bypassed
+    (('host-to-lobby)
      (mp-configure-bridge-version!)
      (mp-setup-host-bridge!
        (and *pc-settings*
             (nonzero? (the-as uint *pc-settings*))
             (-> *pc-settings* mp-internet-host?)))
-     (set! (-> obj current-options) *waiting-for-daxter-options-pc*)
+     (mp-lobby-setup-options! obj)
+     (set! (-> obj current-options) *mp-lobby-options-pc*)
+     )
+    (('mp-lobby)
+     (mp-lobby-setup-options! obj)
+     (set! (-> obj current-options) *mp-lobby-options-pc*)
      )
     (('title-options)
      (set! (-> obj current-options) *options-pc*)

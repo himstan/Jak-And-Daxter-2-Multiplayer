@@ -1181,13 +1181,8 @@ This gives us more freedom to write code how we want.
     )
   )
 
-(deftype menu-waiting-for-daxter-option (menu-option)
-  ()
-  )
-
 (defun mp-progress-host-peer-ready? ()
-  (and (= (pc-multi-get-status) (mp-connection-status connected-lobby))
-       (mp-any-remote-player-connected?))
+  (= (pc-multi-get-status) (mp-connection-status game-starting))
   )
 
 (defun mp-progress-advance-host-if-ready! ((p progress))
@@ -1230,62 +1225,6 @@ This gives us more freedom to write code how we want.
       )
     )
 
-(defmethod respond-progress ((obj menu-waiting-for-daxter-option) (p progress) (selected? symbol))
-  (mp-progress-advance-host-if-ready! p)
-  0)
-
-(defmethod draw-option ((obj menu-waiting-for-daxter-option) (p progress) (font-ctx font-context) (option-index int) (selected? symbol))
-  (when (and p (nonzero? (the-as uint p))
-             font-ctx (nonzero? (the-as uint font-ctx)))
-    (let ((alpha (max 0.0 (* 2.0 (- 0.5 (-> p menu-transition)))))
-          (setup-status (pc-multi-get-host-setup-status)))
-      (set! (-> font-ctx alpha) alpha)
-      (set-flags! font-ctx (font-flags kerning middle large))
-      (set-scale! font-ctx 0.5)
-      (+! (-> font-ctx origin y) 11.0)
-      (if (< setup-status 0)
-          (set-color! font-ctx (font-color red))
-          (set-color! font-ctx (font-color progress)))
-      (cond
-        ((= setup-status 1)
-         (format (clear *temp-string*) "~S"
-                 (lookup-text! *common-text* (text-id progress-host-starting) #f)))
-        ((= setup-status 2)
-         (format (clear *temp-string*) "~S"
-                 (lookup-text! *common-text* (text-id progress-host-configuring-router) #f)))
-        ((= setup-status 3)
-         (format (clear *temp-string*) "~S"
-                 (lookup-text! *common-text* (text-id progress-waiting-for-daxter) #f)))
-        ((= setup-status 4)
-         (format (clear *temp-string*) "~S"
-                 (lookup-text! *common-text* (text-id progress-host-unverified) #f)))
-        ((= setup-status -1)
-         (format (clear *temp-string*) "~S"
-                 (lookup-text! *common-text* (text-id progress-host-automatic-failed) #f)))
-        ((= setup-status -2)
-         (format (clear *temp-string*) "~S"
-                 (lookup-text! *common-text* (text-id progress-host-bind-failed) #f)))
-        ((= setup-status -3)
-         (format (clear *temp-string*) "~S"
-                 (lookup-text! *common-text* (text-id progress-host-start-failed) #f)))
-        (else
-         (format (clear *temp-string*) "~S"
-                 (lookup-text! *common-text* (text-id progress-waiting-for-daxter) #f))))
-      (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))))
-  (none))
-
-(define *waiting-for-daxter-options-pc*
-  (new 'static 'menu-option-list
-    :y-center #xc6
-    :y-space 25
-    :scale 0.74
-    :options (new 'static 'boxed-array :type menu-option
-      (new 'static 'menu-waiting-for-daxter-option)
-      (new 'static 'menu-copy-host-access-option :name (text-id progress-copy-invite))
-      )
-    )
-  )
-
 (deftype menu-join-search-option (menu-option)
   ((last-status mp-connection-status)
    )
@@ -1318,6 +1257,7 @@ This gives us more freedom to write code how we want.
         ((= status (mp-connection-status connected-lobby)) ;; Connected
          (sound-play "generic-beep")
          (set! *multi-sync-enabled?* #f)
+         (set-next-state p 'mp-lobby 0)
          )
         )
       )

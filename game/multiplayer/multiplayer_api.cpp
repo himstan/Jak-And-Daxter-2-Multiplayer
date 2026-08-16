@@ -125,6 +125,7 @@ bool packet_is_host_relayed(PacketType type) {
     case PacketType::VEHICLE_SYNC:
     case PacketType::EVENT_JOIN:
     case PacketType::EVENT_LEAVE:
+    case PacketType::LOBBY_ACTION:
       return true;
     default:
       return false;
@@ -302,6 +303,40 @@ bool handle_receive_packet(MultiplayerData& data,
     case PacketType::SESSION_WELCOME:
       accepted = handle_session_welcome(data, packet);
       break;
+    case PacketType::LOBBY_ACTION: {
+      const auto lobby = view.as_exact<PacketLobbyAction>(PacketType::LOBBY_ACTION);
+      if (!lobby || !controller) {
+        break;
+      }
+      if (lobby->action_type == static_cast<uint8_t>(MPLobbyActionType::SET_CHARACTER)) {
+        const auto char_val = static_cast<MPPlayerCharacter>(lobby->value);
+        if (mp_valid_player_character(char_val) && mp_valid_player_id(lobby->player_id)) {
+          if (data.session_role == 0) {
+            if (auto* session = multiplayer_host_peer_for_player_id(data, lobby->player_id)) {
+              session->character = char_val;
+            }
+            if (lobby->player_id < data.session_player_characters.size()) {
+              data.session_player_characters[lobby->player_id] = char_val;
+            }
+          }
+          if (lobby->player_id == data.local_player_id) {
+            data.local_player_character = char_val;
+          }
+          controller->records[lobby->player_id].identity.character = char_val;
+          data.player_states[lobby->player_id].character = char_val;
+          accepted = true;
+          lg::info("[MP-Lobby] Player {} switched character to {}.", lobby->player_id,
+                   static_cast<uint32_t>(char_val));
+        }
+      } else if (lobby->action_type == static_cast<uint8_t>(MPLobbyActionType::START_GAME)) {
+        if (data.session_role == 1) {
+          data.join_status = static_cast<int>(MultiplayerStatus::GAME_STARTING);
+          accepted = true;
+          lg::info("[MP-Lobby] Host started game. Transitioning client to GAME_STARTING.");
+        }
+      }
+      break;
+    }
     default:
       if (current_time - data.last_traffic_short_packet_debug_time > 2000) {
         lg::warn("[Multiplayer] Ignoring unknown packet type {} ({} bytes).", (int)view.type(),
@@ -1281,6 +1316,60 @@ void pc_multi_set_preference_player_character(u32 player_id, u32 character) {
   mp_set_session_player_character_preference(player_id, character);
 }
 
+int pc_multi_is_lobby_host() {
+  const auto& data = multiplayer_data();
+  return data.session_role == 0 ? 1 : 0;
+}
+
+u32 pc_multi_get_session_player_limit() {
+  const auto& data = multiplayer_data();
+  return data.session_player_limit;
+}
+
+int pc_multi_lobby_start_game() {
+  auto& data = multiplayer_data();
+  if (data.session_role != 0 || !data.host) {
+    return 0;
+  }
+  PacketLobbyAction action = {};
+  action.header = {PacketType::LOBBY_ACTION, ++data.sequence_num};
+  action.player_id = data.local_player_id;
+  action.action_type = static_cast<uint8_t>(MPLobbyActionType::START_GAME);
+  action.value = 0;
+  MultiplayerManager::broadcast(data, static_cast<int>(MultiplayerChannel::CONTROL), action,
+                                ENET_PACKET_FLAG_RELIABLE);
+  data.join_status = static_cast<int>(MultiplayerStatus::GAME_STARTING);
+  lg::info("[MP-Lobby] Host triggered game start.");
+  return 1;
+}
+
+int pc_multi_lobby_set_character(u32 character) {
+  auto& data = multiplayer_data();
+  const auto char_enum = static_cast<MPPlayerCharacter>(character);
+  if (!mp_valid_player_character(char_enum)) {
+    return 0;
+  }
+  const uint32_t local_id = data.local_player_id;
+  if (!mp_valid_player_id(local_id)) {
+    return 0;
+  }
+  data.local_player_character = char_enum;
+  if (data.session_role == 0) {
+    if (local_id < data.session_player_characters.size()) {
+      data.session_player_characters[local_id] = char_enum;
+    }
+  }
+  PacketLobbyAction action = {};
+  action.header = {PacketType::LOBBY_ACTION, ++data.sequence_num};
+  action.player_id = local_id;
+  action.action_type = static_cast<uint8_t>(MPLobbyActionType::SET_CHARACTER);
+  action.value = static_cast<uint8_t>(character);
+  MultiplayerManager::broadcast(data, static_cast<int>(MultiplayerChannel::CONTROL), action,
+                                ENET_PACKET_FLAG_RELIABLE);
+  lg::info("[MP-Lobby] Local player {} broadcasted character choice {}.", local_id, character);
+  return 1;
+}
+
 int pc_multi_get_host_setup_status() {
   return multiplayer_data().host_setup_status;
 }
@@ -1722,6 +1811,13 @@ void init_multiplayer_pc_port() {
                                     (void*)pc_multi_get_preference_player_character);
   jak2::make_function_symbol_from_c("pc-multi-set-preference-player-character",
                                     (void*)pc_multi_set_preference_player_character);
+  jak2::make_function_symbol_from_c("pc-multi-is-lobby-host", (void*)pc_multi_is_lobby_host);
+  jak2::make_function_symbol_from_c("pc-multi-get-session-player-limit",
+                                    (void*)pc_multi_get_session_player_limit);
+  jak2::make_function_symbol_from_c("pc-multi-lobby-start-game",
+                                    (void*)pc_multi_lobby_start_game);
+  jak2::make_function_symbol_from_c("pc-multi-lobby-set-character",
+                                    (void*)pc_multi_lobby_set_character);
   jak2::make_function_symbol_from_c("pc-multi-get-host-setup-status",
                                     (void*)pc_multi_get_host_setup_status);
   jak2::make_function_symbol_from_c("pc-multi-get-host-port", (void*)pc_multi_get_host_port);

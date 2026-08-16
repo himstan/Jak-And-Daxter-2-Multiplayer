@@ -182,7 +182,7 @@
   ;; The waiting status must be polled independently of the currently highlighted menu row.
   (when (and this
              (nonzero? (the-as uint this))
-             (= (-> this current) 'waiting-for-daxter)
+             (= (-> this current) 'host-to-lobby)
              (mp-progress-advance-host-if-ready! this))
     (return 0)
     )
@@ -202,7 +202,7 @@
     (set! (-> *progress-state* which-slot) (-> this option-index))
     (sound-play "generic-beep")
     (push-state this)
-    (set-next-state this 'waiting-for-daxter 0)
+    (set-next-state this 'host-to-lobby 0)
     (return 0)
     )
 
