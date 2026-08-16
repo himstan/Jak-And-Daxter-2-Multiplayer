@@ -211,20 +211,20 @@ This gives us more freedom to write code how we want.
       (+! (-> font-ctx origin y) 11.0)
       (when (= option-index (-> p option-index))
         (draw-generic-highlight (the int (+ -2.0 (-> font-ctx origin y))) 18 alpha))
-      (if (< status 0)
-          (set-color! font-ctx (font-color red))
-          (set-color! font-ctx (font-color progress)))
-      (cond
-        ((and show-status? (= status 1))
-         (format (clear *temp-string*) "~S: ~S"
-                 (lookup-text! *common-text* label #f)
-                 (lookup-text! *common-text* (text-id progress-invite-ready) #f)))
-        ((and show-status? (= status -1))
-         (format (clear *temp-string*) "~S: ~S"
-                 (lookup-text! *common-text* label #f)
-                 (lookup-text! *common-text* (text-id progress-invalid-invite) #f)))
-        (else
-         (format (clear *temp-string*) "~S" (lookup-text! *common-text* label #f))))
+      (format (clear *temp-string*) "~S" (lookup-text! *common-text* label #f))
+      (when (= label (text-id progress-connect))
+        (cond
+          ((< status 0)
+            (set-color! font-ctx (font-color red))
+            )
+          ((= status 1)
+            (set-color! font-ctx (font-color progress))
+            )
+          (else
+            (set-color! font-ctx (font-color progress-option-off))
+            )
+          )
+        )
       (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))))
   (none))
 
@@ -241,38 +241,6 @@ This gives us more freedom to write code how we want.
   (mp-draw-invite-action (text-id progress-paste-invite)
                          (pc-multi-get-staged-invite-status) #t p font-ctx option-index))
 
-(defmethod respond-progress ((obj menu-invite-validation-option)
-                             (p progress) (selected? symbol))
-  0)
-
-(defmethod draw-option ((obj menu-invite-validation-option) (p progress)
-                        (font-ctx font-context) (option-index int) (selected? symbol))
-  (when (and p (nonzero? (the-as uint p))
-             font-ctx (nonzero? (the-as uint font-ctx)))
-    (let ((status (pc-multi-get-staged-invite-status))
-          (alpha (max 0.0 (* 2.0 (- 0.5 (-> p menu-transition))))))
-      (set! (-> font-ctx alpha) alpha)
-      (set-flags! font-ctx (font-flags kerning middle large))
-      (set-scale! font-ctx 0.46)
-      (+! (-> font-ctx origin y) 11.0)
-      (if (= status -1)
-          (set-color! font-ctx (font-color red))
-          (set-color! font-ctx (font-color progress)))
-      (cond
-        ((= status 1)
-         (format (clear *temp-string*) "~S"
-                 (lookup-text! *common-text* (text-id progress-invite-ready) #f)))
-        ((= status -1)
-         (format (clear *temp-string*) "~S"
-                 (lookup-text! *common-text* (text-id progress-invalid-invite) #f)))
-        (else
-         (format (clear *temp-string*) "~S"
-                 (lookup-text! *common-text* (text-id progress-invite-not-pasted) #f))))
-      (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
-      )
-    )
-  (none))
-
 (defmethod respond-progress ((obj menu-connect-invite-option) (p progress) (selected? symbol))
   (when (and selected? p (nonzero? (the-as uint p)))
     (set! (-> p selected-option) #f)
@@ -285,9 +253,11 @@ This gives us more freedom to write code how we want.
 
 (defmethod draw-option ((obj menu-connect-invite-option) (p progress) (font-ctx font-context)
                         (option-index int) (selected? symbol))
-  (mp-draw-invite-action (text-id progress-connect)
-                         (if (= (pc-multi-get-staged-invite-status) 1) 0 -1)
-                         #f p font-ctx option-index))
+  (mp-draw-invite-action
+      (text-id progress-connect)
+      (pc-multi-get-staged-invite-status)
+      #f p font-ctx option-index)
+  )
 
 (defmethod respond-progress ((obj menu-direct-field-option) (p progress) (selected? symbol))
   (when (and selected?
@@ -351,7 +321,7 @@ This gives us more freedom to write code how we want.
 (defmethod draw-option ((obj menu-direct-connect-option) (p progress)
                         (font-ctx font-context) (option-index int) (selected? symbol))
   (mp-draw-invite-action (text-id progress-connect)
-                         (if (= (pc-multi-direct-connect-ready) 1) 0 -1)
+                         (pc-multi-direct-connect-ready)
                          #f p font-ctx option-index)
   )
 
@@ -1384,7 +1354,6 @@ This gives us more freedom to write code how we want.
     :scale 0.82
     :options (new 'static 'boxed-array :type menu-option
       (new 'static 'menu-paste-invite-option :name (text-id progress-paste-invite))
-      (new 'static 'menu-invite-validation-option :name (text-id progress-invite-ready))
       (new 'static 'menu-connect-invite-option :name (text-id progress-connect))
       )
     )
