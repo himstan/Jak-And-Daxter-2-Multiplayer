@@ -2,7 +2,7 @@
 (in-package goal)
 
 ;; Player identity is independent from transport role and avatar choice.
-(define-perm *mp-session-player-limit* uint (the uint MP_MAX_PLAYERS))
+(define-perm *mp-session-player-limit* uint (the uint 2))
 
 (defun mp-set-session-player-limit! ((player-limit uint))
   "Configure the total player limit for the next hosted session."
@@ -98,6 +98,20 @@
   #t)
 
 (mp-reset-session-player-characters!)
+
+(defun mp-sync-preferences-to-session-host-config! ()
+  "Initialize session player limit and character assignments from saved preferences."
+  (let ((limit (pc-multi-get-preference-player-limit)))
+    (when (and (>= limit (the uint 2)) (<= limit (the uint MP_MAX_PLAYERS)))
+      (mp-set-session-player-limit! limit)))
+  (when (and *mp-session-character-config*
+             (nonzero? *mp-session-character-config*))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((character (the-as mp-player-character
+                               (pc-multi-get-preference-player-character (the uint player-id)))))
+        (when (mp-player-character-valid? character)
+          (set! (-> *mp-session-character-config* characters player-id) character)))))
+  (none))
 
 (defun mp-setup-host-bridge! ((internet-host? object))
   "Snapshot the next-session GOAL configuration into the network session."

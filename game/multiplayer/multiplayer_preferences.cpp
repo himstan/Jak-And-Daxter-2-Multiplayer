@@ -135,6 +135,25 @@ MultiplayerPreferences mp_parse_multiplayer_preferences(std::string_view content
         root.at("automatic_port_mapping").is_boolean()) {
       parsed.automatic_port_mapping = root.at("automatic_port_mapping").get<bool>();
     }
+    if (root.contains("session_player_limit") &&
+        root.at("session_player_limit").is_number_unsigned()) {
+      const uint32_t limit = root.at("session_player_limit").get<uint32_t>();
+      if (limit >= 2 && limit <= kMPMaxPlayers) {
+        parsed.session_player_limit = limit;
+      }
+    }
+    if (root.contains("session_characters") && root.at("session_characters").is_array()) {
+      const auto& chars = root.at("session_characters");
+      for (size_t i = 0; i < kMPMaxPlayers && i < chars.size(); ++i) {
+        if (chars[i].is_number_unsigned()) {
+          const uint32_t val = chars[i].get<uint32_t>();
+          if (val == static_cast<uint32_t>(MPPlayerCharacter::JAK) ||
+              val == static_cast<uint32_t>(MPPlayerCharacter::DAXTER)) {
+            parsed.session_characters[i] = static_cast<MPPlayerCharacter>(val);
+          }
+        }
+      }
+    }
   } catch (const std::exception& error) {
     lg::warn("[Multiplayer] Ignoring invalid multiplayer settings: {}", error.what());
   }
@@ -164,6 +183,12 @@ void mp_save_multiplayer_preferences() {
   root["room_code"] = g_preferences.room_code;
   root["player_name"] = g_preferences.player_name;
   root["automatic_port_mapping"] = g_preferences.automatic_port_mapping;
+  root["session_player_limit"] = g_preferences.session_player_limit;
+  json chars_json = json::array();
+  for (uint32_t i = 0; i < kMPMaxPlayers; ++i) {
+    chars_json.push_back(static_cast<uint32_t>(g_preferences.session_characters[i]));
+  }
+  root["session_characters"] = chars_json;
   const auto path = settings_path();
   file_util::create_dir_if_needed_for_file(path);
   file_util::write_text_file(path, root.dump(2));
@@ -308,6 +333,46 @@ bool mp_set_automatic_port_mapping(bool enabled) {
     return true;
   }
   g_preferences.automatic_port_mapping = enabled;
+  save_after_edit();
+  return true;
+}
+
+uint32_t mp_get_session_player_limit_preference() {
+  return g_preferences.session_player_limit;
+}
+
+bool mp_set_session_player_limit_preference(uint32_t limit) {
+  if (limit < 2 || limit > kMPMaxPlayers) {
+    return false;
+  }
+  if (g_preferences.session_player_limit == limit) {
+    return true;
+  }
+  g_preferences.session_player_limit = limit;
+  save_after_edit();
+  return true;
+}
+
+uint32_t mp_get_session_player_character_preference(uint32_t player_id) {
+  if (player_id >= kMPMaxPlayers) {
+    return static_cast<uint32_t>(MPPlayerCharacter::UNKNOWN);
+  }
+  return static_cast<uint32_t>(g_preferences.session_characters[player_id]);
+}
+
+bool mp_set_session_player_character_preference(uint32_t player_id, uint32_t character) {
+  if (player_id >= kMPMaxPlayers) {
+    return false;
+  }
+  if (character != static_cast<uint32_t>(MPPlayerCharacter::JAK) &&
+      character != static_cast<uint32_t>(MPPlayerCharacter::DAXTER)) {
+    return false;
+  }
+  const auto player_char = static_cast<MPPlayerCharacter>(character);
+  if (g_preferences.session_characters[player_id] == player_char) {
+    return true;
+  }
+  g_preferences.session_characters[player_id] = player_char;
   save_after_edit();
   return true;
 }

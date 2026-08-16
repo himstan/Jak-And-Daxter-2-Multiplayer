@@ -1,9 +1,12 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
+
+#include "game/multiplayer/multiplayer_protocol.h"
 
 inline constexpr uint16_t kDefaultMultiplayerPort = 26210;
 inline constexpr uint16_t kMultiplayerDiscoveryPort = 26211;
@@ -14,6 +17,9 @@ struct MultiplayerPreferences {
   std::string room_code;
   std::string player_name;
   bool automatic_port_mapping = true;
+  uint32_t session_player_limit = 2;
+  std::array<MPPlayerCharacter, kMPMaxPlayers> session_characters =
+      mp_default_player_character_config();
 };
 
 bool mp_valid_gameplay_port(uint32_t port);
@@ -32,3 +38,8 @@ int mp_edit_multiplayer_preference(int field, uint32_t key);
 bool mp_commit_multiplayer_preference(int field);
 void mp_discard_multiplayer_preference_edits();
 bool mp_set_automatic_port_mapping(bool enabled);
+
+uint32_t mp_get_session_player_limit_preference();
+bool mp_set_session_player_limit_preference(uint32_t limit);
+uint32_t mp_get_session_player_character_preference(uint32_t player_id);
+bool mp_set_session_player_character_preference(uint32_t player_id, uint32_t character);

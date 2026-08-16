@@ -1265,6 +1265,22 @@ void pc_multi_reset_preferences() {
   mp_reset_multiplayer_preferences();
 }
 
+u32 pc_multi_get_preference_player_limit() {
+  return mp_get_session_player_limit_preference();
+}
+
+void pc_multi_set_preference_player_limit(u32 limit) {
+  mp_set_session_player_limit_preference(limit);
+}
+
+u32 pc_multi_get_preference_player_character(u32 player_id) {
+  return mp_get_session_player_character_preference(player_id);
+}
+
+void pc_multi_set_preference_player_character(u32 player_id, u32 character) {
+  mp_set_session_player_character_preference(player_id, character);
+}
+
 int pc_multi_get_host_setup_status() {
   return multiplayer_data().host_setup_status;
 }
@@ -1698,6 +1714,14 @@ void init_multiplayer_pc_port() {
                                     (void*)pc_multi_set_automatic_port_mapping);
   jak2::make_function_symbol_from_c("pc-multi-reset-preferences",
                                     (void*)pc_multi_reset_preferences);
+  jak2::make_function_symbol_from_c("pc-multi-get-preference-player-limit",
+                                    (void*)pc_multi_get_preference_player_limit);
+  jak2::make_function_symbol_from_c("pc-multi-set-preference-player-limit",
+                                    (void*)pc_multi_set_preference_player_limit);
+  jak2::make_function_symbol_from_c("pc-multi-get-preference-player-character",
+                                    (void*)pc_multi_get_preference_player_character);
+  jak2::make_function_symbol_from_c("pc-multi-set-preference-player-character",
+                                    (void*)pc_multi_set_preference_player_character);
   jak2::make_function_symbol_from_c("pc-multi-get-host-setup-status",
                                     (void*)pc_multi_get_host_setup_status);
   jak2::make_function_symbol_from_c("pc-multi-get-host-port", (void*)pc_multi_get_host_port);
