@@ -4,109 +4,125 @@
 
 # Jak and Daxter II Multiplayer
 
-A Jak II multiplayer mod for OpenGOAL. One player hosts as Jak, the other joins as Daxter, and the game syncs player movement, vehicles, enemies, traffic, missions, cutscenes, and (most of) the world state as you play.
+A Jak II multiplayer mod for OpenGOAL.<br>
+Can be played Online or LAN and even in "faked" split-screen.<br>
+Supports up to 4 players at the moment. The mod is capable of support more, it just haven't been seriously tested with more so far, can be overriden in a developmental build.
 
 ## Current State
 
 This is a very early MVP multiplayer build, so expect a ton of bugs, unstability and crashes. Currently only Act I (up until the palace Baron bossfight) is playable, the game will lock further progress after you've completed that mission.
 However, the goal is to make the full Jak II campaign playable together.<br>
-Currently this mod only serves as a 2 player Co-op mod, but most likely will be extended to support more players and gamemodes.
+Currently this mod primarily serves as a Co-op mod, when the Campaign is in a finished state, more gamemodes are going to be supported as well.<br>
+If the Host at least starts the game in debug mode then a lot of constraints I've put in to block progression can be bypassed.
 
 ## Before You Play
 
-- Both players should use the same version of the mod.
-- For online play, the host needs to allow the game through Windows Firewall, and also manually port-forward if their router has UPnP disabled.
-- In case you live behind CGNAT or for any other reason you cannot port forward, Hamachi, Tailscale, or any other VPN solution should work for playing the game online (should host/join LAN though) as well.
-- The default game port is `26210` which is sadly not configurable at the moment but a session configuration menu is planned.
+- The mod was mainly tested with the NTSC-U (`SCUS-97265`) version of the game. If you notice bugs please record what version you were using.
+- Make sure to align with what each version of the mod all players have installed. You cannot join a session that is running on a different version of the mod. You can see the mod version in-game in the bottom left corner.
+- When you Host you'll get a prompt to allow `gk` through the firewall, if you want to Host Online, you'll need to give it access.
+- The mod has **UPnP (Universal Plug and Play)** support, which means that if you're router supports it and you're not behind a CGNAT for example, then the game'll do an automatic port mapping on your router, so you don't have to manually port forward. This is temporary, and after your host session ends, the mapping is removed. This feature can be turned off in the **Multiplayer Settings** in game.
+- UPnP is not expected to work for everyone especially nowadays, so if you can't port-forward I'd suggest to use some private VPN solution like Hamachi, Radmin, Tailscale etc...
+- The default game port is `26210` which can be configured in the **Multiplayer Settings**
+- Port `26211` is reserved for LAN discovery
+
+## Terminology
+
+### Invite
+- An **Invite** is a **URI** you can easily copy and share with your friends, whom if they have it on their clipboard, can just click a button to join your session.
+- It can only be obtained as the Host, and only if your port is successfully opened. The **Invite** contains your public IP address and the Port you're hosting on, and also the session **Room Code**, which is automatically generated if it's not set in the **Multiplayer Options**
+- Example: `jad2mp://1.1.1.1:26210/1A2B3C`
+
+### Room Code
+- A six character code that can contain uppercase letters (`A-Z`) and digits (`0-9`), which is used as your session's "password". It is only used as a protection for Online Sessions, it's not needed for LAN. 
+- Example: `1A2B3C`
 
 ## Hosting A Game
-### Disclaimer! Hosting Online will attempt to do an automatic port mapping on your router! (it does required your router to support UPnP/NAT-PMP and have it enabled)
 
-1. Start the mod.
-2. Choose **Host Game** from the title menu.
+### Choose **Host Game** from the **Main Menu**
 
-   <img src="images/readme/host-host-game.png" alt="Title menu with Host Game selected" width="500">
+   <img src="docs/img/mp/main-menu-host-game.png" alt="Title menu with Host Game selected" width="400">
 
-3. Choose **Host LAN** or **Host Online** <br> 
+### Choose **Host LAN** or **Host Online**
 
-   <img src="images/readme/host-online-or-lan.png" alt="Host Online or Host LAN menu options showing" width="500">
+   <img src="docs/img/mp/host-host-online.png" alt="Host Online or Host LAN menu options showing" width="400">
 
-4. Choose **New Game** or **Load Game**.
+### Choose **New Game** or **Load Game**
 
-   <img src="images/readme/host-new-game-or-load-game.png" alt="Host Game menu showing New Game and Load Game" width="500">
+   <img src="docs/img/mp/host-new-game.png" alt="Host Game menu showing New Game and Load Game" width="400">
 
-   <img src="images/readme/host-select-save.png" alt="Host save selection menu" width="500">
+   <img src="docs/img/mp/host-select-save.png" alt="Host save selection menu" width="400">
 
-5. Select **Copy Invite**, then send the copied invite (will contain your public IP) privately to the other player. Wait on
-   the host screen until they connect. <br>If the **Copy Invite** button stays red, then that means that either your port is not already forwarded, and also the automatic port mapping has also failed. I suggest you go with a VPN solution and Host LAN.
+### Inside the **Lobby** as the **Host**
 
-   <img src="images/readme/host-waiting-for-player.png" alt="Host waiting for Daxter to connect" width="500">
+   <img src="docs/img/mp/host-lobby-nat-open.png" alt="Host in lobby with NAT Open" width="400">
+   <img src="docs/img/mp/host-lobby-strict-lan.png" alt="Host in lobby with NAT Strict/LAN" width="400">
+   <img src="docs/img/mp/host-lobby-lan.png" alt="Host in lobby with NAT LAN" width="400">
 
-6. Once the client connects, the game will continue into the selected save or new game.
+  - In the **Lobby** you can wait for the other players to join, or just start the game, since the mod support late joiners mid game also. 
+  - As **Host** you also have the ability to Swap between Jak and Daxter with <img src="docs/img/common/dpad-circle.png" alt="PS2 Circle button" width="16"><br>
+  - If you have your game port successful opened then you can press <img src="docs/img/common/dpad-x.png" alt="PS2 X button" width="16"> to copy an invite which will contain your public ip and port, with your custom or generated **Room Code**. You can share this to your friends who then can use it to join easily.
+  - If the port isn't open and you see **NAT: Strict/LAN** or you Hosted **LAN** and see **NAT: LAN** then you can only copy a **Room Code** which is not required in case you want to play via **LAN**
 
-   <img src="images/readme/host-in-game.png" alt="Host player in game after connection" width="500">
+### Once you press <img src="docs/img/common/dpad-square.png" alt="PS2 Square button" width="16"> everyone in the lobby be will put inside the game
 
-The host is Jak. In general, if something important needs to be decided by the game world, let the host trigger it.
+   <img src="docs/img/mp/host-in-game.png" alt="Host player in game after connection" width="400">
+
+  - In general it's a good practice to let the Host lead the important game progression
 
 ## Joining A Game
 
-1. Start the mod.
-2. Choose **Join Game** from the title menu.
+### Choose **Join Game** from the title menu.
 
-   <img src="images/readme/client-join-game.png" alt="Join Game menu options" width="500">
+   <img src="docs/img/mp/main-menu-join-game.png" alt="Join Game menu options" width="400">
 
-3. Select one of the three joining methods:
+### Select one of the three joining methods:
 
-### Option 1: With Invite Token (Recommended for Online)
-Use this option when joining a friend over the internet using a copied host invite string.
+### Option 1: **Join with Invite**
 
-1. Copy the invite string sent by the host to your clipboard.
-2. Choose **With Invite Token**.
-3. Select **Paste Invite**. Once valid clipboard data is detected, the status will display **Paste Invite: Invite ready**.
+- Use this option when joining a friend over the internet using a copied host **Invite**
+
+1. Copy the **Invite** sent by the host to your clipboard
+2. Choose **Join with Invite**.
+3. Select **Paste Invite**. The invite is going to be validated, and if its valid then the **Connect** button will light up
 4. Select **Connect**.
 
-   <img src="images/readme/client-invite-not-ready.png" alt="Paste invite before clipboard detection" width="450">
-   <img src="images/readme/client-invite-ready.png" alt="Paste invite ready" width="450">
+   <img src="docs/img/mp/join-game-join-with-invite.png" alt="Join game with Invite" width="400">
+   <img src="docs/img/mp/join-with-invite-paste-invite.png" alt="Paste invite before clipboard detection" width="400">
 
 ### Option 2: Scan LAN
-Use this option when playing on the same local network (LAN) or local split-screen setup.
+
+- Use this option when playing on the same local network (LAN), through a local VPN solution like Radmin or Hamachi or just want to play split-screen
 
 1. Choose **Scan LAN**.
 2. The game will search for active hosts on your private network and connect automatically.
 
 ### Option 3: Direct Connect
-Use this option to manually specify host details. (CTRL+V pasting is supported)
+
+- Use this option if you manually want to specify the host details. (CTRL+V pasting works in the fields, just make sure to enter them first)
 
 1. Choose **Direct Connect**.
-2. Verify or update the target **Address**, **Port** (default `26210`), and optional **Token**.
+2. Verify or update the target **Address**, **Port** (default `26210`), and optional **Room Code**.
 3. Select **Connect**.
 
-   <img src="images/readme/client-direct-connect.png" alt="Direct Connect settings menu" width="500">
+### Inside the **Lobby** as a **Client**
 
----
+   <img src="docs/img/mp/client-lobby.png" alt="In the lobby as a Client" width="400">
 
-Once connected, the joining player enters the world as **Daxter**!
-
-<img src="images/readme/client-in-game.png" alt="Client player in game as Daxter" width="500">
-
-## Using An Invite
-
-Online invites use form: `address:port/token` Do not post an invite publicly as it contains the host's public IP address! It is a
-temporary credential for the current hosting session.
+- As the Client we also have the ability to switch the Character we want to play as by pressing <img src="docs/img/common/dpad-circle.png" alt="PS2 Circle button" width="16">
 
 ## Local Split Screen
 
-You can play locally by running two instances of the game in windowed mode and placing them next to each other. Have one instance choose **Host Game**, then have the other choose **Join Game** and **Scan LAN**.
+You can play locally by more instances of the game in windowed mode and placing them next to each other. Have one instance choose **Host Game**, then the others choose **Join Game** and **Scan LAN**.
 
 Each instance should recognize a connected controller. If you only have one controller, use the controller for one game window and the keyboard for the other.
 
 ## Playing Together
 
-- If you notice a lot of unstability then it's probably best if you let the host lead the missions, enter major transitions, and drive important story progress.
-- If something looks wrong on the client, the fastest fix is usually to reconnect as the client.
-- If the host leaves, the session is over. Start hosting again and have the client reconnect.
-- There have been some major adjustments to the vanilla game to make it work with multiple targets in mind.
-- Have fun!
+- If you notice a lot of unstability then it's probably best if you let the host lead the missions, only the Host can progress through task nodes, the peers just sync up to them.
+- If as a Client you're noticing a lot of unstability, or something completely broken, then your best bet is to just **Reconnect** ;)
+- If the host leaves, the session is over. Start hosting again and have the Client(s) reconnect.
+- There have been some major adjustments to the vanilla game to make it work with multiple targets in mind, so expect some missions to be somewhat altered.
+- But the most importantly: **Have fun!**
 
 ## Quick Fixes
 
@@ -114,16 +130,17 @@ Each instance should recognize a connected controller. If you only have one cont
 
 The Reconnect button is going to act as your primary safeline while playing this mod I fear, so don't be afraid to use it!
 
-  <img src="images/readme/client-reconnect.png" alt="Reconnect button for the Client" width="500">
+<img src="docs/img/mp/client-reconnect.png" alt="Reconnect button for the Client" width="400">
 
 ### The Client Cannot Find The Host
 
-Check Windows Firewall on the host machine and allow the game/OpenGOAL through it. For online play, the host must aso have the UDP port `26210` forwarded on their router. <br>
-If they have UPnP supported and enabled on their router, the port mapping should be automatic upon pressing **Host Online** and selecting a save.
+Especially when playing Online make sure to check the Firewall on the **Host**'s side and allow the game/OpenGOAL through it.<br>
+If you're trying to connect through the Internet make sure that the Host has a little **NAT: Open** prompt shown in the lobby.<br>
+If the Host has **NAT: Strict/LAN** or **NAT: Failed** then the Host is unable to serve the session through the internet, probably their port can't be forwarded, try a private VPN solution like Radmin, Hamachi etc..<br>
 
 ## Known issues
 
-- There's a couple of random crashes, so expect that, especially on the non-host Daxter side.
+- Random crashes are sadly still not unexpected, thankfully as the Host the game should be a bit more stable, as a Client it's pretty unproblematic to reconnect unless you're in a mission that has an NPC/Bot in it like Sig, since there's no catchup logic implemented for those type of missions (yet).
 - The remote player puppets can miss their animation triggers, so when they jump they might be "falling" until their legs hit the floor.
 - The Traffic Sync is very much so host owned, if the client player exits the host's traffic radius the handover is pretty invasive, it's going to remove all traffic on the client's side until he gets far enough from the Host. When he does the Client is going to start spawning peds and vehicles locally.
 - Reconnecting is currently the main recovery path for client-side issues and soft-locks.

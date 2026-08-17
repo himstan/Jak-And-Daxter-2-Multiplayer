@@ -18,6 +18,12 @@ Were you the host or the client when the bug happened?
 - [ ] Host / Jak
 - [ ] Client / Daxter
 
+## Game Region/Serial
+
+Example: `NTSC-U/SCUS-97265`
+
+Region:
+
 ## Mod Version
 
 Example: `v1.0.0`
