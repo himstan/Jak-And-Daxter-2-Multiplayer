@@ -78,11 +78,6 @@
   (none)
   )
 
-(defun mp-teleport-player-to-remote-coords! ((player target) (extra-y float))
-  (mp-teleport-player-to-record-coords!
-    player (mp-teleport-destination-record) extra-y)
-  (none))
-
 (defun mp-teleport-player-to-vehicle! ((player target) (veh vehicle) (extra-x float) (extra-z float))
   (when (and (mp-teleport-target-ready? player)
              veh

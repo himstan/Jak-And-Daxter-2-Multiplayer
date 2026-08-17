@@ -259,21 +259,18 @@
   )
 
 (defun mp-stadium-board1-try-remote-start-judge! ((source-record mp-player-record))
-  (let ((manager (mp-skate-manager-get))
-        (source-target (mp-player-record-target source-record)))
+  (let ((manager (mp-skate-manager-get)))
     (when (and manager
                (nonzero? manager)
                (-> manager pending-remote-start?)
                (not (-> manager local-active?)))
       (let ((judge-proc (handle->process-safe (-> manager judge-handle))))
         (when (and judge-proc
-                   (nonzero? judge-proc)
-                   source-target
-                   (nonzero? source-target))
+                   (nonzero? judge-proc))
           (debug-log *mp-debug-log?* "[MP-StadiumBoard1] Delivering pending challenge start to judge ~A.~%" (-> manager judge-handle))
           (set! (-> manager pending-remote-start?) #f)
           (set! (-> manager pending-start-source-player-id) (the-as uint #f))
-          (send-event judge-proc 'mp-start :from source-target)))))
+          (send-event judge-proc 'mp-start source-record)))))
   (none)
   )
 
