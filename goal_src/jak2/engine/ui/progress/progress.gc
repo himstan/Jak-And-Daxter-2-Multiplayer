@@ -788,16 +788,18 @@
   "Set the next menu state specified by arg0 at the index specified by arg1."
   (set! (-> *progress-state* clear-screen) #f)
   (when (!= arg0 (-> this current))
-    ;; ----- MULTIPLAYER CANCEL JOIN LOGIC -----
-    ;; If we are leaving the 'searching-game state and NOT going into the game ('go-away), cancel.
-    (when (and (= (-> this current) 'searching-game) (!= arg0 'go-away))
+    (when (and (= (-> this current) 'searching-game)
+               (!= arg0 'go-away)
+               (!= arg0 'mp-lobby))
       (debug-log *mp-debug-log?* "[MP-UI] Canceling search/join from Progress menu.~%")
       (pc-multi-stop-search)
       (pc-multi-disconnect)
       (pc-multi-set-status (mp-connection-status idle))
       (set! *multi-sync-enabled?* #f)
       )
-    (when (and (= (-> this current) 'direct-searching) (!= arg0 'go-away))
+    (when (and (= (-> this current) 'direct-searching)
+               (!= arg0 'go-away)
+               (!= arg0 'mp-lobby))
       (let ((direct-status (pc-multi-get-status)))
         (pc-multi-stop-search)
         (when (or (>= direct-status 3) (= direct-status -1))
@@ -826,7 +828,6 @@
     (when (= (-> this current) 'version-mismatch)
       (mp-clear-version-mismatch-ui!)
       )
-    ;; -----------------------------------------
     (set! (-> *progress-state* yes-no-choice) #f)
     (set! (-> this selected-option) #f)
     (set! (-> this next-option-index) arg1)
@@ -2916,17 +2917,14 @@
 
 (defmethod respond-progress ((this menu-reconnect-option) (arg0 progress) (arg1 symbol))
   "Handle progress menu navigation logic for multiplayer reconnection screen."
-  ;; ONLY handle 'confirm (X) to disconnect. Do not allow 'start' or 'back' to exit.
   (when (cpad-pressed? 0 confirm)
     (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons confirm))
     (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons confirm))
     (debug-log *mp-debug-log?* "[MP-UI] Disconnect requested from Progress menu.~%")
     
-    ;; 1. Break the network link
     (pc-multi-disconnect)
     (mp-reset-state)
 
-    ;; 2. Return to main menu (Matching native Quit flow)
     (sound-volume-off)
     (set! (-> *game-info* mode) 'play)
     (initialize! *game-info* 'game (the-as game-save #f) "title-restart")
@@ -4051,7 +4049,6 @@
 
 (defmethod respond-progress ((this menu-host-left-option) (arg0 progress) (arg1 symbol))
   "Handle progress menu navigation logic for multiplayer host-left screen."
-  ;; ONLY handle 'confirm (X) to go back. Do not allow 'start' or 'back' to exit.
   (when (cpad-pressed? 0 confirm)
     (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons confirm))
     (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons confirm))
@@ -4060,7 +4057,6 @@
     (pc-multi-disconnect)
     (mp-reset-state)
 
-    ;; Return to main menu
     (sound-volume-off)
     (set! (-> *game-info* mode) 'play)
     (initialize! *game-info* 'game (the-as game-save #f) "title-restart")

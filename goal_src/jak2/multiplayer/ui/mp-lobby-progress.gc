@@ -48,7 +48,7 @@
        (lookup-text! *common-text* (text-id progress-lobby-nat-failed) #f))
       (else
        (set-color! font-ctx (font-color progress))
-       (lookup-text! *common-text* (text-id progress-lobby-nat-status) #f)))))
+       (lookup-text! *common-text* (text-id progress-lobby-nat-strict-or-lan) #f)))))
 
 (defun mp-lobby-toggle-local-character! ()
   (let* ((current-character (the-as mp-player-character (pc-multi-get-local-player-character)))
@@ -426,6 +426,20 @@
     :y-space 26
     :scale 0.76
     :options #f
+    :on-tick
+    (lambda ((p progress))
+      (when (and p (nonzero? (the-as uint p)))
+        (let ((status (pc-multi-get-status)))
+          (cond
+            ((or (= status (mp-connection-status host-left))
+                 (= status (mp-connection-status failed)))
+             (mp-lobby-leave! p)
+             )
+            )
+          )
+        )
+      (none)
+      )
     )
   )
 

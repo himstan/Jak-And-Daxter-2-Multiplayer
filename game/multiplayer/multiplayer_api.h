@@ -71,7 +71,7 @@ u32 pc_multi_get_preference_player_limit();
 void pc_multi_set_preference_player_limit(u32 limit);
 u32 pc_multi_get_preference_player_character(u32 player_id);
 void pc_multi_set_preference_player_character(u32 player_id, u32 character);
-int pc_multi_get_host_setup_status();
+int64_t pc_multi_get_host_setup_status();
 int pc_multi_get_host_port();
 int pc_multi_get_connection_phase();
 int pc_multi_get_connection_failure();

@@ -494,6 +494,15 @@ void MultiplayerManager::disconnect(MultiplayerData& data, bool preserve_reconne
     data.scanner_thread.join();
   }
   if (data.discovery_thread.joinable()) {
+    int wake_sock = open_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (wake_sock >= 0) {
+      sockaddr_in loopback = {};
+      loopback.sin_family = AF_INET;
+      loopback.sin_port = htons(DISCOVERY_PORT);
+      loopback.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+      sendto(wake_sock, "", 0, 0, (sockaddr*)&loopback, sizeof(loopback));
+      close_socket(wake_sock);
+    }
     data.discovery_thread.join();
   }
 
@@ -606,7 +615,7 @@ void MultiplayerManager::discovery_responder_func(MultiplayerData* data) {
     return;
   }
 
-  set_socket_timeout(sock, 1000000);  // 1s timeout for checking stop flag
+  set_socket_timeout(sock, 200000);  // 200ms timeout for checking stop flag
 
   lg::info("[Multiplayer] Discovery responder active on port {}", DISCOVERY_PORT);
 

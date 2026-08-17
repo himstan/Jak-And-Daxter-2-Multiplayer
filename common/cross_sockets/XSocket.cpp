@@ -53,8 +53,8 @@ int accept_socket(int socket, sockaddr* addr, socklen_t* addrLen) {
 }
 int select_and_accept_socket(int socket, sockaddr* addr, socklen_t* addrLen, int microSeconds) {
   struct timeval timeout;
-  timeout.tv_sec = 0;
-  timeout.tv_usec = microSeconds;
+  timeout.tv_sec = microSeconds / 1000000;
+  timeout.tv_usec = microSeconds % 1000000;
   // Use select so it can timeout, accept on the returned socket if it is correct
   fd_set read_sockets;
   FD_ZERO(&read_sockets);
@@ -134,8 +134,8 @@ int set_socket_option(int socket, int level, int optname, const void* optval, in
 int set_socket_timeout(int socket, long microSeconds) {
 #ifdef OS_POSIX
   struct timeval timeout = {};
-  timeout.tv_sec = 0;
-  timeout.tv_usec = microSeconds;
+  timeout.tv_sec = microSeconds / 1000000;
+  timeout.tv_usec = microSeconds % 1000000;
   int ret = setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (struct timeval*)&timeout, sizeof(timeout));
   if (ret < 0) {
     printf("Failed to setsockopt(%d, %d, %d, _, _) - Error: %s\n", socket, SOL_SOCKET, SO_RCVTIMEO,

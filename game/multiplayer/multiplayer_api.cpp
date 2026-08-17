@@ -1370,8 +1370,8 @@ int pc_multi_lobby_set_character(u32 character) {
   return 1;
 }
 
-int pc_multi_get_host_setup_status() {
-  return multiplayer_data().host_setup_status;
+int64_t pc_multi_get_host_setup_status() {
+  return static_cast<int64_t>(multiplayer_data().host_setup_status.load());
 }
 
 int pc_multi_get_host_port() {
