@@ -66,7 +66,10 @@
   )
 
 (defun mp-lobby-launch-game! ((p progress))
-  (when (and p (nonzero? (the-as uint p)))
+  (when (and p
+             (nonzero? (the-as uint p))
+             (= (-> p next) 'none)
+             (!= (pc-multi-get-status) (mp-connection-status game-starting)))
     (sound-play "generic-beep")
     (pc-multi-lobby-start-game)
 

@@ -1151,49 +1151,6 @@ This gives us more freedom to write code how we want.
     )
   )
 
-(defun mp-progress-host-peer-ready? ()
-  (= (pc-multi-get-status) (mp-connection-status game-starting))
-  )
-
-(defun mp-progress-advance-host-if-ready! ((p progress))
-  (if (and p
-           (nonzero? (the-as uint p))
-           (mp-progress-host-peer-ready?)
-           (not *multi-sync-enabled?*))
-      (begin
-        (sound-play "generic-beep")
-        (pc-multi-set-status (mp-connection-status game-starting))
-        (when (and (mp-local-player-record) (nonzero? (the-as uint (mp-local-player-record))))
-          (set! (-> *mp-bootstrap-state* phase) (the-as uint 0)))
-
-        (debug-log *mp-debug-log?* "[MP-Host] Remote joined. Transitioning to engine loading flow...~%")
-        (when (and *bigmap* (nonzero? *bigmap*))
-          (set! (-> *bigmap* drawing-flag) #t)
-          )
-        (cond
-          ((and *pc-settings*
-                (nonzero? (the-as uint *pc-settings*))
-                (-> *pc-settings* mp-is-new-game?)
-                (< (-> *pc-settings* mp-selected-save-slot) 4))
-           (set-next-state p 'saving 0)
-           )
-          ((and *pc-settings*
-                (nonzero? (the-as uint *pc-settings*))
-                (-> *pc-settings* mp-is-new-game?))
-           (if (and *game-info* (nonzero? (the-as uint *game-info*)))
-               (mp-progress-intro-start!
-                 (logtest? (-> *game-info* purchase-secrets) (game-secrets hero-mode)))
-               (mp-progress-intro-start! #f))
-           )
-          (else
-            (set-next-state p 'loading 0)
-            )
-          )
-        #t
-        )
-      #f
-      )
-    )
 
 (deftype menu-join-search-option (menu-option)
   ((last-status mp-connection-status)
