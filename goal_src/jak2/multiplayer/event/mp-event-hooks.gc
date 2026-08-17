@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; Engine integration that produces events but is not itself a payload factory.
-
 (define-extern mp-scene-coordinator-note-start-broadcast!
   (function string none))
 

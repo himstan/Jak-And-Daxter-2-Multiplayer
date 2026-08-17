@@ -35,7 +35,6 @@
     )
   (none))
 
-;; --- Event Handlers ---
 (defun mp-event-remote-player-respawned ((source-record mp-player-record))
   (when (and source-record (nonzero? source-record))
     (mp-player-runtime-clear-flag! source-record (mp-player-runtime-flags dying))
@@ -149,8 +148,6 @@
           (let ((proc (-> ent extra process)))
             (if (and proc (nonzero? proc))
                (begin
-                 ;; CRITICAL SAFETY: Never 'break' an NPC or anything that shouldn't just die from a crate-break
-                 ;; This prevents accidental mission failure if a client triggers an entity status change.
                  (if (mp-should-block-break-sync? proc)
                       (debug-log *mp-debug-log?* "[MP-Event-Handlers] Ignoring BREAK for important process ~A aid=~D~%" proc aid)
                       (begin
@@ -596,7 +593,7 @@
 (defun mp-scene-sync-use-entity-trigger? ((scene-name string))
   (and scene-name
        (nonzero? (length scene-name))
-       (or 
+       (or
          (string= scene-name "mtn-plat-buried-rocks-a")
          (string= scene-name "mtn-plat-buried-rocks-2")))
   )
@@ -642,7 +639,7 @@
   )
 
 (defun blocked-scene? ((scene-name string))
-  (if (or 
+  (if (or
       (string= scene-name "mtn-plat-buried-rocks-a")
       (string= scene-name "mtn-plat-buried-rocks-2")
     )
@@ -659,7 +656,6 @@
                (nonzero? source-record))
       (mp-handle-remote-scene-hacks scene-name)
       (mp-scene-sync-teleport-to-player! source-record)
-      ;; For now we just block these from force starting, messes up the camera in the mountain level, TODO to look into that sometime
       (when (not (mp-scene-sync-use-entity-trigger? scene-name))
         (mp-scene-sync-start-target-hold!)
               (let ((scene-obj (scene-lookup scene-name)))
@@ -860,22 +856,16 @@
         (debug-log *mp-debug-log?* "[MP-Event-Handlers] Blocking authority request for host-only enemy aid=~D~%" aid)
         (return #f)
         )
-      ;; Decision Logic:
-      ;; If we are Host (0), we evaluate.
-      ;; If we are Client (1), we always yield to Host.
       (let ((should-yield? #f))
         (if (mp-session-host?)
-            ;; Host logic: Yield if we aren't currently aggroed.
             (if (not (-> rec is-aggro))
                 (set! should-yield? #t))
-
-            ;; Client logic: Always yield to Host.
             (set! should-yield? #t))
-        
+
         (when should-yield?
           (debug-log *mp-debug-log?* "[MP-Event-Handlers] Yielding authority of aid=~D to remote.~%" aid)
           (set! (-> rec owner-player-id) remote-player-id)
-          (set! (-> rec last-transfer-time) (current-time)) ;; Prevent re-acquisition during handover
+          (set! (-> rec last-transfer-time) (current-time))
           (set! (-> rec last-remote-seen) (current-time))
           (when (and proc (nonzero? proc))
             (let ((e-proc (the-as enemy proc)))
@@ -1657,10 +1647,9 @@
 
 (defun mp-receive-continue-event ((evt mp-continue-event))
   "Apply a remote continue point change."
-  (let ((s* *mp-scene-name-scratch*)) ;; Reuse the scratch string safely
+  (let ((s* *mp-scene-name-scratch*))
     (dotimes (i 32) (set! (-> s* data i) (-> evt continue-name i)))
     (set! (-> s* data 31) (the uint 0))
-    ;; Calculate length and update string metadata
     (let ((len 0))
       (while (and (< len 32) (nonzero? (-> s* data len)))
         (+! len 1))
@@ -1670,7 +1659,6 @@
         (debug-log *mp-debug-log?* "[MP-TombBoulder] Ignoring role-incompatible continue: ~S~%" s*)
         (begin
           (debug-log *mp-debug-log?* "[MP-WorldEvent] Remote hit continue point: ~S~%" s*)
-          ;; Update local tracker so we don't bounce it back
           (let ((len (min 31 (length s*))))
             (dotimes (i len) (set! (-> *mp-last-local-continue-name* data i) (-> s* data i)))
             (set! (-> *mp-last-local-continue-name* data len) (the uint 0))
@@ -1702,8 +1690,6 @@
   (none)
   )
 
-;; Subsystems expose state/application helpers, but event entrypoints stay here
-;; so the dispatcher has one obvious ownership boundary.
 (defun mp-receive-waypoint-event ((evt mp-waypoint-event) (snapshot? symbol))
   (mp-waypoint-apply-remote-event! evt snapshot?)
   (none)

@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; --- Vehicle Sync Logic (Ghost Authority) ---
-
 (define MP_VEHICLE_PARKING_MINIMAP_ATTACHED (the uint8 173))
 (define MP_VEHICLE_AUTHORITY_HANDOFF_GRACE (seconds 1))
 (define MP_MAX_VEHICLE_AUTHORITY_HANDOFFS 8)
@@ -435,14 +433,14 @@
     )
   (none)
   )
-  
+
 (defun mp-vehicle-slot-parking-minimap? ((slot mp-vehicle-state))
   "True when the host reports that this vehicle is represented by a parking spot icon."
   (and slot
        (nonzero? slot)
        (logtest? (-> slot state-flags) MP_VEHICLE_STATE_FLAG_PARKING_MINIMAP))
   )
-  
+
 (defun vehicle-parking-minimap? ((veh vehicle))
   "True when the host reports that this vehicle is represented by a parking spot icon."
   (if (and veh (nonzero? veh) (= (-> veh pad-bytes 1) MP_VEHICLE_PARKING_MINIMAP_ATTACHED))
@@ -623,20 +621,16 @@
   (if (and veh (nonzero? veh))
       (let ((flags (-> veh flags)))
         (cond
-          ;; Remote player is driving this vehicle.
           ((mp-vehicle-remote-driven? veh)
            #f)
 
-          ;; Local player is driving this vehicle.
           ((and (logtest? flags (rigid-body-object-flag player-driving))
                 (mp-vehicle-local-target-driving? veh))
            #t)
 
-          ;; Undriven race vehicles and AI racers always belong to the host.
           ((mp-race-vehicle-id? (-> veh net-id))
            (mp-session-host?))
 
-          ;; Ordinary city traffic keeps using the existing authority system.
           (else
            (mp-is-traffic-authoritative?))))
       #f))
@@ -644,10 +638,8 @@
 (defun mp-should-apply-vehicle-camera? ((veh vehicle))
   "Returns #t if the local camera should follow this vehicle."
   (cond
-    ;; 1. Local player is riding this vehicle (as driver or passenger)
     ((mp-vehicle-local-target-riding? veh)
      #t)
-    ;; Default fallback to physics authority (ambient traffic)
     (else
      (mp-vehicle-is-local-authoritative? veh))
     )
@@ -739,8 +731,6 @@
   (none)
   )
 
-;; --- Hijack Implementations ---
-
 (defun mp-vehicle-refuse-traffic-off? ((veh vehicle))
   "True when traffic cleanup must preserve a player-associated vehicle or handoff."
   (when (and veh (nonzero? veh))
@@ -761,7 +751,6 @@
   (let ((v-net-id (-> this net-id)))
     (when (and (nonzero? v-net-id)
                (mp-vehicle-net-id-player-driven? v-net-id #t))
-      ;; If this is the remote player's vehicle, ignore damage events from local machine
       (case arg2
         (('attack 'touch 'impulse)
          (return 'block)
@@ -927,10 +916,8 @@
         (mp-vehicle-promote-local-driver! v-proc)
         )
       (when (and v-proc (nonzero? v-proc) (nonzero? (-> v-proc net-id)))
-        ;; Set occupancy info before pilot-riding so remote puppets can play get-on.
         (set! (-> (mp-local-player-record) vehicle vehicle-id) (-> v-proc net-id))
         (set! (-> (mp-local-player-record) vehicle seat-index) (the uint8 (-> pilot-info seat-index)))
-        ;; Only broadcast vehicle physics if we are the driver.
         (when (zero? (-> pilot-info seat-index))
           (mp-vehicle-pack v-proc (-> (mp-local-player-record) vehicle state))
           )
@@ -1162,10 +1149,8 @@
 
 (defun mp-vehicle-common-post-sync ((this vehicle))
   "Unified synchronization logic for all vehicle post-processing methods."
-  ;; Guard this
   (if (not (and this (nonzero? this))) (return #f))
 
-  ;; RESET NUDGE FLAG (for debug visualization)
   (set! (-> this pad-bytes 0) (the uint8 0))
   (mp-vehicle-clear-stale-player-driver! this)
   (mp-vehicle-release-stale-player-control! this)
@@ -1175,8 +1160,7 @@
     (when (not (mp-is-traffic-existing-update-ready?))
       (return #f)
       )
-    
-    ;; State sync: read desired state from ghost record, transition if desynced.
+
     (let ((rec (mp-get-traffic-ghost (-> this net-id))))
       (when rec
         (when (= (-> rec entity-kind) (the uint8 1))
@@ -1187,7 +1171,7 @@
                      (mp-vehicle-guard-remote-combat-state? target-sym))
             (mp-vehicle-guard-ensure-remote-combat! (the-as vehicle-guard this))
             )
-          
+
           (when (and target-sym (-> this state) (!= (-> this state name) target-sym))
             (let ((st (the-as state #f)))
               (case target-sym
@@ -1199,7 +1183,6 @@
                 (('crash) (set! st (method-of-object this crash)))
                 (('explode) (set! st (method-of-object this explode)))
                 (('die) (set! st (method-of-object this die)))
-                ;; Guard states: resolve via method ID if it's a guard vehicle
                 (('hostile) (set! st (the-as state (-> (the-as (pointer uint32) (-> this type)) 148))))
                 (('stop-and-shoot) (set! st (the-as state (-> (the-as (pointer uint32) (-> this type)) 149))))
                 (('slow-pursuit) (set! st (the-as state (-> (the-as (pointer uint32) (-> this type)) 150))))
@@ -1216,7 +1199,7 @@
                    (set! st (method-of-object (the-as vehicle-racer this) racing)))
                   (('race-finished)
                    (set! st (method-of-object (the-as vehicle-racer this) race-finished)))))
-              
+
               (when (and st (nonzero? st))
                 (set! (-> this next-state) st)
                 (enter-state (the-as object st) (the-as object #f) (the-as object #f) (the-as object #f) (the-as object #f) (the-as object #f))
@@ -1227,11 +1210,8 @@
         )
       )
 
-    ;; Apply ghost P-controller: nudge rbody velocity toward authoritative position
     (mp-vehicle-apply-ghost-correction this)
 
-    ;; EXTRA STABILITY: If not authoritative, kill all momentum.
-    ;; We SKIP this if in player-control, so the local physics can run (driving exhaust/sounds).
     (when (and (-> this state) (!= (-> this state name) 'player-control))
       (let ((rb (-> this rbody state)))
         (when rb
@@ -1323,12 +1303,8 @@
     )
   )
 
-;; --- Sync Application ---
-
 (defun mp-vehicle-apply-color-index! ((proc vehicle) (slot mp-vehicle-state))
   (when (and proc (nonzero? proc) (-> proc info) (> (-> proc info color-option-count) 0))
-    ;; SKIP color sync if the vehicle is exploded or dead. 
-    ;; This preserves the burnt/black appearance applied by the explode state.
     (let ((state-id (-> slot state-id))
           (cur-state (if (-> proc state) (-> proc state name) 'none)))
       (when (and (!= state-id (the uint (mp-veh-state-id explode)))
@@ -1511,8 +1487,6 @@
   (if (not (and slot (nonzero? slot))) (return #f))
   (if (not (mp-is-traffic-existing-update-ready?)) (return #f))
 
-  ;; Protect the local player's vehicle from remote state syncing if they are the pilot.
-  ;; We allow syncing if the local player is just a passenger.
   (let ((local-pilot (get-rider-in-seat proc 0)))
     (when (and local-pilot
                (nonzero? local-pilot)

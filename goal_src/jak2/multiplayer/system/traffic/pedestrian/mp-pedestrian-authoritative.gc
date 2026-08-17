@@ -1,11 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; --- Pedestrian State ID Mapping ---
-
-
-;; --- Pedestrian Packing (Authoritative Side) ---
-
 (defun mp-pedestrian-remote-attack-duplicate? ((rec mp-traffic-ghost-record)
                                                 (evt mp-actor-attack-event))
   (and rec
@@ -224,7 +219,6 @@
   (set! (-> slot quat-z) (-> e-proc root quat z))
   (set! (-> slot quat-w) (-> e-proc root quat w))
 
-  ;; State-based sync: send numeric state ID instead of raw animation data
   (set! (-> slot state-id) (the uint8 (mp-ped-get-state-id e-proc)))
 
   (set! (-> slot hp) (the int32 (-> e-proc hit-points)))
@@ -240,7 +234,6 @@
     (set! (-> slot flags) (the-as mp-pedestrian-flags flags))
     )
 
-  ;; Sync target for Crimson Guards
   (let ((target-handle (if *mp-get-guard-target*
                            (*mp-get-guard-target* e-proc)
                            (if (and (-> e-proc focus) (nonzero? (-> e-proc focus)))

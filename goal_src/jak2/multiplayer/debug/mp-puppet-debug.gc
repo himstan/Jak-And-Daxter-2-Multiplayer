@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; --- Remote Puppet Debugging Module ---
-
 (defun mp-draw-player-puppet-debug ((record mp-player-record))
   "Draw one record's ghost, puppet state, and leased synthetic pad."
   (when (and record (nonzero? record))

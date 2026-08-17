@@ -59,7 +59,6 @@
     (when (not in-movie?)
       (mp-sync-enemies-update))
 
-    ;; Preserve vanilla local visibility overrides, then handle every remote record.
     (when (and *target*
                (nonzero? *target*)
                (or in-movie? (not *visibility-overriden?*)))

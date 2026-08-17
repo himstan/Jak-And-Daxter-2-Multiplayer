@@ -52,8 +52,6 @@
 (define-perm *mp-battle-last-roster-request* time-frame (the-as time-frame 0))
 (define-perm *mp-battle-sync-initialized?* symbol #f)
 
-;; --- Battle name helpers ---
-
 (defun mp-battle-copy-name-bytes! ((dst (pointer uint8)) (src string))
   (when (and dst (nonzero? dst) src (nonzero? src))
     (dotimes (idx 32)
@@ -138,8 +136,6 @@
        (nonzero? name-bytes)
        (nonzero? (-> name-bytes 0)))
   )
-
-;; --- Registry lookup ---
 
 (defun mp-battle-owner-player-id-valid? ((owner-player-id int))
   (and (>= owner-player-id 0) (< owner-player-id MP_MAX_PLAYERS))
@@ -286,8 +282,6 @@
   (the-as battle #f)
   )
 
-;; --- Event queue helpers ---
-
 (defun mp-battle-fill-event-name! ((evt mp-battle-event) (record mp-battle-sync-record))
   (when (and evt (nonzero? evt) record (nonzero? record))
     (dotimes (idx 32)
@@ -339,8 +333,6 @@
     )
   (none)
   )
-
-;; --- Ownership ---
 
 (defun mp-battle-owner-player-id ((battle-proc battle))
   (let ((record (mp-battle-record-for-process battle-proc)))
@@ -465,8 +457,6 @@
     (= (-> record owner-player-id) local-player-id)
     )
   )
-
-;; --- Spawn registry ---
 
 (defun mp-battle-spawn-record-active? ((spawn-record mp-battle-spawn-record))
   (and spawn-record
@@ -845,8 +835,6 @@
   (none)
   )
 
-;; --- Death and roster reconciliation ---
-
 (defun mp-battle-note-enemy-death! ((enemy-proc enemy))
   (mp-battle-ensure-initialized!)
   (when (and enemy-proc
@@ -946,8 +934,6 @@
     )
   (none)
   )
-
-;; --- Receive dispatch ---
 
 (defun mp-battle-lifecycle-event-type? ((battle-evt uint))
   (or (= battle-evt MP_BATTLE_EVT_START)
@@ -1259,8 +1245,6 @@
     )
   (none)
   )
-
-;; --- Enemy ownership and periodic maintenance ---
 
 (defun mp-battle-dispatch-start! ((record mp-battle-sync-record)
                                   (battle-proc battle))

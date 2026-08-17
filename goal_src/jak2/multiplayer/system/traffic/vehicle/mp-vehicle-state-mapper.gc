@@ -1,11 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; --- Vehicle State ID Mapping ---
-
 (defun mp-veh-get-state-id ((v-proc vehicle))
   "Map a vehicle's current state name to a numeric mp-veh-state-id."
-  ;; ADDED: v-proc safety
   (if (not (and v-proc (nonzero? v-proc))) (return (the uint 0)))
 
   (let ((state-name (if (and (-> v-proc state)

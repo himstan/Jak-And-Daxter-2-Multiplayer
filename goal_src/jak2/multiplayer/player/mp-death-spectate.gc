@@ -55,7 +55,6 @@
     (remove-setting! 'mode-name)
     (when (not (mp-spectate-stop! 'death 'respawned))
       (mp-spectate-reset!))
-    ;; This may go-process the target and must remain the final operation.
     (mp-respawn-local-target-at-player! player record))
   (none))
 

@@ -1,9 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; Shared hit-sync helpers used by enemy and traffic pedestrians. Keep the
-;; entity-specific authority and event-send policy in the caller modules.
-
 (define *mp-actor-remote-attack-event* (the-as mp-actor-attack-event #f))
 (define *mp-current-remote-hit-sound-id* (the-as uint32 0))
 

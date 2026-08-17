@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; Runtime-only scene membership. Network identity and scene activity still
-;; travel through mp-event.source-player-id and mp-player-record.action.
 (define-perm *mp-scene-coordinator-name* string (new 'global 'string 64 ""))
 (define-perm *mp-scene-coordinator-generation* uint (the uint 0))
 (define-perm *mp-scene-coordinator-initiator-id* uint MP_INVALID_PLAYER_ID)

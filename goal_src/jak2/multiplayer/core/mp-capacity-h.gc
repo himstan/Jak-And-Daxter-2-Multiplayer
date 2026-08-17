@@ -5,7 +5,6 @@
 ;; Keep this value in sync with kMPMaxPlayers in multiplayer_protocol.h.
 (defconstant MP_MAX_PLAYERS 4)
 
-;; Battle-generated AIDs reserve the low 28 bits below the 0x6 namespace prefix.
 (defconstant MP_PLAYER_ID_BITS
   (cond
     ((<= MP_MAX_PLAYERS 2) 1)

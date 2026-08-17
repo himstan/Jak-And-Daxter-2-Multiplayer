@@ -1,14 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Multiplayer pre-game lobby
-;;
-;; Uses the visual language/layout of the normal four-slot menu, but is a
-;; completely separate menu-option type with its own input behavior. Selecting
-;; a player slot never invokes save/load slot handling.
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 (define *mp-lobby-player-options* (the-as (array menu-option) #f))
 (define *mp-lobby-name-tag* (new 'global 'string 128 (the-as string #f)))
 (define-extern mp-progress-intro-start! (function symbol int))
@@ -293,7 +285,7 @@
        (set-color! font-ctx (font-color progress-force-selected))
        (format (clear *temp-string*) "~S" player-name)
        (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
-        
+
        (+! (-> font-ctx origin y) 34.0)
        (set-scale! font-ctx 0.5)
        (set-color! font-ctx (font-color progress))
@@ -304,14 +296,14 @@
        (set-scale! font-ctx 0.6)
        (format (clear *temp-string*) (lookup-text! *common-text* (text-id progress-lobby-slot-open) #f) (+ player-index 1))
        (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))))
-    
+
     (if (= (pc-multi-is-lobby-host) 1)
       (begin
         (set! (-> font-ctx origin y) 240.0)
         (set-scale! font-ctx 0.42)
         (format (clear *temp-string*) (lookup-text! *common-text* (text-id progress-lobby-nat-status) #f) (mp-lobby-host-status-text font-ctx))
         (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
-        
+
         (set! (-> font-ctx origin y) 260.0)
         (set-color! font-ctx (font-color progress))
         (set-scale! font-ctx 0.42)
@@ -326,12 +318,12 @@
               )
             )
           )
-        
+
         (set! (-> font-ctx origin y) 280.0)
         (set-color! font-ctx (font-color progress))
         (set-scale! font-ctx 0.42)
         (print-game-text (lookup-text! *common-text* (text-id progress-lobby-switch-char) #f) font-ctx #f 44 (bucket-id progress))
-        
+
         (set! (-> font-ctx origin y) 300.0)
         (print-game-text (lookup-text! *common-text* (text-id progress-lobby-start-game) #f) font-ctx #f 44 (bucket-id progress))
         )
@@ -346,8 +338,6 @@
   )
 
 (defmethod respond-progress ((this menu-lobby-player-option) (p progress) (selected? symbol))
-  ;; Keep the normal progress-menu up/down navigation, but own all actions that
-  ;; could otherwise make a player slot behave like a save slot.
   (when (and p (nonzero? (the-as uint p)))
     (set! (-> p selected-option) #f)
     (let ((setup-status (pc-multi-get-host-setup-status)))
@@ -356,16 +346,16 @@
          (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons triangle))
          (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons triangle))
          (mp-lobby-leave! p))
-  
+
         ((cpad-pressed? 0 circle)
          (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons circle))
          (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons circle))
          (mp-lobby-toggle-local-character!))
-  
+
         ((cpad-pressed? 0 square)
          (if (= (pc-multi-is-lobby-host) 1)
              (mp-lobby-launch-game! p)))
-  
+
         ((cpad-pressed? 0 confirm)
          (when (and (!= setup-status 1) (!= setup-status 2))
            (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons confirm))

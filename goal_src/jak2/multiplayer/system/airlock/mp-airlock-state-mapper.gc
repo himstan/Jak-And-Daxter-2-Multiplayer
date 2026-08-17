@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; --- Airlock State ID Mapping ---
-
 (defun mp-airlock-state-id->string ((state-id mp-airlock-state-id))
   (case state-id
     (((mp-airlock-state-id none)) "none")

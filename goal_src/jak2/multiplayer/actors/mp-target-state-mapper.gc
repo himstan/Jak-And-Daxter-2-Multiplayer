@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; --- Target State ID Mapping ---
-
 (defun mp-target-get-state-from-id ((id uint))
   "Map a numeric mp-target-state-id back to a state name symbol."
   (case (the-as mp-target-state-id (the int id))

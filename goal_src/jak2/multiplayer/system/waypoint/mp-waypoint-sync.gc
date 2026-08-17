@@ -828,7 +828,6 @@
 
 (defun mp-waypoint-retry-pending! ()
   (when (and (mp-waypoint-sync-ready?) (> *mp-waypoint-pending-count* 0))
-    ;; One bounded pass per tick prevents a deferred command from monopolizing the main loop.
     (dotimes (offset 32)
       (let* ((idx (mp-waypoint-pending-retry-index offset))
              (pending (-> *mp-pending-waypoints* idx)))

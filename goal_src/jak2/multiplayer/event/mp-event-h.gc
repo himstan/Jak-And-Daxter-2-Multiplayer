@@ -1,10 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; Event IDs are generated from tools/multiplayer_schema/manifest.json.
-;; Event declarations and payload-level constants live in this module.
-
-;; Payload-level action values remain nested for subsystem-specific events.
 (defconstant MP_PALACE_SQUID_EVT_HIT_REQUEST (the-as uint 1))
 (defconstant MP_PALACE_SQUID_EVT_GRENADE (the-as uint 2))
 (defconstant MP_PALACE_SQUID_EVT_WHIRLWIND (the-as uint 3))
@@ -141,8 +137,6 @@
    )
   )
 
-;; The GOAL type includes in-memory padding, but the existing network payload
-;; contains only the serialized fields. Keep this contract wire-compatible.
 (defconstant MP_EDGE_GRAB_EVENT_PAYLOAD_SIZE 460)
 
 (deftype mp-aid-event (mp-event)
@@ -229,13 +223,11 @@
    (source-pos vector :inline :overlay-at (-> data 32))
    (attack-dir vector :inline :overlay-at (-> data 48))))
 
-;; Scene state is encoded by etype. The payload only carries scene data.
 (deftype mp-scene-event (mp-event)
   ((scene-name uint8 64 :overlay-at (-> data 0))
    (event-id uint32 :overlay-at (-> data 64))
    (load-continue uint8 64 :overlay-at (-> data 68))))
 
-;; Mission IDs are encoded by etype. These layouts contain payload only.
 (deftype mp-actor-name-event (mp-event)
   ((target-name uint8 32 :overlay-at (-> data 0))))
 
@@ -327,7 +319,6 @@
 
 (define-perm *mp-event-buffer* mp-event-buffer (new 'static 'mp-event-buffer))
 
-;; The queue owns all pointer/count manipulation. Producers only call these APIs.
 (define-extern mp-event-prepare! (function mp-event uint symbol))
 (define-extern mp-event-enqueue! (function mp-event symbol))
 (define-extern mp-event-queue-reset! (function none))
@@ -337,7 +328,6 @@
 (define-extern pc-multi-send-events (function uint none))
 (define-extern pc-multi-receive-events (function uint none))
 
-;; Event-related application hooks used by the central dispatcher and producers.
 (define-extern mp-vehicle-find-by-net-id (function uint vehicle))
 (define-extern mp-pedestrian-find-by-net-id (function uint citizen))
 (define-extern mp-pedestrian-apply-remote-attack! (function mp-actor-attack-event none))
@@ -375,8 +365,6 @@
 (define-extern *mp-palace-squid-last-action-seq* uint)
 (define-extern *mp-palace-squid-pending-resolution-seq* uint)
 
-;; Typed outbound event builders. Callers provide the storage and pass the
-;; populated result to mp-event-enqueue! for FIFO handling.
 (deftype mp-actor-attack-build-data (structure)
   ((net-id uint)
    (attack-id uint)
@@ -497,7 +485,6 @@
 (define-extern mp-request-intro-skip-bootstrap-when-ready! (function none))
 (define-extern mp-hold-intro-skip-blackout! (function none))
 
-;; Centralized dispatch and subsystem application hooks.
 (define-extern mp-event-handler-authority-request (function uint uint none))
 (define-extern mp-event-handler-authority-ack (function uint none))
 (define-extern mp-event-handler-attack-ped (function mp-actor-attack-event none))

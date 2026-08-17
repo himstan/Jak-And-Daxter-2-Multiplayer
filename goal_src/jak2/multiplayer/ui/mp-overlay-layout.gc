@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; HUD processes can draw before overlay children in the process tree. Retaining
-;; two frame snapshots makes the most recent complete set available either way.
 (define-perm *mp-overlay-occupancy*
              mp-overlay-occupancy-snapshot
              (new 'static 'mp-overlay-occupancy-snapshot))
@@ -89,8 +87,6 @@
                    (* MP_OVERLAY_OCCUPIED_RECT_COUNT
                       MP_OVERLAY_OCCUPANCY_FRAME_COUNT)))
       (set! changed? #f)
-      ;; Moving above one rectangle can expose another collision, so repeat
-      ;; until a complete pass leaves the candidate unchanged.
       (dotimes (frame-index MP_OVERLAY_OCCUPANCY_FRAME_COUNT)
         (let ((frame (-> *mp-overlay-occupancy* frames frame-index)))
           (when (mp-overlay-occupancy-frame-current? frame current-frame)

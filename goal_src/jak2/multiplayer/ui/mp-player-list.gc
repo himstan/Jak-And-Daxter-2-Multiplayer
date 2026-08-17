@@ -44,7 +44,6 @@
       (set! (-> layout bounds-width) 400.0)
       (set! (-> layout bounds-height) box-height)
 
-      ;; Title widget
       (when (and widget (nonzero? widget))
         (mp-overlay-widget-default! widget)
         (set! (-> widget text) (text-id mp-player-list-title))
@@ -58,7 +57,6 @@
         (set! (-> widget font-flags) center-flags)
         (mp-overlay-layout-add-widget! layout widget)
 
-        ;; Header: Column 1 - PLAYER
         (mp-overlay-widget-default! widget)
         (set! (-> widget text) (text-id mp-player-list-header-player))
         (set! (-> widget horizontal-anchor) (mp-overlay-horizontal-anchor left))
@@ -72,7 +70,6 @@
         (set! (-> widget font-flags) left-flags)
         (mp-overlay-layout-add-widget! layout widget)
 
-        ;; Header: Column 2 - PING
         (mp-overlay-widget-default! widget)
         (set! (-> widget text) (text-id mp-player-list-header-ping))
         (set! (-> widget horizontal-anchor) (mp-overlay-horizontal-anchor right))
@@ -86,11 +83,9 @@
         (set! (-> widget font-flags) right-flags)
         (mp-overlay-layout-add-widget! layout widget)
 
-        ;; Per-player rows (Name & Ping)
         (dotimes (i MP_MAX_PLAYERS)
           (let ((row-y (+ 48 (* i 20)))
                 (condition-mask (the uint32 (ash 1 i))))
-            ;; Column 1: Player Name
             (mp-overlay-widget-default! widget)
             (set! (-> widget text) (text-id mp-player-list-name-format))
             (set! (-> widget parameter-kind) (mp-overlay-parameter-kind string))
@@ -107,7 +102,6 @@
             (set! (-> widget font-flags) left-flags)
             (mp-overlay-layout-add-widget! layout widget)
 
-            ;; Column 2: Ping
             (mp-overlay-widget-default! widget)
             (set! (-> widget text) (text-id mp-player-list-ping-format))
             (set! (-> widget parameter-kind) (mp-overlay-parameter-kind integer))

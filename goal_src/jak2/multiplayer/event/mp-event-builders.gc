@@ -29,9 +29,6 @@
       (mp-event-enqueue! (mp-event-build-race! event details))))
   (none))
 
-;; Typed outbound event builders. Callers own the event storage and pass the
-;; populated result to mp-event-enqueue!.
-
 (defun mp-event-build-aid! ((event mp-aid-event) (event-type uint) (aid uint))
   (when (and event
              (nonzero? (the-as uint event))

@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; --- Pedestrian Puppet Logic (Non-Authoritative Side) ---
-
 (define *mp-pedestrian-branchless-log-time* (the-as time-frame 0))
 (define *mp-pedestrian-missing-nav-log-time* (the-as time-frame 0))
 
@@ -449,7 +447,6 @@
     (when (and slot
                (nonzero? slot)
                (mp-is-traffic-ready?))
-      ;; BUDGET/SAFETY: Only spawn if art is loaded to avoid linking crash
       (when (mp-traffic-type-loaded? (the-as traffic-type (-> slot object-type)))
         (mp-traffic-art-context!
           'ped-spawn
@@ -509,13 +506,12 @@
 (defun mp-pedestrian-apply-ghost-state ((proc citizen) (slot mp-pedestrian-state))
   "Update the ghost record for a pedestrian from the latest remote data.
    The actual position correction runs each frame from citizen common-post."
-  ;; 1. Find or allocate ghost record
   (let ((rec (mp-get-traffic-ghost (-> slot net-id))))
     (when (not rec)
       (set! rec (mp-get-free-traffic-ghost))
       (when rec
         (set! (-> rec net-id) (-> slot net-id))
-        (set! (-> rec entity-kind) (the uint8 0))  ;; 0 = pedestrian
+        (set! (-> rec entity-kind) (the uint8 0))
         (set! (-> rec last-applied-state-id) (the uint32 0))
         (set! (-> rec last-state-bump-time) 0)
         (set! (-> rec authorized-trans-state-id) (the uint32 0))
@@ -529,7 +525,6 @@
         )
       )
     (when rec
-      ;; 2. Update ghost from slot data
       (mp-actor-note-traffic-ghost-sample! rec (-> slot x) (-> slot y) (-> slot z))
       (set-vector! (-> rec ghost-trans) (-> slot x) (-> slot y) (-> slot z) 1.0)
       (quaternion-set! (-> rec ghost-quat) (-> slot quat-x) (-> slot quat-y) (-> slot quat-z) (-> slot quat-w))
@@ -556,7 +551,6 @@
       )
     )
 
-  ;; 3. Sync Process State & Visibility
   (when (and proc (nonzero? proc))
     (cond
       ((and (not (logtest? (-> proc enemy-flags) (enemy-flag stop-syncing))) (or (focus-test? proc inactive) (= (-> proc status) 'dead)))
@@ -583,10 +577,8 @@
           )
 
         (when (nonzero? (-> proc net-id))
-          ;; Keep alive: prevent traffic-manager culling
           (logior! (-> proc flags) (citizen-flag persistent))
 
-          ;; Force visibility (clearing flags potentially set by inactive/spawn states)
           (when (and (-> proc draw) (nonzero? (-> proc draw)) (not (focus-test? proc inactive)))
             (logclear! (-> proc draw status) (draw-control-status no-draw force-fade))
             )

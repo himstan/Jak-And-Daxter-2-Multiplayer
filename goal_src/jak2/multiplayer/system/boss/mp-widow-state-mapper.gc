@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; --- Tomb Widow State ID Mapping ---
-
 (defun mp-widow-state->id ((state-name symbol))
   (case state-name
     (('beaten)                    (the uint (mp-widow-state-id beaten)))

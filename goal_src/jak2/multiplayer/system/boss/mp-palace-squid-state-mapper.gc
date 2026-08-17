@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; --- Palace Squid State ID Mapping ---
-
 (defun mp-palace-squid-state->id ((state-name symbol))
   (case state-name
     (('hidden)               (the uint (mp-palace-squid-state-id hidden)))

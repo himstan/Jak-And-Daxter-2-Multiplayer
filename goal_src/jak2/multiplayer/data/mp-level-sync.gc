@@ -290,7 +290,6 @@
           (set! (-> ids 3) (the uint8 0))
           (let ((next-idx 1)
                 (has-valid-wants? #f))
-            ;; Desired levels are authoritative because resident levels may be awaiting unload.
             (when (and *load-state* (nonzero? *load-state*))
               (dotimes (idx 6)
                 (let ((level-name (-> *load-state* want idx name)))
@@ -310,7 +309,6 @@
                   )
                 )
               )
-            ;; Fall back only when load-state has no usable desired levels.
             (when (and (not has-valid-wants?)
                        *level*
                        (nonzero? *level*))
@@ -338,7 +336,6 @@
                 )
               )
             )
-          ;; Pack the 4 uint8 IDs into a single uint32
           (the-as uint (logior (the-as uint (-> ids 0))
                                (shl (the-as uint (-> ids 1)) 8)
                                (shl (the-as uint (-> ids 2)) 16)
@@ -430,7 +427,6 @@
       (dotimes (idx 6)
         (set! (-> desired-levels idx) #f)
         )
-      ;; Copy the synced levels into desired-levels
       (let ((dest-idx 0))
         (dotimes (src-idx 4)
           (let ((lvl (-> levels src-idx)))
@@ -448,7 +444,6 @@
               )
             )
           )
-        ;; Always make sure ctywide is in slot 1 or 2 if any level is a city level
         (let ((has-city? #f))
           (dotimes (src-idx 4)
             (let ((lvl (-> levels src-idx)))
@@ -458,7 +453,6 @@
               )
             )
           (when has-city?
-            ;; Insert ctywide at the first empty slot
             (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctywide))
             )
           )
@@ -466,7 +460,6 @@
       
       (want-levels *load-state* desired-levels)
       
-      ;; Set display for each desired level
       (dotimes (idx 6)
         (let ((lvl (-> desired-levels idx)))
           (when lvl
@@ -474,8 +467,7 @@
             )
           )
         )
-      
-      ;; Set visibility level to the primary level (first element of levels)
+
       (let ((primary (-> levels 0)))
         (when primary
           (want-vis-level *load-state* primary)

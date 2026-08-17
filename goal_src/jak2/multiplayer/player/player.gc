@@ -95,7 +95,6 @@
              (mp-player-id-valid? player-id))
     (let ((record (mp-player-controller-slot controller player-id)))
       (when (and record (nonzero? record))
-        ;; The local process is engine-owned and must survive registry teardown.
         (when (and (!= player-id (-> controller local-player-id))
                    (nonzero? (-> record runtime target-handle)))
           (mp-puppet-deactivate! record))
@@ -746,14 +745,14 @@
 (defun mp-player-render-tint-color-by-id ((player-id int))
   "Resolve the packed RGB color used for the player's clothing tint."
   (case player-id
-    ((0) #x000000) ;; Value doesn't matter because strength will be 0 so they'll get the default texture color
-    ((1) #xff8c00) ;; orange
-    ((2) #x76ff03) ;; green
-    ((3) #xff2ed1) ;; magenta
-    ((4) #x365cff) ;; dark-blue
-    ((5) #xffe600) ;; yellow
-    ((6) #x9b4dff) ;; pink
-    ((7) #xff5c8a) ;; red
+    ((0) #x000000)
+    ((1) #xff8c00)
+    ((2) #x76ff03)
+    ((3) #xff2ed1)
+    ((4) #x365cff)
+    ((5) #xffe600)
+    ((6) #x9b4dff)
+    ((7) #xff5c8a)
     (else #x000000)
     )
   )

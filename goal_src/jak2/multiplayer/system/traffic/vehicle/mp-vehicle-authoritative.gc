@@ -3,8 +3,6 @@
 
 (define-extern mp-race-vehicle-id? (function uint symbol))
 
-;; --- Vehicle Packing (Authoritative Side) ---
-
 (defun mp-vehicle-color-option-matches? ((v-proc vehicle) (color-index int))
   (and (= (-> v-proc draw color-mult x) (-> v-proc info color-option-array color-index x))
        (= (-> v-proc draw color-mult y) (-> v-proc info color-option-array color-index y))
@@ -29,7 +27,6 @@
   )
 
 (defun mp-vehicle-pack ((v-proc vehicle) (slot mp-vehicle-state))
-  ;; ADDED: pointer guards
   (if (not (and v-proc (nonzero? v-proc) (-> v-proc root) (-> v-proc rbody))) (return #f))
 
   (set! (-> slot net-id) (-> v-proc net-id))
@@ -45,11 +42,11 @@
   (set! (-> slot quat-y) (-> v-proc root quat y))
   (set! (-> slot quat-z) (-> v-proc root quat z))
   (set! (-> slot quat-w) (-> v-proc root quat w))
-  
+
   (set! (-> slot lin-vel-x) (-> v-proc root transv x))
   (set! (-> slot lin-vel-y) (-> v-proc root transv y))
   (set! (-> slot lin-vel-z) (-> v-proc root transv z))
-  
+
   (if (-> v-proc rbody state)
       (begin
         (set! (-> slot ang-vel-x) (-> v-proc rbody state ang-velocity x))
@@ -76,7 +73,6 @@
     (let ((rider-proc (handle->process (-> v-proc rider-array i))))
       (cond
         ((and rider-proc (nonzero? rider-proc) (type? rider-proc target))
-         ;; Player (Jak or Daxter)
          (let ((rider-record
                  (mp-player-controller-target-record
                    *mp-player-controller*
@@ -89,7 +85,6 @@
                (set! (-> slot rider-player-ids i) MP_INVALID_PLAYER_ID)))
          )
         ((and rider-proc (nonzero? rider-proc) (type? rider-proc vehicle-rider))
-         ;; Civilian
          (set! (-> slot rider-player-ids i) MP_VEHICLE_RIDER_CIVILIAN_ID)
          )
         (else

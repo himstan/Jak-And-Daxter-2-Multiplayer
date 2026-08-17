@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; --- Pedestrian State ID Mapping ---
-
 (defun mp-ped-get-state-id ((ped citizen))
   "Map a citizen's current state name to a numeric mp-ped-state-id."
   (let ((state-name (if (and ped
@@ -45,7 +43,6 @@
       (('run)                (the uint (mp-ped-state-id run)))
       (('talk)               (the uint (mp-ped-state-id talk)))
       (('hide)               (the uint (mp-ped-state-id hide)))
-      ;; Guard-specific combat states
       (('search)             (the uint (mp-ped-state-id search)))
       (('close-attack)       (the uint (mp-ped-state-id close-attack)))
       (('close-attack-active)(the uint (mp-ped-state-id close-attack-active)))
@@ -97,7 +94,6 @@
     (((mp-ped-state-id run))                'run)
     (((mp-ped-state-id talk))               'talk)
     (((mp-ped-state-id hide))               'hide)
-    ;; Guard-specific combat states
     (((mp-ped-state-id search))             'search)
     (((mp-ped-state-id close-attack))       'close-attack)
     (((mp-ped-state-id close-attack-active))'close-attack-active)

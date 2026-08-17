@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; Shared helpers for non-authoritative actor ghost correction. Keep entity-specific
-;; authority, state mapping, and target/focus rules in the enemy/pedestrian modules.
 
 (defun mp-actor-state-retry-ready? ((last-bump time-frame))
   (time-elapsed? last-bump (seconds 0.35))

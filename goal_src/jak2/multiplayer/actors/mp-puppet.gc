@@ -1,10 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; --- Remote Target Puppet Module ---
-;; This module handles one secondary target process per joined non-local player record.
-;; It uses a P-Controller to nudge the puppet towards an authoritative "ghost" position.
-
 (define *mp-puppet-input-stale-time* (seconds 0.2))
 (define *mp-puppet-action-warmup-time* (seconds 0.3))
 
@@ -67,7 +63,6 @@
                        (< (the-as uint (-> record runtime pad-index))
                           (the uint MP_MAX_PLAYERS))))
           (mp-reset-player-puppet-state! record)))))
-  ;; Recover targets orphaned by older lifecycle code after tracked records are clean.
   (when (and *target-pool* (nonzero? *target-pool*))
     (kill-by-name "mp-puppet" *target-pool*))
   (when (and *target*
@@ -144,9 +139,6 @@
   (none)
   )
 
-;; --- Puppet Sync Logic ---
-
-
 (defun mp-puppet-update-ghost! ((ghost mp-target-ghost-record) (info mp-player-record))
   "Update the ghost record from incoming remote player info."
   (when (and ghost (nonzero? ghost) info (nonzero? info))
@@ -168,7 +160,6 @@
 
 (defun mp-puppet-update-pad ((pad cpad-info) (buttons uint) (lx uint) (ly uint) (rx uint) (ry uint))
   "Manually update a cpad-info structure with raw input data, shifting history and calculating derived fields."
-  ;; 1. Shift history (Old values)
   (set! (-> pad old-leftx 1) (-> pad old-leftx 0))
   (set! (-> pad old-leftx 0) (-> pad leftx))
   (set! (-> pad old-lefty 1) (-> pad old-lefty 0))
@@ -177,13 +168,11 @@
   (set! (-> pad old-rightx 0) (-> pad rightx))
   (set! (-> pad old-righty 1) (-> pad old-righty 0))
   (set! (-> pad old-righty 0) (-> pad righty))
-  
   (set! (-> pad button0-abs 2) (-> pad button0-abs 1))
   (set! (-> pad button0-abs 1) (-> pad button0-shadow-abs 0))
   (set! (-> pad button0-rel 2) (-> pad button0-rel 1))
   (set! (-> pad button0-rel 1) (-> pad button0-rel 0))
 
-  ;; Shift *cpad-history-list* for recently-pressed? macro support
   (let ((history (-> *cpad-history-list* cpads (-> pad number))))
     (dotimes (i 14)
       (set! (-> history button0-abs (- 14 i)) (-> history button0-abs (- 13 i)))
@@ -193,16 +182,14 @@
     (set! (-> history button0-rel 1) (-> pad button0-rel 0))
     )
 
-  ;; 2. Set new raw values
   (set! (-> pad valid) (the-as uint 0))
-  (set! (-> pad status) (the-as uint #x73)) ;; DualShock 2 ID
+  (set! (-> pad status) (the-as uint #x73))
   (set! (-> pad button0) buttons)
   (set! (-> pad leftx) lx)
   (set! (-> pad lefty) ly)
   (set! (-> pad rightx) rx)
   (set! (-> pad righty) ry)
 
-  ;; Set analog button pressure from digital bitmask (Required for vehicles)
   (if (logtest? (the-as pad-buttons buttons) (pad-buttons x))
       (set! (-> pad abutton (abutton-idx x)) (the uint8 255))
       (set! (-> pad abutton (abutton-idx x)) (the uint8 0)))
@@ -228,15 +215,12 @@
       (set! (-> pad abutton (abutton-idx r2)) (the uint8 255))
       (set! (-> pad abutton (abutton-idx r2)) (the uint8 0)))
 
-  ;; 3. Update abs and rel buttons (Expansion of raw buttons to full enum)
   (let ((buttons-pushed (the-as pad-buttons buttons)))
-     ;; Stick to D-Pad mapping (Matches service-cpads in pad.gc)
      (if (< lx (the-as uint 30)) (set! buttons-pushed (logior (pad-buttons l-analog-left) buttons-pushed)))
      (if (> lx (the-as uint 225)) (set! buttons-pushed (logior (pad-buttons l-analog-right) buttons-pushed)))
      (if (< ly (the-as uint 30)) (set! buttons-pushed (logior (pad-buttons l-analog-up) buttons-pushed)))
      (if (> ly (the-as uint 225)) (set! buttons-pushed (logior (pad-buttons l-analog-down) buttons-pushed)))
-     
-     ;; Right analog mapping
+
      (if (< rx (the-as uint 30)) (set! buttons-pushed (logior (pad-buttons r-analog-left) buttons-pushed)))
      (if (> rx (the-as uint 225)) (set! buttons-pushed (logior (pad-buttons r-analog-right) buttons-pushed)))
      (if (< ry (the-as uint 30)) (set! buttons-pushed (logior (pad-buttons r-analog-up) buttons-pushed)))
@@ -247,19 +231,17 @@
      )
   (set! (-> pad button0-rel 0) (logclear (-> pad button0-abs 0) (-> pad button0-abs 1)))
 
-  ;; Update history index 0
   (let ((history (-> *cpad-history-list* cpads (-> pad number))))
     (set! (-> history button0-abs 0) (-> pad button0-abs 0))
     (set! (-> history button0-rel 0) (-> pad button0-rel 0))
     )
 
-  ;; 4. Update stick dir and speed for physics/state machine checks
   (let ((f30-0 (* 0.0078125 (the float (+ (the int lx) -128))))
         (f28-0 (* 0.0078125 (the float (- 127 (the int ly))))))
     (set! (-> pad stick0-dir) (atan (- f30-0) f28-0))
     (set! (-> pad stick0-speed) (fmin 1.0 (sqrtf (+ (* f30-0 f30-0) (* f28-0 f28-0)))))
     )
-  (if (< (-> pad stick0-speed) 0.3) ;; Standard Stick Deadzone
+  (if (< (-> pad stick0-speed) 0.3)
       (set! (-> pad stick0-speed) 0.0)
       )
   (none)
@@ -1379,28 +1361,23 @@
                (-> ghost active?)
                (-> proc control)
                (nonzero? (-> proc control)))
-      ;; CRITICAL: Ensure the process is never culled by distance/kernel optimizations
       (logclear! (-> proc mask) (process-mask pause sleep actor-pause))
 
       (mp-darkjak-apply-remote-stage! proc (-> record action darkjak-stage))
-      ;; Match local target processing order: expose the current pad sample before
-      ;; authoritative replay so native state entry can consume its trigger edge.
       (mp-puppet-apply-input! proc ghost)
       (let ((cur-state (if (-> proc state) (-> proc state name) #f)))
-        ;; 1. Position/Rotation Sync (P-Controller)
         (mp-puppet-apply-transform-correction! proc ghost cur-state)
         (mp-puppet-apply-authoritative-action! proc ghost cur-state)
         (mp-darkjak-update-puppet-giant-feedback!
           proc *target* (-> record action darkjak-stage))
         (set! cur-state (if (-> proc state) (-> proc state name) cur-state))
 
-        ;; 3. State Bumping (Reconciliation Fallback)
         (let ((ghost-state (mp-target-get-state-from-id (-> ghost state-id))))
           (when (and ghost-state (!= cur-state ghost-state))
             (+! (-> record runtime state-mismatch-count) 1)
             (cond
               ((and (mp-target-death-state? ghost-state)
-                    (not (mp-target-death-state? cur-state)) 
+                    (not (mp-target-death-state? cur-state))
                     (not (mp-player-blocks-respawn? record)))
                (debug-log *mp-debug-log?* "[MP-Puppet] Authoritative Death! Bumping ~A -> ~A~%" cur-state ghost-state)
                (mp-player-runtime-set-flag! record (mp-player-runtime-flags dying))
@@ -1429,7 +1406,6 @@
               ((and (mp-target-board-state? ghost-state)
                     (not (mp-puppet-in-board-state? proc cur-state)))
                (debug-log *mp-debug-log?* "[MP-Puppet] Authoritative Board! Bumping ~A -> ~A~%" cur-state ghost-state)
-               ;; Use the native mode change so target-board-init spawns and opens the board model.
                (send-event proc 'change-mode 'board #f)
                (set! (-> record runtime state-mismatch-count) 0)
                )
@@ -1461,11 +1437,9 @@
                   )
               )
               ((= cur-state 'target-ride-along)
-               ;; Puppet thinks it's riding, but ghost is NOT.
                (when (!= ghost-state 'target-ride-along)
                  (when (>= (-> record runtime state-mismatch-count) 2)
                    (debug-log *mp-debug-log?* "[MP-Puppet] Stuck in ride-along! Forcing exit to ~A~%" ghost-state)
-                   ;; Transition directly to the authoritative state via event; :exit handles cleanup
                    (send-event proc 'change-mode 'normal #f)
                    (set! (-> record runtime state-mismatch-count) 0)
                    )
@@ -1473,7 +1447,6 @@
                )
               ((and (mp-target-edge-grab-state? ghost-state)
                     (not (mp-puppet-in-edge-grab-state? proc cur-state)))
-               ;; Puppet is not hanging, but the authoritative player is.
                (when (>= (-> record runtime state-mismatch-count) 10)
                  (debug-log *mp-debug-log?* "[MP-Puppet] Authoritative Edge Grab! Bumping ~A -> ~A~%" cur-state ghost-state)
                  (mp-dispatch-edge-grab-to-target!
@@ -1483,7 +1456,6 @@
                  )
                )
               ((mp-puppet-in-edge-grab-state? proc cur-state)
-               ;; Puppet is hanging, but the authoritative player is not.
                (when (>= (-> record runtime state-mismatch-count) 10)
                  (debug-log *mp-debug-log?* "[MP-Puppet] Stuck in hang! Forcing exit via 'end-mode...~%")
                  (send-event proc 'end-mode 'edge-grab)
@@ -1497,7 +1469,6 @@
             )
           )
 
-        ;; --- 3.5. Occupancy Sync (Direct Attachment) ---
         (let ((info record)
               (ghost-state (mp-target-get-state-from-id (-> ghost state-id))))
           (let ((riding-veh-id
@@ -1513,7 +1484,6 @@
                     (focus-test? proc pilot)
                     (nonzero? (-> proc pilot))
                     (nonzero? (-> proc pilot vehicle)))
-               ;; Death owns the puppet now; do not keep it welded to a stale vehicle seat.
                (let ((v-proc (the-as vehicle (handle->process-safe (-> proc pilot vehicle))))
                      (seat-index (-> proc pilot seat-index)))
                   (when (and v-proc (nonzero? v-proc))
@@ -1530,7 +1500,6 @@
               ((and (nonzero? riding-veh-id)
                     (or (= ghost-state 'target-turret-stance)
                         (= ghost-state 'target-turret-get-on)))
-               ;; Remote player is in a turret.
                (let* ((turret-ent (entity-by-aid riding-veh-id))
                       (turret-proc (the-as mp-base-turret-dummy (if (and turret-ent (nonzero? turret-ent)) (-> turret-ent extra process) #f))))
                  (when (and turret-proc (nonzero? turret-proc))
@@ -1538,7 +1507,6 @@
                    (when (not (mp-puppet-synced-to-turret? proc turret-proc))
                      (debug-log *mp-debug-log?* "[MP-Puppet] Synced to turret (aid=~D)! Starting turret entry.~%" riding-veh-id)
 
-                     ;; Clean up old vehicle occupancy if any
                      (when (and (focus-test? proc pilot)
                                 (nonzero? (-> proc pilot))
                                 (nonzero? (-> proc pilot vehicle)))
@@ -1553,18 +1521,15 @@
                          )
                        )
 
-                     ;; Attach the puppet as the rider of this turret!
                      (set! (-> turret-proc rider) (process->handle proc))
                      (set! (-> turret-proc available-for-pickup) #f)
 
-                     ;; Send the puppet to target-turret-get-on
                      (send-event proc 'change-state target-turret-get-on (process->handle turret-proc))
                      )
                    )
                  )
                )
               ((nonzero? riding-veh-id)
-               ;; Remote player is in a vehicle.
                (let ((v-proc (mp-vehicle-find-by-net-id riding-veh-id)))
                  (when (and v-proc (nonzero? v-proc))
                    (let ((seat-index (the int riding-seat-index)))
@@ -1572,7 +1537,6 @@
                        (if (mp-puppet-synced-to-vehicle-seat? proc v-proc seat-index)
                            (mp-puppet-repair-vehicle-seat-claim! proc v-proc seat-index)
                            (begin
-                             ;; Native pilot get-on attaches the rider at the animation-ready frame.
                              (mp-puppet-start-vehicle-entry! proc v-proc seat-index)
                              )
                            )
@@ -1585,7 +1549,6 @@
                         (= cur-state 'target-turret-get-on))
                     (not (or (= ghost-state 'target-turret-stance)
                              (= ghost-state 'target-turret-get-on))))
-               ;; Remote player exited turret, but puppet is still in it. Force exit.
                (debug-log *mp-debug-log?* "[MP-Puppet] Puppet is in turret but ghost is not! Forcing exit.~%")
                (send-event proc 'change-state
                            (if (mp-player-daxter? record) target-indax-start target-stance)
@@ -1601,10 +1564,9 @@
                    )
                  )
                )
-              ((and (focus-test? proc pilot) 
+              ((and (focus-test? proc pilot)
                     (nonzero? (-> proc pilot))
                     (nonzero? (-> proc pilot vehicle)))
-               ;; Remote player is NOT in a vehicle, but puppet still is. Detach.
                (send-event proc 'change-mode
                            (if (mp-player-daxter? record) 'indax 'normal)
                            #f)
@@ -1618,19 +1580,14 @@
             )
           )
 
-        ;; 4. Weapon Sync
         (mp-puppet-apply-weapon-state! proc ghost)
         (mp-puppet-flush-pending-gun-shot! proc ghost)
         (mp-puppet-refresh-duck-gun-visibility! proc cur-state)
       )
 
-      ;; 5. Camera Orientation Sync
-      ;; Construct a camera-relative input matrix from the remote player's camera angle.
       (matrix-rotate-y! (-> proc control cam-R-w) (-> ghost cam-angle-y))
-      ;; Prevent the target state machine from overwriting this with the local camera.
       (set! (-> proc control update-cam-R-w-start-time) (the-as int64 #x7fffffffffffffff))
 
-      ;; 6. Permanent Jak Hiding (Daxter Puppets)
       (if (mp-player-daxter? record)
           (logior! (-> proc draw status) (draw-control-status no-draw-bounds2))
           )
@@ -1646,7 +1603,6 @@
   (remove-setting! 'allow-pause)
   (remove-setting! 'allow-progress)
 
-  ;; Directly go to the correct state based on role to avoid resets/overrides
   (if (mp-target-daxter? self)
       (go target-indax-start (the handle #f))
       (go target-stance)
@@ -1695,7 +1651,6 @@
              *game-info*
              (nonzero? *game-info*)
              (-> *game-info* current-continue)
-             ;; Safety: Don't spawn if we are in title or demo (Check next-state AND current state)
              (not (or (and (-> *target* next-state) (or (= (-> *target* next-state name) 'target-title)
                                                         (= (-> *target* next-state name) 'target-demo)))
                       (and (-> *target* state) (or (= (-> *target* state name) 'target-title)
@@ -1727,9 +1682,7 @@
         (let ((puppet (mp-player-record-target record)))
           (when (and puppet (nonzero? puppet))
             (mp-puppet-snap-to-ghost-on-spawn! puppet)))
-        
-        ;; If we are the Host (Jak), mp-puppet-init already entered target-indax-start.
-        ;; Do not send another indax change-mode during snapshot/level load startup.
+
         (if (mp-player-daxter? record)
           (begin
             (when (mp-player-runtime-flag? record (mp-player-runtime-flags recovering))

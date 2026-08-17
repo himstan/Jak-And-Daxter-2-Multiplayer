@@ -122,11 +122,9 @@
   (function mp-player-record))
 (define-extern mp-spectate-last-stop-reason (function symbol))
 
-;; Internal query used to protect the manager's level request from region scripts.
 (define-extern mp-spectate-owns-level-request? (function symbol))
 (define-extern mp-spectate-reset! (function none))
 
-;; Compatibility-facing helpers retained for existing callers.
 (define-extern mp-spectated-player-record (function mp-player-record))
 (define-extern mp-prepare-remote-spectate-target!
   (function process-focusable))

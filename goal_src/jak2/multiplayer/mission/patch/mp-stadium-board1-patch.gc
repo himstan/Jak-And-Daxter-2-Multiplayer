@@ -119,7 +119,6 @@
   )
 
 (defun mp-stadium-board1-start-challenge! ((send-event? symbol))
-  ;; log the bools below, and the send event flag
   (debug-log *mp-debug-log?* "[MP-StadiumBoard1] Starting challenge. Stadium mission active?: ~A, Stadium not active?: ~A, Send Event: ~A~%"
           (mp-stadium-board1-mission-active?) (not *mp-stadium-board1-active?*) send-event?)
   (when (and (mp-stadium-board1-mission-active?)

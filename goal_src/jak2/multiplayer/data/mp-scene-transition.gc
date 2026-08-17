@@ -44,7 +44,6 @@
       (mp-record-active-local-scene-name!)
       )
 
-    ;; 1. Handle Exiting Scene
     (when (and *mp-last-scene-player*
                (not in-scene?))
       (when (mp-session-client?)
@@ -57,7 +56,6 @@
     (when (not in-scene?)
       (mp-request-intro-skip-bootstrap-when-ready!)
       (mp-hold-intro-skip-blackout!)
-      ;; SAFETY: Force client-side black presentation state off once we are no longer in a scene.
       (if (and *mp-last-scene-player*
                (not *mp-intro-skip-blackout-pending?*))
           (begin

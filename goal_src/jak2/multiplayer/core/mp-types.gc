@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; Keep these values in sync with MultiplayerStatus in
-;; game/multiplayer/multiplayer_protocol.h.
 (defenum mp-connection-status
   :type int32
   (idle                    0)
@@ -24,7 +22,6 @@
   (!= status (mp-connection-status idle))
   )
 
-;; --- Globals for Throttling ---
 (define-perm *log-level-warn* symbol #f)
 (define-perm *multi-last-send-time* time-frame 0)
 (define-perm *multi-remote-spawn-time* time-frame 0)
@@ -144,9 +141,6 @@
 (define-perm *mp-shuttle-teleport-distance* float (meters 150.0))
 (define-perm *mp-left-behind-start-time* time-frame 0)
 
-
-;; --- Helper functions for handle resolution ---
-
 (define-extern puppet? (function process symbol))
 (define-extern not-puppet? (function process symbol))
 
@@ -158,29 +152,25 @@
 (defun handle->process-safe ((h handle))
   (if (and (nonzero? (the-as int h))
            (!= h (the-as handle #f))
-           (zero? (logand (the-as int h) 3))) ;; Pointers must be 4-byte aligned
+           (zero? (logand (the-as int h) 3)))
       (handle->process h)
       (the-as process #f)
       )
   )
 
-;; --- String Hashing Helper ---
 (defun string-crc32 ((str string))
   "Simple hash function for level name verification (MEMORY BOUNDED)"
   (if (or (not str) (zero? str))
       (return (the-as uint 0)))
   (let ((hash (the-as uint 0))
         (ptr (-> str data))
-        (max-len (-> str allocated-length)) ;; The physical RAM limit of the string!
+        (max-len (-> str allocated-length))
         (i 0))
-    ;; Loop until we hit the null terminator OR we hit the RAM limit
     (while (and (< i max-len) (nonzero? (-> ptr 0)))
       (set! hash (+ (-> ptr 0) (* hash 31)))
       (set! ptr (&-> ptr 1))
       (+! i 1))
     hash))
-
-;; --- Type Definitions ---
 
 (declare-type process-drawable process)
 (declare-type process-focusable process-drawable)
@@ -204,7 +194,7 @@
    (quat-y     float)
    (quat-z     float)
    (quat-w     float)
-   (pad1       float 3) ;; Removed anim-index, anim-frame, last-anim-frame
+   (pad1       float 3)
    (hp         int32)
    (state      uint32)
    (focus-player-id  uint32)
@@ -227,12 +217,10 @@
   (explode               7)
   (die                   8)
   (measure-control-parameters 9)
-  ;; Guard specific
   (hostile               10)
   (stop-and-shoot        11)
   (slow-pursuit          12)
   (waiting-ambush        13)
-  ;; Racer specific
   (waiting-race          14)
   (waiting-for-start     15)
   (racing                16)
@@ -317,7 +305,6 @@
   (indax-flop-hit-ground 43)
   (indax-running-attack 44)
   (ride-along 45)
-  ;; Pilot States
   (pilot-stance 46)
   (pilot-get-on 47)
   (pilot-get-off 48)
@@ -328,14 +315,12 @@
   (pilot-edge-grab 53)
   (pilot-hit 54)
   (pilot-death 55)
-  ;; Indax Pole/Misc
   (indax-start 56)
   (indax-pole-cycle 57)
   (indax-pole-flip-up 58)
   (indax-pole-flip-up-jump 59)
   (indax-pole-flip-forward 60)
   (indax-pole-flip-forward-jump 61)
-  ;; Board States
   (board-start 62)
   (board-duck-stance 65)
   (board-jump 66)
@@ -345,7 +330,6 @@
   (board-get-on 70)
   (board-get-off 71)
   (board-hit 72)
-  ;; Mech States
   (mech-start 73)
   (mech-stance 74)
   (mech-walk 75)
@@ -356,20 +340,17 @@
   (mech-get-off 80)
   (mech-hit 81)
   (mech-death 82)
-  ;; DarkJak States
   (darkjak-get-on 83)
   (darkjak-get-off 84)
   (darkjak-running-attack 85)
   (darkjak-bomb0 86)
   (darkjak-bomb1 87)
   (darkjak-giant 88)
-  ;; Tube States
   (tube-start 89)
   (tube 90)
   (tube-jump 91)
   (tube-hit 92)
   (tube-death 93)
-  ;; Carry States
   (carry-stance 94)
   (carry-walk 95)
   (carry-jump 96)
@@ -377,23 +358,19 @@
   (carry-pickup 98)
   (carry-drop 99)
   (carry-throw 100)
-  ;; Swim/Wade States
   (wade-stance 101)
   (wade-walk 102)
   (swim-down 105)
   (swim-up 106)
   (swim-jump 107)
-  ;; Turret States
   (turret-stance 108)
   (turret-get-on 109)
   (turret-get-off 110)
-  ;; Pole States
   (pole-cycle 111)
   (pole-flip-up 112)
   (pole-flip-up-jump 113)
   (pole-flip-forward 114)
   (pole-flip-forward-jump 115)
-  ;; Indax Pilot States
   (indax-pilot-stance 116)
   (indax-pilot-get-on 117)
   (indax-pilot-get-off 118)
@@ -434,7 +411,6 @@
    (last-sync-time  uint64)
    )
   :size-assert 20520)
-;; --- Pedestrian State IDs (for state-based sync, replaces raw animation index) ---
 (defenum mp-ped-state-id (uint8)
   (none                  0)
   (inactive              1)
@@ -468,7 +444,6 @@
   (run                   29)
   (talk                  30)
   (hide                  31)
-  ;; Guard-specific combat states (crimson-guard)
   (search                32)
   (close-attack          33)
   (close-attack-active   34)
@@ -494,8 +469,8 @@
   ((net-id          uint32)
    (object-type     uint8)
    (object-variance uint8)
-   (state-id        uint8)    ;; Replaces anim-index: numeric mp-ped-state-id
-   (pad-align       uint8)    ;; Alignment padding (was 2 bytes, now 1 since we use one for state-id)
+   (state-id        uint8)
+   (pad-align       uint8)
    (x               float)
    (y               float)
    (z               float)
@@ -505,12 +480,12 @@
    (quat-w          float)
    (hp              int32)
    (flags           mp-pedestrian-flags)
-   (target-player-id uint8) ;; 0xff = invalid; otherwise canonical player ID
-   (context-align   uint8 2)  ;; Aligns the named sync context fields below.
-   (animation-profile uint32) ;; Type-specific initial animation selection.
-   (vehicle-net-id  uint32)   ;; Vehicle rider bootstrap context, 0 = unset
-   (transport-id    uint32)   ;; Transport-spawned guard context, 0 = unset
-   (transport-side  uint8)    ;; Optional transport side hint/debug
+   (target-player-id uint8)
+   (context-align   uint8 2)
+   (animation-profile uint32)
+   (vehicle-net-id  uint32)
+   (transport-id    uint32)
+   (transport-side  uint8)
    (pad             uint8 7)
    )
   :size-assert 64)
@@ -671,26 +646,23 @@
    )
   :size-assert 312)
 
-;; --- Ghost Record for Traffic Sync (Position Prediction) ---
-;; Stores the last-known authoritative position/state for each traffic entity.
-;; Used to present non-authoritative traffic from host-derived motion.
 (deftype mp-traffic-ghost-record (structure)
   ((net-id          uint32)
-   (entity-kind     uint8)       ;; 0=pedestrian, 1=vehicle
+   (entity-kind     uint8)
    (pad             uint8 3)
-   (last-seen       time-frame)  ;; Timestamp of last remote update
+   (last-seen       time-frame)
    (ghost-trans     vector :inline)
    (ghost-quat      quaternion :inline)
-   (presentation-trans vector :inline) ;; Client-only host-driven display position
-   (presentation-quat quaternion :inline) ;; Client-only host-driven display facing
-   (ghost-linvel    vector :inline)   ;; Vehicles: remote linear velocity; peds: locally estimated velocity
-   (ghost-angvel    vector :inline)   ;; Vehicles: remote angular velocity; peds: previous authoritative position
+   (presentation-trans vector :inline)
+   (presentation-quat quaternion :inline)
+   (ghost-linvel    vector :inline)
+   (ghost-angvel    vector :inline)
    (ghost-hp         int32)
-   (ghost-state-id  uint8)           ;; Pedestrian state ID; unused for vehicles
-   (ghost-aux-state uint8)                 ;; Pedestrian target player ID or vehicle state flags
-   (presentation-valid uint8)        ;; Client-only presentation transform has been initialized
+   (ghost-state-id  uint8)
+   (ghost-aux-state uint8)
+   (presentation-valid uint8)
    (last-attack-source-player-id uint8)
-   (ghost-animation-profile uint32)  ;; Latest authoritative pedestrian animation selection
+   (ghost-animation-profile uint32)
    (last-applied-animation-profile uint32)
    (last-attack-id   uint32)
    (last-local-attack-id uint32)
@@ -725,7 +697,6 @@
   (flee 13)
   (jump 14)
   (jump-blocked 15)
-  ;; Nav-Enemy Specific States
   (chase 16)
   (patrol 17)
   (pacing 18)
@@ -733,7 +704,6 @@
   (taunt 20)
   (stop-chase 21)
   (staredown 22)
-  ;; Crimson Guard Specific States
   (gun-shoot 23)
   (get-up-front 24)
   (get-up-back 25)
@@ -747,13 +717,11 @@
   (roll-left 33)
   (arrest 34)
   (attack 35)
-  ;; Grunt Specific States
   (falling-ambush 36)
   (jumping-ambush 37)
   (jumping-ambush-cont 38)
   (wait-for-focus 39)
   (spin-attack 40)
-  ;; Bot Specific States
   (traveling 41)
   (traveling-blocked 42)
   (waiting-far 43)
@@ -763,7 +731,6 @@
   (die-falling 47)
   (failed 48)
   (hidden 49)
-  ;; Sig Specific States
   (sig-path-run 50)
   (sig-path-jump 51)
   (sig-path-jump-land 52)
@@ -777,21 +744,17 @@
   (whip 60)
   (blast 61)
   (chase-attack 62)
-  ;; Amphibian Specific States
   (stare-idle 63)
   (attack-forward 64)
   (attack-forward-lunge 65)
   (attack-forward-end 66)
   (attack-spin 67)
   (tongue-attack 68)
-  ;; Rhino Specific States
   (run-away 69)
   (stop-run 70)
   (charge 71)
-  ;; Sewer scare-grunt specific states
   (waiting 72)
   (scare 73)
-  ;; Ashelin Specific States
   (waiting-idle 74)
   (standing-idle 75)
   (standing-turn 76)
@@ -799,17 +762,14 @@
   (back-spring 78)
   (cartwheel-left 79)
   (tumble-right 80)
-  ;; Monster Frog Specific States
   (turn 81)
   (attack-recover 82)
-  ;; Tomb Beetle Specific States
   (explode 83)
   (fly-away 84)
   (go-to-door 85)
   (key 86)
   (land 87)
   (stand 88)
-  ;; Misc
   (directed 89)
   )
 
@@ -822,11 +782,10 @@
    (last-attack-id     uint32)
    (last-local-attack-id uint32)
    (last-local-attack-time time-frame)
-   ;; --- Ghost Predictive Sync ---
    (ghost-trans        vector :inline)
    (ghost-quat         quaternion :inline)
-   (presentation-trans vector :inline) ;; GOAL-only remote display position
-   (presentation-quat  quaternion :inline) ;; GOAL-only remote display facing
+   (presentation-trans vector :inline)
+   (presentation-quat  quaternion :inline)
    (ghost-linvel       vector :inline)
    (ghost-sample-time  uint32)
    (presentation-valid uint8)
@@ -839,8 +798,6 @@
    )
   )
 
-;; --- Global Variables ---
-
 (define-perm *mp-enemy-buffer* mp-enemy-sync-buffer (new 'static 'mp-enemy-sync-buffer))
 (define-perm *mp-traffic-buffer* mp-traffic-sync-buffer (new 'static 'mp-traffic-sync-buffer))
 (define-perm *mp-palace-squid-buffer* mp-palace-squid-sync-buffer (new 'static 'mp-palace-squid-sync-buffer))
@@ -849,7 +806,6 @@
 (define-perm *mp-widow-last-applied-state-id* uint (the uint 0))
 (define-perm *mp-enemy-auth* (inline-array mp-enemy-auth-record) (new 'static 'inline-array mp-enemy-auth-record 128))
 
-;; Breadcrumbs printed by the art loader when a bad art-group lookup happens.
 (define-perm *mp-traffic-art-context-kind* symbol 'none)
 (define-perm *mp-traffic-art-context-net-id* uint (the uint 0))
 (define-perm *mp-traffic-art-context-object-type* uint (the uint 0))
@@ -941,8 +897,6 @@
 (define-extern mp-target-ride-along? (function process-focusable object))
 (define *mp-daxter-damage-mult* 2.0)
 
-;; --- Function Implementations ---
-
 (defmacro mp-enemy-should-process-damage? (e-proc)
   "Should the local machine process damage/state changes? (Owner OR Remote Event)"
   `(or (mp-enemy-authoritative? ,e-proc) *mp-processing-remote-event*)
@@ -952,9 +906,6 @@
   "Is the local player the elected root of its ranked traffic bubble?"
   `(and *mp-traffic-local-authoritative?* #t)
   )
-
-
-;; --- Extern Declarations ---
 
 (define-extern pc-multi-debug-stop-receive (function uint none))
 (define-extern pc-multi-get-ticks (function uint64))
@@ -1102,7 +1053,6 @@
 (define-extern mp-respawn-local-target-at-remote! (function target none))
 (define-extern mp-any-player-near-and-piloting? (function process-drawable float symbol))
 
-;; --- Traffic Ghost System Externs ---
 (define-extern mp-get-traffic-ghost (function uint mp-traffic-ghost-record))
 (define-extern mp-get-free-traffic-ghost (function mp-traffic-ghost-record))
 (define-extern mp-ped-get-state-id (function citizen uint))
@@ -1119,7 +1069,6 @@
 (define-extern mp-traffic-cleanup-after-sync-exit! (function none))
 (define-extern mp-traffic-refill-local-active-cells! (function none))
 
-;; --- Authoritative Sync Functions ---
 (define-extern mp-palace-squid-tick (function squid none))
 (define-extern mp-palace-squid-target-pos! (function squid vector vector))
 (define-extern mp-palace-squid-local-action-authorized? (function symbol))

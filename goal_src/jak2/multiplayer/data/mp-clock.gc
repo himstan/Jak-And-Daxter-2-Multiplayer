@@ -25,11 +25,8 @@
              (not (load-in-progress? *level*)))
         (let* ((host-clock (-> *mp-world-state* clock))
                (diff (- host-clock (-> *display* shared-clock frame-counter))))
-          ;; Only sync if Host clock is AHEAD of local clock to avoid jittering/stalling
-          ;; Also sync if we are vastly ahead (e.g. host started game after us)
           (when (and (nonzero? host-clock)
                      (or (> diff 0) (< diff -60)))
-            ;; Synchronize the entity and pusher gameplay clock.
             (set! (-> *display* shared-clock frame-counter) host-clock)
             (set! (-> *display* shared-clock old-frame-counter) (+ host-clock -1))
             ))))

@@ -66,7 +66,6 @@
       (set! best-distance
             (vector-vector-distance
               (-> source root trans) (-> current-target root trans))))
-    ;; Preserve vanilla/offline behavior before a multiplayer record is bound.
     (when (and (or (not best-target) (zero? best-target))
                (mp-combat-valid-player-target? *target* require-control?))
       (set! best-target *target*)

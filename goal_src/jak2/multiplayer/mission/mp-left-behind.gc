@@ -1,4 +1,3 @@
-;-*-Lisp-*-
 (in-package goal)
 
 (defun mp-left-behind-teleport-player!
@@ -42,7 +41,6 @@
              (not (focus-test? *target* dead teleporting)))
     (cond
       (condition
-       ;; Countdown start or progress
        (when (= *mp-left-behind-start-time* 0)
          (set! *mp-left-behind-start-time* (current-time))
          )
@@ -52,23 +50,19 @@
            ((>= elapsed time-limit)
             (if (mp-player-teleport-ready-or-request! destination-record)
                 (begin
-                  ;; Reset timer
                   (set! *mp-left-behind-start-time* (the-as time-frame 0))
-                  ;; Execute generic teleportation
                   (mp-left-behind-teleport-player! ride-along? destination-record)
                   )
                 (mp-left-behind-draw-teleport-text! elapsed #t)
                 )
             )
            (else
-            ;; Draw countdown warning overlay (bottom left, scale 0.5, default font color)
             (mp-left-behind-draw-teleport-text! elapsed #f)
             )
            )
          )
        )
       (else
-       ;; Within range, reset countdown
        (set! *mp-left-behind-start-time* (the-as time-frame 0))
        )
       )

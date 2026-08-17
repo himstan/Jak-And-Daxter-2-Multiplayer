@@ -4,13 +4,10 @@
 (define-extern mp-enemy-find-remote-slot (function uint mp-enemy-state))
 (define-extern mp-enemy-get-state-from-id (function uint symbol))
 
-;; Persistent buffers avoid allocating a formatted string for every enemy every frame.
 (define *mp-enemy-debug-local-text* (new 'global 'string 256 (the-as string #f)))
 (define *mp-enemy-debug-ghost-text* (new 'global 'string 512 (the-as string #f)))
 (define *mp-enemy-debug-text-overlap-distance* (meters 2.0))
 (define *mp-enemy-debug-text-stacked-offset* (meters 6.0))
-
-;; --- Text and state helpers ---
 
 (defun mp-enemy-debug-local-state ((e-proc enemy))
   (when (and e-proc
@@ -167,8 +164,6 @@
     )
   (none)
   )
-
-;; --- Geometry and text drawing ---
 
 (defun mp-enemy-debug-text-overlaps? ((e-proc enemy)
                                       (rec mp-enemy-auth-record))

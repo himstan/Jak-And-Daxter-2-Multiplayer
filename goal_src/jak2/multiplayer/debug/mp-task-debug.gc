@@ -40,7 +40,7 @@
   "Overlay real-time task synchronization data with node names"
   (when *mp-debug-task-sync*
     (format *stdcon* "~0k--- MP TASK SYNC DEBUG ---~%")
-    
+
     (let ((nodes (-> *game-info* sub-task-list)))
       (when nodes
         (let ((local-closed 0)
@@ -48,8 +48,7 @@
               (remote-closed 0)
               (remote-active 0)
               (nodes-len (min 512 (-> nodes length))))
-          
-          ;; 1. Collect counts
+
           (dotimes (i nodes-len)
             (let ((byte-idx (/ i 8))
                   (bit-idx (logand i 7)))
@@ -57,7 +56,7 @@
                     (l-open? (task-node-open? (the-as game-task-node i)))
                     (r-closed? (logtest? (-> *mp-world-state* task-mask byte-idx) (ash 1 bit-idx)))
                     (r-open? (logtest? (-> *mp-world-state* active-task-mask byte-idx) (ash 1 bit-idx))))
-                
+
                 (if l-closed? (+! local-closed 1))
                 (if l-open? (+! local-active 1))
                 (if r-closed? (+! remote-closed 1))
@@ -65,8 +64,7 @@
                 )
               )
             )
-          
-          ;; 2. Display Status Summary
+
           (let ((closed-diff (- local-closed remote-closed))
                 (active-diff (- local-active remote-active)))
             (format *stdcon* "CLOSED: L~D R~D (Diff: ~D)~%" local-closed remote-closed closed-diff)
@@ -76,7 +74,6 @@
                 (format *stdcon* "STATUS: !! DESYNCED !!~%"))
             )
 
-          ;; 3. List active course-backed processes and their current waypoint.
           (format *stdcon* "~%ACTIVE COURSE WAYPOINTS:~%")
           (set! *mp-task-debug-course-count* 0)
           (iterate-process-tree *active-pool* mp-task-debug-course-callback *kernel-context*)
@@ -84,12 +81,11 @@
             (format *stdcon* "  none~%")
             )
           (format *stdcon* "PENDING WAYPOINTS: ~D~%" *mp-waypoint-pending-count*)
-          
-          ;; 4. List Local Active Nodes (Wrapped: 2 per line)
+
           (let ((active-count 0))
             (dotimes (i nodes-len)
               (when (task-node-open? (the-as game-task-node i))
-                (if (zero? (mod active-count 2)) 
+                (if (zero? (mod active-count 2))
                     (format *stdcon* "~%  ")
                     (format *stdcon* " | "))
                 (format *stdcon* "~S" (-> nodes data i name))
@@ -98,7 +94,6 @@
             (if (> active-count 0) (format *stdcon* "~%"))
             )
 
-          ;; 5. List Desynced Nodes (1 per line for maximum clarity)
           (let ((has-desync? #f))
             (dotimes (i nodes-len)
               (let ((byte-idx (/ i 8))
@@ -113,8 +108,7 @@
                 )
               )
             )
-          
-          ;; 6. Recent Activity
+
           (format *stdcon* "~%SCENE: ~S, SKIP VOTES: ~D/~D~%"
                   *mp-scene-coordinator-name*
                   (mp-scene-coordinator-vote-count)

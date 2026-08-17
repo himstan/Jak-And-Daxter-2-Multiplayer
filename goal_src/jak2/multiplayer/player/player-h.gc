@@ -1,7 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; Player identity is independent from transport role and avatar choice.
 (define-perm *mp-session-player-limit* uint (the uint 2))
 
 (defun mp-set-session-player-limit! ((player-limit uint))

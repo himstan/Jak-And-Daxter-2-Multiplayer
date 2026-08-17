@@ -1,10 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; Tomb Daxter stand-in interaction. This uses the existing mission-event
-;; packet so no shared C++ structure changes are required.
-
-
 (defconstant MP_TOMB_DAXTER_WAIT_NPC_NAME "daxter-npc-2")
 (defconstant MP_TOMB_DAXTER_WAIT_MOVE_THRESHOLD (meters 0.01))
 

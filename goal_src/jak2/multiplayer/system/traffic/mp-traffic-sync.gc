@@ -31,7 +31,6 @@
        (let ((v-proc (the-as vehicle proc)))
          (when (not (focus-test? v-proc inactive))
            (mp-traffic-ensure-process-net-id! v-proc)
-           ;; Explicit player drivers synchronize through player records instead.
            (when (and (nonzero? (-> v-proc net-id))
                       (not (mp-player-driver-record-by-vehicle-id (-> v-proc net-id)))
                       (< (-> *mp-traffic-buffer* veh-count) (the uint MP_MAX_SYNC_VEHICLES)))
@@ -93,8 +92,6 @@
     )
   (none)
   )
-
-;; --- Main Sync Orchestration ---
 
 (defun mp-traffic-clear-buffer! ()
   (when (nonzero? (the-as uint *mp-traffic-buffer*))
@@ -765,20 +762,16 @@
                )
             )
           (begin
-            ;; Apply piggybacked vehicle data only when this client has a valid city traffic context.
             (when (or (mp-is-traffic-authoritative?)
                       (mp-traffic-local-city-loaded?))
               (mp-vehicle-apply-piggyback)
               )
-            
+
             (if (mp-is-traffic-authoritative?)
-                ;; Authoritative Logic: Gather and Pack
                 (begin
-                  ;; Reclaim host bookkeeping before current entities request slots.
                   (mp-cleanup-authoritative-traffic-ghosts!)
                   (mp-traffic-clear-authoritative-slots!)
-                  
-                  ;; Efficient iteration: Only check children of the traffic trackers
+
                   (let ((curr (-> *traffic-manager* child)))
                     (while (and curr (nonzero? curr))
                       (let ((tracker (ppointer->process curr)))
@@ -794,7 +787,6 @@
                     (set! (-> *mp-traffic-buffer* last-sync-time) (the-as uint (current-time)))
                     )
                   )
-                ;; Puppet Logic: Receive and Apply (Client Side ONLY)
                 (begin
                   (cond
                     ((mp-traffic-local-city-loaded?)
@@ -865,11 +857,8 @@
 (defun mp-traffic-force-clear-local-vehicles! ()
   "Forcefully deactivate/kill all local vehicles on the Client to clean up traffic."
   (when (and *traffic-manager* (nonzero? *traffic-manager*))
-    ;; 1. Deactivate all active and inactive processes tracked by the traffic engine
     (send-event *traffic-manager* 'kill-all)
-    
-    ;; 2. Also forcefully deactivate any vehicle child processes of *traffic-manager* 
-    ;; to clean up any untracked or synced/puppet vehicles.
+
     (let ((curr (-> *traffic-manager* child)))
       (while (and curr (nonzero? curr))
         (let ((proc (ppointer->process curr)))
@@ -877,13 +866,12 @@
             (when (and proc (nonzero? proc) (type? proc vehicle))
               (let ((v-proc (the-as vehicle proc)))
                 (let ((v-net-id (-> v-proc net-id)))
-                  ;; Do not deactivate any player's currently owned or occupied vehicle.
                   (when (not (or (mp-player-record-by-vehicle-id v-net-id)
-                                 (and *target* 
+                                 (and *target*
                                       (nonzero? *target*)
                                       (focus-test? *target* pilot)
                                       (let ((pilot-info (-> *target* pilot)))
-                                        (and pilot-info 
+                                        (and pilot-info
                                              (nonzero? pilot-info)
                                              (= proc (handle->process (-> pilot-info vehicle)))
                                              )

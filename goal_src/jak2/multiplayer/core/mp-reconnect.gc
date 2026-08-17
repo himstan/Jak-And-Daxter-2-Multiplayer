@@ -1,9 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; name: mp-reconnect.gc
-;; name in dgo: mp-reconnect
-
 (define-extern *dproc* process)
 (define-extern activate-progress (function process symbol none))
 (define-extern mp-reset-gameplay-state (function none))

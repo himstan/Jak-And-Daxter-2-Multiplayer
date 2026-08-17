@@ -1,10 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; name: mp-palace-squid-sync.gc
-;; name in dgo: mp-palace-squid-sync
-;; dgos: PALBOSS
-
 (define *mp-palace-squid-proc* (the-as squid #f))
 (define *mp-palace-squid-last-applied-state* (the uint 0))
 (define *mp-palace-squid-last-hit-request* (the uint 0))
@@ -12,7 +8,6 @@
 (define *mp-palace-squid-pending-resolution-seq* (the uint 0))
 (define *mp-palace-squid-applying-action* #f)
 (define *mp-palace-squid-target-player-id* (the-as int MP_INVALID_PLAYER_ID))
-;; Tracks the last known squid state name for local vs remote change detection
 (define *mp-palace-squid-last-state-name* (the-as symbol 'none))
 
 (defun mp-palace-squid-ready? ()
@@ -399,9 +394,6 @@
           (pc-multi-receive-palace-squid (the-as uint *mp-palace-squid-buffer*))
           (mp-palace-squid-apply-state! proc (-> *mp-palace-squid-buffer* remote-state))
           (mp-palace-squid-poll-resolution!)
-          ;; Detect local state changes: if the proc state changed but was NOT caused
-          ;; by the remote sync above (which updates *mp-palace-squid-last-state-name*),
-          ;; then the squid changed state for a local reason (e.g. an internal go).
           (let ((cur-name (mp-palace-squid-current-state-name proc)))
             (when (and cur-name (!= cur-name *mp-palace-squid-last-state-name*))
               (debug-log *mp-debug-log?* "[MP-BOSS] State change (LOCAL): ~S -> ~S~%"

@@ -602,7 +602,6 @@
 (defun mp-apply-remote-world-state ()
   "Continually apply remote world state (Money, Gems, Task Nodes)"
   (when (and (mp-session-client?) *multi-sync-enabled?*)
-    ;; 2. Task Nodes Sync
     (let ((mask (-> *mp-world-state* task-mask))
           (active-mask (-> *mp-world-state* active-task-mask)))
       (let ((nodes (-> *game-info* sub-task-list)))
@@ -612,12 +611,11 @@
                   (bit-idx (logand i 7)))
               (let ((remote-closed? (logtest? (-> mask byte-idx) (ash 1 bit-idx))))
                 (mp-tomb-boulder-note-remote-task-state! i remote-closed?)
-              
+
               (unless (or (= i (the-as uint (game-task-node city-vehicle-training-map)))
                           (= i (the-as uint (game-task-node city-vehicle-training-hover-zone-1)))
                           (= i (the-as uint (game-task-node city-vehicle-training-hover-zone-2)))
                           (= i (the-as uint (game-task-node city-vehicle-training-resolution))))
-                ;; 2.1 Sync CLOSED nodes
                 (when (and remote-closed?
                            (not (logtest? (-> nodes data i flags) (game-task-node-flag closed))))
                   (debug-log *mp-debug-log?* "[MP-Sync-State] Remote closed task node ~D. Applying locally.~%" i)
@@ -625,12 +623,9 @@
                   (mp-task-sync-after-remote-close! (the-as game-task-node i))
                   )
 
-                ;; 2.2 Sync ACTIVE (Open) nodes
                 (when (and (logtest? (-> active-mask byte-idx) (ash 1 bit-idx))
                            (task-node-closed? (the-as game-task-node i)))
-                  
-                  ;; 2.2.1 PROTECTION: If we are in a scene and the remote wants to skip,
-                  ;; or we are in the middle of a remote skip event, don't re-open task managers.
+
                   (let ((should-open? #t))
                     (when (or (mp-scene-coordinator-vote-active?)
                               *mp-processing-remote-event*

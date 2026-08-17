@@ -1,10 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; Preserve host-selected locomotion clips when a reserve-pool citizen becomes
-;; a remote multiplayer puppet. This module intentionally uses only citizen
-;; fields so it remains independent of the concrete CWI pedestrian DGO types.
-
 (defun mp-pedestrian-pack-animation-profile ((walk-anim int) (run-anim int))
   (the uint
        (logior (logand walk-anim #xff)

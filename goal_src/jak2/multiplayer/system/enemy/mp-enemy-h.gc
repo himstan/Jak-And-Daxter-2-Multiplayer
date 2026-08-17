@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; --- Enemy Helpers ---
-
 (defun mp-enemy-host-only? ((e-proc enemy))
   "True when this enemy must remain authoritative on the host."
   (and e-proc
@@ -45,8 +43,6 @@
 
 (defun mp-find-enemy-callback ((p process-tree))
   (let ((proc (the-as process p)))
-    ;; Broaden mask to find suspended or differently masked enemies, but never
-    ;; reinterpret an unrelated drawable or select a terminal streamed copy.
     (when (and proc (nonzero? proc) (type? proc enemy))
       (let ((e-proc (the-as enemy proc)))
         (when (and (mp-enemy-lookup-candidate? e-proc)

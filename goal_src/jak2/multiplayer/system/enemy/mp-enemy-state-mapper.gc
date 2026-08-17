@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; --- Enemy State ID Mapping ---
-
 (defun mp-enemy-get-state-id ((e-proc enemy))
   "Get a numeric ID for the current virtual state of an enemy."
   (let ((s-name (if (and e-proc

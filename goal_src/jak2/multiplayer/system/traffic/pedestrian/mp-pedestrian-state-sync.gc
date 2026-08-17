@@ -1,7 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-
 (defun is-ghost-in-pausable-state? ((rec mp-traffic-ghost-record))
   (let ((state-name (if (and rec (-> rec ghost-state-id)) (mp-target-get-state-from-id (-> rec ghost-state-id)) #f)))
     (is-in-pausable-state? state-name)

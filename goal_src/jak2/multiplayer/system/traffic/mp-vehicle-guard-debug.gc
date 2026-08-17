@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; --- Externs ---
-
 (define-extern mp-format-generic-veh-info (function vehicle string none))
 (define-extern mp-draw-traffic-veh-ghost-debug (function vehicle mp-traffic-ghost-record none))
 (define-extern mp-get-traffic-ghost (function uint mp-traffic-ghost-record))
@@ -16,15 +14,11 @@
 (define-extern mp-guard-target-debug-handle-label (function handle symbol))
 (define-extern mp-guard-target-debug-handle-type (function handle symbol))
 
-;; --- String Buffers to Avoid Heap Allocations ---
-
 (define *mp-guard-veh-debug-text-str* (new 'global 'string 1536 (the-as string #f)))
 (define *mp-guard-veh-debug-tmp-str* (new 'global 'string 512 (the-as string #f)))
 (define *mp-guard-veh-debug-flags-str* (new 'global 'string 128 (the-as string #f)))
 (define *mp-guard-veh-debug-sight-str* (new 'global 'string 64 (the-as string #f)))
 (define *mp-guard-veh-debug-turret-flags-str* (new 'global 'string 128 (the-as string #f)))
-
-;; --- Helper Decoders & Formatters ---
 
 (defun mp-format-turret-flags ((flags turret-flag) (out-str string))
   (when (and out-str (type? out-str string))
@@ -119,8 +113,6 @@
   (none)
   )
 
-;; --- Main Drawing Function ---
-
 (defun mp-draw-vehicle-guard-debug ((proc vehicle-guard) (show-guard-specific? symbol))
   (when (and proc (nonzero? proc) *target* (nonzero? *target*))
     (let ((dist (vector-vector-distance (-> proc root trans) (-> *target* root trans))))
@@ -130,7 +122,7 @@
             (let ((draw-pos (new 'stack-no-clear 'vector)))
               (vector-copy! draw-pos (-> proc root trans))
               (set! (-> draw-pos y) (+ (-> draw-pos y) (meters 2.0)))
-              
+
               (let* ((text-str *mp-guard-veh-debug-text-str*)
                      (tmp *mp-guard-veh-debug-tmp-str*))
                 (when (and text-str (type? text-str string) tmp (type? tmp string))
@@ -144,38 +136,33 @@
                                 (nonzero? driver-record)
                                 (= (-> driver-record identity player-id) (mp-local-player-id))))
                          (is-owner (or is-local-driven (and (not is-remote-driven) (mp-is-traffic-authoritative?)))))
-                    
+
                     (clear text-str)
-                    ;; Step 1: Format generic info
                     (mp-format-generic-veh-info proc text-str)
-                    
-                    ;; Step 2: Append guard-specific info if requested
+
                     (when show-guard-specific?
                       (clear tmp)
                       (format tmp "~%~0k--- GUARD SPECIFIC ---")
                       (cat-string<-string text-str tmp)
-                      
-                      ;; 2.1 Flight level
+
                       (clear tmp)
-                      (format tmp "~%FL-IDX: ~D  FL-HEIGHT: ~,1fm" 
-                              (-> proc flight-level-index) 
+                      (format tmp "~%FL-IDX: ~D  FL-HEIGHT: ~,1fm"
+                              (-> proc flight-level-index)
                               (/ (-> proc flight-level) 4096.0))
                       (cat-string<-string text-str tmp)
-                      
-                      ;; 2.2 AI hook
+
                       (clear tmp)
                       (format tmp "~%AI-HOOK: ~A" (-> proc ai-hook))
                       (cat-string<-string text-str tmp)
-                      
-                      ;; 2.3 Pursuit target
+
                       (clear tmp)
                       (let ((p-target (-> proc pursuit-target)))
                         (if (and p-target (nonzero? p-target))
                             (let ((p-proc (handle->process p-target)))
                               (if (and p-proc (nonzero? p-proc))
-                                  (format tmp "~%PURSUIT: ~S (Type: ~A, Label: ~S)" 
-                                          (-> p-proc name) 
-                                          (-> p-proc type symbol) 
+                                  (format tmp "~%PURSUIT: ~S (Type: ~A, Label: ~S)"
+                                          (-> p-proc name)
+                                          (-> p-proc type symbol)
                                           (mp-guard-target-debug-handle-label p-target))
                                   (format tmp "~%PURSUIT: Dead/Stale Handle (~D)" p-target)
                                   )
@@ -184,8 +171,7 @@
                             )
                         )
                       (cat-string<-string text-str tmp)
-                      
-                      ;; 2.4 Target flags
+
                       (let ((flags-str *mp-guard-veh-debug-flags-str*))
                         (when (and flags-str (type? flags-str string))
                           (mp-format-traffic-target-flags (-> proc target-flags) flags-str)
@@ -194,8 +180,7 @@
                           (cat-string<-string text-str tmp)
                           )
                         )
-                      
-                      ;; 2.5 Target sight time
+
                       (let ((sight-time-str *mp-guard-veh-debug-sight-str*))
                         (when (and sight-time-str (type? sight-time-str string))
                           (mp-format-time-elapsed (-> proc target-in-sight-time) sight-time-str)
@@ -204,15 +189,14 @@
                           (cat-string<-string text-str tmp)
                           )
                         )
-                      
-                      ;; 2.6 Traffic target status
+
                       (clear tmp)
                       (let ((t-status (the-as traffic-target-status (&-> proc traffic-target-status))))
                         (if (and t-status (nonzero? t-status))
                             (let ((t-status-handle (-> t-status handle)))
                               (if (and t-status-handle (nonzero? t-status-handle))
-                                  (format tmp "~%T-STATUS: ~S (Type: ~A)" 
-                                          (mp-guard-target-debug-handle-label t-status-handle) 
+                                  (format tmp "~%T-STATUS: ~S (Type: ~A)"
+                                          (mp-guard-target-debug-handle-label t-status-handle)
                                           (mp-guard-target-debug-handle-type t-status-handle))
                                   (format tmp "~%T-STATUS: Stale")
                                   )
@@ -221,36 +205,32 @@
                             )
                         )
                       (cat-string<-string text-str tmp)
-                      
-                      ;; 2.7 Turret status
+
                       (let ((turret-flags-str *mp-guard-veh-debug-turret-flags-str*))
                         (when (and turret-flags-str (type? turret-flags-str string))
                           (mp-format-turret-flags (-> proc turret flags) turret-flags-str)
                           (clear tmp)
-                          (format tmp "~%TURRET: ~S (Shots: ~D, Dist: ~,1fm)" 
-                                  turret-flags-str 
-                                  (-> proc turret shot-count) 
+                          (format tmp "~%TURRET: ~S (Shots: ~D, Dist: ~,1fm)"
+                                  turret-flags-str
+                                  (-> proc turret shot-count)
                                   (/ (-> proc turret target-dist) 4096.0))
                           (cat-string<-string text-str tmp)
                           )
                         )
-                      
-                      ;; 2.8 LOD2
+
                       (clear tmp)
                       (format tmp "~%LOD2: ~A" (-> proc lod2))
                       (cat-string<-string text-str tmp)
                       )
-                    
-                    ;; Step 3: Draw the complete text
+
                     (let ((color (if is-owner (font-color green) (font-color yellow))))
-                      (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
+                      (add-debug-text-3d #t (bucket-id debug-no-zbuf1)
                                         text-str
-                                        draw-pos 
-                                        color 
+                                        draw-pos
+                                        color
                                         (the-as vector2h #f))
                       )
-                    
-                    ;; Step 4: Draw ghost visuals if puppet
+
                     (when (not is-owner)
                       (let ((rec (mp-get-traffic-ghost net-id)))
                         (mp-draw-traffic-veh-ghost-debug proc rec)

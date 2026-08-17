@@ -94,8 +94,7 @@
           )
       (format *stdcon* "LOSS (ENET RELIABLE): ~,,1f% (var: ~,,1f%)~%" loss loss-var)
       (format *stdcon* "SYNC TPS:  ~D / ~D (Actual / Target)~%" *mp-actual-tps* *multi-sync-tps*)
-      
-      ;; Wire rates and cumulative wire totals include ENet overhead and control traffic.
+
       (let ((rate-in-kb (/ (the float recv-rate) 1024.0))
             (rate-out-kb (/ (the float send-rate) 1024.0)))
         (cond
@@ -113,8 +112,7 @@
         )
       (format *stdcon* "WIRE PPS:   In: ~D / Out: ~D~%" recv-packet-rate send-packet-rate)
       (format *stdcon* "PACKETS TOTAL: In: ~D / Out: ~D~%" packets-recv packets-sent)
-      
-      ;; Category breakdown
+
       (format *stdcon* "BY CATEGORY:~%")
       (dotimes (idx MP_PACKET_COUNT)
         (let ((t-sent (pc-multi-get-type-total-sent idx))
@@ -345,11 +343,11 @@
                              )))
       (format *stdcon* "READY?: ~A~%" (if squid-ready? "YES" "NO"))
       )
-    
+
     (let ((proc-handle-valid? (and *mp-palace-squid-proc* (nonzero? *mp-palace-squid-proc*))))
       (format *stdcon* "PROC HANDLE: ~A (addr: ~D)~%" (if proc-handle-valid? "VALID" "NULL") *mp-palace-squid-proc*)
       )
-      
+
     (let ((tree-proc (mp-find-squid-process)))
       (if (and tree-proc (nonzero? tree-proc))
           (begin
@@ -360,7 +358,7 @@
           (format *stdcon* "TREE SQUID: NOT FOUND~%")
           )
       )
-      
+
     (when (and *mp-palace-squid-buffer* (nonzero? (the-as uint *mp-palace-squid-buffer*)))
       (let ((local-state (-> *mp-palace-squid-buffer* local-state))
             (remote-state (-> *mp-palace-squid-buffer* remote-state)))
@@ -399,7 +397,6 @@
       (when (and proc (nonzero? proc)
                  (-> proc root)
                  (nonzero? (-> proc root)))
-        ;; Position the label a good distance above the boss body
         (let ((draw-pos (new 'stack-no-clear 'vector)))
           (vector-copy! draw-pos (-> proc root trans))
           (+! (-> draw-pos y) (meters 8.0))
@@ -408,17 +405,14 @@
             (let ((color (if is-jak? (font-color green) (font-color yellow)))
                   (role-str (if is-jak? "JAK(AUTH)" "DAX(PUPPET)")))
 
-              ;; ---- AID-less slot: just read live buffer fields ----
               (if (and *mp-palace-squid-buffer*
                        (nonzero? (the-as uint *mp-palace-squid-buffer*)))
                   (let ((local-state  (-> *mp-palace-squid-buffer* local-state))
                         (remote-state (-> *mp-palace-squid-buffer* remote-state)))
                     (when (and local-state (nonzero? local-state)
                                remote-state (nonzero? remote-state))
-                      ;; Decode the state-id to a human-readable symbol
                       (let ((local-state-name
                               (if (-> proc state) (-> proc state name) 'none)))
-                        ;; -- Local state label (green tint) --
                         (add-debug-text-3d
                           #t
                           (bucket-id debug-no-zbuf1)
@@ -435,7 +429,6 @@
                           draw-pos
                           color
                           (the-as vector2h #f))
-                        ;; -- Remote state label (slightly below) --
                         (let ((remote-pos (new 'stack-no-clear 'vector)))
                           (vector-copy! remote-pos draw-pos)
                           (+! (-> remote-pos y) (meters -2.5))
@@ -458,7 +451,6 @@
                         )
                       )
                     )
-                  ;; No buffer yet
                   (add-debug-text-3d
                     #t
                     (bucket-id debug-no-zbuf1)
@@ -533,7 +525,7 @@
       (format *stdcon* "PLAY?: ~A  BORDER?: ~A  VIS?: ~A~%" (-> *level* play?) (-> *level* border?) (-> *level* vis?))
       (format *stdcon* "LOAD-LEVEL: ~A~%" (-> *level* load-level))
       )
-    
+
     (when (and *level* (nonzero? *level*))
       (let ((loading-lev (-> *level* loading-level)))
         (if (and loading-lev (nonzero? loading-lev) (!= loading-lev (-> *level* default-level)))
@@ -542,7 +534,7 @@
             )
         )
       )
-    
+
     (when (and *load-state* (nonzero? *load-state*))
       (format *stdcon* "WANTED LEVELS (WANT):~%")
       (dotimes (i 6)
@@ -559,7 +551,7 @@
           )
         )
       )
-    
+
     (when (and *level* (nonzero? *level*))
       (format *stdcon* "ACTIVE HEAPS (draw-level-count: ~D):~%" (-> *level* draw-level-count))
       (dotimes (i (-> *level* length))

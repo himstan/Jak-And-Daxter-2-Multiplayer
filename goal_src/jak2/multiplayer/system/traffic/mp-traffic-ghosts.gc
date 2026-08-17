@@ -1,9 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; Shared traffic ghost record registry. Pedestrian and vehicle puppet code both
-;; use these records for authoritative samples and correction state.
-
 (define-perm *mp-authoritative-traffic-ghost-cleanup-time* time-frame 0)
 (define-perm *mp-traffic-ghost-allocation-failure-log-time* time-frame 0)
 

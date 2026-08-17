@@ -1,10 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; name: mp-airlock-sync.gc
-;; name in dgo: mp-airlock-sync
-;; dgos: GAME
-
 (defun mp-airlock-ready? ()
   (and *mp-airlock-buffer*
        (nonzero? (the-as uint *mp-airlock-buffer*))

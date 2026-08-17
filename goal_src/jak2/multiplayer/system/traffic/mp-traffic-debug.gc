@@ -7,8 +7,6 @@
 (define-extern traffic-path-risk? (function vehicle symbol))
 (define-extern mp-draw-vehicle-guard-debug (function vehicle-guard symbol none))
 
-;; --- Pedestrian Debug ---
-
 (defun mp-draw-traffic-ped-debug ((proc citizen))
   (when (and *mp-traffic-ped-debug?* *target*)
     (let ((dist (vector-vector-distance (-> proc root trans) (-> *target* root trans))))
@@ -18,41 +16,39 @@
             (let ((draw-pos (new 'stack-no-clear 'vector)))
               (vector-copy! draw-pos (-> proc root trans))
               (set! (-> draw-pos y) (+ (-> draw-pos y) (meters 2.0)))
-              
+
               (let ((is-owner (mp-is-traffic-authoritative?)))
                 (let ((color (if is-owner (font-color green) (font-color yellow)))
                       (status-str (if is-owner "OWNER" "PUPPET"))
                       (type-str (symbol->string (-> proc type symbol)))
                       (cur-state (if (-> proc state) (-> proc state name) 'none)))
-                  
+
                   (if is-owner
-                      (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
-                                        (the-as string (format #f "PED-ID: ~D (~S)~%STATE: ~S(~D)~%TYPE: ~S" 
-                                                net-id 
+                      (add-debug-text-3d #t (bucket-id debug-no-zbuf1)
+                                        (the-as string (format #f "PED-ID: ~D (~S)~%STATE: ~S(~D)~%TYPE: ~S"
+                                                net-id
                                                 status-str
                                                 cur-state
                                                 (the uint8 (mp-ped-get-state-id proc))
                                                 type-str))
-                                        draw-pos 
-                                        color 
+                                        draw-pos
+                                        color
                                         (the-as vector2h #f))
                       (let ((rec (mp-get-traffic-ghost net-id)))
-                        (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
-                                          (the-as string (format #f "PED-ID: ~D (~S)~%STATE: ~S~%GHOST-STATE: ~S(~D)~%TYPE: ~S" 
-                                                  net-id 
+                        (add-debug-text-3d #t (bucket-id debug-no-zbuf1)
+                                          (the-as string (format #f "PED-ID: ~D (~S)~%STATE: ~S~%GHOST-STATE: ~S(~D)~%TYPE: ~S"
+                                                  net-id
                                                   status-str
                                                   cur-state
                                                   (if rec (mp-ped-get-state-from-id (the uint (-> rec ghost-state-id))) 'none)
                                                   (if rec (-> rec ghost-state-id) 0)
                                                   type-str))
-                                          draw-pos 
-                                          color 
+                                          draw-pos
+                                          color
                                           (the-as vector2h #f))
-                        
+
                         (when rec
-                          ;; Draw ghost sphere at authoritative target position
                           (add-debug-sphere #t (bucket-id debug-no-zbuf1) (-> rec ghost-trans) (meters 0.5) (static-rgba 255 255 0 128))
-                          ;; Draw line connecting puppet to ghost
                           (add-debug-line #t (bucket-id debug-no-zbuf1) (-> proc root trans) (-> rec ghost-trans) (static-rgba 255 255 0 128) #f (the-as rgba 0))
                           )
                         )
@@ -67,8 +63,6 @@
     )
   (none)
   )
-
-;; --- Vehicle Debug ---
 
 (define *mp-veh-debug-seat-str* (new 'global 'string 256 (the-as string #f)))
 (define *mp-veh-debug-text-str* (new 'global 'string 768 (the-as string #f)))
@@ -122,9 +116,7 @@
 
 (defun mp-draw-traffic-veh-ghost-debug ((proc vehicle) (rec mp-traffic-ghost-record))
   (when rec
-    ;; Draw ghost sphere at authoritative target position
     (add-debug-sphere #t (bucket-id debug-no-zbuf1) (-> rec ghost-trans) (meters 1.5) (static-rgba 255 255 0 128))
-    ;; Draw line connecting vehicle to ghost
     (add-debug-line #t (bucket-id debug-no-zbuf1) (-> proc root trans) (-> rec ghost-trans) (static-rgba 255 255 0 128) #f (the-as rgba 0))
     )
   (none)
@@ -151,7 +143,7 @@
                     (if (and driver-record (nonzero? driver-record))
                         (-> driver-record runtime pad-index)
                         (-> proc pad-index))))
-              
+
               (if is-local-driven
                   (set! status-str "LOCAL-DRIVEN")
                   )
@@ -168,14 +160,14 @@
                   (if is-owner
                       (begin
                         (clear text-str)
-                        (format text-str "VEH-ID: ~D (~S)~%STATE: ~S(~D)~%" 
-                                net-id 
+                        (format text-str "VEH-ID: ~D (~S)~%STATE: ~S(~D)~%"
+                                net-id
                                 status-str
                                 cur-state
                                 (the uint8 (mp-veh-get-state-id proc)))
                         (clear tmp)
-                        (format tmp "TYPE: ~S~%PAD: ~D~%NUM-RIDERS: ~D~%SEATS:~S" 
-                                type-str 
+                        (format tmp "TYPE: ~S~%PAD: ~D~%NUM-RIDERS: ~D~%SEATS:~S"
+                                type-str
                                 pad-idx
                                 (-> proc root num-riders)
                                 seat-str)
@@ -190,15 +182,15 @@
                       (let ((rec (mp-get-traffic-ghost net-id)))
                         (let ((nudged-str (cond ((= nudged-status 1) "Y") ((= nudged-status 2) "SNAP") (else "N"))))
                           (clear text-str)
-                          (format text-str "ID: ~D (~S) S:~S G:~S~%TYPE: ~S PAD: ~D~%" 
-                                  net-id 
+                          (format text-str "ID: ~D (~S) S:~S G:~S~%TYPE: ~S PAD: ~D~%"
+                                  net-id
                                   status-str
                                   cur-state
                                   (if rec (mp-veh-get-state-from-id (the uint (-> rec ghost-state-id))) 'none)
                                   type-str
                                   pad-idx)
                           (clear tmp)
-                          (format tmp "NUDGED: ~S~%NUM-RIDERS: ~D~%SEATS:~S~%" 
+                          (format tmp "NUDGED: ~S~%NUM-RIDERS: ~D~%SEATS:~S~%"
                                   nudged-str
                                   (-> proc root num-riders)
                                   seat-str)
@@ -243,12 +235,12 @@
                      (is-owner (or is-local-driven (and (not is-remote-driven) (mp-is-traffic-authoritative?)))))
                 (clear text-str)
                 (mp-format-generic-veh-info proc text-str)
-                
+
                 (let ((color (if is-owner (font-color green) (font-color yellow))))
-                  (add-debug-text-3d #t (bucket-id debug-no-zbuf1) 
+                  (add-debug-text-3d #t (bucket-id debug-no-zbuf1)
                                     text-str
-                                    draw-pos 
-                                    color 
+                                    draw-pos
+                                    color
                                     (the-as vector2h #f))
                   )
 
@@ -266,8 +258,6 @@
     )
   (none)
   )
-
-;; --- Authority Bubble Debug ---
 
 (defun mp-draw-traffic-bubble-ring ((center vector) (radius meters) (color rgba) (label string))
   (add-debug-circle #t (bucket-id debug-no-zbuf1) center radius color (the-as matrix #f))
@@ -347,15 +337,12 @@
   (none)
   )
 
-;; --- Master High-Level Call ---
-
 (defun mp-draw-traffic-debug ()
   "Overlay real-time traffic synchronization data"
-  ;; Budget and generic info (legacy master toggle)
   (when *mp-traffic-debug?*
     (format *stdcon* "~0k--- MP TRAFFIC DEBUG ---~%")
-    (format *stdcon* "BUDGET: ~D peds, ~D vehs~%" 
-            (-> *mp-traffic-buffer* ped-count) 
+    (format *stdcon* "BUDGET: ~D peds, ~D vehs~%"
+            (-> *mp-traffic-buffer* ped-count)
             (-> *mp-traffic-buffer* veh-count))
     (format *stdcon* "AUTHORITATIVE: ~S~%" (if (mp-is-traffic-authoritative?) "YES" "NO"))
     (format *stdcon* "-------------------------~%")
@@ -380,7 +367,6 @@
 
   (mp-draw-traffic-authority-bubbles)
 
-  ;; World overlays (independent toggles)
   (when (or *mp-traffic-ped-debug?* *mp-traffic-veh-debug?* *mp-vehicle-guard-debug?*)
     (iterate-process-tree *active-pool* (lambda ((p process-tree))
       (let ((proc (the-as process p)))

@@ -1,9 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; Runtime-only event bridge. Queue ownership lives in mp-event-queue.gc;
-;; application dispatch lives in mp-event-handlers.gc.
-
 (define-extern mp-tomb-scene-sync-suppressed? (function symbol))
 (define-extern mp-tomb-scene-transport-suppressed? (function string symbol))
 
