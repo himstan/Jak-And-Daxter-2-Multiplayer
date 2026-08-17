@@ -73,6 +73,22 @@
            (set! cursor (&-> cursor 1))))))
     valid?))
 
+(defun mp-load-max-players-from-cli! ()
+  (set! *mp-session-player-limit* (the-as uint 2))
+  (let ((max-players-arg (pc-multi-get-command-line-arg "-max-players")))
+    (when (and max-players-arg
+               (nonzero? (the-as uint max-players-arg))
+               (nonzero? (-> max-players-arg allocated-length)))
+      (let ((parsed-limit (string->int max-players-arg)))
+        (if (and (>= parsed-limit 2) (<= parsed-limit MP_MAX_PLAYERS))
+            (mp-set-session-player-limit! (the-as uint parsed-limit))
+            (begin
+              (set! *mp-session-player-limit* (the-as uint 2))
+              (format #t
+                "[MP-Session] WARNING: Invalid -max-players value '~A', defaulting to 2~%"
+                max-players-arg))))))
+  (none))
+
 (defun mp-load-session-characters-from-cli! ()
   (mp-reset-session-player-characters!)
   (let ((characters-arg (pc-multi-get-command-line-arg "-mp-characters")))
@@ -220,6 +236,7 @@
 
 (defun mp-start-host-from-cli! ((internet-host? symbol))
   (debug-log *mp-debug-log?* "[MP-Session] Hosting via CLI argument.~%")
+  (mp-load-max-players-from-cli!)
   (mp-load-session-characters-from-cli!)
   (mp-configure-bridge-version!)
   (mp-setup-host-bridge! internet-host?)
