@@ -7,7 +7,7 @@
 OS = $(shell $(CC) -dumpmachine)
 CC ?= gcc
 ARCH = $(OS)
-VERSION = $(shell cat VERSION)
+VERSION = $(shell cat natpmp.version)
 INSTALL ?= $(shell which install)
 
 ifneq (, $(findstring darwin, $(OS)))
@@ -175,7 +175,7 @@ cleaninstall:
 	$(RM) $(INSTALLDIRLIB)/$(STATICLIB)
 	$(RM) $(INSTALLDIRLIB)/$(PKGCONFIGDIR)
 
-natpmp.pc: VERSION
+natpmp.pc: natpmp.version
 	$(RM) $@
 	echo "prefix=$(INSTALLPREFIX)" >> $@
 	echo "exec_prefix=\$${prefix}" >> $@

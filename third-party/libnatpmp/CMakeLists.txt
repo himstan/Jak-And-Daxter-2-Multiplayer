@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.5)
 
-file(STRINGS VERSION PVER)
+file(STRINGS natpmp.version PVER)
 
 project(natpmp
         LANGUAGES C
