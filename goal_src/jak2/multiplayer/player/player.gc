@@ -501,6 +501,25 @@
   (when (and record (nonzero? record))
     (logclear! (-> record runtime flags) flag)))
 
+(defun mp-player-mission-flag? ((record mp-player-record) (flag mp-player-mission-flags))
+  (if (and record
+           (nonzero? record)
+           (logtest? (-> record runtime mission-flags) flag))
+      #t
+      #f))
+
+(defun mp-player-mission-set-flag! ((record mp-player-record) (flag mp-player-mission-flags))
+  (when (and record (nonzero? record))
+    (logior! (-> record runtime mission-flags) flag))
+  (none)
+  )
+
+(defun mp-player-mission-clear-flag! ((record mp-player-record) (flag mp-player-mission-flags))
+  (when (and record (nonzero? record))
+    (logclear! (-> record runtime mission-flags) flag))
+  (none)
+  )
+
 (defun mp-player-record-dead-or-dying? ((record mp-player-record))
   (and record
        (nonzero? record)

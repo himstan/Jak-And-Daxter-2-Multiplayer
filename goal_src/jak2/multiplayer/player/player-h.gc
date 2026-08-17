@@ -31,6 +31,13 @@
   (pending-gun-shot    8)
   )
 
+(defenum mp-player-mission-flags
+  :type uint32
+  :bitfield #t
+  (stadium-board1-tutorial-done      0)
+  (stadium-board1-tutorial-announced 1)
+  )
+
 (defenum mp-puppet-lifecycle
   :type uint8
   (none      0)
@@ -239,7 +246,8 @@
    (pending-gun-shot-weapon uint8)
    (reserved-byte uint8)
    (flags mp-player-runtime-flags)
-   (reserved uint32 3)
+   (mission-flags mp-player-mission-flags)
+   (reserved uint32 2)
    )
   :size-assert 224)
 
@@ -280,3 +288,6 @@
 (define-extern mp-play-remote-death-vo (function mp-player-record none))
 (define-extern mp-apply-player-render-tint! (function target none))
 (define-extern mp-player-record-by-id (function uint mp-player-record))
+(define-extern mp-player-mission-flag? (function mp-player-record mp-player-mission-flags symbol))
+(define-extern mp-player-mission-set-flag! (function mp-player-record mp-player-mission-flags none))
+(define-extern mp-player-mission-clear-flag! (function mp-player-record mp-player-mission-flags none))

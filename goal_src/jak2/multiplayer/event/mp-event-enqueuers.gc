@@ -174,10 +174,10 @@
   (none)
   )
 
-(defun mp-event-enqueue-stadium-board! ((event-type uint) (score int))
+(defun mp-event-enqueue-stadium-board! ((event-type uint) (player-id uint) (score int))
   (let ((event (new 'stack-no-clear 'mp-stadium-board1-event)))
     (mp-event-enqueue!
-      (mp-event-build-stadium-board! event event-type score)))
+      (mp-event-build-stadium-board! event event-type player-id score)))
   (none)
   )
 

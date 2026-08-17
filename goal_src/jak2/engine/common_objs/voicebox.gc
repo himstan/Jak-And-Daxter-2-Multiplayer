@@ -7,6 +7,8 @@
 
 ;; DECOMP BEGINS
 
+(define-extern mp-teleport-player-to-remote-coords! (function target float none))
+
 (defpartgroup group-talkbox-speak
   :id 77
   :flags (unk-4 unk-6)
@@ -471,7 +473,6 @@
               (reset-combo! *board-trick-tracker*)
             )
             (mp-stadium-board1-local-judge-activated! #t)
-            (mp-stadium-board1-reset-scores)
             (go-virtual enter)
            )
          )
@@ -479,7 +480,7 @@
       (('mp-start)
        ;; Multiplayer can begin the local challenge countdown without a local touch.
        (set! (-> self mp-remote-start?) #t)
-       (mp-teleport-to-remote)
+       (mp-teleport-player-to-remote-coords! (the-as target proc) 0.0)
        (let ((s4-0 (process-spawn camera-remote :init cam-slave-init cam-remote #f :from *camera-dead-pool* :to proc))
              (s5-2 (as-type proc process-focusable)))
         (when (and s4-0 (begin (send-event s5-2 'change-mode 'board #f) (focus-test? s5-2 board)))
@@ -488,7 +489,6 @@
             (reset-combo! *board-trick-tracker*)
           )
           (mp-stadium-board1-local-judge-activated! #f)
-          (mp-stadium-board1-reset-scores)
           (go-virtual enter)
         )
        )

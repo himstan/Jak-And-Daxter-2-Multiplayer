@@ -430,11 +430,13 @@
 
 (defun mp-event-build-stadium-board! ((event mp-stadium-board1-event)
                                       (event-type uint)
+                                      (player-id uint)
                                       (score int))
   (when (and event
              (nonzero? (the-as uint event))
              (mp-event-prepare! event event-type))
       (set! (-> event score) (the-as int32 score))
+      (set! (-> event source-player-id) player-id)
       (set! (-> event unused) (the uint 0))
       (set! (-> event payload-size) (the uint 8))
       (return event)

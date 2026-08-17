@@ -930,7 +930,7 @@
     (when (and score-proc
                (nonzero? score-proc)
                *multi-sync-enabled?*
-               (not (type? score-proc stadium-board1-hud-dual-score)))
+               (not (type? score-proc stadium-hud-multi-score)))
       (send-event (the-as process-tree score-proc) 'hide-and-die)
       (set! (-> self hud-score) (the-as handle #f))
       )
@@ -946,7 +946,7 @@
     (if *multi-sync-enabled?*
         (set! (-> self hud-score)
               (ppointer->handle
-                (process-spawn stadium-board1-hud-dual-score :init hud-init-by-other :to self)))
+                (process-spawn stadium-hud-multi-score :init hud-init-by-other :to self)))
         (set! (-> self hud-score)
               (ppointer->handle (process-spawn hud-score :init hud-init-by-other :to self)))
         )
@@ -1080,7 +1080,7 @@
     )
   :code (behavior ()
     (suspend)
-    (when (mp-stadium-board1-both-tutorials-done?)
+    (when (mp-stadium-board1-tutorials-ready?)
       (let ((a1-0 (new 'stack-no-clear 'event-message-block)))
         (set! (-> a1-0 from) (process->ppointer self))
         (set! (-> a1-0 num-params) 0)
@@ -1113,15 +1113,15 @@
               )
             )
         (format 0 "Setting board judge~%")
-        (set! *stadium-board1-judge* judge-param)
         (let ((gp-1 (ppointer->handle judge-param)))
+          (mp-stadium-board1-set-judge! gp-1)
           (suspend)
           (while (send-event (handle->process gp-1) 'waiting)
             (when (-> self text)
               (cond
                 ((not (task-node-closed? (game-task-node stadium-board1-resolution)))
                  (cond
-                   ((and (mp-stadium-board1-both-tutorials-done?) (task-node-open? (game-task-node stadium-board1-training-judge)))
+                   ((and (mp-stadium-board1-tutorials-ready?) (task-node-open? (game-task-node stadium-board1-training-judge)))
                     (cond
                       ((< (-> self score) 0.0)
                        (render-text self (text-id board-score-activate-judge))
@@ -1165,6 +1165,7 @@
           (suspend)
           )
         (send-event (handle->process gp-1) 'die)
+        (mp-stadium-board1-set-judge! (the-as handle #f))
         ))
       (when (-> self challenge-done)
         (hoverboard-training-manager-method-30 self)
@@ -1445,6 +1446,7 @@
    - sounds"
   ;; og:preserve-this added
   (stack-size-set! (-> this main-thread) 1024)
+  (mp-skate-manager-start! this)
   (let* ((sv-16 (new 'static 'res-tag))
          (v1-1 (res-lump-data (-> this entity) 'actor-groups pointer :tag-ptr (& sv-16)))
          )
@@ -1564,16 +1566,15 @@
     #f
     )
   :post (behavior ()
-    (when (and (not *mp-stadium-board1-ramp-force-opened?*) *multi-sync-enabled?* (not *mp-stadium-board1-active?*) (or (mp-stadium-board1-both-tutorials-done?) *mp-stadium-board1-local-finished?*))
-      (set! *mp-stadium-board1-ramp-force-opened?* #t)
-      (set! *mp-stadium-board1-ramp-force-closed?* #f)
-      (send-event self 'open)
-    )
-    (when (and (not *mp-stadium-board1-ramp-force-closed?*) *multi-sync-enabled?* *mp-stadium-board1-active?*)
-      (set! *mp-stadium-board1-ramp-force-closed?* #t)
-      (set! *mp-stadium-board1-ramp-force-opened?* #f)
-      (send-event self 'close)
-    )
+    (when *multi-sync-enabled?*
+      (let ((should-open?
+              (and (not (mp-stadium-board1-challenge-active?))
+                   (or (mp-stadium-board1-tutorials-ready?)
+                       (mp-stadium-board1-local-finished?)))))
+        (when (and should-open? (not (-> self onoff)))
+          (send-event self 'open))
+        (when (and (not should-open?) (-> self onoff))
+          (send-event self 'close))))
     (transform-post)
     )
   )
