@@ -42,6 +42,7 @@ struct CachedPlayerState {
   uint32_t action_seq;
   uint32_t action_state_id;
   uint32_t riding_along_player_id = kMPInvalidPlayerId;
+  uint32_t mission_flags = 0;
   float turret_roty;
   float turret_rotx;
   uint32_t last_sequence_num = 0;
@@ -192,7 +193,8 @@ struct MPPlayerRuntimeStateGOAL {
   uint8_t pending_gun_shot_weapon;
   uint8_t reserved_byte;
   uint32_t flags;
-  uint32_t reserved[3];
+  uint32_t mission_flags;
+  uint32_t reserved[2];
 };
 static_assert(sizeof(MPPlayerRuntimeStateGOAL) == 224);
 

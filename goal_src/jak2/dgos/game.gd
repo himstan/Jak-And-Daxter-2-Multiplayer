@@ -637,7 +637,6 @@
   "mp-scene-coordinator.o" ;; added
   "mp-sync-state.o" ;; added
   "mp-scene-transition.o" ;; added
-  "mp-stadium-board1-patch.o" ;; added
   "mp-waypoint-sync.o" ;; added
   "mp-warp-gate-sync.o" ;; added
   "mp-event-handlers.o" ;; added

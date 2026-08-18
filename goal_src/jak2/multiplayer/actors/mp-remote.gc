@@ -158,6 +158,9 @@
   (when (and record
              (nonzero? record)
              (mp-player-record-remote? *mp-player-controller* record))
+    (when (not (mp-player-runtime-flag? record (mp-player-runtime-flags join-announced)))
+      (mp-player-runtime-set-flag! record (mp-player-runtime-flags join-announced))
+      (mp-broadcast-player-join! record))
     (when (nonzero? (-> record identity spectator-only?))
       (mp-remote-player-marker-kill! record)
       (when (nonzero? (-> record runtime target-handle))
@@ -202,6 +205,9 @@
 (defun mp-cleanup-stale-player-presentation! ((record mp-player-record))
   "Release presentation resources retained across C++ slot invalidation."
   (when (and record (nonzero? record))
+    (when (mp-player-runtime-flag? record (mp-player-runtime-flags join-announced))
+      (mp-broadcast-player-leave! record)
+      (mp-player-runtime-clear-flag! record (mp-player-runtime-flags join-announced)))
     (mp-remote-player-marker-kill! record)
     (when (nonzero? (-> record runtime target-handle))
       (mp-puppet-deactivate! record))

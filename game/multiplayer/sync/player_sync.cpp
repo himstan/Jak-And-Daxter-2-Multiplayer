@@ -172,6 +172,7 @@ PacketPlayerState make_cached_state_packet(const CachedPlayerState& cached, uint
   state.action_seq = cached.action_seq;
   state.action_state_id = cached.action_state_id;
   state.riding_along_player_id = cached.riding_along_player_id;
+  state.mission_flags = cached.mission_flags;
   memcpy(&state.veh_state, &cached.veh_state, sizeof(state.veh_state));
   return state;
 }
@@ -287,6 +288,7 @@ void copy_cached_state_to_record(const CachedPlayerState& cached, MPPlayerRecord
   record.vehicle.turret_active = cached.turret_active;
   record.vehicle.turret_roty = cached.turret_roty;
   record.vehicle.turret_rotx = cached.turret_rotx;
+  record.runtime.mission_flags = cached.mission_flags;
   memcpy(&record.vehicle.state, &cached.veh_state, sizeof(record.vehicle.state));
 }
 }  // namespace
@@ -317,6 +319,7 @@ void mp_clear_player_slot(MultiplayerData& data,
     const auto runtime = record.runtime;
     record = {};
     record.runtime = runtime;
+    record.runtime.mission_flags = 0;
     record.identity.player_id = kMPInvalidPlayerId;
     record.identity.character = MPPlayerCharacter::UNKNOWN;
     record.action.riding_along_player_id = kMPInvalidPlayerId;
@@ -401,6 +404,7 @@ bool mp_handle_player_state_packet(MultiplayerData& data,
   cached.action_seq = state->action_seq;
   cached.action_state_id = state->action_state_id;
   cached.riding_along_player_id = state->riding_along_player_id;
+  cached.mission_flags = state->mission_flags;
   cached.last_sequence_num = state->header.sequenceNum;
   memcpy(&cached.veh_state, &state->veh_state, sizeof(cached.veh_state));
   if (data.session_role == 0 && state->status == static_cast<uint8_t>(MultiplayerStatus::IN_GAME)) {
@@ -469,6 +473,7 @@ bool mp_handle_join_packet(MultiplayerData& data,
   const auto runtime = record.runtime;
   record = {};
   record.runtime = runtime;
+  record.runtime.mission_flags = 0;
   record.identity.player_id = join->player_id;
   record.identity.character = join->character;
   record.identity.identity_ready = 1;
@@ -597,6 +602,7 @@ void mp_send_player_sync(MultiplayerData& data,
   state.action_seq = local->action.authoritative_sequence;
   state.action_state_id = local->action.action_state_id;
   state.riding_along_player_id = local->action.riding_along_player_id;
+  state.mission_flags = local->runtime.mission_flags;
   memcpy(&state.veh_state, &local->vehicle.state, sizeof(state.veh_state));
   MultiplayerManager::broadcast(data, static_cast<int>(MultiplayerChannel::STATE), state,
                                 ENET_PACKET_FLAG_UNSEQUENCED);

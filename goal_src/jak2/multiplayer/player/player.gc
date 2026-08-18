@@ -87,6 +87,52 @@
     (set! (-> record runtime last-gun-log-active) -1)
     (set! (-> record runtime last-gun-log-requested) -1)))
 
+(defun mp-broadcast-process-tree ((tree process-tree) (msg symbol) (param0 uint) (param1 uint))
+  "Recursively traverse the process tree and dispatch an event to all live processes."
+  (when (and tree (nonzero? tree))
+    (when (and (not (logtest? (-> tree mask) (process-mask process-tree)))
+               (valid? tree process (the-as string #f) #f 0)
+               (nonzero? (-> (the-as process tree) pid))
+               (!= (-> (the-as process tree) status) 'dead))
+      (send-event (the-as process tree) msg param0 param1))
+    (let ((child-node (-> tree child)))
+      (while (and child-node (nonzero? child-node))
+        (let ((next-brother (-> child-node 0 brother)))
+          (mp-broadcast-process-tree (-> child-node 0) msg param0 param1)
+          (set! child-node next-brother)))))
+  (none))
+
+(defun mp-broadcast-event-to-active-processes ((msg symbol) (param0 uint) (param1 uint))
+  "Dispatch an event message to every active process in *active-pool*."
+  (when (and *active-pool* (nonzero? *active-pool*))
+    (mp-broadcast-process-tree *active-pool* msg param0 param1))
+  (none))
+
+(defun mp-broadcast-player-join! ((record mp-player-record))
+  "Notify all active processes that a remote player joined the session."
+  (when (and record
+             (nonzero? record)
+             (nonzero? (-> record identity joined?))
+             (mp-player-record-remote? *mp-player-controller* record))
+    (let ((player-id (-> record identity player-id)))
+      (mp-broadcast-event-to-active-processes
+        'player-joined
+        (the-as uint record)
+        (the-as uint player-id))))
+  (none))
+
+(defun mp-broadcast-player-leave! ((record mp-player-record))
+  "Notify all active processes that a remote player left the session."
+  (when (and record
+             (nonzero? record)
+             (mp-player-record-remote? *mp-player-controller* record))
+    (let ((player-id (-> record identity player-id)))
+      (mp-broadcast-event-to-active-processes
+        'player-left
+        (the-as uint record)
+        (the-as uint player-id))))
+  (none))
+
 (defun mp-player-controller-release-slot!
        ((controller mp-player-controller) (player-id uint))
   "Release presentation ownership before clearing one controller slot."
@@ -95,6 +141,9 @@
              (mp-player-id-valid? player-id))
     (let ((record (mp-player-controller-slot controller player-id)))
       (when (and record (nonzero? record))
+        (when (mp-player-runtime-flag? record (mp-player-runtime-flags join-announced))
+          (mp-broadcast-player-leave! record)
+          (mp-player-runtime-clear-flag! record (mp-player-runtime-flags join-announced)))
         (when (and (!= player-id (-> controller local-player-id))
                    (nonzero? (-> record runtime target-handle)))
           (mp-puppet-deactivate! record))
@@ -121,7 +170,9 @@
       (set! (-> record identity character) character)
       (set! (-> record identity identity-ready?) (the uint8 1))
       (set! (-> record identity joined?) (the uint8 1))
-      (set! (-> record connection connected?) (the uint8 1)))
+      (set! (-> record connection connected?) (the uint8 1))
+      (mp-player-runtime-set-flag! record (mp-player-runtime-flags join-announced))
+      (mp-broadcast-player-join! record))
     record))
 
 (defun mp-player-controller-unregister!
@@ -298,11 +349,13 @@
           (callback record))))))
 
 (defun mp-player-record-remote? ((controller mp-player-controller) (record mp-player-record))
-  (and controller
-       (nonzero? controller)
-       record
-       (nonzero? record)
-       (!= (-> record identity player-id) (-> controller local-player-id))))
+  (if (and controller
+           (nonzero? controller)
+           record
+           (nonzero? record)
+           (!= (-> record identity player-id) (-> controller local-player-id)))
+      #t
+      #f))
 
 (defun mp-player-controller-for-each-remote!
        ((controller mp-player-controller) (callback (function mp-player-record none)))

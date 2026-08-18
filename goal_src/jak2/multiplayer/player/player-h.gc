@@ -29,6 +29,7 @@
   (recovering          6)
   (force-presentation  7)
   (pending-gun-shot    8)
+  (join-announced      9)
   )
 
 (defenum mp-player-mission-flags
@@ -288,6 +289,14 @@
 (define-extern mp-play-remote-death-vo (function mp-player-record none))
 (define-extern mp-apply-player-render-tint! (function target none))
 (define-extern mp-player-record-by-id (function uint mp-player-record))
+(define-extern mp-player-runtime-flag? (function mp-player-record mp-player-runtime-flags symbol))
+(define-extern mp-player-runtime-set-flag! (function mp-player-record mp-player-runtime-flags mp-player-runtime-flags))
+(define-extern mp-player-runtime-clear-flag! (function mp-player-record mp-player-runtime-flags mp-player-runtime-flags))
 (define-extern mp-player-mission-flag? (function mp-player-record mp-player-mission-flags symbol))
 (define-extern mp-player-mission-set-flag! (function mp-player-record mp-player-mission-flags none))
 (define-extern mp-player-mission-clear-flag! (function mp-player-record mp-player-mission-flags none))
+(define-extern mp-player-record-remote? (function mp-player-controller mp-player-record symbol))
+(define-extern mp-broadcast-process-tree (function process-tree symbol uint uint none))
+(define-extern mp-broadcast-event-to-active-processes (function symbol uint uint object))
+(define-extern mp-broadcast-player-join! (function mp-player-record none))
+(define-extern mp-broadcast-player-leave! (function mp-player-record none))

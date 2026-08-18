@@ -1351,22 +1351,22 @@
   )
 
 (defun mp-event-handle-stadium-board1! ((evt mp-stadium-board1-event))
-  "Apply stadium board events from the central event dispatcher."
+  "Apply a stadium board event from the central dispatcher."
   (let ((source-player-id (-> evt source-player-id)))
     (debug-log *mp-debug-log?*
-               "[MP-StadiumBoard1] Received event ~D from player ~D. Score: ~D~%"
+               "[StadiumBoard1] Received event ~D from player ~D. Score: ~D~%"
                (-> evt etype)
                source-player-id
                (-> evt score))
     (case (-> evt etype)
       ((MP_EVENT_MISSION_STADIUM_BOARD1_TUTORIAL_DONE)
-       (mp-stadium-board1-mark-player-tutorial-done! source-player-id))
+       (stadium-board1-receive-tutorial-done! source-player-id))
       ((MP_EVENT_MISSION_STADIUM_BOARD1_CHALLENGE_START)
-       (mp-stadium-board1-remote-start! source-player-id))
+       (stadium-board1-receive-start! source-player-id))
       ((MP_EVENT_MISSION_STADIUM_BOARD1_SCORE_UPDATE)
-       (mp-stadium-board1-update-player-score! source-player-id (the int (-> evt score))))
+       (stadium-board1-receive-score! source-player-id (the int (-> evt score))))
       ((MP_EVENT_MISSION_STADIUM_BOARD1_CHALLENGE_END)
-       (mp-stadium-board1-finish-player! source-player-id (the int (-> evt score))))
+       (stadium-board1-receive-finish! source-player-id (the int (-> evt score))))
       ((MP_EVENT_MISSION_STADIUM_BOARD1_BOARD_PICKED_UP)
        (let ((manager (process-by-type-exact 'hoverboard-training-manager *active-pool*)))
          (when (and manager (nonzero? manager))
