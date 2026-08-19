@@ -43,7 +43,7 @@ inline constexpr std::array<PacketDescriptor, kPacketCount> kPackets = {{
     {14, "LOBBY_ACTION", 3, 0, 5, 16, 0, 0},
     {15, "TRAFFIC_AUTHORITY", 1, 0, 5, 32, 0, 0},
 }};
-inline constexpr std::array<EventDescriptor, 58> kEvents = {{
+inline constexpr std::array<EventDescriptor, 57> kEvents = {{
     {1, "ORB"},
     {2, "GEM"},
     {3, "BREAK"},
@@ -90,18 +90,17 @@ inline constexpr std::array<EventDescriptor, 58> kEvents = {{
     {44, "MISSION_GUNGAME_TARGET_BROKEN"},
     {45, "MISSION_GUNGAME_TARGET_SPAWNED"},
     {46, "MISSION_GUNGAME_COURSE_END"},
-    {47, "MISSION_STADIUM_BOARD1_TUTORIAL_DONE"},
-    {48, "MISSION_STADIUM_BOARD1_CHALLENGE_START"},
-    {49, "MISSION_STADIUM_BOARD1_SCORE_UPDATE"},
-    {50, "MISSION_STADIUM_BOARD1_CHALLENGE_END"},
-    {51, "MISSION_STADIUM_BOARD1_BOARD_PICKED_UP"},
-    {52, "MISSION_KREW_COLLECTION_PICKUP"},
-    {53, "MISSION_CITY_SHUTTLE_STATE"},
-    {54, "MISSION_CITY_POWER_TURRET_STATE"},
-    {55, "MISSION_TOMB_BOULDER_COMPLETE"},
-    {56, "MISSION_TOMB_DAXTER_WAIT_START"},
-    {57, "MISSION_TOMB_DAXTER_WAIT_END"},
-    {58, "RACE"},
+    {47, "MISSION_STADIUM_BOARD1_CHALLENGE_START"},
+    {48, "MISSION_STADIUM_BOARD1_SCORE_UPDATE"},
+    {49, "MISSION_STADIUM_BOARD1_CHALLENGE_END"},
+    {50, "MISSION_STADIUM_BOARD1_BOARD_PICKED_UP"},
+    {51, "MISSION_KREW_COLLECTION_PICKUP"},
+    {52, "MISSION_CITY_SHUTTLE_STATE"},
+    {53, "MISSION_CITY_POWER_TURRET_STATE"},
+    {54, "MISSION_TOMB_BOULDER_COMPLETE"},
+    {55, "MISSION_TOMB_DAXTER_WAIT_START"},
+    {56, "MISSION_TOMB_DAXTER_WAIT_END"},
+    {57, "RACE"},
 }};
 
 inline const PacketDescriptor* packet_descriptor(uint8_t id) {

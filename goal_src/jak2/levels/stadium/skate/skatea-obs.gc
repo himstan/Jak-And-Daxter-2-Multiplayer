@@ -219,18 +219,6 @@
   (none)
   )
 
-(defun stadium-board1-broadcast-tutorial-done! ()
-  (let ((local-record (mp-local-player-record)))
-    (when (and local-record
-               (nonzero? local-record)
-               (mp-player-mission-flag? local-record (mp-player-mission-flags stadium-board1-tutorial-done))
-               (not (mp-player-mission-flag? local-record (mp-player-mission-flags stadium-board1-tutorial-announced))))
-      (mp-player-mission-set-flag! local-record (mp-player-mission-flags stadium-board1-tutorial-announced))
-      (debug-log *mp-debug-log?* "[Skate] Local player completed the tutorial. Broadcasting to all peers...~%")
-      (stadium-board1-send-event! MP_EVENT_MISSION_STADIUM_BOARD1_TUTORIAL_DONE 0)))
-  (none)
-  )
-
 (defun stadium-board1-all-tutorials-done? ()
   (let ((found-player? #f))
     (mp-for-each-player-record (player-id record)
@@ -256,16 +244,7 @@
   (let ((local-record (mp-local-player-record)))
     (when (and local-record (nonzero? local-record))
       (mp-player-mission-set-flag! local-record (mp-player-mission-flags stadium-board1-tutorial-done))
-      (debug-log *mp-debug-log?* "[Skate] Local player completed the tutorial.~%")
-      (stadium-board1-broadcast-tutorial-done!)))
-  (none)
-  )
-
-(defun stadium-board1-receive-tutorial-done! ((player-id uint))
-  (let ((record (stadium-board1-record-by-id player-id)))
-    (when (and record (nonzero? record))
-      (mp-player-mission-set-flag! record (mp-player-mission-flags stadium-board1-tutorial-done))
-      (debug-log *mp-debug-log?* "[Skate] Player ~D completed the tutorial.~%" player-id)))
+      (debug-log *mp-debug-log?* "[Skate] Local player completed the tutorial.~%")))
   (none)
   )
 

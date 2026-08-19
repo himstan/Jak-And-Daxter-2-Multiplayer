@@ -1359,8 +1359,6 @@
                source-player-id
                (-> evt score))
     (case (-> evt etype)
-      ((MP_EVENT_MISSION_STADIUM_BOARD1_TUTORIAL_DONE)
-       (stadium-board1-receive-tutorial-done! source-player-id))
       ((MP_EVENT_MISSION_STADIUM_BOARD1_CHALLENGE_START)
        (stadium-board1-receive-start! source-player-id))
       ((MP_EVENT_MISSION_STADIUM_BOARD1_SCORE_UPDATE)
@@ -1402,8 +1400,6 @@
        (mp-store-gungame-event (the-as mp-gungame-event evt)))
       ((MP_EVENT_MISSION_GUNGAME_COURSE_END)
        (mp-store-gungame-event (the-as mp-gungame-event evt)))
-      ((MP_EVENT_MISSION_STADIUM_BOARD1_TUTORIAL_DONE)
-       (mp-event-handle-stadium-board1! (the-as mp-stadium-board1-event evt)))
       ((MP_EVENT_MISSION_STADIUM_BOARD1_CHALLENGE_START)
        (mp-event-handle-stadium-board1! (the-as mp-stadium-board1-event evt)))
       ((MP_EVENT_MISSION_STADIUM_BOARD1_SCORE_UPDATE)
