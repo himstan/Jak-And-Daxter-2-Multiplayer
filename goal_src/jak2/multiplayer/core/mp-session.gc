@@ -1,6 +1,7 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern mp-death-respawn-event-on-spawn! (function none))
 (define-extern mp-network-sync-window-tick (function object none))
 (define-extern *dproc* process)
 (define-extern activate-progress (function process symbol none))
@@ -299,6 +300,7 @@
       (mp-bootstrap-controller-start!)
       (mp-bootstrap-note-local-spawn! status)
       (mp-enable-sync-after-spawn! status)
+      (mp-death-respawn-event-on-spawn!)
       (mp-arm-spawn-sync-state! status))
     (mp-demo-guard-on-local-spawn!)
     )
@@ -326,6 +328,7 @@
   (set! *multi-last-send-time* (the-as time-frame 0))
   (mp-reset-tps-counter!)
   (mp-spectate-reset!)
+  (set! *mp-death-party-wipe-pending?* #f)
   (mp-reset-respawn-policy!)
   (mp-tomb-boulder-reset-state!)
   (none))

@@ -1829,6 +1829,7 @@
             ((MP_EVENT_WIDOW_BOMB_HIT) (mp-receive-widow-bomb-hit-event (the-as mp-widow-bomb-hit-event evt)))
             ((MP_EVENT_WIDOW_CATWALK_HIT) (mp-receive-widow-catwalk-hit-event (the-as mp-widow-catwalk-hit-event evt)))
             ((MP_EVENT_RACE) (mp-race-receive-event! (the-as mp-race-event evt)))
+            ((MP_EVENT_PARTY_WIPE) (mp-death-party-wipe-receive!))
             (else (debug-log *mp-debug-log?* "[MP-Event] No handler for event ID ~D.~%" event-type)))
           )
          )

@@ -9,13 +9,14 @@
 (define-extern find-nearest-entity (function vector type entity))
 (define-extern warp-gate type)
 (define-extern mp-on-local-spawn! (function none))
-
-;; --- MULTIPLAYER EXTERNALS ---
 (define-extern mp-target-get-state-from-id (function uint symbol))
 (define-extern mp-run-local-death-spectate! (function target symbol))
 (define-extern mp-should-suppress-local-endlessfall? (function symbol))
 (define-extern mp-begin-local-death-respawn-policy! (function target symbol))
 (define-extern target-daxter-death-voice! (function symbol none :behavior target))
+
+(define *mp-death-respawn-event-pending?* #f)
+(define *mp-death-party-wipe-pending?* #f)
 
 ;; DECOMP BEGINS
 
@@ -1455,6 +1456,7 @@
         (debug-log *mp-debug-log?* "[Target-Death] Mission Death. Spectating and waiting 20s...~%")
         (when (mp-run-local-death-spectate! self)
           (debug-log *mp-debug-log?* "[Target-Death] Triggering full reset.~%")
+          (set! *mp-death-respawn-event-pending?* #t)
           (goto cfg-reset-init))
       )
     )

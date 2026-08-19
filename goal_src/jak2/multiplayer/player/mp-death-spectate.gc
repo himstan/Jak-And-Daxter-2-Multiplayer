@@ -1,6 +1,29 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(defun mp-local-player-dead-or-spectating? ()
+  (the symbol
+    (or *mp-death-respawn-event-pending?*
+        (mp-spectate-active?)
+        (mp-spectate-requested?)
+        (and *target*
+             (nonzero? *target*)
+             (focus-test? *target* dead)))))
+
+(defun mp-death-party-wipe-receive! ()
+  (when (mp-local-player-dead-or-spectating?)
+    (set! *mp-death-party-wipe-pending?* #t))
+  (none))
+
+(defun mp-death-respawn-event-on-spawn! ()
+  (when *mp-death-respawn-event-pending?*
+    (set! *mp-death-respawn-event-pending?* #f)
+    (mp-event-enqueue-aid!
+      MP_EVENT_PLAYER_RESPAWNED
+      (the-as uint 0)))
+  (set! *mp-death-party-wipe-pending?* #f)
+  (none))
+
 (defun mp-death-spectate-now ()
   (if (and *display*
            (nonzero? *display*)
@@ -59,8 +82,19 @@
   (none))
 
 (defun mp-death-spectate-reset-needed? ()
-  (or (not *multi-sync-enabled?*)
-      (not (mp-any-live-remote-player?))))
+  (cond
+    (*mp-death-party-wipe-pending?*
+     #t)
+    ((not *multi-sync-enabled?*)
+     #t)
+    ((mp-all-remote-players-dead?)
+     (set! *mp-death-party-wipe-pending?* #t)
+     (mp-event-enqueue-aid! MP_EVENT_PARTY_WIPE (the-as uint 0))
+     #t)
+    (else
+     #f)
+    )
+  )
 
 (defun mp-run-local-death-spectate! ((player target))
   "Run the shared death countdown and return true only when a full reset is required."
@@ -75,6 +109,13 @@
   (apply-settings *setting-control*)
   (let ((start-time (mp-death-spectate-now)))
     (loop
+      (when (mp-death-spectate-reset-needed?)
+        (if (mp-is-fail-mission-pending?)
+            (suspend)
+            (begin
+              (remove-setting! 'mode-name)
+              (mp-spectate-stop! 'death 'no-live-player)
+              (return #t))))
       (let* ((elapsed (- (mp-death-spectate-now) start-time))
              (remaining (/ (- (seconds 20) elapsed) (seconds 1))))
         (mp-death-spectate-update-countdown! remaining)
@@ -85,12 +126,6 @@
           (when (and respawn-record (nonzero? respawn-record))
             (mp-death-spectate-respawn! player respawn-record)
             (loop (suspend))))
-        (when (mp-death-spectate-reset-needed?)
-          (if (mp-is-fail-mission-pending?)
-              (suspend)
-              (begin
-                (remove-setting! 'mode-name)
-                (mp-spectate-stop! 'death 'no-live-player)
-                (return #t)))))
+        )
       (suspend)))
   #f)
