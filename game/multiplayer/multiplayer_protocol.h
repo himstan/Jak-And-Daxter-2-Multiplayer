@@ -14,7 +14,7 @@ inline constexpr size_t kPacketHeaderWireSize = sizeof(uint8_t) + sizeof(uint32_
 inline constexpr size_t kEventEnvelopeHeaderWireSize =
     kPacketHeaderWireSize + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint16_t);
 inline constexpr size_t kMultiplayerPlayerNameSize = 24;
-inline constexpr uint32_t kMPMaxPlayers = 4;
+inline constexpr uint32_t kMPMaxPlayers = 8;
 inline constexpr size_t kMPMaxHostTransportPeers = kMPMaxPlayers * 2;
 inline constexpr uint32_t kMPInvalidPlayerId = 0xffffffffu;
 inline constexpr uint32_t kMPVehicleCivilianRiderId = 0xfffffffeu;

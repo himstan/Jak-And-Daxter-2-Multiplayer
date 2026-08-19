@@ -3,7 +3,7 @@
 
 ;; Compile-time player capacity shared by the kernel, input service, and multiplayer runtime.
 ;; Keep this value in sync with kMPMaxPlayers in multiplayer_protocol.h.
-(defconstant MP_MAX_PLAYERS 4)
+(defconstant MP_MAX_PLAYERS 8)
 
 (defconstant MP_PLAYER_ID_BITS
   (cond

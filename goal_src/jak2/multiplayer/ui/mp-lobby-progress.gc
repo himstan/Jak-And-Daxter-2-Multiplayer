@@ -154,57 +154,62 @@
     )
   )
 
-(defun draw-lobby-player-selection ((option menu-option) (player-index int) (alpha float))
+(defun draw-lobby-player-selection ((option menu-option) (player-index int) (player-count int) (alpha float))
   (let ((left-x 69)
         (top-y 110)
         (list-width 176)
-        (row-height 54)
-        (max-players 4))
-
+        (list-height 216)
+        (layout-count (max 4 player-count)))
     (case (get-aspect-ratio)
       (('aspect16x9)
        (set! left-x 79)
        (set! list-width 166)
-       (set! row-height 62)))
-
+       (set! list-height 248)))
     (#when PC_PORT
       (when (not (-> *pc-settings* use-vis?))
         (set! left-x (the int (adjust-game-x (the float left-x))))
         (set! list-width (the int (* (-> *pc-settings* aspect-ratio-reciprocal) list-width)))))
-
-    (set-vector! (-> option box 0 color) 64 128 128 (the int (* 128.0 alpha)))
-
-    (draw-lobby-box option
-                    (the float left-x)
-                    (the float (+ left-x list-width))
-                    (the float (+ top-y (* row-height player-index)))
-                    (the float (+ top-y (* row-height player-index))))
-
-    (draw-lobby-box option
-                    (the float left-x)
-                    (the float (+ left-x list-width))
-                    (the float (+ top-y row-height (* row-height player-index)))
-                    (the float (+ top-y row-height (* row-height player-index))))
-
-    (when (> player-index 0)
+    (let ((row-top (+ top-y (the int (/ (* list-height player-index) layout-count))))
+          (row-bottom (+ top-y (the int (/ (* list-height (+ player-index 1)) layout-count))))
+          (list-bottom (+ top-y list-height)))
+      (set-vector! (-> option box 0 color) 64 128 128 (the int (* 128.0 alpha)))
       (draw-lobby-box option
+                      (the float left-x)
                       (the float (+ left-x list-width))
-                      (the float (+ left-x list-width))
-                      (the float top-y)
-                      (the float (+ top-y (* row-height player-index)))))
-
-    (when (< player-index (+ max-players -1))
+                      (the float row-top)
+                      (the float row-top))
       (draw-lobby-box option
+                      (the float left-x)
                       (the float (+ left-x list-width))
-                      (the float (+ left-x list-width))
-                      (the float (+ top-y row-height (* row-height player-index)))
-                      (the float (+ top-y (* row-height max-players)))))
-
-    (with-dma-buffer-add-bucket ((buffer (-> *display* frames (-> *display* on-screen) global-buf))
-                                 (bucket-id particles))
-      (draw-sprite2d-xy buffer left-x (+ top-y (* row-height player-index)) list-width row-height
-                        (new 'static 'rgba :r #x40 :g #x40 :b #x40 :a (the int (* 64.0 alpha)))))
-    )
+                      (the float row-bottom)
+                      (the float row-bottom))
+      (when (> player-index 0)
+        (draw-lobby-box option
+                        (the float (+ left-x list-width))
+                        (the float (+ left-x list-width))
+                        (the float top-y)
+                        (the float row-top)))
+      (when (< row-bottom list-bottom)
+        (draw-lobby-box option
+                        (the float (+ left-x list-width))
+                        (the float (+ left-x list-width))
+                        (the float row-bottom)
+                        (the float list-bottom)))
+      (with-dma-buffer-add-bucket ((buffer (-> *display*
+                                               frames
+                                               (-> *display* on-screen)
+                                               global-buf))
+                                   (bucket-id particles))
+        (draw-sprite2d-xy buffer
+                          left-x
+                          row-top
+                          list-width
+                          (- row-bottom row-top)
+                          (new 'static 'rgba
+                               :r #x40
+                               :g #x40
+                               :b #x40
+                               :a (the int (* 64.0 alpha)))))))
   )
 
 (defun get-player-name ((player-index int))
@@ -216,43 +221,53 @@
     )
   )
 
-(defun draw-lobby-player-name ((font-ctx font-context) (player-index int) (selected? symbol))
+(defun draw-lobby-player-name ((font-ctx font-context) (player-index int) (player-count int) (selected? symbol))
   (let ((text-x 84)
-        (text-y (+ 128 (* 54 player-index)))
+        (top-y 110)
+        (list-height 216)
+        (layout-count (max 4 player-count))
         (limit (the int (pc-multi-get-session-player-limit)))
         (local-id (the int (pc-multi-get-local-player-id)))
         (player-name (get-player-name player-index)))
-
     (case (get-aspect-ratio)
       (('aspect16x9)
        (set! text-x 94)
-       (set! text-y (+ 134 (* 60 player-index)))))
-
+       (set! list-height 248)))
     (#when PC_PORT
       (when (not (-> *pc-settings* use-vis?))
         (set! text-x (the int (adjust-game-x (the float text-x))))))
-
-    (set! (-> font-ctx origin x) (the float text-x))
-    (set! (-> font-ctx origin y) (the float text-y))
-    (set-height! font-ctx 42)
-    (set-flags! font-ctx (font-flags kerning large))
-
-    (cond
-      ((>= player-index limit)
-       (set-scale! font-ctx 0.6)
-       (set-color! font-ctx (font-color progress-option-off))
-       (format (clear *temp-string*) (lookup-text! *common-text* (text-id progress-lobby-slot-closed) #f) (+ player-index 1)))
-      (player-name
-       (set-scale! font-ctx 0.6)
-       (set-color! font-ctx (if (= player-index local-id) (font-color progress-force-selected) (font-color progress)))
-       (format (clear *temp-string*) "~S" player-name))
-      (else
-       (set-scale! font-ctx 0.45)
-       (set-color! font-ctx (font-color progress-option-off))
-       (format (clear *temp-string*) (lookup-text! *common-text* (text-id progress-lobby-slot-open) #f) (+ player-index 1))))
-
-    (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
-    )
+    (let ((row-height (/ (the float list-height) (the float layout-count)))
+          (layout-scale (if (> player-count 4)
+                            (/ 4.0 (the float player-count))
+                            1.0)))
+      (let ((text-y (+ (the float top-y)
+                       (* row-height (the float player-index))
+                       (* row-height 0.33))))
+        (set! (-> font-ctx origin x) (the float text-x))
+        (set! (-> font-ctx origin y) text-y)
+        (set-height! font-ctx (the int (* 42.0 layout-scale)))
+        (set-flags! font-ctx (font-flags kerning large))
+        (cond
+          ((>= player-index limit)
+           (set-scale! font-ctx (* 0.6 layout-scale))
+           (set-color! font-ctx (font-color progress-option-off))
+           (format (clear *temp-string*)
+                   (lookup-text! *common-text* (text-id progress-lobby-slot-closed) #f)
+                   (+ player-index 1)))
+          (player-name
+           (set-scale! font-ctx (* 0.6 layout-scale))
+           (set-color! font-ctx
+                       (if (= player-index local-id)
+                           (font-color progress-force-selected)
+                           (font-color progress)))
+           (format (clear *temp-string*) "~S" player-name))
+          (else
+           (set-scale! font-ctx (* 0.45 layout-scale))
+           (set-color! font-ctx (font-color progress-option-off))
+           (format (clear *temp-string*)
+                   (lookup-text! *common-text* (text-id progress-lobby-slot-open) #f)
+                   (+ player-index 1))))
+        (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress)))))
   )
 
 (defun draw-lobby-player-details ((font-ctx font-context) (player-index int) (alpha float))
@@ -379,7 +394,8 @@
   (local-vars (old-x float) (old-y float) (old-width float) (old-height float) (old-scale float) (old-alpha float))
 
   (let ((alpha (* 2.0 (- 0.5 (-> p menu-transition))))
-        (selected-player (-> p option-index)))
+        (selected-player (-> p option-index))
+        (player-count (length (-> p current-options options))))
 
     (when (< alpha 0.0)
       (set! alpha 0.0))
@@ -396,9 +412,9 @@
       (draw-lobby-decoration this font-ctx alpha))
 
     (when (= player-index selected-player)
-      (draw-lobby-player-selection this player-index alpha))
-
-    (draw-lobby-player-name font-ctx player-index (= player-index selected-player))
+      (draw-lobby-player-selection this player-index player-count alpha))
+    
+    (draw-lobby-player-name font-ctx player-index player-count (= player-index selected-player))
 
     (when (= player-index selected-player)
       (draw-lobby-player-details font-ctx player-index alpha))
@@ -450,5 +466,5 @@
   (mp-lobby-build-player-options!)
   (set! (-> *mp-lobby-options-pc* options) *mp-lobby-player-options*)
   (set! (-> p current-options) *mp-lobby-options-pc*)
-  (set! (-> p option-index) 0)
+  (set! (-> p option-index) (the int (pc-multi-get-local-player-id)))
   (none))
