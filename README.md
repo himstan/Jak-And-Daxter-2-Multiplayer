@@ -6,21 +6,21 @@
 
 A Jak II multiplayer mod for OpenGOAL.<br>
 Can be played Online or LAN and even in "faked" split-screen.<br>
-Supports up to 4 players at the moment. The mod is capable of support more, it just haven't been seriously tested with more so far, can be overriden in a developmental build.
+Supports up to 4 players at the moment. The mod is capable of supporting more, it just hasn't been seriously tested with more so far, the limit can be overriden in a developmental build.
 
 ## Current State
 
-This is a very early MVP multiplayer build, so expect a ton of bugs, unstability and crashes. Currently only Act I (up until the palace Baron bossfight) is playable, the game will lock further progress after you've completed that mission.
-However, the goal is to make the full Jak II campaign playable together.<br>
+This is a very early MVP multiplayer build, so expect a ton of bugs, unstability and crashes. Currently only Act I (up until the palace Baron bossfight) is playable, the game will lock further progress after you've completed that mission.<br>
+The goal is to make the full Jak II campaign playable together.<br>
 Currently this mod primarily serves as a Co-op mod, when the Campaign is in a finished state, more gamemodes are going to be supported as well.<br>
-If the Host at least starts the game in debug mode then a lot of constraints I've put in to block progression can be bypassed.
+If at least the Host is in debug mode then a lot of constraints I've put in to block progression can be bypassed.
 
 ## Before You Play
 
 - The mod was mainly tested with the NTSC-U (`SCUS-97265`) version of the game. If you notice bugs please record what version you were using.
-- Make sure to align with what each version of the mod all players have installed. You cannot join a session that is running on a different version of the mod. You can see the mod version in-game in the bottom left corner.
+- Make sure to align with what each version of the mod all players have installed. You cannot join a session that is running on a different version of the mod. You can see the mod version in-game in the bottom right corner.
 - When you Host you'll get a prompt to allow `gk` through the firewall, if you want to Host Online, you'll need to give it access.
-- The mod has **UPnP (Universal Plug and Play)** support, which means that if you're router supports it and you're not behind a CGNAT for example, then the game'll do an automatic port mapping on your router, so you don't have to manually port forward. This is temporary, and after your host session ends, the mapping is removed. This feature can be turned off in the **Multiplayer Settings** in game.
+- The mod has **UPnP (Universal Plug and Play)** support, which means that if your router supports it, and you're not behind a CGNAT for example, then the game will attempt to do an automatic port mapping on your router, so you don't have to manually port forward. This is temporary, and after your host session ends, the mapping is removed. This feature can be turned off in the **Multiplayer Settings** in game.
 - UPnP is not expected to work for everyone especially nowadays, so if you can't port-forward I'd suggest to use some private VPN solution like Hamachi, Radmin, Tailscale etc...
 - The default game port is `26210` which can be configured in the **Multiplayer Settings**
 - Port `26211` is reserved for LAN discovery
@@ -58,7 +58,7 @@ If the Host at least starts the game in debug mode then a lot of constraints I'v
    <img src="docs/img/mp/host-lobby-strict-lan.png" alt="Host in lobby with NAT Strict/LAN" width="400">
    <img src="docs/img/mp/host-lobby-lan.png" alt="Host in lobby with NAT LAN" width="400">
 
-  - In the **Lobby** you can wait for the other players to join, or just start the game, since the mod support late joiners mid game also. 
+  - In the **Lobby** you can wait for the other players to join, or just start the game, since the mod supports late joiners mid game also. 
   - As **Host** you also have the ability to Swap between Jak and Daxter with <img src="docs/img/common/dpad-circle.png" alt="PS2 Circle button" width="16"><br>
   - If you have your game port successful opened then you can press <img src="docs/img/common/dpad-x.png" alt="PS2 X button" width="16"> to copy an invite which will contain your public ip and port, with your custom or generated **Room Code**. You can share this to your friends who then can use it to join easily.
   - If the port isn't open and you see **NAT: Strict/LAN** or you Hosted **LAN** and see **NAT: LAN** then you can only copy a **Room Code** which is not required in case you want to play via **LAN**
