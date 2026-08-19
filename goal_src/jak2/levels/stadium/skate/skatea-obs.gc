@@ -707,6 +707,10 @@
        (stadium-board1-reset)
        #t
        )
+      (('start-challenge)
+       (stadium-board1-start-challenge! (the-as symbol (-> arg3 param 0)))
+       #t
+       )
       (('challenge-start)
        (stadium-board1-receive-start! (the-as uint (-> arg3 param 0)))
        #t
