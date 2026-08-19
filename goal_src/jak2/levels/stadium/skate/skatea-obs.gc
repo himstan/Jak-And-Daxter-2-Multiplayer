@@ -73,15 +73,15 @@
   )
 
 
-(defun stadium-board1-manager-get ()
+(defun get-hoverboard-training-manager ()
   (let ((manager (process-by-type-exact 'hoverboard-training-manager *active-pool*)))
     (if (and manager (nonzero? manager))
         (the-as hoverboard-training-manager manager)
         (the-as hoverboard-training-manager #f)))
   )
 
-(defun stadium-board1-state-get ()
-  (let ((manager (stadium-board1-manager-get)))
+(defun get-hoverboard-training-manager-state ()
+  (let ((manager (get-hoverboard-training-manager)))
     (if manager
         (-> manager stadium-state)
         (the-as stadium-board1-state #f)))
@@ -150,7 +150,7 @@
       (set! (-> state scores player-index) STADIUM_BOARD1_INACTIVE_SCORE))
     (set! (-> state finished-mask) (the uint 0))
     (set! (-> state pending-start-player-id) MP_INVALID_PLAYER_ID))
-  (let ((manager (stadium-board1-manager-get)))
+  (let ((manager (get-hoverboard-training-manager)))
     (when manager
       (set! (-> manager result-display-until) (the-as time-frame 0))))
   (none)
@@ -159,7 +159,7 @@
 (defun stadium-board1-add-participant! ((player-id uint))
   (debug-log *mp-debug-log?* "[Skate] Attempting to add participant: ~D to the hoverboard manager.~%" player-id)
   (let ((player-index (the-as int player-id))
-        (state (stadium-board1-state-get)))
+        (state (get-hoverboard-training-manager-state)))
     (when (and state
                (nonzero? state)
                (stadium-board1-valid-player-index? player-index)
@@ -213,7 +213,7 @@
 (defun stadium-board1-reset ()
   (mp-for-each-player-record (player-id record)
     (stadium-board1-reset-player! record))
-  (let ((state (stadium-board1-state-get)))
+  (let ((state (get-hoverboard-training-manager-state)))
     (when state
       (stadium-board1-reset-round! state)))
   (none)
@@ -276,7 +276,7 @@
   )
 
 (defun stadium-board1-local-finished? ()
-  (let ((state (stadium-board1-state-get))
+  (let ((state (get-hoverboard-training-manager-state))
         (player-id (mp-local-player-id)))
     (and state
          (nonzero? state)
@@ -285,14 +285,14 @@
   )
 
 (defun stadium-board1-challenge-active? ()
-  (let ((manager (stadium-board1-manager-get)))
+  (let ((manager (get-hoverboard-training-manager)))
     (and manager
          (nonzero? manager)
          (not (-> manager challenge-done))))
   )
 
 (defun stadium-board1-all-players-finished? ()
-  (let ((state (stadium-board1-state-get))
+  (let ((state (get-hoverboard-training-manager-state))
         (found-player? #f))
     (when (and state (nonzero? state))
       (dotimes (player-index MP_MAX_PLAYERS)
@@ -306,7 +306,7 @@
   )
 
 (defun stadium-board1-round-active? ()
-  (let ((state (stadium-board1-state-get)))
+  (let ((state (get-hoverboard-training-manager-state)))
     (and state
          (nonzero? state)
          (stadium-board1-has-round-participants? state)
@@ -314,8 +314,8 @@
   )
 
 (defun stadium-board1-start-challenge! ((send-event? symbol))
-  (let ((manager (stadium-board1-manager-get))
-        (state (stadium-board1-state-get))
+  (let ((manager (get-hoverboard-training-manager))
+        (state (get-hoverboard-training-manager-state))
         (local-record (mp-local-player-record)))
     (when (and manager
                state
@@ -336,14 +336,9 @@
   (none)
   )
 
-(defun stadium-board1-local-judge-activated! ((send-event? symbol))
-  (stadium-board1-start-challenge! send-event?)
-  (none)
-  )
-
 (defun stadium-board1-receive-start! ((player-id uint))
-  (let ((manager (stadium-board1-manager-get))
-        (state (stadium-board1-state-get))
+  (let ((manager (get-hoverboard-training-manager))
+        (state (get-hoverboard-training-manager-state))
         (source-record (stadium-board1-record-by-id player-id)))
     (when (and manager
                state
@@ -364,7 +359,7 @@
 
 (defun stadium-board1-deliver-pending-start! ((judge-handle handle))
   "Deliver a queued remote start once the tutorial manager has a waiting judge."
-  (let ((state (stadium-board1-state-get)))
+  (let ((state (get-hoverboard-training-manager-state)))
     (when (and state
                (nonzero? state)
                (!= (-> state pending-start-player-id) MP_INVALID_PLAYER_ID))
@@ -376,13 +371,13 @@
                    (nonzero? judge-proc))
           (debug-log *mp-debug-log?* "[Skate] Delivering pending challenge start to judge ~A.~%" judge-handle)
           (set! (-> state pending-start-player-id) MP_INVALID_PLAYER_ID)
-          (set! (-> (stadium-board1-manager-get) judge-activated?) #t)
+          (set! (-> (get-hoverboard-training-manager) judge-activated?) #t)
           (send-event judge-proc 'mp-start source-record)))))
   (none)
   )
 
 (defun stadium-board1-player-score ((player-id uint))
-  (let ((state (stadium-board1-state-get))
+  (let ((state (get-hoverboard-training-manager-state))
         (player-index (the-as int player-id)))
     (if (and state
              (nonzero? state)
@@ -394,7 +389,7 @@
 
 (defun stadium-board1-effective-score ()
   (let ((best-score (stadium-board1-current-local-score))
-        (state (stadium-board1-state-get)))
+        (state (get-hoverboard-training-manager-state)))
     (when (and *multi-sync-enabled?* state (nonzero? state))
       (dotimes (player-index MP_MAX_PLAYERS)
         (let ((score (-> state scores player-index)))
@@ -405,7 +400,7 @@
   )
 
 (defun stadium-board1-send-score! ((score int) (force? symbol))
-  (let ((state (stadium-board1-state-get))
+  (let ((state (get-hoverboard-training-manager-state))
         (local-record (mp-local-player-record)))
     (when (and state
                (nonzero? state)
@@ -425,7 +420,7 @@
   )
 
 (defun stadium-board1-receive-score! ((player-id uint) (score int))
-  (let ((state (stadium-board1-state-get))
+  (let ((state (get-hoverboard-training-manager-state))
         (player-index (the-as int player-id)))
     (when (and state
                (nonzero? state)
@@ -437,8 +432,8 @@
   )
 
 (defun stadium-board1-begin-result! ()
-  (let ((manager (stadium-board1-manager-get))
-        (state (stadium-board1-state-get)))
+  (let ((manager (get-hoverboard-training-manager))
+        (state (get-hoverboard-training-manager-state)))
     (when (and manager
                state
                (nonzero? state)
@@ -453,7 +448,7 @@
 
 (defun stadium-board1-receive-finish! ((player-id uint) (score int))
   "Apply a remote player's final score to the current round."
-  (let ((state (stadium-board1-state-get))
+  (let ((state (get-hoverboard-training-manager-state))
         (player-index (the-as int player-id)))
     (when (and state
                (nonzero? state)
@@ -469,7 +464,7 @@
   )
 
 (defun stadium-board1-finish-local-challenge! ((send-event? symbol))
-  (let ((state (stadium-board1-state-get))
+  (let ((state (get-hoverboard-training-manager-state))
         (local-record (mp-local-player-record))
         (score (stadium-board1-current-local-score)))
     (when (and state
@@ -494,7 +489,7 @@
 (defun stadium-board1-post-challenge-finished! ((send-event? symbol))
   (when (not (stadium-board1-local-finished?))
     (stadium-board1-finish-local-challenge! send-event?))
-  (let ((state (stadium-board1-state-get)))
+  (let ((state (get-hoverboard-training-manager-state)))
     (when state
       (set! (-> state pending-start-player-id) MP_INVALID_PLAYER_ID)))
   (stadium-board1-begin-result!)
@@ -504,7 +499,7 @@
 (defun stadium-board1-update! ((local-challenge-active? symbol))
   (when local-challenge-active?
     (stadium-board1-send-score! (stadium-board1-current-local-score) #f))
-  (when (stadium-board1-has-round-participants? (stadium-board1-state-get))
+  (when (stadium-board1-has-round-participants? (get-hoverboard-training-manager-state))
     (stadium-board1-begin-result!))
   (none)
   )
@@ -523,7 +518,7 @@
   "Return the highest-scoring player from the current round snapshot."
   (let ((best-player (the-as mp-player-record #f))
         (best-score STADIUM_BOARD1_INACTIVE_SCORE)
-        (state (stadium-board1-state-get)))
+        (state (get-hoverboard-training-manager-state)))
     (when (and state (nonzero? state))
       (mp-for-each-player-record (player-id record)
         (let ((score (-> state scores player-id)))
@@ -537,8 +532,8 @@
 (defun stadium-board1-render-result-text ()
   (when (stadium-board1-local-finished?)
     (stadium-board1-begin-result!))
-  (let ((manager (stadium-board1-manager-get))
-        (state (stadium-board1-state-get)))
+  (let ((manager (get-hoverboard-training-manager))
+        (state (get-hoverboard-training-manager-state)))
     (when (and manager state (nonzero? state) (nonzero? (-> manager result-display-until)))
       (if (< (current-time) (-> manager result-display-until))
           (let ((winner (stadium-board1-winner-player))

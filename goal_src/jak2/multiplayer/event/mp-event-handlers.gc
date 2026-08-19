@@ -1354,7 +1354,7 @@
   "Apply a stadium board event from the central dispatcher."
   (let ((source-player-id (-> evt source-player-id)))
     (debug-log *mp-debug-log?*
-               "[StadiumBoard1] Received event ~D from player ~D. Score: ~D~%"
+               "[Event-Handler] Received event ~D from player ~D. Score: ~D~%"
                (-> evt etype)
                source-player-id
                (-> evt score))
