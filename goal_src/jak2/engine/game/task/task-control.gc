@@ -938,8 +938,8 @@
 
 (defmethod open? ((this game-task-node-info))
   (local-vars (a1-1 symbol))
-  (when (and 
-             (not *debug-segment*)
+  ;; TODO: Remove this when we want to unblock further progress after Act 1
+  (when (and (not *debug-segment*)
              (= (the-as uint (-> this task)) (the-as uint (game-task city-shuttle))))
     (return #f)
     )
