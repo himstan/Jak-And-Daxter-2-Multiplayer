@@ -703,6 +703,22 @@
           (stadium-board1-add-participant! player-id)
           )
         )
+      (('mp-reset)
+       (stadium-board1-reset)
+       #t
+       )
+      (('challenge-start)
+       (stadium-board1-receive-start! (the-as uint (-> arg3 param 0)))
+       #t
+       )
+      (('score-update)
+       (stadium-board1-receive-score! (the-as uint (-> arg3 param 0)) (the-as int (-> arg3 param 1)))
+       #t
+       )
+      (('challenge-end)
+       (stadium-board1-receive-finish! (the-as uint (-> arg3 param 0)) (the-as int (-> arg3 param 1)))
+       #t
+       )
       (('notify)
        (case (-> arg3 param 0)
          (('trick-point)
