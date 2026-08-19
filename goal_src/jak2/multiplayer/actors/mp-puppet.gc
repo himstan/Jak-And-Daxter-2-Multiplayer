@@ -1303,6 +1303,8 @@
              (nonzero? proc)
              (-> proc control)
              (nonzero? (-> proc control))
+             (-> proc clock)
+             (nonzero? (-> proc clock))
              *TARGET-bank*
              (nonzero? *TARGET-bank*)
              (not (logtest? (-> proc state-flags) (state-flags tinvul1))))
@@ -1390,8 +1392,10 @@
                (set! (-> record runtime state-mismatch-count) 0)
                )
               ((or (= ghost-state 'target-hit) (= ghost-state 'target-indax-hit))
-               (mp-puppet-start-hit-flash! proc)
-               (send-event proc 'mp-hit)
+               (when (not (logtest? (-> proc state-flags) (state-flags tinvul1)))
+                 (mp-puppet-start-hit-flash! proc)
+                 (send-event proc 'mp-hit)
+                 )
                (set! (-> record runtime state-mismatch-count) 0)
                )
               ((and (= ghost-state 'target-ride-along) (!= 'target-indax-jump-on cur-state))
@@ -1622,6 +1626,7 @@
                       (mp-player-controller-record-id *mp-player-controller* record)
                       (the-as uint (-> record identity player-id)))))
           (debug-log *mp-debug-log?* "[MP-Puppet] Deactivating target puppet for player ~D...~%" id))
+        (target-timed-invulnerable-off puppet 0)
         (mp-clear-target-edge-grab-pending! puppet)
         (deactivate puppet)))
     (mp-puppet-unbind-record-safe! record)
@@ -1681,6 +1686,7 @@
 
         (let ((puppet (mp-player-record-target record)))
           (when (and puppet (nonzero? puppet))
+            (target-timed-invulnerable-off puppet 0)
             (mp-puppet-snap-to-ghost-on-spawn! puppet)))
 
         (if (mp-player-daxter? record)
