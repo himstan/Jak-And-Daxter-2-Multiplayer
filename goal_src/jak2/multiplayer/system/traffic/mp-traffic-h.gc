@@ -22,6 +22,14 @@
 (declare-type test-bike vehicle)
 (declare-type test-car vehicle)
 
+(deftype mp-traffic-authority-map (structure)
+  ((assignments uint8 MP_MAX_PLAYERS))
+  )
+
+(define-perm *mp-traffic-authority-assignments* mp-traffic-authority-map (new 'static 'mp-traffic-authority-map))
+(define-perm *mp-traffic-working-authority-map* mp-traffic-authority-map (new 'static 'mp-traffic-authority-map))
+(define-perm *mp-traffic-authority-revision* uint (the uint 0))
+
 (define-extern mp-pedestrian-pack (function citizen mp-pedestrian-state none))
 (define-extern mp-pedestrian-apply-remote (function none))
 (define-extern mp-pedestrian-run-external-sync-pass (function none))
@@ -46,7 +54,11 @@
 (define-extern pc-multi-send-traffic (function uint none))
 (define-extern pc-multi-receive-traffic (function uint none))
 (define-extern pc-multi-clear-remote-traffic (function none))
-(define-extern pc-multi-set-traffic-authority-map (function uint uint none))
+(define-extern pc-multi-publish-traffic-authority-map (function (pointer uint8) uint))
+(define-extern pc-multi-read-traffic-authority-map (function (pointer uint8) uint))
+(define-extern pc-multi-set-selected-traffic-authority (function uint none))
+(define-extern mp-traffic-clear-authority-map! (function mp-traffic-authority-map mp-traffic-authority-map))
+(define-extern mp-traffic-copy-authority-map! (function mp-traffic-authority-map mp-traffic-authority-map mp-traffic-authority-map))
 (define-extern mp-traffic-selected-authority-record (function mp-player-record))
 (define-extern mp-traffic-ensure-process-net-id! (function process none))
 (define-extern citizen-spawn (function process type traffic-object-spawn-params process-drawable))

@@ -29,19 +29,22 @@ bool handle_pedestrian_sync_packet(const _ENetEvent& event,
     return false;
   }
   constexpr size_t source_offset = sizeof(PacketHeader);
-  constexpr size_t count_offset = source_offset + sizeof(uint8_t) + 3;
+  constexpr size_t revision_offset = source_offset + sizeof(uint8_t) + 3;
+  constexpr size_t count_offset = revision_offset + sizeof(uint32_t);
   constexpr size_t level_offset = count_offset + sizeof(uint32_t) + sizeof(uint64_t);
   uint8_t source_player_id = kMPInvalidCompactPlayerId;
+  uint32_t authority_revision = 0;
   uint32_t ped_count = 0;
   uint32_t level_hash = 0;
   PacketHeader header = {};
   memcpy(&header, event.packet->data, sizeof(header));
   memcpy(&source_player_id, event.packet->data + source_offset, sizeof(source_player_id));
+  memcpy(&authority_revision, event.packet->data + revision_offset, sizeof(authority_revision));
   memcpy(&ped_count, event.packet->data + count_offset, sizeof(ped_count));
   memcpy(&level_hash, event.packet->data + level_offset, sizeof(level_hash));
   if (header.type != PacketType::PEDESTRIAN_SYNC ||
       ped_count > MAX_PEDESTRIANS_PER_PACKET ||
-      !mp_validate_traffic_source(data, source_player_id, sender_player_id) ||
+      !mp_validate_traffic_source(data, source_player_id, sender_player_id, authority_revision) ||
       !mp_sequence_is_current_or_newer(
           header.sequenceNum,
           data.last_pedestrian_sequence_by_source[source_player_id])) {
@@ -146,6 +149,7 @@ void send_pedestrian_sync_packets(MultiplayerData& data,
     packet.header.type = PacketType::PEDESTRIAN_SYNC;
     packet.header.sequenceNum = snapshot_sequence;
     packet.source_player_id = static_cast<uint8_t>(data.local_player_id);
+    packet.authority_revision = data.traffic_authority_revision;
     packet.count = chunk_size;
     packet.timestamp = enet_time_get();
     packet.level_hash = data.local_traffic_level_hash;

@@ -4,68 +4,82 @@
 (defconstant MP_TRAFFIC_AUTHORITY_ACQUIRE_DISTANCE (meters 250.0))
 (defconstant MP_TRAFFIC_AUTHORITY_RETAIN_DISTANCE (meters 310.0))
 
-(defun mp-traffic-authority-for-player ((authority-map uint) (player-id uint))
+(defun mp-traffic-clear-authority-map! ((authority-map mp-traffic-authority-map))
+  "Set every slot in an authority map to invalid (unassigned)."
+  (when (and authority-map (nonzero? authority-map))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (set! (-> authority-map assignments player-id) (the-as uint8 #xff))))
+  authority-map
+  )
+
+(defun mp-traffic-copy-authority-map!
+       ((dst mp-traffic-authority-map) (src mp-traffic-authority-map))
+  "Copy all assignments from src to dst."
+  (when (and dst (nonzero? dst) src (nonzero? src))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (set! (-> dst assignments player-id) (-> src assignments player-id))))
+  dst
+  )
+
+(defun mp-traffic-authority-for-player ((authority-map mp-traffic-authority-map) (player-id uint))
   "Read one compact source ID from a locally calculated authority map."
-  (if (< player-id (the uint MP_MAX_PLAYERS))
-      (let ((compact-source
-              (the-as uint (logand (shr authority-map (* player-id 8)) #xff))))
+  (if (and authority-map (nonzero? authority-map) (< player-id (the uint MP_MAX_PLAYERS)))
+      (let ((compact-source (the-as uint (-> authority-map assignments player-id))))
         (if (= compact-source #xff)
             MP_INVALID_PLAYER_ID
             compact-source))
       MP_INVALID_PLAYER_ID)
   )
 
-(defun mp-traffic-set-authority-for-player
-       ((authority-map uint) (player-id uint) (source-player-id uint))
-  "Return an authority map with one compact source ID replaced."
-  (when (>= player-id (the uint MP_MAX_PLAYERS))
-    (return authority-map))
-  (let ((shift (* player-id 8))
-        (compact-source (logand source-player-id #xff)))
-    (the-as uint
-      (logior
-        (logand authority-map (lognot (shl #xff shift)))
-        (shl compact-source shift))))
+(defun mp-traffic-set-authority-for-player!
+       ((authority-map mp-traffic-authority-map) (player-id uint) (source-player-id uint))
+  "Set one compact source ID in the authority map."
+  (when (and authority-map (nonzero? authority-map) (< player-id (the uint MP_MAX_PLAYERS)))
+    (set! (-> authority-map assignments player-id)
+          (the-as uint8 (if (= source-player-id MP_INVALID_PLAYER_ID) #xff (logand source-player-id #xff)))))
+  authority-map
   )
 
 (defun mp-traffic-player-eligible? ((record mp-player-record))
   "True when a synchronized player can participate in traffic election."
-  (when (or (not record) (zero? record))
-    (return #f))
-  (let ((player-id (-> record identity player-id))
-        (position (mp-player-record-position record))
-        (primary-level-id (mp-player-primary-level-id record)))
-    (and (< player-id (the uint MP_MAX_PLAYERS))
-         (nonzero? (-> record identity identity-ready?))
-         (nonzero? (-> record identity joined?))
-         (= (-> record identity spectator-only?) 0)
-         (or (= player-id (mp-local-player-id))
-             (= (-> record connection status) (mp-connection-status in-game)))
-         (not (mp-player-record-dead-or-dying? record))
-         (or (!= player-id (mp-local-player-id))
-             (not (mp-spectate-active?)))
-         (nonzero? primary-level-id)
-         position
-         (nonzero? position)))
+  (if (or (not record) (zero? record))
+      #f
+      (let ((player-id (-> record identity player-id))
+            (position (mp-player-record-position record))
+            (primary-level-id (mp-player-primary-level-id record)))
+        (the-as symbol
+          (and (< player-id (the uint MP_MAX_PLAYERS))
+               (nonzero? (-> record identity identity-ready?))
+               (nonzero? (-> record identity joined?))
+               (= (-> record identity spectator-only?) 0)
+               (or (= player-id (mp-local-player-id))
+                   (= (-> record connection status) (mp-connection-status in-game)))
+               (not (mp-player-record-dead-or-dying? record))
+               (or (!= player-id (mp-local-player-id))
+                   (not (mp-spectate-active?)))
+               (nonzero? primary-level-id)
+               position
+               (nonzero? position)))))
   )
 
 (defun mp-traffic-records-within?
        ((record mp-player-record) (root-record mp-player-record) (radius float))
   "True when two eligible players share a primary level and are within radius."
-  (when (or (not (mp-traffic-player-eligible? record))
-            (not (mp-traffic-player-eligible? root-record)))
-    (return #f))
-  (let ((record-level (mp-player-primary-level-id record))
-        (root-level (mp-player-primary-level-id root-record))
-        (record-pos (mp-player-record-position record))
-        (root-pos (mp-player-record-position root-record)))
-    (and (nonzero? record-level)
-         (= record-level root-level)
-         record-pos
-         (nonzero? record-pos)
-         root-pos
-         (nonzero? root-pos)
-         (<= (vector-vector-distance record-pos root-pos) radius)))
+  (if (or (not (mp-traffic-player-eligible? record))
+          (not (mp-traffic-player-eligible? root-record)))
+      #f
+      (let ((record-level (mp-player-primary-level-id record))
+            (root-level (mp-player-primary-level-id root-record))
+            (record-pos (mp-player-record-position record))
+            (root-pos (mp-player-record-position root-record)))
+        (the-as symbol
+          (and (nonzero? record-level)
+               (= record-level root-level)
+               record-pos
+               (nonzero? record-pos)
+               root-pos
+               (nonzero? root-pos)
+               (<= (vector-vector-distance record-pos root-pos) radius)))))
   )
 
 (defun mp-traffic-find-acquire-root
@@ -74,12 +88,10 @@
   (dotimes (root-id player-id)
     (when (logtest? root-mask (ash 1 root-id))
       (let ((root-record (mp-player-record-by-id (the-as uint root-id))))
-        (when (and (mp-traffic-records-within?
-                     record root-record MP_TRAFFIC_AUTHORITY_ACQUIRE_DISTANCE)
-                   (< (vector-vector-distance
-                        (mp-player-record-position record)
-                        (mp-player-record-position root-record))
-                      MP_TRAFFIC_AUTHORITY_ACQUIRE_DISTANCE))
+        (when (and root-record
+                   (nonzero? root-record)
+                   (mp-traffic-records-within?
+                     record root-record MP_TRAFFIC_AUTHORITY_ACQUIRE_DISTANCE))
           (return (the-as uint root-id))))))
   MP_INVALID_PLAYER_ID
   )
@@ -87,39 +99,41 @@
 (defun mp-traffic-retained-root
        ((player-id uint)
         (record mp-player-record)
-        (previous-map uint)
+        (previous-map mp-traffic-authority-map)
         (root-mask uint))
   "Retain the prior direct root while it remains established within 310 meters."
   (let ((previous-source (mp-traffic-authority-for-player previous-map player-id)))
     (when (and (< previous-source player-id)
                (logtest? root-mask (ash 1 previous-source)))
       (let ((root-record (mp-player-record-by-id previous-source)))
-        (when (mp-traffic-records-within?
-                record root-record MP_TRAFFIC_AUTHORITY_RETAIN_DISTANCE)
+        (when (and root-record
+                   (nonzero? root-record)
+                   (mp-traffic-records-within?
+                     record root-record MP_TRAFFIC_AUTHORITY_RETAIN_DISTANCE))
           (return previous-source)))))
   MP_INVALID_PLAYER_ID
   )
 
-(defun mp-traffic-build-authority-map ((previous-map uint))
+(defun mp-traffic-build-authority-map ((previous-map mp-traffic-authority-map))
   "Build direct ranked bubbles in ascending canonical player-ID order."
-  (let ((authority-map (the uint #xffffffff))
+  (let ((authority-map *mp-traffic-working-authority-map*)
         (root-mask (the uint 0)))
+    (mp-traffic-clear-authority-map! authority-map)
     (dotimes (player-id MP_MAX_PLAYERS)
       (let ((record (mp-player-record-by-id (the-as uint player-id))))
-        (when (mp-traffic-player-eligible? record)
+        (when (and record (nonzero? record) (mp-traffic-player-eligible? record))
           (let ((source-player-id
-                  (mp-traffic-find-acquire-root
-                    (the-as uint player-id) record root-mask)))
+                  (mp-traffic-retained-root
+                    (the-as uint player-id) record previous-map root-mask)))
             (when (= source-player-id MP_INVALID_PLAYER_ID)
               (set! source-player-id
-                    (mp-traffic-retained-root
-                      (the-as uint player-id) record previous-map root-mask)))
+                    (mp-traffic-find-acquire-root
+                      (the-as uint player-id) record root-mask)))
             (when (= source-player-id MP_INVALID_PLAYER_ID)
               (set! source-player-id (the-as uint player-id))
               (logior! root-mask (ash 1 player-id)))
-            (set! authority-map
-                  (mp-traffic-set-authority-for-player
-                    authority-map (the-as uint player-id) source-player-id))))))
+            (mp-traffic-set-authority-for-player!
+              authority-map (the-as uint player-id) source-player-id)))))
     authority-map)
   )
 
@@ -141,7 +155,7 @@
       (the-as mp-player-record #f))
   )
 
-(defun mp-traffic-map-has-follower? ((authority-map uint) (root-player-id uint))
+(defun mp-traffic-map-has-follower? ((authority-map mp-traffic-authority-map) (root-player-id uint))
   (when (< root-player-id (the uint MP_MAX_PLAYERS))
     (dotimes (player-id MP_MAX_PLAYERS)
       (when (and (!= (the-as uint player-id) root-player-id)
@@ -158,7 +172,7 @@
   (none)
   )
 
-(defun mp-traffic-apply-authority-map! ((authority-map uint))
+(defun mp-traffic-apply-authority-map! ((authority-map mp-traffic-authority-map) (revision uint))
   "Apply the locally calculated assignment and perform one clean handoff."
   (let* ((local-player-id (mp-local-player-id))
          (interest-player-id (mp-traffic-interest-player-id))
@@ -167,16 +181,22 @@
          (local-authoritative?
            (and (< local-player-id (the uint MP_MAX_PLAYERS))
                 (= interest-player-id local-player-id)
-                (= selected-source local-player-id)
-                (not (mp-spectate-active?))))
+                (= selected-source local-player-id)))
          (has-followers?
            (and local-authoritative?
                 (mp-traffic-map-has-follower? authority-map local-player-id)))
          (source-changed?
            (!= selected-source *mp-traffic-selected-authority-id*)))
     (when source-changed?
+      (debug-log *mp-debug-log?*
+                 "[MP-Traffic-Auth] local=~D old-root=~D new-root=~D rev=~D~%"
+                 local-player-id
+                 *mp-traffic-selected-authority-id*
+                 selected-source
+                 revision)
       (mp-traffic-cleanup-authority-handoff!))
-    (set! *mp-traffic-authority-assignments* authority-map)
+    (mp-traffic-copy-authority-map! *mp-traffic-authority-assignments* authority-map)
+    (set! *mp-traffic-authority-revision* revision)
     (set! *mp-traffic-selected-authority-id* selected-source)
     (set! *mp-traffic-local-authoritative?* local-authoritative?)
     (set! *mp-traffic-local-root-has-followers?* has-followers?)
@@ -185,7 +205,7 @@
                (or (not local-authoritative?) has-followers?)))
     (set! *mp-traffic-suppressed* (not local-authoritative?))
     (set! *mp-traffic-drain-active* (not local-authoritative?))
-    (pc-multi-set-traffic-authority-map authority-map selected-source)
+    (pc-multi-set-selected-traffic-authority selected-source)
     (when source-changed?
       (if local-authoritative?
           (mp-traffic-refill-local-active-cells!)
@@ -201,16 +221,15 @@
           (< *mp-traffic-selected-authority-id* (the uint MP_MAX_PLAYERS))))
     (when had-source?
       (mp-traffic-cleanup-authority-handoff!))
-    (set! *mp-traffic-authority-assignments* (the uint #xffffffff))
+    (mp-traffic-clear-authority-map! *mp-traffic-authority-assignments*)
+    (mp-traffic-clear-authority-map! *mp-traffic-working-authority-map*)
     (set! *mp-traffic-selected-authority-id* MP_INVALID_PLAYER_ID)
     (set! *mp-traffic-local-authoritative?* #t)
     (set! *mp-traffic-local-root-has-followers?* #f)
     (set! *mp-traffic-suppressed* #f)
     (set! *mp-traffic-sync-active* #f)
     (set! *mp-traffic-drain-active* #f)
-    (pc-multi-set-traffic-authority-map
-      (the uint #xffffffff)
-      (the uint MP_INVALID_PLAYER_ID))
+    (pc-multi-set-selected-traffic-authority (the uint MP_INVALID_PLAYER_ID))
     (when (and (not was-authoritative?)
                *traffic-manager*
                (nonzero? *traffic-manager*))
@@ -220,11 +239,32 @@
 
 (defun mp-update-traffic-authority ()
   "Elect deterministic direct traffic bubbles from canonical player IDs."
-  (if (or (!= (pc-multi-get-status) (mp-connection-status in-game))
-          (not *traffic-manager*)
-          (zero? *traffic-manager*))
-      (mp-traffic-reset-offline-authority!)
-      (mp-traffic-apply-authority-map!
-        (mp-traffic-build-authority-map *mp-traffic-authority-assignments*)))
+  (let ((in-game?
+          (= (pc-multi-get-status)
+             (mp-connection-status in-game))))
+    (cond
+      ((not in-game?)
+       (mp-traffic-reset-offline-authority!))
+      ((or (not *traffic-manager*)
+           (zero? *traffic-manager*))
+       (mp-traffic-reset-offline-authority!)
+       (when (mp-session-host?)
+         (let ((rev (pc-multi-publish-traffic-authority-map
+                      (-> *mp-traffic-authority-assignments* assignments))))
+           (when (nonzero? rev)
+             (set! *mp-traffic-authority-revision* rev)))))
+      ((mp-session-host?)
+       (let* ((new-map (mp-traffic-build-authority-map *mp-traffic-authority-assignments*))
+              (revision (pc-multi-publish-traffic-authority-map (-> new-map assignments))))
+         (when (nonzero? revision)
+           (mp-traffic-apply-authority-map! new-map revision))))
+      (else
+       (let ((revision
+               (pc-multi-read-traffic-authority-map
+                 (-> *mp-traffic-working-authority-map* assignments))))
+         (when (nonzero? revision)
+           (mp-traffic-apply-authority-map!
+             *mp-traffic-working-authority-map*
+             revision))))))
   (none)
   )

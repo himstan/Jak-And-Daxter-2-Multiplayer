@@ -854,7 +854,8 @@ TEST(MultiplayerPacket, DirectionPolicyMatchesHostAndClientRoles) {
     const PacketType type = static_cast<PacketType>(value);
     const bool host_only = type == PacketType::BOOTSTRAP || type == PacketType::WORLD_STATE ||
                            type == PacketType::SESSION_WELCOME ||
-                           type == PacketType::PALACE_SQUID_SYNC || type == PacketType::WIDOW_SYNC;
+                           type == PacketType::PALACE_SQUID_SYNC || type == PacketType::WIDOW_SYNC ||
+                           type == PacketType::TRAFFIC_AUTHORITY;
     EXPECT_TRUE(mp_packet_direction_allowed(type, 0));
     EXPECT_EQ(mp_packet_direction_allowed(type, 1), !host_only);
   }
@@ -862,27 +863,52 @@ TEST(MultiplayerPacket, DirectionPolicyMatchesHostAndClientRoles) {
   EXPECT_FALSE(mp_packet_direction_allowed(PacketType::COUNT, 0));
 }
 
+namespace {
+std::array<uint8_t, kMPMaxPlayers> make_test_authority_map(std::initializer_list<uint8_t> assignments) {
+  auto map = mp_invalid_traffic_authority_map();
+  uint32_t idx = 0;
+  for (uint8_t source : assignments) {
+    if (idx >= kMPMaxPlayers) {
+      break;
+    }
+    map[idx++] = source;
+  }
+  return map;
+}
+}  // namespace
+
 TEST(MultiplayerTraffic, RankedSourceValidationUsesLocalAuthorityMap) {
   MultiplayerData host;
   host.session_role = 0;
   host.local_player_id = 0;
   host.host_player_id = 0;
-  mp_set_traffic_authority_map(host, 0x02020000u, 0);  // [0, 0, 2, 2]
+  const auto host_map = make_test_authority_map({0, 0, 2, 2});
+  mp_set_traffic_authority_map(host, host_map.data());
+  mp_set_selected_traffic_authority(host, 0);
 
-  EXPECT_TRUE(mp_validate_traffic_source(host, 0, 0));
-  EXPECT_TRUE(mp_validate_traffic_source(host, 2, 2));
-  EXPECT_FALSE(mp_validate_traffic_source(host, 1, 1));
-  EXPECT_FALSE(mp_validate_traffic_source(host, 2, 1));
+  EXPECT_TRUE(mp_validate_traffic_source(host, 0, 0, 1));
+  if (kMPMaxPlayers > 2) {
+    EXPECT_TRUE(mp_validate_traffic_source(host, 2, 2, 1));
+    EXPECT_FALSE(mp_validate_traffic_source(host, 2, 1, 1));
+  }
+  if (kMPMaxPlayers > 1) {
+    EXPECT_FALSE(mp_validate_traffic_source(host, 1, 1, 1));
+  }
 
   MultiplayerData client;
   client.session_role = 1;
-  client.local_player_id = 3;
+  client.local_player_id = std::min<uint32_t>(3, kMPMaxPlayers - 1);
   client.host_player_id = 0;
-  mp_set_traffic_authority_map(client, 0xff02ff00u, 2);  // Spectator selects root 2.
+  client.traffic_authority_revision = 1;
+  const auto client_map = make_test_authority_map({0, 0xff, 2});
+  client.traffic_authority_map = client_map;
+  mp_set_selected_traffic_authority(client, 2);  // Spectator selects root 2.
 
-  EXPECT_TRUE(mp_validate_traffic_source(client, 2, 0));
-  EXPECT_FALSE(mp_validate_traffic_source(client, 0, 0));
-  EXPECT_FALSE(mp_validate_traffic_source(client, 2, 2));
+  if (kMPMaxPlayers > 2) {
+    EXPECT_TRUE(mp_validate_traffic_source(client, 2, 0, 1));
+    EXPECT_FALSE(mp_validate_traffic_source(client, 2, 2, 1));
+  }
+  EXPECT_FALSE(mp_validate_traffic_source(client, 0, 0, 1));
 }
 
 TEST(MultiplayerTraffic, TrafficNetIdsEncodeClassOriginAndSequence) {
@@ -929,26 +955,316 @@ TEST(MultiplayerTraffic, TrafficNetIdValidationRejectsSpoofedAndLegacyIds) {
   EXPECT_TRUE(mp_validate_vehicle_net_id(0x70000004u));
   EXPECT_FALSE(mp_validate_vehicle_net_id(0x71000001u));
   EXPECT_FALSE(mp_validate_vehicle_net_id(0x70000000u));
-  EXPECT_FALSE(mp_validate_vehicle_net_id(0x24008000u));
+  EXPECT_FALSE(mp_validate_vehicle_net_id(0x28008000u));
   EXPECT_FALSE(mp_validate_vehicle_net_id(32768u));
   EXPECT_FALSE(mp_validate_vehicle_net_id(0x20007fffu));
 }
 
 TEST(MultiplayerTraffic, SourceHandoffClearsRemoteTrafficState) {
   MultiplayerData data;
-  data.local_player_id = 3;
-  mp_set_traffic_authority_map(data, 0x02020000u, 2);  // Player 3 follows player 2.
+  data.session_role = 0;
+  data.local_player_id = std::min<uint32_t>(3, kMPMaxPlayers - 1);
+  const auto map1 = make_test_authority_map({0, 0, 2, 2});
+  mp_set_traffic_authority_map(data, map1.data());
+  mp_set_selected_traffic_authority(data, 2);  // Player follows root 2 at rev 1.
   data.traffic_buffer.pedestrians[0].net_id = 7;
   data.traffic_buffer.vehicles[0].net_id = 9;
-  data.last_pedestrian_sequence_by_source[2] = 10;
-  data.last_vehicle_sequence_by_source[2] = 11;
+  if (kMPMaxPlayers > 2) {
+    data.last_pedestrian_sequence_by_source[2] = 10;
+    data.last_vehicle_sequence_by_source[2] = 11;
+  }
 
-  mp_set_traffic_authority_map(data, 0x00000000u, 0);  // Everyone follows player 0.
+  std::array<uint8_t, kMPMaxPlayers> map2;
+  map2.fill(0);
+  mp_set_traffic_authority_map(data, map2.data());
+  mp_set_selected_traffic_authority(data, 0);  // Everyone follows player 0 at rev 2.
 
   EXPECT_EQ(data.traffic_buffer.pedestrians[0].net_id, 0u);
   EXPECT_EQ(data.traffic_buffer.vehicles[0].net_id, 0u);
-  EXPECT_EQ(data.last_pedestrian_sequence_by_source[2], 0u);
-  EXPECT_EQ(data.last_vehicle_sequence_by_source[2], 0u);
+  if (kMPMaxPlayers > 2) {
+    EXPECT_EQ(data.last_pedestrian_sequence_by_source[2], 0u);
+    EXPECT_EQ(data.last_vehicle_sequence_by_source[2], 0u);
+  }
+  EXPECT_EQ(data.traffic_authority_revision, 2u);
+  EXPECT_EQ(data.selected_traffic_authority, 0u);
+}
+
+TEST(MultiplayerTraffic, DefaultConstructionHasInvalidMapAndZeroRevision) {
+  MultiplayerData data;
+  const auto invalid_map = mp_invalid_traffic_authority_map();
+  EXPECT_EQ(data.traffic_authority_map, invalid_map);
+  EXPECT_EQ(data.traffic_authority_revision, 0u);
+  for (uint32_t i = 0; i < kMPMaxPlayers; ++i) {
+    EXPECT_EQ(data.traffic_authority_map[i], kMPInvalidCompactPlayerId);
+  }
+}
+
+TEST(MultiplayerTraffic, RevisionValidationRejectsStaleTrafficPackets) {
+  MultiplayerData host;
+  host.session_role = 0;
+  host.local_player_id = 0;
+  host.host_player_id = 0;
+  const auto host_map = make_test_authority_map({0, 0, 2, 2});
+  mp_set_traffic_authority_map(host, host_map.data());
+  host.traffic_authority_revision = 10;
+  mp_set_selected_traffic_authority(host, 0);
+
+  if (kMPMaxPlayers > 2) {
+    // Valid root source 2 at matching revision 10
+    EXPECT_TRUE(mp_validate_traffic_source(host, 2, 2, 10));
+    // Same source but stale revision 9 rejected
+    EXPECT_FALSE(mp_validate_traffic_source(host, 2, 2, 9));
+    // Wildcard revision 0 rejected
+    EXPECT_FALSE(mp_validate_traffic_source(host, 2, 2, 0));
+  }
+  if (kMPMaxPlayers > 1) {
+    // Mismatched source rejected
+    EXPECT_FALSE(mp_validate_traffic_source(host, 1, 1, 10));
+  }
+}
+
+TEST(MultiplayerTraffic, TrafficAuthorityPacketFromHostUpdatesClientMapAndRevision) {
+  MultiplayerData client;
+  client.session_role = 1;
+  client.local_player_id = std::min<uint32_t>(3, kMPMaxPlayers - 1);
+  client.host_player_id = 0;
+
+  PacketTrafficAuthority packet = {};
+  packet.header.type = PacketType::TRAFFIC_AUTHORITY;
+  packet.header.sequenceNum = 1;
+  packet.revision = 5;
+  const auto assignments = make_test_authority_map({0, 0, 2, 2});
+  memcpy(packet.assignments, assignments.data(), kMPMaxPlayers);
+
+  ENetPacket raw_packet = {};
+  raw_packet.data = reinterpret_cast<uint8_t*>(&packet);
+  raw_packet.dataLength = sizeof(packet);
+
+  EXPECT_TRUE(mp_handle_traffic_authority_packet(client, &raw_packet, 0));
+  EXPECT_EQ(client.traffic_authority_revision, 5u);
+  EXPECT_EQ(client.traffic_authority_map[0], 0u);
+  if (kMPMaxPlayers > 1) {
+    EXPECT_EQ(client.traffic_authority_map[1], 0u);
+  }
+  if (kMPMaxPlayers > 2) {
+    EXPECT_EQ(client.traffic_authority_map[2], 2u);
+  }
+  if (kMPMaxPlayers > 3) {
+    EXPECT_EQ(client.traffic_authority_map[3], 2u);
+  }
+  EXPECT_EQ(client.selected_traffic_authority, kMPInvalidCompactPlayerId);
+}
+
+TEST(MultiplayerTraffic, TrafficAuthorityPacketFromNonHostIsRejected) {
+  MultiplayerData client;
+  client.session_role = 1;
+  client.local_player_id = std::min<uint32_t>(3, kMPMaxPlayers - 1);
+  client.host_player_id = 0;
+
+  PacketTrafficAuthority packet = {};
+  packet.header.type = PacketType::TRAFFIC_AUTHORITY;
+  packet.header.sequenceNum = 1;
+  packet.revision = 5;
+
+  ENetPacket raw_packet = {};
+  raw_packet.data = reinterpret_cast<uint8_t*>(&packet);
+  raw_packet.dataLength = sizeof(packet);
+
+  // Sender 1 is not the host (host is 0)
+  EXPECT_FALSE(mp_handle_traffic_authority_packet(client, &raw_packet, 1));
+}
+
+TEST(MultiplayerTraffic, OlderTrafficAuthorityRevisionIsRejected) {
+  MultiplayerData client;
+  client.session_role = 1;
+  client.local_player_id = std::min<uint32_t>(3, kMPMaxPlayers - 1);
+  client.host_player_id = 0;
+  client.traffic_authority_revision = 10;
+
+  PacketTrafficAuthority packet = {};
+  packet.header.type = PacketType::TRAFFIC_AUTHORITY;
+  packet.header.sequenceNum = 2;
+  packet.revision = 9;
+
+  ENetPacket raw_packet = {};
+  raw_packet.data = reinterpret_cast<uint8_t*>(&packet);
+  raw_packet.dataLength = sizeof(packet);
+
+  EXPECT_FALSE(mp_handle_traffic_authority_packet(client, &raw_packet, 0));
+  EXPECT_EQ(client.traffic_authority_revision, 10u);
+}
+
+TEST(MultiplayerTraffic, ClientCannotPublishOrReplaceCanonicalAuthorityMap) {
+  MultiplayerData client;
+  client.session_role = 1;
+  client.local_player_id = std::min<uint32_t>(3, kMPMaxPlayers - 1);
+  client.host_player_id = 0;
+  client.traffic_authority_revision = 10;
+  const auto initial_map = make_test_authority_map({0, 0, 2, 2});
+  client.traffic_authority_map = initial_map;
+
+  std::array<uint8_t, kMPMaxPlayers> rogue_map;
+  rogue_map.fill(3);
+  mp_set_traffic_authority_map(client, rogue_map.data());
+
+  // Client cannot publish or overwrite canonical map
+  EXPECT_EQ(client.traffic_authority_revision, 10u);
+  EXPECT_EQ(client.traffic_authority_map[0], 0u);
+  if (kMPMaxPlayers > 3) {
+    EXPECT_EQ(client.traffic_authority_map[3], 2u);
+  }
+}
+
+TEST(MultiplayerTraffic, AssignmentChangeUpdatesSelectedSourceEvenWhenOldSourceRemainsARoot) {
+  MultiplayerData client;
+  client.session_role = 1;
+  client.local_player_id = std::min<uint32_t>(3, kMPMaxPlayers - 1);
+  client.host_player_id = 0;
+
+  // Initial: player follows root 2
+  PacketTrafficAuthority packet1 = {};
+  packet1.header.type = PacketType::TRAFFIC_AUTHORITY;
+  packet1.revision = 1;
+  const auto map1 = make_test_authority_map({0, 0, 2, 2});
+  memcpy(packet1.assignments, map1.data(), kMPMaxPlayers);
+
+  ENetPacket raw1 = {};
+  raw1.data = reinterpret_cast<uint8_t*>(&packet1);
+  raw1.dataLength = sizeof(packet1);
+  EXPECT_TRUE(mp_handle_traffic_authority_packet(client, &raw1, 0));
+  mp_set_selected_traffic_authority(client, client.traffic_authority_map[client.local_player_id]);
+  if (kMPMaxPlayers > 2) {
+    EXPECT_EQ(client.selected_traffic_authority, 2u);
+  }
+
+  // New map arrives: player 3 is remapped to 0, while 2 remains a root for player 2
+  PacketTrafficAuthority packet2 = {};
+  packet2.header.type = PacketType::TRAFFIC_AUTHORITY;
+  packet2.revision = 2;
+  const auto map2 = make_test_authority_map({0, 0, 2, 0});
+  memcpy(packet2.assignments, map2.data(), kMPMaxPlayers);
+
+  ENetPacket raw2 = {};
+  raw2.data = reinterpret_cast<uint8_t*>(&packet2);
+  raw2.dataLength = sizeof(packet2);
+  EXPECT_TRUE(mp_handle_traffic_authority_packet(client, &raw2, 0));
+
+  // Upon receiving the new map, selection is invalidated
+  EXPECT_EQ(client.selected_traffic_authority, kMPInvalidCompactPlayerId);
+
+  // When GOAL client updates its selection based on map[local_player_id], it becomes 0
+  mp_set_selected_traffic_authority(client, client.traffic_authority_map[client.local_player_id]);
+  EXPECT_EQ(client.selected_traffic_authority, 0u);
+}
+
+TEST(MultiplayerTraffic, DuplicateSameRevisionAndMapIsAcceptedAsNoOp) {
+  MultiplayerData client;
+  client.session_role = 1;
+  client.local_player_id = std::min<uint32_t>(3, kMPMaxPlayers - 1);
+  client.host_player_id = 0;
+  client.traffic_authority_revision = 5;
+  const auto assignments = make_test_authority_map({0, 0, 2, 2});
+  client.traffic_authority_map = assignments;
+
+  PacketTrafficAuthority packet = {};
+  packet.header.type = PacketType::TRAFFIC_AUTHORITY;
+  packet.revision = 5;
+  memcpy(packet.assignments, assignments.data(), kMPMaxPlayers);
+
+  ENetPacket raw = {};
+  raw.data = reinterpret_cast<uint8_t*>(&packet);
+  raw.dataLength = sizeof(packet);
+
+  EXPECT_TRUE(mp_handle_traffic_authority_packet(client, &raw, 0));
+  EXPECT_EQ(client.traffic_authority_revision, 5u);
+}
+
+TEST(MultiplayerTraffic, DuplicateSameRevisionWithDifferentMapIsRejected) {
+  MultiplayerData client;
+  client.session_role = 1;
+  client.local_player_id = std::min<uint32_t>(3, kMPMaxPlayers - 1);
+  client.host_player_id = 0;
+  client.traffic_authority_revision = 5;
+  const auto initial_map = make_test_authority_map({0, 0, 2, 2});
+  client.traffic_authority_map = initial_map;
+
+  // Conflict: same revision 5, but different assignments
+  PacketTrafficAuthority packet = {};
+  packet.header.type = PacketType::TRAFFIC_AUTHORITY;
+  packet.revision = 5;
+  const auto conflict_map = make_test_authority_map({0, 0, 0, 0});
+  memcpy(packet.assignments, conflict_map.data(), kMPMaxPlayers);
+
+  ENetPacket raw = {};
+  raw.data = reinterpret_cast<uint8_t*>(&packet);
+  raw.dataLength = sizeof(packet);
+
+  EXPECT_FALSE(mp_handle_traffic_authority_packet(client, &raw, 0));
+  if (kMPMaxPlayers > 2) {
+    EXPECT_EQ(client.traffic_authority_map[2], 2u);
+  }
+}
+
+TEST(MultiplayerTraffic, RevisionZeroAuthorityPacketIsRejected) {
+  MultiplayerData client;
+  client.session_role = 1;
+  client.local_player_id = std::min<uint32_t>(3, kMPMaxPlayers - 1);
+  client.host_player_id = 0;
+  client.traffic_authority_revision = 0;
+
+  PacketTrafficAuthority packet = {};
+  packet.header.type = PacketType::TRAFFIC_AUTHORITY;
+  packet.revision = 0;
+
+  ENetPacket raw = {};
+  raw.data = reinterpret_cast<uint8_t*>(&packet);
+  raw.dataLength = sizeof(packet);
+
+  EXPECT_FALSE(mp_handle_traffic_authority_packet(client, &raw, 0));
+}
+
+TEST(MultiplayerTraffic, HostPublishingIncrementsRevisionMonotonicallyInCpp) {
+  MultiplayerData host;
+  host.session_role = 0;
+  host.local_player_id = 0;
+  host.host_player_id = 0;
+
+  EXPECT_EQ(host.traffic_authority_revision, 0u);
+
+  const auto map1 = make_test_authority_map({0, 0, 2, 2});
+  uint32_t rev1 = mp_set_traffic_authority_map(host, map1.data());
+  EXPECT_EQ(rev1, 1u);
+  EXPECT_EQ(host.traffic_authority_revision, 1u);
+
+  // Same map published again does not increment revision
+  uint32_t rev2 = mp_set_traffic_authority_map(host, map1.data());
+  EXPECT_EQ(rev2, 1u);
+  EXPECT_EQ(host.traffic_authority_revision, 1u);
+
+  // Changed map increments revision
+  const auto map2 = make_test_authority_map({0, 0, 0, 0});
+  uint32_t rev3 = mp_set_traffic_authority_map(host, map2.data());
+  EXPECT_EQ(rev3, 2u);
+  EXPECT_EQ(host.traffic_authority_revision, 2u);
+}
+
+TEST(MultiplayerTraffic, HostPublishingWithNullPointerDoesNotMutateState) {
+  MultiplayerData host;
+  host.session_role = 0;
+  host.local_player_id = 0;
+  host.host_player_id = 0;
+
+  const auto map1 = make_test_authority_map({0, 0, 2, 2});
+  mp_set_traffic_authority_map(host, map1.data());
+  EXPECT_EQ(host.traffic_authority_revision, 1u);
+
+  // Nullptr publish leaves existing revision and map intact
+  uint32_t rev = mp_set_traffic_authority_map(host, nullptr);
+  EXPECT_EQ(rev, 1u);
+  EXPECT_EQ(host.traffic_authority_revision, 1u);
+  if (kMPMaxPlayers > 2) {
+    EXPECT_EQ(host.traffic_authority_map[2], 2u);
+  }
 }
 
 TEST(MultiplayerWireCodec, UsesLittleEndianAndRequiresExactConsumption) {

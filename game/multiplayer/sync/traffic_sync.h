@@ -34,10 +34,16 @@ bool mp_accept_traffic_level(MultiplayerData& data,
 uint8_t mp_traffic_authority_for_player(const MultiplayerData& data, uint32_t player_id);
 bool mp_validate_traffic_source(const MultiplayerData& data,
                                 uint8_t source_player_id,
-                                uint32_t sender_player_id);
-void mp_set_traffic_authority_map(MultiplayerData& data,
-                                  uint32_t authority_map,
-                                  uint32_t selected_authority);
+                                uint32_t sender_player_id,
+                                uint32_t authority_revision);
+void mp_send_traffic_authority(MultiplayerData& data, struct _ENetPeer* peer = nullptr);
+uint32_t mp_set_traffic_authority_map(MultiplayerData& data,
+                                      const uint8_t* authority_map);
+void mp_set_selected_traffic_authority(MultiplayerData& data,
+                                       uint32_t selected_authority);
+bool mp_handle_traffic_authority_packet(MultiplayerData& data,
+                                        const struct _ENetPacket* packet,
+                                        uint32_t sender_player_id);
 
 template <typename T, typename IdGetter>
 T* mp_find_matching_or_empty_slot(T* items, uint32_t count, uint32_t id, IdGetter id_getter) {

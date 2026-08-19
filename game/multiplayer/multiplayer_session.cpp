@@ -95,7 +95,8 @@ void multiplayer_clear_remote_peer_state(MultiplayerData& data) {
   memset(&data.remote_enemy_buffer, 0, sizeof(data.remote_enemy_buffer));
   data.last_enemy_sync_time = 0;
   data.last_enemy_sequence_by_player = {};
-  data.traffic_authority_map = 0xffffffffu;
+  data.traffic_authority_map.fill(kMPInvalidCompactPlayerId);
+  data.traffic_authority_revision = 0;
   data.selected_traffic_authority = kMPInvalidCompactPlayerId;
   data.last_remote_traffic_level_hash = 0;
   multiplayer_reset_remote_traffic_buffers(data);
@@ -152,7 +153,8 @@ void multiplayer_clear_session_state(MultiplayerData& data, bool preserve_reconn
   multiplayer_clear_direct_connect_draft(data);
   data.required_version.clear();
   data.local_traffic_level_hash = 0;
-  data.traffic_authority_map = 0xffffffffu;
+  data.traffic_authority_map.fill(kMPInvalidCompactPlayerId);
+  data.traffic_authority_revision = 0;
   data.selected_traffic_authority = kMPInvalidCompactPlayerId;
   {
     std::lock_guard<std::mutex> lock(data.discovery_result_mutex);

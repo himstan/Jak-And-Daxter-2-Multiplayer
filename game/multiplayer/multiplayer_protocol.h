@@ -28,6 +28,8 @@ enum class MPPlayerCharacter : uint32_t {
 
 static_assert(kMPMaxPlayers >= 2 && kMPMaxPlayers <= 32,
               "multiplayer player capacity must be between 2 and 32");
+static_assert(kMPMaxPlayers <= 16,
+              "Traffic net IDs only reserve 4 bits for player origin");
 
 inline constexpr std::array<MPPlayerCharacter, kMPMaxPlayers>
 mp_default_player_character_config() {
@@ -135,13 +137,22 @@ enum class PacketType : uint8_t {
   WORLD_STATE = 12,
   SESSION_WELCOME = 13,
   LOBBY_ACTION = 14,
-  COUNT = 15
+  TRAFFIC_AUTHORITY = 15,
+  COUNT = 16
 };
 
 struct PacketHeader {
   PacketType type;
   uint32_t sequenceNum;
 };
+
+struct PacketTrafficAuthority {
+  PacketHeader header;
+  uint32_t revision;
+  uint8_t assignments[kMPMaxPlayers];
+};
+static_assert(sizeof(PacketTrafficAuthority) == sizeof(PacketHeader) + sizeof(uint32_t) + kMPMaxPlayers,
+              "PacketTrafficAuthority wire layout must remain explicit");
 
 struct PacketJoin {
   PacketHeader header;
@@ -350,12 +361,13 @@ struct PacketPedestrianSync {
   PacketHeader header;
   uint8_t source_player_id;
   uint8_t source_pad[3];
+  uint32_t authority_revision;
   uint32_t count;
   uint64_t timestamp;
   uint32_t level_hash;
   MPPedestrianStatePacked peds[MAX_PEDESTRIANS_PER_PACKET];
 };
-static_assert(offsetof(PacketPedestrianSync, peds) == 25,
+static_assert(offsetof(PacketPedestrianSync, peds) == 29,
               "PacketPedestrianSync prefix must remain explicit");
 
 struct MPVehicleStatePacked {
@@ -376,12 +388,13 @@ struct PacketVehicleSync {
   PacketHeader header;
   uint8_t source_player_id;
   uint8_t source_pad[3];
+  uint32_t authority_revision;
   uint32_t count;
   uint64_t timestamp;
   uint32_t level_hash;
   MPVehicleStatePacked vehs[MAX_VEHICLES_PER_PACKET];
 };
-static_assert(offsetof(PacketVehicleSync, vehs) == 25,
+static_assert(offsetof(PacketVehicleSync, vehs) == 29,
               "PacketVehicleSync prefix must remain explicit");
 
 struct MPPalaceSquidState {

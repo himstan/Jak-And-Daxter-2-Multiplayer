@@ -322,6 +322,12 @@ struct MPAirlockSyncBufferGOAL {
 };
 static_assert(sizeof(MPAirlockSyncBufferGOAL) == 312, "MPAirlockSyncBufferGOAL must match GOAL");
 
+inline std::array<uint8_t, kMPMaxPlayers> mp_invalid_traffic_authority_map() {
+  std::array<uint8_t, kMPMaxPlayers> map{};
+  map.fill(kMPInvalidCompactPlayerId);
+  return map;
+}
+
 struct MultiplayerData {
   struct AuthenticationFailure {
     uint32_t address = 0;
@@ -371,7 +377,8 @@ struct MultiplayerData {
   std::array<uint32_t, kMPMaxPlayers> last_enemy_sequence_by_player = {};
 
   MPTrafficSyncBufferGOAL traffic_buffer;
-  uint32_t traffic_authority_map = 0xffffffffu;
+  std::array<uint8_t, kMPMaxPlayers> traffic_authority_map = mp_invalid_traffic_authority_map();
+  uint32_t traffic_authority_revision = 0;
   uint8_t selected_traffic_authority = kMPInvalidCompactPlayerId;
   uint32_t last_traffic_sync_time = 0;
   std::array<uint32_t, kMPMaxPlayers> last_pedestrian_sequence_by_source = {};

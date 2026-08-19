@@ -97,6 +97,22 @@ T* goal_ptr(u32 ptr) {
   return Ptr<T>(ptr).c();
 }
 
+const uint8_t* goal_byte_array_ptr(u32 ptr, size_t count) {
+  if (ptr < kMinGoalPointer || count > EE_MAIN_MEM_SIZE ||
+      ptr > static_cast<u32>(EE_MAIN_MEM_SIZE - count)) {
+    return nullptr;
+  }
+  return Ptr<uint8_t>(ptr).c();
+}
+
+uint8_t* goal_byte_array_ptr_mut(u32 ptr, size_t count) {
+  if (ptr < kMinGoalPointer || count > EE_MAIN_MEM_SIZE ||
+      ptr > static_cast<u32>(EE_MAIN_MEM_SIZE - count)) {
+    return nullptr;
+  }
+  return Ptr<uint8_t>(ptr).c();
+}
+
 const char* goal_string_data(u32 ptr) {
   if (ptr < kMinGoalPointer || ptr > static_cast<u32>(EE_MAIN_MEM_SIZE - sizeof(String) - 1)) {
     return nullptr;
@@ -299,6 +315,9 @@ bool handle_receive_packet(MultiplayerData& data,
     case PacketType::WORLD_STATE:
       mp_handle_world_state_packet(data, packet, world);
       accepted = true;
+      break;
+    case PacketType::TRAFFIC_AUTHORITY:
+      accepted = mp_handle_traffic_authority_packet(data, packet, sender_player_id);
       break;
     case PacketType::SESSION_WELCOME:
       accepted = handle_session_welcome(data, packet);
@@ -974,11 +993,45 @@ void pc_multi_clear_remote_traffic() {
   }
 }
 
-void pc_multi_set_traffic_authority_map(u32 authority_map, u32 selected_authority) {
+u32 pc_multi_publish_traffic_authority_map(u32 authority_map_ptr) {
   try {
-    mp_set_traffic_authority_map(multiplayer_data(), authority_map, selected_authority);
+    auto& data = multiplayer_data();
+    if (data.session_role != 0) {
+      return data.traffic_authority_revision;
+    }
+    const auto* map = goal_byte_array_ptr(authority_map_ptr, kMPMaxPlayers);
+    if (!map) {
+      lg::error("[Multiplayer] Invalid traffic authority map pointer in publish.");
+      return data.traffic_authority_revision;
+    }
+    return mp_set_traffic_authority_map(data, map);
   } catch (...) {
-    lg::error("[Multiplayer] Exception in pc_multi_set_traffic_authority_map");
+    lg::error("[Multiplayer] Exception in pc_multi_publish_traffic_authority_map");
+    return 0;
+  }
+}
+
+u32 pc_multi_read_traffic_authority_map(u32 authority_map_ptr) {
+  try {
+    auto& data = multiplayer_data();
+    auto* map = goal_byte_array_ptr_mut(authority_map_ptr, kMPMaxPlayers);
+    if (!map) {
+      return 0;
+    }
+    memcpy(map, data.traffic_authority_map.data(), kMPMaxPlayers);
+    return data.traffic_authority_revision;
+  } catch (...) {
+    lg::error("[Multiplayer] Exception in pc_multi_read_traffic_authority_map");
+    return 0;
+  }
+}
+
+void pc_multi_set_selected_traffic_authority(u32 selected_authority) {
+  try {
+    auto& data = multiplayer_data();
+    mp_set_selected_traffic_authority(data, selected_authority);
+  } catch (...) {
+    lg::error("[Multiplayer] Exception in pc_multi_set_selected_traffic_authority");
   }
 }
 
@@ -1838,8 +1891,12 @@ void init_multiplayer_pc_port() {
   jak2::make_function_symbol_from_c("pc-multi-receive-traffic", (void*)pc_multi_receive_traffic);
   jak2::make_function_symbol_from_c("pc-multi-clear-remote-traffic",
                                     (void*)pc_multi_clear_remote_traffic);
-  jak2::make_function_symbol_from_c("pc-multi-set-traffic-authority-map",
-                                    (void*)pc_multi_set_traffic_authority_map);
+  jak2::make_function_symbol_from_c("pc-multi-publish-traffic-authority-map",
+                                    (void*)pc_multi_publish_traffic_authority_map);
+  jak2::make_function_symbol_from_c("pc-multi-read-traffic-authority-map",
+                                    (void*)pc_multi_read_traffic_authority_map);
+  jak2::make_function_symbol_from_c("pc-multi-set-selected-traffic-authority",
+                                    (void*)pc_multi_set_selected_traffic_authority);
   jak2::make_function_symbol_from_c("pc-multi-send-palace-squid",
                                     (void*)pc_multi_send_palace_squid);
   jak2::make_function_symbol_from_c("pc-multi-receive-palace-squid",

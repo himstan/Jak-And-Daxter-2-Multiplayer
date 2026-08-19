@@ -9,6 +9,7 @@
 #include "game/multiplayer/multiplayer_packet.h"
 #include "game/multiplayer/multiplayer_peer_registry.h"
 #include "game/multiplayer/multiplayer_session.h"
+#include "game/multiplayer/sync/traffic_sync.h"
 
 namespace {
 bool valid_player_name(const char* name) {
@@ -486,6 +487,9 @@ bool mp_handle_join_packet(MultiplayerData& data,
   if (data.session_role == 0) {
     if (auto* session = multiplayer_host_peer_for_player_id(data, join->player_id)) {
       session->identity_ready = true;
+      if (data.traffic_authority_revision > 0) {
+        mp_send_traffic_authority(data, session->peer);
+      }
       if (data.host_game_active) {
         session->bootstrap_pending = true;
         session->bootstrap_sent_once = false;
