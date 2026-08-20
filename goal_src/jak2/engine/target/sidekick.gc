@@ -404,14 +404,19 @@
         (set! (-> self draw color-emissive quad) v1-89)
         )
       (if (and (mp-target-jak? (-> self parent 0)) (!= MP_INVALID_PLAYER_ID (-> self parent 0 riding-along-player-id)))
-        (begin
-          (set! (-> self draw pc-player-tint-color) (mp-player-render-tint-color-by-id (the-as int (-> self parent 0 riding-along-player-id))))
-          (set! (-> self draw pc-player-tint-strength) (mp-player-render-tint-strength-by-id (the-as int (-> self parent 0 riding-along-player-id))))
-          )
-        (begin
-          (set! (-> self draw pc-player-tint-color) (-> self parent 0 draw pc-player-tint-color))
-          (set! (-> self draw pc-player-tint-strength) (-> self parent 0 draw pc-player-tint-strength))
-          )
+        (let ((appearance-record
+                (mp-player-color-record-by-id
+                  (the-as int (-> self parent 0 riding-along-player-id)))))
+          (if (and appearance-record (nonzero? appearance-record))
+              (mp-apply-render-appearance!
+                (-> self draw)
+                (-> appearance-record identity appearance))
+              (mp-clear-render-appearance! (-> self draw))))
+        (dotimes (appearance-slot MP_PLAYER_APPEARANCE_SLOT_COUNT)
+          (set! (-> self draw pc-player-tint-colors appearance-slot)
+                (-> self parent 0 draw pc-player-tint-colors appearance-slot))
+          (set! (-> self draw pc-player-tint-strengths appearance-slot)
+                (-> self parent 0 draw pc-player-tint-strengths appearance-slot)))
         )
       (set! (-> self draw force-fade) (-> self parent 0 draw force-fade))
       (set! (-> self draw death-vertex-skip) (-> self parent 0 draw death-vertex-skip))

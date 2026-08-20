@@ -153,7 +153,10 @@
           *mp-session-role*))
       (let ((local-record (mp-local-player-record)))
         (when (and local-record (nonzero? local-record))
-          (set! (-> local-record identity character) local-character)))
+          (set! (-> local-record identity character) local-character)
+          (when (not (mp-player-color-progress-active?))
+            (pc-multi-get-player-appearance
+              (-> local-record identity appearance)))))
       (when (and *target* (nonzero? *target*))
         (mp-player-controller-bind-target!
           *mp-player-controller*
@@ -459,6 +462,7 @@
             (the-as uint *mp-player-controller*)
             (the-as uint *mp-world-state*)
             (the-as uint *mp-bootstrap-state*))
+          (mp-refresh-player-render-appearances!)
           (set! status (pc-multi-get-status))
           (mp-session-ensure-bootstrap-controller! status)
           (when (not (= status (mp-connection-status in-game)))

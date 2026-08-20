@@ -152,6 +152,9 @@
   "target-h.o"
   "player-h.o"
   "player.o"
+  "mp-player-color.o" ;; added
+  "mp-player-texture-groups.o" ;; added
+  "mp-cutscene-appearance.o" ;; added
   "mp-overlay-layout-h.o"
   "mp-spectate-h.o"
   "mp-player-list-h.o"
@@ -390,6 +393,7 @@
   "progress-static.o"
   "progress-multiplayer-options-pc.o" ;; added
   "progress-static-pc.o" ;; added
+  "mp-lobby-appearance-editor.o" ;; added
   "mp-lobby-progress.o" ;; added
   "progress.o"
   "progress-pc.o" ;; added

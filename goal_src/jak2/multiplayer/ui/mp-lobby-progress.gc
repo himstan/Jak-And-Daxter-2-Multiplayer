@@ -4,6 +4,8 @@
 (define *mp-lobby-player-options* (the-as (array menu-option) #f))
 (define *mp-lobby-name-tag* (new 'global 'string 128 (the-as string #f)))
 (define-extern mp-progress-intro-start! (function symbol int))
+(defconstant MP_LOBBY_LONG_NAME_LENGTH 10)
+(defconstant MP_LOBBY_LONG_NAME_SCALE 0.5)
 
 (deftype menu-lobby-player-option (menu-option)
   ()
@@ -221,6 +223,13 @@
     )
   )
 
+(defun mp-lobby-player-name-scale ((player-name string) (base-scale float))
+  (if (and player-name
+           (nonzero? (the-as uint player-name))
+           (> (length player-name) MP_LOBBY_LONG_NAME_LENGTH))
+      (* base-scale MP_LOBBY_LONG_NAME_SCALE)
+      base-scale))
+
 (defun draw-lobby-player-name ((font-ctx font-context) (player-index int) (player-count int) (selected? symbol))
   (let ((text-x 84)
         (top-y 110)
@@ -255,11 +264,10 @@
                    (lookup-text! *common-text* (text-id progress-lobby-slot-closed) #f)
                    (+ player-index 1)))
           (player-name
-           (set-scale! font-ctx (* 0.6 layout-scale))
-           (set-color! font-ctx
-                       (if (= player-index local-id)
-                           (font-color progress-force-selected)
-                           (font-color progress)))
+           (set-scale! font-ctx
+                       (* (mp-lobby-player-name-scale (the-as string player-name) 0.6)
+                          layout-scale))
+           (set-color! font-ctx (mp-player-font-color-by-id player-index))
            (format (clear *temp-string*) "~S" player-name))
           (else
            (set-scale! font-ctx (* 0.45 layout-scale))
@@ -299,8 +307,8 @@
        (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress)))
 
       ((and record (nonzero? record))
-       (set-scale! font-ctx 0.7)
-       (set-color! font-ctx (font-color progress-force-selected))
+       (set-scale! font-ctx (mp-lobby-player-name-scale (the-as string player-name) 0.7))
+       (set-color! font-ctx (mp-player-font-color-by-id player-index))
        (format (clear *temp-string*) "~S" player-name)
        (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
 
@@ -317,14 +325,18 @@
 
     (if (= (pc-multi-is-lobby-host) 1)
       (begin
-        (set! (-> font-ctx origin y) 240.0)
+        (set! (-> font-ctx origin y) 220.0)
         (set-scale! font-ctx 0.42)
         (format (clear *temp-string*) (lookup-text! *common-text* (text-id progress-lobby-nat-status) #f) (mp-lobby-host-status-text font-ctx))
         (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
 
+        (set-scale! font-ctx 0.35)
+        (set! (-> font-ctx origin y) 240.0)
+        (set-color! font-ctx (font-color progress))
+        (print-game-text (lookup-text! *common-text* (text-id progress-lobby-player-color) #f) font-ctx #f 44 (bucket-id progress))
+
         (set! (-> font-ctx origin y) 260.0)
         (set-color! font-ctx (font-color progress))
-        (set-scale! font-ctx 0.42)
         (when (or (= setup-status 1) (= setup-status 2))
           (set-color! font-ctx (font-color progress-option-off))
           )
@@ -338,17 +350,18 @@
           )
 
         (set! (-> font-ctx origin y) 280.0)
-        (set-color! font-ctx (font-color progress))
-        (set-scale! font-ctx 0.42)
         (print-game-text (lookup-text! *common-text* (text-id progress-lobby-switch-char) #f) font-ctx #f 44 (bucket-id progress))
 
         (set! (-> font-ctx origin y) 300.0)
         (print-game-text (lookup-text! *common-text* (text-id progress-lobby-start-game) #f) font-ctx #f 44 (bucket-id progress))
         )
       (begin
-        (set! (-> font-ctx origin y) 300.0)
+        (set! (-> font-ctx origin y) 278.0)
         (set-color! font-ctx (font-color progress))
-        (set-scale! font-ctx 0.42)
+        (set-scale! font-ctx 0.35)
+        (print-game-text (lookup-text! *common-text* (text-id progress-lobby-player-color) #f) font-ctx #f 44 (bucket-id progress))
+
+        (set! (-> font-ctx origin y) 300.0)
         (print-game-text (lookup-text! *common-text* (text-id progress-lobby-switch-char) #f) font-ctx #f 44 (bucket-id progress))
         )
       )
@@ -360,6 +373,10 @@
     (set! (-> p selected-option) #f)
     (let ((setup-status (pc-multi-get-host-setup-status)))
       (cond
+        ((cpad-pressed? 0 select)
+         (sound-play "generic-beep")
+         (mp-player-color-progress-enter! p))
+
         ((cpad-pressed? 0 triangle)
          (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons triangle))
          (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons triangle))
@@ -380,9 +397,7 @@
            (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons confirm))
            (mp-lobby-copy-host-access!))
           )
-        )
-      )
-    )
+        )))
   0
   )
 
@@ -449,18 +464,10 @@
     (lambda ((p progress))
       (when (and p (nonzero? (the-as uint p)))
         (let ((status (pc-multi-get-status)))
-          (cond
-            ((or (= status (mp-connection-status host-left))
-                 (= status (mp-connection-status failed)))
-             (mp-lobby-leave! p)
-             )
-            )
-          )
-        )
-      (none)
-      )
-    )
-  )
+          (when (or (= status (mp-connection-status host-left))
+                    (= status (mp-connection-status failed)))
+            (mp-lobby-leave! p))))
+      (none))))
 
 (defun mp-lobby-setup-options! ((p progress))
   (mp-lobby-build-player-options!)

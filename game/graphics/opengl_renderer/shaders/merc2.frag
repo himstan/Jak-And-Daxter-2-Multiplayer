@@ -2,6 +2,8 @@
 
 out vec4 color;
 in vec4 vtx_color;
+in vec3 vtx_material_color;
+in vec3 vtx_light_color;
 in vec2 vtx_st;
 in float fog;
 
@@ -13,6 +15,7 @@ uniform float darkjak_interp;
 uniform vec3 player_tint_color;
 uniform int player_tint_enabled;
 uniform float player_tint_strength;
+uniform int player_tint_white_base;
 
 uniform vec4 fog_color;
 uniform int ignore_alpha;
@@ -23,52 +26,53 @@ uniform int decal_enable;
 
 uniform int gfx_hack_no_tex;
 
-
-vec3 rgb_to_hsv(vec3 c) {
-  vec4 K = vec4(
-    0.0,
-    -1.0 / 3.0,
-    2.0 / 3.0,
-    -1.0);
-
-  vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
-  vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
-  float d = q.x - min(q.w, q.y);
-  float e = 1.0e-10;
-
-  return vec3(
-    abs(q.z + (q.w - q.y) / (6.0 * d + e)),
-    d / (q.x + e),
-    q.x);
-}
+const vec3 PLAYER_TINT_LUMINANCE_WEIGHTS = vec3(0.2126, 0.7152, 0.0722);
+const float PLAYER_TINT_MATERIAL_NORMALIZATION = 0.5;
+const float PLAYER_TINT_DETAIL_CONTRAST = 0.65;
+const float PLAYER_TINT_DARK_DETAIL_MIX = 0.18;
+const float PLAYER_TINT_WHITE_BASE_DETAIL_MIX = 0.25;
 
 
-vec3 hsv_to_rgb(vec3 c) {
-  vec3 p = abs(fract(c.xxx + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
-
-  return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
-}
-
-vec3 apply_player_tint(
-  vec3 source_color,
+vec3 player_tint_grayscale_detail(
+  vec3 source_material,
   vec3 target_color) {
+  float source_luminance = clamp(
+    dot(source_material, PLAYER_TINT_LUMINANCE_WEIGHTS) *
+      PLAYER_TINT_MATERIAL_NORMALIZATION,
+    0.0,
+    1.0);
+  float target_luminance = dot(
+    target_color,
+    PLAYER_TINT_LUMINANCE_WEIGHTS);
 
-  vec3 source_hsv = rgb_to_hsv(source_color);
-  vec3 target_hsv = rgb_to_hsv(target_color);
-  
-  float tint_mask = smoothstep(0.04, 0.12, source_hsv.y);
-  vec3 recolored_hsv = source_hsv;
+  float detail_luminance = mix(
+    1.0,
+    source_luminance,
+    PLAYER_TINT_DETAIL_CONTRAST);
+  float neutral_detail_mix =
+    PLAYER_TINT_DARK_DETAIL_MIX * (1.0 - target_luminance);
+  vec3 detail_supported_target = mix(
+    target_color,
+    vec3(1.0),
+    neutral_detail_mix);
 
-  recolored_hsv.x = target_hsv.x;
-  recolored_hsv.y = max(source_hsv.y, target_hsv.y * 0.85);
-  recolored_hsv.z = source_hsv.z;
+  return detail_supported_target * detail_luminance;
+}
 
-  vec3 recolored = hsv_to_rgb(recolored_hsv);
+
+vec3 player_tint_white_base_detail(
+  vec3 source_material,
+  vec3 target_color) {
+  float source_luminance = clamp(
+    dot(source_material, PLAYER_TINT_LUMINANCE_WEIGHTS) *
+      PLAYER_TINT_MATERIAL_NORMALIZATION,
+    0.0,
+    1.0);
 
   return mix(
-    source_color,
-    recolored,
-    tint_mask * clamp(player_tint_strength, 0.0, 1.0));
+    target_color,
+    vec3(source_luminance),
+    PLAYER_TINT_WHITE_BASE_DETAIL_MIX);
 }
 
 
@@ -80,6 +84,7 @@ void main() {
       vec4 darkT0 = texture(tex_T1, vtx_st);
       T0 = mix(T0, darkT0, clamp(darkjak_interp, 0.0, 1.0));
     }
+
     // all merc is tcc=rgba and modulate
     if (decal_enable == 0) {
       color = vtx_color * T0 * 2;
@@ -88,9 +93,28 @@ void main() {
     }
 
     if (player_tint_enabled != 0) {
-      color.rgb = apply_player_tint(
+      vec3 source_material = T0.rgb;
+      vec3 scene_light = vec3(1.0);
+      if (decal_enable == 0) {
+        source_material = vtx_material_color * T0.rgb * 2.0;
+        scene_light = vtx_light_color;
+      }
+
+      vec3 tinted_material;
+      if (player_tint_white_base != 0) {
+        tinted_material = player_tint_white_base_detail(
+          source_material,
+          player_tint_color);
+      } else {
+        tinted_material = player_tint_grayscale_detail(
+          source_material,
+          player_tint_color);
+      }
+      vec3 tinted_lit_color = tinted_material * scene_light;
+      color.rgb = mix(
         color.rgb,
-        player_tint_color);
+        tinted_lit_color,
+        clamp(player_tint_strength, 0.0, 1.0));
     }
 
     color.a *= 2;

@@ -321,8 +321,8 @@
    (default-texture-page  uint8)
    (shadow-values         uint32)
    (pc-darkjak-interp     float)
-   (pc-player-tint-color    uint32)
-   (pc-player-tint-strength float)
+   (pc-player-tint-colors    uint32 MP_PLAYER_APPEARANCE_SLOT_COUNT)
+   (pc-player-tint-strengths float MP_PLAYER_APPEARANCE_SLOT_COUNT)
    )
   (:methods
     (new (symbol type process symbol) _type_)

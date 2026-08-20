@@ -113,6 +113,18 @@ void authenticate(MultiplayerSecurity& host, MultiplayerSecurity& client) {
   ASSERT_EQ(client_result.kind, SecurityReceiveKind::HANDSHAKE);
   ASSERT_TRUE(client.authenticated());
 }
+
+MPPlayerAppearance test_player_appearance(uint32_t primary_color = 0x123456u) {
+  MPPlayerAppearance appearance = mp_default_player_appearance(primary_color, 0.5f);
+  size_t ordinal = 1;
+  for (const auto& definition : kMPPlayerTextureGroups) {
+    const size_t slot = mp_player_appearance_group_index(definition.group);
+    appearance.colors[slot] = (primary_color + static_cast<uint32_t>(slot) * 0x010203u) & 0xffffffu;
+    appearance.strengths[slot] =
+        static_cast<float>(ordinal++) / static_cast<float>(kMPPlayerTextureGroups.size() + 1);
+  }
+  return appearance;
+}
 }  // namespace
 
 TEST(MultiplayerPacket, SaturatingQuantizationRejectsNonFiniteValues) {
@@ -151,7 +163,9 @@ TEST(MultiplayerPacket, PacketViewRejectsTruncationUnknownTypesAndTrailingData) 
 }
 
 TEST(MultiplayerPlayerRegistry, GoalLayoutsAndOffsetsMatch) {
-  EXPECT_EQ(sizeof(MPPlayerIdentityGOAL), 48u);
+  EXPECT_EQ(sizeof(MPPlayerAppearance), 256u);
+  EXPECT_EQ(sizeof(MPPlayerAppearanceGOAL), 256u);
+  EXPECT_EQ(sizeof(MPPlayerIdentityGOAL), 304u);
   EXPECT_EQ(sizeof(MPPlayerConnectionStateGOAL), 16u);
   EXPECT_EQ(sizeof(MPPlayerTransformStateGOAL), 48u);
   EXPECT_EQ(sizeof(MPPlayerActionStateGOAL), 32u);
@@ -159,7 +173,7 @@ TEST(MultiplayerPlayerRegistry, GoalLayoutsAndOffsetsMatch) {
   EXPECT_EQ(sizeof(MPPlayerVehicleStateGOAL), 96u);
   EXPECT_EQ(sizeof(MPTargetGhostRecordGOAL), 96u);
   EXPECT_EQ(sizeof(MPPlayerRuntimeStateGOAL), 224u);
-  EXPECT_EQ(sizeof(MPPlayerRecordGOAL), 480u);
+  EXPECT_EQ(sizeof(MPPlayerRecordGOAL), 736u);
   EXPECT_EQ(sizeof(MPPlayerCharacterConfigGOAL), sizeof(uint32_t) * kMPMaxPlayers);
   EXPECT_EQ(sizeof(MPPlayerControllerGOAL),
             sizeof(MPPlayerRecordGOAL) * kMPMaxPlayers + sizeof(uint32_t) * 4);
@@ -169,6 +183,7 @@ TEST(MultiplayerPlayerRegistry, GoalLayoutsAndOffsetsMatch) {
   EXPECT_EQ(offsetof(MPPlayerIdentityGOAL, identity_ready), 8u);
   EXPECT_EQ(offsetof(MPPlayerIdentityGOAL, spectator_only), 11u);
   EXPECT_EQ(offsetof(MPPlayerIdentityGOAL, name), 12u);
+  EXPECT_EQ(offsetof(MPPlayerIdentityGOAL, appearance), 48u);
   EXPECT_EQ(offsetof(MPPlayerConnectionStateGOAL, latest_state_sequence), 4u);
   EXPECT_EQ(offsetof(MPPlayerConnectionStateGOAL, connected), 12u);
   EXPECT_EQ(offsetof(MPPlayerTransformStateGOAL, velocity), 16u);
@@ -193,12 +208,12 @@ TEST(MultiplayerPlayerRegistry, GoalLayoutsAndOffsetsMatch) {
   EXPECT_EQ(offsetof(MPPlayerRuntimeStateGOAL, pad_index), 204u);
   EXPECT_EQ(offsetof(MPPlayerRuntimeStateGOAL, flags), 208u);
   EXPECT_EQ(offsetof(MPPlayerRuntimeStateGOAL, mission_flags), 212u);
-  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, connection), 48u);
-  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, transform), 64u);
-  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, action), 112u);
-  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, input), 144u);
-  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, vehicle), 160u);
-  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, runtime), 256u);
+  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, connection), 304u);
+  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, transform), 320u);
+  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, action), 368u);
+  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, input), 400u);
+  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, vehicle), 416u);
+  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, runtime), 512u);
   const size_t controller_record_bytes = sizeof(MPPlayerRecordGOAL) * kMPMaxPlayers;
   EXPECT_EQ(offsetof(MPPlayerControllerGOAL, local_player_id), controller_record_bytes);
   EXPECT_EQ(offsetof(MPPlayerControllerGOAL, host_player_id),
@@ -330,6 +345,111 @@ TEST(MultiplayerOwnership, BattleAidNamespaceScalesWithPlayerCapacity) {
   }
 }
 
+TEST(MultiplayerPlayerAppearance, TextureRegistryHasStableGuardedMappings) {
+  EXPECT_EQ(kMPPlayerTextureGroups.size(), 11u);
+  EXPECT_EQ(static_cast<uint32_t>(MPPlayerAppearanceGroup::JAK_JACKET), 1u);
+  EXPECT_EQ(static_cast<uint32_t>(MPPlayerAppearanceGroup::JAK_POUCH), 7u);
+  EXPECT_EQ(static_cast<uint32_t>(MPPlayerAppearanceGroup::JAK_STRAPS), 8u);
+  EXPECT_EQ(static_cast<uint32_t>(MPPlayerAppearanceGroup::JAK_GLOVES), 9u);
+  EXPECT_EQ(static_cast<uint32_t>(MPPlayerAppearanceGroup::DAXTER_HAT), 16u);
+  EXPECT_EQ(static_cast<uint32_t>(MPPlayerAppearanceGroup::DAXTER_FUR), 17u);
+  EXPECT_EQ(kMPJakAppearanceSlotEnd, kMPDaxterAppearanceSlotBegin);
+  EXPECT_EQ(mp_player_texture_group_for_name("jakbsmall-jacketbody"),
+            MPPlayerAppearanceGroup::JAK_JACKET);
+  EXPECT_EQ(mp_player_texture_group_for_name("jakb-jacketbody"),
+            MPPlayerAppearanceGroup::JAK_JACKET);
+  EXPECT_EQ(mp_player_texture_group_for_name("jakbsmall-armor"),
+            MPPlayerAppearanceGroup::JAK_ARMOR);
+  EXPECT_EQ(mp_player_texture_group_for_name("jakb-armor"),
+            MPPlayerAppearanceGroup::JAK_ARMOR);
+  EXPECT_EQ(mp_player_texture_group_for_name("jakbsmall-leggging"),
+            MPPlayerAppearanceGroup::JAK_LEGGINGS);
+  EXPECT_EQ(mp_player_texture_group_for_name("jakbsmall-pants"),
+            MPPlayerAppearanceGroup::JAK_PANTS);
+  EXPECT_EQ(mp_player_texture_group_for_name("jakb-pants"),
+            MPPlayerAppearanceGroup::JAK_PANTS);
+  EXPECT_EQ(mp_player_texture_group_for_name("jakbsmall-shoebottom"),
+            MPPlayerAppearanceGroup::JAK_BOOTS);
+  EXPECT_EQ(mp_player_texture_group_for_name("jakb-shoeteop"),
+            MPPlayerAppearanceGroup::JAK_BOOTS);
+  EXPECT_EQ(mp_player_texture_group_for_name("jakbsmall-scarf"),
+            MPPlayerAppearanceGroup::JAK_SCARF);
+  EXPECT_EQ(mp_player_texture_group_for_name("jakb-scarf"),
+            MPPlayerAppearanceGroup::JAK_SCARF);
+  EXPECT_EQ(mp_player_texture_group_for_name("jakbsmall-leatherpouch"),
+            MPPlayerAppearanceGroup::JAK_POUCH);
+  EXPECT_EQ(mp_player_texture_group_for_name("jakbsmall-blackstrap"),
+            MPPlayerAppearanceGroup::JAK_STRAPS);
+  EXPECT_EQ(mp_player_texture_group_for_name("jakb-brownleather"),
+            MPPlayerAppearanceGroup::JAK_STRAPS);
+  EXPECT_EQ(mp_player_texture_group_for_name("jakbsmall-glovetop"),
+            MPPlayerAppearanceGroup::JAK_GLOVES);
+  EXPECT_EQ(mp_player_texture_group_for_name("jakb-glovetop"),
+            MPPlayerAppearanceGroup::JAK_GLOVES);
+  EXPECT_EQ(mp_player_texture_group_for_name("bam-leather-belt"),
+            MPPlayerAppearanceGroup::DAXTER_HAT);
+  EXPECT_EQ(mp_player_texture_group_for_name("daxterhelmetplain"),
+            MPPlayerAppearanceGroup::DAXTER_HAT);
+  EXPECT_EQ(mp_player_texture_group_for_name("sk-bodyfur"),
+            MPPlayerAppearanceGroup::DAXTER_FUR);
+  EXPECT_EQ(mp_player_texture_group_for_name("daxterheadwidenew"),
+            MPPlayerAppearanceGroup::DAXTER_FUR);
+  EXPECT_EQ(mp_player_texture_group_for_name("sk-eye"),
+            MPPlayerAppearanceGroup::INVALID);
+  EXPECT_EQ(mp_player_texture_group_for_name("daxter-eyelid"),
+            MPPlayerAppearanceGroup::INVALID);
+  EXPECT_EQ(mp_player_texture_group_for_name("daxtergoggles"),
+            MPPlayerAppearanceGroup::INVALID);
+  EXPECT_EQ(mp_player_texture_group_for_name("daxterlense"),
+            MPPlayerAppearanceGroup::INVALID);
+  EXPECT_EQ(mp_player_texture_group_for_name("daxterteeth"),
+            MPPlayerAppearanceGroup::INVALID);
+  EXPECT_EQ(mp_player_texture_group_for_name("jakb-eye"),
+            MPPlayerAppearanceGroup::INVALID);
+  EXPECT_EQ(mp_player_texture_group_for_name("jak-gogglemetal"),
+            MPPlayerAppearanceGroup::INVALID);
+  EXPECT_EQ(mp_player_texture_group_for_name("jak-teeth"),
+            MPPlayerAppearanceGroup::INVALID);
+  EXPECT_EQ(mp_player_model_character("jakb-lod0"), MPPlayerCharacter::JAK);
+  EXPECT_EQ(mp_player_model_character("jak-highres-lod0"), MPPlayerCharacter::JAK);
+  EXPECT_EQ(mp_player_model_character("daxter-lod0"), MPPlayerCharacter::DAXTER);
+  EXPECT_EQ(mp_player_model_character("daxter-highres-lod0"), MPPlayerCharacter::DAXTER);
+  EXPECT_EQ(mp_player_model_character("jak-highres-prison-lod0"),
+            MPPlayerCharacter::UNKNOWN);
+  EXPECT_EQ(mp_player_model_character("darkjak-highres-lod0"), MPPlayerCharacter::UNKNOWN);
+  EXPECT_EQ(mp_player_model_character("crimson-guard-lod0"), MPPlayerCharacter::UNKNOWN);
+
+  std::vector<std::string_view> assigned_textures;
+  std::array<bool, kMPPlayerAppearanceSlotCount> assigned_slots = {};
+  for (const auto& definition : kMPPlayerTextureGroups) {
+    EXPECT_NE(definition.group, MPPlayerAppearanceGroup::PRIMARY);
+    EXPECT_NE(definition.group, MPPlayerAppearanceGroup::INVALID);
+    const size_t slot = mp_player_appearance_group_index(definition.group);
+    ASSERT_LT(slot, kMPPlayerAppearanceSlotCount);
+    EXPECT_FALSE(assigned_slots[slot]);
+    assigned_slots[slot] = true;
+    if (definition.character == MPPlayerCharacter::JAK) {
+      EXPECT_GE(slot, kMPJakAppearanceSlotBegin);
+      EXPECT_LT(slot, kMPJakAppearanceSlotEnd);
+    } else {
+      EXPECT_EQ(definition.character, MPPlayerCharacter::DAXTER);
+      EXPECT_GE(slot, kMPDaxterAppearanceSlotBegin);
+      EXPECT_LT(slot, kMPDaxterAppearanceSlotEnd);
+    }
+    if (definition.group == MPPlayerAppearanceGroup::DAXTER_HAT) {
+      EXPECT_EQ(definition.tint_policy, MPPlayerTintPolicy::WHITE_BASE);
+    } else {
+      EXPECT_EQ(definition.tint_policy, MPPlayerTintPolicy::GRAYSCALE_DETAIL);
+    }
+    for (const auto texture : definition.textures) {
+      EXPECT_EQ(mp_player_texture_group_for_name(texture), definition.group);
+      EXPECT_EQ(std::find(assigned_textures.begin(), assigned_textures.end(), texture),
+                assigned_textures.end());
+      assigned_textures.push_back(texture);
+    }
+  }
+}
+
 TEST(MultiplayerJoin, RegistersPlayerThreeAsDaxterAndAllowsDuplicateCharacters) {
   MultiplayerData data;
   data.local_player_id = 1;
@@ -345,6 +465,7 @@ TEST(MultiplayerJoin, RegistersPlayerThreeAsDaxterAndAllowsDuplicateCharacters) 
   join.player_id = 3;
   join.character = MPPlayerCharacter::DAXTER;
   memcpy(join.player_name, "PlayerThree", sizeof("PlayerThree"));
+  join.appearance = test_player_appearance(0x12ab34);
   ENetPacket packet = {};
   packet.data = reinterpret_cast<uint8_t*>(&join);
   packet.dataLength = sizeof(join);
@@ -355,6 +476,12 @@ TEST(MultiplayerJoin, RegistersPlayerThreeAsDaxterAndAllowsDuplicateCharacters) 
   EXPECT_EQ(controller.records[3].identity.character, MPPlayerCharacter::DAXTER);
   EXPECT_EQ(controller.records[3].identity.joined, 1u);
   EXPECT_STREQ(controller.records[3].identity.name, "PlayerThree");
+  const auto registered =
+      mp_player_appearance_from_goal(controller.records[3].identity.appearance);
+  EXPECT_EQ(registered.colors, join.appearance.colors);
+  EXPECT_EQ(registered.strengths, join.appearance.strengths);
+  EXPECT_EQ(data.player_states[3].appearance.colors, join.appearance.colors);
+  EXPECT_EQ(data.player_states[3].appearance.strengths, join.appearance.strengths);
 }
 
 TEST(MultiplayerJoin, RejectsMalformedIdentityWithoutMutatingSlot) {
@@ -417,6 +544,85 @@ TEST(MultiplayerJoin, EnforcesTheHostAssignedCharacter) {
   EXPECT_TRUE(mp_handle_join_packet(data, &packet, 1, &controller, &assignment_mismatch));
   EXPECT_FALSE(assignment_mismatch);
   EXPECT_EQ(controller.records[1].identity.character, MPPlayerCharacter::JAK);
+}
+
+TEST(MultiplayerJoin, RejectsInvalidPlayerAppearance) {
+  MultiplayerData data;
+  data.local_player_id = 0;
+  MPPlayerControllerGOAL controller = {};
+  controller.local_player_id = 0;
+  PacketJoin join = {};
+  join.header.type = PacketType::EVENT_JOIN;
+  join.player_id = 2;
+  join.character = MPPlayerCharacter::JAK;
+  memcpy(join.player_name, "ColorTwo", sizeof("ColorTwo"));
+  join.appearance = test_player_appearance();
+  join.appearance.colors[1] = 0x1000000;
+  ENetPacket packet = {};
+  packet.data = reinterpret_cast<uint8_t*>(&join);
+  packet.dataLength = sizeof(join);
+  EXPECT_FALSE(mp_handle_join_packet(data, &packet, 2, &controller));
+  join.appearance = test_player_appearance();
+  join.appearance.strengths[2] = std::numeric_limits<float>::quiet_NaN();
+  EXPECT_FALSE(mp_handle_join_packet(data, &packet, 2, &controller));
+  join.appearance = test_player_appearance();
+  join.appearance.strengths[3] = 1.01f;
+  EXPECT_FALSE(mp_handle_join_packet(data, &packet, 2, &controller));
+  join.appearance = test_player_appearance();
+  join.appearance.strengths[0] = 0.1f;
+  EXPECT_FALSE(mp_handle_join_packet(data, &packet, 2, &controller));
+  join.appearance = test_player_appearance();
+  join.appearance.colors[7] = 0x1000000;
+  EXPECT_FALSE(mp_handle_join_packet(data, &packet, 2, &controller));
+  join.appearance = test_player_appearance();
+  join.appearance.colors[10] ^= 1;
+  EXPECT_FALSE(mp_handle_join_packet(data, &packet, 2, &controller));
+  join.appearance = test_player_appearance();
+  join.appearance.strengths[18] = 0.1f;
+  EXPECT_FALSE(mp_handle_join_packet(data, &packet, 2, &controller));
+  EXPECT_EQ(controller.records[2].identity.joined, 0u);
+}
+
+TEST(MultiplayerLobbyAppearance, ValidatesOwnershipColorAndStrengthBeforeApplyingAtomically) {
+  MultiplayerData data;
+  data.session_role = 0;
+  data.local_player_id = 0;
+  MPPlayerControllerGOAL controller = {};
+  for (uint32_t player_id : {2u, 3u}) {
+    controller.records[player_id].identity.player_id = player_id;
+    controller.records[player_id].identity.identity_ready = 1;
+    controller.records[player_id].identity.joined = 1;
+  }
+
+  const MPPlayerAppearance valid = test_player_appearance();
+  EXPECT_FALSE(mp_apply_player_appearance_action(data, 2, 3, valid, &controller));
+  EXPECT_EQ(controller.records[3].identity.appearance.colors[0], 0u);
+
+  MPPlayerAppearance invalid = valid;
+  invalid.colors[4] = 0x1000000;
+  EXPECT_FALSE(mp_apply_player_appearance_action(data, 2, 2, invalid, &controller));
+  invalid = valid;
+  invalid.strengths[5] = std::numeric_limits<float>::quiet_NaN();
+  EXPECT_FALSE(mp_apply_player_appearance_action(data, 2, 2, invalid, &controller));
+  invalid = valid;
+  invalid.strengths[6] = -0.01f;
+  EXPECT_FALSE(mp_apply_player_appearance_action(data, 2, 2, invalid, &controller));
+  invalid = valid;
+  invalid.strengths[1] = 1.01f;
+  EXPECT_FALSE(mp_apply_player_appearance_action(data, 2, 2, invalid, &controller));
+
+  EXPECT_TRUE(mp_apply_player_appearance_action(data, 2, 2, valid, &controller));
+  const auto applied =
+      mp_player_appearance_from_goal(controller.records[2].identity.appearance);
+  EXPECT_EQ(applied.colors, valid.colors);
+  EXPECT_EQ(applied.strengths, valid.strengths);
+  EXPECT_EQ(data.player_states[2].appearance.colors, valid.colors);
+  EXPECT_EQ(data.player_states[2].appearance.strengths, valid.strengths);
+}
+
+TEST(MultiplayerLobbyAppearance, BridgeRejectsInvalidGoalPointers) {
+  EXPECT_EQ(pc_multi_get_player_appearance(0), 0);
+  EXPECT_EQ(pc_multi_lobby_set_appearance(0), 0);
 }
 
 TEST(MultiplayerPlayerRegistry, StateBeforeJoinRemainsVacantUntilIdentityArrives) {
@@ -687,7 +893,7 @@ TEST(MultiplayerJoin, RetriesAndResendsOncePerAuthenticatedSession) {
   EXPECT_EQ(data.packet_scheduler.queued_packet_count(), 2u);
 }
 
-TEST(MultiplayerJoin, SpectatorOnlyStateSurvivesSendReceiveReplayAndClear) {
+TEST(MultiplayerJoin, IdentityAppearanceAndStateSurviveSendReceiveAndRosterReplay) {
   struct ScopedEnet {
     bool initialized = enet_initialize() == 0;
     ~ScopedEnet() {
@@ -724,6 +930,8 @@ TEST(MultiplayerJoin, SpectatorOnlyStateSurvivesSendReceiveReplayAndClear) {
   local.identity.identity_ready = 1;
   local.identity.joined = 1;
   local.identity.spectator_only = 1;
+  const MPPlayerAppearance local_appearance = test_player_appearance(0x1824c7);
+  mp_copy_player_appearance_to_goal(local_appearance, local.identity.appearance);
   local.runtime.mission_flags = 0x5a5a5a5au;
   local.transform.position[0] = 32.0f;
   memcpy(local.identity.name, "Observer", sizeof("Observer"));
@@ -731,12 +939,22 @@ TEST(MultiplayerJoin, SpectatorOnlyStateSurvivesSendReceiveReplayAndClear) {
   MPBootstrapSyncStateGOAL sender_bootstrap = {};
   mp_send_player_sync(sender, &sender_controller, &sender_world, &sender_bootstrap);
 
+  PacketJoin sent_join = {};
   PacketPlayerState sent_state = {};
+  bool saw_join = false;
   bool saw_state = false;
   sender.packet_scheduler.flush_plain(
       sender.stats,
       [&](ENetPeer*, int, const uint8_t* bytes, size_t size, PacketType type, size_t,
-          ENetPacketFlag) {
+          ENetPacketFlag flags) {
+        if (type == PacketType::EVENT_JOIN) {
+          EXPECT_EQ(size, sizeof(PacketJoin));
+          EXPECT_EQ(flags, ENET_PACKET_FLAG_RELIABLE);
+          if (size == sizeof(PacketJoin)) {
+            memcpy(&sent_join, bytes, sizeof(sent_join));
+          }
+          saw_join = true;
+        }
         if (type == PacketType::STATE_UPDATE) {
           EXPECT_EQ(size, sizeof(PacketPlayerState));
           if (size == sizeof(PacketPlayerState)) {
@@ -746,7 +964,10 @@ TEST(MultiplayerJoin, SpectatorOnlyStateSurvivesSendReceiveReplayAndClear) {
         }
         return true;
       });
+  ASSERT_TRUE(saw_join);
   ASSERT_TRUE(saw_state);
+  EXPECT_EQ(sent_join.appearance.colors, local_appearance.colors);
+  EXPECT_EQ(sent_join.appearance.strengths, local_appearance.strengths);
   EXPECT_EQ(sent_state.spectator_only, 1u);
   EXPECT_EQ(sent_state.mission_flags, 0x5a5a5a5au);
 
@@ -754,14 +975,9 @@ TEST(MultiplayerJoin, SpectatorOnlyStateSurvivesSendReceiveReplayAndClear) {
   receiver.local_player_id = 2;
   MPPlayerControllerGOAL receiver_controller = {};
   receiver_controller.local_player_id = 2;
-  PacketJoin join = {};
-  join.header.type = PacketType::EVENT_JOIN;
-  join.player_id = 3;
-  join.character = MPPlayerCharacter::JAK;
-  memcpy(join.player_name, "Observer", sizeof("Observer"));
   ENetPacket join_packet = {};
-  join_packet.data = reinterpret_cast<uint8_t*>(&join);
-  join_packet.dataLength = sizeof(join);
+  join_packet.data = reinterpret_cast<uint8_t*>(&sent_join);
+  join_packet.dataLength = sizeof(sent_join);
   ASSERT_TRUE(mp_handle_join_packet(receiver, &join_packet, 3, &receiver_controller));
 
   ENetPacket state_packet = {};
@@ -772,12 +988,20 @@ TEST(MultiplayerJoin, SpectatorOnlyStateSurvivesSendReceiveReplayAndClear) {
   MPBootstrapSyncStateGOAL receiver_bootstrap = {};
   mp_receive_player_sync(receiver, &receiver_controller, &receiver_world, &receiver_bootstrap);
   EXPECT_EQ(receiver_controller.records[3].identity.spectator_only, 1u);
+  const auto received_appearance =
+      mp_player_appearance_from_goal(receiver_controller.records[3].identity.appearance);
+  EXPECT_EQ(received_appearance.colors, local_appearance.colors);
+  EXPECT_EQ(received_appearance.strengths, local_appearance.strengths);
   EXPECT_EQ(receiver_controller.records[3].runtime.mission_flags, 0x5a5a5a5au);
 
   MPPlayerControllerGOAL replay_controller = {};
   replay_controller.local_player_id = 2;
   mp_receive_player_sync(receiver, &replay_controller, &receiver_world, &receiver_bootstrap);
   EXPECT_EQ(replay_controller.records[3].identity.spectator_only, 1u);
+  const auto replayed_appearance =
+      mp_player_appearance_from_goal(replay_controller.records[3].identity.appearance);
+  EXPECT_EQ(replayed_appearance.colors, local_appearance.colors);
+  EXPECT_EQ(replayed_appearance.strengths, local_appearance.strengths);
   EXPECT_EQ(replay_controller.records[3].runtime.mission_flags, 0x5a5a5a5au);
 
   sent_state.header.sequenceNum += 1;
@@ -1380,19 +1604,76 @@ TEST(MultiplayerPreferences, ValidatesPortsRoomCodesAndIndependentFallbacks) {
   SDL_SetModState(SDL_KMOD_NONE);
   mp_discard_multiplayer_preference_edits();
 
+  uint32_t parsed_color = 0;
+  EXPECT_TRUE(mp_parse_player_color("#12aBcF", parsed_color));
+  EXPECT_EQ(parsed_color, 0x12abcfu);
+  EXPECT_EQ(mp_format_player_color(parsed_color), "#12ABCF");
+  EXPECT_FALSE(mp_parse_player_color("12ABCF", parsed_color));
+  EXPECT_FALSE(mp_parse_player_color("#12ABCG", parsed_color));
+
   const auto valid = mp_parse_multiplayer_preferences(
-      R"({"network_port":31415,"room_code":"i0o1az","player_name":"Player123","automatic_port_mapping":false})");
+      R"({"network_port":31415,"room_code":"i0o1az","player_name":"Player123","player_color":"#12ABCF","player_tint_strength":0.25,"automatic_port_mapping":false})");
   EXPECT_EQ(valid.network_port, 31415);
   EXPECT_EQ(valid.room_code, "I0O1AZ");
   EXPECT_EQ(valid.player_name, "Player123");
+  EXPECT_EQ(valid.player_appearance.colors[0], 0x12abcfu);
+  EXPECT_FLOAT_EQ(valid.player_appearance.strengths[0], 0.0f);
+  EXPECT_EQ(valid.player_appearance.colors[1], 0x12abcfu);
+  EXPECT_FLOAT_EQ(valid.player_appearance.strengths[1], 0.25f);
+  EXPECT_FLOAT_EQ(valid.player_appearance.strengths[2], 0.0f);
+  EXPECT_FLOAT_EQ(
+      valid.player_appearance.strengths[mp_player_appearance_group_index(
+          MPPlayerAppearanceGroup::DAXTER_HAT)],
+      0.25f);
   EXPECT_FALSE(valid.automatic_port_mapping);
 
   const auto fallback = mp_parse_multiplayer_preferences(
-      R"({"network_port":26211,"room_code":"bad!","player_name":"bad-name","automatic_port_mapping":false})");
+      R"({"network_port":26211,"room_code":"bad!","player_name":"bad-name","player_color":"#NOPE00","player_tint_strength":2.0,"automatic_port_mapping":false})");
   EXPECT_EQ(fallback.network_port, kDefaultMultiplayerPort);
   EXPECT_TRUE(fallback.room_code.empty());
   EXPECT_TRUE(fallback.player_name.empty());
+  EXPECT_EQ(fallback.player_appearance.colors[0], kInvalidMultiplayerPlayerColor);
+  EXPECT_FLOAT_EQ(fallback.player_appearance.strengths[0], 0.0f);
+  EXPECT_FLOAT_EQ(fallback.player_appearance.strengths[1], 1.0f);
   EXPECT_FALSE(fallback.automatic_port_mapping);
+
+  const auto grouped = mp_parse_multiplayer_preferences(
+      R"({"player_color":"#102030","player_tint_strength":0.8,"player_texture_groups":{"jak_jacket":{"color":"#AABBCC","tint_strength":0.4},"jak_armor":{"color":"bad","tint_strength":0.9},"jak_pants":{"color":"#445566","tint_strength":0.35},"daxter_fur":{"color":"#010203","tint_strength":0.65}}})");
+  EXPECT_EQ(grouped.player_appearance.colors[0], 0x102030u);
+  EXPECT_EQ(grouped.player_appearance.colors[1], 0xaabbccu);
+  EXPECT_FLOAT_EQ(grouped.player_appearance.strengths[1], 0.4f);
+  EXPECT_EQ(grouped.player_appearance.colors[2], 0x102030u);
+  EXPECT_FLOAT_EQ(grouped.player_appearance.strengths[2], 0.0f);
+  const size_t pants_slot =
+      mp_player_appearance_group_index(MPPlayerAppearanceGroup::JAK_PANTS);
+  const size_t leggings_slot =
+      mp_player_appearance_group_index(MPPlayerAppearanceGroup::JAK_LEGGINGS);
+  const size_t straps_slot =
+      mp_player_appearance_group_index(MPPlayerAppearanceGroup::JAK_STRAPS);
+  const size_t gloves_slot =
+      mp_player_appearance_group_index(MPPlayerAppearanceGroup::JAK_GLOVES);
+  const size_t hat_slot =
+      mp_player_appearance_group_index(MPPlayerAppearanceGroup::DAXTER_HAT);
+  const size_t fur_slot =
+      mp_player_appearance_group_index(MPPlayerAppearanceGroup::DAXTER_FUR);
+  EXPECT_EQ(grouped.player_appearance.colors[pants_slot], 0x445566u);
+  EXPECT_FLOAT_EQ(grouped.player_appearance.strengths[pants_slot], 0.35f);
+  EXPECT_EQ(grouped.player_appearance.colors[hat_slot], 0x102030u);
+  EXPECT_FLOAT_EQ(grouped.player_appearance.strengths[hat_slot], 0.8f);
+  EXPECT_EQ(grouped.player_appearance.colors[fur_slot], 0x010203u);
+  EXPECT_FLOAT_EQ(grouped.player_appearance.strengths[fur_slot], 0.65f);
+  EXPECT_EQ(grouped.player_appearance.colors[leggings_slot], 0x445566u);
+  EXPECT_FLOAT_EQ(grouped.player_appearance.strengths[leggings_slot], 0.35f);
+  EXPECT_EQ(grouped.player_appearance.colors[straps_slot], 0xaabbccu);
+  EXPECT_FLOAT_EQ(grouped.player_appearance.strengths[straps_slot], 0.4f);
+  EXPECT_EQ(grouped.player_appearance.colors[gloves_slot], 0x102030u);
+  EXPECT_FLOAT_EQ(grouped.player_appearance.strengths[gloves_slot], 0.0f);
+
+  const uint32_t generated_color = mp_generate_vivid_player_color();
+  const uint32_t red = (generated_color >> 16) & 0xff;
+  const uint32_t green = (generated_color >> 8) & 0xff;
+  const uint32_t blue = generated_color & 0xff;
+  EXPECT_EQ((std::max)(red, (std::max)(green, blue)), 255u);
 }
 
 TEST(MultiplayerSecurity, AuthenticatedLeaveCanTravelInBothDirections) {

@@ -1,0 +1,871 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(deftype mp-player-color-progress-state (structure)
+  ((active?              symbol)
+   (lobby-source?        symbol)
+   (selected-slider      int32)
+   (red                  int32)
+   (green                int32)
+   (blue                 int32)
+   (tint-percent         int32)
+   (last-adjust-time     time-frame)
+   (last-navigation-time time-frame)
+   (preview              (pointer manipy))
+   (preview-character    mp-player-character)
+   (selected-group       mp-player-appearance-group)
+   (last-jak-group       mp-player-appearance-group)
+   (last-daxter-group    mp-player-appearance-group)
+   (draft-appearance     mp-player-appearance :inline)
+   (original-appearance  mp-player-appearance :inline)
+   )
+  )
+
+(deftype menu-mp-player-color-option (menu-option)
+  ()
+  )
+
+(define *mp-player-color-progress*
+  (new 'static 'mp-player-color-progress-state))
+
+(defconstant MP_PLAYER_COLOR_PREVIEW_X 330.0)
+(defconstant MP_PLAYER_COLOR_PREVIEW_Y -300.0)
+(defconstant MP_PLAYER_COLOR_PREVIEW_Z 1300.0)
+(defconstant MP_PLAYER_COLOR_PREVIEW_JAK_SCALE 0.035)
+(defconstant MP_PLAYER_COLOR_PREVIEW_DAXTER_SCALE 0.07)
+(defconstant MP_PLAYER_COLOR_PREVIEW_ROTATION_SPEED 8192.0)
+(defconstant MP_PLAYER_COLOR_PREVIEW_XZ_SCALE 0.75)
+(defconstant MP_PLAYER_COLOR_LAYOUT_REFERENCE_X_SCALE 0.75)
+
+(defun mp-player-color-progress-layout-x-scale ()
+  "Scale the 16:9-authored editor layout for the active aspect ratio."
+  (when (and *video-params* (nonzero? *video-params*))
+    (let ((render-x-scale (-> *video-params* relative-x-scale)))
+      (when (> render-x-scale 0.0)
+        (return (/ render-x-scale MP_PLAYER_COLOR_LAYOUT_REFERENCE_X_SCALE)))))
+  1.0)
+
+(defun mp-player-color-progress-layout-x ((x int))
+  "Keep horizontal positions centered while adapting them to the active aspect ratio."
+  (the int
+    (+ 256.0
+       (* (- (the float x) 256.0)
+          (mp-player-color-progress-layout-x-scale)))))
+
+(defun mp-player-color-progress-layout-width ((width int))
+  (max 1
+       (the int
+         (* (the float width)
+            (mp-player-color-progress-layout-x-scale)))))
+
+(defun mp-player-color-progress-active? ()
+  (when (and *mp-player-color-progress*
+             (nonzero? *mp-player-color-progress*)
+             (-> *mp-player-color-progress* active?)
+             *progress-process*
+             (nonzero? *progress-process*))
+    (let ((p (-> *progress-process* 0)))
+      (when (and p (nonzero? p))
+        (return (or (= (-> p current) 'mp-player-color)
+                    (= (-> p next) 'mp-player-color))))))
+  #f)
+
+(defun mp-player-color-progress-draft-rgb ()
+  (when (and *mp-player-color-progress* (nonzero? *mp-player-color-progress*))
+    (return
+      (-> *mp-player-color-progress* draft-appearance colors
+          (the-as int (-> *mp-player-color-progress* selected-group)))))
+  (the uint 0))
+
+(defun mp-player-color-progress-primary-rgb ()
+  (if (and *mp-player-color-progress* (nonzero? *mp-player-color-progress*))
+      (-> *mp-player-color-progress* draft-appearance colors
+          MP_PLAYER_PRIMARY_APPEARANCE_SLOT)
+      MP_DEFAULT_PLAYER_COLOR_RGB))
+
+(defun mp-player-color-progress-texture-group? ()
+  (and *mp-player-color-progress*
+       (nonzero? *mp-player-color-progress*)
+       (!= (-> *mp-player-color-progress* selected-group)
+           (mp-player-appearance-group primary))))
+
+(defun mp-player-color-progress-slider-count ()
+  (if (mp-player-color-progress-texture-group?) 4 3))
+
+(defun mp-player-color-progress-load-selected-group! ()
+  "Load the selected draft slot into the four editor controls."
+  (when (and *mp-player-color-progress* (nonzero? *mp-player-color-progress*))
+    (let* ((slot (the-as int (-> *mp-player-color-progress* selected-group)))
+           (color-rgb
+             (-> *mp-player-color-progress* draft-appearance colors slot))
+           (tint-strength
+             (-> *mp-player-color-progress* draft-appearance strengths slot)))
+      (set! (-> *mp-player-color-progress* red)
+            (the int (logand (ash color-rgb -16) #xff)))
+      (set! (-> *mp-player-color-progress* green)
+            (the int (logand (ash color-rgb -8) #xff)))
+      (set! (-> *mp-player-color-progress* blue)
+            (the int (logand color-rgb #xff)))
+      (set! (-> *mp-player-color-progress* tint-percent)
+            (the int
+              (min 100.0 (max 0.0 (+ 0.5 (* 100.0 tint-strength))))))
+      (when (>= (-> *mp-player-color-progress* selected-slider)
+                (mp-player-color-progress-slider-count))
+        (set! (-> *mp-player-color-progress* selected-slider) 0))))
+  (none))
+
+(defun mp-player-color-progress-store-selected-group! ()
+  "Commit the four controls to only the selected draft slot."
+  (when (and *mp-player-color-progress* (nonzero? *mp-player-color-progress*))
+    (let ((slot (the-as int (-> *mp-player-color-progress* selected-group))))
+      (set! (-> *mp-player-color-progress* draft-appearance colors slot)
+            (the-as uint
+              (logior
+                (ash (the-as uint (-> *mp-player-color-progress* red)) 16)
+                (ash (the-as uint (-> *mp-player-color-progress* green)) 8)
+                (the-as uint (-> *mp-player-color-progress* blue)))))
+      (set! (-> *mp-player-color-progress* draft-appearance strengths slot)
+            (if (= slot MP_PLAYER_PRIMARY_APPEARANCE_SLOT)
+                0.0
+                (/ (the float (-> *mp-player-color-progress* tint-percent))
+                   100.0)))
+      (mp-player-appearance-normalize-reserved-slots!
+        (-> *mp-player-color-progress* draft-appearance))))
+  (none))
+
+(defun mp-player-color-progress-selected-character ()
+  "Use the assigned lobby character, or Player 1's next-session selection."
+  (let ((character
+          (if (and *mp-player-color-progress*
+                   (nonzero? *mp-player-color-progress*)
+                   (-> *mp-player-color-progress* lobby-source?)
+                   (= (pc-multi-get-status) (mp-connection-status connected-lobby)))
+              (the-as mp-player-character (pc-multi-get-local-player-character))
+              (mp-session-player-character (the uint 0)))))
+    (if (mp-player-character-valid? character)
+        character
+        (mp-player-character jak))))
+
+(defun mp-player-color-progress-preview-skeleton
+       ((character mp-player-character))
+  (when (and *level* (nonzero? *level*))
+    (let ((group-name
+            (if (= character (mp-player-character daxter))
+                "skel-sidekick"
+                "skel-jchar")))
+      (let ((skeleton
+              (the-as skeleton-group
+                (art-group-get-by-name
+                  *level*
+                  group-name
+                  (the-as (pointer uint32) #f)))))
+        (when (and skeleton (nonzero? skeleton))
+          (return skeleton)))))
+  (the-as skeleton-group #f))
+
+(defun mp-player-color-progress-preview-process ()
+  (when (and *mp-player-color-progress*
+             (nonzero? *mp-player-color-progress*))
+    (let ((preview (-> *mp-player-color-progress* preview)))
+      (when (and preview (nonzero? preview))
+        (let ((preview-process (ppointer->process preview)))
+          (when (and preview-process
+                     (nonzero? preview-process)
+                     (valid? preview-process process (the-as string #f) #f 0)
+                     (type? preview-process manipy))
+            (return (the-as manipy preview-process)))))))
+  (the-as manipy #f))
+
+(defun mp-player-color-progress-destroy-preview! ()
+  (when (and *mp-player-color-progress*
+             (nonzero? *mp-player-color-progress*))
+    (let ((preview-process (mp-player-color-progress-preview-process)))
+      (when (and preview-process (nonzero? preview-process))
+        (deactivate preview-process)))
+    (set! (-> *mp-player-color-progress* preview)
+          (the-as (pointer manipy) #f))
+    (set! (-> *mp-player-color-progress* preview-character)
+          (mp-player-character unknown)))
+  (none))
+
+(defun mp-player-color-progress-preview-scale
+       ((character mp-player-character))
+  (if (= character (mp-player-character daxter))
+      MP_PLAYER_COLOR_PREVIEW_DAXTER_SCALE
+      MP_PLAYER_COLOR_PREVIEW_JAK_SCALE))
+
+(defun mp-player-color-progress-preview-animation
+       ((preview-draw draw-control) (character mp-player-character))
+  (when (and preview-draw (nonzero? preview-draw))
+    (let ((art-group (-> preview-draw art-group)))
+      (when (and art-group (nonzero? art-group))
+        (return
+          (the-as art-joint-anim
+            (-> art-group data
+                (if (= character (mp-player-character daxter)) 6 5)))))))
+  (the-as art-joint-anim #f))
+
+(defun mp-player-color-progress-route-preview-buckets!
+       ((preview-draw draw-control))
+  "Route this preview's used Merc texture chains after the progress bucket."
+  (when (and preview-draw (nonzero? preview-draw))
+    (let ((preview-geometry (-> preview-draw mgeo))
+          (level-index (the-as int (-> preview-draw level-index))))
+      (when (and preview-geometry
+                 (nonzero? preview-geometry)
+                 (>= level-index 0)
+                 (< level-index LEVEL_TOTAL))
+        (let ((preview-work (scratchpad-object foreground-work)))
+          (when (and preview-work (nonzero? preview-work))
+            (let ((bucket-index
+                    (the-as int
+                      (-> preview-work draw-index-map level-index))))
+              (when (and (>= bucket-index 0) (< bucket-index LEVEL_TOTAL))
+                (let ((level-buckets
+                        (-> preview-work grid level-buckets bucket-index)))
+                  (dotimes (effect-index
+                             (the-as int
+                               (-> preview-geometry header effect-count)))
+                    (let ((texture-index
+                            (the-as int
+                              (-> preview-geometry
+                                  effect effect-index texture-index))))
+                      (when (and (>= texture-index 0) (< texture-index 7))
+                        (set!
+                          (-> level-buckets
+                              data texture-index merc vu1-bucket)
+                          (bucket-id bucket-323)))))))))))))
+  (none))
+
+(defun mp-player-color-progress-preview-matrix-buffer
+       ((dma-buf dma-buffer))
+  "Find the aligned HUD matrix area allocated by foreground-draw-hud."
+  (when (and dma-buf (nonzero? dma-buf))
+    (let ((matrix-buffer (the-as pointer (&+ (-> dma-buf base) 64))))
+      (let ((alignment (logand (the-as int matrix-buffer) 48)))
+        (when (nonzero? alignment)
+          (set! matrix-buffer
+                (the-as pointer
+                  (&- (&+ matrix-buffer 64) (the-as uint alignment))))))
+      (return matrix-buffer)))
+  (the-as pointer #f))
+
+(defun mp-player-color-progress-prepare-preview-merc!
+       ((preview-draw draw-control))
+  "Convert the HUD effect setup to Merc2 and provide stable HUD lighting."
+  (when (and preview-draw
+             (nonzero? preview-draw)
+             *foreground*
+             (nonzero? *foreground*)
+             *hud-lights*
+             (nonzero? *hud-lights*))
+    (let ((preview-geometry (-> preview-draw mgeo)))
+      (when (and preview-geometry (nonzero? preview-geometry))
+        (quad-copy!
+          (the pointer (-> (-> *foreground* merc-bucket-info) light))
+          (the pointer *hud-lights*)
+          7)
+        (dotimes (effect-index
+                   (the-as int
+                     (-> preview-geometry header effect-count)))
+          (set! (-> (-> *foreground* merc-bucket-info)
+                    effect effect-index merc-path)
+                0)
+          (set! (-> (-> *foreground* merc-bucket-info)
+                    effect effect-index color-fade)
+                (new 'static 'rgba :r #x80 :g #x80 :b #x80 :a #x80))))))
+  (none))
+
+(defun mp-player-color-progress-add-preview-merc!
+       ((preview-draw draw-control)
+        (dma-buf dma-buffer)
+        (matrix-buffer pointer))
+  (when (and preview-draw
+             (nonzero? preview-draw)
+             dma-buf
+             (nonzero? dma-buf)
+             matrix-buffer
+             (nonzero? matrix-buffer)
+             *display*
+             (nonzero? *display*)
+             (logtest? (-> *display* vu1-enable-user)
+                       (vu1-renderer-mask merc)))
+    (mp-player-color-progress-route-preview-buckets! preview-draw)
+    (mp-player-color-progress-prepare-preview-merc! preview-draw)
+    (set! (-> dma-buf base)
+          (pc-draw-bones
+            preview-draw
+            (-> dma-buf base)
+            matrix-buffer)))
+  (none))
+
+(defun dma-add-mp-player-color-preview
+       ((preview-process process-drawable)
+        (preview-draw draw-control)
+        (distance float)
+        (dma-buf dma-buffer))
+  (when (and preview-process
+             (nonzero? preview-process)
+             preview-draw
+             (nonzero? preview-draw)
+             dma-buf
+             (nonzero? dma-buf)
+             *display*
+             (nonzero? *display*))
+    (let ((matrix-buffer
+            (mp-player-color-progress-preview-matrix-buffer dma-buf)))
+      (protect ((-> *display* vu1-enable-user))
+        (logclear! (-> *display* vu1-enable-user)
+                   (vu1-renderer-mask generic))
+        (dma-add-process-drawable-hud
+          preview-process preview-draw distance dma-buf))
+      (when (logtest? (-> preview-draw status)
+                      (draw-control-status on-screen))
+        (mp-player-color-progress-add-preview-merc!
+          preview-draw dma-buf matrix-buffer))))
+  (none))
+
+(defun mp-player-color-progress-update-preview! ()
+  (when (and *mp-player-color-progress*
+             (nonzero? *mp-player-color-progress*))
+    (let ((preview-process (mp-player-color-progress-preview-process)))
+      (when (and preview-process (nonzero? preview-process))
+        (let ((preview-root (-> preview-process root))
+              (preview-draw (-> preview-process draw))
+              (preview-scale
+                (mp-player-color-progress-preview-scale
+                  (-> *mp-player-color-progress* preview-character))))
+          (when (and preview-root (nonzero? preview-root))
+            (set-vector!
+              (-> preview-root scale)
+              (* preview-scale MP_PLAYER_COLOR_PREVIEW_XZ_SCALE)
+              preview-scale
+              (* preview-scale MP_PLAYER_COLOR_PREVIEW_XZ_SCALE)
+              1.0)
+            (set-vector!
+              (-> preview-root trans)
+              MP_PLAYER_COLOR_PREVIEW_X
+              MP_PLAYER_COLOR_PREVIEW_Y
+              MP_PLAYER_COLOR_PREVIEW_Z
+              1.0)
+            (quaternion-rotate-y!
+              (-> preview-root quat)
+              (-> preview-root quat)
+              (* MP_PLAYER_COLOR_PREVIEW_ROTATION_SPEED (seconds-per-frame))))
+          (when (and preview-draw (nonzero? preview-draw))
+            (mp-apply-render-appearance!
+              preview-draw
+              (-> *mp-player-color-progress* draft-appearance)))))))
+  (none))
+
+(defun mp-player-color-progress-configure-preview!
+       ((preview-process manipy) (character mp-player-character))
+  (when (and preview-process (nonzero? preview-process))
+    (let ((preview-draw (-> preview-process draw))
+          (preview-root (-> preview-process root)))
+      (when (and preview-draw (nonzero? preview-draw))
+        (set! (-> preview-draw dma-add-func)
+              (the-as
+                (function process-drawable draw-control symbol object none)
+                dma-add-mp-player-color-preview))
+        (set! (-> preview-draw shadow) #f)
+        (logior! (-> preview-draw status)
+                 (draw-control-status disable-fog))
+        (let ((preview-animation
+                (mp-player-color-progress-preview-animation
+                  preview-draw
+                  character)))
+          (when (and preview-animation (nonzero? preview-animation))
+            (set! (-> preview-process new-joint-anim) preview-animation)
+            (set! (-> preview-process anim-mode) 'loop))))
+      (when (and preview-root (nonzero? preview-root))
+        (quaternion-identity! (-> preview-root quat))
+        (quaternion-rotate-y!
+          (-> preview-root quat)
+          (-> preview-root quat)
+          24576.0))
+      (let ((preview-skel (-> preview-process skel)))
+        (when (and (= character (mp-player-character daxter))
+                   preview-skel
+                   (nonzero? preview-skel))
+          (logior! (-> preview-skel status)
+                   (joint-control-status eye-anim))))
+      (logior! (-> preview-process mask) (process-mask freeze pause))
+      (logclear! (-> preview-process mask) (process-mask menu progress))
+      (send-event preview-process 'draw #t)
+      (mp-player-color-progress-update-preview!)))
+  (none))
+
+(defun mp-player-color-progress-create-preview!
+       ((p progress) (character mp-player-character))
+  (mp-player-color-progress-destroy-preview!)
+  (when (and p
+             (nonzero? p)
+             *mp-player-color-progress*
+             (nonzero? *mp-player-color-progress*))
+    (let ((skeleton (mp-player-color-progress-preview-skeleton character)))
+      (when (and skeleton (nonzero? skeleton))
+        (let ((preview
+                (the-as (pointer manipy)
+                  (process-spawn
+                    manipy
+                    :init manipy-init
+                    (new 'static 'vector :w 1.0)
+                    #f
+                    skeleton
+                    #f
+                    0
+                    :to p))))
+          (when (and preview (nonzero? preview))
+            (set! (-> *mp-player-color-progress* preview) preview)
+            (set! (-> *mp-player-color-progress* preview-character) character)
+            (let ((preview-process (mp-player-color-progress-preview-process)))
+              (when (and preview-process (nonzero? preview-process))
+                (mp-player-color-progress-configure-preview!
+                  preview-process character))))))))
+  (none))
+
+(defun mp-player-color-progress-local-record ()
+  (when (and *mp-player-color-progress*
+             (nonzero? *mp-player-color-progress*)
+             (-> *mp-player-color-progress* lobby-source?)
+             (= (pc-multi-get-status) (mp-connection-status connected-lobby)))
+    (let ((local-record (mp-local-player-record)))
+      (when (and local-record
+                 (nonzero? local-record)
+                 (nonzero? (-> local-record identity identity-ready?)))
+        (return local-record))))
+  (the-as mp-player-record #f))
+
+(defun mp-player-color-progress-apply-local!
+       ((appearance mp-player-appearance))
+  (when (and appearance (nonzero? appearance))
+    (mp-player-controller-led-sync!
+      (-> appearance colors MP_PLAYER_PRIMARY_APPEARANCE_SLOT))
+    (let ((local-record (mp-player-color-progress-local-record)))
+      (when (and local-record (nonzero? local-record))
+        (mp-player-appearance-copy!
+          (-> local-record identity appearance)
+          appearance)
+        (mp-refresh-player-render-appearance! local-record))))
+  (none))
+
+(defun mp-player-color-progress-preview! ()
+  (when (and *mp-player-color-progress* (nonzero? *mp-player-color-progress*))
+    (mp-player-color-progress-apply-local!
+      (-> *mp-player-color-progress* draft-appearance))
+    (mp-player-color-progress-update-preview!))
+  (none))
+
+(defun mp-player-color-progress-deactivate! ()
+  (when (and *mp-player-color-progress* (nonzero? *mp-player-color-progress*))
+    (mp-player-color-progress-destroy-preview!)
+    (set! (-> *mp-player-color-progress* active?) #f))
+  (none))
+
+(defun mp-player-color-progress-cancel! ((p progress))
+  (when (and p
+             (nonzero? p)
+             *mp-player-color-progress*
+             (nonzero? *mp-player-color-progress*)
+             (-> *mp-player-color-progress* active?))
+    (mp-player-color-progress-apply-local!
+      (-> *mp-player-color-progress* original-appearance))
+    (mp-player-color-progress-deactivate!)
+    (pop-state p))
+  (none))
+
+(defun mp-player-color-progress-confirm! ((p progress))
+  (when (and p
+             (nonzero? p)
+             *mp-player-color-progress*
+             (nonzero? *mp-player-color-progress*)
+             (-> *mp-player-color-progress* active?))
+    (let ((draft-appearance
+            (-> *mp-player-color-progress* draft-appearance)))
+      (mp-player-color-progress-store-selected-group!)
+      (mp-player-appearance-normalize-reserved-slots! draft-appearance)
+      (if (= (pc-multi-lobby-set-appearance draft-appearance) 1)
+          (begin
+            (mp-player-color-progress-apply-local! draft-appearance)
+            (mp-player-color-progress-deactivate!)
+            (pop-state p)
+            (sound-play "generic-beep"))
+          (sound-play "menu-error"))))
+  (none))
+
+(defun mp-player-color-progress-enter! ((p progress))
+  (when (and p
+             (nonzero? p)
+             *mp-player-color-progress*
+             (nonzero? *mp-player-color-progress*)
+             (not (mp-player-color-progress-active?)))
+    (when (= (pc-multi-get-player-appearance
+               (-> *mp-player-color-progress* original-appearance)) 1)
+      (mp-player-appearance-copy!
+        (-> *mp-player-color-progress* draft-appearance)
+        (-> *mp-player-color-progress* original-appearance))
+      (set! (-> *mp-player-color-progress* selected-slider) 0)
+      (set! (-> *mp-player-color-progress* last-adjust-time) 0)
+      (set! (-> *mp-player-color-progress* last-navigation-time) 0)
+      (set! (-> *mp-player-color-progress* lobby-source?) (= (-> p current) 'mp-lobby))
+      (set! (-> *mp-player-color-progress* preview-character)
+            (mp-player-color-progress-selected-character))
+      (set! (-> *mp-player-color-progress* selected-group)
+            (mp-player-appearance-group primary))
+      (set! (-> *mp-player-color-progress* last-jak-group)
+            (mp-player-appearance-group primary))
+      (set! (-> *mp-player-color-progress* last-daxter-group)
+            (mp-player-appearance-group primary))
+      (mp-player-color-progress-load-selected-group!)
+      (set! (-> *mp-player-color-progress* active?) #t)
+      (mp-player-color-progress-preview!)
+      (push-state p)
+      (set-next-state p 'mp-player-color 0)
+      (mp-player-color-progress-create-preview!
+        p
+        (-> *mp-player-color-progress* preview-character))))
+  (none))
+
+(defun mp-player-color-progress-adjust! ((amount int))
+  (when (and *mp-player-color-progress* (nonzero? *mp-player-color-progress*))
+    (case (-> *mp-player-color-progress* selected-slider)
+      ((0)
+       (set! (-> *mp-player-color-progress* red)
+             (min 255 (max 0 (+ (-> *mp-player-color-progress* red) amount)))))
+      ((1)
+       (set! (-> *mp-player-color-progress* green)
+             (min 255 (max 0 (+ (-> *mp-player-color-progress* green) amount)))))
+      ((2)
+       (set! (-> *mp-player-color-progress* blue)
+             (min 255 (max 0 (+ (-> *mp-player-color-progress* blue) amount)))))
+      ((3)
+       (set! (-> *mp-player-color-progress* tint-percent)
+             (min 100
+                  (max 0 (+ (-> *mp-player-color-progress* tint-percent) amount))))))
+    (mp-player-color-progress-store-selected-group!)
+    (mp-player-color-progress-preview!))
+  (none))
+
+(defun mp-player-color-progress-coarse-step
+       ((selected-slider int) (direction int))
+  (* direction (if (= selected-slider 3) 10 16)))
+
+(defun mp-player-color-progress-select! ((amount int))
+  (when (and *mp-player-color-progress* (nonzero? *mp-player-color-progress*))
+    (set! (-> *mp-player-color-progress* selected-slider)
+          (mod (+ (-> *mp-player-color-progress* selected-slider)
+                  amount
+                  (mp-player-color-progress-slider-count))
+               (mp-player-color-progress-slider-count))))
+  (none))
+
+(defun mp-player-color-progress-remember-group! ()
+  (when (and *mp-player-color-progress* (nonzero? *mp-player-color-progress*))
+    (if (= (-> *mp-player-color-progress* preview-character)
+           (mp-player-character daxter))
+        (set! (-> *mp-player-color-progress* last-daxter-group)
+              (-> *mp-player-color-progress* selected-group))
+        (set! (-> *mp-player-color-progress* last-jak-group)
+              (-> *mp-player-color-progress* selected-group))))
+  (none))
+
+(defun mp-player-color-progress-cycle-group! ((step int))
+  (when (and *mp-player-color-progress* (nonzero? *mp-player-color-progress*))
+    (set! (-> *mp-player-color-progress* selected-group)
+          (mp-player-appearance-next-group
+            (-> *mp-player-color-progress* selected-group)
+            (-> *mp-player-color-progress* preview-character)
+            step))
+    (mp-player-color-progress-remember-group!)
+    (set! (-> *mp-player-color-progress* selected-slider) 0)
+    (mp-player-color-progress-load-selected-group!)
+    (mp-player-color-progress-preview!))
+  (none))
+
+(defun mp-player-color-progress-switch-character! ((p progress))
+  (when (and p (nonzero? p)
+             *mp-player-color-progress* (nonzero? *mp-player-color-progress*))
+    (mp-player-color-progress-remember-group!)
+    (let ((next-character
+            (if (= (-> *mp-player-color-progress* preview-character)
+                   (mp-player-character daxter))
+                (mp-player-character jak)
+                (mp-player-character daxter))))
+      (set! (-> *mp-player-color-progress* preview-character) next-character)
+      (set! (-> *mp-player-color-progress* selected-group)
+            (if (= next-character (mp-player-character daxter))
+                (-> *mp-player-color-progress* last-daxter-group)
+                (-> *mp-player-color-progress* last-jak-group)))
+      (set! (-> *mp-player-color-progress* selected-slider) 0)
+      (mp-player-color-progress-load-selected-group!)
+      (mp-player-color-progress-create-preview! p next-character)
+      (mp-player-color-progress-preview!)))
+  (none))
+
+(defun mp-player-color-progress-handle-navigation! ()
+  (when (and *mp-player-color-progress* (nonzero? *mp-player-color-progress*))
+    (let ((now (current-time)))
+      (cond
+        ((cpad-pressed? 0 up l-analog-up)
+         (mp-player-color-progress-select! -1)
+         (set! (-> *mp-player-color-progress* last-navigation-time) now)
+         (sound-play "generic-beep"))
+        ((cpad-pressed? 0 down l-analog-down)
+         (mp-player-color-progress-select! 1)
+         (set! (-> *mp-player-color-progress* last-navigation-time) now)
+         (sound-play "generic-beep"))
+        ((and (cpad-hold? 0 up l-analog-up)
+              (>= (- now (-> *mp-player-color-progress* last-navigation-time))
+                  (seconds 0.15)))
+         (mp-player-color-progress-select! -1)
+         (set! (-> *mp-player-color-progress* last-navigation-time) now))
+        ((and (cpad-hold? 0 down l-analog-down)
+              (>= (- now (-> *mp-player-color-progress* last-navigation-time))
+                  (seconds 0.15)))
+         (mp-player-color-progress-select! 1)
+         (set! (-> *mp-player-color-progress* last-navigation-time) now))))
+  (none)))
+
+(defun mp-player-color-progress-handle-adjustment! ()
+  (when (and *mp-player-color-progress* (nonzero? *mp-player-color-progress*))
+    (let ((now (current-time))
+          (selected (-> *mp-player-color-progress* selected-slider)))
+      (cond
+        ((cpad-pressed? 0 left l-analog-left)
+         (mp-player-color-progress-adjust! -1)
+         (set! (-> *mp-player-color-progress* last-adjust-time) now)
+         (sound-play "generic-beep"))
+        ((cpad-pressed? 0 right l-analog-right)
+         (mp-player-color-progress-adjust! 1)
+         (set! (-> *mp-player-color-progress* last-adjust-time) now)
+         (sound-play "generic-beep"))
+        ((cpad-pressed? 0 l1)
+         (mp-player-color-progress-adjust!
+           (mp-player-color-progress-coarse-step selected -1))
+         (set! (-> *mp-player-color-progress* last-adjust-time) now)
+         (sound-play "generic-beep"))
+        ((cpad-pressed? 0 r1)
+         (mp-player-color-progress-adjust!
+           (mp-player-color-progress-coarse-step selected 1))
+         (set! (-> *mp-player-color-progress* last-adjust-time) now)
+         (sound-play "generic-beep"))
+        ((and (cpad-hold? 0 l1)
+              (>= (- now (-> *mp-player-color-progress* last-adjust-time))
+                  (seconds 0.05)))
+         (mp-player-color-progress-adjust!
+           (mp-player-color-progress-coarse-step selected -1))
+         (set! (-> *mp-player-color-progress* last-adjust-time) now))
+        ((and (cpad-hold? 0 r1)
+              (>= (- now (-> *mp-player-color-progress* last-adjust-time))
+                  (seconds 0.05)))
+         (mp-player-color-progress-adjust!
+           (mp-player-color-progress-coarse-step selected 1))
+         (set! (-> *mp-player-color-progress* last-adjust-time) now))
+        ((and (cpad-hold? 0 left l-analog-left)
+              (>= (- now (-> *mp-player-color-progress* last-adjust-time))
+                  (seconds 0.05)))
+         (mp-player-color-progress-adjust! -4)
+         (set! (-> *mp-player-color-progress* last-adjust-time) now))
+        ((and (cpad-hold? 0 right l-analog-right)
+              (>= (- now (-> *mp-player-color-progress* last-adjust-time))
+                  (seconds 0.05)))
+         (mp-player-color-progress-adjust! 4)
+         (set! (-> *mp-player-color-progress* last-adjust-time) now))))
+  (none)))
+
+(defmethod respond-progress ((this menu-mp-player-color-option)
+                             (p progress)
+                             (selected? symbol))
+  (when (and this
+             (nonzero? this)
+             p
+             (nonzero? p)
+             (mp-player-color-progress-active?))
+    (cond
+      ((cpad-pressed? 0 triangle)
+       (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons triangle))
+       (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons triangle))
+       (sound-play "menu-back")
+       (mp-player-color-progress-cancel! p))
+      ((cpad-pressed? 0 confirm)
+       (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons confirm))
+       (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons confirm))
+       (mp-player-color-progress-confirm! p))
+      ((cpad-pressed? 0 l2)
+       (mp-player-color-progress-cycle-group! -1)
+       (sound-play "generic-beep"))
+      ((cpad-pressed? 0 r2)
+       (mp-player-color-progress-cycle-group! 1)
+       (sound-play "generic-beep"))
+      ((cpad-pressed? 0 circle)
+       (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons circle))
+       (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons circle))
+       (mp-player-color-progress-switch-character! p)
+       (sound-play "generic-beep"))
+      (else
+       (mp-player-color-progress-handle-navigation!)
+       (mp-player-color-progress-handle-adjustment!))))
+  0)
+
+(defun mp-player-color-progress-draw-rect
+       ((x int) (y int) (width int) (height int) (color rgba))
+  (when (and (> width 0)
+             (> height 0)
+             *display*
+             (nonzero? *display*))
+    (with-dma-buffer-add-bucket
+      ((buffer (-> *display* frames (-> *display* on-screen) global-buf))
+       (bucket-id particles))
+      (when (and buffer (nonzero? buffer))
+        (draw-sprite2d-xy
+          buffer
+          (mp-player-color-progress-layout-x x)
+          y
+          (mp-player-color-progress-layout-width width)
+          height
+          color))))
+  (none))
+
+(defun mp-player-color-progress-draw-slider
+       ((slider-index int) (value int) (max-value int) (color rgba))
+  (let ((slider-y (+ 132 (* slider-index 44)))
+        (fill-width (the int (/ (* value 130) max-value))))
+    (when (and *mp-player-color-progress* (nonzero? *mp-player-color-progress*))
+      (when (= slider-index (-> *mp-player-color-progress* selected-slider))
+        (mp-player-color-progress-draw-rect 238 (- slider-y 5) 146 18
+          (mp-player-rgb->rgba (the uint #x606070) (the uint #x80)))))
+    (mp-player-color-progress-draw-rect 246 slider-y 130 8
+      (mp-player-rgb->rgba (the uint #x303038) (the uint #x80)))
+    (mp-player-color-progress-draw-rect 246 slider-y fill-width 8 color))
+  (none))
+
+(defun mp-player-color-progress-print
+       ((font-ctx font-context)
+        (text string)
+        (x int)
+        (y int)
+        (color font-color)
+        (scale float)
+        (flags font-flags))
+  (when (and font-ctx
+             (nonzero? font-ctx)
+             text
+             (nonzero? text))
+    (set! (-> font-ctx origin x)
+          (the float (mp-player-color-progress-layout-x x)))
+    (set! (-> font-ctx origin y) (the float y))
+    (set-color! font-ctx color)
+    (set-scale! font-ctx scale)
+    (set-width! font-ctx (mp-player-color-progress-layout-width 220))
+    (set-height! font-ctx 28)
+    (set-flags! font-ctx flags)
+    (print-game-text text font-ctx #f 44 (bucket-id progress)))
+  (none))
+
+(defun mp-player-color-progress-draw-labels! ((font-ctx font-context))
+  (when (and *mp-player-color-progress* (nonzero? *mp-player-color-progress*))
+    (format (clear *temp-string*) "~S: ~D"
+      (lookup-text! *common-text* (text-id progress-lobby-color-red) #f)
+      (-> *mp-player-color-progress* red))
+    (mp-player-color-progress-print
+      font-ctx *temp-string* 246 112 (font-color progress) 0.45
+      (font-flags kerning large))
+    (format (clear *temp-string*) "~S: ~D"
+      (lookup-text! *common-text* (text-id progress-lobby-color-green) #f)
+      (-> *mp-player-color-progress* green))
+    (mp-player-color-progress-print
+      font-ctx *temp-string* 246 156 (font-color progress) 0.45
+      (font-flags kerning large))
+    (format (clear *temp-string*) "~S: ~D"
+      (lookup-text! *common-text* (text-id progress-lobby-color-blue) #f)
+      (-> *mp-player-color-progress* blue))
+    (mp-player-color-progress-print
+      font-ctx *temp-string* 246 200 (font-color progress) 0.45
+      (font-flags kerning large))
+    (when (mp-player-color-progress-texture-group?)
+      (if (= (-> *mp-player-color-progress* tint-percent) 0)
+          (format (clear *temp-string*) "~S: 0% (~S)"
+            (lookup-text! *common-text* (text-id progress-lobby-texture-tint) #f)
+            (lookup-text! *common-text* (text-id progress-lobby-tint-vanilla) #f))
+          (format (clear *temp-string*) "~S: ~D%"
+            (lookup-text! *common-text* (text-id progress-lobby-texture-tint) #f)
+            (-> *mp-player-color-progress* tint-percent)))
+      (mp-player-color-progress-print
+        font-ctx *temp-string* 246 244 (font-color progress) 0.45
+        (font-flags kerning large))))
+  (none))
+
+(defun mp-player-color-progress-draw! ()
+  (when (mp-player-color-progress-active?)
+    (let* ((color-rgb (mp-player-color-progress-draft-rgb))
+           (font-ctx
+             (new 'stack 'font-context *font-default-matrix* 0 0 0.0
+               (font-color progress) (font-flags kerning large))))
+      (mp-player-color-progress-draw-rect 132 110 88 44
+        (mp-player-rgb->rgba color-rgb (the uint #x80)))
+      (mp-player-color-progress-draw-slider 0 (-> *mp-player-color-progress* red) 255
+        (mp-player-rgb->rgba (the uint #xff3030) (the uint #x80)))
+      (mp-player-color-progress-draw-slider 1 (-> *mp-player-color-progress* green) 255
+        (mp-player-rgb->rgba (the uint #x30ff30) (the uint #x80)))
+      (mp-player-color-progress-draw-slider 2 (-> *mp-player-color-progress* blue) 255
+        (mp-player-rgb->rgba (the uint #x3030ff) (the uint #x80)))
+      (when (mp-player-color-progress-texture-group?)
+        (mp-player-color-progress-draw-slider
+          3
+          (-> *mp-player-color-progress* tint-percent)
+          100
+          (mp-player-rgb->rgba color-rgb (the uint #x80))))
+      (format (clear *temp-string*)
+        (lookup-text! *common-text* (text-id progress-lobby-color-group-format) #f)
+        (mp-player-appearance-group-name
+          (-> *mp-player-color-progress* selected-group)))
+      (mp-player-color-progress-print
+        font-ctx
+        *temp-string*
+        150 82 (font-color progress-force-selected) 0.62
+        (font-flags kerning middle large))
+      (mp-player-color-progress-draw-labels! font-ctx)
+      (mp-player-color-progress-print
+        font-ctx
+        (lookup-text! *common-text* (text-id progress-lobby-color-help) #f)
+        246 294 (font-color progress) 0.35
+        (font-flags kerning large))
+      )
+    )
+  (none))
+
+(defmethod draw-option ((this menu-mp-player-color-option)
+                        (p progress)
+                        (font-ctx font-context)
+                        (option-index int)
+                        (selected? symbol))
+  (when (and this
+             (nonzero? this)
+             p
+             (nonzero? p)
+             font-ctx
+             (nonzero? font-ctx))
+    (mp-player-color-progress-draw!))
+  0
+  (none))
+
+(define *mp-player-color-options-pc*
+  (new 'static 'menu-option-list
+    :y-center 0
+    :y-space 0
+    :scale 1.0
+    :options
+    (new 'static 'boxed-array :type menu-option
+      (new 'static 'menu-mp-player-color-option
+        :name (text-id progress-lobby-color-title)))
+    :on-tick
+    (lambda ((p progress))
+      (when (and p
+                 (nonzero? p)
+                 (mp-player-color-progress-active?))
+        (if (and (-> *mp-player-color-progress* lobby-source?)
+                 (!= (pc-multi-get-status) (mp-connection-status connected-lobby)))
+            (mp-player-color-progress-cancel! p)
+            (mp-player-color-progress-update-preview!)))
+      (none))))

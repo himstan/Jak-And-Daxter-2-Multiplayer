@@ -964,9 +964,11 @@
    (bit-flags pc-merc-bits)
    (pad               uint16)
    (darkjak-interp    float)
-   (player-tint-color    uint32)
-   (player-tint-strength float)
+   (player-tint-colors    uint32 MP_PLAYER_APPEARANCE_SLOT_COUNT)
+   (player-tint-strengths float MP_PLAYER_APPEARANCE_SLOT_COUNT)
+   (reserved              uint32 2)
    )
+  :size-assert 288
   )
 
 (defun pc-merc-draw-request ((dc draw-control) (dma-buf pointer) (matrix-buf pointer) (tex-idx int) (update-verts symbol) (blercs (pointer float)))
@@ -1070,8 +1072,11 @@
               (logior! (-> flags bit-flags)
                        (pc-merc-bits darkjak-instance-morph))
               )
-            (set! (-> flags player-tint-color) (-> dc pc-player-tint-color))
-            (set! (-> flags player-tint-strength) (-> dc pc-player-tint-strength))
+            (dotimes (appearance-slot MP_PLAYER_APPEARANCE_SLOT_COUNT)
+              (set! (-> flags player-tint-colors appearance-slot)
+                    (-> dc pc-player-tint-colors appearance-slot))
+              (set! (-> flags player-tint-strengths appearance-slot)
+                    (-> dc pc-player-tint-strengths appearance-slot)))
             (when update-verts
               (if (= update-verts 'blerc)
                   (logior! (-> flags bit-flags) (pc-merc-bits pc-blerc))
@@ -1087,8 +1092,8 @@
             (set! (-> flags enable-mask) enable-mask)
             (set! (-> flags ignore-alpha-mask) ignore-alpha-mask)
             )
-          (&+! dma-buf (* 16 2))
-          (+! qwc-total 2)
+          (&+! dma-buf (* 16 18))
+          (+! qwc-total 18)
 
           ;; include blerc weights.
           (when (= update-verts 'blerc)

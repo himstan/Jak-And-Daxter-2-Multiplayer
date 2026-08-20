@@ -9,6 +9,7 @@ multiplayer-settings.json store and are committed when editing finishes.
 (defun-extern pc-get-last-key uint)
 (defun-extern draw-generic-highlight int int float pointer)
 (defun-extern draw-generic-simple-string-option menu-generic-option progress font-context int string none)
+(define-extern mp-player-color-progress-enter! (function progress none))
 
 (deftype menu-multiplayer-player-name-option (menu-generic-option) ())
 (deftype menu-multiplayer-setting-field-option (menu-generic-option)
@@ -213,6 +214,10 @@ multiplayer-settings.json store and are committed when editing finishes.
   (progress-new-generic-scrolling-page (text-id progress-multiplayer-options)
     (new 'static 'menu-multiplayer-player-name-option
       :name (text-id progress-username))
+    (new 'static 'menu-generic-button-option
+      :name (text-id progress-lobby-color-title)
+      :on-confirm (lambda ((the-progress progress))
+        (mp-player-color-progress-enter! the-progress)))
     (new 'static 'menu-generic-carousel-option
       :name (text-id progress-multiplayer-max-players)
       :get-max-size-fn (lambda () (+ (the int MP_MAX_PLAYERS) -1))

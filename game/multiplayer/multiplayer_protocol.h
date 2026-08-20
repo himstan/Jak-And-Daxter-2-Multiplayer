@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "game/multiplayer/generated/multiplayer_schema_generated.h"
+#include "game/multiplayer/player_appearance.h"
 
 #pragma pack(push, 1)
 
@@ -13,18 +14,12 @@ const char* const DISCOVERY_MAGIC = "OG_MP_DISCOVERY";
 inline constexpr size_t kPacketHeaderWireSize = sizeof(uint8_t) + sizeof(uint32_t);
 inline constexpr size_t kEventEnvelopeHeaderWireSize =
     kPacketHeaderWireSize + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint16_t);
-inline constexpr size_t kMultiplayerPlayerNameSize = 24;
+inline constexpr size_t kMultiplayerPlayerNameSize = 16;
 inline constexpr uint32_t kMPMaxPlayers = 8;
 inline constexpr size_t kMPMaxHostTransportPeers = kMPMaxPlayers * 2;
 inline constexpr uint32_t kMPInvalidPlayerId = 0xffffffffu;
 inline constexpr uint32_t kMPVehicleCivilianRiderId = 0xfffffffeu;
 inline constexpr uint8_t kMPInvalidCompactPlayerId = 0xffu;
-
-enum class MPPlayerCharacter : uint32_t {
-  UNKNOWN = 0,
-  JAK = 1,
-  DAXTER = 2,
-};
 
 static_assert(kMPMaxPlayers >= 2 && kMPMaxPlayers <= 32,
               "multiplayer player capacity must be between 2 and 32");
@@ -52,10 +47,6 @@ inline constexpr uint32_t mp_player_id_bit_count(uint32_t capacity) {
 inline constexpr uint32_t kMPPlayerIdBits = mp_player_id_bit_count(kMPMaxPlayers);
 inline constexpr uint32_t kMPBattleSpawnCounterBits = 28u - kMPPlayerIdBits;
 inline constexpr uint32_t kMPBattleSpawnCounterLimit = 1u << kMPBattleSpawnCounterBits;
-
-inline constexpr bool mp_valid_player_character(MPPlayerCharacter character) {
-  return character == MPPlayerCharacter::JAK || character == MPPlayerCharacter::DAXTER;
-}
 
 enum class MultiplayerChannel : uint8_t {
   STATE = 0,
@@ -159,8 +150,9 @@ struct PacketJoin {
   uint32_t player_id;
   MPPlayerCharacter character;
   char player_name[kMultiplayerPlayerNameSize];
+  MPPlayerAppearance appearance;
 };
-static_assert(sizeof(PacketJoin) == 37, "PacketJoin identity wire layout must remain explicit");
+static_assert(sizeof(PacketJoin) == 285, "PacketJoin identity wire layout must remain explicit");
 
 struct PacketSessionWelcome {
   PacketHeader header;
@@ -175,16 +167,18 @@ static_assert(sizeof(PacketSessionWelcome) == 21,
 enum class MPLobbyActionType : uint8_t {
   SET_CHARACTER = 1,
   START_GAME = 2,
+  SET_APPEARANCE = 3,
 };
 
 struct PacketLobbyAction {
   PacketHeader header;
   uint32_t player_id;
   uint8_t action_type;
-  uint8_t value;
-  uint8_t pad[2];
+  uint8_t pad[3];
+  uint32_t value;
+  MPPlayerAppearance appearance;
 };
-static_assert(sizeof(PacketLobbyAction) == 13,
+static_assert(sizeof(PacketLobbyAction) == 273,
               "PacketLobbyAction wire layout must remain explicit");
 
 enum class MultiplayerLeaveReason : uint8_t {

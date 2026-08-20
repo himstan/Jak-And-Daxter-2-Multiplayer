@@ -7,6 +7,11 @@ bool mp_valid_player_id(uint32_t player_id);
 bool mp_player_id_allowed_from_sender(const MultiplayerData& data,
                                       uint32_t sender_player_id,
                                       uint32_t claimed_player_id);
+bool mp_apply_player_appearance_action(MultiplayerData& data,
+                                       uint32_t sender_player_id,
+                                       uint32_t player_id,
+                                       const MPPlayerAppearance& appearance,
+                                       MPPlayerControllerGOAL* controller);
 void mp_clear_player_slot(MultiplayerData& data,
                           MPPlayerControllerGOAL* controller,
                           uint32_t player_id);

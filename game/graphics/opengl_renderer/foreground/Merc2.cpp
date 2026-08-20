@@ -537,14 +537,15 @@ void Merc2::handle_pc_model(const DmaTransfer& setup,
     u8 bitflags;
     u16 pad;
     float darkjak_interp;
-    u32 player_tint_color;
-    float player_tint_strength;
+    u32 player_tint_colors[kMPPlayerAppearanceSlotCount];
+    float player_tint_strengths[kMPPlayerAppearanceSlotCount];
+    u32 reserved[2];
   };
-  
+
   static_assert(offsetof(PcMercFlags, darkjak_interp) == 20);
-  static_assert(offsetof(PcMercFlags, player_tint_color) == 24);
-  static_assert(offsetof(PcMercFlags, player_tint_strength) == 28);
-  static_assert(sizeof(PcMercFlags) == 32);
+  static_assert(offsetof(PcMercFlags, player_tint_colors) == 24);
+  static_assert(offsetof(PcMercFlags, player_tint_strengths) == 152);
+  static_assert(sizeof(PcMercFlags) == 288);
   auto* flags = (const PcMercFlags*)input_data;
   const bool model_uses_darkjak_instance_morph = flags->bitflags & 32;
   int num_effects = flags->effect_count;  // mostly just a sanity check
@@ -556,7 +557,7 @@ void Merc2::handle_pc_model(const DmaTransfer& setup,
   bool model_uses_pc_blerc = flags->bitflags & 4;
   bool model_disables_envmap = flags->bitflags & 8;
   bool model_no_texture = flags->bitflags & 16;
-  input_data += 32;
+  input_data += sizeof(PcMercFlags);
 
   float blerc_weights[kMaxBlerc];
   if (model_uses_pc_blerc) {
@@ -646,11 +647,13 @@ void Merc2::handle_pc_model(const DmaTransfer& setup,
   args.lights = lights;
   args.first_bone = first_bone;
   args.no_texture = render_state->version == GameVersion::Jak3 && model_no_texture;
-  args.player_tint_color = flags->player_tint_color;
-  args.player_tint_strength = flags->player_tint_strength;
-  if (args.player_tint_strength > 0.f) {
-    args.player_tint_texture_mask = &get_player_tint_texture_mask(lev);
-  }
+  std::copy(std::begin(flags->player_tint_colors), std::end(flags->player_tint_colors),
+            args.player_tint_colors.begin());
+  std::copy(std::begin(flags->player_tint_strengths), std::end(flags->player_tint_strengths),
+            args.player_tint_strengths.begin());
+  args.player_tint_character =
+      static_cast<u32>(mp_player_model_character(model->name));
+  args.player_tint_texture_groups = &get_player_tint_texture_groups(lev);
   args.darkjak_interp =
       model_uses_darkjak_instance_morph ? flags->darkjak_interp : -1.f;
 
@@ -783,9 +786,11 @@ void Merc2::init_shader_common(Shader& shader, Uniforms* uniforms, bool include_
     uniforms->player_tint_color = glGetUniformLocation(id, "player_tint_color");
     uniforms->player_tint_enabled = glGetUniformLocation(id, "player_tint_enabled");
     uniforms->player_tint_strength = glGetUniformLocation(id, "player_tint_strength");
+    uniforms->player_tint_white_base = glGetUniformLocation(id, "player_tint_white_base");
     glUniform1f(uniforms->player_tint_strength, 0.f);
     glUniform3f(uniforms->player_tint_color, 1.f, 0.f, 0.f);
     glUniform1i(uniforms->player_tint_enabled, 0);
+    glUniform1i(uniforms->player_tint_white_base, 0);
   }
 }
 
@@ -814,7 +819,8 @@ void Merc2::switch_to_emerc(SharedRenderState* render_state) {
 void Merc2::render(DmaFollower& dma,
                    SharedRenderState* render_state,
                    ScopedProfilerNode& prof,
-                   MercDebugStats* stats) {
+                   MercDebugStats* stats,
+                   bool clear_depth_before_draw) {
   bool hack = stats->collect_debug_model_list;
   *stats = {};
   stats->collect_debug_model_list = hack;
@@ -827,7 +833,7 @@ void Merc2::render(DmaFollower& dma,
   {
     auto pp = scoped_prof("handle-all-dma");
     // iterate through the dma chain, filling buckets
-    handle_all_dma(dma, render_state, prof, stats);
+    handle_all_dma(dma, render_state, prof, stats, clear_depth_before_draw);
   }
 
   {
@@ -857,7 +863,8 @@ std::string Merc2::ShaderMercMat::to_string() const {
 void Merc2::handle_all_dma(DmaFollower& dma,
                            SharedRenderState* render_state,
                            ScopedProfilerNode& prof,
-                           MercDebugStats* stats) {
+                           MercDebugStats* stats,
+                           bool clear_depth_before_draw) {
   // process the first tag. this is just jumping to the merc-specific dma.
   auto data0 = dma.read_and_advance();
   ASSERT(data0.vif1() == 0 || data0.vifcode1().kind == VifCode::Kind::NOP);
@@ -877,6 +884,11 @@ void Merc2::handle_all_dma(DmaFollower& dma,
     return;
   }
   // if we reach here, there's stuff to draw
+  if (clear_depth_before_draw) {
+    glDepthMask(GL_TRUE);
+    glClearDepth(0.0);
+    glClear(GL_DEPTH_BUFFER_BIT);
+  }
   // this handles merc-specific setup DMA
   handle_setup_dma(dma, render_state);
 
@@ -1121,33 +1133,24 @@ Merc2::Draw* Merc2::try_alloc_envmap_draw(const tfrag3::MercDraw& mdraw,
   return draw;
 }
 
-const std::vector<u8>& Merc2::get_player_tint_texture_mask(const LevelData* level) {
-  auto [it, inserted] = m_player_tint_texture_masks.try_emplace(level);
-  auto& mask = it->second;
+const std::vector<u8>& Merc2::get_player_tint_texture_groups(const LevelData* level) {
+  auto [it, inserted] = m_player_tint_texture_groups.try_emplace(level);
+  auto& groups = it->second;
 
-  if (!inserted) {
-    return mask;
+  if (!inserted || !level || !level->level) {
+    return groups;
   }
-  
+
   const auto& textures = level->level->textures;
-  mask.assign(textures.size(), PLAYER_TINT_NONE);
-  static const u64 kJakJacketBody = fnv64("jakbsmall-jacketbody");
-  static const u64 kJakJacketSleeve = fnv64("jakbsmall-jacketsleeve");
-  static const u64 kJakBlackStrap = fnv64("jakbsmall-blackstrap");
-  static const u64 kDaxterLeather = fnv64("bam-leather-belt");
+  groups.assign(textures.size(), 0xff);
 
   for (size_t i = 0; i < textures.size(); ++i) {
-    const u64 texture_hash = fnv64(textures[i].debug_name);
-    if (texture_hash == kJakJacketBody ||
-        texture_hash == kJakJacketSleeve ||
-        texture_hash == kJakBlackStrap) {
-      mask[i] |= PLAYER_TINT_GENERIC;
-    }
-    if (texture_hash == kDaxterLeather) {
-      mask[i] |= PLAYER_TINT_DAXTER_ONLY;
+    const auto group = mp_player_texture_group_for_name(textures[i].debug_name);
+    if (group != MPPlayerAppearanceGroup::INVALID) {
+      groups[i] = static_cast<u8>(mp_player_appearance_group_index(group));
     }
   }
-  return mask;
+  return groups;
 }
 
 Merc2::Draw* Merc2::alloc_normal_draw(const tfrag3::MercDraw& mdraw, const DrawArgs& args) {
@@ -1158,8 +1161,8 @@ Merc2::Draw* Merc2::alloc_normal_draw(const tfrag3::MercDraw& mdraw, const DrawA
   draw->mode = mdraw.mode;
   draw->hash = args.hash;
   draw->darkjak_interp = args.darkjak_interp;
-  draw->player_tint_color = args.player_tint_color;
-  draw->player_tint_strength = args.player_tint_strength;
+  draw->player_tint_color = 0;
+  draw->player_tint_strength = 0.f;
   if (args.jak1_water_mode) {
     draw->mode.set_ab(true);
     draw->mode.disable_depth_write();
@@ -1171,16 +1174,22 @@ Merc2::Draw* Merc2::alloc_normal_draw(const tfrag3::MercDraw& mdraw, const DrawA
   }
 
   draw->texture = mdraw.eye_id == 0xff ? mdraw.tree_tex_id : (0xefffff00 | mdraw.eye_id);
-  if (args.player_tint_texture_mask && mdraw.eye_id == 0xff 
-      && mdraw.tree_tex_id >= 0 && static_cast<size_t>(mdraw.tree_tex_id) < args.player_tint_texture_mask->size()) {
-  
-    const u8 tint_rule = (*args.player_tint_texture_mask)[mdraw.tree_tex_id];
-    static const u64 kDaxterLod0Hash = fnv64("daxter-lod0");
-    const bool tint_generic = tint_rule & PLAYER_TINT_GENERIC;
-    const bool tint_daxter = (tint_rule & PLAYER_TINT_DAXTER_ONLY) && args.hash == kDaxterLod0Hash;
-  
-    if (tint_generic || tint_daxter) {
-      draw->flags |= PLAYER_TINT_TEXTURE;
+  if (args.player_tint_texture_groups && mdraw.eye_id == 0xff && mdraw.tree_tex_id >= 0 &&
+      static_cast<size_t>(mdraw.tree_tex_id) < args.player_tint_texture_groups->size()) {
+    const u8 group_id = (*args.player_tint_texture_groups)[mdraw.tree_tex_id];
+    if (group_id < kMPPlayerAppearanceSlotCount) {
+      const auto group = static_cast<MPPlayerAppearanceGroup>(group_id);
+      const auto* definition = mp_player_texture_group_definition(group);
+      const auto character = static_cast<MPPlayerCharacter>(args.player_tint_character);
+      if (definition && definition->character == character &&
+          args.player_tint_strengths[group_id] > 0.f) {
+        draw->player_tint_color = args.player_tint_colors[group_id];
+        draw->player_tint_strength = args.player_tint_strengths[group_id];
+        draw->flags |= PLAYER_TINT_TEXTURE;
+        if (definition->tint_policy == MPPlayerTintPolicy::WHITE_BASE) {
+          draw->flags |= PLAYER_TINT_WHITE_BASE;
+        }
+      }
     }
   }
   draw->first_bone = args.first_bone;
@@ -1325,8 +1334,13 @@ void Merc2::do_draws(const Draw* draw_array,
     glUniform1i(uniforms.ignore_alpha, draw.flags & DrawFlags::IGNORE_ALPHA);
 
     if (!set_fade) {
-      const bool use_player_tint = (draw.flags & PLAYER_TINT_TEXTURE) && draw.player_tint_strength > 0.f;
+      const bool use_player_tint =
+          (draw.flags & PLAYER_TINT_TEXTURE) && draw.player_tint_strength > 0.f;
+      const bool use_player_tint_white_base =
+          use_player_tint && (draw.flags & PLAYER_TINT_WHITE_BASE);
       glUniform1i(uniforms.player_tint_enabled, use_player_tint ? 1 : 0);
+      glUniform1i(uniforms.player_tint_white_base,
+                  use_player_tint_white_base ? 1 : 0);
     
       glUniform1f(uniforms.player_tint_strength, 
         use_player_tint ? std::clamp(draw.player_tint_strength, 0.f, 1.f) : 0.f);

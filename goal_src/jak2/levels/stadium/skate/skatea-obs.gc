@@ -546,25 +546,29 @@
 (define *stadium-board1-local-score-hud-y* 90)
 
 (defun stadium-board1-draw-score-hud! ((hud stadium-hud-multi-score))
-  (let ((remote-hud-y 140))
-    (mp-for-each-player-record (player-id record)
-      (if (= player-id (mp-local-player-id))
-        (set-hud-piece-position!
-          (-> hud sprites player-id)
-          *stadium-board1-local-score-hud-x*
-          *stadium-board1-local-score-hud-y*
-          )
-        (begin
+  (when (and hud (nonzero? hud))
+    (let ((remote-hud-y 140))
+      (mp-for-each-player-record (player-id record)
+        (set! (-> hud strings player-id color)
+              (mp-player-font-color-by-id (the-as int player-id)))
+        (if (= player-id (mp-local-player-id))
           (set-hud-piece-position!
             (-> hud sprites player-id)
-            480
-            remote-hud-y
+            *stadium-board1-local-score-hud-x*
+            *stadium-board1-local-score-hud-y*
             )
-          (+! remote-hud-y 30)
+          (begin
+            (set-hud-piece-position!
+              (-> hud sprites player-id)
+              480
+              remote-hud-y
+              )
+            (+! remote-hud-y 30)
+            )
           )
+        (format (clear (-> hud strings player-id text)) "~D" (-> hud values player-id current))
+        (set-as-offset-from! (the-as hud-sprite (-> hud strings player-id pos)) (the-as vector4w (-> hud sprites player-id)) -12 8)
         )
-      (format (clear (-> hud strings player-id text)) "~D" (-> hud values player-id current))
-      (set-as-offset-from! (the-as hud-sprite (-> hud strings player-id pos)) (the-as vector4w (-> hud sprites player-id)) -12 8)
       )
     )
   )

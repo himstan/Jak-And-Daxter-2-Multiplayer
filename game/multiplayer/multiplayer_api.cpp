@@ -329,7 +329,8 @@ bool handle_receive_packet(MultiplayerData& data,
       }
       if (lobby->action_type == static_cast<uint8_t>(MPLobbyActionType::SET_CHARACTER)) {
         const auto char_val = static_cast<MPPlayerCharacter>(lobby->value);
-        if (mp_valid_player_character(char_val) && mp_valid_player_id(lobby->player_id)) {
+        if (mp_valid_player_character(char_val) && mp_valid_player_id(lobby->player_id) &&
+            mp_player_id_allowed_from_sender(data, sender_player_id, lobby->player_id)) {
           if (data.session_role == 0) {
             if (auto* session = multiplayer_host_peer_for_player_id(data, lobby->player_id)) {
               session->character = char_val;
@@ -346,6 +347,12 @@ bool handle_receive_packet(MultiplayerData& data,
           accepted = true;
           lg::info("[MP-Lobby] Player {} switched character to {}.", lobby->player_id,
                    static_cast<uint32_t>(char_val));
+        }
+      } else if (lobby->action_type == static_cast<uint8_t>(MPLobbyActionType::SET_APPEARANCE)) {
+        if (mp_apply_player_appearance_action(data, sender_player_id, lobby->player_id,
+                                              lobby->appearance, controller)) {
+          accepted = true;
+          lg::info("[MP-Lobby] Player {} changed its complete appearance.", lobby->player_id);
         }
       } else if (lobby->action_type == static_cast<uint8_t>(MPLobbyActionType::START_GAME)) {
         if (data.session_role == 1) {
@@ -611,11 +618,6 @@ void poll_network(MultiplayerData& data,
                      departed_player_id);
           }
           multiplayer_host_peer_release(data, event.peer);
-          if (!data.host_game_active &&
-              data.join_status == static_cast<int>(MultiplayerStatus::CONNECTED_LOBBY) &&
-              multiplayer_host_authenticated_peer_count(data) == 0) {
-            data.join_status = static_cast<int>(MultiplayerStatus::CONNECTING);
-          }
         } else {
           const bool active_session = data.join_status == (int)MultiplayerStatus::CONNECTED_LOBBY ||
                                       data.join_status == (int)MultiplayerStatus::GAME_STARTING ||
@@ -1416,10 +1418,54 @@ int pc_multi_lobby_set_character(u32 character) {
   action.header = {PacketType::LOBBY_ACTION, ++data.sequence_num};
   action.player_id = local_id;
   action.action_type = static_cast<uint8_t>(MPLobbyActionType::SET_CHARACTER);
-  action.value = static_cast<uint8_t>(character);
+  action.value = character;
   MultiplayerManager::broadcast(data, static_cast<int>(MultiplayerChannel::CONTROL), action,
                                 ENET_PACKET_FLAG_RELIABLE);
   lg::info("[MP-Lobby] Local player {} broadcasted character choice {}.", local_id, character);
+  return 1;
+}
+
+u32 pc_multi_get_player_color() {
+  return mp_multiplayer_preferences()
+      .player_appearance.colors[mp_player_appearance_group_index(MPPlayerAppearanceGroup::PRIMARY)];
+}
+
+int pc_multi_get_player_appearance(u32 appearance_ptr) {
+  auto* goal_appearance = goal_ptr<MPPlayerAppearanceGOAL>(appearance_ptr);
+  if (!goal_appearance) {
+    return 0;
+  }
+  mp_copy_player_appearance_to_goal(mp_multiplayer_preferences().player_appearance,
+                                    *goal_appearance);
+  return 1;
+}
+
+int pc_multi_lobby_set_appearance(u32 appearance_ptr) {
+  const auto* goal_appearance = goal_ptr<MPPlayerAppearanceGOAL>(appearance_ptr);
+  if (!goal_appearance) {
+    return 0;
+  }
+  const MPPlayerAppearance appearance = mp_player_appearance_from_goal(*goal_appearance);
+  auto& data = multiplayer_data();
+  if (!mp_set_player_appearance(appearance)) {
+    return 0;
+  }
+
+  const uint32_t local_id = data.local_player_id;
+  if (data.join_status != static_cast<int>(MultiplayerStatus::CONNECTED_LOBBY) ||
+      !mp_valid_player_id(local_id)) {
+    return 1;
+  }
+
+  data.player_states[local_id].appearance = appearance;
+  PacketLobbyAction action = {};
+  action.header = {PacketType::LOBBY_ACTION, ++data.sequence_num};
+  action.player_id = local_id;
+  action.action_type = static_cast<uint8_t>(MPLobbyActionType::SET_APPEARANCE);
+  action.appearance = appearance;
+  MultiplayerManager::broadcast(data, static_cast<int>(MultiplayerChannel::CONTROL), action,
+                                ENET_PACKET_FLAG_RELIABLE);
+  lg::info("[MP-Lobby] Local player {} broadcasted its complete appearance.", local_id);
   return 1;
 }
 
@@ -1871,6 +1917,12 @@ void init_multiplayer_pc_port() {
                                     (void*)pc_multi_lobby_start_game);
   jak2::make_function_symbol_from_c("pc-multi-lobby-set-character",
                                     (void*)pc_multi_lobby_set_character);
+  jak2::make_function_symbol_from_c("pc-multi-get-player-color",
+                                    (void*)pc_multi_get_player_color);
+  jak2::make_function_symbol_from_c("pc-multi-get-player-appearance",
+                                    (void*)pc_multi_get_player_appearance);
+  jak2::make_function_symbol_from_c("pc-multi-lobby-set-appearance",
+                                    (void*)pc_multi_lobby_set_appearance);
   jak2::make_function_symbol_from_c("pc-multi-get-host-setup-status",
                                     (void*)pc_multi_get_host_setup_status);
   jak2::make_function_symbol_from_c("pc-multi-get-host-port", (void*)pc_multi_get_host_port);

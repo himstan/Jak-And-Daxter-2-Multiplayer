@@ -1,6 +1,27 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(defconstant MP_PLAYER_APPEARANCE_SLOT_COUNT 32)
+
+(defenum mp-player-appearance-group
+  (primary 0)
+  (jak-jacket 1)
+  (jak-armor 2)
+  (jak-leggings 3)
+  (jak-pants 4)
+  (jak-boots 5)
+  (jak-scarf 6)
+  (jak-pouch 7)
+  (jak-straps 8)
+  (jak-gloves 9)
+  (daxter-hat 16)
+  (daxter-fur 17))
+
+(deftype mp-player-appearance (structure)
+  ((colors    uint32 MP_PLAYER_APPEARANCE_SLOT_COUNT)
+   (strengths float  MP_PLAYER_APPEARANCE_SLOT_COUNT))
+  :size-assert 256)
+
 (defenum mp-connection-status
   :type int32
   (idle                    0)
@@ -984,6 +1005,9 @@
 (define-extern pc-multi-get-session-player-limit (function uint))
 (define-extern pc-multi-lobby-start-game (function int))
 (define-extern pc-multi-lobby-set-character (function uint int))
+(define-extern pc-multi-get-player-color (function uint))
+(define-extern pc-multi-get-player-appearance (function mp-player-appearance int))
+(define-extern pc-multi-lobby-set-appearance (function mp-player-appearance int))
 (define-extern pc-multi-get-host-setup-status (function int))
 (define-extern pc-multi-get-host-port (function int))
 (define-extern pc-multi-get-connection-phase (function int))

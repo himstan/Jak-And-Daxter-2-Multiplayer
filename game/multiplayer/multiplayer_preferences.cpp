@@ -1,7 +1,10 @@
 #include "game/multiplayer/multiplayer_preferences.h"
 
+#include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <limits>
+#include <random>
 
 #include "common/log/log.h"
 #include "common/util/FileUtil.h"
@@ -57,6 +60,23 @@ void save_after_edit() {
     lg::error("[Multiplayer] Could not save multiplayer settings: {}", error.what());
   }
 }
+
+int hex_digit(char value) {
+  if (value >= '0' && value <= '9') {
+    return value - '0';
+  }
+  if (value >= 'a' && value <= 'f') {
+    return value - 'a' + 10;
+  }
+  if (value >= 'A' && value <= 'F') {
+    return value - 'A' + 10;
+  }
+  return -1;
+}
+
+uint8_t color_channel(float value) {
+  return static_cast<uint8_t>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f));
+}
 }  // namespace
 
 bool mp_valid_gameplay_port(uint32_t port) {
@@ -109,6 +129,70 @@ bool mp_normalize_player_name(std::string_view input, std::string& output, bool 
   return true;
 }
 
+bool mp_parse_player_color(std::string_view input, uint32_t& output) {
+  if (input.size() != 7 || input.front() != '#') {
+    return false;
+  }
+  uint32_t parsed = 0;
+  for (size_t index = 1; index < input.size(); ++index) {
+    const int digit = hex_digit(input[index]);
+    if (digit < 0) {
+      return false;
+    }
+    parsed = (parsed << 4) | static_cast<uint32_t>(digit);
+  }
+  output = parsed;
+  return true;
+}
+
+std::string mp_format_player_color(uint32_t color_rgb) {
+  constexpr char kHexDigits[] = "0123456789ABCDEF";
+  std::string result(7, '0');
+  result[0] = '#';
+  for (int index = 6; index >= 1; --index) {
+    result[index] = kHexDigits[color_rgb & 0xf];
+    color_rgb >>= 4;
+  }
+  return result;
+}
+
+uint32_t mp_generate_vivid_player_color() {
+  static std::mt19937 generator(std::random_device{}());
+  std::uniform_real_distribution<float> hue_distribution(0.0f, 360.0f);
+  const float hue = hue_distribution(generator);
+  constexpr float saturation = 0.85f;
+  constexpr float value = 1.0f;
+  const float chroma = value * saturation;
+  const float hue_sector = hue / 60.0f;
+  const float second = chroma * (1.0f - std::fabs(std::fmod(hue_sector, 2.0f) - 1.0f));
+  const float match = value - chroma;
+  float red = 0.0f;
+  float green = 0.0f;
+  float blue = 0.0f;
+  if (hue_sector < 1.0f) {
+    red = chroma;
+    green = second;
+  } else if (hue_sector < 2.0f) {
+    red = second;
+    green = chroma;
+  } else if (hue_sector < 3.0f) {
+    green = chroma;
+    blue = second;
+  } else if (hue_sector < 4.0f) {
+    green = second;
+    blue = chroma;
+  } else if (hue_sector < 5.0f) {
+    red = second;
+    blue = chroma;
+  } else {
+    red = chroma;
+    blue = second;
+  }
+  return (static_cast<uint32_t>(color_channel(red + match)) << 16) |
+         (static_cast<uint32_t>(color_channel(green + match)) << 8) |
+         static_cast<uint32_t>(color_channel(blue + match));
+}
+
 MultiplayerPreferences mp_parse_multiplayer_preferences(std::string_view contents) {
   MultiplayerPreferences parsed;
   try {
@@ -129,6 +213,70 @@ MultiplayerPreferences mp_parse_multiplayer_preferences(std::string_view content
       std::string normalized;
       if (mp_normalize_player_name(root.at("player_name").get<std::string>(), normalized)) {
         parsed.player_name = std::move(normalized);
+      }
+    }
+    uint32_t primary_color = kInvalidMultiplayerPlayerColor;
+    if (root.contains("player_color") && root.at("player_color").is_string()) {
+      mp_parse_player_color(root.at("player_color").get<std::string>(), primary_color);
+    }
+    float legacy_strength = 1.0f;
+    if (root.contains("player_tint_strength") && root.at("player_tint_strength").is_number()) {
+      const float strength = root.at("player_tint_strength").get<float>();
+      if (std::isfinite(strength) && strength >= 0.0f && strength <= 1.0f) {
+        legacy_strength = strength;
+      }
+    }
+    parsed.player_appearance = mp_default_player_appearance(primary_color, legacy_strength);
+    if (root.contains("player_texture_groups") &&
+        root.at("player_texture_groups").is_object()) {
+      const auto& texture_groups = root.at("player_texture_groups");
+      bool has_valid_leggings = false;
+      bool has_valid_straps = false;
+      for (const auto& definition : kMPPlayerTextureGroups) {
+        const std::string key(definition.preference_key);
+        if (!texture_groups.contains(key) || !texture_groups.at(key).is_object()) {
+          continue;
+        }
+        const auto& group = texture_groups.at(key);
+        if (!group.contains("color") || !group.at("color").is_string() ||
+            !group.contains("tint_strength") || !group.at("tint_strength").is_number()) {
+          continue;
+        }
+        uint32_t group_color = 0;
+        const float group_strength = group.at("tint_strength").get<float>();
+        if (!mp_parse_player_color(group.at("color").get<std::string>(), group_color) ||
+            !std::isfinite(group_strength) || group_strength < 0.0f || group_strength > 1.0f) {
+          continue;
+        }
+        const size_t slot = mp_player_appearance_group_index(definition.group);
+        parsed.player_appearance.colors[slot] = group_color;
+        parsed.player_appearance.strengths[slot] = group_strength;
+        if (definition.group == MPPlayerAppearanceGroup::JAK_LEGGINGS) {
+          has_valid_leggings = true;
+        }
+        if (definition.group == MPPlayerAppearanceGroup::JAK_STRAPS) {
+          has_valid_straps = true;
+        }
+      }
+      if (!has_valid_leggings) {
+        const size_t leggings_slot =
+            mp_player_appearance_group_index(MPPlayerAppearanceGroup::JAK_LEGGINGS);
+        const size_t pants_slot =
+            mp_player_appearance_group_index(MPPlayerAppearanceGroup::JAK_PANTS);
+        parsed.player_appearance.colors[leggings_slot] =
+            parsed.player_appearance.colors[pants_slot];
+        parsed.player_appearance.strengths[leggings_slot] =
+            parsed.player_appearance.strengths[pants_slot];
+      }
+      if (!has_valid_straps) {
+        const size_t straps_slot =
+            mp_player_appearance_group_index(MPPlayerAppearanceGroup::JAK_STRAPS);
+        const size_t jacket_slot =
+            mp_player_appearance_group_index(MPPlayerAppearanceGroup::JAK_JACKET);
+        parsed.player_appearance.colors[straps_slot] =
+            parsed.player_appearance.colors[jacket_slot];
+        parsed.player_appearance.strengths[straps_slot] =
+            parsed.player_appearance.strengths[jacket_slot];
       }
     }
     if (root.contains("automatic_port_mapping") &&
@@ -162,19 +310,84 @@ MultiplayerPreferences mp_parse_multiplayer_preferences(std::string_view content
 
 void mp_load_multiplayer_preferences() {
   g_preferences = {};
+  bool needs_save = false;
   try {
     const auto path = settings_path();
     if (!file_util::file_exists(path.string())) {
+      g_preferences.player_appearance =
+          mp_default_player_appearance(mp_generate_vivid_player_color());
       mp_discard_multiplayer_preference_edits();
+      save_after_edit();
       return;
     }
     lg::info("Loading multiplayer settings at {}", path.string());
-    g_preferences = mp_parse_multiplayer_preferences(file_util::read_text_file(path));
+    const std::string contents = file_util::read_text_file(path);
+    g_preferences = mp_parse_multiplayer_preferences(contents);
+    const json root = parse_commented_json(contents, std::string(kSettingsFileName));
+    if (!root.contains("player_texture_groups") ||
+        !root.at("player_texture_groups").is_object()) {
+      needs_save = true;
+    } else {
+      const auto& texture_groups = root.at("player_texture_groups");
+      for (const auto& definition : kMPPlayerTextureGroups) {
+        const std::string key(definition.preference_key);
+        if (!texture_groups.contains(key) || !texture_groups.at(key).is_object()) {
+          needs_save = true;
+          continue;
+        }
+        const auto& group = texture_groups.at(key);
+        uint32_t color = 0;
+        if (!group.contains("color") || !group.at("color").is_string() ||
+            !mp_parse_player_color(group.at("color").get<std::string>(), color) ||
+            !group.contains("tint_strength") || !group.at("tint_strength").is_number()) {
+          needs_save = true;
+          continue;
+        }
+        const float strength = group.at("tint_strength").get<float>();
+        if (!std::isfinite(strength) || strength < 0.0f || strength > 1.0f) {
+          needs_save = true;
+        }
+      }
+    }
   } catch (const std::exception& error) {
     g_preferences = {};
     lg::error("[Multiplayer] Could not load multiplayer settings: {}", error.what());
   }
+  auto& appearance = g_preferences.player_appearance;
+  const size_t primary_slot =
+      mp_player_appearance_group_index(MPPlayerAppearanceGroup::PRIMARY);
+  if ((appearance.colors[primary_slot] & 0xff000000u) != 0) {
+    appearance.colors[primary_slot] = mp_generate_vivid_player_color();
+    needs_save = true;
+  }
+  for (const auto& definition : kMPPlayerTextureGroups) {
+    const size_t slot = mp_player_appearance_group_index(definition.group);
+    if ((appearance.colors[slot] & 0xff000000u) != 0 ||
+        !std::isfinite(appearance.strengths[slot]) || appearance.strengths[slot] < 0.0f ||
+        appearance.strengths[slot] > 1.0f) {
+      appearance.colors[slot] = appearance.colors[primary_slot];
+      appearance.strengths[slot] =
+          definition.group == MPPlayerAppearanceGroup::JAK_JACKET ||
+                  definition.group == MPPlayerAppearanceGroup::DAXTER_HAT
+              ? 1.0f
+              : 0.0f;
+      needs_save = true;
+    }
+  }
+  for (size_t slot = 0; slot < kMPPlayerAppearanceSlotCount; ++slot) {
+    if (!mp_player_appearance_slot_registered(slot) &&
+        (appearance.colors[slot] != appearance.colors[primary_slot] ||
+         appearance.strengths[slot] != 0.0f)) {
+      appearance.colors[slot] = appearance.colors[primary_slot];
+      appearance.strengths[slot] = 0.0f;
+      needs_save = true;
+    }
+  }
+  appearance.strengths[primary_slot] = 0.0f;
   mp_discard_multiplayer_preference_edits();
+  if (needs_save) {
+    save_after_edit();
+  }
 }
 
 void mp_save_multiplayer_preferences() {
@@ -182,6 +395,18 @@ void mp_save_multiplayer_preferences() {
   root["network_port"] = g_preferences.network_port;
   root["room_code"] = g_preferences.room_code;
   root["player_name"] = g_preferences.player_name;
+  const auto& appearance = g_preferences.player_appearance;
+  root["player_color"] = mp_format_player_color(
+      appearance.colors[mp_player_appearance_group_index(MPPlayerAppearanceGroup::PRIMARY)]);
+  json texture_groups = json::object();
+  for (const auto& definition : kMPPlayerTextureGroups) {
+    const size_t slot = mp_player_appearance_group_index(definition.group);
+    texture_groups[std::string(definition.preference_key)] = {
+        {"color", mp_format_player_color(appearance.colors[slot])},
+        {"tint_strength", appearance.strengths[slot]},
+    };
+  }
+  root["player_texture_groups"] = std::move(texture_groups);
   root["automatic_port_mapping"] = g_preferences.automatic_port_mapping;
   root["session_player_limit"] = g_preferences.session_player_limit;
   json chars_json = json::array();
@@ -196,8 +421,10 @@ void mp_save_multiplayer_preferences() {
 
 void mp_reset_multiplayer_preferences() {
   const std::string player_name = g_preferences.player_name;
+  const MPPlayerAppearance player_appearance = g_preferences.player_appearance;
   g_preferences = {};
   g_preferences.player_name = player_name;
+  g_preferences.player_appearance = player_appearance;
   mp_discard_multiplayer_preference_edits();
   save_after_edit();
 }
@@ -333,6 +560,19 @@ bool mp_set_automatic_port_mapping(bool enabled) {
     return true;
   }
   g_preferences.automatic_port_mapping = enabled;
+  save_after_edit();
+  return true;
+}
+
+bool mp_set_player_appearance(const MPPlayerAppearance& appearance) {
+  if (!mp_valid_player_appearance(appearance)) {
+    return false;
+  }
+  if (g_preferences.player_appearance.colors == appearance.colors &&
+      g_preferences.player_appearance.strengths == appearance.strengths) {
+    return true;
+  }
+  g_preferences.player_appearance = appearance;
   save_after_edit();
   return true;
 }

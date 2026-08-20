@@ -1,0 +1,78 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defconstant MP_DEFAULT_PLAYER_COLOR_RGB (the uint #x00e5ff))
+(defconstant MP_PLAYER_MARKER_ALPHA (the uint #x80))
+(defconstant MP_PLAYER_PRIMARY_APPEARANCE_SLOT (the int 0))
+
+(define *mp-player-controller-led-synced?* #f)
+
+(defun mp-player-controller-led-sync! ((color-rgb uint))
+  "Use the canonical player RGB as Jak II's neutral controller LED color."
+  (pc-controller-led-set-base-rgb!
+    (the int (logand (ash color-rgb -16) #xff))
+    (the int (logand (ash color-rgb -8) #xff))
+    (the int (logand color-rgb #xff)))
+  (true! *mp-player-controller-led-synced?*)
+  (none))
+
+(defun mp-player-controller-led-sync-saved! ()
+  "Initialize the controller LED after GAME object linking has completed."
+  (unless *mp-player-controller-led-synced?*
+    (mp-player-controller-led-sync! (pc-multi-get-player-color)))
+  (none))
+
+(defun mp-player-color-record-by-id ((player-id int))
+  "Return a ready player record for appearance lookups."
+  (when (and (>= player-id 0)
+             (< player-id MP_MAX_PLAYERS))
+    (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (when (and record
+                 (nonzero? record)
+                 (nonzero? (-> record identity identity-ready?)))
+        (return record))))
+  (the-as mp-player-record #f))
+
+(defun mp-player-rgb-by-id ((player-id int))
+  (let ((record (mp-player-color-record-by-id player-id)))
+    (if (and record (nonzero? record))
+        (-> record identity appearance colors MP_PLAYER_PRIMARY_APPEARANCE_SLOT)
+        MP_DEFAULT_PLAYER_COLOR_RGB)))
+
+(defun mp-player-rgb->rgba ((color-rgb uint) (alpha uint))
+  "Convert canonical 0xRRGGBB into the game's byte-ordered RGBA value."
+  (the-as rgba
+    (logior (logand (ash color-rgb -16) #xff)
+            (ash (logand (ash color-rgb -8) #xff) 8)
+            (ash (logand color-rgb #xff) 16)
+            (ash (logand alpha #xff) 24))))
+
+(defun font-color-from-rgb ((color-rgb uint))
+  "Tag an exact RGB value for materialization by the font draw wrapper."
+  (the-as font-color
+    (logior FONT_COLOR_RGB_TAG (logand color-rgb #x00ffffff))))
+
+(defun mp-player-marker-color-by-id ((player-id int) (fallback-color rgba))
+  (let ((record (mp-player-color-record-by-id player-id)))
+    (if (and record (nonzero? record))
+        (mp-player-rgb->rgba
+          (-> record identity appearance colors MP_PLAYER_PRIMARY_APPEARANCE_SLOT)
+          MP_PLAYER_MARKER_ALPHA)
+        fallback-color)))
+
+(defun mp-player-font-color-by-id ((player-id int))
+  (let ((record (mp-player-color-record-by-id player-id)))
+    (if (and record (nonzero? record))
+        (font-color-from-rgb
+          (-> record identity appearance colors MP_PLAYER_PRIMARY_APPEARANCE_SLOT))
+        (font-color default))))
+
+(defun mp-player-marker-color ((marker-key object) (fallback-color rgba))
+  (mp-player-marker-color-by-id
+    (- (the-as int marker-key) MP_REMOTE_PLAYER_MARKER_KEY_BASE)
+    fallback-color))
+
+(defun mp-local-player-marker-color ()
+  (mp-player-marker-color-by-id
+    (the-as int (mp-local-player-id))
+    (mp-player-rgb->rgba MP_DEFAULT_PLAYER_COLOR_RGB MP_PLAYER_MARKER_ALPHA)))

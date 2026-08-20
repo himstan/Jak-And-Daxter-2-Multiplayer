@@ -16,6 +16,7 @@
 (defconstant MP_INVALID_COMPACT_PLAYER_ID (the uint8 #xff))
 (defconstant MP_INVALID_PAD_INDEX (the uint8 #xff))
 (defconstant MP_REMOTE_PLAYER_MARKER_KEY_BASE (the int #x4d505240))
+(defconstant MP_PLAYER_NAME_SIZE 16)
 
 (defenum mp-player-runtime-flags
   :type uint32
@@ -140,10 +141,10 @@
    (state-ready?    uint8)
    (joined?         uint8)
    (spectator-only? uint8)
-   (name            uint8 24)
-   (pad             uint8 12)
+   (name            uint8 MP_PLAYER_NAME_SIZE)
+   (appearance      mp-player-appearance :inline)
    )
-  :size-assert 48)
+  :size-assert 288)
 
 (deftype mp-player-connection-state (structure)
   ((status                 mp-connection-status)
@@ -261,9 +262,9 @@
    (vehicle    mp-player-vehicle-state :inline)
    (runtime    mp-player-runtime-state :inline)
   )
-  :size-assert 480)
+  :size-assert 720)
 
-(defconstant MP_PLAYER_CONTROLLER_SIZE (+ (* 480 MP_MAX_PLAYERS) 16))
+(defconstant MP_PLAYER_CONTROLLER_SIZE (+ (* 720 MP_MAX_PLAYERS) 16))
 
 (deftype mp-player-controller (structure)
   ((records                  mp-player-record MP_MAX_PLAYERS :inline)
@@ -287,7 +288,8 @@
 (define-extern mp-puppet-spawn (function mp-player-record target))
 (define-extern mp-puppet-deactivate! (function mp-player-record none))
 (define-extern mp-play-remote-death-vo (function mp-player-record none))
-(define-extern mp-apply-player-render-tint! (function target none))
+(define-extern mp-apply-player-render-appearance! (function target none))
+(define-extern mp-refresh-player-render-appearances! (function none))
 (define-extern mp-player-record-by-id (function uint mp-player-record))
 (define-extern mp-player-runtime-flag? (function mp-player-record mp-player-runtime-flags symbol))
 (define-extern mp-player-runtime-set-flag! (function mp-player-record mp-player-runtime-flags mp-player-runtime-flags))

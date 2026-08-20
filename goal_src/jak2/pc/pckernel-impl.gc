@@ -128,6 +128,18 @@
 
 (define *pc-settings* (the pc-settings-jak2 #f))
 (define *matrix-minimap-north* (quaternion->matrix (new 'static 'matrix) (quaternion-vector-angle! (new 'static 'quaternion) *y-vector* (degrees 180))))
+(define *pc-controller-led-base-color* (static-vector 0.0 0.0 1.0 1.0))
+
+(defun pc-controller-led-set-base-rgb! ((red int) (green int) (blue int))
+  "Set the neutral controller LED color used by Jak II's dynamic LED effects."
+  (when (and *pc-controller-led-base-color*
+             (nonzero? *pc-controller-led-base-color*))
+    (set-vector-xyz!
+      *pc-controller-led-base-color*
+      (/ (the float red) 255.0)
+      (/ (the float green) 255.0)
+      (/ (the float blue) 255.0)))
+  (none))
 
 
 ;; jak 2 discord rpc structure

@@ -2,8 +2,11 @@
 
 Merc2BucketRenderer::Merc2BucketRenderer(const std::string& name,
                                          int my_id,
-                                         std::shared_ptr<Merc2> merc)
-    : BucketRenderer(name, my_id), m_renderer(merc) {}
+                                         std::shared_ptr<Merc2> merc,
+                                         bool clear_depth_before_draw)
+    : BucketRenderer(name, my_id),
+      m_clear_depth_before_draw(clear_depth_before_draw),
+      m_renderer(merc) {}
 
 void Merc2BucketRenderer::render(DmaFollower& dma,
                                  SharedRenderState* render_state,
@@ -16,7 +19,7 @@ void Merc2BucketRenderer::render(DmaFollower& dma,
     return;
   }
 
-  m_renderer->render(dma, render_state, prof, &m_debug_stats);
+  m_renderer->render(dma, render_state, prof, &m_debug_stats, m_clear_depth_before_draw);
 
   m_empty = m_debug_stats.num_predicted_draws == 0;
 }

@@ -2,6 +2,7 @@
 #include <array>
 #include <unordered_map>
 #include "game/graphics/opengl_renderer/BucketRenderer.h"
+#include "game/multiplayer/player_appearance.h"
 
 struct MercDebugStats {
   int num_models = 0;
@@ -50,7 +51,8 @@ class Merc2 {
   void render(DmaFollower& dma,
               SharedRenderState* render_state,
               ScopedProfilerNode& prof,
-              MercDebugStats* stats);
+              MercDebugStats* stats,
+              bool clear_depth_before_draw = false);
   static constexpr int kMaxBlerc = 40;
 
  private:
@@ -145,6 +147,7 @@ class Merc2 {
     GLuint player_tint_color;
     GLuint player_tint_enabled;
     GLuint player_tint_strength;
+    GLuint player_tint_white_base;
     
     GLuint fade;
   };
@@ -156,7 +159,8 @@ class Merc2 {
   void handle_all_dma(DmaFollower& dma,
                       SharedRenderState* render_state,
                       ScopedProfilerNode& prof,
-                      MercDebugStats* stats);
+                      MercDebugStats* stats,
+                      bool clear_depth_before_draw);
   void handle_merc_chain(DmaFollower& dma,
                          SharedRenderState* render_state,
                          ScopedProfilerNode& prof,
@@ -191,14 +195,9 @@ class Merc2 {
     MOD_VTX = 2,
     NO_TEXTURE = 4,
     PLAYER_TINT_TEXTURE = 8,
+    PLAYER_TINT_WHITE_BASE = 16,
   };
   
-  enum PlayerTintTextureRule : u8 {
-    PLAYER_TINT_NONE = 0,
-    PLAYER_TINT_GENERIC = 1,
-    PLAYER_TINT_DAXTER_ONLY = 2,
-  };
-
   struct Draw {
     u32 first_index;
     u32 index_count;
@@ -243,16 +242,15 @@ class Merc2 {
     u32 lights;
     u32 first_bone;
     float darkjak_interp = -1.f;
-    u32 player_tint_color = 0;
-    float player_tint_strength = 0.f;
-    const std::vector<u8>* player_tint_texture_mask = nullptr;
+    std::array<u32, kMPPlayerAppearanceSlotCount> player_tint_colors = {};
+    std::array<float, kMPPlayerAppearanceSlotCount> player_tint_strengths = {};
+    u32 player_tint_character = 0;
+    const std::vector<u8>* player_tint_texture_groups = nullptr;
   };
   
-  const std::vector<u8>& get_player_tint_texture_mask(
-      const LevelData* level);
-  
-  std::unordered_map<const LevelData*, std::vector<u8>>
-      m_player_tint_texture_masks;
+  const std::vector<u8>& get_player_tint_texture_groups(const LevelData* level);
+
+  std::unordered_map<const LevelData*, std::vector<u8>> m_player_tint_texture_groups;
 
   Draw* alloc_normal_draw(const tfrag3::MercDraw& mdraw, const DrawArgs& args);
 

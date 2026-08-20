@@ -2,7 +2,7 @@
   "max_packet_size": 2048,
   "packets": [
     {"name": "STATE_UPDATE", "id": 0, "direction": "both", "reliability": "unreliable", "priority": "snapshot", "coalescing": "latest", "chunks": "replace", "max_payload": 1024},
-    {"name": "EVENT_JOIN", "id": 1, "direction": "both", "reliability": "reliable", "priority": "reliable", "coalescing": "never", "chunks": "preserve", "max_payload": 32},
+    {"name": "EVENT_JOIN", "id": 1, "direction": "both", "reliability": "reliable", "priority": "reliable", "coalescing": "never", "chunks": "preserve", "max_payload": 280},
     {"name": "EVENT_LEAVE", "id": 2, "direction": "both", "reliability": "reliable", "priority": "reliable", "coalescing": "never", "chunks": "preserve", "max_payload": 5},
     {"name": "EVENT_GAME", "id": 3, "direction": "both", "reliability": "reliable", "priority": "reliable", "coalescing": "never", "chunks": "preserve", "max_payload": 496},
     {"name": "BOOTSTRAP", "id": 4, "direction": "host_to_client", "reliability": "reliable", "priority": "bootstrap", "coalescing": "never", "chunks": "preserve", "max_payload": 2048},
@@ -15,7 +15,7 @@
     {"name": "WIDOW_SYNC", "id": 11, "direction": "host_to_client", "reliability": "unreliable", "priority": "traffic", "coalescing": "latest", "chunks": "replace", "max_payload": 1024},
     {"name": "WORLD_STATE", "id": 12, "direction": "host_to_client", "reliability": "unreliable", "priority": "snapshot", "coalescing": "latest", "chunks": "replace", "max_payload": 256},
     {"name": "SESSION_WELCOME", "id": 13, "direction": "host_to_client", "reliability": "reliable", "priority": "reliable", "coalescing": "never", "chunks": "preserve", "max_payload": 16},
-    {"name": "LOBBY_ACTION", "id": 14, "direction": "both", "reliability": "reliable", "priority": "reliable", "coalescing": "never", "chunks": "preserve", "max_payload": 16},
+    {"name": "LOBBY_ACTION", "id": 14, "direction": "both", "reliability": "reliable", "priority": "reliable", "coalescing": "never", "chunks": "preserve", "max_payload": 268},
     {"name": "TRAFFIC_AUTHORITY", "id": 15, "direction": "host_to_client", "reliability": "reliable", "priority": "reliable", "coalescing": "never", "chunks": "preserve", "max_payload": 32}
   ],
   "events": [

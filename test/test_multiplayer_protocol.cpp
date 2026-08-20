@@ -18,14 +18,24 @@ TEST(MultiplayerProtocol, BootstrapKeepsWireIdentityAndLayout) {
 
 TEST(MultiplayerProtocol, JoinCarriesAValidatedNameReliably) {
   EXPECT_EQ(static_cast<uint8_t>(PacketType::EVENT_JOIN), 1u);
-  EXPECT_EQ(sizeof(PacketJoin), 37u);
+  EXPECT_EQ(sizeof(PacketJoin), 293u);
 
   const auto* descriptor = multiplayer::schema::packet_descriptor(1);
   ASSERT_NE(descriptor, nullptr);
   EXPECT_STREQ(descriptor->name, "EVENT_JOIN");
   EXPECT_EQ(descriptor->allowed_roles, 3u);
   EXPECT_EQ(descriptor->priority, 0u);
-  EXPECT_EQ(descriptor->max_payload, 32u);
+  EXPECT_EQ(descriptor->max_payload, 288u);
+}
+
+TEST(MultiplayerProtocol, LobbyAppearanceFitsTheReliableActionEnvelope) {
+  EXPECT_EQ(sizeof(PacketLobbyAction), 273u);
+  EXPECT_EQ(static_cast<uint8_t>(MPLobbyActionType::SET_APPEARANCE), 3u);
+  const auto* descriptor = multiplayer::schema::packet_descriptor(14);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(descriptor->allowed_roles, 3u);
+  EXPECT_EQ(descriptor->priority, 0u);
+  EXPECT_EQ(descriptor->max_payload, 268u);
 }
 
 TEST(MultiplayerProtocol, WelcomeCarriesTheHostAssignedCharacter) {

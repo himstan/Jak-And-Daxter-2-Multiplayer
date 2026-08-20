@@ -27,7 +27,7 @@ inline constexpr size_t kPacketCount = 16;
 inline constexpr size_t kMaxPacketSize = 2048;
 inline constexpr std::array<PacketDescriptor, kPacketCount> kPackets = {{
     {0, "STATE_UPDATE", 3, 2, 2, 1024, 0, 0},
-    {1, "EVENT_JOIN", 3, 0, 5, 32, 0, 0},
+    {1, "EVENT_JOIN", 3, 0, 5, 280, 0, 0},
     {2, "EVENT_LEAVE", 3, 0, 5, 5, 0, 0},
     {3, "EVENT_GAME", 3, 0, 5, 496, 0, 0},
     {4, "BOOTSTRAP", 1, 1, 5, 2048, 0, 0},
@@ -40,7 +40,7 @@ inline constexpr std::array<PacketDescriptor, kPacketCount> kPackets = {{
     {11, "WIDOW_SYNC", 1, 3, 2, 1024, 0, 0},
     {12, "WORLD_STATE", 1, 2, 2, 256, 0, 0},
     {13, "SESSION_WELCOME", 1, 0, 5, 16, 0, 0},
-    {14, "LOBBY_ACTION", 3, 0, 5, 16, 0, 0},
+    {14, "LOBBY_ACTION", 3, 0, 5, 268, 0, 0},
     {15, "TRAFFIC_AUTHORITY", 1, 0, 5, 32, 0, 0},
 }};
 inline constexpr std::array<EventDescriptor, 58> kEvents = {{

@@ -266,7 +266,7 @@
                       (nonzero? bound-target)
                       (= bound-target player-target))))
           (set! (-> player-target player-id) (the-as uint32 player-id))
-          (mp-apply-player-render-tint! player-target)
+          (mp-apply-player-render-appearance! player-target)
           (set! (-> record runtime target-handle) (process->handle player-target))
           (let* ((leased-pad-index
                    (mp-player-controller-lease-pad! controller record))
@@ -436,9 +436,9 @@
 (define-perm *mp-player-name-scratch* string (new 'global 'string 64 (the-as string #f)))
 
 (defun mp-player-name-equal? ((name-a (pointer uint8)) (name-b (pointer uint8)))
-  "Check if two 24-byte player name buffers are equal."
+  "Check if two 16-byte player name buffers are equal."
   (when (and name-a (nonzero? name-a) name-b (nonzero? name-b))
-    (dotimes (i 24)
+    (dotimes (i MP_PLAYER_NAME_SIZE)
       (let ((char-a (-> name-a i))
             (char-b (-> name-b i)))
         (when (!= char-a char-b)
@@ -480,7 +480,7 @@
          (let ((src (-> record identity name))
                (dst-data (-> dst data))
                (copy-len 0))
-           (while (and (< copy-len 23)
+           (while (and (< copy-len (- MP_PLAYER_NAME_SIZE 1))
                        (nonzero? (-> src copy-len)))
              (set! (-> dst-data copy-len) (-> src copy-len))
              (+! copy-len 1))
@@ -787,81 +787,5 @@
       (let ((player-bits (ash player-id MP_BATTLE_SPAWN_COUNTER_BITS)))
       (the-as uint
           (logior #x60000000 player-bits *mp-battle-spawn-counter*))))))
-
-(defun mp-player-marker-color-by-id ((player-id int) (fallback-color rgba))
-  "Resolve a player marker RGBA color from its zero-based player slot."
-  (cond
-    ((= player-id 0) (static-rgba 0 229 255 128))
-    ((= player-id 1) (static-rgba 255 140 0 128))
-    ((= player-id 2) (static-rgba 118 255 3 128))
-    ((= player-id 3) (static-rgba 255 46 209 128))
-    ((= player-id 4) (static-rgba 54 92 255 128))
-    ((= player-id 5) (static-rgba 255 230 0 128))
-    ((= player-id 6) (static-rgba 155 77 255 128))
-    ((= player-id 7) (static-rgba 255 92 138 128))
-    (else fallback-color)))
-
-(defun mp-player-font-color-by-id ((player-id int))
-  "Resolve the font color corresponding to the player's marker color."
-  (case player-id
-    ((0) (font-color cyan))
-    ((1) (font-color orange))
-    ((2) (font-color green))
-    ((3) (font-color pink))
-    ((4) (font-color blue))
-    ((5) (font-color yellow))
-    ((6) (font-color pink))
-    ((7) (font-color red))
-    (else (font-color default))))
-
-(defun mp-player-render-tint-color-by-id ((player-id int))
-  "Resolve the packed RGB color used for the player's clothing tint."
-  (case player-id
-    ((0) #x000000)
-    ((1) #xff8c00)
-    ((2) #x76ff03)
-    ((3) #xff2ed1)
-    ((4) #x365cff)
-    ((5) #xffe600)
-    ((6) #x9b4dff)
-    ((7) #xff5c8a)
-    (else #x000000)
-    )
-  )
-
-(defun mp-player-render-tint-strength-by-id ((player-id int))
-  "Player 0 keeps vanilla colors. Other player slots use the color tints."
-  (if (= player-id 0)
-      0.0
-      1.0
-      )
-  )
-
-(defun mp-apply-player-render-tint! ((proc target))
-  "Apply the multiplayer player-slot color to this target's Merc draw-control."
-  (when (and proc
-             (nonzero? proc)
-             (-> proc draw)
-             (nonzero? (-> proc draw)))
-    (let ((player-id (the-as int (-> proc player-id))))
-      (set! (-> proc draw pc-player-tint-color)
-            (mp-player-render-tint-color-by-id player-id))
-
-      (set! (-> proc draw pc-player-tint-strength)
-            (mp-player-render-tint-strength-by-id player-id))
-      )
-    )
-  (none)
-  )
-
-(defun mp-player-marker-color ((marker-key object) (fallback-color rgba))
-  (mp-player-marker-color-by-id
-    (- (the-as int marker-key) MP_REMOTE_PLAYER_MARKER_KEY_BASE)
-    fallback-color))
-
-(defun mp-local-player-marker-color ()
-  (mp-player-marker-color-by-id
-    (the-as int (mp-local-player-id))
-    (static-rgba 0 229 255 128)))
 
 (mp-player-controller-reset! *mp-player-controller*)

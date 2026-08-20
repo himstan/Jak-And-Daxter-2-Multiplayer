@@ -97,13 +97,15 @@ PacketJoin make_join_packet(const MPPlayerRecordGOAL& local, uint32_t sequence) 
   packet.player_id = local.identity.player_id;
   packet.character = local.identity.character;
   memcpy(packet.player_name, local.identity.name, sizeof(packet.player_name));
+  packet.appearance = mp_player_appearance_from_goal(local.identity.appearance);
   return packet;
 }
 
 bool valid_join_record(const MPPlayerRecordGOAL& local) {
   return mp_valid_player_id(local.identity.player_id) && local.identity.identity_ready &&
          local.identity.joined && mp_valid_player_character(local.identity.character) &&
-         valid_player_name(local.identity.name);
+         valid_player_name(local.identity.name) &&
+         mp_valid_player_appearance(mp_player_appearance_from_goal(local.identity.appearance));
 }
 
 bool send_local_join_packets(MultiplayerData& data, const MPPlayerRecordGOAL& local) {
@@ -308,6 +310,23 @@ bool mp_player_id_allowed_from_sender(const MultiplayerData& data,
   return data.session_role == 0 ? claimed_player_id == sender_player_id : true;
 }
 
+bool mp_apply_player_appearance_action(MultiplayerData& data,
+                                       uint32_t sender_player_id,
+                                       uint32_t player_id,
+                                       const MPPlayerAppearance& appearance,
+                                       MPPlayerControllerGOAL* controller) {
+  auto* record = joined_record(controller, player_id);
+  if (!record || !record->identity.identity_ready || record->identity.player_id != player_id ||
+      !mp_valid_player_appearance(appearance) ||
+      !mp_player_id_allowed_from_sender(data, sender_player_id, player_id)) {
+    return false;
+  }
+  mp_copy_player_appearance_to_goal(appearance, record->identity.appearance);
+  auto& cached = data.player_states[player_id];
+  cached.appearance = appearance;
+  return true;
+}
+
 void mp_clear_player_slot(MultiplayerData& data,
                           MPPlayerControllerGOAL* controller,
                           uint32_t player_id) {
@@ -461,7 +480,8 @@ bool mp_handle_join_packet(MultiplayerData& data,
   if (!join || !controller || !mp_valid_player_id(join->player_id) ||
       join->player_id == controller->local_player_id || join->player_id == data.local_player_id ||
       !mp_player_id_allowed_from_sender(data, sender_player_id, join->player_id) ||
-      !mp_valid_player_character(join->character) || !valid_player_name(join->player_name)) {
+      !mp_valid_player_character(join->character) || !valid_player_name(join->player_name) ||
+      !mp_valid_player_appearance(join->appearance)) {
     return false;
   }
   auto& cached = data.player_states[join->player_id];
@@ -469,6 +489,7 @@ bool mp_handle_join_packet(MultiplayerData& data,
   cached.player_id = join->player_id;
   cached.character = join->character;
   memcpy(cached.player_name, join->player_name, sizeof(cached.player_name));
+  cached.appearance = join->appearance;
 
   auto& record = controller->records[join->player_id];
   const auto runtime = record.runtime;
@@ -479,6 +500,7 @@ bool mp_handle_join_packet(MultiplayerData& data,
   record.identity.character = join->character;
   record.identity.identity_ready = 1;
   record.identity.joined = 1;
+  mp_copy_player_appearance_to_goal(join->appearance, record.identity.appearance);
   record.connection.connected = 1;
   record.action.riding_along_player_id = kMPInvalidPlayerId;
   memcpy(record.identity.name, join->player_name, sizeof(record.identity.name));
@@ -676,6 +698,7 @@ void mp_receive_player_sync(MultiplayerData& data,
       record.identity.character = cached.character;
       record.identity.identity_ready = 1;
       record.identity.joined = 1;
+      mp_copy_player_appearance_to_goal(cached.appearance, record.identity.appearance);
       record.connection.connected = 1;
       memcpy(record.identity.name, cached.player_name, sizeof(record.identity.name));
     }

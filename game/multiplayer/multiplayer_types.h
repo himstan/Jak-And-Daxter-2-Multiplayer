@@ -21,6 +21,7 @@ struct CachedPlayerState {
   uint32_t player_id = kMPInvalidPlayerId;
   MPPlayerCharacter character = MPPlayerCharacter::UNKNOWN;
   char player_name[kMultiplayerPlayerNameSize] = {};
+  MPPlayerAppearance appearance = {};
   uint8_t status;
   float x, y, z, angle;
   float vel_x, vel_y, vel_z;
@@ -84,6 +85,26 @@ struct MPEventBufferGOAL {
 };
 static_assert(sizeof(MPEventBufferGOAL) == 15904, "MPEventBufferGOAL must match GOAL");
 
+struct MPPlayerAppearanceGOAL {
+  uint32_t colors[kMPPlayerAppearanceSlotCount];
+  float strengths[kMPPlayerAppearanceSlotCount];
+};
+static_assert(sizeof(MPPlayerAppearanceGOAL) == 256);
+
+inline MPPlayerAppearance mp_player_appearance_from_goal(const MPPlayerAppearanceGOAL& goal) {
+  MPPlayerAppearance appearance = {};
+  std::copy(std::begin(goal.colors), std::end(goal.colors), appearance.colors.begin());
+  std::copy(std::begin(goal.strengths), std::end(goal.strengths), appearance.strengths.begin());
+  return appearance;
+}
+
+inline void mp_copy_player_appearance_to_goal(const MPPlayerAppearance& appearance,
+                                              MPPlayerAppearanceGOAL& goal) {
+  std::copy(appearance.colors.begin(), appearance.colors.end(), std::begin(goal.colors));
+  std::copy(appearance.strengths.begin(), appearance.strengths.end(),
+            std::begin(goal.strengths));
+}
+
 struct MPPlayerIdentityGOAL {
   uint32_t player_id;
   MPPlayerCharacter character;
@@ -92,9 +113,11 @@ struct MPPlayerIdentityGOAL {
   uint8_t joined;
   uint8_t spectator_only;
   char name[kMultiplayerPlayerNameSize];
-  uint8_t pad[12];
+  uint8_t pad_before_appearance[4];
+  MPPlayerAppearanceGOAL appearance;
 };
-static_assert(sizeof(MPPlayerIdentityGOAL) == 48);
+static_assert(offsetof(MPPlayerIdentityGOAL, appearance) == 32);
+static_assert(sizeof(MPPlayerIdentityGOAL) == 288);
 
 struct MPPlayerConnectionStateGOAL {
   int32_t status;
@@ -207,7 +230,7 @@ struct MPPlayerRecordGOAL {
   MPPlayerVehicleStateGOAL vehicle;
   MPPlayerRuntimeStateGOAL runtime;
 };
-static_assert(sizeof(MPPlayerRecordGOAL) == 480);
+static_assert(sizeof(MPPlayerRecordGOAL) == 720);
 
 struct MPPlayerCharacterConfigGOAL {
   MPPlayerCharacter characters[kMPMaxPlayers];

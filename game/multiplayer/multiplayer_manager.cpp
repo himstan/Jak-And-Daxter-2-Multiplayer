@@ -384,7 +384,7 @@ void MultiplayerManager::setup_host(
     data.authentication_failures = {};
     data.next_authentication_failure_slot = 0;
     data.internet_host = internet_host;
-    data.join_status = (int)MultiplayerStatus::CONNECTING;  // Waiting for peer
+    data.join_status = (int)MultiplayerStatus::CONNECTING;
     data.initialized = true;
 
     // Start discovery responder

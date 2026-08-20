@@ -25,6 +25,8 @@ uniform mat4 perspective_matrix;
 
 // output
 out vec4 vtx_color;
+out vec3 vtx_material_color;
+out vec3 vtx_light_color;
 out vec2 vtx_st;
 
 out float fog;
@@ -99,5 +101,7 @@ void main() {
 
 
   vtx_color = rgba * light_color;
+  vtx_material_color = rgba.rgb;
+  vtx_light_color = light_color.rgb;
   vtx_st = st_in;
 }

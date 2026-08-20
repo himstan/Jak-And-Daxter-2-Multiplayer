@@ -1,0 +1,163 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defun mp-player-appearance-copy!
+       ((destination mp-player-appearance) (source mp-player-appearance))
+  "Copy every stable appearance slot as one unit."
+  (when (and destination (nonzero? destination) source (nonzero? source))
+    (dotimes (slot MP_PLAYER_APPEARANCE_SLOT_COUNT)
+      (set! (-> destination colors slot) (-> source colors slot))
+      (set! (-> destination strengths slot) (-> source strengths slot))))
+  (none))
+
+(defun mp-player-appearance-equal?
+       ((left mp-player-appearance) (right mp-player-appearance))
+  (when (or (not left) (zero? left) (not right) (zero? right))
+    (return #f))
+  (dotimes (slot MP_PLAYER_APPEARANCE_SLOT_COUNT)
+    (when (or (!= (-> left colors slot) (-> right colors slot))
+              (!= (-> left strengths slot) (-> right strengths slot)))
+      (return #f)))
+  #t)
+
+(defun mp-player-appearance-group-text-id ((group mp-player-appearance-group))
+  (cond
+    ((= group (mp-player-appearance-group jak-jacket))
+     (text-id progress-lobby-color-group-jacket))
+    ((= group (mp-player-appearance-group jak-armor))
+     (text-id progress-lobby-color-group-armor))
+    ((= group (mp-player-appearance-group jak-pants))
+     (text-id progress-lobby-color-group-pants))
+    ((= group (mp-player-appearance-group jak-boots))
+     (text-id progress-lobby-color-group-boots))
+    ((= group (mp-player-appearance-group jak-leggings))
+     (text-id progress-lobby-color-group-leggings))
+    ((= group (mp-player-appearance-group jak-scarf))
+     (text-id progress-lobby-color-group-scarf))
+    ((= group (mp-player-appearance-group jak-pouch))
+     (text-id progress-lobby-color-group-pouch))
+    ((= group (mp-player-appearance-group jak-straps))
+     (text-id progress-lobby-color-group-straps))
+    ((= group (mp-player-appearance-group jak-gloves))
+     (text-id progress-lobby-color-group-gloves))
+    ((= group (mp-player-appearance-group daxter-hat))
+     (text-id progress-lobby-color-group-hat))
+    ((= group (mp-player-appearance-group daxter-fur))
+     (text-id progress-lobby-color-group-fur))
+    (else (text-id progress-lobby-color-group-primary))))
+
+(defun mp-player-appearance-group-name ((group mp-player-appearance-group))
+  (lookup-text! *common-text*
+                (mp-player-appearance-group-text-id group)
+                #f))
+
+(defun mp-player-appearance-group-for-character?
+       ((group mp-player-appearance-group) (character mp-player-character))
+  (or (= group (mp-player-appearance-group primary))
+      (and (= character (mp-player-character jak))
+           (>= group (mp-player-appearance-group jak-jacket))
+           (<= group (mp-player-appearance-group jak-gloves)))
+      (and (= character (mp-player-character daxter))
+           (>= group (mp-player-appearance-group daxter-hat))
+           (<= group (mp-player-appearance-group daxter-fur)))))
+
+(defun mp-player-appearance-group-registered?
+       ((group mp-player-appearance-group))
+  "Return true for Primary or a currently editable character texture group."
+  (or (mp-player-appearance-group-for-character?
+        group
+        (mp-player-character jak))
+      (mp-player-appearance-group-for-character?
+        group
+        (mp-player-character daxter))))
+
+(defun mp-player-appearance-normalize-reserved-slots!
+       ((appearance mp-player-appearance))
+  "Keep non-editable slots canonical when Primary changes."
+  (when (and appearance (nonzero? appearance))
+    (let ((primary-color
+            (-> appearance colors MP_PLAYER_PRIMARY_APPEARANCE_SLOT)))
+      (dotimes (slot MP_PLAYER_APPEARANCE_SLOT_COUNT)
+        (unless (mp-player-appearance-group-registered?
+                  (the-as mp-player-appearance-group slot))
+          (set! (-> appearance colors slot) primary-color)
+          (set! (-> appearance strengths slot) 0.0)))
+      (set! (-> appearance strengths MP_PLAYER_PRIMARY_APPEARANCE_SLOT) 0.0)))
+  (none))
+
+(defun mp-player-appearance-next-group
+       ((group mp-player-appearance-group)
+        (character mp-player-character)
+        (step int))
+  "Cycle the editable groups belonging to one preview character."
+  (let ((candidate (the-as int group)))
+    (dotimes (_ MP_PLAYER_APPEARANCE_SLOT_COUNT)
+      (set! candidate
+            (mod (+ candidate
+                    (if (< step 0)
+                        (- MP_PLAYER_APPEARANCE_SLOT_COUNT 1)
+                        1))
+                 MP_PLAYER_APPEARANCE_SLOT_COUNT))
+      (let ((candidate-group (the-as mp-player-appearance-group candidate)))
+        (when (mp-player-appearance-group-for-character? candidate-group character)
+          (return candidate-group)))))
+  (mp-player-appearance-group primary))
+
+(defun mp-apply-render-appearance!
+       ((draw-control draw-control) (appearance mp-player-appearance))
+  "Copy a complete appearance into a guarded Merc draw-control."
+  (when (and draw-control (nonzero? draw-control)
+             appearance (nonzero? appearance))
+    (dotimes (slot MP_PLAYER_APPEARANCE_SLOT_COUNT)
+      (set! (-> draw-control pc-player-tint-colors slot)
+            (-> appearance colors slot))
+      (set! (-> draw-control pc-player-tint-strengths slot)
+            (-> appearance strengths slot))))
+  (none))
+
+(defun mp-clear-render-appearance! ((draw-control draw-control))
+  (when (and draw-control (nonzero? draw-control))
+    (dotimes (slot MP_PLAYER_APPEARANCE_SLOT_COUNT)
+      (set! (-> draw-control pc-player-tint-colors slot) (the uint 0))
+      (set! (-> draw-control pc-player-tint-strengths slot) 0.0)))
+  (none))
+
+(defun mp-apply-player-render-appearance! ((proc target))
+  "Apply the synchronized appearance to a target's Merc draw-control."
+  (when (and proc (nonzero? proc))
+    (let ((draw-control (-> proc draw)))
+      (when (and draw-control (nonzero? draw-control))
+        (let ((record (mp-player-color-record-by-id
+                        (the-as int (-> proc player-id)))))
+          (if (and record (nonzero? record))
+              (mp-apply-render-appearance!
+                draw-control
+                (-> record identity appearance))
+              (mp-clear-render-appearance! draw-control))))))
+  (none))
+
+(defun mp-refresh-player-render-appearance! ((record mp-player-record))
+  (when (and record (nonzero? record))
+    (let ((player-target (mp-player-record-target record)))
+      (when (and player-target (nonzero? player-target))
+        (let ((draw-control (-> player-target draw)))
+          (when (and draw-control (nonzero? draw-control))
+            (let ((appearance (-> record identity appearance))
+                  (needs-refresh? #f))
+              (dotimes (slot MP_PLAYER_APPEARANCE_SLOT_COUNT)
+                (when (or (!= (-> draw-control pc-player-tint-colors slot)
+                              (-> appearance colors slot))
+                          (!= (-> draw-control pc-player-tint-strengths slot)
+                              (-> appearance strengths slot)))
+                  (set! needs-refresh? #t)))
+              (when needs-refresh?
+                (mp-apply-render-appearance! draw-control appearance))))))))
+  (none))
+
+(defun mp-refresh-player-render-appearances! ()
+  (when (and *mp-player-controller* (nonzero? *mp-player-controller*))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (and record (nonzero? record))
+          (mp-refresh-player-render-appearance! record)))))
+  (none))

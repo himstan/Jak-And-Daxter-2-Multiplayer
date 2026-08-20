@@ -475,11 +475,20 @@
       (-> obj controller-led-status?)
       ))
 
+(defun pc-controller-led-apply-base! ((destination rgbaf))
+  (when (and destination (nonzero? destination))
+    (if (and *pc-controller-led-base-color*
+             (nonzero? *pc-controller-led-base-color*))
+        (vector3-copy!! destination *pc-controller-led-base-color*)
+        (set-vector-xyz! destination 0.0 0.0 1.0)))
+  (none))
+
 (defmethod update-led ((obj pc-settings-jak2))
   "set the controller led color by modifying the controller-led-color vector"
 
-  ;; default color is just blue.
-  (set-vector-xyz! (-> obj controller-led-color) 0.0 0.0 1.0)
+  (mp-player-controller-led-sync-saved!)
+  (when (and obj (nonzero? obj))
+    (pc-controller-led-apply-base! (-> obj controller-led-color)))
 
   (when *target*
     (let ((disable-fader? #t)
@@ -506,7 +515,8 @@
       )
 
     (when (-> obj controller-led-status?)
-      (set-vector-xyz! (-> obj controller-led-color) 1.0 1.0 1.0)
+      (when (and obj (nonzero? obj))
+        (pc-controller-led-apply-base! (-> obj controller-led-color)))
       (cond
         ;; simon plat
         ((set! simon-plat (search-process-tree *active-pool*

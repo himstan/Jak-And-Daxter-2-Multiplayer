@@ -146,10 +146,52 @@
 
 ;; ERROR: function was not converted to expressions. Cannot decompile.
 
+(defun font-color-rgb-tagged? ((color font-color))
+  (logtest? (the-as uint color) FONT_COLOR_RGB_TAG))
+
+(defun font-color-channel->gs ((channel uint))
+  "Convert an 8-bit RGB channel into the GS font palette's 0-128 range."
+  (the-as uint (/ (+ channel 1) 2)))
+
+(defun materialize-font-rgb-color! ((color font-color))
+  (when (and *font-work* (nonzero? *font-work*))
+    (let* ((color-rgb (logand (the-as uint color) #x00ffffff))
+           (red (font-color-channel->gs (logand (ash color-rgb -16) #xff)))
+           (green (font-color-channel->gs (logand (ash color-rgb -8) #xff)))
+           (blue (font-color-channel->gs (logand color-rgb #xff))))
+      (dotimes (vertex 4)
+        (set! (-> *font-work* color-table (font-color font-color-21) color vertex r) red)
+        (set! (-> *font-work* color-table (font-color font-color-21) color vertex g) green)
+        (set! (-> *font-work* color-table (font-color font-color-21) color vertex b) blue))))
+  (none))
+
 (defun draw-string ((arg0 string) (arg1 dma-buffer) (arg2 font-context))
   ;; og:preserve-this modified a bit for debug font scaling.
+  (when (or (not arg0)
+            (zero? arg0)
+            (not arg1)
+            (zero? arg1)
+            (not arg2)
+            (zero? arg2)
+            (not *font-work*)
+            (zero? *font-work*))
+    (return (the draw-string-result #f)))
   (let  ((result (the draw-string-result #f))
-         (orig-scale (-> arg2 scale)))
+         (orig-scale (-> arg2 scale))
+         (orig-color (-> arg2 color))
+         (saved-color (new 'stack 'char-color))
+         (custom-color? (font-color-rgb-tagged? (-> arg2 color))))
+  (when (and custom-color?
+             *font-work*
+             (nonzero? *font-work*)
+             saved-color
+             (nonzero? saved-color))
+    (mem-copy!
+      (the-as pointer saved-color)
+      (the-as pointer (-> *font-work* color-table (font-color font-color-21)))
+      (size-of char-color))
+    (materialize-font-rgb-color! orig-color)
+    (set! (-> arg2 color) (font-color font-color-21)))
   (#when PC_PORT
     ;; debug font scaling.
     (unless (logtest? (-> arg2 flags) (font-flags large pc-hack))
@@ -168,12 +210,27 @@
       (set! result (the-as draw-string-result (-> arg2 origin quad)))
       (set! result (draw-string-asm arg0 arg1 arg2))
       )
+  (when (and custom-color?
+             *font-work*
+             (nonzero? *font-work*))
+    (when (= (-> *font-work* last-color) (font-color font-color-21))
+      (set! (-> *font-work* last-color) orig-color)))
   (dotimes (v1-7 40)
     (dotimes (a0-9 4)
       (set! (-> *font-work* color-table v1-7 color a0-9 a) #x80)
       )
     )
   (set! (-> *font-work* color-shadow w) 128)
+  (when (and custom-color?
+             *font-work*
+             (nonzero? *font-work*)
+             saved-color
+             (nonzero? saved-color))
+    (mem-copy!
+      (the-as pointer (-> *font-work* color-table (font-color font-color-21)))
+      (the-as pointer saved-color)
+      (size-of char-color))
+    (set! (-> arg2 color) orig-color))
   (set! (-> arg2 scale) orig-scale)
 
   result
