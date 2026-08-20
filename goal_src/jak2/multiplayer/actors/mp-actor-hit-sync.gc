@@ -152,6 +152,20 @@
   (not (time-elapsed? last-local-attack-time (seconds 0.2)))
   )
 
+(defun mp-actor-local-enemy-hit-fatal? ((e-proc enemy)
+                                        (attacker process)
+                                        (arg3 event-message-block))
+  "Would this local hit reduce the enemy to zero HP?"
+  (and e-proc
+       (nonzero? e-proc)
+       attacker
+       (nonzero? attacker)
+       arg3
+       (nonzero? arg3)
+       (<= (-> e-proc hit-points)
+           (damage-amount-from-attack e-proc attacker arg3)))
+  )
+
 (defun mp-actor-fill-attack-info-from-event! ((atk attack-info) (evt mp-actor-attack-event))
   "Fill caller-owned attack-info used for an authoritative remote actor hit."
   (set! (-> atk mask) (attack-mask id mode damage shove-back shove-up knock vector intersection attacker-velocity penetrate-using))
@@ -559,8 +573,10 @@
                       (or (= cur-state 'hit)
                           (= cur-state 'knocked)
                           (= cur-state 'knocked-vicinity)))
-             (mp-actor-send-local-hit-request! actor-kind e-proc attacker arg3)
-             (return 'block)
+             (when (not (mp-actor-local-enemy-hit-fatal? e-proc attacker arg3))
+               (mp-actor-send-local-hit-request! actor-kind e-proc attacker arg3)
+               (return 'block)
+               )
              )
            )
          )
