@@ -1076,6 +1076,20 @@
   (none)
   )
 
+(defun mp-event-handler-hover-enemy-spawn ((evt mp-hover-enemy-spawn-event))
+  (when (and evt
+             (nonzero? evt)
+             (mp-session-client?)
+             (= (-> evt source-player-id) (mp-host-player-id))
+             (nonzero? (-> evt manager-aid))
+             (nonzero? (-> evt source-aid))
+             (>= (-> evt enemy-aid) #x60000000)
+             (< (-> evt enemy-aid) #x70000000))
+    (mp-hover-enemy-apply-spawn! evt)
+    )
+  (none)
+  )
+
 (defun mp-receive-player-gun-shot-event ((evt mp-player-gun-shot-event))
   "Reapply a remote gun shot using the authoritative shot event."
   (set! *mp-processing-remote-event* #t)
@@ -1830,6 +1844,7 @@
             ((MP_EVENT_WIDOW_CATWALK_HIT) (mp-receive-widow-catwalk-hit-event (the-as mp-widow-catwalk-hit-event evt)))
             ((MP_EVENT_RACE) (mp-race-receive-event! (the-as mp-race-event evt)))
             ((MP_EVENT_PARTY_WIPE) (mp-death-party-wipe-receive!))
+            ((MP_EVENT_HOVER_ENEMY_SPAWN) (mp-event-handler-hover-enemy-spawn (the-as mp-hover-enemy-spawn-event evt)))
             (else (debug-log *mp-debug-log?* "[MP-Event] No handler for event ID ~D.~%" event-type)))
           )
          )

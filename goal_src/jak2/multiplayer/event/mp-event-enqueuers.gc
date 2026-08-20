@@ -23,6 +23,15 @@
   (none)
   )
 
+(defun mp-event-enqueue-hover-enemy-spawn! ((manager-aid uint)
+                                            (source-aid uint)
+                                            (enemy-aid uint))
+  (let ((event (new 'stack-no-clear 'mp-hover-enemy-spawn-event)))
+    (mp-event-enqueue!
+      (mp-event-build-hover-enemy-spawn! event manager-aid source-aid enemy-aid)))
+  (none)
+  )
+
 (defun mp-event-enqueue-actor-name! ((event-type uint) (proc-name string))
   (let ((event (new 'stack-no-clear 'mp-actor-name-event)))
     (mp-event-enqueue!

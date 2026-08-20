@@ -205,28 +205,124 @@
     )
   )
 
+(define *mp-hover-enemy-manager-search-aid* (the-as uint 0))
+(define *mp-hover-enemy-manager-search-result* (the-as hover-enemy-manager #f))
+
+(defun mp-hover-enemy-manager-search-callback ((node process-tree))
+  (let ((proc (the-as process node)))
+    (when (and proc
+               (nonzero? proc)
+               (type? proc hover-enemy-manager))
+      (let* ((manager (the-as hover-enemy-manager proc))
+             (ent (-> manager entity)))
+        (when (and ent
+                   (nonzero? ent)
+                   (= (-> ent aid) *mp-hover-enemy-manager-search-aid*))
+          (set! *mp-hover-enemy-manager-search-result* manager)
+          (return #f)
+          )
+        )
+      )
+    )
+  #t
+  )
+
+(defun mp-hover-enemy-manager-by-aid ((manager-aid uint))
+  (set! *mp-hover-enemy-manager-search-aid* manager-aid)
+  (set! *mp-hover-enemy-manager-search-result* (the-as hover-enemy-manager #f))
+  (iterate-process-tree *active-pool* mp-hover-enemy-manager-search-callback *kernel-context*)
+  *mp-hover-enemy-manager-search-result*
+  )
+
+(defun mp-hover-enemy-spawn-from-entity! ((manager hover-enemy-manager)
+                                          (spawn-entity entity-actor)
+                                          (enemy-aid uint)
+                                          (remote-spawn? symbol))
+  (when (and manager
+             (nonzero? manager)
+             spawn-entity
+             (nonzero? spawn-entity))
+    (let* ((enemy-type (-> spawn-entity etype))
+           (params (new 'stack-no-clear 'enemy-init-by-other-params))
+           (enemy-proc (get-process *default-dead-pool* enemy-type #x4000)))
+      (set! (-> params trans quad) (-> spawn-entity extra trans quad))
+      (quaternion-copy! (-> params quat) (-> spawn-entity quat))
+      (set! (-> params entity) spawn-entity)
+      (set! (-> params directed?) #f)
+      (set! (-> params no-initial-move-to-ground?) #t)
+      (set! (-> params battle-enemy?) #f)
+      (set! (-> params aid-override) (the-as uint32 enemy-aid))
+      (when (and enemy-proc (nonzero? enemy-proc))
+        ((method-of-type process activate)
+         enemy-proc
+         manager
+         (symbol->string (-> enemy-type symbol))
+         (the-as pointer #x70004000))
+        (run-now-in-process enemy-proc enemy-init-by-other manager params)
+        (+! (-> manager alive-count) 1)
+        (+! (-> manager num-spawned) 1)
+        (when remote-spawn?
+          (mp-enemy-note-remote-battle-spawn! (the-as enemy enemy-proc))
+          )
+        (return (the-as enemy enemy-proc))
+        )
+      )
+    )
+  (the-as enemy #f)
+  )
+
+(defun mp-hover-enemy-apply-spawn! ((evt mp-hover-enemy-spawn-event))
+  (when (and evt (nonzero? evt))
+    (let ((enemy-aid (the-as uint (-> evt enemy-aid))))
+      (when (not (find-enemy-by-aid enemy-aid))
+        (let ((manager (mp-hover-enemy-manager-by-aid (the-as uint (-> evt manager-aid))))
+              (spawn-ent (entity-by-aid (the-as uint (-> evt source-aid)))))
+          (when (and manager
+                     (nonzero? manager)
+                     spawn-ent
+                     (nonzero? spawn-ent)
+                     (type? spawn-ent entity-actor))
+            (mp-hover-enemy-spawn-from-entity!
+              manager
+              (the-as entity-actor spawn-ent)
+              enemy-aid
+              #t)
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
 (defmethod spawn-enemy ((this hover-enemy-manager) (arg0 uint))
-  (when (< arg0 (the-as uint (-> this actor-group-count)))
+  (when (and (or (not *multi-sync-enabled?*) (mp-session-host?))
+             (< arg0 (the-as uint (-> this actor-group-count))))
     (dotimes (s4-0 (-> this actor-group arg0 length))
-      (let* ((s1-0 (-> this actor-group arg0 data s4-0 actor))
-             (s2-0 (-> (the-as entity-actor s1-0) etype))
-             (s3-0 (new 'stack-no-clear 'transformq))
-             )
-        (set! (-> s3-0 trans quad) (-> s1-0 extra trans quad))
-        (quaternion-copy! (-> s3-0 quat) (-> (the-as entity-actor s1-0) quat))
-        (set! (-> s3-0 scale x) (the-as float s1-0))
-        (set! (-> s3-0 scale y) (the-as float #f))
-        (set! (-> s3-0 scale z) (the-as float #t))
-        (let ((s1-1 (get-process *default-dead-pool* s2-0 #x4000)))
-          (when (when s1-1
-                  (let ((t9-2 (method-of-type process activate)))
-                    (t9-2 s1-1 this (symbol->string (-> s2-0 symbol)) (the-as pointer #x70004000))
-                    )
-                  (run-now-in-process s1-1 enemy-init-by-other this s3-0)
-                  (-> s1-1 ppointer)
-                  )
-            (+! (-> this alive-count) 1)
-            (+! (-> this num-spawned) 1)
+      (let ((spawn-ent (-> this actor-group arg0 data s4-0 actor)))
+        (when (and spawn-ent
+                   (nonzero? spawn-ent)
+                   (type? spawn-ent entity-actor))
+          (let* ((enemy-aid (if *multi-sync-enabled?*
+                                (mp-generate-battle-enemy-aid)
+                                (the uint 0)))
+                 (enemy-proc
+                   (mp-hover-enemy-spawn-from-entity!
+                     this
+                     (the-as entity-actor spawn-ent)
+                     enemy-aid
+                     #f)))
+            (when (and enemy-proc
+                       (nonzero? enemy-proc)
+                       *multi-sync-enabled?*
+                       (nonzero? enemy-aid)
+                       (-> this entity)
+                       (nonzero? (-> this entity)))
+              (mp-event-enqueue-hover-enemy-spawn!
+                (-> this entity aid)
+                (-> (the-as entity-actor spawn-ent) aid)
+                enemy-aid)
+              )
             )
           )
         )

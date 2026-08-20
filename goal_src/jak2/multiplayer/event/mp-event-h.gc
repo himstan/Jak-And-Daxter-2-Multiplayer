@@ -178,6 +178,11 @@
   ((source-id uint32 :overlay-at (-> data 0))
    (gem-index uint32 :overlay-at (-> data 4))))
 
+(deftype mp-hover-enemy-spawn-event (mp-event)
+  ((manager-aid uint32 :overlay-at (-> data 0))
+   (source-aid uint32 :overlay-at (-> data 4))
+   (enemy-aid uint32 :overlay-at (-> data 8))))
+
 (deftype mp-mtn-plat-shoot-event (mp-event)
   ((aid uint32 :overlay-at (-> data 0))
    (axe-flip vector :inline :overlay-at (-> data 16))))
@@ -334,6 +339,7 @@
 (define-extern mp-receive-waypoint-event (function mp-waypoint-event symbol none))
 (define-extern mp-waypoint-event-same-target? (function mp-waypoint-event mp-waypoint-event symbol))
 (define-extern mp-battle-receive-event! (function mp-battle-event string none))
+(define-extern mp-hover-enemy-apply-spawn! (function mp-hover-enemy-spawn-event none))
 (define-extern mp-puppet-receive-gun-shot!
   (function uint mp-player-gun-shot-event none))
 (define-extern mp-receive-widow-spydroid-event (function mp-widow-spydroid-event none))
@@ -411,6 +417,7 @@
 (define-extern mp-event-build-aid! (function mp-aid-event uint uint mp-aid-event))
 (define-extern mp-event-build-enemy-death! (function mp-enemy-death-event uint mp-enemy-death-event))
 (define-extern mp-event-build-enemy-gem! (function mp-enemy-gem-event uint uint mp-enemy-gem-event))
+(define-extern mp-event-build-hover-enemy-spawn! (function mp-hover-enemy-spawn-event uint uint uint mp-hover-enemy-spawn-event))
 (define-extern mp-event-build-actor-name! (function mp-actor-name-event uint string mp-actor-name-event))
 (define-extern mp-event-build-robotank-trigger! (function mp-robotank-trigger-event string int vector mp-robotank-trigger-event))
 (define-extern mp-event-build-gungame! (function mp-gungame-event mp-gungame-build-data mp-gungame-event))
@@ -440,6 +447,7 @@
 (define-extern mp-event-enqueue-aid! (function uint uint none))
 (define-extern mp-event-enqueue-enemy-death! (function uint none))
 (define-extern mp-event-enqueue-enemy-gem! (function uint uint none))
+(define-extern mp-event-enqueue-hover-enemy-spawn! (function uint uint uint none))
 (define-extern mp-event-enqueue-actor-name! (function uint string symbol))
 (define-extern mp-event-enqueue-robotank-trigger! (function string int vector none))
 (define-extern mp-event-enqueue-gungame! (function mp-gungame-build-data none))

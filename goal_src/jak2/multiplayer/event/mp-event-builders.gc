@@ -65,6 +65,22 @@
   (the-as mp-enemy-gem-event #f)
   )
 
+(defun mp-event-build-hover-enemy-spawn! ((event mp-hover-enemy-spawn-event)
+                                          (manager-aid uint)
+                                          (source-aid uint)
+                                          (enemy-aid uint))
+  (when (and event
+             (nonzero? (the-as uint event))
+             (mp-event-prepare! event MP_EVENT_HOVER_ENEMY_SPAWN))
+    (set! (-> event manager-aid) (the-as uint32 manager-aid))
+    (set! (-> event source-aid) (the-as uint32 source-aid))
+    (set! (-> event enemy-aid) (the-as uint32 enemy-aid))
+    (set! (-> event payload-size) (the uint 12))
+    (return event)
+    )
+  (the-as mp-hover-enemy-spawn-event #f)
+  )
+
 (defun mp-event-build-actor-name! ((event mp-actor-name-event)
                                    (event-type uint)
                                    (proc-name string))
