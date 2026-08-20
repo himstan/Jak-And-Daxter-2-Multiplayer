@@ -234,7 +234,9 @@
 
 (defun mp-player-list-update! ()
   "Per-frame tick for the popup player list. Displays when SELECT is held."
-  (let ((select-held? (and *cpad-list*
+  (let ((select-held? (and *multi-sync-enabled?*
+                           (= (pc-multi-get-status) (mp-connection-status in-game))
+                           *cpad-list*
                            (nonzero? *cpad-list*)
                            (cpad-hold? 0 select)
                            (not (cpad-hold? 0 l3)))))
