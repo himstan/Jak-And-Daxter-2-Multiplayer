@@ -265,7 +265,11 @@
 
 (defmethod deactivate ((this scene-player))
   "Make a process dead, clean it up, remove it from the active pool, and return to dead pool."
-  (set! *scene-player* (the-as (pointer scene-player) #f))
+  (when (and *scene-player*
+             (nonzero? *scene-player*)
+             (= (ppointer->process *scene-player*) this))
+    (set! *scene-player* (the-as (pointer scene-player) #f))
+    )
   (kill-persister *setting-control* (the-as engine-pers 'blackout) 'bg-a-force)
   ((method-of-type process-drawable deactivate) this)
   (none)
@@ -299,18 +303,14 @@
       (when (or (not scene-name)
                 (zero? scene-name)
                 (zero? (length scene-name))
-                (mp-tomb-boulder-local-only-scene? scene-name)
-                (mp-tomb-scene-transport-suppressed? scene-name)
-                (mp-tomb-scene-sync-suppressed?)
-                (mp-tomb-scene-local-blocked? scene-name)
-                (and (string= scene-name "tomb-boss-intro")
-                     (mp-tomb-boss-intro-local-blocked?)))
+                (mp-tomb-boulder-local-only-scene? scene-name))
         (return #f))
       (when (mp-scene-coordinator-note-local-start! scene-name)
         (debug-log *mp-debug-log?*
           "[MP-Scene] Registered/recovered local scene entry for ~S; broadcasting.~%"
           scene-name)
-        (mp-event-hook-scene! (mp-scene-state started) scene-name)
+        (mp-event-hook-scene!
+          (mp-scene-state started) scene-name)
         (return #t))))
   #f)
 
@@ -1359,6 +1359,13 @@
                 (when (and (cpad-pressed? 0 triangle)
                            (mp-scene-skip-ready? self))
                   (cond
+                    ((and (-> self scene)
+                          (nonzero? (-> self scene))
+                          (-> self scene name)
+                          (nonzero? (-> self scene name))
+                          (mp-tomb-boulder-local-only-scene? (-> self scene name)))
+                       (mp-abort-local-scene! self)
+                       )
                     ((not *multi-sync-enabled?*)
                      (mp-abort-local-scene! self)
                      )
@@ -1650,7 +1657,11 @@
     (set! *mp-was-riding-before-scene* (can-daxter-revert-to-ride-along-after-scene? self))
     )
   (mp-tomb-boulder-adjust-scene! self)
-  (set! (-> self aborted?) (if (and (-> self scene) (string= (-> self scene name) *mp-last-scene-name*)) #t #f))
+  (set! (-> self aborted?)
+        (if (and (-> self scene)
+                 (string= (-> self scene name) *mp-last-scene-name*))
+            #t
+            #f))
   (set! (-> self gui-id) (add-process
                            *gui-control*
                            self
@@ -1666,6 +1677,11 @@
         )
   (set! *scene-player* (the-as (pointer scene-player) (process->ppointer self)))
 
+  (when (not (-> self aborted?))
+    (set! *scene-player*
+          (the-as (pointer scene-player) (process->ppointer self)))
+    )
+  
   (when (-> self scene)
     (copy-string<-string *mp-last-scene-name* (-> self scene name))
     )

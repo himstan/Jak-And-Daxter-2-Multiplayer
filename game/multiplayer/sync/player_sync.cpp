@@ -563,7 +563,9 @@ void mp_handle_bootstrap_packet(const ENetPacket* packet,
   world->weather_rain = state->weather_rain;
   memcpy(world->task_mask, state->task_mask, sizeof(world->task_mask));
   memcpy(world->active_task_mask, state->active_task_mask, sizeof(world->active_task_mask));
-  bootstrap->phase = 1;
+  if (bootstrap->phase == 0) {
+    bootstrap->phase = 1;
+  }
   bootstrap->sequence = state->header.sequenceNum;
   bootstrap->host_task = state->host_task;
   memcpy(bootstrap->host_continue, state->host_continue, sizeof(bootstrap->host_continue));

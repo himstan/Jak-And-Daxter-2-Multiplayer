@@ -718,6 +718,14 @@
   #f
   )
 
+(defun is-host-owned-scene ((scene-name string))
+  (the-as symbol (and (mp-session-host?)
+                      (not (mp-local-scene-name-matches? scene-name))
+                      (or 
+                        (string= scene-name "tomb-boss-res")
+                        )))
+  )
+
 (defun mp-process-pending-scene-sync! ()
   (when *mp-pending-scene-sync?*
     (let ((source-record (mp-scene-coordinator-source-record)))
@@ -767,14 +775,40 @@
       (cond
 
         ((mp-tomb-scene-transport-suppressed? s*)
-         (debug-log *mp-debug-log?* "[MP-Event-Handlers] Ignoring locally-owned tomb scene: ~S~%" s*)
+         (debug-log *mp-debug-log?*
+           "[MP-Event-Handlers] Ignoring locally-owned tomb scene: ~S~%"
+           s*)
          )
-        ((mp-tomb-boulder-ignore-remote-scene? s*)
-         (debug-log *mp-debug-log?* "[MP-Event-Handlers] Ignoring role-incompatible tomb scene: ~S~%" s*)
-         )
+
         ((mp-ignore-intro-start-after-skip? s*)
-         (debug-log *mp-debug-log?* "[MP-Event-Handlers] Ignoring post-skip intro scene start: ~S.~%" s*)
+         (debug-log *mp-debug-log?*
+           "[MP-Event-Handlers] Ignoring post-skip intro scene start: ~S.~%"
+           s*)
          )
+        
+        ((is-host-owned-scene s*)
+         (debug-log *mp-debug-log?*
+           "[MP-Event-Handlers] Ignoring client initiation of host-owned scene ~S.~%"
+           s*)
+         )
+        
+        ((mp-tomb-boulder-ignore-remote-scene? s*)
+         (if (mp-local-scene-name-matches? s*)
+             (if (mp-scene-coordinator-note-remote-start!
+                   source-player-id s*)
+                 (debug-log *mp-debug-log?*
+                   "[MP-Event-Handlers] Recorded player ~D entry for locally active role-owned scene ~S.~%"
+                   source-player-id
+                   s*)
+                 (debug-log *mp-debug-log?*
+                   "[MP-Event-Handlers] Could not record player ~D entry for role-owned scene ~S.~%"
+                   source-player-id
+                   s*)
+                 )
+             (debug-log *mp-debug-log?* "[MP-Event-Handlers] Ignoring role-incompatible tomb scene: ~S~%" s*)
+             )
+         )
+
         ((not (mp-scene-coordinator-note-remote-start!
                 source-player-id s*))
          (debug-log *mp-debug-log?*
@@ -782,12 +816,14 @@
            s*
            source-player-id)
          )
+
         ((mp-duplicate-scene-start? s*)
          (debug-log *mp-debug-log?*
            "[MP-Event-Handlers] Recorded player ~D entry for active scene ~S.~%"
            source-player-id
            s*)
          )
+
         (else
          (debug-log *mp-debug-log?*
            "[MP-Event-Handlers] Player ~D started scene ~S. Waiting for local readiness.~%"

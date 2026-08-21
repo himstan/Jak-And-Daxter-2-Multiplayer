@@ -154,9 +154,7 @@
        (and scene-name
             (nonzero? scene-name)
             (or (string= scene-name "tomb-spider-scare")
-                (mp-tomb-scene-sync-suppressed?)
-                (and (mp-local-player-jak?)
-                     (string= scene-name "tomb-boss-intro")))))
+                (mp-tomb-scene-sync-suppressed?))))
   )
 
 (defun mp-tomb-boulder-finish-intro! ()
@@ -232,6 +230,7 @@
 (defun mp-tomb-boulder-prepare-bootstrap-continue! ((continue-name string) (name-length int))
   (set! *mp-tomb-boulder-bootstrap-local-placement?* #f)
   (if (and *mp-tomb-boulder-reconnect-restart?*
+           (mp-local-player-daxter?)
            (or (mp-tomb-boulder-bootstrap-isolated?) (tomb-poles-boulder-closed-and-boss-door-not-closed?))
            continue-name
            (nonzero? continue-name))
@@ -331,6 +330,11 @@
       (debug-log *mp-debug-log?* "[MP-TombBoulder] Daxter completed the chase; closing the host task.~%")
       (task-node-close! (game-task-node tomb-poles-boulder))
       )
+    )
+  (when (and (mp-local-player-daxter?)
+             (mp-tomb-boulder-started?))
+    (debug-log *mp-debug-log?* "[MP-TombBoulder] Another Daxter completed the chase, loading in tombboss-spider-end~%")
+    (start 'play (get-continue-by-name *game-info* "tombboss-spider-end"))
     )
   (none)
   )

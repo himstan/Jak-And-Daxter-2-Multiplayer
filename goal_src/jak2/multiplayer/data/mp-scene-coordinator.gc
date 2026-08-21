@@ -378,11 +378,7 @@
                      *mp-scene-coordinator-name*))
           (mp-scene-coordinator-clear-player! player-id))
         (when (and (zero? (-> record action scene-state))
-                   (or (zero? (-> record action scene-latched?))
-                       (!= (-> record connection latest-state-sequence)
-                           (-> record action last-replayed-sequence))))
-          (set! (-> record action scene-latched?) (the uint8 0))
-          (set! (-> record action last-replayed-sequence) (the uint 0))
+                   (zero? (-> record action scene-latched?)))
           (mp-scene-coordinator-clear-player! player-id))))
   #t)
 

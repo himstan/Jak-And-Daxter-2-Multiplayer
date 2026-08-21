@@ -458,10 +458,33 @@
             (the-as uint *mp-bootstrap-state*))
           (set! status (pc-multi-get-status))
           (mp-session-refresh-bridge-identity! status)
-          (pc-multi-receive-sync
-            (the-as uint *mp-player-controller*)
-            (the-as uint *mp-world-state*)
-            (the-as uint *mp-bootstrap-state*))
+          (let ((bootstrap-phase-before (-> *mp-bootstrap-state* phase)))
+            (let ((local-bootstrap-phase
+                    (if (and (mp-session-client?)
+                             *mp-bootstrap-state*
+                             (nonzero? *mp-bootstrap-state*))
+                        (-> *mp-bootstrap-state* phase)
+                        (the uint 0))))
+              (pc-multi-receive-sync
+                (the-as uint *mp-player-controller*)
+                (the-as uint *mp-world-state*)
+                (the-as uint *mp-bootstrap-state*))
+              (when (and (= status (mp-connection-status game-starting))
+                         (or (= local-bootstrap-phase (the uint 2))
+                             (= local-bootstrap-phase (the uint 3)))
+                         (= (-> *mp-bootstrap-state* phase) (the uint 1)))
+                (set! (-> *mp-bootstrap-state* phase) local-bootstrap-phase)
+                )
+              )
+            (when (and (= status (mp-connection-status game-starting))
+                       (or (= bootstrap-phase-before (the uint 2))
+                           (= bootstrap-phase-before (the uint 3)))
+                       (= (-> *mp-bootstrap-state* phase) (the uint 1)))
+              (debug-log *mp-debug-log?*
+                "[MP-Bootstrap] Duplicate bootstrap received during phase ~D; preserving local progress.~%"
+                bootstrap-phase-before)
+              (set! (-> *mp-bootstrap-state* phase) bootstrap-phase-before))
+            )
           (mp-refresh-player-render-appearances!)
           (set! status (pc-multi-get-status))
           (mp-session-ensure-bootstrap-controller! status)

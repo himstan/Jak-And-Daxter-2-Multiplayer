@@ -2,6 +2,7 @@
 (in-package goal)
 
 (define-perm *mp-bootstrap-wait-log-time* time-frame 0)
+(define-perm *mp-bootstrap-local-phase* uint (the-as uint 0))
 
 (deftype mp-bootstrap-controller (process)
   ()
@@ -180,7 +181,9 @@
 (defmethod mp-bootstrap-sync-flag ((this mp-bootstrap-controller))
   (the uint
        (if (and (mp-local-player-record) (nonzero? (mp-local-player-record)))
-           (-> *mp-bootstrap-state* phase)
+           (if (nonzero? *mp-bootstrap-local-phase*)
+               *mp-bootstrap-local-phase*
+               (-> *mp-bootstrap-state* phase))
            0))
   )
 
@@ -207,6 +210,7 @@
        (set! *multi-sync-enabled?* #f)
        (pc-multi-set-status (mp-connection-status game-starting))
        (when (and (mp-local-player-record) (nonzero? (mp-local-player-record)))
+         (set! *mp-bootstrap-local-phase* (the uint 2))
          (set! (-> *mp-bootstrap-state* phase) (the-as uint 2))
          )
        (when (and *game-info* (nonzero? *game-info*))
@@ -455,10 +459,11 @@
   (mp-force-clear-bootstrap-progress-ui! this)
   (mp-clear-client-presentation-blackout!)
   (set! *task-manager-spawn-suppressed?* #f)
-  (pc-multi-set-status (mp-connection-status in-game))
+  (set! *mp-bootstrap-local-phase* (the uint 0))
   (when (and (mp-local-player-record) (nonzero? (mp-local-player-record)))
     (set! (-> *mp-bootstrap-state* phase) (the-as uint 0))
     )
+  (pc-multi-set-status (mp-connection-status in-game))
   (set! *mp-intro-skip-blackout-pending?* #f)
   (set! *multi-sync-enabled?* #t)
   (mp-tomb-boulder-bootstrap-complete!)
@@ -504,15 +509,29 @@
   :code (behavior ()
     (until #f
       (cond
-        ((not (mp-bootstrap-client-active? self)) (go-virtual mp-bootstrap-idle))
+        ((not (mp-bootstrap-client-active? self))
+         (go-virtual mp-bootstrap-idle))
         ((= (mp-bootstrap-sync-flag self) (the uint 1))
          (go-virtual mp-bootstrap-load))
         ((= (mp-bootstrap-sync-flag self) (the uint 2))
-         (mp-log-bootstrap-wait! self 'waiting-for-local-spawn)
-         (suspend))
+         (if (mp-bootstrap-client-ready-for-apply? self)
+             (begin
+               (debug-log *mp-debug-log?* "[MP-Bootstrap] Promoting bootstrap phase ~D -> 3.~%" (mp-bootstrap-sync-flag self))
+               (set! *mp-bootstrap-local-phase* (the uint 3))
+               (set! (-> *mp-bootstrap-state* phase) (the uint 3))
+               (debug-log *mp-debug-log?* "[MP-Bootstrap] Local target/world ready; bootstrap apply armed.~%")
+               (suspend)
+               )
+             (begin
+               (mp-log-bootstrap-wait! self 'waiting-for-local-readiness)
+               (suspend)
+               )
+             )
+         )
         ((= (mp-bootstrap-sync-flag self) (the uint 3))
          (go-virtual mp-bootstrap-apply))
-        (else (go-virtual mp-bootstrap-idle))))
+        (else
+         (go-virtual mp-bootstrap-idle))))
     #f))
 
 (defstate mp-bootstrap-apply (mp-bootstrap-controller)
@@ -530,6 +549,7 @@
         ((not (mp-bootstrap-client-ready-for-apply? self))
          (mp-log-bootstrap-apply-wait! self) (suspend))
         (else
+         (debug-log *mp-debug-log?* "[MP-Bootstrap] Entered apply with phase=~D.~%" (-> *mp-bootstrap-state* phase))
          (debug-log *mp-debug-log?* "[MP-Bootstrap] Applying world state for ~S...~%" *mp-continue-name*)
          (mp-bootstrap-apply-player-values! self)
          (mp-bootstrap-apply-task-snapshot! self)
@@ -552,7 +572,8 @@
                (= status (mp-connection-status game-starting))
                local-record
                (nonzero? local-record)
-               (= (-> *mp-bootstrap-state* phase) (the uint 2)))
+               (= *mp-bootstrap-local-phase* (the uint 2)))
+      (set! *mp-bootstrap-local-phase* (the uint 3))
       (set! (-> *mp-bootstrap-state* phase) (the uint 3))
       (debug-log *mp-debug-log?* "[MP-Bootstrap] Local player spawned; bootstrap apply armed.~%")
       )
@@ -595,6 +616,7 @@
 
 (defun mp-bootstrap-controller-reset! ()
   (mp-bootstrap-controller-kill-all!)
+  (set! *mp-bootstrap-local-phase* (the uint 0))
   (set! *task-manager-spawn-suppressed?* #f)
   (none)
   )
