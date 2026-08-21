@@ -77,6 +77,7 @@
 (defconstant MP_EVENT_RACE (the uint 57))
 (defconstant MP_EVENT_PARTY_WIPE (the uint 58))
 (defconstant MP_EVENT_HOVER_ENEMY_SPAWN (the uint 59))
+(defconstant MP_EVENT_DRILL_EGG (the uint 60))
 
 (defconstant MP_PACKET_COUNT (the uint 16))
 
@@ -163,6 +164,7 @@
     ((= event-id MP_EVENT_RACE) #t)
     ((= event-id MP_EVENT_PARTY_WIPE) #t)
     ((= event-id MP_EVENT_HOVER_ENEMY_SPAWN) #t)
+    ((= event-id MP_EVENT_DRILL_EGG) #t)
     (else #f)
     )
   )

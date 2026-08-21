@@ -658,16 +658,22 @@
              (gp-0 (the-as object (-> block param 1)))
              (v1-1 (the-as process (as-type proc process-drawable)))
              )
-         (when (or (and s5-0
-                        v1-1
-                        (and gp-0 (nonzero? gp-0) (or (= (-> (the-as attack-info gp-0) mode) 'turret) (= (-> (the-as attack-info gp-0) mode) 'explode)))
-                        )
-                   (and gp-0 (nonzero? gp-0) (= (-> (the-as attack-info gp-0) mode) 'mp-break))
-                   )
+         (when (and s5-0
+                    v1-1
+                    (or (= (-> (the-as attack-info gp-0) mode) 'turret) (= (-> (the-as attack-info gp-0) mode) 'explode)))
+           (when (not *mp-processing-remote-event*)
+             (when (and (-> self entity) (nonzero? (-> self entity)))
+               (mp-event-enqueue-aid! MP_EVENT_DRILL_EGG (-> self entity aid))
+               )
+             )
            (logclear! (-> self mask) (process-mask actor-pause))
            (go-virtual die)
            )
          )
+       )
+      (('die)
+       (logclear! (-> self mask) (process-mask actor-pause))
+       (go-virtual die)
        )
       )
     )
