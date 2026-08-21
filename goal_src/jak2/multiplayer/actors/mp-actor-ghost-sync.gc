@@ -10,13 +10,14 @@
   (fmin 1.0 (fmax 0.0 (* rate (seconds-per-frame))))
   )
 
-(defun mp-actor-update-presentation! ((presentation-trans vector)
-                                      (presentation-quat quaternion)
-                                      (target-trans vector)
-                                      (target-quat quaternion)
-                                      (initialized? symbol)
-                                      (force-snap? symbol))
-  "Advance an independent replica transform using only authoritative samples."
+(defun mp-actor-update-presentation-with-rates! ((presentation-trans vector)
+                                                 (presentation-quat quaternion)
+                                                 (target-trans vector)
+                                                 (target-quat quaternion)
+                                                 (initialized? symbol)
+                                                 (force-snap? symbol)
+                                                 (position-rate float)
+                                                 (rotation-rate float))
   (when (and presentation-trans
              (nonzero? presentation-trans)
              presentation-quat
@@ -36,14 +37,32 @@
           (vector-lerp! presentation-trans
                         presentation-trans
                         target-trans
-                        (mp-actor-presentation-frame-blend 15.0))
+                        (mp-actor-presentation-frame-blend position-rate))
           (quaternion-slerp! presentation-quat
                              presentation-quat
                              target-quat
-                             (mp-actor-presentation-frame-blend 24.0))
+                             (mp-actor-presentation-frame-blend rotation-rate))
           )
         )
     )
+  (none)
+  )
+
+(defun mp-actor-update-presentation! ((presentation-trans vector)
+                                      (presentation-quat quaternion)
+                                      (target-trans vector)
+                                      (target-quat quaternion)
+                                      (initialized? symbol)
+                                      (force-snap? symbol))
+  (mp-actor-update-presentation-with-rates!
+    presentation-trans
+    presentation-quat
+    target-trans
+    target-quat
+    initialized?
+    force-snap?
+    15.0
+    24.0)
   (none)
   )
 

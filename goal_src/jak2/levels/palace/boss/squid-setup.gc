@@ -180,6 +180,9 @@
    (last-start-recharging-talker    int8)
    (last-done-recharging-talker     int8)
    (suck                            float)
+   (presentation-trans              vector)
+   (presentation-quat               quaternion)
+   (presentation-valid              symbol)
    )
   (:state-methods
     test
@@ -1652,6 +1655,7 @@
     )
   (set! (-> this baron) (the-as squid-baron (process-spawn squid-baron (-> this root trans) :to this)))
   (set! (-> this driver) (process-spawn squid-driver "driver-" :to this))
+  (set! (-> this presentation-valid) #f)
   (init (-> this driver-blend) 0.0 0.0025 0.025 0.5)
   (set-params! (-> this hit-reaction) (the-as vector #f) 0.2 1.0 0.5)
   (let ((s5-6 (vector+!
