@@ -374,6 +374,8 @@
 
 
 (define-perm *target* target #f)
+(define-extern hide-model (function target none))
+(define-extern show-model (function target none))
 
 (deftype sidekick (process-drawable)
   ((parent               (pointer target) :override)
