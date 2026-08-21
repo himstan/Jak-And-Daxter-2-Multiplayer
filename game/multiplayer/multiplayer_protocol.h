@@ -402,15 +402,16 @@ struct MPPalaceSquidState {
   uint32_t action_seq;
   float x, y, z;
   float quat_x, quat_y, quat_z, quat_w;
+  float root_x, root_y, root_z;
+  float root_quat_x, root_quat_y, root_quat_z, root_quat_w;
   float traj_src_x, traj_src_y, traj_src_z;
   float traj_dest_x, traj_dest_y, traj_dest_z;
   float traj_duration;
   int32_t traj_age;
-  uint32_t pad_last_updated;
   uint64_t last_updated;
   uint8_t pad[12];
 };
-static_assert(sizeof(MPPalaceSquidState) == 116, "MPPalaceSquidState must be 116 bytes");
+static_assert(sizeof(MPPalaceSquidState) == 140, "MPPalaceSquidState must be 140 bytes");
 
 struct PacketPalaceSquidSync {
   PacketHeader header;

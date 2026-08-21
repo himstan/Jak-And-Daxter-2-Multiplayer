@@ -344,8 +344,10 @@
       (format *stdcon* "READY?: ~A~%" (if squid-ready? "YES" "NO"))
       )
 
-    (let ((proc-handle-valid? (and *mp-palace-squid-proc* (nonzero? *mp-palace-squid-proc*))))
-      (format *stdcon* "PROC HANDLE: ~A (addr: ~D)~%" (if proc-handle-valid? "VALID" "NULL") *mp-palace-squid-proc*)
+    (let ((proc (process-by-type-exact 'squid *active-pool*)))
+      (when (and proc (nonzero? proc))
+        (format *stdcon* "PROC HANDLE: ~A (addr: ~D)~%" (if (and proc (nonzero? proc)) "VALID" "NULL") proc)
+        )
       )
 
     (let ((tree-proc (mp-find-squid-process)))
@@ -393,7 +395,7 @@
    Mirrors the pattern used by mp-enemy/ped/vehicle debug overlays."
   (when *mp-debug-boss*
     (mp-draw-widow-boss-overlay)
-    (let ((proc *mp-palace-squid-proc*))
+    (let ((proc (the-as squid (process-by-type-exact 'squid *active-pool*))))
       (when (and proc (nonzero? proc)
                  (-> proc root)
                  (nonzero? (-> proc root)))

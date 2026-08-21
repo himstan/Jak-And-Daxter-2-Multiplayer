@@ -6,18 +6,27 @@
 
 #include <cstring>
 
-void mp_handle_palace_squid_sync_packet(MultiplayerData& data,
-                                        const ENetPacket* packet,
-                                        uint32_t current_time) {
+void mp_handle_palace_squid_sync_packet(MultiplayerData& data, const ENetPacket* packet, uint32_t current_time) {
   const auto sync =
       PacketView(packet).as_exact<PacketPalaceSquidSync>(PacketType::PALACE_SQUID_SYNC);
-  if (!sync || data.session_role == 0 || sync->state.active > 1 || sync->state.state_id > 15 ||
+  if (!sync || data.session_role == 0 || sync->state.active > 1 ||
+      sync->state.state_id > 15 ||
       !mp_valid_player_id(static_cast<uint32_t>(sync->state.target_player_id)) ||
       !mp_float_is_finite(sync->state.shield_hit_points) ||
-      !mp_float_is_finite(sync->state.x) || !mp_float_is_finite(sync->state.y) ||
-      !mp_float_is_finite(sync->state.z) || !mp_float_is_finite(sync->state.quat_x) ||
-      !mp_float_is_finite(sync->state.quat_y) || !mp_float_is_finite(sync->state.quat_z) ||
+      !mp_float_is_finite(sync->state.x) ||
+      !mp_float_is_finite(sync->state.y) ||
+      !mp_float_is_finite(sync->state.z) ||
+      !mp_float_is_finite(sync->state.quat_x) ||
+      !mp_float_is_finite(sync->state.quat_y) ||
+      !mp_float_is_finite(sync->state.quat_z) ||
       !mp_float_is_finite(sync->state.quat_w) ||
+      !mp_float_is_finite(sync->state.root_x) ||
+      !mp_float_is_finite(sync->state.root_y) ||
+      !mp_float_is_finite(sync->state.root_z) ||
+      !mp_float_is_finite(sync->state.root_quat_x) ||
+      !mp_float_is_finite(sync->state.root_quat_y) ||
+      !mp_float_is_finite(sync->state.root_quat_z) ||
+      !mp_float_is_finite(sync->state.root_quat_w) ||
       !mp_float_is_finite(sync->state.traj_src_x) ||
       !mp_float_is_finite(sync->state.traj_src_y) ||
       !mp_float_is_finite(sync->state.traj_src_z) ||

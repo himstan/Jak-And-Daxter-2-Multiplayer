@@ -301,13 +301,19 @@ static_assert(sizeof(MPTrafficSyncBufferGOAL) == 13352, "MPTrafficSyncBufferGOAL
 
 struct MPPalaceSquidSyncBufferGOAL {
   MPPalaceSquidState local_state;
-  uint8_t pad_after_local[12];
+  uint8_t pad_after_local[4];
   MPPalaceSquidState remote_state;
   uint8_t pad_before_last_sync[4];
   uint64_t last_sync_time;
   uint8_t pad[8];
 };
-static_assert(sizeof(MPPalaceSquidSyncBufferGOAL) == 264,
+static_assert(offsetof(MPPalaceSquidSyncBufferGOAL, remote_state) == 144,
+              "MPPalaceSquidSyncBufferGOAL remote_state offset mismatch");
+
+static_assert(offsetof(MPPalaceSquidSyncBufferGOAL, last_sync_time) == 288,
+              "MPPalaceSquidSyncBufferGOAL last_sync_time offset mismatch");
+
+static_assert(sizeof(MPPalaceSquidSyncBufferGOAL) == 304,
               "MPPalaceSquidSyncBufferGOAL must match GOAL");
 
 struct MPWidowSyncBufferGOAL {

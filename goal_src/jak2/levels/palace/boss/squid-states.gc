@@ -225,6 +225,7 @@
 
 (defstate test (squid)
   :virtual #t
+  :event squid-handler
   :enter (behavior ()
     (set-time! (-> self state-time))
     )
@@ -322,6 +323,7 @@
 
 (defstate beaten (squid)
   :virtual #t
+  :event squid-handler
   :enter (behavior ()
     (ja-channel-set! 0)
     (ja-post)
@@ -423,10 +425,14 @@
            )
          )
         (else
-          (mp-palace-squid-note-resolution! self)
-          (process-spawn scene-player :init scene-player-init "palace-boss-res" #t #f)
-          (remove-setting! 'music)
-          (go-virtual beaten)
+          (when (mp-palace-squid-state-authority?)
+            (when (mp-session-host?)
+              (mp-palace-squid-note-resolution! self)
+              (process-spawn scene-player :init scene-player-init "palace-boss-res"  #t #f)
+              )
+            (remove-setting! 'music)
+            (go-virtual beaten)
+            )
           )
         )
       )
@@ -439,10 +445,12 @@
     (set! (-> self force-onto-mesh) #f)
     )
   :exit (behavior ()
-    (set! (-> self hit-points) 10)
-    (set! (-> self stage) (min 2 (+ (-> self stage) 1)))
-    (change-to (nav-mesh-from-res-tag (-> self entity) 'nav-mesh-actor (-> self stage)) self)
-    (set! (-> self current-nav-poly) #f)
+    (when (mp-palace-squid-state-authority?)
+      (set! (-> self hit-points) 10)
+      (set! (-> self stage) (min 2 (+ (-> self stage) 1)))
+      (change-to (nav-mesh-from-res-tag (-> self entity) 'nav-mesh-actor (-> self stage)) self)
+      (set! (-> self current-nav-poly) #f)
+      )
     )
   :trans (behavior ()
     (ja :num! (loop!))
@@ -1578,6 +1586,7 @@
 
 (defstate hidden (squid)
   :virtual #t
+  :event squid-handler
   :enter (behavior ()
     (ja-channel-set! 0)
     (ja-post)

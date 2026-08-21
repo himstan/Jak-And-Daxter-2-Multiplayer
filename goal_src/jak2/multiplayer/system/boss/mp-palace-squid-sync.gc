@@ -1,46 +1,12 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(define *mp-palace-squid-proc* (the-as squid #f))
 (define *mp-palace-squid-last-applied-state* (the uint 0))
-(define *mp-palace-squid-last-hit-request* (the uint 0))
-(define *mp-palace-squid-last-action-seq* (the uint 0))
-(define *mp-palace-squid-pending-resolution-seq* (the uint 0))
-(define *mp-palace-squid-applying-action* #f)
 (define *mp-palace-squid-target-player-id* (the-as int MP_INVALID_PLAYER_ID))
 (define *mp-palace-squid-last-state-name* (the-as symbol 'none))
 
-(defun mp-palace-squid-reset-presentation! ((proc squid))
-  (when (and proc (nonzero? proc))
-    (set! (-> proc presentation-valid) #f)
-    )
-  (none)
-  )
-
-(defun mp-palace-squid-interpolate-presentation! ((proc squid)
-                                                  (target-trans vector)
-                                                  (target-quat quaternion))
-  (when (and proc (nonzero? proc))
-    (let ((root (-> proc root)))
-      (when (and root (nonzero? root))
-        (mp-actor-update-presentation-with-rates! (-> proc presentation-trans)
-                                                  (-> proc presentation-quat)
-                                                  target-trans
-                                                  target-quat
-                                                  (-> proc presentation-valid)
-                                                  #f
-                                                  6.0
-                                                  10.0)
-        (set! (-> proc presentation-valid) #t)
-        (mp-actor-apply-presentation! (the-as collide-shape root)
-                                      (-> proc presentation-trans)
-                                      (-> proc presentation-quat)
-                                      (-> root transv))
-        )
-      )
-    )
-  (none)
-  )
+(define-extern mp-palace-squid-reset-presentation! (function squid none))
+(define-extern mp-palace-squid-interpolate-presentation! (function squid vector quaternion none))
 
 (defun mp-palace-squid-ready? ()
   (and *multi-sync-enabled?*
@@ -48,6 +14,11 @@
        *mp-palace-squid-buffer*
        (nonzero? (the-as uint *mp-palace-squid-buffer*))
        )
+  )
+
+(defun mp-palace-squid-state-authority? ()
+  (or (not (mp-palace-squid-ready?))
+      (mp-session-host?))
   )
 
 (defun mp-palace-squid-local-player-valid? ()
@@ -148,15 +119,39 @@
   (set! (-> slot hit-points) (-> proc hit-points))
   (set! (-> slot shield-hit-points) (-> proc shield-hit-points))
   (set! (-> slot target-player-id) *mp-palace-squid-target-player-id*)
-  (set! (-> slot draw-force-fade) (if (and (-> proc draw) (nonzero? (-> proc draw))) (-> proc draw force-fade) (the uint 0)))
-  (set! (-> slot action-seq) *mp-palace-squid-last-action-seq*)
-  (set! (-> slot x) (-> proc root trans x))
-  (set! (-> slot y) (-> proc root trans y))
-  (set! (-> slot z) (-> proc root trans z))
-  (set! (-> slot quat-x) (-> proc root quat x))
-  (set! (-> slot quat-y) (-> proc root quat y))
-  (set! (-> slot quat-z) (-> proc root quat z))
-  (set! (-> slot quat-w) (-> proc root quat w))
+  (set! (-> slot draw-force-fade)
+        (if (and (-> proc draw) (nonzero? (-> proc draw)))
+            (-> proc draw force-fade)
+            (the uint 0)))
+  (set! (-> slot action-seq) (-> proc mp-last-action-seq))
+  (set! (-> slot x) (-> proc trans x))
+  (set! (-> slot y) (-> proc trans y))
+  (set! (-> slot z) (-> proc trans z))
+  (set! (-> slot quat-x) (-> proc quat x))
+  (set! (-> slot quat-y) (-> proc quat y))
+  (set! (-> slot quat-z) (-> proc quat z))
+  (set! (-> slot quat-w) (-> proc quat w))
+  (if (and (-> proc root)
+           (nonzero? (-> proc root)))
+      (begin
+        (set! (-> slot root-x) (-> proc root trans x))
+        (set! (-> slot root-y) (-> proc root trans y))
+        (set! (-> slot root-z) (-> proc root trans z))
+        (set! (-> slot root-quat-x) (-> proc root quat x))
+        (set! (-> slot root-quat-y) (-> proc root quat y))
+        (set! (-> slot root-quat-z) (-> proc root quat z))
+        (set! (-> slot root-quat-w) (-> proc root quat w))
+        )
+      (begin
+        (set! (-> slot root-x) (-> proc trans x))
+        (set! (-> slot root-y) (-> proc trans y))
+        (set! (-> slot root-z) (-> proc trans z))
+        (set! (-> slot root-quat-x) (-> proc quat x))
+        (set! (-> slot root-quat-y) (-> proc quat y))
+        (set! (-> slot root-quat-z) (-> proc quat z))
+        (set! (-> slot root-quat-w) (-> proc quat w))
+        )
+      )
   (set! (-> slot traj-src-x) (-> proc traj-src x))
   (set! (-> slot traj-src-y) (-> proc traj-src y))
   (set! (-> slot traj-src-z) (-> proc traj-src z))
@@ -190,15 +185,27 @@
              (-> proc root)
              (nonzero? (-> proc root))
              (nonzero? (-> slot active)))
-    (let ((target-trans (new 'stack-no-clear 'vector))
-          (target-quat (new 'stack-no-clear 'quaternion)))
-      (set-vector! target-trans (-> slot x) (-> slot y) (-> slot z) 1.0)
-      (quaternion-set! target-quat (-> slot quat-x) (-> slot quat-y) (-> slot quat-z) (-> slot quat-w))
+    (let ((gameplay-trans (new 'stack-no-clear 'vector))
+          (gameplay-quat (new 'stack-no-clear 'quaternion))
+          (presentation-trans (new 'stack-no-clear 'vector))
+          (presentation-quat (new 'stack-no-clear 'quaternion)))
+      (set-vector! gameplay-trans (-> slot x) (-> slot y) (-> slot z) 1.0)
+      (quaternion-set! gameplay-quat (-> slot quat-x) (-> slot quat-y) (-> slot quat-z) (-> slot quat-w))
+      (set-vector! presentation-trans (-> slot root-x) (-> slot root-y) (-> slot root-z) 1.0)
+      (quaternion-set! presentation-quat (-> slot root-quat-x) (-> slot root-quat-y) (-> slot root-quat-z) (-> slot root-quat-w))
+      (vector-copy! (-> proc trans) gameplay-trans)
+      (quaternion-copy! (-> proc quat) gameplay-quat)
 
-      (vector-copy! (-> proc trans) target-trans)
-      (quaternion-copy! (-> proc quat) target-quat)
-
-      (set! (-> proc stage) (-> slot stage))
+      (let ((old-stage (-> proc stage))
+            (host-stage (-> slot stage)))
+        (when (!= old-stage host-stage)
+          (set! (-> proc stage) host-stage)
+          (change-to (nav-mesh-from-res-tag (-> proc entity) 'nav-mesh-actor host-stage) proc)
+          (set! (-> proc current-nav-poly) #f)
+          (debug-log *mp-debug-log?* "[MP-BOSS] Authoritative stage change: ~D -> ~D~%" old-stage host-stage)
+          )
+        (set! (-> proc stage) host-stage)
+        )
       (set! (-> proc hit-points) (-> slot hit-points))
       (set! (-> proc shield-hit-points) (-> slot shield-hit-points))
 
@@ -206,30 +213,37 @@
         (set! (-> proc draw force-fade) (-> slot draw-force-fade))
         )
 
-      (when (and (!= *mp-palace-squid-last-applied-state* (-> slot state-id))
-                 (!= (-> slot state-id) (mp-palace-squid-state-id fire)))
-        (let ((old-name (mp-palace-squid-current-state-name proc)))
-          (set! *mp-palace-squid-last-applied-state* (-> slot state-id))
-          (mp-palace-squid-go-state! proc (-> slot state-id))
-          (let ((new-name (mp-palace-squid-current-state-name proc)))
-            (debug-log *mp-debug-log?* "[Squid Boss] State change (REMOTE SYNC): ~S -> ~S~%" old-name new-name)
-            (set! *mp-palace-squid-last-state-name* new-name)
+      (let ((desired-state-id (-> slot state-id))
+            (local-state-id (mp-palace-squid-state->id (mp-palace-squid-current-state-name proc))))
+        (set! *mp-palace-squid-last-applied-state* desired-state-id)
+        (when (and (!= local-state-id desired-state-id)
+                   (!= desired-state-id (mp-palace-squid-state-id fire)))
+          (let ((old-name (mp-palace-squid-current-state-name proc)))
+            (mp-palace-squid-go-state! proc desired-state-id)
+            (let ((new-name (mp-palace-squid-current-state-name proc)))
+              (debug-log *mp-debug-log?* "[MP-BOSS] Correcting remote state: ~S -> ~S~%" old-name new-name)
+              (set! *mp-palace-squid-last-state-name* new-name)
+              )
             )
           )
         )
 
       (mp-palace-squid-apply-trajectory! proc slot)
-      (mp-palace-squid-interpolate-presentation! proc target-trans target-quat)
+      (mp-palace-squid-interpolate-presentation! proc presentation-trans presentation-quat)
       )
     )
   (none)
   )
 
-(defun mp-palace-squid-local-action-authorized? ()
-  (or (not (mp-palace-squid-ready?))
+(defun mp-palace-squid-local-action-authorized? ((proc squid))
+  (the-as symbol 
+    (or (not (mp-palace-squid-ready?))
       (mp-session-host?)
-      *mp-palace-squid-applying-action*
+      (and proc
+           (nonzero? proc)
+           (-> proc mp-applying-action))
       )
+    )
   )
 
 (defun mp-palace-squid-queue-event! ((evt-kind uint)
@@ -256,21 +270,37 @@
   )
 
 (defun mp-palace-squid-send-hit-request! ((proc squid) (msg event-message-block))
-  (let ((attack-id (the uint (current-time))))
-    (when (and msg (nonzero? msg) (-> msg param 1))
-      (set! attack-id (-> (the-as attack-info (-> msg param 1)) id))
+  (let ((attack-id (the uint (current-time)))
+        (dark-bomb? 0))
+    (when (and msg
+               (nonzero? msg)
+               (-> msg param 1))
+      (let ((attack (the-as attack-info (-> msg param 1))))
+        (set! attack-id (-> attack id))
+        (when (and
+                (logtest?
+                  (attack-mask penetrate-using)
+                  (-> attack mask))
+                (logtest?
+                  (penetrate dark-bomb)
+                  (-> attack penetrate-using)))
+          (set! dark-bomb? 1)
+          )
+        )
       )
-    (when (!= *mp-palace-squid-last-hit-request* (the uint attack-id))
-      (set! *mp-palace-squid-last-hit-request* (the uint attack-id))
+    (when (!= (-> proc mp-last-hit-request) attack-id)
+      (set! (-> proc mp-last-hit-request) attack-id)
       (mp-palace-squid-queue-event!
         MP_PALACE_SQUID_EVT_HIT_REQUEST
-        (the uint attack-id)
+        attack-id
         (the-as int attack-id)
-        0
+        dark-bomb?
         0
         0.0
         (-> proc root trans)
-        (if (mp-palace-squid-local-player-valid?) (-> *target* control trans) (the-as vector #f))
+        (if (mp-palace-squid-local-player-valid?)
+            (-> *target* control trans)
+            (the-as vector #f))
         )
       )
     )
@@ -297,30 +327,12 @@
       )
   )
 
-(defun mp-palace-squid-apply-hit-request! ((evt mp-palace-squid-event))
-  (when (mp-session-host?)
-    (let ((proc *mp-palace-squid-proc*))
-      (when (and proc (nonzero? proc) (!= *mp-palace-squid-last-hit-request* (-> evt sequence)))
-        (set! *mp-palace-squid-last-hit-request* (-> evt sequence))
-        (set! *mp-processing-remote-event* #t)
-        (send-event
-          proc
-          'attack
-          (mp-player-target-by-id (-> evt source-player-id))
-          (static-attack-info ((id (-> evt param0)) (mode 'mp-hit-remote) (shove-back (meters 2)) (shove-up (meters 0.5)))))
-        (set! *mp-processing-remote-event* #f)
-        )
-      )
-    )
-  (none)
-  )
-
 (defun mp-palace-squid-note-grenade-spawn! ((proc squid) (joint-id int) (holder-index int) (charge float) (holder squid-grenade-holder))
   (when (and (mp-palace-squid-ready?) (mp-session-host?) proc (nonzero? proc) holder)
-    (+! *mp-palace-squid-last-action-seq* 1)
+    (+! (-> proc mp-last-action-seq) 1)
     (mp-palace-squid-queue-event!
       MP_PALACE_SQUID_EVT_GRENADE
-      *mp-palace-squid-last-action-seq*
+      (-> proc mp-last-action-seq)
       joint-id
       holder-index
       0
@@ -334,10 +346,10 @@
 
 (defun mp-palace-squid-note-whirlwind-spawn! ((proc squid))
   (when (and (mp-palace-squid-ready?) (mp-session-host?) proc (nonzero? proc))
-    (+! *mp-palace-squid-last-action-seq* 1)
+    (+! (-> proc mp-last-action-seq) 1)
     (mp-palace-squid-queue-event!
       MP_PALACE_SQUID_EVT_WHIRLWIND
-      *mp-palace-squid-last-action-seq*
+      (-> proc mp-last-action-seq)
       0
       0
       0
@@ -351,41 +363,16 @@
 
 (defun mp-palace-squid-note-resolution! ((proc squid))
   (when (and (mp-palace-squid-ready?) (mp-session-host?) proc (nonzero? proc))
-    (+! *mp-palace-squid-last-action-seq* 1)
+    (+! (-> proc mp-last-action-seq) 1)
     (mp-palace-squid-queue-event!
       MP_PALACE_SQUID_EVT_RESOLUTION
-      *mp-palace-squid-last-action-seq*
+      (-> proc mp-last-action-seq)
       0
       0
       0
       0.0
       (-> proc root trans)
       (-> proc root trans)
-      )
-    )
-  (none)
-  )
-
-(defun mp-palace-squid-apply-grenade-event! ((evt mp-palace-squid-event))
-  (let ((proc *mp-palace-squid-proc*))
-    (when (and proc (nonzero? proc) (>= (-> evt param1) 0) (< (-> evt param1) 10))
-      (let ((holder (-> proc grenade (-> evt param1))))
-        (vector-copy! (-> holder target-position) (-> evt target-position))
-        (set! *mp-palace-squid-applying-action* #t)
-        (spawn-grenade proc (-> evt param0) holder (-> evt charge))
-        (set! *mp-palace-squid-applying-action* #f)
-        )
-      )
-    )
-  (none)
-  )
-
-(defun mp-palace-squid-apply-whirlwind-event! ((evt mp-palace-squid-event))
-  (let ((proc *mp-palace-squid-proc*))
-    (when (and proc (nonzero? proc))
-      (set! *mp-palace-squid-applying-action* #t)
-      (spawn-whirlwind proc)
-      (set! *mp-palace-squid-applying-action* #f)
       )
     )
   (none)
@@ -402,51 +389,50 @@
        )
   )
 
-(defun mp-palace-squid-apply-resolution-event! ((sequence uint))
-  (let ((proc *mp-palace-squid-proc*))
-    (when (and proc
-               (nonzero? proc)
-               (mp-palace-squid-resolution-safe-to-start?))
-      (process-spawn scene-player :init scene-player-init "palace-boss-res" #t #f)
-      (remove-setting! 'music)
-      (set! *mp-palace-squid-last-action-seq* sequence)
-      (set! *mp-palace-squid-pending-resolution-seq* (the uint 0))
-      )
+(defun mp-palace-squid-apply-resolution-event! ((proc squid) (sequence uint))
+  (when (and proc
+             (nonzero? proc)
+             (mp-palace-squid-resolution-safe-to-start?))
+    (mp-palace-squid-go-state! proc (the-as uint (mp-palace-squid-state-id beaten)))
+    (process-spawn scene-player :init scene-player-init "palace-boss-res" #t #f)
+    (remove-setting! 'music)
+    (set! (-> proc mp-last-action-seq) sequence)
+    (set! (-> proc mp-pending-resolution-seq) (the uint 0))
     )
   (none)
   )
 
-(defun mp-palace-squid-poll-resolution! ()
-  (when (and (not (mp-session-host?)) (> *mp-palace-squid-pending-resolution-seq* *mp-palace-squid-last-action-seq*))
-    (mp-palace-squid-apply-resolution-event! *mp-palace-squid-pending-resolution-seq*)
+(defun mp-palace-squid-poll-resolution! ((proc squid))
+  (when (and proc
+             (nonzero? proc)
+             (mp-session-client?)
+             (> (-> proc mp-pending-resolution-seq)
+                (-> proc mp-last-action-seq)))
+    (mp-palace-squid-apply-resolution-event! proc (-> proc mp-pending-resolution-seq))
     )
   (none)
   )
 
 (defun mp-palace-squid-tick ((proc squid))
-  (set! *mp-palace-squid-proc* proc)
   (if (not (mp-palace-squid-ready?))
       (mp-palace-squid-reset-presentation! proc)
-      (begin
-        (if (mp-session-host?)
-            (begin
-              (mp-palace-squid-pack-state! proc (-> *mp-palace-squid-buffer* local-state))
-              (pc-multi-send-palace-squid (the-as uint *mp-palace-squid-buffer*))
-              )
-            (begin
-              (pc-multi-receive-palace-squid (the-as uint *mp-palace-squid-buffer*))
-              (mp-palace-squid-apply-state! proc (-> *mp-palace-squid-buffer* remote-state))
-              (mp-palace-squid-poll-resolution!)
-              (let ((cur-name (mp-palace-squid-current-state-name proc)))
-                (when (and cur-name
-                           (!= cur-name *mp-palace-squid-last-state-name*))
-                  (debug-log *mp-debug-log?* "[MP-BOSS] State change (LOCAL): ~S -> ~S~%" *mp-palace-squid-last-state-name* cur-name)
-                  (set! *mp-palace-squid-last-state-name* cur-name)
-                  )
+      (if (mp-session-host?)
+          (begin
+            (mp-palace-squid-pack-state! proc (-> *mp-palace-squid-buffer* local-state))
+            (pc-multi-send-palace-squid (the-as uint *mp-palace-squid-buffer*))
+            )
+          (begin
+            (pc-multi-receive-palace-squid (the-as uint *mp-palace-squid-buffer*))
+            (mp-palace-squid-apply-state! proc (-> *mp-palace-squid-buffer* remote-state))
+            (mp-palace-squid-poll-resolution! proc)
+            (let ((cur-name (mp-palace-squid-current-state-name proc)))
+              (when (and cur-name (!= cur-name *mp-palace-squid-last-state-name*))
+                (debug-log *mp-debug-log?* "[MP-BOSS] State change (LOCAL): ~S -> ~S~%" *mp-palace-squid-last-state-name* cur-name)
+                (set! *mp-palace-squid-last-state-name* cur-name)
                 )
               )
             )
-        )
+          )
       )
   (none)
   )

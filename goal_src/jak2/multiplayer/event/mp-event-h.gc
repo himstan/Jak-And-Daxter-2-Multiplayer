@@ -359,7 +359,7 @@
 (define-extern mp-palace-squid-apply-hit-request! (function mp-palace-squid-event none))
 (define-extern mp-palace-squid-apply-grenade-event! (function mp-palace-squid-event none))
 (define-extern mp-palace-squid-apply-whirlwind-event! (function mp-palace-squid-event none))
-(define-extern mp-palace-squid-apply-resolution-event! (function uint none))
+(define-extern mp-palace-squid-apply-resolution-event! (function squid uint none))
 (define-extern mp-palace-squid-should-swallow-attack? (function squid process event-message-block symbol))
 (define-extern *mp-palace-squid-last-action-seq* uint)
 (define-extern *mp-palace-squid-pending-resolution-seq* uint)
