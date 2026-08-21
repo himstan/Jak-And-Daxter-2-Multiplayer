@@ -25,7 +25,7 @@ def read_capacity(path: Path, pattern: str, language: str) -> int:
 def main() -> int:
     try:
         goal_capacity = read_capacity(
-            GOAL_CAPACITY, r"\(defconstant\s+MP_MAX_PLAYERS\s+(\d+)\)", "GOAL"
+            GOAL_CAPACITY, r"\((?:defconstant|defglobalconstant)\s+MP_MAX_PLAYERS\s+(\d+)\)", "GOAL"
         )
         cpp_capacity = read_capacity(
             CPP_CAPACITY,

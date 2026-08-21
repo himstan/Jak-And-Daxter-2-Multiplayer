@@ -16,7 +16,7 @@ from typing import List, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CAPACITY_HEADER = Path("goal_src/jak2/multiplayer/core/mp-capacity-h.gc")
-CAPACITY_PATTERN = re.compile(r"\(defconstant\s+MP_MAX_PLAYERS\s+(\d+)\)")
+CAPACITY_PATTERN = re.compile(r"\((?:defconstant|defglobalconstant)\s+MP_MAX_PLAYERS\s+(\d+)\)")
 
 
 class LauncherError(RuntimeError):

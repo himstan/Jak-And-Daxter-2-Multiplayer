@@ -8,29 +8,42 @@ multiplayer-settings.json store and are committed when editing finishes.
 
 (defun-extern pc-get-last-key uint)
 (defun-extern draw-generic-highlight int int float pointer)
-(defun-extern draw-generic-simple-string-option menu-generic-option progress font-context int string none)
 (define-extern mp-player-color-progress-enter! (function progress none))
 
-(deftype menu-multiplayer-player-name-option (menu-generic-option) ())
-(deftype menu-multiplayer-setting-field-option (menu-generic-option)
-  ((field int32)))
+(deftype menu-multiplayer-text-field-option (menu-generic-option)
+  ((field         int32)
+   (get-value-fn  (function int string))
+   (on-edit-fn    (function int uint symbol))
+   (on-commit-fn  (function int progress symbol)))
+  (:methods
+    (get-display-string (_type_) string)
+    (handle-edit! (_type_ progress uint) symbol)
+    (handle-commit! (_type_ progress) symbol))
+  )
+
 (deftype menu-multiplayer-player-character-boolean-option (menu-generic-boolean-option)
   ((player-id int32)))
+
+(deftype menu-multiplayer-large-link-option (menu-generic-link-option) ())
 
 (define *mp-preference-port-display* (the-as string #f))
 (define *mp-preference-room-code-display* (the-as string #f))
 (define *mp-preference-player-name-display* (the-as string #f))
 
+(defun mp-preference-field-display ((field int))
+  (cond
+    ((= field 0) *mp-preference-port-display*)
+    ((= field 1) *mp-preference-room-code-display*)
+    ((= field 2) *mp-preference-player-name-display*)
+    (else (the-as string #f))))
+
 (defun mp-refresh-preference-field! ((field int))
   (let ((display (pc-multi-get-preference-field field)))
     (when (and display (nonzero? (the-as uint display)))
-      (if (= field 0)
-          (set! *mp-preference-port-display* display)
-          (if (= field 1)
-              (set! *mp-preference-room-code-display* display)
-              (set! *mp-preference-player-name-display* display)))
-      )
-    )
+      (cond
+        ((= field 0) (set! *mp-preference-port-display* display))
+        ((= field 1) (set! *mp-preference-room-code-display* display))
+        ((= field 2) (set! *mp-preference-player-name-display* display)))))
   (none))
 
 (defun mp-refresh-preference-fields! ()
@@ -39,121 +52,149 @@ multiplayer-settings.json store and are committed when editing finishes.
   (mp-refresh-preference-field! 2)
   (none))
 
+(define-extern *multiplayer-options-pc* menu-option-list)
+
+(defun mp-reset-scrolling-page-selection! ((menu-list menu-option-list))
+  (when (and menu-list (nonzero? (the-as uint menu-list)))
+    (let ((options-array (-> menu-list options)))
+      (when (and options-array (nonzero? (the-as uint options-array)) (> (-> options-array length) 0))
+        (let ((page (-> options-array 0)))
+          (when (and page (nonzero? (the-as uint page)) (type? page menu-generic-scrolling-page))
+            (set! (-> (the-as menu-generic-scrolling-page page) selected-option-index) -1))))))
+  (none))
+
+(defun mp-reset-multiplayer-options-selection! ()
+  (mp-reset-scrolling-page-selection! *multiplayer-options-pc*)
+  (none))
+
 (defun mp-load-multiplayer-options! ()
   (pc-multi-discard-preference-edits)
   (mp-sync-preferences-to-session-host-config!)
   (mp-refresh-preference-fields!)
+  (mp-reset-multiplayer-options-selection!)
+  (when (and *progress-process* (nonzero? *progress-process*))
+    (let ((p (-> *progress-process* 0)))
+      (when (and p (nonzero? p))
+        (set! (-> p selected-option) #f))))
   (none))
 
-(defun mp-player-name-finish-edit! ((p progress))
-  (when (and p (nonzero? (the-as uint p)))
-    (if (= (pc-multi-commit-preference-field 2) 1)
-        (begin
-          (mp-refresh-preference-field! 2)
-          (set! (-> p selected-option) #f)
-          (sound-play "generic-beep"))
-        (sound-play "menu-error"))
-    )
-  (none))
-
-(defun mp-player-name-edit! ((p progress) (key uint))
-  (when (and p
-             (nonzero? (the-as uint p))
-             (= (pc-multi-edit-preference-field 2 key) 1))
-    (mp-refresh-preference-field! 2)
-    )
-  (none))
-
-(defmethod respond-progress ((obj menu-multiplayer-player-name-option)
-                             (p progress) (selected? symbol))
-  (when (and selected?
-             obj (nonzero? (the-as uint obj))
-             p (nonzero? (the-as uint p)))
-    (let ((key (pc-get-last-key)))
-      (cond
-        ((cpad-pressed? 0 confirm)
-         (mp-player-name-finish-edit! p))
-        ((or (= key #x0d) (= key #x0a))
-         (mp-player-name-finish-edit! p))
-        ((nonzero? key)
-         (mp-player-name-edit! p key)))
-      )
-    )
-  0)
-
-(defmethod draw-option ((obj menu-multiplayer-player-name-option)
-                        (p progress) (font-ctx font-context)
-                        (option-index int) (selected? symbol))
-  (when (and obj (nonzero? (the-as uint obj))
-             p (nonzero? (the-as uint p))
-             font-ctx (nonzero? (the-as uint font-ctx))
-             *mp-preference-player-name-display*
-             (nonzero? (the-as uint *mp-preference-player-name-display*)))
-    (format (clear *temp-string*) "~S: ~S"
-            (lookup-text! *common-text* (text-id progress-username) #f)
-            *mp-preference-player-name-display*)
-    (draw-generic-simple-string-option obj p font-ctx option-index *temp-string*)
-      )
-  (none))
-
-(defun mp-preference-field-display ((field int))
-  (if (= field 0)
-      *mp-preference-port-display*
-      *mp-preference-room-code-display*))
-
-(defun mp-preference-field-label ((field int))
-  (if (= field 0)
-      (text-id progress-multiplayer-network-port)
-      (text-id progress-multiplayer-room-code)))
-
-(defun mp-commit-preference-field! ((field int) (p progress))
-  (when (and p (nonzero? (the-as uint p)))
-    (if (= (pc-multi-commit-preference-field field) 1)
+(defun mp-commit-preference-field! ((field int))
+  (let ((success? (= (pc-multi-commit-preference-field field) 1)))
+    (if success?
         (begin
           (mp-refresh-preference-field! field)
-          (set! (-> p selected-option) #f)
-          (sound-play "generic-beep"))
-        (sound-play "menu-error"))
-    )
+          (sound-play "generic-beep")
+          #t)
+        (begin
+          (sound-play "menu-error")
+          #f))))
+
+(defun mp-cancel-preference-field! ((field int))
+  (pc-multi-discard-preference-edits)
+  (mp-refresh-preference-field! field)
   (none))
 
-(defmethod respond-progress ((obj menu-multiplayer-setting-field-option)
+(defmethod get-display-string ((obj menu-multiplayer-text-field-option))
+  (if (and (nonzero? (-> obj get-value-fn)) (!= (-> obj get-value-fn) #f))
+      ((-> obj get-value-fn) (-> obj field))
+      (mp-preference-field-display (-> obj field))))
+
+(defmethod handle-edit! ((obj menu-multiplayer-text-field-option) (p progress) (key uint))
+  (if (and (nonzero? (-> obj on-edit-fn)) (!= (-> obj on-edit-fn) #f))
+      ((-> obj on-edit-fn) (-> obj field) key)
+      (let ((result (= (pc-multi-edit-preference-field (-> obj field) key) 1)))
+        (when result
+          (mp-refresh-preference-field! (-> obj field)))
+        result)))
+
+(defmethod handle-commit! ((obj menu-multiplayer-text-field-option) (p progress))
+  (if (and (nonzero? (-> obj on-commit-fn)) (!= (-> obj on-commit-fn) #f))
+      ((-> obj on-commit-fn) (-> obj field) p)
+      (mp-commit-preference-field! (-> obj field))))
+
+(defmethod respond-progress ((obj menu-multiplayer-text-field-option)
                              (p progress) (selected? symbol))
-  (when (and selected?
-             obj (nonzero? (the-as uint obj))
-             p (nonzero? (the-as uint p)))
-    (let ((field (-> obj field))
-          (key (pc-get-last-key)))
+  (if selected?
+      (let ((key (pc-get-last-key)))
+        (cond
+          ((cpad-pressed? 0 confirm)
+           (handle-commit! obj p))
+          ((cpad-pressed? 0 triangle)
+           (mp-cancel-preference-field! (-> obj field)))
+          ((or (= key #x0d) (= key #x0a))
+           (handle-commit! obj p)
+           (when (and p (nonzero? (the-as uint p)))
+             (set! (-> p selected-option) #f))
+           (mp-reset-multiplayer-options-selection!))
+          ((nonzero? key)
+           (handle-edit! obj p key))))
       (cond
         ((cpad-pressed? 0 confirm)
-         (mp-commit-preference-field! field p))
-        ((or (= key #x0d) (= key #x0a))
-         (mp-commit-preference-field! field p))
-        ((nonzero? key)
-         (when (= (pc-multi-edit-preference-field field key) 1)
-           (mp-refresh-preference-field! field)))
-        )
-      )
-    )
+         (mp-refresh-preference-field! (-> obj field)))))
   0)
 
-(defmethod draw-option ((obj menu-multiplayer-setting-field-option)
+(defmethod draw-option ((obj menu-multiplayer-text-field-option)
                         (p progress) (font-ctx font-context)
                         (option-index int) (selected? symbol))
   (when (and obj (nonzero? (the-as uint obj))
              p (nonzero? (the-as uint p))
              font-ctx (nonzero? (the-as uint font-ctx)))
-    (let ((display (mp-preference-field-display (-> obj field)))
-          (label (mp-preference-field-label (-> obj field))))
-      (when (and display (nonzero? (the-as uint display)))
-        (format (clear *temp-string*) "~S: ~S"
-                (lookup-text! *common-text* label #f)
-                display)
-        (draw-generic-simple-string-option obj p font-ctx option-index *temp-string*)
-        )
+    (when (not (-> obj mounted?))
+      (on-mount! obj))
+    (let ((alpha (fmax (* 2.0 (- 0.5 (-> p menu-transition))) 0.0)))
+      (set! (-> font-ctx scale) 0.45)
+      (set! (-> font-ctx alpha) alpha)
+      (+! (-> font-ctx origin y) 5.0)
+      (set-flags! font-ctx (font-flags kerning middle large))
+      ;; Label row
+      (cond
+        (selected?
+         (set! (-> font-ctx color) (font-color progress-force-selected))
+         (draw-generic-highlight (the int (- (-> font-ctx origin y) 2.0)) 33 alpha))
+        ((and (nonzero? (-> obj should-disable?))
+              (!= (-> obj should-disable?) #f)
+              ((-> obj should-disable?)))
+         (set-color! font-ctx (font-color progress-option-off))
+         (when (= option-index (-> *progress-pc-generic-store* current-menu-hover-index))
+           (draw-generic-highlight (the int (+ -2.0 (-> font-ctx origin y))) 18 (* 0.5 alpha))))
+        ((= option-index (-> *progress-pc-generic-store* current-menu-hover-index))
+         (set! (-> font-ctx color) (progress-selected 0))
+         (draw-generic-highlight (the int (- (-> font-ctx origin y) 2.0)) 18 alpha))
+        (else
+         (set! (-> font-ctx color) (font-color progress))))
+      (print-game-text (lookup-text! *common-text* (-> obj name) #f) font-ctx #f 44 (bucket-id progress))
+      ;; Value row
+      (+! (-> font-ctx origin y) 18.0)
+      (set! (-> font-ctx scale) 0.35)
+      (let ((display (get-display-string obj)))
+        (let ((empty? (or (not display) (zero? (the-as uint display)) (= (length display) 0))))
+          (cond
+            (selected?
+             (let ((blink-on? (logtest? (-> *display* real-clock integral-frame-counter) 16)))
+               (if empty?
+                   (format (clear *progress-generic-temp-string*) (if blink-on? "~33L_~1L" "~33L ~1L"))
+                   (format (clear *progress-generic-temp-string*) (if blink-on? "~33L~S_~1L" "~33L~S ~1L") display))
+               (print-game-text *progress-generic-temp-string* font-ctx #f 44 (bucket-id progress))))
+            (else
+             (set! (-> font-ctx color) (font-color progress))
+             (if empty?
+                 (print-game-text "---" font-ctx #f 44 (bucket-id progress))
+                 (print-game-text display font-ctx #f 44 (bucket-id progress)))))))
       )
     )
   (none))
+
+(defmethod call-get-value-fn ((this menu-multiplayer-player-character-boolean-option))
+  (= (mp-session-player-character (the uint (-> this player-id))) (mp-player-character jak)))
+
+(defmethod call-on-confirm ((this menu-multiplayer-player-character-boolean-option) (val symbol))
+  (let ((chosen (if val (mp-player-character jak) (mp-player-character daxter))))
+    (mp-set-session-player-character! (the uint (-> this player-id)) chosen)
+    (pc-multi-set-preference-player-character (the uint (-> this player-id)) (the uint chosen)))
+  (none))
+
+(defmethod should-disable? ((this menu-multiplayer-player-character-boolean-option))
+  (< *mp-session-player-limit* (the uint (+ (-> this player-id) 1))))
 
 (defmethod draw-option ((obj menu-multiplayer-player-character-boolean-option)
                         (arg0 progress)
@@ -210,84 +251,105 @@ multiplayer-settings.json store and are committed when editing finishes.
     )
   (none))
 
+(defmethod draw-option ((obj menu-multiplayer-large-link-option)
+                        (p progress)
+                        (font-ctx font-context)
+                        (option-index int)
+                        (selected? symbol))
+  (when (and obj (nonzero? (the-as uint obj))
+             p (nonzero? (the-as uint p))
+             font-ctx (nonzero? (the-as uint font-ctx)))
+    (when (not (-> obj mounted?))
+      (on-mount! obj))
+    (let ((alpha (fmax (* 2.0 (- 0.5 (-> p menu-transition))) 0.0)))
+      (set! (-> font-ctx alpha) alpha)
+      (set-flags! font-ctx (font-flags kerning middle large))
+      (set-scale! font-ctx 0.75)
+      (+! (-> font-ctx origin y) (if (= (get-aspect-ratio) 'aspect4x3) 14.0 11.0))
+      (cond
+        ((and (nonzero? (-> obj should-disable?))
+              (!= (-> obj should-disable?) #f)
+              ((-> obj should-disable?)))
+         (set-color! font-ctx (font-color progress-option-off))
+         (when (= option-index (-> *progress-pc-generic-store* current-menu-hover-index))
+           (draw-generic-highlight (the int (+ -2.0 (-> font-ctx origin y))) 26 (* 0.5 alpha))))
+        ((= option-index (-> *progress-pc-generic-store* current-menu-hover-index))
+         (set-color! font-ctx (progress-selected 0))
+         (draw-generic-highlight (the int (+ -2.0 (-> font-ctx origin y))) 26 alpha))
+        (else
+         (set-color! font-ctx (font-color progress))))
+      (print-game-text (lookup-text! *common-text* (-> obj name) #f) font-ctx #f 44 (bucket-id progress))))
+  (none))
+
+(defmacro static-player-character-options ()
+  (let ((lst '()))
+    (dotimes (i MP_MAX_PLAYERS)
+      (set! lst (cons `(new 'static 'menu-multiplayer-player-character-boolean-option
+                         :player-id ,i
+                         :truthy-text (text-id progress-multiplayer-char-jak)
+                         :falsey-text (text-id progress-multiplayer-char-daxter))
+                      lst)))
+    `(new 'static 'boxed-array :type menu-option ,@(reverse lst))))
+
+(defmacro progress-new-generic-large-link-to-scrolling-page (title &key (should-disable? #f) &rest options)
+  `(new 'static 'menu-multiplayer-large-link-option
+    :name ,title
+    :should-disable? ,should-disable?
+    :target (new 'static 'menu-option-list
+      :options (new 'static 'boxed-array :type menu-option
+      (new 'static 'menu-generic-scrolling-page
+       :name ,title
+       :menu-options (new 'static 'boxed-array :type menu-option
+       ,@options))))))
+
 (define *multiplayer-options-pc*
   (progress-new-generic-scrolling-page (text-id progress-multiplayer-options)
-    (new 'static 'menu-multiplayer-player-name-option
-      :name (text-id progress-username))
+    (new 'static 'menu-multiplayer-text-field-option
+      :name (text-id progress-username)
+      :field 2)
     (new 'static 'menu-generic-button-option
       :name (text-id progress-lobby-color-title)
       :on-confirm (lambda ((the-progress progress))
         (mp-player-color-progress-enter! the-progress)))
-    (new 'static 'menu-generic-carousel-option
-      :name (text-id progress-multiplayer-max-players)
-      :get-max-size-fn (lambda () (+ (the int MP_MAX_PLAYERS) -1))
-      :get-item-label-fn (lambda ((index int))
-        (format (clear *temp-string*)
-                (lookup-text! *common-text* (text-id progress-multiplayer-players-count-fmt) #f)
-                (+ index 2))
-        *temp-string*)
-      :get-item-index-fn (lambda ()
-        (+ (the int *mp-session-player-limit*) -2))
-      :on-confirm (lambda ((index int) (the-progress progress))
-        (let ((limit (+ index 2)))
-          (mp-set-session-player-limit! (the uint limit))
-          (pc-multi-set-preference-player-limit (the uint limit)))))
-    (progress-new-generic-link-to-scrolling-page (text-id progress-multiplayer-player-chars)
-      (new 'static 'menu-multiplayer-player-character-boolean-option
-        :player-id 0
-        :truthy-text (text-id progress-multiplayer-char-jak)
-        :falsey-text (text-id progress-multiplayer-char-daxter)
-        :get-value-fn (lambda () (= (mp-session-player-character (the uint 0)) (mp-player-character jak)))
-        :on-confirm (lambda ((val symbol))
-          (let ((chosen (if val (mp-player-character jak) (mp-player-character daxter))))
-            (mp-set-session-player-character! (the uint 0) chosen)
-            (pc-multi-set-preference-player-character (the uint 0) (the uint chosen)))))
-      (new 'static 'menu-multiplayer-player-character-boolean-option
-        :player-id 1
-        :truthy-text (text-id progress-multiplayer-char-jak)
-        :falsey-text (text-id progress-multiplayer-char-daxter)
-        :get-value-fn (lambda () (= (mp-session-player-character (the uint 1)) (mp-player-character jak)))
-        :on-confirm (lambda ((val symbol))
-          (let ((chosen (if val (mp-player-character jak) (mp-player-character daxter))))
-            (mp-set-session-player-character! (the uint 1) chosen)
-            (pc-multi-set-preference-player-character (the uint 1) (the uint chosen)))))
-      (new 'static 'menu-multiplayer-player-character-boolean-option
-        :player-id 2
-        :truthy-text (text-id progress-multiplayer-char-jak)
-        :falsey-text (text-id progress-multiplayer-char-daxter)
-        :should-disable? (lambda () (< *mp-session-player-limit* (the uint 3)))
-        :get-value-fn (lambda () (= (mp-session-player-character (the uint 2)) (mp-player-character jak)))
-        :on-confirm (lambda ((val symbol))
-          (let ((chosen (if val (mp-player-character jak) (mp-player-character daxter))))
-            (mp-set-session-player-character! (the uint 2) chosen)
-            (pc-multi-set-preference-player-character (the uint 2) (the uint chosen)))))
-      (new 'static 'menu-multiplayer-player-character-boolean-option
-        :player-id 3
-        :truthy-text (text-id progress-multiplayer-char-jak)
-        :falsey-text (text-id progress-multiplayer-char-daxter)
-        :should-disable? (lambda () (< *mp-session-player-limit* (the uint 4)))
-        :get-value-fn (lambda () (= (mp-session-player-character (the uint 3)) (mp-player-character jak)))
-        :on-confirm (lambda ((val symbol))
-          (let ((chosen (if val (mp-player-character jak) (mp-player-character daxter))))
-            (mp-set-session-player-character! (the uint 3) chosen)
-            (pc-multi-set-preference-player-character (the uint 3) (the uint chosen))))))
-    (new 'static 'menu-multiplayer-setting-field-option
-      :name (text-id progress-multiplayer-network-port)
-      :field 0)
-    (new 'static 'menu-multiplayer-setting-field-option
-      :name (text-id progress-multiplayer-room-code)
-      :field 1)
-    (new 'static 'menu-generic-boolean-option
-      :name (text-id progress-multiplayer-auto-port-mapping)
-      :truthy-text (text-id progress-on)
-      :falsey-text (text-id progress-off)
-      :get-value-fn (lambda () (= (pc-multi-get-automatic-port-mapping) 1))
-      :on-confirm (lambda ((value symbol))
-        (pc-multi-set-automatic-port-mapping (if value 1 0))))
-    (new 'static 'menu-generic-button-option
-      :name (text-id progress-multiplayer-reset-defaults)
-      :on-confirm (lambda ((the-progress progress))
-        (pc-multi-reset-preferences)
-        (mp-sync-preferences-to-session-host-config!)
-        (mp-refresh-preference-fields!)
-        (none)))))
+    (progress-new-generic-large-link-to-scrolling-page (text-id progress-multiplayer-host-options)
+      (new 'static 'menu-generic-link-option
+        :name (text-id progress-multiplayer-player-chars)
+        :target (new 'static 'menu-option-list
+          :options (new 'static 'boxed-array :type menu-option
+            (new 'static 'menu-generic-scrolling-page
+              :name (text-id progress-multiplayer-player-chars)
+              :menu-options (static-player-character-options)))))
+      (new 'static 'menu-generic-carousel-option
+        :name (text-id progress-multiplayer-max-players)
+        :get-max-size-fn (lambda () (+ (the int MP_MAX_PLAYERS) -1))
+        :get-item-label-fn (lambda ((index int))
+          (format (clear *temp-string*)
+                  (lookup-text! *common-text* (text-id progress-multiplayer-players-count-fmt) #f)
+                  (+ index 2))
+          *temp-string*)
+        :get-item-index-fn (lambda ()
+          (+ (the int *mp-session-player-limit*) -2))
+        :on-confirm (lambda ((index int) (the-progress progress))
+          (let ((limit (+ index 2)))
+            (mp-set-session-player-limit! (the uint limit))
+            (pc-multi-set-preference-player-limit (the uint limit)))))
+      (new 'static 'menu-multiplayer-text-field-option
+        :name (text-id progress-multiplayer-network-port)
+        :field 0)
+      (new 'static 'menu-multiplayer-text-field-option
+        :name (text-id progress-multiplayer-room-code)
+        :field 1)
+      (new 'static 'menu-generic-boolean-option
+        :name (text-id progress-multiplayer-auto-port-mapping)
+        :truthy-text (text-id progress-on)
+        :falsey-text (text-id progress-off)
+        :get-value-fn (lambda () (= (pc-multi-get-automatic-port-mapping) 1))
+        :on-confirm (lambda ((value symbol))
+          (pc-multi-set-automatic-port-mapping (if value 1 0))))
+      (new 'static 'menu-generic-button-option
+        :name (text-id progress-multiplayer-reset-defaults)
+        :on-confirm (lambda ((the-progress progress))
+          (pc-multi-reset-preferences)
+          (mp-sync-preferences-to-session-host-config!)
+          (mp-refresh-preference-fields!)
+          (none))))))

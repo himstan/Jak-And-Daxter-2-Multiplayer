@@ -453,6 +453,7 @@
     (('multiplayer-options)
      (mp-load-multiplayer-options!)
      (set! (-> obj current-options) *multiplayer-options-pc*)
+     (set! (-> obj selected-option) #f)
      )
     (('select-start 'select-pre-start 'select-kiosk-start)
      (set! (-> obj current-options) *select-start-options*)

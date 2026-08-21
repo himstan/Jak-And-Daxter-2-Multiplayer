@@ -1,6 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern mp-reset-multiplayer-options-selection! (function none))
+
 (deftype mp-player-color-progress-state (structure)
   ((active?              symbol)
    (lobby-source?        symbol)
@@ -472,7 +474,9 @@
     (mp-player-color-progress-apply-local!
       (-> *mp-player-color-progress* original-appearance))
     (mp-player-color-progress-deactivate!)
-    (pop-state p))
+    (pop-state p)
+    (set! (-> p selected-option) #f)
+    (mp-reset-multiplayer-options-selection!))
   (none))
 
 (defun mp-player-color-progress-confirm! ((p progress))
@@ -490,6 +494,8 @@
             (mp-player-color-progress-apply-local! draft-appearance)
             (mp-player-color-progress-deactivate!)
             (pop-state p)
+            (set! (-> p selected-option) #f)
+            (mp-reset-multiplayer-options-selection!)
             (sound-play "generic-beep"))
           (sound-play "menu-error"))))
   (none))
