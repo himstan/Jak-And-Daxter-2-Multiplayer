@@ -3428,6 +3428,18 @@
         )
   )
 
+(let ((v1-180 (-> *script-form* 85)))
+  (set! (-> v1-180 name) 'mp-session-host?)
+  (set! (-> v1-180 spec) '((return macro (boolean)) (function macro (symbol))))
+  (set! (-> v1-180 func) (lambda ((arg0 script-context)) (mp-session-host?)))
+  )
+
+(let ((v1-181 (-> *script-form* 86)))
+  (set! (-> v1-181 name) 'mp-session-client?)
+  (set! (-> v1-181 spec) '((return macro (boolean)) (function macro (symbol))))
+  (set! (-> v1-181 func) (lambda ((arg0 script-context)) (mp-session-client?)))
+  )
+
 (let ((v1-182 (new 'global 'script-context (process->ppointer pp) pp (the-as vector #f))))
   (set! (-> v1-182 side-effect?) #f)
   (set! *syntax-context* v1-182)
