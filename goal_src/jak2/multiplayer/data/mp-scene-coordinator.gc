@@ -414,7 +414,7 @@
           (set! (-> font-ctx scale) 0.6)
           (set! (-> font-ctx flags) (font-flags shadow kerning middle large))
           (clear *mp-scene-vote-text*)
-          (format *mp-scene-vote-text* "SKIP VOTES: ~D/~D"
+          (format *mp-scene-vote-text* (lookup-text! *common-text* (text-id mp-scene-skip-votes) #f)
                   vote-count participant-count)
           (print-game-text *mp-scene-vote-text* font-ctx #f 44
                            (bucket-id subtitle))))))
