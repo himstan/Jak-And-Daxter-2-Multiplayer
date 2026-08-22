@@ -16,6 +16,19 @@ The goal is to make the full Jak II campaign playable together.<br>
 Currently this mod primarily serves as a Co-op mod, when the Campaign is in a finished state, more gamemodes are going to be supported as well.<br>
 If at least the Host is in debug mode then a lot of constraints I've put in to block progression can be bypassed.
 
+## Terminology
+
+### Invite
+
+- **IMPORTANT**: The invite will contain your public IP address, so be careful who you're sharing it with.
+- An **Invite** is a **URI** you can easily copy and share with your friends, whom if they have it on their clipboard, can just click a button to join your session.
+- It can only be obtained as the Host, and only if your port is successfully opened. The **Invite** contains your public IP address and the Port you're hosting on, and also the session **Room Code**, which is automatically generated if it's not set in the **Multiplayer Options**
+- Example: `jad2mp://1.1.1.1:26210/1A2B3C`
+
+### Room Code
+- A six character code that can contain uppercase letters (`A-Z`) and digits (`0-9`), which is used as your session's "password". It is only used as a protection for Online Sessions, it's not needed for LAN.
+- Example: `1A2B3C`
+
 ## Before You Play
 
 - The mod was mainly tested with the NTSC-U (`SCUS-97265`) version of the game. If you notice bugs please record what version you were using.
@@ -26,16 +39,19 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
 - The default game port is `26210` which can be configured in the **Multiplayer Settings**
 - Port `26211` is reserved for LAN discovery
 
-## Terminology
+### Good to know
 
-### Invite
-- An **Invite** is a **URI** you can easily copy and share with your friends, whom if they have it on their clipboard, can just click a button to join your session.
-- It can only be obtained as the Host, and only if your port is successfully opened. The **Invite** contains your public IP address and the Port you're hosting on, and also the session **Room Code**, which is automatically generated if it's not set in the **Multiplayer Options**
-- Example: `jad2mp://1.1.1.1:26210/1A2B3C`
+#### Changing your in-game name
+- To change your name you have to go into **Options** -> **Multiplayer Options**
+- Press <img src="docs/img/common/dpad-x.png" alt="PS2 X button" width="16"> to select the **Username** field, and using your keyboard you're free to type in a maximum of 16 characters as your name.
 
-### Room Code
-- A six character code that can contain uppercase letters (`A-Z`) and digits (`0-9`), which is used as your session's "password". It is only used as a protection for Online Sessions, it's not needed for LAN. 
-- Example: `1A2B3C`
+#### Changing your appearance
+- You can edit the color your name and map marker will appear in under **Options** -> **Multiplayer Options** -> **Edit Appearance**<br> or in the **Lobby** by pressing <img src="docs/img/common/dpad-circle.png" alt="PS2 Circle button" width="16">
+- You're also free to customize the colors of your Jak or Daxter avatar
+
+#### Custom keybinds
+- **SELECT** - While in game you can press it to show the player list, and also the nametags above each player.
+- L1 + <img src="docs/img/common/dpad-triangle.png" alt="PS2 X button" width="16"> - While near an empty vehicle will get you into it's passenger seat.
 
 ## Hosting A Game
 
@@ -60,11 +76,12 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
    <img src="docs/img/mp/host-lobby-lan.png" alt="Host in lobby with NAT LAN" width="400">
 
   - In the **Lobby** you can wait for the other players to join, or just start the game, since the mod supports late joiners mid game also. 
-  - As **Host** you also have the ability to Swap between Jak and Daxter with <img src="docs/img/common/dpad-circle.png" alt="PS2 Circle button" width="16"><br>
-  - If you have your game port successful opened then you can press <img src="docs/img/common/dpad-x.png" alt="PS2 X button" width="16"> to copy an invite which will contain your public ip and port, with your custom or generated **Room Code**. You can share this to your friends who then can use it to join easily.
+  - As **Host** you also have the ability to Swap between playing **Jak** or **Daxter** with **R1** and **L1**<br>
+  - If you have your game port successful opened then you can press <img src="docs/img/common/dpad-square.png" alt="PS2 Square button" width="16"> to copy an invite which will contain your public ip and port, with your custom or generated **Room Code**. You can share this to your friends who then can use it to join easily.
   - If the port isn't open and you see **NAT: Strict/LAN** or you Hosted **LAN** and see **NAT: LAN** then you can only copy a **Room Code** which is not required in case you want to play via **LAN**
+  - The game can only be started after each player has readied up
 
-### Once you press <img src="docs/img/common/dpad-square.png" alt="PS2 Square button" width="16"> everyone in the lobby be will put inside the game
+### Once you press <img src="docs/img/common/dpad-x.png" alt="PS2 x button" width="16"> everyone in the lobby be will put inside the game
 
    <img src="docs/img/mp/host-in-game.png" alt="Host player in game after connection" width="400">
 
@@ -109,7 +126,9 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
 
    <img src="docs/img/mp/client-lobby.png" alt="In the lobby as a Client" width="400">
 
-- As the Client we also have the ability to switch the Character we want to play as by pressing <img src="docs/img/common/dpad-circle.png" alt="PS2 Circle button" width="16">
+- As the Client you also have the ability to switch the Character you want to play as by pressing **L1** or **R1**
+- You can edit your appearance in the lobby by pressing <img src="docs/img/common/dpad-circle.png" alt="PS2 Circle button" width="16"> also
+- These options are disabled if you've readied up, if you change your mind you must unready first
 
 ## Local Split Screen
 
