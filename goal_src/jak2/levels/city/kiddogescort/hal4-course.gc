@@ -77,7 +77,6 @@
     (('notify)
      (case (-> arg3 param 0)
        (('arrest)
-        ;; MULTIPLAYER: Only allow arrests on the Host (Jak) to prevent local-guard desync fails
         (if (not (mp-session-host?)) (return #f))
         (set! (-> this arrestor-handle) (process->handle (the-as process (-> arg3 param 1))))
         (let ((v0-0 (the-as object (current-time))))

@@ -310,7 +310,6 @@
 
 (defun matrix<-transformq+trans! ((arg0 matrix) (arg1 transformq) (arg2 vector))
   "Convert to affine transform with an additional translation (in the local frame)."
-  ;; MULTIPLAYER GUARD
   (if (or (not arg1) (not arg2))
       (return (the-as matrix #f)))
   (rlet ((acc :class vf)
@@ -348,7 +347,6 @@
 
 (defun matrix<-transformq+world-trans! ((arg0 matrix) (arg1 transformq) (arg2 vector))
   "Convert to affine transform with an additional translation in the world frame (not rotated)"
-  ;; MULTIPLAYER GUARD
   (if (or (not arg1) (not arg2))
       (return (the-as matrix #f)))
   (rlet ((vf0 :class vf)
@@ -423,7 +421,6 @@
 (defun matrix<-transformq+rot-offset! ((arg0 matrix) (arg1 transformq) (arg2 vector))
   "Affine transform for a point offset in the destination frame of the transformq (rather than just
    adding an offset at the end)"
-  ;; MULTIPLAYER GUARD
   (if (or (not arg1) (not arg2))
       (return (the-as matrix #f)))
   (rlet ((acc :class vf)

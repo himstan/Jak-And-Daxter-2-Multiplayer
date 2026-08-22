@@ -265,9 +265,6 @@
   :size-assert #x50
   )
 
-
-;; Multiplayer player target state is deliberately kept outside traffic-alert-state.
-;; traffic-engine has fixed vanilla offsets and cannot grow to hold a fourth inline slot.
 (defconstant MP_TRAFFIC_PLAYER_TARGET_REGISTRY_SIZE (* #x50 MP_MAX_PLAYERS))
 
 (deftype mp-traffic-player-target-registry (structure)

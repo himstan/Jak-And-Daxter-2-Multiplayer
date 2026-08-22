@@ -478,7 +478,6 @@
          )
        )
       (('mp-start)
-       ;; Multiplayer can begin the local challenge countdown without a local touch.
        (set! (-> self mp-remote-start?) #t)
        (mp-teleport-local-target-to-player! (the-as mp-player-record (-> block param 0)) #f)
        (let ((s4-0 (process-spawn camera-remote :init cam-slave-init cam-remote #f :from *camera-dead-pool* :to proc))

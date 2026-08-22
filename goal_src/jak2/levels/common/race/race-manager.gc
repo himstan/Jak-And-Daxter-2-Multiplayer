@@ -1523,8 +1523,6 @@
     (clear-task-manager-hud-timer-if-present self)
     ;; og:preserve-this auto-save when a race is won
     (#when PC_PORT
-      ;; Multiplayer mission completion is deferred until the host chooses a result action.
-      ;; Spawning an auto-save process here makes every peer save during the results screen.
       (when (not (mp-race-sync-active?))
         (auto-save-user)))
     (until #f

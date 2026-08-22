@@ -191,7 +191,6 @@
 @TODO - unsure if there is a pattern for the events and this should have a more specific name"
   (case arg2
     (('arrest)
-     ;; MULTIPLAYER: Only allow arrests on the Host (Jak) to prevent local-guard desync fails
      (if (not (mp-session-host?)) (return #f))
      (let* ((s4-0 (handle->process (-> this arrestor-handle)))
             (v1-4 (if (type? s4-0 process-focusable)

@@ -179,7 +179,6 @@
   ;; there's probably a way to consistently do it synchronously
   (load-level-text-files (the-as int (-> *pc-settings* text-language)))
 
-  ;; Multiplayer Hosting Intercept
   (when (and (-> *pc-settings* mp-hosting-mode?)
              (or (= (-> this current) 'select-load)
                  (= (-> this current) 'select-save)

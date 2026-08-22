@@ -357,8 +357,6 @@
                  )
                (citizen-nav-init! this)
                
-               ;; MULTIPLAYER: Deterministically seed the RNG using the net-id so visual variants 
-               ;; (like clothes masks set in citizen-init!) are identical across all connected clients!
                (when (nonzero? (-> this net-id))
                  (set! *citizen-prng-seed* (the-as uint (+ (the-as int (-> this net-id)) (the-as int (-> this traffic-type)))))
                  )
@@ -738,8 +736,6 @@
       (logior! (-> self flags) (citizen-flag dark-guard))
       )
   
-  ;; MULTIPLAYER: Deterministically seed the RNG using the net-id so visual variants 
-  ;; (masks, scale, colors, anims) are identical across all connected clients!
   (when (nonzero? (-> arg0 net-id))
     (set! *citizen-prng-seed* (the-as uint (+ (the-as int (-> arg0 net-id)) (the-as int (-> arg0 object-type)))))
     )

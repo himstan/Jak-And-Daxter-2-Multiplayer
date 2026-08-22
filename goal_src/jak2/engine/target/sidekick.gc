@@ -130,7 +130,6 @@
          (vf5 :class vf)
          (vf6 :class vf)
          )
-    ;; MULTIPLAYER GUARD: If cloning from another process that might have been deactivated
     (if (or (not arg0) (zero? (the-as uint arg0)) (logtest? (the-as uint arg0) 15) (>= (the-as uint arg0) #x70000000)
             (not arg1) (zero? (the-as uint arg1)) (logtest? (the-as uint arg1) 15) (>= (the-as uint arg1) #x70000000)
             (not arg2) (zero? (the-as uint arg2)) (logtest? (the-as uint arg2) 15) (>= (the-as uint arg2) #x70000000))
@@ -179,7 +178,6 @@
   )
 
 (defun cspace<-board-transformq+local-offset-normalized! ((arg0 cspace) (arg1 transformq) (arg2 vector))
-  ;; MULTIPLAYER GUARD: Keep the board attachment from dereferencing stale board transforms.
   (if (or (not arg0) (zero? (the-as uint arg0)) (logtest? (the-as uint arg0) 15) (>= (the-as uint arg0) #x70000000)
           (not arg1) (zero? (the-as uint arg1)) (logtest? (the-as uint arg1) 15) (>= (the-as uint arg1) #x70000000)
           (not arg2) (zero? (the-as uint arg2)) (logtest? (the-as uint arg2) 15) (>= (the-as uint arg2) #x70000000))
