@@ -694,11 +694,7 @@
                  MP_TRAFFIC_NET_ID_KIND_PEDESTRIAN))
            (net-id (mp-traffic-allocate-net-id! entity-kind)))
       (when (nonzero? net-id)
-        (set! (-> params net-id) net-id)
-        (debug-log *mp-debug-log?*
-          "[Traffic-Engine] Authority assigned nid=~D to traffic-type=~D~%"
-          net-id
-          (-> params object-type))))
+        (set! (-> params net-id) net-id)))
     )
   (none)
   )

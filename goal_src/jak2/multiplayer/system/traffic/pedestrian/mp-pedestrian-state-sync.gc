@@ -452,13 +452,6 @@
      (when (and this
                 (nonzero? this)
                 (not (mp-pedestrian-death-started? this)))
-       (debug-log *mp-debug-log?*
-               "[MP-Traffic] Cleaning up ~A nid=~D pid=~D inactive=~A status=~A because it was dead/inactive~%"
-               (-> this name)
-               (-> this net-id)
-               (-> this pid)
-               (focus-test? this inactive)
-               (-> this status))
        (set! (-> this net-id) (the uint 0))
        (deactivate this)
        )
