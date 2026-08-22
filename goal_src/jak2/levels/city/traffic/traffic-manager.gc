@@ -54,11 +54,11 @@
   )
 
 (defmethod get-dark-guard-ratio ((this traffic-manager))
-  (if (task-node-closed? (game-task-node tomb-boss-resolution))
-    (the-as int 5)
-    (the-as int 0)
+  (if (task-complete? *game-info* (game-task tomb-boss))
+    5
+    0
     )
-)
+  )
 
 (defun configure-dark-guard-spawn! ((this traffic-manager) (params traffic-object-spawn-params))
   (when (and params (nonzero? params))
