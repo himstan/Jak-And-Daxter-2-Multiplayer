@@ -71,8 +71,7 @@
     (if (mp-lobby-all-peers-ready?)
         (begin
           (set! *mp-lobby-last-countdown-sec* -1)
-          (pc-multi-lobby-start-countdown (the-as uint *mp-lobby-countdown-seconds*))
-          (sound-play "roll-over"))
+          (pc-multi-lobby-start-countdown (the-as uint *mp-lobby-countdown-seconds*)))
         (sound-play "menu-error")))
   (none)
   )
@@ -146,7 +145,6 @@
              (nonzero? (the-as uint p))
              (= (-> p next) 'none)
              (!= (pc-multi-get-status) (mp-connection-status game-starting)))
-    (sound-play "generic-beep")
     (pc-multi-lobby-start-game)
 
     (when (and (mp-local-player-record) (nonzero? (the-as uint (mp-local-player-record))))
@@ -630,7 +628,7 @@
                  (mp-lobby-cancel-countdown!))
                (when (and (> sec-rem 0) (!= sec-rem *mp-lobby-last-countdown-sec*))
                  (set! *mp-lobby-last-countdown-sec* sec-rem)
-                 (sound-play "generic-beep"))
+                 (sound-play "roll-over"))
                (when (and host? (<= sec-rem 0))
                  (set! *mp-lobby-last-countdown-sec* -1)
                  (mp-lobby-launch-game! p))))
