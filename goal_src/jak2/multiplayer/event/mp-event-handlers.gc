@@ -1508,7 +1508,7 @@
       ((MP_EVENT_MISSION_TOMB_DAXTER_WAIT_START)
        (mp-tomb-daxter-wait-receive-start! (-> evt source-player-id)))
       ((MP_EVENT_MISSION_TOMB_DAXTER_WAIT_END)
-       (mp-tomb-daxter-wait-receive-end!))
+       (mp-tomb-daxter-wait-receive-end! (-> evt source-player-id)))
       (else
        (debug-log *mp-debug-log?* "[MP-Event] Unknown mission event ~D.~%" event-type)))
     )
