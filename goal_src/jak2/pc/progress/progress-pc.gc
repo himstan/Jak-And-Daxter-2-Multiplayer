@@ -428,6 +428,7 @@
      (set! (-> obj current-options) *load-save-options*)
      )
     (('host-to-lobby)
+     (mp-sync-preferences-to-session-host-config!)
      (mp-configure-bridge-version!)
      (mp-setup-host-bridge!
        (and *pc-settings*

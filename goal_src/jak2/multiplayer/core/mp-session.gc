@@ -75,7 +75,6 @@
     valid?))
 
 (defun mp-load-max-players-from-cli! ()
-  (set! *mp-session-player-limit* (the-as uint 2))
   (let ((max-players-arg (pc-multi-get-command-line-arg "-max-players")))
     (when (and max-players-arg
                (nonzero? (the-as uint max-players-arg))
@@ -83,22 +82,20 @@
       (let ((parsed-limit (string->int max-players-arg)))
         (if (and (>= parsed-limit 2) (<= parsed-limit MP_MAX_PLAYERS))
             (mp-set-session-player-limit! (the-as uint parsed-limit))
-            (begin
-              (set! *mp-session-player-limit* (the-as uint 2))
-              (format #t
-                "[MP-Session] WARNING: Invalid -max-players value '~A', defaulting to 2~%"
-                max-players-arg))))))
+            (format #t
+              "[MP-Session] WARNING: Invalid -max-players value '~A', keeping limit ~D~%"
+              max-players-arg
+              *mp-session-player-limit*)))))
   (none))
 
 (defun mp-load-session-characters-from-cli! ()
-  (mp-reset-session-player-characters!)
   (let ((characters-arg (pc-multi-get-command-line-arg "-mp-characters")))
     (when (and characters-arg
                (nonzero? (the-as uint characters-arg))
-               (not (mp-parse-session-characters-cli! characters-arg)))
-      (mp-reset-session-player-characters!)
-      (format #t
-        "[MP-Session] WARNING: Invalid -mp-characters value; using alternating defaults.~%")))
+               (nonzero? (-> characters-arg allocated-length)))
+      (if (not (mp-parse-session-characters-cli! characters-arg))
+          (format #t
+            "[MP-Session] WARNING: Invalid -mp-characters value; keeping current character settings.~%"))))
   (none))
 
 (defun mp-client-ready-to-enable-sync-on-spawn? ((status mp-connection-status))
@@ -240,6 +237,7 @@
 
 (defun mp-start-host-from-cli! ((internet-host? symbol))
   (debug-log *mp-debug-log?* "[MP-Session] Hosting via CLI argument.~%")
+  (mp-sync-preferences-to-session-host-config!)
   (mp-load-max-players-from-cli!)
   (mp-load-session-characters-from-cli!)
   (mp-configure-bridge-version!)
@@ -266,6 +264,7 @@
 
 (defun mp-start-host-from-settings! ()
   (debug-log *mp-debug-log?* "[MP-Session] Hosting mode active (from settings). Initializing server...~%")
+  (mp-sync-preferences-to-session-host-config!)
   (mp-configure-bridge-version!)
   (if (and *pc-settings* (nonzero? (the-as uint *pc-settings*))
            (-> *pc-settings* mp-internet-host?))
