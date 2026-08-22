@@ -18,6 +18,7 @@
 struct CachedPlayerState {
   bool identity_ready = false;
   bool state_ready = false;
+  uint8_t lobby_ready = 0;
   uint32_t player_id = kMPInvalidPlayerId;
   MPPlayerCharacter character = MPPlayerCharacter::UNKNOWN;
   char player_name[kMultiplayerPlayerNameSize] = {};
@@ -113,7 +114,8 @@ struct MPPlayerIdentityGOAL {
   uint8_t joined;
   uint8_t spectator_only;
   char name[kMultiplayerPlayerNameSize];
-  uint8_t pad_before_appearance[4];
+  uint8_t lobby_ready;
+  uint8_t pad_before_appearance[3];
   MPPlayerAppearanceGOAL appearance;
 };
 static_assert(offsetof(MPPlayerIdentityGOAL, appearance) == 32);
@@ -437,6 +439,8 @@ struct MultiplayerData {
   // New fields for joining/searching
   std::atomic<int> join_status{
       0};  // 0: idle, 1: searching, 2: found, 3: connecting, 4: connected, -1: failed
+  bool lobby_countdown_active = false;
+  uint64_t lobby_countdown_target_time_ms = 0;
   std::string found_ip = "";
   std::mutex discovery_result_mutex;
   std::atomic<bool> stop_search{false};

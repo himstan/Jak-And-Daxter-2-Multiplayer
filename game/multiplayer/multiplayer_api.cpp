@@ -354,8 +354,35 @@ bool handle_receive_packet(MultiplayerData& data,
           accepted = true;
           lg::info("[MP-Lobby] Player {} changed its complete appearance.", lobby->player_id);
         }
+      } else if (lobby->action_type == static_cast<uint8_t>(MPLobbyActionType::SET_READY)) {
+        if (mp_valid_player_id(lobby->player_id) &&
+            mp_player_id_allowed_from_sender(data, sender_player_id, lobby->player_id)) {
+          const uint8_t ready_val = lobby->value != 0 ? 1 : 0;
+          controller->records[lobby->player_id].identity.lobby_ready = ready_val;
+          data.player_states[lobby->player_id].lobby_ready = ready_val;
+          accepted = true;
+          lg::info("[MP-Lobby] Player {} set ready status to {}.", lobby->player_id, ready_val);
+        }
+      } else if (lobby->action_type == static_cast<uint8_t>(MPLobbyActionType::START_COUNTDOWN)) {
+        if (data.session_role == 1) {
+          const uint32_t secs = lobby->value > 0 ? lobby->value : 3;
+          data.lobby_countdown_active = true;
+          data.lobby_countdown_target_time_ms = enet_time_get() + (secs * 1000);
+          accepted = true;
+          lg::info("[MP-Lobby] Host started lobby countdown ({}s).", secs);
+        }
+      } else if (lobby->action_type == static_cast<uint8_t>(MPLobbyActionType::CANCEL_COUNTDOWN)) {
+        if (data.session_role == 1) {
+          data.lobby_countdown_active = false;
+          data.lobby_countdown_target_time_ms = 0;
+          data.join_status = static_cast<int>(MultiplayerStatus::CONNECTED_LOBBY);
+          accepted = true;
+          lg::info("[MP-Lobby] Host cancelled lobby countdown.");
+        }
       } else if (lobby->action_type == static_cast<uint8_t>(MPLobbyActionType::START_GAME)) {
         if (data.session_role == 1) {
+          data.lobby_countdown_active = false;
+          data.lobby_countdown_target_time_ms = 0;
           data.join_status = static_cast<int>(MultiplayerStatus::GAME_STARTING);
           accepted = true;
           lg::info("[MP-Lobby] Host started game. Transitioning client to GAME_STARTING.");
@@ -1425,6 +1452,79 @@ int pc_multi_lobby_set_character(u32 character) {
   return 1;
 }
 
+int pc_multi_lobby_set_ready(u32 ready) {
+  auto& data = multiplayer_data();
+  const uint32_t local_id = data.local_player_id;
+  if (!mp_valid_player_id(local_id)) {
+    return 0;
+  }
+  const uint8_t ready_val = ready != 0 ? 1 : 0;
+  data.player_states[local_id].lobby_ready = ready_val;
+  PacketLobbyAction action = {};
+  action.header = {PacketType::LOBBY_ACTION, ++data.sequence_num};
+  action.player_id = local_id;
+  action.action_type = static_cast<uint8_t>(MPLobbyActionType::SET_READY);
+  action.value = ready_val;
+  MultiplayerManager::broadcast(data, static_cast<int>(MultiplayerChannel::CONTROL), action,
+                                ENET_PACKET_FLAG_RELIABLE);
+  lg::info("[MP-Lobby] Local player {} broadcasted ready status {}.", local_id, ready_val);
+  return 1;
+}
+
+int pc_multi_lobby_start_countdown(u32 seconds) {
+  auto& data = multiplayer_data();
+  if (data.session_role != 0 || !data.host) {
+    return 0;
+  }
+  if (seconds == 0) {
+    seconds = 3;
+  }
+  data.lobby_countdown_active = true;
+  data.lobby_countdown_target_time_ms = enet_time_get() + (seconds * 1000);
+  PacketLobbyAction action = {};
+  action.header = {PacketType::LOBBY_ACTION, ++data.sequence_num};
+  action.player_id = data.local_player_id;
+  action.action_type = static_cast<uint8_t>(MPLobbyActionType::START_COUNTDOWN);
+  action.value = seconds;
+  MultiplayerManager::broadcast(data, static_cast<int>(MultiplayerChannel::CONTROL), action,
+                                ENET_PACKET_FLAG_RELIABLE);
+  lg::info("[MP-Lobby] Host started lobby countdown for {}s.", seconds);
+  return 1;
+}
+
+int pc_multi_lobby_cancel_countdown() {
+  auto& data = multiplayer_data();
+  if (data.session_role == 0 && data.host) {
+    PacketLobbyAction action = {};
+    action.header = {PacketType::LOBBY_ACTION, ++data.sequence_num};
+    action.player_id = data.local_player_id;
+    action.action_type = static_cast<uint8_t>(MPLobbyActionType::CANCEL_COUNTDOWN);
+    action.value = 0;
+    MultiplayerManager::broadcast(data, static_cast<int>(MultiplayerChannel::CONTROL), action,
+                                  ENET_PACKET_FLAG_RELIABLE);
+  }
+  data.lobby_countdown_active = false;
+  data.lobby_countdown_target_time_ms = 0;
+  lg::info("[MP-Lobby] Lobby countdown cancelled.");
+  return 1;
+}
+
+int64_t pc_multi_lobby_get_countdown_remaining_ms() {
+  const auto& data = multiplayer_data();
+  if (!data.lobby_countdown_active) {
+    return -1;
+  }
+  const uint32_t now = enet_time_get();
+  if (now >= data.lobby_countdown_target_time_ms) {
+    return 0;
+  }
+  return static_cast<int64_t>(data.lobby_countdown_target_time_ms - now);
+}
+
+int pc_multi_lobby_is_countdown() {
+  return multiplayer_data().lobby_countdown_active ? 1 : 0;
+}
+
 u32 pc_multi_get_player_color() {
   return mp_multiplayer_preferences()
       .player_appearance.colors[mp_player_appearance_group_index(MPPlayerAppearanceGroup::PRIMARY)];
@@ -1917,6 +2017,16 @@ void init_multiplayer_pc_port() {
                                     (void*)pc_multi_lobby_start_game);
   jak2::make_function_symbol_from_c("pc-multi-lobby-set-character",
                                     (void*)pc_multi_lobby_set_character);
+  jak2::make_function_symbol_from_c("pc-multi-lobby-set-ready",
+                                    (void*)pc_multi_lobby_set_ready);
+  jak2::make_function_symbol_from_c("pc-multi-lobby-start-countdown",
+                                    (void*)pc_multi_lobby_start_countdown);
+  jak2::make_function_symbol_from_c("pc-multi-lobby-cancel-countdown",
+                                    (void*)pc_multi_lobby_cancel_countdown);
+  jak2::make_function_symbol_from_c("pc-multi-lobby-get-countdown-remaining-ms",
+                                    (void*)pc_multi_lobby_get_countdown_remaining_ms);
+  jak2::make_function_symbol_from_c("pc-multi-lobby-is-countdown",
+                                    (void*)pc_multi_lobby_is_countdown);
   jak2::make_function_symbol_from_c("pc-multi-get-player-color",
                                     (void*)pc_multi_get_player_color);
   jak2::make_function_symbol_from_c("pc-multi-get-player-appearance",

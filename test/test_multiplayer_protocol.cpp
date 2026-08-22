@@ -18,14 +18,14 @@ TEST(MultiplayerProtocol, BootstrapKeepsWireIdentityAndLayout) {
 
 TEST(MultiplayerProtocol, JoinCarriesAValidatedNameReliably) {
   EXPECT_EQ(static_cast<uint8_t>(PacketType::EVENT_JOIN), 1u);
-  EXPECT_EQ(sizeof(PacketJoin), 293u);
+  EXPECT_EQ(sizeof(PacketJoin), 285u);
 
   const auto* descriptor = multiplayer::schema::packet_descriptor(1);
   ASSERT_NE(descriptor, nullptr);
   EXPECT_STREQ(descriptor->name, "EVENT_JOIN");
   EXPECT_EQ(descriptor->allowed_roles, 3u);
   EXPECT_EQ(descriptor->priority, 0u);
-  EXPECT_EQ(descriptor->max_payload, 288u);
+  EXPECT_EQ(descriptor->max_payload, 280u);
 }
 
 TEST(MultiplayerProtocol, LobbyAppearanceFitsTheReliableActionEnvelope) {

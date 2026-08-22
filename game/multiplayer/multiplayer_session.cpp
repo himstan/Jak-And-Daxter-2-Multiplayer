@@ -141,6 +141,8 @@ void multiplayer_clear_session_state(MultiplayerData& data, bool preserve_reconn
   multiplayer_host_peer_reset_all(data);
   data.stats.reset();
   data.host_game_active = false;
+  data.lobby_countdown_active = false;
+  data.lobby_countdown_target_time_ms = 0;
   data.server_peer = nullptr;
   mp_secure_clear_string(data.staged_invite);
   data.staged_invite_status = 0;

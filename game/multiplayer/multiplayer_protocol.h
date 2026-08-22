@@ -168,6 +168,9 @@ enum class MPLobbyActionType : uint8_t {
   SET_CHARACTER = 1,
   START_GAME = 2,
   SET_APPEARANCE = 3,
+  SET_READY = 4,
+  START_COUNTDOWN = 5,
+  CANCEL_COUNTDOWN = 6,
 };
 
 struct PacketLobbyAction {

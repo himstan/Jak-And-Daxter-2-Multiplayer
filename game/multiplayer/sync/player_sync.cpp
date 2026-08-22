@@ -344,6 +344,21 @@ void mp_clear_player_slot(MultiplayerData& data,
     record.identity.character = MPPlayerCharacter::UNKNOWN;
     record.action.riding_along_player_id = kMPInvalidPlayerId;
   }
+  if (data.lobby_countdown_active) {
+    data.lobby_countdown_active = false;
+    data.lobby_countdown_target_time_ms = 0;
+    if (data.session_role == 0 && data.host) {
+      PacketLobbyAction cancel_action = {};
+      cancel_action.header = {PacketType::LOBBY_ACTION, ++data.sequence_num};
+      cancel_action.player_id = data.local_player_id;
+      cancel_action.action_type = static_cast<uint8_t>(MPLobbyActionType::CANCEL_COUNTDOWN);
+      cancel_action.value = 0;
+      MultiplayerManager::broadcast(data, static_cast<int>(MultiplayerChannel::CONTROL),
+                                    cancel_action, ENET_PACKET_FLAG_RELIABLE);
+      lg::info("[MP-Lobby] Countdown automatically cancelled due to player {} disconnect.",
+               player_id);
+    }
+  }
 }
 
 void mp_seed_peer_roster(MultiplayerData& data,
@@ -700,9 +715,14 @@ void mp_receive_player_sync(MultiplayerData& data,
       record.identity.character = cached.character;
       record.identity.identity_ready = 1;
       record.identity.joined = 1;
+      record.identity.lobby_ready = cached.lobby_ready;
       mp_copy_player_appearance_to_goal(cached.appearance, record.identity.appearance);
       record.connection.connected = 1;
       memcpy(record.identity.name, cached.player_name, sizeof(record.identity.name));
+    } else {
+      record.identity.lobby_ready = cached.lobby_ready;
+      record.identity.character = cached.character;
+      mp_copy_player_appearance_to_goal(cached.appearance, record.identity.appearance);
     }
     if (cached.state_ready) {
       CachedPlayerState predicted = cached;

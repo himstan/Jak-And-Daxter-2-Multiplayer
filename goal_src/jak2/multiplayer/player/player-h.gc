@@ -142,6 +142,7 @@
    (joined?         uint8)
    (spectator-only? uint8)
    (name            uint8 MP_PLAYER_NAME_SIZE)
+   (lobby-ready?    uint8)
    (appearance      mp-player-appearance :inline)
    )
   :size-assert 288)

@@ -165,7 +165,7 @@ TEST(MultiplayerPacket, PacketViewRejectsTruncationUnknownTypesAndTrailingData) 
 TEST(MultiplayerPlayerRegistry, GoalLayoutsAndOffsetsMatch) {
   EXPECT_EQ(sizeof(MPPlayerAppearance), 256u);
   EXPECT_EQ(sizeof(MPPlayerAppearanceGOAL), 256u);
-  EXPECT_EQ(sizeof(MPPlayerIdentityGOAL), 304u);
+  EXPECT_EQ(sizeof(MPPlayerIdentityGOAL), 288u);
   EXPECT_EQ(sizeof(MPPlayerConnectionStateGOAL), 16u);
   EXPECT_EQ(sizeof(MPPlayerTransformStateGOAL), 48u);
   EXPECT_EQ(sizeof(MPPlayerActionStateGOAL), 32u);
@@ -173,7 +173,7 @@ TEST(MultiplayerPlayerRegistry, GoalLayoutsAndOffsetsMatch) {
   EXPECT_EQ(sizeof(MPPlayerVehicleStateGOAL), 96u);
   EXPECT_EQ(sizeof(MPTargetGhostRecordGOAL), 96u);
   EXPECT_EQ(sizeof(MPPlayerRuntimeStateGOAL), 224u);
-  EXPECT_EQ(sizeof(MPPlayerRecordGOAL), 736u);
+  EXPECT_EQ(sizeof(MPPlayerRecordGOAL), 720u);
   EXPECT_EQ(sizeof(MPPlayerCharacterConfigGOAL), sizeof(uint32_t) * kMPMaxPlayers);
   EXPECT_EQ(sizeof(MPPlayerControllerGOAL),
             sizeof(MPPlayerRecordGOAL) * kMPMaxPlayers + sizeof(uint32_t) * 4);
@@ -183,7 +183,8 @@ TEST(MultiplayerPlayerRegistry, GoalLayoutsAndOffsetsMatch) {
   EXPECT_EQ(offsetof(MPPlayerIdentityGOAL, identity_ready), 8u);
   EXPECT_EQ(offsetof(MPPlayerIdentityGOAL, spectator_only), 11u);
   EXPECT_EQ(offsetof(MPPlayerIdentityGOAL, name), 12u);
-  EXPECT_EQ(offsetof(MPPlayerIdentityGOAL, appearance), 48u);
+  EXPECT_EQ(offsetof(MPPlayerIdentityGOAL, lobby_ready), 28u);
+  EXPECT_EQ(offsetof(MPPlayerIdentityGOAL, appearance), 32u);
   EXPECT_EQ(offsetof(MPPlayerConnectionStateGOAL, latest_state_sequence), 4u);
   EXPECT_EQ(offsetof(MPPlayerConnectionStateGOAL, connected), 12u);
   EXPECT_EQ(offsetof(MPPlayerTransformStateGOAL, velocity), 16u);
@@ -208,12 +209,12 @@ TEST(MultiplayerPlayerRegistry, GoalLayoutsAndOffsetsMatch) {
   EXPECT_EQ(offsetof(MPPlayerRuntimeStateGOAL, pad_index), 204u);
   EXPECT_EQ(offsetof(MPPlayerRuntimeStateGOAL, flags), 208u);
   EXPECT_EQ(offsetof(MPPlayerRuntimeStateGOAL, mission_flags), 212u);
-  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, connection), 304u);
-  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, transform), 320u);
-  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, action), 368u);
-  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, input), 400u);
-  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, vehicle), 416u);
-  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, runtime), 512u);
+  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, connection), 288u);
+  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, transform), 304u);
+  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, action), 352u);
+  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, input), 384u);
+  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, vehicle), 400u);
+  EXPECT_EQ(offsetof(MPPlayerRecordGOAL, runtime), 496u);
   const size_t controller_record_bytes = sizeof(MPPlayerRecordGOAL) * kMPMaxPlayers;
   EXPECT_EQ(offsetof(MPPlayerControllerGOAL, local_player_id), controller_record_bytes);
   EXPECT_EQ(offsetof(MPPlayerControllerGOAL, host_player_id),
