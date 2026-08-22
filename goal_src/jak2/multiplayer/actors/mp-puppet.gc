@@ -1282,20 +1282,20 @@
 
 (define *mp-jak-death-vo* (new 'static 'boxed-array :type string "jak065" "jak034" "jak076" "jak077" "jak042" "jak078"))
 (define *mp-daxter-death-vo* (new 'static 'boxed-array :type string "ds199" "ds285" "ds490" "ds489" "dsek008" "dsek007"))
+(define *mp-death-taunt-last-time* (the-as time-frame 0))
 
-(defun mp-play-random-vo ((speaker process) (channel gui-channel) (vo-keys (array string)))
-  "Play a random voice line from an array of vo-keys using the specified speaker and channel."
+(defun mp-play-random-vo ((speaker process) (vo-keys (array string)))
+  "Play a random voice line from an array of vo-keys on an independent voice channel with 3D falloff."
   (when (and speaker (nonzero? speaker) vo-keys (nonzero? vo-keys) (> (-> vo-keys length) 0))
     (let* ((idx (rand-vu-int-range 0 (+ (-> vo-keys length) -1)))
-           (vo-key (-> vo-keys idx))
-           )
+           (vo-key (-> vo-keys idx)))
       (when (and *gui-control* (nonzero? *gui-control*))
-        (add-process *gui-control* speaker channel (gui-action play) vo-key -99.0 0)
-        )
-      )
-    )
-  (none)
-  )
+        (let ((s-id (add-process *gui-control* speaker (gui-channel alert) (gui-action play) vo-key 99.0 0)))
+          (when (nonzero? s-id)
+            (set-falloff! *gui-control* s-id #t 20 80 2)
+            (set-volume! *gui-control* s-id 1.0)
+            (set-subtitle! *gui-control* s-id #f))))))
+  (none))
 
 (defun mp-puppet-start-hit-flash! ((proc target))
   "Start the vanilla timed-invulnerability blink and hit vocal once per remote hit."
@@ -1316,40 +1316,49 @@
   (none)
   )
 
-(defun mp-play-remote-death-vo ((record mp-player-record))
-  "Play a funny voice line when the remote player dies."
-  (when (and *target*
-             (nonzero? *target*)
-             (-> *target* state)
-             (nonzero? (-> *target* state))
-             (not (mp-target-death-state? (-> *target* state name))))
-    (if (mp-player-daxter? record)
-        (mp-play-random-vo *target* (gui-channel jak) *mp-jak-death-vo*)
-        (mp-play-random-vo *target* (gui-channel daxter) *mp-daxter-death-vo*)
-        )
-    )
-  (none)
-  )
-
-(defun mp-play-local-death-vo ()
-  "Play a funny voice line from the remote player when the local player dies."
-  (let ((record (mp-nearest-remote-player-record *target* #t)))
-    (when (and record
-               (nonzero? record)
-               (not (mp-player-runtime-flag? record (mp-player-runtime-flags dead)))
-               (not (mp-player-runtime-flag? record (mp-player-runtime-flags dying))))
-      (let ((player-target (mp-player-record-target record)))
-        (when (and player-target (nonzero? player-target))
-          (if (mp-player-daxter? record)
-              (mp-play-random-vo player-target (gui-channel daxter) *mp-daxter-death-vo*)
-              (mp-play-random-vo player-target (gui-channel jak) *mp-jak-death-vo*)
-              )
-          )
-        )
-      )
-    )
-  (none)
-  )
+(defun mp-trigger-death-taunt! ((dead-target target))
+  "Play a proximity-based taunt when a player dies, respecting respawn policies."
+  (when (and *multi-sync-enabled?*
+             (= (pc-multi-get-status) (mp-connection-status in-game))
+             (not *mp-block-remote-respawn-on-me?*)
+             (not *mp-block-local-respawn-on-remote?*)
+             dead-target
+             (nonzero? dead-target)
+             (-> dead-target root)
+             (nonzero? (-> dead-target root))
+             (>= (- (current-time) *mp-death-taunt-last-time*) (seconds 5.0))
+             (<= (rand-vu-int-range 1 100) 75))
+    (let ((speaker (the-as target #f))
+          (is-daxter? #f))
+      (if (= dead-target *target*)
+          ;; Local player died: find nearest living remote player who does not block respawn
+          (let ((rec (mp-nearest-remote-player-record *target* #t)))
+            (when (and rec (nonzero? rec) (not (mp-player-blocks-respawn? rec)))
+              (set! speaker (mp-player-record-target rec))
+              (set! is-daxter? (the-as symbol (mp-player-daxter? rec)))))
+          ;; Remote player died: ensure dead player does not block respawn, local player speaks
+          (let ((dead-rec (mp-player-controller-target-record *mp-player-controller* dead-target)))
+            (when (and dead-rec (nonzero? dead-rec) (not (mp-player-blocks-respawn? dead-rec)))
+              (when (and *target*
+                         (nonzero? *target*)
+                         (-> *target* root)
+                         (nonzero? (-> *target* root))
+                         (-> *target* state)
+                         (nonzero? (-> *target* state))
+                         (not (mp-target-death-state? (-> *target* state name))))
+                (set! speaker *target*)
+                (set! is-daxter? (the-as symbol (mp-local-player-daxter?)))))))
+      ;; Check proximity (within 40m) and play
+      (when (and speaker
+                 (nonzero? speaker)
+                 (-> speaker root)
+                 (nonzero? (-> speaker root))
+                 (< (vector-vector-distance (-> dead-target root trans) (-> speaker root trans)) (meters 40.0)))
+        (set! *mp-death-taunt-last-time* (current-time))
+        (if is-daxter?
+            (mp-play-random-vo speaker *mp-daxter-death-vo*)
+            (mp-play-random-vo speaker *mp-jak-death-vo*)))))
+  (none))
 
 (defun mp-puppet-apply-ghost-correction! ((proc target))
   "Smoothly nudge the puppet target's root towards the ghost position and inject inputs."
@@ -1384,7 +1393,7 @@
                (debug-log *mp-debug-log?* "[MP-Puppet] Authoritative Death! Bumping ~A -> ~A~%" cur-state ghost-state)
                (mp-player-runtime-set-flag! record (mp-player-runtime-flags dying))
                (send-event proc 'mp-die)
-               (mp-play-remote-death-vo record)
+               (mp-trigger-death-taunt! proc)
                (set! (-> record runtime state-mismatch-count) 0)
                )
               ((and (mp-target-death-state? ghost-state)

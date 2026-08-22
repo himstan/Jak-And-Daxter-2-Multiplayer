@@ -2,6 +2,8 @@
 (in-package goal)
 
 (define-perm *mp-session-player-limit* uint (the uint 2))
+(define-extern *mp-block-remote-respawn-on-me?* symbol)
+(define-extern *mp-block-local-respawn-on-remote?* symbol)
 
 (defun mp-set-session-player-limit! ((player-limit uint))
   "Configure the total player limit for the next hosted session."
@@ -288,7 +290,8 @@
 (define-extern mp-puppet-clear-stale! (function mp-player-record none))
 (define-extern mp-puppet-spawn (function mp-player-record target))
 (define-extern mp-puppet-deactivate! (function mp-player-record none))
-(define-extern mp-play-remote-death-vo (function mp-player-record none))
+(define-extern mp-trigger-death-taunt! (function target none))
+(define-extern mp-player-blocks-respawn? (function mp-player-record symbol))
 (define-extern mp-apply-player-render-appearance! (function target none))
 (define-extern mp-refresh-player-render-appearances! (function none))
 (define-extern mp-player-record-by-id (function uint mp-player-record))

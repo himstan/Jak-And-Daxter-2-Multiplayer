@@ -27,6 +27,11 @@
 
 (defstate target-indax-death (target)
   :event (-> target-death event)
+  :enter (behavior ()
+    (when (not-puppet? self)
+      (mp-trigger-death-taunt! self)
+      )
+    )
   :exit (behavior ()
     ((-> target-death exit))
     (target-indax-exit))
