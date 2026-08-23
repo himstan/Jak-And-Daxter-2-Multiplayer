@@ -399,3 +399,7 @@
   )
 
 (define-extern *race-state* race-state)
+
+(defconstant MP_RACE_POST_FINISH_TIMEOUT (seconds 20))
+(define-extern mp-race-sync-post-finish-timer! (function race-manager none))
+(define-extern mp-race-host-dnf-active-racers! (function race-state none))

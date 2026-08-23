@@ -925,3 +925,5 @@
 
 
 (define *traffic-engine* (the-as traffic-engine #f))
+
+(define-extern task-manager-has-race-finisher? (function task-manager symbol))

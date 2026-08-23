@@ -1405,6 +1405,7 @@
   :code sleep-code
   :post (behavior ()
     (update self)
+    (mp-race-sync-post-finish-timer! self)
     (let ((player-racer (-> self race-state racer-array (-> self race-state i-player)))
           (state (-> self race-state))
           )

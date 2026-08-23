@@ -2030,10 +2030,12 @@
       )
     (let ((v1-15 (- (-> this time-limit) (- (current-time) (-> this start-time)))))
       (let ((a0-15 *game-info*))
-        (set! (-> a0-15 timer) v1-15)
+        (set! (-> a0-15 timer) (max 0 v1-15))
         (set! (-> a0-15 timer-flash) (< v1-15 (seconds 10)))
         )
       (when (< v1-15 0)
+        (when (task-manager-has-race-finisher? this)
+          (return 0))
         (debug-log *mp-debug-log?* "[Task-Control] check-time FAILED: task=~A time-limit=~D start-time=~D current-time=~D v1-15=~D~%"
                 (game-task->string (-> this node-info task)) (-> this time-limit) (-> this start-time) (current-time) v1-15)
         (if *debug-segment*
