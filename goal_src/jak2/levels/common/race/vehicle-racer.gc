@@ -25,8 +25,17 @@
       (add-debug-line #t (bucket-id debug-no-zbuf1) start-pos end-pos *color-cyan* #f (the-as rgba -1))))
   (none))
 
+(defun vehicle-racer-local-player-driving? ((this vehicle-racer))
+  "Return true when the local target is actively piloting this vehicle."
+  (and *target*
+       (nonzero? *target*)
+       (focus-test? *target* pilot)
+       (-> *target* pilot)
+       (nonzero? (-> *target* pilot))
+       (= (the-as vehicle this) (handle->process (-> *target* pilot vehicle)))))
+
 (defmethod vehicle-method-120 ((this vehicle-racer))
-  (when (logtest? (-> this flags) (rigid-body-object-flag player-driving))
+  (when (vehicle-racer-local-player-driving? this)
     (set! (-> *game-info* race-number-turbos) (-> this turbo-pickup-count)))
   (logior! (-> this skel status) (joint-control-status sync-math))
   ((method-of-type vehicle vehicle-method-120) this)
@@ -43,7 +52,7 @@
     (set! (-> this turbo-boost-factor) 1.0)
     (set! (-> this turbo-boost-duration) (the-as uint 150))
     (logior! (-> this flags) (rigid-body-object-flag turbo-boost))
-    (when (logtest? (-> this flags) (rigid-body-object-flag player-driving))
+    (when (vehicle-racer-local-player-driving? this)
       (sound-play "turbo-boost")))
   (none))
 
@@ -146,7 +155,7 @@
     (('turbo-pickup)
      (when (< (-> this turbo-pickup-count) 3)
        (sound-play "turbo-pickup")
-       (when (logtest? (-> this flags) (rigid-body-object-flag player-driving))
+       (when (vehicle-racer-local-player-driving? this)
          (sound-play "turbo-pickup-pl")
          (send-event *target* 'color-effect 'eco-pill-dark (seconds 0.2)))
        (+! (-> this turbo-pickup-count) 1)
@@ -186,7 +195,7 @@
      (send-event (ppointer->process (-> this child)) 'unhide))
 
     (('race-pass)
-     (if (logtest? (-> this flags) (rigid-body-object-flag player-driving))
+     (if (vehicle-racer-local-player-driving? this)
          (speech-control-method-12 *speech-control* this
                                    (if (-> *target* pilot as-daxter?)
                                        (speech-type speech-type-45)
@@ -194,7 +203,7 @@
          (send-event (ppointer->process (-> this child)) 'race-pass)))
 
     (('race-got-passed)
-     (when (not (logtest? (-> this flags) (rigid-body-object-flag player-driving)))
+     (when (not (vehicle-racer-local-player-driving? this))
        (send-event (ppointer->process (-> this child)) 'race-got-passed)))
 
     (('race-finished)
