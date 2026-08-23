@@ -134,6 +134,12 @@
           (= (-> this next-state name) 'waiting-for-start)
           (logtest? (-> this flags) (rigid-body-object-flag riding))))
     
+    (('waiting-race)
+     (go (method-of-object this waiting-race)))
+    
+    (('waiting-for-start)
+     (go (method-of-object this waiting-for-start)))
+    
     (('pilot-on)
       (let ((icon (-> this minimap)))
         (when icon

@@ -237,7 +237,7 @@
   (and racer-info
        (nonzero? racer-info)
        (logtest? (-> racer-info flags)
-                 (racer-info-flags multiplayer-human))))
+                 (racer-info-flags player-or-ai))))
 
 (defun mp-race-canonical-human? ((racer-info race-racer-info))
   (and (mp-race-human-capable? racer-info)
@@ -285,7 +285,7 @@
     (while (> racer-count 0)
       (let ((racer-info (-> info racer-array (+ racer-count -1))))
         (if (logtest? (-> racer-info flags)
-                      (racer-info-flags multiplayer-only))
+                      (racer-info-flags player-only))
             (-! racer-count 1)
             (return racer-count))))
     racer-count))
@@ -542,7 +542,7 @@
           (set! (-> spawn-params flags) (traffic-spawn-flags spawn-rider))
           (spawn-default-vehicle-rider! vehicle spawn-params))
         (when (-> vehicle race path)
-          (go (method-of-object vehicle waiting-for-start)))
+          (send-event vehicle 'waiting-for-start))
         #t))))
 
 (defun mp-race-retire-racer! ((state race-state) (racer-index int))

@@ -1093,7 +1093,7 @@
           (logior! (-> vehicle focus-status) (focus-status grabbed))
           (set! (-> racer rider) (the uint8 0))
           (race-manager-mark-racer-icon-open! vehicle)
-          (go (method-of-object vehicle waiting-race))))))
+          (send-event vehicle 'waiting-race)))))
   #t)
 
 (defun race-manager-reconcile-racers! ((manager race-manager))
