@@ -136,22 +136,14 @@
 (defun mp-player-puppet-presentation-allowed? ((record mp-player-record))
   "Apply independent culling and return whether this record should own a live puppet."
   (let ((distance (mp-player-puppet-distance-from-local record))
-        (force-presentation?
-          (mp-player-runtime-flag? record (mp-player-runtime-flags force-presentation))))
+        (cull-suppressed? (mp-culling-suppressed-for-player? record)))
     (cond
-      ((and (> distance (meters 250.0))
-            (not force-presentation?))
+      ((and (not cull-suppressed?)
+            (> distance (meters 250.0)))
        (when (mp-puppet-valid? (mp-player-record-target record))
          (mp-puppet-deactivate! record))
        (mp-player-puppet-cull-vehicle! record)
        (mp-player-runtime-set-flag! record (mp-player-runtime-flags was-far))
-       #f)
-      ((and (> distance (meters 250.0))
-            force-presentation?
-            (not (mp-player-level-ready? record)))
-       (when (mp-puppet-valid? (mp-player-record-target record))
-         (mp-puppet-deactivate! record))
-       (mp-player-puppet-cull-vehicle! record)
        #f)
       ((and (<= distance (meters 250.0))
             (mp-player-runtime-flag? record (mp-player-runtime-flags was-far))
@@ -161,7 +153,7 @@
        (mp-player-runtime-clear-flag! record (mp-player-runtime-flags was-far))
        #t)
       (else
-       (when (and force-presentation? (mp-player-level-ready? record))
+       (when cull-suppressed?
          (mp-player-runtime-clear-flag! record (mp-player-runtime-flags was-far)))
        #t))))
 
@@ -188,6 +180,7 @@
             (mp-update-player-transform! record)
             (mp-puppet-note-remote-packet! record)
             (mp-player-puppet-update-ghost! record)
+            (mp-vehicle-apply-player-piggyback record)
             (let ((puppet (mp-player-record-target record)))
               (when (and puppet
                          (nonzero? puppet)

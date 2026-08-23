@@ -42,6 +42,12 @@
   (stadium-board1-tutorial-announced 1)
   )
 
+(defenum mp-culling-override-flags
+  :type uint32
+  :bitfield #t
+  (race       0)
+  )
+
 (defenum mp-puppet-lifecycle
   :type uint8
   (none      0)
@@ -308,3 +314,9 @@
 (define-extern mp-broadcast-player-leave! (function mp-player-record none))
 (define-extern mp-session-host? (function symbol))
 (define-extern mp-session-client? (function symbol))
+(define-extern *mp-culling-override-mask* uint)
+(define-extern mp-culling-set-override! (function uint symbol uint))
+(define-extern mp-culling-clear-override! (function uint uint))
+(define-extern mp-culling-override-active? (function symbol))
+(define-extern mp-culling-suppressed-for-player? (function mp-player-record symbol))
+(define-extern mp-culling-reset-policy! (function none))

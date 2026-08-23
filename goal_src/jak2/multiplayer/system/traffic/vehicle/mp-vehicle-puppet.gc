@@ -1157,10 +1157,6 @@
 
   (when (and (not (mp-vehicle-is-local-authoritative? this))
              (nonzero? (-> this net-id)))
-    (when (not (mp-is-traffic-existing-update-ready?))
-      (return #f)
-      )
-
     (let ((rec (mp-get-traffic-ghost (-> this net-id))))
       (when rec
         (when (= (-> rec entity-kind) (the uint8 1))
@@ -1485,7 +1481,6 @@
   "Update the ghost record for a vehicle from the latest remote data."
   (if (not (and proc (nonzero? proc))) (return #f))
   (if (not (and slot (nonzero? slot))) (return #f))
-  (if (not (mp-is-traffic-existing-update-ready?)) (return #f))
 
   (let ((local-pilot (get-rider-in-seat proc 0)))
     (when (and local-pilot
@@ -1579,10 +1574,7 @@
 (defun mp-vehicle-apply-player-piggyback ((record mp-player-record))
   "Apply one remote record's independently owned vehicle state."
   (when (or (not record)
-            (zero? record)
-            (not (mp-is-traffic-existing-update-ready?)))
-    (when (and record (nonzero? record))
-      (set! (-> record runtime vehicle-handle) (the-as handle #f)))
+            (zero? record))
     (return #f))
   (mp-vehicle-update-authority-handoff! record)
   (let ((spawn-ready? (mp-is-traffic-spawn-ready?))

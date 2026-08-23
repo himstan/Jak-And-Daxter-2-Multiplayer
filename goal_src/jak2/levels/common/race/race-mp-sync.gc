@@ -127,6 +127,7 @@
     (set! (-> *mp-race-sync-state* manager-generation) (the uint 0))
     (set! (-> *mp-race-sync-state* last-manager-generation) (the uint 0)))
   (set! *mp-race-generation-counter* (the uint 0))
+  (mp-culling-clear-override! (the-as uint (mp-culling-override-flags race)))
   (none))
 
 (defun mp-race-next-sequence! ()
@@ -321,6 +322,7 @@
     #t))
 
 (defun mp-race-manager-begin! ((info race-info))
+  (mp-culling-set-override! (the-as uint (mp-culling-override-flags race)) #t)
   (when (not (mp-race-sync-active?))
     (return #t))
   (when (or (not info) (zero? info))
@@ -346,6 +348,7 @@
          (> (-> sync active-racer-count) 0))))
 
 (defun mp-race-manager-end! ()
+  (mp-culling-clear-override! (the-as uint (mp-culling-override-flags race)))
   (when (and *mp-race-sync-state* (nonzero? *mp-race-sync-state*))
     (let ((manager-generation
             (-> *mp-race-sync-state* manager-generation)))

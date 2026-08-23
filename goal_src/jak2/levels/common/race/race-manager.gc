@@ -1695,8 +1695,6 @@
     )
   )
 
-(define *race-manager* (the-as (pointer race-manager) #f))
-
 (defun want-race-sound! ((info race-info))
   (when (and info (nonzero? info) *load-state* (nonzero? *load-state*))
     (let ((want-sound (-> info want-sound)))
@@ -1727,7 +1725,6 @@
   (set! (-> self race-state) *race-state*)
   (set! (-> self race-state info) info)
   (set! (-> self race-state flags) (race-flags))
-  (set! *race-manager* (the-as (pointer race-manager) (process->ppointer self)))
   (set! (-> info manager) (process->handle self))
   (set! (-> self finish-sound-id) (new 'static 'sound-id))
   (if preload?

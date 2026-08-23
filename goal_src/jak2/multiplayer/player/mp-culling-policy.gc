@@ -1,0 +1,35 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(define-perm *mp-culling-override-mask* uint (the uint 0))
+
+(defun mp-culling-set-override! ((reason uint) (enabled? symbol))
+  "Set or clear a culling override flag reason."
+  (if enabled?
+      (logior! *mp-culling-override-mask* reason)
+      (logclear! *mp-culling-override-mask* reason))
+  *mp-culling-override-mask*)
+
+(defun mp-culling-clear-override! ((reason uint))
+  "Clear a culling override flag reason."
+  (logclear! *mp-culling-override-mask* reason)
+  *mp-culling-override-mask*)
+
+(defun mp-culling-override-active? ()
+  "Return true if any system or mode has requested culling suppression."
+  (the-as symbol (nonzero? *mp-culling-override-mask*)))
+
+(defun mp-culling-suppressed-for-player? ((record mp-player-record))
+  "Return true if presentation culling should be bypassed for this player."
+  (the-as symbol
+    (or (mp-culling-override-active?)
+        (and record
+             (nonzero? record)
+             (mp-player-runtime-flag? record (mp-player-runtime-flags force-presentation))))))
+
+(defun mp-culling-reset-policy! ()
+  "Reset all culling overrides and policies back to defaults."
+  (set! *mp-culling-override-mask* (the uint 0))
+  (none))
+
+

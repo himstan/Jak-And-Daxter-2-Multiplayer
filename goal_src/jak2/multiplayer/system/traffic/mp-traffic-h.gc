@@ -42,6 +42,7 @@
 (define-extern mp-vehicle-pack (function vehicle mp-vehicle-state none))
 (define-extern mp-vehicle-find-by-net-id (function uint vehicle))
 (define-extern mp-vehicle-apply-piggyback (function none))
+(define-extern mp-vehicle-apply-player-piggyback (function mp-player-record none))
 (define-extern mp-vehicle-apply-remote (function none))
 (define-extern mp-vehicle-apply-ghost-state (function vehicle mp-vehicle-state none))
 (define-extern mp-vehicle-record-ghost-sample! (function vehicle mp-vehicle-state mp-traffic-ghost-record symbol))
