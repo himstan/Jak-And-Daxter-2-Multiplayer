@@ -941,7 +941,12 @@
                 )
             (let ((sv-112 (the int (* 56.0 f30-0))))
               )
-            (when sv-100
+            (when (and sv-100
+                       (not (and *target*
+                                 (nonzero? *target*)
+                                 (mp-target-daxter? *target*)
+                                 (or (mp-target-ride-along? *target*)
+                                     (!= (-> *target* riding-along-player-id) MP_INVALID_PLAYER_ID)))))
               (set-pos! this (target-pos 0))
               (if (-> *blit-displays-work* horizontal-flip-flag)
                   (set! f30-0 (- f30-0))

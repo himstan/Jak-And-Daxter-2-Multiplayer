@@ -1373,14 +1373,19 @@
 
 (defun mp-remote-player-marker-hidden? ((connection connection-minimap))
   "Hide only the Daxter record represented by this marker while it is riding along."
-  (let* ((record (mp-player-record-by-marker-key (-> connection key)))
-         (player-target (mp-player-record-target record)))
-    (and record
-         (nonzero? record)
-         (mp-player-daxter? record)
-         player-target
-         (nonzero? player-target)
-         (mp-target-ride-along? player-target))))
+  (when (and connection (nonzero? connection))
+    (let* ((record (mp-player-record-by-marker-key (-> connection key)))
+           (player-target (if (and record (nonzero? record))
+                              (mp-player-record-target record)
+                              (the-as target #f))))
+      (and record
+           (nonzero? record)
+           (mp-player-daxter? record)
+           (or (!= (-> record action riding-along-player-id) MP_INVALID_PLAYER_ID)
+               (and player-target
+                    (nonzero? player-target)
+                    (or (mp-target-ride-along? player-target)
+                        (!= (-> player-target riding-along-player-id) MP_INVALID_PLAYER_ID))))))))
 
 
 ;; WARN: Return type mismatch pointer vs none.
@@ -2188,7 +2193,11 @@
             (set! (-> arg0 mat trans x) (the float (+ v1-44 1792 (-> arg0 draw-pos x))))
             )
         )
-      (when *target*
+      (when (and *target*
+                 (nonzero? *target*)
+                 (not (and (mp-target-daxter? *target*)
+                           (or (mp-target-ride-along? *target*)
+                               (!= (-> *target* riding-along-player-id) MP_INVALID_PLAYER_ID)))))
         (vector-z-quaternion! (the-as vector sv-52) (-> *target* control quat))
         (vector-xz-normalize! (the-as vector sv-52) 1.0)
         (set! (-> sv-52 vector 0 y) 0.0)
@@ -2585,13 +2594,13 @@
       (if (logtest? (-> arg1 class flags) (minimap-flag goal))
           (set! (-> arg1 class icon-xy x) (the-as uint (mod (the int (-> this goal-time)) 6)))
           )
-      (when (not (mp-remote-player-marker-hidden? arg1))
-        (when (and (not s2-0) (string= (the-as string (-> arg1 class name)) "remote-player"))
+      (when (and (not s2-0) (string= (the-as string (-> arg1 class name)) "remote-player"))
+        (when (not (mp-remote-player-marker-hidden? arg1))
           (vector-matrix*! s3-2 s3-2 (-> arg0 mat))
           (draw-minimap-remote-player-marker this arg0 arg1 s3-2)
-          (set! s2-0 #t)
+          )
+        (set! s2-0 #t)
         )
-      )
       (when (not s2-0)
         (vector-matrix*! s3-2 s3-2 (-> arg0 mat))
         (let ((v1-115 (the-as object (-> arg0 buf base))))
