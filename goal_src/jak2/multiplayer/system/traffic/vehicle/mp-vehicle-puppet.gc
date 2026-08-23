@@ -1115,6 +1115,37 @@
   (none)
   )
 
+(defun mp-vehicle-apply-racer-ghost-correction! ((veh vehicle) (rec mp-traffic-ghost-record) (target-trans vector) (dist float))
+  (when (and veh
+             (nonzero? veh)
+             rec
+             (nonzero? rec)
+             target-trans
+             (nonzero? target-trans)
+             (-> veh root)
+             (nonzero? (-> veh root)))
+    (if (> dist (meters 40))
+        (mp-vehicle-hard-snap-to-ghost! veh rec target-trans)
+        (begin
+          (set! (-> veh pad-bytes 0) (the uint8 1))
+          (vector-lerp! (-> veh root trans) (-> veh root trans) target-trans (mp-vehicle-frame-blend 12.0))
+          (mp-vehicle-nudge-rbody-to-target! veh target-trans 300.0)
+          (quaternion-slerp! (-> veh root quat) (-> veh root quat) (-> rec ghost-quat) (mp-vehicle-frame-blend 24.0))
+          (when (and (-> veh rbody)
+                     (nonzero? (-> veh rbody))
+                     (-> veh rbody state)
+                     (nonzero? (-> veh rbody state)))
+            (vector-lerp! (-> veh rbody state ang-velocity)
+                          (-> veh rbody state ang-velocity)
+                          (-> rec ghost-angvel)
+                          (mp-vehicle-frame-blend 18.0))
+            )
+          )
+        )
+    )
+  (none)
+  )
+
 (defun mp-vehicle-apply-ghost-correction ((veh vehicle))
   "Smooth a puppet vehicle's rbody velocity toward the authoritative ghost position."
   (when (and veh
@@ -1131,11 +1162,15 @@
         (let ((target-trans (new 'stack-no-clear 'vector)))
           (mp-actor-traffic-predicted-trans! rec target-trans)
           (let ((dist (vector-vector-distance (-> veh root trans) target-trans)))
-            (if (mp-vehicle-remote-driven? veh)
-                (mp-vehicle-apply-driven-ghost-correction! veh rec target-trans dist)
-                (mp-vehicle-apply-ambient-ghost-correction! veh rec target-trans dist)
-                )
+            (cond
+              ((mp-race-vehicle-id? (-> veh net-id))
+               (mp-vehicle-apply-racer-ghost-correction! veh rec target-trans dist))
+              ((mp-vehicle-remote-driven? veh)
+               (mp-vehicle-apply-driven-ghost-correction! veh rec target-trans dist))
+              (else
+               (mp-vehicle-apply-ambient-ghost-correction! veh rec target-trans dist))
               )
+            )
           )
         (when (and (-> veh rbody state)
                    (nonzero? (-> veh rbody state)))
@@ -1208,7 +1243,9 @@
 
     (mp-vehicle-apply-ghost-correction this)
 
-    (when (and (-> this state) (!= (-> this state name) 'player-control))
+    (when (and (-> this state)
+               (!= (-> this state name) 'player-control)
+               (not (mp-race-vehicle-id? (-> this net-id))))
       (let ((rb (-> this rbody state)))
         (when rb
           (vector-reset! (-> rb lin-momentum))
@@ -1643,6 +1680,24 @@
     (when (mp-player-record-remote? *mp-player-controller* record)
       (mp-vehicle-apply-player-piggyback record)))
   (none))
+
+(defun mp-vehicle-apply-race-remote ()
+  "Apply authoritative race samples only to race vehicles already spawned by the race manager."
+  (dotimes (i (the-as int (-> *mp-traffic-buffer* veh-count)))
+    (let ((slot (-> *mp-traffic-buffer* veh-enemies i)))
+      (when (and (nonzero? (-> slot net-id))
+                 (mp-race-vehicle-id? (-> slot net-id))
+                 (not (mp-vehicle-net-id-player-driven? (-> slot net-id) #f)))
+        (let ((proc (mp-race-vehicle-find-by-net-id (-> slot net-id))))
+          (when (and proc (nonzero? proc))
+            (mp-vehicle-apply-ghost-state proc slot)
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
 
 (defun mp-vehicle-apply-remote ()
   (let ((spawn-budget 2))

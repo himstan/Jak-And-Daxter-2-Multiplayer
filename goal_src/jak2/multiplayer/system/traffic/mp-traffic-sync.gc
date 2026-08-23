@@ -93,6 +93,26 @@
   (none)
   )
 
+(defun mp-sync-race-traffic-update ()
+  "Pack race-manager-owned AI vehicles that are outside the traffic-manager tree."
+  (when (and (mp-race-sync-active?)
+             (mp-session-host?))
+    (let ((manager (process-by-type-exact 'race-manager *active-pool*)))
+      (when (and manager (nonzero? manager))
+        (let ((curr (-> manager child)))
+          (while (and curr (nonzero? curr))
+            (let ((tracker (ppointer->process curr)))
+              (iterate-process-tree tracker mp-sync-traffic-update-callback *kernel-context*)
+              )
+            (set! curr (-> curr 0 brother))
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
 (defun mp-traffic-clear-buffer! ()
   (when (nonzero? (the-as uint *mp-traffic-buffer*))
     (mem-set32! (the-as pointer *mp-traffic-buffer*) (/ (size-of mp-traffic-sync-buffer) 4) 0)
@@ -763,7 +783,9 @@
             )
           (begin
             (when (or (mp-is-traffic-authoritative?)
-                      (mp-traffic-local-city-loaded?))
+                      (mp-traffic-local-city-loaded?)
+                      (and (mp-race-sync-active?)
+                           (mp-is-traffic-existing-update-ready?)))
               (mp-vehicle-apply-piggyback)
               )
 
@@ -781,6 +803,7 @@
                   )
                   )
                   (mp-sync-mission-traffic-update)
+                  (mp-sync-race-traffic-update)
 
                   (when (time-elapsed? (-> *mp-traffic-buffer* last-sync-time) (seconds 2))
                     (debug-log *mp-debug-log?* "[MP-Traffic] Authoritative Active: ~D peds, ~D vehs ready=~A riding=~A local-level=~D authority-level=~D~%" (-> *mp-traffic-buffer* ped-count) (-> *mp-traffic-buffer* veh-count) *mp-traffic-art-context-spawn-ready* *mp-traffic-art-context-riding* *mp-traffic-art-context-local-level* *mp-traffic-art-context-authority-level*)
@@ -789,6 +812,17 @@
                   )
                 (begin
                   (cond
+                    ((and (mp-race-sync-active?)
+                          (not (mp-traffic-local-city-loaded?))
+                          (mp-is-traffic-existing-update-ready?))
+                     (begin
+                       (set! *mp-traffic-last-remote-apply-ready* #f)
+                       (pc-multi-receive-traffic (the-as uint *mp-traffic-buffer*))
+                       (mp-traffic-debug-update-frame-context!)
+                       (mp-vehicle-apply-race-remote)
+                       (mp-cleanup-traffic-ghosts)
+                       )
+                     )
                     ((mp-traffic-local-city-loaded?)
                       (begin
                         (mp-traffic-note-level-context!)

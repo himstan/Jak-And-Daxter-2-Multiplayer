@@ -129,7 +129,13 @@
         (when (>= now (-> rec last-correction-time))
           (let ((age-ms (the float (- now (-> rec last-correction-time))))
                 (ping-ms (the float (pc-multi-get-ping)))
-                (max-ahead-ms (if (= (-> rec entity-kind) (the uint8 1)) 100.0 150.0)))
+                (max-ahead-ms (cond
+                                ((mp-race-vehicle-id? (-> rec net-id))
+                                 250.0)
+                                ((= (-> rec entity-kind) (the uint8 1))
+                                 100.0)
+                                (else
+                                 150.0))))
             (let ((ahead-seconds (* 0.001 (fmin max-ahead-ms (fmax 0.0 (+ age-ms (* ping-ms 0.5)))))))
               (when (> ahead-seconds 0.0)
                 (vector+float*! out (-> rec ghost-trans) (-> rec ghost-linvel) ahead-seconds)

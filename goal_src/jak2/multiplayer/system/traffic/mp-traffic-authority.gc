@@ -114,11 +114,39 @@
   MP_INVALID_PLAYER_ID
   )
 
+(defun mp-traffic-race-host-pinned? ()
+  "Keep the shared traffic channel on the session host while a race manager exists."
+  (let ((manager (process-by-type-exact 'race-manager *active-pool*)))
+    (and manager (nonzero? manager) (= (-> manager state name) 'active))
+    )
+  )
+
 (defun mp-traffic-build-authority-map ((previous-map mp-traffic-authority-map))
   "Build direct ranked bubbles in ascending canonical player-ID order."
   (let ((authority-map *mp-traffic-working-authority-map*)
         (root-mask (the uint 0)))
     (mp-traffic-clear-authority-map! authority-map)
+
+    (when (mp-traffic-race-host-pinned?)
+      (let ((host-player-id (mp-host-player-id)))
+        (when (< host-player-id (the uint MP_MAX_PLAYERS))
+          (dotimes (player-id MP_MAX_PLAYERS)
+            (let ((record (mp-player-record-by-id (the-as uint player-id))))
+              (when (and record
+                         (nonzero? record)
+                         (nonzero? (-> record identity joined?)))
+                (mp-traffic-set-authority-for-player!
+                  authority-map
+                  (the-as uint player-id)
+                  host-player-id)
+               )
+              )
+            )
+          )
+        )
+      (return authority-map)
+      )
+
     (dotimes (player-id MP_MAX_PLAYERS)
       (let ((record (mp-player-record-by-id (the-as uint player-id))))
         (when (and record (nonzero? record) (mp-traffic-player-eligible? record))
