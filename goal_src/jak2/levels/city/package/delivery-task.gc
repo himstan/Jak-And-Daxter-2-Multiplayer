@@ -478,10 +478,10 @@
                  )
                )
              )
-           (let ((f30-0 49152.0)
-                 (f0-6 (vector-vector-distance-squared (-> (the-as process-drawable gp-0) root trans) (-> self end-pos)))
+           (let ((radius 49152.0)
+                 (dist (vector-vector-distance-squared (-> (the-as process-drawable gp-0) root trans) (-> self end-pos)))
                  )
-             (if (>= (square f30-0) f0-6)
+             (if (>= (square radius) dist)
                  (go-virtual complete)
                  )
              )
@@ -570,6 +570,7 @@
   TASK_MANAGER_COMPLETE_HOOK
   (lambda :behavior task-manager
     ()
+    (debug-log *mp-debug-log?* "[Krew-Deliver] triggered complete hook!~%")
     (send-event *traffic-manager* 'decrease-alert-level 0)
     (send-event *traffic-manager* 'set-alert-duration (seconds 30))
     (if (and *target* (focus-test? *target* pilot))
