@@ -28,16 +28,6 @@
 
 (defstate idle (stdmb-race-hatch)
   :virtual #t
-  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
-    (case message
-      (('open)
-       (set! (-> self tt-target) 1.0)
-       )
-      (('close)
-       (set! (-> self tt-target) 0.0)
-       )
-      )
-    )
   :code sleep-code
   :post (behavior ()
     (cond
@@ -103,7 +93,7 @@
   (set! (-> this draw shadow-mask) (the-as uint 30))
   (set! (-> this draw shadow-values) (the-as uint #x22220))
   (set! (-> this tt) 0.0)
-  (set! (-> this tt-target) 0.0)
+  (set! (-> this tt-target) 1.0)
   (ja-channel-push! 1 0)
   (let ((v1-7 (-> this skel root-channel 0)))
     (set! (-> v1-7 frame-group) (the-as art-joint-anim (-> this draw art-group data 3)))
