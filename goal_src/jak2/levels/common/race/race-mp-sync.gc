@@ -57,6 +57,10 @@
        (= (pc-multi-get-status) (mp-connection-status in-game))
        (or (mp-session-host?) (mp-session-client?))))
 
+(defun mp-race-multiplayer-mode? ()
+  (and *multi-sync-enabled?*
+       (or (mp-session-host?) (mp-session-client?))))
+
 (defun mp-race-world-ready? ()
   (and *target*
        (nonzero? *target*)
@@ -127,7 +131,7 @@
     (set! (-> *mp-race-sync-state* manager-generation) (the uint 0))
     (set! (-> *mp-race-sync-state* last-manager-generation) (the uint 0)))
   (set! *mp-race-generation-counter* (the uint 0))
-  (mp-culling-clear-override! (the-as uint (mp-culling-override-flags race)))
+  (mp-culling-clear-override! (mp-culling-override-flags race))
   (none))
 
 (defun mp-race-next-sequence! ()
@@ -287,7 +291,7 @@
     racer-count))
 
 (defun mp-race-host-build-config! ((info race-info))
-  (when (or (not info) (zero? info) (not (mp-race-world-ready?)))
+  (when (or (not info) (zero? info))
     (return #f))
   (let* ((participant-mask (mp-race-build-participant-mask))
          (participant-count (mp-race-count-participants participant-mask))
@@ -321,26 +325,42 @@
       (mp-race-current-clock))
     #t))
 
+(defun mp-race-request-config! ((info race-info))
+  (when (and (mp-race-multiplayer-mode?)
+             (not (mp-session-host?))
+             info
+             (nonzero? info))
+    (mp-race-enqueue-event!
+      MP_RACE_ACTION_CONFIG_REQUEST
+      (the uint MP_RACE_INVALID_INDEX)
+      (mp-local-player-id)
+      (the-as int (-> info id))
+      0
+      (mp-race-current-clock)))
+  (none))
+
 (defun mp-race-manager-begin! ((info race-info))
-  (mp-culling-set-override! (the-as uint (mp-culling-override-flags race)) #t)
-  (when (not (mp-race-sync-active?))
+  (mp-culling-set-override! (mp-culling-override-flags race) #t)
+  (when (not (mp-race-multiplayer-mode?))
     (return #t))
   (when (or (not info) (zero? info))
     (return #f))
   (set! (-> *mp-race-sync-state* manager-generation) (the uint 0))
   (if (mp-session-host?)
       (mp-race-host-build-config! info)
-      #t))
+      (begin
+        (mp-race-request-config! info)
+        #t)))
 
 (defun mp-race-manager-config-ready? ((info race-info))
-  (when (not (mp-race-sync-active?))
+  (when (not (mp-race-multiplayer-mode?))
     (return #t))
   (when (or (not info) (zero? info))
     (return #f))
   (let ((sync *mp-race-sync-state*))
     (when (and (zero? (-> sync manager-generation))
                (= (-> sync race-id) (the-as uint (-> info id)))
-               (> (-> sync generation) (-> sync last-manager-generation)))
+               (nonzero? (-> sync generation)))
       (set! (-> sync manager-generation) (-> sync generation)))
     (and (nonzero? (-> sync manager-generation))
          (= (-> sync manager-generation) (-> sync generation))
@@ -348,14 +368,11 @@
          (> (-> sync active-racer-count) 0))))
 
 (defun mp-race-manager-end! ()
-  (mp-culling-clear-override! (the-as uint (mp-culling-override-flags race)))
+  (mp-culling-clear-override! (mp-culling-override-flags race))
   (when (and *mp-race-sync-state* (nonzero? *mp-race-sync-state*))
-    (let ((manager-generation
-            (-> *mp-race-sync-state* manager-generation)))
-      (when (nonzero? manager-generation)
-        (set! (-> *mp-race-sync-state* last-manager-generation)
-              manager-generation))
-      (set! (-> *mp-race-sync-state* manager-generation) (the uint 0))))
+    (mp-race-reset-runtime!)
+    (set! (-> *mp-race-sync-state* manager-generation) (the uint 0))
+    (set! (-> *mp-race-sync-state* last-manager-generation) (the uint 0)))
   (none))
 
 (defun mp-race-effective-racer-count ((info race-info))
@@ -1007,10 +1024,11 @@
   (none))
 
 (defun mp-race-host-publish-snapshot! ((state race-state))
-  (when (and state (nonzero? state))
+  (when (and *mp-race-sync-state* (nonzero? *mp-race-sync-state*))
     (mp-race-host-enqueue-config-snapshot!)
     (mp-race-host-enqueue-binding-snapshot!)
-    (mp-race-host-enqueue-participant-snapshot! state)
+    (when (and state (nonzero? state))
+      (mp-race-host-enqueue-participant-snapshot! state))
     (mp-race-host-enqueue-start-snapshot!)
     (mp-race-host-enqueue-results-snapshot!)
     (mp-race-host-enqueue-decision-snapshot!))
@@ -1086,6 +1104,7 @@
 (defun mp-race-results-ready? ()
   (and (mp-race-sync-active?)
        (nonzero? *mp-race-sync-state*)
+       (nonzero? (-> *mp-race-sync-state* start-time))
        (nonzero? (-> *mp-race-sync-state* results-ready?))))
 
 (defun mp-race-overall-success? ()
@@ -1164,15 +1183,11 @@
 (defun mp-race-receive-config! ((event mp-race-event))
   (when (or (not (mp-race-event-from-host? event))
             (mp-session-host?)
-            (not (mp-race-world-ready?))
             (not (mp-race-config-valid? event)))
     (return #f))
   (let ((current-generation (-> *mp-race-sync-state* generation)))
     (cond
       ((> (-> event generation) current-generation)
-       (when (<= (-> event generation)
-                 (-> *mp-race-sync-state* last-manager-generation))
-         (return #f))
        (mp-race-reset-runtime!)
        (set! (-> *mp-race-sync-state* generation) (-> event generation))
        (set! (-> *mp-race-sync-state* race-id) (-> event race-id)))
@@ -1330,6 +1345,11 @@
   (case (-> event action)
     ((MP_RACE_ACTION_CONFIG)
      (mp-race-receive-config! event))
+    ((MP_RACE_ACTION_CONFIG_REQUEST)
+     (when (and (mp-session-host?)
+                *race-state*
+                (nonzero? *race-state*))
+       (mp-race-host-publish-snapshot! *race-state*)))
     ((MP_RACE_ACTION_PROGRESS_REQUEST)
      (when (and (mp-session-host?)
                 (mp-race-event-current-generation? event))

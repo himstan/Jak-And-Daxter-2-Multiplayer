@@ -3,16 +3,16 @@
 
 (define-perm *mp-culling-override-mask* uint (the uint 0))
 
-(defun mp-culling-set-override! ((reason uint) (enabled? symbol))
+(defun mp-culling-set-override! ((reason mp-culling-override-flags) (enabled? symbol))
   "Set or clear a culling override flag reason."
   (if enabled?
-      (logior! *mp-culling-override-mask* reason)
-      (logclear! *mp-culling-override-mask* reason))
+      (logior! *mp-culling-override-mask* (the-as uint reason))
+      (logclear! *mp-culling-override-mask* (the-as uint reason)))
   *mp-culling-override-mask*)
 
-(defun mp-culling-clear-override! ((reason uint))
+(defun mp-culling-clear-override! ((reason mp-culling-override-flags))
   "Clear a culling override flag reason."
-  (logclear! *mp-culling-override-mask* reason)
+  (logclear! *mp-culling-override-mask* (the-as uint reason))
   *mp-culling-override-mask*)
 
 (defun mp-culling-override-active? ()

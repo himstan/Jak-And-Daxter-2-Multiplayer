@@ -489,7 +489,12 @@
       (remove-setting! 'gun)
       (remove-setting! 'vehicle-hijacking)
       (remove-setting! 'attack)
-    )
+      (let ((manager (the-as race-manager (handle->process (-> self slave 0)))))
+        (when (and manager (nonzero? manager) (type? manager race-manager))
+          (send-event manager 'die)
+          )
+        )
+      )
     (none))
   )
 
@@ -508,20 +513,14 @@
         (if (>= (* f1-0 f1-0) f0-0)
             (set! complete? #t)
             )
-        (dotimes (player-id MP_MAX_PLAYERS)
-          (let* ((record (mp-player-record-by-id (the-as uint player-id)))
-                 (puppet (mp-player-record-target record)))
-            (when (and record
-                       (nonzero? record)
-                       (mp-player-record-remote? *mp-player-controller* record)
-                       puppet
-                       (nonzero? puppet)
-                       (-> puppet root)
-                       (nonzero? (-> puppet root))
-                       (>= (* f1-0 f1-0)
-                           (vector-vector-distance-squared
-                             (-> puppet root trans) (-> self end-pos))))
-              (set! complete? #t))))
+        (mp-for-each-player-target (player-id record puppet)
+          (when (and (mp-player-record-remote? *mp-player-controller* record)
+                     (-> puppet root)
+                     (nonzero? (-> puppet root))
+                     (>= (* f1-0 f1-0)
+                         (vector-vector-distance-squared
+                           (-> puppet root trans) (-> self end-pos))))
+            (set! complete? #t)))
         (if complete?
             (go-virtual complete)
             )
@@ -545,7 +544,8 @@
           (and
             race-process
             (type? race-process race-manager)
-            (= (-> (the-as race-manager race-process) race-state state) (race-state-enum active))))
+            (= (-> (the-as race-manager race-process) race-state state) (race-state-enum active))
+            (logtest? (-> (the-as race-manager race-process) race-state flags) (race-flags begun))))
         (suspend)
         )
         (until (or v1-7
