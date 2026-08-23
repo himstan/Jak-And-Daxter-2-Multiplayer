@@ -368,7 +368,9 @@
   "Pack local vehicle and turret occupancy into the local player record."
   (when (and (mp-local-player-record)
              (nonzero? (mp-local-player-record)))
-    (set! (-> (mp-local-player-record) vehicle state net-id) (the-as uint 0))
+    (when (not (mp-vehicle-pack-local-crash-snapshot?))
+      (set! (-> (mp-local-player-record) vehicle state net-id) (the-as uint 0))
+      )
     (set! (-> (mp-local-player-record) vehicle vehicle-id) (the uint 0))
     (set! (-> (mp-local-player-record) vehicle seat-index) (the uint8 0))
     (set! (-> (mp-local-player-record) vehicle turret-active?) (the uint8 0))

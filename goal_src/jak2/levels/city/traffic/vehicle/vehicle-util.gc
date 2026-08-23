@@ -625,6 +625,18 @@
     )
   )
 
+(defun mp-vehicle-rider-proc? ((this vehicle) (proc process))
+  "Returns true if proc is currently seated in any seat of this vehicle."
+  (when (and this (nonzero? this) proc (nonzero? proc))
+    (dotimes (i (the int (-> this info seat-count)))
+      (if (= (get-rider-in-seat this i) proc)
+          (return #t)
+          )
+      )
+    )
+  #f
+  )
+
 (defmethod get-best-seat-for-vehicle ((this vehicle) (query-pos vector) (seat-flag-mask int) (occupancy-mode int))
   (let ((gp-0 -1))
     (let ((f30-0 (the-as float #x7f800000))
@@ -713,6 +725,8 @@
   )
 
 (defmethod apply-damage ((this vehicle) (damage float) (impact rigid-body-impact))
+  (if (not (mp-vehicle-is-local-authoritative? this))
+      (return 0))
   (cond
     (#f
       )
@@ -867,6 +881,8 @@
   )
 
 (defmethod set-crash-level! ((this vehicle) (new-crash-level int) (crash-duration uint))
+  (if (not (mp-vehicle-is-local-authoritative? this))
+      (return 0))
   (when (< (-> this crash-level) new-crash-level)
     (set! (-> this crash-level) new-crash-level)
     (set! (-> this crash-duration) crash-duration)

@@ -209,7 +209,8 @@ struct MPVehicleState {
   float lin_vel_x, lin_vel_y, lin_vel_z;
   float ang_vel_x, ang_vel_y, ang_vel_z;
   uint8_t state_flags;
-  uint8_t pad[3];
+  uint8_t hit_points;
+  uint8_t pad[2];
   uint32_t rider_player_ids[4];
 };
 
@@ -378,6 +379,8 @@ struct MPVehicleStatePacked {
   int16_t lin_vel[3];  // Downcast
   int16_t ang_vel[3];  // Downcast
   uint8_t state_flags;
+  uint8_t hit_points;
+  uint8_t pad[2];
   uint32_t rider_player_ids[4];
 };
 

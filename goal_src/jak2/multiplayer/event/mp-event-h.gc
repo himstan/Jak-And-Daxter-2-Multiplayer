@@ -334,6 +334,7 @@
 (define-extern mp-vehicle-find-by-net-id (function uint vehicle))
 (define-extern mp-pedestrian-find-by-net-id (function uint citizen))
 (define-extern mp-pedestrian-apply-remote-attack! (function mp-actor-attack-event none))
+(define-extern mp-vehicle-apply-remote-attack! (function mp-actor-attack-event none))
 (define-extern entity-by-aid (function uint entity))
 (define-extern mp-fort-missile-target-replay! (function uint none))
 (define-extern mp-receive-palace-squid-event (function mp-palace-squid-event none))

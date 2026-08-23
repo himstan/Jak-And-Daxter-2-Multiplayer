@@ -16,6 +16,7 @@
 (define-extern mp-vehicle-common-post-sync (function vehicle none))
 (define-extern mp-vehicle-local-target-driving? (function vehicle symbol))
 (define-extern mp-vehicle-remote-driven? (function vehicle symbol))
+(define-extern mp-vehicle-rider-proc? (function vehicle process symbol))
 
 ;; DECOMP BEGINS
 
@@ -1795,7 +1796,7 @@
            )
        (when (and (!= (-> s3-1 id) (-> this incoming-attack-id))
                   (not (logtest? (-> this flags) (rigid-body-object-flag dead)))
-                  (or (not (logtest? (-> this flags) (rigid-body-object-flag player-driving)))
+                  (or (not (mp-vehicle-rider-proc? this (find-offending-process-focusable arg0 s3-1)))
                       (not (logtest? (penetrate jak-yellow-shot jak-red-shot jak-blue-shot jak-dark-shot) s2-1))
                       )
                   )

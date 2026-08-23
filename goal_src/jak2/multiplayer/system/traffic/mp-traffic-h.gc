@@ -50,6 +50,9 @@
 (define-extern mp-vehicle-clear-seat-occupant! (function vehicle int object none))
 (define-extern mp-vehicle-force-cull-local! (function vehicle none))
 (define-extern mp-vehicle-promote-local-driver! (function vehicle none))
+(define-extern mp-vehicle-send-attack-event! (function vehicle process event-message-block none))
+(define-extern mp-vehicle-apply-remote-attack! (function mp-actor-attack-event none))
+(define-extern mp-vehicle-is-local-authoritative? (function vehicle symbol))
 
 (define-extern mp-sync-traffic-update (function none))
 (define-extern pc-multi-send-traffic (function uint none))

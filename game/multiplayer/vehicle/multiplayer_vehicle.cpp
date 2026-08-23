@@ -143,6 +143,7 @@ bool handle_vehicle_sync_packet(const _ENetEvent& event,
       state->ang_vel_y = mp_unpack_float_q(incoming.ang_vel[1]) * 10.0f;
       state->ang_vel_z = mp_unpack_float_q(incoming.ang_vel[2]) * 10.0f;
       state->state_flags = incoming.state_flags;
+      state->hit_points = incoming.hit_points;
       memcpy(state->rider_player_ids, incoming.rider_player_ids,
              sizeof(state->rider_player_ids));
       data.veh_last_updated[slot] = current_time;
@@ -193,6 +194,7 @@ void send_vehicle_sync_packets(MultiplayerData& data,
       dst->lin_vel[2] = mp_pack_float_scaled(src->lin_vel_z, 10.0f);
       dst->ang_vel[0] = mp_pack_float_q(src->ang_vel_x / 10.0f); dst->ang_vel[1] = mp_pack_float_q(src->ang_vel_y / 10.0f); dst->ang_vel[2] = mp_pack_float_q(src->ang_vel_z / 10.0f);
       dst->state_flags = src->state_flags;
+      dst->hit_points = src->hit_points;
       memcpy(dst->rider_player_ids, src->rider_player_ids, 16);
     }
     const size_t packet_size = vehicle_packet_size(chunk_size);

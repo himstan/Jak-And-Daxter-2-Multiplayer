@@ -187,7 +187,7 @@
       (set! (-> a0-1 radius) (-> v1-0 root-prim prim-core world-sphere w))
       (set! (-> a0-1 collide-with) (-> v1-0 root-prim prim-core collide-with))
       (set! (-> a0-1 ignore-process0) this)
-      (set! (-> a0-1 ignore-process1) (ppointer->process (-> this parent)))
+      (set! (-> a0-1 ignore-process1) (the-as process (or (handle->process (-> this ignore-handle)) (ppointer->process (-> this parent)))))
       (set! (-> a0-1 ignore-pat) (-> v1-0 pat-ignore-mask))
       (set! (-> a0-1 action-mask) (collide-action solid))
       )
