@@ -415,11 +415,9 @@ struct MultiplayerData {
   std::array<uint32_t, kMPMaxPlayers> last_pedestrian_sequence_by_source = {};
   std::array<uint32_t, kMPMaxPlayers> last_vehicle_sequence_by_source = {};
   uint32_t local_traffic_level_hash = 0;
-  uint32_t last_remote_traffic_level_hash = 0;
   uint32_t remote_traffic_buffer_level_hash = 0;
   uint32_t last_ped_traffic_debug_time = 0;
   uint32_t last_veh_traffic_debug_time = 0;
-  uint32_t last_traffic_drop_debug_time = 0;
   uint32_t last_traffic_short_packet_debug_time = 0;
   uint64_t ped_last_updated[MAX_PEDESTRIAN_SYNC_COUNT] = {0};
   uint64_t veh_last_updated[MAX_VEHICLE_SYNC_COUNT] = {0};

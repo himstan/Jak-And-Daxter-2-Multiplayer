@@ -98,7 +98,6 @@ void multiplayer_clear_remote_peer_state(MultiplayerData& data) {
   data.traffic_authority_map.fill(kMPInvalidCompactPlayerId);
   data.traffic_authority_revision = 0;
   data.selected_traffic_authority = kMPInvalidCompactPlayerId;
-  data.last_remote_traffic_level_hash = 0;
   multiplayer_reset_remote_traffic_buffers(data);
   multiplayer_reset_remote_palace_squid_state(data);
   multiplayer_reset_remote_airlock_state(data);

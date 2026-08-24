@@ -207,6 +207,12 @@
 
 (defun mp-pedestrian-pack ((e-proc citizen) (slot mp-pedestrian-state))
   (set! (-> slot net-id) (-> e-proc net-id))
+  (when (and e-proc
+             (nonzero? e-proc)
+             slot
+             (nonzero? slot))
+    (set! (-> slot level-id) (the uint16 (mp-traffic-level-id-for-process e-proc)))
+    )
   (mp-pedestrian-refresh-authoritative-ghost! e-proc)
   (set! (-> slot object-type) (the uint8 (-> e-proc traffic-type)))
   (set! (-> slot object-variance) (the uint8 0))

@@ -210,7 +210,7 @@ struct MPVehicleState {
   float ang_vel_x, ang_vel_y, ang_vel_z;
   uint8_t state_flags;
   uint8_t hit_points;
-  uint8_t pad[2];
+  uint16_t level_id;
   uint32_t rider_player_ids[4];
 };
 
@@ -332,8 +332,9 @@ struct MPPedestrianState {
   uint32_t animation_profile;
   uint32_t vehicle_net_id;
   uint32_t transport_id;
+  uint16_t level_id;
   uint8_t transport_side;
-  uint8_t pad[7];
+  uint8_t pad[5];
 };
 static_assert(sizeof(MPPedestrianState) == 64, "MPPedestrianState must be 64 bytes");
 
@@ -351,7 +352,7 @@ struct MPPedestrianStatePacked {
   uint32_t transport_id;
   uint8_t transport_side;
   uint8_t flags;
-  uint8_t pad[2];
+  uint16_t level_id;
 };
 static_assert(sizeof(MPPedestrianStatePacked) == 48, "MPPedestrianStatePacked must be 48 bytes");
 
@@ -380,7 +381,7 @@ struct MPVehicleStatePacked {
   int16_t ang_vel[3];  // Downcast
   uint8_t state_flags;
   uint8_t hit_points;
-  uint8_t pad[2];
+  uint16_t level_id;
   uint32_t rider_player_ids[4];
 };
 

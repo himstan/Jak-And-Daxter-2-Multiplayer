@@ -98,8 +98,8 @@ bool handle_vehicle_sync_packet(const _ENetEvent& event,
   }
   data.last_vehicle_sequence_by_source[source_player_id] = header.sequenceNum;
   if (current_time - data.last_veh_traffic_debug_time > 2000) {
-    lg::info("[Multiplayer] Accepted vehicle traffic. packetLevel={} remoteLevel={} count={}",
-             level_hash, data.last_remote_traffic_level_hash, veh_count);
+    lg::info("[Multiplayer] Accepted vehicle traffic. packetLevel={} count={}",
+             level_hash, veh_count);
     data.last_veh_traffic_debug_time = current_time;
   }
   data.last_traffic_sync_time = current_time;
@@ -144,6 +144,9 @@ bool handle_vehicle_sync_packet(const _ENetEvent& event,
       state->ang_vel_z = mp_unpack_float_q(incoming.ang_vel[2]) * 10.0f;
       state->state_flags = incoming.state_flags;
       state->hit_points = incoming.hit_points;
+      state->level_id = incoming.level_id != 0
+                            ? incoming.level_id
+                            : static_cast<uint16_t>(level_hash & 0xffu);
       memcpy(state->rider_player_ids, incoming.rider_player_ids,
              sizeof(state->rider_player_ids));
       data.veh_last_updated[slot] = current_time;
@@ -195,6 +198,7 @@ void send_vehicle_sync_packets(MultiplayerData& data,
       dst->ang_vel[0] = mp_pack_float_q(src->ang_vel_x / 10.0f); dst->ang_vel[1] = mp_pack_float_q(src->ang_vel_y / 10.0f); dst->ang_vel[2] = mp_pack_float_q(src->ang_vel_z / 10.0f);
       dst->state_flags = src->state_flags;
       dst->hit_points = src->hit_points;
+      dst->level_id = src->level_id;
       memcpy(dst->rider_player_ids, src->rider_player_ids, 16);
     }
     const size_t packet_size = vehicle_packet_size(chunk_size);

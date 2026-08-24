@@ -267,6 +267,7 @@
 (define-perm *mp-traffic-level-context-change-time* time-frame 0)
 (define-perm *mp-traffic-last-local-primary-level-id* uint (the uint 0))
 (define-perm *mp-traffic-last-authority-level-id* uint (the uint 0))
+(define-perm *mp-traffic-last-selected-authority-id* uint MP_INVALID_PLAYER_ID)
 (define-perm *mp-traffic-last-remote-apply-ready* symbol #f)
 (define-perm *mp-traffic-refresh-existing-log-time* time-frame 0)
 
@@ -301,6 +302,7 @@
   (set! *mp-traffic-level-context-change-time* (the-as time-frame 0))
   (set! *mp-traffic-last-local-primary-level-id* (the uint 0))
   (set! *mp-traffic-last-authority-level-id* (the uint 0))
+  (set! *mp-traffic-last-selected-authority-id* MP_INVALID_PLAYER_ID)
   (set! *mp-traffic-last-remote-apply-ready* #f)
   (set! *mp-traffic-refresh-existing-log-time* (the-as time-frame 0))
   (pc-multi-set-selected-traffic-authority (the uint MP_INVALID_PLAYER_ID))
@@ -405,7 +407,7 @@
   )
 
 (defun mp-traffic-level-data-ready? ((level-name symbol))
-  "True when traffic-engine has linked active cells for the local primary city level."
+  "True when traffic-engine has linked active cells for the local city level."
   (let ((level-info (mp-traffic-active-level-by-name level-name)))
     (when (and level-info
                (nonzero? level-info)
@@ -428,6 +430,24 @@
   #f
   )
 
+(defun mp-traffic-level-admitted-locally? ((level-id uint))
+  "True when a tagged traffic entry belongs to a wanted or resident local level."
+  (let ((level-name (mp-level-id->symbol level-id)))
+    (and (nonzero? level-id)
+         level-name
+         (mp-city-level? level-name)
+         (or (level-wanted? level-name)
+             (mp-traffic-level-data-ready? level-name)))
+    )
+  )
+
+(defun mp-traffic-slot-locally-admitted? ((level-id uint))
+  "Admit tagged entries by level, with primary-level fallback for legacy entries."
+  (if (zero? level-id)
+      (mp-traffic-primary-levels-match?)
+      (mp-traffic-level-admitted-locally? level-id))
+  )
+
 (defun mp-traffic-local-primary-level-ready? ()
   "True when the client's current city level is resident and traffic-engine has usable cells."
   (let ((level-name (mp-traffic-local-primary-level-symbol)))
@@ -437,6 +457,17 @@
          (mp-traffic-target-in-primary-level? level-name)
          (mp-traffic-level-data-ready? level-name))
     )
+  )
+
+(defun mp-traffic-level-materialization-ready? ((level-id uint))
+  "True when a traffic entry's local level can safely create a new puppet."
+  (if (zero? level-id)
+      (mp-traffic-local-primary-level-ready?)
+      (let ((level-name (mp-level-id->symbol level-id)))
+        (and (mp-traffic-level-admitted-locally? level-id)
+             level-name
+             (mp-traffic-level-data-ready? level-name)))
+      )
   )
 
 (defun mp-traffic-log-level-gate! ((reason symbol))
@@ -495,8 +526,7 @@
 
 (defun mp-traffic-local-city-loaded? ()
   "True when this client has a stable local city traffic context. Otherwise ignore traffic packets."
-  (and (mp-local-world-ready-for-remote-sync?)
-       (mp-is-traffic-ready?)
+  (and (mp-is-traffic-ready?)
        (let ((local-primary (mp-traffic-local-primary-level-id)))
          (and (nonzero? local-primary)
               (mp-city-level? (mp-level-id->symbol local-primary)))
@@ -505,9 +535,18 @@
   )
 
 (defun mp-traffic-note-level-context! ()
-  "Track local/remote primary level changes and hold ambient traffic while display settles."
+  "Track primary context changes without dropping the per-level remote snapshot."
   (let ((local-primary (mp-traffic-local-primary-level-id))
-        (authority-level-id (mp-traffic-authority-primary-level-id)))
+        (authority-level-id (mp-traffic-authority-primary-level-id))
+        (selected-authority-id (the uint *mp-traffic-selected-authority-id*)))
+    (when (!= selected-authority-id *mp-traffic-last-selected-authority-id*)
+      (set! *mp-traffic-last-selected-authority-id* selected-authority-id)
+      (set! *mp-traffic-last-remote-apply-ready* #f)
+      (debug-log *mp-debug-log?*
+              "[MP-Traffic] Authority source changed. Resetting remote traffic source=~D~%"
+              selected-authority-id)
+      (mp-traffic-clear-pending-remote!)
+      )
     (when (and (nonzero? local-primary)
                (nonzero? authority-level-id)
                (or (!= local-primary *mp-traffic-last-local-primary-level-id*)
@@ -516,13 +555,9 @@
       (set! *mp-traffic-last-authority-level-id* authority-level-id)
       (set! *mp-traffic-level-context-change-time* (current-time))
       (set! *mp-traffic-last-remote-apply-ready* #f)
-      (mp-traffic-log-level-gate! 'context-change-before-clear)
-      (if (= local-primary authority-level-id)
-          (mp-traffic-clear-incoming-remote!)
-          (mp-traffic-clear-pending-remote!)
-          )
+      (mp-traffic-log-level-gate! 'context-change-retain)
       (debug-log *mp-debug-log?*
-              "[MP-Traffic] Level context changed. Holding ambient traffic local-primary=~D authority-level=~D~%"
+              "[MP-Traffic] Level context changed. Retaining per-level ambient traffic local-primary=~D authority-level=~D~%"
               local-primary
               authority-level-id)
       )
@@ -537,15 +572,12 @@
 
 (defun mp-traffic-remote-apply-ready? ()
   "True when it is safe to apply ambient host-managed traffic on this client."
-  (and (mp-is-traffic-spawn-ready?)
-       (mp-traffic-primary-levels-match?)
-       (mp-traffic-level-context-settled?))
+  (mp-is-traffic-spawn-ready?)
   )
 
 (defun mp-traffic-remote-refresh-ready? ()
-  "True when same-level existing puppets may consume fresh ghost snapshots."
-  (and (mp-is-traffic-existing-update-ready?)
-       (mp-traffic-primary-levels-match?))
+  "True when existing admitted puppets may consume fresh ghost snapshots."
+  (mp-is-traffic-existing-update-ready?)
   )
 
 (defun mp-traffic-level-load-refresh-ready? ()
@@ -558,7 +590,8 @@
   (let ((refreshed? #f))
     (when (and slot
                (nonzero? slot)
-               (nonzero? (-> slot net-id)))
+               (nonzero? (-> slot net-id))
+               (mp-traffic-slot-locally-admitted? (-> slot level-id)))
       (let ((proc (mp-pedestrian-find-by-net-id (-> slot net-id))))
         (when (and proc
                    (nonzero? proc))
@@ -619,6 +652,7 @@
     (when (and slot
                (nonzero? slot)
                (nonzero? (-> slot net-id))
+               (mp-traffic-slot-locally-admitted? (-> slot level-id))
                (not (mp-player-driver-record-by-vehicle-id (-> slot net-id))))
       (mp-vehicle-complete-authority-handoff-if-fresh! (-> slot net-id))
       (when (not (mp-vehicle-authority-handoff-active? (-> slot net-id)))
@@ -711,7 +745,6 @@
   (set! *mp-traffic-last-remote-apply-ready* #f)
   (mp-vehicle-apply-piggyback)
   (mp-traffic-refresh-existing-remote!)
-  (mp-traffic-clear-incoming-remote!)
   (mp-cleanup-traffic-ghosts)
   (none)
   )
@@ -760,9 +793,7 @@
   (let ((status (pc-multi-get-status)))
     (when (and (mp-connection-status-active? status) *mp-traffic-sync-active*)
       (mp-traffic-debug-update-frame-context!)
-      (if (or (mp-multiplayer-scene-active?)
-              (and (mp-multiplayer-level-load-active?)
-                   (not (mp-traffic-level-load-refresh-ready?))))
+      (if (mp-multiplayer-scene-active?)
           (begin
             (set! *mp-traffic-last-remote-apply-ready* #f)
             (set! (-> *mp-traffic-buffer* ped-count) (the uint 0))
@@ -775,7 +806,9 @@
           (if (not (mp-is-traffic-ready?))
           (begin
             (set! *mp-traffic-last-remote-apply-ready* #f)
-            (mp-traffic-clear-authoritative-slots!)
+            (when (mp-is-traffic-authoritative?)
+              (mp-traffic-clear-authoritative-slots!)
+              )
             (when (time-elapsed? (-> *mp-traffic-buffer* last-sync-time) (seconds 5))
                (debug-log *mp-debug-log?* "[MP-Traffic] Waiting for Traffic Manager & Levels...~%")
                (set! (-> *mp-traffic-buffer* last-sync-time) (the-as uint (current-time)))
@@ -812,6 +845,12 @@
                   )
                 (begin
                   (cond
+                    ((mp-multiplayer-level-load-active?)
+                     (begin
+                       (mp-traffic-note-level-context!)
+                       (mp-traffic-update-existing-during-level-load!)
+                       )
+                     )
                     ((and (mp-race-sync-active?)
                           (not (mp-traffic-local-city-loaded?))
                           (mp-is-traffic-existing-update-ready?))
@@ -852,29 +891,16 @@
                               (set! *mp-traffic-last-remote-apply-ready* #f)
                               (mp-traffic-log-level-mismatch!)
                               (mp-traffic-log-level-settle!)
-                              (when (not (mp-traffic-primary-levels-match?))
-                                (mp-traffic-clear-pending-remote!)
-                                )
-                              (when (mp-traffic-primary-levels-match?)
-                                (mp-traffic-refresh-existing-remote!)
-                                )
+                              (mp-traffic-refresh-existing-remote!)
                               )
                             )
                           )
                         )
                       )
-                    ((mp-traffic-level-load-refresh-ready?)
-                     (mp-traffic-update-existing-during-level-load!)
-                     )
                     (else
                       (begin
                         (set! *mp-traffic-last-remote-apply-ready* #f)
-                        (let ((last-log-time (-> *mp-traffic-buffer* last-sync-time)))
-                          (mp-traffic-clear-pending-remote!)
-                          (when (time-elapsed? last-log-time (seconds 2))
-                            (set! (-> *mp-traffic-buffer* last-sync-time) (the-as uint (current-time)))
-                            )
-                          )
+                        (mp-traffic-refresh-existing-remote!)
                         )
                       )
                     )

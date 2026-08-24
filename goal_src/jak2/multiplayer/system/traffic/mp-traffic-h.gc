@@ -65,6 +65,8 @@
 (define-extern mp-traffic-copy-authority-map! (function mp-traffic-authority-map mp-traffic-authority-map mp-traffic-authority-map))
 (define-extern mp-traffic-selected-authority-record (function mp-player-record))
 (define-extern mp-traffic-ensure-process-net-id! (function process none))
+(define-extern mp-traffic-slot-locally-admitted? (function uint symbol))
+(define-extern mp-traffic-level-materialization-ready? (function uint object))
 (define-extern citizen-spawn (function process type traffic-object-spawn-params process-drawable))
 (define-extern mp-traffic-spawn-registered-transport-guard! (function process uint citizen))
 
@@ -248,6 +250,45 @@
     )
   )
 
+(defun mp-traffic-level-id-for-branch ((branch nav-branch))
+  "Resolve the level represented by a traffic branch, preferring its source node."
+  (let ((level-id (the uint 0)))
+    (when (and branch
+               (nonzero? (the-as uint branch)))
+      (let ((src-node (-> branch src-node)))
+        (when (and src-node
+                   (nonzero? (the-as uint src-node))
+                   (-> src-node level))
+          (set! level-id (mp-level-symbol->id (-> src-node level)))
+          )
+        )
+      (when (and (zero? level-id)
+                 (-> branch dest-node)
+                 (nonzero? (the-as uint (-> branch dest-node)))
+                 (-> branch dest-node level))
+        (set! level-id (mp-level-symbol->id (-> branch dest-node level)))
+        )
+      )
+    level-id
+    )
+  )
+
+(defun mp-traffic-level-id-for-process ((proc process))
+  "Resolve the host traffic level from a process's active navigation branch."
+  (let ((branch (the-as nav-branch #f)))
+    (when (and proc
+               (nonzero? proc))
+      (cond
+        ((type? proc citizen)
+         (set! branch (-> (the-as citizen proc) controller branch)))
+        ((type? proc vehicle)
+         (set! branch (-> (the-as vehicle proc) controller branch)))
+        )
+      )
+    (mp-traffic-level-id-for-branch branch)
+    )
+  )
+
 (define *mp-set-guard-target* (the-as (function citizen handle none) #f))
 (define *mp-get-guard-target* (the-as (function citizen handle) #f))
 
@@ -286,22 +327,6 @@
        (-> *target* control)
        (nonzero? (-> *target* control))
        (not (focus-test? *target* teleporting))
-       )
-  )
-
-(defun mp-local-world-ready-for-remote-sync? ()
-  "True when local player/world state is stable enough for remote puppet and traffic state changes."
-  (and *level*
-       (nonzero? *level*)
-       (= (-> *level* loading-level) (-> *level* default-level))
-       *target*
-       (nonzero? *target*)
-       (-> *target* control)
-       (nonzero? (-> *target* control))
-       (not (focus-test? *target* teleporting))
-       (not (and (-> *target* next-state)
-                 (nonzero? (-> *target* next-state))
-                 (= (-> *target* next-state name) 'target-load-wait)))
        )
   )
 

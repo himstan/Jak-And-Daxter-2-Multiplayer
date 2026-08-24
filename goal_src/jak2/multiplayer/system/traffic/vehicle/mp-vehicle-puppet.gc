@@ -1889,6 +1889,7 @@
     (dotimes (i (the-as int (-> *mp-traffic-buffer* veh-count)))
       (let ((slot (-> *mp-traffic-buffer* veh-enemies i)))
         (when (and (nonzero? (-> slot net-id))
+                   (mp-traffic-slot-locally-admitted? (-> slot level-id))
                    (not (mp-vehicle-net-id-player-driven?
                           (-> slot net-id) #f)))
           (mp-vehicle-complete-authority-handoff-if-fresh! (-> slot net-id))
@@ -1905,6 +1906,7 @@
                         )
                       )
                   (when (and (> spawn-budget 0)
+                             (mp-traffic-level-materialization-ready? (-> slot level-id))
                              (> (-> slot state-id) 2)
                              (mp-vehicle-can-spawn-puppet? (-> slot net-id)))
                     (when (mp-vehicle-spawn-puppet slot)
@@ -1937,7 +1939,9 @@
                      )
                     ((not (mp-vehicle-authority-handoff-active? v-net-id))
                      (dotimes (i (the-as int (-> *mp-traffic-buffer* veh-count)))
-                       (when (= (-> *mp-traffic-buffer* veh-enemies i net-id) v-net-id)
+                       (when (and (= (-> *mp-traffic-buffer* veh-enemies i net-id) v-net-id)
+                                  (mp-traffic-slot-locally-admitted?
+                                    (-> *mp-traffic-buffer* veh-enemies i level-id)))
                          (set! found-in-buffer? #t)))
                      )
                     )

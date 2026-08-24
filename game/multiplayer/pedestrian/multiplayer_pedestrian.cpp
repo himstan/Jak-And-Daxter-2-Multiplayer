@@ -78,8 +78,8 @@ bool handle_pedestrian_sync_packet(const _ENetEvent& event,
   }
   data.last_pedestrian_sequence_by_source[source_player_id] = header.sequenceNum;
   if (current_time - data.last_ped_traffic_debug_time > 2000) {
-    lg::info("[Multiplayer] Accepted pedestrian traffic. packetLevel={} remoteLevel={} count={}",
-             level_hash, data.last_remote_traffic_level_hash, ped_count);
+    lg::info("[Multiplayer] Accepted pedestrian traffic. packetLevel={} count={}",
+             level_hash, ped_count);
     data.last_ped_traffic_debug_time = current_time;
   }
   data.last_traffic_sync_time = current_time;
@@ -115,6 +115,9 @@ bool handle_pedestrian_sync_packet(const _ENetEvent& event,
       state->animation_profile = incoming.animation_profile;
       state->vehicle_net_id = incoming.vehicle_net_id;
       state->transport_id = incoming.transport_id;
+      state->level_id = incoming.level_id != 0
+                            ? incoming.level_id
+                            : static_cast<uint16_t>(level_hash & 0xffu);
       state->transport_side = incoming.transport_side;
       state->flags = incoming.flags;
       data.ped_last_updated[slot] = current_time;
@@ -176,8 +179,7 @@ void send_pedestrian_sync_packets(MultiplayerData& data,
       dst->transport_id = src->transport_id;
       dst->transport_side = src->transport_side;
       dst->flags = src->flags;
-      dst->pad[0] = 0;
-      dst->pad[1] = 0;
+      dst->level_id = src->level_id;
     }
 
     const size_t packet_size = pedestrian_packet_size(chunk_size);

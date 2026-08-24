@@ -593,14 +593,16 @@
   (let ((spawn-budget 2))
     (dotimes (i (the-as int (-> *mp-traffic-buffer* ped-count)))
       (let ((slot (-> *mp-traffic-buffer* ped-enemies i)))
-        (when (nonzero? (-> slot net-id))
+        (when (and (nonzero? (-> slot net-id))
+                   (mp-traffic-slot-locally-admitted? (-> slot level-id)))
           (let ((proc (mp-pedestrian-find-by-net-id (-> slot net-id))))
-            (if proc
+            (if (and proc (nonzero? proc))
                 (mp-pedestrian-apply-ghost-state proc slot)
-                (when (> spawn-budget 0)
+                (when (and (> spawn-budget 0)
+                           (mp-traffic-level-materialization-ready? (-> slot level-id)))
                   (when (mp-pedestrian-spawn-puppet slot)
                     (let ((new-proc (mp-pedestrian-find-by-net-id (-> slot net-id))))
-                      (when new-proc
+                      (when (and new-proc (nonzero? new-proc))
                         (mp-pedestrian-apply-ghost-state new-proc slot)
                         )
                       )
@@ -628,7 +630,10 @@
               (let ((found-in-buffer? #f))
                 (dotimes
                   (i (the-as int (-> *mp-traffic-buffer* ped-count)))
-                  (when (= (-> *mp-traffic-buffer* ped-enemies i net-id) (-> (the-as citizen proc) net-id))
+                  (when (and (= (-> *mp-traffic-buffer* ped-enemies i net-id)
+                                (-> (the-as citizen proc) net-id))
+                             (mp-traffic-slot-locally-admitted?
+                               (-> *mp-traffic-buffer* ped-enemies i level-id)))
                     (set! found-in-buffer? #t)
                     )
                   )

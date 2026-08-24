@@ -227,25 +227,13 @@ bool mp_handle_traffic_authority_packet(MultiplayerData& data,
 
 bool mp_accept_traffic_level(MultiplayerData& data,
                              uint32_t level_hash,
-                             uint32_t count,
+                             uint32_t,
                              const char* label,
-                             uint32_t current_time) {
-  if (level_hash != 0 && data.last_remote_traffic_level_hash != 0 &&
-      level_hash != data.last_remote_traffic_level_hash) {
-    if (current_time - data.last_traffic_drop_debug_time > 1000) {
-      lg::info("[Multiplayer] Dropped {} traffic for level mismatch. packetLevel={} remoteLevel={} count={}",
-               label, level_hash, data.last_remote_traffic_level_hash, count);
-      data.last_traffic_drop_debug_time = current_time;
-    }
-    return false;
-  }
-
+                             uint32_t) {
   if (level_hash != 0 && data.remote_traffic_buffer_level_hash != 0 &&
       level_hash != data.remote_traffic_buffer_level_hash) {
-    uint32_t old_level = data.remote_traffic_buffer_level_hash;
-    multiplayer_reset_remote_traffic_buffers(data);
-    lg::info("[Multiplayer] Reset remote traffic table for {} level change. old={} new={}",
-             label, old_level, level_hash);
+    lg::info("[Multiplayer] Traffic primary context changed for {}. old={} new={}; preserving per-entry state",
+             label, data.remote_traffic_buffer_level_hash, level_hash);
   }
   if (level_hash != 0) {
     data.remote_traffic_buffer_level_hash = level_hash;

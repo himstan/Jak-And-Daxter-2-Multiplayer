@@ -62,19 +62,51 @@
                (nonzero? position)))))
   )
 
+(defun mp-traffic-record-advertises-level?
+       ((record mp-player-record) (level-id uint))
+  "True when a player's packed wanted/resident context contains a level."
+  (if (or (not record)
+          (zero? record)
+          (= level-id (the uint 0)))
+      #f
+      (let ((packed-level (-> record transform level))
+            (advertised? #f))
+        (dotimes (level-slot 4)
+          (when (= (logand (shr packed-level (* level-slot 8)) #xff)
+                   level-id)
+            (set! advertised? #t)
+            ))
+        advertised?))
+  )
+
+(defun mp-traffic-records-share-level-context?
+       ((record mp-player-record) (root-record mp-player-record))
+  "True when two players can share traffic through their advertised levels."
+  (if (or (not record)
+          (zero? record)
+          (not root-record)
+          (zero? root-record))
+      #f
+      (let ((record-level (mp-player-primary-level-id record))
+            (root-level (mp-player-primary-level-id root-record)))
+        (and (nonzero? record-level)
+             (nonzero? root-level)
+             (or (= record-level root-level)
+                 (mp-traffic-record-advertises-level? record root-level)
+                 (mp-traffic-record-advertises-level? root-record record-level))))
+  )
+  )
+
 (defun mp-traffic-records-within?
        ((record mp-player-record) (root-record mp-player-record) (radius float))
-  "True when two eligible players share a primary level and are within radius."
+  "True when two eligible players share an advertised level context and are within radius."
   (if (or (not (mp-traffic-player-eligible? record))
           (not (mp-traffic-player-eligible? root-record)))
       #f
-      (let ((record-level (mp-player-primary-level-id record))
-            (root-level (mp-player-primary-level-id root-record))
-            (record-pos (mp-player-record-position record))
+      (let ((record-pos (mp-player-record-position record))
             (root-pos (mp-player-record-position root-record)))
         (the-as symbol
-          (and (nonzero? record-level)
-               (= record-level root-level)
+          (and (mp-traffic-records-share-level-context? record root-record)
                record-pos
                (nonzero? record-pos)
                root-pos

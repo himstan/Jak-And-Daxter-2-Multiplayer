@@ -30,6 +30,12 @@
   (if (not (and v-proc (nonzero? v-proc) (-> v-proc root) (-> v-proc rbody))) (return #f))
 
   (set! (-> slot net-id) (-> v-proc net-id))
+  (when (and v-proc
+             (nonzero? v-proc)
+             slot
+             (nonzero? slot))
+    (set! (-> slot level-id) (the uint16 (mp-traffic-level-id-for-process v-proc)))
+    )
   (set! (-> slot vehicle-type) (the uint8 (-> v-proc traffic-type)))
   (set! (-> slot color-index) (mp-vehicle-get-color-index v-proc))
   (set! (-> slot state-id) (the uint8 (mp-veh-get-state-id v-proc)))
