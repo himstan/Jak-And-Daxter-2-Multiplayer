@@ -295,6 +295,7 @@
   (none))
 
 (defun mp-on-local-spawn! ()
+  (mp-traffic-clear-death-spectate-state!)
   (let ((initial-status (pc-multi-get-status)))
     (mp-auto-start-session-on-spawn! initial-status)
     (let ((status (pc-multi-get-status)))
@@ -330,6 +331,7 @@
   (set! *multi-last-send-time* (the-as time-frame 0))
   (mp-reset-tps-counter!)
   (mp-spectate-reset!)
+  (mp-traffic-clear-death-spectate-state!)
   (set! *mp-death-party-wipe-pending?* #f)
   (mp-reset-respawn-policy!)
   (mp-tomb-boulder-reset-state!)

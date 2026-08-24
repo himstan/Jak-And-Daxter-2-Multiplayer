@@ -40,6 +40,87 @@
   authority-map
   )
 
+(defun mp-traffic-record-death-root-held? ((record mp-player-record))
+  "True when a record is holding traffic authority through death spectating."
+  (and record
+       (nonzero? record)
+       (logtest? (-> record action respawn-flags)
+                 MP_RESPAWN_FLAG_TRAFFIC_DEATH_ROOT_HOLD)
+       (not (logtest? (-> record action respawn-flags)
+                      MP_RESPAWN_FLAG_TRAFFIC_AUTHORITY_RELEASED)))
+  )
+
+(defun mp-traffic-root-incumbent-held?
+       ((player-id uint)
+        (record mp-player-record)
+        (previous-map mp-traffic-authority-map))
+  "True only for a held root that owned itself in the previous map."
+  (and (< player-id (the uint MP_MAX_PLAYERS))
+       (mp-traffic-record-death-root-held? record)
+       (= (mp-traffic-authority-for-player previous-map player-id) player-id))
+  )
+
+(defun mp-traffic-record-can-establish-root?
+       ((player-id uint)
+        (record mp-player-record)
+        (previous-map mp-traffic-authority-map))
+  "Dead records may establish a root only when retaining an incumbent root."
+  (and record
+       (nonzero? record)
+       (or (not (mp-player-record-dead-or-dying? record))
+           (mp-traffic-root-incumbent-held? player-id record previous-map)))
+  )
+
+(defun mp-traffic-local-incumbent-root? ()
+  "True when the local player was self-assigned by the last authority map."
+  (let ((local-player-id (mp-local-player-id)))
+    (and (< local-player-id (the uint MP_MAX_PLAYERS))
+         (= (mp-traffic-authority-for-player
+              *mp-traffic-authority-assignments* local-player-id)
+            local-player-id)))
+  )
+
+(defun mp-traffic-clear-death-spectate-state! ()
+  "Clear the death-spectator authority latch at spawn and deliberate resets."
+  (set! *mp-traffic-death-spectate-active?* #f)
+  (set! *mp-traffic-death-root-hold?* #f)
+  (set! *mp-traffic-authority-released?* #f)
+  (mp-pack-local-respawn-policy!)
+  (none)
+  )
+
+(defun mp-traffic-begin-local-death-spectate! ()
+  "Latch local root authority before the death event is broadcast."
+  (set! *mp-traffic-death-spectate-active?* #t)
+  (set! *mp-traffic-authority-released?* #f)
+  (set! *mp-traffic-death-root-hold?* (mp-traffic-local-incumbent-root?))
+  (mp-pack-local-respawn-policy!)
+  (debug-log *mp-debug-log?*
+    "[MP-Traffic-Auth] death begin hold=~A incumbent=~A released=~A~%"
+    *mp-traffic-death-root-hold?*
+    (mp-traffic-local-incumbent-root?)
+    *mp-traffic-authority-released?*)
+  (none)
+  )
+
+(defun mp-traffic-log-death-spectator-state!
+       ((target-id uint) (distance float) (within? symbol))
+  (when (time-elapsed? *mp-traffic-death-state-log-time* (seconds 1))
+    (debug-log *mp-debug-log?*
+      "[MP-Traffic-Auth] death active=~A hold=~A released=~A target=~D dist=~D~%"
+      *mp-traffic-death-spectate-active?*
+      *mp-traffic-death-root-hold?*
+      *mp-traffic-authority-released?*
+      target-id
+      distance)
+    (debug-log *mp-debug-log?*
+      "[MP-Traffic-Auth] death target-within=~A selected-source=~D~%"
+      within?
+      *mp-traffic-selected-authority-id*)
+    (set! *mp-traffic-death-state-log-time* (current-time)))
+  (none)
+  )
+
 (defun mp-traffic-player-eligible? ((record mp-player-record))
   "True when a synchronized player can participate in traffic election."
   (if (or (not record) (zero? record))
@@ -54,9 +135,11 @@
                (= (-> record identity spectator-only?) 0)
                (or (= player-id (mp-local-player-id))
                    (= (-> record connection status) (mp-connection-status in-game)))
-               (not (mp-player-record-dead-or-dying? record))
+               (or (not (mp-player-record-dead-or-dying? record))
+                   (mp-traffic-record-death-root-held? record))
                (or (!= player-id (mp-local-player-id))
-                   (not (mp-spectate-active?)))
+                   (not (mp-spectate-active?))
+                   (mp-traffic-record-death-root-held? record))
                (nonzero? primary-level-id)
                position
                (nonzero? position)))))
@@ -97,6 +180,44 @@
   )
   )
 
+(defun mp-traffic-update-death-spectator-state! ()
+  "Release held authority once the selected spectator leaves the retained bubble."
+  (when (and *mp-traffic-death-spectate-active?*
+             *mp-traffic-death-root-hold?*
+             (not *mp-traffic-authority-released?*)
+             (mp-spectate-active?))
+    (let ((local-record (mp-local-player-record))
+          (target-record (mp-spectated-player-record))
+          (target-id MP_INVALID_PLAYER_ID)
+          (distance (the float -1.0))
+          (within? #f))
+      (when (and local-record
+                 (nonzero? local-record)
+                 target-record
+                 (nonzero? target-record))
+        (set! target-id (-> target-record identity player-id))
+        (let ((local-pos (mp-player-record-position local-record))
+              (target-pos (mp-player-record-position target-record)))
+          (when (and local-pos
+                     (nonzero? local-pos)
+                     target-pos
+                     (nonzero? target-pos))
+            (set! distance (vector-vector-distance local-pos target-pos))
+            (set! within?
+              (and (mp-traffic-records-share-level-context?
+                     local-record target-record)
+                   (<= distance MP_TRAFFIC_AUTHORITY_RETAIN_DISTANCE)))
+            (when (not within?)
+              (set! *mp-traffic-authority-released?* #t)
+              (mp-pack-local-respawn-policy!)
+              (debug-log *mp-debug-log?*
+                "[MP-Traffic-Auth] death spectator target left retained bubble; releasing authority target=~D dist=~D~%"
+                target-id
+                distance)))))
+      (mp-traffic-log-death-spectator-state! target-id distance within?)))
+  (none)
+  )
+
 (defun mp-traffic-records-within?
        ((record mp-player-record) (root-record mp-player-record) (radius float))
   "True when two eligible players share an advertised level context and are within radius."
@@ -135,11 +256,14 @@
         (root-mask uint))
   "Retain the prior direct root while it remains established within 310 meters."
   (let ((previous-source (mp-traffic-authority-for-player previous-map player-id)))
-    (when (and (< previous-source player-id)
-               (logtest? root-mask (ash 1 previous-source)))
+    (when (< previous-source (the uint MP_MAX_PLAYERS))
       (let ((root-record (mp-player-record-by-id previous-source)))
         (when (and root-record
                    (nonzero? root-record)
+                   (logtest? root-mask (ash 1 previous-source))
+                   (or (< previous-source player-id)
+                       (mp-traffic-root-incumbent-held?
+                         previous-source root-record previous-map))
                    (mp-traffic-records-within?
                      record root-record MP_TRAFFIC_AUTHORITY_RETAIN_DISTANCE))
           (return previous-source)))))
@@ -153,10 +277,45 @@
     )
   )
 
+(defun mp-traffic-seed-held-roots! ((previous-map mp-traffic-authority-map))
+  "Seed incumbent held roots before ranked players are processed."
+  (let ((root-mask (the uint 0)))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (when (and record
+                   (nonzero? record)
+                   (mp-traffic-player-eligible? record)
+                   (mp-traffic-root-incumbent-held?
+                     (the-as uint player-id) record previous-map))
+          (logior! root-mask (ash 1 player-id)))))
+    root-mask)
+  )
+
+(defun mp-traffic-log-authority-map-transitions!
+       ((previous-map mp-traffic-authority-map)
+        (authority-map mp-traffic-authority-map))
+  (when (time-elapsed? *mp-traffic-authority-transition-log-time* (seconds 1))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((old-source
+              (mp-traffic-authority-for-player
+                previous-map (the-as uint player-id)))
+            (new-source
+              (mp-traffic-authority-for-player
+                authority-map (the-as uint player-id))))
+        (when (!= old-source new-source)
+          (debug-log *mp-debug-log?*
+            "[MP-Traffic-Auth] map player=~D old-source=~D new-source=~D~%"
+            player-id
+            old-source
+            new-source))))
+    (set! *mp-traffic-authority-transition-log-time* (current-time)))
+  (none)
+  )
+
 (defun mp-traffic-build-authority-map ((previous-map mp-traffic-authority-map))
   "Build direct ranked bubbles in ascending canonical player-ID order."
   (let ((authority-map *mp-traffic-working-authority-map*)
-        (root-mask (the uint 0)))
+        (root-mask (mp-traffic-seed-held-roots! previous-map)))
     (mp-traffic-clear-authority-map! authority-map)
 
     (when (mp-traffic-race-host-pinned?)
@@ -190,10 +349,13 @@
                     (mp-traffic-find-acquire-root
                       (the-as uint player-id) record root-mask)))
             (when (= source-player-id MP_INVALID_PLAYER_ID)
-              (set! source-player-id (the-as uint player-id))
-              (logior! root-mask (ash 1 player-id)))
+              (when (mp-traffic-record-can-establish-root?
+                      (the-as uint player-id) record previous-map)
+                (set! source-player-id (the-as uint player-id))
+                (logior! root-mask (ash 1 player-id))))
             (mp-traffic-set-authority-for-player!
               authority-map (the-as uint player-id) source-player-id)))))
+    (mp-traffic-log-authority-map-transitions! previous-map authority-map)
     authority-map)
   )
 
@@ -240,7 +402,6 @@
            (mp-traffic-authority-for-player authority-map interest-player-id))
          (local-authoritative?
            (and (< local-player-id (the uint MP_MAX_PLAYERS))
-                (= interest-player-id local-player-id)
                 (= selected-source local-player-id)))
          (has-followers?
            (and local-authoritative?
@@ -260,9 +421,7 @@
     (set! *mp-traffic-selected-authority-id* selected-source)
     (set! *mp-traffic-local-authoritative?* local-authoritative?)
     (set! *mp-traffic-local-root-has-followers?* has-followers?)
-    (set! *mp-traffic-sync-active*
-          (and (< selected-source (the uint MP_MAX_PLAYERS))
-               (or (not local-authoritative?) has-followers?)))
+    (set! *mp-traffic-sync-active* (< selected-source (the uint MP_MAX_PLAYERS)))
     (set! *mp-traffic-suppressed* (not local-authoritative?))
     (set! *mp-traffic-drain-active* (not local-authoritative?))
     (pc-multi-set-selected-traffic-authority selected-source)
@@ -302,6 +461,8 @@
   (let ((in-game?
           (= (pc-multi-get-status)
              (mp-connection-status in-game))))
+    (when in-game?
+      (mp-traffic-update-death-spectator-state!))
     (cond
       ((not in-game?)
        (mp-traffic-reset-offline-authority!))

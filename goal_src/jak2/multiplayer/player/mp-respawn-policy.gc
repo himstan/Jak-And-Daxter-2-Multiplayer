@@ -7,10 +7,16 @@
 (define-perm *mp-block-local-respawn-on-remote?* symbol #f)
 
 (defun mp-local-respawn-policy-flags ()
-  (the uint8
-       (if *mp-block-remote-respawn-on-me?*
-           MP_RESPAWN_FLAG_BLOCK_REMOTE_ON_ME
-           0))
+  (let ((flags
+          (the uint8
+            (if *mp-block-remote-respawn-on-me?*
+                MP_RESPAWN_FLAG_BLOCK_REMOTE_ON_ME
+                0))))
+    (when *mp-traffic-death-root-hold?*
+      (logior! flags MP_RESPAWN_FLAG_TRAFFIC_DEATH_ROOT_HOLD))
+    (when *mp-traffic-authority-released?*
+      (logior! flags MP_RESPAWN_FLAG_TRAFFIC_AUTHORITY_RELEASED))
+    flags)
   )
 
 (defun mp-pack-local-respawn-policy! ()

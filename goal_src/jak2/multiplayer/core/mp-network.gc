@@ -82,7 +82,6 @@
 
 (defun mp-traffic-send-tick ()
   (when (and (mp-is-traffic-authoritative?)
-             *mp-traffic-local-root-has-followers?*
              *mp-traffic-buffer*
              (nonzero? (the-as uint *mp-traffic-buffer*)))
     (pc-multi-send-traffic (the-as uint *mp-traffic-buffer*))

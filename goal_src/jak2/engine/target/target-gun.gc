@@ -1,6 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern mp-local-player-dead-or-spectating? (function symbol))
+
 ;; name: target-gun.gc
 ;; name in dgo: target-gun
 ;; dgos: ENGINE, GAME
@@ -1208,7 +1210,8 @@
   )
 
 (defun target-gun-marking-menu ((this target))
-  (when (and (not (paused?))
+  (when (and (not (mp-local-player-dead-or-spectating?))
+             (not (paused?))
              (not (and (focus-test? this dark) (nonzero? (-> this darkjak))))
              (not (logtest? (-> this focus-status) (focus-status grabbed)))
              (not-puppet? this)

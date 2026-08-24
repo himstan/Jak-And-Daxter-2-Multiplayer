@@ -4,6 +4,7 @@
 (define-extern mp-run-local-death-spectate! (function target symbol))
 (define-extern mp-should-suppress-local-endlessfall? (function symbol))
 (define-extern mp-begin-local-death-respawn-policy! (function target symbol))
+(define-extern mp-traffic-begin-local-death-spectate! (function none))
 
 (defbehavior target-daxter-death-voice! target ((reason symbol))
   (when (and self
@@ -144,6 +145,8 @@
 
     ;; 2. Handle Local Player
     (when (not-puppet? self)
+      (when (not use-local-respawn?)
+        (mp-traffic-begin-local-death-spectate!))
       (mp-event-enqueue-aid! MP_EVENT_PLAYER_DIED (the-as uint 0))
       (when (not use-local-respawn?)
         (debug-log *mp-debug-log?* "[Daxter-Death] Mission Death. Spectating and waiting 20s...~%")

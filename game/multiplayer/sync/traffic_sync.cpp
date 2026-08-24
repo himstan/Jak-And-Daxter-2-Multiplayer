@@ -246,17 +246,6 @@ void mp_send_traffic_sync(MultiplayerData& data, MPTrafficSyncBufferGOAL* buffer
       mp_traffic_authority_for_player(data, data.local_player_id) != data.local_player_id) {
     return;
   }
-  bool has_follower = false;
-  for (uint32_t player_id = 0; player_id < kMPMaxPlayers; ++player_id) {
-    if (player_id != data.local_player_id &&
-        mp_traffic_authority_for_player(data, player_id) == data.local_player_id) {
-      has_follower = true;
-      break;
-    }
-  }
-  if (!has_follower) {
-    return;
-  }
   const int channel = static_cast<int>(MultiplayerChannel::STATE);
   send_pedestrian_sync_packets(data, buffer, channel);
   send_vehicle_sync_packets(data, buffer, channel);

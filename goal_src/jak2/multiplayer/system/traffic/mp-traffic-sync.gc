@@ -1,6 +1,9 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern mp-traffic-clear-death-spectate-state! (function none))
+(define-extern mp-traffic-interest-player-id (function uint))
+
 (defun mp-traffic-ped-valid-for-authoritative-sync? ((proc citizen))
   (and proc
        (nonzero? proc)
@@ -272,6 +275,7 @@
 (define-perm *mp-traffic-refresh-existing-log-time* time-frame 0)
 
 (defun mp-reset-traffic-state! ()
+  (mp-traffic-clear-death-spectate-state!)
   (set! *mp-traffic-suppressed* #f)
   (set! *mp-traffic-sync-active* #f)
   (set! *mp-traffic-drain-active* #f)
@@ -305,6 +309,8 @@
   (set! *mp-traffic-last-selected-authority-id* MP_INVALID_PLAYER_ID)
   (set! *mp-traffic-last-remote-apply-ready* #f)
   (set! *mp-traffic-refresh-existing-log-time* (the-as time-frame 0))
+  (set! *mp-traffic-death-state-log-time* (the-as time-frame 0))
+  (set! *mp-traffic-authority-transition-log-time* (the-as time-frame 0))
   (pc-multi-set-selected-traffic-authority (the uint MP_INVALID_PLAYER_ID))
   (mp-vehicle-reset-authority-handoffs!)
   (mp-traffic-clear-buffer!)
@@ -312,10 +318,13 @@
   (none))
 
 (defun mp-traffic-local-primary-level-id ()
-  (if (and (mp-local-player-record) (nonzero? (mp-local-player-record)))
-      (mp-level-packed-primary-id (-> (mp-local-player-record) transform level))
-      (the uint 0)
-      )
+  (let* ((interest-player-id (mp-traffic-interest-player-id))
+         (interest-record (mp-player-record-by-id interest-player-id)))
+    (if (and interest-record (nonzero? interest-record))
+        (mp-player-primary-level-id interest-record)
+        (the uint 0)
+        )
+    )
   )
 
 (defun mp-traffic-authority-primary-level-id ()
