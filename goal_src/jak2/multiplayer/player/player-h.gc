@@ -70,6 +70,17 @@
   (daxter  2)
   )
 
+(defenum mp-player-visual-secrets
+  :type uint32
+  :bitfield #t
+  (big-head       0)
+  (little-head    1)
+  (goatee-visible 2)
+  )
+
+(defconstant MP_PLAYER_VISUAL_SECRETS_MASK
+  (mp-player-visual-secrets big-head little-head goatee-visible))
+
 (defconstant MP_SESSION_CHARACTER_CONFIG_SIZE (* 4 MP_MAX_PLAYERS))
 
 (deftype mp-session-character-config (structure)
@@ -185,7 +196,7 @@
    (scene-latched?        uint8)
    (last-replayed-sequence uint32)
    (riding-along-player-id uint32)
-   (reserved              uint32)
+   (visual-secrets        mp-player-visual-secrets)
    )
   :size-assert 32)
 

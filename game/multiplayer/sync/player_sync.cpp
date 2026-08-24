@@ -176,6 +176,7 @@ PacketPlayerState make_cached_state_packet(const CachedPlayerState& cached, uint
   state.action_state_id = cached.action_state_id;
   state.riding_along_player_id = cached.riding_along_player_id;
   state.mission_flags = cached.mission_flags;
+  state.visual_secrets = cached.visual_secrets & kMPPlayerVisualSecretsMask;
   memcpy(&state.veh_state, &cached.veh_state, sizeof(state.veh_state));
   return state;
 }
@@ -277,6 +278,7 @@ void copy_cached_state_to_record(const CachedPlayerState& cached, MPPlayerRecord
   record.action.authoritative_sequence = cached.action_seq;
   record.action.action_state_id = cached.action_state_id;
   record.action.riding_along_player_id = cached.riding_along_player_id;
+  record.action.visual_secrets = cached.visual_secrets & kMPPlayerVisualSecretsMask;
   record.action.scene_state = cached.scene_active;
   record.action.respawn_flags = cached.respawn_flags;
   record.input.buttons = cached.buttons;
@@ -439,6 +441,7 @@ bool mp_handle_player_state_packet(MultiplayerData& data,
   cached.action_seq = state->action_seq;
   cached.action_state_id = state->action_state_id;
   cached.riding_along_player_id = state->riding_along_player_id;
+  cached.visual_secrets = state->visual_secrets & kMPPlayerVisualSecretsMask;
   cached.mission_flags = state->mission_flags;
   cached.last_sequence_num = state->header.sequenceNum;
   memcpy(&cached.veh_state, &state->veh_state, sizeof(cached.veh_state));
@@ -646,6 +649,7 @@ void mp_send_player_sync(MultiplayerData& data,
   state.action_state_id = local->action.action_state_id;
   state.riding_along_player_id = local->action.riding_along_player_id;
   state.mission_flags = local->runtime.mission_flags;
+  state.visual_secrets = local->action.visual_secrets & kMPPlayerVisualSecretsMask;
   memcpy(&state.veh_state, &local->vehicle.state, sizeof(state.veh_state));
   MultiplayerManager::broadcast(data, static_cast<int>(MultiplayerChannel::STATE), state,
                                 ENET_PACKET_FLAG_UNSEQUENCED);

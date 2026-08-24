@@ -217,6 +217,74 @@
   (none)
   )
 
+(defun sidekick-player-visual-secrets ((record mp-player-record))
+  "Resolve visual secrets from a Daxter record, including the local player's live settings."
+  (if (and record (nonzero? record))
+      (if (= (-> record identity player-id) (mp-local-player-id))
+          (mp-local-player-visual-secrets)
+          (the-as mp-player-visual-secrets (-> record action visual-secrets)))
+      (the-as mp-player-visual-secrets 0))
+  )
+
+(defun sidekick-visual-secrets-for-target ((parent-target target))
+  "Resolve the Daxter represented by a sidekick's parent target."
+  (let ((visual-secrets (the-as mp-player-visual-secrets 0)))
+    (when (and parent-target (nonzero? parent-target))
+      (cond
+        ((mp-target-daxter? parent-target)
+         (set! visual-secrets (mp-target-visual-secrets parent-target))
+         )
+        ((and (mp-target-jak? parent-target)
+              (!= (-> parent-target riding-along-player-id) MP_INVALID_PLAYER_ID))
+         (let ((rider-record
+                 (mp-player-record-by-id (-> parent-target riding-along-player-id))))
+           (when (and rider-record
+                      (nonzero? rider-record)
+                      (mp-player-daxter? rider-record))
+             (set! visual-secrets (sidekick-player-visual-secrets rider-record))
+             )
+           )
+         )
+        )
+      )
+    visual-secrets
+    )
+  )
+
+(defun sidekick-apply-visual-head! ((daxter-sidekick sidekick))
+  "Apply the represented Daxter player's head secret to the sidekick skeleton."
+  (when (and daxter-sidekick
+             (nonzero? daxter-sidekick)
+             (-> daxter-sidekick head)
+             (nonzero? (-> daxter-sidekick head)))
+    (let ((parent-pointer (-> daxter-sidekick parent)))
+      (when (and parent-pointer (nonzero? parent-pointer))
+        (let ((parent-target (the-as target (ppointer->process parent-pointer))))
+          (when (and parent-target (nonzero? parent-target))
+            (let ((visual-secrets (sidekick-visual-secrets-for-target parent-target))
+                  (head-scale (new-stack-vector0)))
+              (set-vector! head-scale 1.0 1.0 1.0 1.0)
+              (cond
+                ((logtest? (mp-player-visual-secrets little-head) visual-secrets)
+                 (set-vector! head-scale 0.4 0.4 0.4 1.0)
+                 )
+                ((logtest? (mp-player-visual-secrets big-head) visual-secrets)
+                 (set-vector! head-scale 2.0 2.0 2.0 1.0)
+                 )
+                )
+              (trs-set! (-> daxter-sidekick head)
+                        (the-as vector #f)
+                        (the-as quaternion #f)
+                        head-scale)
+              )
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
 (defstate sidekick-clone (sidekick)
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
     (local-vars (v0-0 object))
@@ -431,6 +499,7 @@
 
 
       (update-anim-data (-> self skel))
+      (sidekick-apply-visual-head! self)
       (when *debug-segment*
         (let ((gp-2 (-> *display* frames (-> *display* on-screen) profile-array data 0))
               (v1-132 'target-post)
@@ -583,6 +652,8 @@
     )
   (set! (-> self upper-body) (new 'process 'joint-mod (joint-mod-mode gun-look-at) self 4))
   (set! (-> self upper-body parented-scale?) #t)
+  (set! (-> self head) (new 'process 'joint-mod (joint-mod-mode joint-set*) self 9))
+  (set! (-> self head parented-scale?) #t)
   (set! (-> self shadow-in-movie?) #t)
   (set! (-> self mirror) (the-as (pointer process-drawable) #f))
   (go sidekick-clone)

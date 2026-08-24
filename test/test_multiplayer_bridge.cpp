@@ -144,7 +144,7 @@ TEST(MultiplayerPacket, SequenceComparisonHandlesWraparound) {
 TEST(MultiplayerPacket, PacketViewRejectsTruncationUnknownTypesAndTrailingData) {
   PacketPlayerState state = {};
   state.header.type = PacketType::STATE_UPDATE;
-  EXPECT_EQ(sizeof(PacketPlayerState), 174u);
+  EXPECT_EQ(sizeof(PacketPlayerState), 178u);
   std::vector<uint8_t> bytes(sizeof(state) + 1);
   memcpy(bytes.data(), &state, sizeof(state));
   ENetPacket packet = {};
@@ -643,6 +643,7 @@ TEST(MultiplayerPlayerRegistry, StateBeforeJoinRemainsVacantUntilIdentityArrives
   state.spectator_only = 1;
   state.x = 12.5f;
   state.riding_along_player_id = 1;
+  state.visual_secrets = kMPPlayerVisualSecretsMask | (1u << 10);
   ENetPacket state_packet = {};
   state_packet.data = reinterpret_cast<uint8_t*>(&state);
   state_packet.dataLength = sizeof(state);
@@ -668,6 +669,7 @@ TEST(MultiplayerPlayerRegistry, StateBeforeJoinRemainsVacantUntilIdentityArrives
   EXPECT_EQ(controller.records[3].identity.spectator_only, 1u);
   EXPECT_FLOAT_EQ(controller.records[3].transform.position[0], 12.5f);
   EXPECT_EQ(controller.records[3].action.riding_along_player_id, 1u);
+  EXPECT_EQ(controller.records[3].action.visual_secrets, kMPPlayerVisualSecretsMask);
 }
 
 TEST(MultiplayerPlayerRegistry, RejectsSpoofsStaleStateAndLocalSlotClear) {
@@ -934,6 +936,7 @@ TEST(MultiplayerJoin, IdentityAppearanceAndStateSurviveSendReceiveAndRosterRepla
   const MPPlayerAppearance local_appearance = test_player_appearance(0x1824c7);
   mp_copy_player_appearance_to_goal(local_appearance, local.identity.appearance);
   local.runtime.mission_flags = 0x5a5a5a5au;
+  local.action.visual_secrets = kMPPlayerVisualSecretBigHead | kMPPlayerVisualSecretGoatee;
   local.transform.position[0] = 32.0f;
   memcpy(local.identity.name, "Observer", sizeof("Observer"));
   MPWorldSyncStateGOAL sender_world = {};
@@ -971,6 +974,8 @@ TEST(MultiplayerJoin, IdentityAppearanceAndStateSurviveSendReceiveAndRosterRepla
   EXPECT_EQ(sent_join.appearance.strengths, local_appearance.strengths);
   EXPECT_EQ(sent_state.spectator_only, 1u);
   EXPECT_EQ(sent_state.mission_flags, 0x5a5a5a5au);
+  EXPECT_EQ(sent_state.visual_secrets,
+            kMPPlayerVisualSecretBigHead | kMPPlayerVisualSecretGoatee);
 
   MultiplayerData receiver;
   receiver.local_player_id = 2;
@@ -994,6 +999,8 @@ TEST(MultiplayerJoin, IdentityAppearanceAndStateSurviveSendReceiveAndRosterRepla
   EXPECT_EQ(received_appearance.colors, local_appearance.colors);
   EXPECT_EQ(received_appearance.strengths, local_appearance.strengths);
   EXPECT_EQ(receiver_controller.records[3].runtime.mission_flags, 0x5a5a5a5au);
+  EXPECT_EQ(receiver_controller.records[3].action.visual_secrets,
+            kMPPlayerVisualSecretBigHead | kMPPlayerVisualSecretGoatee);
 
   MPPlayerControllerGOAL replay_controller = {};
   replay_controller.local_player_id = 2;
@@ -1004,6 +1011,8 @@ TEST(MultiplayerJoin, IdentityAppearanceAndStateSurviveSendReceiveAndRosterRepla
   EXPECT_EQ(replayed_appearance.colors, local_appearance.colors);
   EXPECT_EQ(replayed_appearance.strengths, local_appearance.strengths);
   EXPECT_EQ(replay_controller.records[3].runtime.mission_flags, 0x5a5a5a5au);
+  EXPECT_EQ(replay_controller.records[3].action.visual_secrets,
+            kMPPlayerVisualSecretBigHead | kMPPlayerVisualSecretGoatee);
 
   sent_state.header.sequenceNum += 1;
   sent_state.spectator_only = 0;

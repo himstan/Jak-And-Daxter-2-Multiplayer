@@ -1758,10 +1758,13 @@
                                          2.0
                                          )
         )
-  (let ((v1-248 (-> *setting-control* user-current beard)))
-    (when (!= (-> self beard?) v1-248)
+  (let* ((visual-secrets (mp-target-visual-secrets self))
+         (beard? (and (mp-target-jak? self)
+                      (logtest? (mp-player-visual-secrets goatee-visible)
+                                visual-secrets))))
+    (when (!= (-> self beard?) beard?)
       (cond
-        (v1-248
+        (beard?
           (setup-masks (-> self draw) 2 0)
           (set! (-> self beard?) #t)
           )

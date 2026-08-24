@@ -393,6 +393,8 @@
   (when (and (mp-local-player-record)
              (nonzero? (mp-local-player-record)))
     (let ((local-state 0))
+      (set! (-> (mp-local-player-record) action visual-secrets)
+            (mp-local-player-visual-secrets))
       (set! (-> (mp-local-player-record) action darkjak-stage) (the uint 0))
       (set! (-> (mp-local-player-record) action riding-along-player-id)
             MP_INVALID_PLAYER_ID)

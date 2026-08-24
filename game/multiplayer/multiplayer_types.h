@@ -15,6 +15,13 @@
 #include "multiplayer_security.h"
 #include "multiplayer_stats.h"
 
+inline constexpr uint32_t kMPPlayerVisualSecretBigHead = 1u << 0;
+inline constexpr uint32_t kMPPlayerVisualSecretLittleHead = 1u << 1;
+inline constexpr uint32_t kMPPlayerVisualSecretGoatee = 1u << 2;
+inline constexpr uint32_t kMPPlayerVisualSecretsMask =
+    kMPPlayerVisualSecretBigHead | kMPPlayerVisualSecretLittleHead |
+    kMPPlayerVisualSecretGoatee;
+
 struct CachedPlayerState {
   bool identity_ready = false;
   bool state_ready = false;
@@ -44,6 +51,7 @@ struct CachedPlayerState {
   uint32_t action_seq;
   uint32_t action_state_id;
   uint32_t riding_along_player_id = kMPInvalidPlayerId;
+  uint32_t visual_secrets = 0;
   uint32_t mission_flags = 0;
   float turret_roty;
   float turret_rotx;
@@ -151,7 +159,7 @@ struct MPPlayerActionStateGOAL {
   uint8_t scene_latched;
   uint32_t last_replayed_sequence;
   uint32_t riding_along_player_id;
-  uint32_t reserved;
+  uint32_t visual_secrets;
 };
 static_assert(sizeof(MPPlayerActionStateGOAL) == 32);
 

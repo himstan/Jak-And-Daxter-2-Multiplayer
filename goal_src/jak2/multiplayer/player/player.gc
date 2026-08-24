@@ -742,6 +742,44 @@
        (nonzero? record)
        (= (-> record identity character) (mp-player-character daxter))))
 
+(defun mp-local-player-visual-secrets ()
+  "Build the effective visual state that belongs to the local player."
+  (let ((visual-secrets (the-as uint32 0)))
+    (when (and *game-info* (nonzero? *game-info*))
+      (let ((secrets (-> *game-info* secrets)))
+        (when (logtest? (game-secrets big-head) secrets)
+          (logior! visual-secrets (mp-player-visual-secrets big-head)))
+        (when (logtest? (game-secrets little-head) secrets)
+          (logior! visual-secrets (mp-player-visual-secrets little-head)))
+        )
+      )
+    (when (and *setting-control*
+               (nonzero? *setting-control*)
+               (-> *setting-control* user-current beard))
+      (logior! visual-secrets (mp-player-visual-secrets goatee-visible))
+      )
+    (the-as mp-player-visual-secrets visual-secrets)
+    )
+  )
+
+(defun mp-target-visual-secrets ((player-target process-focusable))
+  "Resolve visual state from the target's owning player record."
+  (let ((record
+          (if (and player-target (nonzero? player-target) (type? player-target target))
+              (mp-player-controller-target-record
+                *mp-player-controller*
+                (the-as target player-target))
+              (the-as mp-player-record #f))))
+    (if (and record (nonzero? record))
+        (if (= (-> record identity player-id) (mp-local-player-id))
+            (mp-local-player-visual-secrets)
+            (the-as mp-player-visual-secrets (-> record action visual-secrets)))
+        (if *multi-sync-enabled?*
+            (the-as mp-player-visual-secrets 0)
+            (mp-local-player-visual-secrets)))
+    )
+  )
+
 (defun mp-target-jak? ((player-target process-focusable))
   (let ((record
           (if (and player-target (nonzero? player-target) (type? player-target target))
