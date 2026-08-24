@@ -5,10 +5,12 @@
 #include <cmath>
 #include <limits>
 #include <random>
+#include <stdexcept>
 
 #include "common/log/log.h"
 #include "common/util/FileUtil.h"
 #include "common/util/json_util.h"
+#include "game/multiplayer/multiplayer_profile_lease.h"
 #include "game/runtime.h"
 #include "game/multiplayer/multiplayer_protocol.h"
 
@@ -18,15 +20,19 @@ namespace {
 constexpr int kNetworkPortField = 0;
 constexpr int kRoomCodeField = 1;
 constexpr int kPlayerNameField = 2;
-constexpr std::string_view kSettingsFileName = "multiplayer-settings.json";
+constexpr std::string_view kSettingsFileName = "multiplayer-profile.json";
 
 MultiplayerPreferences g_preferences;
+std::optional<MultiplayerProfileLease> g_profile_lease;
 std::string g_port_draft = std::to_string(kDefaultMultiplayerPort);
 std::string g_room_code_draft;
 std::string g_player_name_draft;
 
 fs::path settings_path() {
-  return file_util::get_user_settings_dir(g_game_version) / std::string(kSettingsFileName);
+  if (!g_profile_lease) {
+    throw std::runtime_error("multiplayer profile has not been acquired");
+  }
+  return g_profile_lease->settings_path();
 }
 
 bool parse_port(std::string_view text, uint16_t& output) {
@@ -312,6 +318,12 @@ void mp_load_multiplayer_preferences() {
   g_preferences = {};
   bool needs_save = false;
   try {
+    if (!g_profile_lease) {
+      g_profile_lease = MultiplayerProfileLease::acquire(g_game_version);
+      if (!g_profile_lease) {
+        throw std::runtime_error("could not acquire a multiplayer profile slot");
+      }
+    }
     const auto path = settings_path();
     if (!file_util::file_exists(path.string())) {
       g_preferences.player_appearance =

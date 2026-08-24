@@ -3,9 +3,11 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstddef>
 #include <cstring>
 #include <limits>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -18,6 +20,7 @@
 #include "game/multiplayer/multiplayer_port_mapping.h"
 #include "game/multiplayer/multiplayer_port_mapping_internal.h"
 #include "game/multiplayer/multiplayer_port_mapping_route.h"
+#include "game/multiplayer/multiplayer_profile_lease.h"
 #include "game/multiplayer/multiplayer_preferences.h"
 #include "game/multiplayer/multiplayer_scanner.h"
 #include "game/multiplayer/multiplayer_security.h"
@@ -1684,6 +1687,100 @@ TEST(MultiplayerPreferences, ValidatesPortsRoomCodesAndIndependentFallbacks) {
   const uint32_t green = (generated_color >> 8) & 0xff;
   const uint32_t blue = generated_color & 0xff;
   EXPECT_EQ((std::max)(red, (std::max)(green, blue)), 255u);
+}
+
+TEST(MultiplayerProfiles, UsesIndependentNumberedSettingsPaths) {
+  file_util::override_user_config_dir("out/build/Release/multiplayer-profile-lease-test", true);
+  const auto profile_directory = mp_multiplayer_profile_directory(GameVersion::Jak2);
+  const auto first_path = mp_multiplayer_profile_settings_path(GameVersion::Jak2, 1);
+  const auto second_path = mp_multiplayer_profile_settings_path(GameVersion::Jak2, 2);
+
+  EXPECT_EQ(first_path.parent_path(), profile_directory);
+  EXPECT_EQ(second_path.parent_path(), profile_directory);
+  EXPECT_EQ(first_path.filename().string(), "profile-1.json");
+  EXPECT_EQ(second_path.filename().string(), "profile-2.json");
+  EXPECT_NE(first_path, second_path);
+
+  file_util::create_dir_if_needed_for_file(first_path);
+  file_util::write_text_file(first_path, R"({"player_name":"PLAYERONE"})");
+  file_util::write_text_file(second_path, R"({"player_name":"PLAYERTWO"})");
+  EXPECT_EQ(mp_parse_multiplayer_preferences(file_util::read_text_file(first_path)).player_name,
+            "PLAYERONE");
+  EXPECT_EQ(mp_parse_multiplayer_preferences(file_util::read_text_file(second_path)).player_name,
+            "PLAYERTWO");
+  fs::remove(first_path);
+  fs::remove(second_path);
+}
+
+TEST(MultiplayerProfiles, AcquiresNextSlotAcrossThreadsAndReusesReleasedSlot) {
+  auto first = MultiplayerProfileLease::acquire(GameVersion::Jak3);
+  ASSERT_TRUE(first.has_value());
+  const uint32_t first_profile_id = first->profile_id();
+
+  std::optional<MultiplayerProfileLease> second;
+  std::thread acquire_second([&second]() {
+    second = MultiplayerProfileLease::acquire(GameVersion::Jak3);
+  });
+  acquire_second.join();
+
+  ASSERT_TRUE(second.has_value());
+  EXPECT_NE(second->profile_id(), first_profile_id);
+
+  first.reset();
+  auto replacement = MultiplayerProfileLease::acquire(GameVersion::Jak3);
+  ASSERT_TRUE(replacement.has_value());
+  EXPECT_EQ(replacement->profile_id(), first_profile_id);
+}
+
+TEST(MultiplayerProfiles, StopsAtMaximumPlayerCapacity) {
+  std::mutex barrier_mutex;
+  std::condition_variable barrier;
+  std::array<uint32_t, kMPMaxPlayers> profile_ids = {};
+  uint32_t acquired_count = 0;
+  bool release_leases = false;
+  std::vector<std::thread> workers;
+  workers.reserve(kMPMaxPlayers);
+  for (uint32_t worker_id = 0; worker_id < kMPMaxPlayers; ++worker_id) {
+    workers.emplace_back([&, worker_id]() {
+      auto lease = MultiplayerProfileLease::acquire(GameVersion::Jak1);
+      {
+        std::lock_guard lock(barrier_mutex);
+        if (lease) {
+          profile_ids[worker_id] = lease->profile_id();
+          ++acquired_count;
+        }
+      }
+      barrier.notify_one();
+      std::unique_lock lock(barrier_mutex);
+      barrier.wait(lock, [&release_leases] { return release_leases; });
+    });
+  }
+
+  bool all_leases_acquired = false;
+  {
+    std::unique_lock lock(barrier_mutex);
+    all_leases_acquired = barrier.wait_for(lock, std::chrono::seconds(1), [&acquired_count] {
+      return acquired_count == kMPMaxPlayers;
+    });
+  }
+  if (all_leases_acquired) {
+    std::sort(profile_ids.begin(), profile_ids.end());
+    for (uint32_t index = 0; index < kMPMaxPlayers; ++index) {
+      EXPECT_EQ(profile_ids[index], index + 1);
+    }
+    EXPECT_FALSE(MultiplayerProfileLease::acquire(GameVersion::Jak1).has_value());
+  } else {
+    ADD_FAILURE() << "Could not acquire all profile leases for the capacity test.";
+  }
+
+  {
+    std::lock_guard lock(barrier_mutex);
+    release_leases = true;
+  }
+  barrier.notify_all();
+  for (auto& worker : workers) {
+    worker.join();
+  }
 }
 
 TEST(MultiplayerSecurity, AuthenticatedLeaveCanTravelInBothDirections) {

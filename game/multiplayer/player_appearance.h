@@ -242,8 +242,6 @@ inline MPPlayerAppearance mp_default_player_appearance(uint32_t primary_color,
   appearance.strengths[mp_player_appearance_group_index(
       MPPlayerAppearanceGroup::JAK_JACKET)] = legacy_strength;
   appearance.strengths[mp_player_appearance_group_index(
-      MPPlayerAppearanceGroup::JAK_STRAPS)] = legacy_strength;
-  appearance.strengths[mp_player_appearance_group_index(
       MPPlayerAppearanceGroup::DAXTER_HAT)] = legacy_strength;
   return appearance;
 }
