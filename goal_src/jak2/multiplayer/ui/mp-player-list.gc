@@ -209,8 +209,8 @@
                 (with-dma-buffer-add-bucket
                   ((buf (-> *display* frames
                             (-> *display* on-screen)
-                            debug-buf))
-                   (bucket-id debug-no-zbuf1))
+                            global-buf))
+                   (bucket-id subtitle))
                   (draw-string *mp-nametag-string* buf font-ctx)))))))))
   (none))
 
