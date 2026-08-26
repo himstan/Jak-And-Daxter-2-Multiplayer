@@ -10,6 +10,7 @@
 (define-extern vehicle-spawn (function process type traffic-object-spawn-params process-drawable))
 (define-extern target-indax-edge-grab (state target))
 (define-extern target-indax-pole-cycle (state handle target))
+(define-extern target-pilot-clear-local-racer-death! (function target symbol))
 
 ;; DECOMP BEGINS
 
@@ -182,8 +183,15 @@
                           (= arg0 'attack)
                           )
                      )
-            (logior! (-> self focus-status) (focus-status dead))
-            (logior! (-> self state-flags) (state-flags disable-attacks))
+            (if (target-pilot-clear-local-racer-death! self)
+                (begin
+                  (return #t)
+                  )
+                (begin
+                  (logior! (-> self focus-status) (focus-status dead))
+                  (logior! (-> self state-flags) (state-flags disable-attacks))
+                  )
+                )
             )
           (go arg4 arg0 (-> self attack-info-rec))
           )

@@ -1,6 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern mp-vehicle-local-target-driving? (function vehicle symbol))
+
 (defmethod compute-rider-hand-position ((this vehicle-racer) (result vector) (seat int) (hand int))
   (vector-matrix*! result
                    (-> this info rider-hand-offset hand)
@@ -27,12 +29,39 @@
 
 (defun vehicle-racer-local-player-driving? ((this vehicle-racer))
   "Return true when the local target is actively piloting this vehicle."
-  (and *target*
-       (nonzero? *target*)
-       (focus-test? *target* pilot)
-       (-> *target* pilot)
-       (nonzero? (-> *target* pilot))
-       (= (the-as vehicle this) (handle->process (-> *target* pilot vehicle)))))
+  (and this
+       (nonzero? this)
+       (mp-vehicle-local-target-driving? (the-as vehicle this))))
+
+(defun vehicle-racer-protect-local-driver! ((this vehicle-racer))
+  "Keep the local racer driver alive and out of vehicle death states."
+  (if (and this
+           (nonzero? this)
+           (vehicle-racer-local-player-driving? this))
+      (begin
+        (when (or (<= (-> this hit-points) 0.0)
+                  (logtest? (-> this flags) (rigid-body-object-flag dead))
+                  (logtest? (-> this focus-status) (focus-status dead)))
+          (set! (-> this hit-points) 1.0))
+        (clear-crash-level! this)
+        (logclear! (-> this flags) (rigid-body-object-flag dead))
+        (logclear! (-> this focus-status) (focus-status dead inactive))
+        #t)
+      #f)
+  )
+
+(defmethod set-crash-level! ((this vehicle-racer) (new-crash-level int) (crash-duration uint))
+  (if (not (vehicle-racer-protect-local-driver! this))
+      ((method-of-type vehicle set-crash-level!) this new-crash-level crash-duration)
+    )
+  (none)
+  )
+
+(defmethod rigid-body-object-method-52 ((this vehicle-racer))
+  (vehicle-racer-protect-local-driver! this)
+  ((method-of-type vehicle rigid-body-object-method-52) this)
+  (none)
+  )
 
 (defmethod vehicle-method-120 ((this vehicle-racer))
   (when (vehicle-racer-local-player-driving? this)
@@ -410,7 +439,8 @@
         (start-jump this))))
 
   (vehicle-method-121 this)
-  (when (< (-> this rbody state position y) -409600.0)
+  (when (and (< (-> this rbody state position y) -409600.0)
+             (not (vehicle-racer-local-player-driving? this)))
     (format #t "vehicle-racer::physics-post: pid ~d fell to death from path-id ~d~%"
             (-> this pid) (-> this race path record-id))
     (go (method-of-object this explode)))

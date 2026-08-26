@@ -555,6 +555,7 @@
              (mp-race-racer-bit racer-index))
     (let* ((racer (-> state racer-array racer-index))
            (vehicle (the-as vehicle-racer (handle->process-safe (-> racer racer)))))
+      (debug-log *mp-debug-log?* "[Racer] Setting dead racer flag 3~%")
       (logior! (-> racer flags) (racer-flags dead))
       (when (and vehicle (nonzero? vehicle))
         (let ((minimap-icon (-> vehicle minimap)))
