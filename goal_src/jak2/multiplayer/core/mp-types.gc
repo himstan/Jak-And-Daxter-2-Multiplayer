@@ -258,6 +258,7 @@
 (define MP_VEHICLE_STATE_FLAG_HIGH_FLIGHT (the uint 2))
 (define MP_VEHICLE_STATE_FLAG_PHYSICS (the uint 4))
 (define MP_VEHICLE_STATE_FLAG_PARKING_MINIMAP (the uint 8))
+(define MP_VEHICLE_STATE_FLAG_RESPAWN_PROTECTED (the uint 16))
 (define MP_VEHICLE_RIDER_CIVILIAN_ID (the uint #xfffffffe))
 
 (deftype mp-vehicle-state (structure)

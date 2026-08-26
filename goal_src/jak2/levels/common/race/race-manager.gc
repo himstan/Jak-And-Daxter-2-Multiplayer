@@ -263,7 +263,6 @@
     (cond
       (racer
        (when (focus-test? (the-as process-focusable racer) dead inactive)
-         (debug-log *mp-debug-log?* "[Racer] Setting dead racer flag 1~%")
          (logior! (-> this flags) (racer-flags dead)))
 
        (set! (-> this position quad) (-> (the-as process-focusable racer) root trans quad))
@@ -347,7 +346,6 @@
          (set! (-> this pos) (+ (-> this lap-distance) (the float (-> this lap-count))))))
 
       (else
-       (debug-log *mp-debug-log?* "[Racer] Setting dead racer flag 2~%")
        (logior! (-> this flags) (racer-flags dead)))))
 
   (none))

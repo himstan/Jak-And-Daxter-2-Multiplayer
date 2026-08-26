@@ -2,6 +2,16 @@
 (in-package goal)
 
 (define-extern mp-vehicle-local-target-driving? (function vehicle symbol))
+(define-extern mp-vehicle-driver-sync-claimed? (function vehicle symbol))
+(define-extern target-timed-invulnerable (function time-frame target int none))
+
+(defconstant RACE_RESPAWN_SAMPLE_INTERVAL (seconds 0.5))
+(defconstant RACE_RESPAWN_WAIT_TIME (seconds 1.0))
+(defconstant RACE_RESPAWN_BLACKOUT_TIME (seconds 1.0))
+(defconstant RACE_RESPAWN_PROTECTION_TIME (seconds 3))
+(defconstant RACE_RESPAWN_STATE_IDLE 0)
+(defconstant RACE_RESPAWN_STATE_WAITING 1)
+(defconstant RACE_RESPAWN_STATE_BLACKOUT 2)
 
 (defmethod compute-rider-hand-position ((this vehicle-racer) (result vector) (seat int) (hand int))
   (vector-matrix*! result
@@ -33,37 +43,409 @@
        (nonzero? this)
        (mp-vehicle-local-target-driving? (the-as vehicle this))))
 
-(defun vehicle-racer-protect-local-driver! ((this vehicle-racer))
-  "Keep the local racer driver alive and out of vehicle death states."
-  (if (and this
-           (nonzero? this)
-           (vehicle-racer-local-player-driving? this))
-      (begin
-        (when (or (<= (-> this hit-points) 0.0)
-                  (logtest? (-> this flags) (rigid-body-object-flag dead))
-                  (logtest? (-> this focus-status) (focus-status dead)))
-          (set! (-> this hit-points) 1.0))
-        (clear-crash-level! this)
-        (logclear! (-> this flags) (rigid-body-object-flag dead))
-        (logclear! (-> this focus-status) (focus-status dead inactive))
-        #t)
-      #f)
-  )
+(defun vehicle-racer-player-driven? ((this vehicle-racer))
+  "Return true for a locally driven racer or a racer claimed by player sync."
+  (and this
+       (nonzero? this)
+       (or (vehicle-racer-local-player-driving? this)
+           (mp-vehicle-driver-sync-claimed? (the-as vehicle this)))))
+
+(defun destination-race-vehicle? ((this vehicle-racer))
+  "Return true when this racer belongs to a destination race without a race mesh."
+  (when (and this (nonzero? this))
+    (let ((race (-> this race)))
+      (when (and race (nonzero? race))
+        (let ((state (-> race state)))
+          (when (and state (nonzero? state))
+            (let ((info (-> state info)))
+              (return (and info
+                           (nonzero? info)
+                           (logtest? (-> info flags)
+                                     (race-info-flags destination-race))))))))))
+  #f)
+
+(defun vehicle-racer-respawn-prim ((this vehicle-racer))
+  "Return the racer primitive whose collision masks are temporarily ghosted."
+  (when (and this (nonzero? this))
+    (let ((root (-> this root)))
+      (when (and root (nonzero? root))
+        (let ((vehicle-prim (find-prim-by-id-logtest root (the-as uint 32))))
+          (when (and vehicle-prim (nonzero? vehicle-prim))
+            (return vehicle-prim))))))
+  (the-as collide-shape-prim #f))
+
+(defun vehicle-racer-set-respawn-flash! ((this vehicle-racer) (hidden? symbol))
+  "Toggle the fake-respawn flash on the racer and its current driver."
+  (when (and this (nonzero? this))
+    (let ((draw (-> this draw)))
+      (when (and draw (nonzero? draw))
+        (if hidden?
+            (logior! (-> draw status) (draw-control-status no-draw-bounds))
+            (logclear! (-> draw status) (draw-control-status no-draw-bounds)))))
+    (let ((info (-> this info)))
+      (when (and info (nonzero? info))
+        (let ((rider (get-rider-in-seat this 0)))
+          (when (and rider
+                     (nonzero? rider)
+                     (type? rider process-drawable))
+            (let ((rider-draw (-> (the-as process-drawable rider) draw)))
+              (when (and rider-draw (nonzero? rider-draw))
+                (if hidden?
+                    (logior! (-> rider-draw status) (draw-control-status no-draw-bounds))
+                    (logclear! (-> rider-draw status) (draw-control-status no-draw-bounds))))))))))
+  (none))
+
+(defun vehicle-racer-update-respawn-protection! ((this vehicle-racer))
+  "Apply or restore the temporary collision, damage, and flash state."
+  (when (and this (nonzero? this))
+    (cond
+      ((-> this respawn-protected?)
+       (when (not (-> this respawn-protection-applied?))
+         (let ((vehicle-prim (vehicle-racer-respawn-prim this)))
+           (when (and vehicle-prim (nonzero? vehicle-prim))
+             (set! (-> this respawn-collide-as)
+                   (-> vehicle-prim prim-core collide-as))
+             (set! (-> this respawn-collide-with)
+                   (-> vehicle-prim prim-core collide-with))
+             (set! (-> vehicle-prim prim-core collide-as) (collide-spec))
+             (set! (-> vehicle-prim prim-core collide-with) (collide-spec backgnd))))
+         (set! (-> this respawn-damage-factor) (-> this damage-factor))
+         (set! (-> this respawn-protection-applied?) #t))
+       (set! (-> this damage-factor) 0.0)
+       (vehicle-racer-set-respawn-flash!
+         this (< (logand (current-time) 3) 1)))
+      ((-> this respawn-protection-applied?)
+       (let ((vehicle-prim (vehicle-racer-respawn-prim this)))
+         (when (and vehicle-prim (nonzero? vehicle-prim))
+           (set! (-> vehicle-prim prim-core collide-as)
+                 (-> this respawn-collide-as))
+           (set! (-> vehicle-prim prim-core collide-with)
+                 (-> this respawn-collide-with))))
+       (set! (-> this damage-factor) (-> this respawn-damage-factor))
+       (vehicle-racer-set-respawn-flash! this #f)
+       (set! (-> this respawn-protection-applied?) #f)))
+  (none)))
+
+(defun vehicle-racer-safe-respawn-sample? ((this vehicle-racer))
+  "Require a grounded, upright, alive, on-track local racer."
+  (when (and this
+             (nonzero? this)
+             *target*
+             (nonzero? *target*)
+             (not (focus-test? *target* dead inactive teleporting))
+             (vehicle-racer-local-player-driving? this)
+             (not (-> this respawn-protected?))
+             (not (focus-test? this dead inactive)))
+    (let ((rbody (-> this rbody))
+          (race (-> this race)))
+      (when (and rbody
+                 (nonzero? rbody)
+                 race
+                 (nonzero? race))
+        (let ((body-state (-> rbody state))
+              (racer-state (-> race racer-state)))
+          (when (and body-state
+                     (nonzero? body-state)
+                     racer-state
+                     (nonzero? racer-state)
+                     (logtest? (-> this flags) (rigid-body-object-flag on-ground))
+                     (> (-> body-state matrix vector 1 y) 0.5)
+                     (logtest? (-> racer-state flags) (racer-flags in-race))
+                     (not (logtest? (-> racer-state flags) (racer-flags dead)))
+                     (or (logtest? (-> racer-state flags) (racer-flags on-track))
+                         (destination-race-vehicle? this)))
+            (return #t))))))
+  #f)
+
+(defun vehicle-racer-sample-respawn-transform! ((this vehicle-racer))
+  "Refresh the last safe transform at a bounded cadence."
+  (when (and (vehicle-racer-safe-respawn-sample? this)
+             (time-elapsed? (-> this respawn-sample-time)
+                            RACE_RESPAWN_SAMPLE_INTERVAL))
+    (let ((root (-> this root))
+          (race (-> this race)))
+      (when (and root
+                 (nonzero? root)
+                 race
+                 (nonzero? race))
+        (cond
+          ((destination-race-vehicle? this)
+           (set! (-> this respawn-position quad) (-> root trans quad))
+           (quaternion-copy! (-> this respawn-rotation) (-> root quat)))
+          ((and (-> race path) (nonzero? (-> race path)))
+           (select-race-path! race (-> race path-select) (-> root trans))
+           (set! (-> this respawn-position quad)
+                 (-> race path-sample pos quad))
+           (quaternion-copy! (-> this respawn-rotation)
+                             (-> race path-sample quat))))
+        (set-time! (-> this respawn-sample-time)))))
+  (none))
+
+(defun vehicle-racer-initialize-respawn! ((this vehicle-racer))
+  "Seed fake-respawn state from the racer's original spawn transform."
+  (when (and this (nonzero? this))
+    (let ((root (-> this root)))
+      (when (and root (nonzero? root))
+        (set! (-> this respawn-position quad) (-> root trans quad))
+        (quaternion-copy! (-> this respawn-rotation) (-> root quat))))
+    (set-time! (-> this respawn-sample-time))
+    (set-time! (-> this respawn-protection-time))
+    (set! (-> this respawn-protected?) #f)
+    (set! (-> this respawn-protection-applied?) #f)
+    (set! (-> this respawn-collide-as) (collide-spec))
+    (set! (-> this respawn-collide-with) (collide-spec))
+    (set! (-> this respawn-damage-factor) (-> this damage-factor))
+    (set! (-> this respawn-state) RACE_RESPAWN_STATE_IDLE)
+    (set-time! (-> this respawn-state-time)))
+  (none))
+
+(defun vehicle-racer-restore-respawn-transform! ((this vehicle-racer))
+  "Restore the live racer rigid body without replacing or changing its state."
+  (when (and this (nonzero? this))
+    (let ((root (-> this root))
+          (rbody (-> this rbody)))
+      (when (and root
+                 (nonzero? root)
+                 rbody
+                 (nonzero? rbody))
+        (let ((body-state (-> rbody state)))
+          (when (and body-state (nonzero? body-state))
+            (set! (-> root trans quad) (-> this respawn-position quad))
+            (quaternion-copy! (-> root quat) (-> this respawn-rotation))
+            (vector-reset! (-> root transv))
+            (rigid-body-method-26
+              body-state (-> this respawn-position) (-> this respawn-rotation))
+            (clear-momentum! body-state)
+            (vector-reset! (-> body-state force))
+            (vector-reset! (-> body-state torque))
+            (vector-reset! (-> this target-acceleration))
+            (vector-reset! (-> this lin-acceleration))
+            (rigid-body-method-13 body-state)
+            (set! (-> root trans-old quad) (-> root trans quad))
+            (set! (-> root trans-old-old quad) (-> root trans quad))
+            (set! (-> root trans-old-old-old quad) (-> root trans quad))
+            (rigid-body-object-method-38 this)
+            (update-transforms root)
+            (update-rider-seat-transforms! this)
+            (return #t))))))
+  #f)
+
+(defun vehicle-racer-clear-respawn-death! ((this vehicle-racer))
+  "Clear transient death state while preserving the current process and rider."
+  (when (and this (nonzero? this))
+    (repair-vehicle! this)
+    (clear-crash-level! this)
+    (set! (-> this force-level) 0)
+    (set! (-> this force-scale) 1.0)
+    (logclear! (-> this flags) (rigid-body-object-flag dead in-air))
+    (logclear! (-> this focus-status) (focus-status dead inactive))
+    (let ((race (-> this race)))
+      (when (and race (nonzero? race))
+        (let ((racer-state (-> race racer-state)))
+          (when (and racer-state (nonzero? racer-state))
+            (logclear! (-> racer-state flags) (racer-flags dead))))))
+    (when (and (vehicle-racer-local-player-driving? this)
+               *target*
+               (nonzero? *target*))
+      (logclear! (-> *target* focus-status) (focus-status dead hit))
+      (logclear! (-> *target* state-flags) (state-flags disable-attacks))))
+  (none))
+
+(defun vehicle-racer-teleport-respawn-camera! ((this vehicle-racer))
+  "Snap the local rider and vehicle camera behind the saved race heading."
+  (when (and this
+             (nonzero? this)
+             *target*
+             (nonzero? *target*)
+             *camera*
+             (nonzero? *camera*)
+             *camera-combiner*
+             (nonzero? *camera-combiner*))
+    (let ((control (-> *target* control))
+          (info (-> this info)))
+      (when (and control
+                 (nonzero? control)
+                 info
+                 (nonzero? info))
+        (set! (-> control trans quad) (-> this respawn-position quad))
+        (vector-reset! (-> control transv))
+        (quaternion-copy! (-> control quat) (-> this respawn-rotation))
+        (quaternion-copy! (-> control quat-for-control) (-> this respawn-rotation))
+        (quaternion-copy! (-> control dir-targ) (-> this respawn-rotation))
+        (set! (-> control camera-pos quad) (-> this respawn-position quad))
+        (set! (-> *target* alt-cam-pos quad) (-> this respawn-position quad))
+        (let ((rotation (new 'stack-no-clear 'matrix))
+              (forward (new 'stack-no-clear 'vector)))
+          (quaternion->matrix rotation (-> this respawn-rotation))
+          (set! (-> forward quad) (-> rotation vector 2 quad))
+          (set! (-> forward y) 0.0)
+          (cond
+            ((> (vector-length-squared forward) 1.0)
+             (vector-normalize! forward 1.0)
+             (vector+float*!
+               (-> *camera-combiner* trans)
+               (-> this respawn-position)
+               forward
+               (- (-> info camera-string-min-length)))
+             (+! (-> *camera-combiner* trans y)
+                 (-> info camera-string-min-height))
+             (forward-down->inv-matrix
+               (-> *camera-combiner* inv-camera-rot)
+               forward
+               (new 'static 'vector :y -1.0)))
+            (else
+             (set! (-> *camera-combiner* trans quad)
+                   (-> this respawn-position quad))))
+          (send-event *camera* 'change-target *target*)
+          (send-event *camera* 'teleport)))))
+  (none))
+
+(defun vehicle-racer-start-respawn-protection! ((this vehicle-racer))
+  "Start local fake-respawn protection and refresh the player camera."
+  (when (and this (nonzero? this))
+    (set-time! (-> this respawn-protection-time))
+    (set! (-> this respawn-protected?) #t)
+    (vehicle-racer-update-respawn-protection! this)
+    (when (and *target* (nonzero? *target*))
+      (let ((control (-> *target* control)))
+        (when (and control (nonzero? control))
+          (target-timed-invulnerable
+            RACE_RESPAWN_PROTECTION_TIME *target* 1))))
+    (vehicle-racer-teleport-respawn-camera! this))
+  (none))
+
+(defun vehicle-racer-respawn-active? ((this vehicle-racer))
+  "Return true while a delayed respawn is waiting or blacked out."
+  (and this
+       (nonzero? this)
+       (or (= (-> this respawn-state) RACE_RESPAWN_STATE_WAITING)
+           (= (-> this respawn-state) RACE_RESPAWN_STATE_BLACKOUT))))
+
+(defun vehicle-racer-request-respawn! ((this vehicle-racer))
+  "Arm the visible one-second delay for a local race respawn."
+  (when (and this
+             (nonzero? this)
+             (not (-> this respawn-protected?))
+             (= (-> this respawn-state) RACE_RESPAWN_STATE_IDLE))
+    (set! (-> this respawn-state) RACE_RESPAWN_STATE_WAITING)
+    (set-time! (-> this respawn-state-time))
+    (return #t))
+  #f)
+
+(defun vehicle-racer-begin-respawn-blackout! ((this vehicle-racer))
+  "Start the blackout after the visible respawn delay expires."
+  (when (and this
+             (nonzero? this)
+             (= (-> this respawn-state) RACE_RESPAWN_STATE_WAITING)
+             (time-elapsed? (-> this respawn-state-time)
+                            RACE_RESPAWN_WAIT_TIME))
+    (set-blackout-frames RACE_RESPAWN_BLACKOUT_TIME)
+    (set! (-> this respawn-state) RACE_RESPAWN_STATE_BLACKOUT)
+    (set-time! (-> this respawn-state-time))
+    (return #t))
+  #f)
+
+(defun vehicle-racer-finish-respawn! ((this vehicle-racer))
+  "Teleport at the end of blackout and release the screen."
+  (when (and this
+             (nonzero? this)
+             (= (-> this respawn-state) RACE_RESPAWN_STATE_BLACKOUT)
+             (time-elapsed? (-> this respawn-state-time)
+                            RACE_RESPAWN_BLACKOUT_TIME))
+    (if (vehicle-racer-restore-respawn-transform! this)
+        (begin
+          (vehicle-racer-clear-respawn-death! this)
+          (vehicle-racer-start-respawn-protection! this)
+          (set! (-> this respawn-state) RACE_RESPAWN_STATE_IDLE)
+          (set-blackout-frames 0)
+          (return #t))
+        (begin
+          (set! (-> this respawn-state) RACE_RESPAWN_STATE_IDLE)
+          (set-blackout-frames 0))))
+  #f)
+
+(defun vehicle-racer-update-delayed-respawn! ((this vehicle-racer))
+  "Advance the delayed respawn state machine once per vehicle update."
+  (when (and this (nonzero? this))
+    (cond
+      ((= (-> this respawn-state) RACE_RESPAWN_STATE_WAITING)
+       (vehicle-racer-begin-respawn-blackout! this))
+      ((= (-> this respawn-state) RACE_RESPAWN_STATE_BLACKOUT)
+       (vehicle-racer-finish-respawn! this))))
+  (none))
+
+(defun vehicle-racer-fake-respawn! ((this vehicle-racer))
+  "Request or maintain a delayed authoritative local racer respawn."
+  (when (and this
+             (nonzero? this)
+             (vehicle-racer-local-player-driving? this))
+    (cond
+      ((-> this respawn-protected?)
+       (vehicle-racer-clear-respawn-death! this)
+       (return #t))
+      ((vehicle-racer-respawn-active? this)
+       (vehicle-racer-clear-respawn-death! this)
+       (return #t))
+      ((vehicle-racer-request-respawn! this)
+       (vehicle-racer-clear-respawn-death! this)
+       (return #t))))
+  #f)
+
+(defun vehicle-racer-protect-player-driver! ((this vehicle-racer))
+  "Keep local and puppet-driven racers out of vehicle death states."
+  (when (and this
+             (nonzero? this)
+             (vehicle-racer-player-driven? this))
+    (let ((would-die?
+            (or (<= (-> this hit-points) 0.0)
+                (logtest? (-> this flags) (rigid-body-object-flag dead))
+                (logtest? (-> this focus-status) (focus-status dead)))))
+      (when (and would-die?
+                 (vehicle-racer-local-player-driving? this))
+        (vehicle-racer-fake-respawn! this))
+      (when (<= (-> this hit-points) 0.0)
+        (set! (-> this hit-points) 1.0))
+      (clear-crash-level! this)
+      (logclear! (-> this flags) (rigid-body-object-flag dead))
+      (logclear! (-> this focus-status) (focus-status dead inactive))
+      (let ((race (-> this race)))
+        (when (and race (nonzero? race))
+          (let ((racer-state (-> race racer-state)))
+            (when (and racer-state (nonzero? racer-state))
+              (logclear! (-> racer-state flags) (racer-flags dead))))))
+      (return #t)))
+  #f)
+
+(defun vehicle-racer-update-respawn! ((this vehicle-racer))
+  "Update protection, delayed respawn phases, and safe recovery sampling."
+  (when (and this (nonzero? this))
+    (when (and (-> this respawn-protected?)
+               (mp-vehicle-is-local-authoritative? this)
+               (time-elapsed? (-> this respawn-protection-time)
+                              RACE_RESPAWN_PROTECTION_TIME))
+      (set! (-> this respawn-protected?) #f))
+    (vehicle-racer-update-respawn-protection! this)
+    (vehicle-racer-update-delayed-respawn! this)
+    (when (and (not (-> this respawn-protected?))
+               (not (vehicle-racer-respawn-active? this)))
+      (vehicle-racer-sample-respawn-transform! this)))
+  (none))
 
 (defmethod set-crash-level! ((this vehicle-racer) (new-crash-level int) (crash-duration uint))
-  (if (not (vehicle-racer-protect-local-driver! this))
+  (if (not (vehicle-racer-protect-player-driver! this))
       ((method-of-type vehicle set-crash-level!) this new-crash-level crash-duration)
     )
   (none)
   )
 
 (defmethod rigid-body-object-method-52 ((this vehicle-racer))
-  (vehicle-racer-protect-local-driver! this)
+  (vehicle-racer-protect-player-driver! this)
   ((method-of-type vehicle rigid-body-object-method-52) this)
   (none)
   )
 
 (defmethod vehicle-method-120 ((this vehicle-racer))
+  (vehicle-racer-update-respawn! this)
   (when (vehicle-racer-local-player-driving? this)
     (set! (-> *game-info* race-number-turbos) (-> this turbo-pickup-count)))
   (logior! (-> this skel status) (joint-control-status sync-math))
@@ -85,16 +467,6 @@
       (sound-play "turbo-boost")))
   (none))
 
-(defun destination-race-vehicle? ((this vehicle-racer))
-  "Return true when this racer belongs to a destination race without a race mesh."
-  (let ((state (-> this race state)))
-    (and state
-         (nonzero? state)
-         (let ((info (-> state info)))
-           (and info
-                (nonzero? info)
-                (logtest? (-> info flags) (race-info-flags destination-race)))))))
-
 (defun wait-for-destination-race-player! ((this vehicle-racer))
   "Keep an unoccupied destination-race bike available for the local player."
   (logior! (-> this flags) (rigid-body-object-flag waiting-for-player))
@@ -109,6 +481,7 @@
     (initialize-race-control! (-> this race) state (-> state racer-array (-> params id))))
 
   (set! (-> this shortcut-speed-factor) 0.0)
+  (vehicle-racer-initialize-respawn! this)
   (case (-> params behavior)
     ((10)
      (cond
@@ -439,11 +812,16 @@
         (start-jump this))))
 
   (vehicle-method-121 this)
-  (when (and (< (-> this rbody state position y) -409600.0)
-             (not (vehicle-racer-local-player-driving? this)))
-    (format #t "vehicle-racer::physics-post: pid ~d fell to death from path-id ~d~%"
-            (-> this pid) (-> this race path record-id))
-    (go (method-of-object this explode)))
+  (when (< (-> this rbody state position y) -409600.0)
+    (cond
+      ((vehicle-racer-local-player-driving? this)
+       (vehicle-racer-fake-respawn! this))
+      ((vehicle-racer-player-driven? this)
+       (vehicle-racer-protect-player-driver! this))
+      (else
+       (debug-log *mp-debug-log?* "[Vehicle-Racer] physics-post: pid ~d fell to death from path-id ~d~%"
+               (-> this pid) (-> this race path record-id))
+       (go (method-of-object this explode)))))
   (none))
 
 (defmethod update-race-physics-lod! ((this vehicle-racer))

@@ -1697,6 +1697,11 @@
       )
     )
 
+  (when (type? proc vehicle-racer)
+    (set! (-> (the-as vehicle-racer proc) respawn-protected?)
+          (logtest? (-> slot state-flags)
+                    MP_VEHICLE_STATE_FLAG_RESPAWN_PROTECTED)))
+
   (let ((rec (mp-traffic-get-or-create-ghost! (-> slot net-id) (the uint 1))))
     (when (and rec (nonzero? rec))
       (mp-vehicle-record-ghost-sample! proc slot rec)

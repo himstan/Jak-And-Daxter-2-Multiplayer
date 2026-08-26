@@ -380,6 +380,17 @@
    (shortcut-speed-factor  float)
    (path-deviation         float)
    (shortcut-time          time-frame)
+   (respawn-position       vector          :inline)
+   (respawn-rotation       quaternion      :inline)
+   (respawn-sample-time    time-frame)
+   (respawn-protection-time time-frame)
+   (respawn-protected?     symbol)
+   (respawn-protection-applied? symbol)
+   (respawn-collide-as     collide-spec)
+   (respawn-collide-with   collide-spec)
+   (respawn-damage-factor  float)
+   (respawn-state          uint8)
+   (respawn-state-time     time-frame)
    )
   (:state-methods
     waiting-race
