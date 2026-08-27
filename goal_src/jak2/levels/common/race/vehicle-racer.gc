@@ -541,6 +541,14 @@
     
     (('waiting-for-start)
      (go (method-of-object this waiting-for-start)))
+
+    (('resume-ai-race)
+     (let ((state (-> this race state)))
+       (when (and state
+                  (nonzero? state)
+                  (logtest? (-> state flags) (race-flags begun)))
+         (logclear! (-> this focus-status) (focus-status grabbed))
+         (go (method-of-object this racing)))))
     
     (('pilot-on)
       (let ((icon (-> this minimap)))

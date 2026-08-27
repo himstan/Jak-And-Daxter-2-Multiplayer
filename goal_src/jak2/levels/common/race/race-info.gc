@@ -222,13 +222,13 @@
       :racer-array (new 'static 'inline-array race-racer-info 9
         (new 'static 'race-racer-info :flags (racer-info-flags player-or-ai))
         (new 'static 'race-racer-info :rider #x2 :vehicle #x1 :seek-offset 1)
-        (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags player-or-ai player-only) :seek-offset 2)
-        (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags player-or-ai player-only) :seek-offset 3)
-        (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags player-or-ai player-only) :seek-offset 4)
-        (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags player-or-ai player-only) :seek-offset 5)
-        (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags player-or-ai player-only) :seek-offset 6)
-        (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags player-or-ai player-only) :seek-offset 7)
-        (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags player-or-ai player-only) :seek-offset 8)
+        (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags player-only) :seek-offset 2)
+        (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags player-only) :seek-offset 3)
+        (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags player-only) :seek-offset 4)
+        (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags player-only) :seek-offset 5)
+        (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags player-only) :seek-offset 6)
+        (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags player-only) :seek-offset 7)
+        (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags player-only) :seek-offset 8)
         )
       :decision-point-array #f
       :level 'ctyport
@@ -280,14 +280,14 @@
       :safe-paths 0
       :turbo-pad-array #f
       :racer-array (new 'static 'inline-array race-racer-info 8
-        (new 'static 'race-racer-info :flags (racer-info-flags player-or-ai) :seek-offset 1)
-        (new 'static 'race-racer-info :flags (racer-info-flags player-or-ai player-only) :seek-offset 2)
-        (new 'static 'race-racer-info :flags (racer-info-flags player-or-ai player-only) :seek-offset 3)
-        (new 'static 'race-racer-info :flags (racer-info-flags player-or-ai player-only) :seek-offset 4)
-        (new 'static 'race-racer-info :flags (racer-info-flags player-or-ai player-only) :seek-offset -1)
-        (new 'static 'race-racer-info :flags (racer-info-flags player-or-ai player-only) :seek-offset -2)
-        (new 'static 'race-racer-info :flags (racer-info-flags player-or-ai player-only) :seek-offset -3)
-        (new 'static 'race-racer-info :flags (racer-info-flags player-or-ai player-only) :seek-offset -4)
+        (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 1)
+        (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 2)
+        (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 3)
+        (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 4)
+        (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset -1)
+        (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset -2)
+        (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset -3)
+        (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset -4)
         )
       :decision-point-array #f
       :level 'ctyport
@@ -511,13 +511,13 @@
       :racer-array (new 'static 'inline-array race-racer-info 9
         (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags player-or-ai))
         (new 'static 'race-racer-info :rider #x3 :seek-offset 1)
-        (new 'static 'race-racer-info :flags (racer-info-flags player-or-ai player-only) :seek-offset 2)
-        (new 'static 'race-racer-info :flags (racer-info-flags player-or-ai player-only) :seek-offset 3)
-        (new 'static 'race-racer-info :flags (racer-info-flags player-or-ai player-only) :seek-offset 4)
-        (new 'static 'race-racer-info :flags (racer-info-flags player-or-ai player-only) :seek-offset 5)
-        (new 'static 'race-racer-info :flags (racer-info-flags player-or-ai player-only) :seek-offset 6)
-        (new 'static 'race-racer-info :flags (racer-info-flags player-or-ai player-only) :seek-offset 7)
-        (new 'static 'race-racer-info :flags (racer-info-flags player-or-ai player-only) :seek-offset 8)
+        (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 2)
+        (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 3)
+        (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 4)
+        (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 5)
+        (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 6)
+        (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 7)
+        (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 8)
         )
       :decision-point-array #f
       :level 'ctyport
@@ -549,12 +549,12 @@
       :racer-array (new 'static 'inline-array race-racer-info 8
         (new 'static 'race-racer-info :vehicle #x1 :flags (racer-info-flags player-or-ai))
         (new 'static 'race-racer-info :rider #x3 :flags (racer-info-flags player-or-ai) :seek-offset 1)
-        (new 'static 'race-racer-info :rider #x4 :flags (racer-info-flags player-or-ai player-only) :seek-offset 2)
-        (new 'static 'race-racer-info :rider #x5 :flags (racer-info-flags player-or-ai player-only) :seek-offset 3)
-        (new 'static 'race-racer-info :rider #x6 :flags (racer-info-flags player-or-ai player-only) :seek-offset 4)
-        (new 'static 'race-racer-info :rider #x7 :flags (racer-info-flags player-or-ai player-only) :seek-offset 5)
-        (new 'static 'race-racer-info :rider #x8 :flags (racer-info-flags player-or-ai player-only) :seek-offset 6)
-        (new 'static 'race-racer-info :rider #x9 :flags (racer-info-flags player-or-ai player-only) :seek-offset 7)
+        (new 'static 'race-racer-info :rider #x4 :flags (racer-info-flags player-only) :seek-offset 2)
+        (new 'static 'race-racer-info :rider #x5 :flags (racer-info-flags player-only) :seek-offset 3)
+        (new 'static 'race-racer-info :rider #x6 :flags (racer-info-flags player-only) :seek-offset 4)
+        (new 'static 'race-racer-info :rider #x7 :flags (racer-info-flags player-only) :seek-offset 5)
+        (new 'static 'race-racer-info :rider #x8 :flags (racer-info-flags player-only) :seek-offset 6)
+        (new 'static 'race-racer-info :rider #x9 :flags (racer-info-flags player-only) :seek-offset 7)
         )
       :decision-point-array #f
       :level 'ctyport
