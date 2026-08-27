@@ -615,3 +615,19 @@
       )
   (the-as mp-actor-attack-event #f)
   )
+
+(defun mp-event-build-mountain-resolution!
+       ((event mp-mountain-resolution-event) (resolution uint))
+  (when (and event
+             (nonzero? (the-as uint event))
+             (or (= resolution MP_MOUNTAIN_RESOLUTION_LENS)
+                 (= resolution MP_MOUNTAIN_RESOLUTION_GEAR)
+                 (= resolution MP_MOUNTAIN_RESOLUTION_SHARD)
+                 (= resolution MP_MOUNTAIN_RESOLUTION_BURIED_ROCKS))
+             (mp-event-prepare! event MP_EVENT_MISSION_MOUNTAIN_RESOLUTION))
+    (set! (-> event resolution) (the-as uint8 resolution))
+    (set! (-> event payload-size) (the uint 1))
+    (return event)
+    )
+  (the-as mp-mountain-resolution-event #f)
+  )

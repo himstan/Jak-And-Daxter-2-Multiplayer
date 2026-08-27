@@ -305,6 +305,8 @@
                 (zero? (length scene-name))
                 (mp-tomb-boulder-local-only-scene? scene-name))
         (return #f))
+      (when (mp-mountain-resolution-scene? scene-name)
+        (return #t))
       (when (mp-scene-coordinator-note-local-start! scene-name)
         (debug-log *mp-debug-log?*
           "[MP-Scene] Registered/recovered local scene entry for ~S; broadcasting.~%"
@@ -1363,7 +1365,8 @@
                           (nonzero? (-> self scene))
                           (-> self scene name)
                           (nonzero? (-> self scene name))
-                          (mp-tomb-boulder-local-only-scene? (-> self scene name)))
+                          (or (mp-tomb-boulder-local-only-scene? (-> self scene name))
+                              (mp-mountain-resolution-scene? (-> self scene name))))
                        (mp-abort-local-scene! self)
                        )
                     ((not *multi-sync-enabled?*)
@@ -1685,6 +1688,14 @@
   (when (-> self scene)
     (copy-string<-string *mp-last-scene-name* (-> self scene name))
     )
+
+  (when (and (-> self scene)
+             (nonzero? (-> self scene))
+             (-> self scene name)
+             (nonzero? (-> self scene name))
+             (mp-mountain-resolution-scene? (-> self scene name))
+             (not *mp-processing-remote-event*))
+    (mp-event-hook-scene! (mp-scene-state started) (-> self scene name)))
 
   (mp-register-local-scene-if-ready! self)
 

@@ -1,0 +1,223 @@
+(in-package goal)
+
+(define-extern mp-scene-sync-teleport-to-player! (function mp-player-record none))
+(define-extern mp-scene-sync-start-target-hold! (function none))
+(define-extern mp-scene-sync-force-npc-step! (function scene string none))
+
+(defconstant MP_MOUNTAIN_PATH_UNKNOWN (the-as uint8 0))
+(defconstant MP_MOUNTAIN_PATH_LENS (the-as uint8 1))
+(defconstant MP_MOUNTAIN_PATH_GEAR (the-as uint8 2))
+(defconstant MP_MOUNTAIN_PATH_SHARD (the-as uint8 3))
+
+(define *mp-mountain-path* (the-as uint8 MP_MOUNTAIN_PATH_UNKNOWN))
+
+(defun mp-mountain-path-set! ((path uint))
+  (when (and (not (mp-spectate-active?))
+             (or (= path MP_MOUNTAIN_PATH_LENS)
+                 (= path MP_MOUNTAIN_PATH_GEAR)
+                 (= path MP_MOUNTAIN_PATH_SHARD)))
+    (set! *mp-mountain-path* (the-as uint8 path))
+    )
+  (none)
+  )
+
+(defun mp-mountain-region-112-enter ((ctx script-context))
+  (let ((rhino (process-by-ename "rhino-7")))
+    (when (and rhino (nonzero? rhino))
+      (send-event rhino 'interesting)
+      )
+    )
+  (mp-mountain-path-set! MP_MOUNTAIN_PATH_LENS)
+  (none)
+  )
+
+(defun mp-mountain-region-135-enter ((ctx script-context))
+  (mp-mountain-path-set! MP_MOUNTAIN_PATH_GEAR)
+  (none)
+  )
+
+(defun mp-mountain-region-175-inside ((ctx script-context))
+  (mp-mountain-path-set! MP_MOUNTAIN_PATH_GEAR)
+  (none)
+  )
+
+(defun mp-mountain-region-820-inside ((ctx script-context))
+  (mp-mountain-path-set! MP_MOUNTAIN_PATH_SHARD)
+  (none)
+  )
+
+(register-region-override!
+  112
+  '(apply mp-mountain-region-112-enter)
+  #f
+  #f
+  )
+
+(register-region-override!
+  135
+  '(apply mp-mountain-region-135-enter)
+  #f
+  #f
+  )
+
+(register-region-override!
+  175
+  #f
+  '(apply mp-mountain-region-175-inside)
+  #f
+  )
+
+(register-region-override!
+  820
+  #f
+  '(apply mp-mountain-region-820-inside)
+  #f
+  )
+
+(register-region-override!
+  150
+  '(apply mp-mountain-region-150-enter)
+  #f
+  #f
+  )
+
+(defun mp-mountain-send-event! ((name string) (message symbol))
+  (let ((proc (process-by-ename name)))
+    (when (and proc (nonzero? proc))
+      (send-event proc message))
+    )
+  (none)
+  )
+
+(defun mp-mountain-buried-rocks-apply! ()
+  (mp-mountain-send-event! "mtn-plat-buried-rocks-2" 'die)
+  (let ((rocks-entity (entity-by-name "mtn-plat-buried-rocks-2")))
+    (when (and rocks-entity (nonzero? rocks-entity))
+      (kill! rocks-entity))
+    )
+  (mp-mountain-send-event! "mtn-plat-buried-4" 'trigger)
+  (mp-mountain-send-event! "mtn-plat-buried-5" 'trigger)
+  (mp-mountain-send-event! "mtn-plat-buried-6" 'trigger)
+  (none)
+  )
+
+(defun mp-mountain-region-150-enter ((ctx script-context))
+  (mp-mountain-buried-rocks-apply!)
+  (mp-mountain-resolution-report! MP_MOUNTAIN_RESOLUTION_BURIED_ROCKS)
+  (none)
+  )
+
+(defun mp-mountain-resolution-scene? ((scene-name string))
+  (the-as symbol
+    (and scene-name
+         (nonzero? scene-name)
+         (nonzero? (length scene-name))
+         (or (string= scene-name "mountain-lens-res")
+             (string= scene-name "mountain-gear-res")
+             (string= scene-name "mountain-shard-res"))))
+  )
+
+(defun mp-mountain-resolution-task-node? ((node-id uint))
+  (the-as symbol
+    (or (= node-id (the-as uint (game-task-node mountain-lens-resolution)))
+        (= node-id (the-as uint (game-task-node mountain-gear-resolution)))
+        (= node-id (the-as uint (game-task-node mountain-shard-resolution)))))
+  )
+
+(defun mp-mountain-resolution-path ((scene-name string))
+  (cond
+    ((string= scene-name "mountain-lens-res") MP_MOUNTAIN_PATH_LENS)
+    ((string= scene-name "mountain-gear-res") MP_MOUNTAIN_PATH_GEAR)
+    ((string= scene-name "mountain-shard-res") MP_MOUNTAIN_PATH_SHARD)
+    (#t MP_MOUNTAIN_PATH_UNKNOWN)
+    )
+  )
+
+(defun mp-mountain-resolution-scene-matches-local-path? ((scene-name string))
+  (let ((path (mp-mountain-resolution-path scene-name)))
+    (and (!= path MP_MOUNTAIN_PATH_UNKNOWN)
+         (= *mp-mountain-path* path)))
+  )
+
+(defun mp-mountain-resolution-scene-valid-for-local-player? ((source-player-id uint)
+                                                              (scene-name string))
+  (let ((source-record (mp-player-record-by-id source-player-id))
+        (local-record (mp-local-player-record)))
+    (and source-record
+         (nonzero? source-record)
+         local-record
+         (nonzero? local-record)
+         (nonzero? (-> source-record identity state-ready?))
+         (= (mp-player-primary-level-id source-record)
+            (mp-player-primary-level-id local-record))
+         *target*
+         (nonzero? *target*)
+         (-> *target* control)
+         (nonzero? (-> *target* control))
+         (not (focus-test? *target* teleporting))
+         (mp-mountain-resolution-scene-matches-local-path? scene-name)))
+  )
+
+(defun mp-mountain-resolution-handle-scene-start!
+       ((scene-name string) (evt mp-scene-event))
+  (when (and (mp-mountain-resolution-scene? scene-name)
+             evt
+             (nonzero? evt)
+             (not *scene-player*)
+             (mp-mountain-resolution-scene-valid-for-local-player?
+               (-> evt source-player-id)
+               scene-name))
+    (let ((source-record (mp-player-record-by-id (-> evt source-player-id)))
+          (scene-obj (scene-lookup scene-name)))
+      (when (and source-record
+                 (nonzero? source-record)
+                 scene-obj
+                 (nonzero? scene-obj)
+                 (-> scene-obj load-point-obj)
+                 (nonzero? (-> scene-obj load-point-obj)))
+        (mp-scene-sync-teleport-to-player! source-record)
+        (mp-scene-sync-start-target-hold!)
+        (let ((old-remote-context *mp-processing-remote-event*))
+          (set! *mp-processing-remote-event* #t)
+          (process-spawn scene-player
+                        :init scene-player-init
+                        scene-name
+                        #t
+                        (the-as string (-> scene-obj load-point-obj)))
+          (set! *mp-processing-remote-event* old-remote-context))
+        (mp-scene-sync-force-npc-step! scene-obj scene-name))))
+  (none)
+  )
+
+(defun mp-mountain-resolution-report! ((resolution uint))
+  (when (and (or (mp-session-host?) (mp-session-client?))
+             *multi-sync-enabled?*
+             (= (pc-multi-get-status) (mp-connection-status in-game))
+             (or (= resolution MP_MOUNTAIN_RESOLUTION_LENS)
+                 (= resolution MP_MOUNTAIN_RESOLUTION_GEAR)
+                 (= resolution MP_MOUNTAIN_RESOLUTION_SHARD)
+                 (= resolution MP_MOUNTAIN_RESOLUTION_BURIED_ROCKS)))
+    (mp-event-enqueue-mountain-resolution! resolution))
+  (none)
+  )
+
+(defun mp-mountain-resolution-receive! ((evt mp-mountain-resolution-event))
+  (when (and evt
+             (nonzero? evt)
+             (>= (-> evt payload-size) (the uint 1)))
+    (if (= (-> evt resolution) MP_MOUNTAIN_RESOLUTION_BURIED_ROCKS)
+        (mp-mountain-buried-rocks-apply!)
+        (when (mp-session-host?)
+          (case (-> evt resolution)
+            ((MP_MOUNTAIN_RESOLUTION_LENS)
+             (when (not (task-node-closed? (game-task-node mountain-lens-resolution)))
+               (task-node-close! (game-task-node mountain-lens-resolution))))
+            ((MP_MOUNTAIN_RESOLUTION_GEAR)
+             (when (not (task-node-closed? (game-task-node mountain-gear-resolution)))
+               (task-node-close! (game-task-node mountain-gear-resolution))))
+            ((MP_MOUNTAIN_RESOLUTION_SHARD)
+             (when (not (task-node-closed? (game-task-node mountain-shard-resolution)))
+               (task-node-close! (game-task-node mountain-shard-resolution)))))))
+  )
+  (none)
+  )

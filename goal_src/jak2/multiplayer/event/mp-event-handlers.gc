@@ -780,6 +780,10 @@
     (when (and s* (nonzero? s*) (nonzero? (length s*)))
       (cond
 
+        ((mp-mountain-resolution-scene? s*)
+         (mp-mountain-resolution-handle-scene-start! s* ev)
+         )
+
         ((mp-tomb-scene-transport-suppressed? s*)
          (debug-log *mp-debug-log?*
            "[MP-Event-Handlers] Ignoring locally-owned tomb scene: ~S~%"
@@ -1916,6 +1920,9 @@
             ((MP_EVENT_PARTY_WIPE) (mp-death-party-wipe-receive!))
             ((MP_EVENT_HOVER_ENEMY_SPAWN) (mp-event-handler-hover-enemy-spawn (the-as mp-hover-enemy-spawn-event evt)))
             ((MP_EVENT_DRILL_EGG) (mp-event-handler-drill-egg aid))
+            ((MP_EVENT_MISSION_MOUNTAIN_RESOLUTION)
+             (mp-mountain-resolution-receive!
+               (the-as mp-mountain-resolution-event evt)))
             (else (debug-log *mp-debug-log?* "[MP-Event] No handler for event ID ~D.~%" event-type)))
           )
          )

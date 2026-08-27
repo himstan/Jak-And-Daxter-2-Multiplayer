@@ -2699,6 +2699,32 @@
               :bounds (static-spherem 0 0 0 3)
               )
 
+(defun mtn-button-on-activate-override ((button-name string))
+  (cond
+    ((string= button-name "mtn-button-1")
+     '(begin
+        (send-event "mtn-step-plat-rocks-a-2" 'done)
+        (send-event "mtn-plat-eject-14" 'eject)
+        )
+     )
+    ((string= button-name "mtn-button-2")
+     '(begin
+        (send-event "mtn-step-plat-rocks-c-2" 'done)
+        (send-event "mtn-plat-eject-15" 'eject)
+        (send-event "mtn-plat-eject-13" 'eject)
+        )
+     )
+    ((string= button-name "mtn-button-6")
+     '(begin
+        (send-event "mtn-step-plat-rocks-b-4" 'done)
+        (send-event "mtn-plat-eject-16" 'eject)
+        (send-event "mtn-plat-eject-17" 'eject)
+        )
+     )
+    (else #f)
+    )
+  )
+
 (defstate idle (mtn-button)
   :virtual #t
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
@@ -2809,7 +2835,18 @@
     (the-as skeleton-group (art-group-get-by-name *level* "skel-mtn-button" (the-as (pointer uint32) #f)))
     (the-as pair 0)
     )
-  (set! (-> this on-activate) (res-lump-struct (-> this entity) 'on-activate symbol))
+  (let ((on-activate (res-lump-struct (-> this entity) 'on-activate symbol))
+        (override (if (and arg0 (nonzero? arg0))
+                      (mtn-button-on-activate-override (res-lump-struct arg0 'name string))
+                      #f))
+        )
+    (set! (-> this on-activate)
+          (if override
+              (the-as symbol override)
+              on-activate
+              )
+          )
+    )
   (let ((a0-22 (-> this skel root-channel 0)))
     (set! (-> a0-22 frame-group) (the-as art-joint-anim (-> this draw art-group data 2)))
     (set! (-> a0-22 param 0) 1.0)

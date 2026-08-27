@@ -57,6 +57,11 @@
 (defconstant MP_ACTOR_ATTACK_HAS_SOURCE_POS (the-as uint32 1))
 (defconstant MP_ACTOR_ATTACK_HAS_DIRECTION (the-as uint32 2))
 
+(defconstant MP_MOUNTAIN_RESOLUTION_LENS (the-as uint8 1))
+(defconstant MP_MOUNTAIN_RESOLUTION_GEAR (the-as uint8 2))
+(defconstant MP_MOUNTAIN_RESOLUTION_SHARD (the-as uint8 3))
+(defconstant MP_MOUNTAIN_RESOLUTION_BURIED_ROCKS (the-as uint8 4))
+
 (declare-type remote process-drawable)
 
 (defenum mp-hit-sound-id (uint32)
@@ -231,6 +236,9 @@
   ((scene-name uint8 64 :overlay-at (-> data 0))
    (event-id uint32 :overlay-at (-> data 64))
    (load-continue uint8 64 :overlay-at (-> data 68))))
+
+(deftype mp-mountain-resolution-event (mp-event)
+  ((resolution uint8 :overlay-at (-> data 0))))
 
 (deftype mp-actor-name-event (mp-event)
   ((target-name uint8 32 :overlay-at (-> data 0))))
@@ -431,6 +439,8 @@
 (define-extern mp-event-build-continue! (function mp-continue-event string mp-continue-event))
 (define-extern mp-event-build-edge-grab! (function mp-event uint edge-grab-state-event-data mp-event))
 (define-extern mp-event-build-scene! (function mp-scene-event uint string string mp-scene-event))
+(define-extern mp-event-build-mountain-resolution!
+  (function mp-mountain-resolution-event uint mp-mountain-resolution-event))
 (define-extern mp-event-build-waypoint! (function mp-waypoint-event uint uint int symbol int symbol string mp-waypoint-event))
 (define-extern mp-event-build-warp-gate! (function mp-warp-gate-event uint uint uint string vector vector mp-warp-gate-event))
 (define-extern mp-event-build-mtn-plat-shoot! (function mp-mtn-plat-shoot-event uint vector mp-mtn-plat-shoot-event))
@@ -461,6 +471,7 @@
 (define-extern mp-event-enqueue-continue! (function string none))
 (define-extern mp-event-enqueue-edge-grab! (function uint edge-grab-state-event-data none))
 (define-extern mp-event-enqueue-scene! (function uint string string none))
+(define-extern mp-event-enqueue-mountain-resolution! (function uint none))
 (define-extern mp-event-enqueue-waypoint! (function uint uint int symbol int symbol string none))
 (define-extern mp-event-enqueue-warp-gate! (function uint uint uint string vector vector none))
 (define-extern mp-event-enqueue-mtn-plat-shoot! (function uint vector none))
@@ -501,3 +512,10 @@
 (define-extern mp-tomb-scene-sync-suppressed? (function symbol))
 (define-extern mp-tomb-scene-transport-suppressed? (function string symbol))
 (define-extern mp-receive-warp-gate-event (function mp-warp-gate-event none))
+
+(define-extern mp-mountain-resolution-scene? (function string symbol))
+(define-extern mp-mountain-resolution-task-node? (function uint symbol))
+(define-extern mp-mountain-resolution-handle-scene-start!
+  (function string mp-scene-event none))
+(define-extern mp-mountain-resolution-report! (function uint none))
+(define-extern mp-mountain-resolution-receive! (function mp-mountain-resolution-event none))

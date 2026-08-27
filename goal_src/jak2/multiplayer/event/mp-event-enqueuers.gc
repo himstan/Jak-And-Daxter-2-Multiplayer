@@ -255,3 +255,10 @@
       (mp-event-build-actor-attack! event event-type details)))
   (none)
   )
+
+(defun mp-event-enqueue-mountain-resolution! ((resolution uint))
+  (let ((event (new 'stack-no-clear 'mp-mountain-resolution-event)))
+    (mp-event-enqueue!
+      (mp-event-build-mountain-resolution! event resolution)))
+  (none)
+  )
