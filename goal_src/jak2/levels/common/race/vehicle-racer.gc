@@ -531,6 +531,16 @@
 (defmethod rigid-body-object-method-46
     ((this vehicle-racer) (sender process-drawable) (event-id int) (event symbol) (message event-message-block))
   (case event
+    (('query)
+     (if (and message (nonzero? message))
+         (case (-> message param 0)
+           (('race-respawn)
+            (vehicle-racer-fake-respawn! this))
+           (else
+             ((method-of-type vehicle rigid-body-object-method-46)
+               this sender event-id event message)))
+         #f))
+
     (('test-ready)
      (and (-> this next-state)
           (= (-> this next-state name) 'waiting-for-start)

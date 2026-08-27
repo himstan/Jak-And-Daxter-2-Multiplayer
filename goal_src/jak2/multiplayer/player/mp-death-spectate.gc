@@ -87,6 +87,8 @@
      #t)
     ((not *multi-sync-enabled?*)
      #t)
+    ((not (mp-any-remote-gameplay-player-connected?))
+     #t)
     ((mp-all-remote-players-dead?)
      (set! *mp-death-party-wipe-pending?* #t)
      (mp-event-enqueue-aid! MP_EVENT_PARTY_WIPE (the-as uint 0))

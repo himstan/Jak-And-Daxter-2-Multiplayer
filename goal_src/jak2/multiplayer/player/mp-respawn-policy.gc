@@ -92,7 +92,8 @@
   (the symbol
        (and *multi-sync-enabled?*
             (= (pc-multi-get-status) (mp-connection-status in-game))
-            (mp-respawn-policy-blocks-remote-placement?)))
+            (or (not (mp-any-remote-gameplay-player-connected?))
+                (mp-respawn-policy-blocks-remote-placement?))))
   )
 
 (defun mp-prepare-local-respawn! ((player target))

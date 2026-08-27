@@ -6,7 +6,7 @@
 ;; dgos: CWI
 (define-extern *pilot-get-on-mods* surface)
 (define-extern *pilot-get-off-mods* surface)
-(define-extern vehicle-racer-fake-respawn! (function vehicle-racer symbol))
+(define-extern target-pilot-clear-local-racer-death! (function target symbol))
 
 ;; DECOMP BEGINS
 
@@ -846,38 +846,6 @@
   :code (-> target-edge-grab code)
   :post target-no-move-post
   )
-
-(defun target-pilot-local-racer-vehicle ((this target))
-  "Return the race vehicle currently driven by this local target."
-  (when (and this
-             (nonzero? this)
-             *target*
-             (nonzero? *target*)
-             (= this *target*)
-             (focus-test? this pilot))
-    (let ((pilot-info (-> this pilot)))
-      (when (and pilot-info (nonzero? pilot-info))
-        (let ((vehicle-proc
-                (the-as vehicle
-                  (handle->process-safe (-> pilot-info vehicle)))))
-          (when (and vehicle-proc
-                     (nonzero? vehicle-proc)
-                     (type? vehicle-proc vehicle-racer)
-                     (vehicle-racer-local-player-driving?
-                       (the-as vehicle-racer vehicle-proc)))
-            (return (the-as vehicle-racer vehicle-proc)))))))
-  (the-as vehicle-racer #f))
-
-(defun target-pilot-clear-local-racer-death! ((this target))
-  "Fake-respawn the local racer and clear transient target death state."
-  (when (and this (nonzero? this))
-    (let ((vehicle (target-pilot-local-racer-vehicle this)))
-      (when (and vehicle (nonzero? vehicle))
-        (vehicle-racer-fake-respawn! vehicle)
-        (logclear! (-> this focus-status) (focus-status dead hit))
-        (logclear! (-> this state-flags) (state-flags disable-attacks))
-        (return #t))))
-  #f)
 
 (defstate target-pilot-hit (target)
   :event target-generic-event-handler

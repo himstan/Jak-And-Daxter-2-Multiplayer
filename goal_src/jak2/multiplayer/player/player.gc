@@ -579,11 +579,23 @@
        (or (mp-player-runtime-flag? record (mp-player-runtime-flags dying))
            (mp-player-runtime-flag? record (mp-player-runtime-flags dead)))))
 
+(defun mp-remote-gameplay-player-connected? ((record mp-player-record))
+  "True for a connected remote player who participates in gameplay."
+  (and record
+       (nonzero? record)
+       (mp-player-record-remote? *mp-player-controller* record)
+       (>= (-> record connection status) 4)
+       (= (-> record identity spectator-only?) 0)))
+
+(defun mp-any-remote-gameplay-player-connected? ()
+  (mp-for-each-player-record (player-id record)
+    (when (mp-remote-gameplay-player-connected? record)
+      (return #t)))
+  #f)
+
 (defun mp-any-live-remote-player? ()
   (mp-for-each-player-record (player-id record)
-    (when (and (mp-player-record-remote? *mp-player-controller* record)
-               (>= (-> record connection status) 4)
-               (= (-> record identity spectator-only?) 0)
+    (when (and (mp-remote-gameplay-player-connected? record)
                (not (mp-player-record-dead-or-dying? record)))
       (return #t)))
   #f)
@@ -591,9 +603,7 @@
 (defun mp-all-remote-players-dead? ()
   (let ((found-remote? #f))
     (mp-for-each-player-record (player-id record)
-      (when (and (mp-player-record-remote? *mp-player-controller* record)
-                 (>= (-> record connection status) 4)
-                 (= (-> record identity spectator-only?) 0))
+      (when (mp-remote-gameplay-player-connected? record)
         (set! found-remote? #t)
         (when (not (mp-player-runtime-flag? record (mp-player-runtime-flags dead)))
           (return #f))))

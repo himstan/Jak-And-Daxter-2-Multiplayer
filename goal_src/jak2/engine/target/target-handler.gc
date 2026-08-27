@@ -10,7 +10,26 @@
 (define-extern vehicle-spawn (function process type traffic-object-spawn-params process-drawable))
 (define-extern target-indax-edge-grab (state target))
 (define-extern target-indax-pole-cycle (state handle target))
-(define-extern target-pilot-clear-local-racer-death! (function target symbol))
+
+(defun target-pilot-clear-local-racer-death! ((this target))
+  "Ask the live pilot vehicle to handle a local race death."
+  (when (and this
+             (nonzero? this)
+             *target*
+             (nonzero? *target*)
+             (= this *target*)
+             (focus-test? this pilot))
+    (let ((pilot-info (-> this pilot)))
+      (when (and pilot-info (nonzero? pilot-info))
+        (let ((vehicle-proc
+                (handle->process-safe (-> pilot-info vehicle))))
+          (when (and vehicle-proc
+                     (nonzero? vehicle-proc)
+                     (send-event vehicle-proc 'query 'race-respawn))
+            (logclear! (-> this focus-status) (focus-status dead hit))
+            (logclear! (-> this state-flags) (state-flags disable-attacks))
+            (return #t))))))
+  #f)
 
 ;; DECOMP BEGINS
 
