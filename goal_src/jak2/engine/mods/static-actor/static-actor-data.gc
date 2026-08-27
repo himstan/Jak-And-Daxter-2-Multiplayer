@@ -33,3 +33,78 @@
       (249.0 -62.0 1419.0))
     )
   )
+
+(defstatic-actor drill-turret-20-definition
+  :level 'drillmtn
+  :name "turret-20"
+  :etype 'turret
+  :aid 60001
+  :trans (-184.0 12.0 192.0)
+  :quat (0.0 0.0 0.0 1.0)
+  :vis-dist 200.0
+  :required-art-groups
+  (static-actor-art-groups "skel-turret" "skel-turret-explode")
+  :properties
+  (static-actor-properties
+    (static-actor-raw-property
+      'shared-battle-aid uint32
+      (new 'static 'array uint32 1 18936)
+      1 #t)
+    (static-actor-raw-property
+      'rotoffset float
+      (new 'static 'array float 1 -24576.0)
+      1 #t)
+    (static-actor-volume
+      'visvol
+      (-189.0 5.0 185.0)
+      (-175.0 20.5 199.5))))
+
+(defstatic-actor drill-turret-21-definition
+  :level 'drillmtn
+  :name "turret-21"
+  :etype 'turret
+  :aid 60002
+  :trans (-12.0 32.0 88.5)
+  :quat (0.0 0.0 0.0 1.0)
+  :vis-dist 200.0
+  :required-art-groups
+  (static-actor-art-groups "skel-turret" "skel-turret-explode")
+  :properties
+  (static-actor-properties
+    (static-actor-raw-property
+      'shared-battle-aid uint32
+      (new 'static 'array uint32 1 18937)
+      1 #t)
+    (static-actor-raw-property
+      'rotoffset float
+      (new 'static 'array float 1 0.0)
+      1 #t)
+    (static-actor-volume
+      'visvol
+      (-22.0 24.0 79.0)
+      (-8.0 39.5 93.0))))
+
+(defstatic-actor drill-turret-22-definition
+  :level 'drillmtn
+  :name "turret-22"
+  :etype 'turret
+  :aid 60003
+  :trans (104.0 24.0 112.0)
+  :quat (0.0 0.0 0.0 1.0)
+  :vis-dist 200.0
+  :required-art-groups
+  (static-actor-art-groups "skel-turret" "skel-turret-explode")
+  :properties
+  (static-actor-properties
+    (static-actor-raw-property
+      'shared-battle-aid uint32
+      (new 'static 'array uint32 1 18939)
+      1 #t)
+    (static-actor-raw-property
+      'rotoffset float
+      (new 'static 'array float 1 24576.0)
+      1 #t)
+    (static-actor-volume
+      'visvol
+      (96.0 17.0 106.0)
+      (110.0 32.5 120.0))))
