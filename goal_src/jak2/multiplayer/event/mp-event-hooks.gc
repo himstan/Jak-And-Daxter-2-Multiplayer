@@ -11,6 +11,7 @@
 (declare-type security-wall process-drawable)
 (declare-type centurion nav-enemy)
 (declare-type drill-metalhead-eggs process-drawable)
+(declare-type mtn-plat-buried-rocks process-drawable)
 
 (defun mp-should-block-break-sync? ((proc process))
   "BREAK events are for simple destructibles, not traffic, enemies, or actors."
@@ -36,6 +37,7 @@
            (type? proc metalhead-shot)
            (type? proc centurion)
            (type? proc drill-metalhead-eggs)
+           (type? proc mtn-plat-buried-rocks)
            (type-type? (-> proc type) part-spawner)
            (type-type? (-> proc type) parking-spot)
            (type-type? (-> proc type) scene-stage)

@@ -233,7 +233,7 @@
                     )
                   )
                 )
-              (when (nonzero? (-> this camera))
+              (when (and (nonzero? (-> this camera)) (-> arg0 movie?))
                 (cond
                   ((handle->process (-> arg0 camera))
                    (change-parent (handle->process (-> arg0 camera)) (ppointer->process s4-0))
@@ -503,7 +503,9 @@
         (send-event s3-0 'restore-default-settings)
         )
       )
-    (send-event *target* 'draw (-> gp-0 draw-target))
+    (when (-> this movie?)
+      (send-event *target* 'draw (-> gp-0 draw-target))
+      )
     (let ((s3-1 (entity-by-name (-> gp-0 entity))))
       (when (and (-> gp-0 entity) (not s3-1))
         (format 0 "ERROR: SCENE: scene ~A can not find entity ~A~%" (-> gp-0 name) (-> gp-0 entity))
@@ -619,7 +621,14 @@
         )
       )
     (process-entity-status! this (entity-perm-status no-kill) #t)
-    (when arg1
+    (dotimes (gp-1 2)
+      (let ((v1-art (-> *art-control* buffer gp-1)))
+        (if (= (-> v1-art status) 'active)
+            (link-art! (-> v1-art art-group))
+            )
+        )
+      )
+    (when (and arg1 (-> this movie?))
       (set-setting! 'region-mode #f 0.0 0)
       (set-setting! 'process-mask 'set 0.0 (-> gp-0 mask-to-clear))
       (set-setting! 'sound-bank-load #f 0.0 0)
@@ -943,41 +952,43 @@
   :virtual #t
   :enter (behavior ((arg0 symbol))
     (set-time! (-> self state-time))
-    (when (or (-> self scene) (-> self preload-continue))
-      (let ((gp-0 (scene-decode-continue (the-as basic (if (-> self scene)
-                                                           (-> self scene load-point-obj)
-                                                           (-> self preload-continue)
-                                                           )
-                                                 )
-                                         )
+    (when (-> self movie?)
+      (when (or (-> self scene) (-> self preload-continue))
+        (let ((gp-0 (scene-decode-continue (the-as basic (if (-> self scene)
+                                                             (-> self scene load-point-obj)
+                                                             (-> self preload-continue)
+                                                             )
+                                                   )
+                                           )
+                    )
+              )
+          (when gp-0
+            (when (-> self scene)
+              (set-setting! 'borrow (-> self scene borrow) 0.0 0)
+              (apply-settings *setting-control*)
+              )
+            (cond
+              ((and *target*
+                    (zero? (-> self scene-index))
+                    (or (not (-> self scene)) (!= (level-status *level* (-> gp-0 vis-nick)) 'active))
+                    )
+               (send-event *target* 'continue gp-0)
+               )
+              (else
+                (let ((a0-9 (lookup-level-info (-> gp-0 vis-nick))))
+                  (set! (-> *load-state* vis-nick) (if a0-9
+                                                       (-> a0-9 name)
+                                                       )
+                        )
                   )
-            )
-        (when gp-0
-          (when (-> self scene)
-            (set-setting! 'borrow (-> self scene borrow) 0.0 0)
-            (apply-settings *setting-control*)
-            )
-          (cond
-            ((and *target*
-                  (zero? (-> self scene-index))
-                  (or (not (-> self scene)) (!= (level-status *level* (-> gp-0 vis-nick)) 'active))
+                (dotimes (v1-23 6)
+                  (set! (-> *load-state* want v1-23 name) (-> gp-0 want v1-23 name))
+                  (set! (-> *load-state* want v1-23 display?) (-> gp-0 want v1-23 display?))
+                  (set! (-> *load-state* want v1-23 force-vis?) #f)
+                  (set! (-> *load-state* want v1-23 force-inside?) #f)
                   )
-             (send-event *target* 'continue gp-0)
-             )
-            (else
-              (let ((a0-9 (lookup-level-info (-> gp-0 vis-nick))))
-                (set! (-> *load-state* vis-nick) (if a0-9
-                                                     (-> a0-9 name)
-                                                     )
-                      )
+                (update-task-masks 'event)
                 )
-              (dotimes (v1-23 6)
-                (set! (-> *load-state* want v1-23 name) (-> gp-0 want v1-23 name))
-                (set! (-> *load-state* want v1-23 display?) (-> gp-0 want v1-23 display?))
-                (set! (-> *load-state* want v1-23 force-vis?) #f)
-                (set! (-> *load-state* want v1-23 force-inside?) #f)
-                )
-              (update-task-masks 'event)
               )
             )
           )
@@ -1001,134 +1012,136 @@
     )
   :code (behavior ((arg0 symbol))
     (local-vars (v1-18 symbol) (v1-118 symbol))
-    (when (and (-> self scene) (zero? (-> self scene wait-max-time)))
+    (when (and (-> self movie?) (-> self scene) (zero? (-> self scene wait-max-time)))
       (set-setting! 'allow-progress #f 0.0 0)
       (set-setting! 'bg-a-force 'abs 1.0 0)
       (apply-settings *setting-control*)
       )
-    (if (or (not *target*) (or (focus-test? *target* grabbed)
-                               (begin
-                                 (dotimes (v1-17 6)
-                                   (when (= (-> *load-state* want v1-17 name) (-> *target* current-level name))
-                                     (set! v1-18 #f)
-                                     (goto cfg-19)
+    (when (-> self movie?)
+      (if (or (not *target*) (or (focus-test? *target* grabbed)
+                                 (begin
+                                   (dotimes (v1-17 6)
+                                     (when (= (-> *load-state* want v1-17 name) (-> *target* current-level name))
+                                       (set! v1-18 #f)
+                                       (goto cfg-19)
+                                       )
                                      )
+                                   #t
+                                   (set! v1-18 #t)
+                                   (label cfg-19)
+                                   (or v1-18 (not (-> self scene)))
                                    )
-                                 #t
-                                 (set! v1-18 #t)
-                                 (label cfg-19)
-                                 (or v1-18 (not (-> self scene)))
                                  )
-                               )
-            )
-        (set! arg0 #f)
-        )
-    (while (and arg0
-                (or (focus-test? *target* in-air)
-                    (and (-> *target* next-state) (= (-> *target* next-state name) 'target-flop-hit-ground))
-                    )
-                (-> self scene)
-                (not (time-elapsed? (-> self state-time) (-> self scene wait-air-time)))
-                )
-      (suspend)
-      )
-    (suspend)
-    (let ((s5-0 (current-time)))
-      (when (and *target* (not (logtest? (-> *target* focus-status) (focus-status grabbed))))
-        (label cfg-44)
-        (when (not (process-grab? *target* #f))
-          (suspend)
-          (goto cfg-44)
+              )
+          (set! arg0 #f)
           )
-        )
-      (process-entity-status! self (entity-perm-status no-kill) #t)
-      ;; og:preserve-this
-      ;; NOTE - for speedrunner mode, allows the game to continue
-      ;; even if there is a dialogue in progress
-      (until (not (or (-> *setting-control* user-current spooling)
-                      (when (not (-> *pc-settings* speedrunner-mode?))
-                        (or (-> *setting-control* user-current talking)
-                            (-> *setting-control* user-current hint)
-                            (-> *setting-control* user-current ambient)))))
-        (set-setting! 'allow-progress #f 0.0 0)
-        (apply-settings *setting-control*)
-        (dotimes (s4-0 2)
-          ;; og:preserve-this
-          ;; NOTE - for speedrunner mode, allows the game to continue
-          ;; even if there is a dialogue in progress
-          (while (or (-> *setting-control* user-current spooling)
-                     (when (not (-> *pc-settings* speedrunner-mode?))
-                        (or (-> *setting-control* user-current talking)
-                            (-> *setting-control* user-current hint)
-                            (-> *setting-control* user-current ambient)))
-                     (or (and (-> *setting-control* user-current movie)
-                              (!= (-> *setting-control* user-current movie) (process->ppointer self))
-                              )
-                         ;; In MP mode the scene-player is spawned directly without a task-manager,
-                         ;; so nothing drives the GUI movie-channel connection to status 3.
-                         ;; Skip this gate in MP; spooling/talking/movie-other still guard us.
-                         (and (not *multi-sync-enabled?*)
-                              (!= (get-status *gui-control* (-> self gui-id)) 3))
-                         )
-                     )
-            (suspend)
-            )
-          )
-        (when arg0
-          (while (and (-> self scene) (not (or (time-elapsed? s5-0 (-> self scene wait-ground-time))
-                                               (time-elapsed? (-> self state-time) (-> self scene wait-max-time))
-                                               )
-                                           )
+      (while (and arg0
+                  (or (focus-test? *target* in-air)
+                      (and (-> *target* next-state) (= (-> *target* next-state name) 'target-flop-hit-ground))
                       )
-            (suspend)
-            )
-          )
-        (remove-setting! 'movie)
-        (remove-setting! 'sound-bank-load)
-        (remove-setting! 'movie-name)
-        (remove-setting! 'bg-a-force)
-        (apply-settings *setting-control*)
-        (set-blackout-frames (seconds 0.1))
-        (suspend)
-        (set-blackout-frames (seconds 0.1))
+                  (-> self scene)
+                  (not (time-elapsed? (-> self state-time) (-> self scene wait-air-time)))
+                  )
         (suspend)
         )
-      )
-    (send-event *target* 'trans 'save (-> self old-target-pos))
-    (let ((gp-1 *load-state*))
-      (when gp-1
-        (dotimes (s5-1 2)
-          (while (begin
-                   (dotimes (s4-1 6)
-                     (when (not (or (not (-> gp-1 want s4-1 name))
-                                    (not (-> gp-1 want s4-1 display?))
-                                    (= (level-status *level* (-> gp-1 want s4-1 name)) 'active)
-                                    )
-                                )
-                       (set! v1-118 #t)
-                       (goto cfg-109)
-                       )
-                     )
-                   (set! v1-118 #f)
-                   (label cfg-109)
-                   v1-118
-                   )
-            (set-blackout-frames (seconds 0.1))
+      (suspend)
+      (let ((s5-0 (current-time)))
+        (when (and *target* (not (logtest? (-> *target* focus-status) (focus-status grabbed))))
+          (label cfg-44)
+          (when (not (process-grab? *target* #f))
             (suspend)
+            (goto cfg-44)
             )
-          (when (and (zero? s5-1) (< (-> self scene-index) (-> self scene-list length)))
-            (scene-player-method-24 self (-> self scene-list (-> self scene-index)) #t)
-            (when (-> self scene)
-              (set-setting! 'borrow (-> self scene borrow) 0.0 0)
-              (apply-settings *setting-control*)
+          )
+        (process-entity-status! self (entity-perm-status no-kill) #t)
+        ;; og:preserve-this
+        ;; NOTE - for speedrunner mode, allows the game to continue
+        ;; even if there is a dialogue in progress
+        (until (not (or (-> *setting-control* user-current spooling)
+                        (when (not (-> *pc-settings* speedrunner-mode?))
+                          (or (-> *setting-control* user-current talking)
+                              (-> *setting-control* user-current hint)
+                              (-> *setting-control* user-current ambient)))))
+          (set-setting! 'allow-progress #f 0.0 0)
+          (apply-settings *setting-control*)
+          (dotimes (s4-0 2)
+            ;; og:preserve-this
+            ;; NOTE - for speedrunner mode, allows the game to continue
+            ;; even if there is a dialogue in progress
+            (while (or (-> *setting-control* user-current spooling)
+                       (when (not (-> *pc-settings* speedrunner-mode?))
+                          (or (-> *setting-control* user-current talking)
+                              (-> *setting-control* user-current hint)
+                              (-> *setting-control* user-current ambient)))
+                       (or (and (-> *setting-control* user-current movie)
+                                (!= (-> *setting-control* user-current movie) (process->ppointer self))
+                                )
+                           ;; In MP mode the scene-player is spawned directly without a task-manager,
+                           ;; so nothing drives the GUI movie-channel connection to status 3.
+                           ;; Skip this gate in MP; spooling/talking/movie-other still guard us.
+                           (and (not *multi-sync-enabled?*)
+                                (!= (get-status *gui-control* (-> self gui-id)) 3))
+                           )
+                       )
+              (suspend)
+              )
+            )
+          (when arg0
+            (while (and (-> self scene) (not (or (time-elapsed? s5-0 (-> self scene wait-ground-time))
+                                                 (time-elapsed? (-> self state-time) (-> self scene wait-max-time))
+                                                 )
+                                             )
+                        )
+              (suspend)
+              )
+            )
+          (remove-setting! 'movie)
+          (remove-setting! 'sound-bank-load)
+          (remove-setting! 'movie-name)
+          (remove-setting! 'bg-a-force)
+          (apply-settings *setting-control*)
+          (set-blackout-frames (seconds 0.1))
+          (suspend)
+          (set-blackout-frames (seconds 0.1))
+          (suspend)
+          )
+        )
+      (send-event *target* 'trans 'save (-> self old-target-pos))
+      (let ((gp-1 *load-state*))
+        (when gp-1
+          (dotimes (s5-1 2)
+            (while (begin
+                     (dotimes (s4-1 6)
+                       (when (not (or (not (-> gp-1 want s4-1 name))
+                                      (not (-> gp-1 want s4-1 display?))
+                                      (= (level-status *level* (-> gp-1 want s4-1 name)) 'active)
+                                      )
+                                  )
+                         (set! v1-118 #t)
+                         (goto cfg-109)
+                         )
+                       )
+                     (set! v1-118 #f)
+                     (label cfg-109)
+                     v1-118
+                     )
+              (set-blackout-frames (seconds 0.1))
+              (suspend)
+              )
+            (when (and (zero? s5-1) (< (-> self scene-index) (-> self scene-list length)))
+              (scene-player-method-24 self (-> self scene-list (-> self scene-index)) #t)
+              (when (-> self scene)
+                (set-setting! 'borrow (-> self scene borrow) 0.0 0)
+                (apply-settings *setting-control*)
+                )
               )
             )
           )
         )
+      (if (and *target* (focus-test? *target* in-head flut board pilot mech dark))
+          (send-event *target* 'change-mode 'normal)
+          )
       )
-    (if (and *target* (focus-test? *target* in-head flut board pilot mech dark))
-        (send-event *target* 'change-mode 'normal)
-        )
     (when (< (-> self scene-index) (-> self scene-list length))
       (scene-player-method-24 self (-> self scene-list (-> self scene-index)) #t)
       (while (and (-> self scene)
@@ -1151,7 +1164,8 @@
                         )
                     )
                   )
-        (set-blackout-frames (seconds 0.1))
+        (if (-> self movie?)
+            (set-blackout-frames (seconds 0.1)))
         (suspend)
         )
       )
@@ -1209,62 +1223,64 @@
       (set! (-> self scene-index) (+ (-> self scene-list length) -1))
       (scene-player-method-24 self (-> self scene-list (-> self scene-index)) #t)
       )
-    (let ((gp-2 (or (not (-> self scene)) (-> self scene blackout-end))))
-      (if gp-2
-          (set-blackout-frames (seconds 0.1))
-          )
-      (send-event *target* 'draw #t)
-      (send-event *target* 'trans 'reset)
-      (suspend)
-      (while (not (process-release? *target*))
+    (when (-> self movie?)
+      (let ((gp-2 (or (not (-> self scene)) (-> self scene blackout-end))))
+        (if gp-2
+            (set-blackout-frames (seconds 0.1))
+            )
+        (send-event *target* 'draw #t)
+        (send-event *target* 'trans 'reset)
         (suspend)
+        (while (not (process-release? *target*))
+          (suspend)
+          (if gp-2
+              (set-blackout-frames (seconds 0.1))
+              )
+          )
         (if gp-2
             (set-blackout-frames (seconds 0.1))
             )
         )
-      (if gp-2
-          (set-blackout-frames (seconds 0.1))
+      (if (nonzero? (the int (-> self scene music-delay)))
+          (persist-with-delay
+            *setting-control*
+            'music-delay
+            (the-as time-frame (the int (-> self scene music-delay)))
+            'sound-mode
+            #f
+            0.0
+            2
+            )
           )
-      )
-    (if (nonzero? (the int (-> self scene music-delay)))
-        (persist-with-delay
-          *setting-control*
-          'music-delay
-          (the-as time-frame (the int (-> self scene music-delay)))
-          'sound-mode
-          #f
-          0.0
-          2
-          )
-        )
-    (cond
-      ((and *target* (-> self scene) (-> self scene end-point-obj))
-       (let ((gp-3 (scene-decode-continue (the-as basic (-> self scene end-point-obj)))))
-         (when gp-3
-           (when (and *mp-debug-log?*
-                      (-> self scene)
-                      (nonzero? (-> self scene))
-                      (-> self scene name)
-                      (nonzero? (-> self scene name))
-                      (-> gp-3 name)
-                      (nonzero? (-> gp-3 name)))
-             (debug-log *mp-debug-log?*
-                        "[MP-ContinueTrace] scene-end scene=~S endpoint=~S~%"
+      (cond
+        ((and *target* (-> self scene) (-> self scene end-point-obj))
+         (let ((gp-3 (scene-decode-continue (the-as basic (-> self scene end-point-obj)))))
+           (when gp-3
+             (when (and *mp-debug-log?*
+                        (-> self scene)
+                        (nonzero? (-> self scene))
                         (-> self scene name)
-                        (-> gp-3 name))
+                        (nonzero? (-> self scene name))
+                        (-> gp-3 name)
+                        (nonzero? (-> gp-3 name)))
+               (debug-log *mp-debug-log?*
+                          "[MP-ContinueTrace] scene-end scene=~S endpoint=~S~%"
+                          (-> self scene name)
+                          (-> gp-3 name))
+               )
+             (set-continue! *game-info* gp-3 #f)
+             (send-event *target* 'continue gp-3)
              )
-           (set-continue! *game-info* gp-3 #f)
-           (send-event *target* 'continue gp-3)
            )
          )
-       )
-      (else
-        (send-event *target* 'trans 'restore (-> self old-target-pos))
+        (else
+          (send-event *target* 'trans 'restore (-> self old-target-pos))
+          )
         )
+      (if (and (-> self scene) (-> self scene save))
+          (auto-save-user)
+          )
       )
-    (if (and (-> self scene) (-> self scene save))
-        (auto-save-user)
-        )
     )
   )
 
@@ -1343,10 +1359,12 @@
       )
     (while (and (< (-> self scene-index) (-> self scene-list length)) (not (-> self aborted?)))
       (scene-player-method-23 self (the-as string (-> self scene-list (-> self scene-index))) #t)
-      (set-blackout-frames (seconds 0.1))
-      (suspend)
-      (set-blackout-frames (seconds 0.1))
-      (suspend)
+      (when (-> self movie?)
+        (set-blackout-frames (seconds 0.1))
+        (suspend)
+        (set-blackout-frames (seconds 0.1))
+        (suspend)
+        )
       (scene-player-method-25 self 0.0)
       (set! (-> self cur-speed) 0.0)
       (set-time! (-> self scene-start-time))
@@ -1356,7 +1374,7 @@
         (the-as art-joint-anim #f)
         (the-as
           (function process-drawable symbol)
-          (if (-> self scene abort)
+          (if (and (-> self movie?) (-> self scene abort))
               (lambda :behavior scene-player ()
                 (when (and (cpad-pressed? 0 triangle)
                            (mp-scene-skip-ready? self))
@@ -1421,8 +1439,10 @@
         )
     )
   :post (behavior ()
-    (mp-register-local-scene-if-ready! self)
-    (mp-scene-coordinator-draw-votes!)
+    (when (-> self movie?)
+      (mp-register-local-scene-if-ready! self)
+      (mp-scene-coordinator-draw-votes!)
+      )
     (when (-> self scene)
       (let ((gp-0 (-> self scene cut-list))
             (s5-0 (-> self skel root-channel 0 frame-group))
@@ -1453,7 +1473,7 @@
           )
       )
     (when (and (-> self scene) (nonzero? (-> self skel active-channels)))
-      (if (and (< (ja-aframe-num 0) 2.0) (logtest? (-> self skel status) (joint-control-status valid-spooled-frame)))
+      (if (and (-> self movie?) (< (ja-aframe-num 0) 2.0) (logtest? (-> self skel status) (joint-control-status valid-spooled-frame)))
           (set-blackout-frames 0)
           )
       (scene-player-method-25 self (ja-aframe-num 0))
@@ -1536,38 +1556,40 @@
           )
         )
       )
-    (when (cpad-pressed? 0 square)
-      (set! (-> *setting-control* user-default subtitle) (not (-> *setting-control* user-default subtitle)))
-      (set-time! (-> self subtitle-change-time))
-      )
-    (when (and (not (time-elapsed? (-> self subtitle-change-time) (seconds 2)))
-               (< (mod (- (current-time) (-> self subtitle-change-time)) 300) 210)
-               )
-      (let ((gp-6
-              (new 'stack 'font-context *font-default-matrix* 36 60 0.0 (font-color default) (font-flags shadow kerning))
-              )
-            )
-        (set-width! gp-6 440)
-        (set-height! gp-6 48)
-        (set-scale! gp-6 0.5)
-        (set! (-> gp-6 flags) (font-flags shadow kerning middle large))
-        (print-game-text
-          (lookup-text!
-            *common-text*
-            (if (-> *setting-control* user-default subtitle)
-                (text-id scene-subtitles-enabled)
-                (text-id scene-subtitles-disabled)
+    (when (-> self movie?)
+      (when (cpad-pressed? 0 square)
+        (set! (-> *setting-control* user-default subtitle) (not (-> *setting-control* user-default subtitle)))
+        (set-time! (-> self subtitle-change-time))
+        )
+      (when (and (not (time-elapsed? (-> self subtitle-change-time) (seconds 2)))
+                 (< (mod (- (current-time) (-> self subtitle-change-time)) 300) 210)
+                 )
+        (let ((gp-6
+                (new 'stack 'font-context *font-default-matrix* 36 60 0.0 (font-color default) (font-flags shadow kerning))
                 )
+              )
+          (set-width! gp-6 440)
+          (set-height! gp-6 48)
+          (set-scale! gp-6 0.5)
+          (set! (-> gp-6 flags) (font-flags shadow kerning middle large))
+          (print-game-text
+            (lookup-text!
+              *common-text*
+              (if (-> *setting-control* user-default subtitle)
+                  (text-id scene-subtitles-enabled)
+                  (text-id scene-subtitles-disabled)
+                  )
+              #f
+              )
+            gp-6
             #f
+            44
+            (bucket-id subtitle)
             )
-          gp-6
-          #f
-          44
-          (bucket-id subtitle)
           )
         )
+      (process-drawable-draw-subtitles)
       )
-    (process-drawable-draw-subtitles)
     )
   )
 
@@ -1588,20 +1610,23 @@
 ;; WARN: Using new Jak 2 rtype-of
 ;; WARN: Using new Jak 2 rtype-of
 ;; WARN: Using new Jak 2 rtype-of
-(defbehavior scene-player-init scene-player ((scene-obj object) (wait-sym symbol) (continue-name string))
+(defbehavior scene-player-init-internal scene-player ((scene-obj object) (wait-sym symbol) (continue-name string) (movie? symbol))
   "`object` arg can be an `(array scene)`, `pair of scene` or a `scene`"
-  ;; Snapshot whether the local target is already riding before any scene-triggered
-  ;; dismount logic gets a chance to clear the riding state.
-  (when (and *target*
-             (nonzero? *target*))
-    (set! *mp-was-riding-before-scene*
-          (the-as symbol
-                  (or (and (-> *target* next-state)
-                           (nonzero? (-> *target* next-state))
-                           (= (-> *target* next-state name) 'target-ride-along))
-                      (and (-> *target* state)
-                           (nonzero? (-> *target* state))
-                           (= (-> *target* state name) 'target-ride-along)))))
+  (set! (-> self movie?) movie?)
+  (when movie?
+    ;; Snapshot whether the local target is already riding before any scene-triggered
+    ;; dismount logic gets a chance to clear the riding state.
+    (when (and *target*
+               (nonzero? *target*))
+      (set! *mp-was-riding-before-scene*
+            (the-as symbol
+                    (or (and (-> *target* next-state)
+                             (nonzero? (-> *target* next-state))
+                             (= (-> *target* next-state name) 'target-ride-along))
+                        (and (-> *target* state)
+                             (nonzero? (-> *target* state))
+                             (= (-> *target* state name) 'target-ride-along)))))
+      )
     )
   (process-entity-set! self (the-as entity #f))
   ;; og:preserve-this changed from 512
@@ -1647,24 +1672,29 @@
   (cond
     ((= (-> self scene-list (-> self scene-index) type) scene)
      (set! (-> self scene) (-> self scene-list (-> self scene-index)))
-     (if (-> self scene)
-         (scene-method-15 (-> self scene) (-> self anim))
-         )
+     (when (-> self scene)
+       (scene-method-15 (-> self scene) (-> self anim))
+       (scene-player-method-23 self (the-as string (-> self scene-list (-> self scene-index))) #f)
+       )
      )
     (else
-      (set-blackout-frames (seconds 0.2))
+      (if movie?
+          (set-blackout-frames (seconds 0.2)))
       (set! (-> self scene) #f)
       )
     )
-  (when *mp-was-riding-before-scene*
-    (set! *mp-was-riding-before-scene* (can-daxter-revert-to-ride-along-after-scene? self))
+  (set! (-> self aborted?) #f)
+  (when movie?
+    (when *mp-was-riding-before-scene*
+      (set! *mp-was-riding-before-scene* (can-daxter-revert-to-ride-along-after-scene? self))
+      )
+    (mp-tomb-boulder-adjust-scene! self)
+    (set! (-> self aborted?)
+          (if (and (-> self scene)
+                   (string= (-> self scene name) *mp-last-scene-name*))
+              #t
+              #f))
     )
-  (mp-tomb-boulder-adjust-scene! self)
-  (set! (-> self aborted?)
-        (if (and (-> self scene)
-                 (string= (-> self scene name) *mp-last-scene-name*))
-            #t
-            #f))
   (set! (-> self gui-id) (add-process
                            *gui-control*
                            self
@@ -1678,32 +1708,44 @@
                            0
                            )
         )
-  (set! *scene-player* (the-as (pointer scene-player) (process->ppointer self)))
+  (when movie?
+    (set! *scene-player* (the-as (pointer scene-player) (process->ppointer self)))
 
-  (when (not (-> self aborted?))
-    (set! *scene-player*
-          (the-as (pointer scene-player) (process->ppointer self)))
+    (when (not (-> self aborted?))
+      (set! *scene-player*
+            (the-as (pointer scene-player) (process->ppointer self)))
+      )
+    
+    (when (-> self scene)
+      (copy-string<-string *mp-last-scene-name* (-> self scene name))
+      )
+
+    (when (and (-> self scene)
+               (nonzero? (-> self scene))
+               (-> self scene name)
+               (nonzero? (-> self scene name))
+               (mp-mountain-resolution-scene? (-> self scene name))
+               (not *mp-processing-remote-event*))
+      (mp-event-hook-scene! (mp-scene-state started) (-> self scene name)))
+
+    (mp-register-local-scene-if-ready! self)
+
+    (set! *display-entity-errors* #f)
+    (set-setting! 'speech-control #f 0.0 0)
+    (set-setting! 'allow-progress #f 0.0 0)
+    (apply-settings *setting-control*)
     )
-  
-  (when (-> self scene)
-    (copy-string<-string *mp-last-scene-name* (-> self scene name))
-    )
-
-  (when (and (-> self scene)
-             (nonzero? (-> self scene))
-             (-> self scene name)
-             (nonzero? (-> self scene name))
-             (mp-mountain-resolution-scene? (-> self scene name))
-             (not *mp-processing-remote-event*))
-    (mp-event-hook-scene! (mp-scene-state started) (-> self scene name)))
-
-  (mp-register-local-scene-if-ready! self)
-
-  (set! *display-entity-errors* #f)
-  (set-setting! 'speech-control #f 0.0 0)
-  (set-setting! 'allow-progress #f 0.0 0)
-  (apply-settings *setting-control*)
   (go-virtual wait wait-sym)
+  (none)
+  )
+
+(defbehavior scene-player-init scene-player ((scene-obj object) (wait-sym symbol) (continue-name string))
+  (scene-player-init-internal scene-obj wait-sym continue-name #t)
+  (none)
+  )
+
+(defbehavior scene-player-init-no-movie scene-player ((scene-obj object) (wait-sym symbol) (continue-name string))
+  (scene-player-init-internal scene-obj wait-sym continue-name #f)
   (none)
   )
 

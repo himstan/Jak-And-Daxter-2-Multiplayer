@@ -1642,7 +1642,11 @@
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
     (case message
       (('trigger)
-       (process-spawn scene-player :init scene-player-init "mtn-plat-buried-rocks-a" #t #f)
+       (mp-mountain-resolution-report! MP_MOUNTAIN_RESOLUTION_BURIED_ROCKS)
+       (process-spawn scene-player :init scene-player-init-no-movie "mtn-plat-buried-rocks-a" #f #f)
+       )
+      (('mp-trigger)
+       (process-spawn scene-player :init scene-player-init-no-movie "mtn-plat-buried-rocks-a" #f #f)
        )
       (('done)
        (go-virtual done #f)

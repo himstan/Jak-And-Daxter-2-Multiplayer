@@ -74,13 +74,6 @@
   #f
   )
 
-(register-region-override!
-  150
-  '(apply mp-mountain-region-150-enter)
-  #f
-  #f
-  )
-
 (defun mp-mountain-send-event! ((name string) (message symbol))
   (let ((proc (process-by-ename name)))
     (when (and proc (nonzero? proc))
@@ -90,20 +83,11 @@
   )
 
 (defun mp-mountain-buried-rocks-apply! ()
-  (mp-mountain-send-event! "mtn-plat-buried-rocks-2" 'die)
-  (let ((rocks-entity (entity-by-name "mtn-plat-buried-rocks-2")))
-    (when (and rocks-entity (nonzero? rocks-entity))
-      (kill! rocks-entity))
+  (let ((proc (process-by-ename "mtn-plat-buried-rocks-2")))
+    (when (and proc (nonzero? proc))
+      (send-event proc 'mp-trigger)
+      )
     )
-  (mp-mountain-send-event! "mtn-plat-buried-4" 'trigger)
-  (mp-mountain-send-event! "mtn-plat-buried-5" 'trigger)
-  (mp-mountain-send-event! "mtn-plat-buried-6" 'trigger)
-  (none)
-  )
-
-(defun mp-mountain-region-150-enter ((ctx script-context))
-  (mp-mountain-buried-rocks-apply!)
-  (mp-mountain-resolution-report! MP_MOUNTAIN_RESOLUTION_BURIED_ROCKS)
   (none)
   )
 

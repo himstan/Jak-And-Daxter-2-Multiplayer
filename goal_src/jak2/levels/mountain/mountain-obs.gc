@@ -2702,24 +2702,13 @@
 (defun mtn-button-on-activate-override ((button-name string))
   (cond
     ((string= button-name "mtn-button-1")
-     '(begin
-        (send-event "mtn-step-plat-rocks-a-2" 'done)
-        (send-event "mtn-plat-eject-14" 'eject)
-        )
+     '(begin (scene-play-no-movie "mtn-step-plat-rocks-a"))
      )
     ((string= button-name "mtn-button-2")
-     '(begin
-        (send-event "mtn-step-plat-rocks-c-2" 'done)
-        (send-event "mtn-plat-eject-15" 'eject)
-        (send-event "mtn-plat-eject-13" 'eject)
-        )
+     '(begin (scene-play-no-movie "mtn-step-plat-rocks-c"))
      )
     ((string= button-name "mtn-button-6")
-     '(begin
-        (send-event "mtn-step-plat-rocks-b-4" 'done)
-        (send-event "mtn-plat-eject-16" 'eject)
-        (send-event "mtn-plat-eject-17" 'eject)
-        )
+     '(begin (scene-play-no-movie "mtn-step-plat-rocks-b"))
      )
     (else #f)
     )

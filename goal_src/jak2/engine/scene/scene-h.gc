@@ -8,6 +8,7 @@
 ;; NOTE - for default-menu
 (declare-type scene-player process-drawable)
 (define-extern scene-player-init (function object symbol string none :behavior scene-player))
+(define-extern scene-player-init-no-movie (function object symbol string none :behavior scene-player))
 
 ;; DECOMP BEGINS
 
@@ -97,6 +98,7 @@
    (unknown-time          time-frame  :overlay-at speed-change-speed)
    (subtitle-change-time  time-frame)
    (user-sound            sound-id    4)
+   (movie?                symbol)
    )
   (:state-methods
     (wait symbol)

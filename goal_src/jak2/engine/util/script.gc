@@ -1279,7 +1279,12 @@
                     (s2-0 (-> arg0 param 3))
                     (s4-0 (the-as object #f))
                     )
-                (when gp-0
+                (when (and gp-0
+                           (or (not *target*)
+                               (!= gp-0 *target*)
+                               (not (and (-> arg0 process)
+                                         (type? (-> arg0 process) scene-player)
+                                         (not (-> (the-as scene-player (-> arg0 process)) movie?))))))
                   (set! (-> s5-0 from) (process->ppointer (-> arg0 process)))
                   (set! (-> s5-0 message) (the-as symbol (-> arg0 param 2)))
                   (let ((a0-3 s2-0))
@@ -3438,6 +3443,17 @@
   (set! (-> v1-181 name) 'mp-session-client?)
   (set! (-> v1-181 spec) '((return macro (boolean)) (function macro (symbol))))
   (set! (-> v1-181 func) (lambda ((arg0 script-context)) (mp-session-client?)))
+  )
+
+(let ((v1-183 (-> *script-form* 88)))
+  (set! (-> v1-183 name) 'scene-play-no-movie)
+  (set! (-> v1-183 spec) '((return macro (none)) (function macro (symbol)) (name eval (string pair))))
+  (set! (-> v1-183 func) (lambda ((arg0 script-context))
+                           (if (-> arg0 side-effect?)
+                               (process-spawn scene-player :init scene-player-init-no-movie (-> arg0 param 1) #f #f)
+                               )
+                           )
+        )
   )
 
 (let ((v1-182 (new 'global 'script-context (process->ppointer pp) pp (the-as vector #f))))
