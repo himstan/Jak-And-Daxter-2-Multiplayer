@@ -2906,7 +2906,7 @@
             :info #f
             :borrow '()
             :open? #f
-            :on-close #f
+            :on-close '(begin (task-close! "mountain-button-1") (task-close! "mountain-button-2") (task-close! "mountain-buried-rocks"))
             :description (text-id progress-missions-mountain-lens)
             )
           (new 'static 'game-task-node-info
@@ -2994,7 +2994,7 @@
             :info #f
             :borrow '()
             :open? #f
-            :on-close #f
+            :on-close '(task-close! "mountain-button-6")
             :description (text-id progress-missions-mountain-gear)
             )
           (new 'static 'game-task-node-info
@@ -12324,6 +12324,82 @@
             :open? #f
             :on-close '(send-event "tomb-boulder-door-1" 'reset)
             :description (text-id progress-missions-tomb-poles)
+            )
+          (new 'static 'game-task-node-info
+            :level 'mountain
+            :task (game-task mountain-collection)
+            :name "mountain-button-1"
+            :when-open #f
+            :flags (game-task-node-flag save-on-life)
+            :parent-node (new 'static 'array game-task-node 4
+              (game-task-node none)
+              (game-task-node none)
+              (game-task-node none)
+              (game-task-node none)
+              )
+            :on-open #f
+            :info #f
+            :borrow '()
+            :open? #f
+            :on-close #f
+            :description (text-id progress-missions-mountain-lens)
+            )
+          (new 'static 'game-task-node-info
+            :level 'mountain
+            :task (game-task mountain-collection)
+            :name "mountain-button-2"
+            :when-open #f
+            :flags (game-task-node-flag save-on-life)
+            :parent-node (new 'static 'array game-task-node 4
+              (game-task-node none)
+              (game-task-node none)
+              (game-task-node none)
+              (game-task-node none)
+              )
+            :on-open #f
+            :info #f
+            :borrow '()
+            :open? #f
+            :on-close #f
+            :description (text-id progress-missions-mountain-shard)
+            )
+          (new 'static 'game-task-node-info
+            :level 'mountain
+            :task (game-task mountain-collection)
+            :name "mountain-button-6"
+            :when-open #f
+            :flags (game-task-node-flag save-on-life)
+            :parent-node (new 'static 'array game-task-node 4
+              (game-task-node none)
+              (game-task-node none)
+              (game-task-node none)
+              (game-task-node none)
+              )
+            :on-open #f
+            :info #f
+            :borrow '()
+            :open? #f
+            :on-close #f
+            :description (text-id progress-missions-mountain-gear)
+            )
+          (new 'static 'game-task-node-info
+            :level 'mountain
+            :task (game-task mountain-collection)
+            :name "mountain-buried-rocks"
+            :when-open #f
+            :flags (game-task-node-flag save-on-life)
+            :parent-node (new 'static 'array game-task-node 4
+              (game-task-node none)
+              (game-task-node none)
+              (game-task-node none)
+              (game-task-node none)
+              )
+            :on-open #f
+            :info #f
+            :borrow '()
+            :open? #f
+            :on-close #f
+            :description (text-id progress-missions-mountain-gear)
             )
           )
         )

@@ -1469,6 +1469,14 @@
   (call-parent-method this offset)
   )
 
+(defun centurion-task-node ((name string))
+  (cond
+    ((string= name "centurion-6") (game-task-node mountain-button-2))
+    ((string= name "centurion-8") (game-task-node mountain-buried-rocks))
+    (else (game-task-node none))
+    )
+  )
+
 (defmethod init-enemy! ((this centurion))
   "Common method called to initialize the enemy, typically sets up default field values and calls ancillary helper methods"
   (stack-size-set! (-> this main-thread) 256)
@@ -1523,8 +1531,11 @@
         )
     (set! (-> s5-1 heading quad) (-> v1-36 quad))
     )
-  0
   (set! (-> this first-shoot?) #t)
-  0
+  (let ((ref-task-node (centurion-task-node (-> this name))))
+      (if (and (!= ref-task-node (game-task-node none)) (task-node-closed? ref-task-node))
+        (go (method-of-object this die-fast))
+        )
+    )
   (none)
   )

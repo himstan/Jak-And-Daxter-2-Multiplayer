@@ -1689,6 +1689,15 @@
   (none)
   )
 
+(defun mtn-plat-eject-task-node ((name string))
+  (cond
+    ((string= name "mtn-plat-eject-14") (game-task-node mountain-button-1))
+    ((or (string= name "mtn-plat-eject-15") (string= name "mtn-plat-eject-13")) (game-task-node mountain-button-2))
+    ((or (string= name "mtn-plat-eject-16") (string= name "mtn-plat-eject-17")) (game-task-node mountain-button-6))
+    (else (game-task-node none))
+    )
+  )
+
 ;; WARN: Return type mismatch object vs none.
 (defmethod init-from-entity! ((this mtn-plat-eject) (arg0 entity-actor))
   "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
@@ -1713,10 +1722,13 @@
     (vector-orient-by-quat! s5-2 s5-2 (-> this root quat))
     (vector+! (-> this root trans) (-> this root trans) s5-2)
     )
-  (if (and (-> this entity) (logtest? (-> this entity extra perm status) (entity-perm-status subtask-complete)))
-      (go (method-of-object this eject))
-      (go (method-of-object this wait))
-      )
+  (let ((node (mtn-plat-eject-task-node (-> this name))))
+    (if (or (and (!= node (game-task-node none)) (task-node-closed? node))
+            (and (-> this entity) (logtest? (-> this entity extra perm status) (entity-perm-status subtask-complete))))
+        (go (method-of-object this eject))
+        (go (method-of-object this wait))
+        )
+    )
   (none)
   )
 
@@ -2756,9 +2768,37 @@
   :code sleep-code
   )
 
+(defun mtn-button-task-node ((name string))
+  (cond
+    ((string= name "mtn-button-1") (game-task-node mountain-button-1))
+    ((string= name "mtn-button-2") (game-task-node mountain-button-2))
+    ((string= name "mtn-button-6") (game-task-node mountain-button-6))
+    (else (game-task-node none))
+    )
+  )
+
+(defun mtn-button-resolution-id ((name string))
+  (cond
+    ((string= name "mtn-button-1") MP_MOUNTAIN_RESOLUTION_BUTTON_1)
+    ((string= name "mtn-button-2") MP_MOUNTAIN_RESOLUTION_BUTTON_2)
+    ((string= name "mtn-button-6") MP_MOUNTAIN_RESOLUTION_BUTTON_6)
+    (else (the-as uint 0))
+    )
+  )
+
 (defstate pressed (mtn-button)
   :virtual #t
   :code (behavior ((arg0 symbol))
+    (let ((node (mtn-button-task-node (-> self name)))
+          (res-id (mtn-button-resolution-id (-> self name))))
+      (when (and (!= res-id 0) (not *mp-processing-remote-event*))
+        (mp-mountain-resolution-report! res-id)
+        )
+      (when (and (!= node (game-task-node none)) (mp-session-host?))
+        (when (not (task-node-closed? node))
+          (task-node-close! node))
+        )
+      )
     (when (not arg0)
       (let ((gp-0 (-> self on-activate)))
         (if gp-0
@@ -2843,10 +2883,13 @@
     (joint-control-channel-group! a0-22 (the-as art-joint-anim (-> this draw art-group data 2)) num-func-loop!)
     )
   (transform-post)
-  (if (and (-> this entity) (logtest? (-> this entity extra perm status) (entity-perm-status subtask-complete)))
-      (go (method-of-object this pressed) #t)
-      (go (method-of-object this idle))
-      )
+  (let ((node (mtn-button-task-node (-> this name))))
+    (if (or (and (!= node (game-task-node none)) (task-node-closed? node))
+            (and (-> this entity) (logtest? (-> this entity extra perm status) (entity-perm-status subtask-complete))))
+        (go (method-of-object this pressed) #t)
+        (go (method-of-object this idle))
+        )
+    )
   (none)
   )
 

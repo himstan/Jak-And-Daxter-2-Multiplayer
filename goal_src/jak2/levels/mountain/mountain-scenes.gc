@@ -1643,9 +1643,11 @@
     (case message
       (('trigger)
        (mp-mountain-resolution-report! MP_MOUNTAIN_RESOLUTION_BURIED_ROCKS)
+       (task-node-close! (game-task-node mountain-buried-rocks))
        (process-spawn scene-player :init scene-player-init-no-movie "mtn-plat-buried-rocks-a" #f #f)
        )
       (('mp-trigger)
+       (task-node-close! (game-task-node mountain-buried-rocks))
        (process-spawn scene-player :init scene-player-init-no-movie "mtn-plat-buried-rocks-a" #f #f)
        )
       (('done)
@@ -1727,7 +1729,8 @@
     )
   (set! (-> this draw force-lod) 1)
   (cond
-    ((and (-> this entity) (logtest? (-> this entity extra perm status) (entity-perm-status subtask-complete)))
+    ((or (task-node-closed? (game-task-node mountain-buried-rocks))
+         (and (-> this entity) (logtest? (-> this entity extra perm status) (entity-perm-status subtask-complete))))
      (go (method-of-object this done) #t)
      )
     (else
@@ -1796,8 +1799,8 @@
    @see [[sync-eased]]"
   (cond
     ((or (logtest? (-> this path flags) (path-control-flag not-found))
-         (and (not (and (-> this entity) (logtest? (-> this entity extra perm status) (entity-perm-status subtask-complete)))
-                   )
+         (and (not (or (task-node-closed? (game-task-node mountain-buried-rocks))
+                       (and (-> this entity) (logtest? (-> this entity extra perm status) (entity-perm-status subtask-complete)))))
               (logtest? (-> this options) (actor-option blocked))
               )
          )
