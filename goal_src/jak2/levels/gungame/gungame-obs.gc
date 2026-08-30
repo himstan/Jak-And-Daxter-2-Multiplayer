@@ -705,7 +705,6 @@
                  (= *mp-gungame-event-kind* MP_EVENT_MISSION_GUNGAME_TARGET_BROKEN)
                  (= *mp-gungame-event-kind* MP_EVENT_MISSION_GUNGAME_TARGET_SPAWNED)
                  (= *mp-gungame-event-kind* MP_EVENT_MISSION_GUNGAME_COURSE_END)))
-    ;; If the manager isn't already running the right course, set it up
     (let ((target-course (mp-gungame-course-by-id *mp-gungame-course-id*)))
       (when (and target-course (!= (-> this course) target-course))
         (set! (-> this course) target-course)
@@ -715,7 +714,6 @@
           (let ((crates (mp-gungame-crates-by-id *mp-gungame-course-id*)))
             (when crates (training-manager-method-23 this crates))
             )
-          ;; Open the entrance door (logical inverse of the end-door)
           (mp-gungame-door-open! this (the-as int (logxor end-door 1)) #f)
           )
         (go (method-of-object this course))

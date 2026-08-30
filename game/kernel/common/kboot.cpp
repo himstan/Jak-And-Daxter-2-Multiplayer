@@ -44,7 +44,7 @@ void kboot_init_globals_common() {
   SplashScreen = 1;
   strcpy(DebugBootLevel, "#f");         // no specified level
   strcpy(DebugBootMessage, "play");     // play mode, the default retail mode
-  strcpy(DebugBootContinue, "#f");      // no specified continue point
-  strcpy(DebugBootSnapshot, "#f");      // no specified snapshot
+  strcpy(DebugBootContinue, "#f");
+  strcpy(DebugBootSnapshot, "#f");
   memset(&masterConfig, 0, sizeof(MasterConfig));
 }

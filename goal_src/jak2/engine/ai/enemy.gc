@@ -1184,7 +1184,7 @@
       (logior! (-> self enemy-flags) (enemy-flag directed))
       )
   (if (-> arg1 battle-enemy?)
-      (logior! (-> self enemy-flags) (enemy-flag mp-battle-enemy))
+      (logior! (-> self enemy-flags) (enemy-flag battle-spawned))
       )
   (if (-> arg1 no-initial-move-to-ground?)
       (set! (-> self enemy-flags)
@@ -1197,14 +1197,14 @@
   (vector-identity! (-> self root scale))
   (init-enemy! self)
   (if (-> arg1 battle-enemy?)
-      (logior! (-> self enemy-flags) (enemy-flag mp-battle-enemy))
+      (logior! (-> self enemy-flags) (enemy-flag battle-spawned))
       )
   (when (and (-> self entity) (nonzero? (-> self entity)))
     (let ((spawn-aid (if (and arg1 (nonzero? arg1) (nonzero? (-> arg1 aid-override)))
                          (-> arg1 aid-override)
                          (-> self entity aid))))
       (when (nonzero? spawn-aid)
-        (format 0 "Spawning enemy with enemy-init-by-other with aid=~D, setting net-id to aid...~%"
+        (debug-log *mp-debug-log?* "[Enemy] Spawning enemy with enemy-init-by-other with aid=~D, setting net-id to aid...~%"
                 spawn-aid)
         (set! (-> self net-id) spawn-aid)
         )
@@ -1273,7 +1273,7 @@
   (process-drawable-from-entity! this arg0)
   (init-enemy! this)
   (when (and (-> this entity) (nonzero? (-> this entity)) (nonzero? (-> this entity aid)))
-        (format 0 "Spawning enemy with init-from-entity with aid=~D, setting net-id to aid...~%"
+        (debug-log *mp-debug-log?* "[Enemy] Spawning enemy with init-from-entity with aid=~D, setting net-id to aid...~%"
                 (-> this entity aid))
         (set! (-> this net-id) (-> this entity aid))
       )

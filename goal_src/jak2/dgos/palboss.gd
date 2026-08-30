@@ -1,8 +1,8 @@
 ("PALBOSS.DGO"
  ("squid-part.o"
   "squid-setup.o"
-  "mp-palace-squid-state-mapper.o"
-  "mp-palace-squid-sync.o"
+  "mp-palace-squid-state-mapper.o" ;; added
+  "mp-palace-squid-sync.o" ;; added
   "squid-extras.o"
   "squid-states.o"
   "baron-squid+0-ag.go"

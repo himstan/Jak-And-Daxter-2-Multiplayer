@@ -146,12 +146,12 @@
     (let ((s4-0 (-> arg0 bone transform)))
       (quaternion->matrix s4-0 (-> arg2 quat))
       (.lvf vf1 (&-> (new 'static 'vector :x 1.0 :y 1.0 :z 1.0 :w 1.0) quad))
-      ;; GUARD: If arg1 or its bone is invalid, use a zero vector to prevent crash
+      ;; use a zero vector to prevent crash, usually happened when coming out of drill-warp, that level is weird
       (if (and arg1 (-> arg1 bone))
           (.lvf vf2 (&-> (-> arg1 bone) transform trans quad))
           (begin
             (.mov.vf vf2 vf0)
-            (set! (-> (new 'stack-no-clear 'vector) quad) (the-as uint128 0))) ;; Dummy to keep logic happy
+            (set! (-> (new 'stack-no-clear 'vector) quad) (the-as uint128 0)))
           )
       (.lvf vf6 (&-> arg2 trans quad))
       (.lvf vf3 (&-> s4-0 quad 0))
@@ -332,9 +332,9 @@
               (set! (-> (the-as (inline-array cspace) v0-0) 0 param0)
                 (the-as (function cspace transformq none) cspace<-cspace-normalized!)
                 )
-                (set! (-> (the-as (inline-array cspace) v0-0) 0 param1) (the-as basic (-> self parent 0 node-list data 25)))
-                (set! (-> (the-as (inline-array cspace) v0-0) 0 param2) #f)
-            )
+              (set! (-> (the-as (inline-array cspace) v0-0) 0 param1) (the-as basic (-> self parent 0 node-list data 25)))
+              (set! (-> (the-as (inline-array cspace) v0-0) 0 param2) #f)
+              )
             (begin
               (set! (-> (the-as (inline-array cspace) v0-0) 0 param0)
                 (the-as (function cspace transformq none) cspace<-board-transformq+local-offset-normalized!)
@@ -343,25 +343,8 @@
                     (the-as basic (the-as transformq (-> self parent 0 board board-trans)))
                     )
               (set! (-> (the-as (inline-array cspace) v0-0) 0 param2) (the-as basic *sidekick-board-local-offset*))
+              )
             )
-          )
-          )
-         (('manipy)
-          (let ((mp (the-as manipy (-> block param 1))))
-            (set! v0-0 (-> self node-list data))
-            (if (or (!= (-> *level* loading-level) (-> *level* default-level))
-                    (zero? (-> mp node-list))
-                    (<= (-> mp node-list length) 23))
-                (begin
-                  ;; Fallback: Snap to root if nodes aren't safe
-                  (set! (-> (the-as (inline-array cspace) v0-0) 0 param0) (the-as (function cspace transformq none) cspace<-cspace!))
-                  (set! (-> (the-as (inline-array cspace) v0-0) 0 param1) (the-as basic (-> mp node-list data 0)))
-                  (set! (-> (the-as (inline-array cspace) v0-0) 0 param2) #f))
-                (begin
-                  ;; Precise: Jak's shoulder
-                  (set! (-> (the-as (inline-array cspace) v0-0) 0 param0) (the-as (function cspace transformq none) cspace<-cspace+transformq!))
-                  (set! (-> (the-as (inline-array cspace) v0-0) 0 param1) (the-as basic (-> mp node-list data 23)))
-                  (set! (-> (the-as (inline-array cspace) v0-0) 0 param2) (the-as basic (-> self offset))))))
           )
          (else
            (set! v0-0 (-> self node-list data))
@@ -496,8 +479,6 @@
         (set! (-> self offset trans y) (* 204.8 f0-3))
         (set! (-> self offset trans z) (* 409.6 f0-3))
         )
-
-
       (update-anim-data (-> self skel))
       (sidekick-apply-visual-head! self)
       (when *debug-segment*
@@ -590,7 +571,6 @@
     (if (logtest? (-> self skel status) (joint-control-status eye-anim-valid eye-anim))
         (merc-eye-anim self)
         )
-
     (when (!= (not (-> *setting-control* user-current mirror)) (not (-> self mirror)))
       (cond
         ((-> self mirror)

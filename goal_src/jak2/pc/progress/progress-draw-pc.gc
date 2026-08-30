@@ -2379,7 +2379,6 @@
     (set! (-> arg1 origin x) (the float (adjust-game-x (-> arg1 origin x))))
     (*! (-> arg1 width) (-> *pc-settings* aspect-ratio-reciprocal))
     )
-  ;; CONNECTION LOST
   (print-game-text
     (lookup-text! *common-text* (text-id progress-reconnect-lost) #f)
     arg1
@@ -2389,7 +2388,6 @@
     )
   (+! (-> arg1 origin y) 115.0)
   (set-height! arg1 95)
-  ;; ATTEMPTING TO RECONNECT...
   (print-game-text
     (lookup-text! *common-text* (text-id progress-reconnect-attempt) #f)
     arg1
@@ -2401,7 +2399,6 @@
   (set-height! arg1 50)
   (set-color! arg1 (progress-selected 0))
   (draw-highlight (the int (+ 12.0 (-> arg1 origin y))) 24 (-> arg1 alpha))
-  ;; PRESS <X> TO DISCONNECT
   (print-game-text
     (lookup-text! *common-text* (text-id progress-reconnect-disconnect) #f)
     arg1
@@ -2427,7 +2424,6 @@
     (set! (-> arg1 origin x) (the float (adjust-game-x (-> arg1 origin x))))
     (*! (-> arg1 width) (-> *pc-settings* aspect-ratio-reciprocal))
     )
-  ;; HOST HAS LEFT THE SESSION
   (print-game-text
     (lookup-text! *common-text* (text-id progress-multi-host-left-msg) #f)
     arg1
@@ -2437,13 +2433,12 @@
     )
   (+! (-> arg1 origin y) 115.0)
   (set-height! arg1 95)
-  ;; (blank space)
   
   (+! (-> arg1 origin y) 90.0)
   (set-height! arg1 50)
   (set-color! arg1 (progress-selected 0))
   (draw-highlight (the int (+ 12.0 (-> arg1 origin y))) 24 (-> arg1 alpha))
-  ;; PRESS <X> TO RETURN TO MAIN MENU
+  
   (print-game-text
     (lookup-text! *common-text* (text-id progress-multi-host-left-disc) #f)
     arg1
@@ -2482,7 +2477,6 @@
     (+! (-> arg1 origin y) 80.0)
     (set-height! arg1 120)
     (set-scale! arg1 0.45)
-    ;; DESCRIPTION
     (print-game-text
       (lookup-text! *common-text* (text-id progress-multi-demo-end-msg) #f)
       arg1
@@ -2495,7 +2489,6 @@
     (set-height! arg1 50)
     (set-color! arg1 (progress-selected 0))
     (draw-highlight (the int (+ 12.0 (-> arg1 origin y))) 24 (-> arg1 alpha))
-    ;; CONFIRM PROMPT
     (print-game-text
       (lookup-text! *common-text* (text-id progress-multi-demo-end-close) #f)
       arg1
@@ -2510,7 +2503,6 @@
 
 
 (defmethod draw-option ((obj menu-demo-disclaimer-option) (p progress) (arg1 font-context) (arg2 int) (arg3 symbol))
-  "Draw the startup disclaimer screen: title, body text, and press-X prompt."
   (when (and p (nonzero? p) arg1 (nonzero? arg1))
     (set! (-> arg1 alpha) (- 1.0 (-> p menu-transition)))
     (set-color! arg1 (font-color progress))

@@ -46,9 +46,6 @@
               (alarm (-> this sprites 0)))
           (when (and alarm (nonzero? alarm))
             (let ((alarm-height (hud-map-sprite-screen-height alarm)))
-              ;; The ring supplies the horizontal collision span so its
-              ;; transparent alarm margin does not collide with center text.
-              ;; The alarm still expands the vertical clearance envelope.
               (when (> alarm-height 0)
                 (let ((alarm-top (- base-y 11)))
                   (set! footprint-top (min footprint-top alarm-top))
@@ -362,6 +359,7 @@
   (set! (-> this sprites 7 angle) 16384.0)
   (set! (-> this sprites 7 pos z) #xfffff6)
   (set! (-> this sprites 8 tex) (get-texture hud-health-01 level-default-minimap))
+  ;; we free up 3 textures by reusing the first hud-health and just rotate it, interesting that they didnt do this in the first place
   (set! (-> this sprites 9 tex) (get-texture hud-health-01 level-default-minimap))
   (set! (-> this sprites 9 angle) -16384.0)
   (set! (-> this sprites 10 tex) (get-texture hud-health-01 level-default-minimap))
@@ -421,6 +419,7 @@
     (cond
       ((or (= (-> this values 2 target) 100) (= (-> *target* game eco-pill-dark) 100.0))
        (if (mp-target-daxter? *target*)
+            ;; the second hud texture is the one of the three freed up hud health textures thats overriden
             (set! (-> this sprites 0 tex) (get-texture hud-health-02 level-default-minimap))
             (set! (-> this sprites 0 tex) (get-texture hud-jak-head-01 level-default-minimap))
             )
@@ -446,6 +445,7 @@
        )
       (else
         (if (mp-target-daxter? *target*)
+            ;; the second hud texture is the one of the three freed up hud health textures thats overriden
             (set! (-> this sprites 0 tex) (get-texture hud-health-02 level-default-minimap))
             (set! (-> this sprites 0 tex) (get-texture hud-jak-head-01 level-default-minimap))
             )
@@ -496,6 +496,7 @@
         (add-process *gui-control* this (gui-channel hud-lower-left-2) (gui-action hidden) (-> this name) 81920.0 0)
         )
   (if (mp-target-daxter? *target*)
+      ;; the second hud texture is the one of the three freed up hud health textures thats overriden
       (set! (-> this sprites 0 tex) (get-texture hud-health-02 level-default-minimap))
       (set! (-> this sprites 0 tex) (get-texture hud-jak-head-01 level-default-minimap))
       )

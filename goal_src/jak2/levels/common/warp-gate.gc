@@ -1131,7 +1131,6 @@
           (* 2.4 (- (-> self control unknown-vector38 z) (-> self control unknown-vector37 z)))
           )
     (when (logtest? (-> self control status) (collide-status on-surface))
-        (format 0 "hit ground")
         (go target-hit-ground #f)
         )
     )
@@ -1233,7 +1232,6 @@
       (suspend)
       (ja :num! (seek!))
       )
-    (format 0 "done  ~%")
     (target-falling-anim -1 (seconds 0.33))
     )
   :post target-no-move-post

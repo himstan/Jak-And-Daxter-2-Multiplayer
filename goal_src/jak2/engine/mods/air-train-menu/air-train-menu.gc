@@ -8,16 +8,16 @@
   (let* ((menu (-> this menu-list))
           (list-length (-> menu length))
           (available-idxs (new 'static 'boxed-array :type int32)) ;; array to store the indexes of the options that are available for selection
-          (available-count 0) ;; stores the amount of options that are available for selection
+          (available-count 0) ;; stores the amount of options that are available for selection 
           )
     (dotimes (i list-length)
       (let* ((allowed? (-> menu i allow-when))
              (forbidden? (-> menu i forbid-when)))
         ;; include the option if `allowed?` is set and returns true,
         ;; and `forbidden?` is either not set (not forbidden?) or does not return true (not (forbidden?)).
-        (when (and (or (not allowed?) (allowed?))
+        (when (and (or (not allowed?) (allowed?)) 
                    (or (not forbidden?) (not (forbidden?))))
-          (set! (-> available-idxs available-count) i) ;; store the available option indexes in `available-idxs` array
+          (set! (-> available-idxs available-count) i) ;; store the available option indexes in `available-idxs` array  
           (+! available-count 1)
           )
         )
@@ -30,7 +30,7 @@
             (have-prev-page? (> page 0)) ;; is there a previous page?
             (items-this-page (min *wm-at-items-per-page* (- available-count start-idx))) ;; amount of items in this page (only destination options is counted)
             (extra-options (cond ((and have-prev-page? have-next-page?) 2) ;; add 2 if have next and previous pages
-                                  (have-prev-page? 1) ;; add 1 if only have previous page
+                                  (have-prev-page? 1) ;; add 1 if only have previous page 
                                   (have-next-page? 1) ;; add 1 if only have next page
                                   (else 0))) ;; no extra option
             (total-items (+ items-this-page extra-options)) ;; total entries displayed on screen
@@ -96,7 +96,7 @@
             (set! (-> font-ctxt height) (the float font-height))
             ;; print menu options
             (cond
-              ((nonzero? available-count) ;; menu have data, print the options on the screen.
+              ((nonzero? available-count) ;; menu have data, print the options on the screen. 
                 (dotimes (i items-this-page)
                   (let ((valid-idx (-> available-idxs (+ start-idx i))))
                     (set! (-> font-ctxt origin x) (the float font-x))
@@ -206,7 +206,7 @@
              (forbidden? (-> menu i forbid-when)))
         ;; include the option if `allowed?` is set and returns true,
         ;; and `forbidden?` is either not set (not forbidden?) or does not return true (not (forbidden?)).
-        (when (and (or (not allowed?) (allowed?))
+        (when (and (or (not allowed?) (allowed?)) 
                    (or (not forbidden?) (not (forbidden?))))
           (return #t)
           )
@@ -223,7 +223,7 @@
   :virtual #t
   :trans (behavior ()
     (when (and (and (available-to-use? self) (>= (-> self distance) (vector-vector-distance (-> self root trans) (-> *target* control trans)))
-                    (not (logtest? (focus-status teleporting) (-> *target* focus-status))))
+                    (not (logtest? (focus-status teleporting) (-> *target* focus-status)))) 
                     (can-display-query? self (the-as string #f) -99.0)
                     (not (focus-test? *target* in-head edge-grab pole flut tube board pilot mech indax))
                     (-> *setting-control* user-current airlock))
@@ -335,3 +335,4 @@
       )
     )
   )
+  

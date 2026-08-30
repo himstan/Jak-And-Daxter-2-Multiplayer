@@ -779,9 +779,7 @@
       (when (and (mp-widow-bomb-fizzle-pending? slot)
                  (widow-bomb-apply-fizzle-deadline! bomb deadline))
         (mp-widow-bomb-clear-fizzle-slot! slot)
-        (debug-log *mp-debug-log?*
-                   "[MP-Widow][FIZZLE] applied slot=~D deadline=~D~%"
-                   slot deadline)
+        (debug-log *mp-debug-log?* "[Widow][FIZZLE] applied slot=~D deadline=~D~%" slot deadline)
         (return #t))
       )
     )
@@ -799,9 +797,7 @@
                  (type? bomb-process widow-bomb))
         (when (mp-widow-bomb-claim-kick-slot! slot)
           (send-event bomb-process 'mp-kickback slot)
-          (debug-log *mp-debug-log?*
-                     "[MP-Widow][KICK] dispatched slot=~D~%"
-                     slot)
+          (debug-log *mp-debug-log?* "[Widow][KICK] dispatched slot=~D~%" slot)
           (return #t)))
       )
     )
@@ -822,9 +818,7 @@
                       'mp-fizzle
                       slot
                       (mp-widow-bomb-fizzle-deadline slot))
-          (debug-log *mp-debug-log?*
-                     "[MP-Widow][FIZZLE] dispatched slot=~D~%"
-                     slot)
+          (debug-log *mp-debug-log?* "[Widow][FIZZLE] dispatched slot=~D~%" slot)
           (return #t)))
       )
     )
@@ -847,17 +841,13 @@
            (let ((kick-from (the-as vector (mp-widow-bomb-kick-from slot)))
                  (kick-dest (the-as vector (mp-widow-bomb-kick-dest slot)))
                  (kick-height (mp-widow-bomb-kick-height slot)))
-             (debug-log *mp-debug-log?*
-                        "[MP-Widow][KICK] applying slot=~D~%"
-                        slot)
+             (debug-log *mp-debug-log?* "[Widow][KICK] applying slot=~D~%" slot)
              (when (widow-bomb-setup-kickback!
                      self kick-from kick-dest kick-height)
                (widow-bomb-notify-kick! self)
                (mp-widow-bomb-clear-kick-slot! slot)
                (go-virtual back-atcha)
-               (debug-log *mp-debug-log?*
-                          "[MP-Widow][KICK] replayed slot=~D~%"
-                          slot))
+               (debug-log *mp-debug-log?* "[Widow][KICK] replayed slot=~D~%" slot))
              )
            )
          )
@@ -899,8 +889,7 @@
              (let ((record (mp-player-process-record arg0)))
                (and record
                     (nonzero? record)
-                    (mp-player-record-remote?
-                      *mp-player-controller* record))))
+                    (mp-player-record-remote? *mp-player-controller* record))))
         (return #f)
         )
        (else

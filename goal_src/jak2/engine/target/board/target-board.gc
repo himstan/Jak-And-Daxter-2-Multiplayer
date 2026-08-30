@@ -1602,15 +1602,11 @@
         (let ((a1-0 (-> self node-list data joint-idx bone transform)))
           (matrix->transformq (the-as transformq (-> self board board-trans)) a1-0)
           (when indax?
-            ;; DAXTER BOARD OVERRIDES
-            ;; 1. Scale
             (set-vector! (-> self board board-scale) 0.5 0.5 0.5 1.0)
-            ;; 2. Local Offset (Forward, Right, Up)
             (let ((v1-10 (new 'stack-no-clear 'vector)))
               (set-vector! v1-10 0.0 200.0 500.0 1.0)
               (vector-matrix*! (-> self board board-trans) v1-10 a1-0)
               )
-            ;; 3. Local Rotation (Pitch, Roll, Yaw)
             (let ((v1-11 (new 'stack-no-clear 'vector))
                   (s5-0 (new 'stack-no-clear 'quaternion))
                   )
@@ -2150,7 +2146,6 @@
     (set! (-> gp-0 quad) (-> self control trans quad))
     (let ((s5-0 (new 'stack-no-clear 'vector)))
       (set! (-> s5-0 quad) (-> self control transv quad))
-
       (when (and (not-puppet? self) (not (edge-grab-info-method-9 s4-0)))
         (format #t "exit update~%")
         (send-event self 'end-mode #f)

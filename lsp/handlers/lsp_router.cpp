@@ -79,7 +79,6 @@ void LSPRouter::init_routes() {
   m_routes["typeHierarchy/supertypes"] = LSPRoute(lsp_handlers::supertypes_type_hierarchy);
   m_routes["typeHierarchy/subtypes"] = LSPRoute(lsp_handlers::subtypes_type_hierarchy);
 
-  // Advertised Capabilities that are not yet implemented, return safe empty results
   m_routes["textDocument/documentLink"] =
       LSPRoute([](Workspace&, json, json) -> std::optional<json> { return json::array(); });
   m_routes["textDocument/colorPresentation"] =

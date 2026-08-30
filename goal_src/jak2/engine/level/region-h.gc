@@ -5,6 +5,7 @@
 ;; name in dgo: region-h
 ;; dgos: ENGINE, GAME
 
+(define-extern region-custom-tick (function none))
 (declare-type region-prim-area structure)
 
 ;; DECOMP BEGINS
@@ -97,5 +98,3 @@
    (items      drawable-region-prim  320)
    )
   )
-
-(define-extern region-custom-tick (function none))

@@ -697,7 +697,6 @@ The cpad-set-buzz! function can be used for vibration.
         )
       )
     )
-  ;; Target logic may mutate derived pad fields, so keep the non-player sink neutral.
   (when (and *cpad-list*
              (nonzero? *cpad-list*)
              *cpad-history-list*

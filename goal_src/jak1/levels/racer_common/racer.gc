@@ -161,7 +161,7 @@
       (ja :group! racer-racer-idle-ja)
       (set! (-> self root root-prim prim-core action) (collide-action solid attackable-unused))
       (set! (-> self root root-prim prim-core offense) (collide-offense indestructible))
-      0.0
+      0.0 
     ;; <modbase:preserve-this> Reduce auto-mount distance from 15 meters to 6 meters to avoid crash in Lava Tube.
     (let ((f30-0 (if (= (-> self condition) 4) 24576.0 20480.0)))
         (loop

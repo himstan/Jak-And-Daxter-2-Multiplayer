@@ -5,19 +5,19 @@
    Each menu list corresponds to a specific air-train entity and contains
    destinations Jak can warp to, based on mission/task progress.
 
-   Also, check the method `setup-fields` of the `air-train` type in `warp-gate-menu-data.gc`,
+   Also, check the method `setup-fields` of the `air-train` type in `warp-gate-menu-data.gc`, 
    which is responsible for assigning a menu entry list to a specific entity. Do this if you
-   want to add custom air-train menus in your own custom levels.
+   want to add custom air-train menus in your own custom levels.  
  |#
 
 (deftype air-train-menu-entry (structure)
   ((level-name    symbol) ;; level name
    (continue-name string) ;; name of the checkpoint Jak will be teleported to
-   (text-id       text-id) ;; text ID that defines the name displayed for this destination in the menu
+   (text-id       text-id) ;; text ID that defines the name displayed for this destination in the menu 
    (allow-when    (function symbol)) ;; optional: function that must return true for this entry to become available
    (forbid-when   (function symbol)) ;; optional: function that hides this entry if it returns true, regardless of `allow-when`
    (on-activate   pair) ;; optional: actions executed when the destination is selected (e.g., play scenes, load levels, close tasks)
-   )
+   )  
   )
 
 (defmacro static-air-train-menu-entry (&key level-name
@@ -42,7 +42,7 @@
 
 ;; ctyport air-train
 (define *air-train-1-menu-list* (new 'static 'boxed-array :type air-train-menu-entry
-              (static-air-train-menu-entry
+              (static-air-train-menu-entry 
                 :level-name 'caspad
                 :continue-name "caspad-warp"
                 :text-id (text-id caspad-name) ;"Landing Pad"

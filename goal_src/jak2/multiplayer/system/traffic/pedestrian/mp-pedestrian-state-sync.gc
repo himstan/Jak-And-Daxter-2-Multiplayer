@@ -98,8 +98,9 @@
   (and e-proc
        (nonzero? e-proc)
        (or (and (-> e-proc state)
+                (nonzero? (-> e-proc state))
                 (mp-pedestrian-terminal-state? (-> e-proc state name)))
-           (logtest? (-> e-proc enemy-flags) (enemy-flag mp-synced-death death-start)))
+           (logtest? (-> e-proc enemy-flags) (enemy-flag death-start)))
        )
   )
 

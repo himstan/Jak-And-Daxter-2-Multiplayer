@@ -104,9 +104,6 @@ enum class MultiplayerHostCopyMode : int32_t {
   ROOM_CODE = 2,
 };
 
-// ENet disconnect data distinguishes an intentional session shutdown from a
-// transport loss. Zero remains the transient/network-loss reason used by ENet
-// itself and by reconnect recovery.
 inline constexpr uint32_t kDisconnectReasonHostClosed = 1;
 inline constexpr uint32_t kDisconnectReasonClientClosed = 2;
 inline constexpr uint32_t kDisconnectReasonHostFull = 3;
@@ -281,7 +278,7 @@ struct MPEnemyState {
   uint32_t actor_id;
   float x, y, z;
   float quat_x, quat_y, quat_z, quat_w;
-  float pad1[3];  // Removed anim_index, anim_frame, last_anim_frame
+  float pad1[3];
   int32_t hp;
   uint32_t state;
   uint32_t focus_player_id;
@@ -289,11 +286,10 @@ struct MPEnemyState {
   uint8_t owner_player_id;
   uint8_t is_aggro;
   uint8_t pad[5];
-  uint64_t last_updated;  // Cross-referenced with C++ enet_time_get()
-  uint8_t pad_align[8];   // Pad to 80 bytes (16-byte alignment from GOAL)
+  uint64_t last_updated;
+  uint8_t pad_align[8];
 };
 
-// Packed structure for network transmission only
 struct MPEnemyStatePacked {
   uint32_t actor_id;
   float x, y, z;
@@ -301,8 +297,8 @@ struct MPEnemyStatePacked {
   int32_t hp;
   uint8_t state;
   uint32_t focus_player_id;
-  uint8_t flags;            // Bitmask: [0: attack_flag, 1: is_aggro]
-  uint8_t owner_player_id;  // 0xff is invalid/unowned
+  uint8_t flags;
+  uint8_t owner_player_id;
 };
 
 struct PacketEnemySync {
@@ -322,13 +318,13 @@ struct MPPedestrianState {
   uint32_t net_id;
   uint8_t object_type;
   uint8_t object_variance;
-  uint8_t state_id;   // Replaces anim_index: numeric pedestrian state ID
-  uint8_t pad_align;  // Replaces second pad_align byte
+  uint8_t state_id;
+  uint8_t pad_align;
   float x, y, z;
   float quat_x, quat_y, quat_z, quat_w;
   int32_t hp;
   uint8_t flags;
-  uint8_t target_player_id;  // 0xff = invalid; otherwise canonical player ID
+  uint8_t target_player_id;
   uint8_t context_align[2];
   uint32_t animation_profile;
   uint32_t vehicle_net_id;
@@ -346,7 +342,7 @@ struct MPPedestrianStatePacked {
   float x, y, z;
   int16_t quat[4];
   int32_t hp;
-  uint8_t state_id;  // Replaces int16_t anim_index
+  uint8_t state_id;
   uint8_t target_player_id;
   uint32_t animation_profile;
   uint32_t vehicle_net_id;
@@ -378,8 +374,8 @@ struct MPVehicleStatePacked {
   uint8_t target_player_id;
   float x, y, z;
   int16_t quat[4];
-  int16_t lin_vel[3];  // Downcast
-  int16_t ang_vel[3];  // Downcast
+  int16_t lin_vel[3];
+  int16_t ang_vel[3];
   uint8_t state_flags;
   uint8_t hit_points;
   uint16_t level_id;

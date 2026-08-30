@@ -129,9 +129,8 @@
                   )
                 (set! (-> arg0 level) s0-0)
                 (when (and s4-0 (nonzero? s4-0))
-                  (mp-apply-cutscene-actor-appearance!
-                    this
-                    (ppointer->process s4-0)))
+                  (mp-apply-cutscene-actor-appearance! this (ppointer->process s4-0))
+                  )
                 (send-event (ppointer->process s4-0) 'anim-mode 'clone-anim)
                 (send-event (ppointer->process s4-0) 'blend-shape #t)
                 (send-event (ppointer->process s4-0) 'prefix (-> this prefix))
@@ -203,9 +202,8 @@
                          )
                     (send-event (ppointer->process s0-1) 'mirror #t)
                     (when (and s0-1 (nonzero? s0-1))
-                      (mp-apply-cutscene-actor-appearance!
-                        this
-                        (ppointer->process s0-1)))
+                      (mp-apply-cutscene-actor-appearance! this (ppointer->process s0-1))
+                      )
                     (send-event (ppointer->process s0-1) 'anim-mode 'mirror)
                     (if (nonzero? (-> this light-index))
                         (send-event (ppointer->process s0-1) 'light-index (* (-> this light-index) 8))
@@ -469,7 +467,6 @@
       )
     )
   )
-
 
 ;; WARN: Return type mismatch basic vs scene.
 (defmethod scene-player-method-24 ((this scene-player) (arg0 basic) (arg1 symbol))
@@ -1076,9 +1073,6 @@
                        (or (and (-> *setting-control* user-current movie)
                                 (!= (-> *setting-control* user-current movie) (process->ppointer self))
                                 )
-                           ;; In MP mode the scene-player is spawned directly without a task-manager,
-                           ;; so nothing drives the GUI movie-channel connection to status 3.
-                           ;; Skip this gate in MP; spooling/talking/movie-other still guard us.
                            (and (not *multi-sync-enabled?*)
                                 (!= (get-status *gui-control* (-> self gui-id)) 3))
                            )
@@ -1613,21 +1607,6 @@
 (defbehavior scene-player-init-internal scene-player ((scene-obj object) (wait-sym symbol) (continue-name string) (movie? symbol))
   "`object` arg can be an `(array scene)`, `pair of scene` or a `scene`"
   (set! (-> self movie?) movie?)
-  (when movie?
-    ;; Snapshot whether the local target is already riding before any scene-triggered
-    ;; dismount logic gets a chance to clear the riding state.
-    (when (and *target*
-               (nonzero? *target*))
-      (set! *mp-was-riding-before-scene*
-            (the-as symbol
-                    (or (and (-> *target* next-state)
-                             (nonzero? (-> *target* next-state))
-                             (= (-> *target* next-state name) 'target-ride-along))
-                        (and (-> *target* state)
-                             (nonzero? (-> *target* state))
-                             (= (-> *target* state name) 'target-ride-along)))))
-      )
-    )
   (process-entity-set! self (the-as entity #f))
   ;; og:preserve-this changed from 512
   (stack-size-set! (-> self main-thread) 768)
@@ -1685,9 +1664,6 @@
     )
   (set! (-> self aborted?) #f)
   (when movie?
-    (when *mp-was-riding-before-scene*
-      (set! *mp-was-riding-before-scene* (can-daxter-revert-to-ride-along-after-scene? self))
-      )
     (mp-tomb-boulder-adjust-scene! self)
     (set! (-> self aborted?)
           (if (and (-> self scene)

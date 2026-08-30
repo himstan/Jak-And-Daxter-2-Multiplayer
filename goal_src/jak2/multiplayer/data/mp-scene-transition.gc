@@ -21,22 +21,6 @@
   (none)
   )
 
-(defun mp-restore-local-target-after-scene! ()
-  "Restore the local target's role-specific base state after a scene ends."
-  (when (and *target* (nonzero? *target*))
-    (if *mp-was-riding-before-scene*
-        (begin
-          (debug-log *mp-debug-log?* "[MP-Scene-Transition] Scene ended. Restoring ride-along state...~%")
-          (set! *has-ridden-before?* #f)
-          )
-        (begin
-          (debug-log *mp-debug-log?* "[MP-Scene-Transition] Scene ended. Restoring base Daxter state...~%")
-          (set! *has-ridden-before?* #t)
-          )
-        )
-    )
-  (none))
-
 (defun mp-handle-scene-transition ()
   "Handle state changes when entering/exiting scenes"
   (let ((in-scene? (not (not *scene-player*))))
@@ -46,9 +30,6 @@
 
     (when (and *mp-last-scene-player*
                (not in-scene?))
-      (when (mp-session-client?)
-        (mp-restore-local-target-after-scene!)
-        )
       (mp-scene-sync-after-local-end! *mp-active-local-scene-name*)
       (mp-clear-active-local-scene-name!)
       )

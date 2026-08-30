@@ -2,7 +2,7 @@
 (in-package goal)
 
 (define *ctyindb-airlock-data* (new 'static 'boxed-array :type airlock-data
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-outer-13"
                 :on-notice '(cond ((task-closed? "sewer-escort-introduction") '(sewescb)) ((task-closed? "sewer-enemy-introduction") '(sewerb)))
                 :on-activate '(cond ((task-closed? "sewer-escort-introduction") (want-load 'sewescb 'ctyindb 'ctywide)) ((task-closed? "sewer-enemy-introduction") (want-load 'sewerb 'ctyindb 'ctywide)))

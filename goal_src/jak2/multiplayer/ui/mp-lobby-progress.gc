@@ -106,7 +106,7 @@
 (defun mp-lobby-host-status-text ((font-ctx font-context))
   (let ((setup-status (pc-multi-get-host-setup-status)))
     (cond
-      ((and *pc-settings* (nonzero? (the-as uint *pc-settings*)) (not (-> *pc-settings* mp-internet-host?)))
+      ((and *pc-settings* (nonzero? (the-as uint *pc-settings*)) (not (-> *pc-settings* is-host-online?)))
        (set-color! font-ctx (font-color green))
        (lookup-text! *common-text* (text-id progress-lobby-nat-lan) #f))
       ((or (= setup-status 1) (= setup-status 2))

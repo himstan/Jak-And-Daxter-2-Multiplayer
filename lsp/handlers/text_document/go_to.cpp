@@ -21,10 +21,8 @@ std::optional<json> go_to_definition(Workspace& workspace, json /*id*/, json raw
     const auto& tracked_file = maybe_tracked_file.value().get();
     const auto symbol = tracked_file.get_symbol_at_position(params.m_position);
 
-    // Check if we are on a field in a (-> ...) form
     TSNode node = tracked_file.get_node_at_position(params.m_position);
     
-    // Normalize: if we are on a sym_name, move up to sym_lit if it exists
     if (!ts_node_is_null(node) && std::string(ts_node_type(node)) == "sym_name") {
       TSNode parent = ts_node_parent(node);
       if (!ts_node_is_null(parent) && std::string(ts_node_type(parent)) == "sym_lit") {
@@ -81,7 +79,7 @@ std::optional<json> go_to_definition(Workspace& workspace, json /*id*/, json raw
             }
             lg::debug("go_to_definition - my symbol index in form: {}", my_sym_idx);
 
-            if (my_sym_idx >= 2) { // 0 is ->, 1 is obj, 2+ are fields
+            if (my_sym_idx >= 2) {
               std::string parent_type_name;
               TSNode obj_node = sym_nodes[1];
               std::string obj_name = ast_util::get_source_code(tracked_file.m_content, obj_node);
@@ -113,7 +111,6 @@ std::optional<json> go_to_definition(Workspace& workspace, json /*id*/, json raw
 
               if (!parent_type_name.empty()) {
                 std::string field_name = ast_util::get_source_code(tracked_file.m_content, node);
-                // If it was a sym_lit, we might need the sym_name source specifically
                 if (std::string(ts_node_type(node)) == "sym_lit" && ts_node_child_count(node) > 0) {
                    for(uint32_t k=0; k < ts_node_child_count(node); k++) {
                       if(std::string(ts_node_type(ts_node_child(node, k))) == "sym_name") {
@@ -136,7 +133,7 @@ std::optional<json> go_to_definition(Workspace& workspace, json /*id*/, json raw
                 }
               }
             }
-            break; // Found the -> list, don't look higher
+            break;
           }
         }
       }

@@ -140,7 +140,6 @@
                gate-proc
                (nonzero? gate-proc))
       (debug-log *mp-debug-log?* "[MP-WarpGate] Following remote gate locally for ride-along.~%")
-      (set! *has-ridden-before?* #f)
       (send-event gate-proc 'mp-use)
       )
     (mp-warp-gate-play-puppet! gate-proc phase as-indax? evt)

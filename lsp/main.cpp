@@ -141,7 +141,6 @@ int main(int argc, char** argv) {
           for (const auto& response : responses.value()) {
             std::cout << response.c_str() << std::flush;
 
-            // Extract the method name from the outgoing response for accurate logging
             std::string outgoing_method_name = "unknown";
             try {
               size_t body_start = response.find("\r\n\r\n");
@@ -150,7 +149,6 @@ int main(int argc, char** argv) {
                 if (outgoing_body.contains("method")) {
                   outgoing_method_name = outgoing_body["method"].get<std::string>();
                 } else if (outgoing_body.contains("id")) {
-                  // It's a response to a request, we might want to log that too
                   outgoing_method_name = fmt::format("response to {}", method_name);
                 }
               }

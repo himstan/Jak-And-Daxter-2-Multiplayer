@@ -378,7 +378,7 @@ struct MultiplayerData {
   bool initialized = false;
   bool enet_initialized = false;
   struct _ENetHost* host = nullptr;
-  struct _ENetPeer* server_peer = nullptr;  // Only used if we are a client
+  struct _ENetPeer* server_peer = nullptr;
   int session_role = -1;
   uint32_t local_player_id = kMPInvalidPlayerId;
   uint32_t host_player_id = kMPInvalidPlayerId;
@@ -441,10 +441,8 @@ struct MultiplayerData {
   MPAirlockStateTableGOAL remote_airlock_table = {};
   uint32_t last_airlock_sync_time = 0;
   std::array<uint32_t, kMPMaxPlayers> last_airlock_sequence_by_player = {};
-
-  // New fields for joining/searching
-  std::atomic<int> join_status{
-      0};  // 0: idle, 1: searching, 2: found, 3: connecting, 4: connected, -1: failed
+  
+  std::atomic<int> join_status{0};
   bool lobby_countdown_active = false;
   uint64_t lobby_countdown_target_time_ms = 0;
   std::string found_ip = "";
@@ -453,23 +451,20 @@ struct MultiplayerData {
   bool directed_discovery = false;
   uint32_t directed_discovery_address = 0;
   uint16_t directed_discovery_game_port = 0;
-
-  // Discovery / Hosting responder
+  
   std::thread discovery_thread;
   std::thread scanner_thread;
   std::atomic<bool> host_discovery_active{false};
   bool local_join_identity_sent = false;
   uint32_t last_event_queue_debug_time = 0;
   uint32_t last_event_receive_debug_time = 0;
-
-  // Reconnection tracking
+  
   uint32_t server_last_receive_time = 0;
   bool reconnect_attempt_active = false;
   bool reconnect_waiting_for_bootstrap = false;
   uint32_t reconnect_attempt_count = 0;
   uint32_t reconnect_next_attempt_time = 0;
 
-  // Host-side temporary router mapping. The address remains private to the bridge.
   std::thread port_mapping_thread;
   std::mutex port_mapping_mutex;
   std::condition_variable port_mapping_cv;
@@ -480,7 +475,6 @@ struct MultiplayerData {
   uint16_t port_mapping_external_port = 0;
   std::string port_mapping_external_ip;
   std::atomic<int> host_setup_status{static_cast<int>(MultiplayerHostSetupStatus::IDLE)};
-  // Rate tracking and statistics
   MultiplayerPacketScheduler packet_scheduler;
   MultiplayerStats stats;
 };

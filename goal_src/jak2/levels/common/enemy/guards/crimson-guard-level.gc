@@ -1438,7 +1438,6 @@
   )
 
 (defun crimson-guard-level-refresh-remote-target-data! ((this crimson-guard-level))
-  "Refresh target metrics after remote presentation data has been applied."
   (when (and this
              (nonzero? this)
              (mp-local-player-record)

@@ -676,7 +676,7 @@
          ((method-of-type nav-enemy general-event-handler) this arg0 arg1 arg2 arg3)
          )
        )
-    )
+     )
     (('request)
      (case (-> arg3 param 0)
        (('waypoint)
@@ -812,7 +812,7 @@
     (('change-mode)
      (when (= (-> arg3 param 0) 'grab)
        (set! v0-0 (alive? this))
-       (when (and (the-as symbol v0-0) (-> arg3 param 1))
+       (if (and (the-as symbol v0-0) (-> arg3 param 1))
            (logior! (-> this focus-status) (focus-status grabbed))
            )
        v0-0
@@ -1123,7 +1123,6 @@
      #f
      )
     ((and *scene-player* (type? (ppointer->process *scene-player*) scene-player))
-     ;; Link to the existing global scene player if it's already running!
      (set! (-> this scene-player-handle) (ppointer->handle *scene-player*))
      (set! (-> this has-been-grabbed-by-scene) #t)
      #t

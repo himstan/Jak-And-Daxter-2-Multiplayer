@@ -48,8 +48,6 @@ void pc_multi_setup_client(u32 ip_ptr, u32 port);
 int64_t pc_multi_get_status();
 void pc_multi_set_status(int status);
 void pc_multi_request_bootstrap();
-// Compatibility export for older GOAL builds; new code uses pc_multi_request_bootstrap.
-void pc_multi_request_full_sync();
 void pc_multi_stop_search();
 void pc_multi_start_search();
 u64 pc_multi_get_command_line_arg(u32 str_ptr);

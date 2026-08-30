@@ -772,8 +772,6 @@
     (let ((v1-101 (-> self edge-grab-state info)))
       (set! (-> v1-101 pilot-edge-grab?) #f)
     )
-    ;; MP Broadcast: inform others that we grabbed an edge.
-    ;; Only send if we are NOT in the pilot-edge-grab state (which sends its own event).
     (if (and (not-puppet? self)
              *multi-sync-enabled?*
              (!= (-> self state name) 'target-pilot-edge-grab)
@@ -833,7 +831,6 @@
              (set! (-> v1-25 best-my-prim) (the-as collide-shape-prim #t))
              (set! (-> v1-25 action-mask) (collide-action solid))
              )
-           ;; CRITICAL: Puppets bypass local probe.
            (when (or (puppet? self) (not (fill-and-probe-using-spheres *collide-cache* a1-2)))
              (if (!= (-> self skel top-anim interp) 0.0)
                  (set! (-> self skel top-anim interp) 1.0)
@@ -999,7 +996,6 @@
         (compute-alignment! (-> self align))
         (when (not (logtest? (-> self align flags) (align-flags disabled)))
           (vector-matrix*! s4-0 (-> self align delta trans) (-> self control c-R-w))
-          ;; CRITICAL: Direct position set for puppets.
           (if (puppet? self)
               (vector+! (-> self control trans) (-> self control trans) s4-0)
               (move-by-vector! (-> self control) s4-0)

@@ -795,8 +795,7 @@
       (set-vector! (-> this offset) -2621440.0 -4456448.0 16384.0 0.000030517578)
       )
     )
-
-  ;; Loading Logic
+  
   (when (-> this drawing-flag)
     (cond
        ((or (= (-> *blit-displays-work* count-down) 1)

@@ -1810,10 +1810,10 @@ struct SlimeInput {
   `(begin
      (let ((sym-val (-> (the symbol ,sym) value)))
        (when (zero? sym-val)
-         (format 0 "symbol ~A is 0 (warning only for multiplayer)~%" ,sym)
+         (format 0 "symbol ~A is 0~%" ,sym)
          )
        (when (and sym-val (!= function (rtype-of sym-val)))
-         (format 0 "symbol ~A is not a function (warning only for multiplayer)~%" ,sym)
+         (format 0 "symbol ~A is not a function~%" ,sym)
          )
        )
      )

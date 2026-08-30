@@ -48,14 +48,13 @@
 
 (defun mp-local-target-ride-along-block-vehicle-entry? ((tgt target) (veh vehicle))
   "Block local vehicle boarding while ride-along is active."
-      ;; Block if we are on the Jak's shoulder
   (or (and tgt
              (nonzero? tgt)
              (= tgt *target*)
              *target*
              (nonzero? *target*)
              (mp-target-ride-along? *target*))
-      ;; Block guard vehicles for now, they're different from regular vehicles and the player driven guard vehicle puppets are broken.
+      ;; Block boarding guard vehicles for now, they're broken as hell now
       ;; TODO: to fix the guard vehicle handling
       (and veh (nonzero? veh) (type? veh vehicle-guard))
   )
@@ -454,8 +453,7 @@
                             (set-height! s3-1 80)
                             (set-scale! s3-1 0.9)
                             (set! (-> s3-1 flags) (font-flags shadow kerning large))
-                            ;; Only display prompt for local player
-                            (when (and (= tgt *target*)
+                            (when (and (not-puppet? tgt)
                                        (not block-local-boarding?)
                                        (not (movie?))
                                        (not (real-movie?))
@@ -484,7 +482,6 @@
                                        (cpad-pressed? pad-idx triangle))
                               (cond
                                 (can-board-seat?
-                                  ;; Use 'pilot-daxter mode if the target is currently in Daxter mode.
                                   (let ((mode (if (focus-test? tgt indax) 'pilot-daxter 'pilot)))
                                     (send-event tgt 'change-mode mode this boarding-seat #f)
                                     )

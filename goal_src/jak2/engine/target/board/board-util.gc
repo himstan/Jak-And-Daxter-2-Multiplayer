@@ -49,7 +49,6 @@
     (let ((a0-37 (-> v1-0 draw shadow-ctrl settings shadow-dir quad)))
       (set! (-> self draw shadow-ctrl settings shadow-dir quad) a0-37)
       )
-    ;; Gameplay can hide target art while keeping its board visible, but cutscenes must hide both.
     (if (or (movie?)
             *scene-player*
             (logtest? (-> v1-0 draw status) (draw-control-status no-draw-temp no-draw-bounds))

@@ -2,7 +2,7 @@
 (in-package goal)
 
 (define *palshaft-airlock-data* (new 'static 'boxed-array :type airlock-data
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-inner-26"
                 :airlock-elevator "com-elevator-2"
                 :other-side-levels '(palcab palroof palboss)
@@ -15,7 +15,7 @@
                 :on-inside '(cond ((task-closed? "palace-sneak-in-resolution") #f) ((task-closed? "palace-sneak-in-introduction") (want-load 'palshaft 'palent 'throne) (want-sound 'ctywide1 'ctywide2 'palent1)) ((task-closed? "palace-boss-resolution") #f) (else (want-load 'palshaft 'palcab 'palroof) (want-sound 'ctywide1 'ctywide2 'palcab1)))
                 :on-deactivate #f
                 )
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-outer-20" ;; UNUSED
                 :on-notice #f
                 :on-activate #f
@@ -25,7 +25,7 @@
                 :on-inside #f
                 :on-deactivate #f
                 )
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-inner-25"
                 :airlock-elevator "com-elevator-2"
                 :other-side-levels '(ctywide)
@@ -38,7 +38,7 @@
                 :on-inside '(begin (want-load 'ctypal 'ctywide 'palshaft) (want-sound 'ctywide1 'palcab1 'palcab2))
                 :on-deactivate #f
                 )
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-inner-23"
                 :airlock-elevator "com-elevator-1"
                 :other-side-levels '(ctywide)
@@ -51,7 +51,7 @@
                 :on-inside '(begin (want-load 'ctygenb 'ctywide 'palshaft) (want-sound 'ctywide1 'ctywide1 'palcab2))
                 :on-deactivate #f
                 )
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-inner-36"
                 :on-notice '(unless (task-closed? "palace-sneak-in-meeting") '(palent))
                 :on-activate #f
@@ -62,7 +62,7 @@
                 :on-inside '(begin (want-load 'ctypal 'ctywide 'palshaft) (want-sound 'ctywide1 'palent1 'palent2))
                 :on-deactivate #f
                 )
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-inner-37"
                 :on-notice '(when (or (not (send-event self 'front)) (< (send-event self 'distance) 8192)) '(palent palout))
                 :on-activate #f
@@ -73,7 +73,7 @@
                 :on-inside '(begin (want-load 'ctypal 'ctywide 'palshaft) (want-sound 'ctywide1 'ctywide2 'palent1))
                 :on-deactivate #f
                 )
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-inner-22"
                 :airlock-elevator "com-elevator-1"
                 :other-side-levels '(palcab palroof palboss)

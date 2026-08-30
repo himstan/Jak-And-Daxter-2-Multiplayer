@@ -1,6 +1,12 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+;; name: race-mesh.gc
+;; name in dgo: race-mesh
+;; dgos: STD, STC, LERLCHAL, STB, LPRTRACE
+
+;; DECOMP BEGINS
+
 (defmethod race-path-position-at ((this race-path) (out vector) (sample-t float) (unused float))
   (let ((points (new 'stack-no-clear 'inline-array 'vector 4))
         (sample-index (the int sample-t)))

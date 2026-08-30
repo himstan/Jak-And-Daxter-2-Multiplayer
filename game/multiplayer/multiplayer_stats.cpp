@@ -64,9 +64,6 @@ float multiplayer_enet_ratio_to_percent(uint32_t ratio) {
 }
 
 bool multiplayer_enet_rtt_sample_valid(const _ENetPeer& peer) {
-  // ENet initializes lastReceiveTime to zero and sets it when it processes the
-  // first reliable acknowledgement. Unlike the smoothed variance, it remains
-  // a stable indication that at least one RTT sample has been observed.
   return peer.lastReceiveTime != 0;
 }
 

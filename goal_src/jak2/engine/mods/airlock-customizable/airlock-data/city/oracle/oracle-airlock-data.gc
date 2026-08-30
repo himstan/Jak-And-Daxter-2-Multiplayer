@@ -2,7 +2,7 @@
 (in-package goal)
 
 (define *oracle-airlock-data* (new 'static 'boxed-array :type airlock-data
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "oracle-door-1"
                 :on-notice '(when (or (not (send-event self 'front)) (and (not (task-open? "city-oracle-level0-training")) (not (task-open? "city-oracle-level1-training")))) '(ctyslumc ctywide))
                 :on-activate #f

@@ -2,7 +2,7 @@
 (in-package goal)
 
 (define *gungame-airlock-data* (new 'static 'boxed-array :type airlock-data
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "hip-door-a-9"
                 :on-notice '(when (or (not (send-event self 'front)) (and (task-closed? "city-red-gun-training-try-once") (not (task-open? "city-yellow-gun-training-introduction")))) '(ctyport ctywide))
                 :on-activate '(want-load 'ctyport 'ctywide 'gungame)

@@ -41,13 +41,12 @@
     (debug-log *mp-debug-log?* "[Daxter-Death] target-indax-death: reason is ~A~%" arg0)
     (when (and (= arg0 'endlessfall)
                (mp-should-suppress-local-endlessfall?))
+      ;; This is a hack guard againts some weird behavior, which is that we can die during cutscenes, never really tried finding the actual reason
       (debug-log *mp-debug-log?* "[Daxter-Death] Suppressing cutscene/loading endlessfall for Daxter.~%")
       (set! (-> self control transv quad) (the-as uint128 0))
       (go target-indax-start (the handle #f))
       )
     (target-daxter-death-voice! arg0)
-    (when (mp-target-ride-along? self)
-      (set! *has-ridden-before?* #f))
     (set! (-> self control unknown-word04) (the-as uint #f))
          (set! (-> self control did-move-to-pole-or-max-jump-height)
                (the-as float (send-event (handle->process-safe (-> self attack-info attacker)) 'target 'die arg0)))
@@ -118,19 +117,16 @@
                (ja :num! (seek!)))))
   (set! (-> self control transv quad) (the-as uint128 0))
 
-  ;; --- MP MULTIPLAYER DEATH HIJACK ---
   (let ((use-local-respawn? (mp-begin-local-death-respawn-policy! self)))
     (when (and *multi-sync-enabled?*
                (= (pc-multi-get-status) (mp-connection-status in-game)))
-    ;; 1. Handle Remote Puppets
     (when (puppet? self)
-      (debug-log *mp-debug-log?* "[Daxter-Death] Indax Death Sequence Complete. Waiting for remote respawn...~%")
+      (debug-log *mp-debug-log?* "[Daxter-Death] Waiting for remote respawn...~%")
       (loop
         (let ((ghost (mp-player-record-ghost (mp-player-process-record self))))
           (when (or (not ghost) (zero? ghost))
             (go target-indax-start (the handle #f)))
           (let ((ghost-state (mp-target-get-state-from-id (-> ghost state-id))))
-          ;; If the remote ghost is no longer in a death state, we are done!
           (when (not (mp-target-death-state? ghost-state))
             (debug-log *mp-debug-log?* "[Daxter-Death] Ghost respawned (State: ~A). Exiting death reset.~%" ghost-state)
             (if (mp-target-daxter? self)
@@ -143,22 +139,20 @@
         )
       )
 
-    ;; 2. Handle Local Player
     (when (not-puppet? self)
       (when (not use-local-respawn?)
         (mp-traffic-begin-local-death-spectate!))
       (mp-event-enqueue-aid! MP_EVENT_PLAYER_DIED (the-as uint 0))
       (when (not use-local-respawn?)
-        (debug-log *mp-debug-log?* "[Daxter-Death] Mission Death. Spectating and waiting 20s...~%")
+        (debug-log *mp-debug-log?* "[Daxter-Death] Mission Death. Spectating and waiting...~%")
         (when (mp-run-local-death-spectate! self)
-          (debug-log *mp-debug-log?* "[Target-Death] Triggering full reset.~%")
           (set! *mp-death-respawn-event-pending?* #t)
-          (goto cfg-reset-init))
+          (goto cfg-reset-init)
+          )
         )
       )
       )
   )
-  ;; --- END MP MULTIPLAYER DEATH HIJACK ---
 
   (label cfg-reset-init)
   (mp-reset-battle-sync-state!)

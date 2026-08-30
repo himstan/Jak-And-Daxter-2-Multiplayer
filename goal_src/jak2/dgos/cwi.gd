@@ -17,7 +17,7 @@
   "vehicle-physics.o"
   "vehicle-states.o"
   "vehicle-guard.o"
-  "mp-vehicle-guard-debug.o"
+  "mp-vehicle-guard-debug.o" ;; added
   "transport.o"
   "bike.o"
   "car.o"
@@ -40,21 +40,21 @@
   "ctywide-texture.o"
   "ctywide-part.o"
   "ctywide-obs.o"
-  "race-mesh.o"
-  "race-part.o"
-  "race-obs.o"
-  "race-control.o"
-  "vehicle-racer.o"
-  "race-info.o"
-  "race-manager.o"
-  "race-hud.o"
+  "race-mesh.o" ;; added
+  "race-part.o" ;; added
+  "race-obs.o" ;; added
+  "race-control.o" ;; added
+  "vehicle-racer.o" ;; added
+  "race-info.o" ;; added
+  "race-manager.o" ;; added
+  "race-hud.o" ;; added
   "ctywide-tasks.o"
   "ctywide-scenes.o"
   "ctywide-speech.o"
   "ctyport-obs.o"
   "target-pilot.o"
   "pilot-states.o"
-  "indax-pilot-states.o"
+  "indax-pilot-states.o" ;; added
   "searchlight.o"
   "tpage-1264.go"
   "tpage-1266.go"

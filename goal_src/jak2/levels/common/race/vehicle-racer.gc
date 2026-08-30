@@ -1,9 +1,15 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+;; name: vehicle-racer.gc
+;; name in dgo: vehicle-racer
+;; dgos: STD, STC, LERLCHAL, STB, LPRTRACE
+
 (define-extern mp-vehicle-local-target-driving? (function vehicle symbol))
 (define-extern mp-vehicle-driver-sync-claimed? (function vehicle symbol))
 (define-extern target-timed-invulnerable (function time-frame target int none))
+
+;; DECOMP BEGINS
 
 (defconstant RACE_RESPAWN_SAMPLE_INTERVAL (seconds 0.5))
 (defconstant RACE_RESPAWN_WAIT_TIME (seconds 1.0))

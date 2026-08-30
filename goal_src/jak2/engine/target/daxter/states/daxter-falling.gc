@@ -5,65 +5,62 @@
   :event target-indax-jump-event-handler
   :enter (behavior ((arg0 symbol))
           ((-> target-falling enter) arg0)
-          (set! (-> self control mod-surface) *indax-jump-mods*))
-
+          (set! (-> self control mod-surface) *indax-jump-mods*)
+          )
   :exit target-indax-exit
   :trans (behavior ()
           (set! (-> self control unknown-float36)
                 (fmax
                   (-> self control unknown-float36)
-                  (* 0.003921569 (the float (-> *cpad-list* cpads (-> self control cpad number) abutton (abutton-idx x)))))) ;; og:preserve-this abutton indexing
-
-
+                  (* 0.003921569 (the float (-> *cpad-list* cpads (-> self control cpad number) abutton (abutton-idx x)))))
+                )
           (if (and (logtest? (water-flags swimming) (-> self water flags))
                    (not (target-indax-swim-reentry-blocked? self)))
-              (go target-swim-stance))
-
+            (go target-swim-stance)
+            )
           (if (logtest? (-> self control status) (collide-status on-surface))
-              (go target-indax-hit-ground #f))
-
+            (go target-indax-hit-ground #f)
+            )
           (if (and (cpad-pressed? (-> self control cpad number) circle) (can-feet? #f))
-              (go target-indax-attack-air #f))
-
+            (go target-indax-attack-air #f)
+            )
           (if (and (recently-pressed? square) (can-hands? #f))
-              (go target-indax-flop 0.0 0.0 0.0))
-
+            (go target-indax-flop 0.0 0.0 0.0)
+            )
           (let ((f0-3 (fmax 0.0 (fmin 1.0 (* 0.000048828126 (+ -10240.0 (-> self control ctrl-xz-vel)))))))
             (if (< (-> self control unknown-float35) f0-3)
-                (seek! (-> self control unknown-float35) f0-3 (* 4.0 (seconds-per-frame))))))
-
-
-
+                (seek! (-> self control unknown-float35) f0-3 (* 4.0 (seconds-per-frame)))
+              )
+            )
+          )
   :code (behavior ((arg0 symbol))
          (let ((a1-0 75))
            (let ((v1-2 (ja-group)))
              (cond
                ((and v1-2 (or (= v1-2 daxter-indax-jump-ja) (= v1-2 daxter-indax-jump-loop-ja))))
-
                (else
                  (let ((v1-8 (ja-group)))
                    (cond
                      ((and v1-8 (= v1-8 daxter-indax-attack-spin-air-ja))
                       (set! a1-0 15)
-                      (set! (-> self control unknown-float35) 0.0))
-
+                      (set! (-> self control unknown-float35) 0.0)
+                      )
                      (else
-                       (set! (-> self control unknown-float35) 0.0)))))))
-
-
-
-
-
-
-           (ja-channel-push! 1 (the-as time-frame a1-0)))
-
+                       (set! (-> self control unknown-float35) 0.0))
+                     )
+                   )
+                 )
+               )
+             )
+           (ja-channel-push! 1 (the-as time-frame a1-0))
+           )
          (ja-no-eval :group! daxter-indax-jump-loop-ja :num! (loop!) :frame-num 0.0)
          (until #f
            (seek! (-> self control unknown-float35) 0.0 (* 10.0 (seconds-per-frame)))
            (suspend)
            (ja-blend-eval)
-           (ja :num! (loop!)))
-
+           (ja :num! (loop!))
+          )
          #f)
-
-  :post target-indax-post)
+  :post target-indax-post
+  )

@@ -2,7 +2,7 @@
 (in-package goal)
 
 (define *palent-airlock-data* (new 'static 'boxed-array :type airlock-data
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-outer-25"
                 :on-notice '(unless (task-closed? "palace-sneak-in-meeting") '(palshaft))
                 :on-activate '(unless (task-closed? "palace-sneak-in-meeting") (want-load 'palshaft 'palent 'throne) (want-sound 'ctywide1 'palent1 'palent2))
@@ -13,7 +13,7 @@
                 :on-inside #f
                 :on-deactivate '(want-display 'palshaft #f)
                 )
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-outer-30"
                 :on-notice '(when #t '(palshaft))
                 :on-activate '(begin (want-load 'palshaft 'palent 'palout) (want-sound 'ctywide1 'palent1 'palent2))
@@ -24,7 +24,7 @@
                 :on-inside #f
                 :on-deactivate '(want-display 'palshaft #f)
                 )
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "pal-throne-door-2"
                 :on-notice '(unless (task-closed? "palace-sneak-in-meeting") '(throne palout))
                 :on-activate '(unless (task-closed? "palace-sneak-in-meeting") (want-load 'palent 'throne 'palout) (want-sound 'ctywide1 'palent1 'palent2))
@@ -35,7 +35,7 @@
                 :on-inside #f
                 :on-deactivate '(begin (want-display 'throne #f) (want-display 'palout #f))
                 )
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "pal-ent-door-1"
                 :on-notice '(when (task-closed? "palace-sneak-in-meeting") '(palent))
                 :on-activate #f
@@ -45,7 +45,7 @@
                 :on-inside #f
                 :on-deactivate #f
                 )
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "pal-ent-door-2"
                 :on-notice '(when (task-closed? "palace-sneak-in-meeting") '(palent))
                 :on-activate #f

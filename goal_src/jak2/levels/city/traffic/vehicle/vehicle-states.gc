@@ -184,7 +184,6 @@
       (set! (-> self controls lean-z) 0.0)
       (reset-flight-level-transition! self)
       (set! (-> self max-time-step) 0.033333335)
-      ;; The camera flag is the ownership token for local player settings.
       (when (logtest? (-> self flags) (rigid-body-object-flag camera))
         (remove-setting! 'sound-flava)
         )

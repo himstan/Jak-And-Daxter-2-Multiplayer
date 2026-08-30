@@ -1279,7 +1279,6 @@
         )
       )
     (when (and (-> self enable-controls) (>= (-> *camera-combiner* interp-val) 1.0))
-      ;; Use the current rider's pad so multiplayer puppets can drive turret aim.
       (let ((turret-pad (base-turret-rider-pad self)))
         (set! (-> self rotyvv) (analog-input-horizontal-first (the-as int (-> turret-pad leftx)) 128.0 32.0 110.0 -98304.0))
         (set! (-> self rotxvv) (analog-input-vertical-first (the-as int (-> turret-pad lefty)) 128.0 32.0 110.0 -65536.0))

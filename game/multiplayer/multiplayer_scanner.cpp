@@ -232,7 +232,6 @@ void MultiplayerScanner::scan_thread_func(MultiplayerData* data) {
     return;
   }
 
-  // Enable broadcasting
   int broadcast_enable = 1;
   set_socket_option(sock, SOL_SOCKET, SO_BROADCAST, &broadcast_enable, sizeof(broadcast_enable));
   set_socket_timeout(sock, 500000);  // 500ms timeout
@@ -258,7 +257,6 @@ void MultiplayerScanner::scan_thread_func(MultiplayerData* data) {
              sizeof(target));
     }
 
-    // Wait for reply
     char buffer[128];
     sockaddr_in from_addr;
     socklen_t from_len = sizeof(from_addr);

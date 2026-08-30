@@ -132,8 +132,6 @@
   (none)
   )
 
-(define-perm *mp-traffic-targeted-prune-log-time* time-frame 0)
-
 (defun mp-traffic-ped-materialized-illegal? ((ped-proc citizen))
   "True for remote pedestrian puppets that are known unsafe to keep alive."
   (and ped-proc
@@ -222,15 +220,6 @@
             )
           )
         )
-      (when (and (or (nonzero? ped-cull-count)
-                     (nonzero? veh-cull-count))
-                 (time-elapsed? *mp-traffic-targeted-prune-log-time* (seconds 1)))
-        (debug-log *mp-debug-log?*
-                "[MP-TrafficGate] targeted-prune peds=~D vehs=~D~%"
-                ped-cull-count
-                veh-cull-count)
-        (set! *mp-traffic-targeted-prune-log-time* (current-time))
-        )
       )
     )
   (none)
@@ -300,7 +289,6 @@
   (set! *mp-traffic-art-context-authority-level* (the uint 0))
   (set! *mp-traffic-art-context-spawn-ready* #f)
   (set! *mp-traffic-art-context-riding* #f)
-  (set! *mp-traffic-targeted-prune-log-time* (the-as time-frame 0))
   (set! *mp-traffic-level-mismatch-log-time* (the-as time-frame 0))
   (set! *mp-traffic-level-settle-log-time* (the-as time-frame 0))
   (set! *mp-traffic-level-context-change-time* (the-as time-frame 0))

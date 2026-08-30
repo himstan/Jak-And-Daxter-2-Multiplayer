@@ -1,7 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-
 (defun mp-actor-state-retry-ready? ((last-bump time-frame))
   (time-elapsed? last-bump (seconds 0.35))
   )

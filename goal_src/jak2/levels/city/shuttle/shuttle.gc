@@ -1308,7 +1308,6 @@
         (when (and destination-record (nonzero? destination-record))
           (set! condition (> best-distance *mp-shuttle-teleport-distance*)))
         )
-      ;; Call the generic left-behind update helper
       (mp-update-left-behind-teleport! condition #f destination-record)
       )
     )

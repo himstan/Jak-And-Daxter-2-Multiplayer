@@ -78,8 +78,6 @@ def main() -> int:
                 line_start = code.rfind("\n", 0, match.start()) + 1
                 line_end = code.find("\n", match.end())
                 line = code[line_start:] if line_end < 0 else code[line_start:line_end]
-                # These are inbound/runtime scratch records, not outbound event
-                # construction. They are intentionally reused rather than queued.
                 if (path.name == "mp-event-h.gc" and "*mp-event-buffer*" in line) or (
                     path.name == "mp-waypoint-sync.gc"
                     and "*mp-waypoint-scratch-event*" in line

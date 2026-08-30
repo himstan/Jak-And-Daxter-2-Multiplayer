@@ -68,8 +68,6 @@
        )
   )
 
-;; Behaviors
-
 (defbehavior target-indax-handler target ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   (local-vars (a0-10 symbol))
   (cond
@@ -338,7 +336,6 @@
     )
   )
 
-;; WARN: Return type mismatch object vs none.
 (defbehavior target-indax-update-art-group-backup! target ()
   (when (or (not (and (-> self sidekick) (!= (the-as uint (-> self sidekick)) 0)))
             (!= (-> self draw art-group) (-> self sidekick 0 draw art-group))
@@ -425,16 +422,13 @@
     )
   (set-time! (-> self indax indax-start-time))
   (target-indax-update-art-group-backup!)
-  ;; 1. Sidekick draws Daxter
   (if (and (-> self sidekick) (!= (the-as uint (-> self sidekick)) 0))
       (set! (-> self draw art-group) (-> self sidekick 0 draw art-group)))
 
-  ;; Daxter has different joint indices for hands
   (set! (-> self control lhand-cspace) (-> self node-list data 16))
   (set! (-> self control rhand-cspace) (-> self node-list data 23))
 
   (ja-channel-set! 1)
-  ;; 3. Signal sidekick to follow
   (if (and (-> self sidekick) (!= (the-as uint (-> self sidekick)) 0))
       (send-event (ppointer->process (-> self sidekick)) 'matrix 'indax))
   (logclear! (-> self draw status) (draw-control-status no-draw))
@@ -550,10 +544,7 @@
                                              (= v1-3 'target-indax-float)
                                              (= v1-3 'target-falling)))))
       (if (= (-> self next-state name) 'process-drawable-art-error)
-        (begin
-          (format 0 "Trying to recover from drawable art error by going to target-indax-start~%")
-          (go target-indax-start (the handle #f))
-        )
+        (go target-indax-start (the handle #f))
         (begin
           (debug-log *mp-debug-log?* "[Daxter] Triggered target-indax-exit. Next state: ~A ~%" (-> self next-state name))
           (logclear! (-> self focus-status) (focus-status indax))
@@ -562,7 +553,6 @@
           (logclear! (-> self state-flags) (state-flags sf6))
           (target-collide-set! 'normal 0.0)
 
-          ;; Restore hand cspaces to Jak defaults
           (when (mp-target-jak? self)
             (set! (-> self control lhand-cspace) (-> self node-list data 45))
             (set! (-> self control rhand-cspace) (-> self node-list data 46))
@@ -678,7 +668,7 @@
     (update-rates! (-> self clock) f30-0))
   (evaluate-joint-control self)
   (joint-points)
-  (target-calc-camera-pos) ;; Added: Allows pole-specific camera overrides to work
+  (target-calc-camera-pos)
   (target-gun-joint-pre0)
   (target-gun-check)
   (do-joint-math (-> self draw) (-> self node-list) (-> self skel))
@@ -686,11 +676,6 @@
   (logior! (-> self draw status) (draw-control-status no-draw-bounds2))
   (logclear! (-> self draw status) (draw-control-status no-draw-temp uninited))
   (target-powerup-process)
-  (when (not *has-ridden-before?*)
-            (begin
-              (go target-ride-along)
-            )
-  )
   (none))
 
 (defbehavior target-indax-post target ()
@@ -720,7 +705,7 @@
           (set-height! s3-1 80)
           (set-scale! s3-1 0.5)
           (set! (-> s3-1 flags) (font-flags shadow kerning large))
-          (when (and (= self *target*)
+          (when (and (not-puppet? self)
                      (mp-target-daxter? self)
                      (not (and *progress-process* (nonzero? *progress-process*))))
             (print-game-text (lookup-text! *common-text* (text-id press-triangle-to-hop-on) #f) s3-1 #f 44 (bucket-id progress))
@@ -733,7 +718,6 @@
   (none)
   )
 
-;; WARN: Return type mismatch float vs none.
 (defbehavior target-indax-hit-setup-anim target ((arg0 attack-info))
   (case (-> arg0 angle)
     (('back)

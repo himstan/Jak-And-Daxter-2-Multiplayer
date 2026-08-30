@@ -341,7 +341,6 @@
       (set! (-> this skeleton) v0-1)
       (let ((s3-1 v0-1))
         (when (or (zero? s5-0) (zero? s3-1))
-          (format 0 "Going to process process drawable art error because of memory~%")
           (go process-drawable-art-error "memory")
           (set! s5-0 (the-as cspace-array #f))
           (goto cfg-13)
@@ -719,7 +718,6 @@
     (let ((s1-0 (load-to-heap-by-name (-> s3-0 art-group) (-> arg1 art-group-name) #f global (-> arg1 version))))
       (when (or (zero? s1-0) (or (not s1-0) (!= (-> s1-0 type) art-group)))
         (process-drawable-art-group-load-debug arg0 arg1 s3-0)
-        (format 0 "Going to process aid=~D process drawable art error beacuse of art-group~%" (-> arg0 entity aid))
         (go process-drawable-art-error "art-group")
         (set! s2-0 (the-as draw-control #f))
         (goto cfg-50)
@@ -727,8 +725,7 @@
       (let ((sv-16 (-> s1-0 data (-> arg1 jgeo))))
         (let ((sv-20 (-> s1-0 length)))
           (when (or (< (-> arg1 jgeo) 0) (>= (-> arg1 jgeo) sv-20) (not sv-16) (!= (-> sv-16 type) art-joint-geo))
-            (format 0 "Going to process aid=~D process drawable art error beacuse of joint-geo~%" (-> arg0 entity aid))
-        (go process-drawable-art-error "joint-geo")
+            (go process-drawable-art-error "joint-geo")
             (set! s2-0 (the-as draw-control #f))
             (goto cfg-50)
             )
@@ -761,8 +758,7 @@
               )
             )
           )
-        (when (not (setup-lods! (-> s2-0 lod-set) arg1 s1-0 (-> arg0 entity)))
-          (format 0 "Going to process aid=~D process drawable art error beacuse of mesh~%" (-> arg0 entity aid))
+        (if (not (setup-lods! (-> s2-0 lod-set) arg1 s1-0 (-> arg0 entity)))
             (go process-drawable-art-error "mesh")
             )
         (let ((v1-41 (res-lump-value (-> sv-16 extra) 'texture-bucket int :default (the-as uint128 1) :time -1000000000.0))
@@ -805,8 +801,7 @@
 
 (defmethod initialize-skeleton ((this process-drawable) (arg0 skeleton-group) (arg1 pair))
   (local-vars (v1-14 art-element))
-  (when (not arg0)
-      (format 0 "Going to process aid=~D process drawable art error beacuse of skel-group~%" (-> this entity aid))
+  (if (not arg0)
       (go process-drawable-art-error "skel-group")
       )
   (set! (-> this draw) (skeleton-group->draw-control this arg0 (&-> this node-list)))
@@ -828,7 +823,6 @@
                           (begin (set! v1-14 (-> s3-1 data (-> arg0 janim))) (not v1-14))
                           (!= (-> v1-14 type) art-joint-anim)
                           )
-                  (format 0 "Going to process aid=~D process drawable art error beacuse of initial joint-anim~%" (-> this entity aid))
                   (go process-drawable-art-error "initial joint-anim")
                   (return (the-as draw-control #f))
                   )
@@ -884,11 +878,8 @@
     (let ((s4-1 (s3-0 s4-0 *temp-string* (the-as (pointer uint32) #f))))
       (if (and (nonzero? s4-1) (valid? s4-1 skeleton-group (the-as string #f) #f 0))
           (initialize-skeleton this (the-as skeleton-group s4-1) (the-as pair 0))
-          (begin
-            (format 0 "Going to process aid=~D process drawable art error beacuse of ~A~%" (-> this entity aid) arg0)
-            (go process-drawable-art-error arg0)
+          (go process-drawable-art-error arg0)
           )
-        )
       )
     )
   (-> this draw)
@@ -1048,15 +1039,13 @@
       ((or (zero? (-> s5-0 active-channels))
            (zero? arg1)
            (when (>= (+ (-> s5-0 active-channels) (-> s5-0 float-channels) arg0) (-> s5-0 allocated-length))
-             (when *log-level-warn*
-               (format
-                 0
-                 "WARNING: ~A could not do (ja-channel-push! ~D) because it has ~D/~D channels.~%"
-                 self
-                 arg0
-                 (+ (-> s5-0 active-channels) (-> s5-0 float-channels))
-                 (-> s5-0 allocated-length)
-                 )
+             (format
+               0
+               "WARNING: ~A could not do (ja-channel-push! ~D) because it has ~D/~D channels.~%"
+               self
+               arg0
+               (+ (-> s5-0 active-channels) (-> s5-0 float-channels))
+               (-> s5-0 allocated-length)
                )
              #t
              )
@@ -1135,15 +1124,13 @@
 (defbehavior ja-channel-float! process-drawable ((arg0 art-joint-anim) (arg1 float) (arg2 float) (arg3 float))
   (cond
     ((>= (+ (-> self skel active-channels) (-> self skel float-channels)) (-> self skel allocated-length))
-      (when *log-level-warn*
-       (format
-         0
-         "WARNING: ~A could not do (ja-channel-float! ~D) because it has ~D/~D channels.~%"
-         self
-         1
-         (+ (-> self skel active-channels) (-> self skel float-channels))
-         (-> self skel allocated-length)
-         )
+     (format
+       0
+       "WARNING: ~A could not do (ja-channel-float! ~D) because it has ~D/~D channels.~%"
+       self
+       1
+       (+ (-> self skel active-channels) (-> self skel float-channels))
+       (-> self skel allocated-length)
        )
      (the-as joint-control-channel #f)
      )
@@ -1262,7 +1249,6 @@
           (else
             (let ((s2-0 (-> s3-0 frame-group)))
               (when (not (and s2-0 (nonzero? s2-0) (= (logand (the-as int s2-0) 7) 4) (= (-> s2-0 type) art-joint-anim)))
-                (format 0 "Going to process process drawable art error beacuse of joint anim 2~%")
                 (go process-drawable-art-error "joint-anim")
                 ;; og:preserve-this
                 (abandon-thread)
@@ -1330,55 +1316,6 @@
         (else
           (let ((s0-0 (-> s1-0 frame-group)))
             (when (not (and s0-0 (nonzero? s0-0) (= (logand (the-as int s0-0) 7) 4) (= (-> s0-0 type) art-joint-anim)))
-              (format
-                0
-                "[DBG] joint-eval bad channel proc=~A aid=~D state=~A next=~A~%"
-                this
-                (-> this entity aid)
-                (if (-> this state) (-> this state name) #f)
-                (if (-> this next-state) (-> this next-state name) #f)
-                )
-              (let ((draw-ctrl (-> this draw)))
-                (when (and draw-ctrl (nonzero? draw-ctrl))
-                  (let ((art-grp (-> draw-ctrl art-group)))
-                    (when (and art-grp (nonzero? art-grp))
-                      (format
-                        0
-                        "[DBG] joint-eval bad channel: art-group=~S length=~D~%"
-                        (-> art-grp name)
-                        (-> art-grp length)
-                        )
-                      )
-                    )
-                  )
-                )
-              (format
-                0
-                "[DBG] joint-eval bad channel aid=~D skel=~A ch=~D cmd=~A frame-group=~A~%"
-                (-> this entity aid)
-                gp-0
-                s2-0
-                v1-19
-                s0-0
-                )
-              (format
-                0
-                "[DBG] joint-eval bad channel aid=~D frame-targ=~A frame-num=~A interp=~A interp0=~A~%"
-                (-> this entity aid)
-                (-> gp-0 top-anim frame-targ)
-                (-> s1-0 frame-num)
-                (-> gp-0 top-anim interp)
-                (-> s1-0 frame-interp 0)
-                )
-              (format
-                0
-                "[DBG] joint-eval bad channel aid=~D interp1=~A ac=~D fc=~D~%"
-                (-> this entity aid)
-                (-> s1-0 frame-interp 1)
-                (-> gp-0 active-channels)
-                (-> gp-0 float-channels)
-                )
-              (format 0 "Going to process process drawable art error beacuse of joint anim for aid=~D~%" (-> this entity aid))
               (go process-drawable-art-error "joint-anim")
               ;; og:preserve-this
               (abandon-thread)

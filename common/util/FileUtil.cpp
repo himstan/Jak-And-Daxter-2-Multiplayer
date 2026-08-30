@@ -177,7 +177,7 @@ std::optional<std::string> try_get_project_path_from_path_modbase(const std::str
       lg::info("Project path found - {}", current_path.string());
       return current_path.string();
     }
-    if (!current_path.has_parent_path()) {
+    if (!current_path.has_parent_path()){
       lg::info("No parent folder found");
       return {};
     }

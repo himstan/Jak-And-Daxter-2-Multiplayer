@@ -1763,7 +1763,6 @@
   (tick! (-> arg0 total-game-clock))
   (tick! (-> arg0 base-clock))
   (tick! (-> arg0 real-clock))
-  ;; Presentation deadlines use a local, unmasked clock like real-clock.
   (tick! (-> arg0 presentation-clock))
   (tick! (-> arg0 target-clock))
   (tick! (-> arg0 camera-clock))

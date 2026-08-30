@@ -7,13 +7,13 @@
   "bounding-box-h.o"
   "matrix-h.o"
   "quaternion-h.o"
-  "mp-types.o"
-  "mp-schema-generated.o"
-  "mp-event-h.o"
-  "debug-log.o"
-  "mp-event-queue.o"
-  "mp-event-builders.o"
-  "mp-event-enqueuers.o"
+  "mp-types.o" ;; added
+  "mp-schema-generated.o" ;; added
+  "mp-event-h.o" ;; added
+  "debug-log.o" ;; added
+  "mp-event-queue.o" ;; added
+  "mp-event-builders.o" ;; added
+  "mp-event-enqueuers.o" ;; added
   "euler-h.o"
   "transform-h.o"
   "geometry-h.o"
@@ -82,7 +82,7 @@
   "drawable-tree-h.o"
   "drawable-actor-h.o"
   "region-h.o"
-  "region-custom-h.o"
+  "region-custom-h.o" ;; added
   "traffic-h.o"
   "game-task-h.o"
   "task-control-h.o"
@@ -138,7 +138,7 @@
   "collide-target-h.o"
   "collide-touch-h.o"
   "collide-edge-grab-h.o"
-  "mp-target-edge-grab-h.o"
+  "mp-target-edge-grab-h.o" ;; added
   "process-drawable-h.o"
   "process-focusable.o"
   "process-taskable-h.o"
@@ -150,16 +150,16 @@
   "projectile-h.o"
   "find-nearest-h.o"
   "target-h.o"
-  "player-h.o"
-  "player.o"
+  "player-h.o" ;; added
+  "player.o" ;; added
   "mp-player-color.o" ;; added
   "mp-player-texture-groups.o" ;; added
   "mp-cutscene-appearance.o" ;; added
-  "mp-overlay-layout-h.o"
-  "mp-spectate-h.o"
-  "mp-player-list-h.o"
-  "mp-world-h.o"
-  "target-helper.o"
+  "mp-overlay-layout-h.o" ;; added
+  "mp-spectate-h.o" ;; added
+  "mp-player-list-h.o" ;; added
+  "mp-world-h.o" ;; added
+  "target-helper.o" ;; added
   "stats-h.o"
   "bsp-h.o"
   "collide-cache-h.o"
@@ -186,7 +186,7 @@
   "progress-generic-h-pc.o" ;; added
   "rpc-h.o"
   "path-h.o"
-  "static-actor-h.o" ;; added - programmatic static actor definitions
+  "static-actor-h.o" ;; added
   "nav-mesh-h.o"
   "nav-control-h.o"
   "spatial-hash-h.o"
@@ -273,7 +273,7 @@
   "sky-tng.o"
   "load-state.o"
   "pc-debug-methods.o" ;; added
-  "snapshot.o"
+  "snapshot.o" ;; added
   "level-info.o"
   "level.o"
   "text.o"
@@ -307,8 +307,7 @@
   "ambient.o"
   "speech.o"
   "region.o"
-  "region-custom.o"
-  "region-overrides.o"
+  "region-custom.o" ;; added
   "fma-sphere.o"
   "script.o"
   "generic-obs.o"
@@ -331,7 +330,7 @@
   "find-nearest.o"
   "task-arrow.o"
   "projectile.o"
-  "daxter-h.o"
+  "daxter-h.o" ;; added
   "target-handler.o"
   "target-anim.o"
   "target.o"
@@ -375,8 +374,8 @@
   "memory-usage.o"
   "entity.o"
   "path.o"
-  "static-actor.o" ;; added - programmatic static actor framework
-  "static-actor-data.o" ;; added - static actor registrations
+  "static-actor.o" ;; added
+  "static-actor-data.o" ;; added
   "vol.o"
   "nav-mesh.o"
   "nav-control.o"
@@ -450,24 +449,24 @@
   "hud-ring-ag.go"
   "jakb-ag.go"
   "daxter-ag.go"
-  "daxter.o"
-  "daxter-aura.o"
-  "daxter-stance.o"
-  "daxter-walk.o"
-  "daxter-duck.o"
-  "daxter-jump.o"
-  "daxter-falling.o"
-  "daxter-attack.o"
-  "daxter-hit.o"
-  "daxter-death.o"
-  "daxter-roll.o"
-  "daxter-misc-states.o"
-  "daxter-ride-along.o"
-  "daxter-pole.o"
-  "daxter-edge-grab.o"
-  "jak-indax+0-ag.go"
-  "jak-pilot+0-ag.go"
-  "jak-pidax+0-ag.go"
+  "daxter.o" ;; added
+  "daxter-aura.o" ;; added
+  "daxter-stance.o" ;; added
+  "daxter-walk.o" ;; added
+  "daxter-duck.o" ;; added
+  "daxter-jump.o" ;; added
+  "daxter-falling.o" ;; added
+  "daxter-attack.o" ;; added
+  "daxter-hit.o" ;; added
+  "daxter-death.o" ;; added
+  "daxter-roll.o" ;; added
+  "daxter-misc-states.o" ;; added
+  "daxter-ride-along.o" ;; added
+  "daxter-pole.o" ;; added
+  "daxter-edge-grab.o" ;; added
+  "jak-indax+0-ag.go" ;; added
+  "jak-pilot+0-ag.go" ;; added
+  "jak-pidax+0-ag.go" ;; added
   "board-ag.go"
   "gun-ag.go"
   "jak-gun+0-ag.go"
@@ -480,18 +479,18 @@
   "blocking-plane.o"
   "idle-control.o"
   "dark-eco-pool.o"
-  "joint-exploder.o"
+  "joint-exploder.o" ;; added
   "enemy-h.o"
   "nav-enemy-h.o"
   "rigid-body-h.o"
-  "damage-number.o"
-  "statistics.o"
+  "damage-number.o" ;; added
+  "statistics.o" ;; added
   "enemy.o"
   "nav-enemy.o"
-  "nav-graph-h.o"
-  "traffic-engine-h.o"
-  "vehicle-h.o"
-  "citizen-h.o"
+  "nav-graph-h.o" ;; added
+  "traffic-engine-h.o" ;; added
+  "vehicle-h.o" ;; added
+  "citizen-h.o" ;; added
   "base-plat.o"
   "plat.o"
   "basebutton.o"
@@ -503,62 +502,62 @@
   "rigid-body-plat.o"
   "airlock-customizable-h.o" ;; added
   ;; atoll
-  "atoll-airlock-data.o"
+  "atoll-airlock-data.o" ;; added
   ;; atollext
-  "atollext-airlock-data.o"
+  "atollext-airlock-data.o" ;; added
   ;; city
-  "consite-airlock-data.o"
-  "consiteb-airlock-data.o"
-  "ctyfarma-airlock-data.o"
-  "ctygenb-airlock-data.o"
-  "ctyinda-airlock-data.o"
-  "ctyindb-airlock-data.o"
-  "ctypal-airlock-data.o"
-  "ctyport-airlock-data.o"
-  "ctysluma-airlock-data.o"
-  "ctyslumb-airlock-data.o"
-  "ctyslumc-airlock-data.o"
-  "gungame-airlock-data.o"
-  "hideout-airlock-data.o"
-  "hiphog-airlock-data.o"
-  "oracle-airlock-data.o"
-  "stadium-airlock-data.o"
-  "vinroom-airlock-data.o"
+  "consite-airlock-data.o" ;; added
+  "consiteb-airlock-data.o" ;; added
+  "ctyfarma-airlock-data.o" ;; added
+  "ctygenb-airlock-data.o" ;; added
+  "ctyinda-airlock-data.o" ;; added
+  "ctyindb-airlock-data.o" ;; added
+  "ctypal-airlock-data.o" ;; added
+  "ctyport-airlock-data.o" ;; added
+  "ctysluma-airlock-data.o" ;; added
+  "ctyslumb-airlock-data.o" ;; added
+  "ctyslumc-airlock-data.o" ;; added
+  "gungame-airlock-data.o" ;; added
+  "hideout-airlock-data.o" ;; added
+  "hiphog-airlock-data.o" ;; added
+  "oracle-airlock-data.o" ;; added
+  "stadium-airlock-data.o" ;; added
+  "vinroom-airlock-data.o" ;; added
   ;; fortress
-  "fordumpa-airlock-data.o"
-  "fordumpc-airlock-data.o"
-  "forexitb-airlock-data.o"
-  "forresca-airlock-data.o"
-  "forrescb-airlock-data.o"
-  "prison-airlock-data.o"
+  "fordumpa-airlock-data.o" ;; added
+  "fordumpc-airlock-data.o" ;; added
+  "forexitb-airlock-data.o" ;; added
+  "forresca-airlock-data.o" ;; added
+  "forrescb-airlock-data.o" ;; added
+  "prison-airlock-data.o" ;; added
   ;; ruins
-  "ruins-airlock-data.o"
+  "ruins-airlock-data.o" ;; added
   ;; sewer
-  "sewerb-airlock-data.o"
-  "sewescb-airlock-data.o"
+  "sewerb-airlock-data.o" ;; added
+  "sewescb-airlock-data.o" ;; added
   ;; palace
-  "palcab-airlock-data.o"
-  "palent-airlock-data.o"
-  "palroof-airlock-data.o"
-  "palshaft-airlock-data.o"
-  "throne-airlock-data.o"
+  "palcab-airlock-data.o" ;; added
+  "palent-airlock-data.o" ;; added
+  "palroof-airlock-data.o" ;; added
+  "palshaft-airlock-data.o" ;; added
+  "throne-airlock-data.o" ;; added
   ;; under
-  "under-airlock-data.o"
-  "underb-airlock-data.o"
+  "under-airlock-data.o" ;; added
+  "underb-airlock-data.o" ;; added
   ;; caspad
-  "caspad-airlock-data.o"
+  "caspad-airlock-data.o" ;; added
   ;; castle
-  "castle-airlock-data.o"
-  "casboss-airlock-data.o"
+  "castle-airlock-data.o" ;; added
+  "casboss-airlock-data.o" ;; added
   ;; drill
-  "drillmtn-airlock-data.o"
+  "drillmtn-airlock-data.o" ;; added
   ;; tomb
-  "tomba-airlock-data.o"
-  "tombboss-airlock-data.o"
-  "tombc-airlock-data.o"
-  "tombd-airlock-data.o"
+  "tomba-airlock-data.o" ;; added
+  "tombboss-airlock-data.o" ;; added
+  "tombc-airlock-data.o" ;; added
+  "tombd-airlock-data.o" ;; added
   ;; mountain
-  "mountain-airlock-data.o"
+  "mountain-airlock-data.o" ;; added
   "airlock-customizable.o" ;; added
   "simple-focus.o"
   "ai-task-h.o" ;; added
@@ -649,7 +648,6 @@
   "mp-events.o" ;; added
   "mp-player-snapshot.o" ;; added
   "mp-remote.o" ;; added
-  "mp-player-role.o" ;; added
   "mp-player-visibility.o" ;; added
   "mp-overlay-layout.o" ;; added
   "mp-player-list.o" ;; added
@@ -663,7 +661,7 @@
   "path-editor-h.o" ;; added - path-editor-h
   "path-editor.o" ;; added - path-editor
   "mod-debug.o" ;; added
-  "mp-airlock-debug.o"
-  "mp-elevator-debug.o"
-  "mp-respawn-policy-debug.o"
+  "mp-airlock-debug.o" ;; added
+  "mp-elevator-debug.o" ;; added
+  "mp-respawn-policy-debug.o" ;; added
  ))

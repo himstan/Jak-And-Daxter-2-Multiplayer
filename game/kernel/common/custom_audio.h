@@ -34,7 +34,6 @@ class Source {
 
 }  // namespace custom_audio
 
-// Existing GOAL-facing custom audio API.
 u64 playMP3(u32 file_path, u32 volume);
 void stopMP3(u32 file_path);
 void stopAllSounds();

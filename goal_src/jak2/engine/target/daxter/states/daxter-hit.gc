@@ -103,41 +103,29 @@
 
   :exit target-indax-exit
   :trans (behavior ()
-    ;; og:preserve-this - High FPS Fix
           (if (and (recently-pressed? x)
                    (can-jump? #f))
-
               (go
                 target-indax-jump
                 (-> *TARGET-bank* indax-jump-height-min)
                 (-> *TARGET-bank* indax-jump-height-max)
                 (the-as surface #f)))
-
-
           (if (!= (-> *cpad-list* cpads (-> self control cpad number) stick0-speed) 0.0)
               (go target-indax-walk))
 
-    ;; og:preserve-this - High FPS Fix
           (if (and (recently-pressed? square)
                    (can-hands? #t))
-
               (go target-indax-running-attack))
 
-    ;; og:preserve-this - High FPS Fix
           (if (and (recently-pressed? circle)
                    (can-feet? #t))
-
               (go target-indax-attack))
-
           (fall-test target-falling -4096000.0))
-
   :code (behavior ((arg0 symbol))
          (ja-channel-push! 1 (seconds 0.05))
          (ja-no-eval :group! daxter-indax-jump-land-ja :num! (seek!) :frame-num 0.0)
          (until (ja-done? 0)
            (suspend)
            (ja :num! (seek!)))
-
          (go target-indax-stance))
-
   :post target-indax-post)

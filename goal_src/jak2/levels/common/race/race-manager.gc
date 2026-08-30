@@ -1,6 +1,10 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+;; name: race-manager.gc
+;; name in dgo: race-manager
+;; dgos: STD, STC, LERLCHAL, STB, LPRTRACE
+
 (define-extern race-start (function int process symbol race-manager))
 (define-extern race-start-from-info (function race-info process symbol race-manager))
 (define-extern race-start-by-task-node (function game-task-node process symbol race-manager))
@@ -14,6 +18,8 @@
 (declare-type race-bike-d vehicle-race-bike)
 (declare-type race-bike-e vehicle-race-bike)
 (declare-type bikea bike-base)
+
+;; DECOMP BEGINS
 
 (defun race-find-ground ((result vector) (position vector))
   "Find the ground below a position and write the hit point to result."
@@ -278,8 +284,6 @@
                     (vector-vector-distance-squared
                       (-> this position)
                       (the-as vector (-> state info finish-sphere)))))
-              ;; Rankings sort larger progress first, so negated distance makes
-              ;; the closest unfinished destination racer lead in real time.
               (set! (-> this lap-distance) (- 0.0 finish-distance-squared))
               (when (< finish-distance-squared
                        (square (-> state info finish-sphere r)))
@@ -1821,7 +1825,7 @@
 (defun race-start-from-info ((info race-info) (parent process) (preload? symbol))
   (cond
     ((not info)
-     (format 0 "race-start-from-info: cannot start a null race-info~%")
+     (debug-log *mp-debug-log?* "[Race] race-start-from-info: cannot start a null race-info~%")
      (the-as race-manager #f)
      )
     (else
@@ -1832,17 +1836,17 @@
             (when (not parent)
               (set! parent (the-as process *entity-pool*))
               )
-            (format #t "starting race-manager for task ~d~%" (the int (-> info task-node)))
+            (debug-log *mp-debug-log?* "[Race] starting race-manager for task ~d~%" (the int (-> info task-node)))
             (let ((spawn-result (process-spawn race-manager info preload? :to (the-as process-tree parent))))
               (cond
                 (spawn-result
                  (let ((manager (-> spawn-result 0)))
-                   (format #t "race-manager started~%")
+                   (debug-log *mp-debug-log?* "[Race] race-manager started~%")
                    manager
                    )
                  )
                 (else
-                  (format 0 "race-start-from-info: failed to spawn race-manager~%")
+                  (debug-log *mp-debug-log?* "[Race] race-start-from-info: failed to spawn race-manager~%")
                   (the-as race-manager #f)
                   )
                 )
@@ -1857,7 +1861,7 @@
 (defun race-start ((race-index int) (parent process) (preload? symbol))
   (if (or (< race-index 0) (>= race-index (length *race-info-array*)))
     (begin
-     (format 0 "race-start: invalid race-info index ~d; array length is ~d~%" race-index (length *race-info-array*))
+     (debug-log *mp-debug-log?* "[Race] race-start: invalid race-info index ~d; array length is ~d~%" race-index (length *race-info-array*))
      (the-as race-manager #f)
      )
     (race-start-from-info
@@ -1872,9 +1876,7 @@
     (if (and info (nonzero? info))
       (race-start-from-info info parent preload?)
       (begin
-        (format
-          0
-          "race-start-by-task-node: no race-info found for task node ~d~%"
+        (debug-log *mp-debug-log?* "[Race] race-start-by-task-node: no race-info found for task node ~d~%"
           (the int task-node))
         (the-as race-manager #f)
         )
@@ -1902,14 +1904,14 @@
     (none)))
 
 (defun race-level-activate ((level level))
-  (format 0 "race-level-activate~%")
+  (debug-log *mp-debug-log?* "[Race] race-level-activate~%")
   (cond
     ((> (-> level entity length) 0)
      (set! *race-vehicle-entity* (the-as entity-actor (-> level entity data 0 entity)))
      )
     (else
       (dotimes (i 10)
-        (format 0 "ERROR: race-level-startup: level ~s has no entities!!~%" (-> level name))
+        (debug-log *mp-debug-log?* "[Race] ERROR: race-level-startup: level ~s has no entities!!~%" (-> level name))
         )
       (set! *race-vehicle-entity* #f)
       )

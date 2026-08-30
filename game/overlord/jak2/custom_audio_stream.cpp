@@ -334,14 +334,14 @@ bool StopCustomAudioStream(const char* key, s32 id) {
   if (entry == g_stream_instances.end()) {
     const bool registered_key = key && key[0] && g_registered_streams.contains(key);
     if (registered_key) {
-      lg::info("[CUSTOM_SPATIAL_AUDIO] stop-request-without-instance key='{}' id={}", key, id);
+      lg::info("stop-request-without-instance key='{}' id={}", key, id);
     }
     return registered_key;
   }
   if ((!key || !key[0]) && entry->second.status == CustomAudioStreamStatus::FINISHED) {
     return false;
   }
-  lg::info("[CUSTOM_SPATIAL_AUDIO] stop-request requested-key='{}' id={}",
+  lg::info("stop-request requested-key='{}' id={}",
            key && key[0] ? key : "<by-id>", id);
   log_stream_state("stop-request-state", id, entry->second);
   if (entry->second.source) {

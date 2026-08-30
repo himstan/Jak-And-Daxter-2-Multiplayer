@@ -309,14 +309,12 @@ void extract_common(const ObjectFileDB& db,
       if (db.obj_files_by_dgo.count(lvl_dgo_name)) {
         const auto& files = db.obj_files_by_dgo.at(lvl_dgo_name);
         for (const auto& file : files) {
-          if (!art_groups_made_common.contains(file.name) &&
-              config.common_art_groups.contains(file.name)) {
+          if (!art_groups_made_common.contains(file.name) && config.common_art_groups.contains(file.name)) {
             lg::info("Art group {} was requested to be made common, we found it in {}!", file.name,
                      lvl_dgo_name);
             const auto& ag_file = db.lookup_record(file);
             MercSwapInfo swapped_info;
-            extract_merc(ag_file, tex_db, db.dts, tex_remap, tfrag_level, false, db.version(),
-                         swapped_info);
+            extract_merc(ag_file, tex_db, db.dts, tex_remap, tfrag_level, false, db.version(), swapped_info);
             extract_joint_group(ag_file, db.dts, db.version(), art_group_data);
             // track found art groups so we don't borther re-processing in a later level
             art_groups_made_common.insert(file.name);

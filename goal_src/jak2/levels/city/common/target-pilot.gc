@@ -237,7 +237,6 @@
     (set! (-> s5-0 backup-nav-radius) (-> self control nav-radius))
     (set! (-> s5-0 gun?) #t)
     (set! (-> s5-0 enable-cam-side-shift) #f)
-    ;; og:preserve-this Resolve avatar mode from this target's bound player record.
     (set! (-> s5-0 as-daxter?)
           (if (or arg1
                   (and (mp-target-daxter? self) (focus-test? self indax)))
@@ -274,25 +273,21 @@
 
         (vehicle-eject-civilian-riders! (the-as vehicle s4-1))
 
-        ;; Determine the seat index using the current multiplayer-aware rules.
         (cond
           ((let ((record (mp-player-process-record self)))
              (and record
                   (nonzero? record)
                   (mp-player-record-remote? *mp-player-controller* record)))
-           ;; Each puppet uses the authoritative seat stored in its own record.
            (let ((record (mp-player-process-record self)))
              (when (and record (nonzero? record))
                (set! (-> s5-0 seat-index)
                      (the int (-> record vehicle seat-index)))))
            )
           ((!= *mp-shuttle-override-seat-index* -1)
-           ;; Teleport-boarding override for shuttle mission
            (set! (-> s5-0 seat-index) *mp-shuttle-override-seat-index*)
            (set! *mp-shuttle-override-seat-index* -1)
            )
           (else
-            ;; Local player boarding: Use proximity/occupancy logic.
             (let* ((force-passenger? (cpad-hold? (-> self control cpad number) l1))
                    (driver-seat-player? (vehicle-driver-seat-has-player? (the-as vehicle s4-1)))
                    (passenger-seat (vehicle-find-empty-passenger-seat (the-as vehicle s4-1) (-> self control trans)))
@@ -302,8 +297,6 @@
                  (set! (-> s5-0 seat-index) passenger-seat)
                  )
                 (else
-                  ;; Normal: driver seat. The prompt path prevents local boarding when
-                  ;; a player driver has no empty passenger seat.
                   (set! (-> s5-0 seat-index) 0)
                   )
                 )
@@ -311,9 +304,7 @@
             )
           )
 
-        ;; 2. Kick out ONLY the occupant of the chosen seat (and protect MP targets)
         (let ((a0-20 (get-rider-in-seat (the-as vehicle s4-1) (-> s5-0 seat-index))))
-          ;; og:preserve-this added for hijack lines cheat
           (when (and a0-20 (or (type-type? (-> a0-20 type) citizen-norm-rider) (type-type? (-> a0-20 type) crimson-guard-rider)))
             (let ((cheat? (pc-cheats? (-> *pc-settings* cheats) hijack-lines))
                   (chance? (rand-vu-percent? (-> *pc-cheat-state* hijack-speech-chance))))
@@ -328,7 +319,6 @@
               )
             )
           )
-        
         (cond
           ((-> s5-0 as-daxter?)
            (set! (-> s5-0 left-right-accel-factor) 0.0000012207031)

@@ -727,7 +727,6 @@
     (set! (-> arg0 proc) #f)
     (set! (-> arg0 net-id) (the uint 0))
     (mp-traffic-assign-spawn-net-id! this arg0)
-
     (let ((v1-2 (-> this traffic object-type-info-array gp-0)))
       (when (and (> (-> v1-2 inactive-count) 0) (> (-> v1-2 reserve-count) 0))
         (let* ((sv-16 (get-from-inactive-by-type this gp-0))
@@ -803,7 +802,6 @@
             (-> s4-0 vector 0)
             (new 'static 'vector :y 1.0 :w 1.0)
             )
-
           (set! (-> this rand) (rand-vu))
           (let ((presentation-pos
                   (mp-player-record-presentation-position (mp-host-player-record))))
@@ -829,7 +827,6 @@
     (set! (-> arg0 proc) #f)
     (set! (-> arg0 net-id) (the uint 0))
     (mp-traffic-assign-spawn-net-id! this arg0)
-
     (when (> (-> this traffic object-type-info-array gp-0 inactive-count) 0)
       (let* ((sv-16 (get-from-inactive-by-handle this gp-0 (-> arg0 handle)))
              (s3-0 (handle->process sv-16))
@@ -1327,8 +1324,6 @@
           )
         )
       )
-    ;; Offline targets have no player record. Slot zero is reserved as the vanilla fallback
-    ;; only while there is no active multiplayer session.
     (when (and (not (mp-connection-status-active? (pc-multi-get-status)))
                (logtest? (-> this alert-state flags) (traffic-alert-flag target-jak))
                (mp-traffic-valid-local-target?))
@@ -3232,30 +3227,33 @@
     ((> (-> this alert-state level) 0)
      (if (and (logtest? (-> this alert-state flags) (traffic-alert-flag target-jak))
               (not (logtest? (-> this alert-state flags) (traffic-alert-flag alert-ending)))
-              (or (mp-traffic-valid-local-target?) (mp-traffic-any-valid-remote-target?))
+              (or (mp-traffic-valid-local-target?) (mp-traffic-any-valid-remote-target?)))
+       (for-all-active-processes 
+         this 
+         (lambda ((arg0 process-focusable) (arg1 traffic-object-type-info))
+          (if (logtest? (-> arg1 flags) (traffic-type-flags trtflags-0))
+              (let ((alert-target (mp-combat-nearest-player-target arg0 (the-as process-focusable #f) #f)))
+                (when (and alert-target
+                           (nonzero? alert-target))
+                  (send-event arg0 'alert-begin alert-target)
+                  )
+                )
               )
-         (for-all-active-processes this (lambda ((arg0 process-focusable) (arg1 traffic-object-type-info))
-                                          (if (logtest? (-> arg1 flags) (traffic-type-flags trtflags-0))
-                                              (let ((alert-target (mp-traffic-closest-alert-target arg0)))
-                                                (when (and alert-target
-                                                           (nonzero? alert-target))
-                                                  (send-event arg0 'alert-begin alert-target)
-                                                  )
-                                                )
-                                              )
-                                          (none)
-                                          )
-                                   )
-         )
+          (none)
+          )
+        )
+       )
      )
     (else
-      (for-all-active-processes this (lambda ((arg0 process-focusable) (arg1 traffic-object-type-info))
-                                       (if (logtest? (-> arg1 flags) (traffic-type-flags trtflags-0))
-                                           (send-event arg0 'alert-end)
-                                           )
-                                       (none)
-                                       )
-                                )
+      (for-all-active-processes 
+        this 
+        (lambda ((arg0 process-focusable) (arg1 traffic-object-type-info))
+         (if (logtest? (-> arg1 flags) (traffic-type-flags trtflags-0))
+             (send-event arg0 'alert-end)
+             )
+         (none)
+         )
+        )
       )
     )
   0
@@ -3761,8 +3759,6 @@
       )
     )
   (let ((s5-0 (math-camera-pos))
-        (host-skip-frustum? (and (mp-session-host?) (mp-connection-status-active? (pc-multi-get-status))))
-        (f30-0 81920.0)
         (f28-0 819200.0)
         (f26-0 491520.0)
         )
@@ -3770,9 +3766,7 @@
       (let ((s3-0 (-> this city-info cell-array s4-0)))
         (let ((f24-0 (vector-vector-distance-squared (-> s3-0 sphere) s5-0)))
           (cond
-            ((or (< (square (+ (-> s3-0 sphere r) f28-0)) f24-0)
-                 (and (< (square (+ (-> s3-0 sphere r) f30-0)) f24-0) (not host-skip-frustum?) (not (sphere-in-view-frustum? (-> s3-0 sphere))))
-                 )
+            ((< (square (+ (-> s3-0 sphere r) f28-0)) f24-0)
              (logclear! (-> s3-0 flags) (vis-cell-flag active-vehicle active-pedestrian))
              )
             ((< (square (+ (-> s3-0 sphere r) f26-0)) f24-0)

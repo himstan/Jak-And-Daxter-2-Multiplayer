@@ -570,7 +570,7 @@
   TASK_MANAGER_COMPLETE_HOOK
   (lambda :behavior task-manager
     ()
-    (debug-log *mp-debug-log?* "[Krew-Deliver] triggered complete hook!~%")
+    (debug-log *mp-debug-log?* "[Krew-Delivery] triggered complete hook!~%")
     (send-event *traffic-manager* 'decrease-alert-level 0)
     (send-event *traffic-manager* 'set-alert-duration (seconds 30))
     (if (and *target* (focus-test? *target* pilot))

@@ -7,7 +7,6 @@
 (defun mp-reset-scene-sync-state! ()
   (set! *multi-remote-spawn-time* (the-as time-frame 0))
   (set! *mp-last-scene-player* #f)
-  (set! *mp-was-riding-before-scene* #f)
   (mp-scene-coordinator-reset!)
   (set! *mp-pending-scene-sync?* #f)
   (set! *mp-pending-scene-sync-next-log-time* (the-as time-frame 0))
@@ -1649,8 +1648,8 @@
       (when (and control (nonzero? control))
         (set! (-> control last-successful-compute-edge-time) (current-time)))
       (send-event target (if pilot?
-                            'mp-pilot-edge-grab-synced
-                            'mp-edge-grab-synced))))
+                            'mp-edge-grab-pilot
+                            'mp-edge-grab))))
   (none)
   )
 
@@ -1712,7 +1711,7 @@
             (when (not (and (focus-test? puppet pole)
                             (= (-> puppet control anim-handle) pole-handle)))
               (send-event pole-proc 'mp-pole-grab (process->handle puppet))
-              (send-event puppet 'mp-pole-grab-synced pole-handle)
+              (send-event puppet 'mp-pole-grab pole-handle)
               )
             )
           )

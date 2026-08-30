@@ -1739,7 +1739,7 @@ into 7 sections, which might explain the weird sizes in the center.
 (defmethod is-object-visible? ((this level) (arg0 int))
   "Is drawable arg0 visible? Note that this will return #f if the visibility data is not loaded."
 
-  ;; Programmatic static actors have no compiler-generated visibility bit.
+  ;; hack: static actors have no compiler-generated visibility bit.
   (when (< arg0 0)
     (return #t)
     )
@@ -2665,7 +2665,7 @@ into 7 sections, which might explain the weird sizes in the center.
               (when (!= (-> this vis-nick) (-> current-continue vis-nick))
                 (when *mp-debug-log?*
                   (debug-log *mp-debug-log?*
-                             "[ContinuePager] align-vis old=~S new=~S current=~S candidate=~S role=~D policy=~A~%"
+                             "[Continue] align-vis old=~S new=~S current=~S candidate=~S role=~D policy=~A~%"
                              (-> this vis-nick)
                              (-> current-continue vis-nick)
                              (-> current-continue name)
@@ -2829,7 +2829,7 @@ into 7 sections, which might explain the weird sizes in the center.
                       (the-as continue-point s3-0))
                     (when *mp-debug-log?*
                       (debug-log *mp-debug-log?*
-                                 "[ContinuePager] protected current=~S candidate=~S vis=~S role=~D~%"
+                                 "[Continue] protected current=~S candidate=~S vis=~S role=~D~%"
                                  (-> *game-info* current-continue name)
                                  (-> (the-as continue-point s3-0) name)
                                  (-> *load-state* vis-nick)
@@ -2844,7 +2844,7 @@ into 7 sections, which might explain the weird sizes in the center.
                                           (nonzero? (-> *game-info* current-continue))
                                           (mp-trace-tomb-continue? (-> *game-info* current-continue name)))))
                         (debug-log *mp-debug-log?*
-                                   "[MP-ContinueTrace] level-auto vis=~S old=~S candidate=~S~%"
+                                   "[Continue] level-auto vis=~S old=~S candidate=~S~%"
                                    (-> *load-state* vis-nick)
                                    (if (and (-> *game-info* current-continue)
                                             (nonzero? (-> *game-info* current-continue)))

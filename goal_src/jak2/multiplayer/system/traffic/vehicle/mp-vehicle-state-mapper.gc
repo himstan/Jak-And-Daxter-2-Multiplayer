@@ -5,10 +5,8 @@
   "Map a vehicle's current state name to a numeric mp-veh-state-id."
   (if (not (and v-proc (nonzero? v-proc))) (return (the uint 0)))
 
-  (let ((state-name (if (and (-> v-proc state)
-                               (nonzero? (-> v-proc state)))
-                          (-> v-proc state name)
-                          'none)))
+  (let ((state-name (if (and (-> v-proc state) (nonzero? (-> v-proc state)))
+                          (-> v-proc state name) 'none)))
     (case state-name
       (('idle)               (the uint (mp-veh-state-id idle)))
       (('inactive)           (the uint (mp-veh-state-id inactive)))

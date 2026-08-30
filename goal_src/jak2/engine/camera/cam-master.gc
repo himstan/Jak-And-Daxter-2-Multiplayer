@@ -573,9 +573,7 @@
 
 (defstate cam-master-active (camera-master)
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
-    ;; MP GUARD: If the event sender is a target, it MUST be the local *target*.
-    ;; This prevents remote puppets from hijacking the camera (e.g. pole zoom).
-    (when (and proc (type? proc target) (!= proc *target*))
+    (when (puppet? proc)
       (return #f)
       )
     (local-vars (v0-0 object) (v1-125 uint))

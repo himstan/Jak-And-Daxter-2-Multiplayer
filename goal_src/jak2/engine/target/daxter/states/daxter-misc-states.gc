@@ -8,11 +8,9 @@
           (set-time! (-> self state-time))
           (sound-play "jump" :vol 70)
           (logclear! (-> self control status) (collide-status on-surface on-ground touch-surface)))
-
   :exit (behavior ()
          (target-exit)
          (target-indax-exit))
-
   :code (behavior ()
          (set! (-> self control mod-surface) *indax-bounce-mods*)
          (ja-channel-push! 1 (seconds 0.02))
@@ -30,9 +28,7 @@
          (until (ja-done? 0)
            (suspend)
            (ja :num! (seek!)))
-
          (sleep-code))
-
   :post target-no-stick-post)
 
 (defstate target-indax-grab (target)

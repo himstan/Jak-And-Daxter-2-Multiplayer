@@ -141,7 +141,7 @@ void InputManager::refresh_device_list() {
         }
       }
 
-      // Otherwise, prefer any controller that was explicitly mapped to port 0.
+      // prefer any controller that was explicitly mapped to port 0.
       if (!claimed_controller) {
         for (size_t i = 0; i < m_available_controllers.size(); i++) {
           const auto& controller_guid = m_available_controllers.at(i)->get_guid();
@@ -155,7 +155,7 @@ void InputManager::refresh_device_list() {
         }
       }
 
-      // Finally, claim the first controller not already claimed by another local game process.
+      // claim the first controller not already claimed by another local game process.
       if (!claimed_controller) {
         for (size_t i = 0; i < m_available_controllers.size(); i++) {
           if (try_claim_controller(i)) {

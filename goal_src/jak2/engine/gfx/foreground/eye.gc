@@ -1012,32 +1012,6 @@
     )
   )
 
-(defun active-eye-rendering-proc? ((pd process-drawable))
-  "Returns true if the drawable process should actively render its eyes."
-  (and pd
-       (nonzero? pd)
-       (-> pd draw)
-       (nonzero? (-> pd draw))
-       (or (and (logtest? (-> pd draw status) (draw-control-status on-screen))
-                (cond
-                  ((and *target* (nonzero? *target*) (= pd *target*))
-                   (mp-target-jak? *target*)
-                   )
-                  ((mp-player-process-record pd)
-                   (mp-target-jak? (the-as process-focusable pd))
-                   )
-                  (else
-                    #t
-                    )
-                  )
-                )
-           (and (mp-player-process-record pd)
-                (mp-target-jak? (the-as process-focusable pd))
-                (not (focus-test? pd indax)))
-           )
-       )
-  )
-
 (defun update-eyes ()
   (when (not (-> *blit-displays-work* screen-copied))
     (dotimes (gp-0 6)
@@ -1047,7 +1021,7 @@
                )
           (when (and v1-8
                      (logtest? (-> (the-as process-drawable v1-8) skel status) (joint-control-status eye-anim))
-                     (active-eye-rendering-proc? (the-as process-drawable v1-8))
+                     (logtest? (-> (the-as process-drawable v1-8) draw status) (draw-control-status on-screen))
                      )
             (when (-> s4-0 shaders)
               (when (not (paused?))
@@ -1234,10 +1208,7 @@
              (current-proc (if (and slot-ctrl (nonzero? slot-ctrl)) (handle->process (-> slot-ctrl process)) (the-as process #f)))
              )
         (when (or (not current-proc)
-                  (zero? current-proc)
-                  (not (active-eye-rendering-proc? (the-as process-drawable current-proc)))
-                  (active-eye-rendering-proc? arg0)
-                  )
+                  (zero? current-proc))
           (cond
             ((and (-> arg0 skel override) (!= (-> arg0 skel override 41) 0.0))
              (let ((v1-7 (-> *eye-control-arrays* data (/ (-> v1-2 eye-slot) 20) data (mod (-> v1-2 eye-slot) 20)))

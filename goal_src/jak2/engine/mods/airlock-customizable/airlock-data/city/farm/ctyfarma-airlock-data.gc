@@ -2,7 +2,7 @@
 (in-package goal)
 
 (define *ctyfarma-airlock-data* (new 'static 'boxed-array :type airlock-data
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-inner-20"
                 :on-notice '(when #t '(ctyfarma ctywide))
                 :other-side-levels '(atoll mountain)
@@ -14,7 +14,7 @@
                 :on-inside '(cond ((task-open? "forest-scouts-get-board")) (else (want-load 'ctyfarma 'mountain #f) (want-sound 'mount1 'mount2 'ctywide1)))
                 :on-deactivate #f
                 )
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-outer-32"
                 :on-notice '(cond ((task-closed? "mountain-lens-introduction") '(ctyfarma)))
                 :on-activate #f
@@ -24,7 +24,7 @@
                 :on-inside #f
                 :on-deactivate #f
                 )
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-inner-38"
                 :other-side-levels '(ctywide)
                 :on-notice '(when #t '(mountain))

@@ -452,13 +452,13 @@
                                             )
                                           (when (nonzero? aid-override)
                                             (debug-log *mp-debug-log?*
-                                                       "[MP-Widow][REMOTE] spawned requested-aid=~D net-id=~D slot=~D floor=~F~%"
+                                                       "[Widow][REMOTE] spawned requested-aid=~D net-id=~D slot=~D floor=~F~%"
                                                        aid-override
                                                        (-> (the-as enemy s4-1) net-id)
                                                        (-> self next-launch)
                                                        (-> self launch-dest y))
                                             (debug-log *mp-debug-log?*
-                                                       "[MP-Widow][REMOTE] spawned trans=(~F,~F,~F)~%"
+                                                       "[Widow][REMOTE] spawned trans=(~F,~F,~F)~%"
                                                        (-> s5-0 trans x)
                                                        (-> s5-0 trans y)
                                                        (-> s5-0 trans z))
@@ -568,10 +568,10 @@
 (defun mp-widow-spydroid-queue! ((self widow) (event mp-widow-spydroid-event))
   (cond
     ((or (not self) (not event) (zero? (-> event spydroid-aid)))
-     (debug-log *mp-debug-log?* "[MP-Widow][REMOTE] rejected invalid launch snapshot~%")
+     (debug-log *mp-debug-log?* "[Widow][REMOTE] rejected invalid launch snapshot~%")
      )
     ((>= (-> self remote-spydroid-count) 8)
-     (debug-log *mp-debug-log?* "[MP-Widow][REMOTE] rejected aid=~D queue-full count=~D~%"
+     (debug-log *mp-debug-log?* "[Widow][REMOTE] rejected aid=~D queue-full count=~D~%"
                 (-> event spydroid-aid) (-> self remote-spydroid-count))
      )
     (else
@@ -585,7 +585,7 @@
       (set! (-> self remote-spydroid-write)
             (logand (+ (-> self remote-spydroid-write) 1) 7))
       (+! (-> self remote-spydroid-count) 1)
-      (debug-log *mp-debug-log?* "[MP-Widow][REMOTE] queued aid=~D slot=~D count=~D~%"
+      (debug-log *mp-debug-log?* "[Widow][REMOTE] queued aid=~D slot=~D count=~D~%"
                  (-> event spydroid-aid)
                  (-> event launch-slot)
                  (-> self remote-spydroid-count))
@@ -599,7 +599,7 @@
              (> (-> self remote-spydroid-count) 0))
     (cond
       ((>= (-> self bomb-hits) 4)
-       (debug-log *mp-debug-log?* "[MP-Widow][REMOTE] rejected queued launches bomb-hits=~D count=~D~%"
+       (debug-log *mp-debug-log?* "[Widow][REMOTE] rejected queued launches bomb-hits=~D count=~D~%"
                   (-> self bomb-hits) (-> self remote-spydroid-count))
        (set! (-> self remote-spydroid-read) 0)
        (set! (-> self remote-spydroid-write) 0)
@@ -611,12 +611,12 @@
                (host-slot (-> self remote-spydroid-slots queue-index))
                (previous-next-launch (-> self next-launch))
                (selected-slot previous-next-launch))
-          (debug-log *mp-debug-log?* "[MP-Widow][REMOTE] attempt aid=~D count=~D next=~D~%"
+          (debug-log *mp-debug-log?* "[Widow][REMOTE] attempt aid=~D count=~D next=~D~%"
                      spydroid-aid (-> self remote-spydroid-count) previous-next-launch)
           (when (and (>= host-slot 0) (< host-slot 8))
             (if (handle->process (-> self bomb host-slot))
                 (debug-log *mp-debug-log?*
-                           "[MP-Widow][REMOTE] slot-fallback aid=~D host-slot=~D current-slot=~D~%"
+                           "[Widow][REMOTE] slot-fallback aid=~D host-slot=~D current-slot=~D~%"
                            spydroid-aid host-slot previous-next-launch)
                 (set! (-> self next-launch) host-slot)
                 )
@@ -627,7 +627,7 @@
                      (or (>= previous-next-launch 0) (>= selected-slot 0)))
             (set! (-> self remote-spydroid-read) (logand (+ queue-index 1) 7))
             (-! (-> self remote-spydroid-count) 1)
-            (debug-log *mp-debug-log?* "[MP-Widow][REMOTE] spawned aid=~D slot=~D remaining=~D~%"
+            (debug-log *mp-debug-log?* "[Widow][REMOTE] spawned aid=~D slot=~D remaining=~D~%"
                        spydroid-aid selected-slot (-> self remote-spydroid-count))
             )
           )
@@ -857,10 +857,10 @@
          (not event)
          (< (-> event launch-slot) 0)
          (>= (-> event launch-slot) 8))
-     (debug-log *mp-debug-log?* "[MP-Widow][REMOTE] rejected invalid bomb launch~%")
+     (debug-log *mp-debug-log?* "[Widow][REMOTE] rejected invalid bomb launch~%")
      )
     ((>= (-> self remote-bomb-count) 8)
-     (debug-log *mp-debug-log?* "[MP-Widow][REMOTE] rejected bomb queue-full count=~D~%"
+     (debug-log *mp-debug-log?* "[Widow][REMOTE] rejected bomb queue-full count=~D~%"
                 (-> self remote-bomb-count))
     )
     (else
@@ -876,7 +876,7 @@
       (set! (-> self remote-bomb-write)
             (logand (+ (-> self remote-bomb-write) 1) 7))
       (+! (-> self remote-bomb-count) 1)
-      (debug-log *mp-debug-log?* "[MP-Widow][REMOTE] queued bomb slot=~D count=~D~%"
+      (debug-log *mp-debug-log?* "[Widow][REMOTE] queued bomb slot=~D count=~D~%"
                  (-> event launch-slot)
                  (-> self remote-bomb-count))
       )
@@ -891,7 +891,7 @@
              (> (-> self remote-bomb-count) 0))
     (cond
       ((>= (-> self bomb-hits) 4)
-       (debug-log *mp-debug-log?* "[MP-Widow][REMOTE] rejected queued bombs bomb-hits=~D count=~D~%"
+       (debug-log *mp-debug-log?* "[Widow][REMOTE] rejected queued bombs bomb-hits=~D count=~D~%"
                   (-> self bomb-hits)
                   (-> self remote-bomb-count))
        (set! (-> self remote-bomb-read) 0)
@@ -922,7 +922,7 @@
                     (logand (+ queue-index 1) 7))
               (-! (-> self remote-bomb-count) 1)
               (debug-log *mp-debug-log?*
-                         "[MP-Widow][REMOTE] launched bomb slot=~D remaining=~D~%"
+                         "[Widow][REMOTE] launched bomb slot=~D remaining=~D~%"
                          host-slot
                          (-> self remote-bomb-count))
               )

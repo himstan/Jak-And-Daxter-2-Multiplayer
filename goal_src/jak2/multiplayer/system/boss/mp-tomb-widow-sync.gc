@@ -109,7 +109,7 @@
              launch-dest
              (nonzero? launch-dest))
     (debug-log *mp-debug-log?*
-               "[MP-Widow][HOST] launch aid=~D slot=~D trans=(~F,~F,~F) floor=~F~%"
+               "[Widow][HOST] launch aid=~D slot=~D trans=(~F,~F,~F) floor=~F~%"
                spydroid-aid
                launch-slot
                (-> spawn-trans x)
@@ -132,7 +132,7 @@
              launch-dest
              (nonzero? launch-dest))
     (debug-log *mp-debug-log?*
-               "[MP-Widow][HOST] bomb launch slot=~D dest=(~F,~F,~F)~%"
+               "[Widow][HOST] bomb launch slot=~D dest=(~F,~F,~F)~%"
                launch-slot
                (-> launch-dest x)
                (-> launch-dest y)
@@ -171,7 +171,7 @@
 
 (defun mp-widow-spydroid-process ((evt mp-widow-spydroid-event))
   (when (and evt (nonzero? evt))
-    (debug-log *mp-debug-log?* "[MP-Widow][REMOTE] received aid=~D~%"
+    (debug-log *mp-debug-log?* "[Widow][REMOTE] received aid=~D~%"
                (-> evt spydroid-aid))
     (let ((widow-proc (find-widow-proc)))
       (when (and widow-proc
@@ -191,7 +191,7 @@
 
 (defun mp-widow-bomb-process ((evt mp-widow-bomb-event))
   (when (and evt (nonzero? evt))
-    (debug-log *mp-debug-log?* "[MP-Widow][REMOTE] received bomb slot=~D~%"
+    (debug-log *mp-debug-log?* "[Widow][REMOTE] received bomb slot=~D~%"
                (-> evt launch-slot))
     (let ((widow-proc (find-widow-proc)))
       (when (and widow-proc

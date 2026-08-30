@@ -1424,14 +1424,6 @@
                       )
                   (ja-done? 0)
                   )
-             ;; log all conditions that are in the when block
-             (format 0 "Squid: done firing guns 1, going to idle conditions: time-elapsed=~S, shield-hit-points=~S, hit-points=~S, stop-shooting=~S~%"
-                     (time-elapsed? (-> self state-time) (seconds 3))
-                     (= (-> self shield-hit-points) 0.0)
-                     (zero? (-> self hit-points))
-                     (-> self stop-shooting)
-                     )
-             (format 0 "Time remaining: ~A~%" (- (current-time) (-> self state-time)))
              (ja :group! squid-fire-guns-end-ja :num! min)
              )
          )
@@ -1444,8 +1436,7 @@
            (squid-method-53 self 49)
            (set! (-> self next-gun) 1)
            )
-         (when (ja-done? 0)
-             (format 0 "Squid: done firing guns 2, going to idle~%")
+         (if (ja-done? 0)
              (ja :group! squid-fire-guns-release-ja :num! min)
              )
          )
@@ -1469,7 +1460,7 @@
                  )
                )
               (else
-                  (mp-palace-squid-start-shooting-local!)
+                (mp-palace-squid-start-shooting-local!)
                 )
               )
             )

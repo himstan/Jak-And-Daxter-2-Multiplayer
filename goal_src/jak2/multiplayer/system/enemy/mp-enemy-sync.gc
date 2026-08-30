@@ -26,7 +26,7 @@
        (nonzero? e)
        (or (<= (-> e hit-points) 0)
            (= (-> e status) 'dead)
-           (logtest? (-> e enemy-flags) (enemy-flag death-start mp-synced-death)))
+           (logtest? (-> e enemy-flags) (enemy-flag death-start)))
        )
   )
 
@@ -36,7 +36,7 @@
        (nonzero? e-proc)
        (or (<= (-> e-proc hit-points) 0)
            (= (-> e-proc status) 'dead)
-           (logtest? (-> e-proc enemy-flags) (enemy-flag death-start mp-synced-death))
+           (logtest? (-> e-proc enemy-flags) (enemy-flag death-start))
            (and (nonzero? enemy-aid)
                 (mp-aid-dead-perm? enemy-aid)))
        )
@@ -284,7 +284,8 @@
           )
         )
 
-      (when (and (= (-> slot state) 9) (not (logtest? (-> e-proc enemy-flags) (enemy-flag death-start))))
+      (when (and (= (-> slot state) (mp-enemy-state-id die))
+                 (not (logtest? (-> e-proc enemy-flags) (enemy-flag death-start))))
         (set! (-> e-proc hit-points) 0)
         (send-event e-proc 'die)
         )
@@ -377,13 +378,14 @@
   )
 
 (defun mp-enemy-broadcast-death ((e-proc enemy))
-  "Queue one authoritative enemy death tombstone for the remote peer."
+  "Persist and broadcast one authoritative static enemy death tombstone."
   (when (and e-proc
              (nonzero? e-proc)
              (mp-enemy-authoritative? e-proc))
     (let ((enemy-aid (mp-get-enemy-aid e-proc)))
       (when (and (nonzero? enemy-aid)
                  (not (mp-battle-enemy-id? enemy-aid)))
+        (mp-mark-aid-dead-perm! enemy-aid)
         (mp-event-enqueue-enemy-death! enemy-aid)
         )
       )
@@ -395,7 +397,7 @@
   "True while a recycled battle enemy has not received its new dynamic network ID."
   (and e-proc
        (nonzero? e-proc)
-       (logtest? (-> e-proc enemy-flags) (enemy-flag mp-battle-enemy))
+       (logtest? (-> e-proc enemy-flags) (enemy-flag battle-spawned))
        (zero? (-> e-proc net-id)))
   )
 
@@ -406,7 +408,7 @@
            (nonzero? e-proc)
            rec
            (nonzero? rec)
-           (logtest? (-> e-proc enemy-flags) (enemy-flag mp-battle-enemy))
+           (logtest? (-> e-proc enemy-flags) (enemy-flag battle-spawned))
            (zero? (-> rec ghost-state)))
       #t
       #f)
@@ -1119,10 +1121,11 @@
                           (begin
                             (cond
                               ((or (logtest? (-> e-proc enemy-flags) (enemy-flag death-start))
-                                   (and remote-slot (= (-> remote-slot state) 2)))
+                                   (and remote-slot
+                                        (nonzero? remote-slot)
+                                        (= (-> remote-slot state) (mp-enemy-state-id die))))
                                (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Remote sync stale for ~A aid=~D nid=~D during DEATH. Severing sync and killing locally.~%" e-proc enemy-aid enemy-nid)
                                (set! (-> rec owner-player-id) local-player-id)
-                               (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death))
                                (set! (-> e-proc hit-points) 0)
                                (send-event e-proc 'die)
                                )
@@ -1137,7 +1140,6 @@
                               ((logtest? (-> e-proc enemy-flags) (enemy-flag boss-spawned))
                                (debug-log *mp-debug-log?* "[MP-Enemy-Sync] Remote sync stale for ~A aid=~D nid=~D. Severing sync and killing locally since it's a boss spawned enemy.~%" e-proc enemy-aid enemy-nid)
                                (set! (-> rec owner-player-id) host-player-id)
-                               (logior! (-> e-proc enemy-flags) (enemy-flag mp-synced-death))
                                (set! (-> e-proc hit-points) 0)
                                (send-event e-proc 'die)
                                )

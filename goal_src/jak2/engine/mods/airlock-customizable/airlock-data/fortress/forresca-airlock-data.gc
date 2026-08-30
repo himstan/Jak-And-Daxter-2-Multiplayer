@@ -2,7 +2,7 @@
 (in-package goal)
 
 (define *forresca-airlock-data* (new 'static 'boxed-array :type airlock-data
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "fort-entry-gate-7"
                 :on-notice '(when #t '(ctysluma ctywide))
                 :on-activate #f

@@ -136,7 +136,6 @@
           (if (and (cpad-hold? (-> self control cpad number) l1)
                    (not (logtest? (-> self state-flags) (state-flags prevent-duck))))
               (go target-indax-duck-walk #f))
-    ;; og:preserve-this - High FPS Fix
           (if (and (recently-pressed? x)
                    (can-jump? #f))
               (go
@@ -144,12 +143,10 @@
                 (-> *TARGET-bank* indax-jump-height-min)
                 (-> *TARGET-bank* indax-jump-height-max)
                 (the-as surface #f)))
-    ;; og:preserve-this - High FPS Fix
           (if (and (recently-pressed? square)
                    (can-hands? #t))
               (go target-indax-running-attack))
           (target-indax-ride-along-check)
-    ;; og:preserve-this - High FPS Fix
           (if (and (recently-pressed? circle)
                    (can-feet? #t))
               (go target-indax-attack))

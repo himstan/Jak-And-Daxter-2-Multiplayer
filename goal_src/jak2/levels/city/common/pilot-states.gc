@@ -835,8 +835,6 @@
         )
       )
 
-    ;; MP Broadcast: inform others that we grabbed a pilot-ledge
-    ;; CRITICAL: Send AFTER we reset interpolation to 0.0!
     (if (and (not-puppet? self) *multi-sync-enabled?*)
         (mp-event-hook-edge-grab! self #t)
         )

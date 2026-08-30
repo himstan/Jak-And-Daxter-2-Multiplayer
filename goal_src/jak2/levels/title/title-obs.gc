@@ -600,10 +600,6 @@
   )
 
 (defun title-demo-disclaimer-state ()
-  (format 0 "Showing starting menu: ~A~%" (if *demo-disclaimer-shown-this-startup?*
-                                                'title
-                                                'demo-disclaimer
-                                                ))
   (if *demo-disclaimer-shown-this-startup?*
       'title
       (begin

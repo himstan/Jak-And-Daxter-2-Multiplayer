@@ -6,17 +6,30 @@
 
 (deftype mp-bootstrap-controller (process)
   ()
-  (:state-methods mp-bootstrap-idle mp-bootstrap-load mp-bootstrap-wait-levels mp-bootstrap-apply)
+  (:state-methods 
+    idle 
+    loading 
+    wait-for-levels 
+    applying
+    )
   (:methods
-    (mp-close-bootstrap-progress-ui! (_type_) none) (mp-force-clear-bootstrap-progress-ui! (_type_) none)
-    (mp-bootstrap-client-ready-for-apply? (_type_) object) (mp-log-bootstrap-wait! (_type_ symbol) none)
-    (mp-log-bootstrap-apply-wait! (_type_) none) (mp-copy-host-continue-name! (_type_) int)
-    (mp-bootstrap-client-active? (_type_) symbol) (mp-bootstrap-sync-flag (_type_) uint)
-    (mp-bootstrap-start-load! (_type_) symbol) (mp-bootstrap-levels-ready? (_type_) symbol)
-    (mp-bootstrap-apply-player-values! (_type_) none) (mp-bootstrap-apply-task-snapshot! (_type_) none)
+    (mp-close-bootstrap-progress-ui! (_type_) none)
+    (mp-force-clear-bootstrap-progress-ui! (_type_) none)
+    (mp-bootstrap-client-ready-for-apply? (_type_) object)
+    (mp-log-bootstrap-wait! (_type_ symbol) none)
+    (mp-log-bootstrap-apply-wait! (_type_) none)
+    (mp-copy-host-continue-name! (_type_) int)
+    (mp-bootstrap-client-active? (_type_) symbol)
+    (mp-bootstrap-sync-flag (_type_) uint)
+    (mp-bootstrap-start-load! (_type_) symbol)
+    (mp-bootstrap-levels-ready? (_type_) symbol)
+    (mp-bootstrap-apply-player-values! (_type_) none)
+    (mp-bootstrap-apply-task-snapshot! (_type_) none)
     (mp-bootstrap-start-active-task-managers! (_type_) none)
-    (mp-bootstrap-deactivate-aid-in-level! (_type_ uint level) none) (mp-bootstrap-apply-aids! (_type_) none)
-    (mp-bootstrap-place-client! (_type_) none) (mp-bootstrap-restore-local-camera! (_type_) none)
+    (mp-bootstrap-deactivate-aid-in-level! (_type_ uint level) none)
+    (mp-bootstrap-apply-aids! (_type_) none)
+    (mp-bootstrap-place-client! (_type_) none)
+    (mp-bootstrap-restore-local-camera! (_type_) none)
     (mp-bootstrap-finish! (_type_) none)
     )
   )
@@ -471,7 +484,7 @@
   (none)
   )
 
-(defstate mp-bootstrap-idle (mp-bootstrap-controller)
+(defstate idle (mp-bootstrap-controller)
   :virtual #t
   :code (behavior ()
     (until #f
@@ -481,38 +494,38 @@
         ((mp-tomb-boulder-suppress-bootstrap?)
          (mp-tomb-boulder-consume-bootstrap!) (suspend))
         ((= (mp-bootstrap-sync-flag self) (the uint 1))
-         (go-virtual mp-bootstrap-load))
+         (go-virtual loading))
         ((= (mp-bootstrap-sync-flag self) (the uint 2))
-         (go-virtual mp-bootstrap-wait-levels))
+         (go-virtual wait-for-levels))
         ((= (mp-bootstrap-sync-flag self) (the uint 3))
-         (go-virtual mp-bootstrap-apply))
+         (go-virtual applying))
         (else (mp-log-bootstrap-wait! self 'unexpected-bootstrap-flag) (suspend))))
     #f))
 
-(defstate mp-bootstrap-load (mp-bootstrap-controller)
+(defstate loading (mp-bootstrap-controller)
   :virtual #t
   :code (behavior ()
     (until #f
       (cond
-        ((not (mp-bootstrap-client-active? self)) (go-virtual mp-bootstrap-idle))
+        ((not (mp-bootstrap-client-active? self)) (go-virtual idle))
         ((not (= (mp-bootstrap-sync-flag self) (the uint 1)))
-         (go-virtual mp-bootstrap-idle))
+         (go-virtual idle))
         ((mp-tomb-boulder-suppress-bootstrap?)
-         (mp-tomb-boulder-consume-bootstrap!) (go-virtual mp-bootstrap-idle))
+         (mp-tomb-boulder-consume-bootstrap!) (go-virtual idle))
         ((mp-bootstrap-start-load! self)
-         (go-virtual mp-bootstrap-wait-levels))
+         (go-virtual wait-for-levels))
         (else (suspend))))
     #f))
 
-(defstate mp-bootstrap-wait-levels (mp-bootstrap-controller)
+(defstate wait-for-levels (mp-bootstrap-controller)
   :virtual #t
   :code (behavior ()
     (until #f
       (cond
         ((not (mp-bootstrap-client-active? self))
-         (go-virtual mp-bootstrap-idle))
+         (go-virtual idle))
         ((= (mp-bootstrap-sync-flag self) (the uint 1))
-         (go-virtual mp-bootstrap-load))
+         (go-virtual loading))
         ((= (mp-bootstrap-sync-flag self) (the uint 2))
          (if (mp-bootstrap-client-ready-for-apply? self)
              (begin
@@ -529,23 +542,23 @@
              )
          )
         ((= (mp-bootstrap-sync-flag self) (the uint 3))
-         (go-virtual mp-bootstrap-apply))
+         (go-virtual applying))
         (else
-         (go-virtual mp-bootstrap-idle))))
+         (go-virtual idle))))
     #f))
 
-(defstate mp-bootstrap-apply (mp-bootstrap-controller)
+(defstate applying (mp-bootstrap-controller)
   :virtual #t
   :code (behavior ()
     (until #f
       (cond
-        ((not (mp-bootstrap-client-active? self)) (go-virtual mp-bootstrap-idle))
+        ((not (mp-bootstrap-client-active? self)) (go-virtual idle))
         ((= (mp-bootstrap-sync-flag self) (the uint 1))
-         (go-virtual mp-bootstrap-load))
+         (go-virtual loading))
         ((= (mp-bootstrap-sync-flag self) (the uint 2))
-         (go-virtual mp-bootstrap-wait-levels))
+         (go-virtual wait-for-levels))
         ((not (= (mp-bootstrap-sync-flag self) (the uint 3)))
-         (go-virtual mp-bootstrap-idle))
+         (go-virtual idle))
         ((not (mp-bootstrap-client-ready-for-apply? self))
          (mp-log-bootstrap-apply-wait! self) (suspend))
         (else
@@ -558,11 +571,11 @@
          (mp-bootstrap-place-client! self)
          (mp-bootstrap-restore-local-camera! self)
          (mp-bootstrap-finish! self)
-         (go-virtual mp-bootstrap-idle))))
+         (go-virtual idle))))
     #f))
 
 (defbehavior mp-bootstrap-controller-init mp-bootstrap-controller ()
-  (go-virtual mp-bootstrap-idle)
+  (go-virtual idle)
   (none)
   )
 

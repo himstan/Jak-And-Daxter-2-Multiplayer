@@ -1,10 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; name: daxter-edge-grab.gc
-;; name in dgo: daxter-edge-grab
-;; dgos: ENGINE, GAME
-
 (defbehavior target-indax-edge-grab-anim target ((arg0 float))
   (ja-channel-push! 1 (seconds 0.15))
   (ja :group! daxter-falling-to-edge-grab-ja :num! min)
@@ -54,7 +50,6 @@
         )
       )
     (when (and (puppet? self) (not (-> s5-0 pilot-edge-grab?)))
-      ;; Standard puppet grabs are positioned by the authoritative ghost.
       (set! (-> self control hand-to-edge-dist) 0.0)
       (set! (-> self control last-trans-any-surf quad) (-> self control trans quad))
       (set-time! (-> self control rider-time))
@@ -130,7 +125,6 @@
              )
            )
           (else
-            ;; Normal Daxter edge grabs keep snapping to avoid gravity jitter while hanging.
             (let ((a1-8 (new 'stack-no-clear 'vector)))
               (vector-! a1-8 (-> s5-0 center-hold) (-> self control ctrl-to-hands-offset))
               (vector+float*! a1-8 a1-8 gp-2 *daxter-edge-grab-depth-offset*)
@@ -179,7 +173,6 @@
     (let ((v1-103 (-> self edge-grab-state info)))
       (set! (-> v1-103 pilot-edge-grab?) #f)
     )
-    ;; MP Broadcast: inform others that we grabbed an edge.
     (if (and (not-puppet? self) *multi-sync-enabled?*)
         (mp-event-hook-edge-grab! self #f)
         )
@@ -321,8 +314,6 @@
   :enter (behavior ((arg0 float) (arg1 float))
     (set-time! (-> self state-time))
     (logior! (-> self state-flags) (state-flags prevent-jump))
-    ;; Clear edge-grab focus immediately to stop target-indax-compute-edge snapping
-    ;; which causes the stratosphere bug and clipping.
     (logclear! (-> self focus-status) (focus-status edge-grab))
     (set! (-> self control transv quad) (the-as uint128 0))
     )

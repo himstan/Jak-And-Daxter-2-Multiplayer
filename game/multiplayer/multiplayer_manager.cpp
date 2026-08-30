@@ -387,7 +387,6 @@ void MultiplayerManager::setup_host(
     data.join_status = (int)MultiplayerStatus::CONNECTING;
     data.initialized = true;
 
-    // Start discovery responder
     data.host_discovery_active = true;
     data.discovery_thread = std::thread(discovery_responder_func, &data);
     if (internet_host) {
@@ -615,7 +614,7 @@ void MultiplayerManager::discovery_responder_func(MultiplayerData* data) {
     return;
   }
 
-  set_socket_timeout(sock, 200000);  // 200ms timeout for checking stop flag
+  set_socket_timeout(sock, 200000);
 
   lg::info("[Multiplayer] Discovery responder active on port {}", DISCOVERY_PORT);
 

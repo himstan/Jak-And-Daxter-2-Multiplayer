@@ -28,8 +28,7 @@ class MultiplayerPacketScheduler {
 
   MultiplayerPacketScheduler(const MultiplayerPacketScheduler&) = delete;
   MultiplayerPacketScheduler& operator=(const MultiplayerPacketScheduler&) = delete;
-
-  // Takes ownership of packet whether it is accepted or rejected.
+  
   bool enqueue(ENetPeer* peer,
                int channel,
                ENetPacket* packet,

@@ -160,6 +160,10 @@
     )
   )
 
+;; we just turn off all too far checks, it would be just too annoying and complicated to implement per player
+;; this allows people to explore atoll during the sig mission, but ehh i mean again it would be too forceful and aggressive
+;; to control 8+ players, they can do whatever they want, the mission still fails if sig dies
+
 (defun sig0-first-battle-too-far ((arg0 sig-atoll))
   0
   )

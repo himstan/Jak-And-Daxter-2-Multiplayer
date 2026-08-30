@@ -202,7 +202,6 @@ off the [[entity-info]]
 If nothing matches, set `method 13` to `#f` and return `#f`"
   (if (or (not arg0) (zero? arg0) (not (type? arg0 type)) (< (-> arg0 allocated-length) 14))
       (begin
-        ;; Fallback path without caching in method table
         (let ((v1-1 *entity-info*))
           (dotimes (a1-0 (-> v1-1 length))
             (when (= arg0 (-> v1-1 a1-0 ptype))

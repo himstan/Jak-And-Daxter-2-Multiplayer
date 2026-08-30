@@ -3812,21 +3812,21 @@
         (logior! (-> guard enemy-flags) (enemy-flag lock-focus))
         )
       (when (mp-guard-target-debug-ready? (-> guard net-id))
-        (format 0
-                "[MP-GuardTarget] nid=~D phase=set-impl state=~S aid=0 target=~S target-type=~S "
-                (-> guard net-id)
-                (if (-> guard state) (-> guard state name) 'none)
-                (mp-guard-target-debug-handle-label target)
-                (mp-guard-target-debug-handle-type target)
-                )
-        (format 0
-                "focus=~S focus-type=~S traffic=~S traffic-type=~S lock=~D~%"
-                (mp-guard-target-debug-handle-label (-> guard focus handle))
-                (mp-guard-target-debug-handle-type (-> guard focus handle))
-                (mp-guard-target-debug-handle-label (-> guard traffic-target-status handle))
-                (mp-guard-target-debug-handle-type (-> guard traffic-target-status handle))
-                (mp-crimson-guard-debug-lock? guard)
-                )
+        (debug-log *mp-debug-log?*
+          "[MP-GuardTarget] nid=~D phase=set-impl state=~S aid=0 target=~S target-type=~S "
+          (-> guard net-id)
+          (if (-> guard state) (-> guard state name) 'none)
+          (mp-guard-target-debug-handle-label target)
+          (mp-guard-target-debug-handle-type target)
+          )
+        (debug-log *mp-debug-log?*
+          "focus=~S focus-type=~S traffic=~S traffic-type=~S lock=~D~%"
+          (mp-guard-target-debug-handle-label (-> guard focus handle))
+          (mp-guard-target-debug-handle-type (-> guard focus handle))
+          (mp-guard-target-debug-handle-label (-> guard traffic-target-status handle))
+          (mp-guard-target-debug-handle-type (-> guard traffic-target-status handle))
+          (mp-crimson-guard-debug-lock? guard)
+          )
         )
       )
     )

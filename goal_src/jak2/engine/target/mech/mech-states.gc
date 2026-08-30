@@ -477,7 +477,7 @@
                   :mat-joint (-> (the-as collide-query gp-1) best-other-tri intersect)
                   )
                 (sound-play "mech-punch-hit" :position (+ (the-as uint gp-1) 48))
-                (when (= self *target*)
+                (when (not-puppet? self)
                   (activate! *camera-smush-control* 1638.4 15 75 1.0 0.9 (-> *display* camera-clock))
                   )
                 )
@@ -860,7 +860,7 @@
       600
       1500
       )
-    (when (= self *target*)
+    (when (not-puppet? self)
                   (activate! *camera-smush-control* 1638.4 15 75 1.0 0.9 (-> *display* camera-clock))
                   )
     )

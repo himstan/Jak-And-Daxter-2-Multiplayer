@@ -3,7 +3,7 @@
   "race-mesh.o"
   "race-part.o"
   "race-obs.o"
-  "race-control.o"
+  "race-control.o" ;; added
   "vehicle-racer.o"
   "race-info.o"
   "race-manager.o"

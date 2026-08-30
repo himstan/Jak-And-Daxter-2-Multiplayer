@@ -1231,11 +1231,6 @@ void pc_multi_request_bootstrap() {
   }
 }
 
-void pc_multi_request_full_sync() {
-  // Keep the old GOAL symbol as a forwarding compatibility alias.
-  pc_multi_request_bootstrap();
-}
-
 void pc_multi_stop_search() {
   MultiplayerScanner::stop_search(multiplayer_data());
 }
@@ -1960,8 +1955,6 @@ void init_multiplayer_pc_port() {
   jak2::make_function_symbol_from_c("pc-multi-set-status", (void*)pc_multi_set_status);
   jak2::make_function_symbol_from_c("pc-multi-request-bootstrap",
                                     (void*)pc_multi_request_bootstrap);
-  jak2::make_function_symbol_from_c("pc-multi-request-full-sync",
-                                    (void*)pc_multi_request_full_sync);
   jak2::make_function_symbol_from_c("pc-multi-stop-search", (void*)pc_multi_stop_search);
   jak2::make_function_symbol_from_c("pc-multi-start-search", (void*)pc_multi_start_search);
   jak2::make_function_symbol_from_c("pc-multi-connect-found-host",

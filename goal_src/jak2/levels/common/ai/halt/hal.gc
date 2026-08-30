@@ -349,7 +349,6 @@
      #f
      )
     ((and *scene-player* (type? (ppointer->process *scene-player*) scene-player))
-     ;; Link to the existing global scene player if it's already running!
      (set! (-> this scene-player-handle) (ppointer->handle *scene-player*))
      #t
      )

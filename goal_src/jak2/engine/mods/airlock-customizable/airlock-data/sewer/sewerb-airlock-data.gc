@@ -2,7 +2,7 @@
 (in-package goal)
 
 (define *sewerb-airlock-data* (new 'static 'boxed-array :type airlock-data
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-inner-1"
                 :airlock-elevator "sew-elevator-15"
                 :other-side-levels '(ctywide)
@@ -15,7 +15,7 @@
                 :on-inside '(begin (want-load 'ctyindb 'ctywide 'sewerb))
                 :on-deactivate #f
                 )
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-outer-3"
                 :on-notice '(when #t '(sewerb))
                 :on-activate '(begin (when (send-event self 'front) (want-load 'sewer 'sewerb #f) (send-event "sew-elevator-15" 'jump-to 'bottom)))
@@ -26,7 +26,7 @@
                 :on-inside #f
                 :on-deactivate '(want-display 'sewerb 'display)
                 )
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-inner-2"
                 :other-side-levels '(sewer)
                 :airlock-elevator "sew-elevator-15"

@@ -135,5 +135,3 @@ void LSPRequester::send_progress_finish_request(const std::string& token,
   notification.endValue = endPayload;
   send_notification(notification, "$/progress");
 }
-
-

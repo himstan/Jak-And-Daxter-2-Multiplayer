@@ -2,7 +2,7 @@
 (in-package goal)
 
 (define *consiteb-airlock-data* (new 'static 'boxed-array :type airlock-data
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "vin-door-ctyinda-5"
                 :on-notice '(when #t '(ctyinda ctywide))
                 :on-activate #f
@@ -13,7 +13,7 @@
                 :on-inside '(begin (want-load 'consiteb 'consite) (want-sound 'ctywide1 'ctywide2 'ctywide3))
                 :on-deactivate '(begin (want-display 'ctyinda #f) (want-display 'ctywide #f))
                 )
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-inner-40"
                 :on-notice '(when #t '(consite))
                 :on-activate #f

@@ -11,7 +11,6 @@ struct _ENetPeer;
 
 struct MultiplayerStats {
   static constexpr size_t kPacketTypeCount = static_cast<size_t>(PacketType::COUNT);
-  // Rolling wire rates and their ENet counter baselines.
   uint32_t last_rate_update_time = 0;
   uint32_t last_sent_bytes = 0;
   uint32_t last_recv_bytes = 0;
@@ -22,7 +21,6 @@ struct MultiplayerStats {
   uint32_t send_rate_packets_per_sec = 0;
   uint32_t recv_rate_packets_per_sec = 0;
 
-  // 64-bit cumulative wire totals. ENet's public counters are 32-bit.
   uint32_t last_wire_sent_bytes = 0;
   uint32_t last_wire_recv_bytes = 0;
   uint32_t last_wire_sent_packets = 0;
@@ -34,7 +32,6 @@ struct MultiplayerStats {
   bool rate_clock_initialized = false;
   bool wire_counter_initialized = false;
 
-  // Category rates and totals
   std::array<uint64_t, kPacketTypeCount> sent_bytes_by_type = {};
   std::array<uint64_t, kPacketTypeCount> recv_bytes_by_type = {};
   std::array<uint64_t, kPacketTypeCount> sent_packets_by_type = {};

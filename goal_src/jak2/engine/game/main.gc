@@ -83,8 +83,8 @@
                     )
                   )
                 )
-          )
-      )
+              )
+        )
     (none)
     )
   )
@@ -860,7 +860,7 @@
     (if (-> *level* loading-level)
         (load-continue (-> *level* loading-level))
         )
-    (mp-frame-tick)
+    (mp-frame-tick) ;; mp main hook
 
     ; ;; Run blerc to modify foreground models
     (with-profiler 'merc *profile-merc-color*

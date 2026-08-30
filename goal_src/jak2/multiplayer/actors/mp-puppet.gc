@@ -1331,12 +1331,10 @@
     (let ((speaker (the-as target #f))
           (is-daxter? #f))
       (if (= dead-target *target*)
-          ;; Local player died: find nearest living remote player who does not block respawn
           (let ((rec (mp-nearest-remote-player-record *target* #t)))
             (when (and rec (nonzero? rec) (not (mp-player-blocks-respawn? rec)))
               (set! speaker (mp-player-record-target rec))
               (set! is-daxter? (the-as symbol (mp-player-daxter? rec)))))
-          ;; Remote player died: ensure dead player does not block respawn, local player speaks
           (let ((dead-rec (mp-player-controller-target-record *mp-player-controller* dead-target)))
             (when (and dead-rec (nonzero? dead-rec) (not (mp-player-blocks-respawn? dead-rec)))
               (when (and *target*
@@ -1348,7 +1346,6 @@
                          (not (mp-target-death-state? (-> *target* state name))))
                 (set! speaker *target*)
                 (set! is-daxter? (the-as symbol (mp-local-player-daxter?)))))))
-      ;; Check proximity (within 40m) and play
       (when (and speaker
                  (nonzero? speaker)
                  (-> speaker root)

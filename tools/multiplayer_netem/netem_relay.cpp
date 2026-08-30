@@ -121,10 +121,6 @@ EndpointRouter::Route EndpointRouter::route_for(const sockaddr_in& source, Netem
     break;
   }
 
-  // A reconnect creates a fresh ENet host and normally changes the client's
-  // ephemeral UDP port. Keep the relay opaque and treat a new endpoint as the
-  // replacement client. Retired endpoints remain blocked while the current
-  // client is active, but may be reused after the current client goes quiet.
   if (m_retired_clients.size() >= kMaximumRetiredClients) {
     m_retired_clients.erase(m_retired_clients.begin());
   }

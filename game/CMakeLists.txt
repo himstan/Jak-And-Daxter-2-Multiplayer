@@ -347,7 +347,6 @@ set(RUNTIME_SOURCE
         system/hid/sdl_util.cpp
         system/IOP_Kernel.cpp
         system/iop_thread.cpp
-        multiplayer/multiplayer.cpp
         multiplayer/multiplayer_api.cpp
         multiplayer/multiplayer_direct_connect.cpp
         multiplayer/multiplayer_manager.cpp

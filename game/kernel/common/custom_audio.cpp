@@ -16,7 +16,6 @@
 #include "game/runtime.h"
 
 #define MINIAUDIO_IMPLEMENTATION
-// miniaudio can collide with the runtime's global Ptr type on macOS.
 namespace MiniAudioLib {
 #if defined(__APPLE__)
 #if !defined(_POSIX_C_SOURCE)

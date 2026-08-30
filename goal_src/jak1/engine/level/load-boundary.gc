@@ -304,13 +304,13 @@
         (if (logtest? (-> arg0 flags) (load-boundary-flags player)) "player" "camera")
         (enum->string load-boundary-cmd (-> arg1 cmd))
         (-> arg1 lev0) (-> arg1 lev1)))
-    (((load-boundary-cmd display))
+    (((load-boundary-cmd display)) 
       (format out "~5L~S ~S ~S ~A ~A ~%"
         prefix
         (if (logtest? (-> arg0 flags) (load-boundary-flags player)) "player" "camera")
         (enum->string load-boundary-cmd (-> arg1 cmd))
         (-> arg1 displev) (-> arg1 dispcmd)))
-    (((load-boundary-cmd vis))
+    (((load-boundary-cmd vis)) 
       (format out "~3L~S ~S ~S ~A ~%"
         prefix
         (if (logtest? (-> arg0 flags) (load-boundary-flags player)) "player" "camera")
@@ -322,7 +322,7 @@
         (if (logtest? (-> arg0 flags) (load-boundary-flags player)) "player" "camera")
         (enum->string load-boundary-cmd (-> arg1 cmd))
         (-> arg1 checkname)))
-    (else
+    (else 
       (format out "~22L~S N/A ~%" prefix))
     )
   )

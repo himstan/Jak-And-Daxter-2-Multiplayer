@@ -2,13 +2,13 @@
 
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
-// clang-format off: Windows networking headers have a required include order.
+
 #include <Windows.h>
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 #include <iphlpapi.h>
 #include <netioapi.h>
-// clang-format on
+
 
 #include <string>
 #include <vector>

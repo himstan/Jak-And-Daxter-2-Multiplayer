@@ -2,7 +2,7 @@
 (in-package goal)
 
 (define *underb-airlock-data* (new 'static 'boxed-array :type airlock-data
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-inner-41"
                 :on-notice '(when (send-event "under-locking-2" 'test #t) '(under underb))
                 :on-activate #f
@@ -13,7 +13,7 @@
                 :on-inside #f
                 :on-deactivate '(want-display 'under #f)
                 )
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "com-airlock-inner-42"
                 :on-notice '(when (send-event "under-locking-2" 'test #f) '(under))
                 :on-activate #f
@@ -23,7 +23,7 @@
                 :on-inside #f
                 :on-deactivate #f
                 )
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "under-door-2"
                 :on-notice '(when #t '(ctyport ctywide))
                 :on-activate #f
@@ -34,7 +34,7 @@
                 :on-inside '(want-load 'underb 'under)
                 :on-deactivate '(begin (want-display 'ctyport #f) (want-display 'ctywide #f))
                 )
-              (static-airlock-data
+              (static-airlock-data 
                 :airlock-name "under-door-4"
                 :on-notice '(when #t '(ctyport ctywide))
                 :on-activate #f

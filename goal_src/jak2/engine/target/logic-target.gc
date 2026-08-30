@@ -1996,8 +1996,7 @@
             )
            )
            (else
-             (debug-log *mp-debug-log?*
-                        "[Target-Logic] Pilot handle invalid; ending edge grab~%")
+             (debug-log *mp-debug-log?* "[Target-Logic] Pilot handle invalid; ending edge grab~%")
              (send-event self 'end-mode)
              (return #f))
            )
@@ -2167,10 +2166,10 @@
             )
            )
            (else
-             (debug-log *mp-debug-log?*
-                        "[Target-Logic] Pilot handle invalid; ending rider edge grab~%")
+             (debug-log *mp-debug-log?* "[Target-Logic] Pilot handle invalid; ending rider edge grab~%")
              (send-event self 'end-mode)
-             (return #f))
+             (return #f)
+             )
            )
          )
        )

@@ -197,7 +197,7 @@ class Merc2 {
     PLAYER_TINT_TEXTURE = 8,
     PLAYER_TINT_WHITE_BASE = 16,
   };
-  
+
   struct Draw {
     u32 first_index;
     u32 index_count;

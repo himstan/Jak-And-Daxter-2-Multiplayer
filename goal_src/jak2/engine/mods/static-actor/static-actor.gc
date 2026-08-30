@@ -61,7 +61,7 @@
      )
     ((or (< (the-as uint (-> definition aid)) STATIC_ACTOR_AID_MIN)
          (> (the-as uint (-> definition aid)) STATIC_ACTOR_AID_MAX))
-     (static-actor-log-error definition "AID is outside the custom range 60000-65534")
+     (static-actor-log-error definition "AID is outside the custom range")
      #f
      )
     (else

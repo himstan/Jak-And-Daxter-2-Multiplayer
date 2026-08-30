@@ -1372,7 +1372,6 @@
   )
 
 (defun mp-remote-player-marker-hidden? ((connection connection-minimap))
-  "Hide only the Daxter record represented by this marker while it is riding along."
   (when (and connection (nonzero? connection))
     (let* ((record (mp-player-record-by-marker-key (-> connection key)))
            (player-target (if (and record (nonzero? record))
@@ -2868,7 +2867,6 @@
                  (draw-race-remote-player-marker this s5-0 conn))))
             (set! s3-2 (-> s3-2 next))))
         (draw-race-local-player-marker this s5-0))
-
       )
     )
   0

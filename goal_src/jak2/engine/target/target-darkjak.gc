@@ -319,7 +319,7 @@
     )
   :code (behavior ((arg0 darkjak-stage))
     ;; og:preserve-this trigger effects
-    (when (and (= self *target*)
+    (when (and (not-puppet? self)
                (pc-get-trigger-effects-enabled?))
       (pc-send-trigger-rumble! 32767 0 100))
     (send-event (handle->process (-> self notify)) 'notify 'attack 15)
@@ -840,7 +840,7 @@
           (vector-matrix*! (-> self control align-xz-vel) gp-1 (-> self control c-R-w))
           )
         (when (!= (the-as float (-> self control unknown-word04)) 0.0)
-          (when (= self *target*)
+          (when (not-puppet? self)
                       (activate! *camera-smush-control* 1638.4 15 75 1.0 0.9 (-> *display* camera-clock))
                       )
 
@@ -912,7 +912,7 @@
                   imp-sound
                   )
                 )
-              (when (= self *target*)
+              (when (not-puppet? self)
                             (activate! *camera-smush-control* 1638.4 15 75 1.0 0.9 (-> *display* camera-clock))
                             )
 
@@ -1197,10 +1197,10 @@
         (the-as (function gui-connection symbol) #f)
         (the-as process #f)
         )
-      (when (and (= self *target*) *cpad-list* (nonzero? *cpad-list*))
+      (when (and (not-puppet? self) *cpad-list* (nonzero? *cpad-list*))
         (cpad-set-buzz! (-> *cpad-list* cpads 0) 1 255 (seconds 0.5))
         )
-      (when (= self *target*)
+      (when (not-puppet? self)
                   (activate! *camera-smush-control* 1638.4 15 75 1.0 0.9 (-> *display* camera-clock))
                   )
 
@@ -1562,10 +1562,10 @@
       (suspend)
       (ja-eval)
       )
-    (when (and (= self *target*) *cpad-list* (nonzero? *cpad-list*))
+    (when (and (not-puppet? self) *cpad-list* (nonzero? *cpad-list*))
       (cpad-set-buzz! (-> *cpad-list* cpads 0) 1 255 (seconds 0.5))
       )
-    (when (= self *target*)
+    (when (not-puppet? self)
                   (activate! *camera-smush-control* 1638.4 15 75 1.0 0.9 (-> *display* camera-clock))
                   )
 
@@ -1791,7 +1791,7 @@
                   )
                 (set! (-> self darkjak clock-vel) -4.0)
                 (set! (-> self darkjak clock-on) #t)
-                (when (and (= self *target*) *camera* (nonzero? *camera*))
+                (when (and (not-puppet? self) *camera* (nonzero? *camera*))
                   (send-event *camera* 'joystick -0.25 1.0)
                   )
                 (when (time-elapsed? sv-72 (seconds 0.1))

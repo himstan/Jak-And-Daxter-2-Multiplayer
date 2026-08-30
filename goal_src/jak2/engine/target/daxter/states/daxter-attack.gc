@@ -17,7 +17,6 @@
          (until (ja-done? 0)
            (compute-alignment! (-> self align))
            (align! (-> self align) (align-opts adjust-quat) 1.0 1.0 1.0)
-           ;; og:preserve-this - High FPS Fix
            (when (and (recently-pressed? x)
                       (can-jump? #f))
              (set-quaternion! (-> self control) (-> self control dir-targ))
@@ -49,7 +48,6 @@
          (until (ja-done? 0)
            (compute-alignment! (-> self align))
            (align! (-> self align) (align-opts adjust-quat) 1.0 1.0 1.0)
-           ;; og:preserve-this - High FPS Fix
            (when (and (recently-pressed? x)
                       (can-jump? #f))
              (set-quaternion! (-> self control) (-> self control dir-targ))
@@ -230,7 +228,6 @@
     (set! (-> self control mod-surface) *flop-mods*)
     (set! (-> self control dynam gravity-max) 245760.0)
     (set! (-> self control dynam gravity-length) 245760.0)
-    ;; Initial small upward "hop" like Jak's flop
     (let ((v1-33 (new-stack-vector0)))
       (let ((f0-7 (vector-dot (-> self control dynam gravity-normal) (-> self control transv))))
         (vector-! v1-33 (-> self control transv) (vector-float*! v1-33 (-> self control dynam gravity-normal) f0-7))
@@ -270,20 +267,18 @@
     )
   :code (behavior ((arg0 float) (arg1 float) (arg2 float))
     (ja-channel-push! 1 (seconds 0.05))
-    ;; Play the trip animation for the dive down
     (ja-no-eval :group! daxter-indax-trip-ja :num! (seek!) :frame-num 0.0)
     (until (ja-done? 0)
       (suspend)
       (ja :num! (seek!))
       )
-    ;; Apply high downward velocity after the initial hop
     (let ((v1-59 (new-stack-vector0)))
       (let ((f0-21 (vector-dot (-> self control dynam gravity-normal) (-> self control transv))))
         (vector-! v1-59 (-> self control transv) (vector-float*! v1-59 (-> self control dynam gravity-normal) f0-21))
         )
       (let* ((f0-22 (vector-length v1-59))
              (f1-3 f0-22)
-             (f2-2 -450560.0) ;; Increased downward slam velocity
+             (f2-2 -450560.0)
              )
         (vector+!
           (-> self control transv)
@@ -292,7 +287,6 @@
           )
         )
       )
-    ;; Loop in a falling-pose (jump-loop) while slamming
     (ja-no-eval :group! daxter-indax-jump-loop-ja :num! (loop!) :frame-num 0.0)
     (until #f
       (suspend)
@@ -305,8 +299,7 @@
   :event target-indax-handler
   :enter (behavior ((arg0 symbol))
     (target-land-effect)
-    ;; Screen smush for impact feel
-    (when (= self *target*)
+    (when (not-puppet? self)
       (activate! *camera-smush-control* 819.2 15 75 1.0 0.9 (-> *display* camera-clock))
       )
     (set-time! (-> self state-time))
@@ -318,7 +311,6 @@
     )
   :exit target-indax-exit
   :trans (behavior ()
-    ;; Allow canceling out of the recovery much earlier
     (let ((v1-3 (ja-group)))
       (when (and v1-3 (= v1-3 daxter-indax-jump-forward-hands-land-ja))
         (if (and (recently-pressed? x) (can-jump? #f))
@@ -332,13 +324,11 @@
     )
   :code (behavior ((arg0 symbol))
     (ja-channel-push! 1 (seconds 0.02))
-    ;; Phase 1: Impact
     (ja-no-eval :group! daxter-indax-trip-land-ja :num! (seek!) :frame-num 0.0)
     (until (ja-done? 0)
       (suspend)
       (ja :num! (seek!))
       )
-    ;; Phase 2: Natural recovery - played slightly faster
     (ja-no-eval :group! daxter-indax-jump-forward-hands-land-ja :num! (seek! max 1.25) :frame-num 0.0)
     (until (ja-done? 0)
       (suspend)
@@ -403,7 +393,7 @@
                (set! (-> s5-1 y) 0.0)
                (vector-matrix*! (-> self control align-xz-vel) s5-1 (-> self control c-R-w)))
       (when (!= (the-as float (-> self control unknown-word04)) 0.0)
-               (when (= self *target*)
+               (when (not-puppet? self)
       (activate! *camera-smush-control* 819.2 15 75 1.0 0.9 (-> *display* camera-clock))
       )
                (set! f26-0 (-> self control unknown-word04))

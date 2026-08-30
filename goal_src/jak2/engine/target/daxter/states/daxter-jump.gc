@@ -9,20 +9,13 @@
                          (arg2
                            (empty)
                            arg2)
-
                          (else
                            *indax-jump-mods*)))
-
-
-
             (t9-0 arg0 arg1 arg2))
-
           (set! (-> self control unknown-float35) 0.0))
-
   :exit (behavior ()
           (target-exit)
           (target-indax-exit))
-
   :trans (behavior ()
           ((-> target-indax-falling trans))
           (mod-var-jump #t #t (cpad-hold? (-> self control cpad number) x) (-> self control transv))
@@ -31,15 +24,10 @@
                    (and (< -61440.0 (vector-dot (-> self control dynam gravity-normal) (-> self control transv)))
                         (not (logtest? (water-flags touch-water) (-> self water flags)))
                         (not (logtest? (state-flags prevent-jump prevent-double-jump) (-> self state-flags)))))
-
-
               (go
                 target-indax-double-jump
                   (-> *TARGET-bank* indax-double-jump-height-min)
                 (-> *TARGET-bank* indax-double-jump-height-max))))
-
-
-
   :code (behavior ((arg0 float) (arg1 float) (arg2 surface))
           (ja-channel-push! 2 (seconds 0.02))
           (ja :group! daxter-indax-jump-ja :num! min)
@@ -49,18 +37,13 @@
             (let ((f30-0 (vector-dot (-> self control dynam gravity-normal) (-> self control transv)))
                   (f0-4 (- 10.0 (ja-aframe-num 0)))
                   (gp-1 (-> self skel root-channel 0)))
-
               (set! (-> gp-1 param 0) (the float (+ (-> gp-1 frame-group frames num-frames) -1)))
               (let ((v1-26 (and (< 0.0 f30-0) (< 0.0 f0-4))))
                 (set! (-> gp-1 param 1)
                       (if v1-26
                           (fmin (fmin 3.0 f0-4) (/ (* 10.0 f0-4) (the float (time-to-apex f30-0 -245760.0))))
                           1.0)))
-
-
-
              (joint-control-channel-group-eval! gp-1 (the-as art-joint-anim #f) num-func-seek!))
-
             (let ((a0-8 (-> self skel root-channel 1)))
               (let ((f0-10 (-> self control unknown-float35)))
                 (set! (-> a0-8 frame-interp 1) f0-10)
@@ -68,11 +51,8 @@
 
               (set! (-> a0-8 param 0) 0.0)
              (joint-control-channel-group-eval! a0-8 (the-as art-joint-anim #f) num-func-chan))
-
             (suspend))
-
          (go target-indax-falling #f))
-
   :post target-indax-post)
 
 (defstate target-indax-double-jump (target)
@@ -83,22 +63,15 @@
           (logclear! (-> self control status) (collide-status on-surface on-ground touch-surface))
           (if (!= (-> self control mod-surface) *slide-jump-mods*)
               (set! (-> self control mod-surface) *indax-double-jump-mods*))
-
           (let ((v1-10 (ja-group)))
             (cond
               ((and v1-10 (or (= v1-10 daxter-indax-jump-ja) (= v1-10 daxter-indax-jump-loop-ja))))
-
               (else
                 (set! (-> self control unknown-float35) 0.0)))))
-
-
-
-
   :exit (-> target-indax-jump exit)
   :trans (behavior ()
           ((-> target-indax-falling trans))
           (mod-var-jump #t #t (cpad-hold? (-> self control cpad number) x) (-> self control transv)))
-
   :code (behavior ((arg0 float) (arg1 float))
          (sound-play "jump-double")
          (let ((v1-3 (ja-group)))
@@ -107,14 +80,10 @@
               (ja-channel-push! 2 (seconds 0.04))
               (ja-no-eval :group! daxter-indax-jump-ja :num! (seek!) :frame-num (ja-aframe 1.0 0))
               (ja :chan 1 :group! daxter-indax-jump-forward-ja :num! (chan 0)))
-
              (else
                (ja-channel-push! 2 (seconds 0.05))
                (ja-no-eval :group! daxter-indax-jump-ja :num! (seek!) :frame-num (ja-aframe 5.0 0))
                (ja :chan 1 :group! daxter-indax-jump-forward-ja :num! (chan 0)))))
-
-
-
          (until (ja-done? 0)
            (suspend)
            (ja :num! (seek!))
@@ -122,11 +91,7 @@
              (let ((f0-14 (-> self control unknown-float35)))
                (set! (-> a0-16 frame-interp 1) f0-14)
                (set! (-> a0-16 frame-interp 0) f0-14))
-
              (set! (-> a0-16 param 0) 0.0)
              (joint-control-channel-group-eval! a0-16 (the-as art-joint-anim #f) num-func-chan)))
-
-
          (go target-indax-falling #f))
-
   :post target-post)

@@ -1,11 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-#|@file
-Dedicated Multiplayer Options page. Persistent values live in the C++
-multiplayer-settings.json store and are committed when editing finishes.
-|#
-
 (defun-extern pc-get-last-key uint)
 (defun-extern draw-generic-highlight int int float pointer)
 (define-extern mp-player-color-progress-enter! (function progress none))
@@ -146,7 +141,6 @@ multiplayer-settings.json store and are committed when editing finishes.
       (set! (-> font-ctx alpha) alpha)
       (+! (-> font-ctx origin y) 5.0)
       (set-flags! font-ctx (font-flags kerning middle large))
-      ;; Label row
       (cond
         (selected?
          (set! (-> font-ctx color) (font-color progress-force-selected))
@@ -163,7 +157,6 @@ multiplayer-settings.json store and are committed when editing finishes.
         (else
          (set! (-> font-ctx color) (font-color progress))))
       (print-game-text (lookup-text! *common-text* (-> obj name) #f) font-ctx #f 44 (bucket-id progress))
-      ;; Value row
       (+! (-> font-ctx origin y) 18.0)
       (set! (-> font-ctx scale) 0.35)
       (let ((display (get-display-string obj)))

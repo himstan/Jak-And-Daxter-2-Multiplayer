@@ -18,60 +18,6 @@ This gives us more freedom to write code how we want.
   0
   )
 
-(deftype menu-username-option (menu-option)
-  ()
-  )
-
-(defmethod respond-progress ((obj menu-username-option) (p progress) (selected? symbol))
-  (if selected?
-    (let ((key (pc-get-last-key)))
-      (when (nonzero? key)
-        (let ((s (-> *pc-settings* username)))
-          (cond
-            ;; Backspace
-            ((= key #x08)
-             (when (> (length s) 0)
-               (set! (-> s data (dec (length s))) 0)
-               ))
-            ;; Enter/Return - finish editing
-            ((or (= key #x0D) (= key #x0A))
-             (set! (-> p selected-option) #f)
-             )
-            ;; Printable ASCII - Only allow letters and numbers for username
-            ((and (or (and (>= key #x30) (<= key #x39))
-                      (and (>= key #x41) (<= key #x5a))
-                      (and (>= key #x61) (<= key #x7a)))
-                  (< (length s) 16))
-             (let ((len (length s)))
-               (set! (-> s data len) key)
-               (set! (-> s data (inc len)) 0)
-               )
-             )
-            )
-          )
-        (pc-settings-save)
-        )
-      )
-    )
-  0)
-
-(defmethod draw-option ((obj menu-username-option) (p progress) (font-ctx font-context) (option-index int) (selected? symbol))
-  (let ((alpha (max 0.0 (* 2.0 (- 0.5 (-> p menu-transition)))))
-        (username (-> *pc-settings* username)))
-    (set! (-> font-ctx alpha) alpha)
-    (set-flags! font-ctx (font-flags kerning middle large))
-    (set-scale! font-ctx 0.5)
-    (+! (-> font-ctx origin y) 11.0)
-    (when (= option-index (-> p option-index))
-       (draw-generic-highlight (the int (+ -2.0 (-> font-ctx origin y))) 18 alpha)
-       )
-
-    (set-color! font-ctx (font-color progress))
-    (format (clear *temp-string*) "~S: ~S" (lookup-text! *common-text* (text-id progress-username) #f) username)
-    (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
-    )
-  (none))
-
 (deftype menu-paste-invite-option (menu-option) ())
 (deftype menu-connect-invite-option (menu-option) ())
 (deftype menu-copy-host-access-option (menu-option) ())
@@ -156,7 +102,7 @@ This gives us more freedom to write code how we want.
     (when (not (and *mp-local-version-text*
                     (nonzero? (the-as uint *mp-local-version-text*))
                     (nonzero? (length *mp-local-version-text*))))
-      (format #t "[Multiplayer] Local mod version is unavailable.~%")
+      (debug-log *mp-debug-log?* "[Multiplayer] Local mod version is unavailable.~%")
       )
     )
   (and *mp-local-version-text*
@@ -1181,7 +1127,7 @@ This gives us more freedom to write code how we want.
     (when (!= status (-> obj last-status))
       (set! (-> obj last-status) status)
       (cond
-        ((= status (mp-connection-status connected-lobby)) ;; Connected
+        ((= status (mp-connection-status connected-lobby))
          (sound-play "generic-beep")
          (set! *multi-sync-enabled?* #f)
          (set-next-state p 'mp-lobby 0)
@@ -1348,17 +1294,6 @@ This gives us more freedom to write code how we want.
     (lambda ((the-progress progress))
       (mp-update-version-mismatch-ui! (pc-multi-get-status))
       (none)
-      )
-    )
-  )
-
-(define *username-options-pc*
-  (new 'static 'menu-option-list
-    :y-center #xc6
-    :y-space 30
-    :scale 0.82
-    :options (new 'static 'boxed-array :type menu-option
-      (new 'static 'menu-username-option :name (text-id progress-username))
       )
     )
   )

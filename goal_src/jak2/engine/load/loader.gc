@@ -1559,7 +1559,6 @@
            (((gui-action queue) (gui-action play) (gui-action playing) (gui-action fade) (gui-action stop))
             (cond
               (gp-0
-                ;; Only playback actions guarantee that param2 contains a stream name.
                 (when (nonzero? (-> gp-0 name))
                   (case (pc-custom-spatial-audio-status
                           (-> gp-0 name)

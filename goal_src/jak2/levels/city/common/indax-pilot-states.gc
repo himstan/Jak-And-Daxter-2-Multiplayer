@@ -1,13 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; name: indax-pilot-states.gc
-;; name in dgo: indax-pilot-states
-;; dgos: CWI
-
-;; Daxter vehicle states reuse the vanilla pilot mechanics, but keep distinct
-;; state names so indax mode and multiplayer state sync never collapse to Jak.
-
 (defbehavior target-indax-pilot-edge-grab-event target ((proc process) (argc int) (message symbol) (block event-message-block))
   (case message
     (('end-mode)

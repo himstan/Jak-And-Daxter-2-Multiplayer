@@ -142,6 +142,7 @@
     )
   )
 
+
 (defmethod new bigmap ((allocation symbol) (type-to-make type))
   (let ((gp-0 (object-new allocation type-to-make (the-as int (-> type-to-make size)))))
     (set! (-> gp-0 bigmap-image)

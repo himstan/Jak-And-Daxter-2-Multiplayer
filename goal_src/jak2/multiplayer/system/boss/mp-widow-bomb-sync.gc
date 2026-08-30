@@ -143,7 +143,7 @@
       (set! (-> *mp-widow-kick-state* kick-dest slot quad) (-> event kick-dest quad))
       (set! (-> *mp-widow-kick-state* kick-height slot) (-> event kick-height))
       (set! (-> *mp-widow-kick-state* kick-time slot) (current-time))
-      (debug-log *mp-debug-log?* "[MP-Widow][KICK] queued slot=~D~%" slot)
+      (debug-log *mp-debug-log?* "[Widow][KICK] queued slot=~D~%" slot)
       )
     )
   (none)
@@ -161,7 +161,7 @@
             (-> event fizzle-deadline))
       (set! (-> *mp-widow-kick-state* fizzle-received slot) (current-time))
       (debug-log *mp-debug-log?*
-                 "[MP-Widow][FIZZLE][REMOTE] queued slot=~D deadline=~D~%"
+                 "[Widow][FIZZLE][REMOTE] queued slot=~D deadline=~D~%"
                  slot (-> event fizzle-deadline))
       )
     )
@@ -176,7 +176,7 @@
           ((> (- (current-time) (-> *mp-widow-kick-state* fizzle-received slot))
               MP_WIDOW_BOMB_FIZZLE_TIMEOUT)
            (debug-log *mp-debug-log?*
-                      "[MP-Widow][FIZZLE] expired pending slot=~D~%"
+                      "[Widow][FIZZLE] expired pending slot=~D~%"
                       slot)
            (mp-widow-bomb-clear-fizzle-slot! slot)
            )
@@ -197,7 +197,7 @@
           ((> (- (current-time) (-> *mp-widow-kick-state* kick-time slot))
               MP_WIDOW_BOMB_KICK_TIMEOUT)
            (debug-log *mp-debug-log?*
-                      "[MP-Widow][KICK] expired pending slot=~D~%"
+                      "[Widow][KICK] expired pending slot=~D~%"
                       slot)
            (mp-widow-bomb-clear-kick-slot! slot)
            )

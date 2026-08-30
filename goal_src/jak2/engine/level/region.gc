@@ -10,34 +10,6 @@
 (define-extern mp-region-target-pos (function vector))
 (define-extern mp-spectate-owns-level-request? (function symbol))
 
-(define-extern region-script-has-load-command? (function object symbol))
-
-(defun region-script-has-load-command? ((arg0 object))
-  "Check if a script list/expression contains any load-related command symbol."
-  (cond
-    ((null? arg0)
-     #f
-     )
-    (else
-      (let ((t (rtype-of arg0)))
-        (cond
-          ((= t symbol)
-           (or (= arg0 'want-load) (= arg0 'want-vis) (= arg0 'want-display) (= arg0 'show-level))
-           )
-          ((= t pair)
-           (or (region-script-has-load-command? (car (the-as pair arg0)))
-               (region-script-has-load-command? (cdr (the-as pair arg0))))
-           )
-          (else
-           #f
-           )
-          )
-        )
-      )
-    )
-  )
-
-
 ;; WARN: Return type mismatch int vs drawable-region-prim.
 (defmethod mem-usage ((this drawable-region-prim) (usage memory-usage-block) (flags int))
   (set! (-> usage length) (max 50 (-> usage length)))
@@ -641,9 +613,6 @@
                 (goto cfg-22)
                 )
             )
-          (when (region-script-has-load-command? s5-2)
-            (format #t "[Level-Load] Entering Region ~D, triggering load script: ~A~%" (-> a2-5 id) s5-2)
-            )
           (script-eval
             s5-2
             :key a2-5
@@ -668,9 +637,6 @@
                 (goto cfg-31)
                 )
             )
-          (when (region-script-has-load-command? s5-3)
-            (format #t "[Level-Load] Exiting Region ~D, triggering load script: ~A~%" (-> a2-6 id) s5-3)
-            )
           (script-eval
             s5-3
             :key a2-6
@@ -687,15 +653,11 @@
            (s5-4 (-> a2-7 on-inside))
            )
       (if s5-4
-          (begin
-            (when (region-script-has-load-command? s5-4)
-              (format #t "[Level-Load] Inside Region ~D, triggering load script: ~A~%" (-> a2-7 id) s5-4)
-              )
-            (script-eval
-              s5-4
-              :key a2-7
-              ;; og:preserve-this:vector (-> (scratchpad-object region-prim-area) region-inside-prim-list gp-4 bsphere)
-              )
+          (script-eval
+            s5-4
+            :key a2-7
+            ;; og:preserve-this
+            :vector (-> (scratchpad-object region-prim-area) region-inside-prim-list gp-4 bsphere)
             )
           )
       )
