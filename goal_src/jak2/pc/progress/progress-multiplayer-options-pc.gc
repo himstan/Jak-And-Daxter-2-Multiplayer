@@ -327,7 +327,7 @@
             (mp-set-session-player-limit! (the uint limit))
             (pc-multi-set-preference-player-limit (the uint limit)))))
       (new 'static 'menu-multiplayer-text-field-option
-        :name (text-id progress-multiplayer-network-port)
+        :name (text-id progress-port)
         :field 0)
       (new 'static 'menu-multiplayer-text-field-option
         :name (text-id progress-multiplayer-room-code)
