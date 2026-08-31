@@ -16,6 +16,10 @@ The goal is to make the full Jak II campaign playable together.<br>
 Currently this mod primarily serves as a Co-op mod, when the Campaign is in a finished state, more gamemodes are going to be supported as well.<br>
 If at least the Host is in debug mode then a lot of constraints I've put in to block progression can be bypassed.
 
+## Disclaimers
+- To speed up development, LLMs have been used for research, debugging and implementation while making this mod, not in an autonomous way, all generated code is being reviewed, and manually modified where needed
+- No feature ideas (does that even make sense), images/art or any player facing text has any AI involvement
+
 ## Terminology
 
 ### Invite
