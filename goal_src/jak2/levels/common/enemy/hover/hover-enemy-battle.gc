@@ -272,11 +272,11 @@
   )
 
 (defun mp-hover-enemy-apply-spawn! ((evt mp-hover-enemy-spawn-event))
-  (when (and evt (nonzero? evt))
-    (let ((enemy-aid (the-as uint (-> evt enemy-aid))))
+  (when (nonnull? evt)
+    (let ((enemy-aid (the-as uint (-> evt payload enemy-aid))))
       (when (not (find-enemy-by-aid enemy-aid))
-        (let ((manager (mp-hover-enemy-manager-by-aid (the-as uint (-> evt manager-aid))))
-              (spawn-ent (entity-by-aid (the-as uint (-> evt source-aid)))))
+        (let ((manager (mp-hover-enemy-manager-by-aid (the-as uint (-> evt payload manager-aid))))
+              (spawn-ent (entity-by-aid (the-as uint (-> evt payload source-aid)))))
           (when (and manager
                      (nonzero? manager)
                      spawn-ent
@@ -296,14 +296,14 @@
   )
 
 (defmethod spawn-enemy ((this hover-enemy-manager) (arg0 uint))
-  (when (and (or (not *multi-sync-enabled?*) (mp-session-host?))
+  (when (and (or (not (mp-session-in-game?)) (mp-session-host?))
              (< arg0 (the-as uint (-> this actor-group-count))))
     (dotimes (s4-0 (-> this actor-group arg0 length))
       (let ((spawn-ent (-> this actor-group arg0 data s4-0 actor)))
         (when (and spawn-ent
                    (nonzero? spawn-ent)
                    (type? spawn-ent entity-actor))
-          (let* ((enemy-aid (if *multi-sync-enabled?*
+          (let* ((enemy-aid (if (mp-session-in-game?)
                                 (mp-generate-battle-enemy-aid)
                                 (the uint 0)))
                  (enemy-proc
@@ -314,7 +314,7 @@
                      #f)))
             (when (and enemy-proc
                        (nonzero? enemy-proc)
-                       *multi-sync-enabled?*
+                       (mp-session-in-game?)
                        (nonzero? enemy-aid)
                        (-> this entity)
                        (nonzero? (-> this entity)))

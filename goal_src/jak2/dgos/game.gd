@@ -7,10 +7,18 @@
   "bounding-box-h.o"
   "matrix-h.o"
   "quaternion-h.o"
-  "mp-types.o" ;; added
-  "mp-schema-generated.o" ;; added
+  "mp-control-types.o" ;; added
+  "mp-player-types.o" ;; added
+  "mp-enemy-types.o" ;; added
+  "mp-traffic-types.o" ;; added
+  "mp-boss-types.o" ;; added
+  "mp-airlock-types.o" ;; added
+  "mp-gameplay-state-h.o" ;; added
+  "mp-api-h.o" ;; added
   "mp-event-h.o" ;; added
-  "debug-log.o" ;; added
+  "mp-event-types.o" ;; added
+  "mp-event-enqueuers-h.o" ;; added
+  "logging.o" ;; added
   "mp-event-queue.o" ;; added
   "mp-event-builders.o" ;; added
   "mp-event-enqueuers.o" ;; added
@@ -159,6 +167,7 @@
   "mp-spectate-h.o" ;; added
   "mp-player-list-h.o" ;; added
   "mp-world-h.o" ;; added
+  "mp-replication-h.o" ;; added
   "target-helper.o" ;; added
   "stats-h.o"
   "bsp-h.o"
@@ -183,6 +192,7 @@
   "hud-h.o"
   "progress-h.o"
   "progress-h-pc.o" ;; added
+  "text-input.o" ;; added
   "progress-generic-h-pc.o" ;; added
   "rpc-h.o"
   "path-h.o"
@@ -322,10 +332,12 @@
   "gun-part.o"
   "collide-reaction-target.o"
   "logic-target.o"
+  "mp-player-visibility.o" ;; added
   "sidekick.o"
   "effect-control.o"
   "voicebox.o"
   "collectables-part.o"
+  "eco-part.o" ;; added
   "debug-part.o"
   "find-nearest.o"
   "task-arrow.o"
@@ -390,6 +402,7 @@
   "hud.o"
   "hud-classes.o"
   "progress-static.o"
+  "async-task.o" ;; added
   "progress-multiplayer-options-pc.o" ;; added
   "progress-static-pc.o" ;; added
   "mp-lobby-appearance-editor.o" ;; added
@@ -596,28 +609,32 @@
   "mp-teleport-utils.o" ;; added
   "mp-left-behind.o" ;; added
   "mp-enemy-h.o" ;; added
+  "mp-aid-permanence.o" ;; added
+  "mp-gem-permanence.o" ;; added
   "mp-enemy-tombstone.o" ;; added
-  "mp-actor-ghost-sync.o" ;; added
+  "actor-record-sync.o" ;; added
   "mp-actor-hit-sync.o" ;; added
   "mp-enemy-state-mapper.o" ;; added
   "mp-enemy-sync.o" ;; added
+  "mp-enemy-animation.o" ;; added
+  "mp-enemy-authority.o" ;; added
   "mp-battle-sync.o" ;; added
   "mp-widow-state-mapper.o" ;; added
   "mp-tomb-widow-sync.o" ;; added
   "mp-widow-bomb-sync.o" ;; added
   "mp-traffic-h.o" ;; added
-  "mp-traffic-ghosts.o" ;; added
+  "traffic-records.o" ;; added
   "mp-pedestrian-animation-sync.o" ;; added
   "mp-pedestrian-state-mapper.o" ;; added
   "mp-pedestrian-authoritative.o" ;; added
   "mp-pedestrian-state-sync.o" ;; added
-  "mp-pedestrian-puppet.o" ;; added
+  "pedestrian-replica.o" ;; added
   "race-h.o" ;; added
   "race-mp-sync.o" ;; added
   "mp-vehicle-state-mapper.o" ;; added
   "mp-vehicle-authoritative.o" ;; added
   "mp-mission-vehicles.o" ;; added
-  "mp-vehicle-puppet.o" ;; added
+  "vehicle-replica.o" ;; added
   "mp-vehicle-seat-reservation.o" ;; added
   "mp-traffic-sync.o" ;; added
   "mp-traffic-authority.o" ;; added
@@ -626,10 +643,10 @@
   "mp-debug.o" ;; added
   "mp-task-debug.o" ;; added
   "mp-oracle-darkjak.o" ;; added
-  "mp-rumble.o" ;; added
+  "rumble-utils.o" ;; added
   "mp-target-state-mapper.o" ;; added
-  "mp-puppet.o" ;; added
-  "mp-puppet-debug.o" ;; added
+  "player-replica.o" ;; added
+  "player-replica-debug.o" ;; added
   "mp-gun-debug.o" ;; added
   "mp-battle-debug.o" ;; added
   "mp-clock.o" ;; added
@@ -648,7 +665,6 @@
   "mp-events.o" ;; added
   "mp-player-snapshot.o" ;; added
   "mp-remote.o" ;; added
-  "mp-player-visibility.o" ;; added
   "mp-overlay-layout.o" ;; added
   "mp-player-list.o" ;; added
   "mp-spectate.o" ;; added
@@ -656,12 +672,13 @@
   "mp-network.o" ;; added
   "mp-reconnect.o" ;; added
   "mp-session.o" ;; added
-  "mp-demo-guard.o" ;; added
   "mp-main.o" ;; added
+  "mp-demo-guard.o" ;; added
   "path-editor-h.o" ;; added - path-editor-h
   "path-editor.o" ;; added - path-editor
   "mod-debug.o" ;; added
   "mp-airlock-debug.o" ;; added
   "mp-elevator-debug.o" ;; added
   "mp-respawn-policy-debug.o" ;; added
+  "mp-palthrone.o" ;; added
  ))

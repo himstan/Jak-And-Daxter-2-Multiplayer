@@ -146,11 +146,8 @@
 
 ;; ERROR: function was not converted to expressions. Cannot decompile.
 
-(defun font-color-rgb-tagged? ((color font-color))
-  (logtest? (the-as uint color) FONT_COLOR_RGB_TAG))
 
 (defun font-color-channel->gs ((channel uint))
-  "Convert an 8-bit RGB channel into the GS font palette's 0-128 range."
   (the-as uint (/ (+ channel 1) 2)))
 
 (defun materialize-font-rgb-color! ((color font-color))
@@ -180,7 +177,7 @@
          (orig-scale (-> arg2 scale))
          (orig-color (-> arg2 color))
          (saved-color (new 'stack 'char-color))
-         (custom-color? (font-color-rgb-tagged? (-> arg2 color))))
+         (custom-color? (logtest? (the-as uint (-> arg2 color)) FONT_COLOR_RGB_TAG)))
   (when (and custom-color?
              *font-work*
              (nonzero? *font-work*)

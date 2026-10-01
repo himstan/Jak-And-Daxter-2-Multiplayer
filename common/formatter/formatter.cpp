@@ -316,8 +316,20 @@ std::vector<std::string> apply_formatting(const FormatterTreeNode& curr_node,
       }
     } else {
       // If it's not a token, we have to recursively build up the form
-      // TODO - add the cursor_pos here
-      const auto& lines = apply_formatting(ref, {}, cursor_pos);
+      int child_cursor_pos = cursor_pos;
+      if (curr_node.formatting_config.inline_until_index(form_lines) > i) {
+        int consolidated_width = curr_node.metadata.is_top_level ? 0 : 1;
+        for (int k = 0; k < i; k++) {
+          if (k < (int)form_lines.size()) {
+            consolidated_width += form_lines.at(k).length() + 1;
+          }
+        }
+        child_cursor_pos += consolidated_width;
+      } else {
+        child_cursor_pos += curr_node.formatting_config.indentation_width_for_index(
+            curr_node.formatting_config, i);
+      }
+      const auto& lines = apply_formatting(ref, {}, child_cursor_pos);
       for (int i = 0; i < (int)lines.size(); i++) {
         const auto& line = lines.at(i);
         form_lines.push_back(fmt::format(
@@ -351,18 +363,20 @@ std::vector<std::string> apply_formatting(const FormatterTreeNode& curr_node,
             form_lines.at(0) += fmt::format(" {}", form_lines.at(1));
             form_lines.erase(form_lines.begin() + 1);
           }
-        } else if (can_node_be_inlined(next_ref, cursor_pos)) {
-          const auto& lines = apply_formatting(next_ref, {}, cursor_pos);  // TODO - cursor pos
-          for (const auto& line : lines) {
-            form_lines.at(form_lines.size() - 1) += fmt::format(" {}", line);
-          }
-          i++;
-          // We have to handle hang-consolidation here or else it will never be reached above!
-          if (i == (int)curr_node.refs.size() - 1 && form_lines.size() > 1 &&
-              (curr_node.formatting_config.hang_forms ||
-               curr_node.formatting_config.combine_first_two_lines)) {
-            form_lines.at(0) += fmt::format(" {}", form_lines.at(1));
-            form_lines.erase(form_lines.begin() + 1);
+        } else {
+          int next_cursor_pos = cursor_pos + (form_lines.empty() ? 0 : (int)form_lines.back().length() + 1);
+          if (can_node_be_inlined(next_ref, next_cursor_pos)) {
+            const auto& lines = apply_formatting(next_ref, {}, next_cursor_pos);
+            for (const auto& line : lines) {
+              form_lines.at(form_lines.size() - 1) += fmt::format(" {}", line);
+            }
+            i++;
+            if (i == (int)curr_node.refs.size() - 1 && form_lines.size() > 1 &&
+                (curr_node.formatting_config.hang_forms ||
+                 curr_node.formatting_config.combine_first_two_lines)) {
+              form_lines.at(0) += fmt::format(" {}", form_lines.at(1));
+              form_lines.erase(form_lines.begin() + 1);
+            }
           }
         }
         if (!curr_node.metadata.is_top_level && next_ref.metadata.node_type == "comment" &&
@@ -384,7 +398,7 @@ std::vector<std::string> apply_formatting(const FormatterTreeNode& curr_node,
   if (curr_node.formatting_config.inline_until_index(form_lines) &&
       !str_util::contains(form_lines.at(0), ";")) {
     std::vector<std::string> new_form_lines = {};
-    const auto original_form_head_width = str_util::split(form_lines.at(0), '\n').at(0).length();
+    int consolidated_head_width = 0;
     bool consolidating_lines = true;
     for (int i = 0; i < (int)form_lines.size(); i++) {
       if (i < curr_node.formatting_config.inline_until_index(form_lines)) {
@@ -393,10 +407,17 @@ std::vector<std::string> apply_formatting(const FormatterTreeNode& curr_node,
         } else {
           new_form_lines.at(0) += fmt::format(" {}", form_lines.at(i));
         }
+        consolidated_head_width =
+            std::max(0, (int)new_form_lines.at(0).length() - (int)form_lines.at(i).length());
       } else {
         if (str_util::starts_with(form_lines.at(i), " ") && consolidating_lines) {
-          new_form_lines.push_back(fmt::format(
-              "{}{}", str_util::repeat(original_form_head_width, " "), form_lines.at(i)));
+          const auto line_indent = curr_node.formatting_config.indentation_width_for_index(
+              curr_node.formatting_config, (int)new_form_lines.size());
+          const int paren_offset = curr_node.metadata.is_top_level ? 0 : 1;
+          const auto pad_width =
+              std::max(0, consolidated_head_width + paren_offset - line_indent);
+          new_form_lines.push_back(
+              fmt::format("{}{}", str_util::repeat(pad_width, " "), form_lines.at(i)));
         } else {
           consolidating_lines = false;
           new_form_lines.push_back(form_lines.at(i));

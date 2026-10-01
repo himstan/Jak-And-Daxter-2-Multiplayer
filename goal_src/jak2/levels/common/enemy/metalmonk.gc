@@ -282,7 +282,6 @@
   )
 
 (defun metalmonk-ready-animation-channel! ((this metalmonk) (fallback-anim-index int))
-  "Restore and validate animation channel 0 after remote state sync bypasses normal startup."
   (when (or (not this) (zero? this))
     (return (the-as joint-control-channel #f))
     )

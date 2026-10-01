@@ -22,12 +22,43 @@ bool is_constant_list(const FormatterTreeNode& node) {
   if (!node.refs.at(0).token) {
     return true;
   }
+  if (node.refs.at(0).node_prefix &&
+      (node.refs.at(0).node_prefix.value() == "'" || node.refs.at(0).node_prefix.value() == "`" ||
+       node.refs.at(0).node_prefix.value() == ",")) {
+    return true;
+  }
   const auto& type = node.refs.at(0).metadata.node_type;
   return constant_types.find(type) != constant_types.end();
 }
 }  // namespace constant_list
 
 namespace blank_lines {
+
+static std::optional<std::string> get_form_head(const FormatterTreeNode& node) {
+  if (!node.is_list() || node.refs.empty()) {
+    return std::nullopt;
+  }
+  return node.refs.at(0).token;
+}
+
+enum class FormCategory { Header, Constant, Define, Extern, Other };
+
+static FormCategory get_form_category(const std::string& form_head) {
+  if (form_head == "in-package" || form_head == "bundles" || form_head == "require" ||
+      form_head == "def-art-elt" || form_head == "def-joint-node" || form_head == "declare-file") {
+    return FormCategory::Header;
+  }
+  if (form_head == "defconstant" || form_head == "defglobalconstant") {
+    return FormCategory::Constant;
+  }
+  if (form_head == "define" || form_head == "define-perm") {
+    return FormCategory::Define;
+  }
+  if (form_head == "define-extern" || form_head == "declare-type") {
+    return FormCategory::Extern;
+  }
+  return FormCategory::Other;
+}
 
 bool should_insert_blank_line(const FormatterTreeNode& containing_node,
                               const FormatterTreeNode& node,
@@ -45,6 +76,23 @@ bool should_insert_blank_line(const FormatterTreeNode& containing_node,
       containing_node.refs.at(index + 1).metadata.is_comment &&
       containing_node.refs.at(index + 1).metadata.is_inline) {
     return false;
+  }
+
+  const auto curr_head = get_form_head(node);
+  const auto& next_node = containing_node.refs.at(index + 1);
+  const auto next_head = get_form_head(next_node);
+  
+  if (curr_head) {
+    const auto curr_cat = get_form_category(curr_head.value());
+    if (curr_cat != FormCategory::Other) {
+      if (next_head) {
+        const auto next_cat = get_form_category(next_head.value());
+        if (curr_cat == next_cat) {
+          return node.metadata.num_blank_lines_following > 0;
+        }
+      }
+      return true;
+    }
   }
 
   if (node.formatting_config.elide_top_level_newline) {
@@ -126,8 +174,11 @@ bool is_element_second_in_constant_pair(const FormatterTreeNode& containing_node
 bool is_element_second_in_constant_pair_new(const FormatterTreeNode& prev_node,
                                             const FormatterTreeNode& curr_node) {
   if (prev_node.metadata.node_type == "kwd_lit") {
+    if (prev_node.token_str() == ":methods" || prev_node.token_str() == ":states" ||
+        prev_node.token_str() == ":state-methods") {
+      return false;
+    }
     // Handle standard constant types
-    // TODO - pair up sym_names as well
     if (constant_types.find(curr_node.metadata.node_type) != constant_types.end()) {
       if (curr_node.metadata.node_type != "kwd_lit") {
         // NOTE - there is ambiugity here which cannot be totally solved (i think?)
@@ -136,9 +187,7 @@ bool is_element_second_in_constant_pair_new(const FormatterTreeNode& prev_node,
         return true;
       }
     }
-    // Quoted symbols
-    if (curr_node.metadata.node_type == "sym_name" && curr_node.node_prefix &&
-        (curr_node.node_prefix.value() == "'" || curr_node.node_prefix.value() == ",")) {
+    if (curr_node.metadata.node_type == "sym_name") {
       return true;
     }
     if (!curr_node.refs.empty()) {
@@ -177,7 +226,8 @@ bool form_should_be_constant_paired(const FormatterTreeNode& node) {
       // If the first element a keyword and the following item is a constant, it's a pair
       // move forward one extra index
       if (ref.metadata.node_type == "kwd_lit" &&
-          constant_types.find(next_ref.metadata.node_type) != constant_types.end()) {
+          (constant_types.find(next_ref.metadata.node_type) != constant_types.end() ||
+           next_ref.metadata.node_type == "sym_name")) {
         num_pairs++;
         i++;
       }

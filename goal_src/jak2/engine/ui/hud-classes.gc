@@ -359,7 +359,7 @@
   (set! (-> this sprites 7 angle) 16384.0)
   (set! (-> this sprites 7 pos z) #xfffff6)
   (set! (-> this sprites 8 tex) (get-texture hud-health-01 level-default-minimap))
-  ;; we free up 3 textures by reusing the first hud-health and just rotate it, interesting that they didnt do this in the first place
+  ;; we free up 3 textures by reusing the first hud-health and just rotate it
   (set! (-> this sprites 9 tex) (get-texture hud-health-01 level-default-minimap))
   (set! (-> this sprites 9 angle) -16384.0)
   (set! (-> this sprites 10 tex) (get-texture hud-health-01 level-default-minimap))

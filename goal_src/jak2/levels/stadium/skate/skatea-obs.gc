@@ -22,7 +22,7 @@
 (deftype stadium-board1-state (structure)
   ((scores                  int32 MP_MAX_PLAYERS)
    (finished-mask           uint32)
-   (pending-start-player-id uint32)
+   (pending-start-player-id uint8)
    )
   )
 
@@ -157,7 +157,7 @@
   )
 
 (defun stadium-board1-add-participant! ((player-id uint))
-  (debug-log *mp-debug-log?* "[Skate] Attempting to add participant: ~D to the hoverboard manager.~%" player-id)
+  (log 'debug "[Skate] Attempting to add participant: ~D to the hoverboard manager.~%" player-id)
   (let ((player-index (the-as int player-id))
         (state (get-hoverboard-training-manager-state)))
     (when (and state
@@ -165,7 +165,7 @@
                (stadium-board1-valid-player-index? player-index)
                (stadium-board1-player-participant? (stadium-board1-record-by-id player-id))
                (= (-> state scores player-index) STADIUM_BOARD1_INACTIVE_SCORE))
-      (debug-log *mp-debug-log?* "[Skate] Participant: ~D has been added to the hoverboard manager.~%" player-id)
+      (log 'debug "[Skate] Participant: ~D has been added to the hoverboard manager.~%" player-id)
       (set! (-> state scores player-index) 0)))
   (none)
   )
@@ -201,12 +201,10 @@
   )
 
 (defun stadium-board1-send-event! ((evt-id uint) (score int))
-  (when (and *multi-sync-enabled?*
-             (= (pc-multi-get-status) (mp-connection-status in-game))
-             (not *mp-processing-remote-event*))
+  (when (not *mp-processing-remote-event*)
     (let ((local-record (mp-local-player-record)))
       (when (and local-record (nonzero? local-record))
-        (mp-event-enqueue-stadium-board! evt-id (-> local-record identity player-id) score))))
+        (mp-event-enqueue-stadium-board! evt-id score))))
   (none)
   )
 
@@ -230,7 +228,7 @@
   )
 
 (defun stadium-board1-tutorials-ready? ()
-  (if *multi-sync-enabled?*
+  (if (mp-session-in-game?)
       (stadium-board1-all-tutorials-done?)
       (not (task-node-open? (game-task-node stadium-board1-training))))
   )
@@ -244,7 +242,7 @@
   (let ((local-record (mp-local-player-record)))
     (when (and local-record (nonzero? local-record))
       (mp-player-mission-set-flag! local-record (mp-player-mission-flags stadium-board1-tutorial-done))
-      (debug-log *mp-debug-log?* "[Skate] Local player completed the tutorial.~%")))
+      (log 'debug "[Skate] Local player completed the tutorial.~%")))
   (none)
   )
 
@@ -310,7 +308,7 @@
       (set! (-> manager challenge-done) #f)
       (set! (-> manager judge-activated?) #t)
       (when send-event?
-        (debug-log *mp-debug-log?* "[Skate] Broadcasting challenge start.~%")
+        (log 'debug "[Skate] Broadcasting challenge start.~%")
         (stadium-board1-send-event! MP_EVENT_MISSION_STADIUM_BOARD1_CHALLENGE_START 0))))
   (none)
   )
@@ -326,9 +324,9 @@
       (when (not (stadium-board1-has-round-participants? state))
         (stadium-board1-snapshot-round! state))
       (stadium-board1-add-participant! player-id)
-      (debug-log *mp-debug-log?* "[Skate] Attempting to set pending start player id to: ~D~%" player-id)
+      (log 'debug "[Skate] Attempting to set pending start player id to: ~D~%" player-id)
       (when (not (stadium-board1-challenge-active?))
-        (debug-log *mp-debug-log?* "[Skate] Setting pending start player id to: ~D~%" player-id)
+        (log 'debug "[Skate] Setting pending start player id to: ~D~%" player-id)
         (set! (-> state pending-start-player-id) player-id)
         )
       )
@@ -337,7 +335,6 @@
   )
 
 (defun stadium-board1-deliver-pending-start! ((judge-handle handle))
-  "Deliver a queued remote start once the tutorial manager has a waiting judge."
   (let ((state (get-hoverboard-training-manager-state)))
     (when (and state
                (nonzero? state)
@@ -348,7 +345,7 @@
                    (nonzero? source-record)
                    judge-proc
                    (nonzero? judge-proc))
-          (debug-log *mp-debug-log?* "[Skate] Delivering pending challenge start to judge ~A.~%" judge-handle)
+          (log 'debug "[Skate] Delivering pending challenge start to judge ~A.~%" judge-handle)
           (set! (-> state pending-start-player-id) MP_INVALID_PLAYER_ID)
           (set! (-> (get-hoverboard-training-manager) judge-activated?) #t)
           (send-event judge-proc 'mp-start source-record)))))
@@ -369,7 +366,9 @@
 (defun stadium-board1-effective-score ()
   (let ((best-score (stadium-board1-current-local-score))
         (state (get-hoverboard-training-manager-state)))
-    (when (and *multi-sync-enabled?* state (nonzero? state))
+    (when (and (mp-session-in-game?)
+               state
+               (nonzero? state))
       (dotimes (player-index MP_MAX_PLAYERS)
         (let ((score (-> state scores player-index)))
           (when (and (!= score STADIUM_BOARD1_INACTIVE_SCORE)
@@ -390,8 +389,7 @@
         (when (and (stadium-board1-valid-player-index? player-index)
                    (stadium-board1-round-participant? state player-id))
           (let ((previous-score (the int (-> state scores player-index))))
-            (when (and *multi-sync-enabled?*
-                       (= (pc-multi-get-status) (mp-connection-status in-game))
+            (when (and (mp-session-in-game?)
                        (or force? (!= score previous-score)))
               (set! (-> state scores player-index) score)
               (stadium-board1-send-event! MP_EVENT_MISSION_STADIUM_BOARD1_SCORE_UPDATE score)))))))
@@ -418,7 +416,7 @@
                (nonzero? state)
                (zero? (-> manager result-display-until))
                (stadium-board1-all-players-finished?))
-      (debug-log *mp-debug-log?* "[Skate] Challenge is done.~%")
+      (log 'debug "[Skate] Challenge is done.~%")
       (set! (-> manager challenge-done) #t)
       (set! (-> manager result-display-until) (+ (current-time) (seconds 10)))
       (set! (-> state pending-start-player-id) MP_INVALID_PLAYER_ID)))
@@ -426,7 +424,6 @@
   )
 
 (defun stadium-board1-receive-finish! ((player-id uint) (score int))
-  "Apply a remote player's final score to the current round."
   (let ((state (get-hoverboard-training-manager-state))
         (player-index (the-as int player-id)))
     (when (and state
@@ -435,7 +432,7 @@
                (stadium-board1-round-participant? state player-id))
       (set! (-> state scores player-index) score)
       (stadium-board1-set-player-finished! state player-id)
-      (debug-log *mp-debug-log?* "[Skate] Player ~D finished with score ~D.~%" player-id score)
+      (log 'debug "[Skate] Player ~D finished with score ~D.~%" player-id score)
       (stadium-board1-begin-result!)
       )
     )
@@ -494,7 +491,6 @@
   )
 
 (defun stadium-board1-winner-player ()
-  "Return the highest-scoring player from the current round snapshot."
   (let ((best-player (the-as mp-player-record #f))
         (best-score STADIUM_BOARD1_INACTIVE_SCORE)
         (state (get-hoverboard-training-manager-state)))
@@ -523,9 +519,11 @@
               (set-width! ctx 520)
               (set-height! ctx 80)
               (set-scale! ctx 0.75)
+              (mp-player-copy-name! player-name (-> winner identity player-id))
+              (pc-encode-utf8-string player-name player-name)
               (format (clear popup-text)
                       (lookup-text! *common-text* (text-id stadium-player-won) #f)
-                      (mp-player-copy-name! player-name (-> winner identity player-id)))
+                      player-name)
               (print-game-text popup-text ctx #f 44 (bucket-id progress))))
           (stadium-board1-reset-round! state))))
   (none)
@@ -632,7 +630,9 @@
   )
 
 (defun hoverboard-training-manager-get-ride-target ()
-  (if (and *multi-sync-enabled?* (mp-target-daxter? *target*) (mp-target-ride-along? *target*))
+  (if (and (mp-session-in-game?)
+           (mp-target-daxter? *target*)
+           (mp-target-ride-along? *target*))
       (let ((ride-target (mp-jak-target-for *target*)))
         (if (and ride-target (nonzero? ride-target))
             ride-target
@@ -742,11 +742,7 @@
          (('pickup)
           (set! v0-0 #t)
           (set! (-> self board-picked-up) (the-as symbol v0-0))
-          (when (and *multi-sync-enabled?*
-                     (= (pc-multi-get-status) (mp-connection-status in-game))
-                     (not *mp-processing-remote-event*))
-            (stadium-board1-send-event! MP_EVENT_MISSION_STADIUM_BOARD1_BOARD_PICKED_UP 0)
-            )
+          (stadium-board1-send-event! MP_EVENT_MISSION_STADIUM_BOARD1_BOARD_PICKED_UP 0)
           v0-0
           )
          (('trick-flush)
@@ -1389,14 +1385,14 @@
                         )))
     (when (and score-proc
                (nonzero? score-proc)
-               *multi-sync-enabled?*
+               (mp-session-in-game?)
                (not (type? score-proc stadium-hud-multi-score)))
       (send-event (the-as process-tree score-proc) 'hide-and-die)
       (set! (-> self hud-score) (the-as handle #f))
       )
     )
   (when (= (-> self hud-score) #f)
-    (if *multi-sync-enabled?*
+    (if (mp-session-in-game?)
         (set! (-> self hud-score)
               (ppointer->handle
                 (process-spawn stadium-hud-multi-score :init hud-init-by-other :to self)))
@@ -2001,7 +1997,7 @@
     #f
     )
   :post (behavior ()
-    (when *multi-sync-enabled?*
+    (when (mp-session-in-game?)
       (let ((should-open?
               (and (not (stadium-board1-challenge-active?))
                    (or (stadium-board1-tutorials-ready?)

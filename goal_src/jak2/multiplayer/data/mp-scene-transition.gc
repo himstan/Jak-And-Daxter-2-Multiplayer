@@ -1,51 +1,32 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(define-extern mp-tomb-scene-sync-suppressed? (function symbol))
-(define-extern mp-tomb-scene-transport-suppressed? (function string symbol))
-
-(defun mp-teleport-to-remote ()
-  (let ((record (mp-teleport-destination-record)))
-    (when (and *target*
-               (nonzero? *target*)
-               (-> *target* control)
-               (nonzero? (-> *target* control))
-               record
-               (nonzero? record))
-      (set! (-> *target* control trans x) (-> record transform position x))
-      (set! (-> *target* control trans y) (-> record transform position y))
-      (set! (-> *target* control trans z) (-> record transform position z))
-      (set! (-> *target* control camera-pos quad) (-> *target* control trans quad))
-      (when (and *camera* (nonzero? *camera*))
-        (send-event *camera* 'teleport))))
-  (none)
-  )
+(define-extern mp-request-intro-skip-bootstrap-when-ready! (function none))
+(define-extern mp-hold-intro-skip-blackout! (function none))
+(define-extern mp-update-player-target-visibility! (function target symbol none))
 
 (defun mp-handle-scene-transition ()
-  "Handle state changes when entering/exiting scenes"
   (let ((in-scene? (not (not *scene-player*))))
     (when in-scene?
-      (mp-record-active-local-scene-name!)
-      )
-
-    (when (and *mp-last-scene-player*
-               (not in-scene?))
+      (mp-record-active-local-scene-name!))
+    (when (and *mp-last-scene-player* (not in-scene?))
       (mp-scene-sync-after-local-end! *mp-active-local-scene-name*)
       (mp-clear-active-local-scene-name!)
-      )
-
+      (when (and *mp-last-scene-name* (nonzero? (the-as uint *mp-last-scene-name*)))
+        (set! (-> *mp-last-scene-name* data 0) (the uint 0)))
+      (remove-setting! 'process-mask)
+      (remove-setting! 'movie)
+      (remove-setting! 'movie-name)
+      (apply-settings *setting-control*)
+      (when (and *target* (nonzero? *target*))
+        (send-event *target* 'draw #t)
+        (mp-update-player-target-visibility! *target* #f)))
     (when (not in-scene?)
       (mp-request-intro-skip-bootstrap-when-ready!)
       (mp-hold-intro-skip-blackout!)
-      (if (and *mp-last-scene-player*
-               (not *mp-intro-skip-blackout-pending?*))
-          (begin
-            (debug-log *mp-debug-log?* "[MP-Scene-Transition] Forcing blackout off after scene end.~%")
-            (mp-clear-client-presentation-blackout!)
-            )
-          )
-      )
-
-    (set! *mp-last-scene-player* in-scene?)
-    )
+      (if (and *mp-last-scene-player* (not *mp-intro-skip-blackout-pending?*))
+        (begin
+          (log 'debug "[MP-Scene-Transition] Forcing blackout off after scene end.~%")
+          (mp-clear-client-presentation-blackout!))))
+    (set! *mp-last-scene-player* in-scene?))
   (none))

@@ -21,7 +21,7 @@
   (rotflags-8)
   (rotflags-9)
   (rotflags-10)
-  (rotflags-11)
+  (mp-pov-presentation)
   (rotflags-12)
   (rotflags-13)
   (rotflags-14)
@@ -111,38 +111,35 @@
               :bounds (static-spherem 0 0 0 8)
               )
 
+(defbehavior fort-roboscreen-handler fort-roboscreen ((proc process) (argc int) (message symbol) (block event-message-block))
+  (case message
+    (('trigger)
+     (when (and (nonnull? self (-> self state)) (!= (-> self state name) 'active))
+       (set-time! (-> self state-time))
+       (go-virtual active)))
+    (('untrigger)
+     (when (and (nonnull? self (-> self state)) (= (-> self state name) 'active))
+       (go-virtual deactive)))
+    (('mp-camera-reset)
+     (go-virtual idle))
+    (('die)
+     (go-virtual die))))
+
 (defstate idle (fort-roboscreen)
   :virtual #t
-  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
-    (case message
-      (('trigger)
-       (set-time! (-> self state-time))
-       (go-virtual active)
-       )
-      (('die)
-       (go-virtual die)
-       )
-      )
-    )
+  :event fort-roboscreen-handler
   :enter (behavior ()
+    (set-roboscreen-alpha! 0.0)
     (logior! (-> self draw status) (draw-control-status no-draw))
     (set! (-> self transition) 0.0)
+    (set! (-> self anim-frame) 0.0)
     )
   :code sleep-code
   )
 
 (defstate active (fort-roboscreen)
   :virtual #t
-  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
-    (case message
-      (('untrigger)
-       (go-virtual deactive)
-       )
-      (('die)
-       (go-virtual die)
-       )
-      )
-    )
+  :event fort-roboscreen-handler
   :enter (behavior ()
     (logclear! (-> self draw status) (draw-control-status no-draw))
     (set-action!
@@ -208,13 +205,7 @@
 
 (defstate deactive (fort-roboscreen)
   :virtual #t
-  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
-    (case message
-      (('die)
-       (go-virtual die)
-       )
-      )
-    )
+  :event fort-roboscreen-handler
   :code (behavior ()
     (until #f
       (when (not (paused?))
@@ -830,6 +821,35 @@
   (the-as vector (-> this root root-prim prim-core))
   )
 
+(defun fort-robotank-turret-camera! ((turret fort-robotank-turret) (enabled? symbol) (reset-screen? symbol))
+  (when (nonnull? turret *setting-control*)
+    (if enabled?
+        (logior! (-> turret flags) (robotank-turret-flags mp-pov-presentation))
+        (begin
+          (logclear! (-> turret flags) (robotank-turret-flags mp-pov-presentation))
+          (remove-setting *setting-control* turret 'fov)))
+    (let ((screen (handle->process-safe (-> turret screen))))
+      (when (nonnull? screen)
+        (send-event screen (cond
+                            (enabled? 'trigger)
+                            (reset-screen? 'mp-camera-reset)
+                            (else 'untrigger)) :from turret))))
+  (none))
+
+(defun fort-robotank-turret-pov! ((turret fort-robotank-turret) (enabled? symbol))
+  (when (nonnull? turret)
+    (if enabled?
+        (logior! (-> turret flags) (robotank-turret-flags rotflags-7))
+        (begin
+          (logclear! (-> turret flags) (robotank-turret-flags rotflags-7))
+          (fort-robotank-turret-camera! turret #f #f)))
+    (when (nonnull? (-> turret root) (-> turret root root-prim))
+      (let ((camera-prim (-> (the-as collide-shape-prim-group (-> turret root root-prim)) child 3)))
+        (when (nonnull? camera-prim)
+          (set! (-> camera-prim prim-core collide-as) (if enabled? (collide-spec obstacle pusher) (collide-spec)))
+          (set! (-> camera-prim prim-core collide-with) (if enabled? (collide-spec jak player-list) (collide-spec)))))))
+  (none))
+
 (defbehavior turret-post fort-robotank-turret ()
   (let ((gp-0 (the-as target (as-type *target* process-focusable))))
     (cond
@@ -865,7 +885,7 @@
                  (set! (-> s5-3 quad) (-> s3-1 quad))
                  (set! (-> s5-3 quad) (-> gp-2 quad))
                  )
-             (when (logtest? (-> self flags) (robotank-turret-flags rotflags-7))
+             (when (logtest? (-> self flags) (robotank-turret-flags mp-pov-presentation))
                (let ((f0-6 (lerp-scale 1.0 0.2 f30-0 8192.0 327680.0)))
                  (seek! (-> self fov-mult) f0-6 (* 2.0 (seconds-per-frame)))
                  )
@@ -979,6 +999,11 @@
 (defbehavior robotank-turret-handler fort-robotank-turret ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   (local-vars (v0-0 object))
   (case arg2
+    (('mp-pov-presentation)
+     (when (nonnull? arg3)
+       (fort-robotank-turret-camera! self
+                                   (the-as symbol (-> arg3 param 0))
+                                   (the-as symbol (-> arg3 param 1)))))
     (('trigger)
      (when (and (-> self next-state) (= (-> self next-state name) 'idle))
        (logior! (-> self flags) (robotank-turret-flags rotflags-0))
@@ -1028,22 +1053,10 @@
      v0-0
      )
     (('pov-cam-on)
-     (let ((v1-22 (-> (the-as collide-shape-prim-group (-> self root root-prim)) child 3)))
-       (set! (-> v1-22 prim-core collide-as) (collide-spec obstacle pusher))
-       (set! (-> v1-22 prim-core collide-with) (collide-spec jak player-list))
-       )
-     (logior! (-> self flags) (robotank-turret-flags rotflags-7))
-     (send-event (handle->process (-> self screen)) 'trigger)
+     (fort-robotank-turret-pov! self #t)
      )
     (('pov-cam-off)
-     (let ((v1-33 (-> (the-as collide-shape-prim-group (-> self root root-prim)) child 3)))
-       (set! (-> v1-33 prim-core collide-as) (collide-spec))
-       (set! (-> v1-33 prim-core collide-with) (collide-spec))
-       )
-     0
-     (logclear! (-> self flags) (robotank-turret-flags rotflags-7))
-     (remove-setting! 'fov)
-     (send-event (handle->process (-> self screen)) 'untrigger)
+     (fort-robotank-turret-pov! self #f)
      )
     (('get-rotate-quat)
      (-> self rotate-quat)
@@ -1213,6 +1226,7 @@
 (defstate die (fort-robotank-turret)
   :virtual #t
   :code (behavior ()
+    (fort-robotank-turret-camera! self #f #t)
     (send-event (handle->process (-> self reticle)) 'die)
     (send-event (handle->process (-> self screen)) 'die)
     (suspend-for (seconds 1)
@@ -1225,6 +1239,7 @@
 
 (defmethod deactivate ((this fort-robotank-turret))
   "Make a process dead, clean it up, remove it from the active pool, and return to dead pool."
+  (fort-robotank-turret-camera! this #f #t)
   (logclear! (-> this flags) (robotank-turret-flags rotflags-6))
   (sound-stop (-> this turn-sound-id))
   (let ((a0-4 (handle->process (-> this screen))))

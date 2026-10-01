@@ -26,7 +26,7 @@ std::string url_encode(const std::string& value) {
 
     // Any other characters are percent-encoded
     escaped << std::uppercase;
-    escaped << '%' << std::setw(2) << int((unsigned char)c);
+    escaped << '%' << std::setw(2) << static_cast<int>((unsigned char)c);
     escaped << std::nouppercase;
   }
 
@@ -109,7 +109,6 @@ ParseResult parse_compiler_error(const std::string& error_text) {
   result.diagnostic.m_source = "OpenGOAL";
   result.diagnostic.m_range = LSPSpec::Range(0, 0);
 
-  // Check for new "Compilation Error" format
   bool is_compilation_error = false;
   for (const auto& line : lines) {
     if (str_util::contains(line, "-- Compilation Error! --")) {
@@ -121,7 +120,6 @@ ParseResult parse_compiler_error(const std::string& error_text) {
   if (is_compilation_error) {
     std::string message;
     std::string form;
-    std::string location_path;
     int line_num = 0;
     std::string source_line;
     int caret_col = -1;
@@ -129,10 +127,8 @@ ParseResult parse_compiler_error(const std::string& error_text) {
     for (size_t i = 0; i < lines.size(); ++i) {
       std::string trimmed = str_util::trim(lines[i]);
       if (str_util::contains(lines[i], "-- Compilation Error! --")) {
-        // Message is usually the very next non-empty line
         for (size_t j = i + 1; j < lines.size(); ++j) {
-          std::string msg_line = str_util::trim(lines[j]);
-          if (!msg_line.empty() && !str_util::contains(msg_line, "goal_src/")) {
+          if (std::string msg_line = str_util::trim(lines[j]); !msg_line.empty() && !str_util::contains(msg_line, "goal_src/")) {
             message = msg_line;
             break;
           }
@@ -144,20 +140,14 @@ ParseResult parse_compiler_error(const std::string& error_text) {
       } else if (trimmed == "Location:") {
         if (i + 1 < lines.size()) {
           std::string loc = str_util::trim(lines[i + 1]);
-          // Match path:line, handle Windows drive letters by looking for the last colon
-          size_t last_colon = loc.find_last_of(':');
-          if (last_colon != std::string::npos && last_colon > 0) {
-            location_path = loc.substr(0, last_colon);
+          if (size_t last_colon = loc.find_last_of(':'); last_colon != std::string::npos && last_colon > 0) {
             try {
               line_num = std::stoi(loc.substr(last_colon + 1));
             } catch (...) {
             }
-
-            // The lines immediately following Location: are the source code and caret
-            // Let's look for them carefully
             for (size_t j = i + 2; j < i + 5 && j < lines.size(); ++j) {
               if (str_util::contains(lines[j], "^")) {
-                caret_col = (int)lines[j].find('^');
+                caret_col = static_cast<int>(lines[j].find('^'));
                 if (j > 0) {
                   source_line = lines[j - 1];
                 }
@@ -180,21 +170,18 @@ ParseResult parse_compiler_error(const std::string& error_text) {
       result.diagnostic.m_range.m_start.m_line = line_num - 1;
       result.diagnostic.m_range.m_end.m_line = line_num - 1;
     }
-
-    // Range calculation priority: Form text match > Caret > Column 0
     if (!form.empty() && !source_line.empty() && source_line.find(form) != std::string::npos) {
       size_t pos = source_line.find(form);
-      result.diagnostic.m_range.m_start.m_character = (uint32_t)pos;
-      result.diagnostic.m_range.m_end.m_character = (uint32_t)(pos + form.length());
+      result.diagnostic.m_range.m_start.m_character = static_cast<uint32_t>(pos);
+      result.diagnostic.m_range.m_end.m_character = static_cast<uint32_t>(pos + form.length());
     } else if (caret_col != -1) {
-      result.diagnostic.m_range.m_start.m_character = (uint32_t)caret_col;
-      result.diagnostic.m_range.m_end.m_character = (uint32_t)(caret_col + 1);
+      result.diagnostic.m_range.m_start.m_character = static_cast<uint32_t>(caret_col);
+      result.diagnostic.m_range.m_end.m_character = static_cast<uint32_t>(caret_col + 1);
     } else {
       result.diagnostic.m_range.m_start.m_character = 0;
       result.diagnostic.m_range.m_end.m_character = 1;
     }
     } else {
-    // Legacy parsing (Reader error, etc.)
     result.diagnostic.m_severity = LSPSpec::DiagnosticSeverity::Error;
     result.diagnostic.m_source = "OpenGOAL";
 
@@ -226,13 +213,11 @@ ParseResult parse_compiler_error(const std::string& error_text) {
             int line_num = std::stoi(loc_match[2].str());
             result.diagnostic.m_range.m_start.m_line = line_num - 1;
             result.diagnostic.m_range.m_end.m_line = line_num - 1;
-
-            // Check for caret line in the next few lines
             for (size_t j = i + 1; j < lines.size() && j < i + 4; j++) {
               if (str_util::contains(lines[j], "^")) {
                 size_t caret_pos = lines[j].find('^');
-                result.diagnostic.m_range.m_start.m_character = (uint32_t)caret_pos;
-                result.diagnostic.m_range.m_end.m_character = (uint32_t)caret_pos + 1;
+                result.diagnostic.m_range.m_start.m_character = static_cast<uint32_t>(caret_pos);
+                result.diagnostic.m_range.m_end.m_character = static_cast<uint32_t>(caret_pos) + 1;
                 break;
               }
             }
@@ -242,32 +227,18 @@ ParseResult parse_compiler_error(const std::string& error_text) {
         }
       }
     }
-
-    // Fallback range if not found
     if (result.diagnostic.m_range.m_end.m_character == 0) {
       result.diagnostic.m_range.m_end.m_character = 1;
     }
   }
-
   return result;
 }
 
 std::optional<CompileProgressEvent> parse_compile_progress_line(const std::string& line) {
-  std::string stripped = strip_ansi_escape_codes(line);
-
-  // Regex for goalc progress lines:
-  // [  2%] [goalc   ] 0.050 goal_src/jak2/multiplayer/core/mp-types.gc
-  // [  2%] [goalc   ]       goal_src/jak2/engine/math/euler-h.gc
-  //
-  // Group 1: percentage
-  // Group 2: phase (e.g. goalc)
-  // Group 3: optional elapsed time
-  // Group 4: file path
+  const std::string stripped = strip_ansi_escape_codes(line);
   static const std::regex progress_regex(
       R"(\[\s*(\d+)%\]\s*\[\s*(\w+)\s*\]\s*(\d+\.\d+)?\s*(.*))");
-
-  std::smatch match;
-  if (std::regex_search(stripped, match, progress_regex)) {
+  if (std::smatch match; std::regex_search(stripped, match, progress_regex)) {
     CompileProgressEvent event;
     event.percentage = std::stoi(match[1].str());
     event.phase = match[2].str();
@@ -275,22 +246,17 @@ std::optional<CompileProgressEvent> parse_compile_progress_line(const std::strin
       event.elapsed_seconds = std::stod(match[3].str());
     }
     event.file_path = str_util::trim(match[4].str());
-    
-    // Sometimes the "file path" might be just spaces if it's a line that doesn't have it
-    // but the regex above will capture it. Let's make sure it's not empty.
     if (event.file_path.empty()) {
       return std::nullopt;
     }
-
     return event;
   }
-
   return std::nullopt;
 }
 
 CompileProgressTracker::CompileProgressTracker(const std::string& title,
-                                               EmitCallback callback,
-                                               bool use_progress)
+                                               const EmitCallback& callback,
+                                               const bool use_progress)
     : m_title(title), m_callback(callback), m_use_progress(use_progress) {
   m_token = fmt::format("opengoal/{}/{}", m_title, str_util::uuid());
 }
@@ -347,7 +313,6 @@ void CompileProgressTracker::handle_chunk(const std::string& chunk) {
 void CompileProgressTracker::finish(const std::string& finish_message) {
   if (!m_use_progress || !m_started) return;
   
-  // First process any remaining text in the buffer if it exists
   if (!m_line_buffer.empty()) {
     process_line(m_line_buffer);
     m_line_buffer.clear();
@@ -363,8 +328,7 @@ void CompileProgressTracker::finish(const std::string& finish_message) {
 }
 
 void CompileProgressTracker::process_line(const std::string& line) {
-  auto event = parse_compile_progress_line(line);
-  if (event) {
+  if (const auto event = parse_compile_progress_line(line)) {
     if (event->percentage != m_last_percentage) {
       ProgressEvent p_event;
       p_event.token = m_token;
@@ -380,5 +344,3 @@ void CompileProgressTracker::process_line(const std::string& line) {
 }
 
 }  // namespace lsp_util
-
-

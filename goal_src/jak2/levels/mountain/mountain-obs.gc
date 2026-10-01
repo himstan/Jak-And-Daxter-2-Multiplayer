@@ -801,7 +801,7 @@
          )
        )
       ((= message 'attack)
-       (when (and (not-puppet? proc) (= (-> self active) 1))
+       (when (and (not-player-replica? proc) (= (-> self active) 1))
          (let ((v1-56 (the-as object (-> block param 1))))
            (when (!= (-> (the-as attack-info v1-56) id) (-> self incoming-attack-id))
              (set! (-> self incoming-attack-id) (-> (the-as attack-info v1-56) id))
@@ -822,7 +822,7 @@
                      (set! (-> self punch-anim) #t)
                      (sound-play "dice-hit")
                      (set! (-> self hint-count) -1.0)
-                     (when (and *multi-sync-enabled?* (not *mp-processing-remote-event*))
+                     (when (not *mp-processing-remote-event*)
                        (let ((prim (get-touched-prim a1-26 (-> self root) (the-as touching-shapes-entry gp-3))))
                          (when (and prim (nonzero? prim))
                           (mp-event-enqueue-mtn-dice!
@@ -2916,6 +2916,11 @@
 
 (defstate idle (mtn-gear-device)
   :virtual #t
+  :trans (behavior ()
+    (when (task-node-closed? (game-task-node mountain-gear-resolution))
+      (deactivate self)
+      )
+    )
   :code (behavior ()
     (add-process *gui-control* self (gui-channel art-load) (gui-action queue) "mountain-gear-res" -99.0 0)
     (until #f

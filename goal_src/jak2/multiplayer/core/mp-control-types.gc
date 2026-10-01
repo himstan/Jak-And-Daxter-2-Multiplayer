@@ -1,0 +1,83 @@
+(in-package goal)
+
+(defenum mp-connection-status
+  :type uint8
+  (idle 0)
+  (connecting 1)
+  (lobby 2)
+  (game-starting 3)
+  (in-game 4)
+  (reconnecting 5)
+  (host-left 6)
+  (failed 7))
+
+(defenum mp-discovery-kind
+  :type uint8
+  (none 0)
+  (lan 1)
+  (directed 2))
+
+(defenum mp-discovery-status
+  :type uint8
+  (idle 0)
+  (searching 1)
+  (found 2)
+  (timed-out 3)
+  (failed 4))
+
+(defenum mp-command-domain
+  :type uint8
+  (connection 0)
+  (session 1)
+  (control 2))
+
+(defenum mp-command-outcome
+  :type uint8
+  (idle 0)
+  (queued 1)
+  (applied 2)
+  (rejected 3))
+
+(defenum mp-command-error
+  :type uint8
+  (none 0)
+  (runtime-inactive 1)
+  (queue-full 2)
+  (invalid-request 3)
+  (invalid-state 4)
+  (not-allowed 5)
+  (unavailable 6)
+  (start-failed 7)
+  (internal-error 8))
+
+(defenum mp-session-rejection
+  :type uint8
+  (none 0)
+  (host-full 1)
+  (wrong-room-code 2)
+  (wrong-game 3)
+  (version-mismatch 4)
+  (malformed-gate 5)
+  (gate-timeout 6)
+  (throttled 7))
+
+(defun mp-connection-status-active? ((status mp-connection-status))
+  (!= status (mp-connection-status idle)))
+
+(defun handle->process-safe ((h handle))
+  (if (and (nonzero? (the-as int h)) (!= h (the-as handle #f)) (zero? (logand (the-as int h) 3)))
+    (handle->process h)
+    (the-as process #f)))
+
+(declare-type process-drawable process)
+(declare-type process-focusable process-drawable)
+(declare-type enemy process-focusable)
+(declare-type battle process-drawable)
+(declare-type widow process-drawable)
+(declare-type citizen enemy)
+(declare-type vehicle process-focusable)
+(declare-type target process-focusable)
+(declare-type mtn-plat-shoot process-drawable)
+(declare-type mtn-dice process-drawable)
+(declare-type squid process-focusable)
+(declare-type squid-grenade-holder structure)

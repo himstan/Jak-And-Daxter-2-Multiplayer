@@ -22,93 +22,28 @@ This gives us more freedom to write code how we want.
 (deftype menu-connect-invite-option (menu-option) ())
 (deftype menu-copy-host-access-option (menu-option) ())
 (deftype menu-invite-validation-option (menu-option) ())
-(deftype menu-direct-field-option (menu-option)
-  ((field int32))
-  )
-(deftype menu-direct-connect-option (menu-option) ())
 (deftype menu-version-mismatch-option (menu-option) ())
 (deftype menu-version-mismatch-back-option (menu-option) ())
 
 (define *mp-version-resolution-attempted?* #f)
 (define *mp-local-version-text* (the-as string #f))
-(define *mp-direct-address-display* (the-as string #f))
-(define *mp-direct-port-display* (the-as string #f))
-(define *mp-direct-room-code-display* (the-as string #f))
-
-(defun mp-refresh-direct-field! ((field int))
-  (let ((display (pc-multi-get-direct-field field)))
-    (when (and display (nonzero? (the-as uint display)))
-      (cond
-        ((= field 0) (set! *mp-direct-address-display* display))
-        ((= field 1) (set! *mp-direct-port-display* display))
-        ((= field 2) (set! *mp-direct-room-code-display* display))
-        )
-      )
-    )
-  (none)
-  )
-
-(defun mp-refresh-direct-fields! ()
-  (mp-refresh-direct-field! 0)
-  (mp-refresh-direct-field! 1)
-  (mp-refresh-direct-field! 2)
-  (none)
-  )
-
-(defun mp-clear-direct-connect-ui! ()
-  (pc-multi-clear-direct-connect)
-  (mp-refresh-direct-fields!)
-  (none)
-  )
-
-(defun mp-reset-direct-connect-ui! ()
-  (pc-multi-reset-direct-connect)
-  (mp-refresh-direct-fields!)
-  (none)
-  )
-
-(defun mp-direct-field-display ((field int))
-  (cond
-    ((= field 0) *mp-direct-address-display*)
-    ((= field 1) *mp-direct-port-display*)
-    ((= field 2) *mp-direct-room-code-display*)
-    (else (the-as string #f))
-    )
-  )
-
-(defun mp-direct-field-label ((field int))
-  (cond
-    ((= field 0) (text-id progress-ip-address))
-    ((= field 1) (text-id progress-port))
-    (else (text-id progress-multiplayer-room-code))
-    )
-  )
 
 (defun mp-configure-bridge-version! ()
   (when (not *mp-version-resolution-attempted?*)
     (set! *mp-version-resolution-attempted?* #t)
-    (if (and *mod-version-text*
-             (nonzero? (the-as uint *mod-version-text*))
-             (= (pc-multi-set-local-version *mod-version-text*) 1))
-        (let ((resolved-version (pc-multi-get-local-version)))
-          (when (and resolved-version
-                     (nonzero? (the-as uint resolved-version))
-                     (nonzero? (length resolved-version)))
-            (set! *mp-local-version-text* resolved-version)
-            )
-          )
-        (none)
-        )
-    (when (not (and *mp-local-version-text*
-                    (nonzero? (the-as uint *mp-local-version-text*))
-                    (nonzero? (length *mp-local-version-text*))))
-      (debug-log *mp-debug-log?* "[Multiplayer] Local mod version is unavailable.~%")
-      )
-    )
+    (when (and *mod-version-text* (nonzero? (the-as uint *mod-version-text*)))
+      (pc-multi-set-local-version *mod-version-text*)))
+  (when (= (pc-multi-get-command-outcome (mp-command-domain control)) (mp-command-outcome applied))
+    (let ((resolved-version (pc-multi-get-local-version)))
+      (when (and resolved-version
+                 (nonzero? (the-as uint resolved-version))
+                 (nonzero? (length resolved-version)))
+        (set! *mp-local-version-text* resolved-version))))
+  (when (= (pc-multi-get-command-outcome (mp-command-domain control)) (mp-command-outcome rejected))
+    (log 'debug "[Multiplayer] Local mod version is unavailable.~%"))
   (and *mp-local-version-text*
        (nonzero? (the-as uint *mp-local-version-text*))
-       (nonzero? (length *mp-local-version-text*)))
-  )
+       (nonzero? (length *mp-local-version-text*))))
 
 (defun mp-progress-local-version ()
   (if (mp-configure-bridge-version!)
@@ -175,10 +110,23 @@ This gives us more freedom to write code how we want.
   (none))
 
 (defmethod respond-progress ((obj menu-paste-invite-option) (p progress) (selected? symbol))
-  (when (and selected? p (nonzero? (the-as uint p)))
+  (when (and selected? (nonnull? p))
     (set! (-> p selected-option) #f)
     (if (= (pc-multi-stage-clipboard-invite) 1)
-        (sound-play "generic-beep")
+        (run-async-task
+          :owner p
+          :tag 'mp-stage-invite
+          :timeout 60
+          :poll (lambda ((task async-task) (owner process))
+                  (let ((st (pc-multi-get-staged-invite-status)))
+                    (cond
+                      ((= st 1) 'success)
+                      ((!= st 0) 'fail)
+                      (else 'continue))))
+          :on-success (lambda ((task async-task) (owner process))
+                        (sound-play "generic-beep"))
+          :on-fail (lambda ((task async-task) (owner process) (reason symbol))
+                     (sound-play "menu-error")))
         (sound-play "menu-error")))
   0)
 
@@ -188,87 +136,44 @@ This gives us more freedom to write code how we want.
                          (pc-multi-get-staged-invite-status) #t p font-ctx option-index))
 
 (defmethod respond-progress ((obj menu-connect-invite-option) (p progress) (selected? symbol))
-  (when (and selected? p (nonzero? (the-as uint p)))
+  (when (and selected? (nonnull? p))
     (set! (-> p selected-option) #f)
     (if (= (pc-multi-get-staged-invite-status) 1)
         (begin
           (sound-play "generic-beep")
-          (set-next-state p 'connecting-invite 0))
-        (sound-play "menu-error")))
-  0)
+          (set-next-state p 'connecting-invite 0)
+          )
+        (run-async-task
+          :owner p
+          :tag 'mp-connect-invite-wait
+          :timeout 30
+          :poll (lambda ((task async-task) (owner process))
+                  (let ((st (pc-multi-get-staged-invite-status)))
+                    (cond
+                      ((= st 1) 'success)
+                      ((!= st 0) 'fail)
+                      (else 'continue)
+                      )
+                    )
+                  )
+          :on-success (lambda ((task async-task) (owner process))
+                        (when (nonnull? owner)
+                          (sound-play "generic-beep")
+                          (set-next-state (the-as progress owner) 'connecting-invite 0)
+                          )
+                        )
+          :on-fail (lambda ((task async-task) (owner process) (reason symbol))
+                     (sound-play "menu-error")
+                     )
+          )
+        )
+    )
+  0
+  )
 
 (defmethod draw-option ((obj menu-connect-invite-option) (p progress) (font-ctx font-context)
                         (option-index int) (selected? symbol))
-  (mp-draw-invite-action
-      (text-id progress-connect)
-      (pc-multi-get-staged-invite-status)
-      #f p font-ctx option-index)
-  )
-
-(defmethod respond-progress ((obj menu-direct-field-option) (p progress) (selected? symbol))
-  (when (and selected?
-             obj (nonzero? (the-as uint obj))
-             p (nonzero? (the-as uint p)))
-    (let ((key (pc-get-last-key)))
-      (when (nonzero? key)
-        (if (or (= key #x0d) (= key #x0a))
-            (set! (-> p selected-option) #f)
-            (let ((edit-result (pc-multi-edit-direct-field (-> obj field) key)))
-              (cond
-                ((= edit-result 1) (mp-refresh-direct-field! (-> obj field)))
-                ((= edit-result -1) (sound-play "menu-error"))
-                )
-              )
-            )
-        )
-      )
-    )
-  0
-  )
-
-(defmethod draw-option ((obj menu-direct-field-option) (p progress)
-                        (font-ctx font-context) (option-index int) (selected? symbol))
-  (when (and obj (nonzero? (the-as uint obj))
-             p (nonzero? (the-as uint p))
-             font-ctx (nonzero? (the-as uint font-ctx)))
-    (let ((display (mp-direct-field-display (-> obj field)))
-          (alpha (max 0.0 (* 2.0 (- 0.5 (-> p menu-transition))))))
-      (set! (-> font-ctx alpha) alpha)
-      (set-flags! font-ctx (font-flags kerning middle large))
-      (set-scale! font-ctx 0.48)
-      (+! (-> font-ctx origin y) 11.0)
-      (when (= option-index (-> p option-index))
-        (draw-generic-highlight (the int (+ -2.0 (-> font-ctx origin y))) 18 alpha)
-        )
-      (set-color! font-ctx (font-color progress))
-      (format (clear *temp-string*) "~S: ~S"
-              (lookup-text! *common-text* (mp-direct-field-label (-> obj field)) #f)
-              display)
-      (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
-      )
-    )
-  (none)
-  )
-
-(defmethod respond-progress ((obj menu-direct-connect-option) (p progress) (selected? symbol))
-  (when (and selected? p (nonzero? (the-as uint p)))
-    (set! (-> p selected-option) #f)
-    (if (= (pc-multi-direct-connect-ready) 1)
-        (begin
-          (sound-play "generic-beep")
-          (set-next-state p 'direct-searching 0)
-          )
-        (sound-play "menu-error")
-        )
-    )
-  0
-  )
-
-(defmethod draw-option ((obj menu-direct-connect-option) (p progress)
-                        (font-ctx font-context) (option-index int) (selected? symbol))
-  (mp-draw-invite-action (text-id progress-connect)
-                         (pc-multi-direct-connect-ready)
-                         #f p font-ctx option-index)
+  (mp-draw-invite-action (text-id progress-connect) (pc-multi-get-staged-invite-status) #f p font-ctx option-index)
   )
 
 (defmethod respond-progress ((obj menu-copy-host-access-option) (p progress) (selected? symbol))
@@ -284,7 +189,7 @@ This gives us more freedom to write code how we want.
 
 (defmethod draw-option ((obj menu-copy-host-access-option) (p progress) (font-ctx font-context)
                         (option-index int) (selected? symbol))
-  (let ((copy-mode (pc-multi-get-host-copy-mode)))
+  (let ((copy-mode (pc-multi-get-host-access-kind)))
     (when (!= copy-mode 0)
       (mp-draw-invite-action (if (= copy-mode 1)
                                  (text-id progress-copy-invite)
@@ -1098,63 +1003,45 @@ This gives us more freedom to write code how we want.
   )
 
 
-(deftype menu-join-search-option (menu-option)
-  ((last-status mp-connection-status)
-   )
-  )
+(deftype menu-join-search-option (menu-option) ())
 
-(defun mp-connection-failure-text-id ((failure int))
+(defun mp-join-status-text-id ()
+  (let ((rejection (pc-multi-get-session-rejection))
+        (discovery-status (pc-multi-get-discovery-status))
+        (discovery-kind (pc-multi-get-discovery-kind))
+        (command-outcome (pc-multi-get-command-outcome (mp-command-domain connection)))
+        (command-error (pc-multi-get-command-error (mp-command-domain connection))))
   (cond
-    ((= failure 1) (text-id progress-invalid-invite))
-    ((= failure 2) (text-id progress-host-unreachable))
-    ((= failure 3) (text-id progress-room-code-rejected))
-    ((= failure 4) (text-id progress-host-full))
-    ((= failure 5) (text-id progress-version-mismatch))
-    ((= failure 6) (text-id progress-lan-search-timeout))
-    ((= failure 7) (text-id progress-credential-discovery-failed))
-    (else (text-id no-menu-data))))
-
-(defun mp-connection-phase-text-id ((phase int))
-  (cond
-    ((= phase 1) (text-id progress-validating-invite))
-    ((= phase 2) (text-id progress-contacting-host))
-    ((= phase 3) (text-id progress-authenticating))
-    ((= phase 4) (text-id progress-connected))
-    (else (text-id progress-searching))))
-
-(defmethod respond-progress ((obj menu-join-search-option) (p progress) (selected? symbol))
-  (let ((status (pc-multi-get-status)))
-    (when (!= status (-> obj last-status))
-      (set! (-> obj last-status) status)
-      (cond
-        ((= status (mp-connection-status connected-lobby))
-         (sound-play "generic-beep")
-         (set! *multi-sync-enabled?* #f)
-         (set-next-state p 'mp-lobby 0)
-         )
-        )
-      )
-    )
-  0)
+    ((= rejection (mp-session-rejection wrong-room-code)) (text-id progress-room-code-rejected))
+    ((= rejection (mp-session-rejection host-full)) (text-id progress-host-full))
+    ((= rejection (mp-session-rejection version-mismatch)) (text-id progress-version-mismatch))
+    ((or (= discovery-status (mp-discovery-status timed-out))
+         (= discovery-status (mp-discovery-status failed)))
+     (if (= discovery-kind (mp-discovery-kind directed))
+       (text-id progress-credential-discovery-failed)
+       (text-id progress-lan-search-timeout)))
+    ((and (= command-outcome (mp-command-outcome rejected))
+          (= command-error (mp-command-error invalid-request)))
+     (text-id progress-invalid-invite))
+    ((= command-outcome (mp-command-outcome rejected)) (text-id progress-host-unreachable))
+    ((= (pc-multi-get-session-status) (mp-connection-status connecting))
+     (text-id progress-authenticating))
+    (else (text-id progress-searching)))))
 
 (defmethod draw-option ((obj menu-join-search-option) (p progress) (font-ctx font-context) (option-index int) (selected? symbol))
   (let ((alpha (max 0.0 (* 2.0 (- 0.5 (-> p menu-transition)))))
-        (status (pc-multi-get-status)))
+        (status (pc-multi-get-session-status)))
     (set! (-> font-ctx alpha) alpha)
     (set-flags! font-ctx (font-flags kerning middle large))
     (set-scale! font-ctx 0.6)
     (+! (-> font-ctx origin y) 11.0)
     (set-color! font-ctx (font-color progress))
     
-    (if (or (= status (mp-connection-status version-mismatch)) *mp-version-mismatch-menu-active?*)
+    (if (or (mp-session-version-mismatch?) *mp-version-mismatch-menu-active?*)
         (format (clear *temp-string*)
                 (lookup-text! *common-text* (text-id progress-version-mismatch) #f)
                 (mp-required-version-for-display))
-        (let ((failure (pc-multi-get-connection-failure)))
-          (let ((msg (if (!= failure 0)
-                       (mp-connection-failure-text-id failure)
-                       (mp-connection-phase-text-id (pc-multi-get-connection-phase)))))
-            (format (clear *temp-string*) "~S" (lookup-text! *common-text* msg #f)))))
+        (format (clear *temp-string*) "~S" (lookup-text! *common-text* (mp-join-status-text-id) #f)))
     (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
     )
   (none))
@@ -1219,7 +1106,7 @@ This gives us more freedom to write code how we want.
                 :name (text-id progress-joining)))
     :on-tick
     (lambda ((the-progress progress))
-      (mp-update-version-mismatch-ui! (pc-multi-get-status))
+      (mp-update-version-mismatch-ui! (pc-multi-get-session-status))
       (none)
       )
     )
@@ -1263,24 +1150,38 @@ This gives us more freedom to write code how we want.
   )
 
 (define *direct-connect-options-pc*
-  (new 'static 'menu-option-list
-    :y-center #xc6
-    :y-space 28
-    :scale 0.78
-    :options (new 'static 'boxed-array :type menu-option
-      (new 'static 'menu-direct-field-option
-        :name (text-id progress-ip-address)
-        :field 0)
-      (new 'static 'menu-direct-field-option
-        :name (text-id progress-port)
-        :field 1)
-      (new 'static 'menu-direct-field-option
-        :name (text-id progress-multiplayer-room-code)
-        :field 2)
-      (new 'static 'menu-direct-connect-option :name (text-id progress-connect))
-      )
-    )
-  )
+  (progress-new-generic-scrolling-page (text-id progress-direct-connect)
+    (new 'static 'menu-generic-text-field-option
+      :name (text-id progress-ip-address)
+      :field 0
+      :get-value-fn (lambda ((field int)) (pc-multi-get-direct-field field))
+      :set-value-fn (lambda ((field int) (value string)) (pc-multi-set-direct-field field value))
+      :max-bytes 15
+      :allowed-characters "0123456789."
+      :session (new 'static 'pc-text-input-session))
+    (new 'static 'menu-generic-text-field-option
+      :name (text-id progress-port)
+      :field 1
+      :get-value-fn (lambda ((field int)) (pc-multi-get-direct-field field))
+      :set-value-fn (lambda ((field int) (value string)) (pc-multi-set-direct-field field value))
+      :max-bytes 5
+      :allowed-characters "0123456789"
+      :session (new 'static 'pc-text-input-session))
+    (new 'static 'menu-generic-text-field-option
+      :name (text-id progress-multiplayer-room-code)
+      :field 2
+      :get-value-fn (lambda ((field int)) (pc-multi-get-direct-field field))
+      :set-value-fn (lambda ((field int) (value string)) (pc-multi-set-direct-field field value))
+      :max-bytes 6
+      :allowed-characters "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+      :uppercase? #t
+      :session (new 'static 'pc-text-input-session))
+    (new 'static 'menu-generic-button-option
+      :name (text-id progress-connect)
+      :should-disable? (lambda () (= (pc-multi-direct-connect-ready) 0))
+      :on-confirm (lambda ((p progress))
+        (when (nonnull? p)
+          (set-next-state p 'direct-searching 0))))))
 
 (define *direct-searching-options-pc*
   (new 'static 'menu-option-list
@@ -1292,7 +1193,7 @@ This gives us more freedom to write code how we want.
       )
     :on-tick
     (lambda ((the-progress progress))
-      (mp-update-version-mismatch-ui! (pc-multi-get-status))
+      (mp-update-version-mismatch-ui! (pc-multi-get-session-status))
       (none)
       )
     )

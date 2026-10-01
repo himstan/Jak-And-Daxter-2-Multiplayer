@@ -1,0 +1,10 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; if someone gets forced played this scene they can get bugged out if they didnt pass through region 387 which displays throne
+(register-region-override! 441
+                           '(when (not (task-closed? "palace-cable-resolution"))
+                             (want-display 'throne 'display)
+                             (scene-play "palace-outside-window-res"))
+                           #f
+                           #f)

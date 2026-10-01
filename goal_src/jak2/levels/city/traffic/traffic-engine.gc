@@ -501,6 +501,11 @@
 (defmethod deactivate-object ((this traffic-tracker) (arg0 int) (arg1 symbol))
   "Send a traffic-off event (or traffic-off-force) to deactivate an object, specified by index in active object array.
    Process is recycled and moved to reserved, if it deactivates."
+  (when (and (nonnull? this) (>= arg0 0) (< arg0 (the int (-> this active-object-count))))
+    (let ((proc (handle->process-safe (-> this active-object-list arg0))))
+      (when (and (nonnull? proc) (type? proc vehicle)
+                 (mp-vehicle-refuse-traffic-off? (the-as vehicle proc)))
+        (return (the-as none 0)))))
   (with-pp
     (let* ((s3-0 (-> this active-object-type-list arg0))
            (gp-0 'traffic-off)
@@ -603,6 +608,18 @@
   (none)
   )
 
+(define-extern mp-traffic-assign-spawn-net-id! (function traffic-tracker traffic-object-spawn-params none))
+(define-extern mp-traffic-allocate-net-id! (function uint uint))
+(define-extern mp-pedestrian-find-by-net-id (function uint citizen))
+
+(defun mp-traffic-net-id-in-use? ((net-id uint) (entity-kind uint))
+  (or (zero? net-id)
+      (if (= entity-kind (the uint 1))
+        (or (nonnull? (mp-vehicle-find-by-net-id net-id))
+            (nonnull? (mp-player-record-by-vehicle-id net-id))
+            (nonnull? (mp-vehicle-authority-handoff-record net-id)))
+        (nonnull? (mp-pedestrian-find-by-net-id net-id)))))
+
 (defun mp-traffic-direct-activation-available? ((tracker traffic-tracker))
   (and tracker
        (nonzero? tracker)
@@ -610,14 +627,13 @@
   )
 
 (defun mp-traffic-direct-activate-from-params! ((tracker traffic-tracker) (object-type traffic-type) (params traffic-object-spawn-params))
-  "Create and activate a traffic object without requiring an inactive reserve."
   (let ((spawned-proc (the-as process-drawable #f)))
     (when (and tracker
                (nonzero? tracker)
                params
                (nonzero? params))
       (when (not (mp-traffic-direct-activation-available? tracker))
-        (debug-log *mp-debug-log?*
+        (log 'debug
           "[Traffic] Direct activation skipped: tracker active list is full.~%")
         )
       (when (mp-traffic-direct-activation-available? tracker)
@@ -633,6 +649,7 @@
                   (if (send-event spawned-proc 'traffic-activate params traffic)
                       (begin
                         (set! (-> params proc) spawned-proc)
+                        (mp-traffic-assign-spawn-net-id! tracker params)
                         (add-active-process tracker object-type (process->handle spawned-proc))
                         )
                       (add-reserved-process tracker object-type (process->handle spawned-proc))
@@ -652,36 +669,32 @@
 (defconstant MP_TRAFFIC_NET_ID_KIND_VEHICLE (the uint 1))
 
 (defun mp-traffic-authority-net-id-active? ()
-  "True when local traffic belongs to an elected in-game authority root."
-  (and (= (pc-multi-get-status) (mp-connection-status in-game))
-       (mp-is-traffic-authoritative?))
+  (and (mp-session-in-game?)
+       *mp-traffic-local-authoritative?*)
   )
 
 (defun mp-traffic-allocate-net-id! ((entity-kind uint))
-  "Allocate the next traffic NetID in the elected root's immutable namespace."
-  (let ((sequence (the uint 0))
-        (class-base (the uint 0)))
-    (cond
-      ((= entity-kind MP_TRAFFIC_NET_ID_KIND_VEHICLE)
-       (set! sequence *mp-vehicle-net-id-counter*)
-       (set! class-base MP_TRAFFIC_VEHICLE_NET_ID_BASE)
-       (+! *mp-vehicle-net-id-counter* 1)
-       (when (>= *mp-vehicle-net-id-counter* (the uint 65535))
-         (set! *mp-vehicle-net-id-counter* (the uint 32768))))
-      ((= entity-kind MP_TRAFFIC_NET_ID_KIND_PEDESTRIAN)
-       (set! sequence *mp-pedestrian-net-id-counter*)
-       (set! class-base MP_TRAFFIC_PEDESTRIAN_NET_ID_BASE)
-       (+! *mp-pedestrian-net-id-counter* 1)
-       (when (>= *mp-pedestrian-net-id-counter* (the uint 65535))
-         (set! *mp-pedestrian-net-id-counter* (the uint 1))))
-      )
-    (mp-traffic-build-net-id class-base (mp-local-player-id) sequence)
-    )
-  )
+  (dotimes (attempt 1024)
+    (let ((sequence (the uint 0))
+          (class-base MP_TRAFFIC_PEDESTRIAN_NET_ID_BASE))
+      (cond
+        ((= entity-kind MP_TRAFFIC_NET_ID_KIND_VEHICLE)
+         (set! sequence *mp-vehicle-net-id-counter*)
+         (set! class-base MP_TRAFFIC_VEHICLE_NET_ID_BASE)
+         (+! *mp-vehicle-net-id-counter* 1)
+         (when (> *mp-vehicle-net-id-counter* MP_TRAFFIC_NET_ID_SEQUENCE_MASK)
+           (set! *mp-vehicle-net-id-counter* (the uint 1))))
+        ((= entity-kind MP_TRAFFIC_NET_ID_KIND_PEDESTRIAN)
+         (set! sequence *mp-pedestrian-net-id-counter*)
+         (+! *mp-pedestrian-net-id-counter* 1)
+         (when (> *mp-pedestrian-net-id-counter* MP_TRAFFIC_NET_ID_SEQUENCE_MASK)
+           (set! *mp-pedestrian-net-id-counter* (the uint 1)))))
+      (let ((candidate (mp-traffic-build-net-id class-base (mp-local-player-id) sequence)))
+        (when (not (mp-traffic-net-id-in-use? candidate entity-kind)) (return candidate)))))
+  (the uint 0))
 
 (defun mp-traffic-assign-spawn-net-id!
        ((tracker traffic-tracker) (params traffic-object-spawn-params))
-  "Assign a NetID to traffic activated by the elected local root."
   (when (and tracker
              (nonzero? tracker)
              params
@@ -694,13 +707,18 @@
                  MP_TRAFFIC_NET_ID_KIND_PEDESTRIAN))
            (net-id (mp-traffic-allocate-net-id! entity-kind)))
       (when (nonzero? net-id)
-        (set! (-> params net-id) net-id)))
+        (set! (-> params net-id) net-id)
+        (when (nonnull? (-> params proc))
+          (cond
+            ((type? (-> params proc) vehicle)
+             (set! (-> (the-as vehicle (-> params proc)) net-id) net-id))
+            ((type? (-> params proc) citizen)
+             (set! (-> (the-as citizen (-> params proc)) net-id) net-id))))))
     )
   (none)
   )
 
 (defun mp-traffic-ensure-process-net-id! ((proc process))
-  "Backfill NetIDs on traffic that was already active before local root election."
   (when (and proc
              (nonzero? proc)
              (mp-traffic-authority-net-id-active?))
@@ -726,7 +744,6 @@
   (let ((gp-0 (-> arg0 object-type)))
     (set! (-> arg0 proc) #f)
     (set! (-> arg0 net-id) (the uint 0))
-    (mp-traffic-assign-spawn-net-id! this arg0)
     (let ((v1-2 (-> this traffic object-type-info-array gp-0)))
       (when (and (> (-> v1-2 inactive-count) 0) (> (-> v1-2 reserve-count) 0))
         (let* ((sv-16 (get-from-inactive-by-type this gp-0))
@@ -734,8 +751,11 @@
                )
           (when s3-0
             (cond
+              ((and (type? s3-0 vehicle) (mp-vehicle-refuse-traffic-off? (the-as vehicle s3-0)))
+               (add-active-process this gp-0 sv-16))
               ((send-event s3-0 'traffic-activate arg0 (-> this traffic))
                (set! (-> arg0 proc) s3-0)
+               (mp-traffic-assign-spawn-net-id! this arg0)
                (add-active-process this gp-0 sv-16)
                0
                )
@@ -805,12 +825,12 @@
           (set! (-> this rand) (rand-vu))
           (let ((presentation-pos
                   (mp-player-record-presentation-position (mp-host-player-record))))
-            (if (and (mp-connection-status-active? (pc-multi-get-status))
-                     (not (mp-is-traffic-authoritative?))
+            (if (and (mp-session-active?)
+                     (not *mp-traffic-local-authoritative?*)
                      presentation-pos
                      (nonzero? presentation-pos)
                      (< (vector-vector-distance (-> s4-0 params position) presentation-pos) (meters 450.0)))
-                (debug-log *mp-debug-log?* "[Traffic-Engine] Blocking local spawn within Host's bubble at dist ~F~%"
+                (log 'debug "[Traffic-Engine] Blocking local spawn within Host's bubble at dist ~F~%"
                         (vector-vector-distance (-> s4-0 params position) presentation-pos))
                 (activate-from-params this (-> s4-0 params))))
           )
@@ -826,15 +846,17 @@
   (let ((gp-0 (-> arg0 object-type)))
     (set! (-> arg0 proc) #f)
     (set! (-> arg0 net-id) (the uint 0))
-    (mp-traffic-assign-spawn-net-id! this arg0)
     (when (> (-> this traffic object-type-info-array gp-0 inactive-count) 0)
       (let* ((sv-16 (get-from-inactive-by-handle this gp-0 (-> arg0 handle)))
              (s3-0 (handle->process sv-16))
              )
         (when s3-0
           (cond
+            ((and (type? s3-0 vehicle) (mp-vehicle-refuse-traffic-off? (the-as vehicle s3-0)))
+             (add-active-process this gp-0 sv-16))
             ((send-event s3-0 'traffic-activate arg0 (-> this traffic))
              (set! (-> arg0 proc) s3-0)
+               (mp-traffic-assign-spawn-net-id! this arg0)
              (add-active-process this gp-0 sv-16)
              0
              )
@@ -1224,14 +1246,13 @@
   )
 
 (defun mp-traffic-density-scale-for-type ((object-type int))
-  (if (mp-connection-status-active? (pc-multi-get-status))
+  (if (mp-session-active?)
       (fmax 0.0 (fmin 1.0 (if (< object-type 11) *mp-traffic-veh-density-scale* *mp-traffic-ped-density-scale*)))
       1.0
       )
   )
 
 (defun mp-traffic-valid-player-target? ((target-proc process-focusable))
-  "True when a player target can be used by wanted guard traffic."
   (and target-proc
        (nonzero? target-proc)
        (mp-combat-valid-player-target? target-proc #f)
@@ -1248,14 +1269,13 @@
   )
 
 (defun mp-traffic-any-valid-remote-target? ()
-  (when (and *multi-sync-enabled?*
-             (= (pc-multi-get-status) (mp-connection-status in-game)))
+  (when (mp-session-in-game?)
     (dotimes (player-id MP_MAX_PLAYERS)
       (let* ((record (mp-player-record-by-id (the-as uint player-id)))
              (remote (mp-player-record-target record)))
         (when (and record
                    (nonzero? record)
-                   (mp-player-record-remote? *mp-player-controller* record)
+                   (is-record-remote-player? record)
                    remote
                    (nonzero? remote)
                    (mp-traffic-valid-player-target? remote))
@@ -1302,7 +1322,6 @@
   )
 
 (defun mp-traffic-sync-player-target-handles! ((this traffic-engine))
-  "Publish joined player handles without changing the vanilla traffic-engine layout."
   (when (and this (nonzero? this))
     (dotimes (player-id MP_MAX_PLAYERS)
       (let ((target-status
@@ -1324,7 +1343,7 @@
           )
         )
       )
-    (when (and (not (mp-connection-status-active? (pc-multi-get-status)))
+    (when (and (not (mp-session-active?))
                (logtest? (-> this alert-state flags) (traffic-alert-flag target-jak))
                (mp-traffic-valid-local-target?))
       (let ((target-status (mp-traffic-player-target-status-by-id (the uint 0))))
@@ -1338,13 +1357,12 @@
   )
 
 (defun mp-traffic-closest-alert-target ((source process-focusable))
-  "Pick the closest valid player target for a guard alert."
   (mp-combat-nearest-player-target
     source (the-as process-focusable #f) #f)
   )
 
 (defun mp-traffic-density-scale-for-tracker ((tracker-id int))
-  (if (mp-connection-status-active? (pc-multi-get-status))
+  (if (mp-session-active?)
       (fmax 0.0 (fmin 1.0 (if (= tracker-id 1) *mp-traffic-veh-density-scale* *mp-traffic-ped-density-scale*)))
       1.0
       )
@@ -1407,8 +1425,7 @@
   )
 
 (defun mp-traffic-refill-local-active-cells! ()
-  "Seed local traffic for cells that became active while MP host traffic suppressed local spawning."
-  (when (and (mp-connection-status-active? (pc-multi-get-status))
+  (when (and (mp-session-active?)
              (not *mp-traffic-suppressed*)
              *traffic-manager*
              (nonzero? *traffic-manager*)
@@ -1955,7 +1972,7 @@
                )
               ((and (type? s3-0 vehicle)
                     (not (logtest? (-> this flags) (rigid-body-object-flag player-driving)))
-                    (mp-is-traffic-authoritative?)
+                    *mp-traffic-local-authoritative?*
                     (traffic-path-risk? (the-as vehicle s3-0))
                     )
                (deactivate-object (-> this citizen-tracker-array) (the-as int s4-0) #f)
@@ -2013,7 +2030,7 @@
     (dotimes (s5-1 2)
       (let ((s4-2 (-> this level-data-array s5-1)))
         (when (nonzero? (-> s4-2 city-info))
-          (when (or (mp-is-traffic-authoritative?) (not *mp-traffic-suppressed*))
+          (when (or *mp-traffic-local-authoritative?* (not *mp-traffic-suppressed*))
             (dotimes (s3-2 (the-as int (-> s4-2 newly-active-cell-count)))
               (let ((a1-22 (-> s4-2 newly-active-cell-list s3-2)))
                 (handle-new-vis-cell this a1-22)

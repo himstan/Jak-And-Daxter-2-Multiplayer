@@ -9,8 +9,7 @@
 
 (defun mp-task-debug-draw-bot-course ((course-bot bot))
   (let ((course (-> course-bot course))
-        (waypoint (-> course-bot waypoint))
-        )
+        (waypoint (-> course-bot waypoint)))
     (when (and course waypoint)
       (+! *mp-task-debug-course-count* 1)
       (format *stdcon*
@@ -20,27 +19,16 @@
               (-> waypoint waypoint-id)
               (-> course waypoints length)
               (-> course-bot waypoint-request)
-              (the-as uint (-> course-bot waypoint-bits))
-              )
-      )
-    )
-  (none)
-  )
+              (the-as uint (-> course-bot waypoint-bits)))))
+  (none))
 
 (defun mp-task-debug-course-callback ((p process-tree))
-  (let ((proc (the-as process p)))
-    (when (and proc (type? proc bot))
-      (mp-task-debug-draw-bot-course (the-as bot proc))
-      )
-    )
-  #t
-  )
+  (let ((proc (the-as process p))) (when (and proc (type? proc bot)) (mp-task-debug-draw-bot-course (the-as bot proc))))
+  #t)
 
 (defun mp-draw-task-debug ()
-  "Overlay real-time task synchronization data with node names"
   (when *mp-debug-task-sync*
     (format *stdcon* "~0k--- MP TASK SYNC DEBUG ---~%")
-
     (let ((nodes (-> *game-info* sub-task-list)))
       (when nodes
         (let ((local-closed 0)
@@ -48,7 +36,6 @@
               (remote-closed 0)
               (remote-active 0)
               (nodes-len (min 512 (-> nodes length))))
-
           (dotimes (i nodes-len)
             (let ((byte-idx (/ i 8))
                   (bit-idx (logand i 7)))
@@ -56,44 +43,30 @@
                     (l-open? (task-node-open? (the-as game-task-node i)))
                     (r-closed? (logtest? (-> *mp-world-state* task-mask byte-idx) (ash 1 bit-idx)))
                     (r-open? (logtest? (-> *mp-world-state* active-task-mask byte-idx) (ash 1 bit-idx))))
-
                 (if l-closed? (+! local-closed 1))
                 (if l-open? (+! local-active 1))
                 (if r-closed? (+! remote-closed 1))
-                (if r-open? (+! remote-active 1))
-                )
-              )
-            )
-
+                (if r-open? (+! remote-active 1)))))
           (let ((closed-diff (- local-closed remote-closed))
                 (active-diff (- local-active remote-active)))
             (format *stdcon* "CLOSED: L~D R~D (Diff: ~D)~%" local-closed remote-closed closed-diff)
             (format *stdcon* "ACTIVE: L~D R~D (Diff: ~D)~%" local-active remote-active active-diff)
             (if (and (zero? closed-diff) (zero? active-diff))
-                (format *stdcon* "STATUS: MATCHED~%")
-                (format *stdcon* "STATUS: !! DESYNCED !!~%"))
-            )
-
+              (format *stdcon* "STATUS: MATCHED~%")
+              (format *stdcon* "STATUS: !! DESYNCED !!~%")))
           (format *stdcon* "~%ACTIVE COURSE WAYPOINTS:~%")
           (set! *mp-task-debug-course-count* 0)
           (iterate-process-tree *active-pool* mp-task-debug-course-callback *kernel-context*)
           (when (zero? *mp-task-debug-course-count*)
-            (format *stdcon* "  none~%")
-            )
+            (format *stdcon* "  none~%"))
           (format *stdcon* "PENDING WAYPOINTS: ~D~%" *mp-waypoint-pending-count*)
-
           (let ((active-count 0))
             (dotimes (i nodes-len)
               (when (task-node-open? (the-as game-task-node i))
-                (if (zero? (mod active-count 2))
-                    (format *stdcon* "~%  ")
-                    (format *stdcon* " | "))
+                (if (zero? (mod active-count 2)) (format *stdcon* "~%  ") (format *stdcon* " | "))
                 (format *stdcon* "~S" (-> nodes data i name))
-                (+! active-count 1))
-              )
-            (if (> active-count 0) (format *stdcon* "~%"))
-            )
-
+                (+! active-count 1)))
+            (if (> active-count 0) (format *stdcon* "~%")))
           (let ((has-desync? #f))
             (dotimes (i nodes-len)
               (let ((byte-idx (/ i 8))
@@ -103,19 +76,11 @@
                   (when (!= l-closed? r-closed?)
                     (if (not has-desync?) (format *stdcon* "~%DESYNCED NODES:~%"))
                     (format *stdcon* "  ![~S (~S)]~%" (-> nodes data i name) (if l-closed? "L-CLOSED" "R-CLOSED"))
-                    (set! has-desync? #t))
-                  )
-                )
-              )
-            )
-
-          (format *stdcon* "~%SCENE: ~S, SKIP VOTES: ~D/~D~%"
+                    (set! has-desync? #t))))))
+          (format *stdcon*
+                  "~%SCENE: ~S, SKIP VOTES: ~D/~D~%"
                   *mp-scene-coordinator-name*
                   (mp-scene-coordinator-vote-count)
-                  (mp-scene-coordinator-participant-count))
-          )
-        )
-      )
-    (format *stdcon* "-------------------------~%~%")
-    )
+                  (mp-scene-coordinator-participant-count)))))
+    (format *stdcon* "-------------------------~%~%"))
   (none))

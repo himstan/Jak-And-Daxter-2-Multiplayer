@@ -645,6 +645,20 @@
   `(neq? ,thing 0)
   )
 
+(desfun build-nonnull-check (objects)
+  (if (null? objects)
+      #t
+      (let ((nonnull-value (gensym)))
+        `(let ((,nonnull-value ,(car objects)))
+           (and ,nonnull-value
+                (nonzero? ,nonnull-value)
+                ,(build-nonnull-check (cdr objects)))))))
+
+(defmacro nonnull? (&rest objects)
+  (if (null? objects)
+      (error "nonnull? requires at least one argument")
+      (build-nonnull-check objects)))
+
 (defmacro or! (place &rest args)
   `(set! ,place (or ,place ,@args))
   )

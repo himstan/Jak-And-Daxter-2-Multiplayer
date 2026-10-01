@@ -9,7 +9,6 @@
 
 #include "font_utils.h"
 
-#include <algorithm>
 #include <stdexcept>
 #include <string_view>
 
@@ -19,7 +18,7 @@
 #include "common/util/font/dbs/font_db_jak2.h"
 #include "common/util/font/dbs/font_db_jak3.h"
 #include "common/util/font/font_utils_korean.h"
-#include "common/util/string_util.h"
+#include "common/util/unicode_util.h"
 #include "common/versions/versions.h"
 
 #include "fmt/format.h"
@@ -257,7 +256,10 @@ std::string GameTextFontBank::convert_utf8_to_game_korean(const std::string& str
   std::string non_korean_buffer = "";
   size_t i = 0;
   while (i < str.size()) {
-    char32_t cp = str_util::next_utf8_char(str, i);
+    char32_t cp = 0;
+    if (!unicode::decode_utf8_codepoint(str, i, cp)) {
+      return {};
+    }
     if (font_util_korean::is_korean_syllable(cp)) {
       // flush any non-korean buffer
       if (!non_korean_buffer.empty()) {
@@ -269,7 +271,7 @@ std::string GameTextFontBank::convert_utf8_to_game_korean(const std::string& str
       // write out the korean character
       output += font_util_korean::game_encode_korean_syllable(str, cp, m_korean_db.value());
     } else {
-      non_korean_buffer += str_util::utf8_encode(cp);
+      non_korean_buffer += unicode::encode_utf8_codepoint(cp);
     }
   }
   // flush any non-korean buffer

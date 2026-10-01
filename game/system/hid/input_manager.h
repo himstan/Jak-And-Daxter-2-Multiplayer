@@ -16,6 +16,7 @@
 #include "devices/mouse.h"
 #include "game/settings/settings.h"
 #include "game/system/hid/input_bindings.h"
+#include "game/system/hid/text_input_editor.h"
 
 /// Central class that:
 /// - keeps track of available input devices
@@ -34,7 +35,9 @@ class InputManager {
     CONTROLLER_SEND_TRIGGER_EFFECT_VIBRATE,
     CONTROLLER_SEND_TRIGGER_EFFECT_WEAPON,
     CONTROLLER_SEND_TRIGGER_RUMBLE,
-    SET_TRIGGER_EFFECTS_ENABLED
+    SET_TRIGGER_EFFECTS_ENABLED,
+    START_TEXT_INPUT,
+    STOP_TEXT_INPUT
   };
 
   struct EEInputEvent {
@@ -62,6 +65,13 @@ class InputManager {
   /// event so it can be ran from the proper thread context (the graphics thread)
   void process_ee_events();
   void register_command(const CommandBinding::Source source, const CommandBinding bind);
+
+  uint32_t begin_text_input(std::string_view initial_text, TextInputEditor::Policy policy);
+  TextInputEditor::Snapshot text_input_snapshot(uint32_t token = 0) const;
+  bool submit_text_input(uint32_t token);
+  bool cancel_text_input(uint32_t token);
+  bool resolve_text_input(uint32_t token, bool accepted);
+  bool close_text_input(uint32_t token);
 
   std::optional<std::shared_ptr<PadData>> get_current_data(const int port) const;
   std::pair<int, int> get_mouse_pos() const { return m_mouse.get_mouse_pos(); }
@@ -165,6 +175,7 @@ class InputManager {
   /// You can have many mice plugged into a computer, but we do not differentiate between
   /// them it's all aggregated under one device.
   MouseDevice m_mouse;
+  TextInputEditor m_text_editor;
   /// A mapping between port numbers and the controller index. Connect as many controllers as
   /// you want.
   std::unordered_map<int, int> m_controller_port_mapping;

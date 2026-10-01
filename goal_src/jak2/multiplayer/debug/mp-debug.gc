@@ -2,28 +2,10 @@
 (in-package goal)
 
 (defun debug-state-name ((proc process))
-  (if (and proc
-           (nonzero? proc)
-           (-> proc state)
-           (nonzero? (-> proc state)))
-      (-> proc state name)
-      'none
-      )
-  )
+  (if (and proc (nonzero? proc) (-> proc state) (nonzero? (-> proc state))) (-> proc state name) 'none))
 
 (defun debug-next-state-name ((proc process))
-  (if (and proc
-           (nonzero? proc)
-           (-> proc next-state)
-           (nonzero? (-> proc next-state)))
-      (-> proc next-state name)
-      'none
-      )
-  )
-
-(defun mp-get-packet-type-name ((idx int))
-  (mp-schema-packet-name idx)
-  )
+  (if (and proc (nonzero? proc) (-> proc next-state) (nonzero? (-> proc next-state))) (-> proc next-state name) 'none))
 
 (defun mp-debug-session-role-name ()
   (cond
@@ -37,155 +19,25 @@
     ((mp-player-daxter? record) "DAXTER")
     (else "UNKNOWN")))
 
-(defun mp-draw-player-registry-debug ()
-  (format *stdcon* "SESSION: ~S LOCAL: ~D HOST: ~D~%"
-          (mp-debug-session-role-name)
-          (mp-local-player-id)
-          (mp-host-player-id))
-  (dotimes (player-id MP_MAX_PLAYERS)
-    (let ((record
-            (mp-player-controller-record
-              *mp-player-controller*
-              (the-as uint player-id))))
-      (if (and record (nonzero? record))
-          (let ((player-target (mp-player-record-target record)))
-            (format *stdcon*
-                    "PLAYER ~D: char=~S status=~D joined=~D connected=~D pad=~D "
-                    player-id
-                    (mp-debug-player-character-name record)
-                    (-> record connection status)
-                    (-> record identity joined?)
-                    (-> record connection connected?)
-                    (-> record runtime pad-index))
-            (format *stdcon*
-                    "target=~S~%"
-                    (if (and player-target (nonzero? player-target)) "BOUND" "NONE")))
-          (format *stdcon* "PLAYER ~D: VACANT~%" player-id))))
-  (none))
-
-(defun mp-draw-network-debug ()
-  "Display ENet wire health, sync TPS, and packet-category statistics."
-  (when *mp-debug-network*
-    (let ((ping (pc-multi-get-ping))
-          (ping-valid (pc-multi-get-ping-valid))
-          (loss (pc-multi-get-packet-loss-percent))
-          (loss-var (pc-multi-get-packet-loss-variance-percent))
-          (ping-var (pc-multi-get-ping-variance))
-          (total-sent (pc-multi-get-wire-total-sent-bytes))
-          (total-recv (pc-multi-get-wire-total-received-bytes))
-          (packets-sent (pc-multi-get-wire-total-sent-packets))
-          (packets-recv (pc-multi-get-wire-total-received-packets))
-          (send-rate (pc-multi-get-send-rate))
-          (recv-rate (pc-multi-get-recv-rate))
-          (send-packet-rate (pc-multi-get-send-packet-rate))
-          (recv-packet-rate (pc-multi-get-recv-packet-rate))
-          (role-str (mp-debug-session-role-name))
-          )
-      (format *stdcon* "~0k--- MP NETWORK DEBUG ---~%")
-      (format *stdcon* "ROLE:      ~S~%" role-str)
-      (mp-draw-player-registry-debug)
-      (if (> (pc-multi-get-status) (mp-connection-status connecting))
-          (format *stdcon* "PEER:      CONNECTED~%")
-          (format *stdcon* "PEER:      NONE~%")
-          )
-      (if (nonzero? ping-valid)
-          (format *stdcon* "RTT (ENET): ~D ms (var: ~D ms)~%" ping ping-var)
-          (format *stdcon* "RTT (ENET): waiting for sample~%")
-          )
-      (format *stdcon* "LOSS (ENET RELIABLE): ~,,1f% (var: ~,,1f%)~%" loss loss-var)
-      (format *stdcon* "SYNC TPS:  ~D / ~D (Actual / Target)~%" *mp-actual-tps* *multi-sync-tps*)
-
-      (let ((rate-in-kb (/ (the float recv-rate) 1024.0))
-            (rate-out-kb (/ (the float send-rate) 1024.0)))
-        (cond
-          ((>= total-recv (* 1024 1024))
-           (format *stdcon* "WIRE IN:   ~,,2f KB/s (Total: ~,,2f MB)~%" rate-in-kb (/ (the float total-recv) 1048576.0)))
-          (else
-           (format *stdcon* "WIRE IN:   ~,,2f KB/s (Total: ~,,2f KB)~%" rate-in-kb (/ (the float total-recv) 1024.0)))
-          )
-        (cond
-          ((>= total-sent (* 1024 1024))
-           (format *stdcon* "WIRE OUT:  ~,,2f KB/s (Total: ~,,2f MB)~%" rate-out-kb (/ (the float total-sent) 1048576.0)))
-          (else
-           (format *stdcon* "WIRE OUT:  ~,,2f KB/s (Total: ~,,2f KB)~%" rate-out-kb (/ (the float total-sent) 1024.0)))
-          )
-        )
-      (format *stdcon* "WIRE PPS:   In: ~D / Out: ~D~%" recv-packet-rate send-packet-rate)
-      (format *stdcon* "PACKETS TOTAL: In: ~D / Out: ~D~%" packets-recv packets-sent)
-
-      (format *stdcon* "BY CATEGORY:~%")
-      (dotimes (idx MP_PACKET_COUNT)
-        (let ((t-sent (pc-multi-get-type-total-sent idx))
-              (t-recv (pc-multi-get-type-total-recv idx))
-              (r-send (pc-multi-get-type-send-rate idx))
-              (r-recv (pc-multi-get-type-recv-rate idx))
-              (p-send (pc-multi-get-type-send-packet-rate idx))
-              (p-recv (pc-multi-get-type-recv-packet-rate idx))
-              (t-sent-packets (pc-multi-get-type-total-sent-packets idx))
-              (t-recv-packets (pc-multi-get-type-total-received-packets idx)))
-          (when (or (> t-sent 0) (> t-recv 0))
-            (let ((name (mp-get-packet-type-name idx))
-                  (rs-kb (/ (the float r-send) 1024.0))
-                  (rr-kb (/ (the float r-recv) 1024.0)))
-              (format *stdcon* "  ~S: Out: ~,,2f KB/s (~D pps) | In: ~,,2f KB/s (~D pps)~%"
-                      name
-                      rs-kb
-                      p-send
-                      rr-kb
-                      p-recv
-                      )
-              (format *stdcon* "      APP TOTAL KB: Out ~,,1f / In ~,,1f~%"
-                      (/ (the float t-sent) 1024.0)
-                      (/ (the float t-recv) 1024.0))
-              (format *stdcon* "      APP PACKETS TOTAL: Out ~D / In ~D~%"
-                      t-sent-packets
-                      t-recv-packets)
-              )
-            )
-          )
-        )
-
-      (format *stdcon* "-------------------------~%~%")
-      )
-    )
-  (none))
-
 (defun mp-find-squid-process ()
-  "Search the active process pool for any process of type squid."
   (let ((found-proc (the-as process #f)))
-    (iterate-process-tree
-      *active-pool*
-      (lambda ((p process-tree))
-        (let ((proc (the-as process p)))
-          (when (and proc (nonzero? proc) (= (-> proc type symbol) 'squid))
-            (set! found-proc proc)
-            )
-          )
-        #t
-        )
-      *kernel-context*
-      )
-    found-proc
-    )
-  )
+    (iterate-process-tree *active-pool*
+                          (lambda ((p process-tree))
+                            (let ((proc (the-as process p)))
+                              (when (and proc (nonzero? proc) (= (-> proc type symbol) 'squid))
+                                (set! found-proc proc)))
+                            #t)
+                          *kernel-context*)
+    found-proc))
 
 (defun mp-find-widow-process ()
-  "Search the active process pool for any process of type widow."
   (let ((found-proc (the-as process #f)))
     (let ((widow-entity (entity-by-type widow)))
-          (when (and widow-entity (nonzero? widow-entity))
-            (let ((widow-proc (-> widow-entity extra process)))
-              (when (and widow-proc
-                         (nonzero? widow-proc)
-                         (type? widow-proc widow))
-                (set! found-proc widow-proc)
-                )
-              )
-            )
-      )
-    found-proc
-    )
-  )
+      (when (and widow-entity (nonzero? widow-entity))
+        (let ((widow-proc (-> widow-entity extra process)))
+          (when (and widow-proc (nonzero? widow-proc) (type? widow-proc widow))
+            (set! found-proc widow-proc)))))
+    found-proc))
 
 (defun mp-widow-debug-valid-position? ((slot mp-widow-state))
   (and slot
@@ -195,365 +47,277 @@
        (= (-> slot z) (-> slot z))
        (< (fabs (-> slot x)) (meters 100000.0))
        (< (fabs (-> slot y)) (meters 100000.0))
-       (< (fabs (-> slot z)) (meters 100000.0)))
-  )
+       (< (fabs (-> slot z)) (meters 100000.0))))
 
 (defun mp-widow-debug-slot-active? ((slot mp-widow-state))
-  (and slot (nonzero? slot)
-       (nonzero? (-> slot active))
-       (mp-widow-debug-valid-position? slot))
-  )
+  (and slot (nonzero? slot) (nonzero? (-> slot active)) (mp-widow-debug-valid-position? slot)))
 
-(defun mp-widow-debug-slot-age ((slot mp-widow-state))
-  (let ((now (pc-multi-get-ticks)))
-    (if (and slot (nonzero? slot)
-             (>= now (-> slot last-updated)))
-        (- now (-> slot last-updated))
-        0
-        )
-    )
-  )
-
-(defun mp-widow-debug-draw-ghost ((proc widow) (slot mp-widow-state))
-  (when (and proc (nonzero? proc)
-             (-> proc root) (nonzero? (-> proc root))
-             (mp-widow-debug-slot-active? slot))
+(defun widow-debug-draw-record ((proc widow) (slot mp-widow-state))
+  (when (and proc (nonzero? proc) (-> proc root) (nonzero? (-> proc root)) (mp-widow-debug-slot-active? slot))
     (let ((widow-pos (-> proc root trans))
-          (ghost-pos (new 'stack-no-clear 'vector)))
-      (set-vector! ghost-pos (-> slot x) (-> slot y) (-> slot z) 1.0)
-      (add-debug-sphere #t (bucket-id debug-no-zbuf1) ghost-pos (meters 1.0)
-                        (static-rgba 0 255 255 180))
-      (when (> (vector-vector-distance widow-pos ghost-pos) (meters 0.1))
-        (add-debug-line #t (bucket-id debug-no-zbuf1) widow-pos ghost-pos
-                        (static-rgba 0 255 255 180) #f (the-as rgba 0))
-        )
-      )
-    )
-  (none)
-  )
+          (record-pos (new 'stack-no-clear 'vector)))
+      (set-vector! record-pos (-> slot x) (-> slot y) (-> slot z) 1.0)
+      (add-debug-sphere #t (bucket-id debug-no-zbuf1) record-pos (meters 1.0) (static-rgba 0 255 255 180))
+      (when (> (vector-vector-distance widow-pos record-pos) (meters 0.1))
+        (add-debug-line #t
+                        (bucket-id debug-no-zbuf1)
+                        widow-pos
+                        record-pos
+                        (static-rgba 0 255 255 180)
+                        #f
+                        (the-as rgba 0)))))
+  (none))
 
 (defun mp-draw-widow-boss-debug ()
-  "Display Widow state and snapshot diagnostics."
   (let ((proc (mp-find-widow-process)))
     (when (and proc (nonzero? proc))
-      (format *stdcon* "WIDOW: current=~S next=~S~%"
-              (debug-state-name proc)
-              (debug-next-state-name proc))
-      (when (and *mp-widow-buffer*
-                 (nonzero? (the-as uint *mp-widow-buffer*)))
+      (format *stdcon* "WIDOW: current=~S next=~S~%" (debug-state-name proc) (debug-next-state-name proc))
+      (when (and *mp-widow-buffer* (nonzero? (the-as uint *mp-widow-buffer*)))
         (let ((local-state (-> *mp-widow-buffer* local-state))
               (remote-state (-> *mp-widow-buffer* remote-state)))
           (if (mp-widow-debug-slot-active? local-state)
-              (begin
-                (format *stdcon* "  LOCAL: id=~D state=~S pos=(~F,~F,~F)~%"
-                        (-> local-state state-id)
-                        (mp-widow-state-id->name (-> local-state state-id))
-                        (-> local-state x) (-> local-state y) (-> local-state z))
-                (format *stdcon* "  LOCAL ROT: (~F,~F,~F,~F)~%"
-                        (-> local-state quat-x) (-> local-state quat-y)
-                        (-> local-state quat-z) (-> local-state quat-w))
-                )
-              (format *stdcon* "  LOCAL: unavailable~%"))
+            (begin
+              (format *stdcon*
+                      "  LOCAL: id=~D state=~S pos=(~F,~F,~F)~%"
+                      (-> local-state state-id)
+                      (mp-widow-state-id->name (-> local-state state-id))
+                      (-> local-state x)
+                      (-> local-state y)
+                      (-> local-state z))
+              (format *stdcon*
+                      "  LOCAL ROT: (~F,~F,~F,~F)~%"
+                      (-> local-state quat-x)
+                      (-> local-state quat-y)
+                      (-> local-state quat-z)
+                      (-> local-state quat-w)))
+            (format *stdcon* "  LOCAL: unavailable~%"))
           (if (mp-widow-debug-slot-active? remote-state)
-              (begin
-                (format *stdcon* "  REMOTE: id=~D state=~S pos=(~F,~F,~F) age=~D~%"
-                        (-> remote-state state-id)
-                        (mp-widow-state-id->name (-> remote-state state-id))
-                        (-> remote-state x) (-> remote-state y) (-> remote-state z)
-                        (mp-widow-debug-slot-age remote-state))
-                (format *stdcon* "  REMOTE ROT: (~F,~F,~F,~F)~%"
-                        (-> remote-state quat-x) (-> remote-state quat-y)
-                        (-> remote-state quat-z) (-> remote-state quat-w))
-                )
-              (format *stdcon* "  REMOTE: unavailable~%"))
-          (when (and (mp-widow-debug-slot-active? local-state)
-                     (mp-widow-debug-slot-active? remote-state))
+            (begin
+              (format *stdcon*
+                      "  REMOTE: id=~D state=~S pos=(~F,~F,~F)~%"
+                      (-> remote-state state-id)
+                      (mp-widow-state-id->name (-> remote-state state-id))
+                      (-> remote-state x)
+                      (-> remote-state y)
+                      (-> remote-state z))
+              (format *stdcon*
+                      "  REMOTE ROT: (~F,~F,~F,~F)~%"
+                      (-> remote-state quat-x)
+                      (-> remote-state quat-y)
+                      (-> remote-state quat-z)
+                      (-> remote-state quat-w)))
+            (format *stdcon* "  REMOTE: unavailable~%"))
+          (when (and (mp-widow-debug-slot-active? local-state) (mp-widow-debug-slot-active? remote-state))
             (let ((local-pos (new 'stack-no-clear 'vector))
                   (remote-pos (new 'stack-no-clear 'vector)))
               (set-vector! local-pos (-> local-state x) (-> local-state y) (-> local-state z) 1.0)
               (set-vector! remote-pos (-> remote-state x) (-> remote-state y) (-> remote-state z) 1.0)
-              (format *stdcon* "  SNAPSHOT DELTA: ~F~%"
-                      (vector-vector-distance local-pos remote-pos))
-              )
-            )
-          )
-        )
-      )
-    )
-  (none)
-  )
+              (format *stdcon* "  SNAPSHOT DELTA: ~F~%" (vector-vector-distance local-pos remote-pos))))))))
+  (none))
 
 (defun mp-draw-widow-boss-overlay ()
-  "Draw Widow state and ghost position above the boss."
   (let ((proc (the-as widow (mp-find-widow-process))))
-    (when (and proc (nonzero? proc)
-               (-> proc root) (nonzero? (-> proc root)))
+    (when (and proc (nonzero? proc) (-> proc root) (nonzero? (-> proc root)))
       (let ((draw-pos (new 'stack-no-clear 'vector)))
         (vector-copy! draw-pos (-> proc root trans))
         (+! (-> draw-pos y) (meters 8.0))
-        (if (and *mp-widow-buffer*
-                 (nonzero? (the-as uint *mp-widow-buffer*)))
-            (let ((snapshot-state (if (mp-session-host?)
-                                      (-> *mp-widow-buffer* local-state)
-                                      (-> *mp-widow-buffer* remote-state))))
-              (if (mp-widow-debug-slot-active? snapshot-state)
-                  (let ((ghost-pos (new 'stack-no-clear 'vector)))
-                    (set-vector! ghost-pos (-> snapshot-state x) (-> snapshot-state y) (-> snapshot-state z) 1.0)
-                    (add-debug-text-3d
-                      #t (bucket-id debug-no-zbuf1)
-                      (the-as string
-                        (format #f "WIDOW~%STATE:~S~%GHOST:~S (~D)~%DELTA:~F"
-                                (debug-state-name proc)
-                                (mp-widow-state-id->name (-> snapshot-state state-id))
-                                (mp-widow-debug-slot-age snapshot-state)
-                                (vector-vector-distance (-> proc root trans) ghost-pos)))
-                      draw-pos (font-color cyan) (the-as vector2h #f))
-                    (mp-widow-debug-draw-ghost proc snapshot-state)
-                    )
-                  (add-debug-text-3d
-                    #t (bucket-id debug-no-zbuf1)
-                    (the-as string
-                      (format #f "WIDOW~%STATE:~S~%GHOST: unavailable"
-                              (debug-state-name proc)))
-                    draw-pos (font-color orange) (the-as vector2h #f))
-                  )
-              )
-            (add-debug-text-3d
-              #t (bucket-id debug-no-zbuf1)
-              (the-as string (format #f "WIDOW~%STATE:~S~%BUFFER: unavailable" (debug-state-name proc)))
-              draw-pos (font-color orange) (the-as vector2h #f))
-            )
-        )
-      )
-    )
-  (none)
-  )
+        (if (and *mp-widow-buffer* (nonzero? (the-as uint *mp-widow-buffer*)))
+          (let ((snapshot-state (if (mp-session-host?) (-> *mp-widow-buffer* local-state) (-> *mp-widow-buffer* remote-state))))
+            (if (mp-widow-debug-slot-active? snapshot-state)
+              (let ((record-pos (new 'stack-no-clear 'vector)))
+                (set-vector! record-pos (-> snapshot-state x) (-> snapshot-state y) (-> snapshot-state z) 1.0)
+                (add-debug-text-3d #t
+                                   (bucket-id debug-no-zbuf1)
+                                   (the-as string
+                                           (format #f
+                                                   "WIDOW~%STATE:~S~%RECORD:~S~%DELTA:~F"
+                                                   (debug-state-name proc)
+                                                   (mp-widow-state-id->name (-> snapshot-state state-id))
+                                                   (vector-vector-distance (-> proc root trans) record-pos)))
+                                   draw-pos
+                                   (font-color cyan)
+                                   (the-as vector2h #f))
+                (widow-debug-draw-record proc snapshot-state))
+              (add-debug-text-3d #t
+                                 (bucket-id debug-no-zbuf1)
+                                 (the-as string
+                                         (format #f "WIDOW~%STATE:~S~%RECORD: unavailable" (debug-state-name proc)))
+                                 draw-pos
+                                 (font-color orange)
+                                 (the-as vector2h #f))))
+          (add-debug-text-3d #t
+                             (bucket-id debug-no-zbuf1)
+                             (the-as string (format #f "WIDOW~%STATE:~S~%BUFFER: unavailable" (debug-state-name proc)))
+                             draw-pos
+                             (font-color orange)
+                             (the-as vector2h #f))))))
+  (none))
 
 (defun mp-draw-boss-debug ()
-  "Overlay real-time boss synchronization state."
   (when *mp-debug-boss*
     (format *stdcon* "~0k--- MP BOSS DEBUG ---~%")
-    (format *stdcon* "ROLE: ~S CHARACTER: ~S~%"
+    (format *stdcon*
+            "ROLE: ~S CHARACTER: ~S~%"
             (mp-debug-session-role-name)
             (mp-debug-player-character-name (mp-local-player-record)))
-    (let ((squid-ready? (and *multi-sync-enabled?*
-                             (= (pc-multi-get-status) (mp-connection-status in-game))
-                             *mp-palace-squid-buffer*
-                             (nonzero? (the-as uint *mp-palace-squid-buffer*))
-                             )))
-      (format *stdcon* "READY?: ~A~%" (if squid-ready? "YES" "NO"))
-      )
-
+    (let ((squid-ready? (and *mp-palace-squid-buffer* (nonzero? (the-as uint *mp-palace-squid-buffer*)))))
+      (format *stdcon* "READY?: ~A~%" (if squid-ready? "YES" "NO")))
     (let ((proc (process-by-type-exact 'squid *active-pool*)))
       (when (and proc (nonzero? proc))
-        (format *stdcon* "PROC HANDLE: ~A (addr: ~D)~%" (if (and proc (nonzero? proc)) "VALID" "NULL") proc)
-        )
-      )
-
+        (format *stdcon* "PROC HANDLE: ~A (addr: ~D)~%" (if (and proc (nonzero? proc)) "VALID" "NULL") proc)))
     (let ((tree-proc (mp-find-squid-process)))
       (if (and tree-proc (nonzero? tree-proc))
-          (begin
-            (format *stdcon* "TREE SQUID: FOUND (addr: ~D)~%" tree-proc)
-            (format *stdcon* "STATE: ~S~%" (if (-> tree-proc state) (-> tree-proc state name) "NONE"))
-            (format *stdcon* "NEXT-STATE: ~S~%" (if (-> tree-proc next-state) (-> tree-proc next-state name) "NONE"))
-            )
-          (format *stdcon* "TREE SQUID: NOT FOUND~%")
-          )
-      )
-
+        (begin
+          (format *stdcon* "TREE SQUID: FOUND (addr: ~D)~%" tree-proc)
+          (format *stdcon* "STATE: ~S~%" (if (-> tree-proc state) (-> tree-proc state name) "NONE"))
+          (format *stdcon* "NEXT-STATE: ~S~%" (if (-> tree-proc next-state) (-> tree-proc next-state name) "NONE")))
+        (format *stdcon* "TREE SQUID: NOT FOUND~%")))
     (when (and *mp-palace-squid-buffer* (nonzero? (the-as uint *mp-palace-squid-buffer*)))
       (let ((local-state (-> *mp-palace-squid-buffer* local-state))
             (remote-state (-> *mp-palace-squid-buffer* remote-state)))
         (when (and local-state (nonzero? local-state))
-          (format *stdcon* "LOCAL BUFFER: Active: ~D, Stage: ~D, HP: ~D, ShieldHP: ~f, Seq: ~D~%"
+          (format *stdcon*
+                  "LOCAL BUFFER: Active: ~D, Stage: ~D, HP: ~D, ShieldHP: ~f, Seq: ~D~%"
                   (-> local-state active)
                   (-> local-state stage)
                   (-> local-state hit-points)
                   (-> local-state shield-hit-points)
-                  (-> local-state action-seq)
-                  )
-          )
+                  (-> local-state action-seq)))
         (when (and remote-state (nonzero? remote-state))
-          (format *stdcon* "REMOTE BUFFER: Active: ~D, Stage: ~D, HP: ~D, ShieldHP: ~f, Seq: ~D~%"
+          (format *stdcon*
+                  "REMOTE BUFFER: Active: ~D, Stage: ~D, HP: ~D, ShieldHP: ~f, Seq: ~D~%"
                   (-> remote-state active)
                   (-> remote-state stage)
                   (-> remote-state hit-points)
                   (-> remote-state shield-hit-points)
-                  (-> remote-state action-seq)
-                  )
-          )
-        (format *stdcon* "LAST SYNC TIME: ~D~%" (-> *mp-palace-squid-buffer* last-sync-time))
-        )
-      )
+                  (-> remote-state action-seq)))
+        (when (nonnull? *mp-replication-state*)
+          (format *stdcon* "REMOTE GENERATION: ~D~%" (-> *mp-replication-state* remote bosses generation)))))
     (format *stdcon* "-------------------------~%~%")
-    (mp-draw-widow-boss-debug)
-    )
+    (mp-draw-widow-boss-debug))
   (none))
 
 (defun mp-draw-boss-debug-overlay ()
-  "Draw real-time sync stats above the squid boss's head in 3D world-space.
-   Mirrors the pattern used by mp-enemy/ped/vehicle debug overlays."
   (when *mp-debug-boss*
     (mp-draw-widow-boss-overlay)
     (let ((proc (the-as squid (process-by-type-exact 'squid *active-pool*))))
-      (when (and proc (nonzero? proc)
-                 (-> proc root)
-                 (nonzero? (-> proc root)))
+      (when (and proc (nonzero? proc) (-> proc root) (nonzero? (-> proc root)))
         (let ((draw-pos (new 'stack-no-clear 'vector)))
           (vector-copy! draw-pos (-> proc root trans))
           (+! (-> draw-pos y) (meters 8.0))
-
           (let ((is-jak? (mp-local-player-jak?)))
             (let ((color (if is-jak? (font-color green) (font-color yellow)))
-                  (role-str (if is-jak? "JAK(AUTH)" "DAX(PUPPET)")))
-
-              (if (and *mp-palace-squid-buffer*
-                       (nonzero? (the-as uint *mp-palace-squid-buffer*)))
-                  (let ((local-state  (-> *mp-palace-squid-buffer* local-state))
-                        (remote-state (-> *mp-palace-squid-buffer* remote-state)))
-                    (when (and local-state (nonzero? local-state)
-                               remote-state (nonzero? remote-state))
-                      (let ((local-state-name
-                              (if (-> proc state) (-> proc state name) 'none)))
-                        (add-debug-text-3d
-                          #t
-                          (bucket-id debug-no-zbuf1)
-                          (the-as string
-                            (format #f
-                              "BOSS (~S)~%LC state:~S HP:~D~%   stg:~D trg:~D sq:~D"
-                              role-str
-                              local-state-name
-                              (-> local-state hit-points)
-                              (-> local-state stage)
-                              (-> local-state target-player-id)
-                              (-> local-state action-seq)
-                              ))
-                          draw-pos
-                          color
-                          (the-as vector2h #f))
-                        (let ((remote-pos (new 'stack-no-clear 'vector)))
-                          (vector-copy! remote-pos draw-pos)
-                          (+! (-> remote-pos y) (meters -2.5))
-                          (add-debug-text-3d
-                            #t
-                            (bucket-id debug-no-zbuf1)
-                            (the-as string
-                              (format #f
-                                "RM id:~D HP:~D~%   stg:~D trg:~D sq:~D"
-                                (-> remote-state state-id)
-                                (-> remote-state hit-points)
-                                (-> remote-state stage)
-                                (-> remote-state target-player-id)
-                                (-> remote-state action-seq)
-                                ))
-                            remote-pos
-                            (font-color cyan)
-                            (the-as vector2h #f))
-                          )
-                        )
-                      )
-                    )
-                  (add-debug-text-3d
-                    #t
-                    (bucket-id debug-no-zbuf1)
-                    (the-as string (format #f "BOSS (~S)~%BUFFER: NOT READY" role-str))
-                    draw-pos
-                    (font-color orange)
-                    (the-as vector2h #f))
-                  )
-              )
-            )
-          )
-        )
-      )
-    )
-  (none)
-  )
+                  (role-str (if is-jak? "JAK(AUTH)" "DAX(REPLICA)")))
+              (if (and *mp-palace-squid-buffer* (nonzero? (the-as uint *mp-palace-squid-buffer*)))
+                (let ((local-state (-> *mp-palace-squid-buffer* local-state))
+                      (remote-state (-> *mp-palace-squid-buffer* remote-state)))
+                  (when (and local-state (nonzero? local-state) remote-state (nonzero? remote-state))
+                    (let ((local-state-name (if (-> proc state) (-> proc state name) 'none)))
+                      (add-debug-text-3d #t
+                                         (bucket-id debug-no-zbuf1)
+                                         (the-as string
+                                                 (format #f
+                                                         "BOSS (~S)~%LC state:~S HP:~D~%   stg:~D trg:~D sq:~D"
+                                                         role-str
+                                                         local-state-name
+                                                         (-> local-state hit-points)
+                                                         (-> local-state stage)
+                                                         (-> local-state target-player-id)
+                                                         (-> local-state action-seq)))
+                                         draw-pos
+                                         color
+                                         (the-as vector2h #f))
+                      (let ((remote-pos (new 'stack-no-clear 'vector)))
+                        (vector-copy! remote-pos draw-pos)
+                        (+! (-> remote-pos y) (meters -2.5))
+                        (add-debug-text-3d #t
+                                           (bucket-id debug-no-zbuf1)
+                                           (the-as string
+                                                   (format #f
+                                                           "RM id:~D HP:~D~%   stg:~D trg:~D sq:~D"
+                                                           (-> remote-state state-id)
+                                                           (-> remote-state hit-points)
+                                                           (-> remote-state stage)
+                                                           (-> remote-state target-player-id)
+                                                           (-> remote-state action-seq)))
+                                           remote-pos
+                                           (font-color cyan)
+                                           (the-as vector2h #f))))))
+                (add-debug-text-3d #t
+                                   (bucket-id debug-no-zbuf1)
+                                   (the-as string (format #f "BOSS (~S)~%BUFFER: NOT READY" role-str))
+                                   draw-pos
+                                   (font-color orange)
+                                   (the-as vector2h #f)))))))))
+  (none))
 
 (defun mp-debug-append-draw-flag ((flags-text string) (flag-name string) (enabled? symbol))
-  "Append a draw-control-status flag name to a comma-separated list."
-  (if enabled?
-      (if (string= flags-text "")
-          flag-name
-          (the-as string (format #f "~A, ~A" flags-text flag-name)))
-      flags-text))
+  (if enabled? (if (string= flags-text "") flag-name (the-as string (format #f "~A, ~A" flags-text flag-name))) flags-text))
 
 (defun mp-debug-get-draw-status-flags ((draw draw-control))
-  "Return a readable list of the active draw-control-status flags."
   (let ((status (if (and draw (nonzero? draw)) (the-as uint32 (-> draw status)) (the-as uint32 0)))
         (flags-text ""))
     (set! flags-text
-          (mp-debug-append-draw-flag flags-text "close-to-screen" (logtest? status (draw-control-status close-to-screen))))
-    (set! flags-text
-          (mp-debug-append-draw-flag flags-text "no-draw" (logtest? status (draw-control-status no-draw))))
+          (mp-debug-append-draw-flag flags-text
+                                     "close-to-screen"
+                                     (logtest? status (draw-control-status close-to-screen))))
+    (set! flags-text (mp-debug-append-draw-flag flags-text "no-draw" (logtest? status (draw-control-status no-draw))))
     (set! flags-text
           (mp-debug-append-draw-flag flags-text "no-draw-temp" (logtest? status (draw-control-status no-draw-temp))))
     (set! flags-text
           (mp-debug-append-draw-flag flags-text "on-screen" (logtest? status (draw-control-status on-screen))))
-    (set! flags-text
-          (mp-debug-append-draw-flag flags-text "uninited" (logtest? status (draw-control-status uninited))))
+    (set! flags-text (mp-debug-append-draw-flag flags-text "uninited" (logtest? status (draw-control-status uninited))))
     (set! flags-text
           (mp-debug-append-draw-flag flags-text "no-draw-bounds" (logtest? status (draw-control-status no-draw-bounds))))
     (set! flags-text
-          (mp-debug-append-draw-flag flags-text "no-closest-distance" (logtest? status (draw-control-status no-closest-distance))))
+          (mp-debug-append-draw-flag flags-text
+                                     "no-closest-distance"
+                                     (logtest? status (draw-control-status no-closest-distance))))
     (set! flags-text
           (mp-debug-append-draw-flag flags-text "math-skel" (logtest? status (draw-control-status math-skel))))
     (set! flags-text
           (mp-debug-append-draw-flag flags-text "force-vu1" (logtest? status (draw-control-status force-vu1))))
     (set! flags-text
-          (mp-debug-append-draw-flag flags-text "no-draw-bounds2" (logtest? status (draw-control-status no-draw-bounds2))))
+          (mp-debug-append-draw-flag flags-text
+                                     "no-draw-bounds2"
+                                     (logtest? status (draw-control-status no-draw-bounds2))))
     (set! flags-text
           (mp-debug-append-draw-flag flags-text "force-fade" (logtest? status (draw-control-status force-fade))))
     (set! flags-text
-          (mp-debug-append-draw-flag flags-text "warp-cross-fade" (logtest? status (draw-control-status warp-cross-fade))))
-    (set! flags-text
-          (mp-debug-append-draw-flag flags-text "lod-set" (logtest? status (draw-control-status lod-set))))
+          (mp-debug-append-draw-flag flags-text
+                                     "warp-cross-fade"
+                                     (logtest? status (draw-control-status warp-cross-fade))))
+    (set! flags-text (mp-debug-append-draw-flag flags-text "lod-set" (logtest? status (draw-control-status lod-set))))
     (set! flags-text
           (mp-debug-append-draw-flag flags-text "disable-fog" (logtest? status (draw-control-status disable-fog))))
-    (set! flags-text
-          (mp-debug-append-draw-flag flags-text "hud" (logtest? status (draw-control-status hud))))
-    (if (string= flags-text "")
-        "none"
-        (the-as string flags-text))))
+    (set! flags-text (mp-debug-append-draw-flag flags-text "hud" (logtest? status (draw-control-status hud))))
+    (if (string= flags-text "") "none" (the-as string flags-text))))
 
 (defun mp-draw-level-debug ()
-  "Draw level loading and level state debug information."
   (when *mp-level-debug?*
     (format *stdcon* "~0k--- LEVEL LOAD DEBUG ---~%")
     (when (and *load-state* (nonzero? *load-state*))
-      (format *stdcon* "VIS-NICK target: ~A~%" (-> *load-state* vis-nick))
-      )
+      (format *stdcon* "VIS-NICK target: ~A~%" (-> *load-state* vis-nick)))
     (when (and *level* (nonzero? *level*))
       (format *stdcon* "PLAY?: ~A  BORDER?: ~A  VIS?: ~A~%" (-> *level* play?) (-> *level* border?) (-> *level* vis?))
-      (format *stdcon* "LOAD-LEVEL: ~A~%" (-> *level* load-level))
-      )
-
+      (format *stdcon* "LOAD-LEVEL: ~A~%" (-> *level* load-level)))
     (when (and *level* (nonzero? *level*))
       (let ((loading-lev (-> *level* loading-level)))
         (if (and loading-lev (nonzero? loading-lev) (!= loading-lev (-> *level* default-level)))
-            (format *stdcon* "LOADING LEVEL: ~A (status: ~A)~%" (-> loading-lev name) (-> loading-lev status))
-            (format *stdcon* "LOADING LEVEL: none~%")
-            )
-        )
-      )
-
+          (format *stdcon* "LOADING LEVEL: ~A (status: ~A)~%" (-> loading-lev name) (-> loading-lev status))
+          (format *stdcon* "LOADING LEVEL: none~%"))))
     (when (and *load-state* (nonzero? *load-state*))
       (format *stdcon* "WANTED LEVELS (WANT):~%")
       (dotimes (i 6)
         (let ((want-state (-> *load-state* want i)))
           (when (and want-state (nonzero? want-state) (-> want-state name))
-            (format *stdcon* "  ~D: ~A [~A] (force-vis? ~A, force-inside? ~A)~%"
+            (format *stdcon*
+                    "  ~D: ~A [~A] (force-vis? ~A, force-inside? ~A)~%"
                     i
                     (-> want-state name)
                     (-> want-state display?)
                     (-> want-state force-vis?)
-                    (-> want-state force-inside?)
-                    )
-            )
-          )
-        )
-      )
-
+                    (-> want-state force-inside?))))))
     (when (and *level* (nonzero? *level*))
       (format *stdcon* "ACTIVE HEAPS (draw-level-count: ~D):~%" (-> *level* draw-level-count))
       (dotimes (i (-> *level* length))
@@ -564,61 +328,45 @@
                    (used (+ (- (the int (-> heap current)) (the int (-> heap base)))
                             (- (the int (-> heap top-base)) (the int (-> heap top)))))
                    (free (- (the int (-> heap top)) (the int (-> heap current)))))
-              (format *stdcon* "  ~D: ~A (status: ~A, nick: ~A, display: ~A, render: ~A)~%"
+              (format *stdcon*
+                      "  ~D: ~A (status: ~A, nick: ~A, display: ~A, render: ~A)~%"
                       i
                       (-> lev name)
                       (-> lev status)
                       (-> lev nickname)
                       (-> lev display?)
-                      (-> lev render?)
-                      )
-              (format *stdcon* "     Heap: size ~D, used ~D (~D%), free ~D~%"
+                      (-> lev render?))
+              (format *stdcon*
+                      "     Heap: size ~D, used ~D (~D%), free ~D~%"
                       size
                       used
                       (if (> size 0) (/ (* 100 used) size) 0)
-                      free
-                      )
-              )
-            )
-          )
-        )
-      )
-    (format *stdcon* "-------------------------~%~%")
-    )
-  (none)
-  )
+                      free))))))
+    (format *stdcon* "-------------------------~%~%"))
+  (none))
 
 (defun mp-debug-print-target-finish-sphere ()
-  "Print a copy-pasteable zero-radius sphere centered on the current target."
   (if (and *target* (nonzero? *target*))
-      (let ((target-control (-> *target* control)))
-        (cond
-          ((not (and target-control (nonzero? target-control)))
-           (format 0 "[MP Debug] Target sphere unavailable: target control is null.~%"))
-          ((focus-test? *target* teleporting)
-           (format 0 "[MP Debug] Target sphere unavailable: target is teleporting.~%"))
-          ((and *level*
-                (nonzero? *level*)
-                (-> *level* loading-level)
-                (nonzero? (-> *level* loading-level))
-                (-> *level* default-level)
-                (!= (-> *level* loading-level) (-> *level* default-level)))
-           (format 0 "[MP Debug] Target sphere unavailable: a level is loading.~%"))
-          (else
-           (let ((target-position (target-pos 0)))
-             (if (and target-position (nonzero? target-position))
-                 (format 0
-                         "(new 'static 'sphere~%                       :x ~,,1f~%                       :y ~,,1f~%                       :z ~,,1f~%                       :r 0.0)~%"
-                         (-> target-position x)
-                         (-> target-position y)
-                         (-> target-position z))
-                 (format 0 "[MP Debug] Target sphere unavailable: target position is null.~%"))
-             )
-           )
-        )
-        )
-      (format 0 "[MP Debug] Target sphere unavailable: *target* is null.~%"))
-  (none)
-  )
-
-
+    (let ((target-control (-> *target* control)))
+      (cond
+        ((not (and target-control (nonzero? target-control)))
+         (format 0 "[MP Debug] Target sphere unavailable: target control is null.~%"))
+        ((focus-test? *target* teleporting) (format 0 "[MP Debug] Target sphere unavailable: target is teleporting.~%"))
+        ((and *level*
+              (nonzero? *level*)
+              (-> *level* loading-level)
+              (nonzero? (-> *level* loading-level))
+              (-> *level* default-level)
+              (!= (-> *level* loading-level) (-> *level* default-level)))
+         (format 0 "[MP Debug] Target sphere unavailable: a level is loading.~%"))
+        (else
+         (let ((target-position (target-pos 0)))
+           (if (and target-position (nonzero? target-position))
+             (format 0
+                     "(new 'static 'sphere~%                       :x ~,,1f~%                       :y ~,,1f~%                       :z ~,,1f~%                       :r 0.0)~%"
+                     (-> target-position x)
+                     (-> target-position y)
+                     (-> target-position z))
+             (format 0 "[MP Debug] Target sphere unavailable: target position is null.~%"))))))
+    (format 0 "[MP Debug] Target sphere unavailable: *target* is null.~%"))
+  (none))

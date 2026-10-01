@@ -2,21 +2,11 @@
 (in-package goal)
 
 (defun mp-debug-get-gun-proc ((proc target))
-  "Return the given target's gun process when it exists."
-  (if (and proc
-           (nonzero? proc)
-           (-> proc gun)
-           (nonzero? (-> proc gun))
-           (-> proc gun gun)
-           (nonzero? (-> proc gun gun)))
-      (let ((gun-proc (the-as gun (-> proc gun gun 0))))
-        (if (and gun-proc (nonzero? gun-proc))
-            gun-proc
-            (the-as gun #f)))
-      (the-as gun #f)))
+  (if (and proc (nonzero? proc) (-> proc gun) (nonzero? (-> proc gun)) (-> proc gun gun) (nonzero? (-> proc gun gun)))
+    (let ((gun-proc (the-as gun (-> proc gun gun 0)))) (if (and gun-proc (nonzero? gun-proc)) gun-proc (the-as gun #f)))
+    (the-as gun #f)))
 
 (defun mp-debug-get-gun-skeleton-name ((gun-info gun-info))
-  "Return a readable skeleton name for the gun's current drawable."
   (if (and gun-info
            (nonzero? gun-info)
            (-> gun-info process)
@@ -27,11 +17,10 @@
            (nonzero? (-> gun-info process 0 draw))
            (-> gun-info process 0 draw art-group)
            (nonzero? (-> gun-info process 0 draw art-group)))
-      (the-as string (format #f "skel-~A" (-> (-> gun-info process 0 draw art-group) name)))
-      "unknown"))
+    (the-as string (format #f "skel-~A" (-> (-> gun-info process 0 draw art-group) name)))
+    "unknown"))
 
 (defun mp-debug-get-gun-attachment-joint-name ((gun-info gun-info))
-  "Return the target joint that the gun is anchored to."
   (if (and gun-info
            (nonzero? gun-info)
            (-> gun-info hips)
@@ -40,17 +29,15 @@
            (nonzero? (-> gun-info hips joint))
            (-> (-> gun-info hips joint) joint)
            (nonzero? (-> (-> gun-info hips joint) joint)))
-      (the-as string (format #f "~S (~D)"
-                      (-> (-> (-> gun-info hips joint) joint) name)
-                      (-> (-> (-> gun-info hips joint) joint) number)))
-      "none"))
+    (the-as string
+            (format #f
+                    "~S (~D)"
+                    (-> (-> (-> gun-info hips joint) joint) name)
+                    (-> (-> (-> gun-info hips joint) joint) number)))
+    "none"))
 
 (defun mp-debug-draw-gun-barrel-line ((gun-proc gun))
-  "Draw a line that follows the gun barrel's aim axis."
-  (when (and gun-proc
-             (nonzero? gun-proc)
-             (-> gun-proc node-list)
-             (nonzero? (-> gun-proc node-list)))
+  (when (and gun-proc (nonzero? gun-proc) (-> gun-proc node-list) (nonzero? (-> gun-proc node-list)))
     (let ((muzzle-idx (joint-node-index gun-lod0-jg muzzle))
           (laser-idx (joint-node-index gun-lod0-jg laser)))
       (when (and (>= muzzle-idx 0) (>= laser-idx 0))
@@ -58,87 +45,60 @@
               (laser-pos (new 'stack-no-clear 'vector)))
           (vector<-cspace! muzzle-pos (-> gun-proc node-list data muzzle-idx))
           (vector<-cspace! laser-pos (-> gun-proc node-list data laser-idx))
-          (add-debug-line
-            #t
-            (bucket-id debug-no-zbuf1)
-            muzzle-pos
-            laser-pos
-            (static-rgba 0 255 255 160)
-            #f
-            (the-as rgba 0))
-          )
-        )
-      )
-    )
+          (add-debug-line #t
+                          (bucket-id debug-no-zbuf1)
+                          muzzle-pos
+                          laser-pos
+                          (static-rgba 0 255 255 160)
+                          #f
+                          (the-as rgba 0))))))
   (none))
 
 (defun mp-debug-bool-string ((value symbol))
-  "Return a compact yes/no string for debug text."
   (if value "YES" "NO"))
 
 (defun mp-debug-art-name ((anim basic))
-  "Return a readable art-joint-anim name."
-  (if (and anim (nonzero? anim))
-      (the-as string (-> (the-as art-joint-anim anim) name))
-      "none"))
+  (if (and anim (nonzero? anim)) (the-as string (-> (the-as art-joint-anim anim) name)) "none"))
 
 (defun mp-debug-get-sync-weapon-text ((proc target))
-  "Return network weapon fields relevant to puppet gun desync debugging."
   (let ((local-weapon (the uint 0))
         (record (mp-player-process-record proc))
         (remote-weapon (the uint 0))
-        (ghost-weapon (the uint 0))
+        (record-weapon (the uint 0))
         (pending-weapon (the uint 0)))
     (when (and (mp-local-player-record) (nonzero? (the-as uint (mp-local-player-record))))
-      (set! local-weapon (the-as uint (-> (mp-local-player-record) input equipped-weapon)))
-      )
+      (set! local-weapon (the-as uint (-> (mp-local-player-record) input equipped-weapon))))
     (when (and record (nonzero? record))
-      (set! remote-weapon (the-as uint (-> record input equipped-weapon)))
-      )
-    (let ((ghost (mp-player-record-ghost record)))
-      (when (and ghost (nonzero? ghost) (-> ghost active?))
-        (set! ghost-weapon (the-as uint (-> ghost equipped-weapon)))))
+      (set! remote-weapon (the-as uint (-> record input equipped-weapon))))
+    (let ((target-record (get-player-target-record record)))
+      (when (and target-record (nonzero? target-record) (-> target-record active?))
+        (set! record-weapon (the-as uint (-> target-record equipped-weapon)))))
     (when (mp-player-runtime-flag? record (mp-player-runtime-flags pending-gun-shot))
-      (set! pending-weapon (-> record runtime pending-gun-shot-weapon))
-      )
-    (if (and record
-             (nonzero? record)
-             (mp-player-record-remote? *mp-player-controller* record))
-        (the-as string
-                (format #f
-                        "SYNC REMOTE: info=~D ghost=~D pending=~D pending?=~A"
-                        remote-weapon
-                        ghost-weapon
-                        pending-weapon
-                        (mp-debug-bool-string
-                          (mp-player-runtime-flag?
-                            record (mp-player-runtime-flags pending-gun-shot)))))
-        (the-as string
-                (format #f "SYNC LOCAL: local-info=~D" local-weapon)))
-    )
-  )
+      (set! pending-weapon (-> record runtime pending-gun-shot-weapon)))
+    (if (and record (nonzero? record) (is-record-remote-player? record))
+      (the-as string
+              (format #f
+                      "SYNC REMOTE: info=~D record=~D pending=~D pending?=~A"
+                      remote-weapon
+                      record-weapon
+                      pending-weapon
+                      (mp-debug-bool-string (mp-player-runtime-flag? record (mp-player-runtime-flags pending-gun-shot)))))
+      (the-as string (format #f "SYNC LOCAL: local-info=~D" local-weapon)))))
 
 (defun mp-debug-get-target-anim-text ((proc target) (label string))
-  "Return target state and parent animation fields that drive held-gun rendering."
   (let ((state-name (the-as symbol #f))
         (root-group (the-as basic #f))
         (top-group (the-as basic #f))
         (top-targ (the-as basic #f))
         (top-push (the-as basic #f)))
-    (when (and proc
-               (nonzero? proc))
-      (when (and (-> proc state)
-                 (nonzero? (-> proc state)))
-        (set! state-name (-> proc state name))
-        )
-      (when (and (-> proc skel)
-                 (nonzero? (-> proc skel)))
+    (when (and proc (nonzero? proc))
+      (when (and (-> proc state) (nonzero? (-> proc state)))
+        (set! state-name (-> proc state name)))
+      (when (and (-> proc skel) (nonzero? (-> proc skel)))
         (set! root-group (the-as basic (-> proc skel root-channel 0 frame-group)))
         (set! top-group (the-as basic (-> proc skel top-anim frame-group)))
         (set! top-targ (the-as basic (-> proc skel top-anim frame-targ)))
-        (set! top-push (the-as basic (-> proc skel top-anim frame-group-push)))
-        )
-      )
+        (set! top-push (the-as basic (-> proc skel top-anim frame-group-push)))))
     (the-as string
             (format #f
                     "~A TARGET: state=~S root=~A top=~A targ=~A push=~A"
@@ -147,12 +107,9 @@
                     (mp-debug-art-name root-group)
                     (mp-debug-art-name top-group)
                     (mp-debug-art-name top-targ)
-                    (mp-debug-art-name top-push)))
-    )
-  )
+                    (mp-debug-art-name top-push)))))
 
 (defun mp-debug-get-gun-state-text ((label string) (gun-info gun-info))
-  "Return local gun-info state relevant to equip and put-away debugging."
   (the-as string
           (format #f
                   "~A GUN~%LOCAL GUN: type=~D using=~D active=~A latch=~A put-away=~A"
@@ -161,58 +118,42 @@
                   (the-as uint (-> gun-info using-gun-type))
                   (mp-debug-bool-string (-> gun-info active?))
                   (mp-debug-bool-string (-> gun-info latch?))
-                  (mp-debug-bool-string (-> gun-info put-away?))))
-  )
+                  (mp-debug-bool-string (-> gun-info put-away?)))))
 
 (defun mp-debug-get-target-render-gate-text ((proc target))
-  "Return parent target render fields that can hide the spawned gun process."
   (let ((active-channels -1))
-    (when (and proc
-               (nonzero? proc)
-               (-> proc skel)
-               (nonzero? (-> proc skel)))
-      (set! active-channels (the int (-> proc skel active-channels)))
-      )
+    (when (and proc (nonzero? proc) (-> proc skel) (nonzero? (-> proc skel)))
+      (set! active-channels (the int (-> proc skel active-channels))))
     (the-as string
             (format #f
                     "TARGET DRAW FLAGS: ~A active-channels=~D"
-                    (if (and proc
-                             (nonzero? proc)
-                             (-> proc draw)
-                             (nonzero? (-> proc draw)))
-                        (mp-debug-get-draw-status-flags (-> proc draw))
-                        "none")
-                    active-channels))
-    )
-  )
+                    (if (and proc (nonzero? proc) (-> proc draw) (nonzero? (-> proc draw)))
+                      (mp-debug-get-draw-status-flags (-> proc draw))
+                      "none")
+                    active-channels))))
 
 (defun mp-debug-get-gun-render-text ((gun-info gun-info) (draw-ctrl draw-control))
-  "Return visual gun state relevant to stale rendered weapon debugging."
   (the-as string
           (format #f
                   "SKELETON: ~A~%ATTACHMENT JOINT: ~A~%DRAW FLAGS: ~A"
                   (mp-debug-get-gun-skeleton-name gun-info)
                   (mp-debug-get-gun-attachment-joint-name gun-info)
-                  (if (and draw-ctrl (nonzero? draw-ctrl)) (mp-debug-get-draw-status-flags draw-ctrl) "none")))
-  )
+                  (if (and draw-ctrl (nonzero? draw-ctrl)) (mp-debug-get-draw-status-flags draw-ctrl) "none"))))
 
 (defun mp-debug-get-gun-root-text ((gun-proc gun))
-  "Return the gun process root transform used for culling and drawing."
-  (if (and gun-proc
-           (nonzero? gun-proc))
-      (the-as string
-              (format #f
-                      "GUN ROOT: pos=(~F ~F ~F) scale=(~F ~F ~F)"
-                      (-> gun-proc root trans x)
-                      (-> gun-proc root trans y)
-                      (-> gun-proc root trans z)
-                      (-> gun-proc root scale x)
-                      (-> gun-proc root scale y)
-                      (-> gun-proc root scale z)))
-      "GUN ROOT: none"))
+  (if (and gun-proc (nonzero? gun-proc))
+    (the-as string
+            (format #f
+                    "GUN ROOT: pos=(~F ~F ~F) scale=(~F ~F ~F)"
+                    (-> gun-proc root trans x)
+                    (-> gun-proc root trans y)
+                    (-> gun-proc root trans z)
+                    (-> gun-proc root scale x)
+                    (-> gun-proc root scale y)
+                    (-> gun-proc root scale z)))
+    "GUN ROOT: none"))
 
 (defun mp-debug-get-gun-timing-text ((gun-info gun-info))
-  "Return gun timing fields that can suppress render or shots."
   (the-as string
           (format #f
                   "TIMING: now=~D suppress=~D active-time=~D laser=~A"
@@ -222,25 +163,17 @@
                   (mp-debug-bool-string (-> gun-info laser-active?)))))
 
 (defun mp-debug-get-gun-root-and-timing-text ((gun-proc gun) (gun-info gun-info))
-  "Return compact root and timing diagnostics without exceeding format argument limits."
-  (the-as string
-          (format #f
-                  "~A~%~A"
-                  (mp-debug-get-gun-root-text gun-proc)
-                  (mp-debug-get-gun-timing-text gun-info)))
-  )
+  (the-as string (format #f "~A~%~A" (mp-debug-get-gun-root-text gun-proc) (mp-debug-get-gun-timing-text gun-info))))
 
 (defun mp-draw-target-gun-debug ((proc target) (label string))
-  "Overlay gun-specific runtime information for the given target player."
   (when (and proc (nonzero? proc))
     (let ((gun-info (-> proc gun))
           (gun-proc (mp-debug-get-gun-proc proc)))
       (when (and gun-info (nonzero? gun-info))
         (let ((draw-pos (new 'stack-no-clear 'vector)))
           (if (and gun-proc (nonzero? gun-proc))
-              (vector-copy! draw-pos (-> gun-proc root trans))
-              (vector-copy! draw-pos (-> proc root trans))
-              )
+            (vector-copy! draw-pos (-> gun-proc root trans))
+            (vector-copy! draw-pos (-> proc root trans)))
           (+! (-> draw-pos y) (meters 2.5))
           (let ((draw-ctrl (if (and gun-info
                                     (nonzero? gun-info)
@@ -250,39 +183,31 @@
                                     (nonzero? (-> gun-info process 0))
                                     (-> gun-info process 0 draw)
                                     (nonzero? (-> gun-info process 0 draw)))
-                               (-> gun-info process 0 draw)
-                               (the-as draw-control #f))))
-            (add-debug-text-3d
-              #t
-              (bucket-id debug-no-zbuf1)
-              (the-as string
-                      (format #f
-                              "~A~%~A~%~A~%~A~%~A~%~A"
-                              (mp-debug-get-target-anim-text proc label)
-                              (mp-debug-get-gun-state-text label gun-info)
-                              (mp-debug-get-sync-weapon-text proc)
-                              (mp-debug-get-target-render-gate-text proc)
-                              (mp-debug-get-gun-render-text gun-info draw-ctrl)
-                              (mp-debug-get-gun-root-and-timing-text gun-proc gun-info)))
-              draw-pos
-              (font-color cyan)
-              (the-as vector2h #f))
-            )
+                             (-> gun-info process 0 draw)
+                             (the-as draw-control #f))))
+            (add-debug-text-3d #t
+                               (bucket-id debug-no-zbuf1)
+                               (the-as string
+                                       (format #f
+                                               "~A~%~A~%~A~%~A~%~A~%~A"
+                                               (mp-debug-get-target-anim-text proc label)
+                                               (mp-debug-get-gun-state-text label gun-info)
+                                               (mp-debug-get-sync-weapon-text proc)
+                                               (mp-debug-get-target-render-gate-text proc)
+                                               (mp-debug-get-gun-render-text gun-info draw-ctrl)
+                                               (mp-debug-get-gun-root-and-timing-text gun-proc gun-info)))
+                               draw-pos
+                               (font-color cyan)
+                               (the-as vector2h #f)))
           (when (-> gun-info active?)
-            (mp-debug-draw-gun-barrel-line gun-proc))
-          )
-        )
-      )
-    )
+            (mp-debug-draw-gun-barrel-line gun-proc))))))
   (none))
 
 (defun mp-draw-gun-debug ()
-  "Overlay gun-specific runtime information for the local player and remote puppet."
   (when *mp-gun-debug?*
     (when (and *target* (nonzero? *target*))
       (mp-draw-target-gun-debug *target* "LOCAL"))
-    (mp-for-each-player-target (player-id record puppet)
-      (when (mp-player-record-remote? *mp-player-controller* record)
-        (mp-draw-target-gun-debug puppet "PUPPET")))
-    )
+    (mp-for-each-player-target (player-id record replica)
+      (when (is-record-remote-player? record)
+        (mp-draw-target-gun-debug replica "REPLICA"))))
   (none))

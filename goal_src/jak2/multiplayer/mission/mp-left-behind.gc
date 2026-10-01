@@ -1,12 +1,5 @@
 (in-package goal)
 
-(defun mp-left-behind-teleport-player!
-       ((ride-along? symbol) (destination-record mp-player-record))
-  "Teleport the local player through the shared MP teleport utility."
-  (mp-teleport-local-target-to-player! destination-record ride-along?)
-  (none)
-  )
-
 (defun mp-left-behind-draw-teleport-text! ((elapsed time-frame) (loading? symbol))
   (let ((font-ctx (new 'stack 'font-context *font-default-matrix* 32 320 0.0 (font-color default) (font-flags shadow kerning))))
     (set-width! font-ctx 350)
@@ -14,24 +7,14 @@
     (set-scale! font-ctx 0.5)
     (set! (-> font-ctx flags) (font-flags shadow kerning large))
     (clear *temp-string*)
-    (if loading?
-        (format *temp-string* "WAITING FOR AREA...")
-        (let ((sec-left (- 3 (/ (the int elapsed) 300))))
-          (format *temp-string* (lookup-text! *common-text* (text-id left-behind-teleport-countdown) #f) sec-left)
-          )
-        )
-    (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
-    )
-  (none)
-  )
+    (unless loading?
+      (let ((sec-left (- 3 (/ (the int elapsed) 300))))
+        (format *temp-string* (lookup-text! *common-text* (text-id left-behind-teleport-countdown) #f) sec-left)))
+    (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress)))
+  (none))
 
-(defun mp-update-left-behind-teleport!
-       ((condition symbol)
-        (ride-along? symbol)
-        (destination-record mp-player-record))
-  "Manages the countdown timer and text warning for the left-behind state, executing the generic teleportation logic upon countdown completion."
-  (when (and *multi-sync-enabled?*
-             (= (pc-multi-get-status) (mp-connection-status in-game))
+(defun mp-update-left-behind-teleport! ((condition symbol) (ride-along? symbol) (destination-record mp-player-record))
+  (when (and (mp-session-in-game?)
              *target*
              (nonzero? *target*)
              (-> *target* control)
@@ -42,30 +25,16 @@
     (cond
       (condition
        (when (= *mp-left-behind-start-time* 0)
-         (set! *mp-left-behind-start-time* (current-time))
-         )
+         (set! *mp-left-behind-start-time* (current-time)))
        (let* ((elapsed (- (current-time) *mp-left-behind-start-time*))
               (time-limit (seconds 3)))
          (cond
            ((>= elapsed time-limit)
             (if (mp-player-teleport-ready-or-request! destination-record)
-                (begin
-                  (set! *mp-left-behind-start-time* (the-as time-frame 0))
-                  (mp-left-behind-teleport-player! ride-along? destination-record)
-                  )
-                (mp-left-behind-draw-teleport-text! elapsed #t)
-                )
-            )
-           (else
-            (mp-left-behind-draw-teleport-text! elapsed #f)
-            )
-           )
-         )
-       )
-      (else
-       (set! *mp-left-behind-start-time* (the-as time-frame 0))
-       )
-      )
-    )
-  (none)
-  )
+              (begin
+                (set! *mp-left-behind-start-time* (the-as time-frame 0))
+                (mp-teleport-local-target-to-player! destination-record ride-along?))
+              (mp-left-behind-draw-teleport-text! elapsed #t)))
+           (else (mp-left-behind-draw-teleport-text! elapsed #f)))))
+      (else (set! *mp-left-behind-start-time* (the-as time-frame 0)))))
+  (none))

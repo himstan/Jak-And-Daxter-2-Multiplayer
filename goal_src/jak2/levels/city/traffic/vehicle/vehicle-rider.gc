@@ -151,7 +151,7 @@
        (when (and *traffic-manager* (nonzero? *traffic-manager*))
          (send-event *traffic-manager* 'activate-object gp-0)
          (when (not (-> gp-0 proc))
-           (debug-log *mp-debug-log?*
+           (log 'debug
              "[Traffic] Failed to activate ejected rider object type=~D~%"
              (the uint (-> gp-0 object-type)))
            )

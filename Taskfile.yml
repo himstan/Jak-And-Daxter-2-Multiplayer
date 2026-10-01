@@ -10,22 +10,6 @@ dotenv:
   - ./scripts/tasks/.env.default
 
 tasks:
-  generate-multiplayer-schema:
-    desc: "Generate C++ and GOAL multiplayer packet metadata"
-    cmds:
-      - "{{.PYTHON}} ./tools/multiplayer_schema/generate.py"
-  check-multiplayer-schema:
-    desc: "Verify generated multiplayer packet metadata is current"
-    cmds:
-      - "{{.PYTHON}} ./tools/multiplayer_schema/generate.py --check"
-  check-multiplayer-event-architecture:
-    desc: "Verify GOAL multiplayer event ownership boundaries"
-    cmds:
-      - "{{.PYTHON}} ./tools/multiplayer_schema/check_event_architecture.py"
-  check-multiplayer-capacity:
-    desc: "Verify GOAL and C++ multiplayer capacities match"
-    cmds:
-      - "{{.PYTHON}} ./tools/check_multiplayer_capacity.py"
   # SETTINGS / CONFIGURATION
   settings:
     - "{{.PYTHON}} ./scripts/tasks/update-env.py --info"
@@ -73,7 +57,7 @@ tasks:
     cmds:
       - "{{.GK_BIN_RELEASE_DIR}}/gk -v --game {{.GAME}} -- -boot -debug -fakeiso -mp-host true"
   boot-game-p2:
-    desc: "Boots the game as the second player on port 8120, it will fail if it's not already compiled!"
+    desc: "Boots the game and tries to connect to localhost"
     preconditions:
       - sh: test -f {{.GK_BIN_RELEASE_DIR}}/gk{{.EXE_FILE_EXTENSION}}
         msg: "Couldn't locate runtime executable in '{{.GK_BIN_RELEASE_DIR}}/gk'"
@@ -81,7 +65,6 @@ tasks:
       - '{{.GK_BIN_RELEASE_DIR}}/gk --port 8120 -v --game {{.GAME}} -- -boot -debug -fakeiso -mp-client 127.0.0.1'
   boot-game-peers:
     desc: "Boots multiple multiplayer client peers on sequential listener ports"
-    deps: [check-multiplayer-capacity]
     vars:
       PEERS: '{{default "" .PEERS}}'
     preconditions:
@@ -108,7 +91,7 @@ tasks:
     cmds:
       - "{{.GK_BIN_RELEASE_DIR}}/gk -v --game {{.GAME}} -- -fakeiso -debug -mp-host true"
   run-game-p2:
-    desc: "Start the game's runtime, to start the game itself the REPL is required"
+    desc: "Start the game's runtime as a client which attempts to connect to localhost, to start the game itself the REPL is required"
     preconditions:
       - sh: test -f {{.GK_BIN_RELEASE_DIR}}/gk{{.EXE_FILE_EXTENSION}}
         msg: "Couldn't locate runtime executable in '{{.GK_BIN_RELEASE_DIR}}/gk'"
@@ -134,22 +117,18 @@ tasks:
       - "cmake {{.CMAKE_GEN_BUILD_DIR_DEBUG}} --preset={{.DEFAULT_CMAKE_DEBUG_PRESET}}"
   build:
     desc: "Build the project using the generated CMake"
-    deps: [check-multiplayer-capacity]
     cmds:
       - "cmake {{.CMAKE_BUILD_DIR_DEBUG}} --parallel 8"
   build-release:
     desc: "Build the project using the generated CMake"
-    deps: [check-multiplayer-capacity]
     cmds:
       - "cmake {{.CMAKE_BUILD_DIR_RELEASE}} --parallel 8"
   build-debug:
     desc: "Build the project using the generated CMake"
-    deps: [check-multiplayer-capacity]
     cmds:
       - "cmake {{.CMAKE_BUILD_DIR_DEBUG}} --parallel 8"
   build-mi:
-    desc: "Compiles all .gc files using (mi) safely with a delay and user profile"
-    deps: [check-multiplayer-capacity]
+    desc: "Boots the REPL and then executes (mi)"
     preconditions:
       - sh: test -f {{.GOALC_BIN_RELEASE_DIR}}/goalc{{.EXE_FILE_EXTENSION}}
         msg: "Couldn't locate compiler executable in '{{.GOALC_BIN_RELEASE_DIR}}/goalc'"
@@ -183,6 +162,15 @@ tasks:
         msg: "Couldn't locate formatter executable in '{{.FORMATTER_BIN_RELEASE_DIR}}/formatter'"
     cmds:
       - "{{.FORMATTER_BIN_RELEASE_DIR}}/formatter --write --file '{{.FILE}}'"
+  format-goal:
+    desc: "Run OpenGOAL AST formatter on .gc files in a directory (defaults to goal_src/{{.GAME}})"
+    vars:
+      DIR: '{{default (printf "goal_src/%s" .GAME) .DIR}}'
+    preconditions:
+      - sh: test -f {{.FORMATTER_BIN_RELEASE_DIR}}/formatter{{.EXE_FILE_EXTENSION}}
+        msg: "Couldn't locate formatter executable in '{{.FORMATTER_BIN_RELEASE_DIR}}/formatter'"
+    cmds:
+      - '{{.PYTHON}} ./scripts/tasks/format-goal.py --dir "{{.DIR}}" --formatter "{{.FORMATTER_BIN_RELEASE_DIR}}/formatter{{.EXE_FILE_EXTENSION}}"'
   # DEVELOPMENT
   mod-base-info:
     desc: "Show the most recent shared commit with OG-Mod-Base upstream + mod base info banner"
@@ -238,7 +226,7 @@ tasks:
       - '{{.DECOMP_BIN_RELEASE_DIR}}/decompiler "./decompiler/config/{{.DECOMP_CONFIG}}" "./iso_data" "./decompiler_out" --version "{{.DECOMP_CONFIG_VERSION}}" --config-override ''{"decompile_code": false, "levels_extract": true, "save_texture_pngs": true}'''
   rip-levels:
     cmds:
-      - '{{.DECOMP_BIN_DEBUG_DIR}}/decompiler "./decompiler/config/{{.DECOMP_CONFIG}}" "./iso_data" "./decompiler_out" --version "{{.DECOMP_CONFIG_VERSION}}" --config-override ''{"decompile_code": false, "levels_extract": true, "rip_levels": true}'''
+      - '{{.DECOMP_BIN_RELEASE_DIR}}/decompiler "./decompiler/config/{{.DECOMP_CONFIG}}" "./iso_data" "./decompiler_out" --version "{{.DECOMP_CONFIG_VERSION}}" --config-override ''{"decompile_code": false, "levels_extract": true, "rip_levels": true}'''
   rip-collision:
     cmds:
       - '{{.DECOMP_BIN_RELEASE_DIR}}/decompiler "./decompiler/config/{{.DECOMP_CONFIG}}" "./iso_data" "./decompiler_out" --version "{{.DECOMP_CONFIG_VERSION}}" --config-override ''{"decompile_code": false, "levels_extract": true, "extract_collision": true, "rip_collision": true}'''
@@ -286,13 +274,9 @@ tasks:
     cmds:
       - "{{.GOALCTEST_BIN_DEBUG_DIR}}/goalc-test{{.EXE_FILE_EXTENSION}} {{.TEST_FILTER}}"
   multiplayer-tests:
-    desc: "Runs the multiplayer bridge and netem tests"
-    deps: [check-multiplayer-capacity]
-    preconditions:
-      - sh: test -f {{.GOALCTEST_BIN_DEBUG_DIR}}/multiplayer-test{{.EXE_FILE_EXTENSION}}
-        msg: "Couldn't locate multiplayer-test executable in '{{.GOALCTEST_BIN_DEBUG_DIR}}'"
+    desc: "Runs all multiplayer test targets with aggregated summary"
     cmds:
-      - '{{.GOALCTEST_BIN_DEBUG_DIR}}/multiplayer-test{{.EXE_FILE_EXTENSION}} --gtest_color=yes'
+      - '{{.PYTHON}} ./tools/run_multiplayer_tests.py --group all --bin-dir "{{.GOALCTEST_BIN_RELEASE_DIR}}" {{.CLI_ARGS}}'
   offline-tests: # ran by jenkins
     cmds:
       - '{{.OFFLINETEST_BIN_RELEASE_DIR}}/offline-test{{.EXE_FILE_EXTENSION}} --iso_data_path "./iso_data/{{.GAME}}" --game {{.GAME}} --fail-on-cmp'

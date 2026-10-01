@@ -12,11 +12,10 @@
 (define *snapshot-cmd-buffer* (new 'global 'string 64 (the-as string #f)))
 
 (defun get-snapshot-continue-name ((name string) (out-name string))
-  "Read the continue point name from a snapshot file."
   (let ((fs (new 'stack 'file-stream (the-as string (format #f "snapshots/~S.txt" name)) 'read)))
     (if (not (file-stream-valid? fs))
         (begin
-          (debug-log *mp-debug-log?* "[Snapshot] Snapshot file not found: snapshots/~S.txt~%" name)
+          (log 'error "[Snapshot] Snapshot file not found: snapshots/~S.txt~%" name)
           (return #f)
           )
         )
@@ -49,36 +48,22 @@
   )
 
 (defun save-snapshot ((name string))
-  "Save the current game state to a snapshot file."
   (pc-mkdir-file-path "snapshots/")
   (let ((fs (new 'stack 'file-stream (the-as string (format #f "snapshots/~S.txt" name)) 'write)))
     (if (not (file-stream-valid? fs))
         (begin
-          (debug-log *mp-debug-log?* "[Snapshot] Failed to open snapshot file for writing: ~S~%" name)
+          (log 'error "[Snapshot] Failed to open snapshot file for writing: ~S~%" name)
           (return #f)
           )
         )
-    
     (format fs "continue ~S~%" (-> *game-info* current-continue name))
-    
     (dotimes (i (-> *game-info* sub-task-list length))
       (when (nonzero? i)
-        (if (task-node-closed? (the-as game-task-node i))
-            (format fs "task-close ~D~%" i)
-            )
+        (task-node-closed? (the-as game-task-node i))
         )
       )
-    
-    (when *target*
-      (let ((pos (-> *target* root trans))
-            (quat (-> *target* root quat)))
-        (format fs "pos ~f ~f ~f~%" (-> pos x) (-> pos y) (-> pos z))
-        (format fs "quat ~f ~f ~f ~f~%" (-> quat x) (-> quat y) (-> quat z) (-> quat w))
-        )
-      )
-    
     (file-stream-close fs)
-    (debug-log *mp-debug-log?* "[Snapshot] Snapshot saved: ~S~%" name)
+    (log 'info "[Snapshot] Snapshot saved: ~S~%" name)
     )
   #t
   )
@@ -98,17 +83,17 @@
 
 (defstate pending-snapshot-apply (pending-snapshot)
   :code (behavior ()
-    (debug-log *mp-debug-log?* "[Snapshot] Pending snapshot process started, waiting for *target*...~%")
+    (log 'debug "[Snapshot] Pending snapshot process started, waiting for *target*...~%")
     (while (not *target*)
       (suspend)
       )
     
-    (debug-log *mp-debug-log?* "[Snapshot] *target* found, waiting 30 frames for engine to settle...~%")
+    (log 'debug "[Snapshot] *target* found, waiting 30 frames for engine to settle...~%")
     (dotimes (i 30)
       (suspend)
       )
     
-    (debug-log *mp-debug-log?* "[Snapshot] Applying snapshot tasks...~%")
+    (log 'debug "[Snapshot] Applying snapshot tasks...~%")
     (dotimes (i (-> self task-count))
       (let ((node-id (-> self tasks-to-close i)))
         (task-node-close! (the-as game-task-node node-id))
@@ -121,10 +106,10 @@
       (set! (-> *target* control camera-pos quad) (-> self target-pos quad))
       (send-event *target* 'reset-velocity)
       (send-event *camera* 'teleport)
-      (debug-log *mp-debug-log?* "[Snapshot] Teleported target to ~m ~m ~m~%" (-> self target-pos x) (-> self target-pos y) (-> self target-pos z))
+      (log 'debug "[Snapshot] Teleported target to ~m ~m ~m~%" (-> self target-pos x) (-> self target-pos y) (-> self target-pos z))
       )
     
-    (debug-log *mp-debug-log?* "[Snapshot]Snapshot ~S fully applied!~%" (-> self snapshot-name))
+    (log 'info "[Snapshot] Snapshot ~S fully applied!~%" (-> self snapshot-name))
     (process-entity-status! self (entity-perm-status dead) #t)
     (deactivate self)
     )
@@ -138,16 +123,15 @@
   )
 
 (defun load-snapshot ((name string))
-  "Load a game state from a snapshot file."
   (let ((fs (new 'stack 'file-stream (the-as string (format #f "snapshots/~S.txt" name)) 'read)))
     (if (not (file-stream-valid? fs))
         (begin
-          (debug-log *mp-debug-log?* "[Snapshot] Failed to open snapshot file for reading: ~S~%" name)
+          (log 'error "[Snapshot] Failed to open snapshot file for reading: ~S~%" name)
           (return #f)
           )
         )
     
-    (debug-log *mp-debug-log?* "[Snapshot] Loading snapshot: ~S~%" name)
+    (log 'info "[Snapshot] Loading snapshot: ~S~%" name)
     (let ((pending (ppointer->process (process-spawn-function pending-snapshot pending-snapshot-init-by-other name))))
       (when pending
         (let ((p (the pending-snapshot pending)))
@@ -162,7 +146,7 @@
                       (case-str *snapshot-cmd-buffer*
                         (("continue")
                          (let ((cont-name (file-stream-read-symbol fs)))
-                           (debug-log *mp-debug-log?* "[Snapshot] continue (immediate): ~S~%" cont-name)
+                           (log 'debug "[Snapshot] continue (immediate): ~S~%" cont-name)
                            (set-continue! *game-info* (symbol->string cont-name) #f)
                            )
                          )

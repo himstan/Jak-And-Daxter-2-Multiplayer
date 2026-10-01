@@ -23,6 +23,9 @@
 (declare-type ammo collectable)
 
 (define-extern orb-placer-list-maintenace (function symbol none))
+(define-extern mp-orb-record-collected-aid! (function uint symbol))
+(define-extern mp-gem-note-local-aid-collected! (function uint none))
+(define-extern mp-enemy-gem-note-local-collected! (function uint uint none))
 
 ;; DECOMP BEGINS
 
@@ -429,13 +432,9 @@
      (sound-play "ammo-pickup")
      )
     (((pickup-type skill))
-     (when (and *game-info*
-                (nonzero? *game-info*)
-                (-> this fact)
-                (nonzero? (-> this fact))
-                (= (+ (-> *game-info* skill-total)
-                      (-> this fact pickup-amount))
-                   1.0))
+     ;; the daxter will yap every time they join a new session, so we only let him speak if its the first orb being picked up
+     (when (and (nonnull? *game-info* this (-> this fact))
+                (= (+ (-> *game-info* skill-total) (-> this fact pickup-amount)) 1.0))
        (talker-spawn-func (-> *talker-speech* 16) *entity-pool* (target-pos 0) (the-as region #f))
        )
      )
@@ -588,7 +587,7 @@
   #f
   )
 
-(defbehavior can-puppet-pick-up? collectable ()
+(defbehavior can-replica-pick-up? collectable ()
   (the-as symbol 
     (and
       (= (pickup-type board) (-> self pickup-type))
@@ -599,7 +598,7 @@
 (defbehavior collectable-standard-event-handler collectable ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   (local-vars (v0-4 object))
   (when (and (or (= arg2 'touch) (= arg2 'attack))
-             (and (or (can-puppet-pick-up?) (not-puppet? arg0))
+             (and (or (can-replica-pick-up?) (not-player-replica? arg0))
                   (logtest? (-> self flags) (collectable-flag pickup))
                   (time-elapsed? (the-as int (-> self birth-time)) (the-as time-frame (-> self collect-timeout)))
                   (not (and (-> self next-state) (= (-> self next-state name) 'pickup)))
@@ -980,7 +979,7 @@
   :virtual #t
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
     (when (and (or (= message 'touch) (= message 'attack))
-               (and (not-puppet? proc)
+               (and (not-player-replica? proc)
                     (logtest? (-> self flags) (collectable-flag pickup))
                     (time-elapsed? (the-as int (-> self birth-time)) (the-as time-frame (-> self collect-timeout)))
                     (not (and (-> self next-state) (= (-> self next-state name) 'pickup)))
@@ -1441,17 +1440,25 @@
   :virtual #t
   :code (behavior ((arg0 symbol) (arg1 handle))
     (let ((p-type (if (-> self fact) (-> self fact pickup-type) (pickup-type none))))
-      (debug-log *mp-debug-log?* "[Collectables] Money pickup: type ~D, entity ~A, handle-proc ~A~%" p-type (-> self entity) (handle->process arg1))
+      (log 'debug "[Collectables] Money pickup: type ~D, entity ~A, handle-proc ~A~%" p-type (-> self entity) (handle->process arg1))
       (if (handle->process arg1)
           (cond
-            ((and (= p-type (pickup-type skill)) (-> self entity) (nonzero? (-> self entity)))
-             (mp-event-enqueue-aid! MP_EVENT_ORB (the-as uint (-> self entity aid))))
-            ((and (= p-type (pickup-type gem)) (nonzero? (-> self enemy-gem-source-id)))
-             (mp-event-enqueue-enemy-gem!
-               (the-as uint (-> self enemy-gem-source-id))
-                (the-as uint (-> self enemy-gem-index))))
-            ((and (= p-type (pickup-type gem)) (-> self entity) (nonzero? (-> self entity)))
-             (mp-event-enqueue-aid! MP_EVENT_GEM (the-as uint (-> self entity aid)))))
+            ((and (= p-type (pickup-type skill)) (nonnull? self (-> self entity)))
+             (let ((orb-aid (the-as uint (-> self entity aid))))
+               (mp-orb-record-collected-aid! orb-aid)
+               (mp-event-enqueue-aid! MP_EVENT_ORB orb-aid)))
+            ((and (= p-type (pickup-type gem))
+                  (nonnull? self)
+                  (nonzero? (-> self enemy-gem-source-id)))
+             (let ((source-aid (the-as uint (-> self enemy-gem-source-id)))
+                   (gem-index (the-as uint (-> self enemy-gem-index))))
+               (mp-enemy-gem-note-local-collected! source-aid gem-index)
+               (mp-event-enqueue-enemy-gem! source-aid gem-index)))
+            ((and (= p-type (pickup-type gem)) (nonnull? self (-> self entity)))
+             (let ((gem-aid (the-as uint (-> self entity aid))))
+               (when (nonzero? gem-aid)
+                 (mp-gem-note-local-aid-collected! gem-aid)
+                 (mp-event-enqueue-aid! MP_EVENT_GEM gem-aid)))))
       ))
     (process-entity-status! self (entity-perm-status dead) #t)
     )
@@ -1598,8 +1605,48 @@
 (deftype gem (money)
   ((roty-speed   degrees)
    (bounce-time  seconds)
+   (enemy-gem-rng-state uint32)
    )
   )
+
+(defun gem-enemy-rng-next-float! ((this gem))
+  (if (nonnull? this)
+      (let* ((next-state
+               (the-as uint32
+                       (logand #xffffffff
+                               (+ (* (the-as int (-> this enemy-gem-rng-state)) 1103515245) 12345))))
+             (value (logand (shr next-state 16) #x7fff)))
+        (set! (-> this enemy-gem-rng-state) next-state)
+        (/ (the float value) 32768.0))
+      0.0))
+
+(defun gem-seed-enemy-rng! ((this gem))
+  (when (and (nonnull? this (-> this root))
+             (nonzero? (-> this enemy-gem-source-id)))
+    (let* ((seed
+             (the-as uint32
+                     (logand #xffffffff
+                             (+ (the-as int (-> this enemy-gem-source-id))
+                                (* (the-as int (-> this enemy-gem-index)) 1013904223)))))
+           (root (-> this root)))
+      (when (= seed 0)
+        (set! seed (the-as uint32 #x6d2b79f5)))
+      (set! (-> this enemy-gem-rng-state) seed)
+      (set-vector! (-> root transv)
+                   (+ -20480.0 (* (gem-enemy-rng-next-float! this) 40960.0))
+                   81920.0
+                   (+ -20480.0 (* (gem-enemy-rng-next-float! this) 40960.0))
+                   1.0)))
+  (none))
+
+(defun gem-bounce-random-factor! ((this gem))
+  (cond
+    ((not (nonnull? this)) 0.7)
+    ((nonzero? (-> this enemy-gem-source-id))
+     (rand-vu)
+     (+ 0.7 (* (gem-enemy-rng-next-float! this) 0.05)))
+    (else
+     (rand-vu-float-range 0.7 0.75))))
 
 
 (defmethod deactivate ((this gem))
@@ -1718,7 +1765,7 @@
       (cond
         ((logtest? s5-2 (collide-status touch-surface))
          (set! (-> gp-1 transv x) (* 0.7 (-> gp-1 transv x)))
-         (set! (-> gp-1 transv y) (* (-> gp-1 transv y) (rand-vu-float-range 0.7 0.75)))
+         (set! (-> gp-1 transv y) (* (-> gp-1 transv y) (gem-bounce-random-factor! self)))
          (set! (-> gp-1 transv z) (* 0.7 (-> gp-1 transv z)))
          (set! (-> self roty-speed)
                (fmin
@@ -1756,6 +1803,7 @@
 
 (defmethod initialize-allocations ((this gem))
   (+! (-> *game-info* live-gem-count) 1)
+  (set! (-> this enemy-gem-rng-state) (the-as uint32 0))
   (stack-size-set! (-> this main-thread) 128)
   (let ((s5-0 (new 'process 'collide-shape-moving this (collide-list-enum hit-by-player))))
     (set! (-> s5-0 dynam) (copy *standard-dynamics* 'process))
@@ -2258,11 +2306,9 @@
 
 (defbehavior birth-pickup-at-point process ((arg0 vector) (arg1 pickup-type) (arg2 float) (arg3 symbol) (arg4 process-tree) (arg5 fact-info))
   (local-vars (sv-32 vector) (sv-36 float) (sv-40 (pointer process)) (sv-48 int) (sv-56 fact-info) (sv-64 int))
+  ;; block dark eco from dropping if we're daxter, he cant turn into anything dark so whats the point of dropping them
   (when (and (= arg1 (pickup-type eco-pill-dark))
-             (or (mp-local-player-daxter?)
-                 (and *target* (nonzero? *target*) (focus-test? *target* indax))
-                 )
-             )
+             (mp-local-player-daxter?))
     (return (the-as (pointer process) #f))
     )
   (set! sv-32 (new-stack-vector0))

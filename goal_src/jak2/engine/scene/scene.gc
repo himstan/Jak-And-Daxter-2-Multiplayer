@@ -5,9 +5,9 @@
 ;; name in dgo: scene
 ;; dgos: ENGINE, GAME
 
-(define-extern string-crc32 (function string uint))
 (define-extern mp-event-hook-scene! (function mp-scene-state string none))
 (define-extern mp-arm-intro-skip-bootstrap! (function string none))
+(define-extern *mp-scene-coordinator-name* string)
 (define-extern mp-scene-coordinator-note-local-start! (function string symbol))
 (define-extern mp-scene-coordinator-note-local-vote! (function string symbol))
 (define-extern mp-scene-coordinator-host-skip-ready? (function symbol))
@@ -21,10 +21,8 @@
 (define-extern mp-tomb-scene-sync-suppressed? (function symbol))
 (define-extern mp-tomb-scene-transport-suppressed? (function string symbol))
 (define-extern mp-tomb-scene-local-blocked? (function string symbol))
-(define-extern mp-tomb-boss-intro-local-blocked? (function symbol))
-(define-extern *art-group-load-debug-caller* symbol)
-(define-extern *art-group-load-debug-context-a* object)
-(define-extern *art-group-load-debug-context-b* object)
+(define-extern mp-mountain-resolution-scene? (function string symbol))
+(define-extern mp-any-remote-player-scene-active? (function symbol))
 
 ;; DECOMP BEGINS
 
@@ -64,6 +62,31 @@
                              )
                            )
           )
+  )
+
+(defun scene-main-entity-ready? ((scene-obj scene))
+  (when (nonnull? scene-obj)
+    (let ((entity-name (-> scene-obj entity)))
+      (return (or (not (nonnull? entity-name))
+                  (nonnull? (entity-by-name entity-name))))
+      )
+    )
+  #f
+  )
+
+(defun scene-player-wait-for-main-entity! ((scene-proc scene-player))
+  (when (nonnull? scene-proc (-> scene-proc scene))
+    (let ((start-time (current-time)))
+      (while (and (not (scene-main-entity-ready? (-> scene-proc scene)))
+                  (not (time-elapsed? start-time (seconds 5))))
+        (when (-> scene-proc movie?)
+          (set-blackout-frames (seconds 0.1))
+          )
+        (suspend)
+        )
+      )
+    )
+  (none)
   )
 
 (defmethod scene-actor-method-9 ((this scene-actor) (arg0 scene-player))
@@ -262,21 +285,27 @@
   )
 
 (defmethod deactivate ((this scene-player))
-  "Make a process dead, clean it up, remove it from the active pool, and return to dead pool."
-  (when (and *scene-player*
-             (nonzero? *scene-player*)
+  (when (and (nonnull? *scene-player*)
              (= (ppointer->process *scene-player*) this))
     (set! *scene-player* (the-as (pointer scene-player) #f))
+    (kill-persister *setting-control* (the-as engine-pers 'blackout) 'bg-a-force)
+    (remove-setting! 'process-mask)
+    (remove-setting! 'movie)
+    (remove-setting! 'movie-name)
+    (apply-settings *setting-control*)
+    (when (nonnull? *target*)
+      (send-event *target* 'draw #t))
     )
-  (kill-persister *setting-control* (the-as engine-pers 'blackout) 'bg-a-force)
   ((method-of-type process-drawable deactivate) this)
   (none)
   )
 
 (defun mp-abort-local-scene! ((scene-proc scene-player))
-  (mp-tomb-boulder-before-scene-abort! scene-proc)
-  (set! (-> scene-proc aborted?) #t)
-  (set-blackout-frames 0)
+  (when (and scene-proc (nonzero? scene-proc))
+    (mp-tomb-boulder-before-scene-abort! scene-proc)
+    (set! (-> scene-proc aborted?) #t)
+    (send-event scene-proc 'abort)
+    (set-blackout-frames 0))
   (none)
   )
 
@@ -288,7 +317,6 @@
   )
 
 (defun mp-register-local-scene-if-ready! ((scene-proc scene-player))
-  "Register or recover the local player's membership in its live scene cohort."
   (when (or (not scene-proc)
             (zero? scene-proc)
             (-> scene-proc aborted?))
@@ -306,7 +334,7 @@
       (when (mp-mountain-resolution-scene? scene-name)
         (return #t))
       (when (mp-scene-coordinator-note-local-start! scene-name)
-        (debug-log *mp-debug-log?*
+        (log 'debug
           "[MP-Scene] Registered/recovered local scene entry for ~S; broadcasting.~%"
           scene-name)
         (mp-event-hook-scene!
@@ -315,27 +343,21 @@
   #f)
 
 (defun mp-complete-active-host-scene-skip-if-ready! ()
-  "Let the host finalize one unanimous vote for its matching active scene."
   (when (and (mp-scene-coordinator-host-skip-ready?)
-             *scene-player*
-             (nonzero? *scene-player*))
-    (let ((scene-proc (the-as scene-player (ppointer->process *scene-player*))))
-      (when (and scene-proc
-                 (nonzero? scene-proc)
-                 (not (-> scene-proc aborted?))
-                 (-> scene-proc scene)
-                 (nonzero? (-> scene-proc scene))
-                 (-> scene-proc scene name)
-                 (nonzero? (-> scene-proc scene name)))
-        (debug-log *mp-debug-log?*
-          "[MP-Scene] Unanimous skip vote reached (~D/~D).~%"
-          (mp-scene-coordinator-vote-count)
-          (mp-scene-coordinator-participant-count))
-        (mp-scene-coordinator-mark-finalized!)
-        (mp-abort-local-scene! scene-proc)
-        (mp-arm-intro-skip-bootstrap! (-> scene-proc scene name))
-        (mp-event-hook-scene!
-          (mp-scene-state skipped) (-> scene-proc scene name)))))
+             (nonnull? *mp-scene-coordinator-name*)
+             (nonzero? (length *mp-scene-coordinator-name*)))
+    (let ((scene-name *mp-scene-coordinator-name*))
+      (log 'debug
+           "[MP-Scene] Unanimous skip vote reached (~D/~D).~%"
+           (mp-scene-coordinator-vote-count)
+           (mp-scene-coordinator-participant-count))
+      (mp-scene-coordinator-mark-finalized!)
+      (mp-arm-intro-skip-bootstrap! scene-name)
+      (mp-event-hook-scene! (mp-scene-state skipped) scene-name)
+      (when (nonnull? *scene-player*)
+        (let ((scene-proc (the-as scene-player (ppointer->process *scene-player*))))
+          (when (nonnull? scene-proc)
+            (mp-abort-local-scene! scene-proc))))))
   (none)
   )
 
@@ -468,6 +490,24 @@
     )
   )
 
+(defun scene-player-for-scene ((scene-obj object))
+  (when (and (mp-session-in-game?) (nonnull? scene-obj *scene-player*))
+    (let ((scene-proc (the-as scene-player (ppointer->process *scene-player*)))
+          (requested (case (rtype-of scene-obj)
+                       ((array)
+                        (let ((scenes (the-as (array scene) scene-obj)))
+                          (if (> (-> scenes length) 0) (the-as object (-> scenes 0)) #f)))
+                       ((pair) (car (the-as pair scene-obj)))
+                       (else scene-obj))))
+      (when (and (nonnull? requested scene-proc)
+                 (type? scene-proc scene-player)
+                 (nonnull? (-> scene-proc scene) (-> scene-proc scene name)))
+        (when (or (= requested (the-as object (-> scene-proc scene)))
+                  (and (type? requested string)
+                       (string= (the-as string requested) (-> scene-proc scene name))))
+          (return scene-proc)))))
+  (the-as scene-player #f))
+
 ;; WARN: Return type mismatch basic vs scene.
 (defmethod scene-player-method-24 ((this scene-player) (arg0 basic) (arg1 symbol))
   "TODO - arg1 can be string/scene"
@@ -479,8 +519,9 @@
       )
     )
   (when (or (not arg0) (!= (-> arg0 type) scene))
-    (format 0 "ERROR: SCENE: scene-player can not find scene ~A~%" arg0)
-    (go process-drawable-art-error "scene-list format")
+    (log 'error "SCENE: scene-player can not find scene ~A~%" arg0)
+    (send-event this 'abort)
+    (return (the-as scene #f))
     )
   (when arg1
     (let ((s4-1 (get-level-by-heap-ptr-and-status *level* (the-as pointer arg0) 'active)))
@@ -505,8 +546,9 @@
       )
     (let ((s3-1 (entity-by-name (-> gp-0 entity))))
       (when (and (-> gp-0 entity) (not s3-1))
-        (format 0 "ERROR: SCENE: scene ~A can not find entity ~A~%" (-> gp-0 name) (-> gp-0 entity))
-        (go process-drawable-art-error (-> gp-0 entity))
+        (log 'error "SCENE: scene ~A can not find entity ~A~%" (-> gp-0 name) (-> gp-0 entity))
+        (send-event this 'abort)
+        (return #f)
         )
       (set! (-> this main-entity) (the-as entity-actor s3-1))
       (cond
@@ -520,13 +562,11 @@
           )
         )
       )
-    (set! *art-group-load-debug-caller* 'scene-main-art)
-    (set! *art-group-load-debug-context-a* (-> gp-0 name))
-    (set! *art-group-load-debug-context-b* (-> gp-0 entity))
     (let ((s3-2 (load-to-heap-by-name (-> *level* default-level art-group) (-> gp-0 art-group) #f global 0)))
       (when (not s3-2)
-        (format 0 "ERROR: SCENE: scene ~A can not find art-group ~A~%" (-> gp-0 name) (-> gp-0 art-group))
-        (go process-drawable-art-error (-> gp-0 art-group))
+        (log 'error "SCENE: scene ~A can not find art-group ~A~%" (-> gp-0 name) (-> gp-0 art-group))
+        (send-event this 'abort)
+        (return #f)
         )
       (set! (-> this draw art-group) s3-2)
       (countdown (v1-33 (-> s3-2 length))
@@ -596,21 +636,18 @@
                )
              )
             (else
-              (debug-log *mp-debug-log?*
+              (log 'debug
                 "[scene-debug] preload scene=~A actor=~A actor-art=~A~%"
                 (-> gp-0 name)
                 (-> s2-0 name)
                 (-> s2-0 art-group)
                 )
-              (debug-log *mp-debug-log?*
+              (log 'debug
                 "[scene-debug] preload actor-level=~A load-level=~A preload-ag=~A~%"
                 (-> s2-0 level)
                 (-> s1-0 name)
                 (the-as string (-> v1-55 data 0))
                 )
-              (set! *art-group-load-debug-caller* 'scene-actor-preload)
-              (set! *art-group-load-debug-context-a* (-> gp-0 name))
-              (set! *art-group-load-debug-context-b* (-> s2-0 name))
               (load-to-heap-by-name (-> s1-0 art-group) (the-as string (-> v1-55 data 0)) #f global 0)
               )
             )
@@ -945,13 +982,34 @@
   (none)
   )
 
+(defbehavior scene-player-event-handler scene-player ((proc process) (argc int) (message symbol) (block event-message-block))
+  (case message
+    (('abort)
+     (set! (-> self aborted?) #t)
+     (set-blackout-frames (seconds 0.1))
+     (let ((a0-3 (-> self anim)))
+       (when (and a0-3 (= (-> *setting-control* user-current spooling) (process->ppointer self)))
+         (ja-abort-spooled-anim a0-3 (the-as art-joint-anim #f) -1)
+         (ja-channel-set! 0)
+         )
+       )
+     (when (and *target* (focus-test? *target* grabbed))
+       (process-release? *target*)
+       (send-event *target* 'draw #t)
+       )
+     (go-virtual release)
+     )
+    )
+  )
+
 (defstate wait (scene-player)
   :virtual #t
+  :event scene-player-event-handler
   :enter (behavior ((arg0 symbol))
     (set-time! (-> self state-time))
     (when (-> self movie?)
-      (when (or (-> self scene) (-> self preload-continue))
-        (let ((gp-0 (scene-decode-continue (the-as basic (if (-> self scene)
+      (when (or (nonnull? (-> self scene)) (nonnull? (-> self preload-continue)))
+        (let ((gp-0 (scene-decode-continue (the-as basic (if (nonnull? (-> self scene))
                                                              (-> self scene load-point-obj)
                                                              (-> self preload-continue)
                                                              )
@@ -959,15 +1017,17 @@
                                            )
                     )
               )
-          (when gp-0
-            (when (-> self scene)
+          (when (nonnull? gp-0)
+            (when (nonnull? (-> self scene))
               (set-setting! 'borrow (-> self scene borrow) 0.0 0)
               (apply-settings *setting-control*)
               )
             (cond
-              ((and *target*
+              ((and (nonnull? *target*)
                     (zero? (-> self scene-index))
-                    (or (not (-> self scene)) (!= (level-status *level* (-> gp-0 vis-nick)) 'active))
+                    (or (not (nonnull? (-> self scene)))
+                        (!= (level-status *level* (-> gp-0 vis-nick)) 'active)
+                        (not (scene-main-entity-ready? (-> self scene))))
                     )
                (send-event *target* 'continue gp-0)
                )
@@ -1073,7 +1133,7 @@
                        (or (and (-> *setting-control* user-current movie)
                                 (!= (-> *setting-control* user-current movie) (process->ppointer self))
                                 )
-                           (and (not *multi-sync-enabled?*)
+                           (and (not (mp-session-in-game?))
                                 (!= (get-status *gui-control* (-> self gui-id)) 3))
                            )
                        )
@@ -1132,7 +1192,8 @@
             )
           )
         )
-      (if (and *target* (focus-test? *target* in-head flut board pilot mech dark))
+      (scene-player-wait-for-main-entity! self)
+      (if (and (nonnull? *target*) (focus-test? *target* in-head flut board pilot mech dark))
           (send-event *target* 'change-mode 'normal)
           )
       )
@@ -1142,7 +1203,7 @@
                   (nonzero? (-> self anim anim-name))
                   (let ((v1-161 (file-status *art-control* (-> self anim name) 0)))
                     (or (not (or (= v1-161 'active) (= v1-161 'locked)))
-                        (and (not *multi-sync-enabled?*)
+                        (and (not (mp-session-in-game?))
                              (let* ((a1-26 (lookup-gui-connection-id
                                              *gui-control*
                                              (the-as string (-> self anim anim-name))
@@ -1169,6 +1230,7 @@
 
 (defstate release (scene-player)
   :virtual #t
+  :event scene-player-event-handler
   :code (behavior ()
     (when (= (-> *game-info* demo-state) 100)
       (logclear! (-> self mask) (process-mask pause progress))
@@ -1250,18 +1312,6 @@
         ((and *target* (-> self scene) (-> self scene end-point-obj))
          (let ((gp-3 (scene-decode-continue (the-as basic (-> self scene end-point-obj)))))
            (when gp-3
-             (when (and *mp-debug-log?*
-                        (-> self scene)
-                        (nonzero? (-> self scene))
-                        (-> self scene name)
-                        (nonzero? (-> self scene name))
-                        (-> gp-3 name)
-                        (nonzero? (-> gp-3 name)))
-               (debug-log *mp-debug-log?*
-                          "[MP-ContinueTrace] scene-end scene=~S endpoint=~S~%"
-                          (-> self scene name)
-                          (-> gp-3 name))
-               )
              (set-continue! *game-info* gp-3 #f)
              (send-event *target* 'continue gp-3)
              )
@@ -1280,21 +1330,7 @@
 
 (defstate play-anim (scene-player)
   :virtual #t
-  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
-    (case message
-      (('abort)
-       (set! (-> self aborted?) #t)
-       (set-blackout-frames (seconds 0.2))
-       (let ((a0-3 (-> self anim)))
-         (when (and a0-3 (= (-> *setting-control* user-current spooling) (process->ppointer self)))
-           (ja-abort-spooled-anim a0-3 (the-as art-joint-anim #f) -1)
-           (ja-channel-set! 0)
-           )
-         )
-       (go-virtual release)
-       )
-      )
-    )
+  :event scene-player-event-handler
   :exit (behavior ()
     (while (-> self child)
       (deactivate (-> self child 0))
@@ -1381,7 +1417,14 @@
                               (mp-mountain-resolution-scene? (-> self scene name))))
                        (mp-abort-local-scene! self)
                        )
-                    ((not *multi-sync-enabled?*)
+                    ((or (not (mp-session-in-game?))
+                         (not (mp-any-remote-player-scene-active?))
+                         (<= (mp-scene-coordinator-participant-count) 1))
+                     (when (and (-> self scene)
+                                (nonzero? (-> self scene))
+                                (-> self scene name)
+                                (nonzero? (-> self scene name)))
+                       (mp-arm-intro-skip-bootstrap! (-> self scene name)))
                      (mp-abort-local-scene! self)
                      )
                     (else
@@ -1430,6 +1473,13 @@
       )
     (if (and (-> self wait) *target* (focus-test? *target* grabbed))
         (go-virtual release)
+        (begin
+          (when (and *target* (nonzero? *target*))
+            (send-event *target* 'draw #t))
+          (remove-setting! 'process-mask)
+          (remove-setting! 'movie)
+          (remove-setting! 'movie-name)
+          (apply-settings *setting-control*))
         )
     )
   :post (behavior ()
@@ -1606,6 +1656,8 @@
 ;; WARN: Using new Jak 2 rtype-of
 (defbehavior scene-player-init-internal scene-player ((scene-obj object) (wait-sym symbol) (continue-name string) (movie? symbol))
   "`object` arg can be an `(array scene)`, `pair of scene` or a `scene`"
+  (when (and movie? (nonnull? (scene-player-for-scene scene-obj)))
+    (go empty-state))
   (set! (-> self movie?) movie?)
   (process-entity-set! self (the-as entity #f))
   ;; og:preserve-this changed from 512
@@ -1651,9 +1703,11 @@
   (cond
     ((= (-> self scene-list (-> self scene-index) type) scene)
      (set! (-> self scene) (-> self scene-list (-> self scene-index)))
-     (when (-> self scene)
+     (when (nonnull? (-> self scene))
        (scene-method-15 (-> self scene) (-> self anim))
-       (scene-player-method-23 self (the-as string (-> self scene-list (-> self scene-index))) #f)
+       (when (scene-main-entity-ready? (-> self scene))
+         (scene-player-method-23 self (the-as string (-> self scene-list (-> self scene-index))) #f)
+         )
        )
      )
     (else
@@ -1687,11 +1741,6 @@
   (when movie?
     (set! *scene-player* (the-as (pointer scene-player) (process->ppointer self)))
 
-    (when (not (-> self aborted?))
-      (set! *scene-player*
-            (the-as (pointer scene-player) (process->ppointer self)))
-      )
-    
     (when (-> self scene)
       (copy-string<-string *mp-last-scene-name* (-> self scene name))
       )

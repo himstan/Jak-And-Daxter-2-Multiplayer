@@ -5,22 +5,19 @@
 ;; name in dgo: enemy
 ;; dgos: GAME, COMMON
 
-(define-extern mp-combat-nearest-player-target
-  (function process-focusable process-focusable symbol process-focusable))
+(define-extern mp-combat-nearest-player-target (function process-focusable process-focusable symbol process-focusable))
 (define-extern mp-actor-broadcast-attack (function enemy process event-message-block symbol))
-(define-extern mp-actor-handle-attack-hijack (function symbol enemy process event-message-block symbol))
+(define-extern mp-actor-handle-attack-hijack (function enemy process event-message-block symbol))
 (define-extern mp-enemy-authoritative? (function enemy symbol))
 (define-extern mp-enemy-allow-local-state-transition? (function enemy symbol))
 (define-extern mp-enemy-allow-kill-prefer-falling? (function enemy symbol))
-(define-extern mp-enemy-should-run-dying? (function enemy symbol))
+(define-extern mp-enemy-gem-collected? (function uint uint symbol))
 (define-extern mp-enemy-apply-remote-transform! (function enemy none))
+(define-extern mp-enemy-animation-post (function none :behavior enemy))
 (define-extern mp-enemy-handle-go-state-event! (function enemy event-message-block symbol))
 (define-extern mp-enemy-broadcast-death (function enemy none))
+(define-extern gem-seed-enemy-rng! (function gem none))
 (define-extern mp-await-authority (state enemy))
-
-(declare-type hopper nav-enemy)
-(declare-type bot nav-enemy)
-(declare-type sig bot)
 
 ;; DECOMP BEGINS
 
@@ -36,32 +33,26 @@
                                            :flags (shadow-flags shdf03 disable-draw)
                                            :shadow-dir (new 'static 'vector :y -1.0 :w 614400.0)
                                            :bot-plane (new 'static 'plane :y 1.0 :w 4096.0)
-                                           :bot-plane (new 'static 'plane :y 1.0 :w 4096.0)
                                            :top-plane (new 'static 'plane :y 1.0 :w -4096.0)
                                            )
                                )
   )
 
-(defun mp-enemy-refresh-player-focus! ((this enemy))
-  "Refresh stale player focus handles without changing non-player focus targets."
-  (when (and this
-             (nonzero? this)
-             (-> this focus)
-             (nonzero? (-> this focus))
-             (-> this root)
-             (nonzero? (-> this root)))
+(defun enemy-refresh-player-focus! ((this enemy))
+  (when (and (nonnull? this (-> this focus) (-> this root))
+             (mp-enemy-authoritative? this))
     (let ((current-target (the-as process-focusable (handle->process-safe (-> this focus handle)))))
-      (when (and current-target
-                 (nonzero? current-target)
+      (when (and (nonnull? current-target)
                  (type? current-target target))
-        (let ((next-target
-                (mp-combat-nearest-player-target this current-target #f)))
+        (let ((next-target (mp-combat-nearest-player-target this current-target #f)))
           (cond
             ((and next-target (nonzero? next-target) (!= next-target current-target))
              (try-update-focus (-> this focus) next-target this)
+             (update-los this)
              )
             ((and (not next-target) current-target (nonzero? current-target))
              (set! (-> this focus handle) (the-as handle #f))
+             (update-los this)
              )
             )
         )
@@ -71,13 +62,11 @@
   (none)
   )
 
-(defun enemy-detach-from-ghost-sync! ((e-proc enemy))
-  "Stop puppet correction once vanilla death has taken ownership."
-  (when (and e-proc
-             (nonzero? e-proc)
+(defun enemy-detach-from-record-sync! ((e-proc enemy))
+  (when (and (nonnull? e-proc)
              (or (<= (-> e-proc hit-points) 0)
                  (logtest? (-> e-proc enemy-flags) (enemy-flag death-start))))
-    (debug-log *mp-debug-log?* "[Enemy] Stopping sync on ~A with nid=~D pid=~D~%" (-> e-proc name) (-> e-proc net-id) (-> e-proc pid))
+    (log 'debug "[Enemy] Stopping sync on ~A with nid=~D pid=~D~%" (-> e-proc name) (-> e-proc net-id) (-> e-proc pid))
     (logior! (-> e-proc enemy-flags) (enemy-flag stop-syncing))
     )
   (none)
@@ -315,7 +304,7 @@
    - tracks when the enemy was last drawn
    - looks at the target and handles attacking
    @TODO Not extremely well understood yet"
-  (mp-enemy-refresh-player-focus! self)
+  (enemy-refresh-player-focus! self)
   (if (and (nonzero? (-> self draw)) (logtest? (-> self draw status) (draw-control-status on-screen)))
       (set-time! (-> self last-draw-time))
       )
@@ -360,7 +349,7 @@
   (if (and *debug-segment* (-> self enemy-info debug-draw-neck) (nonzero? (-> self neck)))
       (joint-mod-debug-draw (-> self neck))
       )
-  (ja-post)
+  (mp-enemy-animation-post)
   (mp-enemy-apply-remote-transform! self)
   0
   (none)
@@ -381,6 +370,9 @@
       )
     )
   )
+
+(defmethod update-los ((this enemy))
+  (none))
 
 ;; WARN: Return type mismatch int vs penetrate.
 (defun get-penetrate-using-from-attack-event ((arg0 process-drawable) (arg1 event-message-block))
@@ -404,7 +396,7 @@
 ;; WARN: Return type mismatch process vs process-focusable.
 (defmethod get-enemy-target ((this enemy))
   "@returns the [[process-focusable]] that the enemy is currently focusing on, or [[#f]] otherwise"
-  (mp-enemy-refresh-player-focus! this)
+  (enemy-refresh-player-focus! this)
   (let ((v0-0 (handle->process-safe (-> this focus handle))))
     (if (and v0-0
              (not (and v0-0
@@ -447,7 +439,7 @@
                          (mp-player-process-record (the-as process s4-0))))
                    (and record
                         (nonzero? record)
-                        (mp-player-record-remote? *mp-player-controller* record))))
+                        (is-record-remote-player? record))))
                (and (logtest? (-> this incoming penetrate-using) (penetrate board))
                     (not (logtest? (-> this incoming penetrate-using) (penetrate spin)))
                     )
@@ -504,40 +496,28 @@
   (go (method-of-object this dormant-aware))
   )
 
-(defmethod go-stare ((this enemy))
-  (when (mp-enemy-allow-local-state-transition? this)
-    (go (method-of-object this stare))
-    )
+(defmethod go-stare enemy ((this enemy))
+  (go (method-of-object this stare))
   )
 
-(defmethod go-stare2 ((this enemy))
-  (when (mp-enemy-allow-local-state-transition? this)
-    (go (method-of-object this stare))
-    )
+(defmethod go-stare2 enemy ((this enemy))
+  (go (method-of-object this stare))
   )
 
-(defmethod go-hostile ((this enemy))
-  (when (mp-enemy-allow-local-state-transition? this)
-    (go (method-of-object this hostile))
-    )
+(defmethod go-hostile enemy ((this enemy))
+  (go (method-of-object this hostile))
   )
 
-(defmethod go-ambush ((this enemy))
-  (when (mp-enemy-allow-local-state-transition? this)
-    (go (method-of-object this ambush))
-    )
+(defmethod go-ambush enemy ((this enemy))
+  (go (method-of-object this ambush))
   )
 
-(defmethod go-flee ((this enemy))
-  (when (mp-enemy-allow-local-state-transition? this)
-    (go (method-of-object this flee))
-    )
+(defmethod go-flee enemy ((this enemy))
+  (go (method-of-object this flee))
   )
 
-(defmethod go-directed ((this enemy))
-  (when (mp-enemy-allow-local-state-transition? this)
-    (go (method-of-object this directed))
-    )
+(defmethod go-directed enemy ((this enemy))
+  (go (method-of-object this directed))
   )
 
 (defmethod react-to-focus ((this enemy))
@@ -546,7 +526,7 @@
     (go mp-await-authority)
     (return #f)
     )
-  (mp-enemy-refresh-player-focus! this)
+  (enemy-refresh-player-focus! this)
   (let ((s5-0 (-> this focus aware)))
     (cond
       ((and (= s5-0 (enemy-aware enemy-aware-3)) (get-enemy-target this))
@@ -1204,7 +1184,7 @@
                          (-> arg1 aid-override)
                          (-> self entity aid))))
       (when (nonzero? spawn-aid)
-        (debug-log *mp-debug-log?* "[Enemy] Spawning enemy with enemy-init-by-other with aid=~D, setting net-id to aid...~%"
+        (log 'debug "[Enemy] Spawning enemy with enemy-init-by-other with aid=~D, setting net-id to aid...~%"
                 spawn-aid)
         (set! (-> self net-id) spawn-aid)
         )
@@ -1273,7 +1253,7 @@
   (process-drawable-from-entity! this arg0)
   (init-enemy! this)
   (when (and (-> this entity) (nonzero? (-> this entity)) (nonzero? (-> this entity aid)))
-        (debug-log *mp-debug-log?* "[Enemy] Spawning enemy with init-from-entity with aid=~D, setting net-id to aid...~%"
+        (log 'debug "[Enemy] Spawning enemy with init-from-entity with aid=~D, setting net-id to aid...~%"
                 (-> this entity aid))
         (set! (-> this net-id) (-> this entity aid))
       )
@@ -1686,19 +1666,19 @@
        )
      )
     ((= arg2 'attack)
-     (when (= (mp-actor-handle-attack-hijack 'enemy this arg0 arg3) 'block)
+     (when (= (mp-actor-handle-attack-hijack this arg0 arg3) 'block)
        (return #f)
        )
      (let ((info (the-as attack-info (-> arg3 param 1))))
        (when (!= (-> info id) (-> this incoming attack-id))
-         (debug-log *mp-debug-log?* "[Enemy] Got 'attack on ~A for nid=~D pid=~D info=~A citizen-incoming-attack-id=~D info-attack-id=~D"
+         (log 'debug "[Enemy] Got 'attack on ~A for nid=~D pid=~D info=~A citizen-incoming-attack-id=~D info-attack-id=~D"
                  (-> this name)
                  (-> this net-id)
                  (-> this pid)
                  (-> info mode)
                  (-> this incoming attack-id)
                  (-> info id))
-         (debug-log *mp-debug-log?* " penetrate=~A~%"
+         (log 'debug " penetrate=~A~%"
                           (enum->string penetrate (-> info penetrate-using)))
          (cond
            ((and (or (logtest? (-> this enemy-flags) (enemy-flag vulnerable))
@@ -1715,11 +1695,9 @@
             (send-event (ppointer->process (-> this parent)) 'child-hit)
             0
             (when (= (-> info mode) 'mp-hit-remote)
-              (let ((remote-attacker
-                      (mp-player-target-by-id *mp-current-event-source-player-id*)))
+              (let ((remote-attacker (mp-player-target-by-id *mp-current-event-source-player-id*)))
                 (when (and remote-attacker (nonzero? remote-attacker))
-                  (set! (-> this incoming attacker-handle)
-                    (process->handle remote-attacker))))
+                  (set! (-> this incoming attacker-handle) (process->handle remote-attacker))))
                 (set! (-> this incoming penetrate-using) (-> info penetrate-using))
               )
             (when (not *debug-unkillable*)
@@ -1728,7 +1706,7 @@
                 (PC_PORT
                   (let ((old-hp (-> this hit-points))
                         (dmg-taken (take-damage-from-attack this arg0 arg3)))
-                    (debug-log *mp-debug-log?* "[Enemy] ~A nid=~D pid=~D took ~D damage from the ~A attack.~%" (-> this name) (-> this net-id) (-> this pid) dmg-taken (-> info mode))
+                    (log 'debug "[Enemy] ~A nid=~D pid=~D took ~D damage from the ~A attack.~%" (-> this name) (-> this net-id) (-> this pid) dmg-taken (-> info mode))
                     (when (> dmg-taken 0)
                       (process-spawn damage-number (damage-amount-from-attack this arg0 arg3) (-> this root trans) (-> this mask))
                       (send-damage-to-bar *health-bar-manager* this dmg-taken old-hp)
@@ -1771,7 +1749,7 @@
        )
      )
     ((= arg2 'hit-flinch)
-     (debug-log *mp-debug-log?* "[Enemy] Called 'hit-flinch event handler for nid=~D hit-points:~D~%" (-> this net-id) (-> this hit-points))
+     (log 'debug "[Enemy] Called 'hit-flinch event handler for nid=~D hit-points:~D~%" (-> this net-id) (-> this hit-points))
      (when (zero? (-> this hit-points))
        (logclear! (-> this mask) (process-mask actor-pause))
        (logclear! (-> this focus-status) (focus-status dangerous))
@@ -1791,7 +1769,7 @@
      #t
      )
     ((= arg2 'hit-knocked)
-     (debug-log *mp-debug-log?* "[Enemy] Called 'hit-knocked event handler for nid=~D~%" (-> this net-id))
+     (log 'debug "[Enemy] Called 'hit-knocked event handler for nid=~D~%" (-> this net-id))
      (logclear! (-> this mask) (process-mask actor-pause))
      (logclear! (-> this focus-status) (focus-status dangerous))
      (logclear! (-> this enemy-flags) (enemy-flag use-notice-distance))
@@ -1813,11 +1791,11 @@
           )
          )
        )
-     (debug-log *mp-debug-log?* "[Enemy] Going to knocked state for nid=~D~%" (-> this net-id))
+     (log 'debug "[Enemy] Going to knocked state for nid=~D~%" (-> this net-id))
      (go (method-of-object this knocked))
      )
     ((= arg2 'hit)
-     (debug-log *mp-debug-log?* "[Enemy] Called 'hit event handler for nid=~D~%" (-> this net-id))
+     (log 'debug "[Enemy] Called 'hit event handler for nid=~D~%" (-> this net-id))
      (logclear! (-> this mask) (process-mask actor-pause))
      (logclear! (-> this focus-status) (focus-status dangerous))
      (logclear! (-> this enemy-flags) (enemy-flag use-notice-distance))
@@ -1833,12 +1811,12 @@
      (send-event arg0 'get-attack-count 1)
      (if (zero? (-> this hit-points))
          (begin
-            (debug-log *mp-debug-log?* "[Enemy] Calling kill-prefer-falling for nid=~D~%" (-> this net-id))
+            (log 'debug "[Enemy] Calling kill-prefer-falling for nid=~D~%" (-> this net-id))
             (kill-prefer-falling this)
            )
          
          (begin
-            (debug-log *mp-debug-log?* "[Enemy] Going to hit state for nid=~D~%" (-> this net-id))
+            (log 'debug "[Enemy] Going to hit state for nid=~D~%" (-> this net-id))
             (go (method-of-object this hit))
            )
          )
@@ -1941,7 +1919,7 @@
      )
     ((= arg2 'die-fast)
      (logior! (-> this draw status) (draw-control-status no-draw))
-     (debug-log *mp-debug-log?* "[Enemy] Calling dying method from 'die-fast event handler for nid=~D~%" (-> this net-id))
+     (log 'debug "[Enemy] Calling dying method from 'die-fast event handler for nid=~D~%" (-> this net-id))
      (dying this)
      (send-event (ppointer->process (-> this parent)) 'child-die)
      (let ((s5-3 (-> this on-death)))
@@ -2249,7 +2227,7 @@
       )
     )
   :trans (behavior ()
-    (mp-enemy-refresh-player-focus! self)
+    (enemy-refresh-player-focus! self)
     (if (and (time-elapsed? (-> self state-time) (-> self state-timeout)) (> (the-as int (-> self focus aware)) 0))
         (go-virtual active)
         )
@@ -2324,7 +2302,7 @@
   :enter (-> (method-of-type enemy dormant) enter)
   :exit (-> (method-of-type enemy dormant) exit)
   :trans (behavior ()
-    (mp-enemy-refresh-player-focus! self)
+    (enemy-refresh-player-focus! self)
     (when (and (time-elapsed? (-> self state-time) (-> self state-timeout)) (> (the-as int (-> self focus aware)) 0))
       (if (logtest? (enemy-option ambush) (-> self fact enemy-options))
           (go-ambush self)
@@ -2374,7 +2352,7 @@
       )
     )
   :trans (behavior ()
-    (mp-enemy-refresh-player-focus! self)
+    (enemy-refresh-player-focus! self)
     (when (time-elapsed? (-> self state-time) (seconds 0.1))
       (let ((v1-3 (-> self focus aware)))
         (cond
@@ -2413,10 +2391,10 @@
       (let ((gp-0 (-> self on-notice)))
         (if gp-0
             (script-eval gp-0 :vector (-> self root trans))
-          )
+            )
         )
       )
-    (mp-enemy-refresh-player-focus! self)
+    (enemy-refresh-player-focus! self)
     (let ((gp-1 (-> self focus aware)))
       (when (logtest? (-> self enemy-flags) (enemy-flag alert))
         (cond
@@ -2474,7 +2452,7 @@
       )
     )
   :trans (behavior ()
-    (mp-enemy-refresh-player-focus! self)
+    (enemy-refresh-player-focus! self)
     (if (and (logtest? (-> self enemy-flags) (enemy-flag victory)) (-> self enemy-info use-victory))
         (go-virtual victory)
         )
@@ -2515,7 +2493,7 @@
     (logclear! (-> self enemy-flags) (enemy-flag chase-startup))
     )
   :trans (behavior ()
-    (mp-enemy-refresh-player-focus! self)
+    (enemy-refresh-player-focus! self)
     (when (time-elapsed? (-> self state-time) (seconds 0.1))
       (let ((gp-0 (-> self focus aware)))
         (cond
@@ -2584,7 +2562,7 @@
     (logclear! (-> self mask) (process-mask actor-pause))
     )
   :trans (behavior ()
-    (mp-enemy-refresh-player-focus! self)
+    (enemy-refresh-player-focus! self)
     (when (time-elapsed? (-> self state-time) (-> self reaction-time))
       (if (!= (-> self focus aware) (enemy-aware unaware))
           (go-stare self)
@@ -2813,8 +2791,8 @@
   :event enemy-event-handler
   :enter (behavior ()
     (when (or (type? self crimson-guard))
-            (logior! (-> self enemy-flags) (enemy-flag stop-syncing))
-          )
+      (logior! (-> self enemy-flags) (enemy-flag stop-syncing))
+      )
     (set-time! (-> self state-time))
     (logclear! (-> self mask) (process-mask actor-pause))
     (logior! (-> self focus-status) (focus-status dangerous))
@@ -3079,25 +3057,31 @@
   (none)
   )
 
+(defun enemy-knocked-rand-factor ((e enemy) (min-val float) (max-val float))
+  (if (and (nonzero? (-> e net-id)) (nonzero? (-> e incoming attack-id)))
+      (let ((hash-val (logand (+ (* (the-as int (-> e incoming attack-id)) 1103515245) 12345) (the uint #xffff))))
+        (+ min-val (* (- max-val min-val) (/ (the float hash-val) 65535.0))))
+      (rnd-float-range e min-val max-val)))
+
 ;; WARN: Return type mismatch object vs none.
 (defmethod enemy-method-52 ((this enemy) (arg0 vector))
   (enemy-method-50 this arg0)
   (let ((s5-0 (-> this enemy-info)))
     (case (-> this incoming knocked-type)
       (((knocked-type knocked-type-2))
-       (let ((f30-0 (rnd-float-range this 0.0 1.0)))
+       (let ((f30-0 (enemy-knocked-rand-factor this 0.0 1.0)))
          (vector-float*! arg0 arg0 (lerp (-> s5-0 knocked-hard-vxz-lo) (-> s5-0 knocked-hard-vxz-hi) f30-0))
          (set! (-> arg0 y) (lerp (-> s5-0 knocked-hard-vy-lo) (-> s5-0 knocked-hard-vy-hi) f30-0))
          )
        )
       (((knocked-type knocked-type-1))
-       (let ((f30-1 (rnd-float-range this 0.0 1.0)))
+       (let ((f30-1 (enemy-knocked-rand-factor this 0.0 1.0)))
          (vector-float*! arg0 arg0 (lerp (-> s5-0 knocked-medium-vxz-lo) (-> s5-0 knocked-medium-vxz-hi) f30-1))
          (set! (-> arg0 y) (lerp (-> s5-0 knocked-medium-vy-lo) (-> s5-0 knocked-medium-vy-hi) f30-1))
          )
        )
       (((knocked-type knocked-type-3))
-       (let ((f30-2 (rnd-float-range this 0.0 1.0)))
+       (let ((f30-2 (enemy-knocked-rand-factor this 0.0 1.0)))
          (vector-float*! arg0 arg0 (lerp (-> s5-0 knocked-huge-vxz-lo) (-> s5-0 knocked-huge-vxz-hi) f30-2))
          (set! (-> arg0 y) (lerp (-> s5-0 knocked-huge-vy-lo) (-> s5-0 knocked-huge-vy-hi) f30-2))
          )
@@ -3111,22 +3095,28 @@
              (vector-negate! arg0 arg0)
              )
          )
-       (let ((f30-3 (rnd-float-range this 0.0 1.0)))
+       (let ((f30-3 (enemy-knocked-rand-factor this 0.0 1.0)))
          (vector-float*! arg0 arg0 (lerp (-> s5-0 knocked-yellow-vxz-lo) (-> s5-0 knocked-yellow-vxz-hi) f30-3))
          (set! (-> arg0 y) (lerp (-> s5-0 knocked-yellow-vy-lo) (-> s5-0 knocked-yellow-vy-hi) f30-3))
          )
        )
       (((knocked-type knocked-type-5))
-       (let* ((f1-2 (vector-vector-xz-distance-squared (target-pos 0) (-> this root trans)))
-              (f30-5 (* (- 1.0 (/ (fmin f1-2 (square 61440.0)) (square 61440.0))) (rnd-float-range this 0.8 1.0)))
+       (let* ((source-pos (if (and (nonzero? (-> this net-id)) (logtest? (-> this incoming penetrate-using) (penetrate jak-red-shot)))
+                              (-> this incoming attacker-pos)
+                              (target-pos 0)))
+              (f1-2 (vector-vector-xz-distance-squared source-pos (-> this root trans)))
+              (f30-5 (* (- 1.0 (/ (fmin f1-2 (square 61440.0)) (square 61440.0))) (enemy-knocked-rand-factor this 0.8 1.0)))
               )
          (vector-float*! arg0 arg0 (lerp (-> s5-0 knocked-red-vxz-lo) (-> s5-0 knocked-red-vxz-hi) f30-5))
          (set! (-> arg0 y) (lerp (-> s5-0 knocked-red-vy-lo) (-> s5-0 knocked-red-vy-hi) f30-5))
          )
        )
       (((knocked-type knocked-type-6))
-       (let* ((f1-5 (vector-vector-xz-distance-squared (target-pos 0) (-> this root trans)))
-              (f30-7 (* (- 1.0 (/ (fmin f1-5 (square 122880.0)) (square 122880.0))) (rnd-float-range this 0.8 1.0)))
+       (let* ((source-pos (if (and (nonzero? (-> this net-id)) (logtest? (-> this incoming penetrate-using) (penetrate jak-blue-shot)))
+                              (-> this incoming attacker-pos)
+                              (target-pos 0)))
+              (f1-5 (vector-vector-xz-distance-squared source-pos (-> this root trans)))
+              (f30-7 (* (- 1.0 (/ (fmin f1-5 (square 122880.0)) (square 122880.0))) (enemy-knocked-rand-factor this 0.8 1.0)))
               )
          (vector-float*! arg0 arg0 (lerp (-> s5-0 knocked-blue-vxz-lo) (-> s5-0 knocked-blue-vxz-hi) f30-7))
          (cond
@@ -3134,7 +3124,9 @@
             (set! (-> arg0 y) (lerp (-> s5-0 knocked-blue-vy-lo) (-> s5-0 knocked-blue-vy-hi) f30-7))
             )
            (else
-             (if (zero? (rnd-int-count this 3))
+             (if (if (and (nonzero? (-> this net-id)) (nonzero? (-> this incoming attack-id)))
+                     (zero? (logand (-> this incoming attack-id) 3))
+                     (zero? (rnd-int-count this 3)))
                  (set! (-> arg0 y) 40960.0)
                  )
              )
@@ -3145,7 +3137,7 @@
        (set! (-> arg0 quad) (-> this incoming attack-direction quad))
        )
       (else
-        (let ((f30-8 (rnd-float-range this 0.0 1.0)))
+        (let ((f30-8 (enemy-knocked-rand-factor this 0.0 1.0)))
           (vector-float*! arg0 arg0 (lerp (-> s5-0 knocked-soft-vxz-lo) (-> s5-0 knocked-soft-vxz-hi) f30-8))
           (set! (-> arg0 y) (lerp (-> s5-0 knocked-soft-vy-lo) (-> s5-0 knocked-soft-vy-hi) f30-8))
           )
@@ -3348,10 +3340,10 @@
     (if (>= (-> self enemy-info knocked-seek-ry-clamp) 0.0)
         (set! (-> self desired-angle) (enemy-method-51 self))
         )
-    (debug-log *mp-debug-log?* "[Enemy] Checking for death in knocked state for nid=~D hit-points=~D~%" (-> self net-id) (-> self hit-points))
+    (log 'debug "[Enemy] Checking for death in knocked state for nid=~D hit-points=~D~%" (-> self net-id) (-> self hit-points))
     (if (zero? (-> self hit-points))
         (begin
-            (debug-log *mp-debug-log?* "[Enemy] Calling dying method from knocked state :enter for pid=~D~%" (-> self net-id))
+            (log 'debug "[Enemy] Calling dying method from knocked state :enter for pid=~D~%" (-> self net-id))
             (dying self)
           )
         (play-damage-or-death-sound self 0)
@@ -3412,7 +3404,7 @@
   :code (behavior ()
     (let ((gp-0 (new 'stack-no-clear 'enemy-knocked-info)))
       (let ((s5-0 0))
-        (set! (-> gp-0 anim-speed) (rnd-float-range self 0.9 1.1))
+        (set! (-> gp-0 anim-speed) (enemy-knocked-rand-factor self 0.95 1.05))
         (set! (-> gp-0 on-surface-count) 0)
         (set! (-> gp-0 move-count) 0)
         (until (enemy-method-80 self gp-0)
@@ -3489,7 +3481,7 @@
 
 (defmethod dying ((this enemy))
   "Cleans-up the enemy and any associated resources. Potentially spawns skull gems"
-  (debug-log *mp-debug-log?* "[Enemy] Method dying got called for nid=~D~%" (-> this net-id))
+  (log 'debug "[Enemy] Method dying got called for nid=~D~%" (-> this net-id))
   (mp-battle-note-enemy-death! this)
   (when (not (logtest? (enemy-flag called-dying) (-> this enemy-flags)))
     (set! (-> this enemy-flags) (the-as enemy-flag (logior (enemy-flag called-dying) (-> this enemy-flags))))
@@ -3514,18 +3506,15 @@
       (let ((a0-18
               (vector<-cspace! (new 'stack-no-clear 'vector) (-> this node-list data (-> this enemy-info gem-joint)))
               )
-            )
-        (let ((gem-ptr (birth-pickup-at-point a0-18 (pickup-type gem) 1.0 #t *entity-pool* (-> this fact))))
-          (when gem-ptr
-            (let ((gem-proc (the-as gem (ppointer->process gem-ptr))))
-              (when (and gem-proc (nonzero? gem-proc) (type? gem-proc gem))
-                (set! (-> gem-proc enemy-gem-source-id) (the-as uint32 (mp-get-enemy-aid this)))
-                (set! (-> gem-proc enemy-gem-index) (the-as uint32 0))
-                )
-              )
-            )
-          )
-        )
+            (source-aid (the-as uint (mp-get-enemy-aid this))))
+        (when (not (mp-enemy-gem-collected? source-aid (the uint 0)))
+          (let ((gem-ptr (birth-pickup-at-point a0-18 (pickup-type gem) 1.0 #t *entity-pool* (-> this fact))))
+            (when (nonnull? gem-ptr)
+              (let ((gem-proc (the-as gem (ppointer->process gem-ptr))))
+                (when (and (nonnull? gem-proc) (type? gem-proc gem))
+                  (set! (-> gem-proc enemy-gem-source-id) (the-as uint32 source-aid))
+                  (set! (-> gem-proc enemy-gem-index) (the-as uint32 0))
+                  (gem-seed-enemy-rng! gem-proc)))))))
       )
     (logclear! (-> this enemy-flags) (enemy-flag vulnerable vulnerable-backup))
     (logclear! (-> this focus-status) (focus-status dangerous))
@@ -3538,7 +3527,7 @@
     (if (-> this skel effect)
         (logior! (-> this skel effect flags) (effect-control-flag ecf1))
         )
-    (enemy-detach-from-ghost-sync! this)
+    (enemy-detach-from-record-sync! this)
     (stop-looking-at-target! this)
     ;; og:preserve-this
     ;; track statistics
@@ -3553,7 +3542,7 @@
   :virtual #t
   :event enemy-event-handler
   :enter (behavior ()
-    (debug-log *mp-debug-log?* "[Enemy] Calling dying method from die state :enter for nid=~D~%" (-> self net-id))
+    (log 'debug "[Enemy] Calling dying method from die state :enter for nid=~D~%" (-> self net-id))
     (dying self)
     (let ((v1-3 (-> self root root-prim)))
       (set! (-> v1-3 prim-core collide-as) (collide-spec))
@@ -3603,7 +3592,7 @@
   :virtual #t
   :event enemy-event-handler
   :enter (behavior ()
-    (debug-log *mp-debug-log?* "[Enemy] Calling dying method from 'die-falling event handler for nid=~D~%" (-> self net-id))
+    (log 'debug "[Enemy] Calling dying method from 'die-falling event handler for nid=~D~%" (-> self net-id))
     (dying self)
     (let ((v1-3 (-> self root root-prim)))
       (set! (-> v1-3 prim-core collide-as) (collide-spec))

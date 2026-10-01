@@ -223,11 +223,10 @@ The cpad-set-buzz! function can be used for vibration.
     )
   )
 
-;; The slot after the player pads is a neutral sink while a menu owns physical pad 0.
 (defconstant CPAD_TARGET_INPUT_SINK_INDEX MP_MAX_PLAYERS)
 (defconstant CPAD_INTERNAL_SLOT_COUNT (+ MP_MAX_PLAYERS 1))
 
-;; Pad 0 is local; multiplayer may synthesize pads 1 through MP_MAX_PLAYERS - 1.
+;; Pad 0 is local, remote players may use pads 1 through MP_MAX_PLAYERS - 1.
 (deftype cpad-list (basic)
   ((num-cpads  int32)
    (cpads      cpad-info CPAD_INTERNAL_SLOT_COUNT)
@@ -240,7 +239,6 @@ The cpad-set-buzz! function can be used for vibration.
 (defmethod new cpad-list ((allocation symbol) (type-to-make type))
   "Create the hardware, synthetic, and neutral target-input pads."
   (let ((gp-0 (object-new allocation type-to-make (the-as int (-> type-to-make size)))))
-    ;; service-cpads polls only physical pad 0; puppet replay updates the synthetic pads.
     (set! (-> gp-0 num-cpads) 1)
     (dotimes (pad-index CPAD_INTERNAL_SLOT_COUNT)
       (set! (-> gp-0 cpads pad-index) (new 'global 'cpad-info pad-index)))
@@ -276,8 +274,7 @@ The cpad-set-buzz! function can be used for vibration.
   )
 
 (defun cpad-reset-neutral-input! ((pad cpad-info) (history cpad-history))
-  "Clear every current and historical input field on a non-player pad."
-  (when (and pad (nonzero? pad))
+  (when (nonnull? pad)
     (cpad-invalid! pad)
     (dotimes (button-history-index 3)
       (set! (-> pad button0-abs button-history-index) (pad-buttons))
@@ -291,7 +288,7 @@ The cpad-set-buzz! function can be used for vibration.
       )
     (set! (-> pad change-time) (the-as time-frame 0))
     )
-  (when (and history (nonzero? history))
+  (when (nonnull? history)
     (dotimes (history-index 15)
       (set! (-> history button0-abs history-index) (pad-buttons))
       (set! (-> history button0-rel history-index) (pad-buttons))
@@ -697,10 +694,7 @@ The cpad-set-buzz! function can be used for vibration.
         )
       )
     )
-  (when (and *cpad-list*
-             (nonzero? *cpad-list*)
-             *cpad-history-list*
-             (nonzero? *cpad-history-list*))
+  (when (nonnull? *cpad-list* *cpad-history-list*)
     (cpad-reset-neutral-input!
       (-> *cpad-list* cpads CPAD_TARGET_INPUT_SINK_INDEX)
       (-> *cpad-history-list* cpads CPAD_TARGET_INPUT_SINK_INDEX)

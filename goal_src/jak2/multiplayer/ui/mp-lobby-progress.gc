@@ -3,39 +3,50 @@
 
 (define *mp-lobby-player-options* (the-as (array menu-option) #f))
 (define *mp-lobby-name-tag* (new 'global 'string 128 (the-as string #f)))
+
 (define-extern mp-progress-intro-start! (function symbol int))
+
 (defconstant MP_LOBBY_LONG_NAME_LENGTH 10)
 (defconstant MP_LOBBY_LONG_NAME_SCALE 0.5)
+
 (define *mp-lobby-countdown-seconds* 3)
 (define *mp-lobby-last-countdown-sec* -1)
 
-(deftype menu-lobby-player-option (menu-option)
-  ()
-  )
+(defconstant MP_LOBBY_HOST_WAIT_TIMEOUT_TICKS 300)
+
+(deftype menu-lobby-player-option (menu-option) ())
+
+(defun mp-lobby-wait-terminal? ((status mp-connection-status))
+  (mp-session-status-terminal? status))
+
+(defun mp-host-setup-ui-state ()
+  (let ((lifecycle (pc-multi-get-host-lifecycle))
+        (mapping (pc-multi-get-host-mapping-state)))
+    (cond
+      ((= lifecycle 1) 1)
+      ((= lifecycle 3) -3)
+      ((= mapping 2) 2)
+      ((or (= mapping 0) (= mapping 3)) 3)
+      ((= mapping 1) 4)
+      ((= mapping 4) -1)
+      (else 0))))
 
 (defun mp-lobby-countdown-active? ()
-  (= (pc-multi-lobby-is-countdown) 1)
-  )
+  (= (pc-multi-lobby-is-countdown) 1))
 
 (defun mp-lobby-countdown-seconds-remaining ()
-  (let ((rem-ms (pc-multi-lobby-get-countdown-remaining-ms)))
-    (if (<= rem-ms 0)
-        0
-        (+ (/ rem-ms 1000) 1)))
-  )
+  (let ((rem-ms (pc-multi-lobby-get-countdown-remaining-ms))) (if (<= rem-ms 0) 0 (+ (/ rem-ms 1000) 1))))
 
 (defun mp-lobby-local-player-ready? ()
   (let ((record (mp-local-player-record)))
-    (and record (nonzero? (the-as uint record)) (nonzero? (-> record identity lobby-ready?))))
-  )
+    (and record (nonzero? (the-as uint record)) (nonzero? (-> record identity lobby-ready?)))))
 
 (defun mp-lobby-player-ready? ((player-index int))
   (let ((record (mp-player-record-by-id (the-as uint player-index))))
     (and record
          (nonzero? (the-as uint record))
          (nonzero? (-> record identity identity-ready?))
-         (nonzero? (-> record identity lobby-ready?))))
-  )
+         (nonzero? (-> record identity lobby-ready?)))))
 
 (defun mp-lobby-all-peers-ready? ()
   (let ((limit (the int (pc-multi-get-session-player-limit)))
@@ -43,68 +54,57 @@
     (dotimes (i limit)
       (when (!= i host-id)
         (let ((record (mp-player-record-by-id (the-as uint i))))
-          (when (and record
-                     (nonzero? (the-as uint record))
-                     (nonzero? (-> record identity identity-ready?)))
+          (when (and record (nonzero? (the-as uint record)) (nonzero? (-> record identity identity-ready?)))
             (when (zero? (-> record identity lobby-ready?))
               (return #f))))))
-    #t)
-  )
+    #t))
 
 (defun mp-lobby-toggle-local-ready! ()
-  (if (mp-lobby-countdown-active?)
-      (sound-play "menu-error")
-      (let* ((cur-ready (if (mp-lobby-local-player-ready?) 1 0))
-             (next-ready (if (= cur-ready 1) 0 1)))
-        (if (nonzero? (pc-multi-lobby-set-ready (the-as uint next-ready)))
-            (begin
-              (let ((local-record (mp-local-player-record)))
-                (when (and local-record (nonzero? (the-as uint local-record)))
-                  (set! (-> local-record identity lobby-ready?) (the-as uint8 next-ready))))
-              (sound-play "generic-beep"))
-            (sound-play "menu-error"))))
-  (none)
-  )
+  (if (or (mp-lobby-countdown-active?) (= (pc-multi-get-session-status) (mp-connection-status game-starting)))
+    (sound-play "menu-error")
+    (let* ((cur-ready (if (mp-lobby-local-player-ready?) 1 0))
+           (next-ready (if (= cur-ready 1) 0 1)))
+      (if (nonzero? (pc-multi-lobby-set-ready (the-as uint next-ready)))
+        (begin
+          (let ((local-record (mp-local-player-record)))
+            (when (and local-record (nonzero? (the-as uint local-record)))
+              (set! (-> local-record identity lobby-ready?) (the-as uint8 next-ready))))
+          (sound-play "generic-beep"))
+        (sound-play "menu-error"))))
+  (none))
 
 (defun mp-lobby-start-countdown! ()
   (when (= (pc-multi-is-lobby-host) 1)
     (if (mp-lobby-all-peers-ready?)
-        (begin
-          (set! *mp-lobby-last-countdown-sec* -1)
-          (pc-multi-lobby-start-countdown (the-as uint *mp-lobby-countdown-seconds*)))
-        (sound-play "menu-error")))
-  (none)
-  )
+      (begin
+        (set! *mp-lobby-last-countdown-sec* -1)
+        (pc-multi-lobby-start-countdown (the-as uint *mp-lobby-countdown-seconds*)))
+      (sound-play "menu-error")))
+  (none))
 
 (defun mp-lobby-cancel-countdown! ()
   (when (mp-lobby-countdown-active?)
     (set! *mp-lobby-last-countdown-sec* -1)
     (pc-multi-lobby-cancel-countdown)
     (sound-play "score-slide"))
-  (none)
-  )
+  (none))
 
 (defun mp-lobby-character-name ((character mp-player-character))
   (cond
-    ((= character (mp-player-character jak))
-     (lookup-text! *common-text* (text-id progress-multiplayer-char-jak) #f))
+    ((= character (mp-player-character jak)) (lookup-text! *common-text* (text-id progress-multiplayer-char-jak) #f))
     ((= character (mp-player-character daxter))
      (lookup-text! *common-text* (text-id progress-multiplayer-char-daxter) #f))
-    (else
-     "Unknown"))
-  )
+    (else "Unknown")))
 
 (defun mp-lobby-copy-host-access! ()
   (when (= (pc-multi-is-lobby-host) 1)
-    (let ((copy-mode (pc-multi-get-host-copy-mode)))
+    (let ((copy-mode (pc-multi-get-host-access-kind)))
       (when (!= copy-mode 0)
-        (if (= (pc-multi-copy-host-access) 1)
-            (sound-play "generic-beep")
-            (sound-play "menu-error")))))
+        (if (= (pc-multi-copy-host-access) 1) (sound-play "generic-beep") (sound-play "menu-error")))))
   (none))
 
 (defun mp-lobby-host-status-text ((font-ctx font-context))
-  (let ((setup-status (pc-multi-get-host-setup-status)))
+  (let ((setup-status (mp-host-setup-ui-state)))
     (cond
       ((and *pc-settings* (nonzero? (the-as uint *pc-settings*)) (not (-> *pc-settings* is-host-online?)))
        (set-color! font-ctx (font-color green))
@@ -126,66 +126,53 @@
        (lookup-text! *common-text* (text-id progress-lobby-nat-strict-or-lan) #f)))))
 
 (defun mp-lobby-toggle-local-character! ()
-  (let* ((current-character (the-as mp-player-character (pc-multi-get-local-player-character)))
-         (next-character (if (= current-character (mp-player-character jak))
-                             (mp-player-character daxter)
-                             (mp-player-character jak))))
-    (if (nonzero? (pc-multi-lobby-set-character (the-as uint next-character)))
+  (if (or (mp-lobby-countdown-active?) (= (pc-multi-get-session-status) (mp-connection-status game-starting)))
+    (sound-play "menu-error")
+    (let* ((current-character (the-as mp-player-character (pc-multi-get-local-player-character)))
+           (next-character (if (= current-character (mp-player-character jak)) (mp-player-character daxter) (mp-player-character jak))))
+      (if (nonzero? (pc-multi-lobby-set-character (the-as uint next-character)))
         (begin
           (let ((local-record (mp-local-player-record)))
             (when (and local-record (nonzero? (the-as uint local-record)))
               (set! (-> local-record identity character) next-character)))
           (sound-play "generic-beep"))
-        (sound-play "menu-error")))
-  (none)
-  )
+        (sound-play "menu-error"))))
+  (none))
 
 (defun mp-lobby-launch-game! ((p progress))
-  (when (and p
-             (nonzero? (the-as uint p))
-             (= (-> p next) 'none)
-             (!= (pc-multi-get-status) (mp-connection-status game-starting)))
+  (when (and p (nonzero? (the-as uint p)) (= (-> p next) 'none) (not (mp-session-in-game?)))
     (pc-multi-lobby-start-game)
-
     (when (and (mp-local-player-record) (nonzero? (the-as uint (mp-local-player-record))))
       (set! (-> *mp-bootstrap-state* phase) (the-as uint 0)))
-
     (when (and *bigmap* (nonzero? *bigmap*))
       (set! (-> *bigmap* drawing-flag) #t))
-
     (cond
-      ((and *pc-settings* (nonzero? (the-as uint *pc-settings*)) (-> *pc-settings* mp-is-new-game?)
+      ((and *pc-settings*
+            (nonzero? (the-as uint *pc-settings*))
+            (-> *pc-settings* mp-is-new-game?)
             (< (-> *pc-settings* mp-selected-save-slot) 4))
        (set-next-state p 'saving 0))
       ((and *pc-settings* (nonzero? (the-as uint *pc-settings*)) (-> *pc-settings* mp-is-new-game?))
        (if (and *game-info* (nonzero? (the-as uint *game-info*)))
-           (mp-progress-intro-start! (logtest? (-> *game-info* purchase-secrets) (game-secrets hero-mode)))
-           (mp-progress-intro-start! #f)))
-      (else
-       (set-next-state p 'loading 0))))
-  (none)
-  )
+         (mp-progress-intro-start! (logtest? (-> *game-info* purchase-secrets) (game-secrets hero-mode)))
+         (mp-progress-intro-start! #f)))
+      (else (set-next-state p 'loading 0))))
+  (none))
 
 (defun mp-lobby-leave! ((p progress))
   (when (and p (nonzero? (the-as uint p)))
     (sound-play "menu-back")
     (pc-multi-disconnect)
-    (pc-multi-set-status (mp-connection-status idle))
-    (set! *multi-sync-enabled?* #f)
     (set-next-state p 'multiplayer 0))
-  (none)
-  )
+  (none))
 
 (defun draw-lobby-box ((option menu-option) (min-x float) (max-x float) (min-y float) (max-y float))
   (set! (-> option box 0 min x) min-x)
   (set! (-> option box 0 max x) max-x)
   (set! (-> option box 0 min y) min-y)
   (set! (-> option box 0 max y) max-y)
-
-  (with-dma-buffer-add-bucket ((buffer (-> *display* frames (-> *display* on-screen) global-buf))
-                               (bucket-id progress))
-    ((method-of-type hud-box draw-box-prim-only) (the-as hud-box (-> option box)) buffer))
-  )
+  (with-dma-buffer-add-bucket ((buffer (-> *display* frames (-> *display* on-screen) global-buf)) (bucket-id progress))
+    ((method-of-type hud-box draw-box-prim-only) (the-as hud-box (-> option box)) buffer)))
 
 (defun draw-lobby-decoration ((option menu-option) (font-ctx font-context) (alpha float))
   (let ((left-x 69)
@@ -194,21 +181,14 @@
         (total-width 375)
         (details-width 200)
         (panel-height 218))
-
     (case (get-aspect-ratio)
-      (('aspect16x9)
-       (set! left-x 79)
-       (set! total-width 355)
-       (set! details-width 190)
-       (set! panel-height 248)))
-
+      (('aspect16x9) (set! left-x 79) (set! total-width 355) (set! details-width 190) (set! panel-height 248)))
     (#when PC_PORT
       (when (not (-> *pc-settings* use-vis?))
         (set! left-x (the int (adjust-game-x (the float left-x))))
         (set! details-x (the int (adjust-game-x (the float details-x))))
         (set! total-width (the int (* (-> *pc-settings* aspect-ratio-reciprocal) total-width)))
         (set! details-width (the int (* (-> *pc-settings* aspect-ratio-reciprocal) details-width)))))
-
     (set-scale! font-ctx 0.65)
     (set-color! font-ctx (font-color progress))
     (set-flags! font-ctx (font-flags kerning middle large))
@@ -219,24 +199,30 @@
     (cond
       ((mp-lobby-countdown-active?)
        (let ((sec (max 1 (mp-lobby-countdown-seconds-remaining))))
-         (format (clear *temp-string*)
-                 (lookup-text! *common-text* (text-id progress-lobby-countdown) #f)
-                 sec)
+         (format (clear *temp-string*) (lookup-text! *common-text* (text-id progress-lobby-countdown) #f) sec)
          (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))))
-      ((= (pc-multi-get-status) (mp-connection-status game-starting))
-       (print-game-text (lookup-text! *common-text* (text-id progress-lobby-host-loading) #f) font-ctx #f 44 (bucket-id progress)))
+      ((= (pc-multi-get-session-status) (mp-connection-status game-starting))
+       (print-game-text (lookup-text! *common-text* (text-id progress-lobby-host-loading) #f)
+                        font-ctx
+                        #f
+                        44
+                        (bucket-id progress)))
       (else
-       (print-game-text (lookup-text! *common-text* (text-id progress-lobby-title) #f) font-ctx #f 44 (bucket-id progress))))
-
+       (print-game-text (lookup-text! *common-text* (text-id progress-lobby-title) #f)
+                        font-ctx
+                        #f
+                        44
+                        (bucket-id progress))))
     (set-vector! (-> option box 0 color) 64 128 128 (the int (* 128.0 alpha)))
     (draw-lobby-box option (the float left-x) (the float (+ left-x total-width)) (the float top-y) (the float top-y))
-
     (with-dma-buffer-add-bucket ((buffer (-> *display* frames (-> *display* on-screen) global-buf))
                                  (bucket-id particles))
-      (draw-sprite2d-xy buffer details-x top-y details-width panel-height
-                        (new 'static 'rgba :r #x40 :g #x40 :b #x40 :a (the int (* 64.0 alpha)))))
-    )
-  )
+      (draw-sprite2d-xy buffer
+                        details-x
+                        top-y
+                        details-width
+                        panel-height
+                        (new 'static 'rgba :r #x40 :g #x40 :b #x40 :a (the int (* 64.0 alpha)))))))
 
 (defun draw-lobby-player-selection ((option menu-option) (player-index int) (player-count int) (alpha float))
   (let ((left-x 69)
@@ -245,10 +231,7 @@
         (list-height 216)
         (layout-count (max 4 player-count)))
     (case (get-aspect-ratio)
-      (('aspect16x9)
-       (set! left-x 79)
-       (set! list-width 166)
-       (set! list-height 248)))
+      (('aspect16x9) (set! left-x 79) (set! list-width 166) (set! list-height 248)))
     (#when PC_PORT
       (when (not (-> *pc-settings* use-vis?))
         (set! left-x (the int (adjust-game-x (the float left-x))))
@@ -279,38 +262,25 @@
                         (the float (+ left-x list-width))
                         (the float row-bottom)
                         (the float list-bottom)))
-      (with-dma-buffer-add-bucket ((buffer (-> *display*
-                                               frames
-                                               (-> *display* on-screen)
-                                               global-buf))
+      (with-dma-buffer-add-bucket ((buffer (-> *display* frames (-> *display* on-screen) global-buf))
                                    (bucket-id particles))
         (draw-sprite2d-xy buffer
                           left-x
                           row-top
                           list-width
                           (- row-bottom row-top)
-                          (new 'static 'rgba
-                               :r #x40
-                               :g #x40
-                               :b #x40
-                               :a (the int (* 64.0 alpha)))))))
-  )
+                          (new 'static 'rgba :r #x40 :g #x40 :b #x40 :a (the int (* 64.0 alpha))))))))
 
 (defun get-player-name ((player-index int))
   (let ((record (mp-player-record-by-id (the-as uint player-index))))
     (if (and record (nonzero? (the-as uint record)) (nonzero? (-> record identity identity-ready?)))
       (mp-player-copy-name! *mp-lobby-name-tag* (the-as uint player-index))
-      #f
-      )
-    )
-  )
+      #f)))
 
 (defun mp-lobby-player-name-scale ((player-name string) (base-scale float))
-  (if (and player-name
-           (nonzero? (the-as uint player-name))
-           (> (length player-name) MP_LOBBY_LONG_NAME_LENGTH))
-      (* base-scale MP_LOBBY_LONG_NAME_SCALE)
-      base-scale))
+  (if (and player-name (nonzero? (the-as uint player-name)) (> (length player-name) MP_LOBBY_LONG_NAME_LENGTH))
+    (* base-scale MP_LOBBY_LONG_NAME_SCALE)
+    base-scale))
 
 (defun draw-lobby-player-name ((font-ctx font-context) (player-index int) (player-count int) (selected? symbol))
   (let ((text-x 84)
@@ -320,16 +290,12 @@
         (limit (the int (pc-multi-get-session-player-limit)))
         (player-name (get-player-name player-index)))
     (case (get-aspect-ratio)
-      (('aspect16x9)
-       (set! text-x 94)
-       (set! list-height 248)))
+      (('aspect16x9) (set! text-x 94) (set! list-height 248)))
     (#when PC_PORT
       (when (not (-> *pc-settings* use-vis?))
         (set! text-x (the int (adjust-game-x (the float text-x))))))
     (let* ((row-height (/ (the float list-height) (the float layout-count)))
-           (layout-scale (if (> player-count 4)
-                             (/ 4.0 (the float player-count))
-                             1.0))
+           (layout-scale (if (> player-count 4) (/ 4.0 (the float player-count)) 1.0))
            (row-top (+ (the float top-y) (* row-height (the float player-index)))))
       (set-height! font-ctx (the int (* 42.0 layout-scale)))
       (set-flags! font-ctx (font-flags kerning large))
@@ -345,10 +311,8 @@
                    (lookup-text! *common-text* (text-id progress-lobby-slot-closed) #f)
                    (+ player-index 1))
            (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))))
-
         (player-name
-         (let ((ready? (or (= player-index (the int (pc-multi-get-host-player-id)))
-                           (mp-lobby-player-ready? player-index)))
+         (let ((ready? (or (= player-index (the int (pc-multi-get-host-player-id))) (mp-lobby-player-ready? player-index)))
                (cur-x (the float text-x)))
            (when ready?
              (let* ((icon-scale (* 0.6 layout-scale))
@@ -361,16 +325,15 @@
                (let ((icon-width (-> (get-string-length icon-str font-ctx) length)))
                  (print-game-text icon-str font-ctx #f 44 (bucket-id progress))
                  (set! cur-x (+ cur-x icon-width (* 6.0 layout-scale))))))
-           (let* ((name-scale (* (mp-lobby-player-name-scale (the-as string player-name) 0.6)
-                                 layout-scale))
+           (let* ((name-scale (* (mp-lobby-player-name-scale (the-as string player-name) 0.6) layout-scale))
                   (name-y (+ row-top (* 0.5 (- row-height (* 28.0 name-scale))))))
              (set-scale! font-ctx name-scale)
              (set-color! font-ctx (mp-player-font-color-by-id player-index))
              (set! (-> font-ctx origin x) cur-x)
              (set! (-> font-ctx origin y) name-y)
              (format (clear *temp-string*) "~S" player-name)
-             (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress)))))
-
+             (pc-encode-utf8-string *temp-string* *pc-encoded-temp-string*)
+             (print-game-text *pc-encoded-temp-string* font-ctx #f 44 (bucket-id progress)))))
         (else
          (let* ((font-scale (* 0.45 layout-scale))
                 (text-y (+ row-top (* 0.5 (- row-height (* 28.0 font-scale))))))
@@ -382,22 +345,19 @@
                    (lookup-text! *common-text* (text-id progress-lobby-slot-open) #f)
                    (+ player-index 1))
            (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress)))))))
-  (none)
-  )
+  (none))
 
 (defun draw-lobby-player-details ((font-ctx font-context) (player-index int) (alpha float))
   (let ((limit (the int (pc-multi-get-session-player-limit)))
-        (setup-status (pc-multi-get-host-setup-status))
+        (setup-status (mp-host-setup-ui-state))
         (player-name (get-player-name player-index))
         (record (mp-player-record-by-id (the-as uint player-index)))
         (details-x 265)
         (details-width 160))
-
     (#when PC_PORT
-          (when (not (-> *pc-settings* use-vis?))
-            (set! details-x (the int (adjust-game-x (the float details-x))))
-            (set! details-width (the int (* (-> *pc-settings* aspect-ratio-reciprocal) details-width)))))
-
+      (when (not (-> *pc-settings* use-vis?))
+        (set! details-x (the int (adjust-game-x (the float details-x))))
+        (set! details-width (the int (* (-> *pc-settings* aspect-ratio-reciprocal) details-width)))))
     (set! (-> font-ctx alpha) alpha)
     (set! (-> font-ctx origin x) (the float details-x))
     (set! (-> font-ctx origin y) 130.0)
@@ -405,106 +365,133 @@
     (set-height! font-ctx 30)
     (set-flags! font-ctx (font-flags kerning large middle))
     (set-color! font-ctx (font-color progress))
-
     (cond
       ((>= player-index limit)
        (set-scale! font-ctx 0.6)
        (set-color! font-ctx (font-color progress-option-off))
-       (format (clear *temp-string*) (lookup-text! *common-text* (text-id progress-lobby-slot-closed) #f) (+ player-index 1))
+       (format (clear *temp-string*)
+               (lookup-text! *common-text* (text-id progress-lobby-slot-closed) #f)
+               (+ player-index 1))
        (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress)))
-
       ((and record (nonzero? record))
        (set-scale! font-ctx (mp-lobby-player-name-scale (the-as string player-name) 0.7))
        (set-color! font-ctx (mp-player-font-color-by-id player-index))
        (format (clear *temp-string*) "~S" player-name)
-       (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
-
+       (pc-encode-utf8-string *temp-string* *pc-encoded-temp-string*)
+       (print-game-text *pc-encoded-temp-string* font-ctx #f 44 (bucket-id progress))
        (+! (-> font-ctx origin y) 40.0)
        (set-scale! font-ctx 0.4)
        (set-color! font-ctx (font-color progress))
-       (print-game-text (lookup-text! *common-text* (text-id progress-lobby-playing-as) #f) font-ctx #f 44 (bucket-id progress))
-
+       (print-game-text (lookup-text! *common-text* (text-id progress-lobby-playing-as) #f)
+                        font-ctx
+                        #f
+                        44
+                        (bucket-id progress))
        (+! (-> font-ctx origin y) 18.0)
        (set-scale! font-ctx 0.5)
        (set-color! font-ctx (font-color progress))
        (if (and (not (mp-lobby-local-player-ready?)) (= player-index (the int (pc-multi-get-local-player-id))))
-           (format (clear *temp-string*)
-                   (lookup-text! *common-text* (text-id progress-lobby-character-select-format) #f)
-                   (mp-lobby-character-name (-> record identity character)))
-           (format (clear *temp-string*) "~S" (mp-lobby-character-name (-> record identity character))))
+         (format (clear *temp-string*)
+                 (lookup-text! *common-text* (text-id progress-lobby-character-select-format) #f)
+                 (mp-lobby-character-name (-> record identity character)))
+         (format (clear *temp-string*) "~S" (mp-lobby-character-name (-> record identity character))))
        (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress)))
-
       (else
        (set-scale! font-ctx 0.4)
-       (format (clear *temp-string*) (lookup-text! *common-text* (text-id progress-lobby-slot-open) #f) (+ player-index 1))
+       (format (clear *temp-string*)
+               (lookup-text! *common-text* (text-id progress-lobby-slot-open) #f)
+               (+ player-index 1))
        (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))))
-    
     (set-flags! font-ctx (font-flags kerning large))
-
     (if (= (pc-multi-is-lobby-host) 1)
       (begin
         (set! (-> font-ctx origin y) 240.0)
         (set-scale! font-ctx 0.42)
-        (format (clear *temp-string*) (lookup-text! *common-text* (text-id progress-lobby-nat-status) #f) (mp-lobby-host-status-text font-ctx))
+        (format (clear *temp-string*)
+                (lookup-text! *common-text* (text-id progress-lobby-nat-status) #f)
+                (mp-lobby-host-status-text font-ctx))
         (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
-
         (set-scale! font-ctx 0.35)
         (set! (-> font-ctx origin y) 260.0)
         (if (mp-lobby-countdown-active?)
-            (set-color! font-ctx (font-color progress-option-off))
-            (set-color! font-ctx (font-color progress)))
-        (print-game-text (lookup-text! *common-text* (text-id progress-lobby-player-color) #f) font-ctx #f 44 (bucket-id progress))
-
+          (set-color! font-ctx (font-color progress-option-off))
+          (set-color! font-ctx (font-color progress)))
+        (print-game-text (lookup-text! *common-text* (text-id progress-lobby-player-color) #f)
+                         font-ctx
+                         #f
+                         44
+                         (bucket-id progress))
         (set! (-> font-ctx origin y) 280.0)
         (if (or (= setup-status 1) (= setup-status 2) (mp-lobby-countdown-active?))
-            (set-color! font-ctx (font-color progress-option-off))
-            (set-color! font-ctx (font-color progress)))
-        (let ((copy-mode (pc-multi-get-host-copy-mode)))
+          (set-color! font-ctx (font-color progress-option-off))
+          (set-color! font-ctx (font-color progress)))
+        (let ((copy-mode (pc-multi-get-host-access-kind)))
           (when (!= copy-mode 0)
             (if (= copy-mode 1)
-              (print-game-text (lookup-text! *common-text* (text-id progress-lobby-copy-invite) #f) font-ctx #f 44 (bucket-id progress))
-              (print-game-text (lookup-text! *common-text* (text-id progress-lobby-copy-room-code) #f) font-ctx #f 44 (bucket-id progress))
-              )
-            )
-          )
-
+              (print-game-text (lookup-text! *common-text* (text-id progress-lobby-copy-invite) #f)
+                               font-ctx
+                               #f
+                               44
+                               (bucket-id progress))
+              (print-game-text (lookup-text! *common-text* (text-id progress-lobby-copy-room-code) #f)
+                               font-ctx
+                               #f
+                               44
+                               (bucket-id progress)))))
         (set! (-> font-ctx origin y) 300.0)
         (if (mp-lobby-countdown-active?)
-            (begin
+          (begin
+            (set-color! font-ctx (font-color progress))
+            (print-game-text (lookup-text! *common-text* (text-id progress-lobby-cancel-start) #f)
+                             font-ctx
+                             #f
+                             44
+                             (bucket-id progress)))
+          (begin
+            (if (mp-lobby-all-peers-ready?)
               (set-color! font-ctx (font-color progress))
-              (print-game-text (lookup-text! *common-text* (text-id progress-lobby-cancel-start) #f) font-ctx #f 44 (bucket-id progress)))
-            (begin
-              (if (mp-lobby-all-peers-ready?)
-                  (set-color! font-ctx (font-color progress))
-                  (set-color! font-ctx (font-color progress-option-off)))
-              (print-game-text (lookup-text! *common-text* (text-id progress-lobby-start-game) #f) font-ctx #f 44 (bucket-id progress))))
-        )
+              (set-color! font-ctx (font-color progress-option-off)))
+            (print-game-text (lookup-text! *common-text* (text-id progress-lobby-start-game) #f)
+                             font-ctx
+                             #f
+                             44
+                             (bucket-id progress)))))
       (begin
         (set! (-> font-ctx origin y) 280.0)
         (set-scale! font-ctx 0.35)
-        (if (or (mp-lobby-local-player-ready?) (mp-lobby-countdown-active?) (= (pc-multi-get-status) (mp-connection-status game-starting)))
-            (set-color! font-ctx (font-color progress-option-off))
-            (set-color! font-ctx (font-color progress)))
-        (print-game-text (lookup-text! *common-text* (text-id progress-lobby-player-color) #f) font-ctx #f 44 (bucket-id progress))
-
+        (if (or (mp-lobby-local-player-ready?)
+                (mp-lobby-countdown-active?)
+                (= (pc-multi-get-session-status) (mp-connection-status game-starting)))
+          (set-color! font-ctx (font-color progress-option-off))
+          (set-color! font-ctx (font-color progress)))
+        (print-game-text (lookup-text! *common-text* (text-id progress-lobby-player-color) #f)
+                         font-ctx
+                         #f
+                         44
+                         (bucket-id progress))
         (set! (-> font-ctx origin y) 300.0)
         (set-scale! font-ctx 0.35)
-        (if (or (mp-lobby-countdown-active?) (= (pc-multi-get-status) (mp-connection-status game-starting)))
-            (set-color! font-ctx (font-color progress-option-off))
-            (set-color! font-ctx (font-color progress)))
+        (if (or (mp-lobby-countdown-active?) (= (pc-multi-get-session-status) (mp-connection-status game-starting)))
+          (set-color! font-ctx (font-color progress-option-off))
+          (set-color! font-ctx (font-color progress)))
         (if (mp-lobby-local-player-ready?)
-            (print-game-text (lookup-text! *common-text* (text-id progress-lobby-unready) #f) font-ctx #f 44 (bucket-id progress))
-            (print-game-text (lookup-text! *common-text* (text-id progress-lobby-ready) #f) font-ctx #f 44 (bucket-id progress)))
-        )
-      )
-    )
-  )
+          (print-game-text (lookup-text! *common-text* (text-id progress-lobby-unready) #f)
+                           font-ctx
+                           #f
+                           44
+                           (bucket-id progress))
+          (print-game-text (lookup-text! *common-text* (text-id progress-lobby-ready) #f)
+                           font-ctx
+                           #f
+                           44
+                           (bucket-id progress)))))))
 
 (defmethod respond-progress ((this menu-lobby-player-option) (p progress) (selected? symbol))
   (when (and p (nonzero? (the-as uint p)))
     (set! (-> p selected-option) #f)
-    (let ((setup-status (pc-multi-get-host-setup-status))
-          (countdown? (or (mp-lobby-countdown-active?) (= (pc-multi-get-status) (mp-connection-status game-starting))))
+    (let ((setup-status (mp-host-setup-ui-state))
+          (countdown? (or (mp-lobby-countdown-active?)
+                          (= (pc-multi-get-session-status) (mp-connection-status game-starting))))
           (host? (= (pc-multi-is-lobby-host) 1))
           (local-ready? (mp-lobby-local-player-ready?)))
       (cond
@@ -512,47 +499,37 @@
          (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons circle))
          (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons circle))
          (if (or countdown? (and (not host?) local-ready?))
-             (sound-play "menu-error")
-             (begin
-               (sound-play "generic-beep")
-               (mp-player-color-progress-enter! p))))
-
+           (sound-play "menu-error")
+           (begin
+             (sound-play "generic-beep")
+             (mp-player-color-progress-enter! p))))
         ((cpad-pressed? 0 triangle)
          (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons triangle))
          (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons triangle))
          (when (and host? countdown?)
            (mp-lobby-cancel-countdown!))
          (mp-lobby-leave! p))
-
         ((cpad-pressed? 0 l1 r1)
          (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons l1 r1))
          (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons l1 r1))
          (if (or countdown? (and (not host?) local-ready?))
-             (sound-play "menu-error")
-             (when (= (-> p option-index) (the int (pc-multi-get-local-player-id)))
-               (mp-lobby-toggle-local-character!))))
-
+           (sound-play "menu-error")
+           (when (= (-> p option-index) (the int (pc-multi-get-local-player-id)))
+             (mp-lobby-toggle-local-character!))))
         ((cpad-pressed? 0 square)
          (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons square))
          (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons square))
          (when (and host? (not countdown?) (!= setup-status 1) (!= setup-status 2))
            (mp-lobby-copy-host-access!)))
-
         ((cpad-pressed? 0 confirm)
          (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons confirm))
          (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons confirm))
          (if host?
-             (if countdown?
-                 (mp-lobby-cancel-countdown!)
-                 (if (mp-lobby-all-peers-ready?)
-                     (mp-lobby-start-countdown!)
-                     (sound-play "menu-error")))
-             (if countdown?
-                 (sound-play "menu-error")
-                 (mp-lobby-toggle-local-ready!))))
-        )))
-  0
-  )
+           (if countdown?
+             (mp-lobby-cancel-countdown!)
+             (if (mp-lobby-all-peers-ready?) (mp-lobby-start-countdown!) (sound-play "menu-error")))
+           (if countdown? (sound-play "menu-error") (mp-lobby-toggle-local-ready!)))))))
+  0)
 
 (defmethod draw-option ((this menu-lobby-player-option)
                         (p progress)
@@ -560,14 +537,11 @@
                         (player-index int)
                         (selected? symbol))
   (local-vars (old-x float) (old-y float) (old-width float) (old-height float) (old-scale float) (old-alpha float))
-
   (let ((alpha (* 2.0 (- 0.5 (-> p menu-transition))))
         (selected-player (-> p option-index))
         (player-count (length (-> p current-options options))))
-
     (when (< alpha 0.0)
       (set! alpha 0.0))
-
     (set! old-x (-> font-ctx origin x))
     (set! old-y (-> font-ctx origin y))
     (set! old-width (-> font-ctx width))
@@ -575,18 +549,13 @@
     (set! old-scale (-> font-ctx scale))
     (set! old-alpha (-> font-ctx alpha))
     (set! (-> font-ctx alpha) alpha)
-
     (when (zero? player-index)
       (draw-lobby-decoration this font-ctx alpha))
-
     (when (= player-index selected-player)
       (draw-lobby-player-selection this player-index player-count alpha))
-    
     (draw-lobby-player-name font-ctx player-index player-count (= player-index selected-player))
-
     (when (= player-index selected-player)
       (draw-lobby-player-details font-ctx player-index alpha))
-
     (set! (-> font-ctx origin x) old-x)
     (set! (-> font-ctx origin y) old-y)
     (set! (-> font-ctx width) old-width)
@@ -594,47 +563,63 @@
     (set! (-> font-ctx scale) old-scale)
     (set! (-> font-ctx alpha) old-alpha))
   0
-  (none)
-  )
+  (none))
 
 (defun mp-lobby-build-player-options! ()
   (let ((player-limit (the int (pc-multi-get-session-player-limit))))
     (set! *mp-lobby-player-options*
-          (the-as (array menu-option)
-            ((method-of-type array new) 'global array menu-option player-limit)))
+          (the-as (array menu-option) ((method-of-type array new) 'global array menu-option player-limit)))
     (dotimes (i player-limit)
       (set! (-> *mp-lobby-player-options* i)
             (new 'static 'menu-lobby-player-option :name (text-id progress-lobby-slot-open)))))
   (none))
 
 (define *mp-lobby-options-pc*
-  (new 'static 'menu-option-list
-    :y-center #xbe
-    :y-space 26
-    :scale 0.76
-    :options #f
-    :on-tick
-    (lambda ((p progress))
-      (when (and p (nonzero? (the-as uint p)))
-        (let ((status (pc-multi-get-status)))
-          (cond
-            ((or (= status (mp-connection-status host-left))
-                 (= status (mp-connection-status failed)))
-             (mp-lobby-leave! p))
-            ((mp-lobby-countdown-active?)
-             (let ((host? (= (pc-multi-is-lobby-host) 1))
-                   (sec-rem (mp-lobby-countdown-seconds-remaining)))
-               (when (and host? (not (mp-lobby-all-peers-ready?)))
-                 (mp-lobby-cancel-countdown!))
-               (when (and (> sec-rem 0) (!= sec-rem *mp-lobby-last-countdown-sec*))
-                 (set! *mp-lobby-last-countdown-sec* sec-rem)
-                 (sound-play "roll-over"))
-               (when (and host? (<= sec-rem 0))
-                 (set! *mp-lobby-last-countdown-sec* -1)
-                 (mp-lobby-launch-game! p))))
-            (else
-             (set! *mp-lobby-last-countdown-sec* -1)))))
-      (none))))
+  (new 'static
+       'menu-option-list
+       :y-center #xbe
+       :y-space 26
+       :scale 0.76
+       :options #f
+       :on-tick
+       (lambda ((p progress))
+         (when (nonnull? p)
+           (let ((status (pc-multi-get-session-status)))
+             (cond
+               ((mp-lobby-wait-terminal? status) (mp-lobby-leave! p))
+               ((mp-lobby-countdown-active?)
+                (let ((host? (= (pc-multi-is-lobby-host) 1))
+                      (sec-rem (mp-lobby-countdown-seconds-remaining)))
+                  (when (and host? (not (mp-lobby-all-peers-ready?)))
+                    (mp-lobby-cancel-countdown!))
+                  (when (and (> sec-rem 0) (!= sec-rem *mp-lobby-last-countdown-sec*))
+                    (set! *mp-lobby-last-countdown-sec* sec-rem)
+                    (sound-play "roll-over"))
+                  (when (and host? (<= sec-rem 0))
+                    (set! *mp-lobby-last-countdown-sec* -1)
+                    (mp-lobby-launch-game! p))))
+               ((and (= (pc-multi-is-lobby-host) 0) (= status (mp-connection-status game-starting)))
+                (when (not (async-task-active? 'mp-lobby-client-launch))
+                  (run-async-task :owner p
+                                  :tag 'mp-lobby-client-launch
+                                  :timeout 900
+                                  :poll
+                                  (lambda ((task async-task) (owner process))
+                                    (let ((current-status (pc-multi-get-session-status)))
+                                      (cond
+                                        ((mp-lobby-wait-terminal? current-status) 'fail)
+                                        ((= current-status (mp-connection-status in-game)) 'success)
+                                        (else 'continue))))
+                                  :on-success
+                                  (lambda ((task async-task) (owner process))
+                                    (when (nonnull? owner)
+                                      (set-next-state (the-as progress owner) 'go-away 0)))
+                                  :on-fail
+                                  (lambda ((task async-task) (owner process) (reason symbol))
+                                    (when (nonnull? owner)
+                                      (mp-lobby-leave! (the-as progress owner)))))))
+               (else (set! *mp-lobby-last-countdown-sec* -1)))))
+         (none))))
 
 (defun mp-lobby-setup-options! ((p progress))
   (set! *mp-lobby-last-countdown-sec* -1)
@@ -642,4 +627,65 @@
   (set! (-> *mp-lobby-options-pc* options) *mp-lobby-player-options*)
   (set! (-> p current-options) *mp-lobby-options-pc*)
   (set! (-> p option-index) (the int (pc-multi-get-local-player-id)))
+  (none))
+
+(defun mp-lobby-prepare-host-options! ((p progress))
+  (when (nonnull? p *mp-lobby-options-pc* *loading-options* (-> *loading-options* options))
+    (set! *mp-lobby-last-countdown-sec* -1)
+    (set! *mp-lobby-player-options* (the-as (array menu-option) #f))
+    (set! (-> *mp-lobby-options-pc* options) (-> *loading-options* options))
+    (set! (-> p current-options) *mp-lobby-options-pc*)
+    (set! (-> p option-index) 0))
+  (none))
+
+(defun mp-lobby-client-searching? ((p progress))
+  (and (nonnull? p)
+       (= (-> p next) 'none)
+       (or (= (-> p current) 'searching-game) (= (-> p current) 'connecting-invite) (= (-> p current) 'direct-searching))))
+
+(defun mp-lobby-start-host-wait! ((p progress))
+  (when (nonnull? p)
+    (run-async-task :owner p
+                    :tag 'mp-lobby-host-ready
+                    :timeout MP_LOBBY_HOST_WAIT_TIMEOUT_TICKS
+                    :poll
+                    (lambda ((task async-task) (owner process))
+                      (let ((prog (the-as progress owner))
+                            (status (pc-multi-get-session-status)))
+                        (cond
+                          ((!= (-> prog current) 'mp-lobby) 'fail)
+                          ((mp-lobby-wait-terminal? status) 'fail)
+                          (else
+                           (when (and (= (-> task user-data) 0)
+                                      (or (= status (mp-connection-status connecting))
+                                          (= status (mp-connection-status game-starting))))
+                             (set! (-> task user-data) (the uint 1))
+                             (pc-multi-session-enter-lobby))
+                           (if (and (= status (mp-connection-status lobby)) (= (pc-multi-is-lobby-host) 1)) 'success 'continue)))))
+                    :on-success
+                    (lambda ((task async-task) (owner process))
+                      (mp-lobby-setup-options! (the-as progress owner)))
+                    :on-fail
+                    (lambda ((task async-task) (owner process) (reason symbol))
+                      (when (nonnull? owner)
+                        (mp-lobby-leave! (the-as progress owner))))))
+  (none))
+
+(defun mp-lobby-start-client-wait! ((p progress))
+  (when (nonnull? p)
+    (run-async-task :owner p
+                    :tag 'mp-lobby-client-ready
+                    :poll
+                    (lambda ((task async-task) (owner process))
+                      (let ((prog (the-as progress owner))
+                            (status (pc-multi-get-session-status)))
+                        (cond
+                          ((not (mp-lobby-client-searching? prog)) 'fail)
+                          ((mp-lobby-wait-terminal? status) 'fail)
+                          ((= status (mp-connection-status lobby)) 'success)
+                          (else 'continue))))
+                    :on-success
+                    (lambda ((task async-task) (owner process))
+                      (sound-play "generic-beep")
+                      (set-next-state (the-as progress owner) 'mp-lobby 0))))
   (none))

@@ -10,30 +10,18 @@
 (defconstant MP_MAX_RACE_VEHICLES 10)
 
 (defun mp-mission-vehicle-id? ((net-id uint))
-  (>= net-id MP_MISSION_VEHICLE_ID_BASE)
-  )
+  (>= net-id MP_MISSION_VEHICLE_ID_BASE))
 
 (defun mp-race-vehicle-id? ((net-id uint))
-  (>= net-id MP_RACE_VEHICLE_ID_BASE)
-  )
+  (>= net-id MP_RACE_VEHICLE_ID_BASE))
 
 (defun mp-mission-vehicle-matches-net-id? ((proc process) (net-id uint))
-  (and proc
-       (nonzero? proc)
-       (type? proc vehicle)
-       (= (-> (the-as vehicle proc) net-id) net-id))
-  )
+  (and proc (nonzero? proc) (type? proc vehicle) (= (-> (the-as vehicle proc) net-id) net-id)))
 
 (defun mp-mission-vehicle-assign-net-id! ((proc process) (mission-net-id uint))
-  "Give a mission-owned vehicle a deterministic multiplayer identity."
-  (when (and proc
-             (nonzero? proc)
-             (type? proc vehicle)
-             (mp-mission-vehicle-id? mission-net-id))
-    (set! (-> (the-as vehicle proc) net-id) mission-net-id)
-    )
-  (none)
-  )
+  (when (and proc (nonzero? proc) (type? proc vehicle) (mp-mission-vehicle-id? mission-net-id))
+    (set! (-> (the-as vehicle proc) net-id) mission-net-id))
+  (none))
 
 (defun mp-mission-vehicle-find-in-task-manager ((task-proc task-manager) (net-id uint))
   (let ((found-proc (the-as vehicle #f)))
@@ -41,74 +29,36 @@
       (when (not found-proc)
         (let ((slave-proc (handle->process-safe (-> task-proc slave slot-idx))))
           (when (mp-mission-vehicle-matches-net-id? slave-proc net-id)
-            (set! found-proc (the-as vehicle slave-proc))
-            )
-          )
-        )
-      )
-    found-proc
-    )
-  )
+            (set! found-proc (the-as vehicle slave-proc))))))
+    found-proc))
 
 (defun mp-mission-vehicle-find-in-traffic-manager ((net-id uint))
-  "Find a reserved mission vehicle that exists as a traffic-manager child."
   (let ((found-proc (the-as vehicle #f)))
-    (when (and *traffic-manager*
-               (nonzero? *traffic-manager*)
-               (mp-mission-vehicle-id? net-id))
+    (when (and *traffic-manager* (nonzero? *traffic-manager*) (mp-mission-vehicle-id? net-id))
       (let ((curr (-> *traffic-manager* child)))
         (while (and curr (nonzero? curr) (not found-proc))
           (let ((proc (the-as process (ppointer->process curr))))
             (when (mp-mission-vehicle-matches-net-id? proc net-id)
-              (set! found-proc (the-as vehicle proc))
-              )
-            )
+              (set! found-proc (the-as vehicle proc))))
           (when (not found-proc)
-            (set! curr (-> curr 0 brother))
-            )
-          )
-        )
-      )
-    found-proc
-    )
-  )
+            (set! curr (-> curr 0 brother))))))
+    found-proc))
 
 (defun mp-mission-vehicle-find-by-net-id ((net-id uint))
-  "Find mission-owned vehicles that already exist locally."
   (let ((found-proc (the-as vehicle #f)))
     (set! found-proc (mp-mission-vehicle-find-in-traffic-manager net-id))
-    (when (and *task-manager-engine*
-               (nonzero? *task-manager-engine*)
-               (not found-proc)
-               (mp-mission-vehicle-id? net-id))
+    (when (and *task-manager-engine* (nonzero? *task-manager-engine*) (not found-proc) (mp-mission-vehicle-id? net-id))
       (let ((task-link (the-as connection (-> *task-manager-engine* alive-list next0))))
         *task-manager-engine*
-        (while (and (not found-proc)
-                    (!= task-link (-> *task-manager-engine* alive-list-end)))
+        (while (and (not found-proc) (!= task-link (-> *task-manager-engine* alive-list-end)))
           (let ((task-proc (the-as task-manager (-> task-link param1))))
             (when (and task-proc (nonzero? task-proc))
-              (set! found-proc (mp-mission-vehicle-find-in-task-manager task-proc net-id))
-              )
-            )
-          (set! task-link (the-as connection (-> task-link next0)))
-          )
-        )
-      )
-    found-proc
-    )
-  )
+              (set! found-proc (mp-mission-vehicle-find-in-task-manager task-proc net-id))))
+          (set! task-link (the-as connection (-> task-link next0))))))
+    found-proc))
 
 (defun mp-race-vehicle-net-id ((race-index int) (racer-index int))
-  (+ MP_RACE_VEHICLE_ID_BASE
-     (* race-index MP_MAX_RACE_VEHICLES)
-     (+ racer-index 1)))
-
-(defun mp-race-vehicle-race-index ((net-id uint))
-  (the int
-    (/ (- net-id MP_RACE_VEHICLE_ID_BASE 1)
-       MP_MAX_RACE_VEHICLES)))
+  (+ MP_RACE_VEHICLE_ID_BASE (* race-index MP_MAX_RACE_VEHICLES) (+ racer-index 1)))
 
 (defun mp-race-vehicle-racer-index ((net-id uint))
-  (mod
-    (the int (- net-id MP_RACE_VEHICLE_ID_BASE 1))
-    MP_MAX_RACE_VEHICLES))
+  (mod (the int (- net-id MP_RACE_VEHICLE_ID_BASE 1)) MP_MAX_RACE_VEHICLES))

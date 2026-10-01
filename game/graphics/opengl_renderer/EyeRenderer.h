@@ -1,16 +1,22 @@
 #pragma once
 
+#include <array>
 #include <string>
+#include <vector>
 
 #include "game/graphics/opengl_renderer/BucketRenderer.h"
 #include "game/graphics/opengl_renderer/opengl_utils.h"
 #include "game/graphics/pipelines/opengl.h"
+#include "game/multiplayer/jak2/wire/multiplayer_protocol.h"
 
 constexpr int EYE_BASE_BLOCK_JAK1 = 8160;
 constexpr int EYE_BASE_BLOCK_JAK2 = 3968;
 constexpr int EYE_BASE_BLOCK_JAK3 = 504;
 constexpr int NUM_EYE_PAIRS = 20;
 constexpr int SINGLE_EYE_SIZE = 32;
+constexpr u32 kPcEyePreviewInstanceId = kMPMaxPlayers;
+constexpr u32 kPcEyeInstanceCount = kPcEyePreviewInstanceId + 1;
+static_assert(kPcEyeInstanceCount <= UINT8_MAX);
 
 class EyeRenderer : public BucketRenderer {
  public:
@@ -22,11 +28,14 @@ class EyeRenderer : public BucketRenderer {
 
   void handle_eye_dma2(DmaFollower& dma, SharedRenderState* render_state, ScopedProfilerNode& prof);
   std::optional<u64> lookup_eye_texture(u8 eye_id);
+  std::optional<u64> lookup_eye_texture_instance(u32 instance_id, bool lr) const;
   std::optional<u64> lookup_eye_texture_hash(u64 hash, bool lr);
 
   struct SpriteInfo {
     u8 a;
     u64 uv0;  // stores hashed name of merc-ctrl that reads this eye.
+    u32 lid_tint_color;
+    float lid_tint_strength;
     u32 uv1[2];
     u32 xyz0[3];
     u32 xyz1[3];
@@ -61,9 +70,14 @@ class EyeRenderer : public BucketRenderer {
     GpuEyeTex() : fb(128, 128, GL_UNSIGNED_INT_8_8_8_8_REV) {}
   } m_gpu_eye_textures[NUM_EYE_PAIRS * 2];
 
-  // xyst per vertex, 4 vertices per square, 4 draws per eye, 11 pairs of eyes, 2 eyes per pair.
-  static constexpr int VTX_BUFFER_FLOATS = 4 * 4 * 4 * NUM_EYE_PAIRS * 2;
-  float m_gpu_vertex_buffer[VTX_BUFFER_FLOATS];
+  struct InstanceEyeTex {
+    FramebufferTexturePair fb;
+
+    InstanceEyeTex() : fb(128, 128, GL_UNSIGNED_INT_8_8_8_8_REV) {}
+  };
+
+  std::array<InstanceEyeTex, kPcEyeInstanceCount * 2> m_gpu_instance_eye_textures;
+  std::vector<float> m_gpu_vertex_buffer;
   GLuint m_vao;
   GLuint m_gl_vertex_buffer;
 
@@ -72,6 +86,9 @@ class EyeRenderer : public BucketRenderer {
     int lr;
     int pair;
     bool using_64 = false;
+    u32 instance_id = UINT32_MAX;
+    u32 lid_tint_color = 0;
+    float lid_tint_strength = 0.f;
 
     int tex_slot() const { return pair * 2 + lr; }
     EyeDraw iris;
@@ -88,5 +105,6 @@ class EyeRenderer : public BucketRenderer {
   };
 
   std::vector<SingleEyeDraws> get_draws(DmaFollower& dma, SharedRenderState* render_state);
+  FramebufferTexturePair& output_framebuffer(const SingleEyeDraws& draw);
   void run_gpu(const std::vector<SingleEyeDraws>& draws, SharedRenderState* render_state);
 };

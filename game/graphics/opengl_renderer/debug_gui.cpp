@@ -9,7 +9,9 @@
 #include "game/graphics/gfx.h"
 #include "game/graphics/screenshot.h"
 #include "game/kernel/common/kmachine.h"
+#include "game/multiplayer/platform/runtime/multiplayer_runtime.h"
 #include "game/overlord/jak3/dma.h"
+#include "game/runtime.h"
 #include "game/system/hid/sdl_util.h"
 
 #include "fmt/format.h"
@@ -109,6 +111,12 @@ void OpenGlDebugGui::draw(const DmaStats& dma_stats) {
       ImGui::MenuItem("Small Profiler", nullptr, &small_profiler);
       ImGui::MenuItem("Loader", nullptr, &m_draw_loader);
       ImGui::MenuItem("Overlord", nullptr, &m_draw_overlord);
+      if (g_game_version == GameVersion::Jak2) {
+        ImGui::MenuItem("Network Diagnostics", nullptr, &m_draw_network_debug);
+#ifdef ENABLE_NETWORK_SIMULATION
+        ImGui::MenuItem("Network Simulation", nullptr, &m_draw_network_simulation);
+#endif
+      }
       if (ImGui::MenuItem("Reboot In Debug Mode!")) {
         want_reboot_in_debug = true;
       }
@@ -275,6 +283,16 @@ void OpenGlDebugGui::draw(const DmaStats& dma_stats) {
   if (should_draw_overlord_debug()) {
     draw_overlord_debug_menu();
   }
+
+  if (g_game_version == GameVersion::Jak2 && m_draw_network_debug) {
+    m_network_debug_panel.draw(multiplayer::platform::multiplayer_runtime().snapshot(),
+                               &m_draw_network_debug);
+  }
+#ifdef ENABLE_NETWORK_SIMULATION
+  if (g_game_version == GameVersion::Jak2 && m_draw_network_simulation) {
+    m_network_simulation_panel.draw(&m_draw_network_simulation);
+  }
+#endif
 }
 
 void OpenGlDebugGui::draw_overlord_debug_menu() {

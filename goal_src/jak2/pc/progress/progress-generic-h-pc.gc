@@ -53,6 +53,17 @@
   (:methods
     (call-on-confirm (_type_ progress) none)))
 
+(deftype menu-generic-text-field-option (menu-generic-option)
+  "An input text field"
+  ((field int32)
+   (get-value-fn (function int string))
+   (set-value-fn (function int string int))
+   (max-bytes uint16)
+   (allowed-characters string)
+   (uppercase? symbol)
+   (session pc-text-input-session)
+   (cached-value string)))
+
 (deftype menu-generic-scrolling-page (menu-generic-option)
   "A menu option that holds menu options"
   (;; props

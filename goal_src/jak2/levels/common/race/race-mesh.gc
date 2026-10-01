@@ -12,35 +12,38 @@
         (sample-index (the int sample-t)))
     (set! (-> points 0 quad) (-> this samples sample-index pos quad))
     (set! (-> points 1 quad) (-> this samples (+ sample-index 1) pos quad))
-    (let ((fraction (- sample-t (the float sample-index))))
-      (vector-lerp! out (-> points 0) (-> points 1) fraction)))
+    (let ((fraction (- sample-t (the float sample-index)))) (vector-lerp! out (-> points 0) (-> points 1) fraction)))
   (none))
 
 (defmethod race-path-sample-at ((this race-path) (out-sample race-path-sample) (out-velocity vector) (sample-t float))
   (let ((samples (new 'stack-no-clear 'inline-array 'race-path-sample 6)))
     (let ((sample-count (the float (-> this sample-count))))
-      (if (< sample-count sample-t)
-          (set! sample-t (- sample-t sample-count)))
-      (if (< sample-t 0.0)
-          (set! sample-t (+ sample-t sample-count))))
+      (if (< sample-count sample-t) (set! sample-t (- sample-t sample-count)))
+      (if (< sample-t 0.0) (set! sample-t (+ sample-t sample-count))))
     (let ((sample-index (the int sample-t)))
       (mem-copy! (the-as pointer (-> samples 0)) (the-as pointer (-> this samples sample-index)) 32)
       (mem-copy! (the-as pointer (-> samples 1)) (the-as pointer (-> this samples (+ sample-index 1))) 32)
       (let ((next-index (+ sample-index 2)))
-        (if (< (the-as int (-> this sample-count)) next-index)
-            (set! next-index (- next-index (the-as int (-> this sample-count)))))
+        (if (< (the-as int (-> this sample-count)) next-index) (set! next-index (- next-index (the-as int (-> this sample-count)))))
         (mem-copy! (the-as pointer (-> samples 2)) (the-as pointer (-> this samples next-index)) 32))
       (let ((fraction (- sample-t (the float sample-index))))
-        (vector-lerp! (the-as vector (-> out-sample bytes)) (the-as vector (-> samples 0)) (the-as vector (-> samples 1)) fraction)
+        (vector-lerp! (the-as vector (-> out-sample bytes))
+                      (the-as vector (-> samples 0))
+                      (the-as vector (-> samples 1))
+                      fraction)
         (quaternion-slerp! (-> out-sample quat) (-> samples 0 quat) (-> samples 1 quat) fraction)
         (set! (-> out-sample stick-x)
-              (the int (+ 0.5 (* (the float (-> samples 1 stick-x)) fraction) (* (the float (-> samples 0 stick-x)) (- 1.0 fraction)))))
+              (the int
+                   (+ 0.5
+                      (* (the float (-> samples 1 stick-x)) fraction)
+                      (* (the float (-> samples 0 stick-x)) (- 1.0 fraction)))))
         (set! (-> out-sample stick-y) (-> samples 0 stick-y))
         (set! (-> out-sample throttle)
-              (the-as
-                uint
-                (the int
-                     (+ 0.5 (* (the float (-> samples 1 throttle)) fraction) (* (the float (-> samples 0 throttle)) (- 1.0 fraction))))))
+              (the-as uint
+                      (the int
+                           (+ 0.5
+                              (* (the float (-> samples 1 throttle)) fraction)
+                              (* (the float (-> samples 0 throttle)) (- 1.0 fraction))))))
         (set! (-> out-sample flags) (-> samples 0 flags))
         (vector-! (the-as vector (-> samples 4)) (the-as vector (-> samples 1)) (the-as vector (-> samples 0)))
         (vector-float*! (the-as vector (-> samples 3)) (the-as vector (-> samples 4)) 15.0)
@@ -50,7 +53,6 @@
   (none))
 
 (defmethod race-path-project-position ((this race-path) (position vector) (start-t float) (end-t float))
-  "Project a world position onto a path segment and return the corresponding sample position."
   (let ((wrapped-end-t end-t)
         (work (new 'stack-no-clear 'matrix))
         (sample-count (the float (-> this sample-count))))
@@ -58,12 +60,10 @@
       (set! wrapped-end-t (- wrapped-end-t sample-count)))
     (when (< start-t 0.0)
       (set! start-t (+ start-t sample-count)))
-
     (race-path-position-at this (the-as vector (-> work vector)) start-t end-t)
     (race-path-position-at this (-> work vector 1) wrapped-end-t end-t)
     (vector-! (-> work vector 2) (-> work vector 1) (the-as vector (-> work vector)))
     (vector-! (-> work trans) position (the-as vector (-> work vector)))
-
     (let* ((segment (-> work vector 2))
            (projection-dot (vector-dot segment (-> work trans)))
            (segment-length-sq (+ (* (-> segment x) (-> segment x))
@@ -86,14 +86,13 @@
     (while (< sample-index (the-as int last-index))
       (let ((sample-a (-> this samples sample-index))
             (sample-b (-> this samples next-index)))
-        (add-debug-line
-          #t
-          (bucket-id debug2)
-          (the-as vector (-> sample-a bytes))
-          (the-as vector (-> sample-b bytes))
-          color-a
-          #f
-          color-b))
+        (add-debug-line #t
+                        (bucket-id debug2)
+                        (the-as vector (-> sample-a bytes))
+                        (the-as vector (-> sample-b bytes))
+                        color-a
+                        #f
+                        color-b))
       (set! sample-index next-index)
       (set! next-index (min (+ next-index 1) (the-as int last-index)))))
   (none))
@@ -101,8 +100,7 @@
 (defmethod debug-draw-path ((this race-mesh) (path-index int) (group-index int) (color-a rgba) (color-b rgba))
   (when (< group-index (the-as int (-> this path-group-count)))
     (let ((group (-> this path-groups group-index)))
-      (if (< path-index (-> group path-count))
-          (draw-path-debug (-> group paths path-index) color-a color-b))))
+      (if (< path-index (-> group path-count)) (draw-path-debug (-> group paths path-index) color-a color-b))))
   (none))
 
 (defmethod debug-draw-path-from-history ((this race-mesh) (record-id int) (group-index int))
@@ -111,23 +109,26 @@
       (countdown (path-index (-> group path-count))
         (let ((path (-> group paths path-index)))
           (when (= (-> path record-id) record-id)
-            (let ((colors (new 'static 'array rgba 16
-                          (new 'static 'rgba :r #x40 :a #x80)
-                          (new 'static 'rgba :r #xff :g #x30 :b #x30 :a #x80)
-                          (new 'static 'rgba :g #xff :a #x80)
-                          (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
-                          (new 'static 'rgba :b #xff :a #x80)
-                          (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
-                          (new 'static 'rgba :r #x60 :g #x60 :b #x60 :a #x80)
-                          (new 'static 'rgba :r #xff :g #xff :a #x80)
-                          (new 'static 'rgba :g #xff :b #xff :a #x80)
-                          (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
-                          (new 'static 'rgba :r #xff :b #xff :a #x80)
-                          (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
-                          (new 'static 'rgba :r #xff :g #x80 :b #x40 :a #x80)
-                          (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
-                          (new 'static 'rgba :a #x80)
-                          (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)))
+            (let ((colors (new 'static
+                               'array
+                               rgba
+                               16
+                               (new 'static 'rgba :r #x40 :a #x80)
+                               (new 'static 'rgba :r #xff :g #x30 :b #x30 :a #x80)
+                               (new 'static 'rgba :g #xff :a #x80)
+                               (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
+                               (new 'static 'rgba :b #xff :a #x80)
+                               (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
+                               (new 'static 'rgba :r #x60 :g #x60 :b #x60 :a #x80)
+                               (new 'static 'rgba :r #xff :g #xff :a #x80)
+                               (new 'static 'rgba :g #xff :b #xff :a #x80)
+                               (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
+                               (new 'static 'rgba :r #xff :b #xff :a #x80)
+                               (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
+                               (new 'static 'rgba :r #xff :g #x80 :b #x40 :a #x80)
+                               (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
+                               (new 'static 'rgba :a #x80)
+                               (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)))
                   (color-index (* record-id 2)))
               (draw-path-debug path (-> colors color-index) (-> colors (+ color-index 1))))
             (return #f)))))
@@ -137,38 +138,34 @@
   (let* ((slice (-> this slices slice-id))
          (start-edge (-> this edges (-> slice start-edge)))
          (end-edge (-> this edges (-> slice end-edge))))
-    (add-debug-line
-      #t
-      (bucket-id debug-no-zbuf1)
-      (-> start-edge left)
-      (-> start-edge right)
-      (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
-      #f
-      (the-as rgba -1))
-    (add-debug-line
-      #t
-      (bucket-id debug-no-zbuf1)
-      (-> start-edge right)
-      (-> end-edge right)
-      (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
-      #f
-      (the-as rgba -1))
-    (add-debug-line
-      #t
-      (bucket-id debug-no-zbuf1)
-      (-> end-edge right)
-      (-> end-edge left)
-      (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
-      #f
-      (the-as rgba -1))
-    (add-debug-line
-      #t
-      (bucket-id debug-no-zbuf1)
-      (-> end-edge left)
-      (-> start-edge left)
-      (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
-      #f
-      (the-as rgba -1))
+    (add-debug-line #t
+                    (bucket-id debug-no-zbuf1)
+                    (-> start-edge left)
+                    (-> start-edge right)
+                    (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
+                    #f
+                    (the-as rgba -1))
+    (add-debug-line #t
+                    (bucket-id debug-no-zbuf1)
+                    (-> start-edge right)
+                    (-> end-edge right)
+                    (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
+                    #f
+                    (the-as rgba -1))
+    (add-debug-line #t
+                    (bucket-id debug-no-zbuf1)
+                    (-> end-edge right)
+                    (-> end-edge left)
+                    (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
+                    #f
+                    (the-as rgba -1))
+    (add-debug-line #t
+                    (bucket-id debug-no-zbuf1)
+                    (-> end-edge left)
+                    (-> start-edge left)
+                    (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
+                    #f
+                    (the-as rgba -1))
     (let ((center (new 'stack-no-clear 'vector)))
       (vector+! center (-> start-edge left) (-> start-edge right))
       (vector+! center center (-> end-edge left))
@@ -185,36 +182,45 @@
       (let* ((slice (-> this slices idx))
              (start-edge (-> this edges (-> slice start-edge)))
              (end-edge (-> this edges (-> slice end-edge))))
-        (add-debug-line #t (bucket-id debug-no-zbuf1) (-> start-edge left) (-> end-edge left) *color-white* #f (the-as rgba -1))
-        (add-debug-line
-          #t
-          (bucket-id debug-no-zbuf1)
-          (-> start-edge right)
-          (-> end-edge right)
-          *color-white*
-          #f
-          (the-as rgba -1))
-        (add-debug-line #t (bucket-id debug-no-zbuf1) (-> end-edge left) (-> end-edge right) *color-gray* #f (the-as rgba -1)))
+        (add-debug-line #t
+                        (bucket-id debug-no-zbuf1)
+                        (-> start-edge left)
+                        (-> end-edge left)
+                        *color-white*
+                        #f
+                        (the-as rgba -1))
+        (add-debug-line #t
+                        (bucket-id debug-no-zbuf1)
+                        (-> start-edge right)
+                        (-> end-edge right)
+                        *color-white*
+                        #f
+                        (the-as rgba -1))
+        (add-debug-line #t
+                        (bucket-id debug-no-zbuf1)
+                        (-> end-edge left)
+                        (-> end-edge right)
+                        *color-gray*
+                        #f
+                        (the-as rgba -1)))
       (+! idx 1)))
   (let ((first-edge (-> this edges 0)))
-    (add-debug-line
-      #t
-      (bucket-id debug-no-zbuf1)
-      (-> first-edge left)
-      (-> first-edge right)
-      *color-green*
-      #f
-      (the-as rgba -1)))
+    (add-debug-line #t
+                    (bucket-id debug-no-zbuf1)
+                    (-> first-edge left)
+                    (-> first-edge right)
+                    *color-green*
+                    #f
+                    (the-as rgba -1)))
   (let ((last-edge-index (+ (-> this edge-count) -1)))
     (let ((last-edge (-> this edges last-edge-index)))
-      (add-debug-line
-        #t
-        (bucket-id debug-no-zbuf1)
-        (-> last-edge left)
-        (-> last-edge right)
-        *color-red*
-        #f
-        (the-as rgba -1)))
+      (add-debug-line #t
+                      (bucket-id debug-no-zbuf1)
+                      (-> last-edge left)
+                      (-> last-edge right)
+                      *color-red*
+                      #f
+                      (the-as rgba -1)))
     (format *stdcon* "edge-count ~d last-edge ~d~%" (-> this edge-count) last-edge-index))
   (none))
 
@@ -230,10 +236,11 @@
   (let ((point-offset (new 'stack-no-clear 'vector))
         (edge-direction (new 'stack-no-clear 'vector)))
     (countdown (corner-index 4)
-      (vector-! edge-direction (-> query slice-corners (logand (+ corner-index 1) 3)) (-> query slice-corners corner-index))
+      (vector-! edge-direction
+                (-> query slice-corners (logand (+ corner-index 1) 3))
+                (-> query slice-corners corner-index))
       (vector-! point-offset (the-as vector (-> query search-sphere)) (-> query slice-corners corner-index))
-      (if (< (- (* (-> edge-direction z) (-> point-offset x)) (* (-> edge-direction x) (-> point-offset z))) 0.0)
-          (return #f))))
+      (if (< (- (* (-> edge-direction z) (-> point-offset x)) (* (-> edge-direction x) (-> point-offset z))) 0.0) (return #f))))
   (let ((diagonal (new 'stack-no-clear 'vector))
         (diagonal-offset (new 'stack-no-clear 'vector)))
     (vector-! diagonal (-> query slice-corners 2) (the-as vector (-> query slice-corners)))
@@ -246,46 +253,48 @@
          (vector-! plane-edge (-> query slice-corners 1) (the-as vector (-> query slice-corners)))
          (vector-cross! plane-normal plane-edge diagonal))
         (else
-          (vector-! plane-edge (-> query slice-corners 3) (the-as vector (-> query slice-corners)))
-          (vector-cross! plane-normal diagonal plane-edge)))
+         (vector-! plane-edge (-> query slice-corners 3) (the-as vector (-> query slice-corners)))
+         (vector-cross! plane-normal diagonal plane-edge)))
       (vector-normalize! plane-normal 1.0)
       (set-vector! plane-edge 0.0 -1.0 0.0 1.0)
-      (let ((vertical-hit-t (intersect-ray-plane (-> query search-sphere) plane-edge (the-as vector (-> query slice-corners)) plane-normal)))
+      (let ((vertical-hit-t (intersect-ray-plane (-> query search-sphere)
+                                                 plane-edge
+                                                 (the-as vector (-> query slice-corners))
+                                                 plane-normal)))
         (vector+float*! (-> query pt-on-slice) (the-as vector (-> query search-sphere)) plane-edge vertical-hit-t))))
-  (if (< (- (-> query search-sphere y) (-> query pt-on-slice y)) -8192.0)
-      (return #f))
+  (if (< (- (-> query search-sphere y) (-> query pt-on-slice y)) -8192.0) (return #f))
   (set! (-> query slice-id) slice-id)
   #t)
 
 (defmethod race-mesh-search-containing ((this race-mesh) (query race-mesh-slice-query))
   (set! (-> query slice-id) -1)
   (let* ((race-hash (-> this hash))
-         (cell-x
-           (max
-             0
-             (min
-               (the int (/ (- (-> query search-sphere x) (-> race-hash origin x)) (-> race-hash cell-length)))
-               (+ (-> race-hash cells-wide) -1))))
-         (cell-z
-           (max
-             0
-             (min
-               (the int (/ (- (-> query search-sphere z) (-> race-hash origin z)) (-> race-hash cell-length)))
-               (+ (-> race-hash cells-tall) -1))))
-         (cell-ptr
-           (the-as object (+ (the-as uint (-> race-hash cells)) (* (+ (* cell-z (-> race-hash cells-wide)) cell-x) 4))))
+         (cell-x (max 0
+                      (min (the int
+                                (/ (- (-> query search-sphere x) (-> race-hash origin x)) (-> race-hash cell-length)))
+                           (+ (-> race-hash cells-wide) -1))))
+         (cell-z (max 0
+                      (min (the int
+                                (/ (- (-> query search-sphere z) (-> race-hash origin z)) (-> race-hash cell-length)))
+                           (+ (-> race-hash cells-tall) -1))))
+         (cell-ptr (the-as object
+                           (+ (the-as uint (-> race-hash cells)) (* (+ (* cell-z (-> race-hash cells-wide)) cell-x) 4))))
          (slice-count (-> (the-as race-mesh-hash-cell cell-ptr) slice-count)))
     (when (nonzero? slice-count)
       (let ((candidate (new 'stack-no-clear 'race-mesh-slice-query)))
         (mem-copy! (the-as pointer candidate) (the-as pointer query) 112)
         (while (nonzero? slice-count)
           (+! slice-count -1)
-          (let ((slice-id (-> (&-> (-> race-hash slice-table) 0 edge-index-array (+ (-> (the-as (pointer int16) cell-ptr)) slice-count)) 0)))
+          (let ((slice-id (-> (&-> (-> race-hash slice-table)
+                                   0
+                                   edge-index-array
+                                   (+ (-> (the-as (pointer int16) cell-ptr)) slice-count))
+                              0)))
             (when (race-mesh-try-slice this (the-as int slice-id) candidate)
               (if (or (= (-> query slice-id) -1)
                       (< (vector-vector-distance-squared (-> candidate pt-on-slice) (-> query search-sphere))
                          (vector-vector-distance-squared (-> query pt-on-slice) (-> query search-sphere))))
-                  (mem-copy! (the-as pointer query) (the-as pointer candidate) 112))))))
+                (mem-copy! (the-as pointer query) (the-as pointer candidate) 112))))))
       #f)))
 
 (defmethod race-mesh-closest-point-on-slice ((this race-mesh) (slice-id int) (query race-mesh-slice-query))
@@ -298,17 +307,17 @@
     (set! (-> query slice-corners 1 quad) (-> start-edge right quad))
     (set! (-> query slice-corners 2 quad) (-> end-edge right quad))
     (set! (-> query slice-corners 3 quad) (-> end-edge left quad)))
-
   (let ((inside-slice #t)
         (point-offset (new 'stack-no-clear 'vector))
         (edge-direction (new 'stack-no-clear 'vector)))
     (countdown (corner-index 4)
       (when inside-slice
-        (vector-! edge-direction (-> query slice-corners (logand (+ corner-index 1) 3)) (-> query slice-corners corner-index))
+        (vector-! edge-direction
+                  (-> query slice-corners (logand (+ corner-index 1) 3))
+                  (-> query slice-corners corner-index))
         (vector-! point-offset (the-as vector (-> query search-sphere)) (-> query slice-corners corner-index))
         (when (< (- (* (-> edge-direction z) (-> point-offset x)) (* (-> edge-direction x) (-> point-offset z))) 0.0)
           (set! inside-slice #f))))
-
     (cond
       (inside-slice
        (let ((diagonal (new 'stack-no-clear 'vector))
@@ -327,28 +336,37 @@
               (vector-cross! plane-normal diagonal plane-edge)))
            (vector-normalize! plane-normal 1.0)
            (set-vector! plane-edge 0.0 -1.0 0.0 1.0)
-           (let ((vertical-hit-t (intersect-ray-plane (-> query search-sphere) plane-edge
-                                                       (the-as vector (-> query slice-corners)) plane-normal)))
+           (let ((vertical-hit-t (intersect-ray-plane (-> query search-sphere)
+                                                      plane-edge
+                                                      (the-as vector (-> query slice-corners))
+                                                      plane-normal)))
              (vector+float*! (-> query pt-on-slice) (the-as vector (-> query search-sphere)) plane-edge vertical-hit-t)))))
-
       (else
        (let ((closest-point (new 'stack-no-clear 'vector))
              (best-distance -1.0))
          (countdown (corner-index 4)
            (let ((edge-distance (vector-segment-distance-point! (-> query search-sphere)
-                                                                 (-> query slice-corners corner-index)
-                                                                 (-> query slice-corners (logand (+ corner-index 1) 3))
-                                                                 closest-point)))
+                                                                (-> query slice-corners corner-index)
+                                                                (-> query slice-corners (logand (+ corner-index 1) 3))
+                                                                closest-point)))
              (when (or (< best-distance 0.0) (< edge-distance best-distance))
                (set! best-distance edge-distance)
                (set! (-> query pt-on-slice quad) (-> closest-point quad)))))))))
   (none))
 
-(defmethod race-mesh-search-cell ((this race-mesh) (search race-mesh-hash-search) (cell-x int) (cell-z int) (query race-mesh-slice-query))
+(defmethod race-mesh-search-cell ((this race-mesh)
+                                  (search race-mesh-hash-search)
+                                  (cell-x int)
+                                  (cell-z int)
+                                  (query race-mesh-slice-query))
   (let* ((cell-index (+ (* cell-z (-> this hash cells-wide)) cell-x))
          (cell-byte-index (/ cell-index 8))
          (cell-bit (ash 1 (logand cell-index 7)))
-         (visited-cell-byte (-> (the-as race-mesh-hash-search (+ cell-byte-index (the-as int search))) cell-bits 0 data 0)))
+         (visited-cell-byte (-> (the-as race-mesh-hash-search (+ cell-byte-index (the-as int search)))
+                                cell-bits
+                                0
+                                data
+                                0)))
     (when (not (logtest? visited-cell-byte cell-bit))
       (set! (-> search cell-bits 0 data cell-byte-index) (logior visited-cell-byte cell-bit))
       (let* ((cell-ptr (the-as object (+ (the-as uint (-> this hash cells)) (* cell-index 4))))
@@ -390,15 +408,23 @@
       (let ((search-min-x (- (-> query search-sphere x) search-half-width))
             (search-min-z (- (-> query search-sphere z) search-half-width)))
         (set! (-> search bounds min x)
-              (max 0 (min (the int (* (- search-min-x (-> race-hash origin x)) inv-cell-length)) (+ (-> race-hash cells-wide) -1))))
+              (max 0
+                   (min (the int (* (- search-min-x (-> race-hash origin x)) inv-cell-length))
+                        (+ (-> race-hash cells-wide) -1))))
         (set! (-> search bounds min z)
-              (max 0 (min (the int (* (- search-min-z (-> race-hash origin z)) inv-cell-length)) (+ (-> race-hash cells-tall) -1)))))
+              (max 0
+                   (min (the int (* (- search-min-z (-> race-hash origin z)) inv-cell-length))
+                        (+ (-> race-hash cells-tall) -1)))))
       (let ((search-max-x (+ (-> query search-sphere x) search-half-width))
             (search-max-z (+ (-> query search-sphere z) search-half-width)))
         (set! (-> search bounds max x)
-              (max 0 (min (the int (* (- search-max-x (-> race-hash origin x)) inv-cell-length)) (+ (-> race-hash cells-wide) -1))))
+              (max 0
+                   (min (the int (* (- search-max-x (-> race-hash origin x)) inv-cell-length))
+                        (+ (-> race-hash cells-wide) -1))))
         (set! (-> search bounds max z)
-              (max 0 (min (the int (* (- search-max-z (-> race-hash origin z)) inv-cell-length)) (+ (-> race-hash cells-tall) -1))))))
+              (max 0
+                   (min (the int (* (- search-max-z (-> race-hash origin z)) inv-cell-length))
+                        (+ (-> race-hash cells-tall) -1))))))
     (let ((cell-z (-> search bounds min z)))
       (until (< (-> search bounds max z) cell-z)
         (let ((cell-x (-> search bounds min x)))
@@ -425,12 +451,14 @@
   (none))
 
 (defmethod race-mesh-calculate-lap-distance ((this race-mesh) (query race-mesh-slice-query))
-  (let* ((start-side-distance
-           (vector-line-distance-point! (-> query pt-on-slice) (the-as vector (-> query slice-corners))
-                                        (-> query slice-corners 1) (the-as vector #f)))
-         (end-side-distance
-           (vector-line-distance-point! (-> query pt-on-slice) (-> query slice-corners 2)
-                                        (-> query slice-corners 3) (the-as vector #f)))
+  (let* ((start-side-distance (vector-line-distance-point! (-> query pt-on-slice)
+                                                           (the-as vector (-> query slice-corners))
+                                                           (-> query slice-corners 1)
+                                                           (the-as vector #f)))
+         (end-side-distance (vector-line-distance-point! (-> query pt-on-slice)
+                                                         (-> query slice-corners 2)
+                                                         (-> query slice-corners 3)
+                                                         (the-as vector #f)))
          (total-width (+ start-side-distance end-side-distance))
          (slice (-> this slices (-> query slice-id)))
          (start-lap-distance (-> this edges (-> slice start-edge) left w))

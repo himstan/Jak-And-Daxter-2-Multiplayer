@@ -5,242 +5,121 @@
 (define-extern mp-enemy-get-state-from-id (function uint symbol))
 
 (define *mp-enemy-debug-local-text* (new 'global 'string 256 (the-as string #f)))
-(define *mp-enemy-debug-ghost-text* (new 'global 'string 512 (the-as string #f)))
+(define *enemy-debug-record-text* (new 'global 'string 512 (the-as string #f)))
 (define *mp-enemy-debug-text-overlap-distance* (meters 2.0))
 (define *mp-enemy-debug-text-stacked-offset* (meters 6.0))
 
 (defun mp-enemy-debug-local-state ((e-proc enemy))
-  (when (and e-proc
-             (nonzero? e-proc)
-             (-> e-proc state)
-             (nonzero? (-> e-proc state)))
-    (return (-> e-proc state name))
-    )
-  'none
-  )
+  (when (and e-proc (nonzero? e-proc) (-> e-proc state) (nonzero? (-> e-proc state)))
+    (return (-> e-proc state name)))
+  'none)
 
 (defun mp-enemy-debug-focus-label ((focus-proc process))
   (cond
-    ((not (and focus-proc (nonzero? focus-proc)))
-     "NONE"
-     )
-    ((and *target* (nonzero? *target*) (= focus-proc *target*))
-     "LOCAL"
-     )
+    ((not (and focus-proc (nonzero? focus-proc))) "NONE")
+    ((and *target* (nonzero? *target*) (= focus-proc *target*)) "LOCAL")
     (else
-      (let ((record (mp-player-process-record focus-proc)))
-        (if (and record
-                 (nonzero? record)
-                 (mp-player-record-remote? *mp-player-controller* record))
-            "REMOTE"
-            "OTHER"))
-      )
-    )
-  )
+     (let ((record (mp-player-process-record focus-proc)))
+       (if (and record (nonzero? record) (is-record-remote-player? record)) "REMOTE" "OTHER")))))
 
 (defun mp-enemy-debug-focus-proc ((e-proc enemy))
-  (when (and e-proc
-             (nonzero? e-proc)
-             (-> e-proc focus)
-             (nonzero? (-> e-proc focus)))
+  (when (and e-proc (nonzero? e-proc) (-> e-proc focus) (nonzero? (-> e-proc focus)))
     (let ((focus (-> e-proc focus)))
       (when (and focus (nonzero? focus))
-        (return (handle->process-safe (-> focus handle)))
-        )
-      )
-    )
-  (the-as process #f)
-  )
+        (return (handle->process-safe (-> focus handle))))))
+  (the-as process #f))
 
 (defun mp-enemy-debug-focus-player-id-label ((focus-player-id uint))
   (cond
-    ((zero? focus-player-id)
-     "NONE"
-     )
+    ((zero? focus-player-id) "NONE")
     ((and (mp-local-player-record)
           (nonzero? (mp-local-player-record))
           (= focus-player-id (the uint (+ 1 (-> (mp-local-player-record) identity player-id)))))
-     "LOCAL"
-     )
-    (else
-      "REMOTE"
-      )
-    )
-  )
+     "LOCAL")
+    (else "REMOTE")))
 
 (defun mp-enemy-debug-owner? ((rec mp-enemy-auth-record))
   (and rec
        (nonzero? rec)
        (mp-local-player-record)
        (nonzero? (mp-local-player-record))
-       (= (-> rec owner-player-id) (-> (mp-local-player-record) identity player-id)))
-  )
+       (= (-> rec owner-player-id) (-> (mp-local-player-record) identity player-id))))
 
 (defun mp-enemy-debug-text-color ((rec mp-enemy-auth-record))
-  (if (mp-enemy-debug-owner? rec)
-      (font-color green)
-      (font-color yellow)
-      )
-  )
+  (if (mp-enemy-debug-owner? rec) (font-color green) (font-color yellow)))
 
-(defun mp-enemy-debug-ghost-state ((rec mp-enemy-auth-record))
-  (if (and rec (nonzero? rec))
-      (mp-enemy-get-state-from-id (the-as uint (-> rec ghost-state)))
-      'none
-      )
-  )
+(defun get-enemy-record-state ((rec mp-enemy-auth-record))
+  (if (and rec (nonzero? rec)) (mp-enemy-get-state-from-id (the-as uint (-> rec state))) 'none))
 
 (defun mp-enemy-debug-slot-state ((slot mp-enemy-state))
-  (if (and slot (nonzero? slot))
-      (mp-enemy-get-state-from-id (the-as uint (-> slot state)))
-      'none
-      )
-  )
+  (if (and slot (nonzero? slot)) (mp-enemy-get-state-from-id (the-as uint (-> slot state))) 'none))
 
-(defun mp-enemy-debug-slot-age-ms ((slot mp-enemy-state))
-  (if (and slot
-           (nonzero? slot)
-           (nonzero? (-> slot last-updated)))
-      (let ((now (the-as uint64 (pc-multi-get-ticks)))
-            (last-updated (-> slot last-updated)))
-        (if (>= now last-updated)
-            (the-as uint (- now last-updated))
-            (the uint 0)
-            )
-        )
-      (the uint 0)
-      )
-  )
-
-(defun mp-enemy-debug-format-local-text ((text-str string)
-                                         (enemy-aid uint)
-                                         (e-proc enemy)
-                                         (focus-label string))
-  (when (and text-str
-             (type? text-str string)
-             e-proc
-             (nonzero? e-proc))
+(defun mp-enemy-debug-format-local-text ((text-str string) (enemy-aid uint) (e-proc enemy) (focus-label string))
+  (when (and text-str (type? text-str string) e-proc (nonzero? e-proc))
     (clear text-str)
     (format text-str
             "LOCAL AID: ~D HP: ~D~%STATE: ~S~%FOCUS: ~A"
             enemy-aid
             (-> e-proc hit-points)
             (mp-enemy-debug-local-state e-proc)
-            focus-label)
-    )
-  (none)
-  )
+            focus-label))
+  (none))
 
-(defun mp-enemy-debug-format-ghost-text ((text-str string)
-                                         (rec mp-enemy-auth-record)
-                                         (remote-slot mp-enemy-state))
-  (when (and text-str
-             (type? text-str string)
-             rec
-             (nonzero? rec))
+(defun enemy-debug-format-record-text ((text-str string) (rec mp-enemy-auth-record) (remote-slot mp-enemy-state))
+  (when (and text-str (type? text-str string) rec (nonzero? rec))
     (clear text-str)
     (if (and remote-slot (nonzero? remote-slot))
-        (begin
-          (format text-str
-                  "GHOST AID: ~D OWNER: ~D~%STATE: ~S FOCUS: ~A"
-                  (-> rec aid)
-                  (-> rec owner-player-id)
-                  (mp-enemy-debug-ghost-state rec)
-                  (mp-enemy-debug-focus-player-id-label (the-as uint (-> rec ghost-focus-player-id))))
-          (format text-str
-                  "~%SLOT: STATE ~S HP ~D ATTACK ~D AGE ~Dms"
-                  (mp-enemy-debug-slot-state remote-slot)
-                  (-> remote-slot hp)
-                  (-> remote-slot attack-flag)
-                  (mp-enemy-debug-slot-age-ms remote-slot))
-          )
+      (begin
         (format text-str
-                "GHOST AID: ~D OWNER: ~D~%STATE: ~S FOCUS: ~A~%SLOT NONE"
+                "RECORD AID: ~D OWNER: ~D~%STATE: ~S FOCUS: ~A"
                 (-> rec aid)
                 (-> rec owner-player-id)
-                (mp-enemy-debug-ghost-state rec)
-                (mp-enemy-debug-focus-player-id-label (the-as uint (-> rec ghost-focus-player-id))))
-        )
-    )
-  (none)
-  )
+                (get-enemy-record-state rec)
+                (mp-enemy-debug-focus-player-id-label (the-as uint (-> rec focus-player-id))))
+        (format text-str
+                "~%SLOT: STATE ~S HP ~D ATTACK ~D"
+                (mp-enemy-debug-slot-state remote-slot)
+                (-> remote-slot hp)
+                (-> remote-slot attack-flag)))
+      (format text-str
+              "RECORD AID: ~D OWNER: ~D~%STATE: ~S FOCUS: ~A~%SLOT NONE"
+              (-> rec aid)
+              (-> rec owner-player-id)
+              (get-enemy-record-state rec)
+              (mp-enemy-debug-focus-player-id-label (the-as uint (-> rec focus-player-id))))))
+  (none))
 
-(defun mp-enemy-debug-text-overlaps? ((e-proc enemy)
-                                      (rec mp-enemy-auth-record))
-  (when (and e-proc
-             (nonzero? e-proc)
-             (-> e-proc root)
-             (nonzero? (-> e-proc root))
-             rec
-             (nonzero? rec))
-    (return (< (vector-vector-distance (-> e-proc root trans)
-                                       (-> rec ghost-trans))
-               *mp-enemy-debug-text-overlap-distance*))
-    )
-  #f
-  )
+(defun mp-enemy-debug-text-overlaps? ((e-proc enemy) (rec mp-enemy-auth-record))
+  (when (and e-proc (nonzero? e-proc) (-> e-proc root) (nonzero? (-> e-proc root)) rec (nonzero? rec))
+    (return (< (vector-vector-distance (-> e-proc root trans) (-> rec trans))
+               *mp-enemy-debug-text-overlap-distance*)))
+  #f)
 
-(defun mp-enemy-debug-ghost-text-offset ((e-proc enemy)
-                                         (rec mp-enemy-auth-record))
-  (if (mp-enemy-debug-text-overlaps? e-proc rec)
-      *mp-enemy-debug-text-stacked-offset*
-      (meters 2.5)
-      )
-  )
+(defun get-enemy-record-text-offset ((e-proc enemy) (rec mp-enemy-auth-record))
+  (if (mp-enemy-debug-text-overlaps? e-proc rec) *mp-enemy-debug-text-stacked-offset* (meters 2.5)))
 
-(defun-debug mp-enemy-debug-draw-local-text ((e-proc enemy)
-                                             (enemy-aid uint)
-                                             (focus-label string)
-                                             (color font-color))
-  (when (and e-proc
-             (nonzero? e-proc)
-             (-> e-proc root)
-             (nonzero? (-> e-proc root)))
+(defun-debug mp-enemy-debug-draw-local-text ((e-proc enemy) (enemy-aid uint) (focus-label string) (color font-color))
+  (when (and e-proc (nonzero? e-proc) (-> e-proc root) (nonzero? (-> e-proc root)))
     (let ((text-pos (new 'stack-no-clear 'vector)))
       (vector-copy! text-pos (-> e-proc root trans))
       (+! (-> text-pos y) (meters 2.5))
-      (mp-enemy-debug-format-local-text *mp-enemy-debug-local-text*
-                                        enemy-aid
-                                        e-proc
-                                        focus-label)
-      (add-debug-text-3d #t
-                         (bucket-id debug-no-zbuf1)
-                         *mp-enemy-debug-local-text*
-                         text-pos
-                         color
-                         (the-as vector2h #f))
-      )
-    )
-  (none)
-  )
+      (mp-enemy-debug-format-local-text *mp-enemy-debug-local-text* enemy-aid e-proc focus-label)
+      (add-debug-text-3d #t (bucket-id debug-no-zbuf1) *mp-enemy-debug-local-text* text-pos color (the-as vector2h #f))))
+  (none))
 
-(defun-debug mp-enemy-debug-draw-ghost-text ((e-proc enemy)
+(defun-debug enemy-debug-draw-record-text ((e-proc enemy)
                                              (rec mp-enemy-auth-record)
                                              (remote-slot mp-enemy-state)
                                              (color font-color))
-  (when (and e-proc
-             (nonzero? e-proc)
-             rec
-             (nonzero? rec))
+  (when (and e-proc (nonzero? e-proc) rec (nonzero? rec))
     (let ((text-pos (new 'stack-no-clear 'vector)))
-      (vector-copy! text-pos (-> rec ghost-trans))
-      (+! (-> text-pos y) (mp-enemy-debug-ghost-text-offset e-proc rec))
-      (mp-enemy-debug-format-ghost-text *mp-enemy-debug-ghost-text*
-                                        rec
-                                        remote-slot)
-      (add-debug-text-3d #t
-                         (bucket-id debug-no-zbuf1)
-                         *mp-enemy-debug-ghost-text*
-                         text-pos
-                         color
-                         (the-as vector2h #f))
-      )
-    )
-  (none)
-  )
+      (vector-copy! text-pos (-> rec trans))
+      (+! (-> text-pos y) (get-enemy-record-text-offset e-proc rec))
+      (enemy-debug-format-record-text *enemy-debug-record-text* rec remote-slot)
+      (add-debug-text-3d #t (bucket-id debug-no-zbuf1) *enemy-debug-record-text* text-pos color (the-as vector2h #f))))
+  (none))
 
-(defun-debug mp-enemy-debug-draw-ghost-geometry ((e-proc enemy)
-                                                 (rec mp-enemy-auth-record))
+(defun-debug enemy-debug-draw-record-geometry ((e-proc enemy) (rec mp-enemy-auth-record))
   (when (and e-proc
              (nonzero? e-proc)
              rec
@@ -248,33 +127,20 @@
              (mp-local-player-record)
              (nonzero? (mp-local-player-record))
              (!= (-> rec owner-player-id) (-> (mp-local-player-record) identity player-id)))
-    (let ((ghost-color (static-rgba 255 255 0 160)))
-      (add-debug-circle #t
-                        (bucket-id debug-no-zbuf1)
-                        (-> rec ghost-trans)
-                        (meters 0.5)
-                        ghost-color
-                        (the-as matrix #f))
-      (when (and (-> e-proc root)
-                 (nonzero? (-> e-proc root)))
+    (let ((record-color (static-rgba 255 255 0 160)))
+      (add-debug-circle #t (bucket-id debug-no-zbuf1) (-> rec trans) (meters 0.5) record-color (the-as matrix #f))
+      (when (and (-> e-proc root) (nonzero? (-> e-proc root)))
         (add-debug-line #t
                         (bucket-id debug-no-zbuf1)
                         (-> e-proc root trans)
-                        (-> rec ghost-trans)
-                        ghost-color
+                        (-> rec trans)
+                        record-color
                         #f
-                        (the-as rgba 0))
-        )
-      )
-    )
-  (none)
-  )
+                        (the-as rgba 0)))))
+  (none))
 
 (defun-debug mp-enemy-debug-draw-no-record ((e-proc enemy))
-  (when (and e-proc
-             (nonzero? e-proc)
-             (-> e-proc root)
-             (nonzero? (-> e-proc root)))
+  (when (and e-proc (nonzero? e-proc) (-> e-proc root) (nonzero? (-> e-proc root)))
     (let ((text-pos (new 'stack-no-clear 'vector)))
       (vector-copy! text-pos (-> e-proc root trans))
       (+! (-> text-pos y) (meters 2.5))
@@ -283,25 +149,17 @@
                          "NO AUTH RECORD"
                          text-pos
                          (font-color orange)
-                         (the-as vector2h #f))
-      )
-    )
-  (none)
-  )
+                         (the-as vector2h #f))))
+  (none))
 
 (defun mp-enemy-debug-culled? ((e-proc enemy))
   (when (and e-proc (nonzero? e-proc))
     (let ((draw (-> e-proc draw))
           (state-name (mp-enemy-debug-local-state e-proc)))
-      (return (or (and draw
-                       (nonzero? draw)
-                       (logtest? (-> draw status) (draw-control-status no-draw)))
+      (return (or (and draw (nonzero? draw) (logtest? (-> draw status) (draw-control-status no-draw)))
                   (= state-name 'inactive)
-                  (= state-name 'process-drawable-art-error)))
-      )
-    )
-  #t
-  )
+                  (= state-name 'process-drawable-art-error)))))
+  #t)
 
 (defun-debug mp-enemy-debug-draw-callback ((p process-tree))
   (let ((proc (the-as process p)))
@@ -316,32 +174,16 @@
             (when (nonzero? enemy-aid)
               (let ((rec (mp-get-enemy-auth enemy-aid)))
                 (if (and rec (nonzero? rec))
-                    (let ((remote-slot (mp-enemy-find-remote-slot enemy-aid))
-                          (focus-label (mp-enemy-debug-focus-label
-                                         (mp-enemy-debug-focus-proc e-proc))))
-                      (let ((color (mp-enemy-debug-text-color rec)))
-                        (mp-enemy-debug-draw-local-text e-proc enemy-aid focus-label color)
-                        (mp-enemy-debug-draw-ghost-text e-proc rec remote-slot color)
-                        (mp-enemy-debug-draw-ghost-geometry e-proc rec)
-                        )
-                      )
-                    (mp-enemy-debug-draw-no-record e-proc)
-                    )
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  #t
-  )
+                  (let ((remote-slot (mp-enemy-find-remote-slot enemy-aid))
+                        (focus-label (mp-enemy-debug-focus-label (mp-enemy-debug-focus-proc e-proc))))
+                    (let ((color (mp-enemy-debug-text-color rec)))
+                      (mp-enemy-debug-draw-local-text e-proc enemy-aid focus-label color)
+                      (enemy-debug-draw-record-text e-proc rec remote-slot color)
+                      (enemy-debug-draw-record-geometry e-proc rec)))
+                  (mp-enemy-debug-draw-no-record e-proc)))))))))
+  #t)
 
 (defun-debug mp-enemy-debug-draw ()
-  (when (and *mp-enemy-debug-auth?*
-             (mp-local-player-record)
-             (nonzero? (mp-local-player-record)))
-    (iterate-process-tree *active-pool* mp-enemy-debug-draw-callback *kernel-context*)
-    )
-  (none)
-  )
+  (when (and *mp-enemy-debug-auth?* (mp-local-player-record) (nonzero? (mp-local-player-record)))
+    (iterate-process-tree *active-pool* mp-enemy-debug-draw-callback *kernel-context*))
+  (none))

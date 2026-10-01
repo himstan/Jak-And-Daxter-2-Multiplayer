@@ -1,8 +1,5 @@
 #include "hover_formatting.h"
 
-#include <algorithm>
-#include <sstream>
-
 #include "common/util/string_util.h"
 #include "fmt/format.h"
 

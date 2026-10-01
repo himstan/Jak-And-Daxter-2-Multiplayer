@@ -535,17 +535,18 @@ void Merc2::handle_pc_model(const DmaTransfer& setup,
     u64 ignore_alpha_mask;
     u8 effect_count;
     u8 bitflags;
-    u16 pad;
+    u8 eye_instance_id;
     float darkjak_interp;
     u32 player_tint_colors[kMPPlayerAppearanceSlotCount];
     float player_tint_strengths[kMPPlayerAppearanceSlotCount];
-    u32 reserved[2];
   };
 
+  constexpr size_t kPcMercFlagsPacketSize = 18 * 16;
+  static_assert(offsetof(PcMercFlags, eye_instance_id) == 18);
   static_assert(offsetof(PcMercFlags, darkjak_interp) == 20);
   static_assert(offsetof(PcMercFlags, player_tint_colors) == 24);
   static_assert(offsetof(PcMercFlags, player_tint_strengths) == 152);
-  static_assert(sizeof(PcMercFlags) == 288);
+  static_assert(sizeof(PcMercFlags) == 280);
   auto* flags = (const PcMercFlags*)input_data;
   const bool model_uses_darkjak_instance_morph = flags->bitflags & 32;
   int num_effects = flags->effect_count;  // mostly just a sanity check
@@ -557,7 +558,7 @@ void Merc2::handle_pc_model(const DmaTransfer& setup,
   bool model_uses_pc_blerc = flags->bitflags & 4;
   bool model_disables_envmap = flags->bitflags & 8;
   bool model_no_texture = flags->bitflags & 16;
-  input_data += sizeof(PcMercFlags);
+  input_data += kPcMercFlagsPacketSize;
 
   float blerc_weights[kMaxBlerc];
   if (model_uses_pc_blerc) {
@@ -647,15 +648,12 @@ void Merc2::handle_pc_model(const DmaTransfer& setup,
   args.lights = lights;
   args.first_bone = first_bone;
   args.no_texture = render_state->version == GameVersion::Jak3 && model_no_texture;
-  std::copy(std::begin(flags->player_tint_colors), std::end(flags->player_tint_colors),
-            args.player_tint_colors.begin());
-  std::copy(std::begin(flags->player_tint_strengths), std::end(flags->player_tint_strengths),
-            args.player_tint_strengths.begin());
-  args.player_tint_character =
-      static_cast<u32>(mp_player_model_character(model->name));
+  args.eye_instance_id = flags->eye_instance_id;
+  std::ranges::copy(flags->player_tint_colors, args.player_tint_colors.begin());
+  std::ranges::copy(flags->player_tint_strengths, args.player_tint_strengths.begin());
+  args.player_tint_character = static_cast<u32>(get_player_model_character(model->name));
   args.player_tint_texture_groups = &get_player_tint_texture_groups(lev);
-  args.darkjak_interp =
-      model_uses_darkjak_instance_morph ? flags->darkjak_interp : -1.f;
+  args.darkjak_interp = model_uses_darkjak_instance_morph ? flags->darkjak_interp : -1.f;
 
   // loop over effects, creating draws for each
   for (size_t ei = 0; ei < model->effects.size(); ei++) {
@@ -820,7 +818,7 @@ void Merc2::render(DmaFollower& dma,
                    SharedRenderState* render_state,
                    ScopedProfilerNode& prof,
                    MercDebugStats* stats,
-                   bool clear_depth_before_draw) {
+                   const bool clear_depth_before_draw) {
   bool hack = stats->collect_debug_model_list;
   *stats = {};
   stats->collect_debug_model_list = hack;
@@ -864,7 +862,7 @@ void Merc2::handle_all_dma(DmaFollower& dma,
                            SharedRenderState* render_state,
                            ScopedProfilerNode& prof,
                            MercDebugStats* stats,
-                           bool clear_depth_before_draw) {
+                           const bool clear_depth_before_draw) {
   // process the first tag. this is just jumping to the merc-specific dma.
   auto data0 = dma.read_and_advance();
   ASSERT(data0.vif1() == 0 || data0.vifcode1().kind == VifCode::Kind::NOP);
@@ -1118,6 +1116,7 @@ Merc2::Draw* Merc2::try_alloc_envmap_draw(const tfrag3::MercDraw& mdraw,
   draw->index_count = mdraw.index_count;
   draw->mode = envmap_mode;
   draw->hash = 0;
+  draw->eye_instance_id = UINT32_MAX;
   if (args.jak1_water_mode) {
     draw->mode.enable_ab();
     draw->mode.disable_depth_write();
@@ -1136,18 +1135,14 @@ Merc2::Draw* Merc2::try_alloc_envmap_draw(const tfrag3::MercDraw& mdraw,
 const std::vector<u8>& Merc2::get_player_tint_texture_groups(const LevelData* level) {
   auto [it, inserted] = m_player_tint_texture_groups.try_emplace(level);
   auto& groups = it->second;
-
   if (!inserted || !level || !level->level) {
     return groups;
   }
-
   const auto& textures = level->level->textures;
   groups.assign(textures.size(), 0xff);
-
   for (size_t i = 0; i < textures.size(); ++i) {
-    const auto group = mp_player_texture_group_for_name(textures[i].debug_name);
-    if (group != MPPlayerAppearanceGroup::INVALID) {
-      groups[i] = static_cast<u8>(mp_player_appearance_group_index(group));
+    if (const auto group = get_player_texture_group_for_name(textures[i].debug_name); group != MPPlayerAppearanceGroup::INVALID) {
+      groups[i] = static_cast<u8>(player_appearance_group_index(group));
     }
   }
   return groups;
@@ -1160,6 +1155,7 @@ Merc2::Draw* Merc2::alloc_normal_draw(const tfrag3::MercDraw& mdraw, const DrawA
   draw->index_count = mdraw.index_count;
   draw->mode = mdraw.mode;
   draw->hash = args.hash;
+  draw->eye_instance_id = args.eye_instance_id;
   draw->darkjak_interp = args.darkjak_interp;
   draw->player_tint_color = 0;
   draw->player_tint_strength = 0.f;
@@ -1176,13 +1172,11 @@ Merc2::Draw* Merc2::alloc_normal_draw(const tfrag3::MercDraw& mdraw, const DrawA
   draw->texture = mdraw.eye_id == 0xff ? mdraw.tree_tex_id : (0xefffff00 | mdraw.eye_id);
   if (args.player_tint_texture_groups && mdraw.eye_id == 0xff && mdraw.tree_tex_id >= 0 &&
       static_cast<size_t>(mdraw.tree_tex_id) < args.player_tint_texture_groups->size()) {
-    const u8 group_id = (*args.player_tint_texture_groups)[mdraw.tree_tex_id];
-    if (group_id < kMPPlayerAppearanceSlotCount) {
+    if (const u8 group_id = (*args.player_tint_texture_groups)[mdraw.tree_tex_id]; group_id < kMPPlayerAppearanceSlotCount) {
       const auto group = static_cast<MPPlayerAppearanceGroup>(group_id);
-      const auto* definition = mp_player_texture_group_definition(group);
-      const auto character = static_cast<MPPlayerCharacter>(args.player_tint_character);
-      if (definition && definition->character == character &&
-          args.player_tint_strengths[group_id] > 0.f) {
+      const auto* definition = get_player_texture_group_definition(group);
+      if (const auto character = static_cast<PlayerCharacter>(args.player_tint_character); 
+        definition && definition->character == character && args.player_tint_strengths[group_id] > 0.f) {
         draw->player_tint_color = args.player_tint_colors[group_id];
         draw->player_tint_strength = args.player_tint_strengths[group_id];
         draw->flags |= PLAYER_TINT_TEXTURE;
@@ -1311,6 +1305,7 @@ void Merc2::do_draws(const Draw* draw_array,
                      SharedRenderState* render_state) {
   glBindVertexArray(m_vao);
   s32 last_tex = INT32_MIN;
+  u32 last_eye_instance_id = UINT32_MAX;
   int last_light = -1;
   bool normal_vtx_buffer_bound = true;
 
@@ -1334,24 +1329,19 @@ void Merc2::do_draws(const Draw* draw_array,
     glUniform1i(uniforms.ignore_alpha, draw.flags & DrawFlags::IGNORE_ALPHA);
 
     if (!set_fade) {
-      const bool use_player_tint =
-          (draw.flags & PLAYER_TINT_TEXTURE) && draw.player_tint_strength > 0.f;
-      const bool use_player_tint_white_base =
-          use_player_tint && (draw.flags & PLAYER_TINT_WHITE_BASE);
+      const bool use_player_tint = (draw.flags & PLAYER_TINT_TEXTURE) && draw.player_tint_strength > 0.f;
+      const bool use_player_tint_white_base = use_player_tint && (draw.flags & PLAYER_TINT_WHITE_BASE);
       glUniform1i(uniforms.player_tint_enabled, use_player_tint ? 1 : 0);
-      glUniform1i(uniforms.player_tint_white_base,
-                  use_player_tint_white_base ? 1 : 0);
+      glUniform1i(uniforms.player_tint_white_base, use_player_tint_white_base ? 1 : 0);
     
       glUniform1f(uniforms.player_tint_strength, 
         use_player_tint ? std::clamp(draw.player_tint_strength, 0.f, 1.f) : 0.f);
     
       if (use_player_tint) {
         const u32 packed = draw.player_tint_color;
-    
         const float r = ((packed >> 16) & 0xff) / 255.f;
         const float g = ((packed >> 8) & 0xff) / 255.f;
         const float b = (packed & 0xff) / 255.f;
-    
         glUniform3f(uniforms.player_tint_color, r, g, b);
       }
     }
@@ -1377,42 +1367,32 @@ void Merc2::do_draws(const Draw* draw_array,
         draw.texture < 0 &&
         m_darkjak_slot_array) {
       darkjak_slot = -(draw.texture + 1);
-    
-      if (darkjak_slot >= 0 &&
-          darkjak_slot < (int)m_darkjak_slot_array->size()) {
+      if (darkjak_slot >= 0 && darkjak_slot < static_cast<int>(m_darkjak_slot_array->size())) {
         const auto& endpoints = m_darkjak_slot_array->at(darkjak_slot);
-    
-        use_darkjak_override =
-            endpoints[0] != 0 &&
-            endpoints[1] != 0;
+        use_darkjak_override = endpoints[0] != 0 && endpoints[1] != 0;
       }
     }
     
     if (use_darkjak_override) {
       const auto& endpoints = m_darkjak_slot_array->at(darkjak_slot);
-    
       glActiveTexture(GL_TEXTURE0);
       glBindTexture(GL_TEXTURE_2D, endpoints[0]);
-
       glActiveTexture(GL_TEXTURE1);
       glBindTexture(GL_TEXTURE_2D, endpoints[1]);
-    
       glActiveTexture(GL_TEXTURE0);
-    
-      glUniform1f(
-          uniforms.darkjak_interp,
-          std::clamp(draw.darkjak_interp, 0.f, 1.f));
-    
+      glUniform1f(  uniforms.darkjak_interp, std::clamp(draw.darkjak_interp, 0.f, 1.f));
       last_tex = INT32_MIN;
+      last_eye_instance_id = UINT32_MAX;
     } else {
       if (!set_fade) {
         glUniform1f(uniforms.darkjak_interp, -1.f);
       }
-    
-      if (draw.texture != last_tex) {
-        if (draw.texture < (int)lev->textures.size() && draw.texture >= 0) {
+      
+      if (const bool is_eye_texture = (draw.texture & 0xffffff00) == 0xefffff00; draw.texture != last_tex ||
+          (is_eye_texture && draw.eye_instance_id != last_eye_instance_id)) {
+        if (draw.texture < static_cast<int>(lev->textures.size()) && draw.texture >= 0) {
           glBindTexture(GL_TEXTURE_2D, lev->textures.at(draw.texture));
-        } else if ((draw.texture & 0xffffff00) == 0xefffff00) {
+        } else if (is_eye_texture) {
           if (render_state->version == GameVersion::Jak3 ||
               render_state->version == GameVersion::JakX) {
             auto maybe_eye =
@@ -1421,25 +1401,25 @@ void Merc2::do_draws(const Draw* draw_array,
             if (maybe_eye) {
               glBindTexture(GL_TEXTURE_2D, *maybe_eye);
             }
+          } else if (render_state->version == GameVersion::Jak2 &&
+                     draw.eye_instance_id < kPcEyeInstanceCount) {
+            auto maybe_eye = render_state->eye_renderer->lookup_eye_texture_instance(
+                draw.eye_instance_id, draw.texture & 1);
+            glBindTexture(GL_TEXTURE_2D, maybe_eye ? *maybe_eye : 0);
           } else {
-            auto maybe_eye =
-                render_state->eye_renderer->lookup_eye_texture(draw.texture & 0xff);
-            if (maybe_eye) {
+            if (auto maybe_eye = render_state->eye_renderer->lookup_eye_texture(draw.texture & 0xff)) {
               glBindTexture(GL_TEXTURE_2D, *maybe_eye);
             }
           }
-    
           use_mipmaps_for_filtering = false;
         } else if (draw.texture < 0) {
-          int slot = -(draw.texture + 1);
+          const int slot = -(draw.texture + 1);
           glBindTexture(GL_TEXTURE_2D, m_anim_slot_array->at(slot));
         } else {
-          fmt::print(
-              "Invalid draw.texture is {}\n",
-              draw.texture);
+          fmt::print("Invalid draw.texture is {}\n", draw.texture);
         }
-    
         last_tex = draw.texture;
+        last_eye_instance_id = is_eye_texture ? draw.eye_instance_id : UINT32_MAX;
       }
     }
 

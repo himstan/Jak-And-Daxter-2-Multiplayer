@@ -1635,17 +1635,6 @@
   )
 
 (defun cspace<-cspace! ((arg0 cspace) (arg1 cspace))
-  (if (or (not arg0) (zero? (the-as uint arg0)) (logtest? (the-as uint arg0) 15) (>= (the-as uint arg0) #x70000000)
-          (not arg1) (zero? (the-as uint arg1)) (logtest? (the-as uint arg1) 15) (>= (the-as uint arg1) #x70000000))
-      (return (the-as matrix #f)))
-
-  (let ((b0 (-> arg0 bone))
-        (b1 (-> arg1 bone)))
-    (if (or (not b0) (zero? (the-as uint b0)) (logtest? (the-as uint b0) 15) (>= (the-as uint b0) #x70000000)
-            (not b1) (zero? (the-as uint b1)) (logtest? (the-as uint b1) 15) (>= (the-as uint b1) #x70000000))
-        (return (the-as matrix #f)))
-    )
-
   (let ((v0-0 (-> arg0 bone transform)))
     (let* ((a2-0 (-> arg1 bone transform))
            (v1-2 (-> a2-0 quad 0))
@@ -1663,17 +1652,6 @@
   )
 
 (defun cspace<-cspace-normalized! ((arg0 cspace) (arg1 cspace))
-  (if (or (not arg0) (zero? (the-as uint arg0)) (logtest? (the-as uint arg0) 15) (>= (the-as uint arg0) #x70000000)
-          (not arg1) (zero? (the-as uint arg1)) (logtest? (the-as uint arg1) 15) (>= (the-as uint arg1) #x70000000))
-      (return (the-as matrix #f)))
-
-  (let ((b0 (-> arg0 bone))
-        (b1 (-> arg1 bone)))
-    (if (or (not b0) (zero? (the-as uint b0)) (logtest? (the-as uint b0) 15) (>= (the-as uint b0) #x70000000)
-            (not b1) (zero? (the-as uint b1)) (logtest? (the-as uint b1) 15) (>= (the-as uint b1) #x70000000))
-        (return (the-as matrix #f)))
-    )
-
   (let ((gp-0 (-> arg0 bone transform)))
     (let* ((a2-0 (-> arg1 bone transform))
            (v1-2 (-> a2-0 quad 0))
@@ -1694,50 +1672,23 @@
   )
 
 (defun cspace<-parent-joint! ((arg0 cspace) (arg1 (pointer process-drawable)) (arg2 int))
-  (if (or (not arg0) (zero? (the-as uint arg0)) (logtest? (the-as uint arg0) 15) (>= (the-as uint arg0) #x70000000)
-          (not arg1) (zero? (the-as uint arg1)) (logtest? (the-as uint arg1) 3) (>= (the-as uint arg1) #x70000000))
-      (return (the-as matrix #f)))
-
-  (let ((b0 (-> arg0 bone))
-        (pd (-> arg1 0)))
-    (if (or (not b0) (zero? (the-as uint b0)) (logtest? (the-as uint b0) 15) (>= (the-as uint b0) #x70000000)
-            (not pd) (zero? (the-as uint pd)) (logtest? (the-as uint pd) 3) (>= (the-as uint pd) #x70000000))
-        (return (the-as matrix #f)))
-
-    (let ((nl (-> pd node-list)))
-      (if (or (not nl) (zero? (the-as uint nl)) (logtest? (the-as uint nl) 3) (>= (the-as uint nl) #x70000000))
-          (return (the-as matrix #f)))
-      )
-    )
-
   (let ((v0-0 (-> arg0 bone transform)))
-    (let* ((a2-1 (-> arg1 0 node-list data arg2 bone transform)))
-      (if (or (not a2-1) (zero? (the-as uint a2-1)) (logtest? (the-as uint a2-1) 15) (>= (the-as uint a2-1) #x70000000))
-          (return (the-as matrix #f)))
-      (let ((v1-5 (-> a2-1 quad 0))
-            (a0-2 (-> a2-1 quad 1))
-            (a1-1 (-> a2-1 quad 2))
-            (a2-2 (-> a2-1 trans quad))
-            )
-        (set! (-> v0-0 quad 0) v1-5)
-        (set! (-> v0-0 quad 1) a0-2)
-        (set! (-> v0-0 quad 2) a1-1)
-        (set! (-> v0-0 trans quad) a2-2)
-        )
+    (let* ((a2-1 (-> arg1 0 node-list data arg2 bone transform))
+           (v1-5 (-> a2-1 quad 0))
+           (a0-2 (-> a2-1 quad 1))
+           (a1-1 (-> a2-1 quad 2))
+           (a2-2 (-> a2-1 trans quad))
+           )
+      (set! (-> v0-0 quad 0) v1-5)
+      (set! (-> v0-0 quad 1) a0-2)
+      (set! (-> v0-0 quad 2) a1-1)
+      (set! (-> v0-0 trans quad) a2-2)
       )
     v0-0
     )
   )
 
 (defun cspace<-rot-yxy! ((dst cspace) (src transform))
-  (if (or (not dst) (zero? (the-as uint dst)) (logtest? (the-as uint dst) 15) (>= (the-as uint dst) #x70000000)
-          (not src) (zero? (the-as uint src)) (logtest? (the-as uint src) 15) (>= (the-as uint src) #x70000000))
-      (return (the-as matrix #f)))
-
-  (let ((b0 (-> dst bone)))
-    (if (or (not b0) (zero? (the-as uint b0)) (logtest? (the-as uint b0) 15) (>= (the-as uint b0) #x70000000))
-        (return (the-as matrix #f)))
-    )
   (let ((s5-0 (-> dst bone transform)))
     (matrix-rotate-yxy! s5-0 (-> src rot))
     (scale-matrix! s5-0 (-> src scale) s5-0)
@@ -1745,14 +1696,6 @@
   )
 
 (defun cspace<-transform-yxy! ((dst cspace) (src transform))
-  (if (or (not dst) (zero? (the-as uint dst)) (logtest? (the-as uint dst) 15) (>= (the-as uint dst) #x70000000)
-          (not src) (zero? (the-as uint src)) (logtest? (the-as uint src) 15) (>= (the-as uint src) #x70000000))
-      (return (the-as matrix #f)))
-
-  (let ((b0 (-> dst bone)))
-    (if (or (not b0) (zero? (the-as uint b0)) (logtest? (the-as uint b0) 15) (>= (the-as uint b0) #x70000000))
-        (return (the-as matrix #f)))
-    )
   (let ((s4-0 (-> dst bone transform))
         (s5-0 (new 'stack-no-clear 'matrix))
         (s3-0 (new 'stack-no-clear 'matrix))
@@ -1786,14 +1729,6 @@
   )
 
 (defun cspace<-matrix-no-push-joint! ((arg0 cspace) (arg1 joint-control))
-  (if (or (not arg0) (zero? (the-as uint arg0)) (logtest? (the-as uint arg0) 15) (>= (the-as uint arg0) #x70000000)
-          (not arg1) (zero? (the-as uint arg1)) (logtest? (the-as uint arg1) 3) (>= (the-as uint arg1) #x70000000))
-      (return (the-as matrix #f)))
-
-  (let ((b0 (-> arg0 bone)))
-    (if (or (not b0) (zero? (the-as uint b0)) (logtest? (the-as uint b0) 15) (>= (the-as uint b0) #x70000000))
-        (return (the-as matrix #f)))
-    )
   (let ((v1-2 (matrix-from-control! (scratchpad-object matrix-stack :offset 64) (-> arg0 joint) arg1 'no-push))
         (v0-1 (-> arg0 bone transform))
         )
@@ -1812,14 +1747,6 @@
   )
 
 (defun cspace<-matrix-joint! ((arg0 cspace) (arg1 matrix))
-  (if (or (not arg0) (zero? (the-as uint arg0)) (logtest? (the-as uint arg0) 15) (>= (the-as uint arg0) #x70000000)
-          (not arg1) (zero? (the-as uint arg1)) (logtest? (the-as uint arg1) 15) (>= (the-as uint arg1) #x70000000))
-      (return (the-as matrix #f)))
-
-  (let ((b0 (-> arg0 bone)))
-    (if (or (not b0) (zero? (the-as uint b0)) (logtest? (the-as uint b0) 15) (>= (the-as uint b0) #x70000000))
-        (return (the-as matrix #f)))
-    )
   (let ((v0-0 (-> arg0 bone transform)))
     (let* ((a2-0 arg1)
            (v1-1 (-> a2-0 quad 0))
@@ -1837,22 +1764,6 @@
   )
 
 (defun cspace<-parented-matrix-joint! ((arg0 cspace) (arg1 matrix))
-  (if (or (not arg0) (zero? (the-as uint arg0)) (logtest? (the-as uint arg0) 15) (>= (the-as uint arg0) #x70000000)
-          (not arg1) (zero? (the-as uint arg1)) (logtest? (the-as uint arg1) 15) (>= (the-as uint arg1) #x70000000))
-      (return (the-as matrix #f)))
-
-  (let ((b0 (-> arg0 bone))
-        (p (-> arg0 parent)))
-    (if (or (not b0) (zero? (the-as uint b0)) (logtest? (the-as uint b0) 15) (>= (the-as uint b0) #x70000000)
-            (not p) (zero? (the-as uint p)) (logtest? (the-as uint p) 15) (>= (the-as uint p) #x70000000))
-        (return (the-as matrix #f)))
-
-    (let ((pb (-> p bone)))
-      (if (or (not pb) (zero? (the-as uint pb)) (logtest? (the-as uint pb) 15) (>= (the-as uint pb) #x70000000))
-          (return (the-as matrix #f)))
-      )
-    )
-
   (rlet ((acc :class vf)
          (vf10 :class vf)
          (vf11 :class vf)
@@ -1906,17 +1817,6 @@
   )
 
 (defun cspace<-parented-matrix-mirror! ((dst cspace) (joint-mat matrix))
-  (if (or (not dst) (zero? (the-as uint dst)) (logtest? (the-as uint dst) 15) (>= (the-as uint dst) #x70000000)
-          (not joint-mat) (zero? (the-as uint joint-mat)) (logtest? (the-as uint joint-mat) 15) (>= (the-as uint joint-mat) #x70000000))
-      (return (the-as matrix #f)))
-
-  (let ((b0 (-> dst bone))
-        (p (-> dst parent)))
-    (if (or (not b0) (zero? (the-as uint b0)) (logtest? (the-as uint b0) 15) (>= (the-as uint b0) #x70000000)
-            (not p) (zero? (the-as uint p)) (logtest? (the-as uint p) 15) (>= (the-as uint p) #x70000000))
-        (return (the-as matrix #f)))
-    )
-
   (let ((gp-0
           (matrix-mirror! (new 'stack-no-clear 'matrix) (the-as vector (-> dst param1)) (the-as vector (-> dst param2)))
           )
@@ -1927,22 +1827,6 @@
   )
 
 (defun cspace<-parented-matrix-joint-flip-z! ((arg0 cspace) (arg1 matrix))
-  (if (or (not arg0) (zero? (the-as uint arg0)) (logtest? (the-as uint arg0) 15) (>= (the-as uint arg0) #x70000000)
-          (not arg1) (zero? (the-as uint arg1)) (logtest? (the-as uint arg1) 15) (>= (the-as uint arg1) #x70000000))
-      (return (the-as matrix #f)))
-
-  (let ((b0 (-> arg0 bone))
-        (p (-> arg0 parent)))
-    (if (or (not b0) (zero? (the-as uint b0)) (logtest? (the-as uint b0) 15) (>= (the-as uint b0) #x70000000)
-            (not p) (zero? (the-as uint p)) (logtest? (the-as uint p) 15) (>= (the-as uint p) #x70000000))
-        (return (the-as matrix #f)))
-
-    (let ((pb (-> p bone)))
-      (if (or (not pb) (zero? (the-as uint pb)) (logtest? (the-as uint pb) 15) (>= (the-as uint pb) #x70000000))
-          (return (the-as matrix #f)))
-      )
-    )
-
   (rlet ((acc :class vf)
          (vf0 :class vf)
          (vf10 :class vf)
@@ -2001,14 +1885,6 @@
   )
 
 (defun cspace<-matrix-joint-flip-z! ((arg0 cspace) (arg1 matrix))
-  (if (or (not arg0) (zero? (the-as uint arg0)) (logtest? (the-as uint arg0) 15) (>= (the-as uint arg0) #x70000000))
-      (return (the-as matrix #f)))
-
-  (let ((b0 (-> arg0 bone)))
-    (if (or (not b0) (zero? (the-as uint b0)) (logtest? (the-as uint b0) 15) (>= (the-as uint b0) #x70000000))
-        (return (the-as matrix #f)))
-    )
-
   (local-vars (v1-2 float))
   (rlet ((vf0 :class vf)
          (vf30 :class vf)
@@ -2030,15 +1906,8 @@
 (def-mips2c cspace<-parented-transformq-joint! (function cspace transformq none))
 
 (defun cspace<-parented-transformq-joint-flip-z! ((dst cspace) (joint-transformq transformq))
-  (when (and dst (not (zero? (the-as uint dst))) (not (logtest? (the-as uint dst) 15)) (< (the-as uint dst) #x70000000)
-             joint-transformq (not (zero? (the-as uint joint-transformq))) (not (logtest? (the-as uint joint-transformq) 15)) (< (the-as uint joint-transformq) #x70000000))
-    (let ((b0 (-> dst bone)))
-      (when (and b0 (not (zero? (the-as uint b0))) (not (logtest? (the-as uint b0) 15)) (< (the-as uint b0) #x70000000))
-        (cspace<-parented-transformq-joint! dst joint-transformq)
-        (cspace<-matrix-joint-flip-z! dst (-> dst bone transform))
-        )
-      )
-    )
+  (cspace<-parented-transformq-joint! dst joint-transformq)
+  (cspace<-matrix-joint-flip-z! dst (-> dst bone transform))
   0
   (none)
   )

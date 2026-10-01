@@ -320,6 +320,11 @@
   "initial initialize method to be run after allocating"
   (set! (-> obj music-unlocked) (new 'global 'bit-array (-> *music-player-tracks* length)))
   ((method-of-type pc-settings initialize) obj)
+  (when (nonnull? obj)
+    (false! (-> obj is-host?))
+    (false! (-> obj is-host-online?))
+    (false! (-> obj mp-is-new-game?))
+    (set! (-> obj mp-selected-save-slot) 0))
   ;; any post-operations that need to be done after loading
   (set! (-> *setting-control* user-default sfx-volume) (-> obj memcard-volume-sfx))
   (set! (-> *setting-control* user-default music-volume) (-> obj memcard-volume-music))

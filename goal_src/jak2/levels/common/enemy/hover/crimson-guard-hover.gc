@@ -1150,7 +1150,7 @@
                 )
              (vector-negate! gp-1 gp-1)
              )
-         (let ((f30-1 (rnd-float-range this 0.0 1.0))
+         (let ((f30-1 (enemy-knocked-rand-factor this 0.0 1.0))
                (s5-1 (-> this enemy-info))
                )
            (vector-float*! gp-1 gp-1 (lerp (-> s5-1 knocked-hard-vxz-lo) (-> s5-1 knocked-hard-vxz-hi) f30-1))

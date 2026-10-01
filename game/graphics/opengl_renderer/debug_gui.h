@@ -9,6 +9,11 @@
 #include "common/util/Timer.h"
 #include "common/versions/versions.h"
 
+#include "game/tools/network_debug/network_debug_panel.h"
+#ifdef ENABLE_NETWORK_SIMULATION
+#include "game/tools/network_simulation/network_simulation_panel.h"
+#endif
+
 class FrameTimeRecorder {
  public:
   static constexpr int SIZE = 60 * 5;
@@ -75,11 +80,19 @@ class OpenGlDebugGui {
  private:
   void draw_overlord_debug_menu();
   FrameTimeRecorder m_frame_timer;
+  NetworkDebugPanel m_network_debug_panel;
+#ifdef ENABLE_NETWORK_SIMULATION
+  NetworkSimulationPanel m_network_simulation_panel;
+#endif
   bool m_draw_frame_time = false;
   bool m_draw_profiler = false;
   bool m_draw_debug = false;
   bool m_draw_loader = false;
   bool m_draw_overlord = false;
+  bool m_draw_network_debug = false;
+#ifdef ENABLE_NETWORK_SIMULATION
+  bool m_draw_network_simulation = false;
+#endif
   bool m_subtitle_editor = false;
   bool m_filters_menu = false;
   bool m_want_screenshot = false;

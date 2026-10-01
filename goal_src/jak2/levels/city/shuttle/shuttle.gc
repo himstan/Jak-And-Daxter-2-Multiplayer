@@ -428,21 +428,21 @@
             (else
               (dotimes (player-id MP_MAX_PLAYERS)
                 (let* ((record (mp-player-record-by-id (the-as uint player-id)))
-                       (puppet (mp-player-record-target record)))
+                       (replica (mp-player-record-target record)))
                   (when (and (not driver)
                              record
                              (nonzero? record)
-                             (mp-player-record-remote? *mp-player-controller* record)
-                             puppet
-                             (nonzero? puppet)
-                             (focus-test? puppet pilot)
-                             (-> puppet pilot)
-                             (nonzero? (-> puppet pilot))
-                             (let ((v-proc (handle->process-safe (-> puppet pilot vehicle))))
+                             (is-record-remote-player? record)
+                             replica
+                             (nonzero? replica)
+                             (focus-test? replica pilot)
+                             (-> replica pilot)
+                             (nonzero? (-> replica pilot))
+                             (let ((v-proc (handle->process-safe (-> replica pilot vehicle))))
                                (and v-proc
                                     (= v-proc initial-vehicle)
-                                    (zero? (-> puppet pilot seat-index)))))
-                    (set! driver puppet))))
+                                    (zero? (-> replica pilot seat-index)))))
+                    (set! driver replica))))
               )
             )
           (when driver
@@ -1015,7 +1015,6 @@
 (defconstant SHUTTLE_SYNC_LAST_COUNTER (the-as int 13))
 
 (defun shuttle-find-or-spawn-vehicle! ((traffic-mgr process) (spawn-params traffic-object-spawn-params))
-  "Reuse the reserved mission vehicle if it already exists locally."
   (when (and spawn-params (nonzero? spawn-params))
     (let ((vehicle-proc (the-as process (mp-vehicle-find-by-net-id MP_MISSION_VEHICLE_CITY_SHUTTLE))))
       (if (and vehicle-proc (nonzero? vehicle-proc))
@@ -1110,8 +1109,7 @@
   )
 
 (defun mp-shuttle-local-rebel-dropoff-authority? ()
-  "Return true when this client owns shuttle rebel dropoff completion."
-  (or (not (and *multi-sync-enabled?* (= (pc-multi-get-status) (mp-connection-status in-game))))
+  (or (not (mp-session-in-game?))
       (mp-session-host?)
       )
   )
@@ -1260,7 +1258,6 @@
   )
 
 (defun mp-shuttle-vehicle-has-rebel? ((veh vehicle))
-  "Check if the vehicle has any citizen-rebel inside it."
   (when (and veh (nonzero? veh) (-> veh info) (nonzero? (-> veh info)))
     (dotimes (seat-idx (the int (-> veh info seat-count)))
       (let ((rider (get-rider-in-seat veh seat-idx)))
@@ -1274,9 +1271,7 @@
   )
 
 (defun mp-shuttle-check-teleport-left-behind! ()
-  "Check if the local player is left behind by the nearest remote-driven rebel vehicle."
-  (when (and *multi-sync-enabled?*
-             (= (pc-multi-get-status) (mp-connection-status in-game))
+  (when (and (mp-session-in-game?)
              *target*
              (nonzero? *target*))
     (let ((condition #f)
@@ -1289,7 +1284,7 @@
           (let ((record (mp-player-record-by-id (the-as uint player-id))))
             (when (and record
                        (nonzero? record)
-                       (mp-player-record-remote? *mp-player-controller* record)
+                       (is-record-remote-player? record)
                        (nonzero? (-> record vehicle vehicle-id))
                        (zero? (-> record vehicle seat-index)))
               (let ((veh (mp-vehicle-find-by-net-id (-> record vehicle vehicle-id))))
@@ -1345,7 +1340,7 @@
                                           (started? uint)
                                           (time-limit time-frame)
                                           (remaining-time time-frame))
-  (debug-log *mp-debug-log?* "[MP-Shuttle] shuttle-set-timer-from-remaining! started?=~D limit=~D remaining=~D~%" started? time-limit remaining-time)
+  (log 'debug "[MP-Shuttle] shuttle-set-timer-from-remaining! started?=~D limit=~D remaining=~D~%" started? time-limit remaining-time)
   (when (and task (nonzero? task))
     (let ((safe-remaining remaining-time))
       (when (< safe-remaining (the-as time-frame 0))
@@ -1359,7 +1354,7 @@
         ((nonzero? started?)
          (set! (-> task data-int32 9) 1)
          (set! (-> task start-time) (- (current-time) (- time-limit safe-remaining)))
-         (debug-log *mp-debug-log?* "[MP-Shuttle] set start-time to ~D (current-time=~D, elapsed=~D)~%"
+         (log 'debug "[MP-Shuttle] set start-time to ~D (current-time=~D, elapsed=~D)~%"
                  (-> task start-time) (current-time) (- time-limit safe-remaining))
          (set! (-> *game-info* timer) safe-remaining)
          (set! (-> *game-info* timer-flash) (< safe-remaining (seconds 10)))
@@ -1416,7 +1411,7 @@
       (when (or (> remote-sub-state (-> task sub-state))
                 (and (= remote-sub-state (-> task sub-state))
                      (nonzero? *mp-shuttle-started?*)))
-        (debug-log *mp-debug-log?* "[MP-Shuttle] Applying remote state task=~D sub=~D remaining=~D seq=~D~%"
+        (log 'debug "[MP-Shuttle] Applying remote state task=~D sub=~D remaining=~D seq=~D~%"
                 task-node
                 remote-sub-state
                 *mp-shuttle-remaining-time*
@@ -1442,8 +1437,7 @@
 (defun shuttle-broadcast-state! ((task task-manager) (task-node uint) (force? symbol))
   (when (and task
              (nonzero? task)
-             *multi-sync-enabled?*
-             (= (pc-multi-get-status) (mp-connection-status in-game))
+             (mp-session-in-game?)
              (not *mp-processing-remote-event*))
     (let ((started? (if (nonzero? (-> task data-int32 9)) (the uint 1) (the uint 0)))
           (counter (shuttle-counter-from-sub-state task (-> task sub-state)))
@@ -1768,19 +1762,19 @@
                             (when (not s4-2)
                               (dotimes (player-id MP_MAX_PLAYERS)
                                 (let* ((record (mp-player-record-by-id (the-as uint player-id)))
-                                       (puppet (mp-player-record-target record)))
+                                       (replica (mp-player-record-target record)))
                                   (when (and (not s4-2)
                                              record
                                              (nonzero? record)
-                                             (mp-player-record-remote? *mp-player-controller* record)
-                                             puppet
-                                             (nonzero? puppet)
-                                             (-> puppet pilot)
-                                             (nonzero? (-> puppet pilot))
-                                             (focus-test? puppet pilot))
+                                             (is-record-remote-player? record)
+                                             replica
+                                             (nonzero? replica)
+                                             (-> replica pilot)
+                                             (nonzero? (-> replica pilot))
+                                             (focus-test? replica pilot))
                                     (set! s4-2
                                       (the-as vehicle
-                                        (handle->process-safe (-> puppet pilot vehicle)))))))
+                                        (handle->process-safe (-> replica pilot vehicle)))))))
                               )
                             (when (and s4-2 (nonzero? s4-2))
                               (let ((v1-260 (get-best-seat-for-vehicle
@@ -1937,7 +1931,6 @@
         )
 
 (defun shuttle-mark-rebel-done! ((task task-manager) (rebel citizen-rebel) (task-node uint))
-  "Advance shuttle progress for one rebel once, ignoring duplicate task-done events."
   (when (and task
              (nonzero? task)
              rebel

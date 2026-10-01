@@ -215,9 +215,7 @@
 
 (defun mp-fort-missile-target-queue! ((target fort-missile-target))
   (when (and target
-             (nonzero? target)
-             *multi-sync-enabled?*
-             (= (pc-multi-get-status) (mp-connection-status in-game)))
+             (nonzero? target))
     (mp-event-enqueue-fort-missile-target! (-> target target-index)))
   (none)
   )

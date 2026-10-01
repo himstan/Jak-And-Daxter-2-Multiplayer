@@ -2,12 +2,9 @@
 (in-package goal)
 
 (defun mp-jak-has-riding-daxter? ((jak-target target))
-  "Return true when a live Daxter record contextually resolves to this Jak."
   (when (and jak-target (nonzero? jak-target) (!= MP_INVALID_PLAYER_ID (-> jak-target riding-along-player-id)))
     (let ((record (mp-player-record-by-id (-> jak-target riding-along-player-id))))
-      (when (and record
-                 (nonzero? record)
-                 (mp-player-daxter? record))
+      (when (and record (nonzero? record) (mp-player-daxter? record))
         (let ((daxter-target (mp-player-record-target record)))
           (when (and daxter-target
                      (nonzero? daxter-target)
@@ -17,59 +14,46 @@
             (return #t))))))
   #f)
 
-(defun mp-update-player-target-visibility!
-       ((player-target target) (in-movie? symbol))
-  (when (and player-target
-             (nonzero? player-target)
-             (-> player-target draw)
-             (nonzero? (-> player-target draw)))
-    (if in-movie?
-        (logior! (-> player-target draw status) (draw-control-status no-draw))
-        (logclear!
-          (-> player-target draw status)
-          (if (mp-target-jak? player-target)
-              (draw-control-status no-draw no-draw-bounds2)
-              (draw-control-status no-draw no-draw-bounds)))))
+(defun mp-update-player-target-visibility! ((player-target target) (in-movie? symbol))
+  (when (and player-target (nonzero? player-target) (-> player-target draw) (nonzero? (-> player-target draw)))
+    (if (or in-movie? (mp-target-ride-along? player-target))
+      (logior! (-> player-target draw status) (draw-control-status no-draw))
+      (logclear! (-> player-target draw status)
+                 (if (mp-target-jak? player-target)
+                   (draw-control-status no-draw no-draw-bounds2)
+                   (draw-control-status no-draw no-draw-bounds)))))
   (none))
 
-(defun mp-update-player-sidekick-visibility!
-       ((player-target target) (in-movie? symbol))
+(defun mp-update-player-sidekick-visibility! ((player-target target) (sidekick-proc sidekick) (in-movie? symbol))
   (when (and player-target
              (nonzero? player-target)
-             (-> player-target sidekick)
-             (nonzero? (-> player-target sidekick)))
-    (let ((sidekick-proc
-            (the-as sidekick (ppointer->process (-> player-target sidekick)))))
-      (when (and sidekick-proc
-                 (nonzero? sidekick-proc)
-                 (-> sidekick-proc draw)
-                 (nonzero? (-> sidekick-proc draw)))
-        (if (or in-movie?
-                (and (mp-target-jak? player-target)
-                     (not (mp-jak-has-riding-daxter? player-target)))
-                (and (mp-target-daxter? player-target)
-                     (mp-target-ride-along? player-target)))
-            (logior! (-> sidekick-proc draw status) (draw-control-status no-draw))
-            (logclear! (-> sidekick-proc draw status) (draw-control-status no-draw))))))
+             sidekick-proc
+             (nonzero? sidekick-proc)
+             (-> sidekick-proc draw)
+             (nonzero? (-> sidekick-proc draw)))
+    (if (or in-movie?
+            (and (mp-target-jak? player-target) (not (mp-jak-has-riding-daxter? player-target)))
+            (and (mp-target-daxter? player-target) (mp-target-ride-along? player-target)))
+      (logior! (-> sidekick-proc draw status) (draw-control-status no-draw))
+      (logclear! (-> sidekick-proc draw status) (draw-control-status no-draw))))
   (none))
 
-(defun mp-update-player-visibility ()
-  "Update every bound player target and its contextual sidekick presentation."
-  (let ((in-movie? (if (or (movie?) *scene-player*) #t #f)))
-    (when (not in-movie?)
-      (mp-sync-enemies-update))
-
-    (when (and *target*
-               (nonzero? *target*)
-               (or in-movie? (not *visibility-overriden?*)))
-      (mp-update-player-target-visibility! *target* in-movie?))
-    (mp-for-each-player-target (player-id record player-target)
-      (when (mp-player-record-remote? *mp-player-controller* record)
-        (mp-update-player-target-visibility! player-target in-movie?)))
-
-    (when (mp-connection-status-active? (pc-multi-get-status))
-      (mp-for-each-player-target (player-id record player-target)
-        (mp-update-player-sidekick-visibility!
-          player-target in-movie?)))
-    )
+(defun mp-update-player-visibility! ((sidekick-proc sidekick))
+  (when (and (mp-session-in-game?)
+             sidekick-proc
+             (nonzero? sidekick-proc)
+             (-> sidekick-proc parent)
+             (nonzero? (-> sidekick-proc parent))
+             *mp-player-controller*
+             (nonzero? *mp-player-controller*))
+    (let ((player-target (the-as target (ppointer->process (-> sidekick-proc parent)))))
+      (when (and player-target (nonzero? player-target))
+        (let ((record (mp-player-controller-target-record *mp-player-controller* player-target))
+              (in-movie? (if (and *scene-player* (movie?)) #t #f)))
+          (when (and record (nonzero? record))
+            (when (is-record-remote-player? record)
+              (mp-update-player-target-visibility! player-target in-movie?))
+            (mp-update-player-sidekick-visibility! player-target sidekick-proc in-movie?))
+          (when (and (= player-target *target*) (or in-movie? (not *visibility-overriden?*)))
+            (mp-update-player-target-visibility! player-target in-movie?))))))
   (none))

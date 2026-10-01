@@ -74,7 +74,7 @@ std::optional<std::vector<json>> did_open_push_diagnostics(Workspace& workspace,
   response["method"] = "textDocument/publishDiagnostics";
   response["params"] = publish_params;
 
-  return std::vector<json>{response};
+  return std::vector{response};
 }
 
 std::optional<std::vector<json>> did_change_push_diagnostics(Workspace& workspace, json raw_params) {
@@ -157,7 +157,7 @@ std::optional<std::vector<json>> did_save_push_diagnostics(Workspace& workspace,
   response["method"] = "textDocument/publishDiagnostics";
   response["params"] = publish_params;
 
-  return std::vector<json>{response};
+  return std::vector{response};
 }
 
 }  // namespace lsp_handlers

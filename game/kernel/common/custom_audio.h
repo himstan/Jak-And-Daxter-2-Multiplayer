@@ -18,11 +18,11 @@ class Source {
   Source(const Source&) = delete;
   Source& operator=(const Source&) = delete;
 
-  bool start(const std::string& path);
-  void stop();
-  void pause();
-  void resume();
-  void set_stereo_volume(u32 left, u32 right);
+  bool start(const std::string& path) const;
+  void stop() const;
+  void pause() const;
+  void resume() const;
+  void set_stereo_volume(u32 left, u32 right) const;
   bool is_playing() const;
   bool is_at_end() const;
   float position_seconds() const;
@@ -34,10 +34,10 @@ class Source {
 
 }  // namespace custom_audio
 
-u64 playMP3(u32 file_path, u32 volume);
-void stopMP3(u32 file_path);
+u64 playMP3(u32 file_path_ptr, u32 volume);
+void stopMP3(u32 file_path_ptr);
 void stopAllSounds();
-void playMainMusic(u32 file_path, u32 volume);
+void playMainMusic(u32 file_path_ptr, u32 volume);
 void pauseMainMusic();
 void stopMainMusic();
 void resumeMainMusic();

@@ -232,28 +232,23 @@
     )
   )
 
-(defun mp-gungame-sync-active? ()
-  (and *multi-sync-enabled?*
-       (= (pc-multi-get-status) (mp-connection-status in-game))
-       )
-  )
-
 (defun mp-gungame-local-authority? ()
-  (or (not (mp-gungame-sync-active?))
+  (or (not (mp-session-in-game?))
       (mp-session-host?)
       )
   )
 
 (defun mp-gungame-red-intro-step-reached? ((step uint))
-  (and (mp-gungame-sync-active?)
+  (and (mp-session-in-game?)
        (mp-session-client?)
        (>= *mp-gungame-red-intro-step* step)
        )
   )
 
 (defun mp-gungame-red-gun-away-done? ()
-  (if (and (mp-gungame-sync-active?) (mp-session-client?))
-      (mp-gungame-red-intro-step-reached? (the uint 2))
+  (if (and (mp-session-in-game?)
+           (mp-session-client?))
+      (>= *mp-gungame-red-intro-step* (the uint 2))
       (and *target*
            (nonzero? *target*)
            (not (focus-test? *target* gun))
@@ -262,8 +257,9 @@
   )
 
 (defun mp-gungame-red-gun-out-done? ()
-  (if (and (mp-gungame-sync-active?) (mp-session-client?))
-      (mp-gungame-red-intro-step-reached? (the uint 3))
+  (if (and (mp-session-in-game?)
+           (mp-session-client?))
+      (>= *mp-gungame-red-intro-step* (the uint 3))
       (and *target*
            (nonzero? *target*)
            (logtest? (focus-status gun) (-> *target* focus-status))
@@ -272,7 +268,7 @@
   )
 
 (defun mp-gungame-send-red-intro-step! ((step uint))
-  (when (and (mp-gungame-sync-active?) (mp-session-host?))
+  (when (and (mp-session-in-game?) (mp-session-host?))
     (set! *mp-gungame-red-intro-step* step)
     (let ((details (new 'stack-no-clear 'mp-gungame-build-data)))
       (set! (-> details event-type) MP_EVENT_MISSION_GUNGAME_TUTORIAL_STEP)
@@ -462,8 +458,7 @@
   )
 
 (defun mp-gungame-set-deterministic-rand! ((target-info tpath-info))
-  (when (and *multi-sync-enabled?*
-             (= (pc-multi-get-status) (mp-connection-status in-game))
+  (when (and (mp-session-in-game?)
              target-info)
     (set! *tpath-rand* (mp-gungame-deterministic-rand target-info))
     )
@@ -540,7 +535,7 @@
   )
 
 (defun mp-gungame-send-spawned! ((this training-manager) (target-info tpath-info) (spawn-kind int))
-  (when (and (mp-gungame-sync-active?)
+  (when (and (mp-session-in-game?)
              (mp-session-host?)
              target-info)
     (let ((cid (mp-gungame-course-id (-> this course))))
@@ -563,7 +558,7 @@
 
 (defun mp-gungame-send-course-snapshot! ((this training-manager))
   (let ((cid (mp-gungame-course-id (-> this course))))
-    (when (and (mp-gungame-sync-active?)
+    (when (and (mp-session-in-game?)
                (mp-session-host?)
                (nonzero? cid)
                (time-elapsed? *mp-gungame-last-snapshot-time* (seconds 0.25)))
@@ -601,7 +596,7 @@
 
 (defun mp-gungame-send-course-end! ((this training-manager))
   (let ((cid (mp-gungame-course-id (-> this course))))
-    (when (and (mp-gungame-sync-active?)
+    (when (and (mp-session-in-game?)
                (mp-session-host?)
                (nonzero? cid))
       (dotimes (chunk 4)
@@ -697,7 +692,7 @@
   )
 
 (defun mp-gungame-apply-snapshot! ((this training-manager))
-  (when (and (mp-gungame-sync-active?)
+  (when (and (mp-session-in-game?)
              (not (mp-gungame-local-authority?))
              *mp-gungame-pending?*
              (nonzero? *mp-gungame-course-id*)
@@ -2642,7 +2637,7 @@
 ;; WARN: Return type mismatch object vs none.
 (defmethod training-manager-method-28 ((this training-manager))
   (cond
-    ((and (mp-gungame-sync-active?)
+    ((and (mp-session-in-game?)
           (mp-session-client?)
           *mp-gungame-pending?*
           (nonzero? *mp-gungame-course-id*)

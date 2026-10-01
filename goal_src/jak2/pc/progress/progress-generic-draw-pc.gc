@@ -343,6 +343,54 @@
     (print-game-text str font-ctx #f 44 (bucket-id progress)))
   (none))
 
+(defun draw-generic-text-field-label ((option menu-generic-text-field-option)
+                                      (progress progress) (font-ctx font-context)
+                                      (option-index int) (selected? symbol))
+  (when (nonnull? option progress font-ctx)
+    (let ((alpha (fmax (* 2.0 (- 0.5 (-> progress menu-transition))) 0.0)))
+      (set! (-> font-ctx scale) 0.45)
+      (set! (-> font-ctx alpha) alpha)
+      (+! (-> font-ctx origin y) 5.0)
+      (set-flags! font-ctx (font-flags kerning middle large))
+      (cond
+        (selected?
+         (set-color! font-ctx (font-color progress-force-selected))
+         (draw-generic-highlight (the int (- (-> font-ctx origin y) 2.0)) 33 alpha))
+        ((= option-index (-> *progress-pc-generic-store* current-menu-hover-index))
+         (set-color! font-ctx (progress-selected 0))
+         (draw-generic-highlight (the int (- (-> font-ctx origin y) 2.0)) 18 alpha))
+        (else
+         (set-color! font-ctx (font-color progress))))
+      (print-game-text (lookup-text! *common-text* (-> option name) #f)
+                       font-ctx #f 44 (bucket-id progress))
+      (+! (-> font-ctx origin y) 18.0)))
+  (none))
+
+(defmethod draw-option ((option menu-generic-text-field-option)
+                        (progress progress) (font-ctx font-context)
+                        (option-index int) (selected? symbol))
+  (when (nonnull? option progress font-ctx (-> option session))
+    (when (not (-> option mounted?))
+      (refresh-generic-text-field! option))
+    (draw-generic-text-field-label option progress font-ctx option-index selected?)
+    (set! (-> font-ctx scale) 0.35)
+    (let ((session (-> option session)))
+      (cond
+        ((and selected? (nonzero? (-> session token)))
+         (pc-text-input-refresh! session)
+         (pc-text-input-format!
+           session *progress-generic-temp-string*
+           (not (logtest? (-> *display* real-clock integral-frame-counter) 16)))
+         (pc-encode-utf8-string *progress-generic-temp-string* *pc-encoded-temp-string*)
+         (print-game-text *pc-encoded-temp-string* font-ctx #f 44 (bucket-id progress)))
+        ((nonnull? (-> option cached-value))
+         (if (= (length (-> option cached-value)) 0)
+             (print-game-text "---" font-ctx #f 44 (bucket-id progress))
+             (begin
+               (pc-encode-utf8-string (-> option cached-value) *pc-encoded-temp-string*)
+               (print-game-text *pc-encoded-temp-string* font-ctx #f 44 (bucket-id progress))))))))
+  (none))
+
 (defmethod draw-option ((obj menu-generic-link-option) (progress progress) (font-ctx font-context) (option-index int) (selected? symbol))
   (when (not (-> obj mounted?))
     (on-mount! obj))

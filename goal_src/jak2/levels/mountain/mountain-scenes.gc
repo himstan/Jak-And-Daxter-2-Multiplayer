@@ -1882,7 +1882,7 @@
       (0 (kill "mtn-lens-base-2"))
       (0 (kill "mtn-lens-floor-2"))
       (0 (task-close! "mountain-lens-resolution"))
-      (0 (mp-mountain-resolution-report! MP_MOUNTAIN_RESOLUTION_LENS))
+      (0 (apply ,(lambda () (mp-mountain-resolution-report! MP_MOUNTAIN_RESOLUTION_LENS))))
       (0 (fadein (seconds (new 'static 'bfloat :data 0.333))))
       ((new 'static 'bfloat :data 0.1) (part-tracker
                                          "group-mtn-lens-light-shaft"
@@ -2216,7 +2216,7 @@
     :command-list '((0
         (kill "mtn-shard-1")
         (task-close! "mountain-shard-resolution")
-        (mp-mountain-resolution-report! MP_MOUNTAIN_RESOLUTION_SHARD)
+        (apply ,(lambda () (mp-mountain-resolution-report! MP_MOUNTAIN_RESOLUTION_SHARD)))
         (fadein (frame-time-30 10))
         (part-tracker
           "group-mountain-mtn-shard-glow"
@@ -2345,7 +2345,7 @@
         (kill "mtn-gear-device-4")
         (kill "mtn-gear-device-gear-4")
         (task-close! "mountain-gear-resolution")
-        (mp-mountain-resolution-report! MP_MOUNTAIN_RESOLUTION_GEAR)
+        (apply ,(lambda () (mp-mountain-resolution-report! MP_MOUNTAIN_RESOLUTION_GEAR)))
         (fadein (seconds (new 'static 'bfloat :data 0.333)))
         (apply
           ,(lambda :behavior scene-player
@@ -2984,6 +2984,11 @@
 (defstate idle (mtn-lens-floor)
   :virtual #t
   :code transform-and-sleep-code
+  :trans (behavior ()
+    (when (task-node-closed? (game-task-node mountain-lens-resolution)) 
+          (deactivate self)
+          )
+    )
   :post (behavior ()
     (spawn-with-cspace (-> self part) (joint-node mtn-lens-floor-lod0-jg main))
     )

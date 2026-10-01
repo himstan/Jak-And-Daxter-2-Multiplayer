@@ -114,7 +114,14 @@ Methods - long arg list
 
 ---
 
-(defmethod fill-and-probe-using-line-sphere ((obj collide-cache) (arg0 vector) (arg1 vector) (arg2 float) (arg3 collide-kind) (arg4 process) (arg5 collide-tri-result) (arg6 pat-surface))
+(defmethod fill-and-probe-using-line-sphere ((obj collide-cache)
+                                             (arg0 vector)
+                                             (arg1 vector)
+                                             (arg2 float)
+                                             (arg3 collide-kind)
+                                             (arg4 process)
+                                             (arg5 collide-tri-result)
+                                             (arg6 pat-surface))
   (fill-using-line-sphere obj arg0 arg1 arg2 arg3 (the-as process-drawable arg4) arg6)
   (probe-using-line-sphere obj arg0 arg1 arg2 arg3 arg5 arg6))
 

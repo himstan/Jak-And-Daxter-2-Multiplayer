@@ -22,10 +22,7 @@
      )
     ((continue-point)
      (let ((continue (the-as continue-point value)))
-       (when (and continue
-                  (nonzero? continue)
-                  (-> continue name)
-                  (nonzero? (-> continue name)))
+       (when (nonnull? continue(-> continue name))
          (return (-> continue name))
          )
        )
@@ -236,10 +233,7 @@
   )
 
 (defun handle-set-continue-hooks ((old-continue continue-point) (new-continue continue-point))
-  (when (and new-continue
-             (nonzero? new-continue)
-             (-> new-continue name)
-             (nonzero? (-> new-continue name))
+  (when (and (nonnull? new-continue  (-> new-continue name))
              (!= old-continue new-continue)
              (string= (-> new-continue name) "tomb-start")
              (not (task-closed? "canyon-insert-items-resolution"))
@@ -252,21 +246,6 @@
 ;; WARN: Using new Jak 2 rtype-of
 (defmethod set-continue! ((this game-info) (arg0 basic) (arg1 symbol))
   (let ((s5-0 (-> this current-continue)))
-    (let ((old-name (if (and s5-0 (nonzero? s5-0))
-                        (-> s5-0 name)
-                        (the-as string #f)))
-          (new-name (mp-trace-continue-name arg0)))
-      (when (and *mp-debug-log?*
-                 (or (mp-trace-tomb-continue? old-name)
-                     (mp-trace-tomb-continue? new-name)))
-        (debug-log *mp-debug-log?*
-                   "[MP-ContinueTrace] set-continue old=~S new=~S force=~S mode=~S~%"
-                   old-name
-                   new-name
-                   arg1
-                   (-> this mode))
-        )
-      )
     (if (null? arg0)
         (set! arg0 (the-as basic #f))
         )
@@ -310,14 +289,6 @@
       (set! (-> this continue-deaths) 0)
       (set! (-> this continue-time) (-> *display* game-clock frame-counter))
       (handle-set-continue-hooks s5-0 (-> this current-continue))
-      )
-    (when (and *mp-debug-log?*
-               (-> this current-continue)
-               (nonzero? (-> this current-continue))
-               (mp-trace-tomb-continue? (-> this current-continue name)))
-      (debug-log *mp-debug-log?*
-                 "[MP-ContinueTrace] set-continue result=~S~%"
-                 (-> this current-continue name))
       )
     )
   (-> this current-continue)

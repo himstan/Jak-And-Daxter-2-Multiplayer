@@ -165,7 +165,7 @@ If the Host has **NAT: Strict/LAN** or **NAT: Failed** then the Host is unable t
 ## Known issues
 
 - Random crashes are sadly still not unexpected, thankfully as the Host the game should be a bit more stable, as a Client it's pretty unproblematic to reconnect unless you're in a mission that has an NPC/Bot in it like Sig, since there's no catchup logic implemented for those type of missions (yet).
-- The remote player puppets can miss their animation triggers, so when they jump they might be "falling" until their legs hit the floor.
+- The remote player replicas can miss their animation triggers, so when they jump they might be "falling" until their legs hit the floor.
 - The Traffic Sync is very much so host owned, if the client player exits the host's traffic radius the handover is pretty invasive, it's going to remove all traffic on the client's side until he gets far enough from the Host. When he does the Client is going to start spawning peds and vehicles locally.
 - Reconnecting is currently the main recovery path for client-side issues and soft-locks.
 - Some situations may still behave better when the host leads the interaction.

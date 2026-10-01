@@ -120,10 +120,10 @@ VolumePair CalculateSpatializedVolume(Vec3w* position,
                                       s32 fo_max) {
   const s32 falloff_volume =
       CalculateFalloffVolume(position, volume, fo_curve, fo_min, fo_max);
-  const auto& pan = gPanTable[(630 - CalculateAngle(position)) % 360];
-  VolumePair result{
-      static_cast<s16>(std::clamp((pan.left * falloff_volume) >> 10, 0, 0x3fff)),
-      static_cast<s16>(std::clamp((pan.right * falloff_volume) >> 10, 0, 0x3fff)),
+  const auto& [left, right] = gPanTable[(630 - CalculateAngle(position)) % 360];
+  const VolumePair result {
+      .left = static_cast<s16>(std::clamp((left * falloff_volume) >> 10, 0, 0x3fff)),
+      .right = static_cast<s16>(std::clamp((right * falloff_volume) >> 10, 0, 0x3fff)),
   };
   return result;
 }

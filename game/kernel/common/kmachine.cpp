@@ -4,10 +4,10 @@
 
 #include <chrono>
 #include <algorithm>
-#include <fstream>
+#include <cerrno>
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
-#include <list>
 #include <random>
 #include <sstream>
 #include <thread>
@@ -37,6 +37,7 @@
 #include "game/sce/libscf.h"
 #include "game/sce/sif_ee.h"
 #include "game/sound/sndshim.h"
+#include "game/system/hid/input_manager.h"
 
 /*!
  * Where does OVERLORD load its data from?
@@ -90,7 +91,7 @@ float GetRuntimeAudioVolume() {
 
 void SetRuntimeAudioMuted(bool muted) {
   {
-    std::lock_guard<std::mutex> lock(runtimeAudioMutex);
+    std::lock_guard lock(runtimeAudioMutex);
     runtimeAudioMuted = muted;
   }
   ApplyRuntimeAudioSettings();
@@ -498,15 +499,14 @@ constexpr u32 kGoalMemoryEnd = 0x08000000;
 constexpr u32 kMaxCustomAudioKeyLength = 47;
 constexpr u32 kMaxCustomAudioPathLength = 4095;
 
-const char* checked_goal_string(u32 string_ptr, u32 max_length) {
+const char* checked_goal_string(const u32 string_ptr, const u32 max_length) {
   if (!g_ee_main_mem || (string_ptr & OFFSET_MASK) != BASIC_OFFSET ||
       string_ptr >= kGoalMemoryEnd - sizeof(String)) {
     return nullptr;
   }
 
   auto* goal_string = Ptr<String>(string_ptr).c();
-  const u32 bytes_remaining = kGoalMemoryEnd - string_ptr - sizeof(String);
-  if (goal_string->len > max_length || goal_string->len >= bytes_remaining ||
+  if (const u32 bytes_remaining = kGoalMemoryEnd - string_ptr - sizeof(String); goal_string->len > max_length || goal_string->len >= bytes_remaining ||
       goal_string->data()[goal_string->len] != '\0') {
     return nullptr;
   }
@@ -514,7 +514,7 @@ const char* checked_goal_string(u32 string_ptr, u32 max_length) {
 }
 }  // namespace
 
-u64 pc_register_custom_spatial_audio(u32 key_ptr, u32 path_ptr) {
+static u64 pc_register_custom_spatial_audio(const u32 key_ptr, const u32 path_ptr) {
   if (g_game_version != GameVersion::Jak2) {
     return bool_to_symbol(false);
   }
@@ -527,7 +527,7 @@ u64 pc_register_custom_spatial_audio(u32 key_ptr, u32 path_ptr) {
   return bool_to_symbol(jak2::RegisterCustomAudioStream(key, path));
 }
 
-s64 pc_custom_spatial_audio_status(u32 key_ptr, s32 id) {
+static s64 pc_custom_spatial_audio_status(const u32 key_ptr, const s32 id) {
   if (g_game_version != GameVersion::Jak2 || !id) {
     return 0;
   }
@@ -539,7 +539,7 @@ s64 pc_custom_spatial_audio_status(u32 key_ptr, s32 id) {
   return static_cast<s64>(jak2::GetCustomAudioStreamStatus(key, id));
 }
 
-s64 pc_custom_spatial_audio_position(s32 id) {
+static s64 pc_custom_spatial_audio_position(const s32 id) {
   if (g_game_version != GameVersion::Jak2) {
     return -1;
   }
@@ -1217,12 +1217,115 @@ void pc_register_screen_shot_settings(u32 ptr) {
   register_screen_shot_settings(Ptr<ScreenShotSettings>(ptr).c());
 }
 
-u32 g_last_key = 0;
+std::shared_ptr<InputManager> main_input_manager() {
+  if (Display::g_displays.empty() || !Display::g_displays.front()) {
+    return {};
+  }
+  return Display::g_displays.front()->get_input_manager();
+}
 
-u32 pc_get_last_key() {
-  u32 key = g_last_key;
-  g_last_key = 0;
-  return key;
+u32 pc_text_input_begin(const u32 initial_ptr,
+                        const u32 max_bytes,
+                        const u32 allowed_ptr,
+                        const u32 uppercase_symbol) {
+  const auto input = main_input_manager();
+  if (!input || initial_ptr == 0 || allowed_ptr == 0 || max_bytes == 0 || max_bytes > 4095) {
+    return 0;
+  }
+  return input->begin_text_input(
+      Ptr<String>(initial_ptr).c()->data(),
+      {.max_bytes = max_bytes,
+       .allowed_characters = Ptr<String>(allowed_ptr).c()->data(),
+       .uppercase_ascii = uppercase_symbol != 0 && symbol_to_bool(uppercase_symbol)});
+}
+
+u32 pc_text_input_status(const u32 token) {
+  const auto input = main_input_manager();
+  return input ? static_cast<u32>(input->text_input_snapshot(token).status) : 0;
+}
+
+u32 pc_text_input_revision(const u32 token) {
+  const auto input = main_input_manager();
+  return input ? input->text_input_snapshot(token).revision : 0;
+}
+
+u64 pc_text_input_text(const u32 token) {
+  const auto input = main_input_manager();
+  const auto text = input ? input->text_input_snapshot(token).text : std::string();
+  return g_pc_port_funcs.make_string_from_c(text.c_str());
+}
+
+u32 pc_text_input_cursor(const u32 token) {
+  const auto input = main_input_manager();
+  return input ? static_cast<u32>(input->text_input_snapshot(token).cursor) : 0;
+}
+
+u32 pc_text_input_anchor(const u32 token) {
+  const auto input = main_input_manager();
+  return input ? static_cast<u32>(input->text_input_snapshot(token).anchor) : 0;
+}
+
+u64 pc_text_input_composition(const u32 token) {
+  const auto input = main_input_manager();
+  const auto composition = input ? input->text_input_snapshot(token).composition : std::string();
+  return g_pc_port_funcs.make_string_from_c(composition.c_str());
+}
+
+u32 pc_text_input_composition_cursor(const u32 token) {
+  const auto input = main_input_manager();
+  return input ? static_cast<u32>(input->text_input_snapshot(token).composition_cursor) : 0;
+}
+
+u32 pc_text_input_composition_anchor(const u32 token) {
+  const auto input = main_input_manager();
+  return input ? static_cast<u32>(input->text_input_snapshot(token).composition_anchor) : 0;
+}
+
+u32 pc_text_input_submit(const u32 token) {
+  const auto input = main_input_manager();
+  return input && input->submit_text_input(token) ? 1 : 0;
+}
+
+u32 pc_text_input_cancel(const u32 token) {
+  const auto input = main_input_manager();
+  return input && input->cancel_text_input(token) ? 1 : 0;
+}
+
+u32 pc_text_input_resolve(const u32 token, const u32 accepted_symbol) {
+  const auto input = main_input_manager();
+  return input && input->resolve_text_input(token, symbol_to_bool(accepted_symbol)) ? 1 : 0;
+}
+
+u32 pc_text_input_close(const u32 token) {
+  const auto input = main_input_manager();
+  return input && input->close_text_input(token) ? 1 : 0;
+}
+
+u32 pc_text_input_valid_number(const u32 text_ptr, const u32 float_symbol) {
+  if (text_ptr == 0) {
+    return bool_to_symbol(false);
+  }
+  const char* text = Ptr<String>(text_ptr).c()->data();
+  if (!text || *text == '\0') {
+    return bool_to_symbol(false);
+  }
+  const bool floating = symbol_to_bool(float_symbol);
+  std::string_view value(text);
+  int base = 10;
+  if (!floating && value.size() > 2 && value[0] == '#' &&
+      (value[1] == 'x' || value[1] == 'X' || value[1] == 'b' || value[1] == 'B')) {
+    base = value[1] == 'x' || value[1] == 'X' ? 16 : 2;
+    value.remove_prefix(2);
+  }
+  errno = 0;
+  char* end = nullptr;
+  if (floating) {
+    std::strtod(text, &end);
+    return bool_to_symbol(errno != ERANGE && end != text && *end == '\0');
+  }
+  const std::string terminated(value);
+  std::strtoll(terminated.c_str(), &end, base);
+  return bool_to_symbol(errno != ERANGE && end != terminated.c_str() && *end == '\0');
 }
 
 void pc_encode_utf8_string(u32 src_str_ptr, u32 str_dest_ptr) {
@@ -1384,7 +1487,22 @@ void init_common_pc_port_functions(
   make_func_symbol_func("pc-encode-utf8-string", (void*)pc_encode_utf8_string);
 
   // debugging tools
-  make_func_symbol_func("pc-get-last-key", (void*)pc_get_last_key);
+  make_func_symbol_func("pc-text-input-begin", (void*)pc_text_input_begin);
+  make_func_symbol_func("pc-text-input-status", (void*)pc_text_input_status);
+  make_func_symbol_func("pc-text-input-revision", (void*)pc_text_input_revision);
+  make_func_symbol_func("pc-text-input-text", (void*)pc_text_input_text);
+  make_func_symbol_func("pc-text-input-cursor", (void*)pc_text_input_cursor);
+  make_func_symbol_func("pc-text-input-anchor", (void*)pc_text_input_anchor);
+  make_func_symbol_func("pc-text-input-composition", (void*)pc_text_input_composition);
+  make_func_symbol_func("pc-text-input-composition-cursor",
+                        (void*)pc_text_input_composition_cursor);
+  make_func_symbol_func("pc-text-input-composition-anchor",
+                        (void*)pc_text_input_composition_anchor);
+  make_func_symbol_func("pc-text-input-submit", (void*)pc_text_input_submit);
+  make_func_symbol_func("pc-text-input-cancel", (void*)pc_text_input_cancel);
+  make_func_symbol_func("pc-text-input-resolve", (void*)pc_text_input_resolve);
+  make_func_symbol_func("pc-text-input-close", (void*)pc_text_input_close);
+  make_func_symbol_func("pc-text-input-valid-number?", (void*)pc_text_input_valid_number);
   make_func_symbol_func("pc-filter-debug-string?", (void*)pc_filter_debug_string);
   make_func_symbol_func("pc-screen-shot", (void*)pc_screen_shot);
   make_func_symbol_func("pc-register-screen-shot-settings",

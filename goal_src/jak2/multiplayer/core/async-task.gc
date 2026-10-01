@@ -1,0 +1,132 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(deftype async-task (process)
+  ((owner-handle  handle)
+   (tag           symbol)
+   (timeout-ticks int32)
+   (elapsed-ticks int32)
+   (user-data     uint64)
+   (poll-fn       (function async-task process symbol))
+   (on-success    (function async-task process object))
+   (on-fail       (function async-task process symbol object)))
+  (:state-methods
+   waiting))
+
+(defun get-async-task-owner ((this async-task))
+  (handle->process (-> this owner-handle)))
+
+(defstate waiting (async-task)
+  :virtual #t
+  :code
+    (behavior ()
+      (until #f
+        (let ((owner (get-async-task-owner self)))
+          (cond
+            ((and (nonzero? (-> self owner-handle)) (not (nonnull? owner)))
+             (when (-> self on-fail)
+               ((-> self on-fail) self owner 'owner-dead))
+             (deactivate self)
+             (return #f))
+            ((and (> (-> self timeout-ticks) 0) (>= (-> self elapsed-ticks) (-> self timeout-ticks)))
+             (when (-> self on-fail)
+               ((-> self on-fail) self owner 'timeout))
+             (deactivate self)
+             (return #f))
+            (else
+             (let ((result (if (-> self poll-fn) ((-> self poll-fn) self owner) 'continue)))
+               (cond
+                 ((= result 'success)
+                  (when (-> self on-success)
+                    ((-> self on-success) self owner))
+                  (deactivate self)
+                  (return #f))
+                 ((= result 'fail)
+                  (when (-> self on-fail)
+                    ((-> self on-fail) self owner 'failed))
+                  (deactivate self)
+                  (return #f)))))))
+        (+! (-> self elapsed-ticks) 1)
+        (suspend))
+      #f))
+
+(defbehavior init-async-task async-task ((owner-proc process)
+                                         (tag symbol)
+                                         (timeout-ticks int)
+                                         (poll (function async-task process symbol))
+                                         (on-success (function async-task process object))
+                                         (on-fail (function async-task process symbol object)))
+  (set! (-> self owner-handle) (if (nonnull? owner-proc) (process->handle owner-proc) (the-as handle #f)))
+  (set! (-> self tag) tag)
+  (set! (-> self timeout-ticks) timeout-ticks)
+  (set! (-> self elapsed-ticks) 0)
+  (set! (-> self user-data) (the-as uint 0))
+  (set! (-> self poll-fn) poll)
+  (set! (-> self on-success) on-success)
+  (set! (-> self on-fail) on-fail)
+  (go-virtual waiting)
+  (none))
+
+(defun cancel-async-task! ((tag symbol))
+  (let ((task-name (symbol->string tag)))
+    (when (and *active-pool* (nonzero? *active-pool*))
+      (kill-by-name task-name *active-pool*))
+    (when (and *mid-pool* (nonzero? *mid-pool*))
+      (kill-by-name task-name *mid-pool*)))
+  (none))
+
+(defun cancel-all-async-tasks! ()
+  (when (and *active-pool* (nonzero? *active-pool*))
+    (kill-by-type async-task *active-pool*))
+  (when (and *mid-pool* (nonzero? *mid-pool*))
+    (kill-by-type async-task *mid-pool*))
+  (none))
+
+(defun async-task-active? ((tag symbol))
+  (let ((task-name (symbol->string tag)))
+    (let ((p (if (and *mid-pool* (nonzero? *mid-pool*)) (process-by-name task-name *mid-pool*) (the-as process #f))))
+      (if (nonnull? p)
+        #t
+        (let ((p2 (if (and *active-pool* (nonzero? *active-pool*)) (process-by-name task-name *active-pool*) (the-as process #f))))
+          (nonnull? p2))))))
+
+(defun spawn-async-task! ((owner process)
+                          (tag symbol)
+                          (timeout-ticks int)
+                          (poll (function async-task process symbol))
+                          (on-success (function async-task process object))
+                          (on-fail (function async-task process symbol object)))
+  (cancel-async-task! tag)
+  (let ((parent-proc (if (nonnull? owner) owner (the-as process *mid-pool*))))
+    (when (nonnull? parent-proc)
+      (process-spawn async-task
+                     owner
+                     tag
+                     timeout-ticks
+                     poll
+                     on-success
+                     on-fail
+                     :init init-async-task
+                     :name (symbol->string tag)
+                     :to parent-proc))))
+
+(defmacro run-async-task (&key
+                          (owner #f)
+                          &key
+                          (tag 'async-task)
+                          &key
+                          (timeout 0)
+                          &key
+                          (poll #f)
+                          &key
+                          (on-success #f)
+                          &key
+                          (on-fail #f))
+  `(spawn-async-task! ,(if owner `(the-as process ,owner) `(process-by-type-exact 'main-multiplayer-manager *active-pool*))
+                     ,tag
+                     ,timeout
+                     ,(if poll `(the-as (function async-task process symbol) ,poll) `(the-as (function async-task process symbol) #f))
+                     ,(if on-success `(the-as (function async-task process object) ,on-success) `(the-as (function async-task process object) #f))
+                     ,(if on-fail
+                       `(the-as (function async-task process symbol object) ,on-fail)
+                       `(the-as (function async-task process symbol object) #f))))

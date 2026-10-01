@@ -1,0 +1,30 @@
+(define *nonnull-eval-count* 0)
+
+(defun nonnull-counted-value ((value integer))
+  (set! *nonnull-eval-count* (1+ *nonnull-eval-count*))
+  value
+  )
+
+(let ((single-result (nonnull? 1))
+      (multiple-result (nonnull? 1 2 3))
+      (false-result (nonnull? (the-as object #f)))
+      (zero-result (nonnull? 1 0 3)))
+  (set! *nonnull-eval-count* 0)
+  (let ((short-circuit-result (nonnull? 0 (nonnull-counted-value 1))))
+    (let ((short-circuit-count *nonnull-eval-count*))
+      (set! *nonnull-eval-count* 0)
+      (let ((single-evaluation-result
+              (nonnull? (nonnull-counted-value 1)
+                        (nonnull-counted-value 2))))
+        (+ (if single-result 1 0)
+           (if multiple-result 2 0)
+           (if (not false-result) 4 0)
+           (if (not zero-result) 8 0)
+           (if (and (not short-circuit-result)
+                    (= short-circuit-count 0))
+               16
+               0)
+           (if (and single-evaluation-result
+                    (= *nonnull-eval-count* 2))
+               32
+               0))))))

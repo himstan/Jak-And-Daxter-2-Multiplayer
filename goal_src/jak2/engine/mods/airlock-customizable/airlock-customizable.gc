@@ -112,16 +112,8 @@
 
 (defmethod airlock-ready-for-state? ((this com-airlock))
   (the-as symbol
-          (and this
-               (nonzero? this)
-               (-> this entity)
-               (nonzero? (-> this entity))
-               (-> this level)
-               (nonzero? (-> this level))
-               (-> this draw)
-               (nonzero? (-> this draw))
-               )
-          )
+    (nonnull? this (-> this entity) (-> this level) (-> this draw) )
+    )
   )
 
 (defmethod airlock-ready-for-script? ((this com-airlock) (script pair))
@@ -265,7 +257,7 @@
 (defmethod run-airlock-script! ((this com-airlock) (script pair) (label symbol))
   (when (airlock-ready-for-script? this script)
     (when (-> this mp-sync?)
-      (debug-log *mp-debug-log?* "[MP-Airlock] Playing ~A for aid=~D name=~A script=~A~%"
+      (log 'debug "[MP-Airlock] Playing ~A for aid=~D name=~A script=~A~%"
               label
               (-> this entity aid)
               (-> this name)
@@ -280,8 +272,7 @@
 (defmethod airlock-reconcile-runtime-ready? ((this com-airlock))
   (the-as symbol
           (and (-> this mp-sync?)
-               *multi-sync-enabled?*
-               (= (pc-multi-get-status) (mp-connection-status in-game))
+               (mp-session-in-game?)
                (airlock-ready-for-state? this)
                (-> this on-reconcile)
                (not *scene-player*)
@@ -614,7 +605,7 @@
 (defmethod is-commit-for-all-players? ((this com-airlock))
   (if (and (-> this mp-sync?)
            (mp-is-local-state-id? (-> this entity aid) (mp-airlock-state-id commit))
-           (mp-is-remote-state-id? (-> this entity aid) (mp-airlock-state-id commit)))
+           (mp-airlock-all-connected-remotes-state-id? (-> this entity aid) (mp-airlock-state-id commit)))
       #t
       #f
       )
@@ -655,15 +646,14 @@
         (let ((record (mp-player-record-by-id (the-as uint player-id))))
           (when (and record
                      (nonzero? record)
-                     (mp-player-record-remote? *mp-player-controller* record)
-                     (>= (-> record connection status) 4))
-            (let ((packed-level (-> record transform level)))
-              (dotimes (packed-idx 4)
-                (let ((level-id
-                        (the-as uint
-                          (logand (shr packed-level (* packed-idx 8)) #xff))))
-                  (when (airlock-level-list-contains-id? this level-list level-id)
-                    (return #t)))))))))
+                     (is-record-remote-player? record)
+                     (>= (-> record connection activity) (mp-player-activity lobby)))
+            (dotimes (i MP_PLAYER_LEVEL_SLOT_COUNT)
+              (let ((level (-> record transform levels i)))
+                (when (airlock-level-list-contains-id? this level-list (-> level level-id))
+                  (return #t))
+                )
+              )))))
     )
   #f
   )
@@ -686,8 +676,7 @@
         (the-as symbol
                 (or (is-commit-for-all-players? this)
                     (and local-commit?
-                         (!= (mp-get-local-airlock-level-id airlock-aid)
-                             (mp-get-remote-airlock-level-id airlock-aid))
+                         (mp-any-remote-airlock-level-differs? airlock-aid (mp-get-local-airlock-level-id airlock-aid))
                          )
                     )
                 )
@@ -1040,11 +1029,11 @@
           (when (and (not (mp-is-local-state-id? (-> self entity aid) (mp-airlock-state-id none)))
                      (or (and local-commit? (not local-in-sync-distance?))
                          (and (not local-commit?) (not local-ready?))))
-            (debug-log *mp-debug-log?* "[MP-Airlock] Setting closed local airlock state to none from ~S aid=~D name=~A level=~A~%" (mp-airlock-state-id->string (mp-get-local-airlock-state (-> self entity aid))) (-> self entity aid) (-> self name) (-> self level name))
+            (log 'debug "[MP-Airlock] Setting closed local airlock state to none from ~S aid=~D name=~A level=~A~%" (mp-airlock-state-id->string (mp-get-local-airlock-state (-> self entity aid))) (-> self entity aid) (-> self name) (-> self level name))
             (mp-airlock-set-local-state! (-> self entity aid) (mp-airlock-state-id none))
             )
           (when (and (not (mp-is-local-state-id? (-> self entity aid) (mp-airlock-state-id ready))) local-ready?)
-            (debug-log *mp-debug-log?* "[MP-Airlock] Setting closed local airlock state to ready from ~S aid=~D name=~A level=~A~%" (mp-airlock-state-id->string (mp-get-local-airlock-state (-> self entity aid))) (-> self entity aid) (-> self name) (-> self level name))
+            (log 'debug "[MP-Airlock] Setting closed local airlock state to ready from ~S aid=~D name=~A level=~A~%" (mp-airlock-state-id->string (mp-get-local-airlock-state (-> self entity aid))) (-> self entity aid) (-> self name) (-> self level name))
             (mp-airlock-set-local-state! (-> self entity aid) (mp-airlock-state-id ready))
             )
           )
@@ -1066,7 +1055,7 @@
                    )
                  )
         (when (-> self mp-sync?)
-          (debug-log *mp-debug-log?* "[MP-Airlock] Started opening airlock aid=~D name=~A~%" (-> self entity aid) (-> self name))
+          (log 'debug "[MP-Airlock] Started opening airlock aid=~D name=~A~%" (-> self entity aid) (-> self name))
           )
         (when (nonzero? (-> self sound-id))
           (let ((v1-17 (the-as sound-rpc-set-param (get-sound-buffer-entry))))
@@ -1237,11 +1226,11 @@
                  (local-ready? (local-player-can-report-airlock-ready? self))
                  )
             (when (and (not (mp-is-local-state-id? (-> self entity aid) (mp-airlock-state-id none))) (not local-in-sync-distance?))
-              (debug-log *mp-debug-log?* "[MP-Airlock] Setting open local airlock state to none from ~A aid=~D name=~A level=~A~%" (mp-airlock-state-id->string (mp-get-local-airlock-state (-> self entity aid))) (-> self entity aid) (-> self name) (-> self level name))
+              (log 'debug "[MP-Airlock] Setting open local airlock state to none from ~A aid=~D name=~A level=~A~%" (mp-airlock-state-id->string (mp-get-local-airlock-state (-> self entity aid))) (-> self entity aid) (-> self name) (-> self level name))
               (mp-airlock-set-local-state! (-> self entity aid) (mp-airlock-state-id none))
               )
             (when (and (not (mp-is-local-state-id? (-> self entity aid) (mp-airlock-state-id ready))) local-ready?)
-              (debug-log *mp-debug-log?* "[MP-Airlock] Setting open local airlock state to ready from ~A aid=~D name=~A level=~A~%" (mp-airlock-state-id->string (mp-get-local-airlock-state (-> self entity aid))) (-> self entity aid) (-> self name) (-> self level name))
+              (log 'debug "[MP-Airlock] Setting open local airlock state to ready from ~A aid=~D name=~A level=~A~%" (mp-airlock-state-id->string (mp-get-local-airlock-state (-> self entity aid))) (-> self entity aid) (-> self name) (-> self level name))
               (mp-airlock-set-local-state! (-> self entity aid) (mp-airlock-state-id ready))
               )
             (when (and (-> self inner?)
@@ -1254,12 +1243,12 @@
                                 (not (want-cross-airlock? self))
                                 (not (has-elevator-and-has-state? self 'arrived))
                                 (dont-have-elevator-or-is-standing-on-it self))))
-              (debug-log *mp-debug-log?* "[MP-Airlock] Setting open local airlock state to commit from ~A aid=~D name=~A level=~A~%" (mp-airlock-state-id->string (mp-get-local-airlock-state (-> self entity aid))) (-> self entity aid) (-> self name) (-> self level name))
+              (log 'debug "[MP-Airlock] Setting open local airlock state to commit from ~A aid=~D name=~A level=~A~%" (mp-airlock-state-id->string (mp-get-local-airlock-state (-> self entity aid))) (-> self entity aid) (-> self name) (-> self level name))
               (mp-airlock-set-local-state! (-> self entity aid) (mp-airlock-state-id commit))
               )
             (when (and (mp-is-local-state-id? (-> self entity aid) (mp-airlock-state-id commit))
                        (not (dont-have-elevator-or-is-standing-on-it self)))
-              (debug-log *mp-debug-log?* "[MP-Airlock] Setting open local airlock state to none from ~A aid=~D name=~A level=~A~%" (mp-airlock-state-id->string (mp-get-local-airlock-state (-> self entity aid))) (-> self entity aid) (-> self name) (-> self level name))
+              (log 'debug "[MP-Airlock] Setting open local airlock state to none from ~A aid=~D name=~A level=~A~%" (mp-airlock-state-id->string (mp-get-local-airlock-state (-> self entity aid))) (-> self entity aid) (-> self name) (-> self level name))
               (mp-airlock-set-local-state! (-> self entity aid) (mp-airlock-state-id none))
               )
             (draw-airlock-waiting-text! self)

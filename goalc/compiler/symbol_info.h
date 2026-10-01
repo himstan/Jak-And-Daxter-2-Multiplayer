@@ -138,9 +138,7 @@ class SymbolInfoMap {
   // This allows us to not only efficiently retrieve symbols by file, but also allows us to
   // cleanup symbols when files are re-compiled.
   std::unordered_map<std::string, std::vector<SymbolInfo*>> m_file_symbol_index;
-
-  // Indexes references to symbols by the file they occur within
-  // This allows us to cleanup references when files are re-compiled.
+  
   std::unordered_map<std::string, std::unordered_map<std::string, std::vector<ReferenceLocation>>>
       m_file_reference_index;
 

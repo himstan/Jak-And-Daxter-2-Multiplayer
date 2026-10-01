@@ -93,6 +93,7 @@
   (set! (-> this draw shadow-mask) (the-as uint 30))
   (set! (-> this draw shadow-values) (the-as uint #x22220))
   (set! (-> this tt) 0.0)
+  ;; the race hatches will be forced open always, players can just jump down to the track and get into the vehicles there
   (set! (-> this tt-target) 1.0)
   (ja-channel-push! 1 0)
   (let ((v1-7 (-> this skel root-channel 0)))

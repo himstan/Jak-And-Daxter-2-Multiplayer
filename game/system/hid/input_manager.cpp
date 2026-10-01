@@ -18,6 +18,7 @@
 #include "game/runtime.h"
 
 #include "third-party/SDL/include/SDL3/SDL_hints.h"
+#include "third-party/SDL/include/SDL3/SDL_clipboard.h"
 #include "fmt/format.h"
 #include "third-party/imgui/imgui.h"
 
@@ -35,7 +36,19 @@ u64 stable_controller_claim_hash(const std::string& claim_key) {
 InputManager::InputManager(SDL_Window* window)
     : m_window(window),
       // Load user settings
-      m_settings(std::make_shared<game_settings::InputSettings>(game_settings::InputSettings())) {
+      m_settings(std::make_shared<game_settings::InputSettings>(game_settings::InputSettings())),
+      m_text_editor({
+          .read = []() {
+            char* text = SDL_GetClipboardText();
+            const std::string result = text ? text : "";
+            SDL_free(text);
+            return result;
+          },
+          .write = [](const std::string_view text) {
+            const std::string terminated(text);
+            SDL_SetClipboardText(terminated.c_str());
+          },
+      }) {
   prof().instant_event("ROOT");
   {
     auto p = scoped_prof("input_manager::init");
@@ -93,6 +106,9 @@ InputManager::~InputManager() {
       device->close_device();
     }
     m_settings->save_settings();
+    if (m_text_editor.active()) {
+      SDL_StopTextInput(m_window);
+    }
   }
 }
 
@@ -196,15 +212,14 @@ bool InputManager::try_claim_controller(const int controller_idx) {
   const auto& controller = m_available_controllers.at(controller_idx);
   const auto claim_hash = stable_controller_claim_hash(controller->get_claim_key());
   const auto mutex_name = fmt::format("Local\\OpenGOALControllerClaim_{:016x}", claim_hash);
-  HANDLE claim_mutex = CreateMutexA(nullptr, false, mutex_name.c_str());
+  const HANDLE claim_mutex = CreateMutexA(nullptr, false, mutex_name.c_str());
   if (!claim_mutex) {
     lg::warn("Unable to create controller claim mutex for {}; allowing controller assignment",
              controller->get_name());
     return true;
   }
 
-  const auto wait_result = WaitForSingleObject(claim_mutex, 0);
-  if (wait_result == WAIT_OBJECT_0 || wait_result == WAIT_ABANDONED) {
+  if (const auto wait_result = WaitForSingleObject(claim_mutex, 0); wait_result == WAIT_OBJECT_0 || wait_result == WAIT_ABANDONED) {
     m_controller_claims[controller_idx] = claim_mutex;
     return true;
   }
@@ -234,7 +249,7 @@ void InputManager::release_controller_claim(const int controller_idx) {
 void InputManager::release_controller_claims() {
   std::vector<int> claimed_controller_indices;
   claimed_controller_indices.reserve(m_controller_claims.size());
-  for (const auto& [controller_idx, _] : m_controller_claims) {
+  for (const auto& controller_idx : m_controller_claims | std::views::keys) {
     claimed_controller_indices.push_back(controller_idx);
   }
   for (const auto controller_idx : claimed_controller_indices) {
@@ -270,11 +285,9 @@ void InputManager::hide_cursor(const bool hide_cursor) {
   m_mouse_currently_hidden = hide_cursor;
 }
 
-extern u32 g_last_key;
-
 void InputManager::process_sdl_event(const SDL_Event& event) {
-  if (event.type == SDL_EVENT_KEY_DOWN) {
-    g_last_key = (u32)event.key.key;
+  if (m_text_editor.handle_event(event)) {
+    return;
   }
 
   // TODO - perhaps should handle `SDL_CONTROLLERDEVICEREMAPPED`?
@@ -321,6 +334,10 @@ void InputManager::process_sdl_event(const SDL_Event& event) {
 }
 
 void InputManager::poll_keyboard_data() {
+  if (m_text_editor.active()) {
+    clear_keyboard_actions();
+    return;
+  }
   if (is_keyboard_enabled() && m_skip_polling_for_n_frames <= 0 && !m_waiting_for_bind) {
     if (m_data.find(m_keyboard_and_mouse_port) != m_data.end()) {
       m_keyboard.poll_state(m_data.at(m_keyboard_and_mouse_port));
@@ -410,9 +427,62 @@ void InputManager::process_ee_events() {
       case EEInputEventType::SET_TRIGGER_EFFECTS_ENABLED:
         set_trigger_effects_enabled(std::get<bool>(evt.param1));
         break;
+      case EEInputEventType::START_TEXT_INPUT:
+        if (!SDL_StartTextInput(m_window)) {
+          sdl_util::log_error("Unable to start text input");
+          m_text_editor.fail_active_session();
+        }
+        break;
+      case EEInputEventType::STOP_TEXT_INPUT:
+        if (!SDL_StopTextInput(m_window)) {
+          sdl_util::log_error("Unable to stop text input");
+        }
+        break;
     }
     ee_event_queue.pop();
   }
+}
+
+uint32_t InputManager::begin_text_input(const std::string_view initial_text,
+                                        TextInputEditor::Policy policy) {
+  const uint32_t token = m_text_editor.begin(initial_text, std::move(policy));
+  if (token != 0) {
+    const std::lock_guard lock(m_event_queue_mtx);
+    ee_event_queue.push({.type = EEInputEventType::START_TEXT_INPUT});
+  }
+  return token;
+}
+
+TextInputEditor::Snapshot InputManager::text_input_snapshot(const uint32_t token) const {
+  return m_text_editor.snapshot(token);
+}
+
+bool InputManager::submit_text_input(const uint32_t token) {
+  return m_text_editor.request_submit(token);
+}
+
+bool InputManager::cancel_text_input(const uint32_t token) {
+  return m_text_editor.request_cancel(token);
+}
+
+bool InputManager::resolve_text_input(const uint32_t token, const bool accepted) {
+  if (!m_text_editor.resolve_submission(token, accepted)) {
+    return false;
+  }
+  if (accepted) {
+    const std::lock_guard lock(m_event_queue_mtx);
+    ee_event_queue.push({.type = EEInputEventType::STOP_TEXT_INPUT});
+  }
+  return true;
+}
+
+bool InputManager::close_text_input(const uint32_t token) {
+  if (!m_text_editor.close(token)) {
+    return false;
+  }
+  const std::lock_guard lock(m_event_queue_mtx);
+  ee_event_queue.push({.type = EEInputEventType::STOP_TEXT_INPUT});
+  return true;
 }
 
 void InputManager::register_command(const CommandBinding::Source source,

@@ -12,7 +12,6 @@
 (define *keira-race-enabled* #t)
 
 (defun keira-delivery-race-start-ready? ()
-  "Wait for the city race assets and a stable local target before starting the race manager."
   (and (= (level-status *level* 'ctyport) 'active)
        (= (level-status *level* 'lprtrace) 'active)
        *target*
@@ -22,7 +21,6 @@
          (and target-control (nonzero? target-control)))))
 
 (defun keira-delivery-find-or-spawn-vehicle! ((traffic-mgr process) (spawn-params traffic-object-spawn-params))
-  "Reuse the reserved mission vehicle if it already exists locally."
   (let ((vehicle-proc (the-as process (mp-mission-vehicle-find-by-net-id MP_MISSION_VEHICLE_KEIRA_DELIVERY))))
     (if (and vehicle-proc (nonzero? vehicle-proc))
         (set! (-> spawn-params proc) vehicle-proc)
@@ -416,7 +414,7 @@
             (let ((race-manager (race-start-from-info info self #f)))
               (when (and race-manager (nonzero? race-manager))
                 (set! (-> self slave 0) (process->handle race-manager))
-                (debug-log *mp-debug-log?* "[Race] Overriding city-keira-delivery-delivery end-pos with race's finish sphere.~%")
+                (log 'debug "[Race] Overriding city-keira-delivery-delivery end-pos with race's finish sphere.~%")
                 (set! (-> self end-pos quad) (-> race-manager race-state info finish-sphere quad))
                 )
               )
@@ -513,13 +511,13 @@
         (if (>= (* f1-0 f1-0) f0-0)
             (set! complete? #t)
             )
-        (mp-for-each-player-target (player-id record puppet)
-          (when (and (mp-player-record-remote? *mp-player-controller* record)
-                     (-> puppet root)
-                     (nonzero? (-> puppet root))
+        (mp-for-each-player-target (player-id record replica)
+          (when (and (is-record-remote-player? record)
+                     (-> replica root)
+                     (nonzero? (-> replica root))
                      (>= (* f1-0 f1-0)
                          (vector-vector-distance-squared
-                           (-> puppet root trans) (-> self end-pos))))
+                           (-> replica root trans) (-> self end-pos))))
             (set! complete? #t)))
         (if complete?
             (go-virtual complete)
@@ -550,7 +548,7 @@
         )
         (until (or v1-7
                  (let ((veh (handle->process (-> self slave 0))))
-                   (and veh (nonzero? veh) (mp-any-player-near-and-piloting? (the-as process-drawable veh) (* 122880.0 122880.0)))
+                   (and veh (nonzero? veh) (type? veh vehicle) (mp-vehicle-player-driving? (the-as vehicle veh)))
                    )
                  )
         (suspend)
@@ -558,17 +556,17 @@
           (set! v1-7 (< (* f0-0 f0-0) (vector-vector-distance-squared (-> self begin-pos) (target-pos 0))))
           (dotimes (player-id MP_MAX_PLAYERS)
             (let* ((record (mp-player-record-by-id (the-as uint player-id)))
-                   (puppet (mp-player-record-target record)))
+                   (replica (mp-player-record-target record)))
               (when (and record
                          (nonzero? record)
-                         (mp-player-record-remote? *mp-player-controller* record)
-                         puppet
-                         (nonzero? puppet)
-                         (-> puppet root)
-                         (nonzero? (-> puppet root))
+                         (is-record-remote-player? record)
+                         replica
+                         (nonzero? replica)
+                         (-> replica root)
+                         (nonzero? (-> replica root))
                          (< (* f0-0 f0-0)
                             (vector-vector-distance-squared
-                              (-> self begin-pos) (-> puppet root trans))))
+                              (-> self begin-pos) (-> replica root trans))))
                 (set! v1-7 #t))))
           )
         )
@@ -585,7 +583,7 @@
   TASK_MANAGER_COMPLETE_HOOK
   (lambda :behavior task-manager
     ()
-    (debug-log *mp-debug-log?* "[Keira-Delivery] Completed city-keira-delivery-delivery!~%")
+    (log 'debug "[Keira-Delivery] Completed city-keira-delivery-delivery!~%")
     (send-event *traffic-manager* 'decrease-alert-level 0)
     (send-event *traffic-manager* 'set-alert-duration (seconds 30))
     (send-event *target* 'end-mode)
@@ -596,7 +594,7 @@
       )
     (let ((manager (the-as race-manager (handle->process (-> self slave 0)))))
       (when (and *keira-race-enabled* manager (nonzero? manager) (type? manager race-manager))
-        (debug-log *mp-debug-log?* "[Keira-Delivery] Finished keira delivery race! Killing race manager...~%")
+        (log 'debug "[Keira-Delivery] Finished keira delivery race! Killing race manager...~%")
         (send-event manager 'die)
         )
       )

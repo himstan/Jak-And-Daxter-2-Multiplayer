@@ -7,130 +7,82 @@
 (define-perm *mp-block-local-respawn-on-remote?* symbol #f)
 
 (defun mp-local-respawn-policy-flags ()
-  (let ((flags
-          (the uint8
-            (if *mp-block-remote-respawn-on-me?*
-                MP_RESPAWN_FLAG_BLOCK_REMOTE_ON_ME
-                0))))
+  (let ((flags (the uint8 (if *mp-block-remote-respawn-on-me?* MP_RESPAWN_FLAG_BLOCK_REMOTE_ON_ME 0))))
     (when *mp-traffic-death-root-hold?*
       (logior! flags MP_RESPAWN_FLAG_TRAFFIC_DEATH_ROOT_HOLD))
     (when *mp-traffic-authority-released?*
       (logior! flags MP_RESPAWN_FLAG_TRAFFIC_AUTHORITY_RELEASED))
-    flags)
-  )
+    flags))
 
 (defun mp-pack-local-respawn-policy! ()
   (when (and (mp-local-player-record) (nonzero? (mp-local-player-record)))
-    (set! (-> (mp-local-player-record) action respawn-flags)
-          (mp-local-respawn-policy-flags))
-    )
-  (none)
-  )
-
-(defun mp-set-block-remote-respawn-on-me! ((blocked? symbol))
-  (set! *mp-block-remote-respawn-on-me?* blocked?)
-  (mp-pack-local-respawn-policy!)
-  (none)
-  )
-
-(defun mp-set-block-local-respawn-on-remote! ((blocked? symbol))
-  (set! *mp-block-local-respawn-on-remote?* blocked?)
-  (none)
-  )
+    (set! (-> (mp-local-player-record) action respawn-flags) (mp-local-respawn-policy-flags)))
+  (none))
 
 (defun mp-set-respawn-blocks! ((block-remote-on-me? symbol) (block-local-on-remote? symbol))
   (set! *mp-block-remote-respawn-on-me?* block-remote-on-me?)
   (set! *mp-block-local-respawn-on-remote?* block-local-on-remote?)
   (mp-pack-local-respawn-policy!)
-  (none)
-  )
+  (none))
 
 (defun mp-reset-respawn-policy! ()
   (set! *mp-block-remote-respawn-on-me?* #f)
   (set! *mp-block-local-respawn-on-remote?* #f)
   (let ((local (mp-local-player-record)))
     (when (and local (nonzero? local))
-      (set! (-> local action respawn-flags) (the uint8 0))
-      )
-    )
+      (set! (-> local action respawn-flags) (the uint8 0))))
   (mp-for-each-player-record (player-id record)
-    (when (mp-player-record-remote? *mp-player-controller* record)
+    (when (is-record-remote-player? record)
       (set! (-> record action respawn-flags) (the uint8 0))))
-  (none)
-  )
+  (none))
 
 (defun mp-clear-remote-respawn-policy! ()
   (mp-for-each-player-record (player-id record)
-    (when (mp-player-record-remote? *mp-player-controller* record)
+    (when (is-record-remote-player? record)
       (set! (-> record action respawn-flags) (the uint8 0))))
-  (none)
-  )
+  (none))
 
 (defun mp-player-blocks-respawn? ((record mp-player-record))
   (the symbol
        (and record
             (nonzero? record)
-            (>= (-> record connection status) 4)
-            (logtest? (-> record action respawn-flags)
-                      MP_RESPAWN_FLAG_BLOCK_REMOTE_ON_ME))))
+            (>= (-> record connection activity) (mp-player-activity lobby))
+            (logtest? (-> record action respawn-flags) MP_RESPAWN_FLAG_BLOCK_REMOTE_ON_ME))))
 
 (defun mp-any-remote-blocks-respawn? ()
   (mp-for-each-player-record (player-id record)
-    (when (and (mp-player-record-remote? *mp-player-controller* record)
-               (mp-player-blocks-respawn? record))
+    (when (and (is-record-remote-player? record) (mp-player-blocks-respawn? record))
       (return #t)))
   #f)
 
 (defun mp-respawn-policy-blocks-remote-placement? ()
-  "True when either player has forbidden remote placement."
-  (the symbol
-       (or *mp-block-local-respawn-on-remote?*
-           (mp-any-remote-blocks-respawn?)))
-  )
+  (the symbol (or *mp-block-local-respawn-on-remote?* (mp-any-remote-blocks-respawn?))))
 
 (defun mp-should-use-local-respawn? ()
   (the symbol
-       (and *multi-sync-enabled?*
-            (= (pc-multi-get-status) (mp-connection-status in-game))
-            (or (not (mp-any-remote-gameplay-player-connected?))
-                (mp-respawn-policy-blocks-remote-placement?))))
-  )
+       (and (mp-session-in-game?)
+            (or (not (mp-any-remote-gameplay-player-connected?)) (mp-respawn-policy-blocks-remote-placement?)))))
 
 (defun mp-prepare-local-respawn! ((player target))
   (mp-spectate-reset!)
   (let ((local-record (mp-local-player-record)))
     (when (and local-record (nonzero? local-record))
-      (mp-player-runtime-clear-flag!
-        local-record (mp-player-runtime-flags respawning))))
+      (mp-player-runtime-clear-flag! local-record (mp-player-runtime-flags respawning))))
   (mp-for-each-player-record (player-id record)
-    (mp-player-runtime-clear-flag!
-      record (mp-player-runtime-flags force-presentation)))
+    (mp-player-runtime-clear-flag! record (mp-player-runtime-flags force-presentation)))
   (when (and player (nonzero? player))
     (mp-clear-local-vehicle-occupancy! player)
     (let ((control (-> player control)))
       (when (and control (nonzero? control))
-        (vector-copy! (-> control camera-pos) (-> control trans))
-        )
-      )
+        (vector-copy! (-> control camera-pos) (-> control trans))))
     (when (and *camera* (nonzero? *camera*))
       (send-event *camera* 'change-target player)
-      (send-event *camera* 'teleport)
-      )
-    )
-  (debug-log *mp-debug-log?* "[MP-Respawn-Policy] Using the vanilla local respawn path.~%")
-  (none)
-  )
+      (send-event *camera* 'teleport)))
+  (log 'debug "[MP-Respawn-Policy] Using the vanilla local respawn path.~%")
+  (none))
 
 (defun mp-begin-local-death-respawn-policy! ((player target))
-  "Latch the policy once when a local death reaches its respawn decision."
-  (when (and player
-             (nonzero? player)
-             *target*
-             (nonzero? *target*)
-             (not-puppet? player)
-             (mp-should-use-local-respawn?))
+  (when (and player (nonzero? player) *target* (nonzero? *target*) (not-player-replica? player) (mp-should-use-local-respawn?))
     (mp-prepare-local-respawn! player)
-    (return #t)
-    )
-  #f
-  )
+    (return #t))
+  #f)

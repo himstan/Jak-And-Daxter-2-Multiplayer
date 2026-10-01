@@ -169,7 +169,6 @@
 (set! (-> *monster-frog-nav-enemy-info* fact-defaults) *fact-info-enemy-defaults*)
 
 (defun monster-frog-replica-moving? ((frog monster-frog))
-  "Use the host-derived presentation velocity to gate replica locomotion animation."
   (when (and frog
              (nonzero? frog)
              (not (mp-enemy-authoritative? frog)))

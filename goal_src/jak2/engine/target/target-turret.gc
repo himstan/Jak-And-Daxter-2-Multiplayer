@@ -2101,31 +2101,8 @@
           )
          (case (-> (the-as attack-info gp-0) mode)
            (('turret)
-            (let ((a0-12 (-> self attack-info)))
-              (let ((v1-17 a0-12))
-                (set! (-> v1-17 attacker) (the-as handle #f))
-                (set! (-> v1-17 mode) 'generic)
-                (set! (-> v1-17 shove-back) 6144.0)
-                (set! (-> v1-17 shove-up) 4915.2)
-                (set! (-> v1-17 angle) #f)
-                (set! (-> v1-17 trans quad) (-> self control trans quad))
-                (set! (-> v1-17 control) 0.0)
-                (set! (-> v1-17 invinc-time) (the-as time-frame (-> *TARGET-bank* hit-invulnerable-timeout)))
-                (set! (-> v1-17 damage) (-> *FACT-bank* health-default-inc))
-                )
-              (combine! a0-12 (the-as attack-info gp-0) self)
-              )
-            (cond
-              ((= (-> self game mode) 'play)
-               (send-event (handle->process (-> self turret handle)) 'trans (-> self control trans))
-               (go target-death 'turret)
-               #t
-               )
-              (else
-                (go target-turret-get-off)
-                #f
-                )
-              )
+            ;; we hit here if another player shoots us with their turret, results in us dying in the turret without it exploding which puts us in a weird bugged out state, so lets just return
+            (return #t)
             )
            (('bot)
             (let ((a0-22 (-> self attack-info)))

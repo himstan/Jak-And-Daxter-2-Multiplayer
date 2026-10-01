@@ -1465,7 +1465,7 @@
    - tracks when the enemy was last drawn
    - looks at the target and handles attacking
    @TODO Not extremely well understood yet"
-  (mp-enemy-refresh-player-focus! this)
+  (enemy-refresh-player-focus! this)
   (let ((t9-0 (method-of-type nav-enemy common-post)))
     (t9-0 this)
     )

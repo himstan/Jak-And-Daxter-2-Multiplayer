@@ -118,7 +118,6 @@
   )
 
 (defun delivery-task-find-or-spawn-vehicle! ((traffic-mgr process) (spawn-params traffic-object-spawn-params))
-  "Reuse the reserved mission vehicle if it already exists locally."
   (when (and spawn-params (nonzero? spawn-params))
     (let ((vehicle-proc (the-as process (mp-mission-vehicle-find-by-net-id MP_MISSION_VEHICLE_KREW_DELIVERY))))
       (if (and vehicle-proc (nonzero? vehicle-proc))
@@ -443,7 +442,7 @@
              )
            (let ((f1-0 12288.0))
              (cond
-               ((mp-any-player-near-and-piloting? (the-as process-drawable gp-0) (* f1-0 f1-0))
+               ((mp-vehicle-player-driving? (the-as vehicle gp-0))
                 (when (nonzero? (-> self sub-state))
                   (send-event (handle->process (-> self arrow)) 'set-position (-> self end-pos))
                   (send-event (handle->process (-> self arrow)) 'modify-flags 1 0)
@@ -570,7 +569,6 @@
   TASK_MANAGER_COMPLETE_HOOK
   (lambda :behavior task-manager
     ()
-    (debug-log *mp-debug-log?* "[Krew-Delivery] triggered complete hook!~%")
     (send-event *traffic-manager* 'decrease-alert-level 0)
     (send-event *traffic-manager* 'set-alert-duration (seconds 30))
     (if (and *target* (focus-test? *target* pilot))

@@ -358,7 +358,7 @@
      )
     (('trigger)
       (let ((triggerer (handle->process (-> (the-as focus (-> event param 0)) handle))))
-        (when (and (not (not-puppet? triggerer)) 
+        (when (and (not (not-player-replica? triggerer))
                    (-> self next-state) 
                    (let ((next-state-1 (-> self next-state name)))
                       (or (= next-state-1 'waiting) (= next-state-1 'arrived))))
@@ -476,7 +476,7 @@
   )
 
 (defmethod is-standing-on-elevator? ((this elevator) (proc process-focusable))
-    (the-as symbol (and (when (and proc (nonzero? proc) (type? proc target) (not-puppet? proc))
+    (the-as symbol (and (when (and proc (nonzero? proc) (type? proc target) (not-player-replica? proc))
          (let* ((target-pos (get-trans proc 0))
                 (dist-from-center (vector-! (new 'stack-no-clear 'vector) target-pos (-> this root trans)))
                 )

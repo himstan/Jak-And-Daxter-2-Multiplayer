@@ -1,10 +1,17 @@
 #include "EyeRenderer.h"
 
+#include <algorithm>
+
 #include "common/util/FileUtil.h"
 
 #include "game/graphics/opengl_renderer/AdgifHandler.h"
 
 #include "third-party/imgui/imgui.h"
+
+namespace {
+constexpr u32 kEyeInstanceTag = 0x4d504559;
+constexpr int kEyeDrawVertexFloats = 4 * 4 * 4;
+}  // namespace
 
 /////////////////////////
 // Bucket Renderer
@@ -47,12 +54,18 @@ void EyeRenderer::init_textures(TexturePool& texture_pool, GameVersion version) 
     }
   }
 
+  for (auto& eye_texture : m_gpu_instance_eye_textures) {
+    FramebufferTexturePairContext ctxt(eye_texture.fb);
+    constexpr float clear[4] = {1.0f, 0.0f, 0.0f, 0.0f};
+    glClearBufferfv(GL_COLOR, 0, clear);
+  }
+
   // set up vertices for GPU mode
   glGenVertexArrays(1, &m_vao);
   glBindVertexArray(m_vao);
   glGenBuffers(1, &m_gl_vertex_buffer);
   glBindBuffer(GL_ARRAY_BUFFER, m_gl_vertex_buffer);
-  glBufferData(GL_ARRAY_BUFFER, VTX_BUFFER_FLOATS * sizeof(float), nullptr, GL_STREAM_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_STREAM_DRAW);
   glEnableVertexAttribArray(0);
   glVertexAttribPointer(0,                  // location 0 in the shader
                         4,                  // 2 floats per vert
@@ -188,6 +201,8 @@ EyeRenderer::SpriteInfo decode_sprite(const DmaTransfer& dma) {
 
   // uv0
   memcpy(&result.uv0, &dma.data[32], 8);
+  memcpy(&result.lid_tint_color, &dma.data[40], 4);
+  memcpy(&result.lid_tint_strength, &dma.data[44], 4);
 
   // xyz0
   memcpy(&result.xyz0[0], &dma.data[48], 12);
@@ -242,6 +257,18 @@ std::vector<EyeRenderer::SingleEyeDraws> EyeRenderer::get_draws(DmaFollower& dma
       // printf("hashed name is 0x%x 0x%x\n", draw0.sprite.uv0[0], draw0.sprite.uv0[1]);
       l_draw.fnv_name_hash = draw0.sprite.uv0;
       r_draw.fnv_name_hash = draw0.sprite.uv0;
+      if (render_state->version == GameVersion::Jak2) {
+        l_draw.lid_tint_color = draw0.sprite.lid_tint_color;
+        r_draw.lid_tint_color = draw0.sprite.lid_tint_color;
+        l_draw.lid_tint_strength = draw0.sprite.lid_tint_strength;
+        r_draw.lid_tint_strength = draw0.sprite.lid_tint_strength;
+      }
+      const u32 instance_tag = draw0.sprite.uv0 >> 32;
+      if (const u32 instance_id = draw0.sprite.uv0 & 0xffffffff;
+        instance_tag == kEyeInstanceTag && instance_id < kPcEyeInstanceCount) {
+        l_draw.instance_id = instance_id;
+        r_draw.instance_id = instance_id;
+      }
       ASSERT(draw0.sprite.uv1[0] == 0);
       ASSERT(draw0.sprite.uv1[1] == 0);
       if (draw0.scissor.y1 - draw0.scissor.y0 == 63) {
@@ -489,38 +516,41 @@ void EyeRenderer::run_gpu(const std::vector<SingleEyeDraws>& draws,
   glBindVertexArray(m_vao);
   glBindBuffer(GL_ARRAY_BUFFER, m_gl_vertex_buffer);
 
-  // the first thing we'll do is prepare the vertices
+  m_gpu_vertex_buffer.resize(draws.size() * kEyeDrawVertexFloats);
   int buffer_idx = 0;
   for (const auto& draw : draws) {
-    buffer_idx = add_clear_draw_to_buffer(buffer_idx, m_gpu_vertex_buffer);
+    buffer_idx = add_clear_draw_to_buffer(buffer_idx, m_gpu_vertex_buffer.data());
     if (draw.using_64) {
       buffer_idx =
-          add_draw_to_buffer_64(buffer_idx, draw.iris, m_gpu_vertex_buffer, draw.pair, draw.lr);
+          add_draw_to_buffer_64(buffer_idx, draw.iris, m_gpu_vertex_buffer.data(), draw.pair, draw.lr);
       buffer_idx =
-          add_draw_to_buffer_64(buffer_idx, draw.pupil, m_gpu_vertex_buffer, draw.pair, draw.lr);
+          add_draw_to_buffer_64(buffer_idx, draw.pupil, m_gpu_vertex_buffer.data(), draw.pair, draw.lr);
       buffer_idx =
-          add_draw_to_buffer_64(buffer_idx, draw.lid, m_gpu_vertex_buffer, draw.pair, draw.lr);
+          add_draw_to_buffer_64(buffer_idx, draw.lid, m_gpu_vertex_buffer.data(), draw.pair, draw.lr);
     } else {
       buffer_idx =
-          add_draw_to_buffer_32(buffer_idx, draw.iris, m_gpu_vertex_buffer, draw.pair, draw.lr);
+          add_draw_to_buffer_32(buffer_idx, draw.iris, m_gpu_vertex_buffer.data(), draw.pair, draw.lr);
       buffer_idx =
-          add_draw_to_buffer_32(buffer_idx, draw.pupil, m_gpu_vertex_buffer, draw.pair, draw.lr);
+          add_draw_to_buffer_32(buffer_idx, draw.pupil, m_gpu_vertex_buffer.data(), draw.pair, draw.lr);
       buffer_idx =
-          add_draw_to_buffer_32(buffer_idx, draw.lid, m_gpu_vertex_buffer, draw.pair, draw.lr);
+          add_draw_to_buffer_32(buffer_idx, draw.lid, m_gpu_vertex_buffer.data(), draw.pair, draw.lr);
     }
   }
-  ASSERT(buffer_idx <= VTX_BUFFER_FLOATS);
+  ASSERT(buffer_idx <= static_cast<int>(m_gpu_vertex_buffer.size()));
   int check = buffer_idx;
 
-  // maybe buffer sub data.
-  glBufferData(GL_ARRAY_BUFFER, buffer_idx * sizeof(float), m_gpu_vertex_buffer, GL_STREAM_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, buffer_idx * sizeof(float), m_gpu_vertex_buffer.data(), GL_STREAM_DRAW);
 
-  FramebufferTexturePairContext ctxt(m_gpu_eye_textures[draws.front().tex_slot()].fb);
+  FramebufferTexturePairContext ctxt(output_framebuffer(draws.front()));
 
   // set up common opengl state
   glDisable(GL_DEPTH_TEST);
   render_state->shaders[ShaderId::EYE].activate();
-  glUniform1i(glGetUniformLocation(render_state->shaders[ShaderId::EYE].id(), "tex_T0"), 0);
+  const auto eye_shader = render_state->shaders[ShaderId::EYE].id();
+  const auto tex_uniform = glGetUniformLocation(eye_shader, "tex_T0");
+  const auto lid_tint_color_uniform = glGetUniformLocation(eye_shader, "lid_tint_color");
+  const auto lid_tint_strength_uniform = glGetUniformLocation(eye_shader, "lid_tint_strength");
+  glUniform1i(tex_uniform, 0);
   glActiveTexture(GL_TEXTURE0);
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -531,9 +561,14 @@ void EyeRenderer::run_gpu(const std::vector<SingleEyeDraws>& draws,
   buffer_idx = 0;
   for (size_t draw_idx = 0; draw_idx < draws.size(); draw_idx++) {
     const auto& draw = draws[draw_idx];
-    auto& out_tex = m_gpu_eye_textures[draw.tex_slot()];
-    out_tex.fnv_name_hash = draw.fnv_name_hash;
-    out_tex.lr = draw.lr;
+    GpuEyeTex* out_tex = nullptr;
+    if (draw.instance_id == UINT32_MAX) {
+      out_tex = &m_gpu_eye_textures[draw.tex_slot()];
+      out_tex->fnv_name_hash = draw.fnv_name_hash;
+      out_tex->lr = draw.lr;
+    }
+
+    glUniform1f(lid_tint_strength_uniform, 0.f);
 
     // clear: not really needed, but we do it to help debugging in case all the textures are missing
     float clear[4] = {1.0, 0, 0, 0};
@@ -569,16 +604,22 @@ void EyeRenderer::run_gpu(const std::vector<SingleEyeDraws>& draws,
 
     if (draw.lid_tex) {
       glDisable(GL_BLEND);
+      const u32 packed_color = draw.lid_tint_color;
+      glUniform3f(lid_tint_color_uniform, ((packed_color >> 16) & 0xff) / 255.f,
+                  ((packed_color >> 8) & 0xff) / 255.f, (packed_color & 0xff) / 255.f);
+      glUniform1f(lid_tint_strength_uniform, std::clamp(draw.lid_tint_strength, 0.f, 1.f));
       glBindTexture(GL_TEXTURE_2D, draw.lid_gl_tex);
       glDrawArrays(GL_TRIANGLE_STRIP, buffer_idx / 4, 4);
     }
     buffer_idx += 4 * 4;
 
     // finally, give to "vram"
-    render_state->texture_pool->move_existing_to_vram(out_tex.gpu_tex, out_tex.tbp);
+    if (out_tex) {
+      render_state->texture_pool->move_existing_to_vram(out_tex->gpu_tex, out_tex->tbp);
+    }
 
     if (draw_idx != draws.size() - 1) {
-      ctxt.switch_to(m_gpu_eye_textures[draws[draw_idx + 1].tex_slot()].fb);
+      ctxt.switch_to(output_framebuffer(draws[draw_idx + 1]));
     }
   }
 
@@ -586,6 +627,13 @@ void EyeRenderer::run_gpu(const std::vector<SingleEyeDraws>& draws,
 
   glBindVertexArray(0);
   glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+FramebufferTexturePair& EyeRenderer::output_framebuffer(const SingleEyeDraws& draw) {
+  if (draw.instance_id < kPcEyeInstanceCount) {
+    return m_gpu_instance_eye_textures[draw.instance_id * 2 + draw.lr].fb;
+  }
+  return m_gpu_eye_textures[draw.tex_slot()].fb;
 }
 
 std::optional<u64> EyeRenderer::lookup_eye_texture(u8 eye_id) {
@@ -636,4 +684,11 @@ std::string EyeRenderer::ScissorInfo::print() const {
 
 std::string EyeRenderer::EyeDraw::print() const {
   return fmt::format("{}\n{}\n", sprite.print(), scissor.print());
+}
+
+std::optional<u64> EyeRenderer::lookup_eye_texture_instance(const u32 instance_id, const bool lr) const {
+  if (instance_id >= kPcEyeInstanceCount) {
+    return {};
+  }
+  return m_gpu_instance_eye_textures[instance_id * 2 + (lr ? 1 : 0)].fb.texture();
 }

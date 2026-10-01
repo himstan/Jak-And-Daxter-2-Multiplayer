@@ -1,0 +1,20 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defun mp-actor-state-retry-ready? ((last-bump time-frame))
+  (time-elapsed? last-bump (seconds 0.35)))
+
+(defun mp-actor-apply-presentation! ((root collide-shape)
+                                     (presentation-trans vector)
+                                     (presentation-quat quaternion)
+                                     (presentation-velocity vector))
+  (when (nonnull? root presentation-trans presentation-quat presentation-velocity)
+    (vector-copy! (-> root trans) presentation-trans)
+    (quaternion-copy! (-> root quat) presentation-quat)
+    (vector-copy! (-> root transv) presentation-velocity))
+  (none))
+
+(defun mp-actor-copy-traffic-presentation! ((rec traffic-record) (out vector))
+  (when (nonnull? rec out)
+    (vector-copy! out (-> rec trans)))
+  (none))

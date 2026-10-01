@@ -80,7 +80,7 @@
 #include "game/overlord/jak3/overlord.h"
 #include "game/system/Deci2Server.h"
 #include "game/system/iop_thread.h"
-#include "game/multiplayer/multiplayer.h"
+#include "game/multiplayer/platform/runtime/multiplayer_runtime.h"
 #include "sce/deci2.h"
 #include "sce/iop.h"
 #include "sce/libcdvd_ee.h"
@@ -474,9 +474,9 @@ RuntimeExitStatus exec_runtime(GameLaunchOptions game_options, int argc, const c
   // join and exit
   tm.join();
 
+  multiplayer::platform::shutdown();
   // kill renderer after all threads are stopped.
   // this makes sure the std::shared_ptr<Display> is destroyed in the main thread.
-  pc_multi_disconnect();
   if (enable_display) {
     Gfx::Exit();
   }

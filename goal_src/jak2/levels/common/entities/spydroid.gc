@@ -982,7 +982,9 @@
          (ja :num! (seek!))
          (cond
            ((ja-done? 0)
-            (if (-> self hit-target)
+            (if (and (-> self hit-target)
+                     (nonnull? (-> self enemy-info))
+                     (-> self enemy-info use-victory))
                 (go-virtual victory)
                 (go-hostile self)
                 )
@@ -1010,7 +1012,9 @@
               ((and (and v1-68 (= v1-68 spydroid-turn-right-ja)) (and (-> self desire-turn) (< (-> self diff-angle) 0.0)))
                (ja :num! (loop! (* -0.0019975142 (-> self diff-angle))))
                )
-              ((-> self hit-target)
+              ((and (-> self hit-target)
+                    (nonnull? (-> self enemy-info))
+                    (-> self enemy-info use-victory))
                (go-virtual victory)
                )
               (else

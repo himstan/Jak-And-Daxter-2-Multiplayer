@@ -306,7 +306,7 @@
         (return (mp-traffic-player-target-status-by-id player-id))
         )
       )
-    (when (and (not (mp-connection-status-active? (pc-multi-get-status)))
+    (when (and (not (mp-session-active?))
                *target*
                (nonzero? *target*)
                (= target-proc *target*))

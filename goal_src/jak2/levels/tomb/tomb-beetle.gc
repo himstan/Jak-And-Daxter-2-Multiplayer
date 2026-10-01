@@ -294,6 +294,7 @@
 (defstate dormant (tomb-beetle)
   :virtual #t
   :enter (behavior ()
+    (logior! (-> self enemy-flags) (enemy-flag stop-syncing))
     (set! (-> self root trans quad) (-> self entity extra trans quad))
     (quaternion-copy! (-> self root quat) (-> self entity quat))
     (let ((t9-2 (-> (the-as (state enemy) (find-parent-state)) enter)))
@@ -307,6 +308,7 @@
 (defstate ambush (tomb-beetle)
   :virtual #t
   :enter (behavior ()
+    (logior! (-> self enemy-flags) (enemy-flag stop-syncing))
     (let ((v1-1 (-> self root root-prim)))
       (set! (-> v1-1 prim-core collide-as) (collide-spec))
       (set! (-> v1-1 prim-core collide-with) (collide-spec))
@@ -376,6 +378,7 @@
 (defstate land (tomb-beetle)
   :virtual #t
   :enter (behavior ()
+    (logior! (-> self enemy-flags) (enemy-flag stop-syncing))
     (let ((v1-1 (-> self draw shadow-ctrl)))
       (logclear! (-> v1-1 settings flags) (shadow-flags disable-draw))
       )
@@ -411,7 +414,11 @@
 (defstate active (tomb-beetle)
   :virtual #t
   :event enemy-event-handler
+  :exit (behavior ()
+    (logior! (-> self enemy-flags) (enemy-flag stop-syncing))
+    )
   :enter (behavior ()
+    (logclear! (-> self enemy-flags) (enemy-flag stop-syncing))
     (let ((v1-0 self))
       (if (not (logtest? (enemy-flag enemy-flag36) (-> v1-0 enemy-flags)))
           (set! (-> v1-0 enemy-flags) (the-as enemy-flag (logior (enemy-flag enemy-flag38) (-> v1-0 enemy-flags))))
@@ -483,7 +490,11 @@
 (defstate stand (tomb-beetle)
   :virtual #t
   :event enemy-event-handler
+  :exit (behavior ()
+    (logior! (-> self enemy-flags) (enemy-flag stop-syncing))
+    )
   :enter (behavior ()
+    (logclear! (-> self enemy-flags) (enemy-flag stop-syncing))
     (set-time! (-> self state-time))
     (let ((v1-2 self))
       (set! (-> v1-2 enemy-flags) (the-as enemy-flag (logclear (-> v1-2 enemy-flags) (enemy-flag enemy-flag36))))
@@ -517,6 +528,7 @@
 (defstate fly-away (tomb-beetle)
   :virtual #t
   :enter (behavior ()
+    (logior! (-> self enemy-flags) (enemy-flag stop-syncing))
     (let ((s5-0 (-> self fly-info))
           (gp-0 (the-as (inline-array tomb-beetle-fly-info) (-> self fly-info 1)))
           )

@@ -1,0 +1,51 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defenum log-level
+  :type uint8
+  (off 0)
+  (error 1)
+  (warn 2)
+  (info 3)
+  (debug 4))
+
+(define-perm *log-level* log-level (if *debug-segment* (log-level debug) (log-level off)))
+
+(desfun log-ensure-newline (fmt-str)
+  (if (and (string? fmt-str) (not (string-ends-with? fmt-str "~%"))) (string-append fmt-str "~%") fmt-str))
+
+(desfun log-process-clause-newline (clause)
+  (if (pair? clause) (cons (log-ensure-newline (car clause)) (cdr clause)) clause))
+
+(defmacro log (level &rest format-args)
+  (let* ((sym (if (and (pair? level) (eq? (car level) 'quote)) (cadr level) level))
+         (tag-str (cond
+                    ((eq? sym 'error) "[~S] \c1b[91m[ERROR]\c1b[0m ")
+                    ((eq? sym 'warn) "[~S] \c1b[93m[WARN]\c1b[0m ")
+                    ((eq? sym 'info) "[~S] \c1b[92m[INFO]\c1b[0m ")
+                    ((eq? sym 'debug) "[~S] \c1b[96m[DEBUG]\c1b[0m ")
+                    (else #f)))
+         (lvl-enum (cond
+                     ((eq? sym 'error) '(log-level error))
+                     ((eq? sym 'warn) '(log-level warn))
+                     ((eq? sym 'info) '(log-level info))
+                     ((eq? sym 'debug) '(log-level debug))
+                     (else #f))))
+    (if (and tag-str (not (null? format-args)))
+      (if (pair? (car format-args))
+        (let* ((rev (reverse format-args))
+               (new-last (log-process-clause-newline (car rev)))
+               (processed-clauses (reverse (cons new-last (cdr rev)))))
+          `(when (>= (the-as int *log-level*) ,lvl-enum)
+            (format 0 ,tag-str (pc-get-local-timestamp))
+            ,@(apply (lambda (clause) (if (pair? clause) `(format 0 ,@clause) `(format 0 ,clause))) processed-clauses)))
+        (let* ((new-fmt (log-ensure-newline (car format-args)))
+               (processed-args (cons new-fmt (cdr format-args))))
+          `(when (>= (the-as int *log-level*) ,lvl-enum)
+            (format 0 ,tag-str (pc-get-local-timestamp))
+            (format 0 ,@processed-args))))
+      `(none))))
+
+(defmacro debug-log (condition &rest format-args)
+  `(when ,condition
+    (log 'debug ,@format-args)))

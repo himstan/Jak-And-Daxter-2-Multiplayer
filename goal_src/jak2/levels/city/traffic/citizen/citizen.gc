@@ -277,11 +277,11 @@
 (defmethod general-event-handler ((this citizen) (arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   "Handles various events for the enemy
    @TODO - unsure if there is a pattern for the events and this should have a more specific name"
-  (let ((mp-result (mp-pedestrian-handle-event! this arg0 arg1 arg2 arg3)))
-    (when (= mp-result 'block)
+  (let ((result (mp-pedestrian-handle-event! this arg0 arg1 arg2 arg3)))
+    (when (= result 'block)
       (return #f)
       )
-    (when (= mp-result 'handled)
+    (when (= result 'handled)
       (return #t)
       )
     )
@@ -356,11 +356,9 @@
                    )
                  )
                (citizen-nav-init! this)
-               
                (when (nonzero? (-> this net-id))
                  (set! *citizen-prng-seed* (the-as uint (+ (the-as int (-> this net-id)) (the-as int (-> this traffic-type)))))
                  )
-               
                (citizen-init! this)
                (enemy-method-127 this 40960.0 40960.0 #t (the-as collide-spec (-> this gnd-collide)))
                (set! (-> this gnd-height) (-> this root gspot-pos y))

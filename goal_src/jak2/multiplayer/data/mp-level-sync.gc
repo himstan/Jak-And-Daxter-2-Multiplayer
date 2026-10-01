@@ -3,594 +3,728 @@
 
 (define-perm *mp-level-sync-next-unknown-log-time* time-frame 0)
 (define-perm *mp-level-sync-policy-next-log-time* time-frame 0)
-
-(defun mp-level-sync-log-policy-blocked! ()
-  (when (and *mp-debug-log?*
-             (>= (current-time) *mp-level-sync-policy-next-log-time*))
-    (let ((vis-level 'none))
-      (when (and *load-state* (nonzero? *load-state*))
-        (set! vis-level (-> *load-state* vis-nick))
-        )
-      (debug-log *mp-debug-log?*
-                 "[MP-LevelSync] Remote placement blocked by respawn policy; preserving vis=~S.~%"
-                 vis-level)
-      (set! *mp-level-sync-policy-next-log-time* (+ (current-time) (seconds 1)))
-      )
-    )
-  (none)
-  )
-
-(define *mp-level-id-table* (new 'static 'boxed-array :type symbol
-                              'default-level 'intro 'demo 'ctywide 'ctysluma 'hideout 'title 'vinroom
-                              'ctyinda 'drillmid 'drill 'drillmtn 'drillb 'sewer 'sewerb 'sewesc
-                              'sewescb 'tomba 'tombb 'tombc 'tombe 'tombd 'tombext 'tombboss
-                              'under 'underb 'palcab 'palroof 'palshaft 'throne 'palent 'palboss
-                              'palout 'outrocst 'lbrnermk 'lashthrn 'lthrnout 'prison 'forexita
-                              'introcst 'ldjakbrn 'lprsncst 'forexitb 'ctyslumb 'forresca 'forrescb
-                              'fordumpa 'fordumpb 'fordumpc 'fordumpd 'strip 'ruins 'sagehut 'atoll
-                              'atollext 'mountain 'mtnext 'mincan 'forest 'forestb 'lwidea 'lwideb
-                              'lwidec 'ctykora 'ctyasha 'ctygena 'ctyfarma 'ctygenb 'ctygenc 'ctypal
-                              'ctyindb 'ltrntess 'lyskdcd 'ctyslumc 'ljakdax 'ctyport 'hiphog
-                              'gungame 'ljkdxash 'ctyfarmb 'ctymarka 'consiteb 'consite 'ctymarkb
-                              'kiosk 'stadium 'stadiumd 'stadblmp 'stadiumb 'stadiumc 'skatea 'garage
-                              'lwidesta 'lerrol 'lkeirift 'lracelit 'lracebb 'lracebf 'lracecb
-                              'lracecf 'lracedb 'lracedf 'lgarcsta 'lsamergd 'lerbrngd 'lsmysbrt
-                              'lashgrd 'onintent 'ltentout 'ltentob 'oracle 'ltrnkrkd 'ltrnysam
-                              'lysamsam 'lkiddoge 'lhelldog 'lpackage 'lsack 'lportrun 'lshuttle
-                              'lmeetbrt 'lpower 'lerlchal 'lprtrace 'lbombbot 'lbbush 'lprotect
-                              'ltess 'lhipout 'lwhack 'lguard 'lcguard 'lerltess 'dig1 'caspad
-                              'dig3a 'dig3b 'castle 'casboss 'cascity 'casext 'village1 'lcitylow
-                              'lintcstb 'nest 'nestb 'portwall 'loutcstb 'island1 'skatepark
-                              'halfpipe 'vistest 'woodstest 'tobytest 'chartest 'dptest 'ctyfence
-                              '4aaron '4pal01 'andrew01 'bsbs 'eitest 'miketest 'tatetest 'teststdc
-                              'teststdd 'wasall 'stadocc 'test-zone
-                              )
-  )
+(define *mp-level-id-table*
+  (new 'static
+       'boxed-array
+       :type symbol
+       'default-level
+       'intro
+       'demo
+       'ctywide
+       'ctysluma
+       'hideout
+       'title
+       'vinroom
+       'ctyinda
+       'drillmid
+       'drill
+       'drillmtn
+       'drillb
+       'sewer
+       'sewerb
+       'sewesc
+       'sewescb
+       'tomba
+       'tombb
+       'tombc
+       'tombe
+       'tombd
+       'tombext
+       'tombboss
+       'under
+       'underb
+       'palcab
+       'palroof
+       'palshaft
+       'throne
+       'palent
+       'palboss
+       'palout
+       'outrocst
+       'lbrnermk
+       'lashthrn
+       'lthrnout
+       'prison
+       'forexita
+       'introcst
+       'ldjakbrn
+       'lprsncst
+       'forexitb
+       'ctyslumb
+       'forresca
+       'forrescb
+       'fordumpa
+       'fordumpb
+       'fordumpc
+       'fordumpd
+       'strip
+       'ruins
+       'sagehut
+       'atoll
+       'atollext
+       'mountain
+       'mtnext
+       'mincan
+       'forest
+       'forestb
+       'lwidea
+       'lwideb
+       'lwidec
+       'ctykora
+       'ctyasha
+       'ctygena
+       'ctyfarma
+       'ctygenb
+       'ctygenc
+       'ctypal
+       'ctyindb
+       'ltrntess
+       'lyskdcd
+       'ctyslumc
+       'ljakdax
+       'ctyport
+       'hiphog
+       'gungame
+       'ljkdxash
+       'ctyfarmb
+       'ctymarka
+       'consiteb
+       'consite
+       'ctymarkb
+       'kiosk
+       'stadium
+       'stadiumd
+       'stadblmp
+       'stadiumb
+       'stadiumc
+       'skatea
+       'garage
+       'lwidesta
+       'lerrol
+       'lkeirift
+       'lracelit
+       'lracebb
+       'lracebf
+       'lracecb
+       'lracecf
+       'lracedb
+       'lracedf
+       'lgarcsta
+       'lsamergd
+       'lerbrngd
+       'lsmysbrt
+       'lashgrd
+       'onintent
+       'ltentout
+       'ltentob
+       'oracle
+       'ltrnkrkd
+       'ltrnysam
+       'lysamsam
+       'lkiddoge
+       'lhelldog
+       'lpackage
+       'lsack
+       'lportrun
+       'lshuttle
+       'lmeetbrt
+       'lpower
+       'lerlchal
+       'lprtrace
+       'lbombbot
+       'lbbush
+       'lprotect
+       'ltess
+       'lhipout
+       'lwhack
+       'lguard
+       'lcguard
+       'lerltess
+       'dig1
+       'caspad
+       'dig3a
+       'dig3b
+       'castle
+       'casboss
+       'cascity
+       'casext
+       'village1
+       'lcitylow
+       'lintcstb
+       'nest
+       'nestb
+       'portwall
+       'loutcstb
+       'island1
+       'skatepark
+       'halfpipe
+       'vistest
+       'woodstest
+       'tobytest
+       'chartest
+       'dptest
+       'ctyfence
+       '4aaron
+       '4pal01
+       'andrew01
+       'bsbs
+       'eitest
+       'miketest
+       'tatetest
+       'teststdc
+       'teststdd
+       'wasall
+       'stadocc
+       'test-zone))
 
 (defun mp-level-symbol->id ((level-name symbol))
-  "Return the reversible MP level id for a level symbol. 0 is reserved for unknown."
-  (when (and level-name
-             *mp-level-id-table*
-             (nonzero? *mp-level-id-table*))
+  (when (and level-name *mp-level-id-table* (nonzero? *mp-level-id-table*))
     (dotimes (idx (-> *mp-level-id-table* length))
       (when (= (-> *mp-level-id-table* idx) level-name)
-        (return (the-as uint (+ idx 1)))
-        )
-      )
-    )
-  (the uint 0)
-  )
+        (return (the-as uint (+ idx 1))))))
+  (the uint 0))
 
 (defun mp-level-id->symbol ((level-id uint))
-  "Resolve a reversible MP level id back to its level symbol."
   (let ((idx (- (the int (logand level-id #xffff)) 1)))
-    (if (and *mp-level-id-table*
-             (nonzero? *mp-level-id-table*)
-             (>= idx 0)
-             (< idx (-> *mp-level-id-table* length)))
-        (-> *mp-level-id-table* idx)
-        #f
-        )
-    )
-  )
-
-(defun mp-level-pack-ids ((primary-id uint) (extra-id uint))
-  "Pack the primary level id plus one extra loaded city level into the existing uint32 field."
-  (the-as uint (logior (logand primary-id #xff) (shl (logand extra-id #xff) 8)))
-  )
-
-(defun mp-level-packed-primary-id ((packed-level uint))
-  (the-as uint (logand packed-level #xff))
-  )
+    (if (and *mp-level-id-table* (nonzero? *mp-level-id-table*) (>= idx 0) (< idx (-> *mp-level-id-table* length)))
+      (-> *mp-level-id-table* idx)
+      #f)))
 
 (defun mp-fort-elec-gate-remote-level-ready? ()
-  (when (or (not *multi-sync-enabled?*)
-            (!= (pc-multi-get-status) (mp-connection-status in-game)))
-    (return #t)
-    )
+  (when (not (mp-session-in-game?))
+    (return #t))
   (when (not (and *load-state* (nonzero? *load-state*)))
     (return #t))
   (let ((local-level-id (mp-level-symbol->id (-> *load-state* vis-nick))))
     (mp-for-each-player-record (player-id record)
-      (when (and (mp-player-record-remote? *mp-player-controller* record)
-                 (>= (-> record connection status) 4))
-        (let ((remote-level-id
-                (mp-level-packed-primary-id (-> record transform level))))
-          (when (and (nonzero? local-level-id)
-                     (nonzero? remote-level-id)
-                     (!= local-level-id remote-level-id))
+      (when (and (is-record-remote-player? record) (>= (-> record connection activity) (mp-player-activity lobby)))
+        (let ((remote-level-id (mp-player-primary-level-id record)))
+          (when (and (nonzero? local-level-id) (nonzero? remote-level-id) (!= local-level-id remote-level-id))
             (return #f)))))
-  #t))
-
-(defun mp-level-packed-extra-id ((packed-level uint))
-  (the-as uint (logand (shr packed-level 8) #xff))
-  )
+    #t))
 
 (defun mp-city-level? ((level-name symbol))
   (case level-name
-    (('ctywide 'ctysluma 'ctyslumb 'ctyslumc 'ctyinda 'ctyindb
-      'ctygena 'ctygenb 'ctygenc 'ctyfarma 'ctyfarmb 'ctymarka
-      'ctymarkb 'ctyport 'ctypal 'ctykora 'ctyasha 'stadium)
-     #t
-     )
-    (else #f)
-    )
-  )
+    (('ctywide
+      'ctysluma
+      'ctyslumb
+      'ctyslumc
+      'ctyinda
+      'ctyindb
+      'ctygena
+      'ctygenb
+      'ctygenc
+      'ctyfarma
+      'ctyfarmb
+      'ctymarka
+      'ctymarkb
+      'ctyport
+      'ctypal
+      'ctykora
+      'ctyasha
+      'stadium)
+     #t)
+    (else #f)))
 
 (defun mp-current-active-level-symbol ()
-  "Prefer the local target's actual region, falling back to the first active level slot."
-  (when (and *target*
-             (nonzero? *target*)
-             (-> *target* current-level)
-             (nonzero? (-> *target* current-level)))
-    (let ((target-level (-> *target* current-level)))
-      (when (-> target-level name)
-        (return (-> target-level name))
-        )
-      )
-    )
+  (when (and *target* (nonzero? *target*) (-> *target* current-level) (nonzero? (-> *target* current-level)))
+    (let ((target-level (-> *target* current-level))) (when (-> target-level name) (return (-> target-level name)))))
   (when (and *level* (nonzero? *level*))
     (let ((lev (-> *level* level 0)))
-      (when (and lev
-                 (nonzero? lev)
-                 (= (-> lev status) 'active))
-        (let ((level-name (-> lev name)))
-          (when level-name
-            (return level-name)
-            )
-          )
-        )
-      )
-    )
-  #f
-  )
-
-(defun mp-array-has-uint8? ((arr (pointer uint8)) (len int) (val uint))
-  (dotimes (idx len)
-    (if (= (the-as uint (-> arr idx)) val)
-        (return #t)
-        )
-    )
-  #f
-  )
-
-(defun mp-symbol-array-has? ((arr (pointer symbol)) (len int) (val symbol))
-  (dotimes (idx len)
-    (if (= (-> arr idx) val)
-        (return #t)
-        )
-    )
-  #f
-  )
-
-(defun mp-add-desired-level-if-room! ((desired-levels (pointer symbol)) (dest-idx int) (level-name symbol))
-  (if (and level-name
-           (< dest-idx 6)
-           (not (mp-symbol-array-has? desired-levels dest-idx level-name)))
-      (begin
-        (set! (-> desired-levels dest-idx) level-name)
-        (+ dest-idx 1)
-        )
-      dest-idx
-      )
-  )
-
-(defun mp-add-city-neighbor-levels! ((desired-levels (pointer symbol)) (dest-idx int) (level-name symbol))
-  "Add nearby Haven City partitions for border teleports where the peer has not loaded adjacency yet."
-  (case level-name
-    (('ctysluma)
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctyindb))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctyslumb))
-     )
-    (('ctyslumb)
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctysluma))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctygenb))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctyslumc))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctykora))
-     )
-    (('ctyslumc)
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctyslumb))
-     )
-    (('ctygena)
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctyfarma))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctygenb))
-     )
-    (('ctygenb)
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctygena))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctyslumb))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'stadium))
-     )
-    (('ctygenc)
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctypal))
-     )
-    (('ctyfarma)
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctygena))
-     )
-    (('ctyfarmb)
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctyport))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctymarka))
-     )
-    (('ctyinda)
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctyindb))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctyport))
-     )
-    (('ctyindb)
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctyinda))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctymarkb))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctysluma))
-     )
-    (('ctymarka)
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctyfarmb))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctymarkb))
-     )
-    (('ctymarkb)
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctymarka))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctyindb))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctypal))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctyasha))
-     )
-    (('ctypal)
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctygenc))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctyport))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctymarkb))
-     )
-    (('ctyport)
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctypal))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctyinda))
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctyfarmb))
-     )
-    (('stadium)
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctygenb))
-     )
-    (('ctykora)
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctyslumb))
-     )
-    (('ctyasha)
-     (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctymarkb))
-     )
-    )
-  dest-idx
-  )
-
-(defun mp-remote-levels-city-only? ((levels (pointer symbol)))
-  "Only speculate city neighbors when the advertised remote set has no non-city level."
-  (let ((has-city? #f))
-    (dotimes (idx 4)
-      (let ((lvl (-> levels idx)))
-        (when lvl
-          (if (mp-city-level? lvl)
-              (set! has-city? #t)
-              (return #f)
-              )
-          )
-        )
-      )
-    has-city?
-    )
-  )
+      (when (and lev (nonzero? lev) (= (-> lev status) 'active))
+        (let ((level-name (-> lev name))) (when level-name (return level-name))))))
+  #f)
 
 (defun mp-current-active-level-id ()
-  "Return the reversible MP level id for the local player's current level."
-  (let ((level-name (mp-current-active-level-symbol)))
-    (if level-name
-        (mp-level-symbol->id level-name)
-        (the uint 0)
-        )
-    )
-  )
-
-(defun mp-current-level-packed-id ()
-  "Pack the primary and desired levels, falling back to resident levels when no valid wants exist."
-  (let ((primary-level (mp-current-active-level-symbol)))
-    (if primary-level
-        (let ((ids (new 'stack-no-clear 'array 'uint8 4)))
-          (set! (-> ids 0) (the uint8 (mp-level-symbol->id primary-level)))
-          (set! (-> ids 1) (the uint8 0))
-          (set! (-> ids 2) (the uint8 0))
-          (set! (-> ids 3) (the uint8 0))
-          (let ((next-idx 1)
-                (has-valid-wants? #f))
-            (when (and *load-state* (nonzero? *load-state*))
-              (dotimes (idx 6)
-                (let ((level-name (-> *load-state* want idx name)))
-                  (when level-name
-                    (let ((lid (mp-level-symbol->id level-name)))
-                      (when (> lid 0)
-                        (set! has-valid-wants? #t)
-                        (when (and (!= level-name primary-level)
-                                   (< next-idx 4)
-                                   (not (mp-array-has-uint8? ids next-idx lid)))
-                          (set! (-> ids next-idx) (the uint8 lid))
-                          (+! next-idx 1)
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            (when (and (not has-valid-wants?)
-                       *level*
-                       (nonzero? *level*))
-              (dotimes (idx 7)
-                (let ((lev (-> *level* level idx)))
-                  (when (and lev
-                             (nonzero? lev)
-                             (or (= (-> lev status) 'active)
-                                 (= (-> lev status) 'alive)
-                                 (= (-> lev status) 'loaded)))
-                    (let ((level-name (-> lev name)))
-                      (when (and level-name
-                                 (!= level-name primary-level)
-                                 (< next-idx 4))
-                        (let ((lid (mp-level-symbol->id level-name)))
-                          (when (and (> lid 0) (not (mp-array-has-uint8? ids next-idx lid)))
-                            (set! (-> ids next-idx) (the uint8 lid))
-                            (+! next-idx 1)
-                            )
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          (the-as uint (logior (the-as uint (-> ids 0))
-                               (shl (the-as uint (-> ids 1)) 8)
-                               (shl (the-as uint (-> ids 2)) 16)
-                               (shl (the-as uint (-> ids 3)) 24)))
-          )
-        (the uint 0)
-        )
-    )
-  )
-
-(defun mp-remote-level-symbols-for-teleport! ((packed-level uint) (out-symbols (pointer symbol)))
-  "Extract up to 4 loaded levels from the packed uint32 into a preallocated array."
-  (dotimes (idx 4)
-    (set! (-> out-symbols idx) #f)
-    )
-  (let ((id0 (logand packed-level #xff))
-        (id1 (logand (shr packed-level 8) #xff))
-        (id2 (logand (shr packed-level 16) #xff))
-        (id3 (logand (shr packed-level 24) #xff)))
-    (when (> id0 0)
-      (set! (-> out-symbols 0) (mp-level-id->symbol id0))
-      )
-    (when (> id1 0)
-      (set! (-> out-symbols 1) (mp-level-id->symbol id1))
-      )
-    (when (> id2 0)
-      (set! (-> out-symbols 2) (mp-level-id->symbol id2))
-      )
-    (when (> id3 0)
-      (set! (-> out-symbols 3) (mp-level-id->symbol id3))
-      )
-    )
-  (none)
-  )
+  (let ((level-name (mp-current-active-level-symbol))) (if level-name (mp-level-symbol->id level-name) (the uint 0))))
 
 (defun mp-level-active? ((level-name symbol))
-  (if (and level-name
-           *level*
-           (nonzero? *level*))
-      (let ((status (level-status *level* level-name)))
-        (or (= status 'active)
-            (= status 'alive)
-            (= status 'loaded)
-            )
-        )
-      #f
-      )
-  )
+  (if (and level-name *level* (nonzero? *level*))
+    (let ((status (level-status *level* level-name))) (or (= status 'active) (= status 'alive) (= status 'loaded)))
+    #f))
 
 (defun mp-player-primary-level-id ((record mp-player-record))
-  "Return one player's advertised primary level id."
-  (if (and record (nonzero? record))
-      (mp-level-packed-primary-id (-> record transform level))
-      (the uint 0)
-      )
-  )
+  (if (and record (nonzero? record)) (the-as uint (-> record transform levels 0 level-id)) (the uint 0)))
 
-(defun mp-player-primary-level-matches-local? ((record mp-player-record))
-  "True when the player and local target occupy the same advertised primary level."
-  (let ((remote-primary-id (mp-player-primary-level-id record))
-        (local-primary-id (mp-current-active-level-id)))
-    (the symbol
-         (and (> remote-primary-id 0)
-              (> local-primary-id 0)
-              (= remote-primary-id local-primary-id)))
-    )
-  )
+(defun mp-level-display->mode ((display symbol))
+  (cond
+    ((not display) (the uint 0))
+    ((= display 'display) (the uint 1))
+    ((= display 'special) (the uint 2))
+    ((= display 'display-no-wait) (the uint 3))
+    (else (the uint 0))))
 
-(defun mp-level-sync-log-unknown! ((packed-level uint))
+(defun mp-level-mode->display ((flags uint))
+  (let ((mode (logand flags MP_PLAYER_LEVEL_MODE_MASK)))
+    (cond
+      ((= mode 1) 'display)
+      ((= mode 2) 'special)
+      ((= mode 3) 'display-no-wait)
+      (else #f))))
+
+(defun mp-level-flags-borrow-owner-index ((flags uint))
+  (let ((encoded (logand (shr flags MP_PLAYER_LEVEL_BORROW_OWNER_SHIFT) #x7))) (if (> encoded 0) (- encoded 1) -1)))
+
+(defun mp-level-flags-borrow-slot ((flags uint))
+  (if (nonzero? (logand flags MP_PLAYER_LEVEL_BORROW_SLOT)) 1 0))
+
+(defun mp-level-borrow? ((level-name symbol))
+  (and level-name (= (-> (lookup-level-info level-name) memory-mode) (load-buffer-mode borrow))))
+
+(defun mp-symbol-array-index ((arr (pointer symbol)) (len int) (value symbol))
+  (dotimes (idx len)
+    (when (= (-> arr idx) value)
+      (return idx)))
+  -1)
+
+(defun mp-symbol-array-has? ((arr (pointer symbol)) (len int) (value symbol))
+  (>= (mp-symbol-array-index arr len value) 0))
+
+(defun mp-level-find-want-index ((level-name symbol))
+  (when (and level-name *load-state* (nonzero? *load-state*))
+    (dotimes (idx MP_PLAYER_LEVEL_SLOT_COUNT)
+      (when (= (-> *load-state* want idx name) level-name)
+        (return idx))))
+  -1)
+
+(defun mp-level-current-display ((level-name symbol))
+  (let ((want-idx (mp-level-find-want-index level-name)))
+    (when (>= want-idx 0)
+      (return (-> *load-state* want want-idx display?))))
+  (when (and *level* (nonzero? *level*))
+    (let ((lev (level-get *level* level-name))) (when (and lev (nonzero? lev)) (return (-> lev display?)))))
+  #f)
+
+(defun mp-level-current-force-vis ((level-name symbol))
+  (let ((want-idx (mp-level-find-want-index level-name)))
+    (when (>= want-idx 0)
+      (return (-> *load-state* want want-idx force-vis?))))
+  (when (and *level* (nonzero? *level*))
+    (let ((lev (level-get *level* level-name))) (when (and lev (nonzero? lev)) (return (-> lev force-all-visible?)))))
+  #f)
+
+(defun mp-level-current-force-inside ((level-name symbol))
+  (let ((want-idx (mp-level-find-want-index level-name)))
+    (when (>= want-idx 0)
+      (return (-> *load-state* want want-idx force-inside?))))
+  (when (and *level* (nonzero? *level*))
+    (let ((lev (level-get *level* level-name))) (when (and lev (nonzero? lev)) (return (-> lev force-inside?)))))
+  #f)
+
+(defun mp-level-borrow-metadata-flags ((child-name symbol) (names (pointer symbol)))
+  (when (and child-name *level* (nonzero? *level*))
+    (let ((child (level-get *level* child-name)))
+      (when (and child (nonzero? child) (-> child borrow-from-level) (nonzero? (-> child borrow-from-level)))
+        (let* ((owner (-> child borrow-from-level))
+               (owner-idx (mp-symbol-array-index names MP_PLAYER_LEVEL_SLOT_COUNT (-> owner name))))
+          (when (>= owner-idx 0)
+            (dotimes (borrow-slot 2)
+              (when (= (-> owner borrow-level borrow-slot) child)
+                (return (the-as uint
+                                (logior (shl (+ owner-idx 1) MP_PLAYER_LEVEL_BORROW_OWNER_SHIFT)
+                                        (if (= borrow-slot 1) MP_PLAYER_LEVEL_BORROW_SLOT 0)))))))))))
+  (dotimes (owner-idx MP_PLAYER_LEVEL_SLOT_COUNT)
+    (let ((owner-name (-> names owner-idx)))
+      (when (and owner-name (not (mp-level-borrow? owner-name)))
+        (let ((owner-info (lookup-level-info owner-name)))
+          (dotimes (borrow-slot 2)
+            (when (and (= (-> owner-info borrow-level borrow-slot) child-name)
+                       (nonzero? (-> owner-info borrow-size borrow-slot)))
+              (return (the-as uint
+                              (logior (shl (+ owner-idx 1) MP_PLAYER_LEVEL_BORROW_OWNER_SHIFT)
+                                      (if (= borrow-slot 1) MP_PLAYER_LEVEL_BORROW_SLOT 0))))))))))
+  (the uint 0))
+
+(defun mp-level-borrow-policy-display ((flags uint) (names (pointer symbol)))
+  (let ((owner-idx (mp-level-flags-borrow-owner-index flags)))
+    (when (and (>= owner-idx 0) (< owner-idx MP_PLAYER_LEVEL_SLOT_COUNT))
+      (let ((owner-name (-> names owner-idx)))
+        (when owner-name
+          (return (-> (lookup-level-info owner-name) borrow-display? (mp-level-flags-borrow-slot flags)))))))
+  #f)
+
+(defun mp-level-pack-slot-flags ((level-name symbol) (names (pointer symbol)))
+  (let ((flags (the uint 0)))
+    (cond
+      ((mp-level-borrow? level-name)
+       (let ((borrow-flags (mp-level-borrow-metadata-flags level-name names)))
+         (logior! flags borrow-flags)
+         (if (>= (mp-level-flags-borrow-owner-index borrow-flags) 0)
+           (logior! flags (mp-level-display->mode (mp-level-borrow-policy-display borrow-flags names)))
+           (logior! flags (mp-level-display->mode (mp-level-current-display level-name))))))
+      (else
+       (logior! flags (mp-level-display->mode (mp-level-current-display level-name)))
+       (when (mp-level-current-force-vis level-name)
+         (logior! flags MP_PLAYER_LEVEL_FORCE_VIS))
+       (when (mp-level-current-force-inside level-name)
+         (logior! flags MP_PLAYER_LEVEL_FORCE_INSIDE))))
+    flags))
+
+(defun mp-pack-local-level-state! ((record mp-player-record))
+  (when (and record (nonzero? record))
+    (dotimes (idx MP_PLAYER_LEVEL_SLOT_COUNT)
+      (set! (-> record transform levels idx level-id) (the uint8 0))
+      (set! (-> record transform levels idx flags) (the uint8 0)))
+    (when (and *load-state* (nonzero? *load-state*))
+      (add-borrow-levels *load-state*))
+    (let ((primary-level (mp-current-active-level-symbol)))
+      (when (and primary-level (> (mp-level-symbol->id primary-level) 0))
+        (let ((names (new 'stack-no-clear 'array 'symbol MP_PLAYER_LEVEL_SLOT_COUNT))
+              (next-idx 1)
+              (has-valid-wants? #f))
+          (dotimes (idx MP_PLAYER_LEVEL_SLOT_COUNT)
+            (set! (-> names idx) #f))
+          (set! (-> names 0) primary-level)
+          (when (and *load-state* (nonzero? *load-state*))
+            (dotimes (idx MP_PLAYER_LEVEL_SLOT_COUNT)
+              (let ((level-name (-> *load-state* want idx name)))
+                (when (and level-name (> (mp-level-symbol->id level-name) 0))
+                  (set! has-valid-wants? #t)
+                  (when (and (< next-idx MP_PLAYER_LEVEL_SLOT_COUNT)
+                             (not (mp-symbol-array-has? names next-idx level-name)))
+                    (set! (-> names next-idx) level-name)
+                    (+! next-idx 1))))))
+          (when (and (not has-valid-wants?) *level* (nonzero? *level*))
+            (dotimes (idx (-> *level* length))
+              (let ((lev (-> *level* level idx)))
+                (when (and lev
+                           (nonzero? lev)
+                           (or (= (-> lev status) 'active) (= (-> lev status) 'alive) (= (-> lev status) 'loaded)))
+                  (let ((level-name (-> lev name)))
+                    (when (and level-name
+                               (> (mp-level-symbol->id level-name) 0)
+                               (< next-idx MP_PLAYER_LEVEL_SLOT_COUNT)
+                               (not (mp-symbol-array-has? names next-idx level-name)))
+                      (set! (-> names next-idx) level-name)
+                      (+! next-idx 1)))))))
+          (dotimes (idx MP_PLAYER_LEVEL_SLOT_COUNT)
+            (let ((level-name (-> names idx)))
+              (when level-name
+                (set! (-> record transform levels idx level-id) (the-as uint8 (mp-level-symbol->id level-name)))
+                (set! (-> record transform levels idx flags) (the-as uint8 (mp-level-pack-slot-flags level-name names))))))))))
+  (none))
+
+(defun mp-player-level-state-symbols! ((record mp-player-record) (out-symbols (pointer symbol)))
+  (dotimes (idx MP_PLAYER_LEVEL_SLOT_COUNT)
+    (set! (-> out-symbols idx) #f)
+    (let ((level-id (the-as uint (-> record transform levels idx level-id))))
+      (when (> level-id 0)
+        (set! (-> out-symbols idx) (mp-level-id->symbol level-id)))))
+  (none))
+
+(defun mp-player-level-state-valid? ((record mp-player-record) (names (pointer symbol)))
+  (let ((saw-empty? #f))
+    (dotimes (idx MP_PLAYER_LEVEL_SLOT_COUNT)
+      (let* ((slot (-> record transform levels idx))
+             (level-id (the-as uint (-> slot level-id)))
+             (flags (the-as uint (-> slot flags)))
+             (level-name (-> names idx)))
+        (cond
+          ((zero? level-id) (when (nonzero? flags) (return #f)) (set! saw-empty? #t))
+          (else
+           (when (or saw-empty? (not level-name))
+             (return #f))
+           (dotimes (prev idx)
+             (when (= (-> record transform levels prev level-id) (-> slot level-id))
+               (return #f)))
+           (let* ((owner-encoded (logand (shr flags MP_PLAYER_LEVEL_BORROW_OWNER_SHIFT) #x7))
+                  (owner-idx (mp-level-flags-borrow-owner-index flags))
+                  (borrow-slot (mp-level-flags-borrow-slot flags)))
+             (when (= owner-encoded 7)
+               (return #f))
+             (cond
+               ((< owner-idx 0)
+                (when (or (nonzero? (logand flags MP_PLAYER_LEVEL_BORROW_SLOT)) (mp-level-borrow? level-name))
+                  (return #f)))
+               (else
+                (when (or (>= owner-idx MP_PLAYER_LEVEL_SLOT_COUNT)
+                          (= owner-idx idx)
+                          (not (-> names owner-idx))
+                          (not (mp-level-borrow? level-name))
+                          (mp-level-borrow? (-> names owner-idx)))
+                  (return #f))
+                (let ((owner-info (lookup-level-info (-> names owner-idx))))
+                  (when (zero? (-> owner-info borrow-size borrow-slot))
+                    (return #f)))
+                (dotimes (prev idx)
+                  (let* ((prev-flags (the-as uint (-> record transform levels prev flags)))
+                         (prev-owner (mp-level-flags-borrow-owner-index prev-flags)))
+                    (when (and (= prev-owner owner-idx) (= (mp-level-flags-borrow-slot prev-flags) borrow-slot))
+                      (return #f))))))))))))
+  #t)
+
+(defun mp-level-clear-owner-borrow-slots! ((owner-name symbol))
+  (when (and owner-name (not (mp-level-borrow? owner-name)))
+    (let ((owner-info (lookup-level-info owner-name)))
+      (dotimes (borrow-slot 2)
+        (set! (-> owner-info borrow-level borrow-slot) #f)
+        (set! (-> owner-info borrow-display? borrow-slot) #f))))
+  (none))
+
+(defun mp-level-clear-authoritative-borrow-links! ((incoming-names (pointer symbol)))
+  (when (and *load-state* (nonzero? *load-state*))
+    (dotimes (idx MP_PLAYER_LEVEL_SLOT_COUNT)
+      (let ((level-name (-> *load-state* want idx name)))
+        (when level-name
+          (mp-level-clear-owner-borrow-slots! level-name)))))
+  (dotimes (idx MP_PLAYER_LEVEL_SLOT_COUNT)
+    (let ((level-name (-> incoming-names idx))) (when level-name (mp-level-clear-owner-borrow-slots! level-name))))
+  (none))
+
+(defun mp-level-runtime-borrow-slot ((child level) (owner level))
+  (when (and child (nonzero? child) owner (nonzero? owner))
+    (dotimes (borrow-slot 2)
+      (when (= (-> owner borrow-level borrow-slot) child)
+        (return borrow-slot))))
+  -1)
+
+(defun mp-level-reload-borrow-on-topology-change! ((record mp-player-record) (names (pointer symbol)))
+  (when (and *level* (nonzero? *level*))
+    (dotimes (idx MP_PLAYER_LEVEL_SLOT_COUNT)
+      (let* ((slot (-> record transform levels idx))
+             (flags (the-as uint (-> slot flags)))
+             (owner-idx (mp-level-flags-borrow-owner-index flags)))
+        (when (>= owner-idx 0)
+          (let* ((child-name (-> names idx))
+                 (expected-owner-name (-> names owner-idx))
+                 (expected-borrow-slot (mp-level-flags-borrow-slot flags))
+                 (child (level-get *level* child-name)))
+            (when (and child (nonzero? child))
+              (let ((actual-owner (-> child borrow-from-level)))
+                (when (or (not (and actual-owner (nonzero? actual-owner)))
+                          (!= (-> actual-owner name) expected-owner-name)
+                          (!= (mp-level-runtime-borrow-slot child actual-owner) expected-borrow-slot))
+                  (unload! child)))))))))
+  (none))
+
+(defun mp-level-install-borrow-links! ((record mp-player-record) (names (pointer symbol)))
+  (dotimes (idx MP_PLAYER_LEVEL_SLOT_COUNT)
+    (let* ((slot (-> record transform levels idx))
+           (flags (the-as uint (-> slot flags)))
+           (owner-idx (mp-level-flags-borrow-owner-index flags)))
+      (when (>= owner-idx 0)
+        (let* ((child-name (-> names idx))
+               (owner-name (-> names owner-idx))
+               (borrow-slot (mp-level-flags-borrow-slot flags))
+               (owner-info (lookup-level-info owner-name))
+               (existing-child (-> owner-info borrow-level borrow-slot)))
+          (when (and existing-child (!= existing-child child-name))
+            (return #f))
+          (set! (-> owner-info borrow-level borrow-slot) child-name)
+          (set! (-> owner-info borrow-display? borrow-slot) (mp-level-mode->display flags))))))
+  #t)
+
+(defun mp-level-set-want-state! ((level-name symbol) (display symbol) (force-vis symbol) (force-inside symbol))
+  (let ((want-idx (mp-level-find-want-index level-name)))
+    (when (>= want-idx 0)
+      (set! (-> *load-state* want want-idx display?) display)
+      (set! (-> *load-state* want want-idx force-vis?) force-vis)
+      (set! (-> *load-state* want want-idx force-inside?) force-inside)
+      (return #t)))
+  #f)
+
+(defun mp-level-sync-log-invalid! ((level-id uint))
   (when (>= (current-time) *mp-level-sync-next-unknown-log-time*)
-    (debug-log *mp-debug-log?* "[MP-LevelSync] Remote level id ~D is unknown. Falling back to current teleport behavior.~%"
-            packed-level)
-    (set! *mp-level-sync-next-unknown-log-time* (+ (current-time) (seconds 2)))
-    )
-  (none)
-  )
+    (log 'warn "[MP-LevelSync] Invalid remote level state near id ~D.~%" level-id)
+    (set! *mp-level-sync-next-unknown-log-time* (+ (current-time) (seconds 2))))
+  (none))
 
-(defun mp-want-multiple-levels-for-remote-teleport! ((levels (pointer symbol)))
-  "Request expanded level context for intentional multiplayer teleports."
-  (when (mp-respawn-policy-blocks-remote-placement?)
-    (mp-level-sync-log-policy-blocked!)
-    )
-  (when (and (not (mp-respawn-policy-blocks-remote-placement?))
-             levels
-             (nonzero? levels)
+(defun mp-apply-player-level-state! ((record mp-player-record))
+  (when (and record
+             (nonzero? record)
+             (not (mp-respawn-policy-blocks-remote-placement?))
              *load-state*
              (nonzero? *load-state*))
-    (let ((desired-levels (new 'stack-no-clear 'array 'symbol 6)))
-      (dotimes (idx 6)
-        (set! (-> desired-levels idx) #f)
-        )
-      (let ((dest-idx 0))
-        (dotimes (src-idx 4)
-          (let ((lvl (-> levels src-idx)))
-            (when (and lvl (!= lvl 'ctywide))
-              (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx lvl))
-              )
-            )
-          )
-        (when (mp-remote-levels-city-only? levels)
-          (dotimes (src-idx 4)
-            (let ((lvl (-> levels src-idx)))
-              (when (and lvl (mp-city-level? lvl) (!= lvl 'ctywide))
-                (set! dest-idx (mp-add-city-neighbor-levels! desired-levels dest-idx lvl))
-                )
-              )
-            )
-          )
-        (let ((has-city? #f))
-          (dotimes (src-idx 4)
-            (let ((lvl (-> levels src-idx)))
-              (when (and lvl (mp-city-level? lvl) (!= lvl 'ctywide))
-                (set! has-city? #t)
-                )
-              )
-            )
-          (when has-city?
-            (set! dest-idx (mp-add-desired-level-if-room! desired-levels dest-idx 'ctywide))
-            )
-          )
-        )
-      
-      (want-levels *load-state* desired-levels)
-      
-      (dotimes (idx 6)
-        (let ((lvl (-> desired-levels idx)))
-          (when lvl
-            (want-display-level *load-state* lvl 'display)
-            )
-          )
-        )
+    (let ((names (new 'stack-no-clear 'array 'symbol MP_PLAYER_LEVEL_SLOT_COUNT)))
+      (mp-player-level-state-symbols! record names)
+      (when (or (zero? (mp-player-primary-level-id record)) (not (mp-player-level-state-valid? record names)))
+        (mp-level-sync-log-invalid! (mp-player-primary-level-id record))
+        (return #f))
+      (mp-level-reload-borrow-on-topology-change! record names)
+      (mp-level-clear-authoritative-borrow-links! names)
+      (when (not (mp-level-install-borrow-links! record names))
+        (mp-level-sync-log-invalid! (mp-player-primary-level-id record))
+        (return #f))
+      (let ((base-levels (new 'stack-no-clear 'array 'symbol MP_PLAYER_LEVEL_SLOT_COUNT))
+            (base-count 0))
+        (dotimes (idx MP_PLAYER_LEVEL_SLOT_COUNT)
+          (set! (-> base-levels idx) #f))
+        (dotimes (idx MP_PLAYER_LEVEL_SLOT_COUNT)
+          (let* ((slot (-> record transform levels idx))
+                 (flags (the-as uint (-> slot flags)))
+                 (level-name (-> names idx)))
+            (when (and level-name (< (mp-level-flags-borrow-owner-index flags) 0))
+              (set! (-> base-levels base-count) level-name)
+              (+! base-count 1))))
+        (want-levels *load-state* base-levels)
+        (dotimes (idx MP_PLAYER_LEVEL_SLOT_COUNT)
+          (let* ((slot (-> record transform levels idx))
+                 (flags (the-as uint (-> slot flags)))
+                 (level-name (-> names idx)))
+            (when (and level-name (< (mp-level-flags-borrow-owner-index flags) 0))
+              (mp-level-set-want-state! level-name
+                                        (mp-level-mode->display flags)
+                                        (if (nonzero? (logand flags MP_PLAYER_LEVEL_FORCE_VIS)) #t #f)
+                                        (if (nonzero? (logand flags MP_PLAYER_LEVEL_FORCE_INSIDE)) #t #f)))))
+        (add-borrow-levels *load-state*)
+        (want-vis-level *load-state* (-> names 0))
+        (return #t))))
+  #f)
 
-      (let ((primary (-> levels 0)))
-        (when primary
-          (want-vis-level *load-state* primary)
-          )
-        )
-      )
-    )
-  (none)
-  )
+(defun mp-level-status-ready-for-display? ((level-name symbol) (display symbol))
+  (if (and level-name *level* (nonzero? *level*))
+    (let ((lev (level-get *level* level-name)))
+      (if (and lev (nonzero? lev))
+        (let ((status (-> lev status)))
+          (if display (= status 'active) (or (= status 'active) (= status 'alive) (= status 'loaded))))
+        #f))
+    #f))
 
-(defun mp-want-exact-levels-for-spectate! ((levels (pointer symbol)))
-  "Request only the levels advertised by the selected spectate player."
-  (when (mp-respawn-policy-blocks-remote-placement?)
-    (mp-level-sync-log-policy-blocked!)
-    )
-  (when (and (not (mp-respawn-policy-blocks-remote-placement?))
-             levels
-             (nonzero? levels)
-             *load-state*
-             (nonzero? *load-state*))
-    (let ((desired-levels (new 'stack-no-clear 'array 'symbol 6))
-          (want-levels-input (new 'stack-no-clear 'array 'symbol 6))
-          (desired-count 0))
-      (dotimes (idx 6)
-        (set! (-> desired-levels idx) #f)
-        (set! (-> want-levels-input idx) #f)
-        )
-      (dotimes (idx 4)
-        (let ((level-name (-> levels idx)))
-          (when level-name
-            (set! desired-count
-                  (mp-add-desired-level-if-room!
-                    desired-levels desired-count level-name))
-            )
-          )
-        )
-      (when (> desired-count 0)
-        (dotimes (idx desired-count)
-          (set! (-> want-levels-input idx) (-> desired-levels idx))
-          )
-        (want-levels *load-state* want-levels-input)
-        (dotimes (idx desired-count)
-          (let ((level-name (-> desired-levels idx)))
-            (when level-name
-              (want-display-level *load-state* level-name 'display)
-              )
-            )
-          )
-        (let ((primary-level (-> levels 0)))
-          (when primary-level
-            (want-vis-level *load-state* primary-level)
-            )
-          )
-        )
-      )
-    )
-  (none)
-  )
+(defun mp-level-borrow-topology-ready? ((record mp-player-record) (names (pointer symbol)) (idx int))
+  (let* ((slot (-> record transform levels idx))
+         (flags (the-as uint (-> slot flags)))
+         (owner-idx (mp-level-flags-borrow-owner-index flags)))
+    (when (< owner-idx 0)
+      (return #t))
+    (when (and *level* (nonzero? *level*))
+      (let* ((child-name (-> names idx))
+             (owner-name (-> names owner-idx))
+             (child (level-get *level* child-name)))
+        (when (and child
+                   (nonzero? child)
+                   (-> child borrow-from-level)
+                   (nonzero? (-> child borrow-from-level))
+                   (= (-> child borrow-from-level name) owner-name)
+                   (= (mp-level-runtime-borrow-slot child (-> child borrow-from-level))
+                      (mp-level-flags-borrow-slot flags)))
+          (return #t)))))
+  #f)
 
-(defun mp-request-player-spectate-levels! ((record mp-player-record))
-  "Request the selected player's exact advertised context without inventing levels."
-  (when (and record (nonzero? record))
-    (let ((packed-level (-> record transform level)))
-      (if (> packed-level 0)
-          (let ((levels (new 'stack-no-clear 'array 'symbol 4)))
-            (mp-remote-level-symbols-for-teleport! packed-level levels)
-            (mp-want-exact-levels-for-spectate! levels)
-            )
-          (mp-level-sync-log-unknown! packed-level)
-          )
-      )
-    )
-  (none)
-  )
+(defun mp-level-slot-expected-display ((record mp-player-record) (names (pointer symbol)) (idx int))
+  (let* ((slot (-> record transform levels idx))
+         (flags (the-as uint (-> slot flags)))
+         (owner-idx (mp-level-flags-borrow-owner-index flags)))
+    (if (< owner-idx 0)
+      (mp-level-mode->display flags)
+      (let ((owner-want-idx (mp-level-find-want-index (-> names owner-idx))))
+        (if (and (>= owner-want-idx 0) (-> *load-state* want owner-want-idx display?)) (mp-level-mode->display flags) #f)))))
 
-(defun mp-ensure-player-level-wanted! ((record mp-player-record))
-  "Request expanded level context before an intentional multiplayer teleport."
-  (when (and record (nonzero? record))
-    (let ((packed (-> record transform level)))
-      (if (> packed 0)
-          (let ((symbols (new 'stack-no-clear 'array 'symbol 4)))
-            (mp-remote-level-symbols-for-teleport! packed symbols)
-            (mp-want-multiple-levels-for-remote-teleport! symbols)
-            )
-          (mp-level-sync-log-unknown! packed)
-          )
-      )
-    )
-  (none)
-  )
+(define-perm *mp-level-ready-next-log-time* time-frame 0)
 
 (defun mp-player-level-ready? ((record mp-player-record))
-  "Check if one player's packed levels are currently active on our side."
   (when (and record (nonzero? record))
-    (let ((packed (-> record transform level)))
-      (if (> packed 0)
-          (let ((symbols (new 'stack-no-clear 'array 'symbol 4)))
-            (mp-remote-level-symbols-for-teleport! packed symbols)
-            (dotimes (idx 4)
-              (let ((lvl (-> symbols idx)))
-                (when (and lvl (not (mp-level-active? lvl)))
-                  (return #f)
-                  )
-                )
-              )
-            )
-          #t
-          )
-      )
-    )
-  #t
-  )
+    (let ((primary-id (mp-player-primary-level-id record))
+          (log? #f))
+      (when (>= (current-time) *mp-level-ready-next-log-time*)
+        (set! log? #t)
+        (set! *mp-level-ready-next-log-time* (+ (current-time) (seconds 2))))
+      (when (zero? primary-id)
+        (when log?
+          (log 'debug "[MP-LevelReady] primary level is zero.~%"))
+        (return #f))
+      (let ((names (new 'stack-no-clear 'array 'symbol MP_PLAYER_LEVEL_SLOT_COUNT)))
+        (mp-player-level-state-symbols! record names)
+        (when (not (mp-player-level-state-valid? record names))
+          (when log?
+            (log 'debug "[MP-LevelReady] advertised state failed validation.~%"))
+          (return #f))
+        (dotimes (idx MP_PLAYER_LEVEL_SLOT_COUNT)
+          (let* ((slot (-> record transform levels idx))
+                 (level-id (the-as uint (-> slot level-id))))
+            (when (> level-id 0)
+              (let* ((flags (the-as uint (-> slot flags)))
+                     (level-name (-> names idx))
+                     (want-idx (mp-level-find-want-index level-name))
+                     (expected-display (mp-level-slot-expected-display record names idx))
+                     (owner-idx (mp-level-flags-borrow-owner-index flags))
+                     (is-borrow? (>= owner-idx 0))
+                     (lev (if (and *level* (nonzero? *level*)) (level-get *level* level-name) (the-as level #f))))
+                (when (< want-idx 0)
+                  (when log?
+                    (log 'debug "[MP-LevelReady] slot ~D ~A: missing from want[]. flags=#x~X~%" idx level-name flags))
+                  (return #f))
+                (when (!= (-> *load-state* want want-idx display?) expected-display)
+                  (when log?
+                    (log 'debug
+                         "[MP-LevelReady] slot ~D ~A: display mismatch actual=~A expected=~A flags=#x~X~%"
+                         idx
+                         level-name
+                         (-> *load-state* want want-idx display?)
+                         expected-display
+                         flags))
+                  (return #f))
+                (if is-borrow?
+                  (begin
+                    (when (or (-> *load-state* want want-idx force-vis?) (-> *load-state* want want-idx force-inside?))
+                      (when log?
+                        (log 'debug
+                             "[MP-LevelReady] slot ~D ~A: borrow has force flags vis=~A inside=~A~%"
+                             idx
+                             level-name
+                             (-> *load-state* want want-idx force-vis?)
+                             (-> *load-state* want want-idx force-inside?)))
+                      (return #f))
+                    (when (not (mp-level-borrow-topology-ready? record names idx))
+                      (when log?
+                        (let* ((expected-owner (-> names owner-idx))
+                               (expected-slot (mp-level-flags-borrow-slot flags))
+                               (actual-owner (if (and lev
+                                                      (nonzero? lev)
+                                                      (-> lev borrow-from-level)
+                                                      (nonzero? (-> lev borrow-from-level)))
+                                               (-> lev borrow-from-level)
+                                               (the-as level #f)))
+                               (actual-slot (if actual-owner (mp-level-runtime-borrow-slot lev actual-owner) -1)))
+                          (log 'debug
+                               ("[MP-LevelReady] slot ~D ~A: BORROW TOPOLOGY mismatch expected-owner=~A expected-slot=~D"
+                                idx
+                                level-name
+                                expected-owner
+                                expected-slot)
+                               ("actual-owner=~A actual-slot=~D flags=#x~X~%"
+                                (if actual-owner (-> actual-owner name) #f)
+                                actual-slot
+                                flags))))
+                      (return #f)))
+                  (begin
+                    (when (!= (-> *load-state* want want-idx force-vis?)
+                              (if (nonzero? (logand flags MP_PLAYER_LEVEL_FORCE_VIS)) #t #f))
+                      (when log?
+                        (log 'debug "[MP-LevelReady] slot ~D ~A: force-vis mismatch.~%" idx level-name))
+                      (return #f))
+                    (when (!= (-> *load-state* want want-idx force-inside?)
+                              (if (nonzero? (logand flags MP_PLAYER_LEVEL_FORCE_INSIDE)) #t #f))
+                      (when log?
+                        (log 'debug "[MP-LevelReady] slot ~D ~A: force-inside mismatch.~%" idx level-name))
+                      (return #f))))
+                (when (not (mp-level-status-ready-for-display? level-name expected-display))
+                  (when log?
+                    (log 'debug
+                         "[MP-LevelReady] slot ~D ~A: status not ready status=~A display=~A flags=#x~X~%"
+                         idx
+                         level-name
+                         (if (and lev (nonzero? lev)) (-> lev status) #f)
+                         expected-display
+                         flags))
+                  (return #f)))))))
+      (return #t)))
+  #f)
+
+(defun mp-player-primary-level-matches-local? ((record mp-player-record))
+  (let ((remote-primary-id (mp-player-primary-level-id record))
+        (local-primary-id (mp-current-active-level-id)))
+    (the symbol (and (> remote-primary-id 0) (> local-primary-id 0) (= remote-primary-id local-primary-id)))))
+
+(defun mp-ensure-player-level-wanted! ((record mp-player-record))
+  (when (and record (nonzero? record))
+    (if (> (mp-player-primary-level-id record) 0)
+      (mp-apply-player-level-state! record)
+      (mp-level-sync-log-invalid! (the uint 0))))
+  (none))
 
 (defun mp-player-spectate-level-ready? ((record mp-player-record))
-  "Require every advertised selected-player level before taking camera ownership."
   (when (and record (nonzero? record))
     (let ((primary-id (mp-player-primary-level-id record)))
-      (when (and (> primary-id 0)
-                 (mp-level-id->symbol primary-id))
-        (return (mp-player-level-ready? record))
-        )
-      )
-    )
-  #f
-  )
-
+      (when (and (> primary-id 0) (mp-level-id->symbol primary-id))
+        (return (mp-player-level-ready? record)))))
+  #f)

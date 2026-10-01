@@ -169,7 +169,7 @@
 
 (defmethod spawn-all ((this traffic-manager))
 
-  (when (and (mp-is-traffic-authoritative?)
+  (when (and *mp-traffic-local-authoritative?*
              (or (mp-session-host?) (mp-is-traffic-spawn-ready?)))
 
     (dotimes (i 21)

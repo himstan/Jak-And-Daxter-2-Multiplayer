@@ -7,6 +7,7 @@
 
 (declare-type squid process-focusable)
 (define-extern squid-talker (function symbol int :behavior squid))
+(define-extern mp-palace-squid-should-swallow-attack? (function squid process event-message-block symbol))
 
 (define-extern set-shield-color! (function vector vector))
 (define-extern set-shield-flash! (function vector vector))
@@ -180,9 +181,6 @@
    (last-start-recharging-talker    int8)
    (last-done-recharging-talker     int8)
    (suck                            float)
-   (presentation-trans              vector)
-   (presentation-quat               quaternion)
-   (presentation-valid              symbol)
    (mp-last-hit-request             uint32)
    (mp-last-action-seq              uint32)
    (mp-pending-resolution-seq       uint32)
@@ -221,34 +219,6 @@
     )
   )
 
-
-(defun mp-palace-squid-reset-presentation! ((proc squid))
-  (when (and proc (nonzero? proc))
-    (set! (-> proc presentation-valid) #f)
-    )
-  (none)
-  )
-
-(defun mp-palace-squid-interpolate-presentation! ((proc squid) (target-trans vector) (target-quat quaternion))
-  (when (and proc (nonzero? proc))
-    (let ((root (-> proc root)))
-      (when (and root (nonzero? root))
-        (mp-actor-update-presentation! (-> proc presentation-trans)
-                                       (-> proc presentation-quat)
-                                       target-trans
-                                       target-quat
-                                       (-> proc presentation-valid)
-                                       #f)
-        (set! (-> proc presentation-valid) #t)
-        (mp-actor-apply-presentation! (the-as collide-shape root)
-                                      (-> proc presentation-trans)
-                                      (-> proc presentation-quat)
-                                      (-> root transv))
-        )
-      )
-    )
-  (none)
-  )
 
 (defskelgroup skel-squid squid squid-lod0-jg squid-squid-idle-ja
               ((squid-lod0-mg (meters 999999)))
@@ -1807,7 +1777,6 @@
     )
   (set! (-> this baron) (the-as squid-baron (process-spawn squid-baron (-> this root trans) :to this)))
   (set! (-> this driver) (process-spawn squid-driver "driver-" :to this))
-  (set! (-> this presentation-valid) #f)
   (set! (-> this mp-last-hit-request) (the uint 0))
   (set! (-> this mp-last-action-seq) (the uint 0))
   (set! (-> this mp-pending-resolution-seq) (the uint 0))

@@ -1,6 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern mp-warp-gate-queue-event! (function process-drawable uint symbol vector vector none))
+
 ;; name: warp-gate.gc
 ;; name in dgo: warp-gate
 ;; dgos: GAME, COMMON
@@ -575,11 +577,11 @@
   (none)
   )
 
-(defun warp-gate-puppet? ((actor target))
+(defun warp-gate-replica? ((actor target))
   (let ((record (mp-player-process-record actor)))
     (if (and record
              (nonzero? record)
-             (mp-player-record-remote? *mp-player-controller* record))
+             (is-record-remote-player? record))
         #t
         #f))
   )
@@ -588,8 +590,6 @@
   (and actor
        (nonzero? actor)
        (= actor *target*)
-       *multi-sync-enabled?*
-       (= (pc-multi-get-status) (mp-connection-status in-game))
        (not *mp-processing-remote-event*)
        )
   )
@@ -1089,12 +1089,12 @@
                   (warp-gate-send-effect-safe! (-> self control unknown-handle02))
                   (hide-model self)
                   (set! (-> self control unknown-word04) (the-as uint #t))
-                  (when (warp-gate-puppet? self)
+                  (when (warp-gate-replica? self)
                     (let ((record (mp-player-process-record self)))
                       (when (and record (nonzero? record))
                         (mp-player-runtime-set-flag! record (mp-player-runtime-flags warping))
                         (deactivate self)
-                        (mp-puppet-clear-stale! record)
+                        (player-replica-clear-stale! record)
                         (mp-player-runtime-clear-flag! record (mp-player-runtime-flags was-far))))
                   )
                   )
@@ -1136,7 +1136,7 @@
     )
   :code (behavior ((arg0 vector) (arg1 vector) (arg2 target))
     (let ((a0-1 (-> self control did-move-to-pole-or-max-jump-height)))
-      (when (and a0-1 (not (warp-gate-puppet? self)))
+      (when (and a0-1 (not (warp-gate-replica? self)))
         (let ((s5-0 (res-lump-struct (the-as res-lump a0-1) 'camera-name structure)))
           (when s5-0
             (logclear! (-> self state-flags) (state-flags sf6))
@@ -1268,7 +1268,7 @@
   :code (behavior ((arg0 vector) (arg1 vector) (arg2 target))
     (hide-model self)
     (let ((a0-1 (-> self control did-move-to-pole-or-max-jump-height)))
-      (when (and a0-1 (not (warp-gate-puppet? self)))
+      (when (and a0-1 (not (warp-gate-replica? self)))
         (let ((s5-0 (res-lump-struct (the-as res-lump a0-1) 'camera-name structure)))
           (when s5-0
             (logclear! (-> self state-flags) (state-flags sf6))
@@ -1455,12 +1455,12 @@
                   (warp-gate-send-effect-safe! (-> self control unknown-handle02))
                   (hide-model self)
                   (set! (-> self control unknown-word04) (the-as uint #t))
-                  (when (warp-gate-puppet? self)
+                  (when (warp-gate-replica? self)
                     (let ((record (mp-player-process-record self)))
                       (when (and record (nonzero? record))
                         (mp-player-runtime-set-flag! record (mp-player-runtime-flags warping))
                         (deactivate self)
-                        (mp-puppet-clear-stale! record)
+                        (player-replica-clear-stale! record)
                         (mp-player-runtime-clear-flag! record (mp-player-runtime-flags was-far))))
                   )
                   )

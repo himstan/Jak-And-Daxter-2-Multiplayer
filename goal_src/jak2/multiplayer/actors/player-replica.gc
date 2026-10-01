@@ -1,0 +1,1276 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(define-extern mp-dispatch-edge-grab-to-target! (function target symbol none))
+(define-extern mp-clear-target-edge-grab-pending! (function target none))
+(define-extern player-replica-gun-process-live? (function target symbol))
+(define-extern player-replica-repair-gun-replay-state! (function target target-record pickup-type none))
+
+(define *player-replica-input-stale-time* (seconds 0.2))
+(define *player-replica-action-warmup-time* (seconds 0.3))
+
+(defun player-replica-process-live? ((replica target))
+  (and replica (nonzero? replica) (!= (-> replica status) 'dead) (!= (-> replica parent) *target-dead-pool*)))
+
+(defun reset-player-replica-state! ((record mp-player-record))
+  (when (nonnull? record)
+    (player-replica-deactivate! record)
+    (let ((target-record (get-player-target-record record)))
+      (when (nonnull? target-record)
+        (mem-set32! (the-as pointer target-record) (/ (size-of target-record) 4) 0)))
+    (set! (-> record runtime vehicle-handle) (the-as handle #f))
+    (set! (-> record runtime last-state-packet-id) (the uint 0))
+    (set! (-> record runtime last-fresh-input-time) (the-as time-frame 0))
+    (set! (-> record runtime last-action-sequence) (the uint 0))
+    (set! (-> record runtime state-mismatch-count) 0)
+    (set! (-> record runtime last-gun-shot-sequence) (the uint 0))
+    (set! (-> record runtime last-gun-replay-debug-sequence) (the uint 0))
+    (set! (-> record runtime last-gun-log-active) -1)
+    (set! (-> record runtime last-gun-log-requested) -1)
+    (set! (-> record runtime replica-lifecycle) (player-replica-lifecycle none))
+    (set! (-> record runtime flags) (the-as mp-player-runtime-flags 0)))
+  (none))
+
+(defun reset-replica-state! ()
+  (when (and *mp-player-controller* (nonzero? *mp-player-controller*))
+    (dotimes (player-id MP_MAX_PLAYERS)
+      (let ((record (-> *mp-player-controller* records player-id)))
+        (when (and record
+                   (nonzero? record)
+                   (!= (the-as uint player-id) (-> *mp-player-controller* local-player-id))
+                   (or (nonzero? (-> record runtime target-handle))
+                       (nonzero? (-> record runtime vehicle-handle))
+                       (< (the-as uint (-> record runtime pad-index)) (the uint MP_MAX_PLAYERS))))
+          (reset-player-replica-state! record)))))
+  (when (and *target* (nonzero? *target*) (-> *target* sidekick) (nonzero? (-> *target* sidekick)))
+    (let ((sk (the-as sidekick (ppointer->process (-> *target* sidekick)))))
+      (when (and sk (nonzero? sk) (-> sk draw) (nonzero? (-> sk draw)))
+        (logclear! (-> sk draw status) (draw-control-status no-draw)))))
+  (none))
+
+(defun player-replica-valid? ((proc target))
+  (if (and (player-replica-process-live? proc)
+           (-> proc control)
+           (nonzero? (-> proc control))
+           (-> proc state)
+           (nonzero? (-> proc state)))
+    #t
+    #f))
+
+(defun player-replica-clear-stale! ((record mp-player-record))
+  (when (nonnull? record)
+    (player-replica-deactivate! record)
+    (set! (-> record runtime state-mismatch-count) 0)
+    (set! (-> record runtime replica-lifecycle) (player-replica-lifecycle none)))
+  (none))
+
+(defun player-replica-snap-to-record-on-spawn! ((proc target))
+  (let ((record (mp-player-controller-target-record *mp-player-controller* proc)))
+    (when (and record (nonzero? record))
+      (let ((target-record (get-player-target-record record)))
+        (when (and proc
+                   (nonzero? proc)
+                   target-record
+                   (nonzero? target-record)
+                   (-> target-record active?)
+                   (-> proc control)
+                   (nonzero? (-> proc control)))
+          (let ((control (-> proc control)))
+            (vector-copy! (-> control trans) (-> target-record trans))
+            (vector-copy! (-> control trans-old) (-> target-record trans))
+            (vector-copy! (-> control trans-old-old) (-> target-record trans))
+            (vector-copy! (-> control trans-old-old-old) (-> target-record trans))
+            (vector-copy! (-> control transv) (-> target-record velocity))
+            (vector-copy! (-> control transv-ctrl) (-> target-record velocity))
+            (quaternion-copy! (-> control quat) (-> target-record quat))
+            (quaternion-copy! (-> control quat-for-control) (-> target-record quat))
+            (quaternion-copy! (-> control dir-targ) (-> target-record quat)))))))
+  (none))
+
+(defun player-replica-update-pad ((pad cpad-info) (buttons uint) (lx uint) (ly uint))
+  (set! (-> pad old-leftx 1) (-> pad old-leftx 0))
+  (set! (-> pad old-leftx 0) (-> pad leftx))
+  (set! (-> pad old-lefty 1) (-> pad old-lefty 0))
+  (set! (-> pad old-lefty 0) (-> pad lefty))
+  (set! (-> pad button0-abs 2) (-> pad button0-abs 1))
+  (set! (-> pad button0-abs 1) (-> pad button0-shadow-abs 0))
+  (set! (-> pad button0-rel 2) (-> pad button0-rel 1))
+  (set! (-> pad button0-rel 1) (-> pad button0-rel 0))
+  (let ((history (-> *cpad-history-list* cpads (-> pad number))))
+    (dotimes (i 14)
+      (set! (-> history button0-abs (- 14 i)) (-> history button0-abs (- 13 i)))
+      (set! (-> history button0-rel (- 14 i)) (-> history button0-rel (- 13 i))))
+    (set! (-> history button0-abs 1) (-> pad button0-shadow-abs 0))
+    (set! (-> history button0-rel 1) (-> pad button0-rel 0)))
+  (set! (-> pad valid) (the-as uint 0))
+  (set! (-> pad status) (the-as uint #x73))
+  (set! (-> pad button0) buttons)
+  (set! (-> pad leftx) lx)
+  (set! (-> pad lefty) ly)
+  (if (logtest? (the-as pad-buttons buttons) (pad-buttons x))
+    (set! (-> pad abutton (abutton-idx x)) (the uint8 255))
+    (set! (-> pad abutton (abutton-idx x)) (the uint8 0)))
+  (if (logtest? (the-as pad-buttons buttons) (pad-buttons square))
+    (set! (-> pad abutton (abutton-idx square)) (the uint8 255))
+    (set! (-> pad abutton (abutton-idx square)) (the uint8 0)))
+  (if (logtest? (the-as pad-buttons buttons) (pad-buttons triangle))
+    (set! (-> pad abutton (abutton-idx triangle)) (the uint8 255))
+    (set! (-> pad abutton (abutton-idx triangle)) (the uint8 0)))
+  (if (logtest? (the-as pad-buttons buttons) (pad-buttons circle))
+    (set! (-> pad abutton (abutton-idx circle)) (the uint8 255))
+    (set! (-> pad abutton (abutton-idx circle)) (the uint8 0)))
+  (if (logtest? (the-as pad-buttons buttons) (pad-buttons l1))
+    (set! (-> pad abutton (abutton-idx l1)) (the uint8 255))
+    (set! (-> pad abutton (abutton-idx l1)) (the uint8 0)))
+  (if (logtest? (the-as pad-buttons buttons) (pad-buttons r1))
+    (set! (-> pad abutton (abutton-idx r1)) (the uint8 255))
+    (set! (-> pad abutton (abutton-idx r1)) (the uint8 0)))
+  (if (logtest? (the-as pad-buttons buttons) (pad-buttons l2))
+    (set! (-> pad abutton (abutton-idx l2)) (the uint8 255))
+    (set! (-> pad abutton (abutton-idx l2)) (the uint8 0)))
+  (if (logtest? (the-as pad-buttons buttons) (pad-buttons r2))
+    (set! (-> pad abutton (abutton-idx r2)) (the uint8 255))
+    (set! (-> pad abutton (abutton-idx r2)) (the uint8 0)))
+  (let ((buttons-pushed (the-as pad-buttons buttons)))
+    (if (< lx (the-as uint 30)) (set! buttons-pushed (logior (pad-buttons l-analog-left) buttons-pushed)))
+    (if (> lx (the-as uint 225)) (set! buttons-pushed (logior (pad-buttons l-analog-right) buttons-pushed)))
+    (if (< ly (the-as uint 30)) (set! buttons-pushed (logior (pad-buttons l-analog-up) buttons-pushed)))
+    (if (> ly (the-as uint 225)) (set! buttons-pushed (logior (pad-buttons l-analog-down) buttons-pushed)))
+    (set! (-> pad button0-shadow-abs 0) buttons-pushed)
+    (set! (-> pad button0-abs 0) buttons-pushed))
+  (set! (-> pad button0-rel 0) (logclear (-> pad button0-abs 0) (-> pad button0-abs 1)))
+  (let ((history (-> *cpad-history-list* cpads (-> pad number))))
+    (set! (-> history button0-abs 0) (-> pad button0-abs 0))
+    (set! (-> history button0-rel 0) (-> pad button0-rel 0)))
+  (let ((f30-0 (* 0.0078125 (the float (+ (the int lx) -128))))
+        (f28-0 (* 0.0078125 (the float (- 127 (the int ly))))))
+    (set! (-> pad stick0-dir) (atan (- f30-0) f28-0))
+    (set! (-> pad stick0-speed) (fmin 1.0 (sqrtf (+ (* f30-0 f30-0) (* f28-0 f28-0))))))
+  (if (< (-> pad stick0-speed) 0.3) (set! (-> pad stick0-speed) 0.0))
+  (none))
+
+(defun player-replica-note-remote-packet! ((info mp-player-record))
+  (when (and info (nonzero? info))
+    (let ((packet-id (-> info connection latest-state-sequence)))
+      (when (!= packet-id (-> info runtime last-state-packet-id))
+        (set! (-> info runtime last-state-packet-id) packet-id)
+        (set! (-> info runtime last-fresh-input-time) (current-time)))))
+  (none))
+
+(defun player-replica-apply-weapon-state! ((proc target) (target-record target-record))
+  (when (and (nonnull? proc target-record) (-> target-record active?) (nonzero? (-> target-record equipped-weapon)))
+    (player-replica-repair-gun-replay-state! proc
+                                        target-record
+                                        (the-as pickup-type
+                                                (mp-equipped-weapon->pickup-type (-> target-record equipped-weapon)))))
+  (when (and proc
+             (nonzero? proc)
+             (-> proc control)
+             (nonzero? (-> proc control))
+             target-record
+             (nonzero? target-record)
+             (-> target-record active?))
+    (let ((record (mp-player-controller-target-record *mp-player-controller* proc))
+          (weapon (the-as uint (-> target-record equipped-weapon)))
+          (gun-info (-> proc gun)))
+      (when (and record (nonzero? record) gun-info (nonzero? gun-info))
+        (let ((active-type (the-as uint (-> gun-info gun-type)))
+              (requested-type (the-as uint (-> gun-info using-gun-type))))
+          (when (or (!= (the-as int active-type) (-> record runtime last-gun-log-active))
+                    (!= (the-as int requested-type) (-> record runtime last-gun-log-requested)))
+            (log 'debug
+                 "[PlayerReplica][Gun] remote=~D active=~D requested=~D state=~S using-gun?=~A~%"
+                 weapon
+                 active-type
+                 requested-type
+                 (if (and (-> proc state) (nonzero? (-> proc state))) (-> proc state name) 'none)
+                 (using-gun? proc))
+            (set! (-> record runtime last-gun-log-active) (the-as int active-type))
+            (set! (-> record runtime last-gun-log-requested) (the-as int requested-type)))
+          (cond
+            ((zero? weapon)
+             (when (or (using-gun? proc) (nonzero? requested-type))
+               (set! (-> gun-info using-gun-type) (pickup-type none))
+               (when (using-gun? proc)
+                 (send-event proc 'mp-put-gun-away))))
+            ((and (!= weapon active-type) (!= (mp-equipped-weapon->pickup-type weapon) requested-type))
+             (handle-gun-equip-marking-menu proc (mp-equipped-weapon->pickup-type weapon))))))))
+  (none))
+
+(defun player-replica-gun-process-live? ((proc target))
+  (when (nonnull? proc (-> proc gun) (-> proc gun gun))
+    (let ((gun-proc (ppointer->process (-> proc gun gun))))
+      (when (and (nonnull? gun-proc (-> gun-proc parent))
+                 (type? gun-proc gun)
+                 (!= (-> gun-proc status) 'dead)
+                 (= (ppointer->process (-> gun-proc parent)) proc))
+        (return #t))))
+  #f)
+
+(defun player-replica-gun-replay-ready? ((proc target) (weapon pickup-type))
+  (and (nonnull? proc (-> proc control) (-> proc gun))
+       (player-replica-gun-process-live? proc)
+       (using-gun? proc)
+       (= (-> proc gun gun-type) weapon)))
+
+(defun player-replica-force-gun-replay-equip! ((proc target) (weapon pickup-type))
+  (when (and proc
+             (nonzero? proc)
+             (-> proc control)
+             (nonzero? (-> proc control))
+             (-> proc gun)
+             (nonzero? (-> proc gun))
+             (not (using-gun? proc))
+             (nonzero? (the-as uint weapon)))
+    (log 'debug
+         "[PlayerReplica][GunReplay] Forcing gun equip: weapon=~D state=~S~%"
+         (the-as uint weapon)
+         (if (and (-> proc state) (nonzero? (-> proc state))) (-> proc state name) 'none))
+    (send-event proc 'change-mode 'gun #f weapon))
+  (none))
+
+(defun player-replica-repair-gun-replay-state! ((proc target) (record target-record) (weapon pickup-type))
+  (when (and (nonnull? proc record (-> proc control) (-> proc skel))
+             (-> record active?)
+             (not (player-replica-gun-process-live? proc)))
+    (when (nonnull? (-> proc gun))
+      (set! (-> proc gun gun) (the-as (pointer gun) #f))
+      (send-event proc 'mp-put-gun-away))
+    (run-now-in-process proc target-gun-setup #t)
+    (when (player-replica-gun-process-live? proc)
+      (set! (-> proc gun using-gun-type) (pickup-type none))
+      (handle-gun-equip-marking-menu proc (the uint weapon))))
+  (none))
+
+(defun player-replica-gun-duck-state? ((cur-state symbol))
+  (or (= cur-state 'target-duck-stance) (= cur-state 'target-duck-walk)))
+
+(defun get-player-replica-gun-stance-anim ((proc target) (gun-type pickup-type))
+  (if (nonnull? proc (-> proc draw) (-> proc draw art-group))
+    (the-as art-joint-anim
+            (-> proc
+                draw
+                art-group
+                data
+                (case gun-type
+                  (((pickup-type eco-yellow)) 254)
+                  (((pickup-type eco-blue)) 255)
+                  (((pickup-type eco-dark)) 253)
+                  (else 244))))
+    (the-as art-joint-anim #f)))
+
+(defun player-replica-refresh-duck-gun-visibility! ((proc target) (cur-state symbol))
+  (when (and (nonnull? proc (-> proc control) (-> proc gun)) (using-gun? proc) (player-replica-gun-duck-state? cur-state))
+    (let ((gun-info (-> proc gun)))
+      (set! (-> gun-info active?) #t)
+      (set! (-> gun-info laser-active?) #t)
+      (set-time! (-> gun-info active-time))
+      (when (< (current-time) (-> gun-info surpress-time))
+        (set! (-> gun-info surpress-time) (current-time)))
+      (when (and (= cur-state 'target-duck-stance)
+                 (-> proc skel)
+                 (nonzero? (-> proc skel))
+                 (not (-> proc skel top-anim frame-group)))
+        (let ((gun-anim (get-player-replica-gun-stance-anim proc (-> gun-info gun-type))))
+          (when (and gun-anim (nonzero? gun-anim))
+            (push-anim-to-targ (-> proc skel top-anim) gun-anim 0.0 0 0 1.0 0.0 #f))))))
+  (none))
+
+(defun player-replica-clear-pending-gun-shot! ((record mp-player-record))
+  (when (nonnull? record)
+    (mp-player-runtime-clear-flag! record (mp-player-runtime-flags pending-gun-shot))
+    (set! (-> record runtime pending-gun-shot-weapon) (the uint8 0))
+    (set! (-> record runtime pending-gun-shot-sequence) (the uint 0))
+    (set! (-> record runtime pending-gun-shot-camera-angle) 0.0)
+    (set! (-> record runtime pending-gun-shot-time) 0))
+  (none))
+
+(defun player-replica-flush-pending-gun-shot! ((proc target) (target-record target-record))
+  (let ((record (mp-player-controller-target-record *mp-player-controller* proc)))
+    (when (and (nonnull? record) (mp-player-runtime-flag? record (mp-player-runtime-flags pending-gun-shot)))
+      (when (> (- (current-time) (-> record runtime pending-gun-shot-time)) (seconds 0.25))
+        (player-replica-clear-pending-gun-shot! record)
+        (return (the-as none 0)))
+      (when (nonnull? proc (-> proc control) target-record)
+        (when (-> target-record active?)
+          (player-replica-apply-weapon-state! proc target-record)
+          (let ((weapon (the-as pickup-type (mp-equipped-weapon->pickup-type (-> record runtime pending-gun-shot-weapon)))))
+            (player-replica-force-gun-replay-equip! proc weapon)
+            (player-replica-repair-gun-replay-state! proc target-record weapon)
+            (when (player-replica-gun-replay-ready? proc weapon)
+              (let ((saved-context *mp-processing-remote-event*))
+                (set! *mp-processing-remote-event* #t)
+                (let ((accepted (send-event proc 'gun weapon)))
+                  (set! *mp-processing-remote-event* saved-context)
+                  (when accepted
+                    (player-replica-clear-pending-gun-shot! record))))))))))
+  (none))
+
+(defun player-replica-receive-gun-shot! ((player-id uint) (evt mp-player-gun-shot-event))
+  (unless (nonnull? evt)
+    (return (the-as none 0)))
+  (let ((record (mp-player-record-by-id player-id)))
+    (when (and record
+               (nonzero? record)
+               (or (zero? (-> record runtime last-gun-shot-sequence))
+                   (> (the-as int32 (- (-> evt payload shot-seq) (-> record runtime last-gun-shot-sequence))) 0)))
+      (set! (-> record runtime last-gun-shot-sequence) (-> evt payload shot-seq))
+      (mp-player-runtime-set-flag! record (mp-player-runtime-flags pending-gun-shot))
+      (set! (-> record runtime pending-gun-shot-weapon) (-> evt payload weapon-type))
+      (set! (-> record runtime pending-gun-shot-sequence) (-> evt payload shot-seq))
+      (set! (-> record runtime pending-gun-shot-time) (current-time))
+      (set! (-> record runtime pending-gun-shot-camera-angle) (-> evt payload cam-angle-y))
+      (set! (-> record input equipped-weapon) (-> evt payload weapon-type))
+      (set! (-> record input camera-angle-y) (-> evt payload cam-angle-y))
+      (let ((target-record (get-player-target-record record)))
+        (when (and target-record (nonzero? target-record) (-> target-record active?))
+          (set! (-> target-record equipped-weapon) (the-as uint8 (-> evt payload weapon-type)))
+          (set! (-> target-record cam-angle-y) (-> evt payload cam-angle-y)))
+        (let ((proc (mp-player-record-target record)))
+          (when (and proc (nonzero? proc) target-record (nonzero? target-record))
+            (player-replica-apply-weapon-state! proc target-record)
+            (player-replica-flush-pending-gun-shot! proc target-record))))))
+  (none))
+
+(defun player-replica-remote-input-stale? ((record mp-player-record))
+  (or (not record)
+      (zero? record)
+      (zero? (-> record runtime last-fresh-input-time))
+      (> (- (current-time) (-> record runtime last-fresh-input-time)) *player-replica-input-stale-time*)))
+
+(defun player-replica-neutralize-pad! ((pad cpad-info))
+  (player-replica-update-pad pad (the-as uint16 0) (the uint8 128) (the uint8 128)))
+
+(defun player-replica-apply-input! ((proc target) (target-record target-record))
+  (let ((record (mp-player-controller-target-record *mp-player-controller* proc)))
+    (when (and record
+               (nonzero? record)
+               (-> proc control)
+               (nonzero? (-> proc control))
+               (-> proc control cpad)
+               (nonzero? (-> proc control cpad)))
+      (let ((buttons (the-as uint16 (-> target-record buttons))))
+        (when (nonzero? (the-as uint (-> target-record equipped-weapon)))
+          (set! buttons (logclear buttons (pad-buttons r1))))
+        (if (player-replica-remote-input-stale? record)
+          (player-replica-neutralize-pad! (-> proc control cpad))
+          (player-replica-update-pad (-> proc control cpad) buttons (-> target-record leftx) (-> target-record lefty))))))
+  (none))
+
+(defun mp-target-state-attacking? ((state symbol))
+  (case state
+    (('target-attack
+      'target-running-attack
+      'target-attack-air
+      'target-attack-uppercut
+      'target-attack-uppercut-jump
+      'target-darkjak-running-attack
+      'target-indax-attack
+      'target-indax-attack-air
+      'target-indax-running-attack
+      'target-indax-attack-uppercut
+      'target-indax-attack-uppercut-jump)
+     #t)
+    (else #f)))
+
+(defun mp-target-upward-action-state? ((state symbol))
+  (case state
+    (('target-jump
+      'target-double-jump
+      'target-high-jump
+      'target-duck-high-jump
+      'target-duck-high-jump-jump
+      'target-attack-uppercut-jump
+      'target-indax-jump
+      'target-indax-double-jump
+      'target-indax-high-jump
+      'target-indax-high-jump-jump
+      'target-indax-attack-uppercut-jump
+      'target-board-jump
+      'target-board-jump-kick
+      'target-board-flip
+      'target-board-hold
+      'target-board-trickx
+      'target-board-wall-kick
+      'target-mech-jump
+      'target-carry-jump)
+     #t)
+    (else #f)))
+
+(defun mp-target-authoritative-board-action-state? ((state symbol))
+  (case state
+    (('target-board-jump
+      'target-board-jump-kick
+      'target-board-flip
+      'target-board-hold
+      'target-board-trickx
+      'target-board-ride-edge
+      'target-board-wall-kick)
+     #t)
+    (else #f)))
+
+(defun player-replica-authoritative-action-compatible? ((proc target) (cur-state symbol) (action-state symbol))
+  (and proc
+       (nonzero? proc)
+       (not (focus-test? proc pilot tube flut))
+       (not (mp-target-death-state? cur-state))
+       (darkjak-replica-action-compatible? proc action-state)
+       (or (not (mp-target-authoritative-board-action-state? action-state))
+           (focus-test? proc board)
+           (mp-target-authoritative-board-action-state? cur-state))))
+
+(defun player-replica-dark-blast-prelude-active? ((proc target) (cur-state symbol) (action-state symbol))
+  (and (= action-state 'target-darkjak-bomb1)
+       (= cur-state 'target-attack-uppercut)
+       proc
+       (nonzero? proc)
+       (focus-test? proc dark)
+       (-> proc darkjak)
+       (nonzero? (-> proc darkjak))
+       (logtest? (-> proc darkjak stage) (darkjak-stage bomb1))))
+
+(defun player-replica-high-jump-prelude-active? ((cur-state symbol) (action-state symbol))
+  (case action-state
+    (('target-duck-high-jump-jump 'target-flop-high-jump-jump)
+     (case cur-state
+       (('target-duck-high-jump 'target-duck-high-jump-jump 'target-flop-high-jump 'target-flop-high-jump-jump) #t)
+       (else #f)))
+    (('target-duck-high-jump 'target-flop-high-jump)
+     (case cur-state
+       (('target-duck-high-jump-jump 'target-flop-high-jump-jump) #t)
+       (else #f)))
+    (else #f)))
+
+(defun player-replica-authoritative-action-observed? ((proc target) (cur-state symbol) (action-state symbol))
+  (or (= cur-state action-state)
+      (player-replica-high-jump-prelude-active? cur-state action-state)
+      (player-replica-dark-blast-prelude-active? proc cur-state action-state)))
+
+(defun player-replica-ack-authoritative-action! ((record mp-player-record) (action-seq uint))
+  (when (and record (nonzero? record))
+    (set! (-> record runtime last-action-sequence) action-seq)
+    (set! (-> record runtime state-mismatch-count) 0))
+  (none))
+
+(defun player-replica-snap-for-authoritative-action! ((proc target) (record target-record) (action-state symbol))
+  (when (and proc (nonzero? proc) record (nonzero? record) (-> proc control) (nonzero? (-> proc control)))
+    (let ((control (-> proc control)))
+      (set! (-> control trans x) (-> record trans x))
+      (set! (-> control trans z) (-> record trans z))
+      (when (mp-target-upward-action-state? action-state)
+        (set! (-> control trans y) (-> record trans y)))
+      (vector-copy! (-> control transv) (-> record velocity))
+      (quaternion-copy! (-> control quat) (-> record quat))
+      (quaternion-copy! (-> control quat-for-control) (-> record quat))
+      (quaternion-copy! (-> control dir-targ) (-> record quat))))
+  (none))
+
+(defun player-replica-go-authoritative-action! ((proc target) (action-state symbol))
+  (case action-state
+    (('target-jump)
+     (go-process proc
+                 target-jump
+                 (-> *TARGET-bank* jump-height-min)
+                 (-> *TARGET-bank* jump-height-max)
+                 (the-as surface #f)))
+    (('target-double-jump)
+     (go-process proc
+                 target-double-jump
+                 (-> *TARGET-bank* double-jump-height-min)
+                 (-> *TARGET-bank* double-jump-height-max)))
+    (('target-high-jump)
+     (go-process proc
+                 target-high-jump
+                 (-> *TARGET-bank* flip-jump-height-min)
+                 (-> *TARGET-bank* flip-jump-height-max)
+                 'flip))
+    (('target-duck-high-jump)
+     (go-process proc
+                 target-duck-high-jump
+                 (-> *TARGET-bank* duck-jump-height-min)
+                 (-> *TARGET-bank* duck-jump-height-max)
+                 'duck))
+    (('target-duck-high-jump-jump)
+     (go-process proc
+                 target-duck-high-jump-jump
+                 (-> *TARGET-bank* duck-jump-height-min)
+                 (-> *TARGET-bank* duck-jump-height-max)
+                 'duck))
+    (('target-flop-high-jump)
+     (go-process proc
+                 target-duck-high-jump
+                 (-> *TARGET-bank* flop-jump-height-min)
+                 (-> *TARGET-bank* flop-jump-height-max)
+                 'flop))
+    (('target-flop-high-jump-jump)
+     (go-process proc
+                 target-duck-high-jump
+                 (-> *TARGET-bank* flop-jump-height-min)
+                 (-> *TARGET-bank* flop-jump-height-max)
+                 'flop))
+    (('target-roll) (go-process proc target-roll))
+    (('target-roll-flip)
+     (go-process proc target-roll-flip (-> *TARGET-bank* roll-flip-height) (-> *TARGET-bank* roll-flip-dist)))
+    (('target-flop) (go-process proc target-flop 0.0 0.0 0.0))
+    (('target-attack) (go-process proc target-attack))
+    (('target-indax-jump-on)
+     (let ((player-proc (mp-player-record-by-id (-> proc player-id))))
+       (when (and player-proc (!= MP_INVALID_PLAYER_ID (-> player-proc action riding-along-player-id)))
+         (go-process proc target-indax-jump-on (-> player-proc action riding-along-player-id)))))
+    (('target-board-get-on) (send-event proc 'change-mode 'board #f))
+    (('target-board-get-off) (send-event proc 'end-mode))
+    (('target-running-attack) (go-process proc target-running-attack))
+    (('target-attack-air) (go-process proc target-attack-air #f))
+    (('target-attack-uppercut)
+     (go-process proc
+                 target-attack-uppercut
+                 (-> *TARGET-bank* attack-jump-height-min)
+                 (-> *TARGET-bank* attack-jump-height-max)))
+    (('target-attack-uppercut-jump)
+     (go-process proc
+                 target-attack-uppercut-jump
+                 (-> *TARGET-bank* attack-jump-height-min)
+                 (-> *TARGET-bank* attack-jump-height-max)))
+    (('target-darkjak-running-attack) (go-process proc target-darkjak-running-attack))
+    (('target-darkjak-bomb0)
+     (darkjak-emit-replica-attack-feedback! proc *target*)
+     (go-process proc target-darkjak-bomb0))
+    (('target-darkjak-bomb1)
+     (darkjak-emit-replica-attack-feedback! proc *target*)
+     (go-process proc
+                 target-attack-uppercut
+                 (-> *TARGET-bank* attack-jump-height-min)
+                 (-> *TARGET-bank* attack-jump-height-max)))
+    (('target-darkjak-giant)
+     (darkjak-emit-replica-transform-feedback! proc *target*)
+     (go-process proc target-darkjak-giant))
+    (('target-indax-jump)
+     (go-process proc
+                 target-indax-jump
+                 (-> *TARGET-bank* indax-jump-height-min)
+                 (-> *TARGET-bank* indax-jump-height-max)
+                 (the-as surface #f)))
+    (('target-indax-double-jump)
+     (go-process proc
+                 target-indax-double-jump
+                 (-> *TARGET-bank* indax-double-jump-height-min)
+                 (-> *TARGET-bank* indax-double-jump-height-max)))
+    (('target-indax-high-jump)
+     (go-process proc
+                 target-indax-high-jump
+                 (-> *TARGET-bank* duck-jump-height-min)
+                 (-> *TARGET-bank* duck-jump-height-max)
+                 'duck))
+    (('target-indax-high-jump-jump)
+     (go-process proc
+                 target-indax-high-jump-jump
+                 (-> *TARGET-bank* duck-jump-height-min)
+                 (-> *TARGET-bank* duck-jump-height-max)
+                 'duck))
+    (('target-indax-roll) (go-process proc target-indax-roll))
+    (('target-indax-roll-flip)
+     (go-process proc target-indax-roll-flip (-> *TARGET-bank* roll-flip-height) (-> *TARGET-bank* roll-flip-dist)))
+    (('target-indax-flop) (go-process proc target-indax-flop 0.0 0.0 0.0))
+    (('target-indax-attack) (go-process proc target-indax-attack))
+    (('target-indax-attack-air) (go-process proc target-indax-attack-air #f))
+    (('target-indax-running-attack) (go-process proc target-indax-running-attack))
+    (('target-indax-attack-uppercut)
+     (go-process proc
+                 target-indax-attack-uppercut
+                 (-> *TARGET-bank* attack-jump-height-min)
+                 (-> *TARGET-bank* attack-jump-height-max)))
+    (('target-indax-attack-uppercut-jump)
+     (go-process proc
+                 target-indax-attack-uppercut-jump
+                 (-> *TARGET-bank* attack-jump-height-min)
+                 (-> *TARGET-bank* attack-jump-height-max)))
+    (('target-board-jump)
+     (go-process proc
+                 target-board-jump
+                 (-> *TARGET_BOARD-bank* jump-height-min)
+                 (-> *TARGET_BOARD-bank* jump-height-max)
+                 #f))
+    (('target-board-jump-kick) (go-process proc target-board-jump-kick))
+    (('target-board-flip)
+     (go-process proc
+                 target-board-flip
+                 (-> *TARGET_BOARD-bank* jump-height-min)
+                 (-> *TARGET_BOARD-bank* jump-height-max)
+                 #f))
+    (('target-board-hold)
+     (go-process proc
+                 target-board-hold
+                 (-> *TARGET_BOARD-bank* tricky-jump-height-min)
+                 (-> *TARGET_BOARD-bank* tricky-jump-height-max)
+                 #f))
+    (('target-board-trickx)
+     (go-process proc
+                 target-board-trickx
+                 (-> *TARGET_BOARD-bank* trickx-jump-height-min)
+                 (-> *TARGET_BOARD-bank* trickx-jump-height-max)
+                 #f))
+    (('target-board-ride-edge) (go-process proc target-board-ride-edge #f))
+    (('target-board-wall-kick) (go-process proc target-board-wall-kick (new 'static 'vector :y 1.0) 0.0))
+    (('target-mech-jump)
+     (go-process proc
+                 target-mech-jump
+                 (-> *TARGET-bank* mech-jump-height-min)
+                 (-> *TARGET-bank* mech-jump-height-max)
+                 (the-as surface #f)))
+    (('target-mech-punch) (go-process proc target-mech-punch))
+    (('target-carry-jump)
+     (go-process proc
+                 target-carry-jump
+                 (-> *TARGET-bank* carry-jump-height-min)
+                 (-> *TARGET-bank* carry-jump-height-max)
+                 #f))
+    (('target-carry-pickup) (go-process proc target-carry-pickup))
+    (('target-carry-drop) (go-process proc target-carry-drop))
+    (('target-carry-throw) (go-process proc target-carry-throw))
+    (else #f))
+  (none))
+
+(defun player-replica-apply-authoritative-action! ((proc target) (target-record target-record) (cur-state symbol))
+  (let ((record (mp-player-controller-target-record *mp-player-controller* proc)))
+    (when (and record
+               (nonzero? record)
+               proc
+               (nonzero? proc)
+               target-record
+               (nonzero? target-record)
+               (-> proc control)
+               (nonzero? (-> proc control))
+               (time-elapsed? (-> record runtime action-warmup-start) *player-replica-action-warmup-time*)
+               cur-state
+               (!= cur-state 'target-indax-start)
+               (!= cur-state 'dead-state))
+      (let ((action-seq (-> record action authoritative-sequence))
+            (action-state (mp-target-get-state-from-id (-> record action action-state-id))))
+        (when (and (nonnull? action-state) (!= action-seq (-> record runtime last-action-sequence)))
+          (cond
+            ((player-replica-authoritative-action-observed? proc cur-state action-state)
+             (player-replica-ack-authoritative-action! record action-seq))
+            ((player-replica-authoritative-action-compatible? proc cur-state action-state)
+             (player-replica-snap-for-authoritative-action! proc target-record action-state)
+             (player-replica-go-authoritative-action! proc action-state)
+             (player-replica-ack-authoritative-action! record action-seq)))))))
+  (none))
+
+(defun player-replica-preserve-platform-y? ((proc target) (cur-state symbol))
+  (and proc
+       (nonzero? proc)
+       (-> proc control)
+       (nonzero? (-> proc control))
+       (not (focus-test? proc pilot tube flut mech pole grabbed))
+       (not (mp-target-death-state? cur-state))
+       (not (= cur-state 'target-ride-along))))
+
+(defun mp-target-edge-grab-state? ((state symbol))
+  (or (= state 'target-edge-grab)
+      (= state 'target-edge-grab-jump)
+      (= state 'target-edge-grab-off)
+      (= state 'target-indax-edge-grab)
+      (= state 'target-indax-edge-grab-jump)
+      (= state 'target-indax-edge-grab-off)
+      (= state 'target-pilot-edge-grab)
+      (= state 'target-indax-pilot-edge-grab)))
+
+(defun mp-target-pilot-edge-grab-state? ((state symbol))
+  (or (= state 'target-pilot-edge-grab) (= state 'target-indax-pilot-edge-grab)))
+
+(defun player-replica-in-edge-grab-state? ((proc target) (cur-state symbol))
+  (and proc (nonzero? proc) (or (focus-test? proc edge-grab) (mp-target-edge-grab-state? cur-state))))
+
+(defun player-replica-standard-edge-grab-active? ((proc target) (cur-state symbol))
+  (when (and proc (nonzero? proc) (player-replica-in-edge-grab-state? proc cur-state))
+    (let ((edge-state (-> proc edge-grab-state)))
+      (when (and edge-state (nonzero? edge-state))
+        (let ((edge-info (-> edge-state info)))
+          (when (and edge-info (nonzero? edge-info) (not (-> edge-info pilot-edge-grab?)))
+            (return #t))))))
+  #f)
+
+(defun player-replica-ensure-can-ride! ((proc target) (cur-state symbol))
+  (when (player-replica-preserve-platform-y? proc cur-state)
+    (let ((control (-> proc control)))
+      (when (and control (nonzero? control) (-> control root-prim) (nonzero? (-> control root-prim)))
+        (logior! (-> control root-prim prim-core action) (collide-action can-ride)))))
+  (none))
+
+(defun player-replica-platform-rider-active? ((proc target))
+  (when (and proc
+             (nonzero? proc)
+             (-> proc control)
+             (nonzero? (-> proc control))
+             (!= (-> proc control rider-time) (the-as time-frame 0)))
+    (not (time-elapsed? (-> proc control rider-time) (seconds 0.2)))))
+
+(defun player-replica-should-correct-platform-y? ((cur-pos vector) (record-pos vector))
+  (> (fabs (- (-> record-pos y) (-> cur-pos y))) (meters 10.0)))
+
+(defun player-replica-apply-transform-correction! ((proc target) (record target-record) (cur-state symbol))
+  (when (and proc
+             (nonzero? proc)
+             record
+             (nonzero? record)
+             (-> proc control)
+             (nonzero? (-> proc control))
+             (not (focus-test? proc pilot tube flut mech pole)))
+    (player-replica-ensure-can-ride! proc cur-state)
+    (let* ((control (-> proc control))
+           (standard-edge-grab? (player-replica-standard-edge-grab-active? proc cur-state))
+           (platform-y? (and (not standard-edge-grab?)
+                             (player-replica-preserve-platform-y? proc cur-state)
+                             (player-replica-platform-rider-active? proc)))
+           (dist (vector-vector-distance (-> control trans) (-> record trans))))
+      (cond
+        ((> dist (meters 15.0))
+         (vector-copy! (-> control trans) (-> record trans))
+         (vector-copy! (-> control transv) (-> record velocity)))
+        (standard-edge-grab?
+         (let ((cur-pos (-> control trans))
+               (record-pos (-> record trans))
+               (position-factor 0.2))
+           (set! (-> cur-pos x) (+ (-> cur-pos x) (* (- (-> record-pos x) (-> cur-pos x)) position-factor)))
+           (set! (-> cur-pos y) (+ (-> cur-pos y) (* (- (-> record-pos y) (-> cur-pos y)) position-factor)))
+           (set! (-> cur-pos z) (+ (-> cur-pos z) (* (- (-> record-pos z) (-> cur-pos z)) position-factor)))))
+        (else
+         (let ((cur-pos (-> control trans))
+               (record-pos (-> record trans))
+               (xz-factor 0.2)
+               (up-factor 0.15)
+               (down-factor 0.05))
+           (when (not (focus-test? proc grabbed))
+             (set! (-> cur-pos x) (+ (-> cur-pos x) (* (- (-> record-pos x) (-> cur-pos x)) xz-factor)))
+             (set! (-> cur-pos z) (+ (-> cur-pos z) (* (- (-> record-pos z) (-> cur-pos z)) xz-factor)))
+             (when (or (not platform-y?) (player-replica-should-correct-platform-y? cur-pos record-pos))
+               (if (> (-> record-pos y) (-> cur-pos y))
+                 (set! (-> cur-pos y) (+ (-> cur-pos y) (* (- (-> record-pos y) (-> cur-pos y)) up-factor)))
+                 (when (not (or (= cur-state 'target-falling)
+                                (= cur-state 'target-indax-falling)
+                                (= cur-state 'target-board-falling)
+                                (= cur-state 'target-mech-falling)
+                                (= cur-state 'target-carry-falling)))
+                   (set! (-> cur-pos y) (+ (-> cur-pos y) (* (- (-> record-pos y) (-> cur-pos y)) down-factor))))))))))
+      (when (not (player-replica-remote-input-stale? (mp-player-controller-target-record *mp-player-controller* proc)))
+        (let ((cur-vel (-> control transv))
+              (record-vel (-> record velocity))
+              (vel-factor 0.35))
+          (set! (-> cur-vel x) (+ (-> cur-vel x) (* (- (-> record-vel x) (-> cur-vel x)) vel-factor)))
+          (when (not platform-y?)
+            (set! (-> cur-vel y) (+ (-> cur-vel y) (* (- (-> record-vel y) (-> cur-vel y)) vel-factor))))
+          (set! (-> cur-vel z) (+ (-> cur-vel z) (* (- (-> record-vel z) (-> cur-vel z)) vel-factor)))))
+      (when (not (mp-target-state-attacking? cur-state))
+        (let ((slerp-factor 0.25))
+          (quaternion-slerp! (-> control quat) (-> control quat) (-> record quat) slerp-factor)
+          (quaternion-slerp! (-> control quat-for-control) (-> control quat-for-control) (-> record quat) slerp-factor)
+          (quaternion-slerp! (-> control dir-targ) (-> control dir-targ) (-> record quat) slerp-factor)))))
+  (none))
+
+(defun mp-target-board-state? ((state symbol))
+  (case state
+    (('target-board-start
+      'target-board-stance
+      'target-board-walk
+      'target-board-duck-stance
+      'target-board-jump
+      'target-board-falling
+      'target-board-jump-kick
+      'target-board-halfpipe
+      'target-board-get-on
+      'target-board-hit
+      'target-board-flip
+      'target-board-hold
+      'target-board-trickx
+      'target-board-ride-edge
+      'target-board-wall-kick
+      'target-board-hit-ground
+      'target-board-turn-to
+      'target-board-grenade)
+     #t)
+    (else #f)))
+
+(defun player-replica-in-board-state? ((proc target) (cur-state symbol))
+  (or (focus-test? proc board) (mp-target-board-state? cur-state)))
+
+(defun mp-target-pole-state? ((state symbol))
+  (case state
+    (('target-pole-cycle
+      'target-pole-flip-up
+      'target-pole-flip-up-jump
+      'target-pole-flip-forward
+      'target-pole-flip-forward-jump
+      'target-indax-pole-cycle
+      'target-indax-pole-flip-up
+      'target-indax-pole-flip-up-jump
+      'target-indax-pole-flip-forward
+      'target-indax-pole-flip-forward-jump)
+     #t)
+    (else #f)))
+
+(defun player-replica-in-pole-state? ((proc target) (cur-state symbol))
+  (or (focus-test? proc pole) (mp-target-pole-state? cur-state)))
+
+(defun get-player-replica-pilot-entry-mode ((proc target))
+  (let ((record (mp-player-controller-target-record *mp-player-controller* proc)))
+    (if (mp-player-daxter? record) 'pilot-daxter 'pilot)))
+
+(defun player-replica-synced-to-vehicle-seat? ((proc target) (v-proc vehicle) (seat-index int))
+  (and proc
+       (nonzero? proc)
+       v-proc
+       (nonzero? v-proc)
+       (focus-test? proc pilot)
+       (nonzero? (-> proc pilot))
+       (nonzero? (-> proc pilot vehicle))
+       (= (handle->process-safe (-> proc pilot vehicle)) v-proc)
+       (= (-> proc pilot seat-index) seat-index)))
+
+(deftype mp-base-turret-dummy (process-focusable)
+  ((hud                   handle)
+   (condition             int32)
+   (shadow-backup         symbol)
+   (rider                 handle)
+   (actor-group           (pointer actor-group))
+   (actor-group-count     int32)
+   (alt-actor             symbol)
+   (smush-control         smush-control :inline)
+   (sound-id              sound-id 3)
+   (sound-playing         symbol 3)
+   (cam-string-vector     vector :inline)
+   (path-event            structure)
+   (path-u                float)
+   (path-u-prev           float)
+   (path-mode             uint16)
+   (path-speed            float)
+   (path-speed-mult       float)
+   (path-speed-mult-final float)
+   (path-old-pos          vector :inline)
+   (path-direction        symbol)
+   (pause-proc            (function process symbol))
+   (gun-recoil-jmod       joint-mod 4)
+   (gun-index             int32)
+   (shot-timeout          time-frame)
+   (fire-time             time-frame)
+   (fire-time-interval    time-frame)
+   (enable-controls       symbol)
+   (available-for-pickup  symbol)
+   (roty                  degrees)
+   (rotyv                 degrees)
+   (rotyvv                degrees)
+   (roty-min              degrees)
+   (roty-max              degrees)
+   (rotx                  degrees)
+   (rotxv                 degrees)
+   (rotxvv                degrees)
+   (rotx-min              degrees)
+   (rotx-max              degrees)))
+
+(deftype mp-turret-info-dummy (basic)
+  ((process  (pointer process))
+   (handle   handle)
+   (turret   pointer)
+   (grabbed? symbol)
+   (quat     quaternion :inline)
+   (trans    vector :inline)))
+
+(defun player-replica-synced-to-turret? ((proc target) (t-proc mp-base-turret-dummy))
+  (and proc
+       (nonzero? proc)
+       t-proc
+       (nonzero? t-proc)
+       (nonzero? (-> proc turret))
+       (= (handle->process-safe (-> (the-as mp-turret-info-dummy (-> proc turret)) handle)) t-proc)
+       (nonzero? (-> proc state))
+       (or (= (-> proc state name) 'target-turret-stance) (= (-> proc state name) 'target-turret-get-on))))
+
+(defun player-replica-apply-turret-aim! ((turret-proc mp-base-turret-dummy) (info mp-player-record))
+  (when (and turret-proc (nonzero? turret-proc) info (nonzero? info) (nonzero? (-> info vehicle turret-active?)))
+    (set! (-> turret-proc enable-controls) #f)
+    (set! (-> turret-proc roty) (-> info vehicle turret-roty))
+    (set! (-> turret-proc rotyv) 0.0)
+    (set! (-> turret-proc rotyvv) 0.0)
+    (set! (-> turret-proc rotx) (-> info vehicle turret-rotx))
+    (set! (-> turret-proc rotxv) 0.0)
+    (set! (-> turret-proc rotxvv) 0.0))
+  (none))
+
+(defun player-replica-start-vehicle-entry! ((proc target) (v-proc vehicle) (seat-index int))
+  (when (and proc
+             (nonzero? proc)
+             (-> proc control)
+             (nonzero? (-> proc control))
+             v-proc
+             (nonzero? v-proc)
+             (>= seat-index 0)
+             (< seat-index 4))
+    (vehicle-eject-civilian-riders! v-proc)
+    (mp-vehicle-clear-seat-occupant! v-proc seat-index proc)
+    (remove-rider v-proc proc)
+    (send-event proc 'change-mode (get-player-replica-pilot-entry-mode proc) v-proc seat-index #f))
+  (none))
+
+(defun player-replica-repair-vehicle-seat-claim! ((proc target) (v-proc vehicle) (seat-index int))
+  (when (and proc
+             (nonzero? proc)
+             v-proc
+             (nonzero? v-proc)
+             (-> v-proc info)
+             (nonzero? (-> v-proc info))
+             (>= seat-index 0)
+             (< seat-index (-> v-proc info seat-count))
+             (focus-test? proc pilot-riding)
+             (player-replica-synced-to-vehicle-seat? proc v-proc seat-index))
+    (mp-vehicle-clear-seat-occupant! v-proc seat-index proc)
+    (let ((seat-rider (get-rider-in-seat v-proc seat-index)))
+      (when (not seat-rider)
+        (put-rider-in-seat v-proc seat-index proc))))
+  (none))
+
+(defun player-vehicle-state? ((state symbol))
+  (let ((state-id (mp-target-get-id-from-state state #f)))
+    (or (and (>= state-id (mp-target-state-id pilot-stance))
+             (<= state-id (mp-target-state-id pilot-death)))
+        (and (>= state-id (mp-target-state-id indax-pilot-stance))
+             (<= state-id (mp-target-state-id indax-pilot-death))))))
+
+(defun player-replica-release-vehicle! ((proc target))
+  (when (nonnull? proc (-> proc pilot))
+    (let* ((pilot-info (-> proc pilot))
+           (vehicle-proc (the-as vehicle (handle->process-safe (-> pilot-info vehicle)))))
+      (when (and (nonnull? vehicle-proc)
+                 (type? vehicle-proc vehicle)
+                 (nonnull? (-> vehicle-proc info)))
+        (let ((driver? (and (> (-> vehicle-proc info seat-count) 0)
+                            (= (get-rider-in-seat vehicle-proc 0) proc))))
+          (remove-rider vehicle-proc proc)
+          (when driver?
+            (set! (-> pilot-info seat-index) 0)
+            (send-event vehicle-proc 'player-get-off :from proc))))
+      (set! (-> pilot-info vehicle) (the-as handle #f))
+      (set! (-> pilot-info seat-index) 0)))
+  (when (nonnull? proc)
+    (logclear! (-> proc focus-status) (focus-status pilot pilot-riding)))
+  (none))
+
+(defun player-replica-reconcile-vehicle-exit! ((proc target) (record mp-player-record) (cur-state symbol))
+  (unless (and (nonnull? proc record (-> proc control))
+               (is-record-remote-player? record)
+               (!= proc *target*)
+               (zero? (-> record vehicle vehicle-id)))
+    (return #f))
+  (let ((record-state (mp-target-get-state-from-id (-> record action target-state-id)))
+        (pilot-info (-> proc pilot)))
+    (unless (and (nonnull? record-state)
+                 (not (player-vehicle-state? record-state))
+                 (not (mp-target-death-state? record-state)))
+      (return #f))
+    (cond
+      ((or (player-vehicle-state? cur-state) (focus-test? proc pilot pilot-riding))
+       (player-replica-release-vehicle! proc)
+       (logclear! (-> proc mask) (process-mask pause sleep actor-pause))
+       (if (mp-player-daxter? record)
+         (go-process proc target-indax-start (the handle #f))
+         (go-process proc target-stance))
+       (set! (-> record runtime state-mismatch-count) 0)
+       (return #t))
+      ((and (nonnull? pilot-info) (nonzero? (-> pilot-info vehicle)))
+       (player-replica-release-vehicle! proc))))
+  #f)
+
+(define *mp-jak-death-vo* (new 'static 'boxed-array :type string "jak065" "jak034" "jak076" "jak077" "jak042" "jak078"))
+(define *mp-daxter-death-vo* (new 'static 'boxed-array :type string "ds199" "ds285" "ds490" "ds489" "dsek008" "dsek007"))
+(define *mp-death-taunt-last-time* (the-as time-frame 0))
+
+(defun mp-play-random-vo ((speaker process) (vo-keys (array string)))
+  (when (and speaker (nonzero? speaker) vo-keys (nonzero? vo-keys) (> (-> vo-keys length) 0))
+    (let* ((idx (rand-vu-int-range 0 (+ (-> vo-keys length) -1)))
+           (vo-key (-> vo-keys idx)))
+      (when (and *gui-control* (nonzero? *gui-control*))
+        (let ((s-id (add-process *gui-control* speaker (gui-channel alert) (gui-action play) vo-key 99.0 0)))
+          (when (nonzero? s-id)
+            (set-falloff! *gui-control* s-id #t 20 80 2)
+            (set-volume! *gui-control* s-id 1.0)
+            (set-subtitle! *gui-control* s-id #f))))))
+  (none))
+
+(defun player-replica-start-hit-flash! ((proc target))
+  (when (and proc
+             (nonzero? proc)
+             (-> proc control)
+             (nonzero? (-> proc control))
+             (-> proc clock)
+             (nonzero? (-> proc clock))
+             *TARGET-bank*
+             (nonzero? *TARGET-bank*)
+             (not (logtest? (-> proc state-flags) (state-flags tinvul1))))
+    (target-timed-invulnerable (the-as time-frame (-> *TARGET-bank* hit-invulnerable-timeout)) proc 1))
+  (none))
+
+(defun mp-trigger-death-taunt! ((dead-target target))
+  (when (and (mp-session-in-game?)
+             (not *mp-block-remote-respawn-on-me?*)
+             (not *mp-block-local-respawn-on-remote?*)
+             dead-target
+             (nonzero? dead-target)
+             (-> dead-target root)
+             (nonzero? (-> dead-target root))
+             (>= (- (current-time) *mp-death-taunt-last-time*) (seconds 5.0))
+             (<= (rand-vu-int-range 1 100) 75))
+    (let ((speaker (the-as target #f))
+          (is-daxter? #f))
+      (if (= dead-target *target*)
+        (let ((rec (mp-nearest-remote-player-record *target* #t)))
+          (when (and rec (nonzero? rec) (not (mp-player-blocks-respawn? rec)))
+            (set! speaker (mp-player-record-target rec))
+            (set! is-daxter? (the-as symbol (mp-player-daxter? rec)))))
+        (let ((dead-rec (mp-player-controller-target-record *mp-player-controller* dead-target)))
+          (when (and dead-rec (nonzero? dead-rec) (not (mp-player-blocks-respawn? dead-rec)))
+            (when (and *target*
+                       (nonzero? *target*)
+                       (-> *target* root)
+                       (nonzero? (-> *target* root))
+                       (-> *target* state)
+                       (nonzero? (-> *target* state))
+                       (not (mp-target-death-state? (-> *target* state name))))
+              (set! speaker *target*)
+              (set! is-daxter? (the-as symbol (mp-local-player-daxter?)))))))
+      (when (and speaker
+                 (nonzero? speaker)
+                 (-> speaker root)
+                 (nonzero? (-> speaker root))
+                 (< (vector-vector-distance (-> dead-target root trans) (-> speaker root trans)) (meters 40.0)))
+        (set! *mp-death-taunt-last-time* (current-time))
+        (if is-daxter? (mp-play-random-vo speaker *mp-daxter-death-vo*) (mp-play-random-vo speaker *mp-jak-death-vo*)))))
+  (none))
+
+(defun player-replica-apply-record-correction! ((proc target))
+  (let ((record (mp-player-controller-target-record *mp-player-controller* proc)))
+    (when (nonnull? record)
+      (let ((target-record (get-player-target-record record)))
+        (when (and (nonnull? proc target-record (-> proc control))
+                   (-> target-record active?)
+                   (not (player-replica-reconcile-vehicle-exit! proc record
+                          (if (nonnull? (-> proc state)) (-> proc state name) #f))))
+          (logclear! (-> proc mask) (process-mask pause sleep actor-pause))
+          (mp-darkjak-apply-remote-stage! proc (-> record action darkjak-stage))
+          (player-replica-apply-input! proc target-record)
+          ;; if someone even after player-replica-go-authoritative-action! get unsynced then this should grab them out of that state/mode 
+          (let ((cur-state (if (-> proc state) (-> proc state name) #f)))
+            (player-replica-apply-transform-correction! proc target-record cur-state)
+            (player-replica-apply-authoritative-action! proc target-record cur-state)
+            (darkjak-update-replica-giant-feedback! proc *target* (-> record action darkjak-stage))
+            (set! cur-state (if (-> proc state) (-> proc state name) cur-state))
+            (let ((record-state (mp-target-get-state-from-id (-> target-record state-id))))
+              (when (and record-state (!= cur-state record-state))
+                (+! (-> record runtime state-mismatch-count) 1)
+                (cond
+                  ((and (mp-target-death-state? record-state)
+                        (not (mp-target-death-state? cur-state))
+                        (not (mp-player-blocks-respawn? record)))
+                   (log 'debug "[PlayerReplica] Authoritative Death! Bumping ~A -> ~A~%" cur-state record-state)
+                   (mp-player-runtime-set-flag! record (mp-player-runtime-flags dying))
+                   (send-event proc 'mp-die)
+                   (mp-trigger-death-taunt! proc)
+                   (set! (-> record runtime state-mismatch-count) 0))
+                  ((and (mp-target-death-state? record-state) (mp-target-death-state? cur-state))
+                   (set! (-> record runtime state-mismatch-count) 0))
+                  ((or (= record-state 'target-hit) (= record-state 'target-indax-hit))
+                   (when (not (logtest? (-> proc state-flags) (state-flags tinvul1)))
+                     (player-replica-start-hit-flash! proc)
+                     (send-event proc 'mp-hit))
+                   (set! (-> record runtime state-mismatch-count) 0))
+                  ((and (= record-state 'target-ride-along) (!= 'target-indax-jump-on cur-state))
+                   (log 'debug "[PlayerReplica] Authoritative Ride Along! Bumping ~A -> ~A~%" cur-state record-state)
+                   (let ((player-proc (mp-player-record-by-id (-> proc player-id))))
+                     (when (and player-proc (!= MP_INVALID_PLAYER_ID (-> player-proc action riding-along-player-id)))
+                       (go-process proc target-indax-jump-on (-> player-proc action riding-along-player-id))
+                       (set! (-> record runtime state-mismatch-count) 0))))
+                  ((and (mp-target-board-state? record-state) (not (player-replica-in-board-state? proc cur-state)))
+                   (log 'debug "[PlayerReplica] Authoritative Board! Bumping ~A -> ~A~%" cur-state record-state)
+                   (send-event proc 'change-mode 'board #f)
+                   (set! (-> record runtime state-mismatch-count) 0))
+                  ((and (not (mp-target-board-state? record-state)) (player-replica-in-board-state? proc cur-state))
+                   (log 'debug "[PlayerReplica] Authoritative Non-Board! Bumping ~A -> ~A~%" cur-state record-state)
+                   (send-event proc 'end-mode)
+                   (set! (-> record runtime state-mismatch-count) 0))
+                  ((and (not (mp-target-pole-state? record-state)) (player-replica-in-pole-state? proc cur-state))
+                   (when (>= (-> record runtime state-mismatch-count) 10)
+                     (log 'debug "[PlayerReplica] Authoritative Non-Pole! Bumping ~A -> ~A~%" cur-state record-state)
+                     (send-event proc 'end-mode 'pole)
+                     (set! (-> record runtime state-mismatch-count) 0)))
+                  ((= cur-state 'process-drawable-art-error)
+                   (when (>= (-> record runtime state-mismatch-count) 10)
+                     (log 'debug "[PlayerReplica] Stuck in drawable art error! Forcing exit...~%")
+                     (mp-clear-target-edge-grab-pending! proc)
+                     (deactivate proc)
+                     (player-unbind-target! record)
+                     (set! (-> record runtime state-mismatch-count) 0)))
+                  ((= cur-state 'target-ride-along)
+                   (when (!= record-state 'target-ride-along)
+                     (when (>= (-> record runtime state-mismatch-count) 2)
+                       (log 'debug "[PlayerReplica] Stuck in ride-along! Forcing exit to ~A~%" record-state)
+                       (send-event proc 'change-mode 'normal #f)
+                       (set! (-> record runtime state-mismatch-count) 0))))
+                  ((and (mp-target-edge-grab-state? record-state) (not (player-replica-in-edge-grab-state? proc cur-state)))
+                   (when (>= (-> record runtime state-mismatch-count) 10)
+                     (log 'debug "[PlayerReplica] Authoritative Edge Grab! Bumping ~A -> ~A~%" cur-state record-state)
+                     (mp-dispatch-edge-grab-to-target! proc (mp-target-pilot-edge-grab-state? record-state))
+                     (set! (-> record runtime state-mismatch-count) 0)))
+                  ((player-replica-in-edge-grab-state? proc cur-state)
+                   (when (>= (-> record runtime state-mismatch-count) 10)
+                     (log 'debug "[PlayerReplica] Stuck in hang! Forcing exit via 'end-mode...~%")
+                     (send-event proc 'end-mode 'edge-grab)
+                     (set! (-> record runtime state-mismatch-count) 0)))))
+              (when (= cur-state record-state)
+                (set! (-> record runtime state-mismatch-count) 0)))
+            (let ((info record)
+                  (record-state (mp-target-get-state-from-id (-> target-record state-id))))
+              (let ((riding-veh-id (if (and info (nonzero? info)) (-> info vehicle vehicle-id) (the uint32 0)))
+                    (riding-seat-index (if (and info (nonzero? info)) (-> info vehicle seat-index) (the uint8 #xff))))
+                (cond
+                  ((and (mp-target-death-state? record-state)
+                        (focus-test? proc pilot)
+                        (nonnull? (-> proc pilot))
+                        (nonzero? (-> proc pilot vehicle)))
+                   (player-replica-release-vehicle! proc))
+                  ((and (nonzero? riding-veh-id)
+                        (or (= record-state 'target-turret-stance) (= record-state 'target-turret-get-on)))
+                   (let* ((turret-ent (entity-by-aid riding-veh-id))
+                          (turret-proc (the-as mp-base-turret-dummy
+                                               (if (and turret-ent (nonzero? turret-ent)) (-> turret-ent extra process) #f))))
+                     (when (and turret-proc (nonzero? turret-proc))
+                       (player-replica-apply-turret-aim! turret-proc info)
+                       (when (not (player-replica-synced-to-turret? proc turret-proc))
+                         (when (and (focus-test? proc pilot)
+                                    (nonnull? (-> proc pilot))
+                                    (nonzero? (-> proc pilot vehicle)))
+                           (player-replica-release-vehicle! proc))
+                         (set! (-> turret-proc rider) (process->handle proc))
+                         (set! (-> turret-proc available-for-pickup) #f)
+                         (send-event proc 'change-state target-turret-get-on (process->handle turret-proc))))))
+                  ((nonzero? riding-veh-id)
+                   (let ((v-proc (mp-vehicle-find-by-net-id riding-veh-id)))
+                     (when (and v-proc (nonzero? v-proc))
+                       (let ((seat-index (the int riding-seat-index)))
+                         (when (mp-vehicle-seat-reserved-by-remote? v-proc seat-index)
+                           (if (player-replica-synced-to-vehicle-seat? proc v-proc seat-index)
+                             (player-replica-repair-vehicle-seat-claim! proc v-proc seat-index)
+                             (begin
+                               (player-replica-start-vehicle-entry! proc v-proc seat-index))))))))
+                  ((and (or (= cur-state 'target-turret-stance) (= cur-state 'target-turret-get-on))
+                        (not (or (= record-state 'target-turret-stance) (= record-state 'target-turret-get-on))))
+                   (send-event proc
+                               'change-state
+                               (if (mp-player-daxter? record) target-indax-start target-stance)
+                               (the handle #f))
+                   (when (and (nonzero? (-> proc turret))
+                              (nonzero? (-> (the-as mp-turret-info-dummy (-> proc turret)) handle)))
+                     (let ((turret-proc (the-as mp-base-turret-dummy
+                                                (handle->process (-> (the-as mp-turret-info-dummy (-> proc turret)) handle)))))
+                       (when (and turret-proc (nonzero? turret-proc))
+                         (set! (-> turret-proc rider) (the-as handle #f))
+                         (set! (-> turret-proc available-for-pickup) #t)
+                         (set! (-> turret-proc enable-controls) #t)
+                         (send-event turret-proc 'exit)))))
+                  ((and (or (= record-state 'target-pilot-get-off) (= record-state 'target-indax-pilot-get-off))
+                        (not (or (= cur-state 'target-pilot-get-off) (= cur-state 'target-indax-pilot-get-off)))
+                        (focus-test? proc pilot)
+                        (nonnull? (-> proc pilot))
+                        (nonzero? (-> proc pilot vehicle)))
+                   (send-event proc 'end-mode :from proc)))))
+            (player-replica-apply-weapon-state! proc target-record)
+            (player-replica-flush-pending-gun-shot! proc target-record)
+            (player-replica-refresh-duck-gun-visibility! proc cur-state))
+          (matrix-rotate-y! (-> proc control cam-R-w) (-> target-record cam-angle-y))
+          (set! (-> proc control update-cam-R-w-start-time) (the-as int64 #x7fffffffffffffff))
+          (if (mp-player-daxter? record) (logior! (-> proc draw status) (draw-control-status no-draw-bounds2)))))))
+  (none))
+
+(defbehavior player-replica-init target ((arg0 continue-point) (player-id uint))
+  (init-target self arg0 #t)
+  (mp-player-controller-bind-target! *mp-player-controller* player-id self)
+  (remove-setting! 'allow-pause)
+  (remove-setting! 'allow-progress)
+  (if (mp-target-daxter? self) (go target-indax-start (the handle #f)) (go target-stance))
+  (none))
+
+(defun player-replica-deactivate! ((record mp-player-record))
+  (when (nonnull? record)
+    (let ((replica (mp-player-record-target record)))
+      (when (and (player-replica-process-live? replica) (or (not *target*) (zero? *target*) (!= replica *target*)))
+        (let ((id (if (and *mp-player-controller* (nonzero? *mp-player-controller*))
+                    (mp-player-controller-record-id *mp-player-controller* record)
+                    (the-as uint (-> record identity player-id)))))
+          (log 'debug "[PlayerReplica] Deactivating target replica for player ~D...~%" id))
+        (target-timed-invulnerable-off replica 0)
+        (mp-clear-target-edge-grab-pending! replica)
+        (deactivate replica)))
+    (player-unbind-target! record)
+    (player-replica-clear-pending-gun-shot! record)
+    (set! (-> record runtime action-warmup-start) (the-as time-frame 0))
+    (set! (-> record runtime replica-lifecycle) (player-replica-lifecycle culled)))
+  (none))
+
+(defun mp-target-pool-slot-available? ()
+  (if (and *target-dead-pool* (nonzero? *target-dead-pool*))
+    (let ((free-slot (-> *target-dead-pool* child))) (and free-slot (nonzero? free-slot)))
+    #f))
+
+(defun player-replica-spawn ((record mp-player-record))
+  (when (and record
+             (nonzero? record)
+             (not (mp-player-record-target record))
+             *target*
+             (nonzero? *target*)
+             *game-info*
+             (nonzero? *game-info*)
+             (-> *game-info* current-continue)
+             (not (or (and (-> *target* next-state)
+                           (or (= (-> *target* next-state name) 'target-title)
+                               (= (-> *target* next-state name) 'target-demo)))
+                      (and (-> *target* state)
+                           (or (= (-> *target* state name) 'target-title) (= (-> *target* state name) 'target-demo))))))
+    (let ((id (the-as uint (-> record identity player-id))))
+      (when (not (mp-target-pool-slot-available?))
+        (when (!= (-> record runtime replica-lifecycle) (player-replica-lifecycle spawning))
+          (format 0 "[PlayerReplica] Target pool exhausted; deferring player ~D spawn.~%" id))
+        (set! (-> record runtime replica-lifecycle) (player-replica-lifecycle spawning))
+        (return (the-as target #f)))
+      (set! (-> record runtime replica-lifecycle) (player-replica-lifecycle spawning))
+      (log 'debug "[PlayerReplica] Spawning new target replica with ID ~D...~%" id)
+      (let ((p (process-spawn target
+                              :init player-replica-init
+                              (-> *game-info* current-continue)
+                              id
+                              :from *target-dead-pool*
+                              :to *target-pool*
+                              :stack *kernel-dram-stack*)))
+        (when p
+          (let ((replica (the-as target (-> p 0))))
+            (when (and replica (nonzero? replica))
+              (if (and *mp-player-name-scratch* (nonzero? *mp-player-name-scratch*))
+                (begin
+                  (mp-player-copy-name! *mp-player-name-scratch* (-> record identity player-id))
+                  (set! (-> replica name) *mp-player-name-scratch*))
+                (set! (-> replica name) "player-replica"))))
+          (set! (-> record runtime state-mismatch-count) 0)
+          (mp-player-runtime-clear-flag! record (mp-player-runtime-flags dying))
+          (mp-player-runtime-clear-flag! record (mp-player-runtime-flags dead))
+          (set! (-> record runtime action-warmup-start) (current-time))
+          (set! (-> record runtime last-action-sequence) (-> record action authoritative-sequence))
+          (let ((replica (mp-player-record-target record)))
+            (when (and replica (nonzero? replica))
+              (target-timed-invulnerable-off replica 0)
+              (player-replica-snap-to-record-on-spawn! replica)))
+          (if (mp-player-daxter? record)
+            (begin
+              (when (mp-player-runtime-flag? record (mp-player-runtime-flags recovering))
+                (mp-player-runtime-clear-flag! record (mp-player-runtime-flags recovering))
+                (let ((replica (mp-player-record-target record)))
+                  (when (and replica (nonzero? replica))
+                    (go-process replica target-indax-spawn-reset))))))
+          (set! (-> record runtime replica-lifecycle) (player-replica-lifecycle active)))
+        (when (not p)
+          (set! (-> record runtime replica-lifecycle) (player-replica-lifecycle none))))))
+  (mp-player-record-target record))

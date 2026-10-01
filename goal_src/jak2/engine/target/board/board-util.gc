@@ -23,9 +23,9 @@
 
 (defbehavior board-post board ()
   (let* ((a0-0 (-> self parent))
-         (v1-0 (if a0-0
+         (v1-0 (the-as target (if a0-0
                    (-> (the-as target (-> a0-0 0)) self)
-                   )
+                   ))
                )
          )
     (set! (-> self root trans quad) (-> v1-0 board board-trans quad))
@@ -61,6 +61,16 @@
         (logior! (-> self draw status) (draw-control-status force-fade))
         (logclear! (-> self draw status) (draw-control-status force-fade))
         )
+    (when (mp-target-daxter? v1-0)
+      (let ((sk (the-as sidekick (ppointer->process (-> v1-0 sidekick)))))
+        (when (nonnull? sk (-> sk draw))
+          (if (logtest? (-> sk draw status) (draw-control-status no-draw-bounds))
+            (logior! (-> self draw status) (draw-control-status no-draw))
+            (logclear! (-> self draw status) (draw-control-status no-draw))
+            )
+          )
+        )
+      )
     )
   (ja-post)
   0

@@ -6129,7 +6129,7 @@
 (defmethod draw-option ((this menu-restart-mission-qr-option) (arg0 progress) (arg1 font-context) (arg2 int) (arg3 symbol))
   (local-vars (a0-11 string))
   (let ((f0-1 (* 2.0 (- 0.5 (-> arg0 menu-transition))))
-        (name (if (= (pc-multi-get-role) 1) (text-id progress-reconnect-button) (-> this name)))
+        (name (if (mp-session-client?) (text-id progress-reconnect-button) (-> this name)))
         )
     (if (< f0-1 0.0)
         (set! f0-1 0.0)

@@ -344,121 +344,133 @@ set(RUNTIME_SOURCE
         system/hid/display_manager.cpp
         system/hid/input_bindings.cpp
         system/hid/input_manager.cpp
+        system/hid/text_input_editor.cpp
         system/hid/sdl_util.cpp
         system/IOP_Kernel.cpp
         system/iop_thread.cpp
-        multiplayer/multiplayer_api.cpp
-        multiplayer/multiplayer_direct_connect.cpp
-        multiplayer/multiplayer_manager.cpp
-        multiplayer/multiplayer_packet.cpp
-        multiplayer/multiplayer_packet_scheduler.cpp
-        multiplayer/multiplayer_peer_registry.cpp
-        multiplayer/multiplayer_port_mapping.cpp
-        multiplayer/multiplayer_profile_lease.cpp
-        multiplayer/multiplayer_preferences.cpp
-        multiplayer/multiplayer_scanner.cpp
-        multiplayer/multiplayer_security.cpp
-        multiplayer/multiplayer_version.cpp
-        multiplayer/multiplayer_session.cpp
-        multiplayer/multiplayer_stats.cpp
-        multiplayer/sync/airlock_sync.cpp
-        multiplayer/sync/enemy_sync.cpp
-        multiplayer/sync/event_sync.cpp
-        multiplayer/sync/palace_squid_sync.cpp
-        multiplayer/sync/widow_sync.cpp
-        multiplayer/sync/player_sync.cpp
-        multiplayer/sync/traffic_sync.cpp
-        multiplayer/pedestrian/multiplayer_pedestrian.cpp
-        multiplayer/vehicle/multiplayer_vehicle.cpp
         system/SystemThread.cpp
         tools/filter_menu/filter_menu.cpp
+        tools/network_debug/network_debug_panel.cpp
         tools/subtitle_editor/subtitle_editor_db.cpp
         tools/subtitle_editor/subtitle_editor_repl_client.cpp
         tools/subtitle_editor/subtitle_editor.cpp
         )
 
-list(APPEND RUNTIME_SOURCE
-        multiplayer/multiplayer_port_mapping_route.cpp)
-if(WIN32)
+set(MULTIPLAYER_JAK2_SOURCE
+        multiplayer/jak2/bridge/goal_bridge.cpp
+        multiplayer/jak2/core/replication_state.cpp
+        multiplayer/jak2/core/replication_state_traffic.cpp
+        multiplayer/jak2/core/replication_state_entities.cpp
+        multiplayer/jak2/core/validation.cpp
+        multiplayer/jak2/application/presentation_runtime.cpp
+        multiplayer/jak2/application/jak2_adapter.cpp
+        multiplayer/jak2/api/multiplayer_api.cpp
+        multiplayer/jak2/api/preferences.cpp
+        multiplayer/jak2/wire/packets/traffic_authority_state_packet.cpp
+        multiplayer/jak2/wire/packets/player_state_packet.cpp
+        multiplayer/jak2/wire/packets/player_vehicle_state_packet.cpp
+        multiplayer/jak2/wire/packets/turret_state_packet.cpp
+        multiplayer/jak2/wire/packets/game_event_batch_packet.cpp
+        multiplayer/jak2/wire/packets/world_state_packet.cpp
+        multiplayer/jak2/wire/packets/bootstrap_state_packet.cpp
+        multiplayer/jak2/wire/packets/airlock_state_batch_packet.cpp
+        multiplayer/jak2/wire/packets/enemy_state_batch_packet.cpp
+        multiplayer/jak2/wire/packets/pedestrian_state_batch_packet.cpp
+        multiplayer/jak2/wire/packets/vehicle_state_batch_packet.cpp
+        multiplayer/jak2/wire/packets/boss_state_packet.cpp
+        multiplayer/jak2/application/packet_handlers.cpp)
+
+set(MULTIPLAYER_PLATFORM_SOURCE
+        multiplayer/platform/session/connection_draft.cpp
+        multiplayer/platform/session/connection_input.cpp
+        multiplayer/platform/core/compatibility_identity.cpp
+        multiplayer/platform/core/message_policy.cpp
+        multiplayer/platform/core/sequence.cpp
+        multiplayer/platform/profile/profile_store.cpp
+        multiplayer/platform/protocol/session_protocol.cpp
+        multiplayer/platform/discovery/discovery_protocol.cpp
+        multiplayer/platform/discovery/invite.cpp
+        multiplayer/platform/discovery/discovery_service.cpp
+        multiplayer/platform/session/participant_registry.cpp
+        multiplayer/platform/session/packet_registry.cpp
+        multiplayer/platform/session/cadence_scheduler.cpp
+        multiplayer/platform/session/reconnect_policy.cpp
+        multiplayer/platform/protocol/message_frame.cpp
+        multiplayer/platform/runtime/multiplayer_runtime.cpp
+        multiplayer/platform/runtime/multiplayer_runtime_commands.cpp
+        multiplayer/platform/runtime/multiplayer_runtime_worker.cpp
+        multiplayer/platform/session/session_controller.cpp
+        multiplayer/platform/session/session_state.cpp
+        multiplayer/platform/transport/session_platform.cpp
+        multiplayer/platform/nat/port_mapping.cpp
+        multiplayer/platform/nat/port_mapping_coordinator.cpp)
+
+if(ENABLE_NETWORK_SIMULATION)
     list(APPEND RUNTIME_SOURCE
-            multiplayer/multiplayer_port_mapping_route_windows.cpp)
-elseif(APPLE)
-    list(APPEND RUNTIME_SOURCE
-            multiplayer/multiplayer_port_mapping_route_macos.cpp)
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    list(APPEND RUNTIME_SOURCE
-            multiplayer/multiplayer_port_mapping_route_linux.cpp)
-else()
-    message(FATAL_ERROR "Automatic port mapping has no route resolver for ${CMAKE_SYSTEM_NAME}")
+            tools/network_simulation/network_simulation_panel.cpp)
+    list(APPEND MULTIPLAYER_PLATFORM_SOURCE
+            multiplayer/platform/transport/network_simulation.cpp)
 endif()
 
 add_subdirectory(sound)
 
-if(WIN32)
-    add_library(libsodium SHARED IMPORTED GLOBAL)
-    set_target_properties(libsodium PROPERTIES
-        IMPORTED_IMPLIB "${PROJECT_SOURCE_DIR}/third-party/libsodium/x64/libsodium.lib"
-        IMPORTED_LOCATION "${PROJECT_SOURCE_DIR}/third-party/libsodium/x64/libsodium.dll"
-        INTERFACE_INCLUDE_DIRECTORIES "${PROJECT_SOURCE_DIR}/third-party/libsodium/include")
-else()
-    set(LIBSODIUM_ROOT "" CACHE PATH "Optional libsodium installation prefix")
-    find_path(LIBSODIUM_INCLUDE_DIR sodium.h
-        HINTS "${LIBSODIUM_ROOT}"
-        PATH_SUFFIXES include
-        REQUIRED)
-    if(STATICALLY_LINK)
-        set(LIBSODIUM_ORIGINAL_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
-        set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
-        find_library(LIBSODIUM_STATIC_LIBRARY sodium
-            HINTS "${LIBSODIUM_ROOT}"
-            PATH_SUFFIXES lib
-            REQUIRED)
-        set(CMAKE_FIND_LIBRARY_SUFFIXES ${LIBSODIUM_ORIGINAL_FIND_LIBRARY_SUFFIXES})
-        add_library(libsodium STATIC IMPORTED GLOBAL)
-        set(LIBSODIUM_LINK_LIBRARY "${LIBSODIUM_STATIC_LIBRARY}")
-    else()
-        find_library(LIBSODIUM_LIBRARY sodium
-            HINTS "${LIBSODIUM_ROOT}"
-            PATH_SUFFIXES lib
-            REQUIRED)
-        add_library(libsodium UNKNOWN IMPORTED GLOBAL)
-        set(LIBSODIUM_LINK_LIBRARY "${LIBSODIUM_LIBRARY}")
-    endif()
-    set_target_properties(libsodium PROPERTIES
-        IMPORTED_LOCATION "${LIBSODIUM_LINK_LIBRARY}"
-        INTERFACE_INCLUDE_DIRECTORIES "${LIBSODIUM_INCLUDE_DIR}")
+add_library(multiplayer-platform STATIC ${MULTIPLAYER_PLATFORM_SOURCE})
+if(ENABLE_NETWORK_SIMULATION)
+    target_compile_definitions(multiplayer-platform PUBLIC ENABLE_NETWORK_SIMULATION)
 endif()
+target_link_libraries(multiplayer-platform PRIVATE GameNetworkingSockets::static common
+        "$<TARGET_FILE:libminiupnpc-static>" "$<TARGET_FILE:natpmp>")
+add_dependencies(multiplayer-platform libminiupnpc-static natpmp)
+target_include_directories(multiplayer-platform PUBLIC "${PROJECT_SOURCE_DIR}")
+if(WIN32)
+    target_link_libraries(multiplayer-platform PRIVATE iphlpapi ws2_32)
+elseif(UNIX)
+    target_link_libraries(multiplayer-platform PRIVATE pthread)
+endif()
+
+add_library(multiplayer-jak2 STATIC ${MULTIPLAYER_JAK2_SOURCE})
+target_include_directories(multiplayer-jak2 PUBLIC "${PROJECT_SOURCE_DIR}")
+target_link_libraries(multiplayer-jak2 PUBLIC multiplayer-platform PRIVATE common fmt)
 
 # we build the runtime as a static library.
 add_library(runtime STATIC ${RUNTIME_SOURCE} "../third-party/glad/src/glad.c")
 
-set_property(SOURCE multiplayer/multiplayer_port_mapping.cpp APPEND PROPERTY
+option(MULTIPLAYER_COVERAGE "Instrument multiplayer production sources with LLVM coverage" OFF)
+if(MULTIPLAYER_COVERAGE)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "MULTIPLAYER_COVERAGE requires Clang and matching llvm-cov/llvm-profdata")
+    endif()
+    foreach(source IN LISTS RUNTIME_SOURCE)
+        if(source MATCHES "^multiplayer/.*\\.cpp$")
+            set_property(SOURCE ${source} APPEND PROPERTY COMPILE_OPTIONS
+                    -fprofile-instr-generate -fcoverage-mapping -O0)
+        endif()
+    endforeach()
+    target_link_options(runtime INTERFACE -fprofile-instr-generate)
+endif()
+
+set_property(SOURCE multiplayer/platform/nat/port_mapping.cpp APPEND PROPERTY
         INCLUDE_DIRECTORIES
         "${PROJECT_SOURCE_DIR}/third-party/miniupnpc/include"
         "${PROJECT_SOURCE_DIR}/third-party/libnatpmp")
-set_property(SOURCE multiplayer/multiplayer_port_mapping.cpp APPEND PROPERTY
+set_property(SOURCE multiplayer/platform/nat/port_mapping.cpp APPEND PROPERTY
         COMPILE_DEFINITIONS
         MINIUPNP_STATICLIB
         NATPMP_STATICLIB
         ENABLE_STRNATPMPERR
         NATPMP_MAX_RETRIES=3)
 
-target_link_libraries(runtime common fmt enet SDL3::SDL3 imgui discord-rpc sound stb_image libco
+target_link_libraries(runtime common fmt multiplayer-platform multiplayer-jak2 SDL3::SDL3 imgui discord-rpc sound stb_image libco
         libcurl "$<TARGET_FILE:libminiupnpc-static>" "$<TARGET_FILE:natpmp>")
 add_dependencies(runtime libminiupnpc-static natpmp)
 if(WIN32)
-    target_link_libraries(runtime mman ole32 iphlpapi ws2_32 libsodium)
+    target_link_libraries(runtime mman ole32 iphlpapi ws2_32)
 else()
-    target_include_directories(runtime PRIVATE "${LIBSODIUM_INCLUDE_DIR}")
-    target_link_libraries(runtime pthread dl libsodium)
+    target_link_libraries(runtime pthread dl)
 endif()
 
 add_executable(gk main.cpp)
 target_link_libraries(gk runtime)
 if(WIN32)
-    add_custom_command(TARGET gk POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "$<TARGET_FILE:libsodium>"
-                "$<TARGET_FILE_DIR:gk>")
     set_target_properties(gk PROPERTIES VS_DPI_AWARE "PerMonitor")
 endif()

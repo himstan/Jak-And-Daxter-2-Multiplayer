@@ -3,33 +3,28 @@
 
 (define-perm *mp-active-local-scene-name* string (new 'global 'string 64 ""))
 
+(defun mp-intro-chain-scene? ((scene-name string))
+  (and (nonnull? scene-name)
+       (or (string= scene-name "intro-samos-hut")
+           (string= scene-name "intro-vortex")
+           (string= scene-name "intro-city-square")
+           (string= scene-name "intro-prison"))))
+
 (defun mp-local-scene-aborted? ()
-  "True while the active scene-player is tearing down after a skip/abort."
-  (when (and *scene-player*
-             (nonzero? *scene-player*))
+  (when (and *scene-player* (nonzero? *scene-player*))
     (let ((scene-proc (the-as scene-player (ppointer->process *scene-player*))))
-      (when (and scene-proc
-                 (nonzero? scene-proc))
-        (return (-> scene-proc aborted?))
-        )
-      )
-    )
-  #f
-  )
+      (when (and scene-proc (nonzero? scene-proc))
+        (return (-> scene-proc aborted?)))))
+  #f)
 
 (defun mp-clear-active-local-scene-name! ()
-  (when (and *mp-active-local-scene-name*
-             (nonzero? *mp-active-local-scene-name*))
+  (when (and *mp-active-local-scene-name* (nonzero? *mp-active-local-scene-name*))
     (set! (-> *mp-active-local-scene-name* data 0) (the uint 0))
-    (set! (-> *mp-active-local-scene-name* data -4) (the-as uint 0))
-    )
+    (set! (-> *mp-active-local-scene-name* data -4) (the-as uint 0)))
   (none))
 
 (defun mp-record-active-local-scene-name! ()
-  "Remember the current local scene so transition cleanup can run after it ends."
-  (when (and (not (mp-local-scene-aborted?))
-             *scene-player*
-             (nonzero? *scene-player*))
+  (when (and (not (mp-local-scene-aborted?)) *scene-player* (nonzero? *scene-player*))
     (let ((scene-proc (the-as scene-player (ppointer->process *scene-player*))))
       (when (and scene-proc
                  (nonzero? scene-proc)
@@ -37,43 +32,29 @@
                  (nonzero? (-> scene-proc scene))
                  (-> scene-proc scene name)
                  (nonzero? (-> scene-proc scene name)))
-        (copy-string<-string *mp-active-local-scene-name* (-> scene-proc scene name))
-        )
-      )
-    )
+        (copy-string<-string *mp-active-local-scene-name* (-> scene-proc scene name)))))
   (none))
 
 (defun repair-local-camera-after-scene ((scene-name string))
   (when (and *target*
-               (nonzero? *target*)
-               (-> *target* control)
-               (nonzero? (-> *target* control))
-               *camera*
-               (nonzero? *camera*)
-               *camera-combiner*
-               (nonzero? *camera-combiner*))
-      (debug-log *mp-debug-log?* "[MP-SceneHook] Repairing camera after ~S.~%" scene-name)
-      (set! *external-cam-mode* #f)
-      (cam-start #t)
-      (when (and *camera*
-                 (nonzero? *camera*))
-        (send-event *camera* 'change-target *target*)
-        (send-event *camera* 'teleport)
-        (cam-master-activate-slave #t)
-        )
-      )
-  )
+             (nonzero? *target*)
+             (-> *target* control)
+             (nonzero? (-> *target* control))
+             *camera*
+             (nonzero? *camera*)
+             *camera-combiner*
+             (nonzero? *camera-combiner*))
+    (log 'debug "[MP-SceneHook] Repairing camera after ~S.~%" scene-name)
+    (set! *external-cam-mode* #f)
+    (cam-start #t)
+    (when (and *camera* (nonzero? *camera*))
+      (send-event *camera* 'change-target *target*)
+      (send-event *camera* 'teleport)
+      (cam-master-activate-slave #t))))
 
 (defun mp-scene-sync-after-local-end! ((scene-name string))
-  "Run opt-in MP cleanup after a local scene-player finishes."
-  (when (and scene-name
-             (nonzero? scene-name)
-             (nonzero? (length scene-name)))
+  (when (and scene-name (nonzero? scene-name) (nonzero? (length scene-name)))
     (cond
-      ((string= scene-name "ruins-tower-victory")
-       (repair-local-camera-after-scene scene-name)
-       )
-      )
-    )
+      ((string= scene-name "ruins-tower-victory") (repair-local-camera-after-scene scene-name))))
   (mp-tomb-boulder-after-scene-end! scene-name)
   (none))

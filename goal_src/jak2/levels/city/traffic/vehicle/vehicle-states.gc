@@ -7,6 +7,7 @@
 
 (define-extern mp-vehicle-local-target-driving? (function vehicle symbol))
 (define-extern mp-vehicle-local-target-riding? (function vehicle symbol))
+(define-extern mp-vehicle-remote-driven? (function vehicle symbol))
 (define-extern mp-vehicle-explode-already-applied? (function vehicle symbol))
 (define-extern mp-vehicle-mark-explode-applied! (function vehicle none))
 
@@ -225,7 +226,7 @@
     (when (and *target*
                (-> *target* control)
                (not (focus-test? *target* pilot teleporting))
-               (vehicle-remote-driven-by-puppet? self)
+               (mp-vehicle-remote-driven? self)
                )
       (check-player-get-on self)
       )
@@ -379,6 +380,19 @@
     )
   )
 
+(defbehavior vehicle-attack-riders-on-explosion! vehicle ()
+  (when (nonnull? self (-> self info))
+    (dotimes (seat-index (-> self info seat-count))
+      (let ((rider (handle->process-safe (-> self rider-array seat-index))))
+        (when (nonnull? rider)
+          (send-event rider
+                      'attack-invinc
+                      #f
+                      (static-attack-info ((id (new-attack-id))
+                                           (mode (if (type? rider target) 'explode 'big-explosion)))))))
+      (put-rider-in-seat self seat-index (the-as process-focusable #f))))
+  (none))
+
 (defstate explode (vehicle)
   :virtual #t
   :event vehicle-event-handler
@@ -395,15 +409,7 @@
           (set! gp-0 (-> gp-0 0 brother))
           )
         )
-      (dotimes (gp-1 (-> self info seat-count))
-        (send-event
-          (handle->process (-> self rider-array gp-1))
-          'attack-invinc
-          #f
-          (static-attack-info ((id (new-attack-id)) (mode 'big-explosion)))
-          )
-        (put-rider-in-seat self gp-1 (the-as process-focusable #f))
-        )
+      (vehicle-attack-riders-on-explosion!)
       (logior! (-> self focus-status) (focus-status dead))
       (set! (-> self crash-level) 3)
       (set! (-> self force-level) 3)

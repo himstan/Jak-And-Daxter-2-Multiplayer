@@ -235,7 +235,7 @@ For example for an elevator pre-compute the distance between the first and last 
                        (vector-rotate90-around-y! (-> self axe-flip) (-> self axe-flip))
                        (set! (-> self angle-flip-vel) -10.0)
                        (set-time! (-> self state-time))
-                       (when (and *multi-sync-enabled?* (not *mp-processing-remote-event*))
+                       (when (not *mp-processing-remote-event*)
                          (mp-event-enqueue-mtn-plat-shoot!
                            (-> self entity aid)
                            (-> (the-as mp-mtn-plat-shoot-stub self) axe-flip))

@@ -429,7 +429,7 @@
          (send-event (-> this process) arg0 arg1 s5-0)
          )
         ((= arg0 'camera-shake)
-         (when (not-puppet? (-> this process))
+         (when (not-player-replica? (-> this process))
            (activate! *camera-smush-control* 819.2 15 75 1.0 0.9 (-> *display* camera-clock))
            )
          )
@@ -1064,7 +1064,7 @@
     (let ((record (mp-player-process-record (-> this process))))
     (when (and record
                (nonzero? record)
-               (mp-player-record-remote? *mp-player-controller* record))
+               (is-record-remote-player? record))
       (when (and (not s5-0) (nonzero? (-> this process)))
         (let ((root-control (-> (the-as process-drawable (-> this process)) root)))
           (when (and root-control (nonzero? root-control))

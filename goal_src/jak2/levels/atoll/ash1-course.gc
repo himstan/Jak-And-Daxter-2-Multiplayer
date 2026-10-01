@@ -29,7 +29,6 @@
   )
 
 (defun ash1-assign-mp-net-id! ((ash ashelin-battle))
-  "Give the atoll battle Ashelin bot a stable MP enemy id."
   (when (and ash
              (nonzero? ash)
              (zero? (-> ash net-id)))

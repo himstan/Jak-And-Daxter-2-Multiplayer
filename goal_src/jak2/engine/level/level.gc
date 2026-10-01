@@ -25,6 +25,8 @@ into 7 sections, which might explain the weird sizes in the center.
 (define-extern *level-type-list* type)
 (define-extern level-auto-continue-protected? (function continue-point continue-point symbol))
 (define-extern mp-respawn-policy-blocks-remote-placement? (function symbol))
+(define-extern mp-orb-restore-collected-aids! (function none))
+(define-extern mp-gem-restore-collected-aids! (function none))
 
 (defglobalconstant NUM_LEVEL_PAGES 146)
 (defglobalconstant LEVEL_PAGE_SIZE_KB 126) ;; original value
@@ -1073,14 +1075,18 @@ into 7 sections, which might explain the weird sizes in the center.
          )
        (dotimes (s4-0 10)
          (let ((a0-8 (-> this info texture-anim s4-0)))
-           (when a0-8
-             (set! (-> this texture-anim-array s4-0)
-                   (init! (the-as texture-anim-array (-> a0-8 value)))
-                   )
+           (when (nonnull? a0-8)
+             (let ((anim-val (-> a0-8 value)))
+               (when (and (nonnull? anim-val) (type? anim-val texture-anim-array))
+                 (set! (-> this texture-anim-array s4-0)
+                       (init! (the-as texture-anim-array anim-val))
+                       )
+                 )
                )
+             )
            )
          )
-        (build-masks s5-0)
+       (build-masks s5-0)
        )
      (set! (-> *login-state* state) -1)
      (set! (-> *login-state* pos) (the-as uint 0))
@@ -1451,6 +1457,8 @@ into 7 sections, which might explain the weird sizes in the center.
          (set! (-> this status) 'alive)
          (set! (-> this render?) #t)
 
+         (mp-orb-restore-collected-aids!)
+         (mp-gem-restore-collected-aids!)
          (copy-perms-to-level! *game-info* this)
          (send-event *camera* 'level-activate (-> this name))
          (send-event *target* 'level-activate (-> this name))
@@ -1521,10 +1529,7 @@ into 7 sections, which might explain the weird sizes in the center.
      (copy-perms-from-level! *game-info* this)
 
      ;; tell target
-     (when (and *target*
-                (nonzero? *target*)
-                (-> *target* control)
-                (nonzero? (-> *target* control)))
+     (when (nonnull? *target* (-> *target* control))
        (send-event *target* 'level-deactivate (-> this name))
        )
 
@@ -1638,17 +1643,24 @@ into 7 sections, which might explain the weird sizes in the center.
       (when (or (= v1-63 'alive) (or (= v1-63 'active) (= v1-63 'loaded)))
         (dotimes (s5-3 10)
           (let ((a0-37 (-> this info texture-anim s5-3)))
-            (if a0-37
-                (set! (-> this texture-anim-array s5-3)
-                      (clear! (the-as texture-anim-array (-> a0-37 value)))
-                      )
+            (when (nonnull? a0-37)
+              (let ((anim-val (-> a0-37 value)))
+                (when (and (nonnull? anim-val) (type? anim-val texture-anim-array))
+                  (set! (-> this texture-anim-array s5-3)
+                        (clear! (the-as texture-anim-array anim-val))
+                        )
+                  )
                 )
+              )
             )
           )
         )
       )
     (dotimes (v1-73 10)
       (set! (-> this texture-anim-array v1-73) #f)
+      )
+    (when (or (= (-> this name) 'stadium) (= (-> this name) 'stadiumb))
+      (set! *stadiumb-energy-wall-anim-array* (the-as (texture-anim-array texture-anim) #f))
       )
     (countdown (s5-4 (-> this loaded-texture-page-count))
       (dotimes (v1-76 32)
@@ -2211,7 +2223,7 @@ into 7 sections, which might explain the weird sizes in the center.
                  )
                )
          )
-    (format 0 "PLAY: kernel-boot-message is: ~A, startup level is ~A~%" v1-3 s5-0)
+    (start-debug "PLAY: kernel-boot-message is: ~A, startup level is ~A~%" v1-3 s5-0)
     (stop 'play)
     (set! (-> *level* vis?) arg0)
     (set! (-> *level* want-level) #f)
@@ -2663,18 +2675,6 @@ into 7 sections, which might explain the weird sizes in the center.
                    (-> current-continue vis-nick)
                    (nonzero? (-> current-continue vis-nick)))
               (when (!= (-> this vis-nick) (-> current-continue vis-nick))
-                (when *mp-debug-log?*
-                  (debug-log *mp-debug-log?*
-                             "[Continue] align-vis old=~S new=~S current=~S candidate=~S role=~D policy=~A~%"
-                             (-> this vis-nick)
-                             (-> current-continue vis-nick)
-                             (-> current-continue name)
-                             (-> candidate-continue name)
-                             (if (and (mp-local-player-record) (nonzero? (mp-local-player-record)))
-                                 (-> (mp-local-player-record) identity player-id)
-                                 -1)
-                             (mp-respawn-policy-blocks-remote-placement?))
-                  )
                 (want-vis-level this (-> current-continue vis-nick))
                 )
               (want-vis-level this (-> lev-for-vis name))
@@ -2824,36 +2824,8 @@ into 7 sections, which might explain the weird sizes in the center.
             (if (and (the-as continue-point s3-0)
                      (not (logtest? (-> (the-as continue-point s3-0) flags) (continue-flags change-continue no-auto)))
                      )
-                (if (level-auto-continue-protected?
-                      (-> *game-info* current-continue)
-                      (the-as continue-point s3-0))
-                    (when *mp-debug-log?*
-                      (debug-log *mp-debug-log?*
-                                 "[Continue] protected current=~S candidate=~S vis=~S role=~D~%"
-                                 (-> *game-info* current-continue name)
-                                 (-> (the-as continue-point s3-0) name)
-                                 (-> *load-state* vis-nick)
-                                 (if (and (mp-local-player-record) (nonzero? (mp-local-player-record)))
-                                     (-> (mp-local-player-record) identity player-id)
-                                     -1))
-                      )
-                    (begin
-                      (when (and *mp-debug-log?*
-                                 (or (mp-trace-tomb-continue? (-> (the-as continue-point s3-0) name))
-                                     (and (-> *game-info* current-continue)
-                                          (nonzero? (-> *game-info* current-continue))
-                                          (mp-trace-tomb-continue? (-> *game-info* current-continue name)))))
-                        (debug-log *mp-debug-log?*
-                                   "[Continue] level-auto vis=~S old=~S candidate=~S~%"
-                                   (-> *load-state* vis-nick)
-                                   (if (and (-> *game-info* current-continue)
-                                            (nonzero? (-> *game-info* current-continue)))
-                                       (-> *game-info* current-continue name)
-                                       (the-as string #f))
-                                   (-> (the-as continue-point s3-0) name))
-                        )
-                      (set-continue! *game-info* (the-as basic s3-0) #f)
-                      )
+                (if (not (level-auto-continue-protected? (-> *game-info* current-continue) (the-as continue-point s3-0)))
+                    (set-continue! *game-info* (the-as basic s3-0) #f)
                     )
                 )
             )
@@ -3131,7 +3103,6 @@ into 7 sections, which might explain the weird sizes in the center.
   )
 
 (defun level-wanted? ((level-name symbol))
-  "Check if the level is in the wanted level loads."
   (and *load-state*
        (nonzero? *load-state*)
        (dotimes (idx 6)

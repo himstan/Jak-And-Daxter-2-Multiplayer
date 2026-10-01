@@ -12,7 +12,6 @@
 (define-extern target-indax-pole-cycle (state handle target))
 
 (defun target-pilot-clear-local-racer-death! ((this target))
-  "Ask the live pilot vehicle to handle a local race death."
   (when (and this
              (nonzero? this)
              *target*
@@ -70,14 +69,18 @@
     )
   )
 
+(declare-type turret-shot guard-shot)
+
 (defbehavior target-attacked target ((arg0 symbol)
                            (arg1 attack-info)
                            (arg2 process)
                            (arg3 touching-shapes-entry)
                            (arg4 (state symbol attack-info target))
                            )
-  (when (puppet? self)
-    (return #f)
+  ;; we have multiple turrets in the drill mission, and you can kill each other while the other is sitting in a turret
+  ;; and it breaks a bunch of things, its easier to just block dmg from the turret shots, i think(?) only the drill turrets produce turret-shot
+  (when (or (player-replica? self) (type? arg2 turret-shot))
+    (return #t)
     )
   (let ((s4-0 (if (logtest? (-> arg1 mask) (attack-mask mode))
                   (-> arg1 mode)
@@ -85,7 +88,7 @@
               )
         (s2-0 arg0)
         )
-    (if (and (not-puppet? self)
+    (if (and (not-player-replica? self)
              (mp-target-ride-along? self)
              (mp-any-live-remote-player?)
              (not (attack-mode-is-invinc s4-0))
@@ -582,8 +585,10 @@
                )
              )
            )
-         (update-task-masks 'level)
-         (format #t "GAMEPLAY: enter ~A~%" (-> arg3 param 0))
+         (when (not-player-replica? self)
+           (update-task-masks 'level)
+           (format #t "GAMEPLAY: enter ~A~%" (-> arg3 param 0))
+           )
          )
        )
      )
@@ -676,7 +681,7 @@
                 )
        (case (-> arg3 param 0)
          (('effect-walk-step-left 'effect-walk-step-right 'effect-run-step-left 'effect-run-step-right)
-          (when (not-puppet? self)
+          (when (not-player-replica? self)
             (activate! *camera-smush-control* 819.2 15 75 1.0 0.9 (-> *display* camera-clock))
             )
           )
@@ -884,11 +889,11 @@
   (let ((record (mp-player-process-record self)))
     (when (and record
                (nonzero? record)
-               (mp-player-record-remote? *mp-player-controller* record))
+               (is-record-remote-player? record))
       (case arg2
         (('mp-hit)
          (let ((dummy-attack (new 'static 'attack-info)))
-           (set! (-> dummy-attack mode) 'mp-ghost-hit)
+           (set! (-> dummy-attack mode) 'replica-hit)
            (if (focus-test? self indax)
                (go target-indax-hit 'hit dummy-attack)
                (go target-hit 'hit dummy-attack)
@@ -976,7 +981,7 @@
             )
         (b! #t cfg-291 :delay (nop!))
         (label cfg-7)
-        (b! (or (!= v1-0 'shove) (and (not-puppet? self) (mp-target-ride-along? self))) cfg-21 :delay (nop!))
+        (b! (or (!= v1-0 'shove) (and (not-player-replica? self) (mp-target-ride-along? self))) cfg-21 :delay (nop!))
         (set! v0-0 (when (not (and (-> self next-state) (= (-> self next-state name) 'target-hit)))
                      (mem-copy! (the-as pointer (-> self attack-info-rec)) (the-as pointer (-> arg3 param 1)) 160)
                      (when (not (logtest? (-> self attack-info-rec mask) (attack-mask attacker)))
@@ -1026,7 +1031,7 @@
                            (or (logtest? (-> self state-flags) (state-flags sf1))
                                (focus-test? self dead dangerous hit grabbed in-head edge-grab pole flut tube board pilot mech)
                                (>= (the-as time-frame (-> self no-load-wait)) (current-time))
-                               (and (not-puppet? self) (mp-target-ride-along? self))
+                               (and (not-player-replica? self) (mp-target-ride-along? self))
                                )
                            )
                        )
@@ -1039,7 +1044,7 @@
         (set! v0-0 #t)
         (b! #t cfg-291 :delay (nop!))
         (label cfg-46)
-        (b! (or (!= v1-0 'change-mode) (and (not-puppet? self) (mp-target-ride-along? self))) cfg-191 :delay (nop!))
+        (b! (or (!= v1-0 'change-mode) (and (not-player-replica? self) (mp-target-ride-along? self))) cfg-191 :delay (nop!))
         (let ((v1-45 (-> arg3 param 0)))
           (set! v0-0
                 (cond
@@ -1052,7 +1057,7 @@
                      )
                    )
                   ((= v1-45 'look-around)
-                    (when (not-puppet? self)
+                    (when (not-player-replica? self)
                       (go target-look-around)
                     )
                    )
@@ -1249,7 +1254,7 @@
         (b! (!= v1-0 'pole-grab) cfg-256 :delay (nop!))
         (set! v0-0
               (if (and (not (focus-test? self dead hit grabbed pole))
-                       (not (and (not-puppet? self) (mp-target-ride-along? self)))
+                       (not (and (not-player-replica? self) (mp-target-ride-along? self)))
                        ((method-of-type touching-shapes-entry prims-touching?)
                         (the-as touching-shapes-entry (-> arg3 param 0))
                         (-> self control)
@@ -1503,6 +1508,7 @@ target-standard-event-handler
     0
     )
   (logclear! (-> self skel effect flags) (effect-control-flag ecf2))
+  (set! (-> self state-param) #f)
   0
   (none)
   )

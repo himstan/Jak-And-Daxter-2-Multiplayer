@@ -1,9 +1,9 @@
 #include "custom_audio_stream.h"
 
 #include <cmath>
-#include <cstring>
 #include <memory>
 #include <mutex>
+#include <ranges>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -39,34 +39,6 @@ std::mutex g_stream_mutex;
 std::unordered_map<std::string, RegisteredStream> g_registered_streams;
 std::unordered_map<s32, StreamInstance> g_stream_instances;
 
-const char* status_name(CustomAudioStreamStatus status) {
-  switch (status) {
-    case CustomAudioStreamStatus::NOT_CUSTOM:
-      return "not-custom";
-    case CustomAudioStreamStatus::READY:
-      return "ready";
-    case CustomAudioStreamStatus::PENDING:
-      return "pending";
-    case CustomAudioStreamStatus::ACTIVE:
-      return "active";
-    case CustomAudioStreamStatus::FINISHED:
-      return "finished";
-  }
-  return "unknown";
-}
-
-void log_stream_state(const char* event, s32 id, const StreamInstance& instance) {
-  const bool has_source = instance.source != nullptr;
-  const bool playing = has_source && instance.source->is_playing();
-  const bool at_end = has_source && instance.source->is_at_end();
-  const float position = has_source ? instance.source->position_seconds() : -1.0f;
-  lg::info(
-      "[CUSTOM_SPATIAL_AUDIO] {} key='{}' id={} status={} source={} playing={} at-end={} "
-      "queued={} paused={} spatial={} position={:.3f}",
-      event, instance.key, id, status_name(instance.status), has_source, playing, at_end,
-      instance.queued, instance.paused, instance.has_spatial_params, position);
-}
-
 bool is_safe_relative_path(const fs::path& path) {
   if (path.empty() || path.is_absolute()) {
     return false;
@@ -79,27 +51,22 @@ bool is_safe_relative_path(const fs::path& path) {
   return true;
 }
 
-StreamInstance& prepare_instance(s32 id, const std::string& key) {
+StreamInstance& prepare_instance(const s32 id, const std::string& key) {
   auto& instance = g_stream_instances[id];
   if (instance.key != key) {
-    if (!instance.key.empty()) {
-      log_stream_state("instance-replaced", id, instance);
-    }
     instance = {};
     instance.key = key;
     instance.params.volume = 0x400;
     instance.params.fo_min = 5;
     instance.params.fo_max = 30;
     instance.params.fo_curve = 2;
-    log_stream_state("instance-created", id, instance);
   }
   return instance;
 }
 
-void refresh_status(s32 id, StreamInstance& instance) {
+void refresh_status(StreamInstance& instance) {
   if (instance.status == CustomAudioStreamStatus::ACTIVE && !instance.paused && instance.source &&
       instance.source->is_at_end()) {
-    log_stream_state("end-of-stream", id, instance);
     instance.status = CustomAudioStreamStatus::FINISHED;
     instance.source.reset();
   }
@@ -112,10 +79,10 @@ void apply_spatial_volume(StreamInstance& instance) {
   }
 
   const s32 base_volume = (instance.params.volume * MasterVolume[2]) >> 10;
-  const auto volume =
+  const auto [left, right] =
       CalculateSpatializedVolume(&instance.params.trans, base_volume, instance.params.fo_curve,
                                  instance.params.fo_min, instance.params.fo_max);
-  instance.source->set_stereo_volume(volume.left, volume.right);
+  instance.source->set_stereo_volume(left, right);
 }
 
 void apply_params(StreamInstance& instance, const SoundParams& params) {
@@ -160,18 +127,18 @@ bool RegisterCustomAudioStream(const char* key, const char* relative_path) {
     return false;
   }
 
-  std::lock_guard<std::mutex> lock(g_stream_mutex);
+  std::lock_guard lock(g_stream_mutex);
   g_registered_streams[std::string(key)] = {full_path.string()};
   lg::info("[CUSTOM_SPATIAL_AUDIO] registered key='{}' path='{}'", key, full_path.string());
   return true;
 }
 
-CustomAudioStreamStatus GetCustomAudioStreamStatus(const char* key, s32 id) {
+CustomAudioStreamStatus GetCustomAudioStreamStatus(const char* key, const s32 id) {
   if (!key || !key[0] || !id) {
     return CustomAudioStreamStatus::NOT_CUSTOM;
   }
 
-  std::lock_guard<std::mutex> lock(g_stream_mutex);
+  std::lock_guard lock(g_stream_mutex);
   const auto registration = g_registered_streams.find(key);
   if (registration == g_registered_streams.end()) {
     return CustomAudioStreamStatus::NOT_CUSTOM;
@@ -183,37 +150,34 @@ CustomAudioStreamStatus GetCustomAudioStreamStatus(const char* key, s32 id) {
   }
 
   auto& instance = entry->second;
-  refresh_status(id, instance);
+  refresh_status(instance);
   if (instance.last_reported_status != instance.status) {
-    log_stream_state("status-reported-to-goal", id, instance);
     instance.last_reported_status = instance.status;
   }
   return instance.status;
 }
 
-s32 GetCustomAudioStreamPosition(s32 id) {
-  std::lock_guard<std::mutex> lock(g_stream_mutex);
+s32 GetCustomAudioStreamPosition(const s32 id) {
+  std::lock_guard lock(g_stream_mutex);
   const auto entry = g_stream_instances.find(id);
   if (entry == g_stream_instances.end()) {
     return -1;
   }
 
   auto& instance = entry->second;
-  refresh_status(id, instance);
+  refresh_status(instance);
   if (!instance.source || instance.status == CustomAudioStreamStatus::FINISHED) {
     return -1;
   }
   const float position = instance.source->position_seconds();
-  const s32 position_second = static_cast<s32>(std::floor(position));
-  if (position >= 0.0f && position_second != instance.last_logged_position_second) {
-    log_stream_state("playback-progress", id, instance);
+  if (const s32 position_second = static_cast<s32>(std::floor(position)); position >= 0.0f && position_second != instance.last_logged_position_second) {
     instance.last_logged_position_second = position_second;
   }
   return position < 0.0f ? -1 : static_cast<s32>(std::floor(position * 30.0f));
 }
 
-u32 UpdateCustomAudioStreamQueue(const char* const* keys, const u32* ids, u32 count) {
-  std::lock_guard<std::mutex> lock(g_stream_mutex);
+u32 UpdateCustomAudioStreamQueue(const char* const* keys, const u32* ids, const u32 count) {
+  std::lock_guard lock(g_stream_mutex);
   std::unordered_set<s32> selected_ids;
   u32 custom_slot_mask = 0;
 
@@ -234,10 +198,8 @@ u32 UpdateCustomAudioStreamQueue(const char* const* keys, const u32* ids, u32 co
         custom_slot_mask |= 1u << slot;
       }
       selected_ids.insert(id);
-      auto& instance = prepare_instance(id, registration->first);
-      if (!instance.queued) {
+      if (auto& instance = prepare_instance(id, registration->first); !instance.queued) {
         instance.queued = true;
-        log_stream_state("queue-selected", id, instance);
       }
     }
   }
@@ -252,13 +214,11 @@ u32 UpdateCustomAudioStreamQueue(const char* const* keys, const u32* ids, u32 co
 
     instance.queued = false;
     if (instance.status == CustomAudioStreamStatus::READY) {
-      log_stream_state("queue-ready-evicted", id, instance);
       entry = g_stream_instances.erase(entry);
       continue;
     }
     if (instance.status == CustomAudioStreamStatus::ACTIVE ||
         instance.status == CustomAudioStreamStatus::PENDING) {
-      log_stream_state("queue-active-evicted", id, instance);
       if (instance.source) {
         instance.source->stop();
         instance.source.reset();
@@ -277,7 +237,7 @@ bool StartCustomAudioStream(const char* key, s32 id) {
     return false;
   }
 
-  std::lock_guard<std::mutex> lock(g_stream_mutex);
+  std::lock_guard lock(g_stream_mutex);
   const auto registration = g_registered_streams.find(key);
   if (registration == g_registered_streams.end()) {
     return false;
@@ -292,40 +252,27 @@ bool StartCustomAudioStream(const char* key, s32 id) {
 
   auto& instance = entry->second;
   instance.start_request_count++;
-  const bool log_request =
-      instance.start_request_count <= 8 || (instance.start_request_count % 60) == 0;
-  if (log_request) {
-    lg::info("[CUSTOM_SPATIAL_AUDIO] start-request count={}", instance.start_request_count);
-    log_stream_state("start-request-state", id, instance);
-  }
-  if (instance.status == CustomAudioStreamStatus::ACTIVE ||
-      instance.status == CustomAudioStreamStatus::PENDING) {
-    if (log_request) {
-      log_stream_state("start-request-noop", id, instance);
-    }
+  if (instance.status == CustomAudioStreamStatus::ACTIVE || instance.status == CustomAudioStreamStatus::PENDING) {
     return true;
   }
 
   instance.status = CustomAudioStreamStatus::PENDING;
-  log_stream_state("decoder-starting", id, instance);
   instance.source = std::make_unique<custom_audio::Source>();
   if (!instance.source->start(registration->second.full_path)) {
     lg::warn("Failed to decode custom audio '{}' at '{}'", key, registration->second.full_path);
     instance.source.reset();
     instance.status = CustomAudioStreamStatus::FINISHED;
-    log_stream_state("decoder-failed", id, instance);
     return true;
   }
 
   instance.paused = false;
   instance.status = CustomAudioStreamStatus::ACTIVE;
   apply_spatial_volume(instance);
-  log_stream_state("playback-started", id, instance);
   return true;
 }
 
 bool StopCustomAudioStream(const char* key, s32 id) {
-  std::lock_guard<std::mutex> lock(g_stream_mutex);
+  std::lock_guard lock(g_stream_mutex);
   if (key && key[0] && !g_registered_streams.contains(key)) {
     return false;
   }
@@ -341,9 +288,7 @@ bool StopCustomAudioStream(const char* key, s32 id) {
   if ((!key || !key[0]) && entry->second.status == CustomAudioStreamStatus::FINISHED) {
     return false;
   }
-  lg::info("stop-request requested-key='{}' id={}",
-           key && key[0] ? key : "<by-id>", id);
-  log_stream_state("stop-request-state", id, entry->second);
+  lg::info("stop-request requested-key='{}' id={}", key && key[0] ? key : "<by-id>", id);
   if (entry->second.source) {
     entry->second.source->stop();
     entry->second.source.reset();
@@ -353,23 +298,22 @@ bool StopCustomAudioStream(const char* key, s32 id) {
   return true;
 }
 
-bool PauseCustomAudioStream(s32 id) {
-  std::lock_guard<std::mutex> lock(g_stream_mutex);
+bool PauseCustomAudioStream(const s32 id) {
+  std::lock_guard lock(g_stream_mutex);
   const auto entry = g_stream_instances.find(id);
   if (entry == g_stream_instances.end() ||
       entry->second.status == CustomAudioStreamStatus::FINISHED) {
     return false;
   }
   if (entry->second.source && entry->second.status == CustomAudioStreamStatus::ACTIVE) {
-    log_stream_state("pause-request", id, entry->second);
     entry->second.source->pause();
     entry->second.paused = true;
   }
   return true;
 }
 
-bool ContinueCustomAudioStream(s32 id) {
-  std::lock_guard<std::mutex> lock(g_stream_mutex);
+bool ContinueCustomAudioStream(const s32 id) {
+  std::lock_guard lock(g_stream_mutex);
   const auto entry = g_stream_instances.find(id);
   if (entry == g_stream_instances.end() ||
       entry->second.status == CustomAudioStreamStatus::FINISHED) {
@@ -377,7 +321,6 @@ bool ContinueCustomAudioStream(s32 id) {
   }
   if (entry->second.source && entry->second.status == CustomAudioStreamStatus::ACTIVE &&
       entry->second.paused) {
-    log_stream_state("continue-request", id, entry->second);
     entry->second.source->resume();
     entry->second.paused = false;
     apply_spatial_volume(entry->second);
@@ -385,34 +328,29 @@ bool ContinueCustomAudioStream(s32 id) {
   return true;
 }
 
-bool SetCustomAudioStreamParams(s32 id, const SoundParams& params) {
-  std::lock_guard<std::mutex> lock(g_stream_mutex);
+bool SetCustomAudioStreamParams(const s32 id, const SoundParams& params) {
+  std::lock_guard lock(g_stream_mutex);
   const auto entry = g_stream_instances.find(id);
   if (entry == g_stream_instances.end() ||
       entry->second.status == CustomAudioStreamStatus::FINISHED) {
     return false;
   }
-  const bool had_spatial_params = entry->second.has_spatial_params;
   apply_params(entry->second, params);
-  if (!had_spatial_params && entry->second.has_spatial_params) {
-    log_stream_state("first-spatial-params", id, entry->second);
-  }
   return true;
 }
 
 void UpdateCustomAudioStreams() {
-  std::lock_guard<std::mutex> lock(g_stream_mutex);
-  for (auto& [id, instance] : g_stream_instances) {
-    refresh_status(id, instance);
+  std::lock_guard lock(g_stream_mutex);
+  for (auto& instance : g_stream_instances | std::views::values) {
+    refresh_status(instance);
     apply_spatial_volume(instance);
   }
 }
 
 void PauseCustomAudioStreams() {
-  std::lock_guard<std::mutex> lock(g_stream_mutex);
-  for (auto& [id, instance] : g_stream_instances) {
+  std::lock_guard lock(g_stream_mutex);
+  for (auto& instance : g_stream_instances | std::views::values) {
     if (instance.source && instance.status == CustomAudioStreamStatus::ACTIVE && !instance.paused) {
-      log_stream_state("group-pause", id, instance);
       instance.source->pause();
       instance.paused = true;
     }
@@ -420,10 +358,9 @@ void PauseCustomAudioStreams() {
 }
 
 void ContinueCustomAudioStreams() {
-  std::lock_guard<std::mutex> lock(g_stream_mutex);
-  for (auto& [id, instance] : g_stream_instances) {
+  std::lock_guard lock(g_stream_mutex);
+  for (auto& instance : g_stream_instances | std::views::values) {
     if (instance.source && instance.status == CustomAudioStreamStatus::ACTIVE && instance.paused) {
-      log_stream_state("group-continue", id, instance);
       instance.source->resume();
       instance.paused = false;
       apply_spatial_volume(instance);
@@ -432,11 +369,8 @@ void ContinueCustomAudioStreams() {
 }
 
 void StopCustomAudioStreams() {
-  std::lock_guard<std::mutex> lock(g_stream_mutex);
-  for (auto& [id, instance] : g_stream_instances) {
-    if (instance.status != CustomAudioStreamStatus::FINISHED) {
-      log_stream_state("group-stop", id, instance);
-    }
+  std::lock_guard lock(g_stream_mutex);
+  for (auto& instance : g_stream_instances | std::views::values) {
     if (instance.source) {
       instance.source->stop();
       instance.source.reset();

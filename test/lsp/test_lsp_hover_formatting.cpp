@@ -49,7 +49,7 @@ TEST(LSPHoverFormattingTest, FieldHover) {
 TEST(LSPHoverFormattingTest, FunctionHover) {
   lsp_hover::HoverInfo info;
   info.kind = lsp_hover::HoverKind::Function;
-  info.name = "mp-puppet-update-pad";
+  info.name = "player-replica-update-pad";
   info.return_type = "none";
   info.docstring =
       "Manually update a cpad-info structure with raw input data, shifting history and calculating derived fields.";
@@ -65,7 +65,7 @@ TEST(LSPHoverFormattingTest, FunctionHover) {
   const auto markdown = get_markdown(info);
 
   EXPECT_NE(markdown.find(
-                "```goal\n(defun mp-puppet-update-pad ((pad cpad-info) (buttons uint) (lx uint) (ly uint) (rx uint) (ry uint)) -> none)\n```"),
+                "```goal\n(defun player-replica-update-pad ((pad cpad-info) (buttons uint) (lx uint) (ly uint) (rx uint) (ry uint)) -> none)\n```"),
             std::string::npos);
   EXPECT_NE(markdown.find("**Function**"), std::string::npos);
   EXPECT_NE(markdown.find("Manually update a cpad-info structure with raw input data, shifting history and calculating derived fields."),

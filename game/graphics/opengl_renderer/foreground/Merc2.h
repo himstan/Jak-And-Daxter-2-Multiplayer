@@ -2,7 +2,7 @@
 #include <array>
 #include <unordered_map>
 #include "game/graphics/opengl_renderer/BucketRenderer.h"
-#include "game/multiplayer/player_appearance.h"
+#include "game/multiplayer/jak2/player_appearance.h"
 
 struct MercDebugStats {
   int num_models = 0;
@@ -213,6 +213,7 @@ class Merc2 {
     u8 no_strip;
     u64 hash;
     float darkjak_interp = -1.f;
+    u32 eye_instance_id = UINT32_MAX;
     u32 player_tint_color = 0;
     float player_tint_strength = 0.f;
   };
@@ -242,6 +243,7 @@ class Merc2 {
     u32 lights;
     u32 first_bone;
     float darkjak_interp = -1.f;
+    u32 eye_instance_id = UINT32_MAX;
     std::array<u32, kMPPlayerAppearanceSlotCount> player_tint_colors = {};
     std::array<float, kMPPlayerAppearanceSlotCount> player_tint_strengths = {};
     u32 player_tint_character = 0;

@@ -37,14 +37,14 @@ class CompileProgressTracker {
  public:
   struct ProgressEvent {
     std::string token;
-    std::string kind; // "create", "begin", "report", "end"
+    std::string kind;
     int percentage = -1;
     std::string message;
   };
 
   using EmitCallback = std::function<void(const ProgressEvent& event)>;
 
-  CompileProgressTracker(const std::string& title, EmitCallback callback, bool use_progress);
+  CompileProgressTracker(const std::string& title, const EmitCallback& callback, bool use_progress);
 
   void start(const std::string& start_message);
   void handle_chunk(const std::string& chunk);
@@ -63,5 +63,4 @@ class CompileProgressTracker {
   bool m_started = false;
 };
 
-}  // namespace lsp_util
-
+};  // namespace lsp_util

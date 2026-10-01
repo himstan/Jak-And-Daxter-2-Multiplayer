@@ -11,6 +11,19 @@ std::wstring utf8_string_to_wide_string(const std::string_view& str);
 bool utf8_string_to_wide_string(std::wstring& dest, const std::string_view& str);
 std::string wide_string_to_utf8_string(const std::wstring_view& str);
 bool wide_string_to_utf8_string(std::string& dest, const std::wstring_view& str);
+
+namespace unicode {
+
+bool decode_utf8(std::string_view text, std::vector<char32_t>& codepoints);
+bool decode_utf8_codepoint(std::string_view text, size_t& offset, char32_t& codepoint);
+bool encode_utf8_codepoint(char32_t codepoint, std::string& output);
+std::string encode_utf8_codepoint(char32_t codepoint);
+bool is_valid_utf8(std::string_view text);
+size_t previous_utf8_boundary(std::string_view text, size_t offset);
+size_t next_utf8_boundary(std::string_view text, size_t offset);
+size_t utf8_codepoint_to_byte_offset(std::string_view text, size_t codepoint_offset);
+
+}  // namespace unicode
 #endif
 
 std::string get_env(const std::string& name);

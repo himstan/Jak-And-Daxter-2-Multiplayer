@@ -81,7 +81,7 @@
           (let ((record (mp-player-record-by-id (the-as uint player-id))))
             (when (and record
                        (nonzero? record)
-                       (mp-player-record-remote? *mp-player-controller* record))
+                       (is-record-remote-player? record))
               (let ((player-target (mp-player-record-target record)))
                 (when (and player-target (nonzero? player-target))
                   (handle-door-opening trans player-target))))))

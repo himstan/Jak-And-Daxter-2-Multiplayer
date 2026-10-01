@@ -367,7 +367,9 @@
 
 (defun dm-current-continue ((arg0 string) (arg1 debug-menu-msg))
   (if (= arg1 (debug-menu-msg press))
-      (start 'play (get-continue-by-name *game-info* arg0))
+      (begin
+        (set-continue! *game-info* arg0 #t)
+        (start 'play (get-continue-by-name *game-info* arg0)))
       )
   (string= (-> (get-current-continue-forced *game-info*) name) arg0)
   )
@@ -827,6 +829,13 @@
       (set! (-> *game-info* mode) arg0)
       )
   (= (-> *game-info* mode) arg0)
+  )
+
+(defun dm-log-level-pick-func ((arg0 log-level) (arg1 debug-menu-msg))
+  (if (= arg1 (debug-menu-msg press))
+      (set! *log-level* arg0)
+      )
+  (= *log-level* arg0)
   )
 
 (defun dm-game-feature-toggle-pick-func ((arg0 int) (arg1 debug-menu-msg))
@@ -4126,78 +4135,56 @@
            "Multiplayer"
            (menu
              "General"
+             (flag "Player Debug Draw" *player-replica-debug?* dm-boolean-toggle-pick-func)
+             (flag "Enemy Debug Draw" *mp-enemy-debug-auth?* dm-boolean-toggle-pick-func)
+             (flag "Battle Debug Draw" *mp-debug-battle* dm-boolean-toggle-pick-func)
+             (flag "Gun Debug Draw" *mp-gun-debug?* dm-boolean-toggle-pick-func)
+             (flag "Boss Debug Draw" *mp-debug-boss* dm-boolean-toggle-pick-func)
+             (flag "Respawn Policy Debug Draw" *mp-respawn-policy-debug?* dm-boolean-toggle-pick-func)
              (flag "Open Demo End Progress" *mp-open-demo-end-progress* dm-boolean-toggle-pick-func)
             )
-            (menu
-             "Level Loading"
-             (flag "Level Load View" *mp-level-debug?* dm-boolean-toggle-pick-func)
+           (menu
+             "Levels"
+             (flag "Debug View" *mp-level-debug?* dm-boolean-toggle-pick-func)
             )
            (menu
-             "Network"
-             (flag "Network Debug" *mp-debug-network* dm-boolean-toggle-pick-func)
-             (flag "Simulate Connection Loss" *mp-debug-simulate-loss?* dm-boolean-toggle-pick-func)
-             )
-           (menu
-             "Remote Player"
-             (flag "Puppet Sync View" *mp-puppet-debug?* dm-boolean-toggle-pick-func)
-             )
-           (menu
-             "Race"
-             (function "Print Target Finish Sphere" #f
-                       ,(lambda ()
-                          (mp-debug-print-target-finish-sphere)
-                          (none)
-                          )
-                       )
-             )
-           (menu
              "Log"
-             (flag "Debug Log" *mp-debug-log?* dm-boolean-toggle-pick-func)
-             )
-           (menu
-             "Gun"
-             (flag "Gun Debug Draw" *mp-gun-debug?* dm-boolean-toggle-pick-func)
-             )
-           (menu
-             "Enemy"
-             (flag "Enemy Debug Draw" *mp-enemy-debug-auth?* dm-boolean-toggle-pick-func)
-             )
+             (flag "Off" (log-level off) dm-log-level-pick-func)
+             (flag "Error" (log-level error) dm-log-level-pick-func)
+             (flag "Warn" (log-level warn) dm-log-level-pick-func)
+             (flag "Info" (log-level info) dm-log-level-pick-func)
+             (flag "Debug" (log-level debug) dm-log-level-pick-func)
+            )
            (menu
              "Traffic"
              (flag "Traffic Status View" *mp-traffic-debug?* dm-boolean-toggle-pick-func)
              (flag "Pedestrian Debug Draw" *mp-traffic-ped-debug?* dm-boolean-toggle-pick-func)
              (flag "Vehicle Debug Draw" *mp-traffic-veh-debug?* dm-boolean-toggle-pick-func)
-             (flag "Guard Veh Debug Draw" *mp-vehicle-guard-debug?* dm-boolean-toggle-pick-func)
-             (flag "Authority Bubble Draw" *mp-traffic-bubble-debug?* dm-boolean-toggle-pick-func)
+             (flag "Show Traffic Bubbles" *mp-traffic-bubble-debug?* dm-boolean-toggle-pick-func)
              (float-var "Debug Draw Dist" *mp-traffic-debug-dist* dm-float-toggle-pick-func 10 1 #t 0 200 1)
              (float-var "Ped Density Scale" *mp-traffic-ped-density-scale* dm-float-toggle-pick-func 100 5 #t 0 1 2)
              (float-var "Vehicle Density Scale" *mp-traffic-veh-density-scale* dm-float-toggle-pick-func 100 5 #t 0 1 2)
-             (flag "Guard Target Debug?" *mp-guard-target-debug?* dm-boolean-toggle-pick-func)
-             (int-var "Guard Target Net ID" *mp-guard-target-debug-net-id* dm-int-toggle-pick-func 1 10 #t 0 1000)
-             )
+            )
            (menu
-            "Tasks"
-            (flag "Task Debug Draw" *mp-debug-task-sync* dm-boolean-toggle-pick-func)
-            (flag "Waypoint Logs" *mp-waypoint-debug?* dm-boolean-toggle-pick-func)
-             )
+             "Task/Waypoint"
+             (flag "Task Debug Draw" *mp-debug-task-sync* dm-boolean-toggle-pick-func)
+             (flag "Waypoint Logs" *mp-waypoint-debug?* dm-boolean-toggle-pick-func)
+            )
            (menu
-            "Battle"
-            (flag "Battle Debug Draw" *mp-debug-battle* dm-boolean-toggle-pick-func)
-             )
+             "Airlock/Elevator"
+             (flag "Airlock Stats Debug" *mp-airlock-debug?* dm-boolean-toggle-pick-func)
+             (flag "Airlock Debug Draw" *mp-airlock-world-debug?* dm-boolean-toggle-pick-func)
+             (flag "Elevator Debug Draw" *mp-elevator-debug?* dm-boolean-toggle-pick-func)
+            )
            (menu
-            "Boss"
-             (flag "Boss Debug Draw" *mp-debug-boss* dm-boolean-toggle-pick-func)
-             )
-           (menu
-            "Respawn"
-             (flag "Respawn Policy Debug Draw" *mp-respawn-policy-debug?* dm-boolean-toggle-pick-func)
-             )
-           (menu
-               "Airlock/Elevator"
-               (flag "Airlock Sync Debug" *mp-airlock-debug?* dm-boolean-toggle-pick-func)
-               (flag "Airlock World Debug" *mp-airlock-world-debug?* dm-boolean-toggle-pick-func)
-               (flag "Elevator Debug" *mp-elevator-debug?* dm-boolean-toggle-pick-func)
-             )
+             "Utils"
+             (function "Print target current loc" #f
+                       ,(lambda ()
+                          (mp-debug-print-target-finish-sphere)
+                          (none)
+                          )
+                       )
+            )
            )
         )
       )

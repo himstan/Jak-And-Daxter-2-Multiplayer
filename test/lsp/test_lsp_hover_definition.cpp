@@ -838,9 +838,9 @@ TEST_F(LSPImplicitSelfAndLiteralTest, NestedDefineInsideChangeParent) {
 // Test 12: define with the-as
 TEST_F(LSPImplicitSelfAndLiteralTest, DefineWithTheAs) {
   std::string code = R"(
-(define *my-test-mp-puppet* (the-as target #f))
-(defun use-puppet ()
-  *my-test-mp-puppet*)
+(define *my-test-player-replica* (the-as target #f))
+(defun get-test-player-replica ()
+  *my-test-player-replica*)
 )";
   workspace->get_compiler(GameVersion::Jak2)->run_front_end_on_string(code);
   WorkspaceOGFile file(file_uri, code, GameVersion::Jak2);
@@ -855,7 +855,7 @@ TEST_F(LSPImplicitSelfAndLiteralTest, DefineWithTheAs) {
   ASSERT_TRUE(res.has_value());
   auto hover = res.value().get<LSPSpec::Hover>();
   std::string text = hover.m_contents.m_value;
-  EXPECT_NE(text.find("*my-test-mp-puppet*"), std::string::npos);
+  EXPECT_NE(text.find("*my-test-player-replica*"), std::string::npos);
   EXPECT_NE(text.find("target"), std::string::npos);
 
   auto res_def = lsp_handlers::go_to_definition(*workspace, 1, params);
@@ -868,11 +868,11 @@ TEST_F(LSPImplicitSelfAndLiteralTest, DefineWithTheAs) {
 // Test 13: define with new static
 TEST_F(LSPImplicitSelfAndLiteralTest, DefineWithNewStatic) {
   std::string code = R"(
-(deftype mp-target-ghost-record (basic) ())
+(deftype target-record (basic) ())
 (define-extern static symbol)
-(define *my-test-mp-puppet-ghost* (new 'static 'mp-target-ghost-record))
-(defun use-ghost ()
-  *my-test-mp-puppet-ghost*)
+(define *my-test-player-replica-record* (new 'static 'target-record))
+(defun get-test-target-record ()
+  *my-test-player-replica-record*)
 )";
   workspace->get_compiler(GameVersion::Jak2)->run_front_end_on_string(code);
   WorkspaceOGFile file(file_uri, code, GameVersion::Jak2);
@@ -887,8 +887,8 @@ TEST_F(LSPImplicitSelfAndLiteralTest, DefineWithNewStatic) {
   ASSERT_TRUE(res.has_value());
   auto hover = res.value().get<LSPSpec::Hover>();
   std::string text = hover.m_contents.m_value;
-  EXPECT_NE(text.find("*my-test-mp-puppet-ghost*"), std::string::npos);
-  EXPECT_NE(text.find("mp-target-ghost-record"), std::string::npos);
+  EXPECT_NE(text.find("*my-test-player-replica-record*"), std::string::npos);
+  EXPECT_NE(text.find("target-record"), std::string::npos);
 
   auto res_def = lsp_handlers::go_to_definition(*workspace, 1, params);
   ASSERT_TRUE(res_def.has_value());

@@ -2,6 +2,7 @@
 (in-package goal)
 
 (define-extern mp-local-player-dead-or-spectating? (function symbol))
+(define-extern mp-player-queue-gun-shot! (function uint none))
 
 ;; name: target-gun.gc
 ;; name in dgo: target-gun
@@ -137,7 +138,7 @@
             (go target-falling #f)
             )
            (('look-around)
-             (when (not-puppet? self)
+             (when (not-player-replica? self)
                (go target-look-around)
              )
             )
@@ -387,27 +388,26 @@
   #f
   )
 
-(defun mp-puppet-weapon-authoritative? ((proc target))
-  "Is this target the active remote puppet whose gun state is network-authoritative?"
+(defun player-replica-weapon-authoritative? ((proc target))
   (let ((record (mp-player-process-record proc)))
-  (let ((ghost (mp-player-record-ghost record)))
+  (let ((target-record (get-player-target-record record)))
     (if (and proc
              (nonzero? proc)
              record
              (nonzero? record)
-             (mp-player-record-remote? *mp-player-controller* record)
-             ghost
-             (nonzero? ghost)
-             (-> ghost active?))
+             (is-record-remote-player? record)
+             target-record
+             (nonzero? target-record)
+             (-> target-record active?))
         #t
       #f)))
   )
 
 (defun is-allowed-to-put-gun-away? ((proc target) (force? symbol))
-  (let ((ghost (mp-player-record-ghost (mp-player-process-record proc))))
-    (if (and ghost (nonzero? ghost))
-      (let ((weapon (the-as uint (-> ghost equipped-weapon))))
-        (or force? (not (mp-puppet-weapon-authoritative? proc)) (= weapon 0))
+  (let ((record (get-player-target-record (mp-player-process-record proc))))
+    (if (and record (nonzero? record))
+      (let ((weapon (the-as uint (-> record equipped-weapon))))
+        (or force? (not (player-replica-weapon-authoritative? proc)) (= weapon 0))
         )
       #t
       ))
@@ -693,7 +693,7 @@
   (set! (-> self gun-type) (the-as pickup-type arg0))
 
   ;; og:preserve-this trigger effects
-  (when (and (not-puppet? self)
+  (when (and (not-player-replica? self)
              (pc-get-trigger-effects-enabled?)
              (-> *pc-settings* controller-swap-r1-r2?))
     (case (-> self gun-type)
@@ -1196,7 +1196,7 @@
         (set! (-> this gun using-gun-type) (the-as pickup-type gun-type))
         (cond
           ((using-gun? this)
-           (if (not-puppet? this)
+           (if (not-player-replica? this)
                (sound-play "select-option"))
            (send-event this 'gun-type gun-type)
            )
@@ -1214,7 +1214,7 @@
              (not (paused?))
              (not (and (focus-test? this dark) (nonzero? (-> this darkjak))))
              (not (logtest? (-> this focus-status) (focus-status grabbed)))
-             (not-puppet? this)
+             (not-player-replica? this)
              )
     (let ((selected-gun-type (the-as uint (-> this gun using-gun-type))))
       (cond
@@ -1703,7 +1703,7 @@
      (send-event self 'gun-combo #t)
      )
     )
-  (when (and (not-puppet? self) (not (using-gun? self)) (want-to-gun? self #f))
+  (when (and (not-player-replica? self) (not (using-gun? self)) (want-to-gun? self #f))
     (let ((gp-2 (nonzero? (-> self gun using-gun-type))))
       (send-event self 'change-mode 'gun #f (-> self gun using-gun-type))
       (when (and (not gp-2) (or (cpad-hold? (-> self control cpad number) r1) (-> self gun latch?)))
@@ -2351,7 +2351,7 @@
        (if (and (or (logtest? (surface-flag gun-hide gun-off) (-> self control current-surface flags))
                     (logtest? (state-flags prevent-gun) (-> self state-flags))
                     (let ((v1-75 (-> self gun gun-type)))
-                      (or (and (not-puppet? self) (cond
+                      (or (and (not-player-replica? self) (cond
                                  ((= v1-75 (pickup-type eco-yellow))
                                   ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
                                   (recently-pressed? down)
@@ -2423,7 +2423,7 @@
         ((or (let ((record (mp-player-process-record self)))
                (and record
                     (nonzero? record)
-                    (mp-player-record-remote? *mp-player-controller* record)))
+                    (is-record-remote-player? record)))
              (< 0.0 f0-0)
              (logtest? (state-flags sf16) (-> self state-flags))
              (logtest? (-> self game secrets) (game-secrets endless-ammo))
@@ -2431,7 +2431,7 @@
          (when (not (let ((record (mp-player-process-record self)))
                       (and record
                            (nonzero? record)
-                           (mp-player-record-remote? *mp-player-controller* record))))
+                           (is-record-remote-player? record))))
            (pickup-collectable! (-> self fact) (the-as pickup-type a1-0) -1.0 (the-as handle #f))
            )
          (case (-> gp-0 gun-type)

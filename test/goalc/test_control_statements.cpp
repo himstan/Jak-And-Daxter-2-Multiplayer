@@ -175,6 +175,11 @@ TEST_F(ControlStatementTests, Defsmacro) {
   runner->run_static_test(testCategory, "defsmacro-defgmacro.static.gc", {"20\n"});
 }
 
+TEST_F(ControlStatementTests, NonnullMacro) {
+  EXPECT_THROW(compiler->run_front_end_on_string("(nonnull?)"), std::exception);
+  runner->run_static_test(testCategory, "nonnull.static.gc", {"63\n"});
+}
+
 TEST_F(ControlStatementTests, Desfun) {
   runner->run_static_test(testCategory, "desfun.static.gc", {"4\n"});
 }

@@ -1,35 +1,44 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(deftype main-multiplayer-manager (process) ()
+  (:state-methods
+   active)
+  (:methods
+   (mp-main-update! (_type_) symbol)))
 
-(defun multiplayer-network-tick ()
-  "Compatibility wrapper for the multiplayer frame scheduler."
-  (mp-send-tick)
+(defmethod mp-main-update! ((this main-multiplayer-manager))
+  (mp-session-tick)
+  (let ((status (pc-multi-get-session-status)))
+    (mp-update-synchronized-gameplay-state!)
+    (when (= status (mp-connection-status in-game))
+      (mp-sync-scene-tick)
+      (mp-apply-synchronized-gameplay-state!))
+    (mp-player-list-update!)
+    (mp-draw-level-debug)
+    (when (= status (mp-connection-status in-game))
+      (mp-debug-draw-synced-tick)))
+  #t)
+
+(defstate active (main-multiplayer-manager)
+  :virtual #t
+  :code
+    (behavior ()
+      (until #f
+        (mp-main-update! self)
+        (suspend))
+      #f))
+
+(defbehavior mp-main-init main-multiplayer-manager ()
+  (change-to-last-brother self)
+  (go-virtual active)
   (none))
 
-(defun mp-reset-gameplay-state ()
-  "Reset multiplayer gameplay state while preserving the active session UI."
-  (set! *multi-sync-enabled?* #f)
-  (set! *multi-last-send-time* (the-as time-frame 0))
-  (mp-reset-event-state!)
-  (mp-reset-scene-sync-state!)
-  (mp-reset-puppet-state!)
-  (mp-reset-player-sync-state!)
-  (mp-reset-enemy-state!)
-  (mp-reset-battle-sync-state!)
-  (mp-reset-traffic-state!)
-  (mp-reset-airlock-state!)
-  (mp-reset-waypoint-state!)
-  (mp-reset-remote-marker-state!)
-  (mp-reset-environment-sync)
-  (mp-player-list-hide!)
-  (none)
-  )
+(defun mp-main-start! ()
+  (when (and *active-pool* (nonzero? *active-pool*) *mid-pool* (nonzero? *mid-pool*))
+    (let ((main-process (process-by-type-exact 'main-multiplayer-manager *active-pool*)))
+      (when (not (and main-process (nonzero? main-process)))
+        (process-spawn main-multiplayer-manager :init mp-main-init :to *mid-pool*))))
+  (none))
 
-(defun mp-reset-state ()
-  "Reset all multiplayer flags, buffers, and singletons to their default state."
-  (mp-reset-session-state!)
-  (mp-reset-gameplay-state)
-  (debug-log *mp-debug-log?* "[MP] State has been fully reset.~%")
-  (none)
-  )
+(mp-main-start!)

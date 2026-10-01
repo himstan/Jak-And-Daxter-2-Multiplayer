@@ -8,6 +8,7 @@
 (define-extern mp-should-apply-vehicle-camera? (function vehicle symbol))
 (define-extern mp-vehicle-clear-stale-player-driver! (function vehicle none))
 (define-extern mp-vehicle-is-local-authoritative? (function vehicle symbol))
+(define-extern mp-vehicle-remote-driven? (function vehicle symbol))
 (define-extern mp-vehicle-remote-needs-physics? (function vehicle symbol))
 
 ;; DECOMP BEGINS
@@ -47,7 +48,6 @@
 
 
 (defun mp-local-target-ride-along-block-vehicle-entry? ((tgt target) (veh vehicle))
-  "Block local vehicle boarding while ride-along is active."
   (or (and tgt
              (nonzero? tgt)
              (= tgt *target*)
@@ -192,7 +192,6 @@
   )
 
 (defun vehicle-eject-civilian-riders! ((veh vehicle))
-  "Eject all civilian rider proxies while preserving player occupants."
   (when (and veh (nonzero? veh))
     (dotimes (seat-index (get-seat-count veh))
       (let ((rider-proc (get-rider-in-seat veh seat-index)))
@@ -200,7 +199,7 @@
                    (nonzero? rider-proc)
                    (or (type? rider-proc citizen-norm-rider)
                        (type? rider-proc crimson-guard-rider)))
-          (if (mp-is-traffic-authoritative?)
+          (if *mp-traffic-local-authoritative?*
               (send-event rider-proc 'knocked-off)
               (begin
                 (send-event rider-proc 'rider-off)
@@ -259,7 +258,6 @@
   )
 
 (defun vehicle-find-best-local-boarding-seat ((veh vehicle) (pos vector))
-  "Find the closest hijackable seat while excluding a remote player's reservation."
   (let ((best-seat -1)
         (best-dist (the float #x7f800000))
         (seat-pos (new 'stack-no-clear 'vector)))
@@ -345,6 +343,7 @@
                           (can-edge-grab? #f)
                           (driver-seat-player? (vehicle-driver-seat-has-player? this))
                           (boarding-seat -1)
+                          (can-hang? (and (> (-> this flight-level-index) 0) (< (-> boarding-work floats 2) -8192.0)))
                           )
                       (set! boarding-seat
                             (if driver-seat-player?
@@ -368,7 +367,7 @@
                             (f1-12 81920.0)
                             )
                         (when (and (< f0-14 (* f1-12 f1-12))
-                                   (or (not driver-seat-player?) (!= boarding-seat -1))
+                                   (or (not driver-seat-player?) (!= boarding-seat -1) can-hang?)
                                    )
                           (set! (-> boarding-work cquery start-pos quad) (-> boarding-work matrices 0 vector 1 quad))
                           (vector-! (-> boarding-work cquery move-dist) (-> boarding-work matrices 0 vector 2) (-> boarding-work matrices 0 vector 1))
@@ -408,7 +407,9 @@
                           (set! (-> boarding-work floats 3) (* (-> this hit-points) (/ 40960.0 (sqrtf (-> boarding-work floats 1)))))
                           )
                         (when (and (not can-board-seat?)
-                                   (and (< (-> boarding-work floats 2) -8192.0) (not (logtest? (-> tgt focus-status) (focus-status edge-grab))))
+                                   (or (not driver-seat-player?) can-hang?)
+                                   (< (-> boarding-work floats 2) -8192.0)
+                                   (not (logtest? (-> tgt focus-status) (focus-status edge-grab)))
                                    )
                           (matrix-4x4-inverse! (-> boarding-work matrices 2) (-> boarding-work matrices 1))
                           (vector-matrix*! (the-as vector (-> boarding-work matrices)) (-> boarding-work matrices 0 vector 1) (-> boarding-work matrices 2))
@@ -439,7 +440,12 @@
                             0
                           )
                         )
-                        (set! can-edge-grab? (if driver-seat-player? can-board-seat? (or can-board-seat? can-edge-grab?)))
+                        (set! can-edge-grab?
+                              (if driver-seat-player?
+                                  (or can-board-seat? (and can-hang? can-edge-grab?))
+                                  (or can-board-seat? can-edge-grab?)
+                                  )
+                              )
                         (when (and can-edge-grab? (and (request-vehicle-hud-prompt? *vehicle-hud-chooser* (process->handle this) (-> boarding-work floats 3))
                                              (can-display-query? this (the-as string #f) (/ 1.0 (-> boarding-work floats 3)))
                                              )
@@ -453,12 +459,13 @@
                             (set-height! s3-1 80)
                             (set-scale! s3-1 0.9)
                             (set! (-> s3-1 flags) (font-flags shadow kerning large))
-                            (when (and (not-puppet? tgt)
+                            (when (and (not-player-replica? tgt)
                                        (not block-local-boarding?)
                                        (not (movie?))
                                        (not (real-movie?))
                                        (not (and *progress-process* (nonzero? *progress-process*))))
                               (let ((msg (cond
+                                           ((not can-board-seat?) (text-id press-triangle-to-hang))
                                            ((and (not (cpad-hold? pad-idx l1)) (not driver-seat-player?)) (text-id press-triangle-to-drive))
                                            ((or (cpad-hold? pad-idx l1) driver-seat-player?) (text-id press-triangle-to-ride))
                                            (else (text-id press-triangle-to-use))
@@ -490,7 +497,7 @@
                                   (set! (-> boarding-work handles 0) (process->handle this))
                                   (mem-copy! (the-as pointer *pilot-edge-grab-info*) (the-as pointer (-> boarding-work vectors)) 40)
                                   (if (send-event tgt 'pilot-edge-grab *pilot-edge-grab-info*)
-                                      (debug-log *mp-debug-log?* "[Vehicle] vehicle::check-player-get-on: (send-event tgt 'pilot-edge-grab self)~%")
+                                      (log 'debug "[Vehicle] vehicle::check-player-get-on: (send-event tgt 'pilot-edge-grab self)~%")
                                   )
                                 )
                               )
@@ -507,7 +514,7 @@
         )
       )
     (cond
-      ((and (logtest? (-> this flags) (rigid-body-object-flag player-driving)) (!= (-> this crash-level) 3) (not (vehicle-remote-driven-by-puppet? this)))
+      ((and (logtest? (-> this flags) (rigid-body-object-flag player-driving)) (!= (-> this crash-level) 3) (not (mp-vehicle-remote-driven? this)))
        (let ((r0 (handle->process (-> this rider-array 0))))
          (when (and r0 (focus-test? (the-as process-focusable r0) pilot-riding))
            (vehicle-controller-method-11 (-> this controller))
@@ -585,7 +592,7 @@
   )
 
 (defmethod get-seat-count ((this vehicle))
-  (-> this info seat-count)
+  (- (-> this info seat-count) (if (or (type? this cara) (type? this carb) (type? this carc)) 1 0))
   )
 
 (defmethod compute-seat-position ((this vehicle) (out-pos vector) (seat-index int))
@@ -731,7 +738,7 @@
       (case (-> impact pat event)
         (((pat-event melt))
          (set! damage (* 10.0 damage))
-         (debug-log *mp-debug-log?* "[Vehicle] vehicle::apply-damage: hit melt (damage ~f)~%" damage)
+         (log 'debug "[Vehicle] vehicle::apply-damage: hit melt (damage ~f)~%" damage)
          )
         )
       (#when PC_PORT

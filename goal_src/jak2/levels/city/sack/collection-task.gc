@@ -101,8 +101,7 @@
 (defun krew-collection-mark-consumed! ((item-index int))
   (when (and (>= item-index 0) (< item-index 32))
     (set! *mp-krew-collection-consumed-mask*
-          (logior *mp-krew-collection-consumed-mask* (krew-collection-pickup-mask item-index))
-          )
+          (logior *mp-krew-collection-consumed-mask* (krew-collection-pickup-mask item-index)) )
     )
   (none)
   )
@@ -238,7 +237,6 @@
   )
 
 (defun krew-collection-find-or-spawn-vehicle! ((traffic-mgr process) (spawn-params traffic-object-spawn-params))
-  "Reuse the reserved collection bike if it already exists locally."
   (let ((vehicle-proc (the-as process (mp-mission-vehicle-find-by-net-id MP_MISSION_VEHICLE_KREW_COLLECTION))))
     (if (and vehicle-proc (nonzero? vehicle-proc))
         (set! (-> spawn-params proc) vehicle-proc)
@@ -309,26 +307,19 @@
         )
       (dotimes (player-id MP_MAX_PLAYERS)
         (let* ((record (mp-player-record-by-id (the-as uint player-id)))
-               (puppet (mp-player-record-target record)))
+               (replica (mp-player-record-target record)))
           (when (and record
                      (nonzero? record)
-                     (mp-player-record-remote? *mp-player-controller* record)
-                     puppet
-                     (nonzero? puppet)
-                     (-> puppet root)
-                     (nonzero? (-> puppet root))
-                     (or (focus-test? puppet pilot)
+                     (is-record-remote-player? record)
+                     replica
+                     (nonzero? replica)
+                     (-> replica root)
+                     (nonzero? (-> replica root))
+                     (or (focus-test? replica pilot)
                          (< (* min-start-distance min-start-distance)
                             (vector-vector-distance-squared
-                              (-> task begin-pos) (-> puppet root trans)))))
+                              (-> task begin-pos) (-> replica root trans)))))
             (set! started? #t))))
-      (let ((vehicle-proc (handle->process-safe (-> task slave 1))))
-        (when (and vehicle-proc (nonzero? vehicle-proc) (type? vehicle-proc vehicle))
-          (when (mp-any-player-near-and-piloting? (the-as process-drawable vehicle-proc) (* min-start-distance min-start-distance))
-            (set! started? #t)
-            )
-          )
-        )
       )
     started?
     )

@@ -29,6 +29,16 @@
 
 (define *pilot-mods* (new 'static 'surface :name 'empty :seek0 1.0 :seek90 1.0 :seek180 1.0 :fric 1.0))
 
+(defun get-player-pilot-hit-state ((player target) (attacker process) (attack attack-info))
+  (cond
+    ((and (nonnull? player attacker attack)
+          (type? attacker vehicle)
+          (logtest? (-> attack mask) (attack-mask mode))
+          (= (-> attack mode) 'explode))
+     (if (mp-target-daxter? player) target-indax-hit target-hit))
+    ((and (nonnull? player) (focus-test? player indax)) target-indax-pilot-hit)
+    (else target-pilot-hit)))
+
 ;; WARN: disable def twice: 124. This may happen when a cond (no else) is nested inside of another conditional, but it should be rare.
 (defbehavior target-pilot-handler target ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   (cond
@@ -106,10 +116,7 @@
            (the-as attack-info (-> arg3 param 1))
            arg0
            (the-as touching-shapes-entry (-> arg3 param 0))
-           (if (focus-test? self indax)
-               target-indax-pilot-hit
-               target-pilot-hit
-               )
+           (get-player-pilot-hit-state self arg0 (the-as attack-info (-> arg3 param 1)))
            )
          )
         (('vehicle-hit)
@@ -183,7 +190,7 @@
         (set! (-> self manipy) (the-as (pointer manipy) #f))
         )
       )
-    (if (and (-> self pilot as-daxter?) (not (focus-test? self indax)))
+    (if (and (nonnull? (-> self pilot)) (-> self pilot as-daxter?) (not (focus-test? self indax)))
         (target-pilot-pidax-exit)
         )
     (when (and (mp-target-daxter? self) (not (focus-test? self indax)))
@@ -270,14 +277,12 @@
           (the-as vehicle s4-1)
           )
         (set! (-> s5-0 stance) (get-rider-stance (the-as vehicle s4-1)))
-
         (vehicle-eject-civilian-riders! (the-as vehicle s4-1))
-
         (cond
           ((let ((record (mp-player-process-record self)))
              (and record
                   (nonzero? record)
-                  (mp-player-record-remote? *mp-player-controller* record)))
+                  (is-record-remote-player? record)))
            (let ((record (mp-player-process-record self)))
              (when (and record (nonzero? record))
                (set! (-> s5-0 seat-index)
@@ -483,13 +488,38 @@
           0
           )
         )
-      (let ((s4-1 (new 'stack-no-clear 'matrix)))
-        (compute-rider-hand-position (the-as vehicle s5-0) (the-as vector (-> s4-1 vector)) (-> gp-2 seat-index) 0)
-        (compute-rider-hand-position (the-as vehicle s5-0) (-> s4-1 vector 1) (-> gp-2 seat-index) 1)
-        (enable-set! (-> self arm-ik 0) #t)
-        (enable-set! (-> self arm-ik 1) #t)
-        (handle-copy! (-> self arm-ik 0) (the-as vector (-> s4-1 vector)))
-        (handle-copy! (-> self arm-ik 1) (-> s4-1 vector 1))
+      (cond
+        ((-> gp-2 as-daxter?)
+         (enable-set! (-> self arm-ik 0) #f)
+         (enable-set! (-> self arm-ik 1) #f)
+         )
+        ((zero? (-> gp-2 seat-index))
+         (let ((s4-1 (new 'stack-no-clear 'matrix)))
+           (compute-rider-hand-position (the-as vehicle s5-0) (the-as vector (-> s4-1 vector)) 0 0)
+           (compute-rider-hand-position (the-as vehicle s5-0) (-> s4-1 vector 1) 0 1)
+           (enable-set! (-> self arm-ik 0) #t)
+           (enable-set! (-> self arm-ik 1) #t)
+           (handle-copy! (-> self arm-ik 0) (the-as vector (-> s4-1 vector)))
+           (handle-copy! (-> self arm-ik 1) (-> s4-1 vector 1))
+           )
+         )
+        (else
+          (let ((s4-1 (new 'stack-no-clear 'matrix))
+                (v-knee-l (new 'stack-no-clear 'vector))
+                (v-knee-r (new 'stack-no-clear 'vector))
+                )
+            (set-vector! v-knee-l 750.0 1050.0 -1200.0 0.0)
+            (set-vector! v-knee-r -750.0 1050.0 -1200.0 0.0)
+            (vector-orient-by-quat! (the-as vector (-> s4-1 vector)) v-knee-l (-> self control quat))
+            (vector-orient-by-quat! (-> s4-1 vector 1) v-knee-r (-> self control quat))
+            (vector+! (the-as vector (-> s4-1 vector)) (-> self control trans) (the-as vector (-> s4-1 vector)))
+            (vector+! (-> s4-1 vector 1) (-> self control trans) (-> s4-1 vector 1))
+            (enable-set! (-> self arm-ik 0) #t)
+            (enable-set! (-> self arm-ik 1) #t)
+            (handle-copy! (-> self arm-ik 0) (the-as vector (-> s4-1 vector)))
+            (handle-copy! (-> self arm-ik 1) (-> s4-1 vector 1))
+            )
+          )
         )
       )
     )

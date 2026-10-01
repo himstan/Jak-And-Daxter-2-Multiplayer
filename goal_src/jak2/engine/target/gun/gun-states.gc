@@ -84,12 +84,14 @@
       )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? x)
+             (not-player-replica? self)
              (can-jump? #f)
              )
         (target-jump-go)
         )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? circle)
+             (not-player-replica? self)
              (can-feet? #t)
              )
         (if (focus-test? self indax)
@@ -99,6 +101,7 @@
         )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? square)
+             (not-player-replica? self)
              (can-hands? #t)
              )
         (if (focus-test? self indax)
@@ -377,6 +380,7 @@
         )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? l1)
+             (not-player-replica? self)
              (and (!= (-> *cpad-list* cpads (-> self control cpad number) stick0-speed) 0.0) (can-roll?))
              )
         (if (focus-test? self indax)
@@ -394,12 +398,14 @@
       )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? x)
+             (not-player-replica? self)
              (can-jump? #f)
              )
         (target-jump-go)
         )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? circle)
+             (not-player-replica? self)
              (can-feet? #t)
              )
       (if (focus-test? self indax)
@@ -409,6 +415,7 @@
     )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? square)
+             (not-player-replica? self)
              (can-hands? #t)
              )
         (if (focus-test? self indax)

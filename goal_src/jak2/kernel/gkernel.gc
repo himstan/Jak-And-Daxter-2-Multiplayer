@@ -2441,7 +2441,7 @@
 
 (kmemopen global "process-buffers")
 
-(defconstant NUM_MAX_TARGET (+ 2 MP_MAX_PLAYERS))
+(defconstant NUM_MAX_TARGET (+ 2 MP_MAX_PLAYERS)) ;; give some extra space in case a player reconnects and their target is is not cleaned up before the rejoin
 
 ;; set up the listener process to run functions sent from the REPL.
 (let ((this (define *listener-process* (new 'global 'process "listener" 2048))))

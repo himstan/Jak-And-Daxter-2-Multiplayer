@@ -1,6 +1,10 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern mp-clear-pole-grab-event-latch (function handle none))
+(define-extern mp-event-hook-pole-grab! (function handle none))
+(define-extern mp-event-hook-edge-grab! (function target symbol none))
+
 ;; name: target2.gc
 ;; name in dgo: target2
 ;; dgos: ENGINE, GAME
@@ -555,7 +559,7 @@
     )
   :enter (behavior ((arg0 handle))
     (set! (-> self control anim-handle) arg0)
-    (when (and (not-puppet? self) (not *mp-processing-remote-event*))
+    (when (and (not-player-replica? self) (not *mp-processing-remote-event*))
       (mp-event-hook-pole-grab! arg0)
       )
     (set-time! (-> self state-time))
@@ -772,8 +776,7 @@
     (let ((v1-101 (-> self edge-grab-state info)))
       (set! (-> v1-101 pilot-edge-grab?) #f)
     )
-    (if (and (not-puppet? self)
-             *multi-sync-enabled?*
+    (if (and (not-player-replica? self)
              (!= (-> self state name) 'target-pilot-edge-grab)
              (!= (-> self state name) 'target-indax-pilot-edge-grab))
         (mp-event-hook-edge-grab! self #f)
@@ -831,7 +834,7 @@
              (set! (-> v1-25 best-my-prim) (the-as collide-shape-prim #t))
              (set! (-> v1-25 action-mask) (collide-action solid))
              )
-           (when (or (puppet? self) (not (fill-and-probe-using-spheres *collide-cache* a1-2)))
+           (when (or (player-replica? self) (not (fill-and-probe-using-spheres *collide-cache* a1-2)))
              (if (!= (-> self skel top-anim interp) 0.0)
                  (set! (-> self skel top-anim interp) 1.0)
                  )
@@ -878,7 +881,7 @@
   :code (behavior ()
     (target-compute-edge)
     (let ((gp-0 (-> self edge-grab-state info)))
-      (if (not-puppet? self)
+      (if (not-player-replica? self)
           (begin
             (set! (-> self control unknown-handle000) (-> gp-0 actor-handle))
             (set! (-> self control unknown-symbol000) #f)
@@ -996,7 +999,7 @@
         (compute-alignment! (-> self align))
         (when (not (logtest? (-> self align flags) (align-flags disabled)))
           (vector-matrix*! s4-0 (-> self align delta trans) (-> self control c-R-w))
-          (if (puppet? self)
+          (if (player-replica? self)
               (vector+! (-> self control trans) (-> self control trans) s4-0)
               (move-by-vector! (-> self control) s4-0)
               )
@@ -1080,7 +1083,7 @@
     (target-exit)
     )
   :code (behavior ((arg0 float))
-    (when (and (!= arg0 0.0) (not-puppet? self))
+    (when (and (!= arg0 0.0) (not-player-replica? self))
       (let ((f0-5 (the float (the int (+ 1.0 (/ (- arg0 (-> *TARGET-bank* fall-far)) (-> *TARGET-bank* fall-far-inc))))))
             )
         (pickup-collectable!
@@ -1093,7 +1096,7 @@
       (target-timed-invulnerable (the-as time-frame (-> *TARGET-bank* hit-invulnerable-timeout)) self 1)
       )
     (cond
-      ((and (= (-> self game mode) 'play) (>= 0.0 (-> (the-as fact-info-target (-> self fact)) health)) (not-puppet? self))
+      ((and (= (-> self game mode) 'play) (>= 0.0 (-> (the-as fact-info-target (-> self fact)) health)) (not-player-replica? self))
        (set! (-> self attack-info attacker) (the-as handle #f))
        (go target-death 'target-hit-ground-hard)
        )
@@ -1192,18 +1195,21 @@
         )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? x)
+             (not-player-replica? self)
              (can-jump? #f)
              )
         (target-jump-go)
         )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? circle)
+             (not-player-replica? self)
              (can-feet? #t)
              )
         (go target-attack)
         )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? square)
+             (not-player-replica? self)
              (can-hands? #t)
              )
         (go target-running-attack)

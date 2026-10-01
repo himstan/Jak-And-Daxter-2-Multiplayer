@@ -717,7 +717,8 @@
   (let ((deadline 0))
     (when (and bomb
                (nonzero? bomb)
-               (or (not *multi-sync-enabled?*) (mp-session-host?)))
+               (or (not (mp-session-in-game?))
+                   (mp-session-host?)))
       (let* ((current-frame (current-time))
              (fizzle-duration 600.0)
              (random-value (/ (the-as int (rand-uint31-gen *random-generator*)) 256))
@@ -779,7 +780,7 @@
       (when (and (mp-widow-bomb-fizzle-pending? slot)
                  (widow-bomb-apply-fizzle-deadline! bomb deadline))
         (mp-widow-bomb-clear-fizzle-slot! slot)
-        (debug-log *mp-debug-log?* "[Widow][FIZZLE] applied slot=~D deadline=~D~%" slot deadline)
+        (log 'debug "[Widow][FIZZLE] applied slot=~D deadline=~D~%" slot deadline)
         (return #t))
       )
     )
@@ -797,7 +798,7 @@
                  (type? bomb-process widow-bomb))
         (when (mp-widow-bomb-claim-kick-slot! slot)
           (send-event bomb-process 'mp-kickback slot)
-          (debug-log *mp-debug-log?* "[Widow][KICK] dispatched slot=~D~%" slot)
+          (log 'debug "[Widow][KICK] dispatched slot=~D~%" slot)
           (return #t)))
       )
     )
@@ -818,7 +819,7 @@
                       'mp-fizzle
                       slot
                       (mp-widow-bomb-fizzle-deadline slot))
-          (debug-log *mp-debug-log?* "[Widow][FIZZLE] dispatched slot=~D~%" slot)
+          (log 'debug "[Widow][FIZZLE] dispatched slot=~D~%" slot)
           (return #t)))
       )
     )
@@ -841,13 +842,13 @@
            (let ((kick-from (the-as vector (mp-widow-bomb-kick-from slot)))
                  (kick-dest (the-as vector (mp-widow-bomb-kick-dest slot)))
                  (kick-height (mp-widow-bomb-kick-height slot)))
-             (debug-log *mp-debug-log?* "[Widow][KICK] applying slot=~D~%" slot)
+             (log 'debug "[Widow][KICK] applying slot=~D~%" slot)
              (when (widow-bomb-setup-kickback!
                      self kick-from kick-dest kick-height)
                (widow-bomb-notify-kick! self)
                (mp-widow-bomb-clear-kick-slot! slot)
                (go-virtual back-atcha)
-               (debug-log *mp-debug-log?* "[Widow][KICK] replayed slot=~D~%" slot))
+               (log 'debug "[Widow][KICK] replayed slot=~D~%" slot))
              )
            )
          )
@@ -861,8 +862,7 @@
              (let ((record (mp-player-process-record arg0)))
                (or (not record)
                    (zero? record)
-                   (not (mp-player-record-remote?
-                          *mp-player-controller* record)))))
+                   (not (is-record-remote-player? record)))))
         (let ((kick-from (new 'stack-no-clear 'vector))
               (kick-dest (new 'stack-no-clear 'vector)))
           (set! (-> kick-from quad) (-> self root trans quad))
@@ -889,7 +889,7 @@
              (let ((record (mp-player-process-record arg0)))
                (and record
                     (nonzero? record)
-                    (mp-player-record-remote? *mp-player-controller* record))))
+                    (is-record-remote-player? record))))
         (return #f)
         )
        (else
@@ -907,6 +907,9 @@
   (case arg2
     (('mp-fizzle)
      (widow-bomb-handle-fizzle-event! self arg1 arg3)
+     )
+    (('mp-kickback)
+     (widow-bomb-handler arg0 arg1 arg2 arg3)
      )
     (('impact-control)
      (let ((s5-0 (as-type (ppointer->process (-> self parent)) widow)))

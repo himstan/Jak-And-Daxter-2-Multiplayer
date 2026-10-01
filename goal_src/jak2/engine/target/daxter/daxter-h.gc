@@ -9,12 +9,11 @@
 (define-extern *indax-bounce-mods* surface)
 (define-extern *indax-duck-mods* surface)
 (define-extern target-indax-handler (function process int symbol event-message-block object :behavior target))
-(define-extern target-indax-dangerous-event-handler (function process int symbol event-message-block object :behavior target))
-(define-extern target-indax-jump-event-handler (function process int symbol event-message-block object :behavior target))
+(define-extern target-indax-dangerous-event-handler
+  (function process int symbol event-message-block object :behavior target))
+(define-extern target-indax-jump-event-handler
+  (function process int symbol event-message-block object :behavior target))
 (define-extern target-indax-init (function symbol none :behavior target))
-(define-extern target-indax-board? (function target symbol))
-(define-extern target-indax-board-set! (function none :behavior target))
-(define-extern target-indax-board-clear! (function none :behavior target))
 (define-extern target-indax-align! (function symbol :behavior target))
 (define-extern target-indax-exit (function none :behavior target))
 (define-extern target-indax-real-post (function none :behavior target))
@@ -58,12 +57,10 @@
 (define-extern target-indax-jump-on (state uint target))
 (define-extern target-no-move-post (function none :behavior target))
 (define-extern target-indax-spawn-reset (state target))
-
 (define-extern target-indax-compute-edge (function none :behavior target))
 (define-extern target-indax-edge-grab (state target))
 (define-extern target-indax-edge-grab-jump (state float float target))
 (define-extern target-indax-edge-grab-off (state target))
-
 (define-extern target-indax-pilot-start (state handle symbol symbol target))
 (define-extern target-indax-pilot-stance (state target))
 (define-extern target-indax-pilot-get-on (state target))
@@ -74,13 +71,9 @@
 (define-extern target-indax-pilot-edge-grab (state pilot-edge-grab-info target))
 (define-extern target-indax-pilot-hit (state symbol attack-info target))
 (define-extern target-indax-pilot-death (state symbol target))
-
 (define-extern skel-sidekick skeleton-group)
 
 (deftype indax-info (basic)
-  ((indax-start-time              time-frame)
-   (indax-time                    time-frame)
-   (indax-board?                  symbol)
-   (art-group-backup              art-group)
-   )
-  )
+  ((indax-start-time time-frame)
+   (indax-time       time-frame)
+   (art-group-backup art-group)))

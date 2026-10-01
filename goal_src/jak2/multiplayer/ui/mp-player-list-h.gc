@@ -1,16 +1,15 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(deftype mp-player-list-manager (structure)
-  ((layout             mp-overlay-layout :inline)
-   (overlay            (pointer mp-overlay-layout-process))
-   (initialized?       symbol)
-   (visible?           symbol)
-   )
-  )
+(define *nametag-string* (new 'global 'string 128 (the-as string #f)))
 
-(define-perm *mp-player-list* mp-player-list-manager
-  (new 'static 'mp-player-list-manager))
+(deftype mp-player-list-manager (structure)
+  ((layout       mp-overlay-layout :inline)
+   (overlay      (pointer mp-overlay-layout-process))
+   (initialized? symbol)
+   (visible?     symbol)))
+
+(define-perm *mp-player-list* mp-player-list-manager (new 'static 'mp-player-list-manager))
 
 (defconstant MP_PLAYER_NAMETAG_MAX_DIST (meters 100.0))
 (defconstant MP_PLAYER_NAMETAG_SCALE_MIN_DIST (meters 3.0))

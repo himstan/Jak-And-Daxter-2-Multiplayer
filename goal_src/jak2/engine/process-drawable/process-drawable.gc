@@ -5,10 +5,6 @@
 ;; name in dgo: process-drawable
 ;; dgos: ENGINE, GAME
 
-(define-extern *art-group-load-debug-caller* symbol)
-(define-extern *art-group-load-debug-context-a* object)
-(define-extern *art-group-load-debug-context-b* object)
-
 (declare-type fuel-cell basic) ;; TODO!!
 
 (#when PC_PORT
@@ -238,6 +234,7 @@
     (set! (-> v0-0 process) (the-as process-drawable arg0))
     (set! (-> v0-0 ripple) #f)
     (set! (-> v0-0 pc-darkjak-interp) -1.0)
+    (set! (-> v0-0 pc-eye-instance-id) MP_INVALID_PLAYER_ID)
     (dotimes (appearance-slot MP_PLAYER_APPEARANCE_SLOT_COUNT)
       (set! (-> v0-0 pc-player-tint-colors appearance-slot) #x000000)
       (set! (-> v0-0 pc-player-tint-strengths appearance-slot) 0.0))
@@ -686,14 +683,14 @@
         (set! active-default-level (-> *level* default-level name))
         )
       )
-    (debug-log *mp-debug-log?*
+    (log 'debug
       "[load-debug] drawable requested missing art-group=~A skel=~A proc=~A entity=~A~%"
       (if (and skelgroup (nonzero? skelgroup)) (-> skelgroup art-group-name) #f)
       skelgroup
       proc
       (if (and proc (nonzero? proc)) (-> proc entity) #f)
       )
-    (debug-log *mp-debug-log?*
+    (log 'debug
       "[load-debug] drawable levels proc-level=~A load-level=~A global-loading=~A global-default=~A~%"
       proc-level
       load-level-name
@@ -712,9 +709,6 @@
                   )
               )
         )
-    (set! *art-group-load-debug-caller* 'process-drawable-skel)
-    (set! *art-group-load-debug-context-a* arg0)
-    (set! *art-group-load-debug-context-b* arg1)
     (let ((s1-0 (load-to-heap-by-name (-> s3-0 art-group) (-> arg1 art-group-name) #f global (-> arg1 version))))
       (when (or (zero? s1-0) (or (not s1-0) (!= (-> s1-0 type) art-group)))
         (process-drawable-art-group-load-debug arg0 arg1 s3-0)
@@ -1039,6 +1033,8 @@
       ((or (zero? (-> s5-0 active-channels))
            (zero? arg1)
            (when (>= (+ (-> s5-0 active-channels) (-> s5-0 float-channels) arg0) (-> s5-0 allocated-length))
+             #|
+             Disabled because replica enemies spam these logs, since they're so much so externally manipulated, seems to be fine to just suppress this tho
              (format
                0
                "WARNING: ~A could not do (ja-channel-push! ~D) because it has ~D/~D channels.~%"
@@ -1047,6 +1043,7 @@
                (+ (-> s5-0 active-channels) (-> s5-0 float-channels))
                (-> s5-0 allocated-length)
                )
+             |#
              #t
              )
            )
@@ -1124,6 +1121,8 @@
 (defbehavior ja-channel-float! process-drawable ((arg0 art-joint-anim) (arg1 float) (arg2 float) (arg3 float))
   (cond
     ((>= (+ (-> self skel active-channels) (-> self skel float-channels)) (-> self skel allocated-length))
+     #|
+     Disabled because replica enemies spam these logs, since they're so much so externally manipulated, seems to be fine to just suppress this tho
      (format
        0
        "WARNING: ~A could not do (ja-channel-float! ~D) because it has ~D/~D channels.~%"
@@ -1132,6 +1131,7 @@
        (+ (-> self skel active-channels) (-> self skel float-channels))
        (-> self skel allocated-length)
        )
+      |#
      (the-as joint-control-channel #f)
      )
     (else

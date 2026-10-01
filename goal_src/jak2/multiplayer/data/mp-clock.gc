@@ -2,17 +2,13 @@
 (in-package goal)
 
 (defun mp-sync-clock-host ()
-  "Update Host Clock BEFORE sync"
-  (if (mp-session-host?)
-      (set! (-> *mp-world-state* clock) (-> *display* shared-clock frame-counter)))
+  (if (mp-session-host?) (set! (-> *mp-world-state* clock) (-> *display* shared-clock frame-counter)))
   (none))
 
 (defun mp-sync-clock-client ()
-  "Update Client Clock AFTER sync - GUARDED to avoid black screen during load"
   (with-pp
     (if (and (mp-session-client?)
-             (= (pc-multi-get-status) (mp-connection-status in-game))
-             *multi-sync-enabled?*
+             (mp-session-in-game?)
              (zero? (-> *mp-bootstrap-state* phase))
              *target*
              (nonzero? *target*)
@@ -23,11 +19,9 @@
              (nonzero? *level*)
              (= (-> *level* loading-level) (-> *level* default-level))
              (not (load-in-progress? *level*)))
-        (let* ((host-clock (-> *mp-world-state* clock))
-               (diff (- host-clock (-> *display* shared-clock frame-counter))))
-          (when (and (nonzero? host-clock)
-                     (or (> diff 0) (< diff -60)))
-            (set! (-> *display* shared-clock frame-counter) host-clock)
-            (set! (-> *display* shared-clock old-frame-counter) (+ host-clock -1))
-            ))))
+      (let* ((host-clock (-> *mp-world-state* clock))
+             (diff (- host-clock (-> *display* shared-clock frame-counter))))
+        (when (and (nonzero? host-clock) (or (> diff 0) (< diff -60)))
+          (set! (-> *display* shared-clock frame-counter) host-clock)
+          (set! (-> *display* shared-clock old-frame-counter) (+ host-clock -1))))))
   (none))

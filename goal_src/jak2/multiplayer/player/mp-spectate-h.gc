@@ -4,130 +4,104 @@
 (defenum mp-spectate-flags
   :type uint32
   :bitfield #t
-  (allow-switch         0)
-  (show-player-name     1)
-  (inert-local-anchor   2)
+  (allow-switch 0)
+  (show-player-name 1)
+  (inert-local-anchor 2)
   (roster-only-presence 3)
-  (end-on-scene         4)
-  )
+  (end-on-scene 4))
 
 (defenum mp-spectate-layout-conditions
   :type uint32
   :bitfield #t
-  (has-selection     0)
-  (show-player-name  1)
-  (waiting           2)
-  (loading           3)
-  (custom-text       4)
-  (can-cycle         5)
-  )
+  (has-selection 0)
+  (show-player-name 1)
+  (waiting 2)
+  (loading 3)
+  (custom-text 4)
+  (can-cycle 5))
 
 (defenum mp-spectate-layout-widget
   :type uint32
-  (custom-text   0)
-  (waiting       1)
-  (loading       2)
-  (previous      3)
-  (player-name   4)
+  (custom-text 0)
+  (waiting 1)
+  (loading 2)
+  (previous 3)
+  (player-name 4)
   (player-number 5)
-  (next          6)
-  )
+  (next 6))
 
 (defenum mp-spectate-layout-integer-binding
   :type uint32
   (selected-player-number 0)
-  (custom-value           1)
-  )
+  (custom-value 1))
 
 (defenum mp-spectate-layout-string-binding
   :type uint32
-  (selected-player-name 0)
-  )
+  (selected-player-name 0))
 
 (deftype mp-spectate-options (structure)
   ((flags                mp-spectate-flags)
-   (preferred-player-id  uint32)
+   (preferred-player-id  uint8)
    (eligible-player-mask uint32)
-   (custom-widget-index   uint32)
-   (layout                mp-overlay-layout :inline)
-   ))
+   (custom-widget-index  uint32)
+   (layout               mp-overlay-layout :inline)))
 
 (defenum mp-spectate-phase
   :type uint32
-  (pending  0)
-  (active   1)
-  (stopping 2)
-  )
+  (pending 0)
+  (active 1)
+  (stopping 2))
 
 (defenum mp-spectate-text-param-kind
   :type uint32
-  (none                   0)
-  (integer                1)
-  (selected-player-name   2)
-  (selected-player-number 3)
-  )
+  (none 0)
+  (integer 1)
+  (selected-player-name 2)
+  (selected-player-number 3))
 
 (deftype mp-spectate-anchor-state (structure)
-  ((saved?                symbol)
-   (position              vector :inline)
-   (process-mask          uint32)
-   (focus-status          uint32)
-   (draw-status           uint32)
-   (collide-as            uint32)
-   (collide-with          uint32)
-   (cpad                   cpad-info)
-   (sidekick-draw-saved?  symbol)
-   (sidekick-draw-status  uint32)
-   ))
+  ((saved?               symbol)
+   (position             vector :inline)
+   (process-mask         uint32)
+   (focus-status         uint32)
+   (draw-status          uint32)
+   (collide-as           uint32)
+   (collide-with         uint32)
+   (cpad                 cpad-info)
+   (sidekick-draw-saved? symbol)
+   (sidekick-draw-status uint32)))
 
 (deftype mp-spectate-manager (process)
-  ((owner                    symbol)
-   (phase                    mp-spectate-phase)
-   (options                  mp-spectate-options :inline)
-   (selected-player-id       uint32)
-   (camera-player-id         uint32)
-   (level-request-owned?     symbol)
-   (overlay                   (pointer mp-overlay-layout-process))
-   (anchor                   mp-spectate-anchor-state :inline)
-   (custom-text-id           text-id)
-   (custom-param-kind        mp-spectate-text-param-kind)
-   (custom-param-value       int32)
-   )
+  ((owner                symbol)
+   (phase                mp-spectate-phase)
+   (options              mp-spectate-options :inline)
+   (selected-player-id   uint8)
+   (camera-player-id     uint8)
+   (level-request-owned? symbol)
+   (overlay              (pointer mp-overlay-layout-process))
+   (anchor               mp-spectate-anchor-state :inline)
+   (custom-text-id       text-id)
+   (custom-param-kind    mp-spectate-text-param-kind)
+   (custom-param-value   int32))
   (:state-methods
-    mp-spectate-pending-state
-    mp-spectate-active-state)
+   mp-spectate-pending-state
+   mp-spectate-active-state)
   (:methods
-    (mp-spectate-manager-finish! (_type_ symbol symbol) none)
-    ))
+   (mp-spectate-manager-finish! (_type_ symbol symbol) none)))
 
-(define-extern mp-spectate-default-options!
-  (function mp-spectate-options mp-spectate-options))
-(define-extern mp-spectate-join-options!
-  (function mp-spectate-options mp-spectate-options))
-(define-extern mp-spectate-start!
-  (function symbol mp-spectate-options symbol))
-(define-extern mp-spectate-set-custom-text!
-  (function symbol text-id mp-spectate-text-param-kind int symbol))
-(define-extern mp-spectate-clear-custom-text!
-  (function symbol symbol))
-(define-extern mp-spectate-cycle!
-  (function symbol int symbol))
-(define-extern mp-spectate-stop!
-  (function symbol symbol symbol))
-(define-extern mp-spectate-stop-at-selected!
-  (function symbol symbol symbol))
+(define-extern mp-spectate-default-options! (function mp-spectate-options mp-spectate-options))
+(define-extern mp-spectate-start! (function symbol mp-spectate-options symbol))
+(define-extern mp-spectate-set-custom-text! (function symbol text-id mp-spectate-text-param-kind int symbol))
+(define-extern mp-spectate-clear-custom-text! (function symbol symbol))
+(define-extern mp-spectate-cycle! (function symbol int symbol))
+(define-extern mp-spectate-stop! (function symbol symbol symbol))
 (define-extern mp-spectate-requested? (function symbol))
 (define-extern mp-spectate-active? (function symbol))
-(define-extern mp-spectate-selected-player-record
-  (function mp-player-record))
-(define-extern mp-spectate-last-stop-reason (function symbol))
-
+(define-extern mp-spectate-selected-player-record (function mp-player-record))
 (define-extern mp-spectate-owns-level-request? (function symbol))
 (define-extern mp-spectate-reset! (function none))
-
 (define-extern mp-spectated-player-record (function mp-player-record))
-(define-extern mp-prepare-remote-spectate-target!
-  (function process-focusable))
+(define-extern mp-prepare-remote-spectate-target! (function process-focusable))
 (define-extern mp-region-target-pos (function vector))
-
 (define-extern mp-death-party-wipe-receive! (function none))
+(define-extern mp-death-spectate-abort! (function none))

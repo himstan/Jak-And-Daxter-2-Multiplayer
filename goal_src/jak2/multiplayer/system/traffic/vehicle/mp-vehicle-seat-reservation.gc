@@ -2,24 +2,20 @@
 (in-package goal)
 
 (defun mp-player-seat-reservation-levels-match? ((record mp-player-record))
-  "Only consume a record's seat reservation in the local player's primary level."
   (let ((local-record (mp-local-player-record)))
     (when (and record
                (nonzero? record)
                local-record
                (nonzero? local-record)
-               (= (pc-multi-get-status) (mp-connection-status in-game))
-               (= (-> record connection status) 6))
-      (let ((local-level
-              (mp-level-packed-primary-id (-> local-record transform level)))
-            (remote-level
-              (mp-level-packed-primary-id (-> record transform level))))
+               (mp-session-in-game?)
+               (= (-> record connection activity) (mp-player-activity in-game)))
+      (let ((local-level (mp-player-primary-level-id local-record))
+            (remote-level (mp-player-primary-level-id record)))
         (when (and (nonzero? local-level) (= local-level remote-level))
           (return #t)))))
   #f)
 
 (defun mp-local-vehicle-seat-claim? ((veh vehicle) (seat-index int))
-  "True while the local target is entering or occupying this exact vehicle seat."
   (when (and veh
              (nonzero? veh)
              *target*
@@ -37,19 +33,13 @@
                  (not (mp-target-death-state? state-name))
                  (!= state-name 'target-pilot-get-off)
                  (!= state-name 'target-indax-pilot-get-off))
-        (return #t)
-        )
-      )
-    )
-  #f
-  )
+        (return #t))))
+  #f)
 
-(defun mp-player-vehicle-seat-claim?
-       ((record mp-player-record) (veh vehicle) (seat-index int))
-  "Validate one remote record's snapshot claim against a live vehicle and seat."
+(defun mp-player-vehicle-seat-claim? ((record mp-player-record) (veh vehicle) (seat-index int))
   (if (and record
            (nonzero? record)
-           (mp-player-record-remote? *mp-player-controller* record)
+           (is-record-remote-player? record)
            veh
            (nonzero? veh)
            (-> veh info)
@@ -60,24 +50,20 @@
            (nonzero? (-> veh net-id))
            (= (-> record vehicle vehicle-id) (-> veh net-id))
            (= (the int (-> record vehicle seat-index)) seat-index))
-      #t
-      #f))
+    #t
+    #f))
 
-(defun mp-remote-vehicle-seat-claimant
-       ((veh vehicle) (seat-index int))
-  "Return the lowest-ID remote claimant for a contested seat."
+(defun mp-remote-vehicle-seat-claimant ((veh vehicle) (seat-index int))
   (let ((claimant (the-as mp-player-record #f)))
     (mp-for-each-player-record (player-id record)
       (when (and (mp-player-vehicle-seat-claim? record veh seat-index)
                  (or (not claimant)
                      (zero? claimant)
-                     (< (-> record identity player-id)
-                        (-> claimant identity player-id))))
+                     (< (-> record identity player-id) (-> claimant identity player-id))))
         (set! claimant record)))
     claimant))
 
 (defun mp-remote-seat-claim-wins? ((veh vehicle) (seat-index int))
-  "An observed remote claim wins; simultaneous claims use the lowest player ID."
   (let ((claimant (mp-remote-vehicle-seat-claimant veh seat-index))
         (local-record (mp-local-player-record)))
     (if (and claimant
@@ -85,18 +71,14 @@
              (or (not (mp-local-vehicle-seat-claim? veh seat-index))
                  (and local-record
                       (nonzero? local-record)
-                      (< (-> claimant identity player-id)
-                         (-> local-record identity player-id)))))
-        #t
-        #f)))
+                      (< (-> claimant identity player-id) (-> local-record identity player-id)))))
+      #t
+      #f)))
 
 (defun mp-vehicle-seat-reserved-by-remote? ((veh vehicle) (seat-index int))
-  "Return whether local boarding and puppet reconciliation should honor the remote claim."
-  (mp-remote-seat-claim-wins? veh seat-index)
-  )
+  (mp-remote-seat-claim-wins? veh seat-index))
 
 (defun mp-resolve-local-vehicle-seat-conflict! ()
-  "Cancel the local client when both players claimed the same seat before either observed it."
   (when (and *target*
              (nonzero? *target*)
              (mp-local-player-record)
@@ -110,14 +92,10 @@
                  (nonzero? vehicle-proc)
                  (mp-local-vehicle-seat-claim? vehicle-proc seat-index)
                  (mp-remote-seat-claim-wins? vehicle-proc seat-index))
-        (debug-log *mp-debug-log?*
-                "[MP-Vehicle] Seat conflict on vehicle ~D seat ~D; local role ~D yielding.~%"
-                (-> vehicle-proc net-id)
-                seat-index
-                (-> (mp-local-player-record) identity player-id))
-        (send-event *target* 'end-mode)
-        )
-      )
-    )
-  (none)
-  )
+        (log 'debug
+             "[MP-Vehicle] Seat conflict on vehicle ~D seat ~D; local role ~D yielding.~%"
+             (-> vehicle-proc net-id)
+             seat-index
+             (-> (mp-local-player-record) identity player-id))
+        (send-event *target* 'end-mode))))
+  (none))

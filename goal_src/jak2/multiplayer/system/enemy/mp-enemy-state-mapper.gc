@@ -2,13 +2,7 @@
 (in-package goal)
 
 (defun mp-enemy-get-state-id ((e-proc enemy))
-  "Get a numeric ID for the current virtual state of an enemy."
-  (let ((s-name (if (and e-proc
-                            (nonzero? e-proc)
-                            (-> e-proc state)
-                            (nonzero? (-> e-proc state)))
-                       (-> e-proc state name)
-                       #f)))
+  (let ((s-name (if (and e-proc (nonzero? e-proc) (-> e-proc state) (nonzero? (-> e-proc state))) (-> e-proc state name) #f)))
     (case s-name
       (('active) (the-as uint32 1))
       (('notice) (the-as uint32 2))
@@ -99,13 +93,10 @@
       (('land) (the-as uint32 87))
       (('stand) (the-as uint32 88))
       (('directed) (the-as uint32 89))
-      (else (the-as uint32 0))
-      )
-    )
-  )
+      (('fire) (the-as uint32 90))
+      (else (the-as uint32 0)))))
 
 (defun mp-enemy-get-state-from-id ((id uint))
-  "Map a numeric ID back to a virtual state symbol."
   (case (the-as mp-enemy-state-id id)
     (((mp-enemy-state-id active)) 'active)
     (((mp-enemy-state-id notice)) 'notice)
@@ -196,7 +187,5 @@
     (((mp-enemy-state-id land)) 'land)
     (((mp-enemy-state-id stand)) 'stand)
     (((mp-enemy-state-id directed)) 'directed)
-    (else 'active)
-    )
-  )
-
+    (((mp-enemy-state-id fire)) 'fire)
+    (else 'active)))

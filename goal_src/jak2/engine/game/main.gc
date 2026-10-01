@@ -6,7 +6,6 @@
 ;; dgos: ENGINE, GAME
 
 ;; DECOMP BEGINS
-(defun-extern mp-frame-tick (none))
 
 (defun set-letterbox-frames ((arg0 time-frame))
   "Set the remaining time until letterboxing is removed.
@@ -136,13 +135,9 @@
 (define *last-master-mode* 'game)
 
 (defun local-target-use-pad! ((pad-index int))
-  "Route the local target to a validated physical, synthetic, or sink pad."
   (when (and (>= pad-index 0)
              (<= pad-index CPAD_TARGET_INPUT_SINK_INDEX)
-             *cpad-list*
-             (nonzero? *cpad-list*)
-             *target*
-             (nonzero? *target*))
+             (nonnull? *cpad-list* *target*))
     (let ((control (-> *target* control)))
       (when (and control (nonzero? control))
         (set! (-> control cpad) (-> *cpad-list* cpads pad-index))
@@ -860,7 +855,6 @@
     (if (-> *level* loading-level)
         (load-continue (-> *level* loading-level))
         )
-    (mp-frame-tick) ;; mp main hook
 
     ; ;; Run blerc to modify foreground models
     (with-profiler 'merc *profile-merc-color*

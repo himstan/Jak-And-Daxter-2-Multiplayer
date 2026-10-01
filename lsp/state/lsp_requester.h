@@ -22,4 +22,3 @@ class LSPRequester {
   void send_request(const json& payload, const std::string& method);
   void send_notification(const json& payload, const std::string& method);
 };
-

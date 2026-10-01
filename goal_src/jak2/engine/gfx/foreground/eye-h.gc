@@ -6,6 +6,9 @@
 ;; dgos: ENGINE, GAME
 
 (define-extern update-eyes (function none))
+(define-extern eye-control-reset-all! (function none))
+
+(defconstant PC_EYE_PREVIEW_INSTANCE_ID MP_MAX_PLAYERS)
 
 
 ;; DECOMP BEGINS
@@ -49,6 +52,19 @@
   )
 
 
+(deftype pc-eye-control-entry (structure)
+  ((control          eye-control :inline)
+   (source-eye-slot  int32)
+   )
+  )
+
+
+(deftype pc-eye-control-array (basic)
+  ((data  pc-eye-control-entry  MP_MAX_PLAYERS :inline)
+   )
+  )
+
+
 (deftype eye-work (structure)
   ((sprite-tmpl   dma-gif-packet  :inline)
    (sprite-tmpl2  dma-gif-packet  :inline)
@@ -70,6 +86,12 @@
                                    )
   )
 
+(define *pc-eye-control-array*
+  (new 'static 'pc-eye-control-array
+       :data (new 'static 'inline-array pc-eye-control-entry MP_MAX_PLAYERS)))
+
+(define *pc-eye-preview-control* (new 'static 'pc-eye-control-entry))
+
 (dotimes (v1-6 6)
   (dotimes (a0-10 16)
     (let ((a1-14 (the-as eye-control (+ (+ (* 96 a0-10) 28 (* 1552 v1-6)) (the-as int *eye-control-arrays*)))))
@@ -81,3 +103,19 @@
       )
     )
   )
+
+(dotimes (instance-id MP_MAX_PLAYERS)
+  (let ((entry (-> *pc-eye-control-array* data instance-id)))
+    (set! (-> entry control process) (the-as handle #f))
+    (set! (-> entry control draw-flag) #t)
+    (set! (-> entry control shaders) (the-as (inline-array adgif-shader) #f))
+    (set! (-> entry control random-time) (the-as uint 60))
+    (set! (-> entry control blink) 0.0)
+    (set! (-> entry source-eye-slot) -1)))
+
+(set! (-> *pc-eye-preview-control* control process) (the-as handle #f))
+(set! (-> *pc-eye-preview-control* control draw-flag) #t)
+(set! (-> *pc-eye-preview-control* control shaders) (the-as (inline-array adgif-shader) #f))
+(set! (-> *pc-eye-preview-control* control random-time) (the-as uint 60))
+(set! (-> *pc-eye-preview-control* control blink) 0.0)
+(set! (-> *pc-eye-preview-control* source-eye-slot) -1)

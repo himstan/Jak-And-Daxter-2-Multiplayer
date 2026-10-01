@@ -2,8 +2,8 @@
 
 Merc2BucketRenderer::Merc2BucketRenderer(const std::string& name,
                                          int my_id,
-                                         std::shared_ptr<Merc2> merc,
-                                         bool clear_depth_before_draw)
+                                         const std::shared_ptr<Merc2>& merc,
+                                         const bool clear_depth_before_draw)
     : BucketRenderer(name, my_id),
       m_clear_depth_before_draw(clear_depth_before_draw),
       m_renderer(merc) {}

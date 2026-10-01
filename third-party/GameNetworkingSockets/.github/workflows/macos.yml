@@ -1,0 +1,87 @@
+name: MacOS
+on: [push, pull_request]
+
+jobs:
+
+  build-and-test-macos:
+    name: Build And Test MacOS
+    runs-on: macos-latest
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+      VCPKG_DOWNLOADS: ${{ github.workspace }}/vcpkg-downloads
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg-bincache
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-bincache,readwrite
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Ensure vcpkg cache directories exist
+      run: |
+        mkdir -p "${VCPKG_DOWNLOADS}"
+        mkdir -p "${VCPKG_DEFAULT_BINARY_CACHE}"
+
+    - name: Install Vcpkg
+      run: |
+        git clone https://github.com/microsoft/vcpkg.git "${VCPKG_ROOT}"
+        cd "${VCPKG_ROOT}"
+        git checkout c3867e714dd3a51c272826eea77267876517ed99
+        ./bootstrap-vcpkg.sh
+        ./vcpkg integrate install
+
+    - name: Restore vcpkg caches
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ env.VCPKG_DOWNLOADS }}
+          ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+        key: vcpkg-${{ runner.os }}-macos-c3867e714dd3a51c272826eea77267876517ed99-${{ hashFiles('vcpkg.json') }}
+        restore-keys: |
+          vcpkg-${{ runner.os }}-macos-
+
+    - name: Install vcpkg dependencies
+      run: |
+        "${VCPKG_ROOT}/vcpkg" install
+
+    - name: Configure CMake (RelWithDebInfo)
+      run: cmake -B ${{github.workspace}}/build
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo
+            -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
+            -DBUILD_TESTS=ON
+            -DBUILD_EXAMPLES=ON
+
+    - name: Build (RelWithDebInfo)
+      run: cmake --build ${{github.workspace}}/build --config RelWithDebInfo
+
+    - name: Test crypto
+      working-directory: ${{github.workspace}}/build/bin
+      run: ./test_crypto
+      shell: bash
+
+    - name: Test connection
+      working-directory: ${{github.workspace}}/build/bin
+      run: ./test_connection suite-quick
+      shell: bash
+
+    - name: Test p2p
+      working-directory: ${{github.workspace}}/build/bin
+      run: python3 test_p2p.py --spewlevel=debug --loglevel-p2prendezvous=debug
+      shell: bash
+
+    - name: Configure CMake (Release)
+      run: cmake -B ${{github.workspace}}/build-release
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
+            -DBUILD_TESTS=ON
+            -DBUILD_EXAMPLES=ON
+
+    - name: Build (Release)
+      run: cmake --build ${{github.workspace}}/build-release --config Release
+
+    - name: Configure CMake (Debug)
+      run: cmake -B ${{github.workspace}}/build-debug
+            -DCMAKE_BUILD_TYPE=Debug
+            -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
+            -DBUILD_TESTS=ON
+            -DBUILD_EXAMPLES=ON
+
+    - name: Build (Debug)
+      run: cmake --build ${{github.workspace}}/build-debug --config Debug

@@ -50,10 +50,8 @@ Workspace::FileType Workspace::determine_filetype_from_uri(const LSPSpec::Docume
 
 LSPSpec::DocumentUri Workspace::normalize_uri(const LSPSpec::DocumentUri& uri) {
   auto path = lsp_util::uri_to_path(uri);
-  // Normalize path separators and casing on Windows
   auto fs_path = fs::path(path);
 #ifdef _WIN32
-  // On Windows, normalize to lowercase drive letter and consistent separators
   std::string path_str = file_util::convert_to_unix_path_separators(fs_path.string());
   if (path_str.length() >= 2 && path_str[1] == ':') {
     path_str[0] = std::tolower(path_str[0]);
@@ -100,18 +98,13 @@ std::optional<std::reference_wrapper<WorkspaceIRFile>> Workspace::get_tracked_ir
 std::optional<GameVersion> Workspace::determine_game_version_from_uri(
     const LSPSpec::DocumentUri& uri) {
   const auto path = lsp_util::uri_to_path(uri);
-  lg::debug("determine_game_version_from_uri - path: {}", path);
   if (str_util::contains(path, "goal_src/jak1") || str_util::contains(path, "test/lsp/fixtures/jak1")) {
-    lg::debug("detected game version: jak1");
     return GameVersion::Jak1;
   } else if (str_util::contains(path, "goal_src/jak2")) {
-    lg::debug("detected game version: jak2");
     return GameVersion::Jak2;
   } else if (str_util::contains(path, "goal_src/jak3")) {
-    lg::debug("detected game version: jak3");
     return GameVersion::Jak3;
   }
-  lg::warn("could not detect game version from path: {}", path);
   return {};
 }
 
@@ -141,13 +134,11 @@ std::optional<symbol_info::SymbolInfo*> Workspace::get_global_symbol_info(
     return {};
   } else if (symbol_infos.size() > 1) {
     lg::debug("Found symbol info, but found multiple infos - {}", symbol_infos.size());
-    // 1. Prefer non-fwd-dec (real definitions like defbehavior)
     for (auto* info : symbol_infos) {
       if (info->m_kind != symbol_info::Kind::FWD_DECLARED_SYM) {
         return info;
       }
     }
-    // 2. Prefer current file
     std::string current_file_path =
         file_util::convert_to_unix_path_separators(lsp_util::uri_to_path(file.m_uri));
     for (auto* info : symbol_infos) {
@@ -178,7 +169,6 @@ std::optional<std::pair<TypeSpec, Type*>> Workspace::get_symbol_typeinfo(
   }
   const auto& compiler = m_compiler_instances[file.m_game_version].get();
 
-  // 1. Explicit compiler type first
   auto typespec = compiler->lookup_typespec(symbol_name);
   bool has_explicit_type = (typespec && typespec->base_type() != "none" && typespec->base_type() != "object");
 
@@ -189,7 +179,6 @@ std::optional<std::pair<TypeSpec, Type*>> Workspace::get_symbol_typeinfo(
     }
   }
 
-  // 2. Existing sym_info->m_type if valid
   const auto symbol_infos = compiler->lookup_exact_name_info(symbol_name);
   if (!symbol_infos.empty()) {
     auto* sym_info = symbol_infos.at(0);
@@ -204,7 +193,6 @@ std::optional<std::pair<TypeSpec, Type*>> Workspace::get_symbol_typeinfo(
     }
   }
 
-  // 3. Inferred define type map fallback
   if (m_inferred_global_types.count(file.m_game_version) > 0) {
     const auto& inner_map = m_inferred_global_types.at(file.m_game_version);
     if (inner_map.count(symbol_name) > 0) {
@@ -218,8 +206,7 @@ std::optional<std::pair<TypeSpec, Type*>> Workspace::get_symbol_typeinfo(
       }
     }
   }
-
-  // 4. Unknown (generic/fallback typespec lookup if it was none or object)
+  
   if (typespec) {
     const auto full_type_info = compiler->type_system().lookup_type_no_throw(typespec->base_type());
     if (full_type_info != nullptr) {
@@ -264,8 +251,6 @@ std::vector<symbol_info::FieldInfo> Workspace::get_field_suggestions(
       field_info.is_dynamic = field.is_dynamic();
       field_info.is_inline = field.is_inline();
 
-      // Try to find the source location for this field
-      // We look at the type where the field was actually DEFINED
       const auto defining_type_info = compiler->type_system().lookup_type_no_throw(type_name);
       if (defining_type_info && defining_type_info->m_field_metadata.count(field.name())) {
         const auto& meta = defining_type_info->m_field_metadata.at(field.name());
@@ -276,7 +261,6 @@ std::vector<symbol_info::FieldInfo> Workspace::get_field_suggestions(
         def_loc.char_idx = meta.definition_info->pos_in_line;
         field_info.m_def_location = def_loc;
       } else {
-        // If not in the current type, it might be in a parent.
         std::string current_search_type = type_name;
         int hierarchy_depth = 0;
         while (!current_search_type.empty() && current_search_type != "none" && hierarchy_depth < 32) {
@@ -306,11 +290,6 @@ std::vector<symbol_info::FieldInfo> Workspace::get_field_suggestions(
 
       suggestions.push_back(field_info);
     }
-  }
-
-  auto bitfield_type = dynamic_cast<BitFieldType*>(type_info);
-  if (bitfield_type) {
-    // TODO - handle bitfield suggestions
   }
 
   return suggestions;
@@ -517,19 +496,6 @@ void Workspace::start_tracking_file(const LSPSpec::DocumentUri& file_uri,
         lg::clear_print_callbacks();
         tracker->finish("OpenGOAL indexing failed");
         lg::debug("error when {}", progress_title);
-
-        auto parse_result = lsp_util::parse_compiler_error(e.what());
-        if (parse_result.success && !parse_result.file_path.empty()) {
-          auto target_uri = normalize_uri(lsp_util::uri_from_path(parse_result.file_path));
-          // We can't easily assign it to m_tracked_og_files here if it's not THIS file
-          // but we can at least log it or try to find it if it was just added
-          if (target_uri == norm_uri) {
-            // This will be handled after we emplace the file below, 
-            // but we need a way to pass it down.
-            // For now, let's just log it and rely on the next save to show it properly,
-            // or we can store it in a temporary map if we really wanted to.
-          }
-        }
       }
     }
     m_tracked_og_files.emplace(norm_uri, WorkspaceOGFile(norm_uri, content, *game_version));
@@ -657,7 +623,6 @@ void Workspace::handle_file_save(const LSPSpec::DocumentUri& file_uri) {
       tracker->finish("Recompile failed");
       auto parse_result = lsp_util::parse_compiler_error(e.what());
       if (parse_result.success) {
-        // If we found a file path in the error, try to use it, otherwise use current file
         auto target_uri = norm_uri;
         if (!parse_result.file_path.empty()) {
           auto target_path = fs::path(parse_result.file_path);
@@ -666,16 +631,13 @@ void Workspace::handle_file_save(const LSPSpec::DocumentUri& file_uri) {
           }
           target_uri = normalize_uri(lsp_util::uri_from_path(target_path));
         }
-
         if (m_tracked_og_files.find(target_uri) != m_tracked_og_files.end()) {
           m_tracked_og_files[target_uri].m_diagnostics = {parse_result.diagnostic};
         } else {
           lg::warn("Compiler error in untracked file: {}", target_uri);
-          // Fallback to current file if target is not tracked
           m_tracked_og_files[norm_uri].m_diagnostics = {parse_result.diagnostic};
         }
       } else {
-        // Fallback: assign to current file at line 0 if parsing failed
         LSPSpec::Diagnostic diag;
         diag.m_message = e.what();
         diag.m_severity = LSPSpec::DiagnosticSeverity::Error;
@@ -834,8 +796,6 @@ TSNode WorkspaceOGFile::get_node_at_position(const LSPSpec::Position position) c
     TSNode root_node = ts_tree_root_node(m_ast.get());
     TSNode node = ts_node_descendant_for_point_range(
         root_node, {position.m_line, position.m_character}, {position.m_line, position.m_character});
-
-    // If we are on a paren or space, look slightly to the left
     if (std::string(ts_node_type(node)) != "sym_name" && position.m_character > 0) {
       TSNode left_node = ts_node_descendant_for_point_range(
           root_node, {position.m_line, position.m_character - 1},
@@ -1190,7 +1150,6 @@ std::optional<LexicalBinding> find_lexical_binding(const WorkspaceOGFile& file, 
 std::string infer_type(const WorkspaceOGFile& file, TSNode node, Workspace& workspace) {
   if (ts_node_is_null(node)) return "";
 
-  // Normalize node: if we are on a sym_name, move up to sym_lit if it exists
   if (std::string(ts_node_type(node)) == "sym_name") {
     TSNode parent = ts_node_parent(node);
     if (!ts_node_is_null(parent) && std::string(ts_node_type(parent)) == "sym_lit") {
@@ -1204,7 +1163,6 @@ std::string infer_type(const WorkspaceOGFile& file, TSNode node, Workspace& work
   if (node_type == "sym_name" || node_type == "sym_lit") {
     std::string sym_name = ast_util::get_source_code(file.m_content, node);
 
-    // Check local bindings first to ensure local scope overrides global
     auto local_binding = find_lexical_binding(file, node, workspace);
     if (local_binding && !local_binding->type.empty()) {
       return local_binding->type;

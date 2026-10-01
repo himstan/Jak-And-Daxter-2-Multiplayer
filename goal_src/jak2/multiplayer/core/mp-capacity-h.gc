@@ -3,7 +3,6 @@
 
 ;; Keep this value in sync with kMPMaxPlayers in multiplayer_protocol.h
 (defglobalconstant MP_MAX_PLAYERS 8)
-
 (defconstant MP_PLAYER_ID_BITS
   (cond
     ((<= MP_MAX_PLAYERS 2) 1)

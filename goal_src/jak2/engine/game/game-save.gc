@@ -1682,9 +1682,9 @@
 auto-save-post
 
 (defbehavior auto-save-init-by-other auto-save ((arg0 symbol) (arg1 process) (arg2 int) (arg3 int) (arg4 symbol))
-  (debug-log *mp-debug-log?* "[Game-Save] auto-save-init-by-other: mode=~S notify-proc=~A card=~D slot=~D force=~A~%" arg0 arg1 arg2 arg3 arg4)
+  (log 'debug "[Game-Save] auto-save-init-by-other: mode=~S notify-proc=~A card=~D slot=~D force=~A~%" arg0 arg1 arg2 arg3 arg4)
   (when (handle->process (-> *game-info* auto-save-proc))
-    (debug-log *mp-debug-log?* "[Game-Save] auto-save-init-by-other ERROR: auto-save-proc already active!~%")
+    (log 'debug "[Game-Save] auto-save-init-by-other ERROR: auto-save-proc already active!~%")
     (send-event arg1 'notify 'error (mc-status-code no-process))
     (return #f)
     )
@@ -1739,7 +1739,7 @@ auto-save-post
 (defstate get-heap (auto-save)
   :virtual #t
   :code (behavior ()
-    (debug-log *mp-debug-log?* "[Game-Save] auto-save get-heap state entered! mode=~S~%" (-> self mode))
+    (log 'debug "[Game-Save] auto-save get-heap state entered! mode=~S~%" (-> self mode))
     (case (-> self mode)
       (('auto-save)
        (when (zero? (-> *game-info* auto-save-count))
@@ -1752,10 +1752,6 @@ auto-save-post
                )
            (suspend)
            )
-         ;; og:preserve-this Disable the auto-save prompt in speedrunner mode, we get it
-         (when (and (not (-> *pc-settings* speedrunner-mode?))
-                    (not (-> *pc-settings* is-host?)))
-          (activate-progress *dproc* 'icon-info))
          (while *progress-process*
            (suspend)
            )
@@ -2046,7 +2042,7 @@ auto-save-post
        #t
        )
       (('done)
-       (debug-log *mp-debug-log?* "[Game-Save] auto-save restore received done event!~%")
+       (log 'debug "[Game-Save] auto-save restore received done event!~%")
        (go-virtual done)
        )
       )

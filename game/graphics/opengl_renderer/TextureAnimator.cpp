@@ -423,20 +423,16 @@ GLuint ClutBlender::run(const float* weights) {
   return m_texture;
 }
 
-GLuint ClutBlender::make_source_texture(int source_idx) const {
+GLuint ClutBlender::make_source_texture(const int source_idx) const {
   ASSERT(source_idx >= 0 && source_idx < 2);
-
   std::vector<u32> rgba(m_dest->index_data.size());
-
   for (size_t i = 0; i < m_dest->index_data.size(); i++) {
     const u8 palette_idx = m_dest->index_data[i];
     memcpy(&rgba[i], (*m_cluts[source_idx])[palette_idx].data(), sizeof(u32));
   }
-
   GLuint texture = 0;
   glGenTextures(1, &texture);
   opengl_upload_texture(texture, rgba.data(), m_dest->w, m_dest->h);
-
   return texture;
 }
 
@@ -808,16 +804,11 @@ void TextureAnimator::add_to_clut_blender_group(int idx,
 
 void TextureAnimator::setup_darkjak_per_instance_textures() {
   ASSERT(m_darkjak_clut_blender_idx >= 0);
-
-  auto& group = m_clut_blender_groups.at(m_darkjak_clut_blender_idx);
-
+  const auto& group = m_clut_blender_groups.at(m_darkjak_clut_blender_idx);
   ASSERT(group.blenders.size() == group.outputs.size());
-
   for (size_t i = 0; i < group.blenders.size(); i++) {
     const int slot = group.outputs[i];
-
     auto& endpoints = m_darkjak_output_slots.at(slot);
-
     endpoints[0] = group.blenders[i].make_source_texture(0);  // normal
     endpoints[1] = group.blenders[i].make_source_texture(1);  // dark
   }

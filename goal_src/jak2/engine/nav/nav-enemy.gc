@@ -7,6 +7,7 @@
 
 (define-extern mp-enemy-allow-local-state-transition? (function enemy symbol))
 (define-extern mp-enemy-apply-remote-transform! (function enemy none))
+(define-extern mp-enemy-animation-post (function none :behavior enemy))
 
 ;; DECOMP BEGINS
 
@@ -274,7 +275,7 @@
   (if (and *debug-segment* (-> self enemy-info debug-draw-neck) (nonzero? (-> self neck)))
       (joint-mod-debug-draw (-> self neck))
       )
-  (ja-post)
+  (mp-enemy-animation-post)
   (mp-enemy-apply-remote-transform! (the-as enemy self))
   0
   (none)
@@ -1241,7 +1242,7 @@
   (process-drawable-from-entity! this arg0)
   (init-enemy! this)
   (when (and (-> this entity) (nonzero? (-> this entity)) (nonzero? (-> this entity aid)))
-      (debug-log *mp-debug-log?* "[Nav-Enemy] Spawning nav-enemy with init-from-entity with aid=~D, setting net-id to aid...~%"
+      (log 'debug "[Nav-Enemy] Spawning nav-enemy with init-from-entity with aid=~D, setting net-id to aid...~%"
               (-> this entity aid))
       (set! (-> this net-id) (-> this entity aid))
     )
@@ -1483,36 +1484,32 @@
   )
 
 (defmethod go-stare ((this nav-enemy))
-  (when (mp-enemy-allow-local-state-transition? (the-as enemy this))
-    (let ((s5-0 (-> this focus aware)))
-      (cond
-        ((or (and (-> this enemy-info use-frustration) (logtest? (enemy-flag not-frustrated) (-> this enemy-flags)))
-             (nav-enemy-method-163 this)
-             )
-         (go-stare2 this)
-         )
-        ((and (= s5-0 (enemy-aware enemy-aware-3)) (-> this enemy-info use-circling))
-         (go (method-of-object this circling))
-         )
-        ((= s5-0 (enemy-aware unaware))
-         (go (method-of-object this flee))
-         )
-        (else
-          (go-stare2 this)
-          )
+  (let ((s5-0 (-> this focus aware)))
+    (cond
+      ((or (and (-> this enemy-info use-frustration) (logtest? (enemy-flag not-frustrated) (-> this enemy-flags)))
+           (nav-enemy-method-163 this)
+           )
+       (go-stare2 this)
+       )
+      ((and (= s5-0 (enemy-aware enemy-aware-3)) (-> this enemy-info use-circling))
+       (go (method-of-object this circling))
+       )
+      ((= s5-0 (enemy-aware unaware))
+       (go (method-of-object this flee))
+       )
+      (else
+        (go-stare2 this)
         )
       )
     )
   )
 
 (defmethod go-hostile ((this nav-enemy))
-  (when (mp-enemy-allow-local-state-transition? (the-as enemy this))
-    (if (or (and (-> this enemy-info use-frustration) (logtest? (enemy-flag not-frustrated) (-> this enemy-flags)))
-            (nav-enemy-method-163 this)
-            )
-        (go-stare2 this)
-        (go (method-of-object this hostile))
-        )
+  (if (or (and (-> this enemy-info use-frustration) (logtest? (enemy-flag not-frustrated) (-> this enemy-flags)))
+          (nav-enemy-method-163 this)
+          )
+      (go-stare2 this)
+      (go (method-of-object this hostile))
       )
   )
 

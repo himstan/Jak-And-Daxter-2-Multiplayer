@@ -2,20 +2,15 @@
 (in-package goal)
 
 (defun mp-cutscene-actor-character ((actor scene-actor))
-  "Identify the standard high-resolution player characters used by scenes."
   (when (and actor (nonzero? actor))
     (let ((art-group (-> actor art-group)))
       (when (and art-group (nonzero? art-group))
         (cond
-          ((string= art-group "skel-jak-highres")
-           (return (mp-player-character jak)))
-          ((string= art-group "skel-sidekick-highres")
-           (return (mp-player-character daxter)))))))
+          ((string= art-group "skel-jak-highres") (return (mp-player-character jak)))
+          ((string= art-group "skel-sidekick-highres") (return (mp-player-character daxter)))))))
   (mp-player-character unknown))
 
-(defun mp-cutscene-appearance-record-eligible?
-       ((record mp-player-record) (character mp-player-character))
-  "Return true when a live roster entry can own a cutscene character's appearance."
+(defun mp-cutscene-appearance-record-eligible? ((record mp-player-record) (character mp-player-character))
   (and record
        (nonzero? record)
        (mp-player-character-valid? character)
@@ -26,10 +21,7 @@
        (= (-> record identity character) character)))
 
 (defun mp-cutscene-appearance-owner ((character mp-player-character))
-  "Prefer the local matching character, then the lowest matching active player ID."
-  (when (and *mp-player-controller*
-             (nonzero? *mp-player-controller*)
-             (mp-player-character-valid? character))
+  (when (and *mp-player-controller* (nonzero? *mp-player-controller*) (mp-player-character-valid? character))
     (let ((local-record (mp-local-player-record)))
       (when (mp-cutscene-appearance-record-eligible? local-record character)
         (return local-record)))
@@ -39,13 +31,8 @@
           (return record)))))
   (the-as mp-player-record #f))
 
-(defun mp-apply-cutscene-actor-appearance!
-       ((actor scene-actor) (actor-process process))
-  "Apply one synchronized appearance snapshot to a standard high-resolution scene actor."
-  (when (and actor
-             (nonzero? actor)
-             actor-process
-             (nonzero? actor-process))
+(defun mp-apply-cutscene-actor-appearance! ((actor scene-actor) (actor-process process))
+  (when (and actor (nonzero? actor) actor-process (nonzero? actor-process))
     (let ((character (mp-cutscene-actor-character actor)))
       (when (mp-player-character-valid? character)
         (let ((drawable (the-as process-drawable actor-process)))
@@ -54,8 +41,6 @@
               (when (and draw-control (nonzero? draw-control))
                 (let ((owner (mp-cutscene-appearance-owner character)))
                   (if (and owner (nonzero? owner))
-                      (mp-apply-render-appearance!
-                        draw-control
-                        (-> owner identity appearance))
-                      (mp-clear-render-appearance! draw-control))))))))))
+                    (mp-apply-render-appearance! draw-control (-> owner identity appearance))
+                    (mp-clear-render-appearance! draw-control))))))))))
   (none))

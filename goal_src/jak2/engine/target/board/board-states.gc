@@ -33,7 +33,7 @@
 ;; DECOMP BEGINS
 
 (defbehavior target-board-get-off-to-falling-or-indax target ((arg0 symbol))
-  (if (target-indax-board? self)
+  (if (mp-target-daxter? self)
       (go target-indax-start (the handle #f))
       (go target-falling arg0)
       )
@@ -41,7 +41,7 @@
   )
 
 (defbehavior target-board-get-off-to-hit-ground-or-indax target ((arg0 symbol))
-  (if (target-indax-board? self)
+  (if (mp-target-daxter? self)
       (go target-indax-start (the handle #f))
       (go target-hit-ground arg0)
       )
@@ -49,7 +49,7 @@
   )
 
 (defbehavior target-board-go-to-stance target ()
-  (if (target-indax-board? self)
+  (if (mp-target-daxter? self)
       (go target-indax-stance)
       (go target-stance)
       )
@@ -424,7 +424,7 @@
                   )
                 )
               (rumble-local-controller self 1 255 (seconds 0.3))
-              (if (target-indax-board? self)
+              (if (mp-target-daxter? self)
                   (target-board-play-daxter-vo self 1.0 0.2 #f)
                   (sound-play "board-boost")
                   )
@@ -2023,7 +2023,8 @@
     (set! (-> self board unknown-float00) 0.0)
     (set! (-> self board unknown-float01) 0.0)
     (set! (-> self control unknown-word04) (the-as uint #t))
-    (target-board-compute-edge)
+    (when (not-player-replica? self)
+      (target-board-compute-edge))
     (let ((f0-17 (vector-dot (-> self control c-R-w vector 2) (-> self control edge-grab-edge-dir))))
       (cond
         ((< 0.7 f0-17)

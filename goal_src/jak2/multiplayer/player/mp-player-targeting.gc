@@ -4,7 +4,6 @@
 (define *mp-combat-retarget-distance-bias* 8192.0)
 
 (defun mp-target-ride-along? ((target-proc process-focusable))
-  "Return true when a target process is riding along or is transitioning into ride-along."
   (and target-proc
        (nonzero? target-proc)
        (type? target-proc target)
@@ -14,12 +13,9 @@
                 (= (-> (the-as target target-proc) state name) 'target-ride-along))
            (and (-> (the-as target target-proc) next-state)
                 (nonzero? (-> (the-as target target-proc) next-state))
-                (= (-> (the-as target target-proc) next-state name) 'target-ride-along)))
-       )
-  )
+                (= (-> (the-as target target-proc) next-state name) 'target-ride-along)))))
 
 (defun mp-combat-valid-player-target? ((target-proc process-focusable) (require-control? symbol))
-  "True when a player target is safe to use for combat targeting."
   (and target-proc
        (nonzero? target-proc)
        (not (focus-test? target-proc disable dead inactive))
@@ -28,173 +24,60 @@
        (nonzero? (-> target-proc root))
        (or (not (mp-target-ride-along? target-proc))
            (let ((partner-jak (mp-jak-target-for (the-as target target-proc))))
-             (and partner-jak
-                  (nonzero? partner-jak)
-                  (focus-test? partner-jak dead)
-                  )
-             )
-           )
+             (and partner-jak (nonzero? partner-jak) (focus-test? partner-jak dead))))
        (or (not require-control?)
-           (and (-> (the-as target target-proc) control)
-                (nonzero? (-> (the-as target target-proc) control))))
-       )
-  )
+           (and (-> (the-as target target-proc) control) (nonzero? (-> (the-as target target-proc) control))))))
 
-(defun mp-combat-local-player-target ((require-control? symbol))
-  "Return the local player if they are valid for combat targeting."
-  (if (and *target*
-           (nonzero? *target*)
-           (mp-combat-valid-player-target? *target* require-control?))
-      (the-as process-focusable *target*)
-      (the-as process-focusable #f)
-      )
-  )
+(defun mp-combat-player-in-scope? ((source process-focusable) (candidate process-focusable))
+  (and (nonnull? source candidate)
+       (or (not (type? source enemy))
+           (not (or (mp-session-host?) (mp-session-client?)))
+           (mp-enemy-player-eligible? (mp-player-process-record candidate) (mp-enemy-level-id (the-as enemy source))))))
 
 (defun mp-combat-nearest-player-target ((source process-focusable)
                                         (current-target process-focusable)
                                         (require-control? symbol))
-  "Select across every valid player while retaining the current-target bias."
-  (when (or (not source)
-            (zero? source)
-            (not (-> source root))
-            (zero? (-> source root)))
+  (when (or (not source) (zero? source) (not (-> source root)) (zero? (-> source root)))
     (return (the-as process-focusable #f)))
   (let ((best-target (the-as process-focusable #f))
         (best-distance (meters 1000000.0)))
-    (when (mp-combat-valid-player-target? current-target require-control?)
+    (when (and (mp-combat-valid-player-target? current-target require-control?)
+               (mp-combat-player-in-scope? source current-target))
       (set! best-target current-target)
-      (set! best-distance
-            (vector-vector-distance
-              (-> source root trans) (-> current-target root trans))))
+      (set! best-distance (vector-vector-distance (-> source root trans) (-> current-target root trans))))
     (when (and (or (not best-target) (zero? best-target))
-               (mp-combat-valid-player-target? *target* require-control?))
+               (mp-combat-valid-player-target? *target* require-control?)
+               (mp-combat-player-in-scope? source *target*))
       (set! best-target *target*)
-      (set! best-distance
-            (vector-vector-distance
-              (-> source root trans) (-> *target* root trans))))
+      (set! best-distance (vector-vector-distance (-> source root trans) (-> *target* root trans))))
     (mp-for-each-player-target (player-id record candidate)
-      (when (and (mp-combat-valid-player-target?
-                   candidate require-control?)
+      (when (and (mp-combat-valid-player-target? candidate require-control?)
+                 (mp-combat-player-in-scope? source candidate)
                  (!= candidate best-target))
-        (let ((candidate-distance
-                (vector-vector-distance
-                  (-> source root trans) (-> candidate root trans))))
+        (let ((candidate-distance (vector-vector-distance (-> source root trans) (-> candidate root trans))))
           (when (or (not best-target)
                     (zero? best-target)
                     (if (= best-target current-target)
-                        (< candidate-distance
-                           (- best-distance
-                              *mp-combat-retarget-distance-bias*))
-                        (or (< candidate-distance best-distance)
-                            (and (= candidate-distance best-distance)
-                                 (< player-id
-                                    (mp-player-id-from-process
-                                      best-target))))))
+                      (< candidate-distance (- best-distance *mp-combat-retarget-distance-bias*))
+                      (or (< candidate-distance best-distance)
+                          (and (= candidate-distance best-distance)
+                               (< player-id (mp-player-id-from-process best-target))))))
             (set! best-target candidate)
             (set! best-distance candidate-distance)))))
     best-target))
 
 (defun mp-target-death-state? ((state-name symbol))
-  "Return true for target states that should be treated as player death."
   (or (= state-name 'target-death)
       (= state-name 'target-indax-death)
       (= state-name 'target-tube-death)
       (= state-name 'target-pilot-death)
       (= state-name 'target-indax-pilot-death)
-      (= state-name 'target-mech-death)
-      )
-  )
-
-(defun mp-guard-target-debug-allowed? ((net-id uint))
-  (and *mp-guard-target-debug?*
-       (nonzero? net-id)
-       (or (zero? *mp-guard-target-debug-net-id*)
-           (= net-id *mp-guard-target-debug-net-id*))
-       )
-  )
-
-(defun mp-guard-target-debug-ready? ((net-id uint))
-  (and (mp-guard-target-debug-allowed? net-id)
-       (>= (current-time) *mp-guard-target-debug-next-time*)
-       )
-  )
-
-(defun mp-guard-target-debug-bump! ()
-  (set! *mp-guard-target-debug-next-time* (+ (current-time) (seconds 0.35)))
-  (none)
-  )
-
-(defun mp-guard-target-debug-process-label ((proc process))
-  (cond
-    ((or (not proc) (zero? proc)) 'NONE)
-    ((mp-player-process-record proc)
-     (if (= (mp-player-id-from-process proc) (mp-local-player-id))
-         'LOCAL
-         'REMOTE-PUPPET))
-    (else 'OTHER)
-    )
-  )
-
-(defun mp-guard-target-debug-handle-label ((target-handle handle))
-  (if (and target-handle (nonzero? target-handle))
-      (mp-guard-target-debug-process-label (handle->process-safe target-handle))
-      'NONE
-      )
-  )
-
-(defun mp-guard-target-debug-process-type ((proc process))
-  (if (and proc (nonzero? proc))
-      (-> proc type symbol)
-      'none
-      )
-  )
-
-(defun mp-guard-target-debug-handle-type ((target-handle handle))
-  (if (and target-handle (nonzero? target-handle))
-      (mp-guard-target-debug-process-type (handle->process-safe target-handle))
-      'none
-      )
-  )
-
-(defun mp-any-player-near-and-piloting? ((veh process-drawable) (dist-sq float))
-  "Check if any player, local or puppet, is near the vehicle and is a pilot."
-  (let ((near? #f))
-    (when (and veh
-               (nonzero? veh)
-               (-> veh root)
-               (nonzero? (-> veh root)))
-      (when (and *target*
-                 (nonzero? *target*)
-                 (focus-test? *target* pilot)
-                 (< (vector-vector-distance-squared (-> veh root trans) (target-pos 0)) dist-sq))
-        (set! near? #t)
-        )
-      (when (not near?)
-        (mp-for-each-player-target (player-id record player-target)
-          (when (and (focus-test? player-target pilot)
-                     (-> player-target root)
-                     (nonzero? (-> player-target root))
-                     (< (vector-vector-distance-squared
-                          (-> veh root trans) (-> player-target root trans))
-                        dist-sq))
-            (set! near? #t)))
-        )
-      )
-    near?
-    )
-  )
+      (= state-name 'target-mech-death)))
 
 (defun mp-point-near-pos-xz? ((point vector) (pos vector) (radius float))
-  (and point
-       (nonzero? point)
-       pos
-       (nonzero? pos)
-       (< (vector-vector-xz-distance-squared point pos) (square radius))
-       )
-  )
+  (and point (nonzero? point) pos (nonzero? pos) (< (vector-vector-xz-distance-squared point pos) (square radius))))
 
 (defun mp-any-player-near-pos-xz? ((pos vector) (radius float))
-  "True if either local target or remote target representation is within radius on XZ."
   (let ((near? #f))
     (when (and pos (nonzero? pos))
       (when (and *target*
@@ -202,39 +85,10 @@
                  (-> *target* control)
                  (nonzero? (-> *target* control))
                  (mp-point-near-pos-xz? (-> *target* control trans) pos radius))
-        (set! near? #t)
-        )
+        (set! near? #t))
       (when (not near?)
         (mp-for-each-player-record (player-id record)
           (let ((player-pos (mp-player-record-position record)))
-            (when (and player-pos
-                       (nonzero? player-pos)
-                       (mp-point-near-pos-xz? player-pos pos radius))
-              (set! near? #t))))
-        )
-      )
-    near?
-    )
-  )
-
-(defun mp-any-player-y-at-least? ((min-y float))
-  "True if either local target or remote target representation is at or above min-y."
-  (let ((high-enough? #f))
-    (when (and *target*
-               (nonzero? *target*)
-               (-> *target* control)
-               (nonzero? (-> *target* control))
-               (>= (-> *target* control trans y) min-y))
-      (set! high-enough? #t)
-      )
-    (when (not high-enough?)
-      (mp-for-each-player-record (player-id record)
-        (let ((player-pos (mp-player-record-position record)))
-          (when (and player-pos
-                     (nonzero? player-pos)
-                     (>= (-> player-pos y) min-y))
-            (set! high-enough? #t))))
-    high-enough?
-    )
-  )
-  )
+            (when (and player-pos (nonzero? player-pos) (mp-point-near-pos-xz? player-pos pos radius))
+              (set! near? #t))))))
+    near?))

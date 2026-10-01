@@ -327,7 +327,7 @@ void SymbolInfoMap::add_reference(const std::string& name, const goos::Object& f
       file_refs[name] = {};
     }
 
-    // Deduplicate: don't add if it's the exact same location
+    // deduplicate: don't add if it's the exact same location
     bool duplicate = false;
     for (const auto& existing : file_refs[name]) {
       if (existing.line_idx == ref_loc.line_idx && existing.char_idx == ref_loc.char_idx) {

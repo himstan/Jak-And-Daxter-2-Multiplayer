@@ -11,7 +11,7 @@
   (if (want-to-darkjak?)
       (go target-darkjak-get-on (darkjak-stage active))
       )
-  (if (and (cpad-pressed? (-> self control cpad number) circle) (can-feet? #f))
+  (if (and (cpad-pressed? (-> self control cpad number) circle) (not-player-replica? self) (can-feet? #f))
       (go target-attack-air #f)
       )
   (if (logtest? (-> self control status) (collide-status on-surface))
@@ -92,6 +92,7 @@
       )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? x)
+             (not-player-replica? self)
              (can-jump? #f)
              )
         (target-jump-go)
@@ -99,12 +100,14 @@
 
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? circle)
+             (not-player-replica? self)
              (can-feet? #t)
              )
         (go target-attack)
         )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? square)
+             (not-player-replica? self)
              (can-hands? #t)
              )
         (go target-running-attack)
@@ -171,18 +174,21 @@
         )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? x)
+             (not-player-replica? self)
              (can-jump? #f)
              )
         (target-jump-go)
         )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? circle)
+             (not-player-replica? self)
              (can-feet? #t)
              )
         (go target-attack)
         )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? square)
+             (not-player-replica? self)
              (can-hands? #t)
              )
         (go target-running-attack)
@@ -230,14 +236,15 @@
     ((-> self state-hook))
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? x)
+             (not-player-replica? self)
              (can-jump? #f)
              )
         (target-jump-go)
         )
-    (if (and (cpad-pressed? (-> self control cpad number) circle) (can-feet? #t))
+    (if (and (cpad-pressed? (-> self control cpad number) circle) (not-player-replica? self) (can-feet? #t))
         (go target-attack)
         )
-    (if (and (cpad-pressed? (-> self control cpad number) square) (can-hands? #t))
+    (if (and (cpad-pressed? (-> self control cpad number) square) (not-player-replica? self) (can-hands? #t))
         (go target-running-attack)
         )
     (if (and (not (logtest? (-> self control status) (collide-status on-surface)))
@@ -443,6 +450,7 @@
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (when (and (recently-pressed? x)
                (can-jump? #f)
+               (not-player-replica? self)
                (!= (-> self state-time) (current-time))
                )
       (forward-up-nopitch->quaternion
@@ -458,6 +466,7 @@
       )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? circle)
+             (not-player-replica? self)
              (can-feet? #t)
              (!= (-> self state-time) (current-time))
              )
@@ -468,6 +477,7 @@
         )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? square)
+             (not-player-replica? self)
              (can-hands? #t)
              (time-elapsed? (-> self control last-running-attack-end-time) (seconds 0.7))
              (!= (-> self state-time) (current-time))
@@ -1504,6 +1514,7 @@
       (else
         )
       )
+    (set! (-> self state-param) arg2)
     )
   :exit target-exit
   :code (behavior ((arg0 float) (arg1 float) (arg2 symbol))
@@ -1533,6 +1544,7 @@
           )
         )
       )
+    (log 'debug "sending target to target-duck-high-jump-jump with arg0=~D arg1=~D arg2=~A" arg0 arg1 arg2)
     (go target-duck-high-jump-jump arg0 arg1 arg2)
     )
   :post target-post
@@ -1555,6 +1567,12 @@
         (set! (-> self control mod-surface) *high-jump-mods*)
         )
       )
+      (when (and (or (= arg2 'flop) (= arg2 'flop-forward))
+                       (!= (ja-group) jakb-flop-jump-ja))
+        (ja-channel-set! 1)
+        (ja :group! jakb-flop-jump-ja :num! (identity (ja-aframe 25.0 0)))
+        )
+      (set! (-> self state-param) arg2)
     )
   :exit target-exit
   :trans (behavior ()
@@ -1774,7 +1792,7 @@
              (nonzero? (-> self darkjak))
              (logtest? (-> self darkjak stage) (darkjak-stage giant))
              )
-        (when (not-puppet? self)
+        (when (not-player-replica? self)
           (activate! *camera-smush-control* 1638.4 15 75 1.0 0.9 (-> *display* camera-clock))
           )
         )
@@ -1848,12 +1866,14 @@
       )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? circle)
+             (not-player-replica? self)
              (can-feet? #t)
              )
         (go target-attack)
         )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (if (and (recently-pressed? square)
+             (not-player-replica? self)
              (can-hands? #t)
              )
         (go target-running-attack)
@@ -2471,7 +2491,7 @@
           (vector-matrix*! (-> self control align-xz-vel) s5-1 (-> self control c-R-w))
           )
         (when (!= (the-as float (-> self control unknown-word04)) 0.0)
-          (when (not-puppet? self)
+          (when (not-player-replica? self)
             (activate! *camera-smush-control* 819.2 15 75 1.0 0.9 (-> *display* camera-clock))
             )
           (set! f26-0 (-> self control unknown-word04))
@@ -2530,7 +2550,7 @@
                     t1-6
                     )
                   )
-                (when (not-puppet? self)
+                (when (not-player-replica? self)
                   (activate! *camera-smush-control* 819.2 15 75 1.0 0.9 (-> *display* camera-clock))
                   )
                 (set! f26-0 -61440.0)
@@ -3030,6 +3050,7 @@
         )
       )
     (if (and (cpad-pressed? (-> self control cpad number) circle)
+             (not-player-replica? self)
              (and (can-feet? #f)
                   (let ((v1-65 (ja-group)))
                     (and v1-65 (or (= v1-65 jakb-attack-uppercut-ja) (= v1-65 jakb-gun-attack-upperbutt-ja)))
@@ -3437,6 +3458,7 @@
     (when (and (!= (-> self control unknown-spool-anim00) 'stuck) (!= (-> self state-time) (current-time)))
       ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
       (if (and (recently-pressed? circle)
+               (not-player-replica? self)
                (can-feet? #f)
                )
           (go target-attack-air 'flop)
@@ -3666,6 +3688,7 @@
           )
         )
     (if (and (cpad-pressed? (-> self control cpad number) circle)
+             (not-player-replica? self)
              (can-feet? #f)
              (let ((v1-20 (ja-group)))
                (and (and v1-20 (= v1-20 jakb-jump-loop-ja)) (= (-> self skel root-channel 0) (-> self skel channel)))

@@ -2,11 +2,11 @@
 (in-package goal)
 
 (define-perm *mp-session-player-limit* uint (the uint 2))
+
 (define-extern *mp-block-remote-respawn-on-me?* symbol)
 (define-extern *mp-block-local-respawn-on-remote?* symbol)
 
 (defun mp-set-session-player-limit! ((player-limit uint))
-  "Configure the total player limit for the next hosted session."
   (set! *mp-session-player-limit*
         (cond
           ((< player-limit (the uint 2)) (the uint 2))
@@ -14,8 +14,7 @@
           (else player-limit)))
   *mp-session-player-limit*)
 
-(defconstant MP_INVALID_PLAYER_ID (the uint #xffffffff))
-(defconstant MP_INVALID_COMPACT_PLAYER_ID (the uint8 #xff))
+(defconstant MP_INVALID_PLAYER_ID (the uint8 #xff))
 (defconstant MP_INVALID_PAD_INDEX (the uint8 #xff))
 (defconstant MP_REMOTE_PLAYER_MARKER_KEY_BASE (the int #x4d505240))
 (defconstant MP_PLAYER_NAME_SIZE 16)
@@ -23,99 +22,73 @@
 (defenum mp-player-runtime-flags
   :type uint32
   :bitfield #t
-  (dying               0)
-  (dead                1)
-  (respawning          2)
-  (interp-initialized  3)
-  (was-far             4)
-  (warping             5)
-  (recovering          6)
-  (force-presentation  7)
-  (pending-gun-shot    8)
-  (join-announced      9)
-  )
+  (dying 0)
+  (dead 1)
+  (respawning 2)
+  (interp-initialized 3)
+  (was-far 4)
+  (warping 5)
+  (recovering 6)
+  (force-presentation 7)
+  (pending-gun-shot 8)
+  (join-announced 9))
 
 (defenum mp-player-mission-flags
   :type uint32
   :bitfield #t
-  (stadium-board1-tutorial-done      0)
-  (stadium-board1-tutorial-announced 1)
-  )
+  (stadium-board1-tutorial-done 0)
+  (stadium-board1-tutorial-announced 1))
 
 (defenum mp-culling-override-flags
   :type uint32
   :bitfield #t
-  (race       0)
-  )
+  (race 0))
 
-(defenum mp-puppet-lifecycle
+(defenum player-replica-lifecycle
   :type uint8
-  (none      0)
-  (spawning  1)
-  (active    2)
-  (culled    3)
-  )
-
-(defenum mp-session-role
-  :type int32
-  (none   -1)
-  (host    0)
-  (client  1)
-  )
+  (none 0)
+  (spawning 1)
+  (active 2)
+  (culled 3))
 
 (defenum mp-player-character
   :type uint32
   (unknown 0)
-  (jak     1)
-  (daxter  2)
-  )
+  (jak 1)
+  (daxter 2))
 
 (defenum mp-player-visual-secrets
   :type uint32
   :bitfield #t
-  (big-head       0)
-  (little-head    1)
-  (goatee-visible 2)
-  )
+  (big-head 0)
+  (little-head 1)
+  (goatee-visible 2))
 
-(defconstant MP_PLAYER_VISUAL_SECRETS_MASK
-  (mp-player-visual-secrets big-head little-head goatee-visible))
-
+(defconstant MP_PLAYER_VISUAL_SECRETS_MASK (mp-player-visual-secrets big-head little-head goatee-visible))
 (defconstant MP_SESSION_CHARACTER_CONFIG_SIZE (* 4 MP_MAX_PLAYERS))
 
 (deftype mp-session-character-config (structure)
   ((characters mp-player-character MP_MAX_PLAYERS))
   :size-assert MP_SESSION_CHARACTER_CONFIG_SIZE)
 
-(define-perm *mp-session-character-config* mp-session-character-config
-  (new 'static 'mp-session-character-config))
+(define-perm *mp-session-character-config* mp-session-character-config (new 'static 'mp-session-character-config))
 
 (defun mp-player-character-valid? ((character mp-player-character))
-  (or (= character (mp-player-character jak))
-      (= character (mp-player-character daxter))))
+  (or (= character (mp-player-character jak)) (= character (mp-player-character daxter))))
 
 (defun mp-reset-session-player-characters! ()
-  "Restore the character choices used by the next hosted session."
-  (when (and *mp-session-character-config*
-             (nonzero? *mp-session-character-config*))
+  (when (and *mp-session-character-config* (nonzero? *mp-session-character-config*))
     (dotimes (player-id MP_MAX_PLAYERS)
       (set! (-> *mp-session-character-config* characters player-id)
-            (if (zero? (logand player-id 1))
-                (mp-player-character jak)
-                (mp-player-character daxter)))))
+            (if (zero? (logand player-id 1)) (mp-player-character jak) (mp-player-character daxter)))))
   (none))
 
 (defun mp-session-player-character ((player-id uint))
-  "Read a character choice for the next hosted session."
-  (if (and *mp-session-character-config*
-           (nonzero? *mp-session-character-config*)
-           (< player-id (the uint MP_MAX_PLAYERS)))
-      (-> *mp-session-character-config* characters player-id)
-      (mp-player-character unknown)))
+  (if (and *mp-session-character-config* (nonzero? *mp-session-character-config*) (< player-id (the uint MP_MAX_PLAYERS)))
+    (-> *mp-session-character-config* characters player-id)
+    (mp-player-character unknown)))
 
-(defun mp-set-session-player-character!
-       ((player-id uint) (character mp-player-character))
-  "Configure one player slot for the next hosted session."
+(defun mp-set-session-player-character! ((player-id uint) (character mp-player-character))
   (when (or (>= player-id (the uint MP_MAX_PLAYERS))
             (not (mp-player-character-valid? character))
             (not *mp-session-character-config*)
@@ -127,34 +100,25 @@
 (mp-reset-session-player-characters!)
 
 (defun mp-sync-preferences-to-session-host-config! ()
-  "Initialize session player limit and character assignments from saved preferences."
   (let ((limit (pc-multi-get-preference-player-limit)))
     (when (and (>= limit (the uint 2)) (<= limit (the uint MP_MAX_PLAYERS)))
       (mp-set-session-player-limit! limit)))
-  (when (and *mp-session-character-config*
-             (nonzero? *mp-session-character-config*))
+  (when (and *mp-session-character-config* (nonzero? *mp-session-character-config*))
     (dotimes (player-id MP_MAX_PLAYERS)
-      (let ((character (the-as mp-player-character
-                               (pc-multi-get-preference-player-character (the uint player-id)))))
+      (let ((character (the-as mp-player-character (pc-multi-get-preference-player-character (the uint player-id)))))
         (when (mp-player-character-valid? character)
           (set! (-> *mp-session-character-config* characters player-id) character)))))
   (none))
 
 (defun mp-setup-host-bridge! ((internet-host? object))
-  "Snapshot the next-session GOAL configuration into the network session."
-  (when (and *mp-session-character-config*
-             (nonzero? *mp-session-character-config*))
+  (when (and *mp-session-character-config* (nonzero? *mp-session-character-config*))
     (if internet-host?
-        (pc-multi-setup-internet-host
-          *mp-session-player-limit*
-          (the-as uint *mp-session-character-config*))
-        (pc-multi-setup-host
-          *mp-session-player-limit*
-          (the-as uint *mp-session-character-config*))))
+      (pc-multi-setup-internet-host *mp-session-player-limit* (the-as uint *mp-session-character-config*))
+      (pc-multi-setup-host *mp-session-player-limit* (the-as uint *mp-session-character-config*))))
   (none))
 
 (deftype mp-player-identity (structure)
-  ((player-id       uint32)
+  ((player-id       uint8)
    (character       mp-player-character)
    (identity-ready? uint8)
    (state-ready?    uint8)
@@ -162,115 +126,110 @@
    (spectator-only? uint8)
    (name            uint8 MP_PLAYER_NAME_SIZE)
    (lobby-ready?    uint8)
-   (appearance      mp-player-appearance :inline)
-   )
+   (appearance      mp-player-appearance :inline))
   :size-assert 288)
 
+(defenum mp-player-activity
+  :type uint8
+  (unavailable 0)
+  (lobby 1)
+  (game-starting 2)
+  (in-game 3))
+
 (deftype mp-player-connection-state (structure)
-  ((status                 mp-connection-status)
-   (latest-state-sequence  uint32)
+  ((latest-state-sequence  uint32)
    (latest-turret-sequence uint32)
+   (lifecycle-generation   uint32)
+   (activity               mp-player-activity)
    (connected?             uint8)
    (state-cached?          uint8)
-   (pad                    uint8 2)
-   )
+   (activity-changed?      uint8))
   :size-assert 16)
+
+(deftype mp-player-level-slot (structure)
+  ((level-id uint8)
+   (flags    uint8))
+  :pack-me
+  :size-assert 2)
 
 (deftype mp-player-transform-state (structure)
   ((position vector :inline)
    (velocity vector :inline)
    (angle    float)
-   (level    uint32)
-   (reserved uint32 2)
-   )
+   (levels   mp-player-level-slot MP_PLAYER_LEVEL_SLOT_COUNT :inline))
   :size-assert 48)
 
 (deftype mp-player-action-state (structure)
-  ((target-state-id       uint32)
-   (darkjak-stage         uint32)
+  ((target-state-id        uint32)
+   (darkjak-stage          uint32)
    (authoritative-sequence uint32)
-   (action-state-id       uint32)
-   (scene-state           uint8)
-   (respawn-flags         uint8)
-   (death-state           uint8)
-   (scene-latched?        uint8)
+   (action-state-id        uint32)
+   (scene-state            uint8)
+   (respawn-flags          uint8)
+   (death-state            uint8)
+   (scene-latched?         uint8)
    (last-replayed-sequence uint32)
-   (riding-along-player-id uint32)
-   (visual-secrets        mp-player-visual-secrets)
-   )
+   (riding-along-player-id uint8)
+   (visual-secrets         mp-player-visual-secrets))
   :size-assert 32)
 
 (deftype mp-player-input-state (structure)
   ((buttons         uint16)
    (leftx           uint8)
    (lefty           uint8)
-   (rightx          uint8)
-   (righty          uint8)
    (equipped-weapon uint8)
-   (reserved        uint8)
-   (camera-angle-y  float)
-   (pad             uint32)
-   )
-  :size-assert 16)
+   (camera-angle-y  float))
+  :size-assert 12)
 
 (deftype mp-player-vehicle-state (structure)
-  ((vehicle-id uint32)
-   (seat-index uint8)
+  ((vehicle-id     uint32)
+   (seat-index     uint8)
    (turret-active? uint8)
-   (reserved uint8 2)
-   (turret-roty float)
-   (turret-rotx float)
-   (state mp-vehicle-state :inline)
-   )
+   (turret-roty    float)
+   (turret-rotx    float)
+   (state          mp-vehicle-state :inline))
   :size-assert 96)
 
-(deftype mp-target-ghost-record (structure)
-  ((trans           vector     :inline)
+(deftype target-record (structure)
+  ((trans           vector :inline)
    (quat            quaternion :inline)
-   (velocity        vector     :inline)
+   (velocity        vector :inline)
    (state-id        uint32)
    (equipped-weapon uint8)
-   (pad-reserved    uint8 3)
    (buttons         uint16)
    (leftx           uint8)
    (lefty           uint8)
-   (rightx          uint8)
-   (righty          uint8)
    (cam-angle-y     float)
    (health          float)
    (last-update     time-frame)
-   (active?         symbol)
-   (pad             uint8 12)
-   )
-  :size-assert 96)
+   (active?         symbol))
+  :size-assert 84)
 
 (deftype mp-player-runtime-state (structure)
-  ((target-handle handle)
-   (vehicle-handle handle)
-   (ghost mp-target-ghost-record :inline)
-   (presentation-position vector :inline)
-   (presentation-quaternion quaternion :inline)
-   (last-fresh-input-time time-frame)
-   (action-warmup-start time-frame)
-   (last-state-packet-id uint32)
-   (last-action-sequence uint32)
-   (state-mismatch-count int32)
-   (death-state uint32)
-   (pending-gun-shot-sequence uint32)
-   (last-gun-shot-sequence uint32)
+  ((target-handle                  handle)
+   (vehicle-handle                 handle)
+   (record                         target-record :inline)
+   (presentation-position          vector :inline)
+   (presentation-quaternion        quaternion :inline)
+   (last-fresh-input-time          time-frame)
+   (action-warmup-start            time-frame)
+   (last-state-packet-id           uint32)
+   (last-action-sequence           uint32)
+   (state-mismatch-count           int32)
+   (death-state                    uint32)
+   (pending-gun-shot-sequence      uint32)
+   (last-gun-shot-sequence         uint32)
    (last-gun-replay-debug-sequence uint32)
-   (interpolation-angle float)
-   (pending-gun-shot-camera-angle float)
-   (last-gun-log-active int32)
-   (last-gun-log-requested int32)
-   (pad-index uint8)
-   (puppet-lifecycle mp-puppet-lifecycle)
-   (pending-gun-shot-weapon uint8)
-   (reserved-byte uint8)
-   (flags mp-player-runtime-flags)
-   (mission-flags mp-player-mission-flags)
-   (reserved uint32 2)
-   )
+   (interpolation-angle            float)
+   (pending-gun-shot-camera-angle  float)
+   (last-gun-log-active            int32)
+   (last-gun-log-requested         int32)
+   (pad-index                      uint8)
+   (replica-lifecycle              player-replica-lifecycle)
+   (pending-gun-shot-weapon        uint8)
+   (flags                          mp-player-runtime-flags)
+   (mission-flags                  mp-player-mission-flags)
+   (pending-gun-shot-time          time-frame))
   :size-assert 224)
 
 (deftype mp-player-record (structure)
@@ -280,33 +239,27 @@
    (action     mp-player-action-state :inline)
    (input      mp-player-input-state :inline)
    (vehicle    mp-player-vehicle-state :inline)
-   (runtime    mp-player-runtime-state :inline)
-  )
+   (runtime    mp-player-runtime-state :inline))
   :size-assert 720)
 
-(defconstant MP_PLAYER_CONTROLLER_SIZE (+ (* 720 MP_MAX_PLAYERS) 16))
+(defconstant MP_PLAYER_CONTROLLER_SIZE (+ (* 720 MP_MAX_PLAYERS) 2))
 
 (deftype mp-player-controller (structure)
-  ((records                  mp-player-record MP_MAX_PLAYERS :inline)
-   (local-player-id          uint32)
-   (host-player-id           uint32)
-   (reserved                 uint32 2)
-   )
+  ((records         mp-player-record MP_MAX_PLAYERS :inline)
+   (local-player-id uint8)
+   (host-player-id  uint8))
   :size-assert MP_PLAYER_CONTROLLER_SIZE)
 
-(define-perm *mp-player-controller* mp-player-controller
-  (new 'static 'mp-player-controller))
-(define-perm *mp-session-role* mp-session-role (mp-session-role none))
+(define-perm *mp-player-controller* mp-player-controller (new 'static 'mp-player-controller))
 
-(define-extern mp-puppet-update-ghost!
-  (function mp-target-ghost-record mp-player-record none))
-(define-extern mp-puppet-apply-weapon-state!
-  (function target mp-target-ghost-record none))
-(define-extern mp-puppet-flush-pending-gun-shot!
-  (function target mp-target-ghost-record none))
-(define-extern mp-puppet-clear-stale! (function mp-player-record none))
-(define-extern mp-puppet-spawn (function mp-player-record target))
-(define-extern mp-puppet-deactivate! (function mp-player-record none))
+(define-extern mp-player-primary-level-id (function mp-player-record uint))
+(define-extern mp-enemy-player-eligible? (function mp-player-record uint symbol))
+(define-extern mp-pack-local-level-state! (function mp-player-record none))
+(define-extern player-replica-apply-weapon-state! (function target target-record none))
+(define-extern player-replica-flush-pending-gun-shot! (function target target-record none))
+(define-extern player-replica-clear-stale! (function mp-player-record none))
+(define-extern player-replica-spawn (function mp-player-record target))
+(define-extern player-replica-deactivate! (function mp-player-record none))
 (define-extern mp-trigger-death-taunt! (function target none))
 (define-extern mp-player-blocks-respawn? (function mp-player-record symbol))
 (define-extern mp-apply-player-render-appearance! (function target none))
@@ -314,11 +267,12 @@
 (define-extern mp-player-record-by-id (function uint mp-player-record))
 (define-extern mp-player-runtime-flag? (function mp-player-record mp-player-runtime-flags symbol))
 (define-extern mp-player-runtime-set-flag! (function mp-player-record mp-player-runtime-flags mp-player-runtime-flags))
-(define-extern mp-player-runtime-clear-flag! (function mp-player-record mp-player-runtime-flags mp-player-runtime-flags))
+(define-extern mp-player-runtime-clear-flag!
+  (function mp-player-record mp-player-runtime-flags mp-player-runtime-flags))
 (define-extern mp-player-mission-flag? (function mp-player-record mp-player-mission-flags symbol))
 (define-extern mp-player-mission-set-flag! (function mp-player-record mp-player-mission-flags none))
 (define-extern mp-player-mission-clear-flag! (function mp-player-record mp-player-mission-flags none))
-(define-extern mp-player-record-remote? (function mp-player-controller mp-player-record symbol))
+(define-extern is-record-remote-player? (function mp-player-record symbol))
 (define-extern mp-broadcast-process-tree (function process-tree symbol uint uint none))
 (define-extern mp-broadcast-event-to-active-processes (function symbol uint uint object))
 (define-extern mp-broadcast-player-join! (function mp-player-record none))
@@ -330,4 +284,5 @@
 (define-extern mp-culling-clear-override! (function mp-culling-override-flags uint))
 (define-extern mp-culling-override-active? (function symbol))
 (define-extern mp-culling-suppressed-for-player? (function mp-player-record symbol))
-(define-extern mp-culling-reset-policy! (function none))
+(define-extern mp-teleport-bootstrap-to-record! (function target mp-player-record symbol))
+(define-extern mp-enemy-participant-departed! (function uint none))

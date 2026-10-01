@@ -573,7 +573,7 @@
 
 (defstate cam-master-active (camera-master)
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
-    (when (puppet? proc)
+    (when (player-replica? proc)
       (return #f)
       )
     (local-vars (v0-0 object) (v1-125 uint))

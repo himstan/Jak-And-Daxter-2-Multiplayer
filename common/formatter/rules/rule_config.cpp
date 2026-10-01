@@ -29,9 +29,10 @@ static FormFormattingConfig new_function_rule(int start_index, bool has_constant
           [start_index](const std::vector<std::string>& /*curr_lines*/) { return start_index; },
       .has_constant_pairs = has_constant_pairs};
   auto arg_list_config = std::make_shared<FormFormattingConfig>();
-  arg_list_config->force_inline = true;
+  arg_list_config->force_inline = false;
   arg_list_config->hang_forms = false;
-  cfg.index_configs.emplace(2, arg_list_config);
+  arg_list_config->indentation_width = 1;
+  cfg.index_configs.emplace(start_index - 1, arg_list_config);
   return cfg;
 }
 
@@ -88,8 +89,9 @@ static FormFormattingConfig new_defmethod_rule(int start_index, bool has_constan
   // Right now this only works for non-`new` methods (else we may bleed into the body of a normal
   // method)
   auto arg_list_config = std::make_shared<FormFormattingConfig>();
-  arg_list_config->force_inline = true;
+  arg_list_config->force_inline = false;
   arg_list_config->hang_forms = false;
+  arg_list_config->indentation_width = 1;
   FormFormattingConfig cfg = {.config_set = true,
                               .hang_forms = false,
                               .inline_until_index =
@@ -107,18 +109,21 @@ static FormFormattingConfig new_defmethod_rule(int start_index, bool has_constan
 }
 
 static FormFormattingConfig new_lambda_rule(int start_index, bool has_constant_pairs = false) {
-  FormFormattingConfig cfg = {.config_set = true,
-                              .hang_forms = false,
-                              .inline_until_index =
-                                  [start_index](const std::vector<std::string>& curr_lines) {
-                                    if (curr_lines.size() >= 2 && curr_lines.at(1) == ":behavior") {
-                                      // defmethod was changed to omit the type name for everything
-                                      // except the `new` method, so special case.
-                                      return start_index + 2;
-                                    }
-                                    return start_index;
-                                  },
-                              .has_constant_pairs = has_constant_pairs};
+  FormFormattingConfig cfg = {
+      .config_set = true,
+      .hang_forms = false,
+      .inline_until_index =
+          [start_index](const std::vector<std::string>& curr_lines) {
+            if (curr_lines.size() >= 2) {
+              if (curr_lines.at(1) == ":behavior") {
+                return start_index + 2;
+              } else if (str_util::starts_with(curr_lines.at(1), ":behavior")) {
+                return start_index + 1;
+              }
+            }
+            return start_index;
+          },
+      .has_constant_pairs = has_constant_pairs};
   return cfg;
 }
 
@@ -226,6 +231,12 @@ static FormFormattingConfig new_binding_rule(int form_head_width) {
   };
   binding_list_config->prevent_inlining =
       true;  // TODO - we only want to prevent inlining if there are more than 2 elements
+
+  auto single_binding_config = std::make_shared<FormFormattingConfig>();
+  single_binding_config->config_set = true;
+  single_binding_config->hang_forms = true;
+  binding_list_config->default_index_config = single_binding_config;
+
   cfg.index_configs.emplace(1, binding_list_config);
   return cfg;
 }
@@ -249,6 +260,12 @@ static FormFormattingConfig new_inline_binding_rule(int form_head_width) {
   binding_list_config->should_prevent_inlining = [](FormFormattingConfig /*config*/, int num_refs) {
     return false;
   };
+
+  auto single_binding_config = std::make_shared<FormFormattingConfig>();
+  single_binding_config->config_set = true;
+  single_binding_config->hang_forms = true;
+  binding_list_config->default_index_config = single_binding_config;
+
   cfg.index_configs.emplace(1, binding_list_config);
   return cfg;
 }
@@ -289,11 +306,11 @@ const std::unordered_map<std::string, FormFormattingConfig> opengoal_form_config
     {"defproc", new_defproc_rule(3, 1, {3, 4, 5, 6})},
     {"suspend-for", new_flow_rule(2)},
     {"spawn-proc", new_flow_rule(2)},
-    {"defun", new_flow_rule(3)},
-    {"defun-recursive", new_flow_rule(4)},
-    {"defun-debug-recursive", new_flow_rule(4)},
-    {"defun-debug", new_flow_rule(3)},
-    {"defbehavior", new_flow_rule(4)},
+    {"defun", new_function_rule(3)},
+    {"defun-recursive", new_function_rule(4)},
+    {"defun-debug-recursive", new_function_rule(4)},
+    {"defun-debug", new_function_rule(3)},
+    {"defbehavior", new_function_rule(4)},
     {"if", new_inlineable_flow_rule(2)},
     {"aif", new_inlineable_flow_rule(2)},
     {"#if", new_inlineable_flow_rule(2)},
@@ -317,6 +334,8 @@ const std::unordered_map<std::string, FormFormattingConfig> opengoal_form_config
     {"behavior", new_flow_rule(2)},
     {"dotimes", new_flow_rule(2)},
     {"dolist", new_flow_rule(2)},
+    {"mp-for-each-player-record", new_flow_rule(2)},
+    {"mp-for-each-player-target", new_flow_rule(2)},
     {"process-spawn-function", new_flow_rule(2)},
     {"let", new_binding_rule(4)},
     {"protect", new_binding_rule(4)},

@@ -11,7 +11,6 @@ mkdir -p $DEST
 cp $BIN_SOURCE/gk.exe $DEST
 cp $BIN_SOURCE/goalc.exe $DEST
 cp $BIN_SOURCE/extractor.exe $DEST
-cp $BIN_SOURCE/libsodium.dll $DEST
 
 mkdir -p $DEST/data
 mkdir -p $DEST/data/launcher/

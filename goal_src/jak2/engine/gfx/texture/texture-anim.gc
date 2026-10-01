@@ -1054,9 +1054,9 @@ struct SlimeInput {
                 (let ((layer (-> anim data layer-idx)))
                   ; (format 0 " running layer ~D, dma at #x~X~%" layer-idx (-> dma-buf base))
                   ;; generate DMA for this layer's effect
-                  (when (and layer (nonzero? layer))
+                  (when (nonnull? layer)
                     (let ((func-ptr (-> layer func)))
-                      (when (and func-ptr (nonzero? func-ptr))
+                      (when (nonnull? func-ptr)
                         (func-ptr dma-buf fbp-for-tex tex-width tex-height layer (-> anim frame-time))
                         )
                       )
@@ -1810,10 +1810,10 @@ struct SlimeInput {
   `(begin
      (let ((sym-val (-> (the symbol ,sym) value)))
        (when (zero? sym-val)
-         (format 0 "symbol ~A is 0~%" ,sym)
+         (log 'error "symbol ~A is 0~%" ,sym)
          )
        (when (and sym-val (!= function (rtype-of sym-val)))
-         (format 0 "symbol ~A is not a function~%" ,sym)
+         (log 'error "symbol ~A is not a function~%" ,sym)
          )
        )
      )
@@ -1827,11 +1827,11 @@ struct SlimeInput {
     (let ((sym-val (-> (the symbol (-> this func)) value)))
       (cond
         ((or (zero? sym-val) (= sym-val #f))
-         (format 0 "init-textures! warning: symbol ~A is 0 or #f~%" (-> this func))
+         (log 'warn "init-textures! warning: symbol ~A is 0 or #f~%" (-> this func))
          (set! (-> this func) (the-as (function dma-buffer texture-anim int) #f))
          )
         ((!= function (rtype-of sym-val))
-         (format 0 "init-textures! warning: symbol ~A is not a function~%" (-> this func))
+         (log 'warn "init-textures! warning: symbol ~A is not a function~%" (-> this func))
          (set! (-> this func) (the-as (function dma-buffer texture-anim int) #f))
          )
         (else
@@ -1844,11 +1844,11 @@ struct SlimeInput {
     (let ((sym-val (-> (the symbol (-> this init-func)) value)))
       (cond
         ((or (zero? sym-val) (= sym-val #f))
-         (format 0 "init-textures! warning: init symbol ~A is 0 or #f~%" (-> this init-func))
+         (log 'warn "init-textures! warning: init symbol ~A is 0 or #f~%" (-> this init-func))
          (set! (-> this init-func) (the-as (function texture-anim int) #f))
          )
         ((!= function (rtype-of sym-val))
-         (format 0 "init-textures! warning: init symbol ~A is not a function~%" (-> this init-func))
+         (log 'warn "init-textures! warning: init symbol ~A is not a function~%" (-> this init-func))
          (set! (-> this init-func) (the-as (function texture-anim int) #f))
          )
         (else
@@ -1939,11 +1939,11 @@ struct SlimeInput {
     (let ((sym-val (-> (the symbol (-> this func)) value)))
       (cond
         ((or (zero? sym-val) (= sym-val #f))
-         (format 0 "initialize-texture! warning: symbol ~A is 0 or #f~%" (-> this func))
+         (log 'warn "initialize-texture! warning: symbol ~A is 0 or #f~%" (-> this func))
          (set! (-> this func) (the-as (function dma-buffer uint int int texture-anim-layer float int) #f))
          )
         ((!= function (rtype-of sym-val))
-         (format 0 "initialize-texture! warning: symbol ~A is not a function~%" (-> this func))
+         (log 'warn "initialize-texture! warning: symbol ~A is not a function~%" (-> this func))
          (set! (-> this func) (the-as (function dma-buffer uint int int texture-anim-layer float int) #f))
          )
         (else
@@ -1956,11 +1956,11 @@ struct SlimeInput {
     (let ((sym-val (-> (the symbol (-> this init-func)) value)))
       (cond
         ((or (zero? sym-val) (= sym-val #f))
-         (format 0 "initialize-texture! warning: init symbol ~A is 0 or #f~%" (-> this init-func))
+         (log 'warn "initialize-texture! warning: init symbol ~A is 0 or #f~%" (-> this init-func))
          (set! (-> this init-func) (the-as (function texture-anim-layer int) #f))
          )
         ((!= function (rtype-of sym-val))
-         (format 0 "initialize-texture! warning: init symbol ~A is not a function~%" (-> this init-func))
+         (log 'warn "initialize-texture! warning: init symbol ~A is not a function~%" (-> this init-func))
          (set! (-> this init-func) (the-as (function texture-anim-layer int) #f))
          )
         (else

@@ -1,6 +1,9 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern scene-player-for-scene (function object scene-player))
+(define-extern task-manager-has-race-finisher? (function task-manager symbol))
+
 ;; name: task-control.gc
 ;; name in dgo: task-control
 ;; dgos: ENGINE, GAME
@@ -314,7 +317,7 @@
     (('atoll)
      (prototypes-game-visible-set!
        '("atoll-tank.mb")
-       (and (not (task-complete? *game-info* (game-task atoll-sig)))
+       (and (not (task-node-closed? (game-task-node atoll-sig-resolution)))
             (not (task-node-closed? (game-task-node atoll-sig-tank)))
             )
        )
@@ -1482,25 +1485,18 @@
     )
   )
 
-(defun mp-mission-failed-restart-sync-active? ()
-  (and *multi-sync-enabled?*
-       (= (pc-multi-get-status) (mp-connection-status in-game)))
-  )
-
 (defun mp-fail-mission-choice-event? ((event-type uint))
   (or (= event-type MP_EVENT_MISSION_FAILED_RETRY_YES)
       (= event-type MP_EVENT_MISSION_FAILED_RETRY_NO))
   )
 
 (defun mp-fail-mission-coordinated? ((fail-proc fail-mission))
-  (and fail-proc
-       (nonzero? fail-proc)
+  (and (nonnull? fail-proc)
        (logtest? (-> fail-proc flags) (fail-mission-flags famflags-7)))
   )
 
 (defun mp-fail-mission-apply-choice! ((fail-proc fail-mission) (event-type uint))
-  (when (or (not fail-proc)
-            (zero? (the-as uint fail-proc))
+  (when (or (nonnull? fail-proc)
             (not (mp-fail-mission-choice-event? event-type)))
     (return #f)
     )
@@ -1510,11 +1506,10 @@
   )
 
 (defun mp-fail-mission-publish-choice! ((fail-proc fail-mission) (event-type uint))
-  (when (and fail-proc
-             (nonzero? fail-proc)
+  (when (and (nonnull? fail-proc)
              (mp-fail-mission-choice-event? event-type)
              (mp-session-host?)
-             (mp-mission-failed-restart-sync-active?)
+             (mp-session-in-game?)
              (not (mp-fail-mission-coordinated? fail-proc))
              (mp-event-enqueue-actor-name! event-type ""))
     (mp-fail-mission-apply-choice! fail-proc event-type)
@@ -1524,15 +1519,14 @@
   )
 
 (defun mp-fail-mission-local-choice-authority? ()
-  (or (not (mp-mission-failed-restart-sync-active?))
+  (or (not (mp-session-in-game?))
       (not (mp-session-client?)))
   )
 
 (defun mp-fail-mission-client-choice-ready? ((fail-proc fail-mission))
-  (and fail-proc
-       (nonzero? fail-proc)
+  (and (nonnull? fail-proc)
        (mp-session-client?)
-       (mp-mission-failed-restart-sync-active?)
+       (mp-session-in-game?)
        (mp-fail-mission-coordinated? fail-proc))
   )
 
@@ -1558,12 +1552,11 @@
   (when (and fail-proc
              (nonzero? fail-proc)
              (mp-session-host?)
-             (mp-mission-failed-restart-sync-active?))
+             (mp-session-in-game?))
     (if (mp-fail-mission-coordinated? fail-proc)
-        (debug-log *mp-debug-log?*
-          "[Task-Control] Coordinated native restart selected. Skipping redundant bootstrap.~%")
+        (log 'debug "[Task-Control] Executing coordinated mission restart.")
         (begin
-          (debug-log *mp-debug-log?*
+          (log 'debug
             "[Task-Control] Non-coordinated mission restart. Waiting for post-reload bootstrap.~%")
           (set! *mp-mission-failed-bootstrap-await-spawn?* #t)
           (set! *mp-mission-failed-bootstrap-pending?* #f)
@@ -1667,7 +1660,7 @@
     )
     :code (behavior ()
       (when (and *target* (focus-test? *target* dead))
-        (if (and (logtest? (-> self flags) (fail-mission-flags famflags-3)) (zero? (-> self message)))
+        (if (and (not (mp-session-client?)) (logtest? (-> self flags) (fail-mission-flags famflags-3)) (zero? (-> self message)))
             (deactivate self)
             )
         (if (and (= (-> self message) (fail-mission-message fammsg-0))
@@ -1752,9 +1745,7 @@
                    (mp-fail-mission-client-retry-selected? self))
            (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons confirm))
            (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons confirm))
-           (when (not (logtest? (-> self flags) (fail-mission-flags famflags-3)))
-             (mp-fail-mission-publish-choice! self MP_EVENT_MISSION_FAILED_RETRY_YES)
-             )
+           (mp-fail-mission-publish-choice! self MP_EVENT_MISSION_FAILED_RETRY_YES)
            (set! (-> self retry) #t)
            (while (not (mp-fail-mission-release-target?))
              (suspend)
@@ -1814,7 +1805,10 @@
       )
     )
   :enter (behavior ()
-    '()
+    (when (and (mp-session-host?)
+               (not (mp-fail-mission-coordinated? self)))
+      (mp-fail-mission-publish-choice! self (if (-> self retry) MP_EVENT_MISSION_FAILED_RETRY_YES MP_EVENT_MISSION_FAILED_RETRY_NO))
+      )
     )
   :exit (behavior ()
     (if (= *master-mode* 'freeze)
@@ -1876,8 +1870,7 @@
          (else
            (task-node-reset 'life)
            (update-task-masks 'life)
-           (if (and *target*
-                    (nonzero? *target*)
+           (if (and (nonnull? *target*)
                     (focus-test? *target* dead grabbed))
                (send-event *target* 'end-mode)
                )
@@ -2036,7 +2029,7 @@
       (when (< v1-15 0)
         (when (task-manager-has-race-finisher? this)
           (return 0))
-        (debug-log *mp-debug-log?* "[Task-Control] check-time FAILED: task=~A time-limit=~D start-time=~D current-time=~D v1-15=~D~%"
+        (log 'debug "[Task-Control] check-time FAILED: task=~A time-limit=~D start-time=~D current-time=~D v1-15=~D~%"
                 (game-task->string (-> this node-info task)) (-> this time-limit) (-> this start-time) (current-time) v1-15)
         (if *debug-segment*
             (format #t "task failed:  ran out of time~%")
@@ -2140,7 +2133,7 @@
        (('die)
         (when (and (= arg0 *target*)
                    (-> self fail-on-death?)
-                   (or (not *multi-sync-enabled?*)
+                   (or (not (mp-session-in-game?))
                        (mp-all-remote-players-dead?)))
           (if (and (-> self next-state) (= (-> self next-state name) 'active))
               (go-virtual fail)
@@ -2326,16 +2319,20 @@
       )
     (set-time! (-> self state-time))
     (when (logtest? (-> self info mask) (task-manager-mask resolution-scene))
-      (let ((gp-2 (ppointer->handle (process-spawn
-                                      scene-player
-                                      :init scene-player-init
-                                      (-> self info resolution-scene)
-                                      #t
-                                      (-> self info resolution-scene-continue)
+      (let* ((existing-scene (scene-player-for-scene (-> self info resolution-scene)))
+             (gp-2 (if (nonnull? existing-scene)
+                     (process->handle existing-scene)
+                     (ppointer->handle (process-spawn
+                                        scene-player
+                                        :init scene-player-init
+                                        (-> self info resolution-scene)
+                                        #t
+                                        (-> self info resolution-scene-continue)
+                                        )
                                       )
-                                    )
-                  )
-            )
+                     )
+                   )
+             )
         (while (handle->process (the-as handle gp-2))
           (suspend)
           )
@@ -2498,7 +2495,6 @@
   )
 
 (defun mp-is-fail-mission-pending? ()
-  "Check if an active task manager has fail-on-death? enabled, meaning it will spawn a fail-mission screen."
   (let ((pending? #f))
     (when *task-manager-engine*
       (let ((task-link (the-as connection (-> *task-manager-engine* alive-list next0))))

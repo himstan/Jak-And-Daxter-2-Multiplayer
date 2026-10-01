@@ -962,13 +962,12 @@
    (ignore-alpha-mask uint64)
    (effect-count uint8)
    (bit-flags pc-merc-bits)
-   (pad               uint16)
+   (eye-instance-id   uint8)
    (darkjak-interp    float)
    (player-tint-colors    uint32 MP_PLAYER_APPEARANCE_SLOT_COUNT)
    (player-tint-strengths float MP_PLAYER_APPEARANCE_SLOT_COUNT)
-   (reserved              uint32 2)
    )
-  :size-assert 288
+  :size-assert 280
   )
 
 (defun pc-merc-draw-request ((dc draw-control) (dma-buf pointer) (matrix-buf pointer) (tex-idx int) (update-verts symbol) (blercs (pointer float)))
@@ -1077,6 +1076,7 @@
                     (-> dc pc-player-tint-colors appearance-slot))
               (set! (-> flags player-tint-strengths appearance-slot)
                     (-> dc pc-player-tint-strengths appearance-slot)))
+            (set! (-> flags eye-instance-id) (the uint8 (-> dc pc-eye-instance-id)))
             (when update-verts
               (if (= update-verts 'blerc)
                   (logior! (-> flags bit-flags) (pc-merc-bits pc-blerc))

@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(define-extern target-indax-spawn-reset (state target))
-
 ;; name: collide-shape.gc
 ;; name in dgo: collide-shape
 ;; dgos: ENGINE, GAME
@@ -1289,6 +1287,8 @@ it returns a triangle and normal direction to push in.
     (stopwatch-start (the-as stopwatch (&-> *collide-stats* pad0 1))) ;; i think this code is just broken.
 
     ;; hack: prevent crazy velocities.
+    ;; also more hack we respawn remote player replicas with nan velocities, this only happens in the drill platform level,
+    ;; could not figure out the cause, but anyway this works at least
     (when (< 1638400.0 (vector-length arg0))
       (let ((collision-process (-> this process)))
       (let ((player-record
@@ -1301,12 +1301,12 @@ it returns a triangle and normal direction to push in.
                   (the-as mp-player-record #f))))
       (if (and player-record
                (nonzero? player-record)
-               (mp-player-record-remote? *mp-player-controller* player-record))
+               (is-record-remote-player? player-record))
         (begin
           (mp-player-runtime-set-flag! player-record (mp-player-runtime-flags recovering))
           (when (and collision-process (nonzero? collision-process))
             (deactivate collision-process))
-          (mp-puppet-clear-stale! player-record)
+          (player-replica-clear-stale! player-record)
           (mp-player-runtime-clear-flag! player-record (mp-player-runtime-flags pending-gun-shot))
           (set! (-> player-record runtime pending-gun-shot-weapon) (the uint8 0))
           (set! (-> player-record runtime pending-gun-shot-sequence) (the uint 0))

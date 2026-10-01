@@ -36,6 +36,7 @@
 #include "common/log/log.h"
 #include "common/util/Assert.h"
 #include "common/util/string_util.h"
+#include "common/util/unicode_util.h"
 
 #include "fmt/format.h"
 
@@ -110,26 +111,6 @@ inline bool is_jamo_character(const std::string& character) {
           TRAILING_CONSONANTS.end());
 }
 
-inline std::string codepoint_to_utf8(char32_t cp) {
-  std::string result;
-  if (cp <= 0x7F) {
-    result += static_cast<char>(cp);
-  } else if (cp <= 0x7FF) {
-    result += static_cast<char>(0xC0 | ((cp >> 6) & 0x1F));
-    result += static_cast<char>(0x80 | (cp & 0x3F));
-  } else if (cp <= 0xFFFF) {
-    result += static_cast<char>(0xE0 | ((cp >> 12) & 0x0F));
-    result += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-    result += static_cast<char>(0x80 | (cp & 0x3F));
-  } else if (cp <= 0x10FFFF) {
-    result += static_cast<char>(0xF0 | ((cp >> 18) & 0x07));
-    result += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
-    result += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-    result += static_cast<char>(0x80 | (cp & 0x3F));
-  }
-  return result;
-}
-
 inline std::string compose_jamo_characters(const std::string& leading_consonant,
                                            const std::string& vowel,
                                            const std::optional<std::string>& trailing_consonant) {
@@ -143,34 +124,7 @@ inline std::string compose_jamo_characters(const std::string& leading_consonant,
                               : 0;
   int index_of_syllable = index_of_leading_consonant_and_vowel + index_of_trailing;
 
-  return codepoint_to_utf8(BASE_OF_SYLLABLES + index_of_syllable);
-}
-
-std::vector<char32_t> utf8_to_codepoints(const std::string& text) {
-  std::vector<char32_t> codepoints;
-  size_t i = 0;
-  while (i < text.size()) {
-    char32_t cp = 0;
-    unsigned char c = text[i];
-    if (c < 0x80) {
-      cp = c;
-      ++i;
-    } else if ((c >> 5) == 0x6) {
-      cp = ((c & 0x1F) << 6) | (text[i + 1] & 0x3F);
-      i += 2;
-    } else if ((c >> 4) == 0xE) {
-      cp = ((c & 0x0F) << 12) | ((text[i + 1] & 0x3F) << 6) | (text[i + 2] & 0x3F);
-      i += 3;
-    } else if ((c >> 3) == 0x1E) {
-      cp = ((c & 0x07) << 18) | ((text[i + 1] & 0x3F) << 12) | ((text[i + 2] & 0x3F) << 6) |
-           (text[i + 3] & 0x3F);
-      i += 4;
-    } else {
-      ++i;
-    }
-    codepoints.push_back(cp);
-  }
-  return codepoints;
+  return unicode::encode_utf8_codepoint(BASE_OF_SYLLABLES + index_of_syllable);
 }
 
 bool is_leading(char32_t c) {
@@ -196,7 +150,10 @@ char32_t compose_jamo(char32_t lead, char32_t vowel, std::optional<char32_t> tra
 
 std::string font_util_korean::compose_korean_containing_text(const std::string& text) {
   std::string output;
-  std::vector<char32_t> cps = utf8_to_codepoints(text);
+  std::vector<char32_t> cps;
+  if (!unicode::decode_utf8(text, cps)) {
+    return text;
+  }
 
   size_t i = 0;
   while (i < cps.size()) {
@@ -206,18 +163,18 @@ std::string font_util_korean::compose_korean_containing_text(const std::string& 
     char32_t fourth = (i + 3 < cps.size()) ? cps[i + 3] : 0;
     if (is_leading(first) && is_vowel(second) && is_leading(third) && is_vowel(fourth)) {
       char32_t syllable = compose_jamo(first, second);
-      output += codepoint_to_utf8(syllable);
+      output += unicode::encode_utf8_codepoint(syllable);
       i += 2;  // consume 2 codepoints
     } else if (is_leading(first) && is_vowel(second) && is_trailing(third)) {
       char32_t syllable = compose_jamo(first, second, third);
-      output += codepoint_to_utf8(syllable);
+      output += unicode::encode_utf8_codepoint(syllable);
       i += 3;  // consume 3 codepoints
     } else if (is_leading(first) && is_vowel(second)) {
       char32_t syllable = compose_jamo(first, second);
-      output += codepoint_to_utf8(syllable);
+      output += unicode::encode_utf8_codepoint(syllable);
       i += 2;  // consume 2 codepoints
     } else {
-      output += codepoint_to_utf8(first);
+      output += unicode::encode_utf8_codepoint(first);
       i += 1;
     }
   }
@@ -338,8 +295,8 @@ std::string font_util_korean::game_encode_korean_syllable(
   //
   // the order the glyphs are drawn in does not matter, as they all overlap anyway.
   std::vector<std::string> glyphs_to_draw = {};
-  const auto initial_utf8 = codepoint_to_utf8(initial);
-  const auto median_utf8 = codepoint_to_utf8(median);
+  const auto initial_utf8 = unicode::encode_utf8_codepoint(initial);
+  const auto median_utf8 = unicode::encode_utf8_codepoint(median);
   if (final == BASE_OF_TRAILING_CONSONANTS) {  // no final consonant
     const auto initial_alt_lookup_key = fmt::format("<G>,{}", median_utf8);
     const auto& initial_alts = db.at(initial_utf8).at(orientation).alternatives;
@@ -358,7 +315,7 @@ std::string font_util_korean::game_encode_korean_syllable(
           glyph_hex_string_to_int(db.at(median_utf8).at(orientation).defaultGlyph));
     }
   } else {
-    const auto final_utf8 = codepoint_to_utf8(final);
+    const auto final_utf8 = unicode::encode_utf8_codepoint(final);
     const auto initial_alt_lookup_key = fmt::format("<G>,{},{}", median_utf8, final_utf8);
     const auto& initial_alts = db.at(initial_utf8).at(orientation).alternatives;
     if (initial_alts.contains(initial_alt_lookup_key)) {

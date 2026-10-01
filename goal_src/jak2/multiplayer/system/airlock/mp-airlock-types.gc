@@ -1,0 +1,44 @@
+(in-package goal)
+
+(defenum mp-airlock-state-id
+  (uint32)
+  (none 0)
+  (ready 1)
+  (occupied 2)
+  (commit 3))
+
+(defconstant MP_AIRLOCK_LOCAL_STATE_COUNT 4)
+(defconstant MP_AIRLOCK_STATE_COUNT (* MP_AIRLOCK_LOCAL_STATE_COUNT MP_MAX_PLAYERS))
+
+(deftype mp-airlock-state (structure)
+  ((airlock-aid      uint32)
+   (state-id         uint32)
+   (level-id         uint32)
+   (sequence         uint32)
+   (source-player-id uint8))
+  :size-assert 17)
+
+(deftype mp-airlock-state-table (structure)
+  ((count  uint32)
+   (states mp-airlock-state MP_AIRLOCK_STATE_COUNT :inline))
+  :size-assert 1040)
+
+(deftype mp-airlock-sync-buffer (structure)
+  ((local-table  mp-airlock-state-table :inline)
+   (remote-table mp-airlock-state-table :inline)
+   (sequence     uint32)
+   (generation   uint64))
+  :size-assert 2096)
+
+(define-extern *mp-waypoint-pending-count* int)
+
+(define-perm *mp-local-airlock-state* mp-airlock-state-table (new 'static 'mp-airlock-state-table))
+(define-perm *mp-remote-airlock-state* mp-airlock-state-table (new 'static 'mp-airlock-state-table))
+(define-perm *mp-airlock-buffer* mp-airlock-sync-buffer (new 'static 'mp-airlock-sync-buffer))
+(define-perm *mp-airlock-local-sequence* uint (the uint 0))
+(define-perm *mp-airlock-last-local-airlock-aid* uint (the uint 0))
+(define-perm *mp-airlock-last-local-state-id* uint (the uint 0))
+(define-perm *mp-airlock-last-local-level-id* uint (the uint 0))
+
+(define-extern mp-airlock-sync-tick (function none))
+(define-extern mp-airlock-set-local-state! (function uint mp-airlock-state-id none))

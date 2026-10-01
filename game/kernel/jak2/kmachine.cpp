@@ -1,7 +1,6 @@
 #include "kmachine.h"
 
 #include <bitset>
-#include <cstring>
 #include <stdexcept>
 #include <string>
 
@@ -9,10 +8,7 @@
 #include "common/log/log.h"
 #include "common/symbols.h"
 #include "common/util/FileUtil.h"
-#include "common/util/font/font_utils.h"
-#include "common/util/string_util.h"
 
-#include "game/external/discord_jak2.h"
 #include "game/graphics/display.h"
 #include "game/graphics/jak2_texture_remap.h"
 #include "game/kernel/common/Symbol4.h"
@@ -31,19 +27,20 @@
 #include "game/kernel/common/memory_layout.h"
 #include "game/kernel/jak2/kboot.h"
 #include "game/kernel/jak2/kdgo.h"
-#include "game/kernel/jak2/klink.h"
 #include "game/kernel/jak2/klisten.h"
 #include "game/kernel/jak2/kmachine_extras.h"
 #include "game/kernel/jak2/kmalloc.h"
 #include "game/kernel/jak2/kscheme.h"
 #include "game/kernel/jak2/ksound.h"
-#include "game/overlord/jak2/iso.h"
+#include "game/multiplayer/jak2/api/multiplayer_api.h"
 #include "game/sce/deci2.h"
 #include "game/sce/libdma.h"
 #include "game/sce/libgraph.h"
 #include "game/sce/sif_ee.h"
 #include "game/sce/stubs.h"
-#include "game/multiplayer/multiplayer.h"
+#include "game/multiplayer/jak2/application/jak2_adapter.h"
+#include "game/multiplayer/jak2/wire/multiplayer_protocol.h"
+#include "game/multiplayer/platform/runtime/multiplayer_runtime.h"
 
 using namespace ee;
 
@@ -672,7 +669,6 @@ u32 sceGsSyncPath(u32 mode, u32 timeout) {
 void aybabtu() {}
 
 void InitMachineScheme() {
-  lg::info("[Multiplayer] Entering InitMachineScheme");
   make_function_symbol_from_c("put-display-env", (void*)PutDisplayEnv);
   make_function_symbol_from_c("syncv", (void*)sceGsSyncV);
   make_function_symbol_from_c("sync-path", (void*)sceGsSyncPath);
@@ -755,7 +751,19 @@ void InitMachineScheme() {
     auto p = scoped_prof("play-boot-func");
     call_goal_function_by_name("play-boot");  // new function for jak2!
   }
-  init_multiplayer_pc_port();
+  if (const auto& service = multiplayer::platform::multiplayer_runtime(); service.active()) {
+    if (!service.adapter("jak2")) {
+      throw std::runtime_error("another game adapter is already installed");
+    }
+  } else if (!multiplayer::platform::install_adapter(std::make_unique<multiplayer::jak2::application::Jak2Adapter>(),{
+    .game_id = "jak2",
+    .root_directory = file_util::get_user_settings_dir(g_game_version) / "multiplayer-profiles",
+    .maximum_instances = kMPMaxPlayers})) 
+  {
+    throw std::runtime_error("failed to install Jak 2 adapter");
+  }
+  init_jak2_bridge();
+  lg::info("Jak 2 adapter is installed!");
 }
 
 sqlite::SQLiteDatabase sql_db;

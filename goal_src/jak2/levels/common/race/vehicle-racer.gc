@@ -6,7 +6,6 @@
 ;; dgos: STD, STC, LERLCHAL, STB, LPRTRACE
 
 (define-extern mp-vehicle-local-target-driving? (function vehicle symbol))
-(define-extern mp-vehicle-driver-sync-claimed? (function vehicle symbol))
 (define-extern target-timed-invulnerable (function time-frame target int none))
 
 ;; DECOMP BEGINS
@@ -26,9 +25,7 @@
   (none))
 
 (defmethod spawn-default-vehicle-rider! ((this vehicle-racer) (params traffic-object-spawn-params))
-  (vehicle-rider-spawn this
-                       (if (= (-> params user-data) 2) errol-rider stadium-racer)
-                       params)
+  (vehicle-rider-spawn this (if (= (-> params user-data) 2) errol-rider stadium-racer) params)
   (none))
 
 (defmethod debug-draw-race-path-slice ((this vehicle-racer) (path race-path) (slice race-mesh-slice))
@@ -43,18 +40,11 @@
       (add-debug-line #t (bucket-id debug-no-zbuf1) start-pos end-pos *color-cyan* #f (the-as rgba -1))))
   (none))
 
-(defun vehicle-racer-local-player-driving? ((this vehicle-racer))
-  "Return true when the local target is actively piloting this vehicle."
+(defun vehicle-racer-player-associated? ((this vehicle-racer))
+  "Return true for a local driver attachment or a canonical driver claim."
   (and this
        (nonzero? this)
-       (mp-vehicle-local-target-driving? (the-as vehicle this))))
-
-(defun vehicle-racer-player-driven? ((this vehicle-racer))
-  "Return true for a locally driven racer or a racer claimed by player sync."
-  (and this
-       (nonzero? this)
-       (or (vehicle-racer-local-player-driving? this)
-           (mp-vehicle-driver-sync-claimed? (the-as vehicle this)))))
+       (or (mp-vehicle-local-target-driving? this) (mp-player-driver-record-by-vehicle-id (-> this net-id)))))
 
 (defun destination-race-vehicle? ((this vehicle-racer))
   "Return true when this racer belongs to a destination race without a race mesh."
@@ -64,10 +54,7 @@
         (let ((state (-> race state)))
           (when (and state (nonzero? state))
             (let ((info (-> state info)))
-              (return (and info
-                           (nonzero? info)
-                           (logtest? (-> info flags)
-                                     (race-info-flags destination-race))))))))))
+              (return (and info (nonzero? info) (logtest? (-> info flags) (race-info-flags destination-race))))))))))
   #f)
 
 (defun vehicle-racer-respawn-prim ((this vehicle-racer))
@@ -86,19 +73,17 @@
     (let ((draw (-> this draw)))
       (when (and draw (nonzero? draw))
         (if hidden?
-            (logior! (-> draw status) (draw-control-status no-draw-bounds))
-            (logclear! (-> draw status) (draw-control-status no-draw-bounds)))))
+          (logior! (-> draw status) (draw-control-status no-draw-bounds))
+          (logclear! (-> draw status) (draw-control-status no-draw-bounds)))))
     (let ((info (-> this info)))
       (when (and info (nonzero? info))
         (let ((rider (get-rider-in-seat this 0)))
-          (when (and rider
-                     (nonzero? rider)
-                     (type? rider process-drawable))
+          (when (and rider (nonzero? rider) (type? rider process-drawable))
             (let ((rider-draw (-> (the-as process-drawable rider) draw)))
               (when (and rider-draw (nonzero? rider-draw))
                 (if hidden?
-                    (logior! (-> rider-draw status) (draw-control-status no-draw-bounds))
-                    (logclear! (-> rider-draw status) (draw-control-status no-draw-bounds))))))))))
+                  (logior! (-> rider-draw status) (draw-control-status no-draw-bounds))
+                  (logclear! (-> rider-draw status) (draw-control-status no-draw-bounds))))))))))
   (none))
 
 (defun vehicle-racer-update-respawn-protection! ((this vehicle-racer))
@@ -109,28 +94,23 @@
        (when (not (-> this respawn-protection-applied?))
          (let ((vehicle-prim (vehicle-racer-respawn-prim this)))
            (when (and vehicle-prim (nonzero? vehicle-prim))
-             (set! (-> this respawn-collide-as)
-                   (-> vehicle-prim prim-core collide-as))
-             (set! (-> this respawn-collide-with)
-                   (-> vehicle-prim prim-core collide-with))
+             (set! (-> this respawn-collide-as) (-> vehicle-prim prim-core collide-as))
+             (set! (-> this respawn-collide-with) (-> vehicle-prim prim-core collide-with))
              (set! (-> vehicle-prim prim-core collide-as) (collide-spec))
              (set! (-> vehicle-prim prim-core collide-with) (collide-spec backgnd))))
          (set! (-> this respawn-damage-factor) (-> this damage-factor))
          (set! (-> this respawn-protection-applied?) #t))
        (set! (-> this damage-factor) 0.0)
-       (vehicle-racer-set-respawn-flash!
-         this (< (logand (current-time) 3) 1)))
+       (vehicle-racer-set-respawn-flash! this (< (logand (current-time) 3) 1)))
       ((-> this respawn-protection-applied?)
        (let ((vehicle-prim (vehicle-racer-respawn-prim this)))
          (when (and vehicle-prim (nonzero? vehicle-prim))
-           (set! (-> vehicle-prim prim-core collide-as)
-                 (-> this respawn-collide-as))
-           (set! (-> vehicle-prim prim-core collide-with)
-                 (-> this respawn-collide-with))))
+           (set! (-> vehicle-prim prim-core collide-as) (-> this respawn-collide-as))
+           (set! (-> vehicle-prim prim-core collide-with) (-> this respawn-collide-with))))
        (set! (-> this damage-factor) (-> this respawn-damage-factor))
        (vehicle-racer-set-respawn-flash! this #f)
        (set! (-> this respawn-protection-applied?) #f)))
-  (none)))
+    (none)))
 
 (defun vehicle-racer-safe-respawn-sample? ((this vehicle-racer))
   "Require a grounded, upright, alive, on-track local racer."
@@ -139,15 +119,12 @@
              *target*
              (nonzero? *target*)
              (not (focus-test? *target* dead inactive teleporting))
-             (vehicle-racer-local-player-driving? this)
+             (mp-vehicle-local-target-driving? this)
              (not (-> this respawn-protected?))
              (not (focus-test? this dead inactive)))
     (let ((rbody (-> this rbody))
           (race (-> this race)))
-      (when (and rbody
-                 (nonzero? rbody)
-                 race
-                 (nonzero? race))
+      (when (and rbody (nonzero? rbody) race (nonzero? race))
         (let ((body-state (-> rbody state))
               (racer-state (-> race racer-state)))
           (when (and body-state
@@ -158,32 +135,25 @@
                      (> (-> body-state matrix vector 1 y) 0.5)
                      (logtest? (-> racer-state flags) (racer-flags in-race))
                      (not (logtest? (-> racer-state flags) (racer-flags dead)))
-                     (or (logtest? (-> racer-state flags) (racer-flags on-track))
-                         (destination-race-vehicle? this)))
+                     (or (logtest? (-> racer-state flags) (racer-flags on-track)) (destination-race-vehicle? this)))
             (return #t))))))
   #f)
 
 (defun vehicle-racer-sample-respawn-transform! ((this vehicle-racer))
   "Refresh the last safe transform at a bounded cadence."
   (when (and (vehicle-racer-safe-respawn-sample? this)
-             (time-elapsed? (-> this respawn-sample-time)
-                            RACE_RESPAWN_SAMPLE_INTERVAL))
+             (time-elapsed? (-> this respawn-sample-time) RACE_RESPAWN_SAMPLE_INTERVAL))
     (let ((root (-> this root))
           (race (-> this race)))
-      (when (and root
-                 (nonzero? root)
-                 race
-                 (nonzero? race))
+      (when (and root (nonzero? root) race (nonzero? race))
         (cond
           ((destination-race-vehicle? this)
            (set! (-> this respawn-position quad) (-> root trans quad))
            (quaternion-copy! (-> this respawn-rotation) (-> root quat)))
           ((and (-> race path) (nonzero? (-> race path)))
            (select-race-path! race (-> race path-select) (-> root trans))
-           (set! (-> this respawn-position quad)
-                 (-> race path-sample pos quad))
-           (quaternion-copy! (-> this respawn-rotation)
-                             (-> race path-sample quat))))
+           (set! (-> this respawn-position quad) (-> race path-sample pos quad))
+           (quaternion-copy! (-> this respawn-rotation) (-> race path-sample quat))))
         (set-time! (-> this respawn-sample-time)))))
   (none))
 
@@ -210,17 +180,13 @@
   (when (and this (nonzero? this))
     (let ((root (-> this root))
           (rbody (-> this rbody)))
-      (when (and root
-                 (nonzero? root)
-                 rbody
-                 (nonzero? rbody))
+      (when (and root (nonzero? root) rbody (nonzero? rbody))
         (let ((body-state (-> rbody state)))
           (when (and body-state (nonzero? body-state))
             (set! (-> root trans quad) (-> this respawn-position quad))
             (quaternion-copy! (-> root quat) (-> this respawn-rotation))
             (vector-reset! (-> root transv))
-            (rigid-body-method-26
-              body-state (-> this respawn-position) (-> this respawn-rotation))
+            (rigid-body-method-26 body-state (-> this respawn-position) (-> this respawn-rotation))
             (clear-momentum! body-state)
             (vector-reset! (-> body-state force))
             (vector-reset! (-> body-state torque))
@@ -250,9 +216,7 @@
         (let ((racer-state (-> race racer-state)))
           (when (and racer-state (nonzero? racer-state))
             (logclear! (-> racer-state flags) (racer-flags dead))))))
-    (when (and (vehicle-racer-local-player-driving? this)
-               *target*
-               (nonzero? *target*))
+    (when (and (mp-vehicle-local-target-driving? this) *target* (nonzero? *target*))
       (logclear! (-> *target* focus-status) (focus-status dead hit))
       (logclear! (-> *target* state-flags) (state-flags disable-attacks))))
   (none))
@@ -269,10 +233,7 @@
              (nonzero? *camera-combiner*))
     (let ((control (-> *target* control))
           (info (-> this info)))
-      (when (and control
-                 (nonzero? control)
-                 info
-                 (nonzero? info))
+      (when (and control (nonzero? control) info (nonzero? info))
         (set! (-> control trans quad) (-> this respawn-position quad))
         (vector-reset! (-> control transv))
         (quaternion-copy! (-> control quat) (-> this respawn-rotation))
@@ -288,20 +249,13 @@
           (cond
             ((> (vector-length-squared forward) 1.0)
              (vector-normalize! forward 1.0)
-             (vector+float*!
-               (-> *camera-combiner* trans)
-               (-> this respawn-position)
-               forward
-               (- (-> info camera-string-min-length)))
-             (+! (-> *camera-combiner* trans y)
-                 (-> info camera-string-min-height))
-             (forward-down->inv-matrix
-               (-> *camera-combiner* inv-camera-rot)
-               forward
-               (new 'static 'vector :y -1.0)))
-            (else
-             (set! (-> *camera-combiner* trans quad)
-                   (-> this respawn-position quad))))
+             (vector+float*! (-> *camera-combiner* trans)
+                             (-> this respawn-position)
+                             forward
+                             (- (-> info camera-string-min-length)))
+             (+! (-> *camera-combiner* trans y) (-> info camera-string-min-height))
+             (forward-down->inv-matrix (-> *camera-combiner* inv-camera-rot) forward (new 'static 'vector :y -1.0)))
+            (else (set! (-> *camera-combiner* trans quad) (-> this respawn-position quad))))
           (send-event *camera* 'change-target *target*)
           (send-event *camera* 'teleport)))))
   (none))
@@ -315,8 +269,7 @@
     (when (and *target* (nonzero? *target*))
       (let ((control (-> *target* control)))
         (when (and control (nonzero? control))
-          (target-timed-invulnerable
-            RACE_RESPAWN_PROTECTION_TIME *target* 1))))
+          (target-timed-invulnerable RACE_RESPAWN_PROTECTION_TIME *target* 1))))
     (vehicle-racer-teleport-respawn-camera! this))
   (none))
 
@@ -343,8 +296,7 @@
   (when (and this
              (nonzero? this)
              (= (-> this respawn-state) RACE_RESPAWN_STATE_WAITING)
-             (time-elapsed? (-> this respawn-state-time)
-                            RACE_RESPAWN_WAIT_TIME))
+             (time-elapsed? (-> this respawn-state-time) RACE_RESPAWN_WAIT_TIME))
     (set-blackout-frames RACE_RESPAWN_BLACKOUT_TIME)
     (set! (-> this respawn-state) RACE_RESPAWN_STATE_BLACKOUT)
     (set-time! (-> this respawn-state-time))
@@ -356,58 +308,43 @@
   (when (and this
              (nonzero? this)
              (= (-> this respawn-state) RACE_RESPAWN_STATE_BLACKOUT)
-             (time-elapsed? (-> this respawn-state-time)
-                            RACE_RESPAWN_BLACKOUT_TIME))
+             (time-elapsed? (-> this respawn-state-time) RACE_RESPAWN_BLACKOUT_TIME))
     (if (vehicle-racer-restore-respawn-transform! this)
-        (begin
-          (vehicle-racer-clear-respawn-death! this)
-          (vehicle-racer-start-respawn-protection! this)
-          (set! (-> this respawn-state) RACE_RESPAWN_STATE_IDLE)
-          (set-blackout-frames 0)
-          (return #t))
-        (begin
-          (set! (-> this respawn-state) RACE_RESPAWN_STATE_IDLE)
-          (set-blackout-frames 0))))
+      (begin
+        (vehicle-racer-clear-respawn-death! this)
+        (vehicle-racer-start-respawn-protection! this)
+        (set! (-> this respawn-state) RACE_RESPAWN_STATE_IDLE)
+        (set-blackout-frames 0)
+        (return #t))
+      (begin
+        (set! (-> this respawn-state) RACE_RESPAWN_STATE_IDLE)
+        (set-blackout-frames 0))))
   #f)
 
 (defun vehicle-racer-update-delayed-respawn! ((this vehicle-racer))
   "Advance the delayed respawn state machine once per vehicle update."
   (when (and this (nonzero? this))
     (cond
-      ((= (-> this respawn-state) RACE_RESPAWN_STATE_WAITING)
-       (vehicle-racer-begin-respawn-blackout! this))
-      ((= (-> this respawn-state) RACE_RESPAWN_STATE_BLACKOUT)
-       (vehicle-racer-finish-respawn! this))))
+      ((= (-> this respawn-state) RACE_RESPAWN_STATE_WAITING) (vehicle-racer-begin-respawn-blackout! this))
+      ((= (-> this respawn-state) RACE_RESPAWN_STATE_BLACKOUT) (vehicle-racer-finish-respawn! this))))
   (none))
 
 (defun vehicle-racer-fake-respawn! ((this vehicle-racer))
   "Request or maintain a delayed authoritative local racer respawn."
-  (when (and this
-             (nonzero? this)
-             (vehicle-racer-local-player-driving? this))
+  (when (and this (nonzero? this) (mp-vehicle-local-target-driving? this))
     (cond
-      ((-> this respawn-protected?)
-       (vehicle-racer-clear-respawn-death! this)
-       (return #t))
-      ((vehicle-racer-respawn-active? this)
-       (vehicle-racer-clear-respawn-death! this)
-       (return #t))
-      ((vehicle-racer-request-respawn! this)
-       (vehicle-racer-clear-respawn-death! this)
-       (return #t))))
+      ((-> this respawn-protected?) (vehicle-racer-clear-respawn-death! this) (return #t))
+      ((vehicle-racer-respawn-active? this) (vehicle-racer-clear-respawn-death! this) (return #t))
+      ((vehicle-racer-request-respawn! this) (vehicle-racer-clear-respawn-death! this) (return #t))))
   #f)
 
 (defun vehicle-racer-protect-player-driver! ((this vehicle-racer))
-  "Keep local and puppet-driven racers out of vehicle death states."
-  (when (and this
-             (nonzero? this)
-             (vehicle-racer-player-driven? this))
-    (let ((would-die?
-            (or (<= (-> this hit-points) 0.0)
-                (logtest? (-> this flags) (rigid-body-object-flag dead))
-                (logtest? (-> this focus-status) (focus-status dead)))))
-      (when (and would-die?
-                 (vehicle-racer-local-player-driving? this))
+  "Keep local and replica-driven racers out of vehicle death states."
+  (when (and this (nonzero? this) (vehicle-racer-player-associated? this))
+    (let ((would-die? (or (<= (-> this hit-points) 0.0)
+                          (logtest? (-> this flags) (rigid-body-object-flag dead))
+                          (logtest? (-> this focus-status) (focus-status dead)))))
+      (when (and would-die? (mp-vehicle-local-target-driving? this))
         (vehicle-racer-fake-respawn! this))
       (when (<= (-> this hit-points) 0.0)
         (set! (-> this hit-points) 1.0))
@@ -427,32 +364,27 @@
   (when (and this (nonzero? this))
     (when (and (-> this respawn-protected?)
                (mp-vehicle-is-local-authoritative? this)
-               (time-elapsed? (-> this respawn-protection-time)
-                              RACE_RESPAWN_PROTECTION_TIME))
+               (time-elapsed? (-> this respawn-protection-time) RACE_RESPAWN_PROTECTION_TIME))
       (set! (-> this respawn-protected?) #f))
     (vehicle-racer-update-respawn-protection! this)
     (vehicle-racer-update-delayed-respawn! this)
-    (when (and (not (-> this respawn-protected?))
-               (not (vehicle-racer-respawn-active? this)))
+    (when (and (not (-> this respawn-protected?)) (not (vehicle-racer-respawn-active? this)))
       (vehicle-racer-sample-respawn-transform! this)))
   (none))
 
 (defmethod set-crash-level! ((this vehicle-racer) (new-crash-level int) (crash-duration uint))
   (if (not (vehicle-racer-protect-player-driver! this))
-      ((method-of-type vehicle set-crash-level!) this new-crash-level crash-duration)
-    )
-  (none)
-  )
+    ((method-of-type vehicle set-crash-level!) this new-crash-level crash-duration))
+  (none))
 
 (defmethod rigid-body-object-method-52 ((this vehicle-racer))
   (vehicle-racer-protect-player-driver! this)
   ((method-of-type vehicle rigid-body-object-method-52) this)
-  (none)
-  )
+  (none))
 
 (defmethod vehicle-method-120 ((this vehicle-racer))
   (vehicle-racer-update-respawn! this)
-  (when (vehicle-racer-local-player-driving? this)
+  (when (mp-vehicle-local-target-driving? this)
     (set! (-> *game-info* race-number-turbos) (-> this turbo-pickup-count)))
   (logior! (-> this skel status) (joint-control-status sync-math))
   ((method-of-type vehicle vehicle-method-120) this)
@@ -462,14 +394,13 @@
   (none))
 
 (defmethod activate-turbo-boost! ((this vehicle-racer))
-  (when (and (not (logtest? (rigid-body-object-flag turbo-boost) (-> this flags)))
-             (> (-> this turbo-pickup-count) 0))
+  (when (and (not (logtest? (rigid-body-object-flag turbo-boost) (-> this flags))) (> (-> this turbo-pickup-count) 0))
     (+! (-> this turbo-pickup-count) -1)
     (set-time! (-> this turbo-boost-time))
     (set! (-> this turbo-boost-factor) 1.0)
     (set! (-> this turbo-boost-duration) (the-as uint 150))
     (logior! (-> this flags) (rigid-body-object-flag turbo-boost))
-    (when (vehicle-racer-local-player-driving? this)
+    (when (mp-vehicle-local-target-driving? this)
       (sound-play "turbo-boost")))
   (none))
 
@@ -483,9 +414,7 @@
 (defmethod start-from-spawn-params! ((this vehicle-racer) (params traffic-object-spawn-params))
   (set! (-> this draw lod-set lod 1 dist) 819200.0)
   (set! (-> this draw lod-set lod 2 dist) 1228800.0)
-  (let ((state *race-state*))
-    (initialize-race-control! (-> this race) state (-> state racer-array (-> params id))))
-
+  (let ((state *race-state*)) (initialize-race-control! (-> this race) state (-> state racer-array (-> params id))))
   (set! (-> this shortcut-speed-factor) 0.0)
   (vehicle-racer-initialize-respawn! this)
   (case (-> params behavior)
@@ -497,8 +426,7 @@
           ((logtest? (-> params flags) (traffic-spawn-flags spawn-rider))
            (logior! (-> this flags) (rigid-body-object-flag riding ai-driving))
            (cond
-             ((-> this race path)
-              (go (method-of-object this waiting-for-start)))
+             ((-> this race path) (go (method-of-object this waiting-for-start)))
              (else
               (format 0 "vehicle-racer::go-start-state: ERROR, no race-paths found~%")
               (go (method-of-object this die)))))
@@ -506,20 +434,14 @@
            (logior! (-> this flags) (rigid-body-object-flag waiting-for-player))
            (logior! (-> this focus-status) (focus-status grabbed))
            (go (method-of-object this waiting-race)))))
-       ((and (destination-race-vehicle? this)
-             (not (logtest? (-> params flags) (traffic-spawn-flags spawn-rider))))
+       ((and (destination-race-vehicle? this) (not (logtest? (-> params flags) (traffic-spawn-flags spawn-rider))))
         (wait-for-destination-race-player! this))
-       (else
-        (format #t "ERROR: vehicle-racer::go-start-state: no race-mesh found~%")
-        (go (method-of-object this die)))))
-    (else
-     ((method-of-type vehicle start-from-spawn-params!) this params)))
+       (else (format #t "ERROR: vehicle-racer::go-start-state: no race-mesh found~%") (go (method-of-object this die)))))
+    (else ((method-of-type vehicle start-from-spawn-params!) this params)))
   (none))
 
 (defmethod send-vehicle-player-control! ((this vehicle-racer))
-  (if (focus-test? this grabbed)
-      (go (method-of-object this waiting-for-start))
-      (go (method-of-object this player-control)))
+  (if (focus-test? this grabbed) (go (method-of-object this waiting-for-start)) (go (method-of-object this player-control)))
   (none))
 
 (defmethod rigid-body-object-method-45 ((this vehicle-racer) (impact rigid-body-impact))
@@ -528,52 +450,42 @@
              (< 40960.0 (-> impact impulse))
              (< 0.0 (-> this hit-points)))
     (if (-> impact rbody)
-        (dotimes (seat (-> this info seat-count))
-          (send-event (handle->process (-> this rider-array seat)) 'vehicle-got-hit impact))
-        (dotimes (seat (-> this info seat-count))
-          (send-event (handle->process (-> this rider-array seat)) 'vehicle-hit impact))))
+      (dotimes (seat (-> this info seat-count))
+        (send-event (handle->process (-> this rider-array seat)) 'vehicle-got-hit impact))
+      (dotimes (seat (-> this info seat-count))
+        (send-event (handle->process (-> this rider-array seat)) 'vehicle-hit impact))))
   (none))
 
-(defmethod rigid-body-object-method-46
-    ((this vehicle-racer) (sender process-drawable) (event-id int) (event symbol) (message event-message-block))
+(defmethod rigid-body-object-method-46 ((this vehicle-racer)
+                                        (sender process-drawable)
+                                        (event-id int)
+                                        (event
+                                          symbol)
+                                        (message event-message-block))
   (case event
     (('query)
      (if (and message (nonzero? message))
-         (case (-> message param 0)
-           (('race-respawn)
-            (vehicle-racer-fake-respawn! this))
-           (else
-             ((method-of-type vehicle rigid-body-object-method-46)
-               this sender event-id event message)))
-         #f))
-
+       (case (-> message param 0)
+         (('race-respawn) (vehicle-racer-fake-respawn! this))
+         (else ((method-of-type vehicle rigid-body-object-method-46) this sender event-id event message)))
+       #f))
     (('test-ready)
      (and (-> this next-state)
           (= (-> this next-state name) 'waiting-for-start)
           (logtest? (-> this flags) (rigid-body-object-flag riding))))
-    
-    (('waiting-race)
-     (go (method-of-object this waiting-race)))
-    
-    (('waiting-for-start)
-     (go (method-of-object this waiting-for-start)))
-
+    (('waiting-race) (go (method-of-object this waiting-race)))
+    (('waiting-for-start) (go (method-of-object this waiting-for-start)))
     (('resume-ai-race)
      (let ((state (-> this race state)))
-       (when (and state
-                  (nonzero? state)
-                  (logtest? (-> state flags) (race-flags begun)))
+       (when (and state (nonzero? state) (logtest? (-> state flags) (race-flags begun)))
          (logclear! (-> this focus-status) (focus-status grabbed))
          (go (method-of-object this racing)))))
-    
     (('pilot-on)
-      (let ((icon (-> this minimap)))
-        (when icon
-          (logior! (-> icon flags) (minimap-flag fade-out))
-          (set! (-> this minimap) #f)))
-      ((method-of-type vehicle rigid-body-object-method-46) this sender event-id event message)
-      ) 
-
+     (let ((icon (-> this minimap)))
+       (when icon
+         (logior! (-> icon flags) (minimap-flag fade-out))
+         (set! (-> this minimap) #f)))
+     ((method-of-type vehicle rigid-body-object-method-46) this sender event-id event message))
     (('begin-race)
      (logclear! (-> this focus-status) (focus-status grabbed))
      (when (and (-> this next-state) (= (-> this next-state name) 'waiting-for-start))
@@ -581,18 +493,15 @@
          ((logtest? (-> this flags) (rigid-body-object-flag player-driving))
           (logclear! (-> this flags) (rigid-body-object-flag player-grabbed))
           (go (method-of-object this player-control)))
-         (else
-          (go (method-of-object this racing))))))
-
+         (else (go (method-of-object this racing))))))
     (('turbo-pickup)
      (when (< (-> this turbo-pickup-count) 3)
        (sound-play "turbo-pickup")
-       (when (vehicle-racer-local-player-driving? this)
+       (when (mp-vehicle-local-target-driving? this)
          (sound-play "turbo-pickup-pl")
          (send-event *target* 'color-effect 'eco-pill-dark (seconds 0.2)))
        (+! (-> this turbo-pickup-count) 1)
        #t))
-
     (('race-decision-point)
      (when (logtest? (rigid-body-object-flag ai-driving) (-> this flags))
        (let* ((decision (the-as race-decision-point (-> message param 0)))
@@ -602,9 +511,9 @@
             (cond
               ((and (nonzero? (-> decision shortcuts))
                     (>= (-> this race racer-state speed-factor) (-> this race state info ai-max-speed-factor))
-                    (< 0.1 (- (+ (-> this race state target-pos)
-                                  (-> this race racer-state target-pos-offset))
-                               (-> this race racer-state pos))))
+                    (< 0.1
+                       (- (+ (-> this race state target-pos) (-> this race racer-state target-pos-offset))
+                          (-> this race racer-state pos))))
                (select-path-randomly-from-mask this (-> decision shortcuts))
                (set-time! (-> this shortcut-time))
                (set! (-> this shortcut-speed-factor) 1.0))
@@ -617,27 +526,21 @@
                        (>= (-> this race racer-state speed-factor) (-> this race state info ai-max-speed-factor)))
               (rigid-body-object-method-38 this)
               (activate-turbo-boost! this)))))))
-
     (('hide)
      (logior! (-> this draw status) (draw-control-status no-draw))
      (send-event (ppointer->process (-> this child)) 'hide))
-
     (('unhide)
      (logclear! (-> this draw status) (draw-control-status no-draw))
      (send-event (ppointer->process (-> this child)) 'unhide))
-
     (('race-pass)
-     (if (vehicle-racer-local-player-driving? this)
-         (speech-control-method-12 *speech-control* this
-                                   (if (-> *target* pilot as-daxter?)
-                                       (speech-type speech-type-45)
-                                       (speech-type speech-type-36)))
-         (send-event (ppointer->process (-> this child)) 'race-pass)))
-
+     (if (mp-vehicle-local-target-driving? this)
+       (speech-control-method-12 *speech-control*
+                                 this
+                                 (if (-> *target* pilot as-daxter?) (speech-type speech-type-45) (speech-type speech-type-36)))
+       (send-event (ppointer->process (-> this child)) 'race-pass)))
     (('race-got-passed)
-     (when (not (vehicle-racer-local-player-driving? this))
+     (when (not (mp-vehicle-local-target-driving? this))
        (send-event (ppointer->process (-> this child)) 'race-got-passed)))
-
     (('race-finished)
      (let ((safe-paths (-> message param 0)))
        (select-path-randomly-from-mask this safe-paths)
@@ -648,11 +551,8 @@
           (when (zero? safe-paths)
             (set! (-> this race path) #f)
             #f))
-         (else
-          (go (method-of-object this race-finished))))))
-
-    (else
-     ((method-of-type vehicle rigid-body-object-method-46) this sender event-id event message))))
+         (else (go (method-of-object this race-finished))))))
+    (else ((method-of-type vehicle rigid-body-object-method-46) this sender event-id event message))))
 
 (defmethod select-path-randomly-from-mask ((this vehicle-racer) (path-mask uint))
   "Choose one path uniformly from the low eight bits of a path mask."
@@ -665,7 +565,6 @@
       (+! path-count (logand remaining 1))
       (+! path-index 1)
       (set! remaining (shr remaining 1)))
-
     (when (> path-count 0)
       (let ((selected-path (-> paths (rand-vu-int-count path-count))))
         (format #t "vehicle-racer::select-path-randomly-from-mask: switching to path-~d~%" selected-path)
@@ -682,37 +581,32 @@
              (dt (seconds-per-frame))
              (path-speed (vector-length (-> race lin-velocity)))
              (speed-scale (fmin (* (+ (vector-length (-> state lin-velocity)) (* 163840.0 dt))
-                                    (/ 1.0 (fmax 1.0 path-speed)))
+                                   (/ 1.0 (fmax 1.0 path-speed)))
                                 (-> race racer-state speed-factor)))
              (target-rotation (new 'stack-no-clear 'quaternion))
              (target-velocity (new 'stack-no-clear 'vector))
              (path-offset (new 'stack-no-clear 'vector))
              (velocity-change (new 'stack-no-clear 'vector)))
-
         (quaternion-copy! target-rotation (-> race path-sample quat))
         (vector-float*! target-velocity (-> race lin-velocity) speed-scale)
         (vector-! path-offset (-> race path-sample pos) (-> state position))
-
         (set! (-> this path-deviation)
               (* (+ (* (-> path-offset x) (-> path-offset x))
                     (* (-> path-offset y) (-> path-offset y))
                     (* (-> path-offset z) (-> path-offset z)))
                  (/ 1.0 (square 40960.0))))
-
         (+! (-> target-velocity x) (-> path-offset x))
         (+! (-> target-velocity y) (-> path-offset y))
         (+! (-> target-velocity z) (-> path-offset z))
         (set! (-> velocity-change x) (* 16.0 (- (-> target-velocity x) (-> state lin-velocity x))))
         (set! (-> velocity-change y) (* 16.0 (- (-> target-velocity y) (-> state lin-velocity y))))
         (set! (-> velocity-change z) (* 16.0 (- (-> target-velocity z) (-> state lin-velocity z))))
-
         (let ((max-acceleration 819200.0)
               (velocity-change-sq (+ (* (-> velocity-change x) (-> velocity-change x))
                                      (* (-> velocity-change y) (-> velocity-change y))
                                      (* (-> velocity-change z) (-> velocity-change z)))))
           (when (< (square max-acceleration) velocity-change-sq)
             (vector-normalize! velocity-change max-acceleration)))
-
         (+! (-> state lin-velocity x) (* (-> velocity-change x) dt))
         (+! (-> state lin-velocity y) (* (-> velocity-change y) dt))
         (+! (-> state lin-velocity z) (* (-> velocity-change z) dt))
@@ -720,16 +614,13 @@
         (+! (-> state position y) (* (-> state lin-velocity y) dt))
         (+! (-> state position z) (* (-> state lin-velocity z) dt))
         (quaternion-pseudo-seek (-> state rotation) (-> state rotation) target-rotation (* 10.0 dt))
-
         (vector-float*! (-> state lin-momentum) (-> state lin-velocity) (-> this info info mass))
         (vector-reset! (-> state ang-momentum))
         (rigid-body-method-24 state)
         (rigid-body-method-13 state)
-
         (set! (-> this root transv quad) (-> state lin-velocity quad))
         (quaternion-copy! (-> this root quat) (-> state rotation))
         (rigid-body-method-23 state (-> this root trans))
-
         (let ((bone-transform (-> this node-list data 0 bone transform))
               (body-matrix (-> state matrix)))
           (set! (-> bone-transform quad 0) (-> body-matrix quad 0))
@@ -737,9 +628,7 @@
           (set! (-> bone-transform quad 2) (-> body-matrix quad 2))
           (set! (-> bone-transform trans quad) (-> body-matrix trans quad)))
         (set! (-> this node-list data 0 bone transform trans quad) (-> this root trans quad))
-
         (advance-race-path! race (* dt speed-scale)))))
-
   (update-rider-seat-transforms! this)
   (vehicle-method-120 this)
   (update-transforms (-> this root))
@@ -765,38 +654,29 @@
            (lookahead-sample (new 'stack-no-clear 'race-path-sample))
            (lookahead-velocity (new 'stack-no-clear 'vector))
            (controls (new 'stack-no-clear 'vector)))
-
       (set! (-> forward quad) (-> state matrix quad 0))
       (set! (-> forward y) 0.0)
       (vector-normalize! forward 1.0)
-
       (sync-race-path-to-position! race position)
-
       (let* ((current-speed (vector-length velocity))
              (path-speed (vector-length (-> race lin-velocity)))
-             (desired-speed (* path-speed (fmax (-> race racer-state speed-factor)
-                                                (-> this shortcut-speed-factor))))
+             (desired-speed (* path-speed (fmax (-> race racer-state speed-factor) (-> this shortcut-speed-factor))))
              (turn-speed (* (-> state ang-velocity y) current-speed))
              (sample (-> race path-sample)))
-
         (when (logtest? (rigid-body-object-flag in-air turbo-boost) (-> this flags))
           (set! desired-speed (* 2.0 desired-speed)))
-
         (let ((sample-steering (* 0.007874016 (the float (-> sample stick-x))))
               (sample-throttle (* 0.003921569 (the float (-> sample throttle)))))
           (let ((lookahead-t (+ (-> race path-t) (* 1.875 (/ 1.0 path-speed) current-speed))))
             (race-path-sample-at (-> race path) lookahead-sample lookahead-velocity lookahead-t))
-
           (vector-! path-offset (-> sample pos) position)
-          (let ((path-deviation
-                  (+ (* (+ (* (-> path-offset x) (-> path-offset x))
-                           (* (-> path-offset y) (-> path-offset y))
-                           (* (-> path-offset z) (-> path-offset z)))
-                        (/ 1.0 (square 40960.0)))
-                     (* (vector-vector-distance-squared (-> race lin-velocity) velocity)
-                        (/ 1.0 (square 40960.0))))))
+          (let ((path-deviation (+ (* (+ (* (-> path-offset x) (-> path-offset x))
+                                         (* (-> path-offset y) (-> path-offset y))
+                                         (* (-> path-offset z) (-> path-offset z)))
+                                      (/ 1.0 (square 40960.0)))
+                                   (* (vector-vector-distance-squared (-> race lin-velocity) velocity)
+                                      (/ 1.0 (square 40960.0))))))
             (set! (-> this path-deviation) path-deviation)
-
             (set! (-> desired-velocity x) (+ (-> lookahead-velocity x) (-> path-offset x)))
             (set! (-> desired-velocity y) (+ (-> lookahead-velocity y) (-> path-offset y)))
             (set! (-> desired-velocity z) (+ (-> lookahead-velocity z) (-> path-offset z)))
@@ -806,45 +686,35 @@
             (set! (-> steering-error x) (* 1.5 (-> velocity-error x)))
             (set! (-> steering-error y) (* 1.5 (-> velocity-error y)))
             (set! (-> steering-error z) (* 1.5 (-> velocity-error z)))
-
             (let ((throttle-delta (* 0.00036621094 (- desired-speed current-speed) dt)))
               (set! (-> this ai-controls throttle)
                     (fmax 0.0 (fmin 1.0 (+ (-> this ai-controls throttle) throttle-delta)))))
-
             (set! (-> this ai-controls brake)
                   (fmax 0.0 (fmin 1.0 (* 0.000048828126 (+ (- -4096.0 desired-speed) current-speed)))))
-            (+! (-> this ai-controls brake)
-                (* (- (-> this ai-controls brake)) (fmin 1.0 (* 8.0 dt))))
-
+            (+! (-> this ai-controls brake) (* (- (-> this ai-controls brake)) (fmin 1.0 (* 8.0 dt))))
             (set! (-> this ai-controls steering)
                   (fmax -1.0
                         (fmin 1.0
-                              (* 0.000000000048894434
-                                 (+ 40960.0 desired-speed)
-                                 (vector-dot forward steering-error)))))
-
+                              (* 0.000000000048894434 (+ 40960.0 desired-speed) (vector-dot forward steering-error)))))
             (let ((deviation-blend (fmin 1.0 path-deviation)))
               (set! (-> controls x)
-                    (+ (* sample-steering (- 1.0 deviation-blend))
-                       (* (-> this ai-controls steering) deviation-blend))))
+                    (+ (* sample-steering (- 1.0 deviation-blend)) (* (-> this ai-controls steering) deviation-blend))))
             (set! (-> controls y) (-> this ai-controls throttle))
             (set! (-> controls w) (* 0.007874016 (the float (-> sample stick-y))))
             (set! (-> controls z) (-> this ai-controls brake))
             (vehicle-method-95 this controls))))
-
       (when (logtest? (-> race path-sample flags) 2)
         (start-jump this))))
-
   (vehicle-method-121 this)
   (when (< (-> this rbody state position y) -409600.0)
     (cond
-      ((vehicle-racer-local-player-driving? this)
-       (vehicle-racer-fake-respawn! this))
-      ((vehicle-racer-player-driven? this)
-       (vehicle-racer-protect-player-driver! this))
+      ((mp-vehicle-local-target-driving? this) (vehicle-racer-fake-respawn! this))
+      ((vehicle-racer-player-associated? this) (vehicle-racer-protect-player-driver! this))
       (else
-       (debug-log *mp-debug-log?* "[Vehicle-Racer] physics-post: pid ~d fell to death from path-id ~d~%"
-               (-> this pid) (-> this race path record-id))
+       (log 'debug
+            "[Vehicle-Racer] physics-post: pid ~d fell to death from path-id ~d~%"
+            (-> this pid)
+            (-> this race path record-id))
        (go (method-of-object this explode)))))
   (none))
 
@@ -866,205 +736,194 @@
        (rigid-body-object-method-38 this))))
   (none))
 
-(defun update-puppet-racer! ((this vehicle-racer))
+(defun update-replica-racer! ((this vehicle-racer))
   "Present a Host-authoritative AI racer without simulating its race AI locally."
   (set! (-> this camera-dist2) (vector-vector-distance-squared (-> this root trans) (camera-pos)))
   (set! (-> this player-dist2) (vector-vector-distance-squared (-> this root trans) (target-pos 0)))
   (update-race-physics-lod! this)
   (vehicle-method-120 this)
-  (let ((rec (mp-get-traffic-ghost (-> this net-id))))
+  (let ((rec (get-traffic-record (-> this net-id))))
     (when (and rec (nonzero? rec) (nonzero? (-> rec last-correction-time)))
-      (mp-vehicle-apply-ghost-correction this)
+      (mp-vehicle-apply-network-presentation this)
       (let ((rb (-> this rbody state)))
         (when rb
           (vector-float*! (-> rb lin-momentum) (-> rb lin-velocity) (-> this info info mass))
-          (vector-reset! (-> rb ang-momentum))
-          )
-        )
+          (vector-reset! (-> rb ang-momentum))))
       (let ((bone-transform (-> this node-list data 0 bone transform))
             (body-matrix (-> this rbody state matrix)))
         (set! (-> bone-transform quad 0) (-> body-matrix quad 0))
         (set! (-> bone-transform quad 1) (-> body-matrix quad 1))
         (set! (-> bone-transform quad 2) (-> body-matrix quad 2))
-        (set! (-> bone-transform trans quad) (-> this root trans quad))
-        )
+        (set! (-> bone-transform trans quad) (-> this root trans quad)))
       (when (< (-> this player-dist2) (square 245760.0))
         (let* ((speed (vector-length (-> this root transv)))
                (thrust (fmin 1.0 (/ speed (meters 1)))))
           (seek! (-> this engine-thrust) thrust (* 6.0 (seconds-per-frame)))
-          (set! (-> this engine-power-factor) (fabs (-> this engine-thrust)))
-          )
-        (do-engine-sounds this)
-        )
+          (set! (-> this engine-power-factor) (fabs (-> this engine-thrust))))
+        (do-engine-sounds this))
       (when (logtest? (-> this draw status) (draw-control-status on-screen))
         (draw-thrusters this)
         (when (< (-> this camera-dist2) (square 245760.0))
-          (update-joint-mods this)
-          )
-        )
+          (update-joint-mods this)))
       (update-transforms (-> this root))
-      (update-rider-seat-transforms! this)
-      )
-    )
-  (none)
-  )
+      (update-rider-seat-transforms! this)))
+  (none))
 
 (defmethod update-ai-racing! ((this vehicle-racer))
   "Update an AI-controlled racer during the active race."
-  (if (or (not (mp-race-vehicle-id? (-> this net-id)))
-          (mp-vehicle-is-local-authoritative? this))
-      (begin
-        (set! (-> this camera-dist2) (vector-vector-distance-squared (-> this rbody state position) (camera-pos)))
-        (set! (-> this player-dist2) (vector-vector-distance-squared (-> this rbody state position) (target-pos 0)))
-        (when (time-elapsed? (-> this shortcut-time) (seconds 5))
-          (set! (-> this shortcut-speed-factor) 0.0))
-        (update-race-physics-lod! this)
-        (if (logtest? (-> this rbody state flags) (rigid-body-flag enable-physics))
-            (physics-post this)
-            (update-kinematic-race-motion! this)))
-      (update-puppet-racer! this))
+  (if (or (not (mp-race-vehicle-id? (-> this net-id))) (mp-vehicle-is-local-authoritative? this))
+    (begin
+      (set! (-> this camera-dist2) (vector-vector-distance-squared (-> this rbody state position) (camera-pos)))
+      (set! (-> this player-dist2) (vector-vector-distance-squared (-> this rbody state position) (target-pos 0)))
+      (when (time-elapsed? (-> this shortcut-time) (seconds 5))
+        (set! (-> this shortcut-speed-factor) 0.0))
+      (update-race-physics-lod! this)
+      (if (logtest? (-> this rbody state flags) (rigid-body-flag enable-physics))
+        (physics-post this)
+        (update-kinematic-race-motion! this)))
+    (update-replica-racer! this))
   (none))
 
 (defmethod update-race-finished! ((this vehicle-racer))
   "Update a racer after finishing while it remains attached to a race path."
-  (if (or (not (mp-race-vehicle-id? (-> this net-id)))
-          (mp-vehicle-is-local-authoritative? this))
-      (begin
-        (set! (-> this camera-dist2) (vector-vector-distance-squared (-> this rbody state position) (camera-pos)))
-        (set! (-> this player-dist2) (vector-vector-distance-squared (-> this rbody state position) (target-pos 0)))
-        (set! (-> this shortcut-speed-factor) 0.0)
-        (update-race-physics-lod! this)
-        (when (and (logtest? (-> this flags) (rigid-body-object-flag player-driving))
-                   (not (logtest? (-> this rbody state flags) (rigid-body-flag enable-physics))))
-          (rigid-body-object-method-38 this))
-        (if (logtest? (-> this rbody state flags) (rigid-body-flag enable-physics))
-            (physics-post this)
-            (update-kinematic-race-motion! this)))
-      (update-puppet-racer! this))
+  (if (or (not (mp-race-vehicle-id? (-> this net-id))) (mp-vehicle-is-local-authoritative? this))
+    (begin
+      (set! (-> this camera-dist2) (vector-vector-distance-squared (-> this rbody state position) (camera-pos)))
+      (set! (-> this player-dist2) (vector-vector-distance-squared (-> this rbody state position) (target-pos 0)))
+      (set! (-> this shortcut-speed-factor) 0.0)
+      (update-race-physics-lod! this)
+      (when (and (logtest? (-> this flags) (rigid-body-object-flag player-driving))
+                 (not (logtest? (-> this rbody state flags) (rigid-body-flag enable-physics))))
+        (rigid-body-object-method-38 this))
+      (if (logtest? (-> this rbody state flags) (rigid-body-flag enable-physics))
+        (physics-post this)
+        (update-kinematic-race-motion! this)))
+    (update-replica-racer! this))
   (none))
 
 (defmethod vehicle-method-124 ((this vehicle-racer))
   (cond
-    ((and (logtest? (rigid-body-object-flag player-grabbed) (-> this flags))
-          (-> this race path))
+    ((and (logtest? (rigid-body-object-flag player-grabbed) (-> this flags)) (-> this race path))
      (update-race-finished! this))
-    (else
-     (vehicle-method-94 this)
-     (vehicle-method-121 this)))
+    (else (vehicle-method-94 this) (vehicle-method-121 this)))
   (vehicle-method-97 this)
   (none))
 
 (defstate waiting-race (vehicle-racer)
   :virtual #t
   :event vehicle-event-handler
-  :enter (behavior ()
-    (set-time! (-> self state-time))
-    (logior! (-> self flags) (rigid-body-object-flag ignition))
-    (set! (-> self controls throttle) 0.0)
-    (set! (-> self controls brake) 0.0)
-    (set! (-> self controls steering) 0.0)
-    (set! (-> self damage-factor) 0.0)
-    (reset-flight-level-transition! self)
-    (update-navmesh-membership! self)
-    (let ((vehicle-prim (find-prim-by-id-logtest (-> self root) (the-as uint 32))))
-      (when vehicle-prim
-        (set! (-> vehicle-prim prim-core collide-with) (collide-spec))
-        (set! (-> vehicle-prim prim-core collide-as) (collide-spec))
-        )
-      )
-    )
-  :exit (behavior ()
-    (set! (-> self hit-points) 1.0)
-    (logclear! (-> self flags) (rigid-body-object-flag waiting-for-player))
-    (let ((vehicle-prim (find-prim-by-id-logtest (-> self root) (the-as uint 32))))
-      (when vehicle-prim
-        (set! (-> vehicle-prim prim-core collide-with)
-              (collide-spec backgnd crate civilian enemy obstacle vehicle-sphere
-                            hit-by-player-list hit-by-others-list collectable pusher))
-        (set! (-> vehicle-prim prim-core collide-as) (collide-spec vehicle-sphere))
-        )
-      )
-    )
+  :enter
+    (behavior ()
+      (set-time! (-> self state-time))
+      (logior! (-> self flags) (rigid-body-object-flag ignition))
+      (set! (-> self controls throttle) 0.0)
+      (set! (-> self controls brake) 0.0)
+      (set! (-> self controls steering) 0.0)
+      (set! (-> self damage-factor) 0.0)
+      (reset-flight-level-transition! self)
+      (update-navmesh-membership! self)
+      (let ((vehicle-prim (find-prim-by-id-logtest (-> self root) (the-as uint 32))))
+        (when vehicle-prim
+          (set! (-> vehicle-prim prim-core collide-with) (collide-spec))
+          (set! (-> vehicle-prim prim-core collide-as) (collide-spec)))))
+  :exit
+    (behavior ()
+      (set! (-> self hit-points) 1.0)
+      (logclear! (-> self flags) (rigid-body-object-flag waiting-for-player))
+      (let ((vehicle-prim (find-prim-by-id-logtest (-> self root) (the-as uint 32))))
+        (when vehicle-prim
+          (set! (-> vehicle-prim prim-core collide-with)
+                (collide-spec backgnd
+                              crate
+                              civilian
+                              enemy
+                              obstacle
+                              vehicle-sphere
+                              hit-by-player-list
+                              hit-by-others-list
+                              collectable
+                              pusher))
+          (set! (-> vehicle-prim prim-core collide-as) (collide-spec vehicle-sphere)))))
   :trans #f
   :code sleep-code
-  :post (behavior ()
+  :post
+  (behavior ()
     (when (logtest? (-> self flags) (rigid-body-object-flag waiting-for-player))
       (set! (-> self camera-dist2) (vector-vector-distance-squared (-> self root trans) (camera-pos)))
       (set! (-> self player-dist2) (vector-vector-distance-squared (-> self root trans) (target-pos 0)))
-      (check-player-get-on self)
-      )
+      (check-player-get-on self))
     (vector-reset! (-> self target-acceleration))
     (vehicle-method-120 self)
     (update-transforms (-> self root))
     (update-rider-seat-transforms! self)
-    (rigid-body-object-method-39 self)
-    )
-  )
+    (rigid-body-object-method-39 self)))
 
 (defstate waiting-for-start (vehicle-racer)
   :virtual #t
   :event vehicle-event-handler
-  :enter (behavior ()
-    (set-time! (-> self state-time))
-    (set! (-> self damage-factor) (-> self info damage-factor))
-    (update-navmesh-membership! self)
-    (logior! (-> self flags) (rigid-body-object-flag ignition))
-    )
+  :enter
+    (behavior ()
+      (set-time! (-> self state-time))
+      (set! (-> self damage-factor) (-> self info damage-factor))
+      (update-navmesh-membership! self)
+      (logior! (-> self flags) (rigid-body-object-flag ignition)))
   :code sleep-code
-  :post (behavior ()
-    (vector-reset! (-> self target-acceleration))
-    (logclear! (-> self flags) (rigid-body-object-flag player-impulse-force player-contact-force))
-    (let ((state (-> self rbody state)))
-      (set! (-> state force quad) (the-as uint128 0))
-      (set! (-> state torque quad) (the-as uint128 0))
-      )
-    (clear-momentum! (-> self rbody state))
-    (vehicle-method-120 self)
-    (update-rider-seat-transforms! self)
-    )
-  )
+  :post
+    (behavior ()
+      (vector-reset! (-> self target-acceleration))
+      (logclear! (-> self flags) (rigid-body-object-flag player-impulse-force player-contact-force))
+      (let ((state (-> self rbody state)))
+        (set! (-> state force quad) (the-as uint128 0))
+        (set! (-> state torque quad) (the-as uint128 0)))
+      (clear-momentum! (-> self rbody state))
+      (vehicle-method-120 self)
+      (update-rider-seat-transforms! self)))
 
 (defstate racing (vehicle-racer)
   :virtual #t
   :event vehicle-event-handler
-  :enter (behavior ()
-    (set-time! (-> self state-time))
-    (logior! (-> self flags) (rigid-body-object-flag riding ignition))
-    (set! (-> self controls throttle) 0.0)
-    (set! (-> self controls brake) 0.0)
-    (set! (-> self controls steering) 0.0)
-    )
-  :exit (behavior ()
-    (logclear! (-> self flags) (rigid-body-object-flag waiting-for-player))
-    (let ((vehicle-prim (find-prim-by-id-logtest (-> self root) (the-as uint 32))))
-      (when vehicle-prim
-        (set! (-> vehicle-prim prim-core collide-with)
-              (collide-spec backgnd crate civilian enemy obstacle vehicle-sphere
-                            hit-by-player-list hit-by-others-list collectable pusher))
-        (set! (-> vehicle-prim prim-core collide-as) (collide-spec vehicle-sphere))
-        )
-      )
-    )
+  :enter
+    (behavior ()
+      (set-time! (-> self state-time))
+      (logior! (-> self flags) (rigid-body-object-flag riding ignition))
+      (set! (-> self controls throttle) 0.0)
+      (set! (-> self controls brake) 0.0)
+      (set! (-> self controls steering) 0.0))
+  :exit
+    (behavior ()
+      (logclear! (-> self flags) (rigid-body-object-flag waiting-for-player))
+      (let ((vehicle-prim (find-prim-by-id-logtest (-> self root) (the-as uint 32))))
+        (when vehicle-prim
+          (set! (-> vehicle-prim prim-core collide-with)
+                (collide-spec backgnd
+                              crate
+                              civilian
+                              enemy
+                              obstacle
+                              vehicle-sphere
+                              hit-by-player-list
+                              hit-by-others-list
+                              collectable
+                              pusher))
+          (set! (-> vehicle-prim prim-core collide-as) (collide-spec vehicle-sphere)))))
   :trans #f
   :code sleep-code
-  :post (behavior ()
-    (update-ai-racing! self)
-    )
-  )
+  :post
+  (behavior ()
+    (update-ai-racing! self)))
 
 (defstate race-finished (vehicle-racer)
   :virtual #t
   :event vehicle-event-handler
-  :enter (behavior ()
-    (set-time! (-> self state-time))
-    (logior! (-> self flags) (rigid-body-object-flag persistent riding nav-spheres))
-    (set! (-> self controls throttle) 0.0)
-    (set! (-> self controls brake) 0.0)
-    (set! (-> self controls steering) 0.0)
-    )
+  :enter
+    (behavior ()
+      (set-time! (-> self state-time))
+      (logior! (-> self flags) (rigid-body-object-flag persistent riding nav-spheres))
+      (set! (-> self controls throttle) 0.0)
+      (set! (-> self controls brake) 0.0)
+      (set! (-> self controls steering) 0.0))
   :trans #f
   :code sleep-code
-  :post (behavior ()
-    (update-race-finished! self)
-    )
-  )
+  :post
+    (behavior ()
+      (update-race-finished! self)))

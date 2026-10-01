@@ -10,7 +10,6 @@
   )
 
 (defun register-region-override! ((id int) (on-enter object) (on-inside object) (on-exit object))
-  "Register a custom script override for a specific region ID."
   (let ((found #f)
         (uid (the-as uint id)))
     (dotimes (i *region-overrides-count*)
@@ -40,7 +39,6 @@
   )
 
 (defun region-custom-patch-level ((lev level))
-  "Apply all registered overrides to the regions in the given level."
   (when (and lev (nonzero? lev) (nonzero? (-> lev bsp)) (nonzero? (-> lev bsp region-array)))
     (dotimes (i (-> lev bsp region-array length))
       (let ((reg (-> lev bsp region-array data i)))
@@ -68,7 +66,6 @@
   )
 
 (defun region-custom-tick ()
-  "Tick function called every frame to apply region overrides to active levels."
   (when (and *level* (nonzero? *level*))
     (dotimes (idx (-> *level* length))
       (let* ((lev (-> *level* level idx))

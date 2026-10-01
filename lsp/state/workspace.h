@@ -37,8 +37,8 @@ struct OGGlobalIndex {
 
 struct LexicalBinding {
   std::string name;
-  std::string kind; // "parameter", "local"
-  std::string type; // e.g. "mp-battle-event", empty if unknown
+  std::string kind;
+  std::string type;
   TSNode decl_node;
 };
 
@@ -65,7 +65,7 @@ class WorkspaceOGFile {
   void parse_content(const std::string& new_content);
   void update_symbols(const std::vector<symbol_info::SymbolInfo*>& symbol_infos);
   std::optional<std::string> get_symbol_at_position(const LSPSpec::Position position) const;
-  TSNode get_node_at_position(const LSPSpec::Position position) const;
+  TSNode get_node_at_position(LSPSpec::Position position) const;
   std::vector<OpenGOALFormResult> search_for_forms_that_begin_with(
       std::vector<std::string> prefix) const;
   const std::shared_ptr<TSTree>& get_ast() const { return m_ast; }

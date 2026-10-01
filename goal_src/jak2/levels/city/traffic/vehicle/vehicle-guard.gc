@@ -7,7 +7,10 @@
 
 (define-extern mp-combat-valid-player-target? (function process-focusable symbol symbol))
 (define-extern mp-combat-nearest-player-target (function process-focusable process-focusable symbol process-focusable))
-(define-extern mp-vehicle-guard-handle-event! (function vehicle process int symbol event-message-block symbol))
+(define-extern mp-vehicle-guard-clear-combat! (function vehicle-guard none))
+(define-extern mp-vehicle-player-driving? (function vehicle symbol))
+(define-extern mp-vehicle-remote-driven? (function vehicle symbol))
+(define-extern mp-vehicle-handle-traffic-off! (function vehicle symbol))
 (define-extern mp-vehicle-clear-stale-player-driver! (function vehicle none))
 
 (deftype turret-unknown-stack-structure (structure)
@@ -895,14 +898,6 @@
 
 ;; WARN: disable def twice: 112. This may happen when a cond (no else) is nested inside of another conditional, but it should be rare.
 (defmethod rigid-body-object-method-46 ((this vehicle-guard) (arg0 process-drawable) (arg1 int) (arg2 symbol) (arg3 event-message-block))
-  (let ((mp-result (mp-vehicle-guard-handle-event! this arg0 arg1 arg2 arg3)))
-    (when (= mp-result 'block)
-      (return #f)
-      )
-    (when (= mp-result 'handled)
-      (return #t)
-      )
-    )
   (case arg2
     (('impact-impulse)
      (let ((s5-1 (the-as matrix (-> arg3 param 0))))
@@ -938,7 +933,15 @@
     (('track)
      (not (logtest? (-> this flags) (rigid-body-object-flag player-driving)))
      )
+    (('pilot-on)
+     (mp-vehicle-guard-clear-combat! this)
+     ((method-of-type vehicle rigid-body-object-method-46) this arg0 arg1 arg2 arg3)
+     )
     (('alert-begin)
+     (when (mp-vehicle-player-driving? this)
+       (mp-vehicle-guard-clear-combat! this)
+       (return #t)
+       )
      (when (and (not (focus-test? this dead))
                 (not (logtest? (rigid-body-object-flag alert) (-> this flags)))
                 (logtest? (rigid-body-object-flag ai-driving) (-> this flags))
@@ -950,21 +953,25 @@
                 (nonzero? (-> this controller traffic))
                 (>= (the-as uint (get-alert-level (-> this controller traffic))) (the-as uint 2))
                 )
-       (let ((target-proc (the-as process (-> arg3 param 0))))
-         (when (and target-proc
-                    (nonzero? target-proc)
-                    (mp-vehicle-guard-ensure-target-status! this target-proc))
-           (logior! (-> this flags) (rigid-body-object-flag alert))
-           (let ((v0-4 (the-as object (process->handle target-proc))))
-             (set! (-> this pursuit-target) (the-as handle v0-4))
-             (set! (-> this traffic-target-status handle) (the-as handle v0-4))
-             v0-4
-             )
-           )
-         )
-       )
-     )
+        (let ((target-proc (the-as process (-> arg3 param 0))))
+          (when (and target-proc
+                     (nonzero? target-proc)
+                     (mp-vehicle-guard-ensure-target-status! this target-proc))
+            (logior! (-> this flags) (rigid-body-object-flag alert))
+            (let ((v0-4 (the-as object (process->handle target-proc))))
+              (set! (-> this pursuit-target) (the-as handle v0-4))
+              (set! (-> this traffic-target-status handle) (the-as handle v0-4))
+              v0-4
+              )
+            )
+          )
+        )
+      )
     (('alert-end)
+     (when (mp-vehicle-player-driving? this)
+       (mp-vehicle-guard-clear-combat! this)
+       (return #t)
+       )
      (when (not (focus-test? this dead))
        (when (logtest? (rigid-body-object-flag alert) (-> this flags))
          (set! (-> this flags) (the-as
@@ -979,6 +986,10 @@
        )
      )
     (('end-pursuit)
+     (when (mp-vehicle-player-driving? this)
+       (mp-vehicle-guard-clear-combat! this)
+       (return #t)
+       )
      (when (logtest? (rigid-body-object-flag alert) (-> this flags))
        (set! (-> this flags) (the-as
                                rigid-body-object-flag
@@ -1285,7 +1296,7 @@
   :event vehicle-event-handler
   :enter (behavior ()
     (let ((v1-0 (-> self controller branch)))
-      (when (and (or (not v1-0) (zero? v1-0)) (mp-is-traffic-authoritative?))
+      (when (and (or (not v1-0) (zero? v1-0)) *mp-traffic-local-authoritative?*)
         (cond
           ((logtest? (-> self draw status) (draw-control-status on-screen))
            (set! (-> self hit-points) 0.0)

@@ -800,7 +800,7 @@
            (s2-0 (if (= (the-as int (-> arg3 param 2)) 1) #t #f))
            (s3-1 (the-as uint (-> arg3 param 3)))
            )
-       (debug-log *mp-debug-log?*
+       (log 'debug
          "[Battle][~A][EVENT] battle=~A spawner=~D spawner-ok=~A breed=~D aid=~D~%"
          (if (mp-session-host?) "HOST" "CLIENT")
          self
@@ -809,7 +809,7 @@
          s1-0
          s3-1
          )
-       (debug-log *mp-debug-log?*
+       (log 'debug
          "[Battle][~A][EVENT] initial=~A initial-raw=~D beaten=~A aid=~D~%"
          (if (mp-session-host?) "HOST" "CLIENT")
          s2-0
@@ -817,7 +817,7 @@
          (logtest? (-> self flags) (battle-flags beaten))
          s3-1
          )
-       (when (and s0-0 (not (logtest? (-> self flags) (battle-flags beaten))))
+       (when (and s0-0 (not (mp-battle-local-owner? self)) (not (logtest? (-> self flags) (battle-flags beaten))))
          (spawn-from-spawner-choice self s0-0 (the-as int (-> arg3 param 0)) s2-0 s1-0 s3-1)
          )
        )
@@ -1144,7 +1144,7 @@
 
 (defmethod get-random-breed-index ((this battle) (arg0 battle-spawner))
   (let ((f0-0 (rand-vu))
-        (v1-0 -1)
+        (v1-0 0)
         )
     (let ((a0-2 (-> arg0 breeds length)))
       (dotimes (a1-1 a0-2)
@@ -1251,8 +1251,7 @@
            (s0-1 (get-breed-by-index this arg0 arg3))
            (v0-7 (the-as handle #f))
            (local-owner? (mp-battle-local-owner? this))
-           (replica-spawn? (and *multi-sync-enabled?*
-                                *mp-processing-remote-event*
+           (replica-spawn? (and *mp-processing-remote-event*
                                 (not local-owner?)))
            )
       (set! (-> s1-1 trans quad) (-> s3-0 quad))
@@ -1261,13 +1260,11 @@
       (set! (-> s1-1 directed?) #t)
       (set! (-> s1-1 no-initial-move-to-ground?) s2-1)
       (set! (-> s1-1 battle-enemy?) #t)
-      (if (nonzero? aid-override)
+      (if local-owner?
+        (set! (-> s1-1 aid-override) (mp-generate-battle-enemy-aid))
         (set! (-> s1-1 aid-override) aid-override)
-        (when local-owner?
-          (set! (-> s1-1 aid-override) (mp-generate-battle-enemy-aid))
-          )
         )
-      (debug-log *mp-debug-log?*
+      (log 'debug
         "[Battle][~A][TRY] battle=~A spawner=~D breed=~D initial=~A aid=~D~%"
         (if (mp-session-host?) "HOST" "CLIENT")
         this
@@ -1276,7 +1273,7 @@
         arg2
         (-> s1-1 aid-override)
         )
-      (debug-log *mp-debug-log?*
+      (log 'debug
         "[Battle][~A][CTX] owner=~D epoch=~D local=~D mode=~A remote-flag=~A "
         (if (mp-session-host?) "HOST" "CLIENT")
         (mp-battle-owner-player-id this)
@@ -1284,10 +1281,10 @@
         (if (and (mp-local-player-record) (nonzero? (mp-local-player-record))) (-> (mp-local-player-record) identity player-id) -1)
         (if local-owner? "OWNER" (if replica-spawn? "REPLICA" "BLOCKED"))
         *mp-processing-remote-event*)
-      (debug-log *mp-debug-log?*
+      (log 'debug
               "aid=~D~%"
               (-> s1-1 aid-override))
-      (debug-log *mp-debug-log?*
+      (log 'debug
         "[Battle][~A][TRY] intro-path=~A breed-ok=~A aid=~D~%"
         (if (mp-session-host?) "HOST" "CLIENT")
         s2-0
@@ -1299,7 +1296,7 @@
             (let ((spawned-proc (the-as enemy (handle->process v0-7))))
               (if (and spawned-proc (nonzero? spawned-proc))
                   (begin
-                    (debug-log *mp-debug-log?*
+                    (log 'debug
                       "[Battle][~A][SPAWNED] proc=~A aid=~D spawner=~D breed=~D remote=~A~%"
                       (if (mp-session-host?) "HOST" "CLIENT")
                       spawned-proc
@@ -1318,7 +1315,7 @@
                       (mp-battle-note-local-spawn! this arg1 arg3 arg2 (mp-get-enemy-aid spawned-proc))
                       )
                     )
-                  (debug-log *mp-debug-log?*
+                  (log 'debug
                     "[Battle][~A][FAIL] spawn-from-breed returned no valid process spawner=~D breed=~D~%"
                     (if (mp-session-host?) "HOST" "CLIENT")
                     arg1
@@ -1328,12 +1325,12 @@
               )
             )
           (if s0-1
-              (debug-log *mp-debug-log?*
+              (log 'debug
                 "[Battle][~A][REJECT] non-owner local spawn spawner=~D breed=~D.~%"
                 (if (mp-session-host?) "HOST" "CLIENT")
                 arg1
                 arg3)
-              (debug-log *mp-debug-log?*
+              (log 'debug
                 "[Battle][~A][FAIL] invalid breed index spawner=~D breed=~D~%"
                 (if (mp-session-host?) "HOST" "CLIENT")
                 arg1
@@ -1345,12 +1342,12 @@
   (none)
   )
 
-(defmethod spawn-from-spawner ((this battle) (arg0 battle-spawner) (arg1 symbol))
-  (let ((s0-1 (get-random-breed-index this arg0))
-        (s1-1 (get-spawner-index this arg0))
+(defmethod spawn-from-spawner ((this battle) (spawner battle-spawner) (arg1 symbol))
+  (let ((breed-i (get-random-breed-index this spawner))
+        (spawner-i (get-spawner-index this spawner))
         )
-    (when (and (>= s0-1 0) (>= s1-1 0))
-      (spawn-from-spawner-choice this arg0 s1-1 arg1 s0-1 (the-as uint 0))
+    (when (and (>= breed-i 0) (>= spawner-i 0))
+      (spawn-from-spawner-choice this spawner spawner-i arg1 breed-i (the-as uint 0))
       )
     )
   (none)
@@ -1540,7 +1537,7 @@
   :virtual #t
   :event battle-event-handler
   :enter (behavior ()
-    (if (and (not *multi-sync-enabled?*)
+    (if (and (not (mp-session-in-game?))
              (-> self spawn-initial-creatures?)
              (not (-> self info dont-spawn-initial-until-notice?)))
         (spawn-initial-creatures self)
@@ -1588,7 +1585,7 @@
       )
     (set-battle-music self)
     (let ((local-owner? (mp-battle-local-owner? self)))
-      (debug-log *mp-debug-log?*
+      (log 'debug
         "[Battle][NOTICE-ENTER] owner=~D epoch=~D local=~D dispatch=~A~%"
         (mp-battle-owner-player-id self)
         (mp-battle-epoch self)
@@ -1881,7 +1878,7 @@
             (+! f30-0 (-> s5-1 data v1-20 percent))
             )
           (when (!= f30-0 1.0)
-            (debug-log *mp-debug-log?*
+            (log 'debug
               "WARNING: battle spawner ~A has spawn percents that don't sum to 1.0.~%"
               (res-lump-struct (-> arg0 entity) 'name structure)
               )

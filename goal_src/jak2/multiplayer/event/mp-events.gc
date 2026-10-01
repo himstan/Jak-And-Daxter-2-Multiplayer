@@ -7,7 +7,6 @@
 (defun mp-reset-event-state! ()
   (set! *mp-processing-remote-event* #f)
   (set! *mp-current-event-source-player-id* MP_INVALID_PLAYER_ID)
-  (set! *multi-last-in-event-seq* (the-as uint 0))
   (mp-event-queue-reset!)
   (set! *mp-mission-failed-pending-choice* (the uint 0))
   (set! *mp-mission-failed-bootstrap-pending?* #f)
@@ -61,90 +60,51 @@
   (mp-broadcast-event-to-active-processes 'mp-reset (the uint 0) (the uint 0))
   (mp-for-each-player-record (player-id record)
     (set! (-> record runtime last-gun-shot-sequence) (the uint 0)))
-  (when (and *mp-event-buffer*
-             (nonzero? (the-as uint *mp-event-buffer*)))
-    (mem-set32! (the-as pointer *mp-event-buffer*) (/ (size-of mp-event-buffer) 4) 0)
-    )
-  (none)
-  )
+  (when (and *mp-event-buffer* (nonzero? (the-as uint *mp-event-buffer*)))
+    (mem-set32! (the-as pointer *mp-event-buffer*) (/ (size-of mp-event-buffer) 4) 0))
+  (none))
+
 (defun mp-inbound-waypoint-command? ((evt mp-event))
   (and evt
        (nonzero? (the-as uint evt))
-       (or (= (-> evt etype) MP_EVENT_WAYPOINT_BUMP)
-           (= (-> evt etype) MP_EVENT_WAYPOINT_REQUEST)))
-  )
+       (or (= (-> evt etype) MP_EVENT_WAYPOINT_BUMP) (= (-> evt etype) MP_EVENT_WAYPOINT_REQUEST))))
 
-(defun mp-inbound-waypoint-has-later-command? ((evt mp-event)
-                                               (start-idx int)
-                                               (total-count int))
-  (when (or (not (mp-session-host?))
-            (not (mp-inbound-waypoint-command? evt)))
+(defun mp-inbound-waypoint-has-later-command? ((evt mp-event) (start-idx int) (total-count int))
+  (when (or (not (mp-session-host?)) (not (mp-inbound-waypoint-command? evt)))
     (return #f))
   (let ((scan-index (+ start-idx 1))
         (current (the-as mp-waypoint-event evt)))
-    (when (and *mp-event-buffer*
-               (nonzero? (the-as uint *mp-event-buffer*)))
+    (when (and *mp-event-buffer* (nonzero? (the-as uint *mp-event-buffer*)))
       (while (< scan-index total-count)
         (let ((later (-> *mp-event-buffer* in-events scan-index)))
           (when (and (mp-inbound-waypoint-command? later)
-                     (mp-waypoint-event-same-target? current
-                                                    (the-as mp-waypoint-event later)))
-            (return #t))
-          )
-        (+! scan-index 1)
-        )
-      )
-    )
-  #f
-  )
+                     (mp-waypoint-event-same-target? current (the-as mp-waypoint-event later)))
+            (return #t)))
+        (+! scan-index 1))))
+  #f)
 
 (defun mp-log-inbound-event-begin! ((evt mp-event) (event-index int))
   (when (and evt (nonzero? (the-as uint evt)))
-    (debug-log *mp-debug-log?*
-               "[MP-Events] Dispatch begin index=~D type=~D~%"
-               event-index
-               (-> evt etype)))
-  (none)
-  )
+    (log 'debug "[MP-Events] Dispatch begin index=~D type=~D~%" event-index (-> evt etype)))
+  (none))
 
 (defun mp-log-inbound-event-complete! ((evt mp-event) (event-index int))
   (when (and evt (nonzero? (the-as uint evt)))
-    (debug-log *mp-debug-log?*
-               "[MP-Events] Dispatch complete index=~D type=~D~%"
-               event-index
-               (-> evt etype)))
-  (none)
-  )
+    (log 'debug "[MP-Events] Dispatch complete index=~D type=~D~%" event-index (-> evt etype)))
+  (none))
 
 (defun mp-process-inbound-events ()
-  "Process a bounded bridge batch through the central event dispatcher."
-  (when (and *mp-event-buffer*
-             (nonzero? (the-as uint *mp-event-buffer*)))
-    (let ((total-to-process (min 16 (the-as int (-> *mp-event-buffer* in-count)))))
+  (when (and *mp-event-buffer* (nonzero? (the-as uint *mp-event-buffer*)))
+    (let ((total-to-process (min 64 (the-as int (-> *mp-event-buffer* in-count)))))
       (when (> total-to-process 0)
-        (debug-log *mp-debug-log?*
-                   "[MP-Events] Processing ~D inbound events.~%"
-                   total-to-process)
+        (log 'debug "[MP-Events] Processing ~D inbound events.~%" total-to-process)
         (dotimes (event-index total-to-process)
           (let ((event (-> *mp-event-buffer* in-events event-index)))
-            (if (mp-inbound-waypoint-has-later-command?
-                 event
-                 (the-as int event-index)
-                 total-to-process)
-                (debug-log *mp-debug-log?*
-                           "[MP-Events] Coalesced waypoint event index=~D.~%"
-                           event-index)
-                (begin
-                  (mp-log-inbound-event-begin! event (the-as int event-index))
-                  (mp-event-dispatch! event)
-                  (mp-log-inbound-event-complete! event (the-as int event-index))
-                  )
-                )
-            )
-          )
-        (set! (-> *mp-event-buffer* in-count) (the uint 0))
-        )
-      )
-    )
-  (none)
-  )
+            (if (mp-inbound-waypoint-has-later-command? event (the-as int event-index) total-to-process)
+              (log 'debug "[MP-Events] Coalesced waypoint event index=~D.~%" event-index)
+              (begin
+                (mp-log-inbound-event-begin! event (the-as int event-index))
+                (mp-event-dispatch! event)
+                (mp-log-inbound-event-complete! event (the-as int event-index))))))
+        (set! (-> *mp-event-buffer* in-count) (the uint 0)))))
+  (none))

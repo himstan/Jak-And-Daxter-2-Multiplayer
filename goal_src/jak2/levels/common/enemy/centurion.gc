@@ -1322,6 +1322,11 @@
     )
   )
 
+(defmethod update-los ((this centurion))
+  (set-dst-proc! (-> this los) (-> this focus handle))
+  (none)
+  )
+
 (defmethod enemy-method-78 ((this centurion) (arg0 enemy-knocked-info))
   (cond
     ((zero? (-> this hit-points))

@@ -1218,7 +1218,7 @@
             :info #f
             :borrow '()
             :open? #f
-            :on-close #f
+            :on-close '(task-close! "city-vehicle-training-resolution")
             :add (game-task-node-command add-darkjak)
             :description (text-id progress-missions-city-save-kid)
             )

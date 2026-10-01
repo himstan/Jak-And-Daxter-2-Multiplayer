@@ -304,9 +304,9 @@
                           #f
                           0
                           :to self
+                          )
                         )
                  )
-             )
              (set! (-> self slave s4-1) (ppointer->handle v1-12))
              (set! (-> (the-as basebutton (-> v1-12 0)) event-down) 'button-down)
              )
@@ -342,8 +342,8 @@
                                                             )
                                                           )
                                  )
+                         )
                    )
-               )
                (set! (-> self slave s4-2) (the-as handle v0-1))
                v0-1
                )

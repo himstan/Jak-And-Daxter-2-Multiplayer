@@ -295,7 +295,7 @@
              (nonzero? pole)
              proc
              (nonzero? proc)
-             (not-puppet? proc))
+             (not-player-replica? proc))
     (swingpole-refresh-player-state! pole)
     (let ((player-slot (swingpole-player-slot proc))
           (target-handle (process->handle proc)))

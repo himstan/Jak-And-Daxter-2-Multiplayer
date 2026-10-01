@@ -1091,16 +1091,16 @@
   )
 
 (defbehavior can-play-stance-amibent? target ()
-  (when (puppet? self)
+  (when (player-replica? self)
     (return #f)
     )
-  (when *multi-sync-enabled?*
+  (when (mp-session-in-game?)
     (let ((ride-along-found? #f))
       (dotimes (player-id MP_MAX_PLAYERS)
         (let ((record (mp-player-record-by-id (the-as uint player-id))))
           (when (and record
                      (nonzero? record)
-                     (mp-player-record-remote? *mp-player-controller* record)
+                     (is-record-remote-player? record)
                      (mp-target-ride-along? (mp-player-record-target record)))
             (set! ride-along-found? #t))))
       (when (not ride-along-found?)

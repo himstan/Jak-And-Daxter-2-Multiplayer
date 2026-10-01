@@ -126,7 +126,6 @@
 (define *pc-controller-led-base-color* (static-vector 0.0 0.0 1.0 1.0))
 
 (defun pc-controller-led-set-base-rgb! ((red int) (green int) (blue int))
-  "Set the neutral controller LED color used by Jak II's dynamic LED effects."
   (when (and *pc-controller-led-base-color*
              (nonzero? *pc-controller-led-base-color*))
     (set-vector-xyz!

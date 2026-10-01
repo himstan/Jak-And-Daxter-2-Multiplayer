@@ -5,7 +5,6 @@
 (define-extern traffic-branch-loaded? (function nav-branch symbol))
 (define-extern traffic-next-branch-risk? (function nav-branch symbol))
 (define-extern traffic-path-risk? (function vehicle symbol))
-(define-extern mp-draw-vehicle-guard-debug (function vehicle-guard symbol none))
 
 (defun mp-draw-traffic-ped-debug ((proc citizen))
   (when (and *mp-traffic-ped-debug?* *target*)
@@ -16,53 +15,54 @@
             (let ((draw-pos (new 'stack-no-clear 'vector)))
               (vector-copy! draw-pos (-> proc root trans))
               (set! (-> draw-pos y) (+ (-> draw-pos y) (meters 2.0)))
-
-              (let ((is-owner (mp-is-traffic-authoritative?)))
+              (let ((is-owner *mp-traffic-local-authoritative?*))
                 (let ((color (if is-owner (font-color green) (font-color yellow)))
-                      (status-str (if is-owner "OWNER" "PUPPET"))
+                      (status-str (if is-owner "OWNER" "REPLICA"))
                       (type-str (symbol->string (-> proc type symbol)))
                       (cur-state (if (-> proc state) (-> proc state name) 'none)))
-
                   (if is-owner
-                      (add-debug-text-3d #t (bucket-id debug-no-zbuf1)
-                                        (the-as string (format #f "PED-ID: ~D (~S)~%STATE: ~S(~D)~%TYPE: ~S"
-                                                net-id
-                                                status-str
-                                                cur-state
-                                                (the uint8 (mp-ped-get-state-id proc))
-                                                type-str))
-                                        draw-pos
-                                        color
-                                        (the-as vector2h #f))
-                      (let ((rec (mp-get-traffic-ghost net-id)))
-                        (add-debug-text-3d #t (bucket-id debug-no-zbuf1)
-                                          (the-as string (format #f "PED-ID: ~D (~S)~%STATE: ~S~%GHOST-STATE: ~S(~D)~%TYPE: ~S"
-                                                  net-id
-                                                  status-str
-                                                  cur-state
-                                                  (if rec (mp-ped-get-state-from-id (the uint (-> rec ghost-state-id))) 'none)
-                                                  (if rec (-> rec ghost-state-id) 0)
-                                                  type-str))
-                                          draw-pos
-                                          color
-                                          (the-as vector2h #f))
-
-                        (when rec
-                          (add-debug-sphere #t (bucket-id debug-no-zbuf1) (-> rec ghost-trans) (meters 0.5) (static-rgba 255 255 0 128))
-                          (add-debug-line #t (bucket-id debug-no-zbuf1) (-> proc root trans) (-> rec ghost-trans) (static-rgba 255 255 0 128) #f (the-as rgba 0))
-                          )
-                        )
-                      )
-                  )
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  (none)
-  )
+                    (add-debug-text-3d #t
+                                       (bucket-id debug-no-zbuf1)
+                                       (the-as string
+                                               (format #f
+                                                       "PED-ID: ~D (~S)~%STATE: ~S(~D)~%TYPE: ~S"
+                                                       net-id
+                                                       status-str
+                                                       cur-state
+                                                       (the uint8 (mp-ped-get-state-id proc))
+                                                       type-str))
+                                       draw-pos
+                                       color
+                                       (the-as vector2h #f))
+                    (let ((rec (get-traffic-record net-id)))
+                      (add-debug-text-3d #t
+                                         (bucket-id debug-no-zbuf1)
+                                         (the-as string
+                                                 (format #f
+                                                         "PED-ID: ~D (~S)~%STATE: ~S~%RECORD-STATE: ~S(~D)~%TYPE: ~S"
+                                                         net-id
+                                                         status-str
+                                                         cur-state
+                                                         (if rec (mp-ped-get-state-from-id (the uint (-> rec state-id))) 'none)
+                                                         (if rec (-> rec state-id) 0)
+                                                         type-str))
+                                         draw-pos
+                                         color
+                                         (the-as vector2h #f))
+                      (when rec
+                        (add-debug-sphere #t
+                                          (bucket-id debug-no-zbuf1)
+                                          (-> rec trans)
+                                          (meters 0.5)
+                                          (static-rgba 255 255 0 128))
+                        (add-debug-line #t
+                                        (bucket-id debug-no-zbuf1)
+                                        (-> proc root trans)
+                                        (-> rec trans)
+                                        (static-rgba 255 255 0 128)
+                                        #f
+                                        (the-as rgba 0)))))))))))))
+  (none))
 
 (define *mp-veh-debug-seat-str* (new 'global 'string 256 (the-as string #f)))
 (define *mp-veh-debug-text-str* (new 'global 'string 768 (the-as string #f)))
@@ -73,84 +73,60 @@
     (cond
       ((not rider) "E")
       ((type? rider target)
-       (let ((is-local (= rider *target*)))
-         (if (mp-target-jak? (the-as process-focusable rider)) "JAK" "DAX")
-         )
-       )
-      (else "PED")
-      )
-    )
-  )
+       (let ((is-local (= rider *target*))) (if (mp-target-jak? (the-as process-focusable rider)) "JAK" "DAX")))
+      (else "PED"))))
 
 (defun mp-debug-get-net-seat-occupier-str ((player-id uint))
   (cond
     ((= player-id MP_VEHICLE_RIDER_CIVILIAN_ID) "PED")
     ((= player-id MP_INVALID_PLAYER_ID) "E")
     (else
-      (let ((record (mp-player-record-by-id player-id)))
-        (cond
-          ((mp-player-jak? record) "JAK")
-          ((mp-player-daxter? record) "DAX")
-          (else "?")))))
-  )
+     (let ((record (mp-player-record-by-id player-id)))
+       (cond
+         ((mp-player-jak? record) "JAK")
+         ((mp-player-daxter? record) "DAX")
+         (else "?"))))))
 
-(defun mp-debug-append-seat-info
-       ((proc vehicle) (seat-str string) (driver-record mp-player-record))
+(defun mp-debug-append-seat-info ((proc vehicle) (seat-str string) (driver-record mp-player-record))
   (let ((tmp *mp-veh-debug-tmp-str*))
     (dotimes (i (-> proc info seat-count))
       (let ((local-occupant (mp-debug-get-seat-occupier-str proc i)))
         (clear tmp)
         (if (and driver-record (nonzero? driver-record))
-            (let ((net-player-id
-                    (-> driver-record vehicle state rider-player-ids i)))
-              (format tmp " S~D:L:~S/N:~S" i local-occupant (mp-debug-get-net-seat-occupier-str net-player-id))
-              )
-            (format tmp " S~D:L:~S" i local-occupant)
-            )
-        (cat-string<-string seat-str tmp)
-        )
-      )
-    )
-  (none)
-  )
+          (let ((net-player-id (-> driver-record vehicle state rider-player-ids i)))
+            (format tmp " S~D:L:~S/N:~S" i local-occupant (mp-debug-get-net-seat-occupier-str net-player-id)))
+          (format tmp " S~D:L:~S" i local-occupant))
+        (cat-string<-string seat-str tmp))))
+  (none))
 
-(defun mp-draw-traffic-veh-ghost-debug ((proc vehicle) (rec mp-traffic-ghost-record))
+(defun draw-traffic-veh-record-debug ((proc vehicle) (rec traffic-record))
   (when rec
-    (add-debug-sphere #t (bucket-id debug-no-zbuf1) (-> rec ghost-trans) (meters 1.5) (static-rgba 255 255 0 128))
-    (add-debug-line #t (bucket-id debug-no-zbuf1) (-> proc root trans) (-> rec ghost-trans) (static-rgba 255 255 0 128) #f (the-as rgba 0))
-    )
-  (none)
-)
+    (add-debug-sphere #t (bucket-id debug-no-zbuf1) (-> rec trans) (meters 1.5) (static-rgba 255 255 0 128))
+    (add-debug-line #t
+                    (bucket-id debug-no-zbuf1)
+                    (-> proc root trans)
+                    (-> rec trans)
+                    (static-rgba 255 255 0 128)
+                    #f
+                    (the-as rgba 0)))
+  (none))
 
 (defun mp-format-generic-veh-info ((proc vehicle) (text-str string))
   (when (and proc (nonzero? proc))
     (let ((net-id (-> proc net-id)))
       (when (nonzero? net-id)
         (let* ((driver-record (mp-player-driver-record-by-vehicle-id net-id))
-               (is-local-driven
-                 (and driver-record
-                      (nonzero? driver-record)
-                      (= (-> driver-record identity player-id) (mp-local-player-id))))
-               (is-remote-driven
-                 (and driver-record
-                      (nonzero? driver-record)
-                      (mp-player-record-remote? *mp-player-controller* driver-record)))
-              (type-str (symbol->string (-> proc type symbol)))
-              (cur-state (if (-> proc state) (-> proc state name) 'none)))
-          (let ((is-owner (or is-local-driven (and (not is-remote-driven) (mp-is-traffic-authoritative?)))))
-            (let ((status-str (if is-owner "OWNER" "PUPPET"))
-                  (pad-idx
-                    (if (and driver-record (nonzero? driver-record))
-                        (-> driver-record runtime pad-index)
-                        (-> proc pad-index))))
-
-              (if is-local-driven
-                  (set! status-str "LOCAL-DRIVEN")
-                  )
-              (if is-remote-driven
-                  (set! status-str "REMOTE-DRIVEN")
-                  )
-
+               (is-local-driven (and driver-record
+                                     (nonzero? driver-record)
+                                     (= (-> driver-record identity player-id) (mp-local-player-id))))
+               (is-remote-driven (and driver-record (nonzero? driver-record) (is-record-remote-player? driver-record)))
+               (type-str (symbol->string (-> proc type symbol)))
+               (cur-state (if (-> proc state) (-> proc state name) 'none)))
+          (let ((is-owner (or is-local-driven (and (not is-remote-driven) *mp-traffic-local-authoritative?*))))
+            (let ((status-str (if is-owner "OWNER" "REPLICA"))
+                  (pad-idx (if (and driver-record (nonzero? driver-record)) (-> driver-record runtime pad-index) (-> proc pad-index))))
+              (if is-local-driven (set! status-str "LOCAL-DRIVEN"))
+              (if is-remote-driven (set! status-str "REMOTE-DRIVEN"))
               (let ((nudged-status (-> proc pad-bytes 0))
                     (seat-str *mp-veh-debug-seat-str*)
                     (tmp *mp-veh-debug-tmp-str*))
@@ -158,59 +134,55 @@
                   (clear seat-str)
                   (mp-debug-append-seat-info proc seat-str driver-record)
                   (if is-owner
-                      (begin
+                    (begin
+                      (clear text-str)
+                      (format text-str
+                              "VEH-ID: ~D (~S)~%STATE: ~S(~D)~%"
+                              net-id
+                              status-str
+                              cur-state
+                              (the uint8 (mp-veh-get-state-id proc)))
+                      (clear tmp)
+                      (format tmp
+                              "TYPE: ~S~%PAD: ~D~%NUM-RIDERS: ~D~%SEATS:~S"
+                              type-str
+                              pad-idx
+                              (-> proc root num-riders)
+                              seat-str)
+                      (cat-string<-string text-str tmp)
+                      (clear tmp)
+                      (format tmp
+                              "~%PARKED: ~S"
+                              (if (and (nonzero? (-> proc is-parked?)) (-> proc is-parked?)) "PARKED" "NOT-PARKED"))
+                      (cat-string<-string text-str tmp)
+                      (clear tmp)
+                      (format tmp "~%ZONE: ~S" (if (traffic-path-risk? proc) "UNLOADED-TOUCH" "LOADED"))
+                      (cat-string<-string text-str tmp))
+                    (let ((rec (get-traffic-record net-id)))
+                      (let ((nudged-str (cond
+                                          ((= nudged-status 1) "Y")
+                                          ((= nudged-status 2) "SNAP")
+                                          (else "N"))))
                         (clear text-str)
-                        (format text-str "VEH-ID: ~D (~S)~%STATE: ~S(~D)~%"
+                        (format text-str
+                                "ID: ~D (~S) S:~S G:~S~%TYPE: ~S PAD: ~D~%"
                                 net-id
                                 status-str
                                 cur-state
-                                (the uint8 (mp-veh-get-state-id proc)))
-                        (clear tmp)
-                        (format tmp "TYPE: ~S~%PAD: ~D~%NUM-RIDERS: ~D~%SEATS:~S"
+                                (if rec (mp-veh-get-state-from-id (the uint (-> rec state-id))) 'none)
                                 type-str
-                                pad-idx
+                                pad-idx)
+                        (clear tmp)
+                        (format tmp
+                                "NUDGED: ~S~%NUM-RIDERS: ~D~%SEATS:~S~%"
+                                nudged-str
                                 (-> proc root num-riders)
                                 seat-str)
                         (cat-string<-string text-str tmp)
                         (clear tmp)
-                        (format tmp "~%PARKED: ~S" (if (and (nonzero? (-> proc is-parked?)) (-> proc is-parked?)) "PARKED" "NOT-PARKED"))
-                        (cat-string<-string text-str tmp)
-                        (clear tmp)
                         (format tmp "~%ZONE: ~S" (if (traffic-path-risk? proc) "UNLOADED-TOUCH" "LOADED"))
-                        (cat-string<-string text-str tmp)
-                        )
-                      (let ((rec (mp-get-traffic-ghost net-id)))
-                        (let ((nudged-str (cond ((= nudged-status 1) "Y") ((= nudged-status 2) "SNAP") (else "N"))))
-                          (clear text-str)
-                          (format text-str "ID: ~D (~S) S:~S G:~S~%TYPE: ~S PAD: ~D~%"
-                                  net-id
-                                  status-str
-                                  cur-state
-                                  (if rec (mp-veh-get-state-from-id (the uint (-> rec ghost-state-id))) 'none)
-                                  type-str
-                                  pad-idx)
-                          (clear tmp)
-                          (format tmp "NUDGED: ~S~%NUM-RIDERS: ~D~%SEATS:~S~%"
-                                  nudged-str
-                                  (-> proc root num-riders)
-                                  seat-str)
-                          (cat-string<-string text-str tmp)
-                          (clear tmp)
-                          (format tmp "~%ZONE: ~S" (if (traffic-path-risk? proc) "UNLOADED-TOUCH" "LOADED"))
-                          (cat-string<-string text-str tmp)
-                          )
-                        )
-                      )
-                  )
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  (none)
-  )
+                        (cat-string<-string text-str tmp))))))))))))
+  (none))
 
 (defun mp-draw-traffic-veh-debug ((proc vehicle))
   (when (and *mp-traffic-veh-debug?* *target* (nonzero? *target*))
@@ -221,43 +193,22 @@
             (let ((draw-pos (new 'stack-no-clear 'vector)))
               (vector-copy! draw-pos (-> proc root trans))
               (set! (-> draw-pos y) (+ (-> draw-pos y) (meters 2.0)))
-
               (let* ((text-str *mp-veh-debug-text-str*)
                      (driver-record (mp-player-driver-record-by-vehicle-id net-id))
-                     (is-remote-driven
-                       (and driver-record
-                            (nonzero? driver-record)
-                            (mp-player-record-remote? *mp-player-controller* driver-record)))
-                     (is-local-driven
-                       (and driver-record
-                            (nonzero? driver-record)
-                            (= (-> driver-record identity player-id) (mp-local-player-id))))
-                     (is-owner (or is-local-driven (and (not is-remote-driven) (mp-is-traffic-authoritative?)))))
+                     (is-remote-driven (and driver-record
+                                            (nonzero? driver-record)
+                                            (is-record-remote-player? driver-record)))
+                     (is-local-driven (and driver-record
+                                           (nonzero? driver-record)
+                                           (= (-> driver-record identity player-id) (mp-local-player-id))))
+                     (is-owner (or is-local-driven (and (not is-remote-driven) *mp-traffic-local-authoritative?*))))
                 (clear text-str)
                 (mp-format-generic-veh-info proc text-str)
-
                 (let ((color (if is-owner (font-color green) (font-color yellow))))
-                  (add-debug-text-3d #t (bucket-id debug-no-zbuf1)
-                                    text-str
-                                    draw-pos
-                                    color
-                                    (the-as vector2h #f))
-                  )
-
+                  (add-debug-text-3d #t (bucket-id debug-no-zbuf1) text-str draw-pos color (the-as vector2h #f)))
                 (when (not is-owner)
-                  (let ((rec (mp-get-traffic-ghost net-id)))
-                    (mp-draw-traffic-veh-ghost-debug proc rec)
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  (none)
-  )
+                  (let ((rec (get-traffic-record net-id))) (draw-traffic-veh-record-debug proc rec))))))))))
+  (none))
 
 (defun mp-draw-traffic-bubble-ring ((center vector) (radius meters) (color rgba) (label string))
   (add-debug-circle #t (bucket-id debug-no-zbuf1) center radius color (the-as matrix #f))
@@ -265,144 +216,92 @@
     (vector-copy! label-pos center)
     (set! (-> label-pos x) (+ (-> label-pos x) radius))
     (set! (-> label-pos y) (+ (-> label-pos y) (meters 3.0)))
-    (add-debug-text-3d #t (bucket-id debug-no-zbuf1) label label-pos (font-color white) (the-as vector2h #f))
-    )
-  (none)
-  )
+    (add-debug-text-3d #t (bucket-id debug-no-zbuf1) label label-pos (font-color white) (the-as vector2h #f)))
+  (none))
 
 (defun mp-traffic-debug-root-color ((player-id uint))
   (cond
     ((= player-id 0) (static-rgba 0 128 255 180))
     ((= player-id 1) (static-rgba 0 255 128 180))
     ((= player-id 2) (static-rgba 255 192 0 180))
-    (else (static-rgba 255 64 192 180)))
-  )
+    (else (static-rgba 255 64 192 180))))
 
-(defun mp-draw-traffic-player-authority-label
-       ((position vector) (player-id uint) (source-player-id uint))
+(defun mp-draw-traffic-player-authority-label ((position vector) (player-id uint) (source-player-id uint))
   (when (and position (nonzero? position))
     (let ((label-pos (new 'stack-no-clear 'vector)))
       (vector-copy! label-pos position)
       (set! (-> label-pos y) (+ (-> label-pos y) (meters 3.0)))
-      (add-debug-text-3d
-        #t
-        (bucket-id debug-no-zbuf1)
-        (the-as string (format #f "P~D -> ROOT P~D" player-id source-player-id))
-        label-pos
-        (font-color white)
-        (the-as vector2h #f))))
-  (none)
-  )
+      (add-debug-text-3d #t
+                         (bucket-id debug-no-zbuf1)
+                         (the-as string (format #f "P~D -> ROOT P~D" player-id source-player-id))
+                         label-pos
+                         (font-color white)
+                         (the-as vector2h #f))))
+  (none))
 
 (defun mp-draw-traffic-authority-bubbles ()
-  (when (and *mp-traffic-bubble-debug?*
-             (= (pc-multi-get-status) (mp-connection-status in-game)))
+  (when (and *mp-traffic-bubble-debug?* (mp-session-in-game?))
     (mp-for-each-player-record (player-id record)
       (let ((player-pos (mp-player-record-position record))
-            (source-player-id
-              (mp-traffic-authority-for-player
-                *mp-traffic-authority-assignments* (the-as uint player-id))))
-        (when (and player-pos
-                   (nonzero? player-pos)
-                   (< source-player-id (the uint MP_MAX_PLAYERS)))
+            (source-player-id (mp-traffic-authority-for-player *mp-traffic-authority-assignments*
+                                                               (the-as uint player-id))))
+        (when (and player-pos (nonzero? player-pos) (< source-player-id (the uint MP_MAX_PLAYERS)))
           (let ((root-color (mp-traffic-debug-root-color source-player-id)))
-            (add-debug-sphere
-              #t (bucket-id debug-no-zbuf1) player-pos (meters 2.0) root-color)
-            (mp-draw-traffic-player-authority-label
-              player-pos (the-as uint player-id) source-player-id)
+            (add-debug-sphere #t (bucket-id debug-no-zbuf1) player-pos (meters 2.0) root-color)
+            (mp-draw-traffic-player-authority-label player-pos (the-as uint player-id) source-player-id)
             (if (= source-player-id (the-as uint player-id))
-                (begin
-                  (mp-draw-traffic-bubble-ring
-                    player-pos
-                    MP_TRAFFIC_AUTHORITY_ACQUIRE_DISTANCE
-                    root-color
-                    "ACQUIRE <250m")
-                  (mp-draw-traffic-bubble-ring
-                    player-pos
-                    MP_TRAFFIC_AUTHORITY_RETAIN_DISTANCE
-                    (static-rgba 255 255 255 96)
-                    "RETAIN <=310m"))
-                (let ((root-record (mp-player-record-by-id source-player-id)))
-                  (when (and root-record (nonzero? root-record))
-                    (let ((root-pos (mp-player-record-position root-record)))
-                      (when (and root-pos (nonzero? root-pos))
-                        (add-debug-line
-                          #t
-                          (bucket-id debug-no-zbuf1)
-                          player-pos
-                          root-pos
-                          root-color
-                          #f
-                          (the-as rgba 0))))))))))))
-  (none)
-  )
+              (begin
+                (mp-draw-traffic-bubble-ring player-pos
+                                             MP_TRAFFIC_AUTHORITY_ACQUIRE_DISTANCE
+                                             root-color
+                                             "ACQUIRE <250m")
+                (mp-draw-traffic-bubble-ring player-pos
+                                             MP_TRAFFIC_AUTHORITY_RETAIN_DISTANCE
+                                             (static-rgba 255 255 255 96)
+                                             "RETAIN <=310m"))
+              (let ((root-record (mp-player-record-by-id source-player-id)))
+                (when (and root-record (nonzero? root-record))
+                  (let ((root-pos (mp-player-record-position root-record)))
+                    (when (and root-pos (nonzero? root-pos))
+                      (add-debug-line #t (bucket-id debug-no-zbuf1) player-pos root-pos root-color #f (the-as rgba 0))))))))))))
+  (none))
 
 (defun mp-draw-traffic-debug ()
-  "Overlay real-time traffic synchronization data"
   (when *mp-traffic-debug?*
     (format *stdcon* "~0k--- MP TRAFFIC DEBUG ---~%")
-    (format *stdcon* "BUDGET: ~D peds, ~D vehs~%"
-            (-> *mp-traffic-buffer* ped-count)
-            (-> *mp-traffic-buffer* veh-count))
-    (format *stdcon* "AUTHORITATIVE: ~S~%" (if (mp-is-traffic-authoritative?) "YES" "NO"))
+    (format *stdcon* "BUDGET: ~D peds, ~D vehs~%" (-> *mp-traffic-buffer* ped-count) (-> *mp-traffic-buffer* veh-count))
+    (format *stdcon* "AUTHORITATIVE: ~S~%" (if *mp-traffic-local-authoritative?* "YES" "NO"))
     (format *stdcon* "-------------------------~%")
-
     (format *stdcon* "~0k--- MP TRAFFIC STATUS ---~%")
-    (format *stdcon* "SYNC: ~S  SUPPRESSED: ~S~%"
+    (format *stdcon*
+            "SYNC: ~S  SUPPRESSED: ~S~%"
             (if *mp-traffic-sync-active* "YES" "NO")
             (if *mp-traffic-suppressed* "YES" "NO"))
     (mp-for-each-player-record (player-id record)
-      (when (and (mp-player-record-remote? *mp-player-controller* record)
+      (when (and (is-record-remote-player? record)
                  *target*
                  (nonzero? *target*)
                  (-> *target* root)
                  (nonzero? (-> *target* root)))
         (let ((position (mp-player-record-position record)))
           (when (and position (nonzero? position))
-            (format *stdcon* "PLAYER ~D DIST: ~m~%"
-              player-id
-              (vector-vector-distance (-> *target* root trans) position))))))
-    (format *stdcon* "-------------------------~%")
-  )
-
+            (format *stdcon*
+                    "PLAYER ~D DIST: ~m~%"
+                    player-id
+                    (vector-vector-distance (-> *target* root trans) position))))))
+    (format *stdcon* "-------------------------~%"))
   (mp-draw-traffic-authority-bubbles)
-
-  (when (or *mp-traffic-ped-debug?* *mp-traffic-veh-debug?* *mp-vehicle-guard-debug?*)
-    (iterate-process-tree *active-pool* (lambda ((p process-tree))
-      (let ((proc (the-as process p)))
-        (cond
-          ((type? proc vehicle)
-           (cond
-             ((type? proc vehicle-guard)
-              (let ((draw-func mp-draw-vehicle-guard-debug))
-                (when (and draw-func (nonzero? draw-func))
-                  (cond
-                    (*mp-vehicle-guard-debug?*
-                     (draw-func (the-as vehicle-guard proc) #t)
-                     )
-                    (*mp-traffic-veh-debug?*
-                     (draw-func (the-as vehicle-guard proc) #f)
-                     )
-                    )
-                  )
-                )
-              )
-             (else
-              (when *mp-traffic-veh-debug?*
-                (mp-draw-traffic-veh-debug (the-as vehicle proc))
-                )
-              )
-             )
-           )
-          ((type? proc citizen)
-           (when *mp-traffic-ped-debug?*
-             (mp-draw-traffic-ped-debug (the-as citizen proc))
-             )
-           )
-          )
-        )
-      #t)
-      *kernel-context*)
-    )
-  (none)
-)
+  (when (or *mp-traffic-ped-debug?* *mp-traffic-veh-debug?*)
+    (iterate-process-tree *active-pool*
+                          (lambda ((p process-tree))
+                            (let ((proc (the-as process p)))
+                              (cond
+                                ((type? proc vehicle)
+                                 (when *mp-traffic-veh-debug?*
+                                   (mp-draw-traffic-veh-debug (the-as vehicle proc))))
+                                ((type? proc citizen)
+                                 (when *mp-traffic-ped-debug?*
+                                   (mp-draw-traffic-ped-debug (the-as citizen proc))))))
+                            #t)
+                          *kernel-context*))
+  (none))

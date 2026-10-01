@@ -44,16 +44,6 @@ bool is_symbol_node(const TSNode node) {
   return node_type == "sym_name" || node_type == "sym_lit";
 }
 
-TSNode normalize_symbol_node(TSNode node) {
-  if (!ts_node_is_null(node) && std::string(ts_node_type(node)) == "sym_name") {
-    TSNode parent = ts_node_parent(node);
-    if (!ts_node_is_null(parent) && std::string(ts_node_type(parent)) == "sym_lit") {
-      return parent;
-    }
-  }
-  return node;
-}
-
 bool position_before(const LSPSpec::Position& lhs, const LSPSpec::Position& rhs) {
   return lhs.m_line < rhs.m_line ||
          (lhs.m_line == rhs.m_line && lhs.m_character < rhs.m_character);
@@ -345,7 +335,7 @@ std::optional<json> get_completions(Workspace& workspace, json /*id*/, json para
   }
 
   // The cursor position in the context of completions is always 1 character ahead of the text, we
-  // move it back 1 spot so we can actually detect what the user has typed so far.
+  // move it back 1 spot so we can actually detect what the user has typed so far
   LSPSpec::Position new_position = converted_params.position;
   if (new_position.m_character > 0) {
     new_position.m_character--;

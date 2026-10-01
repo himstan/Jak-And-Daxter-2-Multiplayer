@@ -35,7 +35,6 @@
 
 
 (defun target-board-play-daxter-vo ((proc target) (chance float) (vol float) (subtitle-flag symbol))
-  "Play a random Daxter voice-over comment with a specified chance, subtitle configuration, and 3D falloff."
   (when (and (mp-target-daxter? proc)
              (< (rand-vu) chance)
              proc
@@ -763,7 +762,6 @@
 (defbehavior target-board-init target ()
   (target-gun-end-mode #f)
   (target-exit)
-  (target-indax-board-set!)
   (target-board-setup #t)
   (when (mp-target-daxter? self)
     (logior! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
@@ -896,7 +894,6 @@
       (the-as float (-> self control dynam gravity-length))
       )
     (logclear! (-> self focus-status) (focus-status board))
-    (target-indax-board-clear!)
     (logclear! (-> self control root-prim prim-core action) (collide-action stuck-wall-escape no-normal-reset))
     (logior! (-> self control root-prim prim-core action) (collide-action can-ride))
     (set! (-> self control mod-surface) *walk-mods*)
@@ -1116,6 +1113,9 @@
     (let* ((f0-2 arg2)
            (f0-4 (- f0-2 (the float (the int f0-2))))
            )
+      (when (< v0-0 0)
+        (set! v0-0 0)
+        (set! f0-4 0.0))
       (when (>= v0-0 arg1)
         (set! v0-0 (+ arg1 -1))
         (set! f0-4 (- arg2 (the float v0-0)))
@@ -1449,7 +1449,7 @@
       (set! (-> a2-6 action-mask) (collide-action solid))
       (fill-cache-integrate-and-collide v1-30 (-> v1-30 transv) a2-6 (meters 1))
       )
-    (when (and (not-puppet? self) (logtest? (-> self control root-prim prim-core action) (collide-action check-edge)))
+    (when (and (not-player-replica? self) (logtest? (-> self control root-prim prim-core action) (collide-action check-edge)))
       (logclear! (-> *collide-edge-board-spec* flags) (collide-edge-spec-flags one))
       (set! (-> *collide-edge-board-spec* touching-segment) #f)
       (do-edge-grabs *target* *collide-cache* *collide-edge-board-spec*)
@@ -2146,7 +2146,7 @@
     (set! (-> gp-0 quad) (-> self control trans quad))
     (let ((s5-0 (new 'stack-no-clear 'vector)))
       (set! (-> s5-0 quad) (-> self control transv quad))
-      (when (and (not-puppet? self) (not (edge-grab-info-method-9 s4-0)))
+      (when (and (not-player-replica? self) (not (edge-grab-info-method-9 s4-0)))
         (format #t "exit update~%")
         (send-event self 'end-mode #f)
         (return (the-as time-frame #f))
@@ -2608,7 +2608,8 @@
         0
         (add-gravity)
         (reverse-conversions (-> self control transv))
-        (target-board-compute-edge)
+        (when (not-player-replica? self)
+          (target-board-compute-edge))
         (do-rotations2)
         (pre-collide-setup)
         (seek! (-> self board cushion-offset) 1638.4 (* 16384.0 (seconds-per-frame)))

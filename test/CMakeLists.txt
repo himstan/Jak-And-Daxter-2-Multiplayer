@@ -15,6 +15,7 @@ add_executable(goalc-test
         ${CMAKE_CURRENT_LIST_DIR}/test_emitter_neon.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_emitter_arm64.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_common_util.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/test_text_input_editor.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_pretty_print.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_math.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_zstd.cpp
@@ -75,18 +76,53 @@ add_executable(goalc-test
 
 target_link_libraries(goalc-test common runtime compiler gtest decomp Zydis libzstd_static tree-sitter)
 
-add_executable(multiplayer-test
-        ${CMAKE_CURRENT_LIST_DIR}/multiplayer_test_main.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/test_multiplayer_bridge.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/test_multiplayer_protocol.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/test_multiplayer_stats.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/test_multiplayer_scheduler.cpp)
-target_link_libraries(multiplayer-test runtime gtest)
-if(WIN32)
-  target_sources(multiplayer-test PRIVATE
-          ${CMAKE_CURRENT_LIST_DIR}/test_multiplayer_netem.cpp)
-  target_link_libraries(multiplayer-test multiplayer-netem-core)
-endif()
+add_executable(multiplayer-platform-unit-test
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/platform/unit/test_connection_draft.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/platform/unit/test_snapshot_timeline.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/platform/unit/test_platform_core.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/platform/unit/test_platform_protocol.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/platform/unit/test_packet_handlers.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/platform/unit/test_frame_submission.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/platform/unit/test_runtime_commands.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/platform/unit/test_serialize_codec.cpp)
+target_link_libraries(multiplayer-platform-unit-test multiplayer-platform gtest_main)
+
+add_executable(multiplayer-platform-integration-test
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/platform/integration/test_gns_transport.cpp)
+target_link_libraries(multiplayer-platform-integration-test multiplayer-platform
+        GameNetworkingSockets::static gtest_main)
+
+add_executable(multiplayer-jak2-unit-test
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/unit/test_core.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/unit/test_core_state.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/unit/test_vehicle_state.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/unit/test_traffic_state.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/unit/test_enemy_state.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/unit/test_player_codec.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/unit/test_wire_codecs.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/unit/test_wire_packets.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/unit/test_protocol.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/unit/test_traffic_codec.cpp)
+target_link_libraries(multiplayer-jak2-unit-test multiplayer-jak2 gtest_main)
+
+add_executable(multiplayer-jak2-integration-test
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/integration/runtime_stubs.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/integration/test_adapter_contract.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/integration/test_goal_bridge.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/integration/test_replication_dispatch.cpp)
+target_link_libraries(multiplayer-jak2-integration-test multiplayer-jak2 gtest_main SDL3::SDL3)
+target_compile_definitions(multiplayer-jak2-integration-test PRIVATE
+        MP_SOURCE_ROOT="${PROJECT_SOURCE_DIR}")
+
+include(GoogleTest)
+gtest_discover_tests(multiplayer-platform-unit-test TEST_PREFIX "platform.unit."
+        PROPERTIES LABELS "platform;unit")
+gtest_discover_tests(multiplayer-platform-integration-test TEST_PREFIX "platform.integration."
+        PROPERTIES LABELS "platform;integration")
+gtest_discover_tests(multiplayer-jak2-unit-test TEST_PREFIX "jak2.unit."
+        PROPERTIES LABELS "jak2;unit")
+gtest_discover_tests(multiplayer-jak2-integration-test TEST_PREFIX "jak2.integration."
+        PROPERTIES LABELS "jak2;integration")
 
 add_executable(test_image_resize ${CMAKE_CURRENT_LIST_DIR}/common/test_image_resize.cpp)
 target_link_libraries(test_image_resize common)

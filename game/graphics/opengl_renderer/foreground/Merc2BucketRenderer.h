@@ -7,7 +7,7 @@ class Merc2BucketRenderer : public BucketRenderer {
  public:
   Merc2BucketRenderer(const std::string& name,
                       int my_id,
-                      std::shared_ptr<Merc2> merc,
+                      const std::shared_ptr<Merc2>& merc,
                       bool clear_depth_before_draw = false);
   void draw_debug_window() override;
   void render(DmaFollower& dma, SharedRenderState* render_state, ScopedProfilerNode& prof) override;
