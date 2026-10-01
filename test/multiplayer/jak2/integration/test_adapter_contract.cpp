@@ -10,9 +10,11 @@
 #include "game/multiplayer/jak2/wire/packets/bootstrap_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/enemy_state_batch_packet.h"
 #include "game/multiplayer/jak2/wire/packets/game_event_batch_packet.h"
+#include "game/multiplayer/jak2/wire/packets/gungame_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/player_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/player_vehicle_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/vehicle_state_batch_packet.h"
+#include "game/multiplayer/platform/session/cadence_scheduler.h"
 #include "game/multiplayer/platform/wire/quantization.h"
 #include "gtest/gtest.h"
 
@@ -66,8 +68,10 @@ class RecordingEndpoint final : public platform::GameSessionEndpoint {
       ++next_sequence;
     return next_sequence;
   }
-  bool cadence_due(uint8_t, uint64_t now_ms, bool dirty) override {
+  bool cadence_due(uint8_t id, uint64_t now_ms, bool dirty) override {
     cadence_times.push_back(now_ms);
+    if (schedule_gungame && id == static_cast<uint8_t>(PacketType::GUNGAME_STATE))
+      return cadence_enabled && cadence.due(jak2::wire::GungameStatePacket::kPolicy, now_ms, dirty);
     return cadence_enabled && dirty;
   }
   platform::NetworkPressure network_pressure() const override {
@@ -89,6 +93,8 @@ class RecordingEndpoint final : public platform::GameSessionEndpoint {
   bool bootstrap_requested = false;
   bool cadence_enabled = true;
   bool accept_sends = true;
+  bool schedule_gungame = false;
+  platform::CadenceScheduler cadence;
   std::optional<size_t> reject_after;
   uint32_t next_sequence = 0;
   std::vector<uint64_t> cadence_times;
@@ -881,6 +887,222 @@ TEST(Jak2AdapterIntegration, RapidRejoinRetainsLifecycleAndStartsFreshPresentati
   const auto pending = adapter.mailbox().take_inbound_events(64);
   ASSERT_EQ(pending.size(), 1u);
   EXPECT_EQ(pending[0].source_player_id, 2u);
+}
+
+TEST(Jak2AdapterIntegration, GungameStateIsPeriodicAndRejectedPublicationDoesNotApplyLocally) {
+  jak2::application::Jak2Adapter adapter;
+  RecordingEndpoint endpoint;
+  endpoint.schedule_gungame = true;
+  adapter.installed(endpoint);
+  adapter.session_started(endpoint.session_snapshot.state);
+  const auto publish = [&](uint32_t run, uint64_t time) {
+    auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
+    frame->local_player_id = 0;
+    frame->host_player_id = 0;
+    if (run != 0) {
+      frame->gungame = jak2::core::GungameState{
+          .run_id = run, .course_id = 3, .phase = jak2::core::GungamePhase::COURSE};
+      frame->gungame->targets.resize(209, {.state = jak2::core::GungameTargetState::SPAWNED});
+    }
+    adapter.mailbox().publish_local_frame(std::move(frame));
+    adapter.tick(time);
+  };
+  const auto count = [&] {
+    return std::ranges::count_if(endpoint.sent, [](const auto& packet) {
+      return packet.id == static_cast<uint8_t>(PacketType::GUNGAME_STATE);
+    });
+  };
+  publish(1, 1000);
+  EXPECT_EQ(count(), 1);
+  auto remote = adapter.mailbox().take_remote_frame();
+  ASSERT_TRUE(remote);
+  EXPECT_EQ(remote->gungame.targets.size(), 209u);
+  publish(2, 1249);
+  EXPECT_EQ(count(), 1);
+  endpoint.accept_sends = false;
+  publish(2, 1250);
+  EXPECT_EQ(count(), 1);
+  remote = adapter.mailbox().take_remote_frame();
+  ASSERT_TRUE(remote);
+  EXPECT_EQ(remote->gungame.run_id, 1u);
+  endpoint.accept_sends = true;
+  publish(2, 1500);
+  EXPECT_EQ(count(), 2);
+  remote = adapter.mailbox().take_remote_frame();
+  ASSERT_TRUE(remote);
+  EXPECT_EQ(remote->gungame.run_id, 2u);
+  publish(0, 1750);
+  remote = adapter.mailbox().take_remote_frame();
+  ASSERT_TRUE(remote);
+  EXPECT_EQ(remote->gungame.phase, jak2::core::GungamePhase::INACTIVE);
+  EXPECT_TRUE(remote->gungame.targets.empty());
+  adapter.session_reset();
+  adapter.tick(2000);
+  remote = adapter.mailbox().take_remote_frame();
+  ASSERT_TRUE(remote);
+  EXPECT_EQ(remote->gungame.sequence, 0u);
+}
+
+TEST(Jak2AdapterIntegration, MissingGungameCaptureKeepsPlayerAndTrafficPublishing) {
+  jak2::application::Jak2Adapter adapter;
+  RecordingEndpoint endpoint;
+  endpoint.session_snapshot.state.status = platform::SessionStatus::IN_GAME;
+  adapter.installed(endpoint);
+  adapter.session_started(endpoint.session_snapshot.state);
+  const auto publish = [&](bool capture_gungame, float position, uint64_t time) {
+    auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
+    frame->local_player_id = 0;
+    frame->host_player_id = 0;
+    frame->players[0].state_ready = true;
+    frame->players[0].position[0] = position;
+    frame->traffic_authority.revision = 1;
+    frame->traffic_authority.assignments.fill(0);
+    frame->selected_traffic_authority = 0;
+    frame->vehicles.kind = jak2::core::TrafficSnapshot::Kind::VEHICLES;
+    frame->vehicles.vehicles.push_back({.net_id = 1, .position = {position, 0.0f, 0.0f}});
+    if (!capture_gungame)
+      frame->gungame.reset();
+    adapter.mailbox().publish_local_frame(std::move(frame));
+    adapter.tick(time);
+  };
+  publish(false, 10.0f, 1000);
+  publish(false, 20.0f, 1250);
+  EXPECT_EQ(std::ranges::count_if(endpoint.sent,
+                                  [](const auto& packet) {
+                                    return packet.id ==
+                                           static_cast<uint8_t>(PacketType::PLAYER_STATE);
+                                  }),
+            2);
+  EXPECT_EQ(std::ranges::count_if(endpoint.sent,
+                                  [](const auto& packet) {
+                                    return packet.id ==
+                                           static_cast<uint8_t>(PacketType::VEHICLE_STATE_BATCH);
+                                  }),
+            2);
+  EXPECT_EQ(std::ranges::count_if(endpoint.sent,
+                                  [](const auto& packet) {
+                                    return packet.id ==
+                                           static_cast<uint8_t>(PacketType::GUNGAME_STATE);
+                                  }),
+            0);
+  auto remote = adapter.mailbox().take_remote_frame();
+  ASSERT_TRUE(remote);
+  EXPECT_FLOAT_EQ(remote->players[0].position[0], 20.0f);
+  EXPECT_EQ(remote->gungame.sequence, 0u);
+  publish(true, 30.0f, 1500);
+  EXPECT_EQ(std::ranges::count_if(endpoint.sent,
+                                  [](const auto& packet) {
+                                    return packet.id ==
+                                           static_cast<uint8_t>(PacketType::GUNGAME_STATE);
+                                  }),
+            1);
+}
+
+TEST(Jak2AdapterIntegration, GungameReceivesCompleteHostStateAndRejectsStaleSequences) {
+  jak2::application::Jak2Adapter adapter;
+  RecordingEndpoint endpoint;
+  endpoint.session_snapshot.state.role = platform::SessionRole::CLIENT;
+  endpoint.session_snapshot.state.local_player_id = 1;
+  adapter.installed(endpoint);
+  adapter.session_started(endpoint.session_snapshot.state);
+  jak2::core::GungameState state = {.run_id = 8,
+                                    .score = 2300,
+                                    .elapsed_time = 600,
+                                    .course_id = 3,
+                                    .phase = jak2::core::GungamePhase::COURSE};
+  state.targets.resize(209, {.state = jak2::core::GungameTargetState::SPAWNED});
+  state.targets.back() = {.state = jak2::core::GungameTargetState::BROKEN};
+  const auto receive = [&](uint32_t sequence, bool host = true) {
+    const auto bytes = platform::wire::encode_packet(jak2::wire::to_packet(state));
+    EXPECT_TRUE(bytes);
+    return adapter.packets()
+        .receive({.origin = {.authenticated_player_id = static_cast<uint8_t>(host ? 0 : 2),
+                             .from_host = host},
+                  .message_id = static_cast<uint8_t>(PacketType::GUNGAME_STATE),
+                  .sequence = sequence,
+                  .payload = *bytes},
+                 endpoint)
+        .disposition;
+  };
+  EXPECT_EQ(receive(1, false), platform::PayloadDisposition::REJECT);
+  EXPECT_EQ(receive(0), platform::PayloadDisposition::REJECT);
+  EXPECT_EQ(receive(UINT32_MAX - 1), platform::PayloadDisposition::CONSUME);
+  adapter.tick(1000);
+  auto remote = adapter.mailbox().take_remote_frame();
+  ASSERT_TRUE(remote);
+  EXPECT_EQ(remote->gungame.targets, state.targets);
+  EXPECT_EQ(remote->gungame.score, 2300);
+  EXPECT_EQ(receive(UINT32_MAX - 1), platform::PayloadDisposition::REJECT);
+  state.run_id = 9;
+  state.targets.assign(209, {.state = jak2::core::GungameTargetState::NOT_SPAWNED});
+  EXPECT_EQ(receive(1), platform::PayloadDisposition::CONSUME);
+  EXPECT_EQ(receive(UINT32_MAX), platform::PayloadDisposition::REJECT);
+  adapter.tick(1010);
+  remote = adapter.mailbox().take_remote_frame();
+  ASSERT_TRUE(remote);
+  EXPECT_EQ(remote->gungame.run_id, 9u);
+  EXPECT_EQ(remote->gungame.targets.back().state, jak2::core::GungameTargetState::NOT_SPAWNED);
+  EXPECT_TRUE(endpoint.sent.empty());
+}
+
+TEST(Jak2AdapterIntegration, GungameHitRequestsAndConfirmationsPreserveOriginsAndFullIds) {
+  jak2::application::Jak2Adapter host, client;
+  RecordingEndpoint host_endpoint, client_endpoint;
+  client_endpoint.session_snapshot.state.role = platform::SessionRole::CLIENT;
+  client_endpoint.session_snapshot.state.local_player_id = 1;
+  host.installed(host_endpoint);
+  client.installed(client_endpoint);
+  host.session_started(host_endpoint.session_snapshot.state);
+  client.session_started(client_endpoint.session_snapshot.state);
+  jak2::core::GameEvent first = {.event_id = 44,
+                                 .source_player_id = 0,
+                                 .payload_size = 8,
+                                 .payload = {9, 0, 0, 0, 0xec, 0x0e, 2, 1}};
+  auto second = first;
+  second.payload[4] = 0xf6;
+  second.payload[7] = 0;
+  ASSERT_TRUE(client.mailbox().push_outbound_events({first, second}));
+  client_endpoint.accept_sends = false;
+  client.tick(1000);
+  EXPECT_EQ(client.mailbox().outbound_event_count(), 2u);
+  EXPECT_TRUE(client_endpoint.sent.empty());
+  client_endpoint.accept_sends = true;
+  client.tick(1001);
+  ASSERT_EQ(client_endpoint.sent.size(), 1u);
+  EXPECT_EQ(client.mailbox().outbound_event_count(), 0u);
+  const auto requests =
+      host.packets().receive({.origin = {.authenticated_player_id = 1},
+                              .message_id = static_cast<uint8_t>(PacketType::GAME_EVENT_BATCH),
+                              .sequence = 1,
+                              .payload = client_endpoint.sent.front().payload},
+                             host_endpoint);
+  EXPECT_EQ(requests.disposition, platform::PayloadDisposition::CONSUME_AND_RELAY);
+  host.tick(1001);
+  const auto accepted = host.mailbox().take_inbound_events(64);
+  ASSERT_EQ(accepted.size(), 2u);
+  EXPECT_EQ(accepted[0].payload, first.payload);
+  EXPECT_EQ(accepted[1].payload, second.payload);
+  EXPECT_EQ(accepted[0].source_player_id, 1u);
+  EXPECT_EQ(accepted[1].source_player_id, 1u);
+  // The GOAL manager queues confirmations after validating the run and applying a break.
+  ASSERT_TRUE(host.mailbox().push_outbound_events(accepted));
+  host.tick(1002);
+  ASSERT_EQ(host_endpoint.sent.size(), 1u);
+  EXPECT_EQ(client.packets()
+                .receive({.origin = {.authenticated_player_id = 0, .from_host = true},
+                          .message_id = static_cast<uint8_t>(PacketType::GAME_EVENT_BATCH),
+                          .sequence = 2,
+                          .payload = host_endpoint.sent.front().payload},
+                         client_endpoint)
+                .disposition,
+            platform::PayloadDisposition::CONSUME);
+  client.tick(1003);
+  const auto confirmed = client.mailbox().take_inbound_events(64);
+  ASSERT_EQ(confirmed.size(), 2u);
+  EXPECT_EQ(confirmed[0].payload, first.payload);
+  EXPECT_EQ(confirmed[1].payload, second.payload);
+  EXPECT_EQ(confirmed[0].source_player_id, 0u);
+  EXPECT_EQ(confirmed[1].source_player_id, 0u);
 }
 
 }  // namespace

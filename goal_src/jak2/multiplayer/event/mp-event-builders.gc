@@ -78,18 +78,6 @@
     (return event))
   (the-as mp-robotank-trigger-event #f))
 
-(defun mp-event-build-gungame! ((event mp-gungame-event) (details mp-gungame-build-data))
-  (when (and (nonnull? event details) (mp-event-prepare! event (-> details event-type)))
-    (set! (-> event payload course-id) (-> details course-id))
-    (set! (-> event payload step) (-> details step))
-    (set! (-> event payload score) (-> details score))
-    (set! (-> event payload elapsed-time) (-> details elapsed-time))
-    (set! (-> event payload broken-mask) (-> details broken-mask))
-    (set! (-> event payload open-end?) (-> details open-end?))
-    (set! (-> event payload end-door) (-> details end-door))
-    (return event))
-  (the-as mp-gungame-event #f))
-
 (defun mp-event-build-krew-pickup! ((event mp-krew-collection-event) (bag-index int))
   (when (and (nonnull? event) (mp-event-prepare! event MP_EVENT_MISSION_KREW_COLLECTION_PICKUP))
     (set! (-> event payload) (the-as uint8 bag-index))

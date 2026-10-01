@@ -40,8 +40,14 @@
     (mp-event-enqueue! (mp-event-build-robotank-trigger! event proc-name trigger-id source-pos)))
   (none))
 
-(defun mp-event-enqueue-gungame! ((details mp-gungame-build-data))
-  (let ((event (new 'stack-no-clear 'mp-gungame-event))) (mp-event-enqueue! (mp-event-build-gungame! event details)))
+(defun gungame-enqueue-target-broken! ((run-id uint) (course-id uint) (target-num uint) (combo? uint))
+  (let ((event (new 'stack-no-clear 'gungame-target-broken-event)))
+    (when (mp-event-prepare! event MP_EVENT_MISSION_GUNGAME_TARGET_BROKEN)
+      (set! (-> event payload run-id) run-id)
+      (set! (-> event payload course-id) course-id)
+      (set! (-> event payload target-num) target-num)
+      (set! (-> event payload combo?) combo?)
+      (mp-event-enqueue! event)))
   (none))
 
 (defun mp-event-enqueue-krew-pickup! ((bag-index int))

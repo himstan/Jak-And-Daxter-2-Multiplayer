@@ -1,8 +1,31 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(defbehavior target-indax-ground-attack-event-handler target ((proc process)
+                                                             (argc int)
+                                                             (message symbol)
+                                                             (block event-message-block))
+  (when (nonnull? self (-> self control) (-> self gun) (-> self state) block)
+    (case message
+      (('hit)
+       (case (the-as symbol (-> block param 0))
+         (('spin 'punch)
+          (set-time! (-> self gun combo-window-start))
+          (set! (-> self gun combo-window-state) (-> self state name))))
+       (target-indax-dangerous-event-handler proc argc message block))
+      (('gun-combo)
+       (when (-> block param 0)
+         (forward-up-nopitch->quaternion
+           (-> self control dir-targ)
+           (vector-! (new 'stack-no-clear 'vector) (-> self gun track-trans) (-> self control trans))
+           (vector-y-quaternion! (new-stack-vector0) (-> self control dir-targ)))
+         (set-quaternion! (-> self control) (-> self control dir-targ))
+         (go target-indax-stance))
+       #t)
+      (else (target-indax-dangerous-event-handler proc argc message block)))))
+
 (defstate target-indax-attack (target)
-  :event target-indax-dangerous-event-handler
+  :event target-indax-ground-attack-event-handler
   :enter
     (-> target-attack
         enter)
@@ -262,7 +285,7 @@
   :post target-indax-post)
 
 (defstate target-indax-running-attack (target)
-  :event target-indax-dangerous-event-handler
+  :event target-indax-ground-attack-event-handler
   :enter
     (-> target-running-attack
         enter)

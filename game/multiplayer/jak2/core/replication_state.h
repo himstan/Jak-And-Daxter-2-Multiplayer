@@ -77,13 +77,16 @@ class WorldReplicationState {
  public:
   void reset();
   bool apply(const WorldState& state, const ApplyContext& context);
+  bool apply(const GungameState& state, const ApplyContext& context);
   bool apply_bootstrap(const BootstrapState& state, Sequence sequence);
 
   const WorldState& world() const { return world_; }
+  const GungameState& gungame() const { return gungame_; }
   const BootstrapState& bootstrap() const { return bootstrap_; }
 
  private:
   WorldState world_ = {};
+  GungameState gungame_ = {};
   BootstrapState bootstrap_ = {};
 };
 

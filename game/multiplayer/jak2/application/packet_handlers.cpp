@@ -8,6 +8,7 @@
 #include "game/multiplayer/jak2/wire/packets/boss_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/enemy_state_batch_packet.h"
 #include "game/multiplayer/jak2/wire/packets/game_event_batch_packet.h"
+#include "game/multiplayer/jak2/wire/packets/gungame_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/pedestrian_state_batch_packet.h"
 #include "game/multiplayer/jak2/wire/packets/player_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/player_vehicle_state_packet.h"
@@ -189,6 +190,13 @@ void Jak2Adapter::add_player_handlers(Handlers& handlers) {
 }
 
 void Jak2Adapter::add_world_handlers(Handlers& handlers) {
+  add_packet_handler<wire::GungameStatePacket>(
+      handlers, wire::to_packet, state_.world(), wire::canonicalize_host_state,
+      [this](auto& handler, auto& endpoint, uint64_t now_ms) {
+        if (local_frame_->gungame)
+          handler.send(*local_frame_->gungame, endpoint, now_ms);
+      },
+      frame_ready(local_frame_));
   add_packet_handler<wire::WorldStatePacket>(
       handlers, wire::to_packet, state_.world(), wire::canonicalize_host_state,
       [this](auto& handler, auto& endpoint, uint64_t now_ms) {

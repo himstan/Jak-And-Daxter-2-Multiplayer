@@ -170,7 +170,6 @@ If the Host has **NAT: Strict/LAN** or **NAT: Failed** then the Host is unable t
 - Reconnecting is currently the main recovery path for client-side issues and soft-locks.
 - Some situations may still behave better when the host leads the interaction.
 - Testing has not been very thorough, so please feel free to report any issues or game-breaking bugs you find!
-- The red and yellow gungames are pretty buggy, and are only roughly synced.
 
 ## Credits
 

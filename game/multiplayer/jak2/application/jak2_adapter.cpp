@@ -148,6 +148,7 @@ void Jak2Adapter::publish_remote_frame(const platform::SessionState& session,
   frame->player_vehicles = state_.participants().player_vehicles();
   frame->turrets = state_.participants().turrets();
   frame->world = state_.world().world();
+  frame->gungame = state_.world().gungame();
   frame->bootstrap = state_.world().bootstrap();
   const auto& enemy_snapshot = state_.entities().enemies();
   frame->enemies.source_player_id = enemy_snapshot.source_player_id;

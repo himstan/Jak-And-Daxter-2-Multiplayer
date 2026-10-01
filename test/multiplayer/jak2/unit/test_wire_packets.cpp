@@ -8,6 +8,7 @@
 #include "game/multiplayer/jak2/wire/packets/airlock_state_batch_packet.h"
 #include "game/multiplayer/jak2/wire/packets/bootstrap_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/enemy_state_batch_packet.h"
+#include "game/multiplayer/jak2/wire/packets/gungame_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/pedestrian_state_batch_packet.h"
 #include "game/multiplayer/jak2/wire/packets/player_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/traffic_authority_state_packet.h"
@@ -33,11 +34,15 @@ TEST(Jak2Protocol, GameplayBodyAndHostReencodeAreCanonical) {
 
 TEST(Jak2Protocol, EventEnvelopesPreserveEveryPayloadByte) {
   constexpr std::array<uint8_t, 61> sizes = {
-      4,  4,  4,  63, 4, 64, 64, 64, 17, 5,  64, 0,  0, 62, 62, 0,  0,  32, 39, 39, 39,
-      4,  55, 9,  62, 5, 20, 37, 46, 1,  53, 17, 37, 9, 17, 1,  32, 32, 0,  0,  52, 16,
-      16, 16, 16, 16, 4, 4,  4,  4,  1,  28, 18, 0,  0, 0,  31, 0,  12, 4,  1};
+      4,    4,  4,    63,   4, 64, 64, 64, 17, 5,  64, 0,  0, 62, 62, 0,  0,  32, 39, 39, 39,
+      4,    55, 9,    62,   5, 20, 37, 46, 1,  53, 17, 37, 9, 17, 1,  32, 32, 0,  0,  52, 0xff,
+      0xff, 8,  0xff, 0xff, 4, 4,  4,  4,  1,  28, 18, 0,  0, 0,  31, 0,  12, 4,  1};
   for (uint8_t id = 1; id <= sizes.size(); ++id) {
     SCOPED_TRACE(id);
+    if (sizes[id - 1] == 0xff) {
+      EXPECT_EQ(multiplayer::jak2::wire::event_descriptor(id), nullptr);
+      continue;
+    }
     std::vector<uint8_t> bytes = {1, id, sizes[id - 1]};
     for (uint8_t index = 0; index < sizes[id - 1]; ++index) {
       bytes.push_back(static_cast<uint8_t>(id + index * 3));
@@ -481,4 +486,78 @@ TEST(Jak2Protocol, WorldEndianFieldsRoundTripWithoutEnvelopeSequence) {
   ASSERT_TRUE(packet);
   multiplayer::jak2::wire::from_packet(*packet, decoded);
   EXPECT_EQ(decoded.clock, 123u);
+}
+
+TEST(Jak2Protocol, GungameStateUsesCompleteCompactTargetCollection) {
+  using namespace multiplayer;
+  jak2::core::GungameState state = {.run_id = 0x01020304,
+                                    .score = -2,
+                                    .elapsed_time = -120,
+                                    .course_id = 3,
+                                    .phase = jak2::core::GungamePhase::COURSE,
+                                    .red_intro_step = 4,
+                                    .yellow_intro_step = 3,
+                                    .end_door = 1,
+                                    .open_end = true};
+  state.targets = {{.state = jak2::core::GungameTargetState::NOT_SPAWNED},
+                   {.spawn_time = 300, .state = jak2::core::GungameTargetState::SPAWNED},
+                   {.spawn_time = 600, .state = jak2::core::GungameTargetState::BROKEN}};
+  auto bytes = platform::wire::encode_packet(jak2::wire::to_packet(state));
+  ASSERT_TRUE(bytes);
+  EXPECT_EQ(*bytes, (std::vector<uint8_t>{4,   3, 2, 1,  254, 255, 255, 255, 136, 255, 255,
+                                          255, 3, 0, 3,  3,   4,   3,   1,   1,   36,  0,
+                                          0,   0, 0, 44, 1,   0,   0,   88,  2,   0,   0}));
+  for (const size_t count : {137u, 191u, 209u, 109u, 257u, 7705u}) {
+    state.targets.resize(count, {.state = jak2::core::GungameTargetState::BROKEN});
+    bytes = platform::wire::encode_packet(jak2::wire::to_packet(state));
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ(bytes->size(), 20 + (count + 3) / 4 + count * 4);
+    auto decoded = platform::wire::decode_packet<jak2::wire::GungameStatePacket>(*bytes);
+    ASSERT_TRUE(decoded);
+    EXPECT_EQ(decoded->state.targets, state.targets);
+    EXPECT_EQ(decoded->state.score, -2);
+    EXPECT_EQ(decoded->state.elapsed_time, -120);
+  }
+  state.targets.resize(7706);
+  EXPECT_FALSE(platform::wire::encode_packet(jak2::wire::to_packet(state)));
+}
+
+TEST(Jak2Protocol, GungameStateRejectsMalformedAndInconsistentBodies) {
+  using namespace multiplayer;
+  jak2::core::GungameState state = {
+      .run_id = 1,
+      .course_id = 1,
+      .phase = jak2::core::GungamePhase::COURSE,
+      .targets = {{.state = jak2::core::GungameTargetState::SPAWNED}}};
+  const auto encoded = platform::wire::encode_packet(jak2::wire::to_packet(state));
+  ASSERT_TRUE(encoded);
+  for (size_t size = 0; size < encoded->size(); ++size)
+    EXPECT_FALSE(platform::wire::decode_packet<jak2::wire::GungameStatePacket>(
+        std::span(*encoded).first(size)));
+  for (const auto [offset, value] : std::vector<std::pair<size_t, uint8_t>>{
+           {0, 0}, {14, 5}, {15, 5}, {16, 5}, {17, 4}, {18, 2}, {19, 2}, {20, 3}}) {
+    auto malformed = *encoded;
+    malformed[offset] = value;
+    EXPECT_FALSE(platform::wire::decode_packet<jak2::wire::GungameStatePacket>(malformed));
+  }
+  auto trailing = *encoded;
+  trailing.push_back(0);
+  EXPECT_FALSE(platform::wire::decode_packet<jak2::wire::GungameStatePacket>(trailing));
+  auto oversized_count = *encoded;
+  oversized_count[12] = 0xff;
+  oversized_count[13] = 0xff;
+  EXPECT_FALSE(platform::wire::decode_packet<jak2::wire::GungameStatePacket>(oversized_count));
+  state.targets.front().spawn_time = -1;
+  EXPECT_FALSE(platform::wire::encode_packet(jak2::wire::to_packet(state)));
+  state.targets.front() = {.spawn_time = 1};
+  EXPECT_FALSE(platform::wire::encode_packet(jak2::wire::to_packet(state)));
+  state.targets.front() = {.state = jak2::core::GungameTargetState::SPAWNED};
+  state.phase = jak2::core::GungamePhase::RED_INTRO;
+  EXPECT_FALSE(platform::wire::encode_packet(jak2::wire::to_packet(state)));
+  state.targets.clear();
+  EXPECT_TRUE(platform::wire::encode_packet(jak2::wire::to_packet(state)));
+  state.course_id = 2;
+  EXPECT_FALSE(platform::wire::encode_packet(jak2::wire::to_packet(state)));
+  state = {};
+  EXPECT_TRUE(platform::wire::encode_packet(jak2::wire::to_packet(state)));
 }

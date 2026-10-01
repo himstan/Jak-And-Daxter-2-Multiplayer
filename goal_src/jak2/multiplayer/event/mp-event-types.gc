@@ -134,11 +134,7 @@
                   (MP_EVENT_MISSION_FORTRESS_ROBOTANK_TRIGGER 41
                                                               mp-robotank-trigger-event-data
                                                               (mp-event-handle-mission! evt))
-                  (MP_EVENT_MISSION_GUNGAME_TUTORIAL_STEP 42 mp-gungame-event-data (mp-event-handle-mission! evt))
-                  (MP_EVENT_MISSION_GUNGAME_COURSE_SNAPSHOT 43 mp-gungame-event-data (mp-event-handle-mission! evt))
-                  (MP_EVENT_MISSION_GUNGAME_TARGET_BROKEN 44 mp-gungame-event-data (mp-event-handle-mission! evt))
-                  (MP_EVENT_MISSION_GUNGAME_TARGET_SPAWNED 45 mp-gungame-event-data (mp-event-handle-mission! evt))
-                  (MP_EVENT_MISSION_GUNGAME_COURSE_END 46 mp-gungame-event-data (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_GUNGAME_TARGET_BROKEN 44 gungame-target-broken-data (mp-event-handle-mission! evt))
                   (MP_EVENT_MISSION_STADIUM_BOARD1_CHALLENGE_START 47
                                                                    mp-stadium-board1-event-data
                                                                    (mp-event-handle-mission! evt))

@@ -204,6 +204,34 @@
    (assignments uint8 MP_MAX_PLAYERS))
   :size-assert 18)
 
+(deftype gungame-target-record (structure)
+  ((spawn-time int32)
+   (state      uint8))
+  :pack-me
+  :size-assert 5)
+
+(deftype gungame-target-record-array (inline-array-class)
+  ((data gungame-target-record :inline :dynamic)))
+
+(set! (-> gungame-target-record-array heap-base)
+      (the-as uint (align-n (size-of gungame-target-record) (size-of int32))))
+
+(deftype gungame-state (structure)
+  ((sequence          uint32)
+   (run-id            uint32)
+   (score             int32)
+   (elapsed-time      int32)
+   (targets           (inline-array gungame-target-record))
+   (count             uint16)
+   (capacity          uint16)
+   (course-id         uint8)
+   (phase             uint8)
+   (red-intro-step    uint8)
+   (yellow-intro-step uint8)
+   (end-door          uint8)
+   (open-end?         uint8))
+  :size-assert 30)
+
 (deftype mp-replication-frame (structure)
   ((generation               uint32)
    (players                  mp-replication-player MP_MAX_PLAYERS :inline)
@@ -213,6 +241,7 @@
    (traffic                  mp-replication-traffic-set :inline)
    (bosses                   mp-replication-boss-set :inline)
    (airlocks                 mp-replication-airlock-set :inline)
+   (gungame                  gungame-state :inline)
    (authority                mp-replication-authority :inline)
    (world-generation         uint32)
    (bootstrap-generation     uint32)
@@ -222,9 +251,9 @@
    (enemy-clear-generation   uint32)
    (traffic-clear-generation uint32)
    (boss-clear-generation    uint32))
-  :size-assert 92464)
+  :size-assert 92496)
 
-(defconstant MP_REPLICATION_STATE_SIZE 195216)
+(defconstant MP_REPLICATION_STATE_SIZE 195280)
 
 (deftype mp-replication-state (structure)
   ((abi-size             uint32)

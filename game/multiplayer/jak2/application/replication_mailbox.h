@@ -23,6 +23,7 @@ struct LocalReplicationFrame {
   std::optional<core::PlayerVehicleState> player_vehicle;
   std::optional<core::TurretState> turret;
   core::WorldState world = {};
+  std::optional<core::GungameState> gungame = core::GungameState{};
   core::BootstrapState bootstrap = {};
   core::EnemySnapshot enemies = {};
   core::TrafficSnapshot pedestrians = {};
@@ -51,6 +52,7 @@ struct RemoteReplicationFrame {
   std::array<PresentationTarget, core::kMaxPlayers> player_targets = {};
   std::array<PresentationTarget, core::kMaxPlayers> player_vehicle_targets = {};
   core::WorldState world = {};
+  core::GungameState gungame = {};
   core::BootstrapState bootstrap = {};
   core::EnemySnapshot enemies = {};
   core::TrafficSnapshot selected_traffic = {};

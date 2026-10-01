@@ -19,7 +19,7 @@ inline constexpr size_t kMPReplicationVehicleCapacity = 64;
 inline constexpr size_t kMPReplicationAirlockCapacity =
     multiplayer::jak2::core::kMaxPlayers * multiplayer::jak2::core::kMaxAirlockStatesPerSnapshot;
 inline constexpr size_t kMPReplicationEventCapacity = 64;
-inline constexpr uint32_t kMPReplicationStateSize = 195216;
+inline constexpr uint32_t kMPReplicationStateSize = 195280;
 
 #pragma pack(push, 1)
 struct MPReplicationPlayerVehicleGOAL {
@@ -119,6 +119,31 @@ struct MPReplicationAuthorityGOAL {
 #pragma pack(pop)
 static_assert(sizeof(MPReplicationAuthorityGOAL) == 18);
 
+struct GungameTargetRecordGOAL {
+  int32_t spawn_time;
+  uint8_t state;
+};
+static_assert(sizeof(GungameTargetRecordGOAL) == 8);
+
+#pragma pack(push, 1)
+struct GungameStateGOAL {
+  uint32_t sequence;
+  uint32_t run_id;
+  int32_t score;
+  int32_t elapsed_time;
+  uint32_t targets;
+  uint16_t count;
+  uint16_t capacity;
+  uint8_t course_id;
+  uint8_t phase;
+  uint8_t red_intro_step;
+  uint8_t yellow_intro_step;
+  uint8_t end_door;
+  uint8_t open_end;
+};
+#pragma pack(pop)
+static_assert(sizeof(GungameStateGOAL) == 30);
+
 struct alignas(16) MPReplicationFrameGOAL {
   uint32_t generation;
   alignas(16) MPReplicationPlayerGOAL players[kMPMaxPlayers];
@@ -128,6 +153,7 @@ struct alignas(16) MPReplicationFrameGOAL {
   alignas(16) MPReplicationTrafficSetGOAL traffic;
   alignas(16) MPReplicationBossSetGOAL bosses;
   alignas(16) MPReplicationAirlockSetGOAL airlocks;
+  alignas(16) GungameStateGOAL gungame;
   alignas(16) MPReplicationAuthorityGOAL authority;
   uint32_t world_generation;
   uint32_t bootstrap_generation;
@@ -138,7 +164,7 @@ struct alignas(16) MPReplicationFrameGOAL {
   uint32_t traffic_clear_generation;
   uint32_t boss_clear_generation;
 };
-static_assert(sizeof(MPReplicationFrameGOAL) == 92464);
+static_assert(sizeof(MPReplicationFrameGOAL) == 92496);
 static_assert(offsetof(MPReplicationFrameGOAL, players) == 16);
 static_assert(offsetof(MPReplicationFrameGOAL, world) == 4368);
 static_assert(offsetof(MPReplicationFrameGOAL, bootstrap) == 4544);
@@ -146,7 +172,7 @@ static_assert(offsetof(MPReplicationFrameGOAL, enemies) == 21008);
 static_assert(offsetof(MPReplicationFrameGOAL, traffic) == 78368);
 static_assert(offsetof(MPReplicationFrameGOAL, bosses) == 91696);
 static_assert(offsetof(MPReplicationFrameGOAL, airlocks) == 91888);
-static_assert(offsetof(MPReplicationFrameGOAL, authority) == 92416);
+static_assert(offsetof(MPReplicationFrameGOAL, authority) == 92448);
 
 struct alignas(16) MPReplicationStateGOAL {
   uint32_t abi_size;
@@ -162,8 +188,8 @@ struct alignas(16) MPReplicationStateGOAL {
 
 static_assert(sizeof(MPReplicationStateGOAL) == kMPReplicationStateSize);
 static_assert(offsetof(MPReplicationStateGOAL, local) == 16);
-static_assert(offsetof(MPReplicationStateGOAL, remote) == 92480);
-static_assert(offsetof(MPReplicationStateGOAL, outbound_event_count) == 184944);
-static_assert(offsetof(MPReplicationStateGOAL, outbound_events) == 184960);
-static_assert(offsetof(MPReplicationStateGOAL, inbound_event_count) == 190080);
-static_assert(offsetof(MPReplicationStateGOAL, inbound_events) == 190096);
+static_assert(offsetof(MPReplicationStateGOAL, remote) == 92512);
+static_assert(offsetof(MPReplicationStateGOAL, outbound_event_count) == 185008);
+static_assert(offsetof(MPReplicationStateGOAL, outbound_events) == 185024);
+static_assert(offsetof(MPReplicationStateGOAL, inbound_event_count) == 190144);
+static_assert(offsetof(MPReplicationStateGOAL, inbound_events) == 190160);

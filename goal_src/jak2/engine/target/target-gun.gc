@@ -1672,7 +1672,7 @@
            (target-gun-combo-start 20 (seconds 0.4))
            (send-event self 'gun-combo #t)
            (case (-> self gun combo-window-state)
-             (('target-attack 'target-running-attack)
+             (('target-attack 'target-running-attack 'target-indax-attack 'target-indax-running-attack)
               (case (-> self gun gun-type)
                 (((pickup-type eco-red) (pickup-type eco-dark))
                  )
@@ -2732,7 +2732,8 @@
            )
          (when (and (or (time-elapsed? (-> gp-0 fire-time) (the-as time-frame (-> gp-0 fire-delay)))
                         (case (-> gp-0 combo-window-state)
-                          (('target-attack-air 'target-attack 'target-running-attack)
+                          (('target-attack-air 'target-attack 'target-running-attack
+                            'target-indax-attack 'target-indax-running-attack)
                            (time-elapsed? (-> gp-0 fire-time) (the-as time-frame (-> gp-0 combo-fire-delay)))
                            )
                           )

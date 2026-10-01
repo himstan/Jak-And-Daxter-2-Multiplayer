@@ -11,7 +11,7 @@ struct EventDescriptor {
   uint8_t payload_size;
 };
 
-inline constexpr std::array<EventDescriptor, 61> kEvents = {{
+inline constexpr std::array<EventDescriptor, 57> kEvents = {{
     {1, "ORB", 4},
     {2, "GEM", 4},
     {3, "BREAK", 4},
@@ -53,11 +53,7 @@ inline constexpr std::array<EventDescriptor, 61> kEvents = {{
     {39, "MISSION_FAILED_RETRY_YES", 0},
     {40, "MISSION_FAILED_RETRY_NO", 0},
     {41, "MISSION_FORTRESS_ROBOTANK_TRIGGER", 52},
-    {42, "MISSION_GUNGAME_TUTORIAL_STEP", 16},
-    {43, "MISSION_GUNGAME_COURSE_SNAPSHOT", 16},
-    {44, "MISSION_GUNGAME_TARGET_BROKEN", 16},
-    {45, "MISSION_GUNGAME_TARGET_SPAWNED", 16},
-    {46, "MISSION_GUNGAME_COURSE_END", 16},
+    {44, "MISSION_GUNGAME_TARGET_BROKEN", 8},
     {47, "MISSION_STADIUM_BOARD1_CHALLENGE_START", 4},
     {48, "MISSION_STADIUM_BOARD1_SCORE_UPDATE", 4},
     {49, "MISSION_STADIUM_BOARD1_CHALLENGE_END", 4},
@@ -76,7 +72,10 @@ inline constexpr std::array<EventDescriptor, 61> kEvents = {{
 }};
 
 inline const EventDescriptor* event_descriptor(uint8_t id) {
-  return id > 0 && id <= kEvents.size() ? &kEvents[id - 1] : nullptr;
+  for (const auto& event : kEvents)
+    if (event.id == id)
+      return &event;
+  return nullptr;
 }
 
 }  // namespace multiplayer::jak2::wire

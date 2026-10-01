@@ -137,6 +137,7 @@ void ParticipantReplicationState::depart(const PlayerId player_id) {
 
 void WorldReplicationState::reset() {
   world_ = {};
+  gungame_ = {};
   bootstrap_ = {};
 }
 
@@ -150,6 +151,15 @@ bool WorldReplicationState::apply(const WorldState& state, const ApplyContext& c
   world_.money = bootstrap_.world.money;
   world_.gems = bootstrap_.world.gems;
   world_.skill = bootstrap_.world.skill;
+  return true;
+}
+
+bool WorldReplicationState::apply(const GungameState& state, const ApplyContext& context) {
+  if (!context.source.from_host || !valid_gungame_state(state) ||
+      !platform::sequence_is_newer(context.sequence, gungame_.sequence))
+    return false;
+  gungame_ = state;
+  gungame_.sequence = context.sequence;
   return true;
 }
 

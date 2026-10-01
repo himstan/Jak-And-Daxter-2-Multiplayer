@@ -9,7 +9,7 @@
 (define-extern mp-event-enqueue-hover-enemy-spawn! (function uint uint uint none))
 (define-extern mp-event-enqueue-actor-name! (function uint string symbol))
 (define-extern mp-event-enqueue-robotank-trigger! (function string int vector none))
-(define-extern mp-event-enqueue-gungame! (function mp-gungame-build-data none))
+(define-extern gungame-enqueue-target-broken! (function uint uint uint uint none))
 (define-extern mp-event-enqueue-krew-pickup! (function int none))
 (define-extern mp-event-enqueue-shuttle! (function uint uint uint time-frame time-frame int uint none))
 (define-extern mp-event-enqueue-city-power! (function uint uint vector none))

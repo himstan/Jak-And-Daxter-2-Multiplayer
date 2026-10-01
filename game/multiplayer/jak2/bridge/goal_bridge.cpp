@@ -120,6 +120,61 @@ core::PlayerState read_player(const MPReplicationPlayerGOAL& source) {
   return result;
 }
 
+GungameTargetRecordGOAL* gungame_targets(const GungameStateGOAL& state, size_t count) {
+  if (count > state.capacity || state.targets < kMinGoalPointer ||
+      state.targets >= EE_MAIN_MEM_SIZE || state.targets % alignof(GungameTargetRecordGOAL) != 0 ||
+      count > (EE_MAIN_MEM_SIZE - state.targets) / sizeof(GungameTargetRecordGOAL))
+    return nullptr;
+  return Ptr<GungameTargetRecordGOAL>(state.targets).c();
+}
+
+bool read_gungame(const GungameStateGOAL& source, core::GungameState& destination) {
+  destination = {.run_id = source.run_id,
+                 .score = source.score,
+                 .elapsed_time = source.elapsed_time,
+                 .course_id = source.course_id,
+                 .phase = static_cast<core::GungamePhase>(source.phase),
+                 .red_intro_step = source.red_intro_step,
+                 .yellow_intro_step = source.yellow_intro_step,
+                 .end_door = source.end_door,
+                 .open_end = source.open_end != 0};
+  if (source.count != 0) {
+    const auto* targets = gungame_targets(source, source.count);
+    if (!targets)
+      return false;
+    for (size_t index = 0; index < source.count; ++index)
+      destination.targets.push_back(
+          {.spawn_time = targets[index].spawn_time,
+           .state = static_cast<core::GungameTargetState>(targets[index].state)});
+  }
+  return source.open_end <= 1 && core::valid_gungame_state(destination);
+}
+
+void write_gungame(const core::GungameState& source, GungameStateGOAL& destination) {
+  auto* targets = gungame_targets(destination, source.targets.size());
+  if (source.sequence == 0 || !core::valid_gungame_state(source) ||
+      (!source.targets.empty() && !targets)) {
+    destination.sequence = 0;
+    destination.count = 0;
+    return;
+  }
+  destination.sequence = source.sequence;
+  destination.run_id = source.run_id;
+  destination.score = source.score;
+  destination.elapsed_time = source.elapsed_time;
+  destination.course_id = source.course_id;
+  destination.phase = static_cast<uint8_t>(source.phase);
+  destination.red_intro_step = source.red_intro_step;
+  destination.yellow_intro_step = source.yellow_intro_step;
+  destination.end_door = source.end_door;
+  destination.open_end = source.open_end;
+  destination.count = static_cast<uint16_t>(source.targets.size());
+  for (size_t index = 0; index < source.targets.size(); ++index) {
+    targets[index].spawn_time = source.targets[index].spawn_time;
+    targets[index].state = static_cast<uint8_t>(source.targets[index].state);
+  }
+}
+
 core::WorldState read_world(const MPWorldSyncStateGOAL& source) {
   core::WorldState result = {};
   result.sequence = source.sequence;
@@ -264,6 +319,8 @@ bool capture_local(MPReplicationStateGOAL& state, application::ReplicationMailbo
                                       .rotation_x = player.vehicle.turret_rotx};
   }
   frame->world = read_world(state.local.world);
+  if (!read_gungame(state.local.gungame, frame->gungame.emplace()))
+    frame->gungame.reset();
   read_bootstrap(state.local.bootstrap, frame->bootstrap);
   frame->enemies.source_player_id = state.local_player_id;
   for (uint8_t i = 0; i < state.local.enemies.count; ++i)
@@ -552,7 +609,11 @@ bool publish_remote(MPReplicationStateGOAL& state, application::ReplicationMailb
         });
     state.inbound_event_count = static_cast<uint8_t>(end - std::begin(state.inbound_events));
     static_assert(std::is_trivially_copyable_v<MPReplicationFrameGOAL>);
+    const auto gungame_buffer = state.remote.gungame;
     std::memset(&state.remote, 0, sizeof(state.remote));
+    state.remote.gungame.targets = gungame_buffer.targets;
+    state.remote.gungame.capacity = gungame_buffer.capacity;
+    write_gungame(frame->gungame, state.remote.gungame);
     state.remote.generation = frame->generation;
     state.remote.identity_generation = frame->generation;
     for (size_t i = 0; i < core::kMaxPlayers; ++i) {

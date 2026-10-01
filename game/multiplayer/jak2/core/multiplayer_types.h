@@ -361,6 +361,29 @@ struct WorldState {
   std::array<uint8_t, 64> active_task_mask = {};
 };
 
+enum class GungamePhase : uint8_t { INACTIVE, RED_INTRO, YELLOW_INTRO, COURSE, FINISHED };
+enum class GungameTargetState : uint8_t { NOT_SPAWNED, SPAWNED, BROKEN };
+
+struct GungameTargetRecord {
+  int32_t spawn_time = 0;
+  GungameTargetState state = GungameTargetState::NOT_SPAWNED;
+  bool operator==(const GungameTargetRecord&) const = default;
+};
+
+struct GungameState {
+  Sequence sequence = 0;
+  uint32_t run_id = 0;
+  int32_t score = 0;
+  int32_t elapsed_time = 0;
+  uint8_t course_id = 0;
+  GungamePhase phase = GungamePhase::INACTIVE;
+  uint8_t red_intro_step = 0;
+  uint8_t yellow_intro_step = 0;
+  uint8_t end_door = 0;
+  bool open_end = false;
+  std::vector<GungameTargetRecord> targets;
+};
+
 struct BootstrapState {
   WorldState world = {};
   uint32_t host_task = 0;

@@ -3,14 +3,18 @@
 #include <cstring>
 #include <map>
 #include <memory>
+#include <optional>
 #include <unordered_set>
 #include <vector>
 
 #include "common/common_types.h"
+#include "common/goal_constants.h"
+#include "common/goos/Interpreter.h"
 #include "common/goos/ParseHelpers.h"
 #include "common/goos/Reader.h"
 #include "common/type_system/TypeSystem.h"
 #include "common/type_system/deftype.h"
+#include "common/util/FileUtil.h"
 #include "common/util/json_util.h"
 
 #include "game/kernel/common/kscheme.h"
@@ -117,9 +121,31 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
     });
   };
   load_types("kernel/gcommon.gc", "vector");
+  load_types("kernel/gcommon.gc", "inline-array-class");
   load_types("kernel/gkernel-h.gc", "time-frame");
   load_types("engine/math/quaternion-h.gc", "quaternion");
   load_types("multiplayer/event/mp-event-h.gc");
+  load_types("multiplayer/data/mp-replication-h.gc", "gungame-target-record");
+  EXPECT_EQ(types.get_deref_info(types.make_inline_array_typespec("gungame-target-record")).stride,
+            sizeof(GungameTargetRecordGOAL));
+  EXPECT_EQ(types.lookup_field_info("gungame-target-record", "state").field.offset(),
+            offsetof(GungameTargetRecordGOAL, state));
+  load_types("multiplayer/data/mp-replication-h.gc", "gungame-target-record-array");
+  const auto* target_array = types.lookup_type("gungame-target-record-array");
+  const auto target_data = types.lookup_field_info("gungame-target-record-array", "data").field;
+  EXPECT_EQ(target_data.alignment(), alignof(GungameTargetRecordGOAL));
+  EXPECT_EQ(target_data.offset(), target_array->get_size_in_memory());
+  EXPECT_TRUE(target_data.is_inline());
+  EXPECT_TRUE(target_data.is_dynamic());
+  EXPECT_EQ(target_data.type().print(), "gungame-target-record");
+  EXPECT_EQ(types.lookup_method("gungame-target-record-array", "new").defined_in_type,
+            "inline-array-class");
+  load_types("multiplayer/data/mp-replication-h.gc", "gungame-state");
+  EXPECT_EQ(types.lookup_type("gungame-state")->get_size_in_memory(), sizeof(GungameStateGOAL));
+  EXPECT_EQ(types.lookup_field_info("gungame-state", "targets").field.offset(),
+            offsetof(GungameStateGOAL, targets));
+  EXPECT_EQ(types.lookup_field_info("gungame-state", "count").field.offset(),
+            offsetof(GungameStateGOAL, count));
 
   struct Contract {
     int64_t id;
@@ -168,6 +194,64 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
   }
 }
 
+TEST(Jak2GoalBridge, GungameStateHandlersPreserveEventReplies) {
+  ASSERT_TRUE(file_util::setup_project_path(fs::path(MP_SOURCE_ROOT), true));
+  goos::Interpreter interpreter;
+  auto reply = goos::Object::make_integer(123456);
+  std::optional<goos::Object> forwarded;
+  interpreter.register_form("gungame-event-handler",
+                            [&](const auto&, auto&, const auto&) { return reply; });
+  interpreter.register_form("return", [&](const auto&, auto& args, const auto& environment) {
+    interpreter.eval_args(&args, environment);
+    forwarded = args.unnamed.at(0);
+    return *forwarded;
+  });
+  const auto source = interpreter.reader.read_from_file(
+      {std::string(MP_SOURCE_ROOT) + "/goal_src/jak2/levels/gungame/gungame-obs.gc"});
+  size_t direct_handlers = 0;
+  size_t forwarding_handlers = 0;
+  goos::for_each_in_list(source.as_pair()->cdr, [&](const goos::Object& form) {
+    if (!form.is_pair() || !form.as_pair()->car.is_symbol("defstate"))
+      return;
+    std::vector<goos::Object> state;
+    goos::for_each_in_list(form.as_pair()->cdr, [&](const auto& value) { state.push_back(value); });
+    if (!state.at(1).as_pair()->car.is_symbol("training-manager"))
+      return;
+    SCOPED_TRACE(state.at(0).print());
+    for (size_t index = 2; index + 1 < state.size(); ++index) {
+      if (!state[index].is_symbol(":event"))
+        continue;
+      const auto& handler = state[index + 1];
+      if (handler.is_symbol("gungame-event-handler")) {
+        ++direct_handlers;
+        break;
+      }
+      ASSERT_TRUE(handler.is_pair());
+      ASSERT_TRUE(handler.as_pair()->car.is_symbol("behavior"));
+      auto body = handler.as_pair()->cdr.as_pair()->cdr;
+      if (body.as_pair()->car.as_pair()->car.is_symbol("local-vars"))
+        body = body.as_pair()->cdr;
+      const auto& forwarding = body.as_pair()->car;
+      for (const auto& value : {goos::Object::make_integer(123456), goos::Object::make_integer(0),
+                                interpreter.intern("#t"), interpreter.intern("#f")}) {
+        reply = value;
+        forwarded.reset();
+        interpreter.eval(forwarding, interpreter.global_environment.as_env_ptr());
+        if (value.is_symbol("#f")) {
+          EXPECT_FALSE(forwarded.has_value());
+        } else {
+          ASSERT_TRUE(forwarded.has_value());
+          EXPECT_EQ(*forwarded, value);
+        }
+      }
+      ++forwarding_handlers;
+      break;
+    }
+  });
+  EXPECT_EQ(direct_handlers, 3u);
+  EXPECT_EQ(forwarding_handlers, 4u);
+}
+
 TEST(Jak2GoalBridge, DirectionalAggregateHasCanonicalCompactAbi) {
   EXPECT_EQ(sizeof(MPReplicationPlayerIdentityGOAL), 279u);
   EXPECT_EQ(sizeof(MPReplicationPlayerVehicleGOAL), 94u);
@@ -176,12 +260,12 @@ TEST(Jak2GoalBridge, DirectionalAggregateHasCanonicalCompactAbi) {
   EXPECT_EQ(sizeof(MPReplicationPedestrianStateGOAL), 60u);
   EXPECT_EQ(sizeof(MPReplicationTrafficSetGOAL), 13328u);
   EXPECT_EQ(sizeof(MPReplicationBootstrapStateGOAL), 16454u);
-  EXPECT_EQ(sizeof(MPReplicationFrameGOAL), 92464u);
-  EXPECT_EQ(sizeof(MPReplicationStateGOAL), 195216u);
+  EXPECT_EQ(sizeof(MPReplicationFrameGOAL), 92496u);
+  EXPECT_EQ(sizeof(MPReplicationStateGOAL), 195280u);
   EXPECT_EQ(offsetof(MPReplicationStateGOAL, local), 16u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, remote), 92480u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, outbound_events), 184960u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, inbound_events), 190096u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, remote), 92512u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, outbound_events), 185024u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, inbound_events), 190160u);
 }
 
 TEST(Jak2GoalBridge, PlayerAppearanceConversionRoundTripsValues) {
@@ -663,4 +747,177 @@ TEST(Jak2GoalBridge, RemoteEnemiesPreserveFullCapacityAcrossParticipants) {
   ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
   EXPECT_EQ(state.remote.enemies.count, 0u);
   EXPECT_EQ(state.remote.enemies.enemies[kMPReplicationEnemyCapacity - 1].actor_id, 0u);
+}
+
+TEST(Jak2GoalBridge, EveryGungameCourseFitsLengthAndTargetNumberContracts) {
+  goos::Reader reader;
+  const auto source = reader.read_from_file(
+      {std::string(MP_SOURCE_ROOT) + "/goal_src/jak2/levels/gungame/gungame-data.gc"});
+  const std::map<std::string, size_t> expected = {{"*red-training-path-global-info*", 137},
+                                                  {"*yellow-training-path-global-info*", 191},
+                                                  {"*blue-training-path-global-info*", 209},
+                                                  {"*peace-training-path-global-info*", 109}};
+  size_t courses = 0;
+  int64_t maximum_number = 0;
+  const auto elements = [](const goos::Object& list) {
+    std::vector<goos::Object> values;
+    goos::for_each_in_list(list, [&](const auto& value) { values.push_back(value); });
+    return values;
+  };
+  goos::for_each_in_list(source.as_pair()->cdr, [&](const goos::Object& form) {
+    if (!form.is_pair() || !form.as_pair()->car.is_symbol("define"))
+      return;
+    const auto definition = elements(form);
+    const auto found = expected.find(definition[1].as_symbol().name_ptr);
+    if (found == expected.end())
+      return;
+    SCOPED_TRACE(found->first);
+    const auto entries = elements(definition[2]);
+    ASSERT_GE(entries.size(), 5u);
+    EXPECT_EQ(entries.size() - 5, found->second);
+    EXPECT_LE(entries.size() - 5, UINT16_MAX);
+    std::unordered_set<int64_t> numbers;
+    for (size_t index = 5; index < entries.size(); ++index) {
+      const auto fields = elements(entries[index]);
+      int64_t number = 0;
+      for (size_t field = 3; field + 1 < fields.size(); ++field) {
+        if (fields[field].is_symbol(":num"))
+          number = fields[field + 1].as_int();
+      }
+      EXPECT_GE(number, 0);
+      EXPECT_LE(number, UINT16_MAX);
+      EXPECT_TRUE(numbers.insert(number).second);
+      maximum_number = std::max(maximum_number, number);
+    }
+    ++courses;
+  });
+  EXPECT_EQ(courses, 4u);
+  EXPECT_EQ(maximum_number, 3820);
+}
+
+TEST(Jak2GoalBridge, GungameExchangeOwnsCopiedTargetsAndPreservesDestinationDescriptor) {
+  using namespace multiplayer::jak2;
+  GoalMemoryFixture memory;
+  auto& state = replication_state(memory);
+  state.local.gungame = {.run_id = 5,
+                         .score = 1300,
+                         .elapsed_time = -120,
+                         .targets = 0x10000,
+                         .count = 209,
+                         .capacity = 209,
+                         .course_id = 3,
+                         .phase = 3,
+                         .end_door = 1,
+                         .open_end = 1};
+  state.remote.gungame.targets = 0x11000;
+  state.remote.gungame.capacity = 209;
+  auto* targets = &memory.at<GungameTargetRecordGOAL>(0x10000);
+  for (size_t index = 0; index < 209; ++index)
+    targets[index] = {.spawn_time = index % 3 ? static_cast<int32_t>(index * 300) : 0,
+                      .state = static_cast<uint8_t>(index % 3)};
+  application::ReplicationMailbox mailbox;
+  ASSERT_TRUE(bridge::exchange_state(0x12000, mailbox));
+  const auto local = mailbox.take_local_frame();
+  ASSERT_TRUE(local);
+  ASSERT_TRUE(local->gungame);
+  EXPECT_EQ(local->gungame->targets.size(), 209u);
+  EXPECT_EQ(local->gungame->targets[128].state, core::GungameTargetState::BROKEN);
+  EXPECT_EQ(local->gungame->targets[128].spawn_time, 38400);
+  targets[128] = {};
+  EXPECT_EQ(local->gungame->targets[128].spawn_time, 38400);
+  EXPECT_EQ(local->gungame->targets[128].state, core::GungameTargetState::BROKEN);
+  const auto publish = [&] {
+    auto frame = std::make_unique<application::RemoteReplicationFrame>();
+    frame->gungame = *local->gungame;
+    frame->gungame.sequence = 7;
+    mailbox.publish_remote_frame(std::move(frame));
+    EXPECT_TRUE(bridge::exchange_state(0x12000, mailbox));
+  };
+  publish();
+  EXPECT_EQ(state.remote.gungame.targets, 0x11000u);
+  EXPECT_EQ(state.remote.gungame.capacity, 209u);
+  EXPECT_EQ(state.remote.gungame.sequence, 7u);
+  EXPECT_EQ(state.remote.gungame.count, 209u);
+  EXPECT_EQ(state.remote.gungame.elapsed_time, -120);
+  EXPECT_EQ(
+      memory.at<GungameTargetRecordGOAL>(0x11000 + 128 * sizeof(GungameTargetRecordGOAL)).state,
+      2u);
+  state.remote.gungame.capacity = 208;
+  memory.at<uint8_t>(0x11000) = 0xee;
+  publish();
+  EXPECT_EQ(state.remote.gungame.sequence, 0u);
+  EXPECT_EQ(memory.at<uint8_t>(0x11000), 0xee);
+  state.remote.gungame.capacity = 209;
+  publish();
+  EXPECT_EQ(state.remote.gungame.sequence, 7u);
+  state.local.gungame.targets = 0x10800;
+  state.remote.gungame.targets = 0x11800;
+  std::memset(targets, 3, 209 * sizeof(GungameTargetRecordGOAL));
+  auto* moved_targets = &memory.at<GungameTargetRecordGOAL>(0x10800);
+  for (size_t index = 0; index < 209; ++index)
+    moved_targets[index] = {.spawn_time = 300, .state = 1};
+  std::memset(&memory.at<GungameTargetRecordGOAL>(0x11000), 0xee,
+              209 * sizeof(GungameTargetRecordGOAL));
+  publish();
+  const auto moved_local = mailbox.take_local_frame();
+  ASSERT_TRUE(moved_local);
+  ASSERT_TRUE(moved_local->gungame);
+  EXPECT_EQ(moved_local->gungame->targets.size(), 209u);
+  EXPECT_EQ(moved_local->gungame->targets[128].state, core::GungameTargetState::SPAWNED);
+  EXPECT_EQ(state.remote.gungame.targets, 0x11800u);
+  EXPECT_EQ(
+      memory.at<GungameTargetRecordGOAL>(0x11800 + 128 * sizeof(GungameTargetRecordGOAL)).state,
+      2u);
+  EXPECT_EQ(
+      memory.at<GungameTargetRecordGOAL>(0x11000 + 128 * sizeof(GungameTargetRecordGOAL)).state,
+      0xee);
+  state.remote.gungame.targets = 0;
+  state.remote.gungame.capacity = 0;
+  publish();
+  EXPECT_EQ(state.remote.gungame.sequence, 0u);
+}
+
+TEST(Jak2GoalBridge, InvalidGungameCaptureDoesNotBlockOtherDomainsOrEvents) {
+  using namespace multiplayer::jak2;
+  GoalMemoryFixture memory;
+  auto& state = replication_state(memory);
+  state.local.gungame = {
+      .run_id = 1, .targets = 0x10000, .count = 209, .capacity = 208, .course_id = 3, .phase = 3};
+  state.local.traffic.pedestrian_count = 1;
+  state.local.traffic.pedestrians[0].value.net_id = 0x10000001;
+  state.outbound_event_count = 1;
+  state.outbound_events[0] = {.etype = 44, .source_player_id = 0, .payload_size = 8};
+  application::ReplicationMailbox mailbox;
+  float position = 10.0f;
+  const auto capture = [&](bool valid_gungame) {
+    state.local.players[0].transform.position[0] = ++position;
+    state.local.traffic.pedestrians[0].value.position[0] = position;
+    EXPECT_TRUE(bridge::exchange_state(0x12000, mailbox));
+    const auto frame = mailbox.take_local_frame();
+    ASSERT_TRUE(frame);
+    EXPECT_FLOAT_EQ(frame->players[0].position[0], position);
+    ASSERT_EQ(frame->pedestrians.pedestrians.size(), 1u);
+    EXPECT_FLOAT_EQ(frame->pedestrians.pedestrians[0].position[0], position);
+    EXPECT_EQ(frame->gungame.has_value(), valid_gungame);
+  };
+  capture(false);
+  EXPECT_EQ(state.outbound_event_count, 0u);
+  const auto events = mailbox.take_outbound_events(64);
+  ASSERT_EQ(events.size(), 1u);
+  EXPECT_EQ(events[0].event_id, 44u);
+  state.local.gungame.capacity = 209;
+  for (const uint32_t address :
+       {0u, 0xfffu, 0x10001u, static_cast<uint32_t>(EE_MAIN_MEM_SIZE - 8)}) {
+    state.local.gungame.targets = address;
+    capture(false);
+  }
+  state.local.gungame.targets = 0x10000;
+  auto& target =
+      memory.at<GungameTargetRecordGOAL>(0x10000 + 208 * sizeof(GungameTargetRecordGOAL));
+  target.state = 3;
+  capture(false);
+  target = {.spawn_time = 9000, .state = 0};
+  capture(false);
+  target.spawn_time = 0;
+  capture(true);
 }

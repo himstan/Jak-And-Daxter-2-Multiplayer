@@ -14,6 +14,7 @@ bool count_fits(uint32_t count, uint32_t maximum);
 bool valid_index(uint32_t index, uint32_t limit);
 bool source_allows_player(const platform::MessageOrigin& source, PlayerId player_id);
 PlayerId snapshot_source(PlayerId snapshot_source_id, const platform::MessageOrigin& source);
+bool valid_gungame_state(const GungameState& state);
 bool valid_world_state(const WorldState& world);
 bool valid_vehicle_state(const VehicleState& vehicle);
 bool valid_player_vehicle_state(const VehicleState& vehicle);

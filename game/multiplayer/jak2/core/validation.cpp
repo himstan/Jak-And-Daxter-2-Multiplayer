@@ -34,6 +34,24 @@ PlayerId snapshot_source(const PlayerId snapshot_source_id, const platform::Mess
                                                       : source.authenticated_player_id;
 }
 
+bool valid_gungame_state(const GungameState& state) {
+  if (state.targets.size() > UINT16_MAX || state.course_id > 4 || state.end_door > 1 ||
+      state.red_intro_step > 4 || state.yellow_intro_step > 3 ||
+      state.phase > GungamePhase::FINISHED || !std::ranges::all_of(state.targets, [](auto target) {
+        return target.state <= GungameTargetState::BROKEN && target.spawn_time >= 0 &&
+               (target.state != GungameTargetState::NOT_SPAWNED || target.spawn_time == 0);
+      }))
+    return false;
+  if (state.phase == GungamePhase::INACTIVE)
+    return state.course_id == 0 && state.targets.empty() && !state.open_end;
+  if (state.run_id == 0 || state.course_id == 0)
+    return false;
+  if (state.phase == GungamePhase::RED_INTRO || state.phase == GungamePhase::YELLOW_INTRO)
+    return state.course_id == (state.phase == GungamePhase::RED_INTRO ? 1 : 2) &&
+           state.targets.empty() && !state.open_end;
+  return !state.targets.empty() && (state.phase != GungamePhase::FINISHED || !state.open_end);
+}
+
 bool valid_world_state(const WorldState& world) {
   return finite(world.money) && finite(world.gems) && finite(world.skill) &&
          finite(world.time_of_day_ratio) && finite(world.weather_cloud) &&
