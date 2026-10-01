@@ -50,12 +50,12 @@ tasks:
     cmds:
       - '{{.DECOMP_BIN_RELEASE_DIR}}/decompiler "./decompiler/config/{{.DECOMP_CONFIG}}" "./iso_data" "./decompiler_out" --version "{{.DECOMP_CONFIG_VERSION}}" --config-override ''{"decompile_code": false, "levels_extract": true, "allowed_objects": []}'''
   boot-game:
-    desc: "Boots the game, it will fail if it's not already compiled!"
+    desc: "Boots the game and starts a host session, it will fail if it's not already compiled!"
     preconditions:
       - sh: test -f {{.GK_BIN_RELEASE_DIR}}/gk{{.EXE_FILE_EXTENSION}}
         msg: "Couldn't locate runtime executable in '{{.GK_BIN_RELEASE_DIR}}/gk'"
     cmds:
-      - "{{.GK_BIN_RELEASE_DIR}}/gk -v --game {{.GAME}} -- -boot -debug -fakeiso -mp-host true -snapshot slot1 -mp-characters jak,jak"
+      - "{{.GK_BIN_RELEASE_DIR}}/gk -v --game {{.GAME}} -- -boot -debug -fakeiso -mp-host true"
   boot-game-p2:
     desc: "Boots the game and tries to connect to localhost"
     preconditions:
