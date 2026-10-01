@@ -7,7 +7,11 @@
           (target-record (get-player-target-record record))
           (draw-pos (new 'stack-no-clear 'vector)))
       (when (and target-record (nonzero? target-record) (-> target-record active?))
-        (add-debug-sphere #t (bucket-id debug-no-zbuf1) (-> target-record trans) (meters 0.5) (static-rgba 255 255 0 128))
+        (add-debug-sphere #t
+                          (bucket-id debug-no-zbuf1)
+                          (-> target-record trans)
+                          (meters 0.5)
+                          (static-rgba 255 255 0 128))
         (vector-copy! draw-pos (-> target-record trans))
         (+! (-> draw-pos y) (meters 2.0))
         (let ((state-sym (mp-target-get-state-from-id (-> target-record state-id))))
@@ -34,7 +38,12 @@
                                draw-pos
                                (font-color green)
                                (the-as vector2h #f)))
-          (add-debug-text-3d #t (bucket-id debug-no-zbuf1) "REPLICA" replica-pos (font-color green) (the-as vector2h #f))
+          (add-debug-text-3d #t
+                             (bucket-id debug-no-zbuf1)
+                             "REPLICA"
+                             replica-pos
+                             (font-color green)
+                             (the-as vector2h #f))
           (let ((pad (-> proc control cpad))
                 (debug-str *temp-string*))
             (when (and pad (nonzero? pad))

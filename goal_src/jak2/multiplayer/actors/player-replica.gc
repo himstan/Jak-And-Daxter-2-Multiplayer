@@ -160,9 +160,9 @@
 (defun player-replica-apply-weapon-state! ((proc target) (target-record target-record))
   (when (and (nonnull? proc target-record) (-> target-record active?) (nonzero? (-> target-record equipped-weapon)))
     (player-replica-repair-gun-replay-state! proc
-                                        target-record
-                                        (the-as pickup-type
-                                                (mp-equipped-weapon->pickup-type (-> target-record equipped-weapon)))))
+                                             target-record
+                                             (the-as pickup-type
+                                                     (mp-equipped-weapon->pickup-type (-> target-record equipped-weapon)))))
   (when (and proc
              (nonzero? proc)
              (-> proc control)
@@ -260,7 +260,9 @@
     (the-as art-joint-anim #f)))
 
 (defun player-replica-refresh-duck-gun-visibility! ((proc target) (cur-state symbol))
-  (when (and (nonnull? proc (-> proc control) (-> proc gun)) (using-gun? proc) (player-replica-gun-duck-state? cur-state))
+  (when (and (nonnull? proc (-> proc control) (-> proc gun))
+             (using-gun? proc)
+             (player-replica-gun-duck-state? cur-state))
     (let ((gun-info (-> proc gun)))
       (set! (-> gun-info active?) #t)
       (set! (-> gun-info laser-active?) #t)
@@ -929,20 +931,15 @@
 
 (defun player-vehicle-state? ((state symbol))
   (let ((state-id (mp-target-get-id-from-state state #f)))
-    (or (and (>= state-id (mp-target-state-id pilot-stance))
-             (<= state-id (mp-target-state-id pilot-death)))
-        (and (>= state-id (mp-target-state-id indax-pilot-stance))
-             (<= state-id (mp-target-state-id indax-pilot-death))))))
+    (or (and (>= state-id (mp-target-state-id pilot-stance)) (<= state-id (mp-target-state-id pilot-death)))
+        (and (>= state-id (mp-target-state-id indax-pilot-stance)) (<= state-id (mp-target-state-id indax-pilot-death))))))
 
 (defun player-replica-release-vehicle! ((proc target))
   (when (nonnull? proc (-> proc pilot))
     (let* ((pilot-info (-> proc pilot))
            (vehicle-proc (the-as vehicle (handle->process-safe (-> pilot-info vehicle)))))
-      (when (and (nonnull? vehicle-proc)
-                 (type? vehicle-proc vehicle)
-                 (nonnull? (-> vehicle-proc info)))
-        (let ((driver? (and (> (-> vehicle-proc info seat-count) 0)
-                            (= (get-rider-in-seat vehicle-proc 0) proc))))
+      (when (and (nonnull? vehicle-proc) (type? vehicle-proc vehicle) (nonnull? (-> vehicle-proc info)))
+        (let ((driver? (and (> (-> vehicle-proc info seat-count) 0) (= (get-rider-in-seat vehicle-proc 0) proc))))
           (remove-rider vehicle-proc proc)
           (when driver?
             (set! (-> pilot-info seat-index) 0)
@@ -969,13 +966,10 @@
       ((or (player-vehicle-state? cur-state) (focus-test? proc pilot pilot-riding))
        (player-replica-release-vehicle! proc)
        (logclear! (-> proc mask) (process-mask pause sleep actor-pause))
-       (if (mp-player-daxter? record)
-         (go-process proc target-indax-start (the handle #f))
-         (go-process proc target-stance))
+       (if (mp-player-daxter? record) (go-process proc target-indax-start (the handle #f)) (go-process proc target-stance))
        (set! (-> record runtime state-mismatch-count) 0)
        (return #t))
-      ((and (nonnull? pilot-info) (nonzero? (-> pilot-info vehicle)))
-       (player-replica-release-vehicle! proc))))
+      ((and (nonnull? pilot-info) (nonzero? (-> pilot-info vehicle))) (player-replica-release-vehicle! proc))))
   #f)
 
 (define *mp-jak-death-vo* (new 'static 'boxed-array :type string "jak065" "jak034" "jak076" "jak077" "jak042" "jak078"))
@@ -1050,8 +1044,9 @@
       (let ((target-record (get-player-target-record record)))
         (when (and (nonnull? proc target-record (-> proc control))
                    (-> target-record active?)
-                   (not (player-replica-reconcile-vehicle-exit! proc record
-                          (if (nonnull? (-> proc state)) (-> proc state name) #f))))
+                   (not (player-replica-reconcile-vehicle-exit! proc
+                                                                record
+                                                                (if (nonnull? (-> proc state)) (-> proc state name) #f))))
           (logclear! (-> proc mask) (process-mask pause sleep actor-pause))
           (mp-darkjak-apply-remote-stage! proc (-> record action darkjak-stage))
           (player-replica-apply-input! proc target-record)
@@ -1112,7 +1107,8 @@
                        (log 'debug "[PlayerReplica] Stuck in ride-along! Forcing exit to ~A~%" record-state)
                        (send-event proc 'change-mode 'normal #f)
                        (set! (-> record runtime state-mismatch-count) 0))))
-                  ((and (mp-target-edge-grab-state? record-state) (not (player-replica-in-edge-grab-state? proc cur-state)))
+                  ((and (mp-target-edge-grab-state? record-state)
+                        (not (player-replica-in-edge-grab-state? proc cur-state)))
                    (when (>= (-> record runtime state-mismatch-count) 10)
                      (log 'debug "[PlayerReplica] Authoritative Edge Grab! Bumping ~A -> ~A~%" cur-state record-state)
                      (mp-dispatch-edge-grab-to-target! proc (mp-target-pilot-edge-grab-state? record-state))

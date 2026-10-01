@@ -200,9 +200,7 @@
 
 (defconstant MAX_TRAFFIC_RECORDS 192)
 
-(define-perm *traffic-records*
-             (inline-array traffic-record)
-             (new 'static 'inline-array traffic-record 192))
+(define-perm *traffic-records* (inline-array traffic-record) (new 'static 'inline-array traffic-record 192))
 
 (define-extern mp-vehicle-player-driving? (function vehicle symbol))
 (define-extern get-traffic-record (function uint traffic-record))

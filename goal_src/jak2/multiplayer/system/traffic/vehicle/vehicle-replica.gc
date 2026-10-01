@@ -943,9 +943,9 @@
               (when vehicle-can-spawn?
                 (mp-vehicle-force-cull-local! proc))
               (vehicle-apply-record proc
-                                            (-> record
-                                                vehicle
-                                                state))))
+                                    (-> record
+                                        vehicle
+                                        state))))
           (when (and spawn-ready?
                      vehicle-can-spawn?
                      (> (-> record vehicle state state-id) 2)

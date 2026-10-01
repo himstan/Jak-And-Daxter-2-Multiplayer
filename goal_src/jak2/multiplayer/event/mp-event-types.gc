@@ -3,15 +3,18 @@
 
 (defmacro define-mp-events (&rest events)
   (let ((constants '())
-        (sizes '()))
+        (sizes '())
+        (routes '()))
     (dolist (remaining events)
       (let* ((event (car remaining))
              (name (first event))
              (id (second event))
              (payload-type (third event))
+             (handler (cadddr event))
              (payload-size (if (eq? payload-type 'none) 0 `(size-of ,payload-type))))
         (set! constants (cons `(defconstant ,name (the uint ,id)) constants))
-        (set! sizes (cons `((,name) (the uint8 ,payload-size)) sizes))))
+        (set! sizes (cons `((,name) (the uint8 ,payload-size)) sizes))
+        (set! routes (cons `((,name) ,handler) routes))))
     `(begin
       ,@(reverse constants)
       (defun mp-event-payload-size ((event-id uint))
@@ -19,66 +22,151 @@
           ,@(reverse sizes)
           (else (the uint8 #xff))))
       (defun mp-event-known? ((event-id uint))
-        (!= (mp-event-payload-size event-id) (the uint8 #xff))))))
+        (!= (mp-event-payload-size event-id) (the uint8 #xff)))
+      (defmacro mp-event-route! (event record)
+        (list 'let
+              (list (list 'evt event) (list 'source-record record))
+              '(case (-> evt etype)
+                ,@(reverse routes)
+                (else (log 'debug "[MP-Event] No handler for event ID ~D.~%" (-> evt etype)))))))))
 
-(define-mp-events (MP_EVENT_ORB 1 mp-aid-event-data)
-                  (MP_EVENT_GEM 2 mp-aid-event-data)
-                  (MP_EVENT_BREAK 3 mp-aid-event-data)
-                  (MP_EVENT_ATTACK_ENEMY 4 mp-actor-attack-event-data)
-                  (MP_EVENT_ENEMY_DEATH 5 mp-aid-event-data)
-                  (MP_EVENT_SCENE_START 6 mp-scene-event-data)
-                  (MP_EVENT_SCENE_REQUEST_SKIP 7 mp-scene-event-data)
-                  (MP_EVENT_SCENE_SKIPPED 8 mp-scene-event-data)
-                  (MP_EVENT_ENEMY_AUTHORITY_REQUEST 9 mp-enemy-authority-request-event-data)
-                  (MP_EVENT_ENEMY_AUTHORITY_ACK 10 mp-enemy-authority-grant-event-data)
-                  (MP_EVENT_ATTACK_PED 11 mp-ped-attack-event-data)
-                  (MP_EVENT_CHANGE_MODE_DARKJAK 12 none)
-                  (MP_EVENT_END_MODE_DARKJAK 13 none)
-                  (MP_EVENT_EDGE_GRAB 14 edge-grab-state-event-data)
-                  (MP_EVENT_PILOT_EDGE_GRAB 15 edge-grab-state-event-data)
-                  (MP_EVENT_PLAYER_RESPAWNED 16 none)
-                  (MP_EVENT_PLAYER_DIED 17 none)
-                  (MP_EVENT_CONTINUE_POINT 18 mp-name-event-data)
-                  (MP_EVENT_WAYPOINT_BUMP 19 mp-waypoint-event-data)
-                  (MP_EVENT_WAYPOINT_SNAPSHOT 20 mp-waypoint-event-data)
-                  (MP_EVENT_WAYPOINT_REQUEST 21 mp-waypoint-event-data)
-                  (MP_EVENT_POLE_GRAB 22 mp-aid-event-data)
-                  (MP_EVENT_BATTLE_EVENT 23 mp-battle-event-data)
-                  (MP_EVENT_PLAYER_GUN_SHOT 24 mp-player-gun-shot-event-data)
-                  (MP_EVENT_WARP_GATE 25 mp-warp-gate-event-data)
-                  (MP_EVENT_ENEMY_GEM 26 mp-enemy-gem-event-data)
-                  (MP_EVENT_MTN_PLAT_SHOOT 27 mp-mtn-plat-shoot-event-data)
-                  (MP_EVENT_MTN_DICE 28 mp-mtn-dice-event-data)
-                  (MP_EVENT_PALACE_SQUID 29 mp-palace-squid-event-data)
-                  (MP_EVENT_FORT_MISSILE_TARGET 30 uint8)
-                  (MP_EVENT_WIDOW_SPYDROID 31 mp-widow-spydroid-event-data)
-                  (MP_EVENT_WIDOW_BOMB 32 mp-widow-bomb-event-data)
-                  (MP_EVENT_WIDOW_BOMB_KICK 33 mp-widow-bomb-kick-event-data)
-                  (MP_EVENT_WIDOW_BOMB_FIZZLE 34 mp-widow-bomb-fizzle-event-data)
-                  (MP_EVENT_WIDOW_BOMB_HIT 35 mp-widow-bomb-hit-event-data)
-                  (MP_EVENT_WIDOW_CATWALK_HIT 36 uint8)
-                  (MP_EVENT_MISSION_LEAVE 37 mp-name-event-data)
-                  (MP_EVENT_MISSION_PLAY_SCENE 38 mp-name-event-data)
-                  (MP_EVENT_MISSION_FAILED_RETRY_YES 39 none)
-                  (MP_EVENT_MISSION_FAILED_RETRY_NO 40 none)
-                  (MP_EVENT_MISSION_FORTRESS_ROBOTANK_TRIGGER 41 mp-robotank-trigger-event-data)
-                  (MP_EVENT_MISSION_GUNGAME_TUTORIAL_STEP 42 mp-gungame-event-data)
-                  (MP_EVENT_MISSION_GUNGAME_COURSE_SNAPSHOT 43 mp-gungame-event-data)
-                  (MP_EVENT_MISSION_GUNGAME_TARGET_BROKEN 44 mp-gungame-event-data)
-                  (MP_EVENT_MISSION_GUNGAME_TARGET_SPAWNED 45 mp-gungame-event-data)
-                  (MP_EVENT_MISSION_GUNGAME_COURSE_END 46 mp-gungame-event-data)
-                  (MP_EVENT_MISSION_STADIUM_BOARD1_CHALLENGE_START 47 mp-stadium-board1-event-data)
-                  (MP_EVENT_MISSION_STADIUM_BOARD1_SCORE_UPDATE 48 mp-stadium-board1-event-data)
-                  (MP_EVENT_MISSION_STADIUM_BOARD1_CHALLENGE_END 49 mp-stadium-board1-event-data)
-                  (MP_EVENT_MISSION_STADIUM_BOARD1_BOARD_PICKED_UP 50 mp-stadium-board1-event-data)
-                  (MP_EVENT_MISSION_KREW_COLLECTION_PICKUP 51 uint8)
-                  (MP_EVENT_MISSION_CITY_SHUTTLE_STATE 52 mp-shuttle-event-data)
-                  (MP_EVENT_MISSION_CITY_POWER_TURRET_STATE 53 mp-city-power-event-data)
-                  (MP_EVENT_MISSION_TOMB_BOULDER_COMPLETE 54 none)
-                  (MP_EVENT_MISSION_TOMB_DAXTER_WAIT_START 55 none)
-                  (MP_EVENT_MISSION_TOMB_DAXTER_WAIT_END 56 none)
-                  (MP_EVENT_RACE 57 mp-race-event-data)
-                  (MP_EVENT_PARTY_WIPE 58 none)
-                  (MP_EVENT_HOVER_ENEMY_SPAWN 59 mp-hover-enemy-spawn-event-data)
-                  (MP_EVENT_DRILL_EGG 60 mp-aid-event-data)
-                  (MP_EVENT_MISSION_MOUNTAIN_RESOLUTION 61 uint8))
+(define-mp-events (MP_EVENT_ORB 1 mp-aid-event-data (mp-event-handler-orb (-> (the-as mp-aid-event evt) payload aid)))
+                  (MP_EVENT_GEM 2 mp-aid-event-data (mp-event-handler-gem (-> (the-as mp-aid-event evt) payload aid)))
+                  (MP_EVENT_BREAK 3
+                                  mp-aid-event-data
+                                  (mp-event-handler-break (-> (the-as mp-aid-event evt) payload aid)))
+                  (MP_EVENT_ATTACK_ENEMY 4
+                                         mp-actor-attack-event-data
+                                         (mp-event-handler-attack-enemy (the-as mp-actor-attack-event evt)))
+                  (MP_EVENT_ENEMY_DEATH 5
+                                        mp-aid-event-data
+                                        (mp-event-handler-enemy-death (the-as mp-enemy-death-event evt)))
+                  (MP_EVENT_SCENE_START 6 mp-scene-event-data (mp-event-handle-scene! (the-as mp-scene-event evt)))
+                  (MP_EVENT_SCENE_REQUEST_SKIP 7
+                                               mp-scene-event-data
+                                               (mp-event-handle-scene! (the-as mp-scene-event evt)))
+                  (MP_EVENT_SCENE_SKIPPED 8 mp-scene-event-data (mp-event-handle-scene! (the-as mp-scene-event evt)))
+                  (MP_EVENT_ENEMY_AUTHORITY_REQUEST 9
+                                                    mp-enemy-authority-request-event-data
+                                                    (mp-event-handler-authority-request (the-as mp-enemy-authority-request-event
+                                                                                                evt)))
+                  (MP_EVENT_ENEMY_AUTHORITY_ACK 10
+                                                mp-enemy-authority-grant-event-data
+                                                (mp-event-handler-authority-ack (the-as mp-enemy-authority-grant-event
+                                                                                        evt)))
+                  (MP_EVENT_ATTACK_PED 11
+                                       mp-ped-attack-event-data
+                                       (mp-event-handler-attack-ped (the-as mp-actor-attack-event evt)))
+                  (MP_EVENT_CHANGE_MODE_DARKJAK 12
+                                                none
+                                                (mp-event-handler-change-mode-darkjak (-> evt source-player-id)))
+                  (MP_EVENT_END_MODE_DARKJAK 13 none (mp-event-handler-end-mode-darkjak (-> evt source-player-id)))
+                  (MP_EVENT_EDGE_GRAB 14
+                                      edge-grab-state-event-data
+                                      (mp-receive-edge-grab-event (mp-player-record-target source-record) evt #f))
+                  (MP_EVENT_PILOT_EDGE_GRAB 15
+                                            edge-grab-state-event-data
+                                            (mp-receive-edge-grab-event (mp-player-record-target source-record) evt #t))
+                  (MP_EVENT_PLAYER_RESPAWNED 16 none (mp-event-remote-player-respawned source-record))
+                  (MP_EVENT_PLAYER_DIED 17 none (mp-event-remote-player-died source-record))
+                  (MP_EVENT_CONTINUE_POINT 18
+                                           mp-name-event-data
+                                           (mp-receive-continue-event (the-as mp-continue-event evt)))
+                  (MP_EVENT_WAYPOINT_BUMP 19
+                                          mp-waypoint-event-data
+                                          (mp-receive-waypoint-event (the-as mp-waypoint-event evt) #f))
+                  (MP_EVENT_WAYPOINT_SNAPSHOT 20
+                                              mp-waypoint-event-data
+                                              (mp-receive-waypoint-event (the-as mp-waypoint-event evt) #t))
+                  (MP_EVENT_WAYPOINT_REQUEST 21
+                                             mp-waypoint-event-data
+                                             (mp-receive-waypoint-event (the-as mp-waypoint-event evt) #f))
+                  (MP_EVENT_POLE_GRAB 22 mp-aid-event-data (mp-receive-pole-grab-event (the-as mp-aid-event evt)))
+                  (MP_EVENT_BATTLE_EVENT 23 mp-battle-event-data (mp-receive-battle-event (the-as mp-battle-event evt)))
+                  (MP_EVENT_PLAYER_GUN_SHOT 24
+                                            mp-player-gun-shot-event-data
+                                            (mp-receive-player-gun-shot-event (the-as mp-player-gun-shot-event evt)))
+                  (MP_EVENT_WARP_GATE 25
+                                      mp-warp-gate-event-data
+                                      (mp-receive-warp-gate-event (the-as mp-warp-gate-event evt)))
+                  (MP_EVENT_ENEMY_GEM 26
+                                      mp-enemy-gem-event-data
+                                      (mp-event-handler-enemy-gem (the-as mp-enemy-gem-event evt)))
+                  (MP_EVENT_MTN_PLAT_SHOOT 27
+                                           mp-mtn-plat-shoot-event-data
+                                           (mp-event-handler-mtn-plat-shoot (the-as mp-mtn-plat-shoot-event evt)))
+                  (MP_EVENT_MTN_DICE 28
+                                     mp-mtn-dice-event-data
+                                     (mp-event-handler-mtn-dice (the-as mp-mtn-dice-event evt)))
+                  (MP_EVENT_PALACE_SQUID 29
+                                         mp-palace-squid-event-data
+                                         (mp-receive-palace-squid-event (the-as mp-palace-squid-event evt)))
+                  (MP_EVENT_FORT_MISSILE_TARGET 30
+                                                uint8
+                                                (mp-fort-missile-target-replay! (the-as uint
+                                                                                        (-> (the-as mp-fort-missile-target-event
+                                                                                                    evt)
+                                                                                            payload))))
+                  (MP_EVENT_WIDOW_SPYDROID 31
+                                           mp-widow-spydroid-event-data
+                                           (mp-receive-widow-spydroid-event (the-as mp-widow-spydroid-event evt)))
+                  (MP_EVENT_WIDOW_BOMB 32
+                                       mp-widow-bomb-event-data
+                                       (mp-receive-widow-bomb-event (the-as mp-widow-bomb-event evt)))
+                  (MP_EVENT_WIDOW_BOMB_KICK 33
+                                            mp-widow-bomb-kick-event-data
+                                            (mp-receive-widow-bomb-kick-event (the-as mp-widow-bomb-kick-event evt)))
+                  (MP_EVENT_WIDOW_BOMB_FIZZLE 34
+                                              mp-widow-bomb-fizzle-event-data
+                                              (mp-receive-widow-bomb-fizzle-event (the-as mp-widow-bomb-fizzle-event
+                                                                                          evt)))
+                  (MP_EVENT_WIDOW_BOMB_HIT 35
+                                           mp-widow-bomb-hit-event-data
+                                           (mp-receive-widow-bomb-hit-event (the-as mp-widow-bomb-hit-event evt)))
+                  (MP_EVENT_WIDOW_CATWALK_HIT 36
+                                              uint8
+                                              (mp-receive-widow-catwalk-hit-event (the-as mp-widow-catwalk-hit-event
+                                                                                          evt)))
+                  (MP_EVENT_MISSION_LEAVE 37 mp-name-event-data (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_PLAY_SCENE 38 mp-name-event-data (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_FAILED_RETRY_YES 39 none (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_FAILED_RETRY_NO 40 none (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_FORTRESS_ROBOTANK_TRIGGER 41
+                                                              mp-robotank-trigger-event-data
+                                                              (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_GUNGAME_TUTORIAL_STEP 42 mp-gungame-event-data (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_GUNGAME_COURSE_SNAPSHOT 43 mp-gungame-event-data (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_GUNGAME_TARGET_BROKEN 44 mp-gungame-event-data (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_GUNGAME_TARGET_SPAWNED 45 mp-gungame-event-data (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_GUNGAME_COURSE_END 46 mp-gungame-event-data (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_STADIUM_BOARD1_CHALLENGE_START 47
+                                                                   mp-stadium-board1-event-data
+                                                                   (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_STADIUM_BOARD1_SCORE_UPDATE 48
+                                                                mp-stadium-board1-event-data
+                                                                (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_STADIUM_BOARD1_CHALLENGE_END 49
+                                                                 mp-stadium-board1-event-data
+                                                                 (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_STADIUM_BOARD1_BOARD_PICKED_UP 50
+                                                                   mp-stadium-board1-event-data
+                                                                   (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_KREW_COLLECTION_PICKUP 51 uint8 (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_CITY_SHUTTLE_STATE 52 mp-shuttle-event-data (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_CITY_POWER_TURRET_STATE 53 mp-city-power-event-data (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_TOMB_BOULDER_COMPLETE 54 none (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_TOMB_DAXTER_WAIT_START 55 none (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_TOMB_DAXTER_WAIT_END 56 none (mp-event-handle-mission! evt))
+                  (MP_EVENT_RACE 57 mp-race-event-data (mp-race-receive-event! (the-as mp-race-event evt)))
+                  (MP_EVENT_PARTY_WIPE 58 none (mp-death-party-wipe-receive!))
+                  (MP_EVENT_HOVER_ENEMY_SPAWN 59
+                                              mp-hover-enemy-spawn-event-data
+                                              (mp-event-handler-hover-enemy-spawn (the-as mp-hover-enemy-spawn-event
+                                                                                          evt)))
+                  (MP_EVENT_DRILL_EGG 60
+                                      mp-aid-event-data
+                                      (mp-event-handler-drill-egg (-> (the-as mp-aid-event evt) payload aid)))
+                  (MP_EVENT_MISSION_MOUNTAIN_RESOLUTION 61
+                                                        uint8
+                                                        (mp-mountain-resolution-receive! (the-as mp-mountain-resolution-event
+                                                                                                 evt))))

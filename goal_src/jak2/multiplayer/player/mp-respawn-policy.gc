@@ -82,7 +82,12 @@
   (none))
 
 (defun mp-begin-local-death-respawn-policy! ((player target))
-  (when (and player (nonzero? player) *target* (nonzero? *target*) (not-player-replica? player) (mp-should-use-local-respawn?))
+  (when (and player
+             (nonzero? player)
+             *target*
+             (nonzero? *target*)
+             (not-player-replica? player)
+             (mp-should-use-local-respawn?))
     (mp-prepare-local-respawn! player)
     (return #t))
   #f)

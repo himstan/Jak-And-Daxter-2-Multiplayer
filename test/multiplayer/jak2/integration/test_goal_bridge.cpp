@@ -134,7 +134,9 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
     goos::for_each_in_list(form.as_pair()->cdr, [&](const goos::Object& entry) {
       std::vector<goos::Object> values;
       goos::for_each_in_list(entry, [&](const auto& value) { values.push_back(value); });
-      ASSERT_EQ(values.size(), 3u);
+      ASSERT_EQ(values.size(), 4u);
+      ASSERT_TRUE(values[3].is_pair());
+      ASSERT_TRUE(values[3].as_pair()->car.is_symbol());
       const std::string name = values[0].as_symbol().name_ptr;
       ASSERT_TRUE(name.starts_with("MP_EVENT_"));
       const auto id = values[1].as_int();

@@ -187,9 +187,7 @@
 
 (defun mp-pedestrian-run-common-post-post! ((this citizen))
   (when (and (nonnull? this) (not *mp-traffic-local-authoritative?*) (nonzero? (-> this net-id)))
-    (let ((rec (get-traffic-record (-> this net-id))))
-      (when (nonnull? rec)
-        (pedestrian-run-replica-sync! this rec))))
+    (let ((rec (get-traffic-record (-> this net-id)))) (when (nonnull? rec) (pedestrian-run-replica-sync! this rec))))
   (none))
 
 (defun mp-pedestrian-external-sync-needed? ()

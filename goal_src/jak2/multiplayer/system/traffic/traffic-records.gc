@@ -74,8 +74,7 @@
   (let ((ped-proc (mp-pedestrian-find-by-net-id (-> rec net-id)))) (or (not ped-proc) (not (nonzero? ped-proc)))))
 
 (defun cleanup-authoritative-traffic-records! ()
-  (when (and *mp-traffic-local-authoritative?*
-             (time-elapsed? *authoritative-traffic-record-cleanup-time* (seconds 1)))
+  (when (and *mp-traffic-local-authoritative?* (time-elapsed? *authoritative-traffic-record-cleanup-time* (seconds 1)))
     (let ((stale-count (the int 0))
           (missing-ped-count (the int 0)))
       (dotimes (i MAX_TRAFFIC_RECORDS)
@@ -83,9 +82,7 @@
           (when (and rec (nonzero? rec) (nonzero? (-> rec net-id)))
             (cond
               ((time-elapsed? (-> rec last-seen) (seconds 10)) (+! stale-count 1) (release-traffic-record! rec))
-              ((authoritative-pedestrian-record-missing? rec)
-               (+! missing-ped-count 1)
-               (release-traffic-record! rec))))))
+              ((authoritative-pedestrian-record-missing? rec) (+! missing-ped-count 1) (release-traffic-record! rec))))))
       (when (or (nonzero? stale-count) (nonzero? missing-ped-count))
         (log 'debug
              "[TrafficRecords] Authority cleanup stale=~D missing-ped=~D used=~D/~D~%"

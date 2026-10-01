@@ -91,8 +91,7 @@
 
 (defun mp-enemy-debug-text-overlaps? ((e-proc enemy) (rec mp-enemy-auth-record))
   (when (and e-proc (nonzero? e-proc) (-> e-proc root) (nonzero? (-> e-proc root)) rec (nonzero? rec))
-    (return (< (vector-vector-distance (-> e-proc root trans) (-> rec trans))
-               *mp-enemy-debug-text-overlap-distance*)))
+    (return (< (vector-vector-distance (-> e-proc root trans) (-> rec trans)) *mp-enemy-debug-text-overlap-distance*)))
   #f)
 
 (defun get-enemy-record-text-offset ((e-proc enemy) (rec mp-enemy-auth-record))
@@ -108,9 +107,9 @@
   (none))
 
 (defun-debug enemy-debug-draw-record-text ((e-proc enemy)
-                                             (rec mp-enemy-auth-record)
-                                             (remote-slot mp-enemy-state)
-                                             (color font-color))
+                                           (rec mp-enemy-auth-record)
+                                           (remote-slot mp-enemy-state)
+                                           (color font-color))
   (when (and e-proc (nonzero? e-proc) rec (nonzero? rec))
     (let ((text-pos (new 'stack-no-clear 'vector)))
       (vector-copy! text-pos (-> rec trans))
