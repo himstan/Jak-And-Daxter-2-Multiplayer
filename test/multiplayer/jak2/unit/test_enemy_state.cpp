@@ -45,7 +45,7 @@ TEST(Jak2Replication, EnemyGenerationValidatesBeforeMutationAndExpiresByArrival)
   EXPECT_TRUE(state.entities().enemies().enemies.empty());
 }
 
-TEST(Jak2Replication, EnemyAggregationPreservesEachParticipantsCapacity) {
+TEST(Jak2Replication, EnemyAggregationPreservesEachPlayersCapacity) {
   ReplicationState state;
   for (PlayerId source = 0; source < kMaxPlayers; ++source) {
     EnemySnapshot snapshot = {.source_player_id = source};

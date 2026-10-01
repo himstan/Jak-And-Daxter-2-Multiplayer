@@ -69,7 +69,7 @@ struct DiscoveryRequest {
   uint16_t discovery_port = 0;
   uint16_t expected_game_port = 0;
   std::string directed_address;
-  ParticipantProfile profile;
+  PlayerProfile profile;
 };
 
 class ConnectionExecutionPort {
@@ -87,7 +87,7 @@ class ConnectionExecutionPort {
 class SessionExecutionPort {
  public:
   virtual ~SessionExecutionPort() = default;
-  virtual CommandError set_profile(ParticipantProfile) = 0;
+  virtual CommandError set_profile(PlayerProfile) = 0;
   virtual CommandError set_character(PlayerCharacter) = 0;
   virtual CommandError set_ready(bool) = 0;
   virtual CommandError start_countdown(uint32_t) = 0;
@@ -222,7 +222,7 @@ class DisconnectSessionCommand final : public ConnectionCommand {
 MP_VALUE_COMMAND(SetProfileCommand,
                  SessionCommand,
                  SessionAction::SET_PROFILE,
-                 ParticipantProfile,
+                 PlayerProfile,
                  SessionExecutionPort,
                  set_profile);
 MP_VALUE_COMMAND(SetCharacterCommand,

@@ -391,7 +391,7 @@ set(MULTIPLAYER_PLATFORM_SOURCE
         multiplayer/platform/discovery/discovery_protocol.cpp
         multiplayer/platform/discovery/invite.cpp
         multiplayer/platform/discovery/discovery_service.cpp
-        multiplayer/platform/session/participant_registry.cpp
+        multiplayer/platform/session/player_registry.cpp
         multiplayer/platform/session/packet_registry.cpp
         multiplayer/platform/session/cadence_scheduler.cpp
         multiplayer/platform/session/reconnect_policy.cpp

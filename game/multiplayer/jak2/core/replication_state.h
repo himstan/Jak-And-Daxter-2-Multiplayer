@@ -10,7 +10,7 @@ namespace multiplayer::jak2::core {
 
 using ApplyContext = platform::PacketContext;
 
-class ParticipantReplicationState {
+class PlayerReplicationState {
  public:
   void reset();
   void expire(uint64_t now_ms);
@@ -21,14 +21,14 @@ class ParticipantReplicationState {
   void depart(PlayerId player_id);
 
   const auto& identities() const { return identities_; }
-  const auto& players() const { return players_; }
+  const auto& players() const { return player_states_; }
   const auto& player_vehicles() const { return player_vehicles_; }
   const auto& turrets() const { return turrets_; }
   const auto& turret_sequences() const { return turret_sequences_; }
 
  private:
   std::array<PlayerIdentity, kMaxPlayers> identities_ = {};
-  std::array<PlayerState, kMaxPlayers> players_ = {};
+  std::array<PlayerState, kMaxPlayers> player_states_ = {};
   std::array<PlayerVehicleState, kMaxPlayers> player_vehicles_ = {};
   std::array<Sequence, kMaxPlayers> player_vehicle_sequences_ = {};
   std::array<TurretState, kMaxPlayers> turrets_ = {};
@@ -135,11 +135,11 @@ class ReplicationState {
   void reset();
   void expire(uint64_t now_ms);
   bool apply_bootstrap(const BootstrapState& state, Sequence sequence);
-  bool update_participant_identity(const PlayerIdentity& identity);
-  bool depart_participant(PlayerId player_id);
+  bool update_player_identity(const PlayerIdentity& identity);
+  bool depart_player(PlayerId player_id);
 
-  ParticipantReplicationState& participants() { return participants_; }
-  const ParticipantReplicationState& participants() const { return participants_; }
+  PlayerReplicationState& players() { return players_; }
+  const PlayerReplicationState& players() const { return players_; }
   TrafficReplicationState& traffic() { return traffic_; }
   const TrafficReplicationState& traffic() const { return traffic_; }
   WorldReplicationState& world() { return world_; }
@@ -150,7 +150,7 @@ class ReplicationState {
   const EventReplicationState& events() const { return events_; }
 
  private:
-  ParticipantReplicationState participants_;
+  PlayerReplicationState players_;
   TrafficReplicationState traffic_;
   WorldReplicationState world_;
   EntityReplicationState entities_;

@@ -15,7 +15,7 @@ struct DraftConnectionRequest {
 };
 
 bool build_connection_request(std::string_view invite,
-                              ParticipantProfile profile,
+                              PlayerProfile profile,
                               ControllerClientConfig& request);
 
 class ConnectionDraft {
@@ -25,13 +25,13 @@ class ConnectionDraft {
   std::string field(int field) const;
   bool set_field(int field, std::string_view value);
   bool ready() const;
-  bool build_direct(ParticipantProfile profile,
+  bool build_direct(PlayerProfile profile,
                     uint16_t discovery_port,
                     DraftConnectionRequest& request) const;
   bool stage(const std::string& invite);
   void clear_staged();
   bool staged() const { return staged_connection_.has_value(); }
-  bool build_staged(ParticipantProfile profile, ControllerClientConfig& request) const;
+  bool build_staged(PlayerProfile profile, ControllerClientConfig& request) const;
 
  private:
   bool direct_target(std::string& address, uint16_t& port, std::string& room_code) const;

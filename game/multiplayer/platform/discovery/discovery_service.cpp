@@ -198,7 +198,7 @@ void DiscoveryScanner::scan(DiscoveryConfig config) {
     }
     if (!config.include_full_sessions &&
         advertisement.current_players >= advertisement.player_limit) {
-      lg::warn("[Discovery] Ignored full session from {} ({}/{} participants).",
+      lg::warn("[Discovery] Ignored full session from {} ({}/{} players).",
                address_to_string(source), advertisement.current_players,
                advertisement.player_limit);
       continue;

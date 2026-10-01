@@ -30,26 +30,26 @@ PlayerIdentity identity(const PlayerId player_id) {
 TEST(Jak2Replication, IdentityUsesSharedAppearanceValidation) {
   ReplicationState state;
   auto valid = identity(1);
-  ASSERT_TRUE(state.update_participant_identity(valid));
-  EXPECT_TRUE(state.participants().identities()[1].joined);
+  ASSERT_TRUE(state.update_player_identity(valid));
+  EXPECT_TRUE(state.players().identities()[1].joined);
 
   auto invalid = identity(2);
   invalid.appearance.colors[5] = 0xff000000u;
-  EXPECT_FALSE(state.update_participant_identity(invalid));
-  EXPECT_FALSE(state.participants().identities()[2].joined);
+  EXPECT_FALSE(state.update_player_identity(invalid));
+  EXPECT_FALSE(state.players().identities()[2].joined);
 }
 
 TEST(Jak2Replication, DepartureClearsAllGameplayDomains) {
   ReplicationState state;
   PlayerState player = {.player_id = 1, .state_ready = true};
-  ASSERT_TRUE(state.participants().apply(player, from(1, 1)));
+  ASSERT_TRUE(state.players().apply(player, from(1, 1)));
   EnemySnapshot enemies = {.source_player_id = 1,
                            .enemies = {{.actor_id = 41, .owner_player_id = 1}}};
   ASSERT_TRUE(state.entities().apply(enemies, from(1, 1)));
   GameEventBatch events = {.events = {{.event_id = 2, .source_player_id = 1}}};
   ASSERT_TRUE(state.events().apply(events, from(1, 1)));
-  ASSERT_TRUE(state.depart_participant(1));
-  EXPECT_EQ(state.participants().players()[1].last_sequence, 0u);
+  ASSERT_TRUE(state.depart_player(1));
+  EXPECT_EQ(state.players().players()[1].last_sequence, 0u);
   EXPECT_TRUE(state.entities().enemies().enemies.empty());
   EXPECT_TRUE(state.events().events().empty());
 }
@@ -108,35 +108,35 @@ TEST(Jak2Replication, EventsRejectInvalidBoundsBeforeMutation) {
   EXPECT_TRUE(state.events().events().empty());
 }
 
-TEST(Jak2Replication, ParticipantExpiryClearsDependentVehicleAndTurretState) {
+TEST(Jak2Replication, PlayerExpiryClearsDependentVehicleAndTurretState) {
   ReplicationState state;
   PlayerState player = {.player_id = 1,
                         .state_ready = true,
                         .turret_active = true,
                         .vehicle_id = kPlayerVehicleNetIdClass | 1u};
-  ASSERT_TRUE(state.participants().apply(player, from(1, 1, 1000)));
+  ASSERT_TRUE(state.players().apply(player, from(1, 1, 1000)));
   PlayerVehicleState vehicle = {
       .player_id = 1,
       .vehicle = {.net_id = player.vehicle_id, .quaternion = {0.0f, 0.0f, 0.0f, 1.0f}}};
-  ASSERT_TRUE(state.participants().apply(vehicle, from(1, 1, 1000)));
+  ASSERT_TRUE(state.players().apply(vehicle, from(1, 1, 1000)));
   TurretState turret = {.player_id = 1, .turret_aid = player.vehicle_id};
-  ASSERT_TRUE(state.participants().apply(turret, from(1, 1, 1000)));
+  ASSERT_TRUE(state.players().apply(turret, from(1, 1, 1000)));
   state.expire(3001);
-  EXPECT_FALSE(state.participants().players()[1].state_ready);
-  EXPECT_EQ(state.participants().player_vehicles()[1].vehicle.net_id, 0u);
-  EXPECT_EQ(state.participants().turrets()[1].turret_aid, 0u);
+  EXPECT_FALSE(state.players().players()[1].state_ready);
+  EXPECT_EQ(state.players().player_vehicles()[1].vehicle.net_id, 0u);
+  EXPECT_EQ(state.players().turrets()[1].turret_aid, 0u);
 }
 
-TEST(Jak2Replication, ParticipantExpiryUsesFullLocalClock) {
+TEST(Jak2Replication, PlayerExpiryUsesFullLocalClock) {
   ReplicationState state;
   const uint64_t received_at_ms = (uint64_t{1} << 32) + 1000;
   PlayerState player = {.player_id = 1, .state_ready = true};
-  ASSERT_TRUE(state.participants().apply(player, from(1, 1, received_at_ms)));
-  EXPECT_EQ(state.participants().players()[1].received_time_ms, received_at_ms);
+  ASSERT_TRUE(state.players().apply(player, from(1, 1, received_at_ms)));
+  EXPECT_EQ(state.players().players()[1].received_time_ms, received_at_ms);
   state.expire(received_at_ms + 2000);
-  EXPECT_TRUE(state.participants().players()[1].state_ready);
+  EXPECT_TRUE(state.players().players()[1].state_ready);
   state.expire(received_at_ms + 2001);
-  EXPECT_FALSE(state.participants().players()[1].state_ready);
+  EXPECT_FALSE(state.players().players()[1].state_ready);
 }
 
 TEST(Jak2Replication, BossAndAirlockValidationPrecedesMutation) {
@@ -164,11 +164,11 @@ TEST(Jak2Replication, BossAndAirlockValidationPrecedesMutation) {
 TEST(Jak2Replication, ResetClearsAllComposedState) {
   ReplicationState state;
   PlayerState player = {.player_id = 1};
-  ASSERT_TRUE(state.participants().apply(player, from(1, 1)));
+  ASSERT_TRUE(state.players().apply(player, from(1, 1)));
   WorldState world = {.clock = 9};
   ASSERT_TRUE(state.world().apply(world, {.sequence = 1, .source = {.from_host = true}}));
   state.reset();
-  EXPECT_EQ(state.participants().players()[1].last_sequence, 0u);
+  EXPECT_EQ(state.players().players()[1].last_sequence, 0u);
   EXPECT_EQ(state.world().world().clock, 0u);
   EXPECT_TRUE(state.events().events().empty());
 }

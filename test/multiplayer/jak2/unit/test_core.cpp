@@ -21,11 +21,11 @@ TEST(Jak2Protocol, PlayerMessagesCommitOnlyWhenFresh) {
   player.player_id = 2;
   player.state_id = 17;
   const SourceContext source{.authenticated_player_id = 2};
-  ASSERT_TRUE(state.participants().apply(player, {.sequence = 4, .source = source}));
-  EXPECT_EQ(state.participants().players()[2].state_id, 17u);
+  ASSERT_TRUE(state.players().apply(player, {.sequence = 4, .source = source}));
+  EXPECT_EQ(state.players().players()[2].state_id, 17u);
   player.state_id = 99;
-  EXPECT_FALSE(state.participants().apply(player, {.sequence = 3, .source = source}));
-  EXPECT_EQ(state.participants().players()[2].state_id, 17u);
+  EXPECT_FALSE(state.players().apply(player, {.sequence = 3, .source = source}));
+  EXPECT_EQ(state.players().players()[2].state_id, 17u);
 }
 
 TEST(Jak2Protocol, InvalidFiniteValuesDoNotPartiallyCommit) {
@@ -35,10 +35,10 @@ TEST(Jak2Protocol, InvalidFiniteValuesDoNotPartiallyCommit) {
   player.player_id = 4;
   player.state_id = 22;
   player.position[1] = std::numeric_limits<float>::quiet_NaN();
-  EXPECT_FALSE(state.participants().apply(
-      player, {.sequence = 8, .source = {.authenticated_player_id = 4}}));
-  EXPECT_EQ(state.participants().players()[4].state_id, 0u);
-  EXPECT_EQ(state.participants().players()[4].last_sequence, 0u);
+  EXPECT_FALSE(
+      state.players().apply(player, {.sequence = 8, .source = {.authenticated_player_id = 4}}));
+  EXPECT_EQ(state.players().players()[4].state_id, 0u);
+  EXPECT_EQ(state.players().players()[4].last_sequence, 0u);
 }
 
 TEST(Jak2Protocol, SourceSequencesMergeWithoutCrossPeerOverwrite) {

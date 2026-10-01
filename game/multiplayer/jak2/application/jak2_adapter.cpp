@@ -85,28 +85,27 @@ bool Jak2Adapter::apply_bootstrap(const uint32_t generation,
   return state_.apply_bootstrap(bootstrap, generation);
 }
 
-void Jak2Adapter::participant_profile_changed(const platform::ParticipantProfile& profile) {
+void Jak2Adapter::player_profile_changed(const platform::PlayerProfile& profile) {
   core::PlayerIdentity identity = {};
-  identity.player_id = profile.participant;
+  identity.player_id = profile.player_id;
   identity.character = profile.character;
   identity.lobby_ready = profile.ready;
   const auto name_size = std::min(profile.display_name.size(), identity.name.size() - 1);
   std::memcpy(identity.name.data(), profile.display_name.data(), name_size);
   if (profile.game_extension.size() == sizeof(identity.appearance))
     std::memcpy(&identity.appearance, profile.game_extension.data(), sizeof(identity.appearance));
-  if (!state_.update_participant_identity(identity)) {
-    lg::error("[MP-Jak2] Rejected canonical platform profile for participant {}.",
-              profile.participant);
+  if (!state_.update_player_identity(identity)) {
+    lg::error("[MP-Jak2] Rejected canonical platform profile for player {}.", profile.player_id);
   }
 }
 
-void Jak2Adapter::participant_departed(const platform::PlayerId participant) {
-  if (participant < core::kMaxPlayers) {
-    ++participant_lifecycles_[participant];
-    presentation_.reset_player(participant);
-    mailbox_.discard_participant_events(participant);
+void Jak2Adapter::player_departed(const platform::PlayerId player_id) {
+  if (player_id < core::kMaxPlayers) {
+    ++player_lifecycles_[player_id];
+    presentation_.reset_player(player_id);
+    mailbox_.discard_player_events(player_id);
   }
-  state_.depart_participant(participant);
+  state_.depart_player(player_id);
 }
 
 void Jak2Adapter::tick(const uint64_t now_ms) {
@@ -142,11 +141,11 @@ void Jak2Adapter::publish_remote_frame(const platform::SessionState& session,
                                        const uint64_t now_ms) {
   auto profile = scoped_prof("multiplayer::jak2::publish_remote_frame");
   auto frame = std::make_unique<RemoteReplicationFrame>();
-  frame->participant_lifecycles = participant_lifecycles_;
-  frame->identities = state_.participants().identities();
-  frame->players = state_.participants().players();
-  frame->player_vehicles = state_.participants().player_vehicles();
-  frame->turrets = state_.participants().turrets();
+  frame->player_lifecycles = player_lifecycles_;
+  frame->identities = state_.players().identities();
+  frame->players = state_.players().players();
+  frame->player_vehicles = state_.players().player_vehicles();
+  frame->turrets = state_.players().turrets();
   frame->world = state_.world().world();
   frame->gungame = state_.world().gungame();
   frame->bootstrap = state_.world().bootstrap();

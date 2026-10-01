@@ -93,7 +93,7 @@
       (let ((previous-player-id (the uint (-> destination identity player-id))))
         (if (and (nonzero? (-> destination identity joined?)) (mp-player-id-valid? previous-player-id))
           (begin
-            (mp-enemy-participant-departed! previous-player-id)
+            (reassign-player-owned-enemies previous-player-id)
             (mp-player-controller-release-slot! *mp-player-controller* previous-player-id))
           (reset-player-replica-state! destination)))
       (set! (-> destination connection lifecycle-generation) (-> source lifecycle-generation)))

@@ -30,21 +30,21 @@ struct ClientGate {
 struct ServerGate {
   bool accepted = false;
   RejectionReason rejection = RejectionReason::NONE;
-  PlayerId participant = kInvalidPlayerId;
-  PlayerId host_participant = 0;
-  uint8_t participant_capacity = 0;
+  PlayerId player_id = kInvalidPlayerId;
+  PlayerId host_player_id = 0;
+  uint8_t player_capacity = 0;
   PlayerCharacter character = PlayerCharacter::UNKNOWN;
   std::string required_identity;
 };
 
-struct ParticipantProfile {
-  PlayerId participant = kInvalidPlayerId;
+struct PlayerProfile {
+  PlayerId player_id = kInvalidPlayerId;
   std::string display_name;
   PlayerCharacter character = PlayerCharacter::UNKNOWN;
   bool ready = false;
   std::vector<uint8_t> game_extension;
 
-  bool operator==(const ParticipantProfile&) const = default;
+  bool operator==(const PlayerProfile&) const = default;
 };
 
 enum class ControlKind : uint8_t {
@@ -64,9 +64,9 @@ bool control_allowed_from(ControlKind kind, SessionRole sender);
 
 struct ControlMessage {
   ControlKind kind = ControlKind::PROFILE;
-  ParticipantProfile profile;
-  std::vector<ParticipantProfile> roster;
-  PlayerId participant = kInvalidPlayerId;
+  PlayerProfile profile;
+  std::vector<PlayerProfile> roster;
+  PlayerId player_id = kInvalidPlayerId;
   PlayerCharacter character = PlayerCharacter::UNKNOWN;
   bool ready = false;
   uint32_t value = 0;
@@ -88,7 +88,7 @@ std::vector<uint8_t> encode_control_message(const ControlMessage& message,
                                             uint16_t maximum_extension_bytes);
 bool decode_control_message(std::span<const uint8_t> bytes,
                             uint16_t maximum_extension_bytes,
-                            uint8_t maximum_participants,
+                            uint8_t maximum_players,
                             ControlMessage& message);
 std::vector<uint8_t> encode_gameplay_envelope(uint8_t message_id,
                                               uint32_t sequence,

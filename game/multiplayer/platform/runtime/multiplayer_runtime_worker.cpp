@@ -59,11 +59,11 @@ void RuntimeWorker::pump_reconnect(const uint64_t now_ms) {
 }
 
 void RuntimeWorker::persist_profile(const SessionSnapshot& session) {
-  for (const auto& participant : session.participants) {
-    if (participant.participant != session.state.local_player_id)
+  for (const auto& player : session.players) {
+    if (player.player_id != session.state.local_player_id)
       continue;
-    const StoredPlayerProfile stored = {.display_name = participant.display_name,
-                                        .preferred_character = participant.character};
+    const StoredPlayerProfile stored = {.display_name = player.display_name,
+                                        .preferred_character = player.character};
     if ((!last_saved_profile_ || last_saved_profile_->display_name != stored.display_name ||
          last_saved_profile_->preferred_character != stored.preferred_character) &&
         runtime_.save_profile(stored)) {
@@ -83,7 +83,7 @@ void RuntimeWorker::update_host_advertisement(const SessionSnapshot& session) {
     return;
   const auto& descriptor = adapter_.descriptor();
   discovery_responder_.update({.game_port = controller_.local_port(),
-                               .current_players = static_cast<uint8_t>(session.participants.size()),
+                               .current_players = static_cast<uint8_t>(session.players.size()),
                                .player_limit = session.state.player_limit,
                                .game_id = descriptor.game_id,
                                .compatibility_identity = compatibility_identity_,

@@ -285,4 +285,4 @@
 (define-extern mp-culling-override-active? (function symbol))
 (define-extern mp-culling-suppressed-for-player? (function mp-player-record symbol))
 (define-extern mp-teleport-bootstrap-to-record! (function target mp-player-record symbol))
-(define-extern mp-enemy-participant-departed! (function uint none))
+(define-extern reassign-player-owned-enemies (function uint none))

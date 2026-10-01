@@ -34,13 +34,13 @@ auto& connection_draft() {
   return draft;
 }
 
-multiplayer::platform::ParticipantProfile local_profile() {
+multiplayer::platform::PlayerProfile local_profile() {
   const auto& preferences = multiplayer_preferences();
   multiplayer::platform::StoredPlayerProfile identity = {
       .display_name = preferences.player_name,
       .preferred_character = static_cast<PlayerCharacter>(preferences.session_characters[0])};
   runtime().load_profile(identity);
-  multiplayer::platform::ParticipantProfile profile;
+  multiplayer::platform::PlayerProfile profile;
   profile.display_name = std::move(identity.display_name);
   profile.character = identity.preferred_character;
   const auto* begin = reinterpret_cast<const uint8_t*>(&preferences.player_appearance);
@@ -57,9 +57,9 @@ multiplayer::platform::ControllerHostConfig host_config(
   config.room_code = get_resolved_host_room_code();
   config.local_profile = local_profile();
   for (size_t index = 0; index < player_limit && index < characters.size(); ++index) {
-    config.participant_characters.push_back(characters[index] == PlayerCharacter::DAXTER
-                                                ? PlayerCharacter::DAXTER
-                                                : PlayerCharacter::JAK);
+    config.player_characters.push_back(characters[index] == PlayerCharacter::DAXTER
+                                           ? PlayerCharacter::DAXTER
+                                           : PlayerCharacter::JAK);
   }
   return config;
 }
@@ -70,7 +70,7 @@ uint64_t steady_time_ms() {
                                    .count());
 }
 
-bool enqueue_invite(const std::string& invite, multiplayer::platform::ParticipantProfile profile) {
+bool enqueue_invite(const std::string& invite, multiplayer::platform::PlayerProfile profile) {
   multiplayer::platform::ControllerClientConfig request;
   if (!multiplayer::platform::build_connection_request(invite, std::move(profile), request))
     return false;
@@ -112,10 +112,17 @@ static u8 pc_multi_get_host_player_id() {
   return runtime().snapshot().session.state.host_player_id;
 }
 
+static int64_t pc_multi_get_player_ping(const u32 player_id) {
+  if (player_id >= kMPMaxPlayers)
+    return -1;
+  const auto snapshot = runtime().snapshot();
+  return snapshot.session.player_ping_ms(static_cast<multiplayer::platform::PlayerId>(player_id))
+      .value_or(-1);
+}
+
 static u32 pc_multi_get_local_player_character() {
-  for (const auto snapshot = runtime().snapshot();
-       const auto& profile : snapshot.session.participants) {
-    if (profile.participant == snapshot.session.state.local_player_id)
+  for (const auto snapshot = runtime().snapshot(); const auto& profile : snapshot.session.players) {
+    if (profile.player_id == snapshot.session.state.local_player_id)
       return static_cast<u32>(profile.character);
   }
   return static_cast<u32>(PlayerCharacter::UNKNOWN);
@@ -430,11 +437,10 @@ static int pc_multi_lobby_set_appearance(const u32 appearance_ptr) {
     return 0;
   }
   auto profile = local_profile();
-  for (const auto snapshot = runtime().snapshot();
-       const auto& participant : snapshot.session.participants) {
-    if (participant.participant == snapshot.session.state.local_player_id) {
-      profile.character = participant.character;
-      profile.ready = participant.ready;
+  for (const auto snapshot = runtime().snapshot(); const auto& player : snapshot.session.players) {
+    if (player.player_id == snapshot.session.state.local_player_id) {
+      profile.character = player.character;
+      profile.ready = player.ready;
       break;
     }
   }
@@ -570,6 +576,7 @@ void init_jak2_bridge() {
   register_symbol("pc-multi-exchange-state", &pc_multi_exchange_state);
   register_symbol("pc-multi-get-local-player-id", &pc_multi_get_local_player_id);
   register_symbol("pc-multi-get-host-player-id", &pc_multi_get_host_player_id);
+  register_symbol("pc-multi-get-player-ping", &pc_multi_get_player_ping);
   register_symbol("pc-multi-get-local-player-character", &pc_multi_get_local_player_character);
   register_symbol("pc-multi-disconnect", &pc_multi_disconnect);
   register_symbol("pc-multi-reconnect", &pc_multi_reconnect);

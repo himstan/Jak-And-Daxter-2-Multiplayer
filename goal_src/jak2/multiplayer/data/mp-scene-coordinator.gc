@@ -203,7 +203,7 @@
              local-player-id
              scene-name
              (mp-scene-coordinator-vote-count)
-             (mp-scene-coordinator-participant-count)))
+             (mp-scene-coordinator-player-count)))
       new-vote?)))
 
 (defun mp-scene-coordinator-note-remote-vote! ((player-id uint) (scene-name string))
@@ -220,13 +220,13 @@
       (mp-scene-current-local-name-matches? *mp-scene-coordinator-name*)
       (or (nonzero? (-> record action scene-state)) (nonzero? (-> record action scene-latched?))))))
 
-(defun mp-scene-coordinator-participant-mask ()
-  (let ((participant-mask (the uint 0)))
+(defun mp-scene-coordinator-player-mask ()
+  (let ((player-mask (the uint 0)))
     (when (and *mp-scene-coordinator-active?* (not *mp-scene-coordinator-finalized?*))
       (dotimes (player-id MP_MAX_PLAYERS)
         (when (mp-scene-player-active-in-cohort? (the-as uint player-id))
-          (set! participant-mask (logior participant-mask (mp-scene-player-bit (the-as uint player-id)))))))
-    participant-mask))
+          (set! player-mask (logior player-mask (mp-scene-player-bit (the-as uint player-id)))))))
+    player-mask))
 
 (defun mp-scene-count-mask ((player-mask uint))
   (let ((count 0))
@@ -235,23 +235,23 @@
         (+! count 1)))
     count))
 
-(defun mp-scene-coordinator-participant-count ()
-  (mp-scene-count-mask (mp-scene-coordinator-participant-mask)))
+(defun mp-scene-coordinator-player-count ()
+  (mp-scene-count-mask (mp-scene-coordinator-player-mask)))
 
 (defun mp-scene-coordinator-vote-count ()
-  (mp-scene-count-mask (logand *mp-scene-coordinator-vote-mask* (mp-scene-coordinator-participant-mask))))
+  (mp-scene-count-mask (logand *mp-scene-coordinator-vote-mask* (mp-scene-coordinator-player-mask))))
 
 (defun mp-scene-coordinator-vote-active? ()
-  (nonzero? (logand *mp-scene-coordinator-vote-mask* (mp-scene-coordinator-participant-mask))))
+  (nonzero? (logand *mp-scene-coordinator-vote-mask* (mp-scene-coordinator-player-mask))))
 
 (defun mp-scene-coordinator-host-skip-ready? ()
-  (let ((participant-mask (mp-scene-coordinator-participant-mask)))
+  (let ((player-mask (mp-scene-coordinator-player-mask)))
     (and (mp-session-host?)
          *mp-scene-coordinator-active?*
          (not *mp-scene-coordinator-finalized?*)
-         (nonzero? participant-mask)
+         (nonzero? player-mask)
          (or (not (nonnull? *scene-player*)) (mp-scene-current-local-name-matches? *mp-scene-coordinator-name*))
-         (= (logand *mp-scene-coordinator-vote-mask* participant-mask) participant-mask))))
+         (= (logand *mp-scene-coordinator-vote-mask* player-mask) player-mask))))
 
 (defun mp-scene-coordinator-mark-finalized! ()
   (when *mp-scene-coordinator-active?*
@@ -338,15 +338,15 @@
                (if *mp-scene-coordinator-finalized?*
                  (and (not (mp-any-remote-player-scene-active?))
                       (time-elapsed? *mp-scene-coordinator-finalized-time* (seconds 1)))
-                 (or (zero? (mp-scene-coordinator-participant-mask)) (not (mp-any-remote-player-scene-active?)))))
+                 (or (zero? (mp-scene-coordinator-player-mask)) (not (mp-any-remote-player-scene-active?)))))
       (mp-scene-coordinator-reset!)))
   (none))
 
 (defun mp-scene-coordinator-draw-votes! ()
-  (let ((participant-count (mp-scene-coordinator-participant-count))
+  (let ((player-count (mp-scene-coordinator-player-count))
         (vote-count (mp-scene-coordinator-vote-count)))
     (when (and (mp-session-in-game?)
-               (> participant-count 1)
+               (> player-count 1)
                (> vote-count 0)
                *mp-scene-vote-text*
                (nonzero? *mp-scene-vote-text*))
@@ -367,6 +367,6 @@
           (format *mp-scene-vote-text*
                   (lookup-text! *common-text* (text-id mp-scene-skip-votes) #f)
                   vote-count
-                  participant-count)
+                  player-count)
           (print-game-text *mp-scene-vote-text* font-ctx #f 44 (bucket-id subtitle))))))
   (none))

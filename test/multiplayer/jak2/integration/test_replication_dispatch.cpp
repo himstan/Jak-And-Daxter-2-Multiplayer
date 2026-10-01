@@ -12,7 +12,7 @@ ApplyContext from(const PlayerId source, const Sequence sequence, const bool hos
 TEST(Jak2AdapterIntegration, TypedDomainsApplyEveryGameplayPayload) {
   ReplicationState state;
   PlayerState player = {.player_id = 1};
-  EXPECT_TRUE(state.participants().apply(player, from(1, 1)));
+  EXPECT_TRUE(state.players().apply(player, from(1, 1)));
 
   TrafficAuthority authority = {.revision = 1};
   authority.assignments.fill(kInvalidPlayerId);
@@ -28,7 +28,7 @@ TEST(Jak2AdapterIntegration, TypedDomainsApplyEveryGameplayPayload) {
 
   GameEventBatch events = {.events = {{.event_id = 2, .source_player_id = 1}}};
   EXPECT_TRUE(state.events().apply(events, from(1, 1)));
-  EXPECT_EQ(state.participants().players()[1].player_id, 1);
+  EXPECT_EQ(state.players().players()[1].player_id, 1);
   EXPECT_EQ(state.traffic().authority().revision, 1u);
   EXPECT_EQ(state.world().world().clock, 17u);
   EXPECT_EQ(state.entities().enemies().enemies.size(), 1u);

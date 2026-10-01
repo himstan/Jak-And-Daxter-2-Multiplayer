@@ -3,7 +3,7 @@
 
 (define-extern *mp-scene-coordinator-name* string)
 (define-extern mp-scene-coordinator-vote-count (function int))
-(define-extern mp-scene-coordinator-participant-count (function int))
+(define-extern mp-scene-coordinator-player-count (function int))
 
 (define *mp-task-debug-course-count* 0)
 
@@ -81,6 +81,6 @@
                   "~%SCENE: ~S, SKIP VOTES: ~D/~D~%"
                   *mp-scene-coordinator-name*
                   (mp-scene-coordinator-vote-count)
-                  (mp-scene-coordinator-participant-count)))))
+                  (mp-scene-coordinator-player-count)))))
     (format *stdcon* "-------------------------~%~%"))
   (none))

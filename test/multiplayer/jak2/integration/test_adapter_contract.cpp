@@ -198,7 +198,7 @@ TEST(Jak2AdapterIntegration, RejectedStaleAndSemanticPayloadsDoNotMutateAccepted
   EXPECT_EQ(remote->players[1].last_sequence, 2u);
 }
 
-TEST(Jak2AdapterIntegration, TrafficRelayTargetsOnlyParticipantsAssignedToItsSource) {
+TEST(Jak2AdapterIntegration, TrafficRelayTargetsOnlyPlayersAssignedToItsSource) {
   jak2::application::Jak2Adapter adapter;
   RecordingEndpoint endpoint;
   endpoint.session_snapshot.state.player_limit = 4;
@@ -232,8 +232,8 @@ TEST(Jak2AdapterIntegration, TrafficRelayTargetsOnlyParticipantsAssignedToItsSou
        .payload = *encoded},
       endpoint);
   EXPECT_EQ(result.disposition, platform::PayloadDisposition::CONSUME_AND_RELAY);
-  ASSERT_TRUE(result.relay_participants);
-  EXPECT_EQ(*result.relay_participants, (std::vector<platform::PlayerId>{2}));
+  ASSERT_TRUE(result.relay_recipients);
+  EXPECT_EQ(*result.relay_recipients, (std::vector<platform::PlayerId>{2}));
   EXPECT_EQ(result.canonical_payload, *encoded);
 }
 
@@ -804,7 +804,7 @@ TEST(Jak2AdapterIntegration, PresentationRuntimeKeepsAuthoritativeSnapshotsUnmod
   EXPECT_GT(frame->ambient_vehicle_targets[0].position[0], ambient_x);
 }
 
-TEST(Jak2AdapterIntegration, ProfileExtensionAndParticipantLifecycleStayGameSpecific) {
+TEST(Jak2AdapterIntegration, ProfileExtensionAndPlayerLifecycleStayGameSpecific) {
   jak2::application::Jak2Adapter adapter;
   RecordingEndpoint endpoint;
   adapter.installed(endpoint);
@@ -813,16 +813,16 @@ TEST(Jak2AdapterIntegration, ProfileExtensionAndParticipantLifecycleStayGameSpec
   std::vector<uint8_t> canonical;
   ASSERT_TRUE(adapter.validate_profile_extension(extension, canonical));
   ASSERT_EQ(canonical, extension);
-  adapter.participant_profile_changed({.participant = 1,
-                                       .display_name = "Daxter",
-                                       .character = platform::PlayerCharacter::DAXTER,
-                                       .game_extension = extension});
+  adapter.player_profile_changed({.player_id = 1,
+                                  .display_name = "Daxter",
+                                  .character = platform::PlayerCharacter::DAXTER,
+                                  .game_extension = extension});
   adapter.tick(200);
   auto remote = adapter.mailbox().take_remote_frame();
   ASSERT_TRUE(remote);
   EXPECT_TRUE(remote->identities[1].joined);
   EXPECT_EQ(remote->identities[1].name[0], 'D');
-  adapter.participant_departed(1);
+  adapter.player_departed(1);
   adapter.tick(208);
   remote = adapter.mailbox().take_remote_frame();
   ASSERT_TRUE(remote);
@@ -833,12 +833,12 @@ TEST(Jak2AdapterIntegration, RapidRejoinRetainsLifecycleAndStartsFreshPresentati
   RecordingEndpoint endpoint;
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
-  const platform::ParticipantProfile profile = {
-      .participant = 1,
+  const platform::PlayerProfile profile = {
+      .player_id = 1,
       .display_name = "Remote",
       .character = platform::PlayerCharacter::JAK,
       .game_extension = std::vector<uint8_t>(sizeof(jak2::core::PlayerAppearance))};
-  adapter.participant_profile_changed(profile);
+  adapter.player_profile_changed(profile);
   jak2::core::PlayerState player = {};
   player.player_id = 1;
   player.activity = jak2::core::PlayerActivity::IN_GAME;
@@ -855,8 +855,8 @@ TEST(Jak2AdapterIntegration, RapidRejoinRetainsLifecycleAndStartsFreshPresentati
                 .disposition,
             platform::PayloadDisposition::REJECT);
   adapter.tick(100);
-  adapter.participant_departed(1);
-  adapter.participant_profile_changed(profile);
+  adapter.player_departed(1);
+  adapter.player_profile_changed(profile);
   player.position = {400.0f, 500.0f, 600.0f};
   ASSERT_TRUE(encode_player_packet(player, body));
   ASSERT_NE(adapter.packets()
@@ -872,7 +872,7 @@ TEST(Jak2AdapterIntegration, RapidRejoinRetainsLifecycleAndStartsFreshPresentati
   auto frame = adapter.mailbox().take_remote_frame();
   ASSERT_TRUE(frame);
   EXPECT_TRUE(frame->identities[1].joined);
-  EXPECT_EQ(frame->participant_lifecycles[1], 1u);
+  EXPECT_EQ(frame->player_lifecycles[1], 1u);
   EXPECT_EQ(frame->players[1].last_sequence, 1u);
   EXPECT_TRUE(frame->player_targets[1].valid);
   EXPECT_EQ(frame->player_targets[1].position, frame->players[1].position);
@@ -883,7 +883,7 @@ TEST(Jak2AdapterIntegration, RapidRejoinRetainsLifecycleAndStartsFreshPresentati
   events[1].source_player_id = 2;
   events[2].source_player_id = 1;
   ASSERT_TRUE(adapter.mailbox().push_inbound_events(events));
-  adapter.participant_departed(1);
+  adapter.player_departed(1);
   const auto pending = adapter.mailbox().take_inbound_events(64);
   ASSERT_EQ(pending.size(), 1u);
   EXPECT_EQ(pending[0].source_player_id, 2u);

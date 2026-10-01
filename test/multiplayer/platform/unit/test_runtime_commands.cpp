@@ -33,9 +33,7 @@ class ConnectionPort final : public ConnectionExecutionPort {
 
 class SessionPort final : public SessionExecutionPort {
  public:
-  CommandError set_profile(ParticipantProfile) override {
-    return called(SessionAction::SET_PROFILE);
-  }
+  CommandError set_profile(PlayerProfile) override { return called(SessionAction::SET_PROFILE); }
   CommandError set_character(PlayerCharacter) override {
     return called(SessionAction::SET_CHARACTER);
   }

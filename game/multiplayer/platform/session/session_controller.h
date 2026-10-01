@@ -10,7 +10,7 @@
 #include "game/multiplayer/platform/session/cadence_scheduler.h"
 #include "game/multiplayer/platform/session/frame_submission.h"
 #include "game/multiplayer/platform/session/game_adapter.h"
-#include "game/multiplayer/platform/session/participant_registry.h"
+#include "game/multiplayer/platform/session/player_registry.h"
 #include "game/multiplayer/platform/session/session_snapshot.h"
 #include "game/multiplayer/platform/transport/session_platform.h"
 
@@ -20,15 +20,15 @@ struct ControllerHostConfig {
   uint16_t port = 0;
   uint8_t player_limit = 0;
   std::string room_code;
-  std::vector<PlayerCharacter> participant_characters;
-  ParticipantProfile local_profile;
+  std::vector<PlayerCharacter> player_characters;
+  PlayerProfile local_profile;
 };
 
 struct ControllerClientConfig {
   std::string endpoint;
   uint16_t port = 0;
   std::string room_code;
-  ParticipantProfile local_profile;
+  PlayerProfile local_profile;
 };
 
 class SessionController final : public GameSessionEndpoint {
@@ -41,7 +41,7 @@ class SessionController final : public GameSessionEndpoint {
   void disconnect(int reason = 0);
   void pump(uint64_t now_ms);
 
-  bool set_local_profile(ParticipantProfile profile);
+  bool set_local_profile(PlayerProfile profile);
   bool set_character(PlayerCharacter character);
   bool set_ready(bool ready);
   bool start_countdown(uint32_t seconds);
@@ -56,7 +56,7 @@ class SessionController final : public GameSessionEndpoint {
   bool cadence_due(uint8_t message_id, uint64_t now_ms, bool dirty = true) override;
   void request_bootstrap() override;
   const SessionSnapshot& snapshot() const override { return snapshot_; }
-  uint32_t estimated_rtt_ms(PlayerId participant) const override;
+  uint32_t estimated_rtt_ms(PlayerId player_id) const override;
   NetworkPressure network_pressure() const override { return pressure_.pressure(); }
   bool severe_pressure_sustained(uint64_t now_ms) const override;
 
@@ -69,7 +69,7 @@ class SessionController final : public GameSessionEndpoint {
   bool valid_character(PlayerCharacter character) const;
   bool valid_message_policies(std::string_view action) const;
   bool valid_game_identity(std::string_view action) const;
-  bool validate_profile(ParticipantProfile& profile, PlayerId participant) const;
+  bool validate_profile(PlayerProfile& profile, PlayerId player_id) const;
   void reset_adapter_session();
   void clear_countdown();
   uint32_t next_bootstrap_generation();
@@ -78,15 +78,15 @@ class SessionController final : public GameSessionEndpoint {
   void handle_pending_message(const TransportEvent& event);
   void handle_admitted_message(const TransportEvent& event);
   void handle_control(ConnectionId connection,
-                      PlayerId participant,
-                      PlayerId origin,
+                      PlayerId player_id,
+                      PlayerId origin_id,
                       Delivery delivery,
                       std::span<const uint8_t> payload,
                       uint64_t now_ms);
-  void handle_host_control(ConnectionId connection, PlayerId participant, ControlMessage message);
+  void handle_host_control(ConnectionId connection, PlayerId player_id, ControlMessage message);
   void handle_client_control(ConnectionId connection, ControlMessage message, uint64_t now_ms);
   void handle_gameplay(ConnectionId connection,
-                       PlayerId participant,
+                       PlayerId player_id,
                        PlayerId origin,
                        Delivery delivery,
                        TransportLane lane,
@@ -103,7 +103,7 @@ class SessionController final : public GameSessionEndpoint {
                              std::span<const uint8_t> payload,
                              TransportLane lane);
   void send_control(const ControlMessage& message, const Audience& audience);
-  void broadcast_profile(const ParticipantProfile& profile);
+  void broadcast_profile(const PlayerProfile& profile);
   void publish_roster(ConnectionId connection);
   void update_snapshot(std::vector<ConnectionSnapshot> connections);
   void send_pending_bootstraps(uint64_t now_ms);
@@ -121,17 +121,17 @@ class SessionController final : public GameSessionEndpoint {
 
   GameAdapter& adapter_;
   SessionPlatform transport_;
-  ParticipantRegistry registry_;
+  PlayerRegistry registry_;
   CadenceScheduler cadence_;
   NetworkPressureTracker pressure_;
   SessionSnapshot snapshot_;
-  ParticipantProfile local_profile_;
-  std::vector<ParticipantProfile> profiles_;
+  PlayerProfile local_profile_;
+  std::vector<PlayerProfile> profiles_;
   std::array<uint32_t, 256> outbound_sequences_ = {};
   std::unordered_map<ConnectionId, PendingGate> pending_gates_;
   std::unordered_map<ConnectionId, uint64_t> pending_rejection_closes_;
   std::unordered_map<std::string, RejectionThrottle> rejection_throttles_;
-  std::vector<PlayerCharacter> participant_characters_;
+  std::vector<PlayerCharacter> player_characters_;
   std::string room_code_;
   uint32_t last_applied_bootstrap_ = 0;
   uint32_t host_bootstrap_generation_ = 0;

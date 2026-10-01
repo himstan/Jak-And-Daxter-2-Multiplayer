@@ -122,7 +122,7 @@ TEST(PlatformCore, PressureClassificationHysteresisAndCadenceProtectCriticalStat
 TEST(PlatformSession, CommonProtocolRoundTripsAndRejectsMalformedFrames) {
   multiplayer::platform::ControlMessage control = {
       .kind = multiplayer::platform::ControlKind::PROFILE,
-      .profile = {.participant = 2,
+      .profile = {.player_id = 2,
                   .display_name = "Player2",
                   .character = multiplayer::platform::PlayerCharacter::DAXTER,
                   .ready = true,
@@ -190,15 +190,15 @@ TEST(PlatformSession, AdmissionGateCodecsAreTypedAndRejectTruncation) {
 
   const multiplayer::platform::ServerGate accepted = {
       .accepted = true,
-      .participant = 3,
-      .host_participant = 0,
-      .participant_capacity = 8,
+      .player_id = 3,
+      .host_player_id = 0,
+      .player_capacity = 8,
       .character = multiplayer::platform::PlayerCharacter::DAXTER};
   const auto accepted_bytes = multiplayer::platform::encode_server_gate(accepted);
   multiplayer::platform::ServerGate decoded_response;
   ASSERT_TRUE(multiplayer::platform::decode_server_gate(accepted_bytes, decoded_response));
   EXPECT_TRUE(decoded_response.accepted);
-  EXPECT_EQ(decoded_response.participant, 3);
+  EXPECT_EQ(decoded_response.player_id, 3);
 
   const auto rejected_bytes = multiplayer::platform::encode_server_gate(
       {.rejection = multiplayer::platform::RejectionReason::VERSION_MISMATCH,

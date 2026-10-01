@@ -13,7 +13,7 @@
   TASK_MANAGER_INIT_HOOK
   (lambda :behavior task-manager
     ()
-    (set! (-> self data-int32 0) (if (mp-oracle-darkjak-training-participant?) 1 0))
+    (set! (-> self data-int32 0) (if (mp-oracle-darkjak-training-allowed?) 1 0))
     (when (and (nonzero? (-> self data-int32 0)) *target* (nonzero? *target*))
       (set! (-> self data-float 0) (the-as float (send-event *target* 'test-pickup (pickup-type eco-pill-dark))))
       (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim))
@@ -117,7 +117,7 @@
   TASK_MANAGER_INIT_HOOK
   (lambda :behavior task-manager
     ()
-    (set! (-> self data-int32 0) (if (mp-oracle-darkjak-training-participant?) 1 0))
+    (set! (-> self data-int32 0) (if (mp-oracle-darkjak-training-allowed?) 1 0))
     (when (and (nonzero? (-> self data-int32 0)) *target* (nonzero? *target*))
       (set! (-> self data-float 0) (the-as float (send-event *target* 'test-pickup (pickup-type eco-pill-dark))))
       (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim))
@@ -221,7 +221,7 @@
   TASK_MANAGER_INIT_HOOK
   (lambda :behavior task-manager
     ()
-    (set! (-> self data-int32 0) (if (mp-oracle-darkjak-training-participant?) 1 0))
+    (set! (-> self data-int32 0) (if (mp-oracle-darkjak-training-allowed?) 1 0))
     (when (and (nonzero? (-> self data-int32 0)) *target* (nonzero? *target*))
       (set! (-> self data-float 0) (the-as float (send-event *target* 'test-pickup (pickup-type eco-pill-dark))))
       (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim))
@@ -304,7 +304,7 @@
   TASK_MANAGER_INIT_HOOK
   (lambda :behavior task-manager
     ()
-    (set! (-> self data-int32 0) (if (mp-oracle-darkjak-training-participant?) 1 0))
+    (set! (-> self data-int32 0) (if (mp-oracle-darkjak-training-allowed?) 1 0))
     (when (and (nonzero? (-> self data-int32 0)) *target* (nonzero? *target*))
       (set! (-> self data-float 0) (the-as float (send-event *target* 'test-pickup (pickup-type eco-pill-dark))))
       (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim))

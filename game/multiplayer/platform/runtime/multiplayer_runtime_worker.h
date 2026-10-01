@@ -23,7 +23,7 @@ class RuntimeWorker final : public ConnectionExecutionPort,
     std::string room_code;
   };
   struct ClientConnectionState {
-    ParticipantProfile profile;
+    PlayerProfile profile;
     std::optional<CanonicalEndpoint> endpoint;
   };
   CommandError host(HostSessionRequest request) override;
@@ -33,7 +33,7 @@ class RuntimeWorker final : public ConnectionExecutionPort,
   CommandError connect_discovered() override;
   CommandError reconnect() override;
   CommandError disconnect(int reason) override;
-  CommandError set_profile(ParticipantProfile profile) override;
+  CommandError set_profile(PlayerProfile profile) override;
   CommandError set_character(PlayerCharacter character) override;
   CommandError set_ready(bool ready) override;
   CommandError start_countdown(uint32_t seconds) override;

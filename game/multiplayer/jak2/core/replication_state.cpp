@@ -22,18 +22,18 @@ bool valid_name(const std::array<uint8_t, kPlayerNameSize>& name) {
 
 }  // namespace
 
-void ParticipantReplicationState::reset() {
+void PlayerReplicationState::reset() {
   identities_ = {};
-  players_ = {};
+  player_states_ = {};
   player_vehicles_ = {};
   player_vehicle_sequences_ = {};
   turrets_ = {};
   turret_sequences_ = {};
 }
 
-void ParticipantReplicationState::expire(const uint64_t now_ms) {
+void PlayerReplicationState::expire(const uint64_t now_ms) {
   for (PlayerId player_id = 0; player_id < kMaxPlayers; ++player_id) {
-    auto& player = players_[player_id];
+    auto& player = player_states_[player_id];
     if (!player.state_ready || now_ms - player.received_time_ms <= 2000)
       continue;
     player.state_ready = false;
@@ -45,15 +45,16 @@ void ParticipantReplicationState::expire(const uint64_t now_ms) {
   }
 }
 
-bool ParticipantReplicationState::apply(const PlayerState& state, const ApplyContext& context) {
+bool PlayerReplicationState::apply(const PlayerState& state, const ApplyContext& context) {
   if (!valid_index(state.player_id, kMaxPlayers) ||
       !source_allows_player(context.source, state.player_id) || !finite_vector(state.position) ||
       !finite_vector(state.velocity) || !finite(state.angle) || !finite(state.camera_angle_y) ||
       !valid_player_level_state(state.levels) ||
-      !platform::sequence_is_newer(context.sequence, players_[state.player_id].last_sequence)) {
+      !platform::sequence_is_newer(context.sequence,
+                                   player_states_[state.player_id].last_sequence)) {
     return false;
   }
-  auto& current = players_[state.player_id];
+  auto& current = player_states_[state.player_id];
   if (current.vehicle_id != state.vehicle_id) {
     player_vehicles_[state.player_id] = {};
     player_vehicle_sequences_[state.player_id] = 0;
@@ -75,17 +76,16 @@ bool ParticipantReplicationState::apply(const PlayerState& state, const ApplyCon
   return true;
 }
 
-bool ParticipantReplicationState::apply(const PlayerVehicleState& state,
-                                        const ApplyContext& context) {
+bool PlayerReplicationState::apply(const PlayerVehicleState& state, const ApplyContext& context) {
   if (!valid_index(state.player_id, kMaxPlayers) ||
       !source_allows_player(context.source, state.player_id) ||
       !valid_player_vehicle_state(state.vehicle) ||
-      (players_[state.player_id].last_sequence != 0 &&
-       players_[state.player_id].vehicle_id != state.vehicle.net_id) ||
+      (player_states_[state.player_id].last_sequence != 0 &&
+       player_states_[state.player_id].vehicle_id != state.vehicle.net_id) ||
       !platform::sequence_is_newer(context.sequence, player_vehicle_sequences_[state.player_id])) {
     return false;
   }
-  auto& player = players_[state.player_id];
+  auto& player = player_states_[state.player_id];
   player.vehicle_id = state.vehicle.net_id;
   if (player.last_sequence == 0)
     player.vehicle_seat = state.seat_index;
@@ -97,23 +97,23 @@ bool ParticipantReplicationState::apply(const PlayerVehicleState& state,
   return true;
 }
 
-bool ParticipantReplicationState::apply(const TurretState& state, const ApplyContext& context) {
+bool PlayerReplicationState::apply(const TurretState& state, const ApplyContext& context) {
   if (!valid_index(state.player_id, kMaxPlayers) ||
       !source_allows_player(context.source, state.player_id) || !finite(state.rotation_x) ||
       !finite(state.rotation_y) || state.turret_aid == 0 ||
-      (players_[state.player_id].last_sequence != 0 &&
-       (!players_[state.player_id].turret_active ||
-        players_[state.player_id].vehicle_id != state.turret_aid)) ||
+      (player_states_[state.player_id].last_sequence != 0 &&
+       (!player_states_[state.player_id].turret_active ||
+        player_states_[state.player_id].vehicle_id != state.turret_aid)) ||
       !platform::sequence_is_newer(context.sequence, turret_sequences_[state.player_id])) {
     return false;
   }
   turrets_[state.player_id] = state;
   turret_sequences_[state.player_id] = context.sequence;
-  players_[state.player_id].turret_active = true;
+  player_states_[state.player_id].turret_active = true;
   return true;
 }
 
-bool ParticipantReplicationState::update_identity(const PlayerIdentity& identity) {
+bool PlayerReplicationState::update_identity(const PlayerIdentity& identity) {
   if (!valid_index(identity.player_id, kMaxPlayers) || !valid_character(identity.character) ||
       !valid_name(identity.name) || !is_player_appearance_valid(identity.appearance)) {
     return false;
@@ -124,11 +124,11 @@ bool ParticipantReplicationState::update_identity(const PlayerIdentity& identity
   return true;
 }
 
-void ParticipantReplicationState::depart(const PlayerId player_id) {
+void PlayerReplicationState::depart(const PlayerId player_id) {
   if (!valid_index(player_id, kMaxPlayers))
     return;
   identities_[player_id] = {};
-  players_[player_id] = {};
+  player_states_[player_id] = {};
   player_vehicles_[player_id] = {};
   player_vehicle_sequences_[player_id] = 0;
   turrets_[player_id] = {};
@@ -227,7 +227,7 @@ std::vector<GameEvent> EventReplicationState::take(const size_t maximum) {
 }
 
 void ReplicationState::reset() {
-  participants_.reset();
+  players_.reset();
   traffic_.reset();
   world_.reset();
   entities_.reset();
@@ -235,7 +235,7 @@ void ReplicationState::reset() {
 }
 
 void ReplicationState::expire(const uint64_t now_ms) {
-  participants_.expire(now_ms);
+  players_.expire(now_ms);
   traffic_.expire(now_ms);
   entities_.expire(now_ms);
 }
@@ -244,14 +244,14 @@ bool ReplicationState::apply_bootstrap(const BootstrapState& state, const Sequen
   return world_.apply_bootstrap(state, sequence);
 }
 
-bool ReplicationState::update_participant_identity(const PlayerIdentity& identity) {
-  return participants_.update_identity(identity);
+bool ReplicationState::update_player_identity(const PlayerIdentity& identity) {
+  return players_.update_identity(identity);
 }
 
-bool ReplicationState::depart_participant(const PlayerId player_id) {
+bool ReplicationState::depart_player(const PlayerId player_id) {
   if (!valid_index(player_id, kMaxPlayers))
     return false;
-  participants_.depart(player_id);
+  players_.depart(player_id);
   traffic_.clear_source(player_id);
   entities_.depart(player_id);
   events_.depart(player_id);

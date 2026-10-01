@@ -217,9 +217,9 @@ TEST(Jak2Protocol, PlayerVehicleWireFormatPreservesCivilianAndVacantRiders) {
   EXPECT_EQ(actual.vehicle.level_id, 0x1234u);
   EXPECT_EQ(actual.vehicle.rider_player_ids, vehicle.rider_player_ids);
   multiplayer::jak2::core::ReplicationState replication;
-  ASSERT_TRUE(replication.participants().apply(
+  ASSERT_TRUE(replication.players().apply(
       *decoded, {.sequence = 0x01020304, .source = {.authenticated_player_id = 2}}));
-  EXPECT_EQ(replication.participants().player_vehicles()[2].vehicle.rider_player_ids,
+  EXPECT_EQ(replication.players().player_vehicles()[2].vehicle.rider_player_ids,
             vehicle.rider_player_ids);
   auto malformed = bytes;
   malformed[50] = static_cast<uint8_t>((malformed[50] & ~0x03u) | 0x02u);

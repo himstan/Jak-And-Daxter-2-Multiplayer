@@ -605,7 +605,7 @@ bool publish_remote(MPReplicationStateGOAL& state, application::ReplicationMailb
         [&](const MPEventGOAL& event) {
           return event.source_player_id >= core::kMaxPlayers ||
                  state.remote.players[event.source_player_id].lifecycle_generation !=
-                     frame->participant_lifecycles[event.source_player_id];
+                     frame->player_lifecycles[event.source_player_id];
         });
     state.inbound_event_count = static_cast<uint8_t>(end - std::begin(state.inbound_events));
     static_assert(std::is_trivially_copyable_v<MPReplicationFrameGOAL>);
@@ -626,7 +626,7 @@ bool publish_remote(MPReplicationStateGOAL& state, application::ReplicationMailb
       }
       write_player(frame->players[i], player_vehicle, frame->turrets[i], frame->player_targets[i],
                    state.remote.players[i]);
-      state.remote.players[i].lifecycle_generation = frame->participant_lifecycles[i];
+      state.remote.players[i].lifecycle_generation = frame->player_lifecycles[i];
     }
     state.remote.world_valid = frame->world.sequence != 0;
     state.remote.world_generation = frame->generation;

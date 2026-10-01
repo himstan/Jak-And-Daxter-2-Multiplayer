@@ -363,7 +363,7 @@
           (set! (-> rec request-time) (current-time))))))
   (none))
 
-(defun mp-enemy-participant-departed! ((player-id uint))
+(defun reassign-player-owned-enemies ((player-id uint))
   (when (nonnull? *mp-enemy-auth*)
     (dotimes (index MP_MAX_ENEMY_AUTH_RECORDS)
       (let ((rec (-> *mp-enemy-auth* index)))

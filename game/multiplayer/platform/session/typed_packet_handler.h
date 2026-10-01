@@ -50,7 +50,7 @@ class TypedPacketHandler : public PacketHandler {
     return {.disposition = session.role == SessionRole::HOST ? PayloadDisposition::CONSUME_AND_RELAY
                                                              : PayloadDisposition::CONSUME,
             .canonical_payload = std::move(*canonical),
-            .relay_participants =
+            .relay_recipients =
                 session.role == SessionRole::HOST ? hooks_.relay(message, session) : std::nullopt};
   }
 

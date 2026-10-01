@@ -10,8 +10,9 @@
 #include "game/multiplayer/platform/nat/port_mapping_coordinator.h"
 #include "game/multiplayer/platform/protocol/message_frame.h"
 #include "game/multiplayer/platform/runtime/multiplayer_runtime.h"
-#include "game/multiplayer/platform/session/participant_registry.h"
+#include "game/multiplayer/platform/session/player_registry.h"
 #include "game/multiplayer/platform/session/reconnect_policy.h"
+#include "game/multiplayer/platform/session/session_snapshot.h"
 #include "game/multiplayer/platform/session/session_state.h"
 #include "gtest/gtest.h"
 
@@ -142,6 +143,38 @@ TEST(PlatformCore, NetworkStatisticsAggregateCapacityQueuesAndWorstHealth) {
   EXPECT_EQ(multiplayer::platform::kReliableBacklogLimitBytes, 384 * 1024);
 }
 
+TEST(PlatformSession, PlayerPingUsesOnlyThatPlayersConnection) {
+  using namespace multiplayer::platform;
+  SessionSnapshot snapshot;
+  EXPECT_FALSE(snapshot.player_ping_ms(kInvalidPlayerId));
+  EXPECT_FALSE(snapshot.player_ping_ms(0));
+
+  snapshot.state.role = SessionRole::HOST;
+  snapshot.state.local_player_id = 0;
+  snapshot.state.host_player_id = 0;
+  snapshot.connections = {
+      {.player_id = 2, .network = {.connection_id = 11, .ping_ms = 61}},
+      {.player_id = 1, .network = {.connection_id = 10, .ping_ms = 24}},
+      {.player_id = kInvalidPlayerId, .network = {.connection_id = 12, .ping_ms = 9}},
+  };
+  EXPECT_EQ(snapshot.player_ping_ms(0), 0);
+  EXPECT_EQ(snapshot.player_ping_ms(1), 24);
+  EXPECT_EQ(snapshot.player_ping_ms(2), 61);
+  EXPECT_FALSE(snapshot.player_ping_ms(3));
+  EXPECT_FALSE(snapshot.player_ping_ms(kInvalidPlayerId));
+  snapshot.connections[0].network.ping_ms = -1;
+  EXPECT_FALSE(snapshot.player_ping_ms(2));
+
+  snapshot.state.role = SessionRole::CLIENT;
+  snapshot.state.local_player_id = 1;
+  snapshot.connections = {{.player_id = 0, .network = {.connection_id = 10, .ping_ms = 24}}};
+  EXPECT_EQ(snapshot.player_ping_ms(0), 24);
+  EXPECT_EQ(snapshot.player_ping_ms(1), 0);
+  EXPECT_FALSE(snapshot.player_ping_ms(2));
+  snapshot.connections.clear();
+  EXPECT_FALSE(snapshot.player_ping_ms(0));
+}
+
 TEST(PlatformSession, MessageFrameKeepsAuthenticatedOriginOutsideGameplayPayload) {
   const std::vector<uint8_t> payload = {9, 8, 7};
   const auto bytes = multiplayer::platform::encode_message_frame(
@@ -220,8 +253,8 @@ TEST(PlatformDiscovery, FilteringRejectsWrongIdentityGamePortAndCapacity) {
   EXPECT_TRUE(multiplayer::platform::discovery_advertisement_matches(include_full, advertisement));
 }
 
-TEST(PlatformSession, ParticipantRegistryAllocatesRejectsDuplicatesAndReusesSlots) {
-  multiplayer::platform::ParticipantRegistry registry(3);
+TEST(PlatformSession, PlayerRegistryAllocatesRejectsDuplicatesAndReusesSlots) {
+  multiplayer::platform::PlayerRegistry registry(3);
   ASSERT_NE(registry.bind(10, 1, multiplayer::platform::PlayerCharacter::DAXTER), nullptr);
   ASSERT_NE(registry.bind(11, 2, multiplayer::platform::PlayerCharacter::JAK), nullptr);
   EXPECT_FALSE(registry.has_open_remote_slot());
@@ -232,8 +265,8 @@ TEST(PlatformSession, ParticipantRegistryAllocatesRejectsDuplicatesAndReusesSlot
   EXPECT_EQ(registry.find_player(1)->connection_id, 12u);
 }
 
-TEST(PlatformSession, BootstrapTrackingOnlyTargetsReadyParticipants) {
-  multiplayer::platform::ParticipantRegistry registry(3);
+TEST(PlatformSession, BootstrapTrackingOnlyTargetsReadyPlayers) {
+  multiplayer::platform::PlayerRegistry registry(3);
   auto* ready = registry.bind(10, 1, multiplayer::platform::PlayerCharacter::JAK);
   auto* pending_identity = registry.bind(11, 2, multiplayer::platform::PlayerCharacter::DAXTER);
   ASSERT_NE(ready, nullptr);

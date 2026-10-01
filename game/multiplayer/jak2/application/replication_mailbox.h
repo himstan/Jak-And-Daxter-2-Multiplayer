@@ -44,7 +44,7 @@ struct PresentationTarget {
 };
 
 struct RemoteReplicationFrame {
-  std::array<uint32_t, core::kMaxPlayers> participant_lifecycles = {};
+  std::array<uint32_t, core::kMaxPlayers> player_lifecycles = {};
   std::array<core::PlayerIdentity, core::kMaxPlayers> identities = {};
   std::array<core::PlayerState, core::kMaxPlayers> players = {};
   std::array<core::PlayerVehicleState, core::kMaxPlayers> player_vehicles = {};
@@ -105,7 +105,7 @@ class ReplicationMailbox {
     return inbound_events_.push_back(events);
   }
 
-  void discard_participant_events(core::PlayerId player_id) {
+  void discard_player_events(core::PlayerId player_id) {
     inbound_events_.erase_if(
         [player_id](const core::GameEvent& event) { return event.source_player_id == player_id; });
   }

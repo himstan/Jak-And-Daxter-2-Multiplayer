@@ -27,10 +27,10 @@ class Jak2Adapter final : public platform::GameAdapter {
   platform::PacketRegistry& packets() override { return packets_; }
   bool validate_profile_extension(std::span<const uint8_t> extension,
                                   std::vector<uint8_t>& canonical) override;
-  std::vector<uint8_t> create_bootstrap(platform::PlayerId participant) override;
+  std::vector<uint8_t> create_bootstrap(platform::PlayerId player_id) override;
   bool apply_bootstrap(uint32_t generation, std::span<const uint8_t> payload) override;
-  void participant_profile_changed(const platform::ParticipantProfile& profile) override;
-  void participant_departed(platform::PlayerId participant) override;
+  void player_profile_changed(const platform::PlayerProfile& profile) override;
+  void player_departed(platform::PlayerId player_id) override;
   void tick(uint64_t now_ms) override;
   void stop() override;
 
@@ -50,7 +50,7 @@ class Jak2Adapter final : public platform::GameAdapter {
   std::optional<core::TrafficAuthority> last_traffic_authority_;
   std::optional<uint64_t> last_remote_publish_ms_;
   uint32_t remote_generation_ = 0;
-  std::array<uint32_t, core::kMaxPlayers> participant_lifecycles_ = {};
+  std::array<uint32_t, core::kMaxPlayers> player_lifecycles_ = {};
   PresentationRuntime presentation_;
   platform::GameDescriptor descriptor_;
   platform::PacketRegistry packets_;

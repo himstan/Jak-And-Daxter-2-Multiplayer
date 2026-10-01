@@ -148,7 +148,7 @@ std::vector<std::unique_ptr<platform::PacketHandler>> Jak2Adapter::make_packet_h
 void Jak2Adapter::add_player_handlers(Handlers& handlers) {
   const auto ready = frame_ready(local_frame_);
   add_packet_handler<wire::PlayerStatePacket>(
-      handlers, wire::to_packet, state_.participants(), wire::canonicalize_player,
+      handlers, wire::to_packet, state_.players(), wire::canonicalize_player,
       [this](auto& handler, auto& endpoint, uint64_t now_ms) {
         const auto& session = endpoint.snapshot().state;
         auto player = local_frame_->players[session.local_player_id];
@@ -163,7 +163,7 @@ void Jak2Adapter::add_player_handlers(Handlers& handlers) {
       },
       ready);
   add_packet_handler<wire::PlayerVehicleStatePacket>(
-      handlers, wire::to_packet, state_.participants(), wire::canonicalize_player,
+      handlers, wire::to_packet, state_.players(), wire::canonicalize_player,
       [this](auto& handler, auto& endpoint, uint64_t now_ms) {
         const auto local_id = endpoint.snapshot().state.local_player_id;
         const auto& player = local_frame_->players[local_id];
@@ -177,7 +177,7 @@ void Jak2Adapter::add_player_handlers(Handlers& handlers) {
       },
       ready);
   add_packet_handler<wire::TurretStatePacket>(
-      handlers, wire::to_packet, state_.participants(), wire::canonicalize_player,
+      handlers, wire::to_packet, state_.players(), wire::canonicalize_player,
       [this](auto& handler, auto& endpoint, uint64_t now_ms) {
         const auto local_id = endpoint.snapshot().state.local_player_id;
         if (!local_frame_->turret || local_frame_->players[local_id].spectator_only)
@@ -244,11 +244,11 @@ void Jak2Adapter::add_traffic_handlers(Handlers& handlers) {
                             const auto& session) -> std::optional<std::vector<platform::PlayerId>> {
     std::vector<platform::PlayerId> targets;
     const auto& assignments = state_.traffic().authority().assignments;
-    for (core::PlayerId participant = 0;
-         participant < session.player_limit && participant < core::kMaxPlayers; ++participant)
-      if (participant != message.origin.authenticated_player_id &&
-          assignments[participant] == message.origin.authenticated_player_id)
-        targets.push_back(participant);
+    for (core::PlayerId player_id = 0;
+         player_id < session.player_limit && player_id < core::kMaxPlayers; ++player_id)
+      if (player_id != message.origin.authenticated_player_id &&
+          assignments[player_id] == message.origin.authenticated_player_id)
+        targets.push_back(player_id);
     return targets;
   };
   const auto produce = [this](auto& handler, auto& endpoint, uint64_t now_ms) {

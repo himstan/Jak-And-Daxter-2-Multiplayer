@@ -147,7 +147,7 @@ CommandError RuntimeWorker::disconnect(const int reason) {
   return CommandError::NONE;
 }
 
-CommandError RuntimeWorker::set_profile(ParticipantProfile profile) {
+CommandError RuntimeWorker::set_profile(PlayerProfile profile) {
   client_.profile = profile;
   return controller_.set_local_profile(std::move(profile)) ? CommandError::NONE
                                                            : CommandError::INVALID_STATE;

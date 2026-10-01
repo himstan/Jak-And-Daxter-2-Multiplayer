@@ -7,7 +7,7 @@
 namespace {
 using namespace multiplayer::platform;
 
-ParticipantProfile profile() {
+PlayerProfile profile() {
   return {.display_name = "Player", .character = PlayerCharacter::UNKNOWN};
 }
 

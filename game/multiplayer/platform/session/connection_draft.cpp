@@ -7,7 +7,7 @@
 
 namespace multiplayer::platform {
 bool build_connection_request(const std::string_view invite,
-                              ParticipantProfile profile,
+                              PlayerProfile profile,
                               ControllerClientConfig& request) {
   std::string address;
   std::string room_code;
@@ -84,7 +84,7 @@ bool ConnectionDraft::ready() const {
   return build_direct({}, 0, request);
 }
 
-bool ConnectionDraft::build_direct(ParticipantProfile profile,
+bool ConnectionDraft::build_direct(PlayerProfile profile,
                                    const uint16_t discovery_port,
                                    DraftConnectionRequest& request) const {
   std::string address;
@@ -118,8 +118,7 @@ void ConnectionDraft::clear_staged() {
   staged_connection_.reset();
 }
 
-bool ConnectionDraft::build_staged(ParticipantProfile profile,
-                                   ControllerClientConfig& request) const {
+bool ConnectionDraft::build_staged(PlayerProfile profile, ControllerClientConfig& request) const {
   if (!staged_connection_)
     return false;
   request = *staged_connection_;

@@ -672,7 +672,7 @@ TEST(Jak2GoalBridge, LifecycleChangeDiscardsAlreadyCopiedEventsFromPreviousOccup
   state.inbound_events[2].source_player_id = 1;
   multiplayer::jak2::application::ReplicationMailbox mailbox;
   auto frame = std::make_unique<multiplayer::jak2::application::RemoteReplicationFrame>();
-  frame->participant_lifecycles[1] = 4;
+  frame->player_lifecycles[1] = 4;
   frame->identities[1].joined = true;
   mailbox.publish_remote_frame(std::move(frame));
   ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
@@ -692,12 +692,12 @@ TEST(Jak2GoalBridge, ExpiredHostRetainsRawDestinationButCannotBePresentedAsReady
   player.activity = core::PlayerActivity::IN_GAME;
   player.state_ready = true;
   player.levels[0].level_id = 1;
-  ASSERT_TRUE(replication.participants().apply(
+  ASSERT_TRUE(replication.players().apply(
       player, {.sequence = 1, .source = {.authenticated_player_id = 1}, .received_at_ms = 100}));
   replication.expire(2101);
   auto frame = std::make_unique<application::RemoteReplicationFrame>();
-  frame->players = replication.participants().players();
-  frame->identities = replication.participants().identities();
+  frame->players = replication.players().players();
+  frame->identities = replication.players().identities();
   application::PresentationRuntime presentation;
   presentation.prepare(*frame, replication, 2101);
   application::ReplicationMailbox mailbox;
@@ -725,7 +725,7 @@ TEST(Jak2GoalBridge, AuthoritativeCoordinatesStayDistinctFromInterpolatedPresent
   EXPECT_EQ(state.remote.players[1].transform.levels[0].level_id, 2u);
 }
 
-TEST(Jak2GoalBridge, RemoteEnemiesPreserveFullCapacityAcrossParticipants) {
+TEST(Jak2GoalBridge, RemoteEnemiesPreserveFullCapacityAcrossPlayers) {
   GoalMemoryFixture memory;
   auto& state = replication_state(memory);
   multiplayer::jak2::application::ReplicationMailbox mailbox;

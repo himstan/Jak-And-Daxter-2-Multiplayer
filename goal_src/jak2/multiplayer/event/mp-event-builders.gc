@@ -8,7 +8,7 @@
     (set! (-> event payload race-id) (-> details race-id))
     (set! (-> event payload racer-index) (-> details racer-index))
     (set! (-> event payload player-id) (-> details player-id))
-    (set! (-> event payload participant-mask) (-> details participant-mask))
+    (set! (-> event payload player-mask) (-> details player-mask))
     (set! (-> event payload open-racer-mask) (-> details open-racer-mask))
     (set! (-> event payload value0) (-> details value0))
     (set! (-> event payload value1) (-> details value1))

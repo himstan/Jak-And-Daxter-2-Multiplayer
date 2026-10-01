@@ -13,7 +13,7 @@
 (define-extern mp-scene-coordinator-host-skip-ready? (function symbol))
 (define-extern mp-scene-coordinator-mark-finalized! (function none))
 (define-extern mp-scene-coordinator-vote-count (function int))
-(define-extern mp-scene-coordinator-participant-count (function int))
+(define-extern mp-scene-coordinator-player-count (function int))
 (define-extern mp-scene-coordinator-draw-votes! (function none))
 (define-extern mp-tomb-boulder-adjust-scene! (function scene-player none))
 (define-extern mp-tomb-boulder-before-scene-abort! (function scene-player none))
@@ -350,7 +350,7 @@
       (log 'debug
            "[MP-Scene] Unanimous skip vote reached (~D/~D).~%"
            (mp-scene-coordinator-vote-count)
-           (mp-scene-coordinator-participant-count))
+           (mp-scene-coordinator-player-count))
       (mp-scene-coordinator-mark-finalized!)
       (mp-arm-intro-skip-bootstrap! scene-name)
       (mp-event-hook-scene! (mp-scene-state skipped) scene-name)
@@ -1419,7 +1419,7 @@
                        )
                     ((or (not (mp-session-in-game?))
                          (not (mp-any-remote-player-scene-active?))
-                         (<= (mp-scene-coordinator-participant-count) 1))
+                         (<= (mp-scene-coordinator-player-count) 1))
                      (when (and (-> self scene)
                                 (nonzero? (-> self scene))
                                 (-> self scene name)

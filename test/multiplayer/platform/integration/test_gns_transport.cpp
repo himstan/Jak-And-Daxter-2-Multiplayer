@@ -222,12 +222,10 @@ class RecordingAdapter final : public GameAdapter {
     ValidatedPayload result = {
         .disposition = relay ? PayloadDisposition::CONSUME_AND_RELAY : PayloadDisposition::CONSUME,
         .canonical_payload = received.back().payload};
-    result.relay_participants = relay_participants;
+    result.relay_recipients = relay_recipients;
     return result;
   }
-  std::vector<uint8_t> create_bootstrap(PlayerId participant) override {
-    return {participant, 0x42};
-  }
+  std::vector<uint8_t> create_bootstrap(PlayerId player_id) override { return {player_id, 0x42}; }
   bool apply_bootstrap(uint32_t generation, std::span<const uint8_t> payload) override {
     ++bootstrap_apply_attempts;
     if (!apply_succeeds)
@@ -236,16 +234,16 @@ class RecordingAdapter final : public GameAdapter {
     applied_bootstrap.assign(payload.begin(), payload.end());
     return true;
   }
-  void participant_profile_changed(const ParticipantProfile& value) override {
+  void player_profile_changed(const PlayerProfile& value) override {
     profile_changes.push_back(value);
   }
-  void participant_departed(PlayerId participant) override { departures.push_back(participant); }
+  void player_departed(PlayerId player_id) override { departures.push_back(player_id); }
 
   PacketRegistry& packets() override { return packets_; }
   PacketRegistry packets_;
   GameDescriptor descriptor_;
   bool relay = false;
-  std::optional<std::vector<PlayerId>> relay_participants;
+  std::optional<std::vector<PlayerId>> relay_recipients;
   bool apply_succeeds = true;
   uint32_t bootstrap_apply_attempts = 0;
   uint32_t applied_generation = 0;
@@ -253,7 +251,7 @@ class RecordingAdapter final : public GameAdapter {
   uint32_t session_reset_count = 0;
   std::vector<uint8_t> applied_bootstrap;
   std::vector<ReceivedGameplay> received;
-  std::vector<ParticipantProfile> profile_changes;
+  std::vector<PlayerProfile> profile_changes;
   std::vector<PlayerId> departures;
 };
 
@@ -306,7 +304,7 @@ class RuntimeAdapter final : public GameAdapter {
                           64 * 1024};
 };
 
-ParticipantProfile profile(std::string name = "Player") {
+PlayerProfile profile(std::string name = "Player") {
   return {.display_name = std::move(name), .character = PlayerCharacter::JAK};
 }
 
@@ -314,7 +312,7 @@ ControllerHostConfig host_config(uint16_t port, uint8_t limit = 8) {
   return {.port = port,
           .player_limit = limit,
           .room_code = "ABC123",
-          .participant_characters = std::vector<PlayerCharacter>(limit, PlayerCharacter::JAK),
+          .player_characters = std::vector<PlayerCharacter>(limit, PlayerCharacter::JAK),
           .local_profile = profile("Host")};
 }
 
@@ -930,11 +928,11 @@ TEST(GnsTransportIntegration, AbruptLossReconnectsAndLateJoinReceivesBootstrap) 
       pump_until([&] { host.pump(now_ms()); },
                  [&] {
                    return client.snapshot().session.state.status == SessionStatus::IN_GAME &&
-                          host.snapshot().participants.size() == 2;
+                          host.snapshot().players.size() == 2;
                  });
   ASSERT_TRUE(joined_in_game) << "status="
                               << static_cast<int>(client.snapshot().session.state.status)
-                              << " participants=" << host.snapshot().participants.size()
+                              << " players=" << host.snapshot().players.size()
                               << " starts=" << state->starts.load()
                               << " bootstraps=" << state->bootstraps.load();
   EXPECT_EQ(state->starts.load(), 1u);
@@ -951,21 +949,21 @@ TEST(GnsTransportIntegration, AbruptLossReconnectsAndLateJoinReceivesBootstrap) 
       pump_until([&] { host.pump(now_ms()); },
                  [&] {
                    return client.snapshot().session.state.status == SessionStatus::IN_GAME &&
-                          host.snapshot().participants.size() == 2 && state->starts.load() == 2;
+                          host.snapshot().players.size() == 2 && state->starts.load() == 2;
                  });
   ASSERT_TRUE(reconnected) << "status=" << static_cast<int>(client.snapshot().session.state.status)
                            << " error="
                            << static_cast<int>(client.snapshot().connection_result.error)
-                           << " participants=" << host.snapshot().participants.size()
+                           << " players=" << host.snapshot().players.size()
                            << " starts=" << state->starts.load()
                            << " resets=" << state->resets.load()
                            << " bootstraps=" << state->bootstraps.load();
   EXPECT_GE(state->resets.load(), 1u);
   EXPECT_EQ(state->bootstraps.load(), 2u);
   ASSERT_EQ(host.snapshot().connections.size(), 1u);
-  EXPECT_EQ(host.snapshot().connections.front().participant, 1u);
+  EXPECT_EQ(host.snapshot().connections.front().player_id, 1u);
   ASSERT_EQ(client.snapshot().session.connections.size(), 1u);
-  EXPECT_EQ(client.snapshot().session.connections.front().participant, 0u);
+  EXPECT_EQ(client.snapshot().session.connections.front().player_id, 0u);
 
   const auto connections2 = host.transport().connection_snapshots();
   ASSERT_EQ(connections2.size(), 1u);
@@ -978,21 +976,21 @@ TEST(GnsTransportIntegration, AbruptLossReconnectsAndLateJoinReceivesBootstrap) 
       pump_until([&] { host.pump(now_ms()); },
                  [&] {
                    return client.snapshot().session.state.status == SessionStatus::IN_GAME &&
-                          host.snapshot().participants.size() == 2 && state->starts.load() == 3;
+                          host.snapshot().players.size() == 2 && state->starts.load() == 3;
                  });
   ASSERT_TRUE(reconnected2) << "status=" << static_cast<int>(client.snapshot().session.state.status)
                             << " error="
                             << static_cast<int>(client.snapshot().connection_result.error)
-                            << " participants=" << host.snapshot().participants.size()
+                            << " players=" << host.snapshot().players.size()
                             << " starts=" << state->starts.load()
                             << " resets=" << state->resets.load()
                             << " bootstraps=" << state->bootstraps.load();
   EXPECT_GE(state->resets.load(), 2u);
   EXPECT_EQ(state->bootstraps.load(), 3u);
   ASSERT_EQ(host.snapshot().connections.size(), 1u);
-  EXPECT_EQ(host.snapshot().connections.front().participant, 1u);
+  EXPECT_EQ(host.snapshot().connections.front().player_id, 1u);
   ASSERT_EQ(client.snapshot().session.connections.size(), 1u);
-  EXPECT_EQ(client.snapshot().session.connections.front().participant, 0u);
+  EXPECT_EQ(client.snapshot().session.connections.front().player_id, 0u);
   client.shutdown();
 }
 
@@ -1017,15 +1015,15 @@ TEST(GnsTransportIntegration, SessionAdmissionProfilesAndRelayStayAboveTransport
       [&] {
         return client.snapshot().state.status == SessionStatus::LOBBY &&
                observer.snapshot().state.status == SessionStatus::LOBBY &&
-               host.snapshot().participants.size() == 3;
+               host.snapshot().players.size() == 3;
       }));
   ASSERT_EQ(host.snapshot().connections.size(), 2u);
-  EXPECT_EQ(host.snapshot().connections[0].participant, 1u);
-  EXPECT_EQ(host.snapshot().connections[1].participant, 2u);
+  EXPECT_EQ(host.snapshot().connections[0].player_id, 1u);
+  EXPECT_EQ(host.snapshot().connections[1].player_id, 2u);
   EXPECT_NE(host.snapshot().connections[0].network.connection_id, 0u);
   EXPECT_NE(host.snapshot().connections[1].network.connection_id, 0u);
   ASSERT_EQ(client.snapshot().connections.size(), 1u);
-  EXPECT_EQ(client.snapshot().connections.front().participant, 0u);
+  EXPECT_EQ(client.snapshot().connections.front().player_id, 0u);
   EXPECT_EQ(client.snapshot().connections.front().network.connection_id,
             client.transport().host_connection_id());
   const std::vector<uint8_t> payload(4096, 0x5a);
@@ -1051,7 +1049,7 @@ TEST(GnsTransportIntegration, SessionAdmissionProfilesAndRelayStayAboveTransport
   EXPECT_EQ(observer_adapter.received[0].payload, payload);
   EXPECT_EQ(observer_adapter.profile_changes.size(), 3u);
 
-  host_adapter.relay_participants.emplace();
+  host_adapter.relay_recipients.emplace();
   ASSERT_TRUE(client.send_gameplay(0, Audience::everyone(), std::array<uint8_t, 1>{0x61}));
   ASSERT_TRUE(pump_until(
       [&] {
@@ -1072,7 +1070,7 @@ TEST(GnsTransportIntegration, SessionAdmissionProfilesAndRelayStayAboveTransport
   const auto observer_id = observer.snapshot().state.local_player_id;
   ASSERT_NE(observer_id, kInvalidPlayerId);
   ASSERT_NE(observer_id, client.snapshot().state.local_player_id);
-  host_adapter.relay_participants = std::vector<PlayerId>{observer_id};
+  host_adapter.relay_recipients = std::vector<PlayerId>{observer_id};
   ASSERT_TRUE(client.send_gameplay(0, Audience::everyone(), std::array<uint8_t, 1>{0x62}));
   ASSERT_TRUE(pump_until(
       [&] {
@@ -1125,13 +1123,13 @@ TEST(GnsTransportIntegration, GameplayBroadcastRejectsAClosedRecipientBeforeRost
       },
       [&] {
         return client.snapshot().state.status == SessionStatus::LOBBY &&
-               host.snapshot().participants.size() == 2;
+               host.snapshot().players.size() == 2;
       }));
   const auto connections = host.transport().connection_snapshots();
   ASSERT_EQ(connections.size(), 1u);
   const auto connection = connections.front().connection_id;
   host.transport().close_connection(connection, 2005, "test closed gameplay recipient");
-  ASSERT_EQ(host.snapshot().participants.size(), 2u);
+  ASSERT_EQ(host.snapshot().players.size(), 2u);
   const std::array<uint8_t, 1> payload = {0x42};
   EXPECT_FALSE(host.send_gameplay(0, Audience::everyone(), payload));
   EXPECT_FALSE(host.send_gameplay(0, Audience::one(connection), payload));
@@ -1140,7 +1138,7 @@ TEST(GnsTransportIntegration, GameplayBroadcastRejectsAClosedRecipientBeforeRost
         host.pump(now_ms());
         client.pump(now_ms());
       },
-      [&] { return host.snapshot().participants.size() == 1; }));
+      [&] { return host.snapshot().players.size() == 1; }));
   const auto local_only = host.send_gameplay(0, Audience::everyone(), payload);
   ASSERT_TRUE(local_only);
   EXPECT_EQ(*local_only, 3u);
@@ -1160,7 +1158,7 @@ TEST(GnsTransportIntegration, ClientSubmissionRejectsAnUnavailableHostBeforeReco
       },
       [&] {
         return client.snapshot().state.status == SessionStatus::LOBBY &&
-               host.snapshot().participants.size() == 2;
+               host.snapshot().players.size() == 2;
       }));
   const auto connection = client.transport().host_connection_id();
   client.transport().close_connection(connection, 2005, "test unavailable gameplay host");
@@ -1186,7 +1184,7 @@ TEST(GnsTransportIntegration, ZeroSequenceGameplayClosesTheSenderBeforeAdapterDi
       },
       [&] {
         return client.snapshot().state.status == SessionStatus::LOBBY &&
-               host.snapshot().participants.size() == 2;
+               host.snapshot().players.size() == 2;
       }));
   const std::array<uint8_t, 1> payload = {0x42};
   auto envelope = encode_gameplay_envelope(0, 1, payload);
@@ -1201,7 +1199,7 @@ TEST(GnsTransportIntegration, ZeroSequenceGameplayClosesTheSenderBeforeAdapterDi
         client.pump(now_ms());
       },
       [&] {
-        return host.snapshot().participants.size() == 1 &&
+        return host.snapshot().players.size() == 1 &&
                client.snapshot().state.status == SessionStatus::RECONNECTING;
       }));
   EXPECT_TRUE(host_adapter.received.empty());
@@ -1236,7 +1234,7 @@ TEST(GnsTransportIntegration, GameplaySendsRejectWhileClientIsReconnecting) {
   EXPECT_FALSE(client.send_gameplay(0, Audience::everyone(), std::array<uint8_t, 1>{0x42}));
 }
 
-TEST(GnsTransportIntegration, SpoofedClientOriginClosesOnlyThatParticipant) {
+TEST(GnsTransportIntegration, SpoofedClientOriginClosesOnlyThatPlayer) {
   RecordingAdapter host_adapter;
   RecordingAdapter client_adapter;
   SessionController host(host_adapter);
@@ -1249,7 +1247,7 @@ TEST(GnsTransportIntegration, SpoofedClientOriginClosesOnlyThatParticipant) {
         host.pump(now);
         client.pump(now);
       },
-      [&] { return host.snapshot().participants.size() == 2; }));
+      [&] { return host.snapshot().players.size() == 2; }));
   const auto gameplay = encode_gameplay_envelope(0, 1, std::array<uint8_t, 1>{0x44});
   const auto spoofed = encode_message_frame(FrameKind::GAMEPLAY, 0, gameplay);
   ASSERT_TRUE(client.transport().send(client.transport().host_connection_id(), spoofed,
@@ -1260,7 +1258,7 @@ TEST(GnsTransportIntegration, SpoofedClientOriginClosesOnlyThatParticipant) {
         host.pump(now);
         client.pump(now);
       },
-      [&] { return host.snapshot().participants.size() == 1; }));
+      [&] { return host.snapshot().players.size() == 1; }));
   EXPECT_TRUE(host_adapter.received.empty());
   ASSERT_EQ(host_adapter.departures.size(), 1u);
   EXPECT_EQ(host_adapter.departures.front(), 1u);
@@ -1298,7 +1296,7 @@ TEST(GnsTransportIntegration, SessionReportsTypedGateRejections) {
   }
 }
 
-TEST(GnsTransportIntegration, HostCapacityAndParticipantSlotReuseAreSessionOwned) {
+TEST(GnsTransportIntegration, HostCapacityAndPlayerSlotReuseAreSessionOwned) {
   RecordingAdapter host_adapter;
   RecordingAdapter first_adapter;
   RecordingAdapter rejected_adapter;
@@ -1333,7 +1331,7 @@ TEST(GnsTransportIntegration, HostCapacityAndParticipantSlotReuseAreSessionOwned
         host.pump(now);
       },
       [&] {
-        return host.snapshot().participants.size() == 1 &&
+        return host.snapshot().players.size() == 1 &&
                host.transport().connection_snapshots().empty() &&
                host.snapshot().connections.empty();
       }));
@@ -1350,14 +1348,14 @@ TEST(GnsTransportIntegration, HostCapacityAndParticipantSlotReuseAreSessionOwned
   ASSERT_TRUE(replacement_joined)
       << "replacement_status=" << static_cast<int>(replacement.snapshot().state.status)
       << " rejection=" << static_cast<int>(replacement.snapshot().rejection)
-      << " host_participants=" << host.snapshot().participants.size()
+      << " host_players=" << host.snapshot().players.size()
       << " host_connections=" << host.transport().connection_snapshots().size()
       << " client_connections=" << replacement.transport().connection_snapshots().size();
   EXPECT_EQ(replacement.snapshot().state.local_player_id, 1);
   ASSERT_EQ(host.snapshot().connections.size(), 1u);
-  EXPECT_EQ(host.snapshot().connections.front().participant, 1u);
+  EXPECT_EQ(host.snapshot().connections.front().player_id, 1u);
   ASSERT_EQ(replacement.snapshot().connections.size(), 1u);
-  EXPECT_EQ(replacement.snapshot().connections.front().participant, 0u);
+  EXPECT_EQ(replacement.snapshot().connections.front().player_id, 0u);
 }
 
 TEST(GnsTransportIntegration, BootstrapRetriesUntilSuccessfulApplyAndAcknowledgement) {
@@ -1373,7 +1371,7 @@ TEST(GnsTransportIntegration, BootstrapRetriesUntilSuccessfulApplyAndAcknowledge
         host.pump(now);
         client.pump(now);
       },
-      [&] { return host.snapshot().participants.size() == 2; }));
+      [&] { return host.snapshot().players.size() == 2; }));
   client_adapter.apply_succeeds = false;
   host.enter_lobby();
   ASSERT_TRUE(host.start_game());
@@ -1479,7 +1477,7 @@ TEST(GnsTransportIntegration, HostAdmitsSevenClientsAndRejectsTheEighth) {
           client->pump(now);
       },
       [&] {
-        return host.snapshot().participants.size() == 8 &&
+        return host.snapshot().players.size() == 8 &&
                std::ranges::all_of(clients, [](const auto& client) {
                  return client->snapshot().state.status == SessionStatus::LOBBY;
                });

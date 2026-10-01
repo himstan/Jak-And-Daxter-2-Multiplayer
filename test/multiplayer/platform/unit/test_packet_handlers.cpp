@@ -125,7 +125,7 @@ TEST_F(PacketHandlersTest, NewGameNeutralPacketRoutesWithoutPlatformDispatchChan
                                       endpoint);
   EXPECT_EQ(result.disposition, PayloadDisposition::CONSUME_AND_RELAY);
   EXPECT_EQ(result.canonical_payload, (std::vector<uint8_t>{7}));
-  EXPECT_EQ(result.relay_participants, (std::optional{std::vector<PlayerId>{2}}));
+  EXPECT_EQ(result.relay_recipients, (std::optional{std::vector<PlayerId>{2}}));
   EXPECT_EQ(applied.source, 3);
   EXPECT_EQ(last_context.sequence, 41u);
   EXPECT_EQ(last_context.received_at_ms, 123u);
@@ -203,7 +203,7 @@ TEST_F(PacketHandlersTest, ZeroSequenceNeverAppliesOrRelaysAValidPayload) {
     const auto result = packets.receive(message, endpoint);
     EXPECT_EQ(result.disposition, PayloadDisposition::REJECT);
     EXPECT_TRUE(result.canonical_payload.empty());
-    EXPECT_FALSE(result.relay_participants);
+    EXPECT_FALSE(result.relay_recipients);
   }
   EXPECT_EQ(applications, 0u);
   EXPECT_EQ(relays, 0u);

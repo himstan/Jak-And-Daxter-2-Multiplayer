@@ -32,7 +32,7 @@ enum class PayloadDisposition : uint8_t {
 struct ValidatedPayload {
   PayloadDisposition disposition = PayloadDisposition::REJECT;
   std::vector<uint8_t> canonical_payload;
-  std::optional<std::vector<PlayerId>> relay_participants;
+  std::optional<std::vector<PlayerId>> relay_recipients;
 };
 
 struct GameplayMessage {
@@ -61,7 +61,7 @@ class GameSessionEndpoint {
   virtual bool cadence_due(uint8_t message_id, uint64_t now_ms, bool dirty = true) = 0;
   virtual void request_bootstrap() = 0;
   virtual const SessionSnapshot& snapshot() const = 0;
-  virtual uint32_t estimated_rtt_ms(PlayerId participant) const = 0;
+  virtual uint32_t estimated_rtt_ms(PlayerId player_id) const = 0;
   virtual NetworkPressure network_pressure() const = 0;
   virtual bool severe_pressure_sustained(uint64_t now_ms) const = 0;
 };
@@ -84,8 +84,8 @@ class GameAdapter {
   }
   virtual std::vector<uint8_t> create_bootstrap(PlayerId) { return {}; }
   virtual bool apply_bootstrap(uint32_t, std::span<const uint8_t>) { return false; }
-  virtual void participant_profile_changed(const ParticipantProfile&) {}
-  virtual void participant_departed(PlayerId) {}
+  virtual void player_profile_changed(const PlayerProfile&) {}
+  virtual void player_departed(PlayerId) {}
 };
 
 }  // namespace multiplayer::platform

@@ -55,7 +55,7 @@ tasks:
       - sh: test -f {{.GK_BIN_RELEASE_DIR}}/gk{{.EXE_FILE_EXTENSION}}
         msg: "Couldn't locate runtime executable in '{{.GK_BIN_RELEASE_DIR}}/gk'"
     cmds:
-      - "{{.GK_BIN_RELEASE_DIR}}/gk -v --game {{.GAME}} -- -boot -debug -fakeiso -mp-host true"
+      - "{{.GK_BIN_RELEASE_DIR}}/gk -v --game {{.GAME}} -- -boot -debug -fakeiso -mp-host true -snapshot slot1 -mp-characters jak,jak"
   boot-game-p2:
     desc: "Boots the game and tries to connect to localhost"
     preconditions:

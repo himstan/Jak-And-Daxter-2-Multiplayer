@@ -3,7 +3,7 @@
 
 (define-perm *mp-darkjak-last-giant-step-feedback-time* time-frame 0)
 
-(defun mp-oracle-darkjak-training-participant? ()
+(defun mp-oracle-darkjak-training-allowed? ()
   (or (not (mp-session-in-game?)) (mp-local-player-jak?)))
 
 (defun mp-darkjak-persistent-stage ((stage uint))

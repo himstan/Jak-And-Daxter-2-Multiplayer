@@ -537,7 +537,7 @@
         ((and *scene-player* (nonzero? *scene-player*))
          (mp-log-pending-scene-sync-wait! "another local scene is active"))
         ((not (mp-scene-coordinator-has-connected-entry?))
-         (mp-cancel-pending-scene-sync! "no connected scene participant remains"))
+         (mp-cancel-pending-scene-sync! "no connected scene player remains"))
         ((or (not source-record) (zero? source-record))
          (mp-log-pending-scene-sync-wait! "scene source state is not ready"))
         ((not (mp-scene-sync-levels-ready-or-request!))
@@ -603,7 +603,7 @@
            source-player-id
            *mp-scene-name-scratch*
            (mp-scene-coordinator-vote-count)
-           (mp-scene-coordinator-participant-count))))
+           (mp-scene-coordinator-player-count))))
   (mp-complete-active-host-scene-skip-if-ready!)
   (none))
 
