@@ -242,10 +242,11 @@
       (else (mp-bootstrap-host-levels-ready? this)))))
 
 (defmethod mp-bootstrap-apply-player-values! ((this mp-bootstrap-controller))
-  (when (and *game-info* (nonzero? *game-info*) (mp-local-player-record) (nonzero? (mp-local-player-record)))
+  (when (nonnull? *game-info* *mp-world-state* (mp-local-player-record))
     (set! (-> *game-info* money) (-> *mp-world-state* money))
     (set! (-> *game-info* gem) (-> *mp-world-state* gems))
-    (set! (-> *game-info* skill) (-> *mp-world-state* skill)))
+    (set! (-> *game-info* skill) (-> *mp-world-state* skill))
+    (set! (-> *game-info* skill-total) (-> *mp-world-state* skill)))
   (none))
 
 (defmethod mp-bootstrap-apply-task-snapshot! ((this mp-bootstrap-controller))
