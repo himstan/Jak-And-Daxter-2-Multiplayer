@@ -367,7 +367,7 @@
                         progress
                         (or selected? selected-item?))))
         (when (or (< response 0)
-                  (and (zero? response)
+                  (and selected? (zero? response)
                        (or (cpad-pressed? 0 confirm) (cpad-pressed? 0 triangle))))
           (set! (-> this selected-option-index) -1))
         (return response))))
