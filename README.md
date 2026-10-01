@@ -7,13 +7,13 @@
 A Jak II multiplayer mod for OpenGOAL.<br>
 Can be played Online or LAN and even in "faked" split-screen.<br>
 Supports up to 8 players at the moment. The mod is capable of supporting more, it just hasn't been seriously tested with more so far, the limit can be overriden in a developmental build.<br>
-The intentional experience is tailored around 2 players where one plays as Jak, the other as Daxter (why Daxter got back his name in the mod title), but should be able to progress through the story with even 8 players, the experience will be just even more funkier
+The intentional experience is tailored around 2 players where one plays as Jak, the other as Daxter (why Daxter got back his name in the mod title), but should be able to progress through the story with even 8 players, the experience will be just even more funky
 
 ## Current State
 
 This is a very early MVP multiplayer build, so expect a ton of bugs, unstability and crashes. Currently only Act I (up until the palace Baron bossfight) is playable, the game will lock further progress after you've completed that mission.<br>
 The goal is to make the full Jak II campaign playable together.<br>
-Currently this mod primarily serves as a Co-op mod, when the Campaign is in a finished state, more gamemodes are going to be supported as well.<br>
+Currently, this mod primarily serves as a Co-op mod, when the Campaign is in a finished state, more game modes are going to be supported as well.<br>
 If at least the Host is in debug mode then a lot of constraints I've put in to block progression can be bypassed.
 
 ## Disclaimers
