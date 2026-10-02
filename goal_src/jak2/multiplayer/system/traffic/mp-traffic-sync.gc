@@ -268,7 +268,7 @@
                *traffic-engine*
                (nonzero? (the-as uint *traffic-engine*)))
       (let ((city-info (-> level-info bsp city-level-info)))
-        (dotimes (level-data-idx 2)
+        (dotimes (level-data-idx LEVEL_MAX)
           (let ((level-data (-> *traffic-engine* level-data-array level-data-idx)))
             (when (and (= (-> level-data city-info) city-info) (> (-> level-data active-cell-count) 0))
               (return #t)))))))

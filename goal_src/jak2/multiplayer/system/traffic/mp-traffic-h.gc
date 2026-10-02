@@ -189,7 +189,7 @@
   (let ((best-branch (the-as nav-branch #f))
         (best-active-count (the uint 0)))
     (when (and *traffic-engine* (nonzero? (the-as uint *traffic-engine*)))
-      (dotimes (slot-idx 2)
+      (dotimes (slot-idx LEVEL_MAX)
         (let ((level-data (-> *traffic-engine* level-data-array slot-idx)))
           (let ((city-info (-> level-data city-info)))
             (when (and city-info (nonzero? city-info) (-> city-info nav-graph) (nonzero? (-> city-info nav-graph)))

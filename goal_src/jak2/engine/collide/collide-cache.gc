@@ -1,6 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern mp-traffic-level-collision-ready? (function level symbol))
+
 ;; name: collide-cache.gc
 ;; name in dgo: collide-cache
 ;; dgos: ENGINE, GAME
@@ -35,7 +37,7 @@
       )
   (dotimes (s2-0 (-> *level* length))
     (let ((v1-7 (-> *level* level s2-0)))
-      (if (= (-> v1-7 status) 'active)
+      (if (mp-traffic-level-collision-ready? v1-7)
           (arg0 (-> v1-7 bsp collide-hash) 0 *collide-list* arg2)
           )
       )

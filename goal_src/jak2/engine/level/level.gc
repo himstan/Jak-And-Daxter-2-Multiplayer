@@ -27,6 +27,9 @@ into 7 sections, which might explain the weird sizes in the center.
 (define-extern mp-respawn-policy-blocks-remote-placement? (function symbol))
 (define-extern mp-orb-restore-collected-aids! (function none))
 (define-extern mp-gem-restore-collected-aids! (function none))
+(define-extern mp-traffic-level-event! (function level symbol none))
+(define-extern mp-traffic-prefetch-levels! (function load-state int))
+(define-extern mp-traffic-clear-prefetch-requests! (function load-state int none))
 
 (defglobalconstant NUM_LEVEL_PAGES 146)
 (defglobalconstant LEVEL_PAGE_SIZE_KB 126) ;; original value
@@ -1413,6 +1416,7 @@ into 7 sections, which might explain the weird sizes in the center.
   ;; end the load
   (set! (-> lev draw-priority) (-> lev info draw-priority))
   (set! (-> lev status) 'loaded)
+  (mp-traffic-level-event! lev 'level-loaded)
   (mark-hud-warp-sprite-dirty *texture-pool*)
   (set! loading-level global)
   (set! (-> *level* loading-level) (-> *level* default-level))
@@ -1483,9 +1487,6 @@ into 7 sections, which might explain the weird sizes in the center.
                )
              )
            )
-         (if (and (!= (-> this bsp city-level-info) 0) *traffic-manager*)
-             (send-event *traffic-manager* 'level-loaded this)
-             )
          (when (-> this info activate-func)
            (let ((s0-1 (-> this info activate-func value)))
              (if (and s0-1 (nonzero? s0-1) (type? s0-1 function))
@@ -1510,11 +1511,6 @@ into 7 sections, which might explain the weird sizes in the center.
   (case (-> this status)
     (('active 'alive)
      (format 0 "----------- kill ~A (status ~A)~%" this (-> this status))
-
-     ;; send event to traffic manager.
-     (if (and (!= (-> this bsp city-level-info) 0) *traffic-manager*)
-         (send-event *traffic-manager* 'level-killed this)
-         )
 
      ;; run kill callbacks
      (when (-> this info kill-func)
@@ -1570,6 +1566,8 @@ into 7 sections, which might explain the weird sizes in the center.
 
 (defmethod unload! ((this level))
   "Unload a level."
+
+  (mp-traffic-level-event! this 'level-killed)
 
   ;; make sure it's not alive/active
   (deactivate this)
@@ -2768,7 +2766,9 @@ into 7 sections, which might explain the weird sizes in the center.
         )
       )
     )
-  (update! *load-state*)
+  (let ((traffic-prefetch-mask (mp-traffic-prefetch-levels! *load-state*)))
+    (update! *load-state*)
+    (mp-traffic-clear-prefetch-requests! *load-state* traffic-prefetch-mask))
 
   (dotimes (s5-2 (-> this length))
     (let ((s4-1 (-> this level s5-2)))

@@ -175,7 +175,7 @@
     (dotimes (i 21)
       (let ((s4-0 (-> this traffic-engine object-type-info-array i)))
         (logclear! (-> s4-0 flags) (traffic-type-flags trtflags-3))
-        (if (= (level-status *level* (-> s4-0 level)) 'active)
+        (if (mp-level-active? (-> s4-0 level))
             (logior! (-> s4-0 flags) (traffic-type-flags trtflags-3))
             )
         )

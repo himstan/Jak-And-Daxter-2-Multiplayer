@@ -601,6 +601,7 @@
   "mp-event-hooks.o" ;; added
   "mp-scene-state.o" ;; added
   "mp-player-targeting.o" ;; added
+  "mp-traffic-residency.o" ;; added
   "mp-respawn-policy.o" ;; added
   "mp-culling-policy.o" ;; added
   "mp-level-sync.o" ;; added
