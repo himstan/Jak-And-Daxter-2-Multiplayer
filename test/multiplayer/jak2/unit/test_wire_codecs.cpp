@@ -56,6 +56,69 @@ TEST(Jak2Protocol, MeasureSizeMatchesEmittedSizeForFixedWidthPacket) {
   EXPECT_GE(measure.GetBytesProcessed(), static_cast<int64_t>(encoded->size()));
 }
 
+TEST(Jak2Protocol, RacingVelocitiesRoundTripInPlayerAndVehicleSnapshots) {
+  using namespace multiplayer;
+  for (const std::array<float, 3> velocity :
+       {std::array<float, 3>{-17566.875f, -49152.598f, 263952.88f},
+        std::array<float, 3>{409600.0f, -409600.0f, 0.0f},
+        std::array<float, 3>{-524288.0f, 0.0f, 524288.0f}}) {
+    jak2::wire::PlayerStatePacket player;
+    player.velocity = velocity;
+    jak2::wire::PlayerVehicleStatePacket vehicle;
+    vehicle.vehicle.linear_velocity = velocity;
+    jak2::wire::VehicleStateBatchPacket traffic;
+    traffic.vehicles.push_back({.net_id = 1, .linear_velocity = velocity});
+    const auto player_bytes = platform::wire::encode_packet(player);
+    const auto vehicle_bytes = platform::wire::encode_packet(vehicle);
+    const auto traffic_bytes = platform::wire::encode_packet(traffic);
+    ASSERT_TRUE(player_bytes);
+    ASSERT_TRUE(vehicle_bytes);
+    ASSERT_TRUE(traffic_bytes);
+    EXPECT_EQ(player_bytes->size(), jak2::wire::PlayerStatePacket::kPolicy.maximum_payload_bytes);
+    EXPECT_EQ(vehicle_bytes->size(), jak2::wire::kPlayerVehicleStatePacketWireSize);
+    EXPECT_EQ(traffic_bytes->size(), jak2::wire::kVehicleStateBatchPacketPrefixWireSize +
+                                         (jak2::wire::kVehicleStateRecordWireBits + 7) / 8);
+    const auto decoded_player =
+        platform::wire::decode_packet<jak2::wire::PlayerStatePacket>(*player_bytes);
+    const auto decoded_vehicle =
+        platform::wire::decode_packet<jak2::wire::PlayerVehicleStatePacket>(*vehicle_bytes);
+    const auto decoded_traffic =
+        platform::wire::decode_packet<jak2::wire::VehicleStateBatchPacket>(*traffic_bytes);
+    ASSERT_TRUE(decoded_player);
+    ASSERT_TRUE(decoded_vehicle);
+    ASSERT_TRUE(decoded_traffic);
+    ASSERT_EQ(decoded_traffic->vehicles.size(), 1u);
+    for (size_t axis = 0; axis < velocity.size(); ++axis) {
+      EXPECT_NEAR(decoded_player->velocity[axis], velocity[axis],
+                  platform::wire::kLinearVelocityResolution / 2.0f);
+      EXPECT_NEAR(decoded_vehicle->vehicle.linear_velocity[axis], velocity[axis],
+                  platform::wire::kLinearVelocityResolution / 2.0f);
+      EXPECT_NEAR(decoded_traffic->vehicles[0].linear_velocity[axis], velocity[axis],
+                  platform::wire::kLinearVelocityResolution / 2.0f);
+    }
+  }
+}
+
+TEST(Jak2Protocol, LinearVelocityBoundsRejectOutOfRangeAndNonfiniteSnapshots) {
+  using namespace multiplayer;
+  for (const float invalid :
+       {platform::wire::kLinearVelocityMin - 1.0f, platform::wire::kLinearVelocityMax + 1.0f,
+        std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN()}) {
+    for (size_t axis = 0; axis < 3; ++axis) {
+      jak2::wire::PlayerStatePacket player;
+      player.velocity[axis] = invalid;
+      jak2::wire::PlayerVehicleStatePacket vehicle;
+      vehicle.vehicle.linear_velocity[axis] = invalid;
+      jak2::wire::VehicleStateBatchPacket traffic;
+      traffic.vehicles.push_back({.net_id = 1});
+      traffic.vehicles[0].linear_velocity[axis] = invalid;
+      EXPECT_FALSE(platform::wire::encode_packet(player));
+      EXPECT_FALSE(platform::wire::encode_packet(vehicle));
+      EXPECT_FALSE(platform::wire::encode_packet(traffic));
+    }
+  }
+}
+
 TEST(Jak2Protocol, QuantizedFieldsStayWithinTheirDeclaredHalfStep) {
   multiplayer::jak2::wire::PlayerStatePacket player = {};
   player.position = {123456.0f, -654321.0f, 777777.0f};

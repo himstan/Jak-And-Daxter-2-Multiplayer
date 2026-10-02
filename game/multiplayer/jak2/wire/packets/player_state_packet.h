@@ -17,7 +17,7 @@ struct PlayerStatePacket : platform::wire::Packet<PlayerStatePacket, PacketType:
       .priority = platform::MessagePriority::CRITICAL,
       .cadence = platform::CadenceMode::PERIODIC,
       .interval_ms = 33,
-      .maximum_payload_bytes = 49};
+      .maximum_payload_bytes = 50};
 
   uint32_t sample_time_ms = 0;
   core::PlayerActivity activity = core::PlayerActivity::UNAVAILABLE;

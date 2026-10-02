@@ -129,6 +129,20 @@
     (set! (-> destination vehicle turret-active?) (-> source vehicle turret-active))
     (set! (-> destination connection activity-changed?)
           (if (= (-> destination connection activity) (-> source activity)) (the uint8 0) (the uint8 1)))
+    (when (and (!= (-> destination connection connected?) (-> source valid?))
+               (!= (-> source identity player-id) (mp-local-player-id)))
+      (log 'debug
+           ("[MP-PlayerState] Player=~D connected=~D->~D state-ready=~D joined=~D"
+            (-> source identity player-id)
+            (-> destination connection connected?)
+            (-> source valid?)
+            (-> source identity state-ready?)
+            (-> source identity joined?))
+           (" activity=~D presentation-generation=~D lifecycle=~D vehicle=~D"
+            (-> source activity)
+            (-> source generation)
+            (-> source lifecycle-generation)
+            (-> source vehicle vehicle-id))))
     (set! (-> destination connection activity) (-> source activity))
     (set! (-> destination connection connected?) (-> source valid?))
     (set! (-> destination connection state-cached?) (-> source valid?))

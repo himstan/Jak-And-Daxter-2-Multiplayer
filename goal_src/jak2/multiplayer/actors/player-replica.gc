@@ -14,7 +14,7 @@
 
 (defun reset-player-replica-state! ((record mp-player-record))
   (when (nonnull? record)
-    (player-replica-deactivate! record)
+    (player-replica-deactivate! record 'state-reset)
     (let ((target-record (get-player-target-record record)))
       (when (nonnull? target-record)
         (mem-set32! (the-as pointer target-record) (/ (size-of target-record) 4) 0)))
@@ -59,7 +59,7 @@
 
 (defun player-replica-clear-stale! ((record mp-player-record))
   (when (nonnull? record)
-    (player-replica-deactivate! record)
+    (player-replica-deactivate! record 'invalid-process)
     (set! (-> record runtime state-mismatch-count) 0)
     (set! (-> record runtime replica-lifecycle) (player-replica-lifecycle none)))
   (none))
@@ -1188,14 +1188,28 @@
   (if (mp-target-daxter? self) (go target-indax-start (the handle #f)) (go target-stance))
   (none))
 
-(defun player-replica-deactivate! ((record mp-player-record))
+(defun player-replica-deactivate! ((record mp-player-record) (reason symbol))
   (when (nonnull? record)
     (let ((replica (mp-player-record-target record)))
-      (when (and (player-replica-process-live? replica) (or (not *target*) (zero? *target*) (!= replica *target*)))
+      (when (and (nonnull? replica)
+                 (player-replica-process-live? replica)
+                 (or (not *target*) (zero? *target*) (!= replica *target*)))
         (let ((id (if (and *mp-player-controller* (nonzero? *mp-player-controller*))
                     (mp-player-controller-record-id *mp-player-controller* record)
                     (the-as uint (-> record identity player-id)))))
-          (log 'debug "[PlayerReplica] Deactivating target replica for player ~D...~%" id))
+          (log 'debug
+               ("[PlayerReplica] Deactivating target replica player=~D reason=~A pid=~D state=~A pilot=~A"
+                id
+                reason
+                (-> replica pid)
+                (if (nonnull? (-> replica state)) (-> replica state name) 'none)
+                (focus-test? replica pilot))
+               (" vehicle=~D connected=~D cached=~D activity=~D cull-suppressed=~A"
+                (-> record vehicle vehicle-id)
+                (-> record connection connected?)
+                (-> record connection state-cached?)
+                (-> record connection activity)
+                (mp-culling-suppressed-for-player? record))))
         (target-timed-invulnerable-off replica 0)
         (mp-clear-target-edge-grab-pending! replica)
         (deactivate replica)))

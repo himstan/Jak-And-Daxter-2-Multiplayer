@@ -210,6 +210,14 @@ TEST(Jak2Protocol, RejectsOversizedSnapshotsInsteadOfTruncating) {
                    .has_value());
 
   multiplayer::jak2::core::TrafficSnapshot vehicles = {};
+  vehicles.vehicles.resize(multiplayer::jak2::core::kMaxVehicles);
+  const auto full_vehicle_batch = multiplayer::platform::wire::encode_packet(
+      multiplayer::jak2::wire::to_vehicle_state_batch_packet(vehicles));
+  ASSERT_TRUE(full_vehicle_batch);
+  EXPECT_EQ(full_vehicle_batch->size(),
+            multiplayer::jak2::wire::kVehicleStateBatchPacketMaxWireSize);
+  EXPECT_EQ(full_vehicle_batch->size(),
+            multiplayer::jak2::wire::VehicleStateBatchPacket::kPolicy.maximum_payload_bytes);
   vehicles.vehicles.resize(multiplayer::jak2::core::kMaxVehicles + 1);
   EXPECT_FALSE(multiplayer::platform::wire::encode_packet(
                    multiplayer::jak2::wire::to_vehicle_state_batch_packet(vehicles))

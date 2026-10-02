@@ -259,7 +259,7 @@
 (define-extern player-replica-flush-pending-gun-shot! (function target target-record none))
 (define-extern player-replica-clear-stale! (function mp-player-record none))
 (define-extern player-replica-spawn (function mp-player-record target))
-(define-extern player-replica-deactivate! (function mp-player-record none))
+(define-extern player-replica-deactivate! (function mp-player-record symbol none))
 (define-extern mp-trigger-death-taunt! (function target none))
 (define-extern mp-player-blocks-respawn? (function mp-player-record symbol))
 (define-extern mp-apply-player-render-appearance! (function target none))

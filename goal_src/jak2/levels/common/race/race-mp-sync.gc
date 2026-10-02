@@ -110,6 +110,37 @@
   (+! (-> *mp-race-sync-state* sequence) 1)
   (-> *mp-race-sync-state* sequence))
 
+(defun race-log-event! ((direction symbol) (source-player-id uint) (details mp-race-event-data))
+  (when (nonnull? details)
+    (log 'debug
+         ("[Race-MP] ~A action=~A source=~D player=~D racer=~D"
+          direction
+          (case (-> details action)
+            ((MP_RACE_ACTION_CONFIG) 'config)
+            ((MP_RACE_ACTION_BIND_COMMIT) 'bind-commit)
+            ((MP_RACE_ACTION_START) 'start)
+            ((MP_RACE_ACTION_PROGRESS_REQUEST) 'progress-request)
+            ((MP_RACE_ACTION_PROGRESS_COMMIT) 'progress-commit)
+            ((MP_RACE_ACTION_DNF) 'dnf)
+            ((MP_RACE_ACTION_RESULTS) 'results)
+            ((MP_RACE_ACTION_DECISION) 'decision)
+            ((MP_RACE_ACTION_CONFIG_REQUEST) 'config-request)
+            (else 'unknown))
+          source-player-id
+          (-> details player-id)
+          (-> details racer-index))
+         (" generation=~D race=~D sequence=~D time=~D"
+          (-> details generation)
+          (-> details race-id)
+          (-> details sequence)
+          (-> details event-time))
+         (" value0=~D value1=~D players=~X open=~X"
+          (-> details value0)
+          (-> details value1)
+          (-> details player-mask)
+          (-> details open-racer-mask))))
+  (none))
+
 (defun mp-race-enqueue-event! ((action uint)
                                (racer-index uint)
                                (player-id uint)
@@ -129,6 +160,7 @@
       (set! (-> details value1) value1)
       (set! (-> details sequence) (mp-race-next-sequence!))
       (set! (-> details event-time) event-time)
+      (race-log-event! 'send (mp-local-player-id) details)
       (mp-event-enqueue-race! details)))
   (none))
 
@@ -498,7 +530,7 @@
   (none))
 
 (defun mp-race-restore-ai-racer! ((state race-state) (racer-index int))
-  (when (or (not state) (zero? state) (< racer-index 0) (>= racer-index (-> state racer-count)))
+  (when (or (not (nonnull? state)) (< racer-index 0) (>= racer-index (-> state racer-count)))
     (return #f))
   (let ((info (-> state info)))
     (when (or (not info) (zero? info) (>= racer-index (-> info racer-count)))
@@ -508,12 +540,19 @@
            (rider (the-as uint (-> racer-info rider)))
            (vehicle (the-as vehicle-racer (handle->process-safe (-> racer racer)))))
       (when (or (not (mp-race-ai-capable? racer-info))
-                (not vehicle)
-                (zero? vehicle)
+                (not (nonnull? vehicle))
                 (not (type? vehicle vehicle-racer)))
         (return #f))
       (when (mp-race-ai-rider-active? vehicle)
         (return #t))
+      (let ((driver (get-rider-in-seat vehicle 0)))
+        (log 'debug
+             "[Race-MP] AI takeover racer=~D vehicle=~D driver-pid=~D local-driver=~A state=~A~%"
+             racer-index
+             (-> vehicle net-id)
+             (if (nonnull? driver) (-> driver pid) -1)
+             (and (nonnull? driver *target*) (= driver *target*))
+             (if (nonnull? (-> vehicle state)) (-> vehicle state name) 'none)))
       (mp-vehicle-clear-seat-occupant! vehicle 0 (the-as object #f))
       (logclear! (-> vehicle flags) (rigid-body-object-flag waiting-for-player player-driving player-grabbed))
       (logior! (-> vehicle flags) (rigid-body-object-flag riding ai-driving))
@@ -589,6 +628,16 @@
                  (= (the-as uint (-> *mp-race-sync-state* player-status player-index)) MP_RACE_STATUS_ACTIVE))
         (let ((record (mp-player-record-by-id player-id)))
           (when (not (mp-race-record-connected? record))
+            (log 'debug
+                 ("[Race-MP] Host disconnect DNF player=~D racer=~D record-present=~A"
+                  player-id
+                  (mp-race-bound-racer-index player-id)
+                  (nonnull? record))
+                 (" joined=~D connected=~D cached=~D activity=~D"
+                  (if (nonnull? record) (-> record identity joined?) 0)
+                  (if (nonnull? record) (-> record connection connected?) 0)
+                  (if (nonnull? record) (-> record connection state-cached?) 0)
+                  (if (nonnull? record) (-> record connection activity) 0)))
             (mp-race-host-publish-dnf! state player-id (mp-race-bound-racer-index player-id)))))))
   (none))
 
@@ -1182,6 +1231,7 @@
 (defun mp-race-receive-event! ((event mp-race-event))
   (when (or (not (nonnull? event)) (zero? event))
     (return #f))
+  (race-log-event! 'receive (-> event source-player-id) (-> event payload))
   (case (-> event payload action)
     ((MP_RACE_ACTION_CONFIG) (mp-race-receive-config! event))
     ((MP_RACE_ACTION_CONFIG_REQUEST)

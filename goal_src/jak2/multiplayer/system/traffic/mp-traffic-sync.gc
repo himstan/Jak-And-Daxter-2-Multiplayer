@@ -427,6 +427,20 @@
   (cleanup-traffic-records)
   (none))
 
+(defun sync-race-traffic! ()
+  (when (and (mp-session-in-game?)
+             (nonnull? *mp-traffic-buffer*
+                       (process-by-type-exact 'race-manager *active-pool*)))
+    (if (mp-session-host?)
+      (begin
+        (when (or (not *mp-traffic-sync-active*) (not (mp-is-traffic-ready?)))
+          (mp-traffic-clear-authoritative-slots!))
+        (mp-sync-race-traffic-update))
+      (begin
+        (mp-vehicle-apply-race-remote)
+        (cleanup-traffic-records))))
+  (none))
+
 (defun mp-sync-traffic-update ()
   (let ((status (pc-multi-get-session-status)))
     (when (and (mp-connection-status-active? status) *mp-traffic-sync-active*)
@@ -458,20 +472,13 @@
                     (let ((tracker (ppointer->process curr)))
                       (iterate-process-tree tracker mp-sync-traffic-update-callback *kernel-context*))
                     (set! curr (-> curr 0 brother))))
-                (mp-sync-mission-traffic-update)
-                (mp-sync-race-traffic-update))
+                (mp-sync-mission-traffic-update))
               (begin
                 (cond
                   ((mp-multiplayer-level-load-active?)
                    (begin
                      (mp-traffic-note-level-context!)
                      (mp-traffic-update-existing-during-level-load!)))
-                  ((and (= status (mp-connection-status in-game))
-                        (not (mp-traffic-local-city-loaded?))
-                        (mp-is-traffic-existing-update-ready?))
-                   (begin
-                     (mp-vehicle-apply-race-remote)
-                     (cleanup-traffic-records)))
                   ((mp-traffic-local-city-loaded?)
                    (begin
                      (mp-traffic-note-level-context!)
@@ -484,6 +491,7 @@
                            (cleanup-traffic-records))
                          (mp-traffic-refresh-existing-remote!)))))
                   (else (mp-traffic-refresh-existing-remote!))))))))))
+  (sync-race-traffic!)
   (none))
 
 (defun mp-traffic-force-clear-local-vehicles! ()

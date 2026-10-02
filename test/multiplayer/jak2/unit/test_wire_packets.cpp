@@ -96,10 +96,10 @@ void expect_exact_packet(const Model& payload, const std::vector<uint8_t>& expec
 }  // namespace
 
 TEST(Jak2Protocol, PlayerStateWireFormatPreservesEveryField) {
-  const std::vector<uint8_t> bytes = {120, 86,  52, 18,  3,   0,   16,  0,   0,   1,   0,   16,  0,
-                                      16,  0,   16, 0,   80,  0,   80,  12,  81,  192, 140, 129, 8,
-                                      66,  196, 64, 149, 132, 217, 168, 64,  243, 106, 132, 123, 11,
-                                      0,   148, 2,  0,   0,   20,  75,  109, 231, 22};
+  const std::vector<uint8_t> bytes = {120, 86,  52, 18,  3,  0,   16,  0,   0,   1,   0,   16,  0,
+                                      16,  0,   32, 0,   64, 1,   128, 98,  136, 2,   102, 12,  68,
+                                      16,  34,  6,  170, 36, 204, 70,  5,   154, 87,  35,  220, 91,
+                                      0,   160, 20, 0,   0,  160, 88,  106, 59,  183, 0};
   multiplayer::jak2::core::PlayerState state = {};
   state.player_id = 2;
   state.sample_time_ms = 0x12345678;
@@ -171,10 +171,10 @@ TEST(Jak2Protocol, PlayerStateWireFormatPreservesEveryField) {
 }
 
 TEST(Jak2Protocol, PlayerVehicleWireFormatPreservesCivilianAndVacantRiders) {
-  const std::vector<uint8_t> bytes = {120, 86, 52,  18, 41,  0, 0,   64,  3,  4,   5, 0,   128,
-                                      0,   0,  8,   0,  128, 0, 0,   0,   0,  0,   0, 0,   0,
-                                      0,   0,  0,   0,  0,   0, 0,   127, 0,  128, 2, 128, 2,
-                                      128, 0,  128, 0,  128, 0, 128, 36,  50, 141, 4, 132, 63};
+  const std::vector<uint8_t> bytes = {120, 86, 52, 18,  41, 0,   0,   64, 3,  4,   5,  0, 128, 0,
+                                      0,   8,  0,  128, 0,  0,   0,   0,  0,  0,   0,  0, 0,   0,
+                                      0,   0,  0,  0,   0,  127, 0,   0,  5,  0,   10, 0, 4,   0,
+                                      4,   0,  4,  0,   36, 145, 105, 36, 32, 252, 1};
   multiplayer::jak2::core::PlayerVehicleState state = {};
   state.player_id = 2;
   auto& vehicle = state.vehicle;
@@ -224,7 +224,7 @@ TEST(Jak2Protocol, PlayerVehicleWireFormatPreservesCivilianAndVacantRiders) {
   EXPECT_EQ(replication.players().player_vehicles()[2].vehicle.rider_player_ids,
             vehicle.rider_player_ids);
   auto malformed = bytes;
-  malformed[50] = static_cast<uint8_t>((malformed[50] & ~0x03u) | 0x02u);
+  malformed[50] = static_cast<uint8_t>((malformed[50] & ~0x18u) | 0x10u);
   EXPECT_FALSE(mp_test::decode_player_vehicle(malformed, {.authenticated_player_id = 2}));
 }
 

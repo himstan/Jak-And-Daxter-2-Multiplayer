@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 
+#include "common/log/log.h"
 #include "game/multiplayer/jak2/core/validation.h"
 #include "game/multiplayer/platform/core/sequence.h"
 
@@ -36,6 +37,9 @@ void PlayerReplicationState::expire(const uint64_t now_ms) {
     auto& player = player_states_[player_id];
     if (!player.state_ready || now_ms - player.received_time_ms <= 2000)
       continue;
+    lg::debug("[MP-PlayerState] Expiring player {}: age={}ms sequence={} activity={} vehicle={}.",
+              player_id, now_ms - player.received_time_ms, player.last_sequence,
+              static_cast<uint8_t>(player.activity), player.vehicle_id);
     player.state_ready = false;
     identities_[player_id].state_ready = false;
     player_vehicles_[player_id] = {};

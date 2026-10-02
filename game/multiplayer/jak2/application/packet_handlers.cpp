@@ -1,7 +1,9 @@
 #include <algorithm>
 #include <limits>
+#include <optional>
 #include <type_traits>
 
+#include "common/log/log.h"
 #include "game/multiplayer/jak2/application/jak2_adapter.h"
 #include "game/multiplayer/jak2/core/validation.h"
 #include "game/multiplayer/jak2/wire/packet_source.h"
@@ -157,7 +159,8 @@ void Jak2Adapter::add_player_handlers(Handlers& handlers) {
   const auto ready = frame_ready(local_frame_);
   add_packet_handler<wire::PlayerStatePacket>(
       handlers, wire::to_packet, state_.players(), wire::canonicalize_player,
-      [this](auto& handler, auto& endpoint, uint64_t now_ms) {
+      [this, failed_at = std::optional<uint64_t>{}](auto& handler, auto& endpoint,
+                                                 uint64_t now_ms) mutable {
         const auto& session = endpoint.snapshot().state;
         auto player = local_frame_->players[session.local_player_id];
         player.player_id = session.local_player_id;
@@ -168,7 +171,31 @@ void Jak2Adapter::add_player_handlers(Handlers& handlers) {
           player.activity = core::PlayerActivity::IN_GAME;
         else if (session.status == platform::SessionStatus::GAME_STARTING)
           player.activity = core::PlayerActivity::GAME_STARTING;
-        handler.send(player, endpoint, now_ms);
+        const auto sequence = handler.send(player, endpoint, now_ms);
+        if (!sequence) {
+          if (!failed_at) {
+            const auto packet = wire::to_packet(player);
+            lg::debug(
+                "[MP-PlayerState] Player {} snapshot send failed: packet-valid={} "
+                "position-valid={} velocity-valid={} velocity=({},{},{}) limits=[{},{}] "
+                "position=({},{},{}) sample-time={} activity={} vehicle={}.",
+                player.player_id, wire::validate_packet(packet),
+                platform::wire::valid_position_array(packet.position),
+                platform::wire::valid_linear_velocity_array(packet.velocity), player.velocity[0],
+                player.velocity[1], player.velocity[2], platform::wire::kLinearVelocityMin,
+                platform::wire::kLinearVelocityMax, player.position[0], player.position[1],
+                player.position[2], player.sample_time_ms, static_cast<uint8_t>(player.activity),
+                player.vehicle_id);
+            failed_at = now_ms;
+          }
+        } else if (failed_at) {
+          lg::debug(
+              "[MP-PlayerState] Player {} snapshot send resumed after {}ms: sequence={} "
+              "velocity=({},{},{}) sample-time={} vehicle={}.",
+              player.player_id, now_ms - *failed_at, *sequence, player.velocity[0],
+              player.velocity[1], player.velocity[2], player.sample_time_ms, player.vehicle_id);
+          failed_at.reset();
+        }
       },
       ready);
   add_packet_handler<wire::PlayerVehicleStatePacket>(

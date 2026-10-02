@@ -71,7 +71,7 @@ TEST(Jak2Protocol, TrafficInterestFitsPlayerPacketAndRejectsInvalidSources) {
     input.selected_traffic_authority = static_cast<uint8_t>(source);
     const auto bytes = platform::wire::encode_packet(jak2::wire::to_packet(input));
     ASSERT_TRUE(bytes);
-    EXPECT_EQ(bytes->size(), 49u);
+    EXPECT_EQ(bytes->size(), 50u);
     const auto packet = platform::wire::decode_packet<jak2::wire::PlayerStatePacket>(*bytes);
     ASSERT_TRUE(packet);
     jak2::core::PlayerState output;
@@ -84,7 +84,8 @@ TEST(Jak2Protocol, TrafficInterestFitsPlayerPacketAndRejectsInvalidSources) {
     EXPECT_FALSE(platform::wire::encode_packet(invalid));
     auto bytes = platform::wire::encode_packet(jak2::wire::PlayerStatePacket{});
     ASSERT_TRUE(bytes);
-    bytes->back() = (bytes->back() & ~0x3c) | (source << 2);
+    (*bytes)[48] = ((*bytes)[48] & 0x1f) | ((source & 7) << 5);
+    (*bytes)[49] = source >> 3;
     EXPECT_FALSE(platform::wire::decode_packet<jak2::wire::PlayerStatePacket>(*bytes));
   }
 }

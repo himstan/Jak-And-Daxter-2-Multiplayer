@@ -10,7 +10,7 @@
 
 namespace multiplayer::jak2::wire {
 
-inline constexpr size_t kPlayerVehicleStatePacketWireSize = 52;
+inline constexpr size_t kPlayerVehicleStatePacketWireSize = 53;
 
 struct PlayerVehicleStateRecord {
   uint32_t sample_time_ms = 0;
@@ -36,7 +36,7 @@ struct PlayerVehicleStatePacket
       .priority = platform::MessagePriority::CRITICAL,
       .cadence = platform::CadenceMode::PERIODIC,
       .interval_ms = 33,
-      .maximum_payload_bytes = 52};
+      .maximum_payload_bytes = kPlayerVehicleStatePacketWireSize};
 
   PlayerVehicleStateRecord vehicle = {};
 };

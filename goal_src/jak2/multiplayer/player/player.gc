@@ -127,7 +127,7 @@
           (mp-broadcast-player-leave! record)
           (mp-player-runtime-clear-flag! record (mp-player-runtime-flags join-announced)))
         (when (and (!= player-id (-> controller local-player-id)) (nonzero? (-> record runtime target-handle)))
-          (player-replica-deactivate! record))
+          (player-replica-deactivate! record 'slot-release))
         (set! (-> record runtime vehicle-handle) (the-as handle #f))
         (mp-player-controller-release-pad! controller record)
         (mp-player-record-reset! record))))

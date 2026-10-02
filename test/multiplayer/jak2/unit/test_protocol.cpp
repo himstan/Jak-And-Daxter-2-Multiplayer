@@ -138,11 +138,11 @@ TEST(Jak2Protocol, GameplayPolicyMaximumAppliesToPayloadBody) {
 
 TEST(Jak2Protocol, PlayerVehicleStateCarriesDriverVehicleWireLayout) {
   EXPECT_EQ(static_cast<uint8_t>(PacketType::PLAYER_VEHICLE_STATE), 11u);
-  EXPECT_EQ(multiplayer::jak2::wire::kPlayerVehicleStatePacketWireSize, 52u);
+  EXPECT_EQ(multiplayer::jak2::wire::kPlayerVehicleStatePacketWireSize, 53u);
 
   const auto* policy = (&multiplayer::jak2::wire::PlayerVehicleStatePacket::kPolicy);
   ASSERT_NE(policy, nullptr);
   EXPECT_STREQ(policy->name, "PLAYER_VEHICLE_STATE");
   EXPECT_EQ(policy->direction, multiplayer::platform::MessageDirection::BIDIRECTIONAL);
-  EXPECT_EQ(policy->maximum_payload_bytes, 52u);
+  EXPECT_EQ(policy->maximum_payload_bytes, 53u);
 }
