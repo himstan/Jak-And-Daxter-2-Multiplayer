@@ -492,7 +492,7 @@
 (defstate wait (citizen-chick)
   :virtual #t
   :code (behavior ()
-    (let ((f30-1 (/ 1.0 (rand-vu-float-range 10.0 13.0))))
+    (let ((f30-1 (get-pedestrian-wait-animation-speed self)))
       (ja-channel-push! 1 (seconds 0.2))
       (until #f
         (ja-no-eval :group! citizen-chick-idle-ja :num! (seek! max f30-1) :frame-num 0.0)

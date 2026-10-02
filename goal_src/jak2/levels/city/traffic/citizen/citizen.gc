@@ -6,6 +6,7 @@
 ;; dgos: CWI
 
 (define-extern get-pedestrian-animation-choice (function citizen uint int int))
+(define-extern get-pedestrian-wait-animation-speed (function citizen float))
 (define-extern get-pedestrian-travel-speed (function citizen float))
 (define-extern mp-pedestrian-run-common-post-pre! (function citizen none))
 (define-extern mp-pedestrian-run-common-post-post! (function citizen none))

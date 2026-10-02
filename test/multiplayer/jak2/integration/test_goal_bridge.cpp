@@ -244,7 +244,7 @@ TEST(Jak2GoalBridge, PedestrianAnimationChoicesIgnoreSpawnOrderAndSharedRandomne
       salts.push_back(name);
     }
   });
-  ASSERT_EQ(salts.size(), 3u);
+  ASSERT_EQ(salts.size(), 4u);
   const auto choice = [&](const std::string& salt) {
     return evaluate("(get-choice 1 " + salt + " 3)").as_int();
   };
