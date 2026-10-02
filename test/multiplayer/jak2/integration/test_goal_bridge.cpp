@@ -13,6 +13,7 @@
 #include "common/goos/ParseHelpers.h"
 #include "common/goos/Reader.h"
 #include "common/type_system/TypeSystem.h"
+#include "common/type_system/defenum.h"
 #include "common/type_system/deftype.h"
 #include "common/util/FileUtil.h"
 #include "common/util/json_util.h"
@@ -96,6 +97,54 @@ MPReplicationStateGOAL& replication_state(GoalMemoryFixture& memory) {
 }
 
 }  // namespace
+
+TEST(Jak2GoalBridge, PedestrianAppearanceLayoutMatchesGoal) {
+  TypeSystem types;
+  types.add_builtin_types(GameVersion::Jak2);
+  goos::Reader reader;
+  const auto load = [&](const std::string& path, const std::string& name) {
+    const auto source =
+        reader.read_from_file({std::string(MP_SOURCE_ROOT) + "/goal_src/jak2/" + path});
+    goos::for_each_in_list(source.as_pair()->cdr, [&](const goos::Object& form) {
+      if (!form.is_pair())
+        return;
+      const auto& definition = form.as_pair()->cdr;
+      if (!definition.is_pair() || !definition.as_pair()->car.is_symbol(name))
+        return;
+      if (form.as_pair()->car.is_symbol("defenum"))
+        parse_defenum(definition, &types, nullptr);
+      else if (form.as_pair()->car.is_symbol("deftype"))
+        parse_deftype(definition, &types);
+    });
+  };
+  load("kernel/gcommon.gc", "vector");
+  load("engine/math/quaternion-h.gc", "quaternion");
+  load("multiplayer/system/traffic/mp-traffic-types.gc", "pedestrian-appearance");
+  EXPECT_EQ(types.lookup_type("pedestrian-appearance")->get_size_in_memory(), sizeof(uint32_t));
+  const auto parts = types.lookup_bitfield_info("pedestrian-appearance", "parts");
+  const auto width = types.lookup_bitfield_info("pedestrian-appearance", "width-scale");
+  const auto height = types.lookup_bitfield_info("pedestrian-appearance", "height-scale");
+  EXPECT_EQ(parts.offset, 0);
+  EXPECT_EQ(parts.size, 24);
+  EXPECT_EQ(width.offset, 24);
+  EXPECT_EQ(width.size, 4);
+  EXPECT_EQ(height.offset, 28);
+  EXPECT_EQ(height.size, 4);
+  EXPECT_FALSE(parts.sign_extend);
+  EXPECT_FALSE(width.sign_extend);
+  EXPECT_FALSE(height.sign_extend);
+  load("multiplayer/system/traffic/mp-traffic-types.gc", "mp-pedestrian-flags");
+  load("multiplayer/system/traffic/mp-traffic-types.gc", "mp-pedestrian-state");
+  EXPECT_EQ(types.lookup_type("mp-pedestrian-state")->get_size_in_memory(), 63u);
+  load("multiplayer/data/mp-replication-h.gc", "mp-replication-pedestrian-state");
+  EXPECT_EQ(types.lookup_type("mp-replication-pedestrian-state")->get_size_in_memory(),
+            sizeof(MPReplicationPedestrianStateGOAL));
+  EXPECT_EQ(
+      types.lookup_field_info("mp-replication-pedestrian-state", "appearance-mask").field.offset(),
+      offsetof(MPReplicationPedestrianStateGOAL, appearance_mask));
+  EXPECT_EQ(types.lookup_field_info("mp-replication-pedestrian-state", "state-id").field.offset(),
+            offsetof(MPReplicationPedestrianStateGOAL, state_id));
+}
 
 TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
   TypeSystem types;
@@ -257,7 +306,7 @@ TEST(Jak2GoalBridge, DirectionalAggregateHasCanonicalCompactAbi) {
   EXPECT_EQ(sizeof(MPReplicationPlayerVehicleGOAL), 94u);
   EXPECT_EQ(sizeof(MPReplicationPlayerGOAL), 544u);
   EXPECT_EQ(sizeof(MPReplicationEnemySetGOAL), 57360u);
-  EXPECT_EQ(sizeof(MPReplicationPedestrianStateGOAL), 60u);
+  EXPECT_EQ(sizeof(MPReplicationPedestrianStateGOAL), 63u);
   EXPECT_EQ(sizeof(MPReplicationTrafficSetGOAL), 13328u);
   EXPECT_EQ(sizeof(MPReplicationBootstrapStateGOAL), 16454u);
   EXPECT_EQ(sizeof(MPReplicationFrameGOAL), 92496u);
@@ -421,6 +470,8 @@ TEST(Jak2GoalBridge, ExchangePublishesTargetsAndPreservesLocalHalf) {
   GoalMemoryFixture memory;
   auto& state = replication_state(memory);
   state.local.generation = 77;
+  state.local.traffic.pedestrian_count = 1;
+  state.local.traffic.pedestrians[0].value.appearance_mask = 0xff7ffeb1;
   auto remote = std::make_unique<multiplayer::jak2::application::RemoteReplicationFrame>();
   remote->generation = 9;
   remote->players[1].player_id = 1;
@@ -431,7 +482,8 @@ TEST(Jak2GoalBridge, ExchangePublishesTargetsAndPreservesLocalHalf) {
   remote->player_targets[1].quaternion = {0.0f, 0.5f, 0.0f, 0.5f};
   remote->player_targets[1].velocity = {4.0f, 5.0f, 6.0f};
   remote->selected_traffic.sequence = 3;
-  remote->selected_traffic.pedestrians.push_back({.net_id = 0x11000001});
+  remote->selected_traffic.pedestrians.push_back(
+      {.net_id = 0x11000001, .appearance_mask = 0xffbfeddf});
   multiplayer::jak2::application::ReplicationMailbox mailbox;
   mailbox.publish_remote_frame(std::move(remote));
   ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
@@ -443,6 +495,11 @@ TEST(Jak2GoalBridge, ExchangePublishesTargetsAndPreservesLocalHalf) {
   EXPECT_FLOAT_EQ(state.remote.players[1].presentation_velocity[2], 6.0f);
   ASSERT_EQ(state.remote.traffic.pedestrian_count, 1u);
   EXPECT_EQ(state.remote.traffic.pedestrians[0].value.net_id, 0x11000001u);
+  EXPECT_EQ(state.remote.traffic.pedestrians[0].value.appearance_mask, 0xffbfeddfu);
+  const auto local = mailbox.take_local_frame();
+  ASSERT_TRUE(local);
+  ASSERT_EQ(local->pedestrians.pedestrians.size(), 1u);
+  EXPECT_EQ(local->pedestrians.pedestrians[0].appearance_mask, 0xff7ffeb1u);
 }
 
 TEST(Jak2GoalBridge, EmptyRemoteAirlockSnapshotClearsPreviousGoalRecords) {

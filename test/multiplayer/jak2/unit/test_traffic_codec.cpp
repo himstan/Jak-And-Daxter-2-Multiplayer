@@ -102,7 +102,7 @@ TEST(Jak2Protocol, PedestrianRecordEncodesAndDecodesLosslessly) {
   multiplayer::jak2::wire::PedestrianStateRecord input = {};
   input.net_id = 555;
   input.object_type = 2;
-  input.object_variance = 1;
+  input.appearance_mask = 0xff7ffeb1;
   input.position = {100.0f, 200.0f, 300.0f};
   input.quaternion = {0.1f, 0.2f, 0.3f, 0.4f};
   input.hit_points = 8;
@@ -123,7 +123,11 @@ TEST(Jak2Protocol, PedestrianRecordEncodesAndDecodesLosslessly) {
       multiplayer::jak2::wire::PedestrianStateBatchPacket>(*bytes);
   ASSERT_TRUE(decoded_packet.has_value());
   ASSERT_EQ(decoded_packet->pedestrians.size(), 1u);
+  ASSERT_EQ(bytes->size(), 51u);
+  EXPECT_EQ(std::vector<uint8_t>(bytes->begin() + 18, bytes->begin() + 22),
+            (std::vector<uint8_t>{0xb1, 0xfe, 0x7f, 0xff}));
   EXPECT_EQ(decoded_packet->pedestrians[0].net_id, input.net_id);
+  EXPECT_EQ(decoded_packet->pedestrians[0].appearance_mask, input.appearance_mask);
   for (size_t axis = 0; axis < input.position.size(); ++axis) {
     EXPECT_NEAR(decoded_packet->pedestrians[0].position[axis], input.position[axis],
                 multiplayer::platform::wire::kPositionResolution / 2.0f);
@@ -133,6 +137,48 @@ TEST(Jak2Protocol, PedestrianRecordEncodesAndDecodesLosslessly) {
                 multiplayer::platform::wire::kQuaternionResolution / 2.0f);
   }
   EXPECT_EQ(decoded_packet->pedestrians[0].animation_profile, input.animation_profile);
+  multiplayer::jak2::core::TrafficSnapshot snapshot;
+  multiplayer::jak2::wire::from_packet(*decoded_packet, snapshot);
+  ASSERT_EQ(snapshot.pedestrians.size(), 1u);
+  EXPECT_EQ(snapshot.pedestrians[0].appearance_mask, input.appearance_mask);
+  EXPECT_EQ(multiplayer::platform::wire::encode_packet(
+                multiplayer::jak2::wire::to_pedestrian_state_batch_packet(snapshot)),
+            bytes);
+  for (size_t length = 0; length < bytes->size(); ++length) {
+    EXPECT_FALSE(
+        multiplayer::platform::wire::decode_packet<
+            multiplayer::jak2::wire::PedestrianStateBatchPacket>(std::span(*bytes).first(length)));
+  }
+  auto trailing = *bytes;
+  trailing.push_back(0);
+  EXPECT_FALSE(multiplayer::platform::wire::decode_packet<
+               multiplayer::jak2::wire::PedestrianStateBatchPacket>(trailing));
+}
+
+TEST(Jak2Protocol, PedestrianAppearancePreservesEveryScaleCodeWithoutGrowingPacket) {
+  using namespace multiplayer;
+  for (uint32_t width = 0; width < 16; ++width) {
+    for (uint32_t height = 0; height < 16; ++height) {
+      SCOPED_TRACE(width);
+      SCOPED_TRACE(height);
+      const uint32_t parts = ((width + height) & 1) ? 0x007ffeb1 : 0x00ffffff;
+      const uint32_t appearance = parts | (width << 24) | (height << 28);
+      jak2::core::TrafficSnapshot snapshot;
+      snapshot.pedestrians.push_back({.net_id = 555, .appearance_mask = appearance});
+      const auto bytes =
+          platform::wire::encode_packet(jak2::wire::to_pedestrian_state_batch_packet(snapshot));
+      ASSERT_TRUE(bytes);
+      ASSERT_EQ(bytes->size(), 51u);
+      EXPECT_EQ((*bytes)[21], width | (height << 4));
+      const auto decoded =
+          platform::wire::decode_packet<jak2::wire::PedestrianStateBatchPacket>(*bytes);
+      ASSERT_TRUE(decoded);
+      jak2::wire::from_packet(*decoded, snapshot);
+      ASSERT_EQ(snapshot.pedestrians.size(), 1u);
+      EXPECT_EQ(snapshot.pedestrians[0].appearance_mask, appearance);
+      EXPECT_EQ(snapshot.pedestrians[0].appearance_mask & 0x00ffffff, parts);
+    }
+  }
 }
 
 TEST(Jak2Protocol, RejectsTruncatedBuffer) {
@@ -154,6 +200,12 @@ TEST(Jak2Protocol, RejectsTruncatedBuffer) {
 
 TEST(Jak2Protocol, RejectsOversizedSnapshotsInsteadOfTruncating) {
   multiplayer::jak2::core::TrafficSnapshot pedestrians = {};
+  pedestrians.pedestrians.resize(multiplayer::jak2::core::kMaxPedestrians);
+  const auto full_batch = multiplayer::platform::wire::encode_packet(
+      multiplayer::jak2::wire::to_pedestrian_state_batch_packet(pedestrians));
+  ASSERT_TRUE(full_batch);
+  EXPECT_LE(full_batch->size(),
+            multiplayer::jak2::wire::PedestrianStateBatchPacket::kPolicy.maximum_payload_bytes);
   pedestrians.pedestrians.resize(multiplayer::jak2::core::kMaxPedestrians + 1);
   EXPECT_FALSE(multiplayer::platform::wire::encode_packet(
                    multiplayer::jak2::wire::to_pedestrian_state_batch_packet(pedestrians))

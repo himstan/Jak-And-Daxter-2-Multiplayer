@@ -14,7 +14,7 @@ namespace multiplayer::jak2::wire {
 struct PedestrianStateRecord {
   uint32_t net_id = 0;
   uint8_t object_type = 0;
-  uint8_t object_variance = 0;
+  uint32_t appearance_mask = 0;
   std::array<float, 3> position = {};
   std::array<float, 4> quaternion = {};
   int32_t hit_points = 0;
@@ -36,7 +36,7 @@ struct PedestrianStateBatchPacket
       .priority = platform::MessagePriority::BULK,
       .cadence = platform::CadenceMode::PERIODIC,
       .interval_ms = 66,
-      .maximum_payload_bytes = 4493};
+      .maximum_payload_bytes = 4877};
 
   uint32_t sample_time_ms = 0;
   uint32_t authority_revision = 0;
@@ -51,7 +51,7 @@ bool serialize_pedestrian_state_record(Stream& stream, RecordT&& pedestrian) {
   }
   return platform::wire::serialize_u32(stream, pedestrian.net_id) &&
          platform::wire::serialize_u8(stream, pedestrian.object_type) &&
-         platform::wire::serialize_u8(stream, pedestrian.object_variance) &&
+         platform::wire::serialize_u32(stream, pedestrian.appearance_mask) &&
          platform::wire::serialize_position_array(stream, pedestrian.position) &&
          platform::wire::serialize_quaternion_array(stream, pedestrian.quaternion) &&
          platform::wire::serialize_uint_bits(stream, pedestrian.hit_points, 8) &&

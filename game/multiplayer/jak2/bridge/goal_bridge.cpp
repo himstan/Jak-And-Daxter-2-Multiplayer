@@ -228,7 +228,7 @@ core::PedestrianState read_pedestrian(const MPReplicationPedestrianStateGOAL& so
   core::PedestrianState result = {};
   result.net_id = source.net_id;
   result.object_type = source.object_type;
-  result.object_variance = source.object_variance;
+  result.appearance_mask = source.appearance_mask;
   result.state_id = source.state_id;
   result.hit_points = source.hp;
   result.target_player_id = source.target_player_id;
@@ -516,7 +516,7 @@ void write_pedestrian(const core::PedestrianState& source,
   destination = {};
   destination.net_id = source.net_id;
   destination.object_type = source.object_type;
-  destination.object_variance = source.object_variance;
+  destination.appearance_mask = source.appearance_mask;
   destination.state_id = source.state_id;
   destination.hp = source.hit_points;
   destination.target_player_id = source.target_player_id;

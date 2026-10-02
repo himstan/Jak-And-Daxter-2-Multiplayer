@@ -29,7 +29,7 @@ PedestrianStateBatchPacket to_pedestrian_state_batch_packet(const core::TrafficS
     packet.pedestrians.push_back(
         {.net_id = pedestrian.net_id,
          .object_type = pedestrian.object_type,
-         .object_variance = pedestrian.object_variance,
+         .appearance_mask = pedestrian.appearance_mask,
          .position = pedestrian.position,
          .quaternion = pedestrian.quaternion,
          .hit_points = pedestrian.hit_points,
@@ -54,13 +54,13 @@ void from_packet(const PedestrianStateBatchPacket& packet, core::TrafficSnapshot
   snapshot.level_id = packet.level_id;
   snapshot.sample_time_ms = packet.sample_time_ms;
   snapshot.pedestrians.reserve(packet.pedestrians.size());
-  for (const auto& [net_id, object_type, object_variance, position, quaternion, hit_points,
+  for (const auto& [net_id, object_type, appearance_mask, position, quaternion, hit_points,
                     state_id, flags, target_player_id, animation_profile, vehicle_net_id,
                     transport_id, transport_side, level_id] : packet.pedestrians) {
     core::PedestrianState state;
     state.net_id = net_id;
     state.object_type = object_type;
-    state.object_variance = object_variance;
+    state.appearance_mask = appearance_mask;
     state.position = position;
     state.quaternion = quaternion;
     state.hit_points = hit_points;

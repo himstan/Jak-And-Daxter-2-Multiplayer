@@ -110,7 +110,7 @@
     (set! (-> slot level-id) (the uint16 (mp-traffic-level-id-for-process e-proc))))
   (pedestrian-refresh-authoritative-record! e-proc)
   (set! (-> slot object-type) (the uint8 (-> e-proc traffic-type)))
-  (set! (-> slot object-variance) (the uint8 0))
+  (set! (-> slot appearance-mask) (the uint32 (pedestrian-pack-appearance! e-proc)))
   (set! (-> slot animation-profile) (mp-pedestrian-get-animation-profile e-proc))
   (set! (-> slot x) (-> e-proc root trans x))
   (set! (-> slot y) (-> e-proc root trans y))

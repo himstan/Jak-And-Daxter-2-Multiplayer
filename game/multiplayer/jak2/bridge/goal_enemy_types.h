@@ -24,9 +24,9 @@ struct MPReplicationPedestrianStateGOAL {
   uint32_t animation_profile;
   uint32_t vehicle_net_id;
   uint32_t transport_id;
+  uint32_t appearance_mask;
   uint16_t level_id;
   uint8_t object_type;
-  uint8_t object_variance;
   uint8_t state_id;
   uint8_t flags;
   uint8_t target_player_id;
@@ -35,4 +35,4 @@ struct MPReplicationPedestrianStateGOAL {
 #pragma pack(pop)
 
 static_assert(sizeof(MPReplicationEnemyStateGOAL) == 64);
-static_assert(sizeof(MPReplicationPedestrianStateGOAL) == 60);
+static_assert(sizeof(MPReplicationPedestrianStateGOAL) == 63);

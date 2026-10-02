@@ -267,6 +267,8 @@
   (none))
 
 (defun pedestrian-apply-record ((proc citizen) (slot mp-pedestrian-state))
+  (when (not (nonnull? slot))
+    (return #f))
   (let ((rec (get-traffic-record (-> slot net-id))))
     (when (not rec)
       (set! rec (get-free-traffic-record))
@@ -305,6 +307,7 @@
        (pedestrian-despawn-replica! proc)
        (return #f))
       (else
+       (pedestrian-apply-appearance! proc (the uint (-> slot appearance-mask)))
        (mp-pedestrian-apply-vehicle-context! proc slot)
        (mp-pedestrian-ensure-controller-branch! proc)
        (let ((animation-rec (get-traffic-record (-> slot net-id))))

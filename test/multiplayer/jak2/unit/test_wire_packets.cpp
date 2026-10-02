@@ -364,7 +364,7 @@ TEST(Jak2Protocol, PedestrianAndVehiclePacketsRemainSeparate) {
       multiplayer::jak2::wire::to_vehicle_state_batch_packet(vehicles));
   ASSERT_TRUE(pedestrian_bytes);
   ASSERT_TRUE(vehicle_bytes);
-  EXPECT_EQ(pedestrian_bytes->size(), 48u);
+  EXPECT_EQ(pedestrian_bytes->size(), 51u);
   EXPECT_EQ(vehicle_bytes->size(), 61u);
 }
 

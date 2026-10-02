@@ -140,10 +140,18 @@
   (dead)
   (dark-guard))
 
+(defconstant PEDESTRIAN_SCALE_MIN 1.0)
+(defconstant PEDESTRIAN_SCALE_MAX 1.25)
+(defconstant PEDESTRIAN_SCALE_STEPS 15)
+
+(deftype pedestrian-appearance (uint32)
+  ((parts        uint32 :offset 0  :size 24)
+   (width-scale  uint8  :offset 24 :size 4)
+   (height-scale uint8 :offset 28 :size 4)))
+
 (deftype mp-pedestrian-state (structure)
   ((net-id            uint32)
    (object-type       uint8)
-   (object-variance   uint8)
    (state-id          uint8)
    (x                 float)
    (y                 float)
@@ -158,9 +166,10 @@
    (animation-profile uint32)
    (vehicle-net-id    uint32)
    (transport-id      uint32)
+   (appearance-mask   uint32)
    (level-id          uint16)
    (transport-side    uint8))
-  :size-assert 59)
+  :size-assert 63)
 
 (defconstant MP_MAX_SYNC_PEDESTRIANS 128)
 (defconstant MP_MAX_SYNC_VEHICLES 64)

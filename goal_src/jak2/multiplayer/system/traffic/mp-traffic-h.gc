@@ -71,6 +71,38 @@
 (define *mp-traffic-transport-registry*
   (new 'static 'inline-array mp-traffic-transport-record MP_TRAFFIC_TRANSPORT_REGISTRY_SIZE))
 
+(defun encode-pedestrian-scale ((scale float))
+  (the uint (+ 0.5
+               (* (the float PEDESTRIAN_SCALE_STEPS)
+                  (/ (- (fmin PEDESTRIAN_SCALE_MAX (fmax PEDESTRIAN_SCALE_MIN scale))
+                        PEDESTRIAN_SCALE_MIN)
+                     (- PEDESTRIAN_SCALE_MAX PEDESTRIAN_SCALE_MIN))))))
+
+(defun decode-pedestrian-scale ((code uint))
+  (+ PEDESTRIAN_SCALE_MIN
+     (* (- PEDESTRIAN_SCALE_MAX PEDESTRIAN_SCALE_MIN)
+        (/ (the float code) (the float PEDESTRIAN_SCALE_STEPS)))))
+
+(defun pedestrian-apply-appearance! ((proc citizen) (packed uint))
+  (let ((appearance (the-as pedestrian-appearance packed)))
+    (when (nonnull? proc (-> proc root))
+      (let ((width (decode-pedestrian-scale (-> appearance width-scale)))
+            (height (decode-pedestrian-scale (-> appearance height-scale))))
+        (set-vector! (-> proc root scale) width height width 1.0)))
+    (when (nonnull? proc (-> proc draw) (-> proc draw mgeo))
+      (when (!= (logand (-> proc draw seg-mask) #xffffff) (-> appearance parts))
+        (setup-masks (-> proc draw) #xffffff (the int (-> appearance parts))))))
+  (none))
+
+(defun pedestrian-pack-appearance! ((proc citizen))
+  (let ((appearance (new 'static 'pedestrian-appearance :parts #xffffff)))
+    (when (nonnull? proc (-> proc root) (-> proc draw))
+      (set! (-> appearance parts) (logand (-> proc draw seg-mask) #xffffff))
+      (set! (-> appearance width-scale) (encode-pedestrian-scale (-> proc root scale x)))
+      (set! (-> appearance height-scale) (encode-pedestrian-scale (-> proc root scale y)))
+      (pedestrian-apply-appearance! proc (the-as uint appearance)))
+    (the-as uint appearance)))
+
 (defun mp-pedestrian-slot-transport-id ((slot mp-pedestrian-state))
   (if (and slot (nonzero? slot)) (-> slot transport-id) (the uint 0)))
 

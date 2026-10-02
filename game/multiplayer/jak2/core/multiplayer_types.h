@@ -235,7 +235,7 @@ struct TurretState {
 struct PedestrianState {
   EntityId net_id = 0;
   uint8_t object_type = 0;
-  uint8_t object_variance = 0;
+  uint32_t appearance_mask = 0;
   uint8_t state_id = 0;
   int32_t hit_points = 0;
   uint8_t target_player_id = kInvalidPlayerId;
