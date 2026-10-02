@@ -239,7 +239,6 @@ struct PedestrianState {
   uint8_t state_id = 0;
   int32_t hit_points = 0;
   uint8_t target_player_id = kInvalidPlayerId;
-  uint32_t animation_profile = 0;
   EntityId vehicle_net_id = 0;
   uint32_t transport_id = 0;
   uint8_t transport_side = 0;

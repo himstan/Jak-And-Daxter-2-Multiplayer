@@ -26,23 +26,21 @@ PedestrianStateBatchPacket to_pedestrian_state_batch_packet(const core::TrafficS
   packet.level_id = snapshot.level_id;
   packet.pedestrians.reserve(snapshot.pedestrians.size());
   for (const auto& pedestrian : snapshot.pedestrians) {
-    packet.pedestrians.push_back(
-        {.net_id = pedestrian.net_id,
-         .object_type = pedestrian.object_type,
-         .appearance_mask = pedestrian.appearance_mask,
-         .position = pedestrian.position,
-         .quaternion = pedestrian.quaternion,
-         .hit_points = pedestrian.hit_points,
-         .state_id = pedestrian.state_id,
-         .flags = pedestrian.state_flags,
-         .target_player_id = pedestrian.target_player_id < kMPMaxPlayers
-                                 ? pedestrian.target_player_id
-                                 : kWireInvalidPlayerId,
-         .animation_profile = static_cast<uint16_t>(pedestrian.animation_profile & 0xffff),
-         .vehicle_net_id = pedestrian.vehicle_net_id,
-         .transport_id = pedestrian.transport_id,
-         .transport_side = pedestrian.transport_side,
-         .level_id = pedestrian.level_id});
+    packet.pedestrians.push_back({.net_id = pedestrian.net_id,
+                                  .object_type = pedestrian.object_type,
+                                  .appearance_mask = pedestrian.appearance_mask,
+                                  .position = pedestrian.position,
+                                  .quaternion = pedestrian.quaternion,
+                                  .hit_points = pedestrian.hit_points,
+                                  .state_id = pedestrian.state_id,
+                                  .flags = pedestrian.state_flags,
+                                  .target_player_id = pedestrian.target_player_id < kMPMaxPlayers
+                                                          ? pedestrian.target_player_id
+                                                          : kWireInvalidPlayerId,
+                                  .vehicle_net_id = pedestrian.vehicle_net_id,
+                                  .transport_id = pedestrian.transport_id,
+                                  .transport_side = pedestrian.transport_side,
+                                  .level_id = pedestrian.level_id});
   }
   return packet;
 }
@@ -55,8 +53,8 @@ void from_packet(const PedestrianStateBatchPacket& packet, core::TrafficSnapshot
   snapshot.sample_time_ms = packet.sample_time_ms;
   snapshot.pedestrians.reserve(packet.pedestrians.size());
   for (const auto& [net_id, object_type, appearance_mask, position, quaternion, hit_points,
-                    state_id, flags, target_player_id, animation_profile, vehicle_net_id,
-                    transport_id, transport_side, level_id] : packet.pedestrians) {
+                    state_id, flags, target_player_id, vehicle_net_id, transport_id, transport_side,
+                    level_id] : packet.pedestrians) {
     core::PedestrianState state;
     state.net_id = net_id;
     state.object_type = object_type;
@@ -67,7 +65,6 @@ void from_packet(const PedestrianStateBatchPacket& packet, core::TrafficSnapshot
     state.state_id = state_id;
     state.target_player_id =
         target_player_id < kMPMaxPlayers ? target_player_id : core::kInvalidPlayerId;
-    state.animation_profile = animation_profile;
     state.vehicle_net_id = vehicle_net_id;
     state.transport_id = transport_id;
     state.transport_side = transport_side;

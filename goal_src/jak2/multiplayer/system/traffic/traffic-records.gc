@@ -15,7 +15,7 @@
     used-count))
 
 (defun release-traffic-record! ((rec traffic-record))
-  (when (and rec (nonzero? rec))
+  (when (nonnull? rec)
     (set! (-> rec net-id) (the uint32 0))
     (set! (-> rec entity-kind) (the uint8 0))
     (set! (-> rec last-seen) 0)
@@ -23,8 +23,7 @@
     (set! (-> rec state-id) (the uint8 0))
     (set! (-> rec aux-state) MP_INVALID_PLAYER_ID)
     (set! (-> rec last-attack-source-player-id) MP_INVALID_PLAYER_ID)
-    (set! (-> rec animation-profile) (the uint32 0))
-    (set! (-> rec last-applied-animation-profile) (the uint32 0))
+    (set! (-> rec travel-speed) (the uint8 0))
     (set! (-> rec last-attack-id) (the uint32 0))
     (set! (-> rec last-local-attack-id) (the uint32 0))
     (set! (-> rec last-local-attack-time) 0)

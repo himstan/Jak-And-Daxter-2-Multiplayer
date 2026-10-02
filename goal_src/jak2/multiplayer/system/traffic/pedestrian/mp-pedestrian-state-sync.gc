@@ -57,7 +57,10 @@
   (mp-actor-state-retry-ready? (-> rec last-state-bump-time)))
 
 (defun pedestrian-replica-locked? ((this citizen))
-  (and (not *mp-traffic-local-authoritative?*) (nonzero? (-> this net-id)) (get-traffic-record (-> this net-id))))
+  (and (nonnull? this)
+       (not *mp-traffic-local-authoritative?*)
+       (nonzero? (-> this net-id))
+       (nonnull? (get-traffic-record (-> this net-id)))))
 
 (defun mp-pedestrian-authorize-remote-trans! ((rec traffic-record) (target-state-id uint))
   (set! (-> rec authorized-trans-state-id) (the-as uint32 target-state-id))

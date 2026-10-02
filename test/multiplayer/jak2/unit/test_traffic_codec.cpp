@@ -109,7 +109,6 @@ TEST(Jak2Protocol, PedestrianRecordEncodesAndDecodesLosslessly) {
   input.state_id = 23;
   input.flags = 0x3;
   input.target_player_id = 4;
-  input.animation_profile = (14 << 8) | 5;
   input.vehicle_net_id = 777;
   input.transport_id = 888;
   input.transport_side = 1;
@@ -123,7 +122,7 @@ TEST(Jak2Protocol, PedestrianRecordEncodesAndDecodesLosslessly) {
       multiplayer::jak2::wire::PedestrianStateBatchPacket>(*bytes);
   ASSERT_TRUE(decoded_packet.has_value());
   ASSERT_EQ(decoded_packet->pedestrians.size(), 1u);
-  ASSERT_EQ(bytes->size(), 51u);
+  ASSERT_EQ(bytes->size(), 49u);
   EXPECT_EQ(std::vector<uint8_t>(bytes->begin() + 18, bytes->begin() + 22),
             (std::vector<uint8_t>{0xb1, 0xfe, 0x7f, 0xff}));
   EXPECT_EQ(decoded_packet->pedestrians[0].net_id, input.net_id);
@@ -136,7 +135,6 @@ TEST(Jak2Protocol, PedestrianRecordEncodesAndDecodesLosslessly) {
     EXPECT_NEAR(decoded_packet->pedestrians[0].quaternion[component], input.quaternion[component],
                 multiplayer::platform::wire::kQuaternionResolution / 2.0f);
   }
-  EXPECT_EQ(decoded_packet->pedestrians[0].animation_profile, input.animation_profile);
   multiplayer::jak2::core::TrafficSnapshot snapshot;
   multiplayer::jak2::wire::from_packet(*decoded_packet, snapshot);
   ASSERT_EQ(snapshot.pedestrians.size(), 1u);
@@ -168,7 +166,7 @@ TEST(Jak2Protocol, PedestrianAppearancePreservesEveryScaleCodeWithoutGrowingPack
       const auto bytes =
           platform::wire::encode_packet(jak2::wire::to_pedestrian_state_batch_packet(snapshot));
       ASSERT_TRUE(bytes);
-      ASSERT_EQ(bytes->size(), 51u);
+      ASSERT_EQ(bytes->size(), 49u);
       EXPECT_EQ((*bytes)[21], width | (height << 4));
       const auto decoded =
           platform::wire::decode_packet<jak2::wire::PedestrianStateBatchPacket>(*bytes);

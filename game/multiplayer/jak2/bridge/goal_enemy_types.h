@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+constexpr float kPedestrianTravelSpeedResolution = 512.0f;
+
 #pragma pack(push, 1)
 struct MPReplicationEnemyStateGOAL {
   float position[4];
@@ -21,7 +23,6 @@ struct MPReplicationPedestrianStateGOAL {
   float quaternion[4];
   uint32_t net_id;
   int32_t hp;
-  uint32_t animation_profile;
   uint32_t vehicle_net_id;
   uint32_t transport_id;
   uint32_t appearance_mask;
@@ -31,8 +32,9 @@ struct MPReplicationPedestrianStateGOAL {
   uint8_t flags;
   uint8_t target_player_id;
   uint8_t transport_side;
+  uint8_t travel_speed;
 };
 #pragma pack(pop)
 
 static_assert(sizeof(MPReplicationEnemyStateGOAL) == 64);
-static_assert(sizeof(MPReplicationPedestrianStateGOAL) == 63);
+static_assert(sizeof(MPReplicationPedestrianStateGOAL) == 60);

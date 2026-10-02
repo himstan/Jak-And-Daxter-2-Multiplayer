@@ -4,6 +4,7 @@
 (define-extern mp-enemy-current-battle-owner (function enemy int))
 (define-extern mp-enemy-local-player-pos (function vector))
 (define-extern mp-enemy-request-authority! (function mp-enemy-auth-record uint none))
+(define-extern pedestrian-replica-locked? (function citizen object))
 
 (defconstant MP_ENEMY_COMBAT_AUTHORITY_DISTANCE (meters 100.0))
 
@@ -271,6 +272,12 @@
     #f))
 
 (defun mp-process-allow-local-state-transition? ((proc process))
+  (when (and (nonnull? proc)
+             (type? proc citizen)
+             (pedestrian-replica-locked? (the-as citizen proc))
+             (not (logtest? (-> (the-as enemy proc) enemy-flags) (enemy-flag stop-syncing)))
+             (not (is-enemy-in-pausable-state? (the-as enemy proc))))
+    (return #f))
   (if (and proc (nonzero? proc) (logtest? (-> proc mask) (process-mask enemy)) (type? proc enemy))
     (mp-enemy-allow-local-state-transition? (the-as enemy proc))
     #t))

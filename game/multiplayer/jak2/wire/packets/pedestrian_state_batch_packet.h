@@ -21,7 +21,6 @@ struct PedestrianStateRecord {
   uint32_t state_id = 0;
   uint8_t flags = 0;
   uint8_t target_player_id = kWireInvalidPlayerId;
-  uint16_t animation_profile = 0;
   uint32_t vehicle_net_id = 0;
   uint32_t transport_id = 0;
   uint8_t transport_side = 0;
@@ -36,7 +35,7 @@ struct PedestrianStateBatchPacket
       .priority = platform::MessagePriority::BULK,
       .cadence = platform::CadenceMode::PERIODIC,
       .interval_ms = 66,
-      .maximum_payload_bytes = 4877};
+      .maximum_payload_bytes = 4621};
 
   uint32_t sample_time_ms = 0;
   uint32_t authority_revision = 0;
@@ -58,7 +57,6 @@ bool serialize_pedestrian_state_record(Stream& stream, RecordT&& pedestrian) {
          platform::wire::serialize_uint_bits(stream, pedestrian.state_id, 6) &&
          platform::wire::serialize_uint_bits(stream, pedestrian.flags, 2) &&
          platform::wire::serialize_uint_bits(stream, pedestrian.target_player_id, 4) &&
-         platform::wire::serialize_u16(stream, pedestrian.animation_profile) &&
          platform::wire::serialize_u32(stream, pedestrian.vehicle_net_id) &&
          platform::wire::serialize_u32(stream, pedestrian.transport_id) &&
          platform::wire::serialize_u8(stream, pedestrian.transport_side) &&

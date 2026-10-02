@@ -1,6 +1,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstring>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -135,7 +136,7 @@ TEST(Jak2GoalBridge, PedestrianAppearanceLayoutMatchesGoal) {
   EXPECT_FALSE(height.sign_extend);
   load("multiplayer/system/traffic/mp-traffic-types.gc", "mp-pedestrian-flags");
   load("multiplayer/system/traffic/mp-traffic-types.gc", "mp-pedestrian-state");
-  EXPECT_EQ(types.lookup_type("mp-pedestrian-state")->get_size_in_memory(), 63u);
+  EXPECT_EQ(types.lookup_type("mp-pedestrian-state")->get_size_in_memory(), 60u);
   load("multiplayer/data/mp-replication-h.gc", "mp-replication-pedestrian-state");
   EXPECT_EQ(types.lookup_type("mp-replication-pedestrian-state")->get_size_in_memory(),
             sizeof(MPReplicationPedestrianStateGOAL));
@@ -144,6 +145,131 @@ TEST(Jak2GoalBridge, PedestrianAppearanceLayoutMatchesGoal) {
       offsetof(MPReplicationPedestrianStateGOAL, appearance_mask));
   EXPECT_EQ(types.lookup_field_info("mp-replication-pedestrian-state", "state-id").field.offset(),
             offsetof(MPReplicationPedestrianStateGOAL, state_id));
+  EXPECT_EQ(
+      types.lookup_field_info("mp-replication-pedestrian-state", "travel-speed").field.offset(),
+      offsetof(MPReplicationPedestrianStateGOAL, travel_speed));
+  EXPECT_EQ(types.lookup_field_info("mp-pedestrian-state", "travel-speed").field.offset(), 59);
+  const auto source =
+      reader.read_from_file({std::string(MP_SOURCE_ROOT) +
+                             "/goal_src/jak2/multiplayer/system/traffic/mp-traffic-types.gc"});
+  bool found_resolution = false;
+  goos::for_each_in_list(source.as_pair()->cdr, [&](const goos::Object& form) {
+    if (!form.is_pair() || !form.as_pair()->car.is_symbol("defconstant"))
+      return;
+    const auto& definition = form.as_pair()->cdr;
+    if (definition.as_pair()->car.is_symbol("PEDESTRIAN_TRAVEL_SPEED_RESOLUTION")) {
+      EXPECT_FLOAT_EQ(definition.as_pair()->cdr.as_pair()->car.as_float(),
+                      kPedestrianTravelSpeedResolution);
+      found_resolution = true;
+    }
+  });
+  EXPECT_TRUE(found_resolution);
+}
+
+TEST(Jak2GoalBridge, PedestrianAnimationChoicesIgnoreSpawnOrderAndSharedRandomness) {
+  ASSERT_TRUE(file_util::setup_project_path(fs::path(MP_SOURCE_ROOT), true));
+  goos::Interpreter interpreter;
+  const auto environment = interpreter.global_environment.as_env_ptr();
+  uint32_t net_id = 0;
+  uint8_t object_type = 0;
+  int random_calls = 0;
+  interpreter.register_form("->", [&](const auto&, auto& args, const auto&) {
+    return goos::Object::make_integer(args.unnamed.at(1).is_symbol("net-id") ? net_id
+                                                                             : object_type);
+  });
+  interpreter.register_form(
+      "nonnull?", [&](const auto&, auto&, const auto&) { return interpreter.intern("#t"); });
+  interpreter.register_form("zero?", [&](const auto&, auto& args, const auto& env) {
+    interpreter.eval_args(&args, env);
+    return interpreter.intern(args.unnamed.at(0).as_int() == 0 ? "#t" : "#f");
+  });
+  for (const auto* cast : {"the", "the-as"}) {
+    interpreter.register_form(cast, [&](const auto&, auto& args, const auto& env) {
+      return interpreter.eval(args.unnamed.at(1), env);
+    });
+  }
+  for (const std::string operation : {"logxor", "logand", "shr", "mod"}) {
+    interpreter.register_form(operation, [&, operation](const auto&, auto& args, const auto& env) {
+      interpreter.eval_args(&args, env);
+      int64_t result = args.unnamed.at(0).as_int();
+      for (size_t index = 1; index < args.unnamed.size(); ++index) {
+        const auto value = args.unnamed[index].as_int();
+        if (operation == "logxor")
+          result ^= value;
+        else if (operation == "logand")
+          result &= value;
+        else if (operation == "shr")
+          result = static_cast<uint64_t>(result) >> value;
+        else
+          result %= value;
+      }
+      return goos::Object::make_integer(result);
+    });
+  }
+  interpreter.register_form("rnd-int-count", [&](const auto&, auto&, const auto&) {
+    ++random_calls;
+    return goos::Object::make_integer(2);
+  });
+  const auto evaluate = [&](const std::string& source) {
+    return interpreter.eval(interpreter.reader.read_from_string(source), environment);
+  };
+  const auto source = interpreter.reader.read_from_file(
+      {std::string(MP_SOURCE_ROOT) +
+       "/goal_src/jak2/multiplayer/system/traffic/pedestrian/mp-pedestrian-animation-sync.gc"});
+  bool found = false;
+  goos::for_each_in_list(source.as_pair()->cdr, [&](const goos::Object& form) {
+    if (!form.is_pair() || !form.as_pair()->car.is_symbol("defun"))
+      return;
+    const auto& definition = form.as_pair()->cdr;
+    if (!definition.as_pair()->car.is_symbol("get-pedestrian-animation-choice"))
+      return;
+    std::string lambda = "(define get-choice (lambda (ped salt count)";
+    goos::for_each_in_list(definition.as_pair()->cdr.as_pair()->cdr,
+                           [&](const auto& body) { lambda += " " + body.print(); });
+    evaluate(lambda + "))");
+    found = true;
+  });
+  ASSERT_TRUE(found);
+  const auto declarations = interpreter.reader.read_from_file(
+      {std::string(MP_SOURCE_ROOT) +
+       "/goal_src/jak2/multiplayer/system/traffic/mp-traffic-types.gc"});
+  std::vector<std::string> salts;
+  goos::for_each_in_list(declarations.as_pair()->cdr, [&](const goos::Object& form) {
+    if (!form.is_pair() || !form.as_pair()->car.is_symbol("defconstant"))
+      return;
+    const auto& definition = form.as_pair()->cdr;
+    const auto name = definition.as_pair()->car.print();
+    if (name.starts_with("PEDESTRIAN_") && name.ends_with("_ANIMATION_SEED")) {
+      evaluate("(define " + name + " " + definition.as_pair()->cdr.as_pair()->car.print() + ")");
+      salts.push_back(name);
+    }
+  });
+  ASSERT_EQ(salts.size(), 3u);
+  const auto choice = [&](const std::string& salt) {
+    return evaluate("(get-choice 1 " + salt + " 3)").as_int();
+  };
+  for (uint8_t type : {1, 2, 3, 4, 5}) {
+    object_type = type;
+    for (const auto& salt : salts) {
+      std::array<bool, 3> seen = {};
+      for (uint32_t id = 1; id <= 128; ++id) {
+        net_id = 0x11000000u + id;
+        const auto expected = choice(salt);
+        ASSERT_GE(expected, 0);
+        ASSERT_LT(expected, 3);
+        seen[expected] = true;
+        net_id = 0x12000000u + (129 - id);
+        choice(salt);
+        net_id = 0x11000000u + id;
+        EXPECT_EQ(choice(salt), expected);
+      }
+      EXPECT_TRUE(seen[0] && seen[1] && seen[2]);
+    }
+  }
+  EXPECT_EQ(random_calls, 0);
+  net_id = 0;
+  EXPECT_EQ(choice(salts[0]), 2);
+  EXPECT_EQ(random_calls, 1);
 }
 
 TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
@@ -306,7 +432,7 @@ TEST(Jak2GoalBridge, DirectionalAggregateHasCanonicalCompactAbi) {
   EXPECT_EQ(sizeof(MPReplicationPlayerVehicleGOAL), 94u);
   EXPECT_EQ(sizeof(MPReplicationPlayerGOAL), 544u);
   EXPECT_EQ(sizeof(MPReplicationEnemySetGOAL), 57360u);
-  EXPECT_EQ(sizeof(MPReplicationPedestrianStateGOAL), 63u);
+  EXPECT_EQ(sizeof(MPReplicationPedestrianStateGOAL), 60u);
   EXPECT_EQ(sizeof(MPReplicationTrafficSetGOAL), 13328u);
   EXPECT_EQ(sizeof(MPReplicationBootstrapStateGOAL), 16454u);
   EXPECT_EQ(sizeof(MPReplicationFrameGOAL), 92496u);
@@ -500,6 +626,38 @@ TEST(Jak2GoalBridge, ExchangePublishesTargetsAndPreservesLocalHalf) {
   ASSERT_TRUE(local);
   ASSERT_EQ(local->pedestrians.pedestrians.size(), 1u);
   EXPECT_EQ(local->pedestrians.pedestrians[0].appearance_mask, 0xff7ffeb1u);
+}
+
+TEST(Jak2GoalBridge, PedestrianAnimationSpeedUsesHorizontalPresentationVelocity) {
+  using namespace multiplayer::jak2::application;
+  GoalMemoryFixture memory;
+  auto& state = replication_state(memory);
+  ReplicationMailbox mailbox;
+  const float unit = kGoalUnitsPerMeter;
+  const float invalid = std::numeric_limits<float>::quiet_NaN();
+  struct Sample {
+    std::array<float, 3> velocity;
+    bool valid;
+    uint8_t expected;
+  };
+  const Sample samples[] = {
+      {{0.0f, 0.0f, 0.0f}, true, 0},
+      {{2.0f * unit, 0.0f, 0.0f}, true, 16},
+      {{-6.0f * unit, 100.0f * unit, 8.0f * unit}, true, 80},
+      {{100.0f * unit, 0.0f, 0.0f}, true, 255},
+      {{10.0f * unit, 0.0f, 0.0f}, false, 0},
+      {{invalid, 0.0f, 0.0f}, true, 0},
+  };
+  for (const auto& sample : samples) {
+    auto frame = std::make_unique<RemoteReplicationFrame>();
+    frame->selected_traffic.sequence = 1;
+    frame->selected_traffic.pedestrians.push_back({.net_id = 1});
+    frame->pedestrian_targets.push_back({.velocity = sample.velocity, .valid = sample.valid});
+    mailbox.publish_remote_frame(std::move(frame));
+    ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
+    ASSERT_EQ(state.remote.traffic.pedestrian_count, 1u);
+    EXPECT_EQ(state.remote.traffic.pedestrians[0].value.travel_speed, sample.expected);
+  }
 }
 
 TEST(Jak2GoalBridge, EmptyRemoteAirlockSnapshotClearsPreviousGoalRecords) {

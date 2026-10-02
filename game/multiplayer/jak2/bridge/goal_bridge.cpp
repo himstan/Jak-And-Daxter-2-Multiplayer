@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <type_traits>
 #include <vector>
@@ -232,7 +233,6 @@ core::PedestrianState read_pedestrian(const MPReplicationPedestrianStateGOAL& so
   result.state_id = source.state_id;
   result.hit_points = source.hp;
   result.target_player_id = source.target_player_id;
-  result.animation_profile = source.animation_profile;
   result.vehicle_net_id = source.vehicle_net_id;
   result.transport_id = source.transport_id;
   result.transport_side = source.transport_side;
@@ -520,12 +520,18 @@ void write_pedestrian(const core::PedestrianState& source,
   destination.state_id = source.state_id;
   destination.hp = source.hit_points;
   destination.target_player_id = source.target_player_id;
-  destination.animation_profile = source.animation_profile;
   destination.vehicle_net_id = source.vehicle_net_id;
   destination.transport_id = source.transport_id;
   destination.transport_side = source.transport_side;
   destination.flags = source.state_flags;
   destination.level_id = source.level_id;
+  if (target.valid) {
+    const float speed = std::hypot(target.velocity[0], target.velocity[2]);
+    if (std::isfinite(speed)) {
+      destination.travel_speed = static_cast<uint8_t>(
+          std::lround(std::clamp(speed / kPedestrianTravelSpeedResolution, 0.0f, 255.0f)));
+    }
+  }
   const auto& position = target.valid ? target.position : source.position;
   const auto& quaternion = target.valid ? target.quaternion : source.quaternion;
   std::ranges::copy(position.begin(), position.end(), std::begin(destination.position));

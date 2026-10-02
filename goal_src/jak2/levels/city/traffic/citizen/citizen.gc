@@ -5,6 +5,8 @@
 ;; name in dgo: citizen
 ;; dgos: CWI
 
+(define-extern get-pedestrian-animation-choice (function citizen uint int int))
+(define-extern get-pedestrian-travel-speed (function citizen float))
 (define-extern mp-pedestrian-run-common-post-pre! (function citizen none))
 (define-extern mp-pedestrian-run-common-post-post! (function citizen none))
 (define-extern mp-pedestrian-handle-event! (function citizen process int symbol event-message-block symbol))
@@ -359,6 +361,11 @@
                (when (nonzero? (-> this net-id))
                  (set! *citizen-prng-seed* (the-as uint (+ (the-as int (-> this net-id)) (the-as int (-> this traffic-type)))))
                  )
+               (when (nonnull? this s5-1)
+                 (if (zero? (-> this net-id))
+                   (mp-traffic-ensure-process-net-id! this)
+                   (init-travel-animations! this))
+                 (set! (-> s5-1 net-id) (-> this net-id)))
                (citizen-init! this)
                (enemy-method-127 this 40960.0 40960.0 #t (the-as collide-spec (-> this gnd-collide)))
                (set! (-> this gnd-height) (-> this root gspot-pos y))
@@ -738,13 +745,17 @@
     (set! *citizen-prng-seed* (the-as uint (+ (the-as int (-> arg0 net-id)) (the-as int (-> arg0 object-type)))))
     )
 
+  (when (nonnull? self arg0)
+    (set! (-> self traffic-type) (-> arg0 object-type))
+    (set! (-> self net-id) (-> arg0 net-id)))
   (init-enemy! self)
   (set! (-> self traffic-id) (the-as int (-> arg0 id)))
-  (set! (-> self traffic-type) (-> arg0 object-type))
-  (set! (-> self net-id) (-> arg0 net-id))
   (go-inactive self)
   (none)
   )
+
+(defmethod init-travel-animations! ((this citizen))
+  (none))
 
 (defmethod get-run-anim ((this citizen))
   (-> this anim-run)
@@ -780,14 +791,7 @@
       )
     )
   (until #f
-    (let ((f30-0 0.0))
-      (when (and (-> self nav) (nonzero? (-> self nav)))
-        (let ((v1-nav-state (-> self nav state)))
-          (when (and v1-nav-state (nonzero? v1-nav-state))
-            (set! f30-0 (-> v1-nav-state speed))
-            )
-          )
-        )
+    (let ((f30-0 (get-pedestrian-travel-speed self)))
       (lerp-scale 0.0 1.0 f30-0 (-> self speed-walk) (-> self speed-run))
       (set! f28-0
             (cond
