@@ -7,6 +7,25 @@
 
 ;; DECOMP BEGINS
 
+(defun draw-race-finish-wait! ((this hud-race-timer))
+  (let ((sync *mp-race-sync-state*)
+        (player-id (mp-local-player-id)))
+    (when (and (nonnull? this sync *common-text*)
+               (not (hidden? this))
+               (stadium-race-finish-timer-active?)
+               (< player-id (the uint MP_MAX_PLAYERS))
+               (logtest? (-> sync player-mask) (mp-race-player-bit player-id))
+               (= (-> sync player-status player-id) MP_RACE_STATUS_FINISHED))
+      (let ((font (new 'stack 'font-context *font-default-matrix* 32 120 0.0
+                       (font-color white) (font-flags shadow kerning middle large))))
+        (+! (-> font origin y) 80.0)
+        (set-width! font 448)
+        (set-height! font 64)
+        (set-scale! font 0.55)
+        (print-game-text (lookup-text! *common-text* (text-id race-waiting-for-finish) #f)
+                         font #f 44 (bucket-id progress)))))
+  (none))
+
 (defmethod draw ((this hud-race-timer))
   (set-hud-piece-position! (-> this sprites 0) 0 (the int (+ 20.0 (* -100.0 (-> this offset)))))
   (format (clear (-> this strings 0 text)) "~2,'0D:" (-> this values 0 current))
@@ -17,6 +36,7 @@
   (set-as-offset-from! (the-as hud-sprite (-> this strings 2 pos)) (the-as vector4w (-> this strings 1 pos)) 28 0)
   (set-as-offset-from! (-> this sprites 1) (-> this sprites 0 pos) 128 0)
   ((method-of-type hud draw) this)
+  (draw-race-finish-wait! this)
   0
   (none))
 
@@ -88,7 +108,9 @@
   (none))
 
 (defmethod draw ((this hud-race-turbo-counter))
-  (set-hud-piece-position! (-> this sprites 0) 224 (the int (+ 25.0 (* -100.0 (-> this offset)))))
+  (set-hud-piece-position! (-> this sprites 0) 224
+                          (the int (+ (if (stadium-race-finish-timer-active?) 75.0 25.0)
+                                      (* -100.0 (-> this offset)))))
   (set-as-offset-from! (-> this sprites 1) (-> this sprites 0 pos) 0 0)
   (set-as-offset-from! (-> this sprites 2) (-> this sprites 1 pos) 32 0)
   (set-as-offset-from! (-> this sprites 3) (-> this sprites 1 pos) 32 0)
@@ -118,7 +140,12 @@
 (defmethod init-callback ((this hud-race-turbo-counter))
   (set! (-> this level) (level-get *level* 'stadium))
   (set! (-> this gui-id)
-        (add-process *gui-control* this (gui-channel hud-upper-center) (gui-action hidden) (-> this name) 81920.0 0))
+        (add-process *gui-control* this
+                     (if (and (mp-session-in-game?) (nonnull? *mp-race-sync-state*)
+                              (stadium-race? (the-as int (-> *mp-race-sync-state* race-id))))
+                       (gui-channel hud-upper-center-2)
+                       (gui-channel hud-upper-center))
+                     (gui-action hidden) (-> this name) 81920.0 0))
   (logior! (-> this flags) (hud-flags show))
   (set! (-> this sprites 0 tex) (get-texture stadiumb-hud-booster-off-01 stadium-minimap))
   (set! (-> this sprites 1 tex) (get-texture stadiumb-hud-booster-on-01 stadium-minimap))

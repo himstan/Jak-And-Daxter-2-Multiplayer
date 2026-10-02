@@ -1146,13 +1146,15 @@
           (if (mp-race-overall-success?) (go-virtual win) (go-virtual lose))))))
 
 (defun clear-task-manager-hud-timer-if-present ((manager race-manager))
+  (unless (nonnull? manager) (return (the-as none 0)))
   (let ((manager-parent (the-as task-manager (ppointer->process (-> manager parent)))))
-    (when manager-parent
-      (nonzero? manager-parent)
-      (type? manager-parent task-manager)
-      (let ((hud-timer (handle->process (-> (the-as task-manager manager-parent) hud-timer))))
+    (when (and (nonnull? manager-parent) (type? manager-parent task-manager))
+      (let ((hud-timer (handle->process-safe (-> manager-parent hud-timer))))
         (set! (-> manager-parent start-time) 0)
-        (send-event hud-timer 'hide-and-die)))))
+        (set! (-> manager-parent hud-timer) (the-as handle #f))
+        (when (nonnull? hud-timer)
+          (send-event hud-timer 'hide-and-die)))))
+  (none))
 
 (defun race-manager-force-hide-hud! ((hud-handle handle))
   (let ((hud (handle->process-safe hud-handle))) (when (and hud (nonzero? hud)) (send-event hud 'force-hide)))
@@ -1172,13 +1174,13 @@
       (race-manager-force-hide-hud! (-> self race-state hud-turbo-counter))
       (process-spawn hud-race-final-stats :init hud-init-by-other :to self)
       (set-time! (-> self state-time))
+      (clear-task-manager-hud-timer-if-present self)
       (when (logtest? (-> self race-state info flags) (race-info-flags complete-immediately))
         (when (or (not (mp-session-in-game?)) (mp-session-host?))
           (when (mp-session-in-game?)
             (mp-race-host-set-decision! MP_RACE_DECISION_COMPLETE))
           (send-event (ppointer->process (-> self parent)) 'complete)
           (sleep-code)))
-      (clear-task-manager-hud-timer-if-present self)
       ;; og:preserve-this auto-save when a race is won
       (#when PC_PORT
         (when (not (mp-session-in-game?))
@@ -1259,6 +1261,11 @@
       (race-manager-force-hide-hud! (-> self race-state hud-turbo-counter))
       (process-spawn hud-race-final-stats :init hud-init-by-other :to self)
       (set-time! (-> self state-time))
+      (when (and (nonnull? *mp-race-sync-state*)
+                 (mp-session-in-game?)
+                 (stadium-race? (the-as int (-> *mp-race-sync-state* race-id)))
+                 (nonzero? (-> *mp-race-sync-state* finish-deadline)))
+        (clear-task-manager-hud-timer-if-present self))
       (until #f
         (when (and (mp-session-in-game?) (mp-session-client?) (!= (mp-race-decision) MP_RACE_DECISION_NONE))
           (stop-speech self)
@@ -1320,7 +1327,12 @@
 
 (defmethod deactivate ((this race-manager))
   "Make a process dead, clean it up, remove it from the active pool, and return to dead pool."
-  (when (and (-> this race-state) (-> this race-state info))
+  (when (and (nonnull? this *mp-race-sync-state*)
+             (mp-session-in-game?)
+             (stadium-race? (the-as int (-> *mp-race-sync-state* race-id)))
+             (nonzero? (-> *mp-race-sync-state* finish-deadline)))
+    (clear-task-manager-hud-timer-if-present this))
+  (when (nonnull? this (-> this race-state) (-> this race-state info))
     (set! (-> this race-state info manager) (the-as handle #f)))
   (mp-race-manager-end!)
   (mp-race-clear-vehicle-handles!)
