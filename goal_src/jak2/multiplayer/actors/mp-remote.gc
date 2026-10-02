@@ -46,12 +46,14 @@
                        0))))))
   (none))
 
-(defun get-player-replica-distance-from-local ((record mp-player-record))
+(defun get-player-replica-distance-from-focus ((record mp-player-record))
   (let ((presentation-position (mp-player-record-presentation-position record)))
-    (if (and (nonnull? record presentation-position *target* (-> *target* control))
-             (nonzero? (-> record connection state-cached?)))
-      (vector-vector-distance (-> *target* control trans) presentation-position)
-      (meters 1000000.0))))
+    (when (and (nonnull? record presentation-position *target* (-> *target* control))
+               (nonzero? (-> record connection state-cached?)))
+      (let ((focus-position (mp-region-target-pos)))
+        (when (nonnull? focus-position)
+          (return (vector-vector-distance focus-position presentation-position))))))
+  (meters 1000000.0))
 
 (defun player-replica-cull-vehicle! ((record mp-player-record))
   (when (and record (nonzero? record))
@@ -85,7 +87,7 @@
           (when (player-replica-valid? (mp-player-record-target record))
             (player-replica-deactivate! record))
           (return #f)))))
-  (let ((distance (get-player-replica-distance-from-local record))
+  (let ((distance (get-player-replica-distance-from-focus record))
         (cull-suppressed? (mp-culling-suppressed-for-player? record)))
     (cond
       ((and (not cull-suppressed?) (> distance (meters 250.0)))
