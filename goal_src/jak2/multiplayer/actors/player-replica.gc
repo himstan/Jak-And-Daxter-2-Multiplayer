@@ -711,13 +711,10 @@
   (> (fabs (- (-> record-pos y) (-> cur-pos y))) (meters 10.0)))
 
 (defun player-replica-apply-transform-correction! ((proc target) (record target-record) (cur-state symbol))
-  (when (and proc
-             (nonzero? proc)
-             record
-             (nonzero? record)
-             (-> proc control)
-             (nonzero? (-> proc control))
-             (not (focus-test? proc pilot tube flut mech pole)))
+  (when (and (nonnull? proc record (-> proc control))
+             (not (focus-test? proc pilot tube flut mech pole))
+             (!= cur-state 'target-indax-jump-on)
+             (!= cur-state 'target-ride-along))
     (player-replica-ensure-can-ride! proc cur-state)
     (let* ((control (-> proc control))
            (standard-edge-grab? (player-replica-standard-edge-grab-active? proc cur-state))

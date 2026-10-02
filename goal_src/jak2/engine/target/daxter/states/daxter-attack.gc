@@ -2,9 +2,9 @@
 (in-package goal)
 
 (defbehavior target-indax-ground-attack-event-handler target ((proc process)
-                                                             (argc int)
-                                                             (message symbol)
-                                                             (block event-message-block))
+                                                              (argc int)
+                                                              (message symbol)
+                                                              (block event-message-block))
   (when (nonnull? self (-> self control) (-> self gun) (-> self state) block)
     (case message
       (('hit)
@@ -15,10 +15,11 @@
        (target-indax-dangerous-event-handler proc argc message block))
       (('gun-combo)
        (when (-> block param 0)
-         (forward-up-nopitch->quaternion
-           (-> self control dir-targ)
-           (vector-! (new 'stack-no-clear 'vector) (-> self gun track-trans) (-> self control trans))
-           (vector-y-quaternion! (new-stack-vector0) (-> self control dir-targ)))
+         (forward-up-nopitch->quaternion (-> self control dir-targ)
+                                         (vector-! (new 'stack-no-clear 'vector)
+                                                   (-> self gun track-trans)
+                                                   (-> self control trans))
+                                         (vector-y-quaternion! (new-stack-vector0) (-> self control dir-targ)))
          (set-quaternion! (-> self control) (-> self control dir-targ))
          (go target-indax-stance))
        #t)

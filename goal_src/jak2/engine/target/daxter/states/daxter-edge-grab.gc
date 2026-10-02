@@ -82,7 +82,9 @@
                (vector-float*! (-> self control rider-last-move) s4-1 (-> self clock frames-per-second))
                (set-time! (-> self control rider-time))
                (vector+! grab-pos grab-pos (-> self control cspace-offset))
-               (if (player-replica? self) (set! (-> self control trans quad) (-> grab-pos quad)) (move-to-point! (-> self control) grab-pos)))))
+               (if (player-replica? self)
+                 (set! (-> self control trans quad) (-> grab-pos quad))
+                 (move-to-point! (-> self control) grab-pos)))))
           (else
            (let ((a1-8 (new 'stack-no-clear 'vector)))
              (vector-! a1-8 (-> s5-0 center-hold) (-> self control ctrl-to-hands-offset))

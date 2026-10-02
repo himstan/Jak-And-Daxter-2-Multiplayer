@@ -466,43 +466,31 @@
   (daxter-gun-update-eco-aura!)
   (none))
 
-(defun has-no-daxter-riding-on ((jak-record mp-player-record))
-  (let ((jak-target (mp-player-record-target jak-record)))
-    (return (the-as symbol
-                    (and jak-target
-                         (nonzero? jak-target)
-                         (= MP_INVALID_PLAYER_ID (-> jak-target riding-along-player-id))))))
-  #f)
+(defbehavior draw-ride-along-prompt! target ((message text-id))
+  (when (and (not-player-replica? self) (mp-target-daxter? self)
+             (not (movie?)) (not (real-movie?)) (not (nonnull? *progress-process*))
+             (nonnull? *font-default-matrix* *common-text*))
+    (let ((context (new 'stack 'font-context *font-default-matrix* 32 320 0.0
+                        (font-color default) (font-flags shadow kerning large))))
+      (when (nonnull? context)
+        (set-width! context 440)
+        (set-height! context 80)
+        (set-scale! context 0.5)
+        (print-game-text (lookup-text! *common-text* message #f) context #f 44 (bucket-id progress)))))
+  (none))
 
 (defbehavior target-indax-ride-along-check target ()
-  (let ((jak-record (mp-jak-record-for self)))
-    (when (and jak-record (nonzero? jak-record) (has-no-daxter-riding-on jak-record))
-      (let ((remote-pos (new 'stack-no-clear 'vector)))
-        (vector-copy! remote-pos (-> jak-record transform position))
-        (set! (-> remote-pos w) 1.0)
-        (let ((dist (vector-vector-distance (-> self control trans) remote-pos)))
-          (when (and (< dist (meters 2.0)) (not (real-movie?)) (zero? (-> jak-record action scene-state)))
-            (let ((s3-1 (new 'stack
-                             'font-context
-                             *font-default-matrix*
-                             32
-                             320
-                             0.0
-                             (font-color default)
-                             (font-flags shadow kerning))))
-              (set-width! s3-1 440)
-              (set-height! s3-1 80)
-              (set-scale! s3-1 0.5)
-              (set! (-> s3-1 flags) (font-flags shadow kerning large))
-              (when (and (not-player-replica? self)
-                         (mp-target-daxter? self)
-                         (not (and *progress-process* (nonzero? *progress-process*))))
-                (print-game-text (lookup-text! *common-text* (text-id press-triangle-to-hop-on) #f)
-                                 s3-1
-                                 #f
-                                 44
-                                 (bucket-id progress))))
-            (if (recently-pressed? triangle) (go target-indax-jump-on (-> jak-record identity player-id))))))))
+  (when (nonnull? (-> self control))
+    (let* ((jak-record (mp-jak-record-for self))
+           (jak-target (mp-player-record-target jak-record)))
+      (when (and (nonnull? jak-record jak-target (-> jak-target control))
+                 (not (focus-test? jak-target dead inactive))
+                 (not (nonnull? (get-jak-rider jak-target)))
+                 (< (vector-vector-distance (-> self control trans) (-> jak-target control trans)) (meters 2.0))
+                 (not (real-movie?)) (zero? (-> jak-record action scene-state)))
+        (draw-ride-along-prompt! (text-id press-triangle-to-hop-on))
+        (when (and (not-player-replica? self) (recently-pressed? triangle))
+          (go target-indax-jump-on (-> jak-record identity player-id))))))
   (none))
 
 (defbehavior target-indax-hit-setup-anim target ((arg0 attack-info))
