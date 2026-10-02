@@ -277,8 +277,6 @@
         (set! (-> rec entity-kind) (the uint8 0))
         (set! (-> rec last-applied-state-id) (the uint32 0))
         (set! (-> rec last-state-bump-time) 0)
-        (set! (-> rec authorized-trans-state-id) (the uint32 0))
-        (set! (-> rec authorized-trans-frame) 0)
         (set! (-> rec last-correction-time) (the uint64 0))
         (set-vector! (-> rec linvel) 0.0 0.0 0.0 0.0)
         (set-vector! (-> rec angvel) 0.0 0.0 0.0 0.0)))

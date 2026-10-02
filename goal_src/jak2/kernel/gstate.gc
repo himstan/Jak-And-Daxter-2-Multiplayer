@@ -52,6 +52,7 @@ It type checks the arguments for the entry function.
 ;; DECOMP BEGINS
 
 (define-extern mp-process-allow-local-state-transition? (function process symbol))
+(define-extern pedestrian-state-entry-allowed? (function process symbol symbol))
 (define-extern mp-handle-engine-event! (function process-tree event-message-block none))
 
 (defmacro go (next-state &rest args)
@@ -345,10 +346,24 @@ It type checks the arguments for the entry function.
   this
   )
 
-(define-extern enter-state (function object object object object object object object))
-(defun enter-state (arg0 arg1 arg2 arg3 arg4 arg5)
+(defun state-entry-ready? ()
+  (with-pp
+    (when (and (nonnull? pp (-> pp next-state) pedestrian-state-entry-allowed?)
+               (not (pedestrian-state-entry-allowed? pp (-> pp next-state name))))
+      (set! (-> pp next-state) (-> pp state))
+      (when (and (nonnull? *kernel-context*)
+                 (= (-> *kernel-context* current-process) pp)
+                 (= (-> pp main-thread) (-> pp top-thread)))
+        (until #f
+          (suspend)))
+      (return #f))
+    #t))
+
+(defun-recursive enter-state object ((arg0 object) (arg1 object) (arg2 object) (arg3 object) (arg4 object) (arg5 object))
   "Make the process stored in pp enter the state in pp next-state"
   (with-pp
+    (unless (state-entry-ready?)
+      (return #f))
     (if (zero? (-> pp next-state))
       (break!))
     ;; unsleep us

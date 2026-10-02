@@ -29,9 +29,7 @@
     (set! (-> rec last-local-attack-time) 0)
     (set! (-> rec last-correction-time) (the uint64 0))
     (set! (-> rec last-applied-state-id) (the uint32 0))
-    (set! (-> rec last-state-bump-time) 0)
-    (set! (-> rec authorized-trans-state-id) (the uint32 0))
-    (set! (-> rec authorized-trans-frame) 0))
+    (set! (-> rec last-state-bump-time) 0))
   (none))
 
 (defun get-traffic-record ((net-id uint))
