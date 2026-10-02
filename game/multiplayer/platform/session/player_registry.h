@@ -9,13 +9,17 @@
 namespace multiplayer::platform {
 
 struct PlayerSession {
+  static constexpr uint8_t kControlBudgetMaximum = 32;
+
   ConnectionId connection_id = 0;
   PlayerId player_id = kInvalidPlayerId;
   PlayerCharacter character = PlayerCharacter::UNKNOWN;
   PlayerProfile profile;
   std::vector<uint8_t> bootstrap_payload;
   uint64_t last_bootstrap_send_time = 0;
+  uint64_t control_budget_updated_ms = 0;
   uint32_t bootstrap_generation = 0;
+  uint8_t control_budget = kControlBudgetMaximum;
   bool accepted = false;
   bool identity_ready = false;
   bool bootstrap_pending = false;

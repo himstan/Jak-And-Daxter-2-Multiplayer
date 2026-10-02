@@ -236,21 +236,33 @@ TEST(PlatformDiscovery, FilteringRejectsWrongIdentityGamePortAndCapacity) {
                                                                  .game_id = "jak3",
                                                                  .compatibility_identity = "v1.2.3",
                                                                  .room_code = "ABC123"};
-  EXPECT_TRUE(multiplayer::platform::discovery_advertisement_matches(config, advertisement));
+  EXPECT_TRUE(
+      multiplayer::platform::discovery_advertisement_matches(config, advertisement, "127.0.0.1"));
+  EXPECT_FALSE(
+      multiplayer::platform::discovery_advertisement_matches(config, advertisement, "127.0.0.2"));
+  auto lan = config;
+  lan.directed_address.clear();
+  EXPECT_TRUE(
+      multiplayer::platform::discovery_advertisement_matches(lan, advertisement, "127.0.0.2"));
   advertisement.game_id = "jak2";
-  EXPECT_FALSE(multiplayer::platform::discovery_advertisement_matches(config, advertisement));
+  EXPECT_FALSE(
+      multiplayer::platform::discovery_advertisement_matches(config, advertisement, "127.0.0.1"));
   advertisement.game_id = "jak3";
   advertisement.compatibility_identity = "v1.2.4";
-  EXPECT_FALSE(multiplayer::platform::discovery_advertisement_matches(config, advertisement));
+  EXPECT_FALSE(
+      multiplayer::platform::discovery_advertisement_matches(config, advertisement, "127.0.0.1"));
   advertisement.compatibility_identity = "v1.2.3";
   ++advertisement.game_port;
-  EXPECT_FALSE(multiplayer::platform::discovery_advertisement_matches(config, advertisement));
+  EXPECT_FALSE(
+      multiplayer::platform::discovery_advertisement_matches(config, advertisement, "127.0.0.1"));
   advertisement.game_port = 26210;
   advertisement.current_players = advertisement.player_limit;
-  EXPECT_FALSE(multiplayer::platform::discovery_advertisement_matches(config, advertisement));
+  EXPECT_FALSE(
+      multiplayer::platform::discovery_advertisement_matches(config, advertisement, "127.0.0.1"));
   auto include_full = config;
   include_full.include_full_sessions = true;
-  EXPECT_TRUE(multiplayer::platform::discovery_advertisement_matches(include_full, advertisement));
+  EXPECT_TRUE(multiplayer::platform::discovery_advertisement_matches(include_full, advertisement,
+                                                                     "127.0.0.1"));
 }
 
 TEST(PlatformSession, PlayerRegistryAllocatesRejectsDuplicatesAndReusesSlots) {

@@ -188,9 +188,10 @@ void EventReplicationState::reset() {
   events_.clear();
 }
 
-bool EventReplicationState::apply(const GameEventBatch& batch, const ApplyContext& context) {
+platform::PacketApplyResult EventReplicationState::apply(const GameEventBatch& batch,
+                                                         const ApplyContext& context) {
   if (batch.events.empty() || batch.events.size() > UINT8_MAX)
-    return false;
+    return platform::PacketApplyResult::REJECT;
   const PlayerId source_player_id = valid_index(context.source.authenticated_player_id, kMaxPlayers)
                                         ? context.source.authenticated_player_id
                                         : batch.events.front().source_player_id;
@@ -201,11 +202,13 @@ bool EventReplicationState::apply(const GameEventBatch& batch, const ApplyContex
                source_allows_player(context.source, event.source_player_id) &&
                event.payload_size <= event.payload.size();
       })) {
-    return false;
+    return platform::PacketApplyResult::REJECT;
   }
+  if (batch.events.size() > kMaximumQueuedEvents - events_.size())
+    return platform::PacketApplyResult::CAPACITY_EXCEEDED;
   sequences_[source_player_id] = context.sequence;
   events_.insert(events_.end(), batch.events.begin(), batch.events.end());
-  return true;
+  return platform::PacketApplyResult::ACCEPT;
 }
 
 void EventReplicationState::depart(const PlayerId player_id) {

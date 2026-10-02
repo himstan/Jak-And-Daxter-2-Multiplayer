@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <limits>
+#include <type_traits>
 
 #include "game/multiplayer/jak2/application/jak2_adapter.h"
 #include "game/multiplayer/jak2/core/validation.h"
@@ -42,8 +43,15 @@ void add_packet_handler(
       typename Handler::Hooks{
           .to_wire = convert,
           .canonicalize = canonicalize,
-          .apply = [&domain](const Model& model,
-                             const auto& context) { return domain.apply(model, context); },
+          .apply =
+              [&domain](const Model& model, const auto& context) {
+                if constexpr (const auto result = domain.apply(model, context);
+                              std::is_same_v<std::remove_cv_t<decltype(result)>, bool>)
+                  return result ? platform::PacketApplyResult::ACCEPT
+                                : platform::PacketApplyResult::REJECT;
+                else
+                  return result;
+              },
           .produce = std::move(produce),
           .ready = std::move(ready),
           .relay = std::move(relay)}));

@@ -85,7 +85,7 @@ class PacketHandlersTest : public testing::Test {
                                      ++applications;
                                      applied = model;
                                      last_context = context;
-                                     return accept_apply;
+                                     return apply_result;
                                    },
                                .produce =
                                    [this](Handler& packet, auto& endpoint, uint64_t now_ms) {
@@ -109,7 +109,7 @@ class PacketHandlersTest : public testing::Test {
   PacketContext last_context;
   size_t applications = 0;
   size_t relays = 0;
-  bool accept_apply = true;
+  PacketApplyResult apply_result = PacketApplyResult::ACCEPT;
   std::optional<bool> ready = true;
   std::optional<uint32_t> sequence;
 };
@@ -134,6 +134,19 @@ TEST_F(PacketHandlersTest, NewGameNeutralPacketRoutesWithoutPlatformDispatchChan
             PayloadDisposition::REJECT);
   EXPECT_EQ(packets.find(38), nullptr);
   EXPECT_EQ(applications, 1u);
+}
+
+TEST_F(PacketHandlersTest, CapacityFailureRequestsDisconnectWithoutRelaying) {
+  auto packets = registry();
+  apply_result = PacketApplyResult::CAPACITY_EXCEEDED;
+  const std::array<uint8_t, 1> bytes = {7};
+  const auto result = packets.receive(
+      {.origin = {.authenticated_player_id = 3}, .message_id = 37, .sequence = 1, .payload = bytes},
+      endpoint);
+  EXPECT_EQ(result.disposition, PayloadDisposition::DISCONNECT);
+  EXPECT_TRUE(result.canonical_payload.empty());
+  EXPECT_EQ(applications, 1u);
+  EXPECT_EQ(relays, 0u);
 }
 
 TEST_F(PacketHandlersTest, InvalidPayloadsAndCanonicalEncodingFailBeforeApplication) {
@@ -177,7 +190,7 @@ TEST_F(PacketHandlersTest, InvalidPayloadsAndCanonicalEncodingFailBeforeApplicat
                               .apply =
                                   [this](const Model&, const PacketContext&) {
                                     ++applications;
-                                    return true;
+                                    return PacketApplyResult::ACCEPT;
                                   },
                               .produce = [](auto&, auto&, uint64_t) {},
                               .ready = [] { return std::optional{true}; },

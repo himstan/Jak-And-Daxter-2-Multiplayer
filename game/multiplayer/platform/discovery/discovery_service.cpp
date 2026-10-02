@@ -71,11 +71,13 @@ std::vector<sockaddr_in> broadcast_targets(const uint16_t port) {
 }  // namespace
 
 bool discovery_advertisement_matches(const DiscoveryConfig& config,
-                                     const DiscoveryAdvertisement& advertisement) {
+                                     const DiscoveryAdvertisement& advertisement,
+                                     const std::string_view source_address) {
   return advertisement.game_id == config.game_id &&
          advertisement.compatibility_identity == config.compatibility_identity &&
          (config.directed_address.empty() ||
-          advertisement.game_port == config.expected_game_port) &&
+          (source_address == config.directed_address &&
+           advertisement.game_port == config.expected_game_port)) &&
          (config.include_full_sessions ||
           advertisement.current_players < advertisement.player_limit);
 }
@@ -181,29 +183,9 @@ void DiscoveryScanner::scan(DiscoveryConfig config) {
         !decode_discovery_advertisement({buffer, static_cast<size_t>(received)}, advertisement)) {
       continue;
     }
-    if (advertisement.game_id != config.game_id) {
-      lg::warn("[Discovery] Ignored advertisement from {}: game ID '{}' does not match '{}'.",
-               address_to_string(source), advertisement.game_id, config.game_id);
-      continue;
-    }
-    if (advertisement.compatibility_identity != config.compatibility_identity) {
-      lg::warn("[Discovery] Ignored advertisement from {}: compatibility identity does not match.",
-               address_to_string(source));
-      continue;
-    }
-    if (!config.directed_address.empty() && advertisement.game_port != config.expected_game_port) {
-      lg::warn("[Discovery] Ignored advertisement from {}: game port {} does not match {}.",
-               address_to_string(source), advertisement.game_port, config.expected_game_port);
-      continue;
-    }
-    if (!config.include_full_sessions &&
-        advertisement.current_players >= advertisement.player_limit) {
-      lg::warn("[Discovery] Ignored full session from {} ({}/{} players).",
-               address_to_string(source), advertisement.current_players,
-               advertisement.player_limit);
-      continue;
-    }
     const std::string address = address_to_string(source);
+    if (!discovery_advertisement_matches(config, advertisement, address))
+      continue;
     const uint16_t game_port = advertisement.game_port;
     const std::string room_code = advertisement.room_code;
     {

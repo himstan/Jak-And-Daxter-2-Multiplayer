@@ -174,13 +174,20 @@ struct SessionPlatform::Impl {
   void on_connection_changed(const SteamNetConnectionStatusChangedCallback_t& callback) {
     const auto state = callback.m_info.m_eState;
     if (state == k_ESteamNetworkingConnectionState_Connecting && hosting) {
+      if (!gns_connections.contains(callback.m_hConn) &&
+          gns_connections.size() >= maximum_pending_connections) {
+        sockets->CloseConnection(callback.m_hConn, kCloseTransportSetup,
+                                 "transport capacity exceeded", false);
+        return;
+      }
       auto& connection = add_connection(callback.m_hConn, &callback.m_info.m_addrRemote);
       connection.lanes_configured = configure_connection(callback.m_hConn);
-      if (gns_connections.size() > maximum_pending_connections ||
+      if (!connection.lanes_configured ||
           sockets->AcceptConnection(callback.m_hConn) != k_EResultOK ||
           !sockets->SetConnectionPollGroup(callback.m_hConn, poll_group)) {
         sockets->CloseConnection(callback.m_hConn, kCloseTransportSetup, "transport setup failed",
                                  false);
+        remove_connection(callback.m_hConn);
       }
       return;
     }
@@ -189,6 +196,7 @@ struct SessionPlatform::Impl {
       if (!((connection.lanes_configured = configure_connection(callback.m_hConn)))) {
         sockets->CloseConnection(callback.m_hConn, kCloseTransportSetup,
                                  "could not configure message lanes", false);
+        remove_connection(callback.m_hConn);
         return;
       }
       if (!hosting) {
@@ -196,6 +204,7 @@ struct SessionPlatform::Impl {
         if (!sockets->SetConnectionPollGroup(callback.m_hConn, poll_group)) {
           sockets->CloseConnection(callback.m_hConn, kCloseTransportSetup,
                                    "could not configure poll group", false);
+          remove_connection(callback.m_hConn);
           return;
         }
       }

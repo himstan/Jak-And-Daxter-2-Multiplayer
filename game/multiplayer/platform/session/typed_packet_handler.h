@@ -14,7 +14,7 @@ class TypedPacketHandler : public PacketHandler {
   struct Hooks {
     Packet (*to_wire)(const Model&);
     void (*canonicalize)(Model&, const MessageOrigin&);
-    std::function<bool(const Model&, const PacketContext&)> apply;
+    std::function<PacketApplyResult(const Model&, const PacketContext&)> apply;
     std::function<void(TypedPacketHandler&, GameSessionEndpoint&, uint64_t)> produce;
     std::function<std::optional<bool>()> ready;
     std::function<std::optional<std::vector<PlayerId>>(const GameplayMessage&, const SessionState&)>
@@ -41,11 +41,15 @@ class TypedPacketHandler : public PacketHandler {
     from_packet(*packet, model);
     hooks_.canonicalize(model, message.origin);
     auto canonical = wire::encode_packet(hooks_.to_wire(model));
-    if (!canonical || canonical->size() > policy().maximum_payload_bytes ||
-        !hooks_.apply(model, {.sequence = message.sequence,
-                              .source = message.origin,
-                              .received_at_ms = message.received_at_ms,
-                              .local_player_id = session.local_player_id}))
+    if (!canonical || canonical->size() > policy().maximum_payload_bytes)
+      return {};
+    const auto result = hooks_.apply(model, {.sequence = message.sequence,
+                                             .source = message.origin,
+                                             .received_at_ms = message.received_at_ms,
+                                             .local_player_id = session.local_player_id});
+    if (result == PacketApplyResult::CAPACITY_EXCEEDED)
+      return {.disposition = PayloadDisposition::DISCONNECT};
+    if (result != PacketApplyResult::ACCEPT)
       return {};
     return {.disposition = session.role == SessionRole::HOST ? PayloadDisposition::CONSUME_AND_RELAY
                                                              : PayloadDisposition::CONSUME,

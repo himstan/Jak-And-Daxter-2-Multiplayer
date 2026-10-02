@@ -25,8 +25,15 @@ struct GameDescriptor {
 
 enum class PayloadDisposition : uint8_t {
   REJECT,
+  DISCONNECT,
   CONSUME,
   CONSUME_AND_RELAY,
+};
+
+enum class PacketApplyResult : uint8_t {
+  REJECT,
+  ACCEPT,
+  CAPACITY_EXCEEDED,
 };
 
 struct ValidatedPayload {

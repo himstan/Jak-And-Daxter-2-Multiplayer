@@ -27,7 +27,8 @@ TEST(Jak2AdapterIntegration, TypedDomainsApplyEveryGameplayPayload) {
   EXPECT_TRUE(state.entities().apply(enemies, from(1, 1)));
 
   GameEventBatch events = {.events = {{.event_id = 2, .source_player_id = 1}}};
-  EXPECT_TRUE(state.events().apply(events, from(1, 1)));
+  EXPECT_EQ(state.events().apply(events, from(1, 1)),
+            multiplayer::platform::PacketApplyResult::ACCEPT);
   EXPECT_EQ(state.players().players()[1].player_id, 1);
   EXPECT_EQ(state.traffic().authority().revision, 1u);
   EXPECT_EQ(state.world().world().clock, 17u);

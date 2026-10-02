@@ -23,6 +23,7 @@ constexpr uint64_t kRejectionWindowMs = 60'000;
 constexpr uint64_t kRejectionThrottleMs = 30'000;
 constexpr uint8_t kRejectionsPerWindow = 5;
 constexpr int kInvalidProtocolReason = 4;
+constexpr uint64_t kControlBudgetRefillMs = 100;
 constexpr int kGameplaySendFailureReason = 2005;
 constexpr int kSessionCloseReasonBase = 1000;
 constexpr int kSessionCloseReasonMaximum = kSessionCloseReasonBase + 255;
@@ -458,6 +459,23 @@ void SessionController::handle_control(const ConnectionId connection,
                                        const Delivery delivery,
                                        const std::span<const uint8_t> payload,
                                        const uint64_t now_ms) {
+  if (snapshot_.state.role == SessionRole::HOST) {
+    auto* player = registry_.find_connection(connection);
+    if (!player)
+      return;
+    if (const auto refill = (now_ms - player->control_budget_updated_ms) / kControlBudgetRefillMs;
+        refill != 0) {
+      player->control_budget = static_cast<uint8_t>(std::min<uint64_t>(
+          PlayerSession::kControlBudgetMaximum, player->control_budget + refill));
+      player->control_budget_updated_ms += refill * kControlBudgetRefillMs;
+    }
+    if (player->control_budget == 0) {
+      transport_.close_connection(connection, kInvalidProtocolReason,
+                                  "control rate limit exceeded");
+      return;
+    }
+    --player->control_budget;
+  }
   ControlMessage message;
   if (delivery != Delivery::RELIABLE_ORDERED ||
       !decode_control_message(payload, adapter_.descriptor().maximum_profile_extension_bytes,
@@ -479,7 +497,8 @@ void SessionController::handle_host_control(const ConnectionId connection,
     transport_.close_connection(connection, kInvalidProtocolReason, "unauthorized control message");
     return;
   }
-  if (player_id == 0 || player_id >= profiles_.size())
+  auto* session = registry_.find_player(player_id);
+  if (!session || player_id == 0 || player_id >= profiles_.size())
     return;
   auto& profile = profiles_[player_id];
   if (message.kind == ControlKind::PROFILE) {
@@ -488,46 +507,48 @@ void SessionController::handle_host_control(const ConnectionId connection,
       return;
     }
     message.profile.character = player_characters_[player_id];
+    if (session->identity_ready && profile == message.profile)
+      return;
+    const bool first_profile = !session->identity_ready;
     profile = std::move(message.profile);
-    if (auto* session = registry_.find_player(player_id)) {
-      session->profile = profile;
-      session->identity_ready = true;
-    }
+    session->profile = profile;
+    session->identity_ready = true;
     lg::debug("[MP-Session] Player {} profile accepted; gameplay and bootstrap are ready.",
               player_id);
-    publish_roster(connection);
+    if (first_profile)
+      publish_roster(connection);
     broadcast_profile(profile);
     adapter_.player_profile_changed(profile);
-    if (snapshot_.countdown_active && snapshot_.countdown_target_ms > last_pump_ms_) {
+    if (first_profile && snapshot_.countdown_active &&
+        snapshot_.countdown_target_ms > last_pump_ms_) {
       const auto remaining_ms = snapshot_.countdown_target_ms - last_pump_ms_;
       send_control({.kind = ControlKind::START_COUNTDOWN,
                     .value = static_cast<uint32_t>((remaining_ms + 999) / 1000)},
                    Audience::one(connection));
     }
-    if (snapshot_.state.status == SessionStatus::IN_GAME) {
-      if (auto* session = registry_.find_player(player_id)) {
-        session->bootstrap_pending = true;
-        session->bootstrap_sent_once = false;
-        session->bootstrap_payload.clear();
-        session->bootstrap_generation = next_bootstrap_generation();
-      }
+    if (first_profile && snapshot_.state.status == SessionStatus::IN_GAME) {
+      session->bootstrap_pending = true;
+      session->bootstrap_sent_once = false;
+      session->bootstrap_payload.clear();
+      session->bootstrap_generation = next_bootstrap_generation();
     }
   } else if (message.kind == ControlKind::SET_CHARACTER) {
     if (!valid_character(message.character)) {
       transport_.close_connection(connection, kInvalidProtocolReason, "invalid player character");
       return;
     }
+    if (!session->identity_ready || profile.character == message.character)
+      return;
     profile.character = message.character;
-    if (auto* session = registry_.find_player(player_id)) {
-      session->character = message.character;
-      session->profile = profile;
-    }
+    session->character = message.character;
+    session->profile = profile;
     broadcast_profile(profile);
     adapter_.player_profile_changed(profile);
   } else if (message.kind == ControlKind::SET_READY) {
+    if (!session->identity_ready || profile.ready == message.ready)
+      return;
     profile.ready = message.ready;
-    if (auto* session = registry_.find_player(player_id))
-      session->profile = profile;
+    session->profile = profile;
     broadcast_profile(profile);
     adapter_.player_profile_changed(profile);
   } else if (message.kind == ControlKind::BOOTSTRAP_ACK) {
@@ -633,6 +654,10 @@ void SessionController::handle_gameplay(const ConnectionId connection,
       .payload = envelope.payload};
   auto [disposition, canonical_payload, relay_recipients] =
       adapter_.packets().receive(message, *this);
+  if (disposition == PayloadDisposition::DISCONNECT) {
+    transport_.close_connection(connection, kInvalidProtocolReason, "gameplay capacity exceeded");
+    return;
+  }
   if (disposition == PayloadDisposition::REJECT) {
     if (!gameplay_rejection_observed_) {
       gameplay_rejection_observed_ = true;

@@ -528,6 +528,35 @@ TEST(Jak2AdapterIntegration, LocalTimersKeep64BitTimeAcross32BitBoundary) {
   EXPECT_TRUE(adapter.mailbox().take_remote_frame());
 }
 
+TEST(Jak2AdapterIntegration, InboundEventOverflowRequestsDisconnectAndDrainingRecovers) {
+  jak2::application::Jak2Adapter adapter;
+  RecordingEndpoint endpoint;
+  adapter.installed(endpoint);
+  adapter.session_started(endpoint.session_snapshot.state);
+  jak2::core::GameEventBatch batch;
+  batch.events.assign(255, {.event_id = 12});
+  const auto bytes = platform::wire::encode_packet(jak2::wire::to_packet(batch));
+  ASSERT_TRUE(bytes);
+  const auto receive = [&](uint32_t sequence) {
+    return adapter.packets()
+        .receive({.origin = {.authenticated_player_id = 1},
+                  .message_id = static_cast<uint8_t>(PacketType::GAME_EVENT_BATCH),
+                  .sequence = sequence,
+                  .payload = *bytes},
+                 endpoint)
+        .disposition;
+  };
+  for (uint32_t sequence = 1; sequence <= 4; ++sequence)
+    ASSERT_EQ(receive(sequence), platform::PayloadDisposition::CONSUME_AND_RELAY);
+  EXPECT_EQ(receive(5), platform::PayloadDisposition::DISCONNECT);
+  adapter.tick(100);
+  EXPECT_EQ(adapter.mailbox().inbound_event_count(), jak2::application::kReplicationEventCapacity);
+  EXPECT_EQ(receive(5), platform::PayloadDisposition::CONSUME_AND_RELAY);
+  adapter.session_reset();
+  EXPECT_EQ(adapter.mailbox().inbound_event_count(), 0u);
+  EXPECT_EQ(receive(1), platform::PayloadDisposition::CONSUME_AND_RELAY);
+}
+
 TEST(Jak2AdapterIntegration, AdapterEventPublisherPreservesEventBatchContents) {
   jak2::application::Jak2Adapter adapter;
   RecordingEndpoint endpoint;

@@ -119,8 +119,10 @@ class EntityReplicationState {
 
 class EventReplicationState {
  public:
+  static constexpr size_t kMaximumQueuedEvents = 1024;
+
   void reset();
-  bool apply(const GameEventBatch& batch, const ApplyContext& context);
+  platform::PacketApplyResult apply(const GameEventBatch& batch, const ApplyContext& context);
   void depart(PlayerId player_id);
   std::vector<GameEvent> take(size_t maximum);
   const std::deque<GameEvent>& events() const { return events_; }

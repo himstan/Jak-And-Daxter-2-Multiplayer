@@ -47,7 +47,8 @@ TEST(Jak2Replication, DepartureClearsAllGameplayDomains) {
                            .enemies = {{.actor_id = 41, .owner_player_id = 1}}};
   ASSERT_TRUE(state.entities().apply(enemies, from(1, 1)));
   GameEventBatch events = {.events = {{.event_id = 2, .source_player_id = 1}}};
-  ASSERT_TRUE(state.events().apply(events, from(1, 1)));
+  ASSERT_EQ(state.events().apply(events, from(1, 1)),
+            multiplayer::platform::PacketApplyResult::ACCEPT);
   ASSERT_TRUE(state.depart_player(1));
   EXPECT_EQ(state.players().players()[1].last_sequence, 0u);
   EXPECT_TRUE(state.entities().enemies().enemies.empty());
@@ -87,9 +88,12 @@ TEST(Jak2Replication, EventsSequencePerSourceAndDrainWithinBounds) {
   GameEventBatch first = {
       .events = {{.event_id = 1, .source_player_id = 1}, {.event_id = 2, .source_player_id = 1}}};
   GameEventBatch second = {.events = {{.event_id = 3, .source_player_id = 2}}};
-  ASSERT_TRUE(state.events().apply(first, from(1, 5)));
-  ASSERT_TRUE(state.events().apply(second, from(2, 1)));
-  EXPECT_FALSE(state.events().apply(first, from(1, 5)));
+  ASSERT_EQ(state.events().apply(first, from(1, 5)),
+            multiplayer::platform::PacketApplyResult::ACCEPT);
+  ASSERT_EQ(state.events().apply(second, from(2, 1)),
+            multiplayer::platform::PacketApplyResult::ACCEPT);
+  EXPECT_EQ(state.events().apply(first, from(1, 5)),
+            multiplayer::platform::PacketApplyResult::REJECT);
   const auto taken = state.events().take(2);
   ASSERT_EQ(taken.size(), 2u);
   EXPECT_EQ(taken[0].event_id, 1);
@@ -100,12 +104,43 @@ TEST(Jak2Replication, EventsSequencePerSourceAndDrainWithinBounds) {
 TEST(Jak2Replication, EventsRejectInvalidBoundsBeforeMutation) {
   ReplicationState state;
   GameEvent invalid = {.event_id = 1, .source_player_id = 1, .payload_size = 65};
-  EXPECT_FALSE(state.events().apply(GameEventBatch{.events = {invalid}}, from(1, 1)));
+  EXPECT_EQ(state.events().apply(GameEventBatch{.events = {invalid}}, from(1, 1)),
+            multiplayer::platform::PacketApplyResult::REJECT);
   GameEvent valid = {.event_id = 1, .source_player_id = 1};
   GameEventBatch oversized;
   oversized.events.assign(256, valid);
-  EXPECT_FALSE(state.events().apply(oversized, from(1, 1)));
+  EXPECT_EQ(state.events().apply(oversized, from(1, 1)),
+            multiplayer::platform::PacketApplyResult::REJECT);
   EXPECT_TRUE(state.events().events().empty());
+}
+
+TEST(Jak2Replication, EventQueueOverflowIsAtomicAndDrainingRestoresCapacity) {
+  using multiplayer::platform::PacketApplyResult;
+  EventReplicationState state;
+  GameEventBatch batch;
+  batch.events.assign(255, {.event_id = 12, .source_player_id = 1});
+  for (Sequence sequence = 1; sequence <= 4; ++sequence)
+    ASSERT_EQ(state.apply(batch, from(1, sequence)), PacketApplyResult::ACCEPT);
+  batch.events.resize(4);
+  ASSERT_EQ(state.apply(batch, from(1, 5)), PacketApplyResult::ACCEPT);
+  ASSERT_EQ(state.events().size(), EventReplicationState::kMaximumQueuedEvents);
+
+  EXPECT_EQ(state.apply(batch, from(1, 5)), PacketApplyResult::REJECT);
+  batch.events.resize(2);
+  EXPECT_EQ(state.apply(batch, from(1, 6)), PacketApplyResult::CAPACITY_EXCEEDED);
+  EXPECT_EQ(state.events().size(), EventReplicationState::kMaximumQueuedEvents);
+  const auto drained = state.take(2);
+  ASSERT_EQ(drained.size(), 2u);
+  EXPECT_EQ(drained.front().event_id, 12);
+  EXPECT_EQ(state.apply(batch, from(1, 6)), PacketApplyResult::ACCEPT);
+  EXPECT_EQ(state.events().size(), EventReplicationState::kMaximumQueuedEvents);
+
+  state.depart(1);
+  EXPECT_TRUE(state.events().empty());
+  EXPECT_EQ(state.apply(batch, from(1, 1)), PacketApplyResult::ACCEPT);
+  state.reset();
+  EXPECT_TRUE(state.events().empty());
+  EXPECT_EQ(state.apply(batch, from(1, 1)), PacketApplyResult::ACCEPT);
 }
 
 TEST(Jak2Replication, PlayerExpiryClearsDependentVehicleAndTurretState) {

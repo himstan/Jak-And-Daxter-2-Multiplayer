@@ -5,6 +5,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 
 #include "game/multiplayer/platform/discovery/discovery_protocol.h"
@@ -34,7 +35,8 @@ struct DiscoveryResult {
 };
 
 bool discovery_advertisement_matches(const DiscoveryConfig& config,
-                                     const DiscoveryAdvertisement& advertisement);
+                                     const DiscoveryAdvertisement& advertisement,
+                                     std::string_view source_address);
 
 class DiscoveryScanner {
  public:

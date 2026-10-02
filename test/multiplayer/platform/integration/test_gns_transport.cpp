@@ -213,6 +213,8 @@ class RecordingAdapter final : public GameAdapter {
     return true;
   }
   ValidatedPayload record(const GameplayMessage& message) {
+    if (disconnect_payloads)
+      return {.disposition = PayloadDisposition::DISCONNECT};
     received.push_back(
         {.origin = message.origin.authenticated_player_id,
          .id = message.message_id,
@@ -243,6 +245,7 @@ class RecordingAdapter final : public GameAdapter {
   PacketRegistry packets_;
   GameDescriptor descriptor_;
   bool relay = false;
+  bool disconnect_payloads = false;
   std::optional<std::vector<PlayerId>> relay_recipients;
   bool apply_succeeds = true;
   uint32_t bootstrap_apply_attempts = 0;
@@ -376,6 +379,52 @@ class ThrowingControlCommand final : public RuntimeControlCommand {
     throw std::runtime_error("expected test failure");
   }
 };
+
+TEST(GnsTransportIntegration, CapacityRejectionsDoNotPreventLaterConnections) {
+  SessionPlatform host;
+  ASSERT_TRUE(host.host({.port = available_udp_port(), .maximum_pending_connections = 1}));
+  SessionPlatform first;
+  ASSERT_TRUE(first.connect({.endpoint = "127.0.0.1", .port = host.local_port()}));
+  ASSERT_TRUE(pump_until(
+      [&] {
+        host.pump();
+        first.pump();
+      },
+      [&] { return host.connection_snapshots().size() == 1; }));
+  for (size_t attempt = 0; attempt < 3; ++attempt) {
+    SessionPlatform rejected;
+    ASSERT_TRUE(rejected.connect({.endpoint = "127.0.0.1", .port = host.local_port()}));
+    ASSERT_TRUE(pump_until(
+        [&] {
+          host.pump();
+          first.pump();
+          rejected.pump();
+        },
+        [&] {
+          TransportEvent event;
+          while (rejected.poll_event(event)) {
+            if (event.kind == TransportEventKind::CLOSED)
+              return true;
+          }
+          return false;
+        }));
+    EXPECT_EQ(host.connection_snapshots().size(), 1u);
+  }
+  first.shutdown();
+  ASSERT_TRUE(
+      pump_until([&] { host.pump(); }, [&] { return host.connection_snapshots().empty(); }));
+  SessionPlatform replacement;
+  ASSERT_TRUE(replacement.connect({.endpoint = "127.0.0.1", .port = host.local_port()}));
+  ASSERT_TRUE(pump_until(
+      [&] {
+        host.pump();
+        replacement.pump();
+      },
+      [&] {
+        return host.connection_snapshots().size() == 1 &&
+               replacement.connection_snapshots().size() == 1;
+      }));
+}
 
 TEST(GnsTransportIntegration, RawTransportConfiguresLanesAndDeliversLargeMessagesWhole) {
   SessionPlatform host;
@@ -1081,6 +1130,93 @@ TEST(GnsTransportIntegration, SessionAdmissionProfilesAndRelayStayAboveTransport
       },
       [&] { return host_adapter.received.size() == 3 && observer_adapter.received.size() == 2; }));
   EXPECT_EQ(observer_adapter.received.back().payload, std::vector<uint8_t>({0x62}));
+}
+
+TEST(GnsTransportIntegration, DuplicateControlsAreSuppressedAndFloodClosesOnlyTheSender) {
+  RecordingAdapter host_adapter;
+  RecordingAdapter client_adapter;
+  RecordingAdapter observer_adapter;
+  SessionController host(host_adapter);
+  SessionController client(client_adapter);
+  SessionController observer(observer_adapter);
+  ASSERT_TRUE(host.host(host_config(available_udp_port(), 3)));
+  ASSERT_TRUE(client.connect(client_config(host.local_port())));
+  ASSERT_TRUE(observer.connect(client_config(host.local_port())));
+  auto clock = now_ms();
+  const auto pump = [&] {
+    host.pump(clock);
+    client.pump(clock);
+    observer.pump(clock);
+  };
+  ASSERT_TRUE(pump_until(pump, [&] {
+    return host.snapshot().players.size() == 3 && client.snapshot().players.size() == 3 &&
+           observer.snapshot().players.size() == 3;
+  }));
+  const auto player_id = client.snapshot().state.local_player_id;
+  auto duplicate = profile("Client");
+  duplicate.player_id = player_id;
+  const auto send = [&](const ControlMessage& message) {
+    const auto payload = encode_control_message(message, 16);
+    const auto frame = encode_message_frame(FrameKind::CONTROL, player_id, payload);
+    return client.transport().send(client.transport().host_connection_id(), frame,
+                                   TransportLane::CONTROL_RELIABLE);
+  };
+  host_adapter.profile_changes.clear();
+  ASSERT_TRUE(send({.kind = ControlKind::PROFILE, .profile = duplicate}));
+  ASSERT_TRUE(send({.kind = ControlKind::SET_READY, .ready = false}));
+  ASSERT_TRUE(send({.kind = ControlKind::SET_CHARACTER, .character = PlayerCharacter::JAK}));
+  ASSERT_TRUE(send({.kind = ControlKind::SET_READY, .ready = true}));
+  ASSERT_TRUE(pump_until(pump, [&] {
+    return std::ranges::any_of(observer.snapshot().players, [&](const auto& player) {
+      return player.player_id == player_id && player.ready;
+    });
+  }));
+  ASSERT_EQ(host_adapter.profile_changes.size(), 1u);
+  EXPECT_TRUE(host_adapter.profile_changes.front().ready);
+
+  for (size_t iteration = 0; iteration < 2; ++iteration) {
+    clock += 4000;
+    for (size_t update = 0; update < 20; ++update)
+      ASSERT_TRUE(send({.kind = ControlKind::SET_READY, .ready = update % 2 != 0}));
+    ASSERT_TRUE(pump_until(
+        pump, [&] { return host_adapter.profile_changes.size() == 1 + (iteration + 1) * 20; }));
+    ASSERT_EQ(host.snapshot().connections.size(), 2u);
+  }
+  for (size_t update = 0; update < 40; ++update)
+    ASSERT_TRUE(send({.kind = ControlKind::SET_READY, .ready = true}));
+  ASSERT_TRUE(pump_until(pump, [&] { return host.snapshot().connections.size() == 1; }));
+  EXPECT_EQ(host.snapshot().connections.front().player_id,
+            observer.snapshot().state.local_player_id);
+  EXPECT_EQ(observer.snapshot().state.status, SessionStatus::LOBBY);
+  ASSERT_TRUE(observer.set_ready(true));
+  ASSERT_TRUE(pump_until(pump, [&] {
+    return host_adapter.profile_changes.back().player_id ==
+           observer.snapshot().state.local_player_id;
+  }));
+
+  ASSERT_TRUE(client.connect(client_config(host.local_port())));
+  ASSERT_TRUE(pump_until(pump, [&] { return host.snapshot().players.size() == 3; }));
+  EXPECT_EQ(client.snapshot().state.local_player_id, player_id);
+}
+
+TEST(GnsTransportIntegration, AdapterCapacityFailureClosesTheSendingConnection) {
+  RecordingAdapter host_adapter;
+  RecordingAdapter client_adapter;
+  host_adapter.disconnect_payloads = true;
+  SessionController host(host_adapter);
+  SessionController client(client_adapter);
+  ASSERT_TRUE(host.host(host_config(available_udp_port(), 2)));
+  ASSERT_TRUE(client.connect(client_config(host.local_port())));
+  const auto pump = [&] {
+    const auto now = now_ms();
+    host.pump(now);
+    client.pump(now);
+  };
+  ASSERT_TRUE(pump_until(pump, [&] { return host.snapshot().players.size() == 2; }));
+  ASSERT_TRUE(client.send_gameplay(0, Audience::everyone(), std::array<uint8_t, 1>{7}));
+  ASSERT_TRUE(pump_until(pump, [&] { return host.snapshot().connections.empty(); }));
+  EXPECT_TRUE(host_adapter.received.empty());
+  ASSERT_EQ(host_adapter.departures.size(), 1u);
 }
 
 TEST(GnsTransportIntegration, GameplaySequencesRejectInvalidSendsWorkWithoutPeersAndReset) {
