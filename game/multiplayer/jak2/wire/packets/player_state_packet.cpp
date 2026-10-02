@@ -14,7 +14,8 @@ bool validate_packet(const PlayerStatePacket& packet) {
          platform::wire::valid_angle(packet.camera_angle_y) && packet.action_sequence <= 0xffu &&
          packet.action_state_id <= 0xffu &&
          valid_wire_player_reference(packet.riding_along_player_id) &&
-         packet.mission_flags <= 0x03u && packet.visual_secrets <= 0x07u;
+         packet.mission_flags <= 0x03u && packet.visual_secrets <= 0x07u &&
+         valid_wire_player_reference(packet.selected_traffic_authority);
 }
 
 PlayerStatePacket to_packet(const core::PlayerState& state) {
@@ -41,7 +42,10 @@ PlayerStatePacket to_packet(const core::PlayerState& state) {
                                         ? state.riding_along_player_id
                                         : kWireInvalidPlayerId,
           .mission_flags = state.mission_flags,
-          .visual_secrets = state.visual_secrets};
+          .visual_secrets = state.visual_secrets,
+          .selected_traffic_authority = state.selected_traffic_authority < kMPMaxPlayers
+                                            ? state.selected_traffic_authority
+                                            : kWireInvalidPlayerId};
 }
 
 void from_packet(const PlayerStatePacket& packet, core::PlayerState& state) {
@@ -72,6 +76,9 @@ void from_packet(const PlayerStatePacket& packet, core::PlayerState& state) {
                                      : core::kInvalidPlayerId;
   state.mission_flags = packet.mission_flags;
   state.visual_secrets = packet.visual_secrets;
+  state.selected_traffic_authority = packet.selected_traffic_authority < kMPMaxPlayers
+                                         ? packet.selected_traffic_authority
+                                         : core::kInvalidPlayerId;
   state.sample_time_ms = packet.sample_time_ms;
 }
 

@@ -11,8 +11,10 @@
 #include "game/multiplayer/jak2/wire/packets/enemy_state_batch_packet.h"
 #include "game/multiplayer/jak2/wire/packets/game_event_batch_packet.h"
 #include "game/multiplayer/jak2/wire/packets/gungame_state_packet.h"
+#include "game/multiplayer/jak2/wire/packets/pedestrian_state_batch_packet.h"
 #include "game/multiplayer/jak2/wire/packets/player_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/player_vehicle_state_packet.h"
+#include "game/multiplayer/jak2/wire/packets/traffic_authority_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/vehicle_state_batch_packet.h"
 #include "game/multiplayer/platform/session/cadence_scheduler.h"
 #include "game/multiplayer/platform/wire/quantization.h"
@@ -72,6 +74,12 @@ class RecordingEndpoint final : public platform::GameSessionEndpoint {
     cadence_times.push_back(now_ms);
     if (schedule_gungame && id == static_cast<uint8_t>(PacketType::GUNGAME_STATE))
       return cadence_enabled && cadence.due(jak2::wire::GungameStatePacket::kPolicy, now_ms, dirty);
+    if (schedule_traffic && id == static_cast<uint8_t>(PacketType::PEDESTRIAN_STATE_BATCH))
+      return cadence_enabled &&
+             cadence.due(jak2::wire::PedestrianStateBatchPacket::kPolicy, now_ms, dirty);
+    if (schedule_traffic && id == static_cast<uint8_t>(PacketType::VEHICLE_STATE_BATCH))
+      return cadence_enabled &&
+             cadence.due(jak2::wire::VehicleStateBatchPacket::kPolicy, now_ms, dirty);
     return cadence_enabled && dirty;
   }
   platform::NetworkPressure network_pressure() const override {
@@ -94,6 +102,7 @@ class RecordingEndpoint final : public platform::GameSessionEndpoint {
   bool cadence_enabled = true;
   bool accept_sends = true;
   bool schedule_gungame = false;
+  bool schedule_traffic = false;
   platform::CadenceScheduler cadence;
   std::optional<size_t> reject_after;
   uint32_t next_sequence = 0;
@@ -101,6 +110,209 @@ class RecordingEndpoint final : public platform::GameSessionEndpoint {
   mutable std::optional<uint64_t> last_pressure_time_ms;
   std::vector<SentGameplay> sent;
 };
+
+class TrafficRoutingScenario {
+ public:
+  jak2::application::Jak2Adapter adapter;
+  RecordingEndpoint endpoint;
+  jak2::core::TrafficAuthority authority = {.revision = 1};
+
+  TrafficRoutingScenario(platform::SessionRole role, uint8_t local_id) {
+    endpoint.session_snapshot.state.role = role;
+    endpoint.session_snapshot.state.local_player_id = local_id;
+    endpoint.session_snapshot.state.status = platform::SessionStatus::IN_GAME;
+    endpoint.session_snapshot.state.player_limit = 3;
+    endpoint.session_snapshot.players = {{.player_id = 0}, {.player_id = 1}, {.player_id = 2}};
+    endpoint.session_snapshot.connections = {{.player_id = 1, .network = {.connection_id = 11}},
+                                             {.player_id = 2, .network = {.connection_id = 12}}};
+    endpoint.schedule_traffic = true;
+    authority.assignments[0] = 0;
+    authority.assignments[1] = 1;
+    authority.assignments[2] = 2;
+    adapter.installed(endpoint);
+    adapter.session_started(endpoint.session_snapshot.state);
+  }
+
+  void publish(uint64_t now_ms, uint8_t selected = jak2::core::kInvalidPlayerId) {
+    endpoint.sent.clear();
+    const auto local = endpoint.session_snapshot.state.local_player_id;
+    if (endpoint.session_snapshot.state.role == platform::SessionRole::CLIENT) {
+      const auto packet = platform::wire::encode_packet(jak2::wire::to_packet(authority));
+      ASSERT_TRUE(packet);
+      ASSERT_NE(
+          adapter.packets()
+              .receive({.origin = {.authenticated_player_id = 0, .from_host = true},
+                        .message_id = static_cast<uint8_t>(PacketType::TRAFFIC_AUTHORITY_STATE),
+                        .sequence = authority.revision,
+                        .payload = *packet},
+                       endpoint)
+              .disposition,
+          platform::PayloadDisposition::REJECT);
+    }
+    auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
+    frame->local_player_id = local;
+    frame->host_player_id = 0;
+    frame->selected_traffic_authority =
+        selected == jak2::core::kInvalidPlayerId ? authority.assignments[local] : selected;
+    frame->traffic_authority = authority;
+    frame->sample_time_ms = static_cast<uint32_t>(now_ms);
+    frame->players[local].state_ready = true;
+    frame->pedestrians.kind = jak2::core::TrafficSnapshot::Kind::PEDESTRIANS;
+    frame->vehicles.kind = jak2::core::TrafficSnapshot::Kind::VEHICLES;
+    for (uint32_t index = 1; index <= 40; ++index) {
+      const auto source_bits = static_cast<uint32_t>(local) << 24;
+      frame->pedestrians.pedestrians.push_back(
+          {.net_id = jak2::core::kTrafficPedestrianNetIdClass | source_bits | index});
+      frame->pedestrians.pedestrians.back().quaternion[3] = 1.0f;
+      frame->vehicles.vehicles.push_back(
+          {.net_id = jak2::core::kTrafficVehicleNetIdClass | source_bits | index});
+      frame->vehicles.vehicles.back().quaternion[3] = 1.0f;
+    }
+    adapter.mailbox().publish_local_frame(std::move(frame));
+    adapter.tick(now_ms);
+  }
+
+  void select(uint8_t player_id, uint8_t source, uint32_t sequence) {
+    jak2::core::PlayerState player = {.player_id = player_id,
+                                      .activity = jak2::core::PlayerActivity::IN_GAME,
+                                      .state_ready = true,
+                                      .spectator_only = true};
+    player.selected_traffic_authority = source;
+    const auto packet = platform::wire::encode_packet(jak2::wire::to_packet(player));
+    ASSERT_TRUE(packet);
+    ASSERT_NE(adapter.packets()
+                  .receive({.origin = {.authenticated_player_id = player_id,
+                                       .from_host = endpoint.session_snapshot.state.role ==
+                                                    platform::SessionRole::CLIENT},
+                            .message_id = static_cast<uint8_t>(PacketType::PLAYER_STATE),
+                            .sequence = sequence,
+                            .received_at_ms = sequence,
+                            .payload = *packet},
+                           endpoint)
+                  .disposition,
+              platform::PayloadDisposition::REJECT);
+  }
+
+  std::vector<SentGameplay> ambient() const {
+    std::vector<SentGameplay> result;
+    for (const auto& packet : endpoint.sent)
+      if (packet.id == static_cast<uint8_t>(PacketType::PEDESTRIAN_STATE_BATCH) ||
+          packet.id == static_cast<uint8_t>(PacketType::VEHICLE_STATE_BATCH))
+        result.push_back(packet);
+    return result;
+  }
+};
+
+TEST(Jak2AdapterIntegration, HostTrafficTargetsOnlySubscribersAndKeepsFullPopulation) {
+  TrafficRoutingScenario scenario(platform::SessionRole::HOST, 0);
+  scenario.authority.assignments[2] = 1;
+  scenario.publish(100);
+  EXPECT_TRUE(scenario.ambient().empty());
+  scenario.authority.assignments[2] = 0;
+  ++scenario.authority.revision;
+  scenario.publish(101);
+  const auto packets = scenario.ambient();
+  ASSERT_EQ(packets.size(), 2u);
+  for (const auto& packet : packets) {
+    EXPECT_EQ(packet.audience.kind, platform::AudienceKind::CONNECTION);
+    EXPECT_EQ(packet.audience.connection_id, 12u);
+  }
+  const auto pedestrians =
+      platform::wire::decode_packet<jak2::wire::PedestrianStateBatchPacket>(packets[0].payload);
+  const auto vehicles =
+      platform::wire::decode_packet<jak2::wire::VehicleStateBatchPacket>(packets[1].payload);
+  ASSERT_TRUE(pedestrians);
+  ASSERT_TRUE(vehicles);
+  EXPECT_EQ(pedestrians->pedestrians.size(), 40u);
+  EXPECT_EQ(vehicles->vehicles.size(), 40u);
+  EXPECT_EQ(vehicles->sample_time_ms, 101u);
+  scenario.authority.assignments[1] = 0;
+  ++scenario.authority.revision;
+  scenario.publish(167);
+  EXPECT_EQ(scenario.ambient().size(), 4u);
+  scenario.endpoint.session_snapshot.players.pop_back();
+  scenario.publish(233);
+  for (const auto& packet : scenario.ambient())
+    EXPECT_EQ(packet.audience.connection_id, 11u);
+  EXPECT_EQ(scenario.ambient().size(), 2u);
+  scenario.authority.assignments[1] = 1;
+  ++scenario.authority.revision;
+  scenario.publish(299);
+  EXPECT_TRUE(scenario.ambient().empty());
+  EXPECT_TRUE(std::ranges::any_of(scenario.endpoint.sent, [](const auto& packet) {
+    return packet.id == static_cast<uint8_t>(PacketType::PLAYER_STATE);
+  }));
+}
+
+TEST(Jak2AdapterIntegration, SoloClientTrafficStopsAndResumesForFollowersIncludingHost) {
+  TrafficRoutingScenario scenario(platform::SessionRole::CLIENT, 1);
+  scenario.publish(100);
+  EXPECT_TRUE(scenario.ambient().empty());
+  scenario.authority.assignments[2] = 1;
+  ++scenario.authority.revision;
+  scenario.publish(101);
+  ASSERT_EQ(scenario.ambient().size(), 2u);
+  for (const auto& packet : scenario.ambient())
+    EXPECT_EQ(packet.audience.kind, platform::AudienceKind::EVERYONE);
+  scenario.authority.assignments[2] = 2;
+  ++scenario.authority.revision;
+  scenario.publish(167);
+  EXPECT_TRUE(scenario.ambient().empty());
+  scenario.authority.assignments[0] = 1;
+  ++scenario.authority.revision;
+  scenario.publish(168);
+  EXPECT_EQ(scenario.ambient().size(), 2u);
+  scenario.authority.assignments[1] = 0;
+  scenario.authority.assignments[0] = 0;
+  ++scenario.authority.revision;
+  scenario.publish(234);
+  EXPECT_TRUE(scenario.ambient().empty());
+}
+
+TEST(Jak2AdapterIntegration, SpectatorInterestStartsAndStopsRootPublication) {
+  for (const auto role : {platform::SessionRole::HOST, platform::SessionRole::CLIENT}) {
+    const uint8_t root = role == platform::SessionRole::HOST ? 0 : 1;
+    TrafficRoutingScenario scenario(role, root);
+    scenario.publish(100);
+    EXPECT_TRUE(scenario.ambient().empty());
+    scenario.select(2, root, 1);
+    scenario.publish(101);
+    EXPECT_EQ(scenario.ambient().size(), 2u);
+    scenario.select(2, 2, 2);
+    scenario.publish(167);
+    EXPECT_TRUE(scenario.ambient().empty());
+  }
+}
+
+TEST(Jak2AdapterIntegration, TrafficRelayIncludesSpectatorsWithoutSendingToOtherRoots) {
+  TrafficRoutingScenario scenario(platform::SessionRole::HOST, 0);
+  scenario.publish(100, 1);
+  scenario.select(2, 1, 1);
+  const auto snapshot = jak2::core::TrafficSnapshot{
+      .kind = jak2::core::TrafficSnapshot::Kind::VEHICLES, .authority_revision = 1};
+  const auto packet =
+      platform::wire::encode_packet(jak2::wire::to_vehicle_state_batch_packet(snapshot));
+  ASSERT_TRUE(packet);
+  const auto relay = [&](uint32_t sequence) {
+    return scenario.adapter.packets().receive(
+        {.origin = {.authenticated_player_id = 1},
+         .message_id = static_cast<uint8_t>(PacketType::VEHICLE_STATE_BATCH),
+         .sequence = sequence,
+         .payload = *packet},
+        scenario.endpoint);
+  };
+  auto result = relay(1);
+  ASSERT_TRUE(result.relay_recipients);
+  EXPECT_EQ(*result.relay_recipients, (std::vector<platform::PlayerId>{2}));
+  scenario.adapter.tick(108);
+  const auto remote = scenario.adapter.mailbox().take_remote_frame();
+  ASSERT_TRUE(remote);
+  EXPECT_EQ(remote->selected_traffic.source_player_id, 1u);
+  scenario.select(2, 2, 2);
+  result = relay(2);
+  ASSERT_TRUE(result.relay_recipients);
+  EXPECT_TRUE(result.relay_recipients->empty());
+}
 
 TEST(Jak2AdapterIntegration, AdapterRejectsMalformedGameplayBeforeRelay) {
   jak2::application::Jak2Adapter adapter;
@@ -202,6 +414,7 @@ TEST(Jak2AdapterIntegration, TrafficRelayTargetsOnlyPlayersAssignedToItsSource) 
   jak2::application::Jak2Adapter adapter;
   RecordingEndpoint endpoint;
   endpoint.session_snapshot.state.player_limit = 4;
+  endpoint.session_snapshot.players = {{.player_id = 0}, {.player_id = 1}, {.player_id = 2}};
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
 
@@ -947,6 +1160,8 @@ TEST(Jak2AdapterIntegration, MissingGungameCaptureKeepsPlayerAndTrafficPublishin
   jak2::application::Jak2Adapter adapter;
   RecordingEndpoint endpoint;
   endpoint.session_snapshot.state.status = platform::SessionStatus::IN_GAME;
+  endpoint.session_snapshot.players = {{.player_id = 0}, {.player_id = 1}};
+  endpoint.session_snapshot.connections = {{.player_id = 1, .network = {.connection_id = 11}}};
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
   const auto publish = [&](bool capture_gungame, float position, uint64_t time) {

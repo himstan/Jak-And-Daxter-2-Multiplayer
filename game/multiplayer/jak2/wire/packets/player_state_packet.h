@@ -40,6 +40,7 @@ struct PlayerStatePacket : platform::wire::Packet<PlayerStatePacket, PacketType:
   uint8_t riding_along_player_id = kWireInvalidPlayerId;
   uint8_t mission_flags = 0;
   uint8_t visual_secrets = 0;
+  uint8_t selected_traffic_authority = kWireInvalidPlayerId;
 };
 
 template <typename Stream, typename PacketT>
@@ -76,6 +77,7 @@ bool serialize_fields(Stream& stream, PacketT&& packet) {
       !platform::wire::serialize_uint_bits(stream, packet.riding_along_player_id, 4) ||
       !platform::wire::serialize_uint_bits(stream, packet.mission_flags, 2) ||
       !platform::wire::serialize_uint_bits(stream, packet.visual_secrets, 3) ||
+      !platform::wire::serialize_uint_bits(stream, packet.selected_traffic_authority, 4) ||
       !platform::wire::serialize_byte_align(stream)) {
     return false;
   }

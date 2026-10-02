@@ -631,7 +631,8 @@ void SessionController::handle_gameplay(const ConnectionId connection,
       .sequence = envelope.sequence,
       .received_at_ms = last_pump_ms_,
       .payload = envelope.payload};
-  auto [disposition, canonical_payload, relay_recipients] = adapter_.packets().receive(message, *this);
+  auto [disposition, canonical_payload, relay_recipients] =
+      adapter_.packets().receive(message, *this);
   if (disposition == PayloadDisposition::REJECT) {
     if (!gameplay_rejection_observed_) {
       gameplay_rejection_observed_ = true;

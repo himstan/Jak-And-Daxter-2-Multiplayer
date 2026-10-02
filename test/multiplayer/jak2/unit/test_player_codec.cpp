@@ -31,6 +31,7 @@ TEST(Jak2Protocol, RoundTripsCorePlayerStateWithStableWireSize) {
   input.vehicle_id = 0x11223344;
   input.vehicle_seat = 2;
   input.riding_along_player_id = 4;
+  input.selected_traffic_authority = 7;
   input.mission_flags = 0x2;
   input.visual_secrets = 0x4;
 
@@ -58,8 +59,34 @@ TEST(Jak2Protocol, RoundTripsCorePlayerStateWithStableWireSize) {
     EXPECT_EQ(output.levels[level].flags, input.levels[level].flags);
   }
   EXPECT_EQ(output.vehicle_id, input.vehicle_id);
+  EXPECT_EQ(output.selected_traffic_authority, input.selected_traffic_authority);
   EXPECT_TRUE(output.spectator_only);
   EXPECT_TRUE(output.scene_active);
+}
+
+TEST(Jak2Protocol, TrafficInterestFitsPlayerPacketAndRejectsInvalidSources) {
+  using namespace multiplayer;
+  for (const auto source : {0, 1, 2, 3, 4, 5, 6, 7, 255}) {
+    jak2::core::PlayerState input;
+    input.selected_traffic_authority = static_cast<uint8_t>(source);
+    const auto bytes = platform::wire::encode_packet(jak2::wire::to_packet(input));
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ(bytes->size(), 49u);
+    const auto packet = platform::wire::decode_packet<jak2::wire::PlayerStatePacket>(*bytes);
+    ASSERT_TRUE(packet);
+    jak2::core::PlayerState output;
+    jak2::wire::from_packet(*packet, output);
+    EXPECT_EQ(output.selected_traffic_authority, source);
+  }
+  for (uint8_t source = 8; source < 15; ++source) {
+    jak2::wire::PlayerStatePacket invalid;
+    invalid.selected_traffic_authority = source;
+    EXPECT_FALSE(platform::wire::encode_packet(invalid));
+    auto bytes = platform::wire::encode_packet(jak2::wire::PlayerStatePacket{});
+    ASSERT_TRUE(bytes);
+    bytes->back() = (bytes->back() & ~0x3c) | (source << 2);
+    EXPECT_FALSE(platform::wire::decode_packet<jak2::wire::PlayerStatePacket>(*bytes));
+  }
 }
 
 TEST(Jak2Protocol, PlayerCodecRejectsTruncationAndTrailingBytes) {

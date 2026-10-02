@@ -154,6 +154,7 @@ void Jak2Adapter::add_player_handlers(Handlers& handlers) {
         auto player = local_frame_->players[session.local_player_id];
         player.player_id = session.local_player_id;
         player.sample_time_ms = local_frame_->sample_time_ms;
+        player.selected_traffic_authority = local_frame_->selected_traffic_authority;
         player.activity = core::PlayerActivity::LOBBY;
         if (session.status == platform::SessionStatus::IN_GAME)
           player.activity = core::PlayerActivity::IN_GAME;
@@ -226,6 +227,28 @@ void Jak2Adapter::add_entity_handlers(Handlers& handlers) {
       frame_ready(local_frame_));
 }
 
+std::vector<core::PlayerId> Jak2Adapter::traffic_subscribers(
+    const core::PlayerId source,
+    const platform::SessionSnapshot& session) const {
+  std::vector<core::PlayerId> targets;
+  const auto& [revision, assignments] = state_.traffic().authority();
+  if (source >= core::kMaxPlayers || revision == 0 || assignments[source] != source)
+    return targets;
+  for (const auto& profile : session.players) {
+    const auto player_id = profile.player_id;
+    if (player_id == source || player_id >= session.state.player_limit ||
+        player_id >= core::kMaxPlayers)
+      continue;
+    const auto& player = state_.players().players()[player_id];
+    auto selected = player.state_ready ? player.selected_traffic_authority : core::kInvalidPlayerId;
+    if (player_id == session.state.local_player_id && local_frame_)
+      selected = local_frame_->selected_traffic_authority;
+    if (assignments[player_id] == source || selected == source)
+      targets.push_back(player_id);
+  }
+  return targets;
+}
+
 void Jak2Adapter::add_traffic_handlers(Handlers& handlers) {
   add_packet_handler<wire::TrafficAuthorityStatePacket>(
       handlers, wire::to_packet, state_.traffic(), wire::canonicalize_host_state,
@@ -241,21 +264,17 @@ void Jak2Adapter::add_traffic_handlers(Handlers& handlers) {
                last_traffic_authority_->assignments != local_frame_->traffic_authority.assignments;
       });
   const auto relay = [this](const auto& message,
-                            const auto& session) -> std::optional<std::vector<platform::PlayerId>> {
-    std::vector<platform::PlayerId> targets;
-    const auto& assignments = state_.traffic().authority().assignments;
-    for (core::PlayerId player_id = 0;
-         player_id < session.player_limit && player_id < core::kMaxPlayers; ++player_id)
-      if (player_id != message.origin.authenticated_player_id &&
-          assignments[player_id] == message.origin.authenticated_player_id)
-        targets.push_back(player_id);
+                            const auto&) -> std::optional<std::vector<platform::PlayerId>> {
+    auto targets =
+        traffic_subscribers(message.origin.authenticated_player_id, endpoint_->snapshot());
+    std::erase(targets, endpoint_->snapshot().state.local_player_id);
     return targets;
   };
   const auto produce = [this](auto& handler, auto& endpoint, uint64_t now_ms) {
     const auto& session = endpoint.snapshot().state;
-    const auto& authority = state_.traffic().authority();
-    if (authority.revision == 0 ||
-        authority.assignments[session.local_player_id] != session.local_player_id)
+    const auto& [revision, assignments] = state_.traffic().authority();
+    const auto targets = traffic_subscribers(session.local_player_id, endpoint.snapshot());
+    if (targets.empty())
       return;
     auto snapshot = handler.policy().id == static_cast<uint8_t>(PacketType::PEDESTRIAN_STATE_BATCH)
                         ? local_frame_->pedestrians
@@ -274,13 +293,29 @@ void Jak2Adapter::add_traffic_handlers(Handlers& handlers) {
           [](const auto& vehicle) { return vehicle.net_id; });
     }
     snapshot.source_player_id = session.local_player_id;
-    snapshot.authority_revision = authority.revision;
+    snapshot.authority_revision = revision;
     snapshot.level_id =
         core::primary_level_id(local_frame_->players[session.local_player_id].levels);
     snapshot.sample_time_ms = local_frame_->sample_time_ms;
-    handler.send(snapshot, endpoint, now_ms);
+    if (session.role == platform::SessionRole::CLIENT) {
+      handler.send(snapshot, endpoint, now_ms);
+    } else {
+      bool applied = false;
+      for (const auto& connection : endpoint.snapshot().connections) {
+        if (std::ranges::find(targets, connection.player_id) != targets.end())
+          applied |= handler
+                         .send(snapshot, endpoint, now_ms, !applied,
+                               platform::Audience::one(connection.network.connection_id))
+                         .has_value();
+      }
+    }
   };
-  const auto ready = frame_ready(local_frame_);
+  const auto ready = [this]() -> std::optional<bool> {
+    if (!local_frame_ || !endpoint_ ||
+        traffic_subscribers(local_frame_->local_player_id, endpoint_->snapshot()).empty())
+      return std::nullopt;
+    return true;
+  };
   add_packet_handler<wire::PedestrianStateBatchPacket>(
       handlers, wire::to_pedestrian_state_batch_packet, state_.traffic(),
       wire::canonicalize_snapshot, produce, ready, relay);

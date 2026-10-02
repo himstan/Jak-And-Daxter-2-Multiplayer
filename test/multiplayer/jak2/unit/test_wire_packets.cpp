@@ -99,7 +99,7 @@ TEST(Jak2Protocol, PlayerStateWireFormatPreservesEveryField) {
   const std::vector<uint8_t> bytes = {120, 86,  52, 18,  3,   0,   16,  0,   0,   1,   0,   16,  0,
                                       16,  0,   16, 0,   80,  0,   80,  12,  81,  192, 140, 129, 8,
                                       66,  196, 64, 149, 132, 217, 168, 64,  243, 106, 132, 123, 11,
-                                      0,   148, 2,  0,   0,   20,  75,  109, 231, 2};
+                                      0,   148, 2,  0,   0,   20,  75,  109, 231, 22};
   multiplayer::jak2::core::PlayerState state = {};
   state.player_id = 2;
   state.sample_time_ms = 0x12345678;
@@ -130,6 +130,7 @@ TEST(Jak2Protocol, PlayerStateWireFormatPreservesEveryField) {
   state.riding_along_player_id = 3;
   state.mission_flags = 3;
   state.visual_secrets = 5;
+  state.selected_traffic_authority = 5;
   expect_exact_packet(state, bytes);
   const auto decoded = mp_test::decode_player(bytes, {.authenticated_player_id = 2});
   ASSERT_TRUE(decoded);
@@ -164,6 +165,7 @@ TEST(Jak2Protocol, PlayerStateWireFormatPreservesEveryField) {
   EXPECT_EQ(actual.action_sequence, 0xa5u);
   EXPECT_EQ(actual.action_state_id, 0xb6u);
   EXPECT_EQ(actual.riding_along_player_id, 3u);
+  EXPECT_EQ(actual.selected_traffic_authority, 5u);
   EXPECT_EQ(actual.mission_flags, 3u);
   EXPECT_EQ(actual.visual_secrets, 5u);
 }

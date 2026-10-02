@@ -40,6 +40,8 @@ class Jak2Adapter final : public platform::GameAdapter {
   void add_world_handlers(std::vector<std::unique_ptr<platform::PacketHandler>>&);
   void add_entity_handlers(std::vector<std::unique_ptr<platform::PacketHandler>>&);
   void add_traffic_handlers(std::vector<std::unique_ptr<platform::PacketHandler>>&);
+  std::vector<core::PlayerId> traffic_subscribers(core::PlayerId source,
+                                                  const platform::SessionSnapshot& session) const;
   void add_event_handler(std::vector<std::unique_ptr<platform::PacketHandler>>&);
   void publish_remote_frame(const platform::SessionState& session, uint64_t now_ms);
 

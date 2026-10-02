@@ -182,6 +182,7 @@ struct PlayerState {
   uint32_t vehicle_id = 0;
   uint8_t vehicle_seat = 0;
   PlayerId riding_along_player_id = kInvalidPlayerId;
+  PlayerId selected_traffic_authority = kInvalidPlayerId;
   uint8_t mission_flags = 0;
   uint8_t visual_secrets = 0;
   uint32_t sample_time_ms = 0;
