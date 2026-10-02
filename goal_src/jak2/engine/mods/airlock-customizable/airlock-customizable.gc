@@ -343,7 +343,7 @@
   (when (and (airlock-reconcile-runtime-ready? this)
              (airlock-in-state? this 'open)
              (logtest? (-> this mask) (process-mask sleep-code))
-             (is-ready-for-any-players? this)
+             (local-player-can-report-airlock-ready? this)
              (not (airlock-commit-in-progress? this))
              (airlock-reconcile-script this 0)
              (airlock-reconcile-script this 1)
