@@ -62,7 +62,7 @@
     (target-state-hook-exit)
     )
   :trans (behavior ()
-    (when (focus-test? self indax)
+    (when (or (focus-test? self indax) (mp-target-daxter? self))
       (go target-indax-start (the handle #f))
       )
     ((-> self state-hook))
