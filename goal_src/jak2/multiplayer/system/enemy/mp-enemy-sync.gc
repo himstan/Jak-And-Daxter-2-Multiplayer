@@ -147,7 +147,6 @@
     (set! (-> rec focus-player-id) MP_INVALID_PLAYER_ID)
     (set! (-> rec locomotion-animation) -1)
     (set! (-> rec locomotion-frame) 0.0)
-    (set! (-> rec locomotion-time) 0)
     (mp-enemy-reset-remote-motion-sample! rec)
     (when (nonnull? (-> proc root))
       (vector-copy! (-> rec trans) (-> proc root trans))
