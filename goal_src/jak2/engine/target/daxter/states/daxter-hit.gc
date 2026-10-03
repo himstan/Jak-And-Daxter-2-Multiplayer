@@ -71,9 +71,11 @@
                   (else
                    (pickup-collectable! (-> self fact) (pickup-type health) -1000.0 (the-as handle #f))
                    (go target-indax-death (-> gp-0 mode)))))
-               (('instant-death 'smush 'tomb-spider 'bot)
+               (('dark-eco-pool 'instant-death 'smush 'tomb-spider 'bot)
                 (pickup-collectable! (-> self fact) (pickup-type health) -1000.0 (the-as handle #f))
-                (if (= (-> self game mode) 'play) (go target-indax-death (-> gp-0 mode))))
+                (when (and (nonnull? self (-> self game) gp-0) (= (-> self game mode) 'play))
+                  (go (if (= (-> gp-0 mode) 'dark-eco-pool) target-death target-indax-death)
+                      (-> gp-0 mode))))
                (else (pickup-collectable! (-> self fact) (pickup-type health) (- (-> gp-0 damage)) (the-as handle #f))))
              (target-hit-effect gp-0))
             (else
