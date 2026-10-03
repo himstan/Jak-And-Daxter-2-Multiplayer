@@ -300,6 +300,15 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
   load_types("kernel/gkernel-h.gc", "time-frame");
   load_types("engine/math/quaternion-h.gc", "quaternion");
   load_types("multiplayer/event/mp-event-h.gc");
+  load_types("multiplayer/data/mp-world-h.gc", "mp-world-sync-state");
+  EXPECT_EQ(types.lookup_type("mp-world-sync-state")->get_size_in_memory(),
+            sizeof(MPWorldSyncStateGOAL));
+  EXPECT_EQ(types.lookup_field_info("mp-world-sync-state", "player-collision").field.offset(),
+            offsetof(MPWorldSyncStateGOAL, player_collision));
+  EXPECT_EQ(types.lookup_field_info("mp-world-sync-state", "friendly-fire").field.offset(),
+            offsetof(MPWorldSyncStateGOAL, friendly_fire));
+  EXPECT_EQ(types.lookup_field_info("mp-world-sync-state", "task-mask").field.offset(),
+            offsetof(MPWorldSyncStateGOAL, task_mask));
   load_types("multiplayer/data/mp-replication-h.gc", "gungame-target-record");
   EXPECT_EQ(types.get_deref_info(types.make_inline_array_typespec("gungame-target-record")).stride,
             sizeof(GungameTargetRecordGOAL));
@@ -435,12 +444,12 @@ TEST(Jak2GoalBridge, DirectionalAggregateHasCanonicalCompactAbi) {
   EXPECT_EQ(sizeof(MPReplicationPedestrianStateGOAL), 60u);
   EXPECT_EQ(sizeof(MPReplicationTrafficSetGOAL), 13328u);
   EXPECT_EQ(sizeof(MPReplicationBootstrapStateGOAL), 16454u);
-  EXPECT_EQ(sizeof(MPReplicationFrameGOAL), 92496u);
-  EXPECT_EQ(sizeof(MPReplicationStateGOAL), 195280u);
+  EXPECT_EQ(sizeof(MPReplicationFrameGOAL), 92512u);
+  EXPECT_EQ(sizeof(MPReplicationStateGOAL), 195312u);
   EXPECT_EQ(offsetof(MPReplicationStateGOAL, local), 16u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, remote), 92512u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, outbound_events), 185024u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, inbound_events), 190160u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, remote), 92528u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, outbound_events), 185056u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, inbound_events), 190192u);
 }
 
 TEST(Jak2GoalBridge, PlayerAppearanceConversionRoundTripsValues) {
@@ -1156,4 +1165,47 @@ TEST(Jak2GoalBridge, InvalidGungameCaptureDoesNotBlockOtherDomainsOrEvents) {
   capture(false);
   target.spawn_time = 0;
   capture(true);
+}
+
+TEST(Jak2GoalBridge, PlayerRulesPersistAndResetToOff) {
+  ScopedPreferencesRoot preferences_root;
+  EXPECT_FALSE(multiplayer_preferences().player_collision);
+  EXPECT_FALSE(multiplayer_preferences().friendly_fire);
+  set_player_collision(true);
+  set_friendly_fire(true);
+  load_multiplayer_preferences();
+  EXPECT_TRUE(multiplayer_preferences().player_collision);
+  EXPECT_TRUE(multiplayer_preferences().friendly_fire);
+  const auto json =
+      parse_commented_json(file_util::read_text_file(preferences_root.path()), "preferences.json");
+  EXPECT_EQ(json.at("player_collision"), true);
+  EXPECT_EQ(json.at("friendly_fire"), true);
+  const auto malformed =
+      parse_multiplayer_preferences(R"({"player_collision": "true", "friendly_fire": 1})");
+  EXPECT_FALSE(malformed.player_collision);
+  EXPECT_FALSE(malformed.friendly_fire);
+  reset_multiplayer_preferences();
+  load_multiplayer_preferences();
+  EXPECT_FALSE(multiplayer_preferences().player_collision);
+  EXPECT_FALSE(multiplayer_preferences().friendly_fire);
+}
+
+TEST(Jak2GoalBridge, PlayerRulesCrossTheWorldBridge) {
+  GoalMemoryFixture memory;
+  auto& state = replication_state(memory);
+  state.local.world.player_collision = 1;
+  state.local.world.friendly_fire = 1;
+  multiplayer::jak2::application::ReplicationMailbox mailbox;
+  ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
+  const auto local = mailbox.take_local_frame();
+  ASSERT_TRUE(local);
+  EXPECT_TRUE(local->world.player_collision);
+  EXPECT_TRUE(local->world.friendly_fire);
+  auto remote = std::make_unique<multiplayer::jak2::application::RemoteReplicationFrame>();
+  remote->world = local->world;
+  remote->world.friendly_fire = false;
+  mailbox.publish_remote_frame(std::move(remote));
+  ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
+  EXPECT_EQ(state.remote.world.player_collision, 1);
+  EXPECT_EQ(state.remote.world.friendly_fire, 0);
 }

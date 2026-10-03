@@ -70,6 +70,7 @@ bool bootstrap_equal(const core::BootstrapState& left, const core::BootstrapStat
   const auto& a = left.world;
   const auto& b = right.world;
   return a.money == b.money && a.gems == b.gems && a.skill == b.skill &&
+         a.player_collision == b.player_collision && a.friendly_fire == b.friendly_fire &&
          a.task_mask == b.task_mask && a.active_task_mask == b.active_task_mask &&
          left.host_task == right.host_task && left.host_continue == right.host_continue &&
          left.host_spawn_position == right.host_spawn_position &&

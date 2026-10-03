@@ -1805,7 +1805,7 @@
     (set! (-> gp-0 pos quad) (-> arg0 quad))
     (set! (-> gp-0 vel quad) (-> (vector-normalize-copy! (new 'stack-no-clear 'vector) arg1 1228800.0) quad))
     (set! (-> gp-0 notify-handle) (the-as handle #f))
-    (set! (-> gp-0 owner-handle) (the-as handle #f))
+    (set! (-> gp-0 owner-handle) (-> this rider))
     (set! (-> gp-0 ignore-handle) (process->handle this))
     (let* ((v1-9 *game-info*)
            (a0-9 (+ (-> v1-9 attack-id) 1))
@@ -2088,6 +2088,8 @@
          )
        )
       (('attack 'attack-invinc)
+       (when (nonnull? (get-player-attacker proc))
+         (return #f))
        (let ((gp-0
                (the-as object (mem-copy! (the-as pointer (-> self attack-info-rec)) (the-as pointer (-> block param 1)) 160))
                )
@@ -2101,7 +2103,8 @@
           )
          (case (-> (the-as attack-info gp-0) mode)
            (('turret)
-            ;; we hit here if another player shoots us with their turret, results in us dying in the turret without it exploding which puts us in a weird bugged out state, so lets just return
+            (target-attacked 'attack-invinc (the-as attack-info (-> block param 1)) proc
+                             (the-as touching-shapes-entry (-> block param 0)) target-hit)
             (return #t)
             )
            (('bot)

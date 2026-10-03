@@ -16,6 +16,7 @@
 #include "game/multiplayer/jak2/wire/packets/player_vehicle_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/traffic_authority_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/vehicle_state_batch_packet.h"
+#include "game/multiplayer/jak2/wire/packets/world_state_packet.h"
 #include "game/multiplayer/platform/session/cadence_scheduler.h"
 #include "game/multiplayer/platform/wire/quantization.h"
 #include "gtest/gtest.h"
@@ -1417,4 +1418,57 @@ TEST(Jak2AdapterIntegration, RegistryContainsEveryGameplayIdWithoutSharedControl
   RecordingEndpoint endpoint;
   EXPECT_EQ(adapter.packets().receive({.message_id = 255}, endpoint).disposition,
             platform::PayloadDisposition::REJECT);
+}
+
+TEST(Jak2AdapterIntegration, HostRulesReachLateJoinAndReconnectBootstrap) {
+  jak2::application::Jak2Adapter host;
+  RecordingEndpoint host_endpoint;
+  host.installed(host_endpoint);
+  host.session_started(host_endpoint.session_snapshot.state);
+  jak2::application::Jak2Adapter client;
+  RecordingEndpoint client_endpoint;
+  client_endpoint.session_snapshot.state.role = platform::SessionRole::CLIENT;
+  client_endpoint.session_snapshot.state.local_player_id = 1;
+  client.installed(client_endpoint);
+  client.session_started(client_endpoint.session_snapshot.state);
+  for (uint32_t generation = 1; generation <= 2; ++generation) {
+    auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
+    frame->local_player_id = 0;
+    frame->host_player_id = 0;
+    frame->world.player_collision = generation == 1;
+    frame->world.friendly_fire = generation == 2;
+    frame->bootstrap.host_continue[0] = 'a';
+    host.mailbox().publish_local_frame(std::move(frame));
+    host.tick(generation * 100);
+    ASSERT_TRUE(client.apply_bootstrap(generation, host.create_bootstrap(1)));
+    client.tick(generation * 100);
+    const auto remote = client.mailbox().take_remote_frame();
+    ASSERT_TRUE(remote);
+    EXPECT_EQ(remote->world.player_collision, generation == 1);
+    EXPECT_EQ(remote->world.friendly_fire, generation == 2);
+    EXPECT_EQ(remote->bootstrap.world.player_collision, generation == 1);
+    EXPECT_EQ(remote->bootstrap.world.friendly_fire, generation == 2);
+    jak2::core::WorldState live_world = {};
+    live_world.clock = generation * 1000;
+    live_world.player_collision = generation != 1;
+    live_world.friendly_fire = generation != 2;
+    const auto payload = platform::wire::encode_packet(jak2::wire::to_packet(live_world));
+    ASSERT_TRUE(payload);
+    EXPECT_EQ(client.packets()
+                  .receive({.origin = {.authenticated_player_id = 0, .from_host = true},
+                            .message_id = static_cast<uint8_t>(PacketType::WORLD_STATE),
+                            .sequence = generation + 100,
+                            .payload = *payload},
+                           client_endpoint)
+                  .disposition,
+              platform::PayloadDisposition::CONSUME);
+    client.tick(generation * 100 + 50);
+    const auto updated = client.mailbox().take_remote_frame();
+    ASSERT_TRUE(updated);
+    EXPECT_EQ(updated->world.clock, live_world.clock);
+    EXPECT_EQ(updated->world.player_collision, generation == 1);
+    EXPECT_EQ(updated->world.friendly_fire, generation == 2);
+    client.session_reset();
+    client.session_started(client_endpoint.session_snapshot.state);
+  }
 }

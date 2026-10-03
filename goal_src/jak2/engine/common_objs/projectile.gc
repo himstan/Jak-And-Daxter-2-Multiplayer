@@ -484,6 +484,7 @@ If we've met or exceeded the projectiles maximum allowed hits, switch to the [[p
   (set! (-> self target-pos quad) (-> self base-target-pos quad))
   (set! (-> self event-hook) projectile-event-handler)
   (init-proj-settings! self)
+  (player-projectile-contact! self)
   (update-transforms (-> self root))
   (draw-laser-sight self)
   (play-impact-sound self (projectile-options))

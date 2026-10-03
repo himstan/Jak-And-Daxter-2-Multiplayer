@@ -327,6 +327,22 @@ static void pc_multi_set_automatic_port_mapping(const int enabled) {
   set_automatic_port_mapping(enabled != 0);
 }
 
+static int pc_multi_get_player_collision() {
+  return multiplayer_preferences().player_collision ? 1 : 0;
+}
+
+static void pc_multi_set_player_collision(const int enabled) {
+  set_player_collision(enabled != 0);
+}
+
+static int pc_multi_get_friendly_fire() {
+  return multiplayer_preferences().friendly_fire ? 1 : 0;
+}
+
+static void pc_multi_set_friendly_fire(const int enabled) {
+  set_friendly_fire(enabled != 0);
+}
+
 static void pc_multi_reset_preferences() {
   reset_multiplayer_preferences();
 }
@@ -533,6 +549,10 @@ void init_jak2_bridge() {
   register_symbol("pc-multi-get-preference-field", &pc_multi_get_preference_field);
   register_symbol("pc-multi-get-player-name", &pc_multi_get_player_name);
   register_symbol("pc-multi-set-preference-field", &pc_multi_set_preference_field);
+  register_symbol("pc-multi-get-player-collision", &pc_multi_get_player_collision);
+  register_symbol("pc-multi-set-player-collision", &pc_multi_set_player_collision);
+  register_symbol("pc-multi-get-friendly-fire", &pc_multi_get_friendly_fire);
+  register_symbol("pc-multi-set-friendly-fire", &pc_multi_set_friendly_fire);
   register_symbol("pc-multi-get-automatic-port-mapping", &pc_multi_get_automatic_port_mapping);
   register_symbol("pc-multi-set-automatic-port-mapping", &pc_multi_set_automatic_port_mapping);
   register_symbol("pc-multi-reset-preferences", &pc_multi_reset_preferences);

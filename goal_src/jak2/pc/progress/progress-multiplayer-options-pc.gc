@@ -110,6 +110,20 @@
           (let ((limit (+ index 2)))
             (mp-set-session-player-limit! (the uint limit))
             (pc-multi-set-preference-player-limit (the uint limit)))))
+      (new 'static 'menu-generic-boolean-option
+        :name (text-id progress-multiplayer-friendly-fire)
+        :truthy-text (text-id progress-on)
+        :falsey-text (text-id progress-off)
+        :get-value-fn (lambda () (= (pc-multi-get-friendly-fire) 1))
+        :on-confirm (lambda ((value symbol))
+          (pc-multi-set-friendly-fire (if value 1 0))))
+      (new 'static 'menu-generic-boolean-option
+        :name (text-id progress-multiplayer-player-collision)
+        :truthy-text (text-id progress-on)
+        :falsey-text (text-id progress-off)
+        :get-value-fn (lambda () (= (pc-multi-get-player-collision) 1))
+        :on-confirm (lambda ((value symbol))
+          (pc-multi-set-player-collision (if value 1 0))))
       (new 'static 'menu-generic-text-field-option
         :name (text-id progress-port)
         :field 0

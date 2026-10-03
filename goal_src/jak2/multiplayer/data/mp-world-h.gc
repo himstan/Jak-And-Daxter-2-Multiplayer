@@ -14,9 +14,11 @@
    (weather-cloud     float)
    (weather-fog       float)
    (weather-rain      float)
+   (player-collision  uint8)
+   (friendly-fire     uint8)
    (task-mask         uint8 64)
    (active-task-mask  uint8 64))
-  :size-assert 176)
+  :size-assert 178)
 
 (deftype mp-bootstrap-sync-state (structure)
   ((phase                  uint32)

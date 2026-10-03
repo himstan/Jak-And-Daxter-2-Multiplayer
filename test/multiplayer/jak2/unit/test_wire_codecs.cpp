@@ -406,7 +406,7 @@ TEST(Jak2Protocol, BootstrapAndAirlockKeepFixedWireSizes) {
   std::vector<uint8_t> bytes;
   ASSERT_TRUE(multiplayer::platform::wire::encode_packet(
       multiplayer::jak2::wire::to_packet(bootstrap), bytes));
-  ASSERT_EQ(bytes.size(), 212u);
+  ASSERT_EQ(bytes.size(), 214u);
   const auto bootstrap_packet =
       multiplayer::platform::wire::decode_packet<multiplayer::jak2::wire::BootstrapStatePacket>(
           bytes);

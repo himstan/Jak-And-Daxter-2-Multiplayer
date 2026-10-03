@@ -615,6 +615,7 @@
   "mp-enemy-tombstone.o" ;; added
   "actor-record-sync.o" ;; added
   "mp-actor-hit-sync.o" ;; added
+  "player-interaction.o" ;; added
   "mp-enemy-state-mapper.o" ;; added
   "mp-enemy-sync.o" ;; added
   "mp-enemy-animation.o" ;; added

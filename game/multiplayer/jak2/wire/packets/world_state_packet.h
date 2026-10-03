@@ -18,7 +18,7 @@ struct WorldStatePacket : platform::wire::Packet<WorldStatePacket, PacketType::W
       .direction = platform::MessageDirection::HOST_TO_CLIENT,
       .cadence = platform::CadenceMode::PERIODIC,
       .interval_ms = 100,
-      .maximum_payload_bytes = 148};
+      .maximum_payload_bytes = kWorldStatePacketWireSize};
 
   uint64_t clock = 0;
   uint64_t time_of_day_frame = 0;

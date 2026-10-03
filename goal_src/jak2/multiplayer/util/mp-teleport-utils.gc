@@ -170,7 +170,7 @@
           ((4) (-! (-> position z) (meters 2))))
         (when (above-ground? control query position (collide-spec backgnd) (meters 2) (meters 12) (meters 0.5))
           (set! (-> position y) (+ (-> query best-other-tri intersect y) (meters 1)))
-          (when (mp-teleport-bootstrap-clearance? player position)
+          (when (and (mp-teleport-bootstrap-clearance? player position) (player-position-clear? player position))
             (return #t))))))
   #f)
 

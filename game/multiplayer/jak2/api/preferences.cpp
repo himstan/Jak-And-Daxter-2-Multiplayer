@@ -240,6 +240,12 @@ void parse_preferences_root(const json& root, MultiplayerPreferences& parsed, bo
     if (root.contains("automatic_port_mapping") && root.at("automatic_port_mapping").is_boolean()) {
       parsed.automatic_port_mapping = root.at("automatic_port_mapping").get<bool>();
     }
+    if (root.contains("player_collision") && root.at("player_collision").is_boolean()) {
+      parsed.player_collision = root.at("player_collision").get<bool>();
+    }
+    if (root.contains("friendly_fire") && root.at("friendly_fire").is_boolean()) {
+      parsed.friendly_fire = root.at("friendly_fire").get<bool>();
+    }
     if (root.contains("session_player_limit") &&
         root.at("session_player_limit").is_number_unsigned()) {
       if (const uint32_t limit = root.at("session_player_limit").get<uint32_t>();
@@ -341,6 +347,8 @@ void save_multiplayer_preferences() {
     };
   }
   root["player_texture_groups"] = std::move(texture_groups);
+  root["player_collision"] = g_preferences.player_collision;
+  root["friendly_fire"] = g_preferences.friendly_fire;
   root["automatic_port_mapping"] = g_preferences.automatic_port_mapping;
   root["session_player_limit"] = g_preferences.session_player_limit;
   const auto path = settings_path();
@@ -443,6 +451,20 @@ bool set_automatic_port_mapping(const bool enabled) {
   g_preferences.automatic_port_mapping = enabled;
   save_after_edit();
   return true;
+}
+
+void set_player_collision(const bool enabled) {
+  if (g_preferences.player_collision != enabled) {
+    g_preferences.player_collision = enabled;
+    save_after_edit();
+  }
+}
+
+void set_friendly_fire(const bool enabled) {
+  if (g_preferences.friendly_fire != enabled) {
+    g_preferences.friendly_fire = enabled;
+    save_after_edit();
+  }
 }
 
 bool set_player_appearance(const MPPlayerAppearance& appearance) {

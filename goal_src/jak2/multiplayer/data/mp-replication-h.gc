@@ -251,9 +251,9 @@
    (enemy-clear-generation   uint32)
    (traffic-clear-generation uint32)
    (boss-clear-generation    uint32))
-  :size-assert 92496)
+  :size-assert 92512)
 
-(defconstant MP_REPLICATION_STATE_SIZE 195280)
+(defconstant MP_REPLICATION_STATE_SIZE 195312)
 
 (deftype mp-replication-state (structure)
   ((abi-size             uint32)

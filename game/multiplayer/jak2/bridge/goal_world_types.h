@@ -4,6 +4,7 @@
 
 #include "game/multiplayer/jak2/core/multiplayer_types.h"
 
+#pragma pack(push, 1)
 struct MPWorldSyncStateGOAL {
   float money;
   float gems;
@@ -15,9 +16,12 @@ struct MPWorldSyncStateGOAL {
   float weather_cloud;
   float weather_fog;
   float weather_rain;
+  uint8_t player_collision;
+  uint8_t friendly_fire;
   uint8_t task_mask[64];
   uint8_t active_task_mask[64];
 };
+#pragma pack(pop)
 
 #pragma pack(push, 1)
 struct MPReplicationBootstrapStateGOAL {
@@ -33,5 +37,5 @@ struct MPReplicationBootstrapStateGOAL {
 };
 #pragma pack(pop)
 
-static_assert(sizeof(MPWorldSyncStateGOAL) == 176);
+static_assert(sizeof(MPWorldSyncStateGOAL) == 178);
 static_assert(sizeof(MPReplicationBootstrapStateGOAL) == 16454);

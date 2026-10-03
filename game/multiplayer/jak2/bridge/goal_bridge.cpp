@@ -188,6 +188,8 @@ core::WorldState read_world(const MPWorldSyncStateGOAL& source) {
   result.weather_cloud = source.weather_cloud;
   result.weather_fog = source.weather_fog;
   result.weather_rain = source.weather_rain;
+  result.player_collision = source.player_collision != 0;
+  result.friendly_fire = source.friendly_fire != 0;
   std::ranges::copy(source.task_mask, result.task_mask.begin());
   std::ranges::copy(std::begin(source.active_task_mask), std::end(source.active_task_mask),
                     result.active_task_mask.begin());
@@ -468,6 +470,8 @@ void write_world(const core::WorldState& source, MPWorldSyncStateGOAL& destinati
   destination.weather_cloud = source.weather_cloud;
   destination.weather_fog = source.weather_fog;
   destination.weather_rain = source.weather_rain;
+  destination.player_collision = source.player_collision;
+  destination.friendly_fire = source.friendly_fire;
   std::ranges::copy(source.task_mask.begin(), source.task_mask.end(),
                     std::begin(destination.task_mask));
   std::ranges::copy(source.active_task_mask.begin(), source.active_task_mask.end(),

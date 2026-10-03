@@ -357,6 +357,8 @@ struct WorldState {
   float weather_cloud = 0.0f;
   float weather_fog = 0.0f;
   float weather_rain = 0.0f;
+  bool player_collision = false;
+  bool friendly_fire = false;
   std::array<uint8_t, 64> task_mask = {};
   std::array<uint8_t, 64> active_task_mask = {};
 };

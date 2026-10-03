@@ -27,6 +27,8 @@ struct BootstrapStatePacket : platform::wire::Packet<BootstrapStatePacket, Packe
   float weather_cloud = 0.0f;
   float weather_fog = 0.0f;
   float weather_rain = 0.0f;
+  uint8_t player_collision = 0;
+  uint8_t friendly_fire = 0;
   float host_camera_angle_y = 0.0f;
 };
 
@@ -74,6 +76,8 @@ bool serialize_fields(Stream& stream, PacketT&& packet) {
          platform::wire::serialize_unit(stream, packet.weather_cloud) &&
          platform::wire::serialize_unit(stream, packet.weather_fog) &&
          platform::wire::serialize_unit(stream, packet.weather_rain) &&
+         platform::wire::serialize_u8(stream, packet.player_collision) &&
+         platform::wire::serialize_u8(stream, packet.friendly_fire) &&
          platform::wire::serialize_angle(stream, packet.host_camera_angle_y) &&
          platform::wire::serialize_byte_align(stream);
 }

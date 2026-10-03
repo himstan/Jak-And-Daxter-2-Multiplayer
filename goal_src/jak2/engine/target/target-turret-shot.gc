@@ -196,13 +196,13 @@
     (case message
       (('touched)
        (let ((toucher (as-type proc process-drawable)))
-         (when toucher
-           (-> toucher root)
+         (when (nonnull? self toucher block)
            (send-event
              proc
              'attack
              (-> block param 0)
-             (static-attack-info ((id (-> self attack-id)) (mode 'explode) (damage (-> self damage))))
+             (static-attack-info ((id (-> self attack-id)) (mode 'explode) (damage (-> self damage))
+                                 (attacker (process->handle (the-as process (or (handle->process-safe (-> self owner-handle)) self))))))
              )
            )
          )

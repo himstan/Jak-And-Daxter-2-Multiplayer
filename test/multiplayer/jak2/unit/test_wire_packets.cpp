@@ -563,3 +563,40 @@ TEST(Jak2Protocol, GungameStateRejectsMalformedAndInconsistentBodies) {
   state = {};
   EXPECT_TRUE(platform::wire::encode_packet(jak2::wire::to_packet(state)));
 }
+
+TEST(Jak2Protocol, PlayerRulesRoundTripOnlyInBootstrap) {
+  using namespace multiplayer;
+  for (const bool collision : {false, true}) {
+    for (const bool friendly : {false, true}) {
+      jak2::core::WorldState world = {};
+      world.player_collision = collision;
+      world.friendly_fire = friendly;
+      auto bytes = platform::wire::encode_packet(jak2::wire::to_packet(world));
+      ASSERT_TRUE(bytes);
+      EXPECT_EQ(bytes->size(), jak2::wire::kWorldStatePacketWireSize);
+      const auto packet = platform::wire::decode_packet<jak2::wire::WorldStatePacket>(*bytes);
+      ASSERT_TRUE(packet);
+      jak2::core::WorldState decoded;
+      jak2::wire::from_packet(*packet, decoded);
+      EXPECT_FALSE(decoded.player_collision);
+      EXPECT_FALSE(decoded.friendly_fire);
+      auto without_rules = world;
+      without_rules.player_collision = false;
+      without_rules.friendly_fire = false;
+      EXPECT_EQ(platform::wire::encode_packet(jak2::wire::to_packet(without_rules)), bytes);
+
+      jak2::core::BootstrapState bootstrap = {};
+      bootstrap.world = world;
+      bytes = platform::wire::encode_packet(jak2::wire::to_packet(bootstrap));
+      ASSERT_TRUE(bytes);
+      auto initial = platform::wire::decode_packet<jak2::wire::BootstrapStatePacket>(*bytes);
+      ASSERT_TRUE(initial);
+      jak2::core::BootstrapState restored;
+      jak2::wire::from_packet(*initial, restored);
+      EXPECT_EQ(restored.world.player_collision, collision);
+      EXPECT_EQ(restored.world.friendly_fire, friendly);
+      initial->friendly_fire = 2;
+      EXPECT_FALSE(platform::wire::encode_packet(*initial));
+    }
+  }
+}

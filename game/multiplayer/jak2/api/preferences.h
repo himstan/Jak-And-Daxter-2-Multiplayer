@@ -18,6 +18,8 @@ struct MultiplayerPreferences {
   MPPlayerAppearance player_appearance =
       get_default_player_appearance(kInvalidMultiplayerPlayerColor);
   bool automatic_port_mapping = true;
+  bool player_collision = false;
+  bool friendly_fire = false;
   uint32_t session_player_limit = 2;
 };
 
@@ -38,6 +40,8 @@ std::string get_resolved_host_room_code();
 std::string get_multiplayer_preference_display(int field);
 bool set_multiplayer_preference(int field, std::string_view value);
 bool set_automatic_port_mapping(bool enabled);
+void set_player_collision(bool enabled);
+void set_friendly_fire(bool enabled);
 bool set_player_appearance(const MPPlayerAppearance& appearance);
 bool set_room_code_preference(std::string_view room_code);
 

@@ -5,7 +5,8 @@
 namespace multiplayer::jak2::wire {
 
 bool validate_packet(const BootstrapStatePacket& packet) {
-  return std::isfinite(packet.money) && std::isfinite(packet.gems) && std::isfinite(packet.skill) &&
+  return packet.player_collision <= 1 && packet.friendly_fire <= 1 && std::isfinite(packet.money) &&
+         std::isfinite(packet.gems) && std::isfinite(packet.skill) &&
          platform::wire::valid_position_array(packet.host_spawn_position) &&
          packet.synchronized_aid_count <= core::kMaxBootstrapAids &&
          packet.synchronized_aid_count == packet.synchronized_aids.size() &&
@@ -37,6 +38,8 @@ BootstrapStatePacket to_packet(const core::BootstrapState& state) {
   packet.weather_cloud = state.world.weather_cloud;
   packet.weather_fog = state.world.weather_fog;
   packet.weather_rain = state.world.weather_rain;
+  packet.player_collision = state.world.player_collision;
+  packet.friendly_fire = state.world.friendly_fire;
   packet.host_camera_angle_y = platform::wire::canonical_angle(state.host_camera_angle_y);
   return packet;
 }
@@ -59,6 +62,8 @@ void from_packet(const BootstrapStatePacket& packet, core::BootstrapState& state
   state.world.weather_cloud = packet.weather_cloud;
   state.world.weather_fog = packet.weather_fog;
   state.world.weather_rain = packet.weather_rain;
+  state.world.player_collision = packet.player_collision != 0;
+  state.world.friendly_fire = packet.friendly_fire != 0;
   state.host_camera_angle_y = packet.host_camera_angle_y;
 }
 
