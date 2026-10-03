@@ -173,17 +173,14 @@
   (none))
 
 (defun mp-vehicle-release-stale-player-control! ((veh vehicle))
-  (when (and veh
-             (nonzero? veh)
-             (-> veh state)
-             (nonzero? (-> veh state))
+  (when (and (nonnull? veh (-> veh state))
              (= (-> veh state name) 'player-control)
              (not (mp-player-driver-record-by-vehicle-id (-> veh net-id)))
              (not (mp-vehicle-local-target-driving? veh)))
     (let ((current-pilot (get-rider-in-seat veh 0)))
-      (if current-pilot (send-event veh 'change-state 'active) (send-event veh 'change-state 'waiting))
-      (when (and (-> veh next-state) (nonzero? (-> veh next-state)) (= (-> veh next-state name) 'player-control))
-        (set! (-> veh next-state) (the-as state #f)))))
+      (if (nonnull? current-pilot)
+        (go-process veh (method-of-object veh active))
+        (go-process veh (method-of-object veh waiting)))))
   (none))
 
 (defun mp-vehicle-ensure-guard-minimap! ((veh vehicle))
