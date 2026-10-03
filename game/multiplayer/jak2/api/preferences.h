@@ -1,6 +1,5 @@
 #pragma once
 
-#include <array>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -20,8 +19,6 @@ struct MultiplayerPreferences {
       get_default_player_appearance(kInvalidMultiplayerPlayerColor);
   bool automatic_port_mapping = true;
   uint32_t session_player_limit = 2;
-  std::array<PlayerCharacter, kMPMaxPlayers> session_characters =
-      get_default_player_character_config();
 };
 
 bool normalize_player_name(std::string_view input, std::string& output, bool allow_empty = true);
@@ -46,5 +43,5 @@ bool set_room_code_preference(std::string_view room_code);
 
 uint32_t get_session_player_limit_preference();
 bool set_session_player_limit_preference(uint32_t limit);
-uint32_t get_session_player_character_preference(uint8_t player_id);
-bool set_session_player_character_preference(uint8_t player_id, uint32_t character);
+uint32_t get_player_character_preference();
+bool set_player_character_preference(uint32_t character);

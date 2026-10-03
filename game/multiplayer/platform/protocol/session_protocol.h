@@ -33,7 +33,6 @@ struct ServerGate {
   PlayerId player_id = kInvalidPlayerId;
   PlayerId host_player_id = 0;
   uint8_t player_capacity = 0;
-  PlayerCharacter character = PlayerCharacter::UNKNOWN;
   std::string required_identity;
 };
 

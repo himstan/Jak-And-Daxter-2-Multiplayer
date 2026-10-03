@@ -80,10 +80,7 @@
               (and (<= (-> ped hit-points) 0) (mp-pedestrian-terminal-state? state-name)))
       (return #t))
     (let ((rec (get-traffic-record (-> ped net-id))))
-      (if (nonnull? rec)
-        (or (zero? (-> rec state-id))
-            (= state-name (mp-ped-get-state-from-id (the uint (-> rec state-id)))))
-        #t))))
+      (if (nonnull? rec) (or (zero? (-> rec state-id)) (= state-name (mp-ped-get-state-from-id (the uint (-> rec state-id))))) #t))))
 
 (defun mp-pedestrian-prepare-wait-state! ((this citizen))
   (let ((active-st (method-state (-> this type) (the-as basic 'active))))

@@ -78,9 +78,7 @@
   (when (not (nonnull? rec (-> rec is-aggro)))
     (return MP_INVALID_PLAYER_ID))
   (let* ((locked (the uint (-> rec combat-owner-player-id)))
-         (player-id (if (mp-player-id-valid? locked)
-                      locked
-                      (the uint (-> rec focus-player-id))))
+         (player-id (if (mp-player-id-valid? locked) locked (the uint (-> rec focus-player-id))))
          (record (mp-player-record-by-id player-id)))
     (when (and (nonnull? record)
                (mp-enemy-owner-candidate? rec player-id excluded)
@@ -275,9 +273,7 @@
     #f))
 
 (defun mp-process-allow-local-state-transition? ((proc process))
-  (when (and (nonnull? proc)
-             (type? proc citizen)
-             (pedestrian-replica-locked? (the-as citizen proc)))
+  (when (and (nonnull? proc) (type? proc citizen) (pedestrian-replica-locked? (the-as citizen proc)))
     (return #t))
   (if (and proc (nonzero? proc) (logtest? (-> proc mask) (process-mask enemy)) (type? proc enemy))
     (mp-enemy-allow-local-state-transition? (the-as enemy proc))

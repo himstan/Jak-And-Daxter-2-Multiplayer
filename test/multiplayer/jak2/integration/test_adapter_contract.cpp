@@ -591,24 +591,21 @@ TEST(Jak2AdapterIntegration, CollectableTotalsUseNormalMixedEventBatchesAndHostR
   host.installed(host_endpoint);
   picker.installed(picker_endpoint);
   observer.installed(observer_endpoint);
-  const jak2::core::GameEvent orb = {.event_id = 1,
-                                    .payload_size = 12,
-                                    .payload = {42, 0, 0, 0, 0, 0, 48, 65, 0, 0, 136, 65}};
-  const jak2::core::GameEvent gem = {.event_id = 2,
-                                    .payload_size = 12,
-                                    .payload = {43, 0, 0, 0, 0, 0, 32, 65, 0, 0, 112, 65}};
-  const jak2::core::GameEvent enemy_gem = {.event_id = 26,
-                                          .payload_size = 13,
-                                          .payload = {44, 0, 0, 0, 0, 0, 48, 65, 0, 0, 128, 65, 2}};
+  const jak2::core::GameEvent orb = {
+      .event_id = 1, .payload_size = 12, .payload = {42, 0, 0, 0, 0, 0, 48, 65, 0, 0, 136, 65}};
+  const jak2::core::GameEvent gem = {
+      .event_id = 2, .payload_size = 12, .payload = {43, 0, 0, 0, 0, 0, 32, 65, 0, 0, 112, 65}};
+  const jak2::core::GameEvent enemy_gem = {
+      .event_id = 26, .payload_size = 13, .payload = {44, 0, 0, 0, 0, 0, 48, 65, 0, 0, 128, 65, 2}};
   ASSERT_TRUE(picker.mailbox().push_outbound_events({orb, gem, enemy_gem}));
   picker.tick(100);
   ASSERT_EQ(picker_endpoint.sent.size(), 1u);
-  const auto result = host.packets().receive(
-      {.origin = {.authenticated_player_id = 1},
-       .message_id = static_cast<uint8_t>(PacketType::GAME_EVENT_BATCH),
-       .sequence = 1,
-       .payload = picker_endpoint.sent[0].payload},
-      host_endpoint);
+  const auto result =
+      host.packets().receive({.origin = {.authenticated_player_id = 1},
+                              .message_id = static_cast<uint8_t>(PacketType::GAME_EVENT_BATCH),
+                              .sequence = 1,
+                              .payload = picker_endpoint.sent[0].payload},
+                             host_endpoint);
   EXPECT_EQ(result.disposition, platform::PayloadDisposition::CONSUME_AND_RELAY);
   EXPECT_FALSE(result.relay_recipients);
   host.tick(101);

@@ -72,16 +72,15 @@
   (new 'static 'inline-array mp-traffic-transport-record MP_TRAFFIC_TRANSPORT_REGISTRY_SIZE))
 
 (defun encode-pedestrian-scale ((scale float))
-  (the uint (+ 0.5
-               (* (the float PEDESTRIAN_SCALE_STEPS)
-                  (/ (- (fmin PEDESTRIAN_SCALE_MAX (fmax PEDESTRIAN_SCALE_MIN scale))
-                        PEDESTRIAN_SCALE_MIN)
-                     (- PEDESTRIAN_SCALE_MAX PEDESTRIAN_SCALE_MIN))))))
+  (the uint
+       (+ 0.5
+          (* (the float PEDESTRIAN_SCALE_STEPS)
+             (/ (- (fmin PEDESTRIAN_SCALE_MAX (fmax PEDESTRIAN_SCALE_MIN scale)) PEDESTRIAN_SCALE_MIN)
+                (- PEDESTRIAN_SCALE_MAX PEDESTRIAN_SCALE_MIN))))))
 
 (defun decode-pedestrian-scale ((code uint))
   (+ PEDESTRIAN_SCALE_MIN
-     (* (- PEDESTRIAN_SCALE_MAX PEDESTRIAN_SCALE_MIN)
-        (/ (the float code) (the float PEDESTRIAN_SCALE_STEPS)))))
+     (* (- PEDESTRIAN_SCALE_MAX PEDESTRIAN_SCALE_MIN) (/ (the float code) (the float PEDESTRIAN_SCALE_STEPS)))))
 
 (defun pedestrian-apply-appearance! ((proc citizen) (packed uint))
   (let ((appearance (the-as pedestrian-appearance packed)))

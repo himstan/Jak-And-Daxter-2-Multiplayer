@@ -148,23 +148,33 @@ CommandError RuntimeWorker::disconnect(const int reason) {
 }
 
 CommandError RuntimeWorker::set_profile(PlayerProfile profile) {
+  if (!controller_.set_local_profile(profile))
+    return CommandError::INVALID_STATE;
   client_.profile = profile;
-  return controller_.set_local_profile(std::move(profile)) ? CommandError::NONE
-                                                           : CommandError::INVALID_STATE;
+  return CommandError::NONE;
 }
 
 CommandError RuntimeWorker::set_character(const PlayerCharacter character) {
+  if (!controller_.set_character(character))
+    return CommandError::INVALID_STATE;
   client_.profile.character = character;
-  return controller_.set_character(character) ? CommandError::NONE : CommandError::INVALID_STATE;
+  return CommandError::NONE;
 }
 
 CommandError RuntimeWorker::set_ready(const bool ready) {
+  if (!controller_.set_ready(ready))
+    return CommandError::INVALID_STATE;
   client_.profile.ready = ready;
-  return controller_.set_ready(ready) ? CommandError::NONE : CommandError::INVALID_STATE;
+  if (ready)
+    persist_profile();
+  return CommandError::NONE;
 }
 
 CommandError RuntimeWorker::start_countdown(const uint32_t seconds) {
-  return controller_.start_countdown(seconds) ? CommandError::NONE : CommandError::INVALID_STATE;
+  if (!controller_.start_countdown(seconds))
+    return CommandError::INVALID_STATE;
+  persist_profile();
+  return CommandError::NONE;
 }
 
 CommandError RuntimeWorker::cancel_countdown() {
@@ -172,7 +182,10 @@ CommandError RuntimeWorker::cancel_countdown() {
 }
 
 CommandError RuntimeWorker::start_game() {
-  return controller_.start_game() ? CommandError::NONE : CommandError::INVALID_STATE;
+  if (!controller_.start_game())
+    return CommandError::INVALID_STATE;
+  persist_profile();
+  return CommandError::NONE;
 }
 
 CommandError RuntimeWorker::session_action(void (SessionController::*action)()) {

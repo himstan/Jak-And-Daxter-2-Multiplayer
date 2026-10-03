@@ -33,6 +33,9 @@ bool MultiplayerRuntime::install(std::unique_ptr<GameAdapter> adapter,
       profile_config ? ProfileLease::acquire(*profile_config) : std::optional<ProfileLease>{};
   if (profile_config && !lease)
     return false;
+  StoredPlayerProfile stored_profile;
+  if (lease && !load_player_profile(*lease, stored_profile))
+    return false;
   std::lock_guard lock(mutex_);
   if (adapter_ || worker_.joinable())
     return false;
@@ -40,6 +43,7 @@ bool MultiplayerRuntime::install(std::unique_ptr<GameAdapter> adapter,
   snapshot_.compatibility_identity = descriptor.compatibility_identity;
   adapter_ = std::move(adapter);
   profile_lease_ = std::move(lease);
+  stored_profile_ = std::move(stored_profile);
   accepting_commands_ = true;
   worker_ = std::jthread([this](const std::stop_token& stop_token) { run(stop_token); });
   return true;
@@ -142,6 +146,7 @@ void MultiplayerRuntime::shutdown() {
 void MultiplayerRuntime::clear_locked() {
   adapter_.reset();
   profile_lease_.reset();
+  stored_profile_ = {};
   commands_.clear();
   snapshot_ = {};
   next_revision_ = 0;
@@ -155,12 +160,18 @@ bool MultiplayerRuntime::active() const {
 
 bool MultiplayerRuntime::load_profile(StoredPlayerProfile& profile) const {
   std::lock_guard lock(mutex_);
-  return profile_lease_ && load_player_profile(*profile_lease_, profile);
+  if (!profile_lease_)
+    return false;
+  profile = stored_profile_;
+  return true;
 }
 
-bool MultiplayerRuntime::save_profile(const StoredPlayerProfile& profile) const {
+bool MultiplayerRuntime::save_profile(const StoredPlayerProfile& profile) {
   std::lock_guard lock(mutex_);
-  return profile_lease_ && save_player_profile(*profile_lease_, profile);
+  if (!profile_lease_ || !save_player_profile(*profile_lease_, profile))
+    return false;
+  stored_profile_ = profile;
+  return true;
 }
 
 fs::path MultiplayerRuntime::game_preferences_path() const {

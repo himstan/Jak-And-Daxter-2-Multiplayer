@@ -9,60 +9,6 @@
 (define-extern mp-reset-orb-permanence-state! (function none))
 (define-extern mp-reset-gem-permanence-state! (function none))
 
-(defun mp-character-cli-whitespace? ((character uint))
-  (or (= character (the uint 32)) (= character (the uint 9)) (= character (the uint 13)) (= character (the uint 10))))
-
-(defun mp-character-cli-letter? ((character uint) (lowercase uint))
-  (or (= character lowercase) (= character (- lowercase (the uint 32)))))
-
-(defun mp-character-from-cli-token ((token-start (pointer uint8)) (token-end (pointer uint8)))
-  (while (and (< (the-as uint token-start) (the-as uint token-end))
-              (mp-character-cli-whitespace? (the-as uint (-> token-start 0))))
-    (set! token-start (&-> token-start 1)))
-  (while (and (< (the-as uint token-start) (the-as uint token-end))
-              (mp-character-cli-whitespace? (the-as uint (-> token-end -1))))
-    (set! token-end (&-> token-end -1)))
-  (let ((token-length (&- token-end (the-as uint token-start))))
-    (cond
-      ((and (= token-length (the uint 3))
-            (mp-character-cli-letter? (the-as uint (-> token-start 0)) (the uint 106))
-            (mp-character-cli-letter? (the-as uint (-> token-start 1)) (the uint 97))
-            (mp-character-cli-letter? (the-as uint (-> token-start 2)) (the uint 107)))
-       (mp-player-character jak))
-      ((and (= token-length (the uint 6))
-            (mp-character-cli-letter? (the-as uint (-> token-start 0)) (the uint 100))
-            (mp-character-cli-letter? (the-as uint (-> token-start 1)) (the uint 97))
-            (mp-character-cli-letter? (the-as uint (-> token-start 2)) (the uint 120))
-            (mp-character-cli-letter? (the-as uint (-> token-start 3)) (the uint 116))
-            (mp-character-cli-letter? (the-as uint (-> token-start 4)) (the uint 101))
-            (mp-character-cli-letter? (the-as uint (-> token-start 5)) (the uint 114)))
-       (mp-player-character daxter))
-      (else (mp-player-character unknown)))))
-
-(defun mp-parse-session-characters-cli! ((characters-arg string))
-  (when (or (not characters-arg) (zero? (the-as uint characters-arg)))
-    (return #f))
-  (let ((token-start (-> characters-arg data))
-        (cursor (-> characters-arg data))
-        (player-id (the uint 0))
-        (valid? #t)
-        (done? #f))
-    (while (and valid? (not done?))
-      (let ((character (the-as uint (-> cursor 0))))
-        (cond
-          ((or (zero? character) (= character (the uint 44)))
-           (if (>= player-id (the uint MP_MAX_PLAYERS))
-             (set! valid? #f)
-             (let ((player-character (mp-character-from-cli-token token-start cursor)))
-               (if (mp-player-character-valid? player-character)
-                 (begin
-                   (mp-set-session-player-character! player-id player-character)
-                   (+! player-id (the uint 1)))
-                 (set! valid? #f))))
-           (if (zero? character) (set! done? #t) (begin   (set! cursor (&-> cursor 1))   (set! token-start cursor))))
-          (else (set! cursor (&-> cursor 1))))))
-    valid?))
-
 (defun mp-load-max-players-from-cli! ()
   (let ((max-players-arg (pc-multi-get-command-line-arg "-max-players")))
     (when (and max-players-arg
@@ -75,13 +21,6 @@
                   "[MP-Session] WARNING: Invalid -max-players value '~A', keeping limit ~D~%"
                   max-players-arg
                   *mp-session-player-limit*)))))
-  (none))
-
-(defun mp-load-session-characters-from-cli! ()
-  (let ((characters-arg (pc-multi-get-command-line-arg "-mp-characters")))
-    (when (and characters-arg (nonzero? (the-as uint characters-arg)) (nonzero? (-> characters-arg allocated-length)))
-      (if (not (mp-parse-session-characters-cli! characters-arg))
-        (format #t "[MP-Session] WARNING: Invalid -mp-characters value; keeping current character settings.~%"))))
   (none))
 
 (defun mp-session-migrate-local-player! ((local-player-id uint))
@@ -194,7 +133,6 @@
     (set! (-> *pc-settings* is-host-online?) internet-host?))
   (mp-sync-preferences-to-session-host-config!)
   (mp-load-max-players-from-cli!)
-  (mp-load-session-characters-from-cli!)
   (mp-configure-bridge-version!)
   (mp-setup-host-bridge! internet-host?)
   (mp-session-host-game-start!)

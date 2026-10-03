@@ -69,7 +69,7 @@ class MultiplayerRuntime {
   void shutdown();
   bool active() const;
   bool load_profile(StoredPlayerProfile& profile) const;
-  bool save_profile(const StoredPlayerProfile& profile) const;
+  bool save_profile(const StoredPlayerProfile& profile);
   fs::path game_preferences_path() const;
 
  private:
@@ -97,6 +97,7 @@ class MultiplayerRuntime {
   std::condition_variable_any wake_cv_;
   std::unique_ptr<GameAdapter> adapter_;
   std::optional<ProfileLease> profile_lease_;
+  StoredPlayerProfile stored_profile_;
   std::deque<QueuedCommand> commands_;
   RuntimeSnapshot snapshot_;
   uint32_t next_revision_ = 0;

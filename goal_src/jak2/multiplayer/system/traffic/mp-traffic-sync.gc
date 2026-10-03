@@ -428,9 +428,7 @@
   (none))
 
 (defun sync-race-traffic! ()
-  (when (and (mp-session-in-game?)
-             (nonnull? *mp-traffic-buffer*
-                       (process-by-type-exact 'race-manager *active-pool*)))
+  (when (and (mp-session-in-game?) (nonnull? *mp-traffic-buffer* (process-by-type-exact 'race-manager *active-pool*)))
     (if (mp-session-host?)
       (begin
         (when (or (not *mp-traffic-sync-active*) (not (mp-is-traffic-ready?)))

@@ -197,6 +197,7 @@ bool parse_texture_group(const json& group, uint32_t& color, float& strength) {
 }
 
 void parse_preferences_root(const json& root, MultiplayerPreferences& parsed, bool& needs_save) {
+  needs_save |= root.contains("session_characters");
   try {
     if (root.contains("network_port") && root.at("network_port").is_number_unsigned()) {
       if (const uint32_t port = root.at("network_port").get<uint32_t>();
@@ -246,18 +247,6 @@ void parse_preferences_root(const json& root, MultiplayerPreferences& parsed, bo
         parsed.session_player_limit = limit;
       }
     }
-    if (root.contains("session_characters") && root.at("session_characters").is_array()) {
-      const auto& chars = root.at("session_characters");
-      for (size_t i = 0; i < kMPMaxPlayers && i < chars.size(); ++i) {
-        if (chars[i].is_number_unsigned()) {
-          if (const uint32_t val = chars[i].get<uint32_t>();
-              val == static_cast<uint32_t>(PlayerCharacter::JAK) ||
-              val == static_cast<uint32_t>(PlayerCharacter::DAXTER)) {
-            parsed.session_characters[i] = static_cast<PlayerCharacter>(val);
-          }
-        }
-      }
-    }
   } catch (const std::exception& error) {
     lg::warn("[Multiplayer] Ignoring invalid multiplayer settings: {}", error.what());
   }
@@ -287,7 +276,6 @@ void load_multiplayer_preferences() {
       throw std::runtime_error("invalid multiplayer identity profile");
     }
     g_preferences.player_name = identity.display_name;
-    g_preferences.session_characters[0] = identity.preferred_character;
     const auto path = settings_path();
     if (!file_util::file_exists(path.string())) {
       g_preferences.player_appearance = get_default_player_appearance(generate_player_color());
@@ -300,7 +288,6 @@ void load_multiplayer_preferences() {
     g_preferences = {};
     parse_preferences_root(root, g_preferences, needs_save);
     g_preferences.player_name = identity.display_name;
-    g_preferences.session_characters[0] = identity.preferred_character;
   } catch (const std::exception& error) {
     g_preferences = {};
     lg::error("[Multiplayer] Could not load multiplayer settings: {}", error.what());
@@ -356,17 +343,15 @@ void save_multiplayer_preferences() {
   root["player_texture_groups"] = std::move(texture_groups);
   root["automatic_port_mapping"] = g_preferences.automatic_port_mapping;
   root["session_player_limit"] = g_preferences.session_player_limit;
-  json chars_json = json::array();
-  for (uint32_t i = 0; i < kMPMaxPlayers; ++i) {
-    chars_json.push_back(static_cast<uint32_t>(g_preferences.session_characters[i]));
-  }
-  root["session_characters"] = chars_json;
   const auto path = settings_path();
   file_util::create_dir_if_needed_for_file(path);
   file_util::write_text_file(path, root.dump(2));
-  if (!save_common_profile({.display_name = g_preferences.player_name,
-                            .preferred_character = static_cast<PlayerCharacter>(
-                                g_preferences.session_characters[0])})) {
+  multiplayer::platform::StoredPlayerProfile identity;
+  if (!load_common_profile(identity)) {
+    throw std::runtime_error("could not load multiplayer identity profile");
+  }
+  identity.display_name = g_preferences.player_name;
+  if (!save_common_profile(identity)) {
     throw std::runtime_error("could not save multiplayer identity profile");
   }
 }
@@ -489,28 +474,23 @@ bool set_session_player_limit_preference(const uint32_t limit) {
   return true;
 }
 
-uint32_t get_session_player_character_preference(const uint8_t player_id) {
-  if (player_id >= kMPMaxPlayers) {
-    return static_cast<uint32_t>(PlayerCharacter::UNKNOWN);
-  }
-  return static_cast<uint32_t>(g_preferences.session_characters[player_id]);
+uint32_t get_player_character_preference() {
+  multiplayer::platform::StoredPlayerProfile identity;
+  load_common_profile(identity);
+  return static_cast<uint32_t>(identity.preferred_character);
 }
 
-bool set_session_player_character_preference(const uint8_t player_id, uint32_t character) {
-  if (player_id >= kMPMaxPlayers) {
-    return false;
-  }
+bool set_player_character_preference(const uint32_t character) {
   if (character != static_cast<uint32_t>(PlayerCharacter::JAK) &&
       character != static_cast<uint32_t>(PlayerCharacter::DAXTER)) {
     return false;
   }
-  const auto player_char = static_cast<PlayerCharacter>(character);
-  if (g_preferences.session_characters[player_id] == player_char) {
-    return true;
+  multiplayer::platform::StoredPlayerProfile identity;
+  if (!load_common_profile(identity)) {
+    return false;
   }
-  g_preferences.session_characters[player_id] = player_char;
-  save_after_edit();
-  return true;
+  identity.preferred_character = static_cast<PlayerCharacter>(character);
+  return save_common_profile(identity);
 }
 
 bool set_room_code_preference(const std::string_view room_code) {

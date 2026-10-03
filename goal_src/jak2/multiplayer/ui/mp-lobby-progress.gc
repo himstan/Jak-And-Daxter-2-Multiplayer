@@ -126,14 +126,16 @@
        (lookup-text! *common-text* (text-id progress-lobby-nat-strict-or-lan) #f)))))
 
 (defun mp-lobby-toggle-local-character! ()
-  (if (or (mp-lobby-countdown-active?) (= (pc-multi-get-session-status) (mp-connection-status game-starting)))
+  (if (or (mp-lobby-local-player-ready?)
+          (mp-lobby-countdown-active?)
+          (= (pc-multi-get-session-status) (mp-connection-status game-starting)))
     (sound-play "menu-error")
     (let* ((current-character (the-as mp-player-character (pc-multi-get-local-player-character)))
            (next-character (if (= current-character (mp-player-character jak)) (mp-player-character daxter) (mp-player-character jak))))
       (if (nonzero? (pc-multi-lobby-set-character (the-as uint next-character)))
         (begin
           (let ((local-record (mp-local-player-record)))
-            (when (and local-record (nonzero? (the-as uint local-record)))
+            (when (nonnull? local-record)
               (set! (-> local-record identity character) next-character)))
           (sound-play "generic-beep"))
         (sound-play "menu-error"))))

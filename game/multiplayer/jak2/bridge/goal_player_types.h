@@ -71,13 +71,8 @@ struct MPReplicationPlayerInputGOAL {
 };
 #pragma pack(pop)
 
-struct MPPlayerCharacterConfigGOAL {
-  uint32_t characters[kMPMaxPlayers];
-};
-
 static_assert(sizeof(MPReplicationPlayerIdentityGOAL) == 279);
 static_assert(sizeof(MPPlayerLevelSlotGOAL) == 2);
 static_assert(sizeof(MPReplicationPlayerTransformGOAL) == 48);
 static_assert(sizeof(MPReplicationPlayerActionGOAL) == 17);
 static_assert(sizeof(MPReplicationPlayerInputGOAL) == 9);
-static_assert(sizeof(MPPlayerCharacterConfigGOAL) == sizeof(uint32_t) * kMPMaxPlayers);

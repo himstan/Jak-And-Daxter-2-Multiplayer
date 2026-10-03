@@ -4,6 +4,7 @@
 #include <type_traits>
 
 #include "common/log/log.h"
+
 #include "game/multiplayer/jak2/application/jak2_adapter.h"
 #include "game/multiplayer/jak2/core/validation.h"
 #include "game/multiplayer/jak2/wire/packet_source.h"
@@ -160,7 +161,7 @@ void Jak2Adapter::add_player_handlers(Handlers& handlers) {
   add_packet_handler<wire::PlayerStatePacket>(
       handlers, wire::to_packet, state_.players(), wire::canonicalize_player,
       [this, failed_at = std::optional<uint64_t>{}](auto& handler, auto& endpoint,
-                                                 uint64_t now_ms) mutable {
+                                                    uint64_t now_ms) mutable {
         const auto& session = endpoint.snapshot().state;
         auto player = local_frame_->players[session.local_player_id];
         player.player_id = session.local_player_id;

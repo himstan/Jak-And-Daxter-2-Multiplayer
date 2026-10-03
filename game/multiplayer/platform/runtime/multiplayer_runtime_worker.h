@@ -55,7 +55,7 @@ class RuntimeWorker final : public ConnectionExecutionPort,
   void reset_for_new_connection();
   void process_commands();
   void pump_reconnect(uint64_t now_ms);
-  void persist_profile(const SessionSnapshot& session);
+  void persist_profile();
   void update_discovery();
   void update_host_advertisement(const SessionSnapshot& session);
   void publish(const SessionSnapshot& session);
@@ -69,7 +69,6 @@ class RuntimeWorker final : public ConnectionExecutionPort,
   std::optional<DiscoveryResult> discovery_result_;
   ReconnectState reconnect_;
   ClientConnectionState client_;
-  std::optional<StoredPlayerProfile> last_saved_profile_;
   DiscoveryKind discovery_kind_ = DiscoveryKind::NONE;
   HostSnapshot host_;
   std::string compatibility_identity_;

@@ -5,9 +5,6 @@
 (define-extern mp-player-color-progress-enter! (function progress none))
 (define-extern refresh-generic-text-fields! (function menu-option-list none))
 
-(deftype menu-multiplayer-player-character-boolean-option (menu-generic-boolean-option)
-  ((player-id int32)))
-
 (deftype menu-multiplayer-large-link-option (menu-generic-link-option) ())
 
 (define-extern *multiplayer-options-pc* menu-option-list)
@@ -31,73 +28,6 @@
   (mp-reset-multiplayer-options-selection!)
   (when (nonnull? *progress-process* (-> *progress-process* 0))
     (set! (-> (-> *progress-process* 0) selected-option) #f))
-  (none))
-
-(defmethod call-get-value-fn ((this menu-multiplayer-player-character-boolean-option))
-  (= (mp-session-player-character (the uint (-> this player-id))) (mp-player-character jak)))
-
-(defmethod call-on-confirm ((this menu-multiplayer-player-character-boolean-option) (val symbol))
-  (let ((chosen (if val (mp-player-character jak) (mp-player-character daxter))))
-    (mp-set-session-player-character! (the uint (-> this player-id)) chosen)
-    (pc-multi-set-preference-player-character (the uint (-> this player-id)) (the uint chosen)))
-  (none))
-
-(defmethod should-disable? ((this menu-multiplayer-player-character-boolean-option))
-  (< *mp-session-player-limit* (the uint (+ (-> this player-id) 1))))
-
-(defmethod draw-option ((obj menu-multiplayer-player-character-boolean-option)
-                        (arg0 progress)
-                        (font-ctx font-context)
-                        (option-index int)
-                        (selected? symbol))
-  (when (and obj (nonzero? (the-as uint obj))
-             arg0 (nonzero? (the-as uint arg0))
-             font-ctx (nonzero? (the-as uint font-ctx)))
-    (when (not (-> obj mounted?))
-      (on-mount! obj))
-    (let ((alpha (fmax (* 2.0 (- 0.5 (-> arg0 menu-transition))) 0.0))
-          (line-height 18.0))
-      (set! (-> font-ctx alpha) alpha)
-      (set-flags! font-ctx (font-flags kerning middle large))
-      (set-scale! font-ctx 0.45)
-      (+! (-> font-ctx origin y) (if (= (get-aspect-ratio) 'aspect4x3) 7.0 5.0))
-      (format (clear *temp-string*)
-              (lookup-text! *common-text* (text-id progress-multiplayer-player-char-fmt) #f)
-              (+ (-> obj player-id) 1))
-      (cond
-        (selected?
-          (set-color! font-ctx (font-color progress-force-selected))
-          (draw-generic-highlight (the int (- (-> font-ctx origin y) 2.0)) 33 alpha)
-          (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
-          (+! (-> font-ctx origin y) line-height)
-          (set! *progress-generic-temp-string* (clear *progress-generic-temp-string*))
-          (if (-> obj value)
-              (format *progress-generic-temp-string* "~33L~S~35L ~S" (lookup-text! *common-text* (-> obj truthy-text) #f) (lookup-text! *common-text* (-> obj falsey-text) #f))
-              (format *progress-generic-temp-string* "~35L~S ~33L~S~1L" (lookup-text! *common-text* (-> obj truthy-text) #f) (lookup-text! *common-text* (-> obj falsey-text) #f))))
-        (else
-          (cond
-            ((and (nonzero? (-> obj should-disable?))
-                  (!= (-> obj should-disable?) #f)
-                  ((-> obj should-disable?)))
-             (set-color! font-ctx (font-color progress-option-off))
-             (when (= option-index (-> *progress-pc-generic-store* current-menu-hover-index))
-               (draw-generic-highlight (the int (+ -2.0 (-> font-ctx origin y))) 18 (* 0.5 alpha))))
-            ((= option-index (-> *progress-pc-generic-store* current-menu-hover-index))
-             (set-color! font-ctx (progress-selected 0))
-             (draw-generic-highlight (the int (+ -2.0 (-> font-ctx origin y))) 18 alpha))
-            (else
-             (set-color! font-ctx (font-color progress))))
-          (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))
-          (+! (-> font-ctx origin y) line-height)
-          (set! *progress-generic-temp-string* (clear *progress-generic-temp-string*))
-          (let ((actual-value (call-get-value-fn obj)))
-            (if actual-value
-                (format *progress-generic-temp-string* "~1L~S~35L ~S" (lookup-text! *common-text* (-> obj truthy-text) #f) (lookup-text! *common-text* (-> obj falsey-text) #f))
-                (format *progress-generic-temp-string* "~35L~S ~1L~S~1L" (lookup-text! *common-text* (-> obj truthy-text) #f) (lookup-text! *common-text* (-> obj falsey-text) #f))))))
-      (set-scale! font-ctx 0.35)
-      (print-game-text *progress-generic-temp-string* font-ctx #f 44 (bucket-id progress))
-      )
-    )
   (none))
 
 (defmethod draw-option ((obj menu-multiplayer-large-link-option)
@@ -130,16 +60,6 @@
       (print-game-text (lookup-text! *common-text* (-> obj name) #f) font-ctx #f 44 (bucket-id progress))))
   (none))
 
-(defmacro static-player-character-options ()
-  (let ((lst '()))
-    (dotimes (i MP_MAX_PLAYERS)
-      (set! lst (cons `(new 'static 'menu-multiplayer-player-character-boolean-option
-                         :player-id ,i
-                         :truthy-text (text-id progress-multiplayer-char-jak)
-                         :falsey-text (text-id progress-multiplayer-char-daxter))
-                      lst)))
-    `(new 'static 'boxed-array :type menu-option ,@(reverse lst))))
-
 (defmacro progress-new-generic-large-link-to-scrolling-page (title &key (should-disable? #f) &rest options)
   `(new 'static 'menu-multiplayer-large-link-option
     :name ,title
@@ -162,18 +82,20 @@
       :allowed-characters "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
       :uppercase? #f
       :session (new 'static 'pc-text-input-session))
+    (new 'static 'menu-generic-boolean-option
+      :name (text-id progress-multiplayer-preferred-character)
+      :truthy-text (text-id progress-multiplayer-char-jak)
+      :falsey-text (text-id progress-multiplayer-char-daxter)
+      :get-value-fn (lambda ()
+        (= (pc-multi-get-preference-player-character) (mp-player-character jak)))
+      :on-confirm (lambda ((value symbol))
+        (pc-multi-set-preference-player-character
+          (the uint (if value (mp-player-character jak) (mp-player-character daxter))))))
     (new 'static 'menu-generic-button-option
       :name (text-id progress-lobby-color-title)
       :on-confirm (lambda ((the-progress progress))
         (mp-player-color-progress-enter! the-progress)))
     (progress-new-generic-large-link-to-scrolling-page (text-id progress-multiplayer-host-options)
-      (new 'static 'menu-generic-link-option
-        :name (text-id progress-multiplayer-player-chars)
-        :target (new 'static 'menu-option-list
-          :options (new 'static 'boxed-array :type menu-option
-            (new 'static 'menu-generic-scrolling-page
-              :name (text-id progress-multiplayer-player-chars)
-              :menu-options (static-player-character-options)))))
       (new 'static 'menu-generic-carousel-option
         :name (text-id progress-multiplayer-max-players)
         :get-max-size-fn (lambda () (+ (the int MP_MAX_PLAYERS) -1))

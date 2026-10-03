@@ -56,24 +56,16 @@
 (defun collectable-sync-counts! ((evt collectable-pickup-event) (pickup pickup-type) (collected int))
   (when (and (nonnull? evt *game-info* *mp-player-controller*) (>= collected 0))
     (let* ((host? (mp-session-host?))
-           (count (if host?
-                    (if (= pickup (pickup-type skill)) (-> *game-info* skill) (-> *game-info* gem))
-                    (-> evt payload count)))
-           (total (if host?
-                    (if (= pickup (pickup-type skill)) (-> *game-info* skill-total) (-> *game-info* gem-total))
-                    (-> evt payload total))))
+           (count (if host? (if (= pickup (pickup-type skill)) (-> *game-info* skill) (-> *game-info* gem)) (-> evt payload count)))
+           (total (if host? (if (= pickup (pickup-type skill)) (-> *game-info* skill-total) (-> *game-info* gem-total)) (-> evt payload total))))
       (when host?
         (+! count (the float collected))
         (+! total (the float collected)))
       (when (and (> collected 0) (nonnull? *target*))
         (send-event *target* 'get-pickup pickup 1.0))
       (case pickup
-        (((pickup-type skill))
-         (set! (-> *game-info* skill) count)
-         (set! (-> *game-info* skill-total) total))
-        (((pickup-type gem))
-         (set! (-> *game-info* gem) count)
-         (set! (-> *game-info* gem-total) total)))
+        (((pickup-type skill)) (set! (-> *game-info* skill) count) (set! (-> *game-info* skill-total) total))
+        (((pickup-type gem)) (set! (-> *game-info* gem) count) (set! (-> *game-info* gem-total) total)))
       (when host?
         (set! (-> evt payload count) count)
         (set! (-> evt payload total) total)
@@ -211,9 +203,7 @@
             (mp-mark-aid-dead-perm! net-id))
           (when (mp-battle-enemy-id? net-id)
             (mp-battle-request-rosters!))
-          (log 'debug
-               "[MP-Event-Handlers] Could not find enemy process for nid=~D.~%"
-               net-id)))))
+          (log 'debug "[MP-Event-Handlers] Could not find enemy process for nid=~D.~%" net-id)))))
   (none))
 
 (defun mp-event-handler-attack-ped ((evt mp-actor-attack-event))

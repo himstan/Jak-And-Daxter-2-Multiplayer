@@ -310,7 +310,6 @@ std::vector<uint8_t> encode_server_gate(const ServerGate& gate) {
     out.push_back(gate.player_id);
     out.push_back(gate.host_player_id);
     out.push_back(gate.player_capacity);
-    out.push_back(static_cast<uint8_t>(gate.character));
   } else {
     if (gate.rejection == RejectionReason::NONE)
       return {};
@@ -326,13 +325,11 @@ bool decode_server_gate(const std::span<const uint8_t> bytes, ServerGate& gate) 
   gate = {};
   size_t cursor = 0;
   if (read_gate_header(bytes, kAcceptedGateKind, cursor)) {
-    uint8_t character = 0;
     if (!read_u8(bytes, cursor, gate.player_id) || !read_u8(bytes, cursor, gate.host_player_id) ||
-        !read_u8(bytes, cursor, gate.player_capacity) || !read_u8(bytes, cursor, character) ||
-        cursor != bytes.size() || gate.player_id == kInvalidPlayerId || gate.player_capacity < 2)
+        !read_u8(bytes, cursor, gate.player_capacity) || cursor != bytes.size() ||
+        gate.player_id == kInvalidPlayerId || gate.player_capacity < 2)
       return false;
     gate.accepted = true;
-    gate.character = static_cast<PlayerCharacter>(character);
     return true;
   }
   cursor = 0;

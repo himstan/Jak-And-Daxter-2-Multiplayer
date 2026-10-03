@@ -4,6 +4,7 @@
 #include <cctype>
 
 #include "common/log/log.h"
+
 #include "game/multiplayer/jak2/core/validation.h"
 #include "game/multiplayer/platform/core/sequence.h"
 

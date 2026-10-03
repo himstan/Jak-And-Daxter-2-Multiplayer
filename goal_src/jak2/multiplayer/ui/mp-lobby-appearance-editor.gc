@@ -107,7 +107,7 @@
                             (-> *mp-player-color-progress* lobby-source?)
                             (= (pc-multi-get-session-status) (mp-connection-status lobby)))
                      (the-as mp-player-character (pc-multi-get-local-player-character))
-                     (mp-session-player-character (the uint 0)))))
+                     (the-as mp-player-character (pc-multi-get-preference-player-character)))))
     (if (mp-player-character-valid? character) character (mp-player-character jak))))
 
 (defun mp-player-color-progress-preview-skeleton ((character mp-player-character))

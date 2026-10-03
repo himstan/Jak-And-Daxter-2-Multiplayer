@@ -20,7 +20,6 @@ struct ControllerHostConfig {
   uint16_t port = 0;
   uint8_t player_limit = 0;
   std::string room_code;
-  std::vector<PlayerCharacter> player_characters;
   PlayerProfile local_profile;
 };
 
@@ -42,6 +41,7 @@ class SessionController final : public GameSessionEndpoint {
   void pump(uint64_t now_ms);
 
   bool set_local_profile(PlayerProfile profile);
+  const PlayerProfile& local_profile() const { return local_profile_; }
   bool set_character(PlayerCharacter character);
   bool set_ready(bool ready);
   bool start_countdown(uint32_t seconds);
@@ -131,7 +131,6 @@ class SessionController final : public GameSessionEndpoint {
   std::unordered_map<ConnectionId, PendingGate> pending_gates_;
   std::unordered_map<ConnectionId, uint64_t> pending_rejection_closes_;
   std::unordered_map<std::string, RejectionThrottle> rejection_throttles_;
-  std::vector<PlayerCharacter> player_characters_;
   std::string room_code_;
   uint32_t last_applied_bootstrap_ = 0;
   uint32_t host_bootstrap_generation_ = 0;

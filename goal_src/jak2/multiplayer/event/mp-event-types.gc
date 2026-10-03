@@ -30,8 +30,12 @@
                 ,@(reverse routes)
                 (else (log 'debug "[MP-Event] No handler for event ID ~D.~%" (-> evt etype)))))))))
 
-(define-mp-events (MP_EVENT_ORB 1 collectable-pickup-event-data (mp-event-handler-orb (the-as collectable-pickup-event evt)))
-                  (MP_EVENT_GEM 2 collectable-pickup-event-data (mp-event-handler-gem (the-as collectable-pickup-event evt)))
+(define-mp-events (MP_EVENT_ORB 1
+                                collectable-pickup-event-data
+                                (mp-event-handler-orb (the-as collectable-pickup-event evt)))
+                  (MP_EVENT_GEM 2
+                                collectable-pickup-event-data
+                                (mp-event-handler-gem (the-as collectable-pickup-event evt)))
                   (MP_EVENT_BREAK 3
                                   mp-aid-event-data
                                   (mp-event-handler-break (-> (the-as mp-aid-event evt) payload aid)))

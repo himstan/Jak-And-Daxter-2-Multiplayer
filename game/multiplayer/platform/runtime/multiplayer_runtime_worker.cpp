@@ -58,19 +58,14 @@ void RuntimeWorker::pump_reconnect(const uint64_t now_ms) {
     reset_reconnect(reconnect_);
 }
 
-void RuntimeWorker::persist_profile(const SessionSnapshot& session) {
-  for (const auto& player : session.players) {
-    if (player.player_id != session.state.local_player_id)
-      continue;
-    const StoredPlayerProfile stored = {.display_name = player.display_name,
-                                        .preferred_character = player.character};
-    if ((!last_saved_profile_ || last_saved_profile_->display_name != stored.display_name ||
-         last_saved_profile_->preferred_character != stored.preferred_character) &&
-        runtime_.save_profile(stored)) {
-      last_saved_profile_ = stored;
-    }
+void RuntimeWorker::persist_profile() {
+  const auto& profile = controller_.local_profile();
+  StoredPlayerProfile stored;
+  if (runtime_.load_profile(stored) && stored.display_name == profile.display_name &&
+      stored.preferred_character == profile.character)
     return;
-  }
+  runtime_.save_profile(
+      {.display_name = profile.display_name, .preferred_character = profile.character});
 }
 
 void RuntimeWorker::update_discovery() {
@@ -132,7 +127,6 @@ void RuntimeWorker::run(const std::stop_token stop_token) {
     adapter_.tick(now_ms);
     update_discovery();
     const auto session = controller_.snapshot();
-    persist_profile(session);
     update_host_advertisement(session);
     publish(session);
     std::unique_lock lock(runtime_.mutex_);

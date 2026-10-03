@@ -36,9 +36,7 @@ auto& connection_draft() {
 
 multiplayer::platform::PlayerProfile local_profile() {
   const auto& preferences = multiplayer_preferences();
-  multiplayer::platform::StoredPlayerProfile identity = {
-      .display_name = preferences.player_name,
-      .preferred_character = static_cast<PlayerCharacter>(preferences.session_characters[0])};
+  multiplayer::platform::StoredPlayerProfile identity = {.display_name = preferences.player_name};
   runtime().load_profile(identity);
   multiplayer::platform::PlayerProfile profile;
   profile.display_name = std::move(identity.display_name);
@@ -48,19 +46,12 @@ multiplayer::platform::PlayerProfile local_profile() {
   return profile;
 }
 
-multiplayer::platform::ControllerHostConfig host_config(
-    const uint32_t player_limit,
-    const std::array<PlayerCharacter, kMPMaxPlayers>& characters) {
+multiplayer::platform::ControllerHostConfig host_config(const uint32_t player_limit) {
   multiplayer::platform::ControllerHostConfig config;
   config.port = get_resolved_host_port();
   config.player_limit = static_cast<uint8_t>(player_limit);
   config.room_code = get_resolved_host_room_code();
   config.local_profile = local_profile();
-  for (size_t index = 0; index < player_limit && index < characters.size(); ++index) {
-    config.player_characters.push_back(characters[index] == PlayerCharacter::DAXTER
-                                           ? PlayerCharacter::DAXTER
-                                           : PlayerCharacter::JAK);
-  }
   return config;
 }
 
@@ -77,16 +68,10 @@ bool enqueue_invite(const std::string& invite, multiplayer::platform::PlayerProf
   return runtime().enqueue<multiplayer::platform::ConnectSessionCommand>(std::move(request));
 }
 
-void enqueue_host(const uint32_t player_limit,
-                  const uint32_t character_config_ptr,
-                  const bool internet) {
-  std::array<PlayerCharacter, kMPMaxPlayers> characters = {};
-  if (!multiplayer::jak2::bridge::read_character_config(character_config_ptr, characters)) {
-    return;
-  }
+void enqueue_host(const uint32_t player_limit, const bool internet) {
   runtime().enqueue<multiplayer::platform::HostSessionCommand>(
       multiplayer::platform::HostSessionRequest{
-          .config = host_config(player_limit, characters),
+          .config = host_config(player_limit),
           .discovery_port = multiplayer::platform::kMultiplayerDiscoveryPort,
           .internet = internet,
           .automatic_port_mapping = internet && multiplayer_preferences().automatic_port_mapping});
@@ -177,12 +162,12 @@ void pc_multi_disconnect() {
   runtime().enqueue<multiplayer::platform::DisconnectSessionCommand>();
 }
 
-static void pc_multi_setup_host(const u32 player_limit, const u32 character_config_ptr) {
-  enqueue_host(player_limit, character_config_ptr, false);
+static void pc_multi_setup_host(const u32 player_limit) {
+  enqueue_host(player_limit, false);
 }
 
-static void pc_multi_setup_internet_host(const u32 player_limit, const u32 character_config_ptr) {
-  enqueue_host(player_limit, character_config_ptr, true);
+static void pc_multi_setup_internet_host(const u32 player_limit) {
+  enqueue_host(player_limit, true);
 }
 
 static void pc_multi_setup_client(const u32 ip_ptr, const u32 port) {
@@ -354,12 +339,12 @@ static void pc_multi_set_preference_player_limit(const u32 limit) {
   set_session_player_limit_preference(limit);
 }
 
-static u32 pc_multi_get_preference_player_character(const u8 player_id) {
-  return get_session_player_character_preference(player_id);
+static u32 pc_multi_get_preference_player_character() {
+  return get_player_character_preference();
 }
 
-static void pc_multi_set_preference_player_character(const u8 player_id, const u32 character) {
-  set_session_player_character_preference(player_id, character);
+static void pc_multi_set_preference_player_character(const u32 character) {
+  set_player_character_preference(character);
 }
 
 static int pc_multi_is_lobby_host() {

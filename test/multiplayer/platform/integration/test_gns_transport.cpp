@@ -312,11 +312,8 @@ PlayerProfile profile(std::string name = "Player") {
 }
 
 ControllerHostConfig host_config(uint16_t port, uint8_t limit = 8) {
-  return {.port = port,
-          .player_limit = limit,
-          .room_code = "ABC123",
-          .player_characters = std::vector<PlayerCharacter>(limit, PlayerCharacter::JAK),
-          .local_profile = profile("Host")};
+  return {
+      .port = port, .player_limit = limit, .room_code = "ABC123", .local_profile = profile("Host")};
 }
 
 ControllerClientConfig client_config(uint16_t port) {
@@ -937,16 +934,30 @@ TEST(GnsTransportIntegration, CompatibilityIdentityRequiresIdleSessionAndDiscove
 TEST(GnsTransportIntegration, RuntimeHostWaitsForTheGameToChooseLobbyOrInGame) {
   auto state = std::make_shared<RuntimeAdapterState>();
   MultiplayerRuntime runtime;
-  ASSERT_TRUE(runtime.install(std::make_unique<RuntimeAdapter>(state)));
-  ASSERT_TRUE(runtime.enqueue<HostSessionCommand>(
-      HostSessionRequest{.config = host_config(available_udp_port(), 2)}));
+  const ProfileStorageConfig storage = {
+      .game_id = "test",
+      .root_directory =
+          fs::temp_directory_path() / ("jadmp-host-character-" + std::to_string(now_ms()))};
+  ASSERT_TRUE(runtime.install(std::make_unique<RuntimeAdapter>(state), storage));
+  auto config = host_config(available_udp_port(), 2);
+  config.local_profile.character = PlayerCharacter::DAXTER;
+  ASSERT_TRUE(runtime.enqueue<HostSessionCommand>(HostSessionRequest{.config = config}));
   ASSERT_TRUE(pump_until(
       [] {}, [&] { return runtime.snapshot().session.state.status == SessionStatus::CONNECTING; }));
   EXPECT_EQ(runtime.snapshot().session.state.role, SessionRole::HOST);
+  EXPECT_EQ(runtime.snapshot().session.players.front().character, PlayerCharacter::DAXTER);
+  StoredPlayerProfile stored;
+  ASSERT_TRUE(runtime.load_profile(stored));
+  EXPECT_EQ(stored.preferred_character, PlayerCharacter::JAK);
 
   ASSERT_TRUE(runtime.enqueue<EnterLobbyCommand>());
   ASSERT_TRUE(pump_until(
       [] {}, [&] { return runtime.snapshot().session.state.status == SessionStatus::LOBBY; }));
+
+  ASSERT_TRUE(runtime.enqueue<StartCountdownCommand>(3));
+  ASSERT_TRUE(pump_until([] {}, [&] { return runtime.snapshot().session.countdown_active; }));
+  ASSERT_TRUE(runtime.load_profile(stored));
+  EXPECT_EQ(stored.preferred_character, PlayerCharacter::DAXTER);
 
   ASSERT_TRUE(runtime.enqueue<StartGameCommand>());
   ASSERT_TRUE(pump_until(
@@ -957,6 +968,70 @@ TEST(GnsTransportIntegration, RuntimeHostWaitsForTheGameToChooseLobbyOrInGame) {
   ASSERT_TRUE(pump_until(
       [] {}, [&] { return runtime.snapshot().session.state.status == SessionStatus::IN_GAME; }));
   runtime.shutdown();
+}
+
+TEST(GnsTransportIntegration, LobbyCharacterPersistsOnlyWhenReadyAndLocksUntilUnready) {
+  RecordingAdapter host_adapter;
+  SessionController host(host_adapter);
+  ASSERT_TRUE(host.host(host_config(available_udp_port(), 2)));
+  host.enter_lobby();
+
+  auto state = std::make_shared<RuntimeAdapterState>();
+  MultiplayerRuntime client;
+  const ProfileStorageConfig storage = {
+      .game_id = "test",
+      .root_directory =
+          fs::temp_directory_path() / ("jadmp-client-character-" + std::to_string(now_ms()))};
+  ASSERT_TRUE(client.install(std::make_unique<RuntimeAdapter>(state), storage));
+  ASSERT_TRUE(client.save_profile({.display_name = "Client"}));
+  ASSERT_TRUE(client.enqueue<ConnectSessionCommand>(client_config(host.local_port())));
+  auto pump = [&] { host.pump(now_ms()); };
+  ASSERT_TRUE(pump_until(pump, [&] { return host.snapshot().players.size() == 2; }));
+
+  StoredPlayerProfile stored;
+  ASSERT_TRUE(client.enqueue<SetCharacterCommand>(PlayerCharacter::DAXTER));
+  ASSERT_TRUE(pump_until(
+      pump, [&] { return host.snapshot().players.back().character == PlayerCharacter::DAXTER; }));
+  ASSERT_TRUE(client.load_profile(stored));
+  EXPECT_EQ(stored.preferred_character, PlayerCharacter::JAK);
+
+  ASSERT_TRUE(client.enqueue<SetReadyCommand>(true));
+  ASSERT_TRUE(pump_until(pump, [&] { return host.snapshot().players.back().ready; }));
+  ASSERT_TRUE(client.load_profile(stored));
+  EXPECT_EQ(stored.preferred_character, PlayerCharacter::DAXTER);
+  ASSERT_TRUE(client.enqueue<SetCharacterCommand>(PlayerCharacter::JAK));
+  ASSERT_TRUE(pump_until(
+      pump, [&] { return client.snapshot().session_result.outcome == CommandOutcome::REJECTED; }));
+  EXPECT_EQ(client.snapshot().session_result.error, CommandError::INVALID_STATE);
+  EXPECT_EQ(host.snapshot().players.back().character, PlayerCharacter::DAXTER);
+
+  const auto connection = host.snapshot().connections.front().network.connection_id;
+  host.transport().close_connection(connection, 4002, "reconnect ready character");
+  ASSERT_TRUE(pump_until(
+      pump, [&] { return client.snapshot().session.state.status == SessionStatus::RECONNECTING; }));
+  ASSERT_TRUE(pump_until(pump, [&] {
+    return client.snapshot().session.state.status == SessionStatus::LOBBY &&
+           host.snapshot().players.size() == 2;
+  }));
+  EXPECT_EQ(host.snapshot().players.back().character, PlayerCharacter::DAXTER);
+
+  ASSERT_TRUE(client.enqueue<SetReadyCommand>(false));
+  ASSERT_TRUE(pump_until(pump, [&] { return !host.snapshot().players.back().ready; }));
+  ASSERT_TRUE(client.enqueue<SetCharacterCommand>(PlayerCharacter::JAK));
+  ASSERT_TRUE(pump_until(
+      pump, [&] { return host.snapshot().players.back().character == PlayerCharacter::JAK; }));
+  ASSERT_TRUE(client.load_profile(stored));
+  EXPECT_EQ(stored.preferred_character, PlayerCharacter::DAXTER);
+  ASSERT_TRUE(client.enqueue<SetReadyCommand>(true));
+  ASSERT_TRUE(pump_until(pump, [&] { return host.snapshot().players.back().ready; }));
+  ASSERT_TRUE(client.load_profile(stored));
+  EXPECT_EQ(stored.preferred_character, PlayerCharacter::JAK);
+  client.shutdown();
+  auto lease = ProfileLease::acquire(storage);
+  ASSERT_TRUE(lease);
+  ASSERT_TRUE(load_player_profile(*lease, stored));
+  EXPECT_EQ(stored.preferred_character, PlayerCharacter::JAK);
+  EXPECT_EQ(stored.display_name, "Client");
 }
 
 TEST(GnsTransportIntegration, AbruptLossReconnectsAndLateJoinReceivesBootstrap) {
@@ -972,7 +1047,9 @@ TEST(GnsTransportIntegration, AbruptLossReconnectsAndLateJoinReceivesBootstrap) 
   MultiplayerRuntime client;
   state->on_bootstrap = [&] { client.enqueue<EnterGameCommand>(); };
   ASSERT_TRUE(client.install(std::make_unique<RuntimeAdapter>(state)));
-  ASSERT_TRUE(client.enqueue<ConnectSessionCommand>(client_config(host.local_port())));
+  auto request = client_config(host.local_port());
+  request.local_profile.character = PlayerCharacter::DAXTER;
+  ASSERT_TRUE(client.enqueue<ConnectSessionCommand>(request));
   const bool joined_in_game =
       pump_until([&] { host.pump(now_ms()); },
                  [&] {
@@ -986,6 +1063,7 @@ TEST(GnsTransportIntegration, AbruptLossReconnectsAndLateJoinReceivesBootstrap) 
                               << " bootstraps=" << state->bootstraps.load();
   EXPECT_EQ(state->starts.load(), 1u);
   EXPECT_EQ(state->bootstraps.load(), 1u);
+  EXPECT_EQ(host.snapshot().players.back().character, PlayerCharacter::DAXTER);
 
   const auto connections = host.transport().connection_snapshots();
   ASSERT_EQ(connections.size(), 1u);
@@ -1009,6 +1087,7 @@ TEST(GnsTransportIntegration, AbruptLossReconnectsAndLateJoinReceivesBootstrap) 
                            << " bootstraps=" << state->bootstraps.load();
   EXPECT_GE(state->resets.load(), 1u);
   EXPECT_EQ(state->bootstraps.load(), 2u);
+  EXPECT_EQ(host.snapshot().players.back().character, PlayerCharacter::DAXTER);
   ASSERT_EQ(host.snapshot().connections.size(), 1u);
   EXPECT_EQ(host.snapshot().connections.front().player_id, 1u);
   ASSERT_EQ(client.snapshot().session.connections.size(), 1u);
@@ -1036,6 +1115,7 @@ TEST(GnsTransportIntegration, AbruptLossReconnectsAndLateJoinReceivesBootstrap) 
                             << " bootstraps=" << state->bootstraps.load();
   EXPECT_GE(state->resets.load(), 2u);
   EXPECT_EQ(state->bootstraps.load(), 3u);
+  EXPECT_EQ(host.snapshot().players.back().character, PlayerCharacter::DAXTER);
   ASSERT_EQ(host.snapshot().connections.size(), 1u);
   EXPECT_EQ(host.snapshot().connections.front().player_id, 1u);
   ASSERT_EQ(client.snapshot().session.connections.size(), 1u);

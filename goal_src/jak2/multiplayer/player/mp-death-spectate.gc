@@ -64,7 +64,16 @@
            (seat (mp-teleport-find-last-empty-seat veh #t)))
       (reset-teleport-history! player)
       (logclear! (-> player water flags)
-                 (water-flags active over-water touch-water under-water head-under-water bouncing wading swimming jump-out break-surface))
+                 (water-flags active
+                              over-water
+                              touch-water
+                              under-water
+                              head-under-water
+                              bouncing
+                              wading
+                              swimming
+                              jump-out
+                              break-surface))
       (logclear! (-> player focus-status) (focus-status touch-water))
       (mp-event-enqueue-aid! MP_EVENT_PLAYER_RESPAWNED (the-as uint 0))
       (set! (-> player fact health) (/ (-> player fact health-max) 2.0))
@@ -75,9 +84,7 @@
       (mp-death-refresh-chase-camera!)
       (when (nonnull? *TARGET-bank*)
         (target-timed-invulnerable (the-as time-frame (-> *TARGET-bank* hit-invulnerable-timeout)) player 1))
-      (if (and (nonnull? veh) (!= seat -1))
-        (mp-teleport-board-vehicle-seat! player veh seat)
-        (mp-respawn-local-target! player))))
+      (if (and (nonnull? veh) (!= seat -1)) (mp-teleport-board-vehicle-seat! player veh seat) (mp-respawn-local-target! player))))
   (none))
 
 (defun mp-death-spectate-abort! ()

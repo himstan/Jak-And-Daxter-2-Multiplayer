@@ -178,9 +178,7 @@
              (not (mp-player-driver-record-by-vehicle-id (-> veh net-id)))
              (not (mp-vehicle-local-target-driving? veh)))
     (let ((current-pilot (get-rider-in-seat veh 0)))
-      (if (nonnull? current-pilot)
-        (go-process veh (method-of-object veh active))
-        (go-process veh (method-of-object veh waiting)))))
+      (if (nonnull? current-pilot) (go-process veh (method-of-object veh active)) (go-process veh (method-of-object veh waiting)))))
   (none))
 
 (defun mp-vehicle-ensure-guard-minimap! ((veh vehicle))
@@ -972,8 +970,7 @@
                    (mp-race-vehicle-id? (-> slot net-id))
                    (not (mp-player-driver-record-by-vehicle-id (-> slot net-id))))
           (let ((proc (mp-race-vehicle-find-by-net-id (-> slot net-id))))
-            (when (nonnull? proc (-> proc root) (-> proc rbody) (-> proc rbody state)
-                           (-> proc draw) (-> proc info))
+            (when (nonnull? proc (-> proc root) (-> proc rbody) (-> proc rbody state) (-> proc draw) (-> proc info))
               (vehicle-apply-record proc slot)))))))
   (none))
 

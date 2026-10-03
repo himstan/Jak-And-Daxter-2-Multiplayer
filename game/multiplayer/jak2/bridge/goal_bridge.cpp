@@ -746,20 +746,6 @@ bool read_string(const uint32_t address, std::string& value) {
   return true;
 }
 
-bool read_character_config(const uint32_t address,
-                           std::array<PlayerCharacter, kMPMaxPlayers>& characters) {
-  const auto* source = goal_ptr<MPPlayerCharacterConfigGOAL>(address);
-  if (!source)
-    return false;
-  for (size_t index = 0; index < characters.size(); ++index) {
-    const auto character = static_cast<PlayerCharacter>(source->characters[index]);
-    if (!is_player_character_valid(character))
-      return false;
-    characters[index] = character;
-  }
-  return true;
-}
-
 bool read_appearance(const uint32_t address, MPPlayerAppearance& appearance) {
   const auto* source = goal_ptr<MPPlayerAppearanceGOAL>(address);
   if (!source)

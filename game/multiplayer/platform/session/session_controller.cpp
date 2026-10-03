@@ -134,14 +134,7 @@ bool SessionController::host(const ControllerHostConfig& config) {
   }
   if (!valid_game_identity("Host"))
     return false;
-  if (config.player_characters.size() < config.player_limit ||
-      !std::ranges::all_of(std::span(config.player_characters).first(config.player_limit),
-                           [this](const auto character) { return valid_character(character); })) {
-    lg::error("[MP-Session] Host rejected: player character configuration is invalid.");
-    return false;
-  }
   local_profile_ = config.local_profile;
-  local_profile_.character = config.player_characters[0];
   if (!validate_profile(local_profile_, 0)) {
     lg::error("[MP-Session] Host rejected: local player profile is invalid.");
     return false;
@@ -151,7 +144,6 @@ bool SessionController::host(const ControllerHostConfig& config) {
     return false;
   }
   registry_.configure(config.player_limit);
-  player_characters_ = config.player_characters;
   room_code_ = config.room_code;
   snapshot_.state.role = SessionRole::HOST;
   snapshot_.state.status = SessionStatus::CONNECTING;
@@ -208,7 +200,6 @@ void SessionController::disconnect(const int reason) {
   pending_gates_.clear();
   pending_rejection_closes_.clear();
   rejection_throttles_.clear();
-  player_characters_.clear();
   room_code_.clear();
   last_applied_bootstrap_ = 0;
   host_bootstrap_generation_ = 0;
@@ -352,16 +343,14 @@ void SessionController::handle_pending_message(const TransportEvent& event) {
     }();
     if (next == kInvalidPlayerId)
       return reject(event.connection_id, RejectionReason::HOST_FULL);
-    const auto character = player_characters_[next];
-    if (!registry_.bind(event.connection_id, next, character))
+    if (!registry_.bind(event.connection_id, next, PlayerCharacter::UNKNOWN))
       return reject(event.connection_id, RejectionReason::HOST_FULL);
     pending_gates_.erase(event.connection_id);
     lg::debug("[MP-Session] Accepted connection {} as player {}.", event.connection_id, next);
     const auto response = encode_server_gate({.accepted = true,
                                               .player_id = next,
                                               .host_player_id = 0,
-                                              .player_capacity = snapshot_.state.player_limit,
-                                              .character = character});
+                                              .player_capacity = snapshot_.state.player_limit});
     if (!transport_.send(event.connection_id, response, TransportLane::CONTROL_RELIABLE)) {
       host_departure(event.connection_id, kInvalidProtocolReason);
       transport_.close_connection(event.connection_id, kInvalidProtocolReason,
@@ -384,7 +373,7 @@ void SessionController::handle_pending_message(const TransportEvent& event) {
   }
   if (gate.player_id == gate.host_player_id || gate.host_player_id != 0 ||
       gate.player_id >= gate.player_capacity || gate.player_capacity < 2 ||
-      !valid_character(gate.character) || !registry_.configure(gate.player_capacity) ||
+      !registry_.configure(gate.player_capacity) ||
       !registry_.bind(event.connection_id, gate.host_player_id, PlayerCharacter::UNKNOWN)) {
     transport_.close_connection(event.connection_id, kInvalidProtocolReason,
                                 "invalid player assignment");
@@ -396,7 +385,6 @@ void SessionController::handle_pending_message(const TransportEvent& event) {
   snapshot_.state.player_limit = gate.player_capacity;
   profiles_.assign(gate.player_capacity, {});
   local_profile_.player_id = gate.player_id;
-  local_profile_.character = gate.character;
   if (!validate_profile(local_profile_, gate.player_id)) {
     transport_.close_connection(event.connection_id, kInvalidProtocolReason,
                                 "invalid local profile");
@@ -506,11 +494,15 @@ void SessionController::handle_host_control(const ConnectionId connection,
       transport_.close_connection(connection, kInvalidProtocolReason, "invalid player profile");
       return;
     }
-    message.profile.character = player_characters_[player_id];
+    if (session->identity_ready && message.profile.character != profile.character &&
+        (profile.ready || snapshot_.state.status != SessionStatus::LOBBY ||
+         snapshot_.countdown_active))
+      return;
     if (session->identity_ready && profile == message.profile)
       return;
     const bool first_profile = !session->identity_ready;
     profile = std::move(message.profile);
+    session->character = profile.character;
     session->profile = profile;
     session->identity_ready = true;
     lg::debug("[MP-Session] Player {} profile accepted; gameplay and bootstrap are ready.",
@@ -537,7 +529,9 @@ void SessionController::handle_host_control(const ConnectionId connection,
       transport_.close_connection(connection, kInvalidProtocolReason, "invalid player character");
       return;
     }
-    if (!session->identity_ready || profile.character == message.character)
+    if (!session->identity_ready || profile.ready ||
+        snapshot_.state.status != SessionStatus::LOBBY || snapshot_.countdown_active ||
+        profile.character == message.character)
       return;
     profile.character = message.character;
     session->character = message.character;
@@ -571,9 +565,6 @@ void SessionController::handle_client_control(const ConnectionId connection,
     }
     const bool changed = profiles_[message.profile.player_id] != message.profile;
     profiles_[message.profile.player_id] = message.profile;
-    if (message.profile.player_id == snapshot_.state.local_player_id) {
-      local_profile_ = message.profile;
-    }
     if (changed)
       adapter_.player_profile_changed(message.profile);
   } else if (message.kind == ControlKind::ROSTER) {
@@ -593,8 +584,6 @@ void SessionController::handle_client_control(const ConnectionId connection,
     for (const auto& profile : profiles_) {
       if (profile.player_id == kInvalidPlayerId)
         continue;
-      if (profile.player_id == snapshot_.state.local_player_id)
-        local_profile_ = profile;
       if (profile.player_id >= previous.size() || previous[profile.player_id] != profile) {
         adapter_.player_profile_changed(profile);
       }
@@ -913,6 +902,10 @@ bool SessionController::set_local_profile(PlayerProfile profile) {
     return false;
   if (!validate_profile(profile, snapshot_.state.local_player_id))
     return false;
+  if (profile.character != local_profile_.character &&
+      (local_profile_.ready || snapshot_.state.status != SessionStatus::LOBBY ||
+       snapshot_.countdown_active))
+    return false;
   local_profile_ = profile;
   if (snapshot_.state.role == SessionRole::HOST) {
     profiles_[profile.player_id] = profile;
@@ -926,7 +919,8 @@ bool SessionController::set_local_profile(PlayerProfile profile) {
 }
 
 bool SessionController::set_character(const PlayerCharacter character) {
-  if (snapshot_.state.status != SessionStatus::LOBBY || !valid_character(character))
+  if (snapshot_.state.status != SessionStatus::LOBBY || snapshot_.countdown_active ||
+      local_profile_.ready || !valid_character(character))
     return false;
   local_profile_.character = character;
   if (snapshot_.state.role == SessionRole::HOST)

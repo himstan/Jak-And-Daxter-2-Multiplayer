@@ -15,14 +15,6 @@ static_assert(kMPMaxPlayers >= 2 && kMPMaxPlayers <= 32,
               "multiplayer player capacity must be between 2 and 32");
 static_assert(kMPMaxPlayers <= 16, "Traffic net IDs only reserve 4 bits for player origin");
 
-constexpr std::array<PlayerCharacter, kMPMaxPlayers> get_default_player_character_config() {
-  std::array<PlayerCharacter, kMPMaxPlayers> characters = {};
-  for (uint32_t player_id = 0; player_id < kMPMaxPlayers; ++player_id) {
-    characters[player_id] = (player_id & 1u) == 0 ? PlayerCharacter::JAK : PlayerCharacter::DAXTER;
-  }
-  return characters;
-}
-
 enum class PacketType : uint8_t {
   PLAYER_STATE = 0,
   GAME_EVENT_BATCH = 1,

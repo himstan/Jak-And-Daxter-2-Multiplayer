@@ -464,15 +464,6 @@ TEST(Jak2GoalBridge, FreeBridgeFunctionsReadAndWriteGoalValues) {
   ASSERT_TRUE(multiplayer::jak2::bridge::read_string(0x10000, text));
   EXPECT_EQ(text, "hello");
 
-  auto& config = memory.at<MPPlayerCharacterConfigGOAL>(0x11000);
-  for (size_t index = 0; index < kMPMaxPlayers; ++index) {
-    config.characters[index] =
-        static_cast<uint32_t>(index % 2 == 0 ? PlayerCharacter::JAK : PlayerCharacter::DAXTER);
-  }
-  std::array<PlayerCharacter, kMPMaxPlayers> characters = {};
-  ASSERT_TRUE(multiplayer::jak2::bridge::read_character_config(0x11000, characters));
-  EXPECT_EQ(characters, get_default_player_character_config());
-
   auto& source = memory.at<MPPlayerAppearanceGOAL>(0x11500);
   for (size_t index = 0; index < kMPPlayerAppearanceSlotCount; ++index) {
     source.colors[index] = static_cast<uint32_t>(index + 1);
@@ -875,6 +866,36 @@ TEST(Jak2GoalBridge, TexturePreferencesKeepValidGroupsAndRepairInvalidGroups) {
             format_player_color(colors[primary]));
   EXPECT_EQ(saved["player_texture_groups"]["jak_straps"]["color"],
             format_player_color(colors[primary]));
+}
+
+TEST(Jak2GoalBridge, CharacterPreferenceBelongsToIdentityAndSurvivesOtherSettings) {
+  ScopedPreferencesRoot preferences_root;
+  const auto identity_path = preferences_root.path().parent_path() / "identity.json";
+  ASSERT_TRUE(set_player_character_preference(static_cast<uint32_t>(PlayerCharacter::DAXTER)));
+  auto identity = parse_commented_json(file_util::read_text_file(identity_path), "identity.json");
+  EXPECT_EQ(identity["preferred_character"], static_cast<uint8_t>(PlayerCharacter::DAXTER));
+  EXPECT_FALSE(set_player_character_preference(static_cast<uint32_t>(PlayerCharacter::UNKNOWN)));
+
+  auto settings =
+      parse_commented_json(file_util::read_text_file(preferences_root.path()), "preferences.json");
+  settings["session_characters"] = {1, 1, 1, 1, 1, 1, 1, 1};
+  file_util::write_text_file(preferences_root.path(), settings.dump(2));
+  load_multiplayer_preferences();
+  EXPECT_EQ(get_player_character_preference(), static_cast<uint32_t>(PlayerCharacter::DAXTER));
+  settings =
+      parse_commented_json(file_util::read_text_file(preferences_root.path()), "preferences.json");
+  EXPECT_FALSE(settings.contains("session_characters"));
+
+  ASSERT_TRUE(set_multiplayer_preference(2, "Player2"));
+  reset_multiplayer_preferences();
+  load_multiplayer_preferences();
+  EXPECT_EQ(get_player_character_preference(), static_cast<uint32_t>(PlayerCharacter::DAXTER));
+  identity = parse_commented_json(file_util::read_text_file(identity_path), "identity.json");
+  EXPECT_EQ(identity["display_name"], "Player2");
+  identity["preferred_character"] = static_cast<uint8_t>(PlayerCharacter::JAK);
+  file_util::write_text_file(identity_path, identity.dump(2));
+  ASSERT_TRUE(set_automatic_port_mapping(false));
+  EXPECT_EQ(get_player_character_preference(), static_cast<uint32_t>(PlayerCharacter::JAK));
 }
 
 TEST(Jak2GoalBridge, LifecycleChangeDiscardsAlreadyCopiedEventsFromPreviousOccupant) {

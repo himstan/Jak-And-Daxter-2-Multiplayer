@@ -189,16 +189,18 @@ TEST(PlatformSession, AdmissionGateCodecsAreTypedAndRejectTruncation) {
   EXPECT_FALSE(multiplayer::platform::decode_client_gate(old_request, decoded_request));
 
   const multiplayer::platform::ServerGate accepted = {
-      .accepted = true,
-      .player_id = 3,
-      .host_player_id = 0,
-      .player_capacity = 8,
-      .character = multiplayer::platform::PlayerCharacter::DAXTER};
+      .accepted = true, .player_id = 3, .host_player_id = 0, .player_capacity = 8};
   const auto accepted_bytes = multiplayer::platform::encode_server_gate(accepted);
+  EXPECT_EQ(accepted_bytes.size(), 8u);
   multiplayer::platform::ServerGate decoded_response;
   ASSERT_TRUE(multiplayer::platform::decode_server_gate(accepted_bytes, decoded_response));
   EXPECT_TRUE(decoded_response.accepted);
   EXPECT_EQ(decoded_response.player_id, 3);
+  EXPECT_FALSE(multiplayer::platform::decode_server_gate(
+      std::span(accepted_bytes).first(accepted_bytes.size() - 1), decoded_response));
+  auto trailing_response = accepted_bytes;
+  trailing_response.push_back(2);
+  EXPECT_FALSE(multiplayer::platform::decode_server_gate(trailing_response, decoded_response));
 
   const auto rejected_bytes = multiplayer::platform::encode_server_gate(
       {.rejection = multiplayer::platform::RejectionReason::VERSION_MISMATCH,

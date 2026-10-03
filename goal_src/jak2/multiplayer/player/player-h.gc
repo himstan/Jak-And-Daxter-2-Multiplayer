@@ -65,56 +65,18 @@
   (goatee-visible 2))
 
 (defconstant MP_PLAYER_VISUAL_SECRETS_MASK (mp-player-visual-secrets big-head little-head goatee-visible))
-(defconstant MP_SESSION_CHARACTER_CONFIG_SIZE (* 4 MP_MAX_PLAYERS))
-
-(deftype mp-session-character-config (structure)
-  ((characters mp-player-character MP_MAX_PLAYERS))
-  :size-assert MP_SESSION_CHARACTER_CONFIG_SIZE)
-
-(define-perm *mp-session-character-config* mp-session-character-config (new 'static 'mp-session-character-config))
 
 (defun mp-player-character-valid? ((character mp-player-character))
   (or (= character (mp-player-character jak)) (= character (mp-player-character daxter))))
-
-(defun mp-reset-session-player-characters! ()
-  (when (and *mp-session-character-config* (nonzero? *mp-session-character-config*))
-    (dotimes (player-id MP_MAX_PLAYERS)
-      (set! (-> *mp-session-character-config* characters player-id)
-            (if (zero? (logand player-id 1)) (mp-player-character jak) (mp-player-character daxter)))))
-  (none))
-
-(defun mp-session-player-character ((player-id uint))
-  (if (and *mp-session-character-config* (nonzero? *mp-session-character-config*) (< player-id (the uint MP_MAX_PLAYERS)))
-    (-> *mp-session-character-config* characters player-id)
-    (mp-player-character unknown)))
-
-(defun mp-set-session-player-character! ((player-id uint) (character mp-player-character))
-  (when (or (>= player-id (the uint MP_MAX_PLAYERS))
-            (not (mp-player-character-valid? character))
-            (not *mp-session-character-config*)
-            (zero? *mp-session-character-config*))
-    (return #f))
-  (set! (-> *mp-session-character-config* characters player-id) character)
-  #t)
-
-(mp-reset-session-player-characters!)
 
 (defun mp-sync-preferences-to-session-host-config! ()
   (let ((limit (pc-multi-get-preference-player-limit)))
     (when (and (>= limit (the uint 2)) (<= limit (the uint MP_MAX_PLAYERS)))
       (mp-set-session-player-limit! limit)))
-  (when (and *mp-session-character-config* (nonzero? *mp-session-character-config*))
-    (dotimes (player-id MP_MAX_PLAYERS)
-      (let ((character (the-as mp-player-character (pc-multi-get-preference-player-character (the uint player-id)))))
-        (when (mp-player-character-valid? character)
-          (set! (-> *mp-session-character-config* characters player-id) character)))))
   (none))
 
 (defun mp-setup-host-bridge! ((internet-host? object))
-  (when (and *mp-session-character-config* (nonzero? *mp-session-character-config*))
-    (if internet-host?
-      (pc-multi-setup-internet-host *mp-session-player-limit* (the-as uint *mp-session-character-config*))
-      (pc-multi-setup-host *mp-session-player-limit* (the-as uint *mp-session-character-config*))))
+  (if internet-host? (pc-multi-setup-internet-host *mp-session-player-limit*) (pc-multi-setup-host *mp-session-player-limit*))
   (none))
 
 (deftype mp-player-identity (structure)
