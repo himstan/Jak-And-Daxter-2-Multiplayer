@@ -10,6 +10,7 @@
 (define-extern demo? (function symbol))
 (define-extern task-closed? (function string symbol))
 (define-extern task-resolution-close! (function game-task symbol))
+(define-extern enemy-restore-actor-tombstone! (function entity-actor none))
 (define-extern *lightning-darkjak-pill* lightning-spec)
 (define-extern lightning-probe-callback (function lightning-tracker none))
 (define-extern process-drawable-shock-effect (function process-drawable lightning-spec (function lightning-tracker none) sparticle-launcher int int float object)) ;; guess
@@ -1215,6 +1216,8 @@
         (when actor-perm
           (set! (-> entity-perm quad) (-> actor-perm quad))
           (update entity-perm 'try (entity-perm-status bit-0 error dead no-kill bit-5 subtask-complete bit-9 bit-12))
+          (when (nonnull? level-entities)
+            (enemy-restore-actor-tombstone! (the-as entity-actor (-> level-entities data i entity))))
           )
         )
       )
