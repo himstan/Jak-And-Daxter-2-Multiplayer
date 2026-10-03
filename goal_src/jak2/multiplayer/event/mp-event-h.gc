@@ -129,6 +129,16 @@
   ((payload mp-aid-event-data :inline :overlay-at (-> data 0)))
   :size-assert 80)
 
+(deftype collectable-pickup-event-data (structure)
+  ((source-id uint32)
+   (count     float)
+   (total     float))
+  :size-assert 12)
+
+(deftype collectable-pickup-event (mp-event)
+  ((payload collectable-pickup-event-data :inline :overlay-at (-> data 0)))
+  :size-assert 80)
+
 (deftype mp-enemy-authority-grant-event-data (mp-aid-event-data)
   ((owner-player-id uint8)))
 
@@ -203,12 +213,12 @@
   ((payload mp-aid-event-data :inline :overlay-at (-> data 0)))
   :size-assert 80)
 
-(deftype mp-enemy-gem-event-data (structure)
-  ((source-id uint32)
-   (gem-index uint8)))
+(deftype mp-enemy-gem-event-data (collectable-pickup-event-data)
+  ((gem-index uint8))
+  :size-assert 13)
 
-(deftype mp-enemy-gem-event (mp-event)
-  ((payload mp-enemy-gem-event-data :inline :overlay-at (-> data 0)))
+(deftype mp-enemy-gem-event (collectable-pickup-event)
+  ((payload mp-enemy-gem-event-data :inline :override :overlay-at payload))
   :size-assert 80)
 
 (deftype mp-hover-enemy-spawn-event-data (structure)

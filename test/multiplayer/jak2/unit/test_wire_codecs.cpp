@@ -222,7 +222,7 @@ TEST(Jak2Protocol, GameEventRejectsTrailingBytesAndPreservesPayload) {
   multiplayer::jak2::core::GameEvent input = {};
   input.event_id = 1;
   input.source_player_id = 2;
-  input.payload_size = 4;
+  input.payload_size = 12;
   input.payload[0] = 0xaa;
   input.payload[1] = 0xbb;
   input.payload[2] = 0xcc;
@@ -231,7 +231,7 @@ TEST(Jak2Protocol, GameEventRejectsTrailingBytesAndPreservesPayload) {
   const multiplayer::jak2::core::GameEventBatch input_batch = {.events = {input}};
   ASSERT_TRUE(encode_core<multiplayer::jak2::wire::GameEventBatchPacket>(
       input_batch, bytes, multiplayer::jak2::wire::to_packet));
-  ASSERT_EQ(bytes.size(), 7u);
+  ASSERT_EQ(bytes.size(), 15u);
 
   multiplayer::jak2::core::GameEventBatch output_batch = {};
   ASSERT_TRUE(decode_core<multiplayer::jak2::wire::GameEventBatchPacket>(bytes, output_batch));

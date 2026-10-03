@@ -12,8 +12,8 @@ struct EventDescriptor {
 };
 
 inline constexpr std::array<EventDescriptor, 57> kEvents = {{
-    {1, "ORB", 4},
-    {2, "GEM", 4},
+    {1, "ORB", 12},
+    {2, "GEM", 12},
     {3, "BREAK", 4},
     {4, "ATTACK_ENEMY", 63},
     {5, "ENEMY_DEATH", 4},
@@ -37,7 +37,7 @@ inline constexpr std::array<EventDescriptor, 57> kEvents = {{
     {23, "BATTLE_EVENT", 55},
     {24, "PLAYER_GUN_SHOT", 9},
     {25, "WARP_GATE", 62},
-    {26, "ENEMY_GEM", 5},
+    {26, "ENEMY_GEM", 13},
     {27, "MTN_PLAT_SHOOT", 20},
     {28, "MTN_DICE", 37},
     {29, "PALACE_SQUID", 46},

@@ -567,9 +567,9 @@ TEST(Jak2AdapterIntegration, AdapterEventPublisherPreservesEventBatchContents) {
 
   std::vector<jak2::core::GameEvent> events(2);
   events[0].event_id = 1;
-  events[0].payload_size = 4;
+  events[0].payload_size = 12;
   events[1].event_id = 2;
-  events[1].payload_size = 4;
+  events[1].payload_size = 12;
   ASSERT_TRUE(adapter.mailbox().push_outbound_events(events));
   adapter.tick(100);
 
@@ -579,6 +579,61 @@ TEST(Jak2AdapterIntegration, AdapterEventPublisherPreservesEventBatchContents) {
   ASSERT_EQ(decoded.events.size(), 2u);
   EXPECT_EQ(decoded.events[0].event_id, 1u);
   EXPECT_EQ(decoded.events[1].event_id, 2u);
+}
+
+TEST(Jak2AdapterIntegration, CollectableTotalsUseNormalMixedEventBatchesAndHostRelay) {
+  jak2::application::Jak2Adapter host, picker, observer;
+  RecordingEndpoint host_endpoint, picker_endpoint, observer_endpoint;
+  picker_endpoint.session_snapshot.state.role = platform::SessionRole::CLIENT;
+  picker_endpoint.session_snapshot.state.local_player_id = 1;
+  observer_endpoint.session_snapshot.state.role = platform::SessionRole::CLIENT;
+  observer_endpoint.session_snapshot.state.local_player_id = 2;
+  host.installed(host_endpoint);
+  picker.installed(picker_endpoint);
+  observer.installed(observer_endpoint);
+  const jak2::core::GameEvent orb = {.event_id = 1,
+                                    .payload_size = 12,
+                                    .payload = {42, 0, 0, 0, 0, 0, 48, 65, 0, 0, 136, 65}};
+  const jak2::core::GameEvent gem = {.event_id = 2,
+                                    .payload_size = 12,
+                                    .payload = {43, 0, 0, 0, 0, 0, 32, 65, 0, 0, 112, 65}};
+  const jak2::core::GameEvent enemy_gem = {.event_id = 26,
+                                          .payload_size = 13,
+                                          .payload = {44, 0, 0, 0, 0, 0, 48, 65, 0, 0, 128, 65, 2}};
+  ASSERT_TRUE(picker.mailbox().push_outbound_events({orb, gem, enemy_gem}));
+  picker.tick(100);
+  ASSERT_EQ(picker_endpoint.sent.size(), 1u);
+  const auto result = host.packets().receive(
+      {.origin = {.authenticated_player_id = 1},
+       .message_id = static_cast<uint8_t>(PacketType::GAME_EVENT_BATCH),
+       .sequence = 1,
+       .payload = picker_endpoint.sent[0].payload},
+      host_endpoint);
+  EXPECT_EQ(result.disposition, platform::PayloadDisposition::CONSUME_AND_RELAY);
+  EXPECT_FALSE(result.relay_recipients);
+  host.tick(101);
+  const auto inbound = host.mailbox().take_inbound_events(64);
+  ASSERT_EQ(inbound.size(), 3u);
+  EXPECT_EQ(inbound[0].source_player_id, 1u);
+  EXPECT_EQ(inbound[0].payload, orb.payload);
+  EXPECT_EQ(inbound[1].payload, gem.payload);
+  EXPECT_EQ(inbound[2].payload, enemy_gem.payload);
+  EXPECT_TRUE(host_endpoint.sent.empty());
+  EXPECT_EQ(observer.packets()
+                .receive({.origin = {.authenticated_player_id = 1, .from_host = true},
+                          .message_id = static_cast<uint8_t>(PacketType::GAME_EVENT_BATCH),
+                          .sequence = 1,
+                          .payload = result.canonical_payload},
+                         observer_endpoint)
+                .disposition,
+            platform::PayloadDisposition::CONSUME);
+  observer.tick(103);
+  const auto relayed = observer.mailbox().take_inbound_events(64);
+  ASSERT_EQ(relayed.size(), 3u);
+  EXPECT_EQ(relayed[0].source_player_id, 1u);
+  EXPECT_EQ(relayed[0].payload, orb.payload);
+  EXPECT_EQ(relayed[1].payload, gem.payload);
+  EXPECT_EQ(relayed[2].payload, enemy_gem.payload);
 }
 
 TEST(Jak2AdapterIntegration, AdapterEventPublisherSplitsBatchesAtPayloadLimit) {
@@ -719,7 +774,7 @@ TEST(Jak2AdapterIntegration, RemoteFramesPublishImmediatelyThenAtEightMillisecon
   ASSERT_TRUE(first);
 
   jak2::core::GameEventBatch inbound_events = {
-      .events = {{.event_id = 1, .source_player_id = 1, .payload_size = 4}}};
+      .events = {{.event_id = 1, .source_player_id = 1, .payload_size = 12}}};
   const auto encoded_events = platform::wire::encode_packet(jak2::wire::to_packet(inbound_events));
   ASSERT_TRUE(encoded_events);
   ASSERT_EQ(adapter.packets()

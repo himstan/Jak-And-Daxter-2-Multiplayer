@@ -3,9 +3,10 @@
 
 (define-extern mp-event-enqueue-race! (function mp-race-event-data none))
 (define-extern mp-event-enqueue-aid! (function uint uint symbol))
+(define-extern collectable-enqueue-pickup! (function uint uint float float symbol))
 (define-extern mp-event-enqueue-authority-grant! (function uint uint symbol))
 (define-extern mp-event-enqueue-enemy-death! (function uint none))
-(define-extern mp-event-enqueue-enemy-gem! (function uint uint none))
+(define-extern mp-event-enqueue-enemy-gem! (function uint uint float float none))
 (define-extern mp-event-enqueue-hover-enemy-spawn! (function uint uint uint none))
 (define-extern mp-event-enqueue-actor-name! (function uint string symbol))
 (define-extern mp-event-enqueue-robotank-trigger! (function string int vector none))

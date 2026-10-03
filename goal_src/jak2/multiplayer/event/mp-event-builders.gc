@@ -29,9 +29,11 @@
     (return event))
   (the-as mp-enemy-death-event #f))
 
-(defun mp-event-build-enemy-gem! ((event mp-enemy-gem-event) (source-id uint) (gem-index uint))
+(defun mp-event-build-enemy-gem! ((event mp-enemy-gem-event) (source-id uint) (gem-index uint) (count float) (total float))
   (when (and (nonnull? event) (mp-event-prepare! event MP_EVENT_ENEMY_GEM))
     (set! (-> event payload source-id) (the-as uint32 source-id))
+    (set! (-> event payload count) count)
+    (set! (-> event payload total) total)
     (set! (-> event payload gem-index) (the-as uint8 gem-index))
     (return event))
   (the-as mp-enemy-gem-event #f))

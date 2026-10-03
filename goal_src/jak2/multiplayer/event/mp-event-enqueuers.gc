@@ -9,6 +9,15 @@
 (defun mp-event-enqueue-aid! ((event-type uint) (aid uint))
   (let ((event (new 'stack-no-clear 'mp-aid-event))) (mp-event-enqueue! (mp-event-build-aid! event event-type aid))))
 
+(defun collectable-enqueue-pickup! ((event-type uint) (source-id uint) (count float) (total float))
+  (let ((event (new 'stack-no-clear 'collectable-pickup-event)))
+    (when (and (nonzero? source-id) (nonnull? event) (mp-event-prepare! event event-type))
+      (set! (-> event payload source-id) (the-as uint32 source-id))
+      (set! (-> event payload count) count)
+      (set! (-> event payload total) total)
+      (return (mp-event-enqueue! event))))
+  #f)
+
 (defun mp-event-enqueue-authority-grant! ((aid uint) (owner-player-id uint))
   (let ((event (new 'stack-no-clear 'mp-enemy-authority-grant-event)))
     (when (and (< owner-player-id (the uint MP_MAX_PLAYERS)) (mp-event-prepare! event MP_EVENT_ENEMY_AUTHORITY_ACK))
@@ -21,9 +30,9 @@
   (let ((event (new 'stack-no-clear 'mp-enemy-death-event))) (mp-event-enqueue! (mp-event-build-enemy-death! event aid)))
   (none))
 
-(defun mp-event-enqueue-enemy-gem! ((source-id uint) (gem-index uint))
+(defun mp-event-enqueue-enemy-gem! ((source-id uint) (gem-index uint) (count float) (total float))
   (let ((event (new 'stack-no-clear 'mp-enemy-gem-event)))
-    (mp-event-enqueue! (mp-event-build-enemy-gem! event source-id gem-index)))
+    (mp-event-enqueue! (mp-event-build-enemy-gem! event source-id gem-index count total)))
   (none))
 
 (defun mp-event-enqueue-hover-enemy-spawn! ((manager-aid uint) (source-aid uint) (enemy-aid uint))

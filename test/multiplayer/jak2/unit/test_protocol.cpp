@@ -36,7 +36,7 @@ bool decode_event_batch(const std::span<const uint8_t> bytes,
 TEST(Jak2Protocol, EncodesOnlyTheDeclaredPayloadLength) {
   multiplayer::jak2::core::GameEvent event = {};
   event.event_id = 26;
-  event.payload_size = 5;
+  event.payload_size = 13;
   event.source_player_id = 3;
   event.payload[0] = 0xaa;
   event.payload[1] = 0xbb;
@@ -46,13 +46,13 @@ TEST(Jak2Protocol, EncodesOnlyTheDeclaredPayloadLength) {
   const multiplayer::jak2::core::GameEventBatch batch = {.events = {event}};
   ASSERT_TRUE(encode_event_batch(batch, encoded));
   EXPECT_EQ(encoded.size(), multiplayer::jak2::wire::kGameEventBatchPacketPrefixWireSize +
-                                multiplayer::jak2::wire::kGameEventRecordPrefixWireSize + 5);
+                                multiplayer::jak2::wire::kGameEventRecordPrefixWireSize + 13);
 
   multiplayer::jak2::core::GameEventBatch decoded = {};
   ASSERT_TRUE(decode_event_batch(encoded, decoded));
   ASSERT_EQ(decoded.events.size(), 1u);
   EXPECT_EQ(decoded.events[0].event_id, 26u);
-  EXPECT_EQ(decoded.events[0].payload_size, 5u);
+  EXPECT_EQ(decoded.events[0].payload_size, 13u);
   EXPECT_EQ(decoded.events[0].payload[0], 0xaa);
   EXPECT_EQ(decoded.events[0].payload[2], 0xcc);
 }
