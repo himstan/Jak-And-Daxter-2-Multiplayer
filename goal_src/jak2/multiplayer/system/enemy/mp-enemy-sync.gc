@@ -47,9 +47,7 @@
       (when (and target-state (not (is-in-pausable-state? target-state)))
         (if (mp-enemy-state-current-or-pending? e-proc target-state)
           (begin
-            (when (and (zero? (-> rec last-applied-remote-state))
-                       (nonnull? (-> e-proc state))
-                       (= (-> e-proc state name) target-state))
+            (when (zero? (-> rec last-applied-remote-state))
               (process-mask-clear! (-> e-proc mask) sleep-code))
             (set! (-> rec last-applied-remote-state) (the-as mp-enemy-state-id remote-state-id)))
           (when (or (!= (the-as mp-enemy-state-id remote-state-id) (-> rec last-applied-remote-state))

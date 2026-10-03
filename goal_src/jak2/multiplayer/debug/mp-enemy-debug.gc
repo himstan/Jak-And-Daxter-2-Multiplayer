@@ -183,6 +183,6 @@
   #t)
 
 (defun-debug mp-enemy-debug-draw ()
-  (when (and *mp-enemy-debug-auth?* (mp-local-player-record) (nonzero? (mp-local-player-record)))
+  (when (and *mp-enemy-debug-auth?* (nonnull? (mp-local-player-record)))
     (iterate-process-tree *active-pool* mp-enemy-debug-draw-callback *kernel-context*))
   (none))
