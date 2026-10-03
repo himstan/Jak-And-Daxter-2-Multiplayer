@@ -11,6 +11,7 @@
 struct LevelData {
   std::unique_ptr<tfrag3::Level> level;
   std::vector<GLuint> textures;
+  mutable std::vector<u8> player_tint_texture_groups;
   u64 load_id = UINT64_MAX;
 
   struct TieOpenGL {

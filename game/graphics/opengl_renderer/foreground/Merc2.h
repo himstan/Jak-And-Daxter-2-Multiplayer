@@ -1,6 +1,5 @@
 #pragma once
 #include <array>
-#include <unordered_map>
 #include "game/graphics/opengl_renderer/BucketRenderer.h"
 #include "game/multiplayer/jak2/player_appearance.h"
 
@@ -251,8 +250,6 @@ class Merc2 {
   };
   
   const std::vector<u8>& get_player_tint_texture_groups(const LevelData* level);
-
-  std::unordered_map<const LevelData*, std::vector<u8>> m_player_tint_texture_groups;
 
   Draw* alloc_normal_draw(const tfrag3::MercDraw& mdraw, const DrawArgs& args);
 

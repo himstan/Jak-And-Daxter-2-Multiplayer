@@ -1133,12 +1133,12 @@ Merc2::Draw* Merc2::try_alloc_envmap_draw(const tfrag3::MercDraw& mdraw,
 }
 
 const std::vector<u8>& Merc2::get_player_tint_texture_groups(const LevelData* level) {
-  auto [it, inserted] = m_player_tint_texture_groups.try_emplace(level);
-  auto& groups = it->second;
-  if (!inserted || !level || !level->level) {
+  ASSERT(level && level->level);
+  auto& groups = level->player_tint_texture_groups;
+  const auto& textures = level->level->textures;
+  if (groups.size() == textures.size()) {
     return groups;
   }
-  const auto& textures = level->level->textures;
   groups.assign(textures.size(), 0xff);
   for (size_t i = 0; i < textures.size(); ++i) {
     if (const auto group = get_player_texture_group_for_name(textures[i].debug_name); group != MPPlayerAppearanceGroup::INVALID) {
