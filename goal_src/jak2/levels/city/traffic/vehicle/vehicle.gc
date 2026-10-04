@@ -357,7 +357,9 @@
 (defmethod vehicle-method-94 ((this vehicle))
   (cond
     ((or (logtest? (rigid-body-object-flag player-grabbed) (-> this flags))
-         (and *target* (focus-test? *target* dead grabbed))
+         (and (nonnull? *target*)
+              (focus-test? *target* dead grabbed)
+              (not (mp-vehicle-remote-driven? this)))
          )
      (let ((v1-7 (new 'stack-no-clear 'vector)))
        (set! (-> v1-7 x) 0.0)
