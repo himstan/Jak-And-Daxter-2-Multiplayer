@@ -78,6 +78,7 @@ class WorldReplicationState {
   void reset();
   bool apply(const WorldState& state, const ApplyContext& context);
   bool apply(const GungameState& state, const ApplyContext& context);
+  bool apply(const PlayerRulesState& state, const ApplyContext& context);
   bool apply_bootstrap(const BootstrapState& state, Sequence sequence);
 
   const WorldState& world() const { return world_; }
@@ -88,6 +89,7 @@ class WorldReplicationState {
   WorldState world_ = {};
   GungameState gungame_ = {};
   BootstrapState bootstrap_ = {};
+  Sequence player_rules_sequence_ = 0;
 };
 
 class EntityReplicationState {

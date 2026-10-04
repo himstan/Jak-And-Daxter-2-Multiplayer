@@ -72,3 +72,28 @@ TEST(Jak2AdapterIntegration, AirlocksIgnoreLocalLoopbackSource) {
   EXPECT_TRUE(state.entities().apply(
       airlocks, {.sequence = 1, .source = {.authenticated_player_id = 1}, .local_player_id = 2}));
 }
+
+TEST(Jak2AdapterIntegration, LivePlayerRulesAreHostOwnedAndSurviveWorldAndDelayedBootstrap) {
+  WorldReplicationState state;
+  BootstrapState initial;
+  initial.world.money = 12;
+  ASSERT_TRUE(state.apply_bootstrap(initial, 1));
+  const PlayerRulesState rules = {
+      .respawn_delay_seconds = 0, .player_collision = true, .friendly_fire = true};
+  EXPECT_FALSE(state.apply(rules, from(1, 2)));
+  ASSERT_TRUE(state.apply(rules, from(0, 2, true)));
+  EXPECT_FALSE(state.apply(PlayerRulesState{}, from(0, 2, true)));
+  ASSERT_TRUE(state.apply(WorldState{.clock = 999}, from(0, 3, true)));
+  EXPECT_EQ(state.world().respawn_delay_seconds, 0);
+  EXPECT_TRUE(state.world().player_collision);
+  EXPECT_TRUE(state.world().friendly_fire);
+  EXPECT_FLOAT_EQ(state.world().money, 12);
+  ASSERT_TRUE(state.apply_bootstrap(initial, 4));
+  EXPECT_EQ(state.bootstrap().world.respawn_delay_seconds, 0);
+  EXPECT_TRUE(state.bootstrap().world.player_collision);
+  EXPECT_TRUE(state.world().friendly_fire);
+  state.reset();
+  ASSERT_TRUE(state.apply_bootstrap(initial, 1));
+  EXPECT_EQ(state.world().respawn_delay_seconds, kDefaultRespawnDelaySeconds);
+  EXPECT_FALSE(state.world().player_collision);
+}

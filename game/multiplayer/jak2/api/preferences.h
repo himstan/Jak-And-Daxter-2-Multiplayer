@@ -8,8 +8,11 @@
 
 #include "game/multiplayer/jak2/wire/multiplayer_protocol.h"
 #include "game/multiplayer/platform/session/connection_input.h"
+#include "game/multiplayer/platform/session/session_state.h"
 
 inline constexpr uint32_t kInvalidMultiplayerPlayerColor = 0xffffffffu;
+
+enum class PlayerNametagVisibility : uint8_t { ALWAYS, HOLD, OFF };
 
 struct MultiplayerPreferences {
   uint16_t network_port = multiplayer::platform::kDefaultMultiplayerPort;
@@ -21,6 +24,8 @@ struct MultiplayerPreferences {
   bool automatic_port_mapping = true;
   bool player_collision = false;
   bool friendly_fire = false;
+  bool player_map_marker = true;
+  PlayerNametagVisibility nametag_visibility = PlayerNametagVisibility::HOLD;
   uint8_t session_player_limit = 2;
   PlayerCharacter preferred_character = PlayerCharacter::JAK;
 };
@@ -41,4 +46,7 @@ std::string get_resolved_host_room_code();
 
 MultiplayerPreferences get_multiplayer_preferences();
 bool set_multiplayer_preferences(MultiplayerPreferences preferences);
+bool can_edit_multiplayer_preferences(const MultiplayerPreferences& previous,
+                                      const MultiplayerPreferences& next,
+                                      const multiplayer::platform::SessionState& session);
 bool set_player_appearance(const MPPlayerAppearance& appearance);

@@ -328,7 +328,9 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
            {"network-port", offsetof(MultiplayerPreferencesGOAL, network_port)},
            {"respawn-delay-seconds", offsetof(MultiplayerPreferencesGOAL, respawn_delay_seconds)},
            {"session-player-limit", offsetof(MultiplayerPreferencesGOAL, session_player_limit)},
-           {"friendly-fire", offsetof(MultiplayerPreferencesGOAL, friendly_fire)}}) {
+           {"friendly-fire", offsetof(MultiplayerPreferencesGOAL, friendly_fire)},
+           {"nametag-visibility", offsetof(MultiplayerPreferencesGOAL, nametag_visibility)},
+           {"player-map-marker", offsetof(MultiplayerPreferencesGOAL, player_map_marker)}}) {
     EXPECT_EQ(types.lookup_field_info("multiplayer-preferences", field).field.offset(), offset);
   }
   load_types("multiplayer/event/mp-event-h.gc");
@@ -1270,6 +1272,39 @@ TEST(Jak2GoalBridge, RespawnDelayValidatesPersistsAndResets) {
   EXPECT_EQ(get_multiplayer_preferences().respawn_delay_seconds, 20);
 }
 
+TEST(Jak2Preferences, PlayerDisplayPreferencesPersistAndValidate) {
+  ScopedPreferencesRoot preferences_root;
+  const auto defaults = get_multiplayer_preferences();
+  EXPECT_EQ(defaults.nametag_visibility, PlayerNametagVisibility::HOLD);
+  EXPECT_TRUE(defaults.player_map_marker);
+  for (const auto mode : {PlayerNametagVisibility::ALWAYS, PlayerNametagVisibility::HOLD,
+                          PlayerNametagVisibility::OFF}) {
+    auto preferences = get_multiplayer_preferences();
+    preferences.nametag_visibility = mode;
+    preferences.player_map_marker = false;
+    ASSERT_TRUE(set_multiplayer_preferences(preferences));
+    load_multiplayer_preferences();
+    EXPECT_EQ(get_multiplayer_preferences().nametag_visibility, mode);
+    EXPECT_FALSE(get_multiplayer_preferences().player_map_marker);
+  }
+  auto invalid = get_multiplayer_preferences();
+  invalid.nametag_visibility = static_cast<PlayerNametagVisibility>(3);
+  EXPECT_FALSE(set_multiplayer_preferences(invalid));
+  EXPECT_EQ(get_multiplayer_preferences().nametag_visibility, PlayerNametagVisibility::OFF);
+  for (const auto value : {"-1", "3", "256", "true", "\"always\""}) {
+    EXPECT_EQ(parse_multiplayer_preferences("{\"nametag_visibility\":" + std::string(value) + "}")
+                  .nametag_visibility,
+              PlayerNametagVisibility::HOLD);
+  }
+  EXPECT_TRUE(parse_multiplayer_preferences(R"({"player_map_marker":0})").player_map_marker);
+  EXPECT_EQ(parse_multiplayer_preferences("{}").nametag_visibility, PlayerNametagVisibility::HOLD);
+  EXPECT_TRUE(parse_multiplayer_preferences("{}").player_map_marker);
+  reset_multiplayer_preferences();
+  load_multiplayer_preferences();
+  EXPECT_EQ(get_multiplayer_preferences().nametag_visibility, PlayerNametagVisibility::HOLD);
+  EXPECT_TRUE(get_multiplayer_preferences().player_map_marker);
+}
+
 TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   ScopedPreferencesRoot preferences_root;
   GoalMemoryFixture memory;
@@ -1284,6 +1319,8 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   preferences.automatic_port_mapping = false;
   preferences.player_collision = true;
   preferences.friendly_fire = true;
+  preferences.nametag_visibility = PlayerNametagVisibility::OFF;
+  preferences.player_map_marker = false;
   preferences.player_appearance = get_default_player_appearance(0x123456);
   std::memset(memory.at<String>(state.player_name).data(), 'x', 16);
   ASSERT_TRUE(multiplayer::jak2::bridge::write_preferences(0x11000, preferences));
@@ -1293,6 +1330,8 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   EXPECT_EQ(state.automatic_port_mapping, 0);
   EXPECT_EQ(state.player_collision, 1);
   EXPECT_EQ(state.friendly_fire, 1);
+  EXPECT_EQ(state.nametag_visibility, static_cast<uint8_t>(PlayerNametagVisibility::OFF));
+  EXPECT_EQ(state.player_map_marker, 0);
 
   MultiplayerPreferences restored;
   ASSERT_TRUE(multiplayer::jak2::bridge::read_preferences(0x11000, restored));
@@ -1314,6 +1353,8 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   EXPECT_FALSE(restored.automatic_port_mapping);
   EXPECT_TRUE(restored.player_collision);
   EXPECT_TRUE(restored.friendly_fire);
+  EXPECT_EQ(restored.nametag_visibility, PlayerNametagVisibility::OFF);
+  EXPECT_FALSE(restored.player_map_marker);
   EXPECT_EQ(restored.player_appearance.colors, preferences.player_appearance.colors);
   EXPECT_EQ(restored.player_appearance.strengths, preferences.player_appearance.strengths);
   const auto root =
@@ -1328,13 +1369,16 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRejectsInvalidBuffersAndFlags) {
   values.player_name = "Player2";
   values.room_code = "ABC123";
   ASSERT_TRUE(multiplayer::jak2::bridge::write_preferences(0x11000, values));
-  for (uint8_t* flag :
-       {&state.automatic_port_mapping, &state.player_collision, &state.friendly_fire}) {
+  for (uint8_t* flag : {&state.automatic_port_mapping, &state.player_collision,
+                        &state.friendly_fire, &state.player_map_marker}) {
     const auto saved = *flag;
     *flag = 2;
     EXPECT_FALSE(multiplayer::jak2::bridge::read_preferences(0x11000, values));
     *flag = saved;
   }
+  state.nametag_visibility = 3;
+  EXPECT_FALSE(multiplayer::jak2::bridge::read_preferences(0x11000, values));
+  state.nametag_visibility = static_cast<uint8_t>(PlayerNametagVisibility::HOLD);
   EXPECT_FALSE(multiplayer::jak2::bridge::read_preferences(0, values));
   EXPECT_FALSE(multiplayer::jak2::bridge::write_preferences(EE_MAIN_MEM_SIZE - 1, values));
   memory.at<String>(state.room_code).len = 2;
@@ -1370,4 +1414,42 @@ TEST(Jak2GoalBridge, PlayerRulesCrossTheWorldBridge) {
   EXPECT_EQ(state.remote.world.respawn_delay_seconds, 65535);
   EXPECT_EQ(state.remote.world.player_collision, 1);
   EXPECT_EQ(state.remote.world.friendly_fire, 0);
+}
+
+TEST(Jak2Preferences, ActiveSessionsProtectConnectionSettingsAndClientHostRules) {
+  MultiplayerPreferences original;
+  auto changed = original;
+  multiplayer::platform::SessionState session = {
+      .role = multiplayer::platform::SessionRole::HOST,
+      .status = multiplayer::platform::SessionStatus::IN_GAME};
+  changed.friendly_fire = true;
+  changed.player_collision = true;
+  changed.respawn_delay_seconds = 0;
+  EXPECT_TRUE(can_edit_multiplayer_preferences(original, changed, session));
+  session.role = multiplayer::platform::SessionRole::CLIENT;
+  EXPECT_FALSE(can_edit_multiplayer_preferences(original, changed, session));
+  changed = original;
+  changed.player_name = "Player2";
+  changed.preferred_character = PlayerCharacter::DAXTER;
+  changed.nametag_visibility = PlayerNametagVisibility::ALWAYS;
+  EXPECT_TRUE(can_edit_multiplayer_preferences(original, changed, session));
+  for (const auto status : {multiplayer::platform::SessionStatus::LOBBY,
+                            multiplayer::platform::SessionStatus::IN_GAME}) {
+    session.status = status;
+    session.role = multiplayer::platform::SessionRole::HOST;
+    for (const auto field : {0, 1, 2, 3}) {
+      changed = original;
+      if (field == 0)
+        ++changed.network_port;
+      if (field == 1)
+        changed.room_code = "ABC123";
+      if (field == 2)
+        ++changed.session_player_limit;
+      if (field == 3)
+        changed.automatic_port_mapping = false;
+      EXPECT_FALSE(can_edit_multiplayer_preferences(original, changed, session));
+    }
+  }
+  session.role = multiplayer::platform::SessionRole::NONE;
+  EXPECT_TRUE(can_edit_multiplayer_preferences(original, changed, session));
 }

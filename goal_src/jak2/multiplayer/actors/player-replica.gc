@@ -4,6 +4,7 @@
 (define-extern mp-dispatch-edge-grab-to-target! (function target symbol none))
 (define-extern mp-clear-target-edge-grab-pending! (function target none))
 (define-extern player-replica-gun-process-live? (function target symbol))
+(define-extern player-changing-character? (function target symbol))
 (define-extern player-replica-repair-gun-replay-state! (function target target-record pickup-type none))
 
 (define *player-replica-input-stale-time* (seconds 0.2))
@@ -1040,6 +1041,7 @@
     (when (nonnull? record)
       (let ((target-record (get-player-target-record record)))
         (when (and (nonnull? proc target-record (-> proc control))
+                   (not (player-changing-character? proc))
                    (-> target-record active?)
                    (not (player-replica-reconcile-vehicle-exit! proc
                                                                 record

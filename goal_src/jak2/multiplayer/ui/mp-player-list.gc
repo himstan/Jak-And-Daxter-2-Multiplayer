@@ -185,9 +185,17 @@
           (draw-string *nametag-string* buffer context)))))
   #t)
 
+(defun player-nametags-visible? ()
+  (if (nonnull? *multiplayer-preferences*)
+    (case (-> *multiplayer-preferences* nametag-visibility)
+      (((player-nametag-visibility always)) #t)
+      (((player-nametag-visibility hold)) (mp-player-list-visible?))
+      (else #f))
+    (mp-player-list-visible?)))
+
 (defun draw-player-nametags! ()
   (when (and (mp-session-in-game?)
-             (mp-player-list-visible?)
+             (player-nametags-visible?)
              (nonnull? *display*
                        *math-camera*
                        *font-work*

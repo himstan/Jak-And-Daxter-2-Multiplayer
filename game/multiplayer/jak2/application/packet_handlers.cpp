@@ -14,6 +14,7 @@
 #include "game/multiplayer/jak2/wire/packets/game_event_batch_packet.h"
 #include "game/multiplayer/jak2/wire/packets/gungame_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/pedestrian_state_batch_packet.h"
+#include "game/multiplayer/jak2/wire/packets/player_rules_packet.h"
 #include "game/multiplayer/jak2/wire/packets/player_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/player_vehicle_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/traffic_authority_state_packet.h"
@@ -229,6 +230,29 @@ void Jak2Adapter::add_player_handlers(Handlers& handlers) {
 }
 
 void Jak2Adapter::add_world_handlers(Handlers& handlers) {
+  add_packet_handler<wire::PlayerRulesPacket>(
+      handlers, wire::to_packet, state_.world(), wire::canonicalize_player_rules,
+      [this](auto& handler, auto& endpoint, uint64_t now_ms) {
+        const auto& world = local_frame_->world;
+        const core::PlayerRulesState rules = {.respawn_delay_seconds = world.respawn_delay_seconds,
+                                              .player_collision = world.player_collision,
+                                              .friendly_fire = world.friendly_fire};
+        if (handler.send(rules, endpoint, now_ms))
+          last_player_rules_ = rules;
+      },
+      [this]() -> std::optional<bool> {
+        if (!local_frame_ || local_frame_->local_player_id >= core::kMaxPlayers)
+          return std::nullopt;
+        const auto& world = local_frame_->world;
+        const core::PlayerRulesState rules = {.respawn_delay_seconds = world.respawn_delay_seconds,
+                                              .player_collision = world.player_collision,
+                                              .friendly_fire = world.friendly_fire};
+        if (!last_player_rules_) {
+          last_player_rules_ = rules;
+          return false;
+        }
+        return *last_player_rules_ != rules;
+      });
   add_packet_handler<wire::GungameStatePacket>(
       handlers, wire::to_packet, state_.world(), wire::canonicalize_host_state,
       [this](auto& handler, auto& endpoint, uint64_t now_ms) {

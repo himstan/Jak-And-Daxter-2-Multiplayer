@@ -713,6 +713,10 @@
     (mp-spectate-clear-custom-text-state! manager))
   (none))
 
+(defun mp-spectate-set-flags! ((flags mp-spectate-flags))
+  (let ((manager (mp-spectate-manager-process))) (when (nonnull? manager) (logior! (-> manager options flags) flags)))
+  (none))
+
 (defun mp-spectate-clear-flags! ((flags mp-spectate-flags))
   (let ((manager (mp-spectate-manager-process)))
     (when (and manager (nonzero? manager))

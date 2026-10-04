@@ -667,6 +667,7 @@
   "mp-event-handlers.o" ;; added
   "mp-events.o" ;; added
   "mp-player-snapshot.o" ;; added
+  "player-profile.o" ;; added
   "mp-remote.o" ;; added
   "mp-overlay-layout.o" ;; added
   "mp-player-list.o" ;; added

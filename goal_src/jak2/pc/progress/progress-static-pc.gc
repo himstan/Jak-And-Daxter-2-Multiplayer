@@ -716,6 +716,10 @@ This gives us more freedom to write code how we want.
 
 (define *game-options-pc*
   (progress-new-generic-scrolling-page (text-id progress-root-game-options)
+    (new 'static 'menu-generic-button-option
+      :name (text-id progress-multiplayer-options)
+      :on-confirm (lambda ((the-progress progress))
+        (navigate! *progress-pc-generic-store* the-progress *multiplayer-options-pc* mp-load-multiplayer-options!)))
     (game-options-pc-input-options)
     (game-options-pc-subtitle-toggle)
     (game-options-pc-hint-subtitle-toggle)

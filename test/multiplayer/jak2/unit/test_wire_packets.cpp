@@ -10,6 +10,7 @@
 #include "game/multiplayer/jak2/wire/packets/enemy_state_batch_packet.h"
 #include "game/multiplayer/jak2/wire/packets/gungame_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/pedestrian_state_batch_packet.h"
+#include "game/multiplayer/jak2/wire/packets/player_rules_packet.h"
 #include "game/multiplayer/jak2/wire/packets/player_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/traffic_authority_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/vehicle_state_batch_packet.h"
@@ -605,5 +606,33 @@ TEST(Jak2Protocol, PlayerRulesRoundTripOnlyInBootstrap) {
         EXPECT_FALSE(platform::wire::encode_packet(*initial));
       }
     }
+  }
+}
+
+TEST(Jak2Protocol, PlayerRulesPacketIsCompactAndRejectsMalformedFlags) {
+  using namespace multiplayer;
+  for (const uint16_t delay : {uint16_t{0}, uint16_t{65535}}) {
+    const jak2::core::PlayerRulesState rules = {
+        .respawn_delay_seconds = delay, .player_collision = true, .friendly_fire = false};
+    const auto bytes = platform::wire::encode_packet(jak2::wire::to_packet(rules));
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes->size(), 4u);
+    const auto decoded = platform::wire::decode_packet<jak2::wire::PlayerRulesPacket>(*bytes);
+    ASSERT_TRUE(decoded);
+    jak2::core::PlayerRulesState restored;
+    jak2::wire::from_packet(*decoded, restored);
+    EXPECT_EQ(restored, rules);
+    for (size_t length = 0; length < bytes->size(); ++length)
+      EXPECT_FALSE(platform::wire::decode_packet<jak2::wire::PlayerRulesPacket>(
+          std::span(*bytes).first(length)));
+    auto malformed = *bytes;
+    malformed.push_back(0);
+    EXPECT_FALSE(platform::wire::decode_packet<jak2::wire::PlayerRulesPacket>(malformed));
+    malformed = *bytes;
+    malformed[2] = 2;
+    EXPECT_FALSE(platform::wire::decode_packet<jak2::wire::PlayerRulesPacket>(malformed));
+    malformed = *bytes;
+    malformed[3] = 2;
+    EXPECT_FALSE(platform::wire::decode_packet<jak2::wire::PlayerRulesPacket>(malformed));
   }
 }

@@ -23,7 +23,8 @@ Jak2Adapter::Jak2Adapter()
                   .maximum_payload_bytes = 32768,
                   .maximum_players = core::kMaxPlayers,
                   .maximum_profile_extension_bytes = sizeof(core::PlayerAppearance),
-                  .supported_characters = {PlayerCharacter::JAK, PlayerCharacter::DAXTER}},
+                  .supported_characters = {PlayerCharacter::JAK, PlayerCharacter::DAXTER},
+                  .allow_in_game_character_changes = true},
       packets_(make_packet_handlers(), descriptor_.maximum_payload_bytes) {}
 
 bool Jak2Adapter::configure_compatibility_identity(const std::string identity) {
@@ -41,6 +42,7 @@ void Jak2Adapter::session_started(const platform::SessionState&) {
   state_.reset();
   local_frame_.reset();
   last_traffic_authority_.reset();
+  last_player_rules_.reset();
   last_remote_publish_ms_.reset();
   remote_generation_ = 0;
   presentation_.reset();
@@ -51,6 +53,7 @@ void Jak2Adapter::session_reset() {
   mailbox_.reset();
   local_frame_.reset();
   last_traffic_authority_.reset();
+  last_player_rules_.reset();
   last_remote_publish_ms_.reset();
   remote_generation_ = 0;
   presentation_.reset();

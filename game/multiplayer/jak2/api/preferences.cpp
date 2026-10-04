@@ -244,6 +244,14 @@ void parse_preferences_root(const json& root, MultiplayerPreferences& parsed, bo
     if (root.contains("friendly_fire") && root.at("friendly_fire").is_boolean()) {
       parsed.friendly_fire = root.at("friendly_fire").get<bool>();
     }
+    if (root.contains("player_map_marker") && root.at("player_map_marker").is_boolean()) {
+      parsed.player_map_marker = root.at("player_map_marker").get<bool>();
+    }
+    if (root.contains("nametag_visibility") && root.at("nametag_visibility").is_number_unsigned() &&
+        root.at("nametag_visibility") <= static_cast<uint8_t>(PlayerNametagVisibility::OFF)) {
+      parsed.nametag_visibility =
+          static_cast<PlayerNametagVisibility>(root.at("nametag_visibility").get<uint8_t>());
+    }
     if (root.contains("respawn_delay_seconds") &&
         root.at("respawn_delay_seconds").is_number_unsigned() &&
         root.at("respawn_delay_seconds") <= std::numeric_limits<uint16_t>::max()) {
@@ -352,6 +360,8 @@ void save_multiplayer_preferences() {
   root["player_texture_groups"] = std::move(texture_groups);
   root["player_collision"] = g_preferences.player_collision;
   root["friendly_fire"] = g_preferences.friendly_fire;
+  root["player_map_marker"] = g_preferences.player_map_marker;
+  root["nametag_visibility"] = static_cast<uint8_t>(g_preferences.nametag_visibility);
   root["respawn_delay_seconds"] = g_preferences.respawn_delay_seconds;
   root["automatic_port_mapping"] = g_preferences.automatic_port_mapping;
   root["session_player_limit"] = g_preferences.session_player_limit;
@@ -412,6 +422,22 @@ MultiplayerPreferences get_multiplayer_preferences() {
   return preferences;
 }
 
+bool can_edit_multiplayer_preferences(const MultiplayerPreferences& previous,
+                                      const MultiplayerPreferences& next,
+                                      const multiplayer::platform::SessionState& session) {
+  using multiplayer::platform::SessionRole;
+  if (session.role == SessionRole::NONE)
+    return true;
+  if (previous.network_port != next.network_port || previous.room_code != next.room_code ||
+      previous.session_player_limit != next.session_player_limit ||
+      previous.automatic_port_mapping != next.automatic_port_mapping)
+    return false;
+  return session.role == SessionRole::HOST ||
+         (previous.friendly_fire == next.friendly_fire &&
+          previous.player_collision == next.player_collision &&
+          previous.respawn_delay_seconds == next.respawn_delay_seconds);
+}
+
 bool set_multiplayer_preferences(MultiplayerPreferences preferences) {
   std::string name;
   std::string room_code;
@@ -419,6 +445,7 @@ bool set_multiplayer_preferences(MultiplayerPreferences preferences) {
       !normalize_player_name(preferences.player_name, name) ||
       !multiplayer::platform::normalize_room_code(preferences.room_code, room_code) ||
       !is_player_appearance_valid(preferences.player_appearance) ||
+      preferences.nametag_visibility > PlayerNametagVisibility::OFF ||
       preferences.session_player_limit < 2 || preferences.session_player_limit > kMPMaxPlayers ||
       (preferences.preferred_character != PlayerCharacter::JAK &&
        preferences.preferred_character != PlayerCharacter::DAXTER)) {

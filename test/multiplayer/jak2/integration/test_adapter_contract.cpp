@@ -12,6 +12,7 @@
 #include "game/multiplayer/jak2/wire/packets/game_event_batch_packet.h"
 #include "game/multiplayer/jak2/wire/packets/gungame_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/pedestrian_state_batch_packet.h"
+#include "game/multiplayer/jak2/wire/packets/player_rules_packet.h"
 #include "game/multiplayer/jak2/wire/packets/player_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/player_vehicle_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/traffic_authority_state_packet.h"
@@ -1477,4 +1478,43 @@ TEST(Jak2AdapterIntegration, HostRulesReachLateJoinAndReconnectBootstrap) {
     client.session_reset();
     client.session_started(client_endpoint.session_snapshot.state);
   }
+}
+
+TEST(Jak2AdapterIntegration, PlayerRulesSendOnlyChangesAndRetryFailedSends) {
+  jak2::application::Jak2Adapter host;
+  RecordingEndpoint endpoint;
+  host.installed(endpoint);
+  host.session_started(endpoint.session_snapshot.state);
+  const auto publish = [&](uint64_t now, uint16_t delay, bool collision, bool friendly) {
+    endpoint.sent.clear();
+    auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
+    frame->local_player_id = 0;
+    frame->host_player_id = 0;
+    frame->world.respawn_delay_seconds = delay;
+    frame->world.player_collision = collision;
+    frame->world.friendly_fire = friendly;
+    frame->bootstrap.host_continue[0] = 'a';
+    host.mailbox().publish_local_frame(std::move(frame));
+    host.tick(now);
+    return std::ranges::count_if(endpoint.sent, [](const auto& packet) {
+      return packet.id == static_cast<uint8_t>(PacketType::PLAYER_RULES);
+    });
+  };
+  EXPECT_EQ(publish(100, 20, false, false), 0);
+  EXPECT_EQ(publish(200, 20, false, false), 0);
+  endpoint.accept_sends = false;
+  EXPECT_EQ(publish(300, 0, true, true), 0);
+  endpoint.accept_sends = true;
+  EXPECT_EQ(publish(400, 0, true, true), 1);
+  EXPECT_EQ(publish(500, 0, true, true), 0);
+  const auto bootstrap = host.create_bootstrap(1);
+  const auto decoded = platform::wire::decode_packet<jak2::wire::BootstrapStatePacket>(bootstrap);
+  ASSERT_TRUE(decoded);
+  EXPECT_EQ(decoded->respawn_delay_seconds, 0);
+  EXPECT_EQ(decoded->player_collision, 1);
+  EXPECT_EQ(decoded->friendly_fire, 1);
+  const auto* handler = host.packets().find(static_cast<uint8_t>(PacketType::PLAYER_RULES));
+  ASSERT_NE(handler, nullptr);
+  EXPECT_EQ(handler->policy().delivery, platform::Delivery::RELIABLE_ORDERED);
+  EXPECT_EQ(handler->policy().direction, platform::MessageDirection::HOST_TO_CLIENT);
 }

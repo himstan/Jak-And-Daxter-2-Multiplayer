@@ -495,8 +495,7 @@ void SessionController::handle_host_control(const ConnectionId connection,
       return;
     }
     if (session->identity_ready && message.profile.character != profile.character &&
-        (profile.ready || snapshot_.state.status != SessionStatus::LOBBY ||
-         snapshot_.countdown_active))
+        !character_change_allowed(profile))
       return;
     if (session->identity_ready && profile == message.profile)
       return;
@@ -895,6 +894,13 @@ void SessionController::publish_roster(const ConnectionId connection) {
   send_control(roster, Audience::one(connection));
 }
 
+bool SessionController::character_change_allowed(const PlayerProfile& profile) const {
+  if (snapshot_.state.status == SessionStatus::IN_GAME)
+    return adapter_.descriptor().allow_in_game_character_changes;
+  return snapshot_.state.status == SessionStatus::LOBBY && !profile.ready &&
+         !snapshot_.countdown_active;
+}
+
 bool SessionController::set_local_profile(PlayerProfile profile) {
   if (snapshot_.state.role == SessionRole::NONE ||
       (snapshot_.state.status != SessionStatus::LOBBY &&
@@ -902,9 +908,7 @@ bool SessionController::set_local_profile(PlayerProfile profile) {
     return false;
   if (!validate_profile(profile, snapshot_.state.local_player_id))
     return false;
-  if (profile.character != local_profile_.character &&
-      (local_profile_.ready || snapshot_.state.status != SessionStatus::LOBBY ||
-       snapshot_.countdown_active))
+  if (profile.character != local_profile_.character && !character_change_allowed(local_profile_))
     return false;
   local_profile_ = profile;
   if (snapshot_.state.role == SessionRole::HOST) {

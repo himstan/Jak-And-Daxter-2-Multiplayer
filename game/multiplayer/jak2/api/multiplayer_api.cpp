@@ -43,6 +43,14 @@ multiplayer::platform::PlayerProfile local_profile() {
   profile.character = identity.preferred_character;
   const auto* begin = reinterpret_cast<const uint8_t*>(&preferences.player_appearance);
   profile.game_extension.assign(begin, begin + sizeof(preferences.player_appearance));
+  for (const auto session = runtime().snapshot().session; const auto& player : session.players) {
+    if (player.player_id == session.state.local_player_id) {
+      profile.player_id = player.player_id;
+      profile.character = player.character;
+      profile.ready = player.ready;
+      break;
+    }
+  }
   return profile;
 }
 
@@ -311,16 +319,38 @@ static int pc_multi_get_preferences(const u32 preferences_ptr) {
 
 static int pc_multi_set_preferences(const u32 preferences_ptr) {
   MultiplayerPreferences preferences;
-  return multiplayer::jak2::bridge::read_preferences(preferences_ptr, preferences) &&
-                 set_multiplayer_preferences(std::move(preferences)) &&
-                 multiplayer::jak2::bridge::write_preferences(preferences_ptr,
-                                                              multiplayer_preferences())
+  const auto previous = get_multiplayer_preferences();
+  const auto session = runtime().snapshot().session;
+  if (!multiplayer::jak2::bridge::read_preferences(preferences_ptr, preferences) ||
+      !can_edit_multiplayer_preferences(previous, preferences, session.state))
+    return 0;
+  auto profile = local_profile();
+  const bool character_changed = preferences.preferred_character != previous.preferred_character;
+  if (character_changed && preferences.preferred_character != profile.character &&
+      session.state.role != multiplayer::platform::SessionRole::NONE &&
+      session.state.status != multiplayer::platform::SessionStatus::IN_GAME &&
+      (session.state.status != multiplayer::platform::SessionStatus::LOBBY || profile.ready ||
+       session.countdown_active))
+    return 0;
+  const bool profile_changed =
+      character_changed || preferences.player_name != previous.player_name ||
+      preferences.player_appearance.colors != previous.player_appearance.colors ||
+      preferences.player_appearance.strengths != previous.player_appearance.strengths;
+  if (!set_multiplayer_preferences(std::move(preferences)))
+    return 0;
+  if (profile_changed && session.state.role != multiplayer::platform::SessionRole::NONE) {
+    auto updated = local_profile();
+    if (character_changed)
+      updated.character = multiplayer_preferences().preferred_character;
+    if (!runtime().enqueue<multiplayer::platform::SetProfileCommand>(std::move(updated))) {
+      set_multiplayer_preferences(previous);
+      return 0;
+    }
+  }
+  return multiplayer::jak2::bridge::write_preferences(preferences_ptr,
+                                                      get_multiplayer_preferences())
              ? 1
              : 0;
-}
-
-static void pc_multi_reset_preferences() {
-  reset_multiplayer_preferences();
 }
 
 static int pc_multi_is_lobby_host() {
@@ -386,13 +416,6 @@ static int pc_multi_lobby_set_appearance(const u32 appearance_ptr) {
     return 0;
   }
   auto profile = local_profile();
-  for (const auto snapshot = runtime().snapshot(); const auto& player : snapshot.session.players) {
-    if (player.player_id == snapshot.session.state.local_player_id) {
-      profile.character = player.character;
-      profile.ready = player.ready;
-      break;
-    }
-  }
   return runtime().enqueue<multiplayer::platform::SetProfileCommand>(std::move(profile)) ? 1 : 0;
 }
 
@@ -496,7 +519,6 @@ void init_jak2_bridge() {
   register_symbol("pc-multi-connect-direct", &pc_multi_connect_direct);
   register_symbol("pc-multi-get-preferences", &pc_multi_get_preferences);
   register_symbol("pc-multi-set-preferences", &pc_multi_set_preferences);
-  register_symbol("pc-multi-reset-preferences", &pc_multi_reset_preferences);
   register_symbol("pc-multi-is-lobby-host", &pc_multi_is_lobby_host);
   register_symbol("pc-multi-get-session-player-limit", &pc_multi_get_session_player_limit);
   register_symbol("pc-multi-lobby-start-game", &pc_multi_lobby_start_game);

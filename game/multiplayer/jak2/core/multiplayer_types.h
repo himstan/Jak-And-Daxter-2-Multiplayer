@@ -347,6 +347,13 @@ struct AirlockSnapshot {
   std::vector<AirlockState> states;
 };
 
+struct PlayerRulesState {
+  uint16_t respawn_delay_seconds = kDefaultRespawnDelaySeconds;
+  bool player_collision = false;
+  bool friendly_fire = false;
+  bool operator==(const PlayerRulesState&) const = default;
+};
+
 struct WorldState {
   Sequence sequence = 0;
   float money = 0.0f;

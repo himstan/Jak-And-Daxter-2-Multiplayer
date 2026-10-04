@@ -69,6 +69,7 @@ class SessionController final : public GameSessionEndpoint {
   bool valid_character(PlayerCharacter character) const;
   bool valid_message_policies(std::string_view action) const;
   bool valid_game_identity(std::string_view action) const;
+  bool character_change_allowed(const PlayerProfile& profile) const;
   bool validate_profile(PlayerProfile& profile, PlayerId player_id) const;
   void reset_adapter_session();
   void clear_countdown();

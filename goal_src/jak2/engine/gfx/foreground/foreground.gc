@@ -1133,7 +1133,23 @@
     )
   )
 
-(defun pc-draw-bones ((dc draw-control) (dma-buf pointer) (matrix-buf pointer))
+(defun link-merc-draw! ((chain merc-chain) (packet dma-packet) (patch dma-packet) (bucket bucket-id-16))
+  (when (nonnull? packet patch)
+    (if (>= bucket 0)
+        (let ((frame (current-frame)))
+          (when (nonnull? frame (-> frame bucket-group))
+            (dma-bucket-insert-tag (-> frame bucket-group) (the-as bucket-id bucket)
+                                  (the-as pointer packet) (the-as (pointer dma-tag) patch))))
+        (when (nonnull? chain)
+          (when (zero? (-> chain first))
+            (set! (-> chain first) packet))
+          (when (nonnull? (-> chain patch))
+            (set! (-> chain patch dma)
+                  (new 'static 'dma-tag :id (dma-tag-id next) :addr (the-as int packet))))
+          (set! (-> chain patch) patch))))
+  (none))
+
+(defun pc-draw-bones ((dc draw-control) (dma-buf pointer) (matrix-buf pointer) (bucket bucket-id-16))
   "Add a dma packet to tell the PC renderer which model we are renderering."
   (let* ((use-flags (new 'stack-no-clear 'array 'uint8 7))
          (blerc-weights (new 'stack-no-clear 'array 'float 40))
@@ -1194,24 +1210,7 @@
             (set! (-> patch-packet vif1) (new 'static 'vif-tag))
             (set! dma-buf (the pointer (&+ patch-packet 16)))
 
-            ;; now, the confusing splice stuff
-            (let ((merc-chain (-> buckets data i merc)))
-              ;; first step: set first, if we are the first thing to draw.
-              (when (zero? (-> merc-chain first))
-                  (set! (-> merc-chain first) packet)
-                  )
-
-              ;; second step: patch the last thing that was drawn
-              (when (nonzero? (-> merc-chain patch))
-                (let ((patch-addr (+ 4 (the-as int (-> merc-chain patch)))))
-                  (set! (-> (the (pointer dma-packet) patch-addr)) packet)
-                  )
-                )
-
-              ;; third step: update patch to point to our packet.
-              (set! (-> merc-chain patch) patch-packet)
-
-              )
+            (link-merc-draw! (-> buckets data i merc) packet patch-packet bucket)
             )
           )
 
@@ -1652,7 +1651,8 @@
                             )
 
                           ;; added
-                          (set! dma-ptr (pc-draw-bones dc dma-ptr (the pointer (-> (scratchpad-object foreground-work) regs mtxs))))
+                          (set! dma-ptr (pc-draw-bones dc dma-ptr (the pointer (-> (scratchpad-object foreground-work) regs mtxs))
+                                                            (the-as bucket-id-16 -1)))
 
                           ; (if (nonzero? (-> bucket-info need-mercprime-if-merc))
                           ;     (set! dma-ptr (foreground-merc dc (-> (scratchpad-object foreground-work) regs mtxs) dma-ptr 32 17 bucket-info))

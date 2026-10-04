@@ -29,7 +29,8 @@ enum class PacketType : uint8_t {
   TRAFFIC_AUTHORITY_STATE = 10,
   PLAYER_VEHICLE_STATE = 11,
   GUNGAME_STATE = 12,
-  COUNT = 13
+  PLAYER_RULES = 13,
+  COUNT = 14
 };
 
 inline constexpr uint8_t kMPPlayerStateFlagSpectatorOnly = 1u << 0;

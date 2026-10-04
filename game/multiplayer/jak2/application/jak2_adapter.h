@@ -50,6 +50,7 @@ class Jak2Adapter final : public platform::GameAdapter {
   core::ReplicationState state_;
   std::unique_ptr<LocalReplicationFrame> local_frame_;
   std::optional<core::TrafficAuthority> last_traffic_authority_;
+  std::optional<core::PlayerRulesState> last_player_rules_;
   std::optional<uint64_t> last_remote_publish_ms_;
   uint32_t remote_generation_ = 0;
   std::array<uint32_t, core::kMaxPlayers> player_lifecycles_ = {};

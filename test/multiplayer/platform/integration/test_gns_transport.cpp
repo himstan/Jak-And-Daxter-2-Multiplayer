@@ -1816,3 +1816,68 @@ TEST(GnsTransportIntegration, MalformedGatesAndRepeatedRejectionsAreThrottled) {
   }
 }
 }  // namespace
+
+TEST(GnsTransportIntegration, AdapterPolicyAllowsLiveProfilesWithoutUnlockingReadyLobbyCharacters) {
+  RecordingAdapter host_adapter;
+  RecordingAdapter client_adapter;
+  RecordingAdapter observer_adapter;
+  SessionController host(host_adapter);
+  SessionController client(client_adapter);
+  SessionController observer(observer_adapter);
+  ASSERT_TRUE(host.host(host_config(available_udp_port(), 3)));
+  ASSERT_TRUE(client.connect(client_config(host.local_port())));
+  ASSERT_TRUE(observer.connect(client_config(host.local_port())));
+  const auto pump = [&] {
+    const auto now = now_ms();
+    host.pump(now);
+    client.pump(now);
+    observer.pump(now);
+  };
+  ASSERT_TRUE(pump_until(pump, [&] {
+    return host.snapshot().players.size() == 3 && client.snapshot().players.size() == 3 &&
+           observer.snapshot().players.size() == 3;
+  }));
+  host.enter_lobby();
+  ASSERT_TRUE(client.set_ready(true));
+  ASSERT_TRUE(pump_until(pump, [&] {
+    return std::ranges::any_of(host.snapshot().players, [&](const auto& profile) {
+      return profile.player_id == client.local_profile().player_id && profile.ready;
+    });
+  }));
+  auto updated = client.local_profile();
+  updated.character = PlayerCharacter::DAXTER;
+  EXPECT_FALSE(client.set_local_profile(updated));
+  ASSERT_TRUE(host.start_game());
+  ASSERT_TRUE(pump_until(pump, [&] {
+    return client.snapshot().state.status == SessionStatus::GAME_STARTING &&
+           observer.snapshot().state.status == SessionStatus::GAME_STARTING;
+  }));
+  host.enter_game();
+  client.enter_game();
+  observer.enter_game();
+  EXPECT_FALSE(client.set_local_profile(updated));
+  host_adapter.descriptor_.allow_in_game_character_changes = true;
+  client_adapter.descriptor_.allow_in_game_character_changes = true;
+  observer_adapter.descriptor_.allow_in_game_character_changes = true;
+  updated.display_name = "Updated";
+  updated.game_extension = {1, 2, 3};
+  ASSERT_TRUE(client.set_local_profile(updated));
+  const auto matches = [&](const SessionController& controller) {
+    return std::ranges::any_of(controller.snapshot().players, [&](const auto& value) {
+      return value.player_id == updated.player_id && value.display_name == updated.display_name &&
+             value.character == updated.character && value.game_extension == updated.game_extension;
+    });
+  };
+  ASSERT_TRUE(
+      pump_until(pump, [&] { return matches(host) && matches(client) && matches(observer); }));
+  auto host_profile = host.local_profile();
+  host_profile.character = PlayerCharacter::DAXTER;
+  host_profile.display_name = "NewHost";
+  ASSERT_TRUE(host.set_local_profile(host_profile));
+  ASSERT_TRUE(pump_until(pump, [&] {
+    return std::ranges::any_of(observer.snapshot().players, [](const auto& value) {
+      return value.player_id == 0 && value.display_name == "NewHost" &&
+             value.character == PlayerCharacter::DAXTER;
+    });
+  }));
+}

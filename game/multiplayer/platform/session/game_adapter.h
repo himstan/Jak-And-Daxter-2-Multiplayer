@@ -21,6 +21,7 @@ struct GameDescriptor {
   uint8_t maximum_players = 0;
   uint16_t maximum_profile_extension_bytes = 0;
   std::vector<PlayerCharacter> supported_characters;
+  bool allow_in_game_character_changes = false;
 };
 
 enum class PayloadDisposition : uint8_t {

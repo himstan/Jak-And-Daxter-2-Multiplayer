@@ -1,6 +1,7 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(defun-extern draw-generic-highlight int int float pointer)
 
 (deftype generic-progress-state-entry (structure)
   "All info that is pushed onto a 'stack' when navigating to a sub-menu with
@@ -114,6 +115,8 @@
     (get-item-label (_type_ int) string)
     (call-get-item-index-fn (_type_) int)
     (call-on-confirm (_type_ int progress) none)))
+
+(deftype menu-generic-choice-option (menu-generic-carousel-option) ())
 
 (deftype menu-generic-confirm-option (menu-generic-option)
   "A button option that confirms before triggering it's action"
@@ -234,10 +237,11 @@
       :options (new 'static 'boxed-array :type menu-option
         ,@options))))
 
-(defmacro progress-new-generic-link-to-scrolling-page (title &key (should-disable? #f) &rest options)
+(defmacro progress-new-generic-link-to-scrolling-page (title &key (should-disable? #f) &key (on-load #f) &rest options)
   `(new 'static 'menu-generic-link-option
     :name ,title
     :should-disable? ,should-disable?
+    :on-load ,on-load
     :target (new 'static 'menu-option-list
       :options (new 'static 'boxed-array :type menu-option
       (new 'static 'menu-generic-scrolling-page

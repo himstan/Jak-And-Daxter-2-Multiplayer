@@ -154,22 +154,6 @@
         (return (the-as art-joint-anim (-> art-group data (if (= character (mp-player-character daxter)) 6 5)))))))
   (the-as art-joint-anim #f))
 
-(defun mp-player-color-progress-route-preview-buckets! ((preview-draw draw-control))
-  (when (and preview-draw (nonzero? preview-draw))
-    (let ((preview-geometry (-> preview-draw mgeo))
-          (level-index (the-as int (-> preview-draw level-index))))
-      (when (and preview-geometry (nonzero? preview-geometry) (>= level-index 0) (< level-index LEVEL_TOTAL))
-        (let ((preview-work (scratchpad-object foreground-work)))
-          (when (and preview-work (nonzero? preview-work))
-            (let ((bucket-index (the-as int (-> preview-work draw-index-map level-index))))
-              (when (and (>= bucket-index 0) (< bucket-index LEVEL_TOTAL))
-                (let ((level-buckets (-> preview-work grid level-buckets bucket-index)))
-                  (dotimes (effect-index (the-as int (-> preview-geometry header effect-count)))
-                    (let ((texture-index (the-as int (-> preview-geometry effect effect-index texture-index))))
-                      (when (and (>= texture-index 0) (< texture-index 7))
-                        (set! (-> level-buckets data texture-index merc vu1-bucket) (bucket-id bucket-323)))))))))))))
-  (none))
-
 (defun mp-player-color-progress-preview-matrix-buffer ((dma-buf dma-buffer))
   (when (and dma-buf (nonzero? dma-buf))
     (let ((matrix-buffer (the-as pointer (&+ (-> dma-buf base) 64))))
@@ -207,9 +191,8 @@
              *display*
              (nonzero? *display*)
              (logtest? (-> *display* vu1-enable-user) (vu1-renderer-mask merc)))
-    (mp-player-color-progress-route-preview-buckets! preview-draw)
     (mp-player-color-progress-prepare-preview-merc! preview-draw)
-    (set! (-> dma-buf base) (pc-draw-bones preview-draw (-> dma-buf base) matrix-buffer)))
+    (set! (-> dma-buf base) (pc-draw-bones preview-draw (-> dma-buf base) matrix-buffer (bucket-id-16 bucket-323))))
   (none))
 
 (defun dma-add-mp-player-color-preview ((preview-process process-drawable)

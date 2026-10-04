@@ -144,6 +144,7 @@ void WorldReplicationState::reset() {
   world_ = {};
   gungame_ = {};
   bootstrap_ = {};
+  player_rules_sequence_ = 0;
 }
 
 bool WorldReplicationState::apply(const WorldState& state, const ApplyContext& context) {
@@ -171,6 +172,18 @@ bool WorldReplicationState::apply(const GungameState& state, const ApplyContext&
   return true;
 }
 
+bool WorldReplicationState::apply(const PlayerRulesState& state, const ApplyContext& context) {
+  if (!context.source.from_host ||
+      !platform::sequence_is_newer(context.sequence, player_rules_sequence_))
+    return false;
+  player_rules_sequence_ = context.sequence;
+  world_.respawn_delay_seconds = bootstrap_.world.respawn_delay_seconds =
+      state.respawn_delay_seconds;
+  world_.player_collision = bootstrap_.world.player_collision = state.player_collision;
+  world_.friendly_fire = bootstrap_.world.friendly_fire = state.friendly_fire;
+  return true;
+}
+
 bool WorldReplicationState::apply_bootstrap(const BootstrapState& state, const Sequence sequence) {
   if (!valid_world_state(state.world) ||
       state.synchronized_aid_count > state.synchronized_aids.size() ||
@@ -179,8 +192,16 @@ bool WorldReplicationState::apply_bootstrap(const BootstrapState& state, const S
       (sequence != 0 && !platform::sequence_is_newer(sequence, bootstrap_.sequence))) {
     return false;
   }
+  const PlayerRulesState live_rules = {.respawn_delay_seconds = world_.respawn_delay_seconds,
+                                       .player_collision = world_.player_collision,
+                                       .friendly_fire = world_.friendly_fire};
   bootstrap_ = state;
   bootstrap_.sequence = sequence;
+  if (sequence != 0 && player_rules_sequence_ != 0) {
+    bootstrap_.world.respawn_delay_seconds = live_rules.respawn_delay_seconds;
+    bootstrap_.world.player_collision = live_rules.player_collision;
+    bootstrap_.world.friendly_fire = live_rules.friendly_fire;
+  }
   if (sequence == 0 || platform::sequence_is_newer(sequence, world_.sequence)) {
     world_ = state.world;
     world_.sequence = sequence;
@@ -188,9 +209,9 @@ bool WorldReplicationState::apply_bootstrap(const BootstrapState& state, const S
   world_.money = state.world.money;
   world_.gems = state.world.gems;
   world_.skill = state.world.skill;
-  world_.respawn_delay_seconds = state.world.respawn_delay_seconds;
-  world_.player_collision = state.world.player_collision;
-  world_.friendly_fire = state.world.friendly_fire;
+  world_.respawn_delay_seconds = bootstrap_.world.respawn_delay_seconds;
+  world_.player_collision = bootstrap_.world.player_collision;
+  world_.friendly_fire = bootstrap_.world.friendly_fire;
   return true;
 }
 

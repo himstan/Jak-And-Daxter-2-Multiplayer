@@ -40,7 +40,7 @@
       (log 'debug "[MP-Session] Registered local player ~D (character ~D).~%" local-player-id local-character))
     (let ((local-record (mp-local-player-record)))
       (when (nonnull? local-record)
-        (set! (-> local-record identity character) local-character)
+        (apply-player-character-change! local-record local-character)
         (when (not (mp-player-color-progress-active?))
           (mp-player-appearance-copy! (-> local-record identity appearance) (-> *multiplayer-preferences* appearance))))))
   (none))

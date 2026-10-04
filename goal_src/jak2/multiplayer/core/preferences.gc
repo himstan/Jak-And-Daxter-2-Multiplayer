@@ -1,6 +1,12 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(defenum player-nametag-visibility
+  :type uint8
+  (always 0)
+  (hold 1)
+  (off 2))
+
 (deftype multiplayer-preferences (structure)
   ((appearance             mp-player-appearance :inline)
    (player-name            string)
@@ -11,14 +17,16 @@
    (preferred-character    uint8)
    (automatic-port-mapping uint8)
    (player-collision       uint8)
-   (friendly-fire          uint8))
-  :size-assert 273)
+   (friendly-fire          uint8)
+   (nametag-visibility     uint8)
+   (player-map-marker      uint8))
+  :size-assert 275)
 
 (define-extern pc-multi-get-preferences (function multiplayer-preferences int))
 (define-extern pc-multi-set-preferences (function multiplayer-preferences int))
-(define-extern pc-multi-reset-preferences (function none))
 
-(define *multiplayer-preferences* (new 'static 'multiplayer-preferences))
+(define *multiplayer-preferences*
+  (new 'static 'multiplayer-preferences :nametag-visibility (player-nametag-visibility hold) :player-map-marker 1))
 
 (when (nonnull? *multiplayer-preferences*)
   (set! (-> *multiplayer-preferences* player-name) (new 'global 'string 15 ""))
