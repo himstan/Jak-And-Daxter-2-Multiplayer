@@ -13,6 +13,7 @@ inline constexpr uint32_t kInvalidMultiplayerPlayerColor = 0xffffffffu;
 
 struct MultiplayerPreferences {
   uint16_t network_port = multiplayer::platform::kDefaultMultiplayerPort;
+  uint16_t respawn_delay_seconds = multiplayer::jak2::core::kDefaultRespawnDelaySeconds;
   std::string room_code;
   std::string player_name;
   MPPlayerAppearance player_appearance =
@@ -20,7 +21,8 @@ struct MultiplayerPreferences {
   bool automatic_port_mapping = true;
   bool player_collision = false;
   bool friendly_fire = false;
-  uint32_t session_player_limit = 2;
+  uint8_t session_player_limit = 2;
+  PlayerCharacter preferred_character = PlayerCharacter::JAK;
 };
 
 bool normalize_player_name(std::string_view input, std::string& output, bool allow_empty = true);
@@ -37,15 +39,6 @@ const MultiplayerPreferences& multiplayer_preferences();
 uint16_t get_resolved_host_port();
 std::string get_resolved_host_room_code();
 
-std::string get_multiplayer_preference_display(int field);
-bool set_multiplayer_preference(int field, std::string_view value);
-bool set_automatic_port_mapping(bool enabled);
-void set_player_collision(bool enabled);
-void set_friendly_fire(bool enabled);
+MultiplayerPreferences get_multiplayer_preferences();
+bool set_multiplayer_preferences(MultiplayerPreferences preferences);
 bool set_player_appearance(const MPPlayerAppearance& appearance);
-bool set_room_code_preference(std::string_view room_code);
-
-uint32_t get_session_player_limit_preference();
-bool set_session_player_limit_preference(uint32_t limit);
-uint32_t get_player_character_preference();
-bool set_player_character_preference(uint32_t character);

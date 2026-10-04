@@ -11,7 +11,9 @@
 
 #include "game/kernel/common/Ptr.h"
 #include "game/kernel/common/kscheme.h"
+#include "game/multiplayer/jak2/api/preferences.h"
 #include "game/multiplayer/jak2/application/replication_mailbox.h"
+#include "game/multiplayer/jak2/bridge/goal_preferences_types.h"
 #include "game/multiplayer/jak2/bridge/goal_replication_types.h"
 #include "game/multiplayer/jak2/core/validation.h"
 
@@ -36,7 +38,7 @@ T* goal_ptr(const uint32_t address) {
   return Ptr<T>(address).c();
 }
 
-const char* goal_string_data(const uint32_t address) {
+String* goal_string(const uint32_t address) {
   if (address < kMinGoalPointer ||
       address > static_cast<uint32_t>(EE_MAIN_MEM_SIZE - sizeof(String) - 1)) {
     return nullptr;
@@ -46,8 +48,15 @@ const char* goal_string_data(const uint32_t address) {
       string->len > static_cast<uint32_t>(EE_MAIN_MEM_SIZE) - address - sizeof(String) - 1) {
     return nullptr;
   }
+  return string;
+}
+
+const char* goal_string_data(const uint32_t address) {
+  auto* string = goal_string(address);
+  if (!string)
+    return nullptr;
   const char* value = string->data();
-  return value[string->len] == '\0' ? value : nullptr;
+  return std::memchr(value, '\0', string->len + 1) ? value : nullptr;
 }
 
 core::PlayerIdentity read_identity(const MPReplicationPlayerIdentityGOAL& source) {
@@ -188,6 +197,7 @@ core::WorldState read_world(const MPWorldSyncStateGOAL& source) {
   result.weather_cloud = source.weather_cloud;
   result.weather_fog = source.weather_fog;
   result.weather_rain = source.weather_rain;
+  result.respawn_delay_seconds = source.respawn_delay_seconds;
   result.player_collision = source.player_collision != 0;
   result.friendly_fire = source.friendly_fire != 0;
   std::ranges::copy(source.task_mask, result.task_mask.begin());
@@ -470,6 +480,7 @@ void write_world(const core::WorldState& source, MPWorldSyncStateGOAL& destinati
   destination.weather_cloud = source.weather_cloud;
   destination.weather_fog = source.weather_fog;
   destination.weather_rain = source.weather_rain;
+  destination.respawn_delay_seconds = source.respawn_delay_seconds;
   destination.player_collision = source.player_collision;
   destination.friendly_fire = source.friendly_fire;
   std::ranges::copy(source.task_mask.begin(), source.task_mask.end(),
@@ -750,19 +761,56 @@ bool read_string(const uint32_t address, std::string& value) {
   return true;
 }
 
+bool read_preferences(const uint32_t address, MultiplayerPreferences& preferences) {
+  const auto* source = goal_ptr<MultiplayerPreferencesGOAL>(address);
+  MultiplayerPreferences parsed;
+  if (!source || source->automatic_port_mapping > 1 || source->player_collision > 1 ||
+      source->friendly_fire > 1 || !read_string(source->player_name, parsed.player_name) ||
+      !read_string(source->room_code, parsed.room_code)) {
+    return false;
+  }
+  parsed.player_appearance = get_player_appearance_from_goal(source->appearance);
+  parsed.network_port = source->network_port;
+  parsed.respawn_delay_seconds = source->respawn_delay_seconds;
+  parsed.session_player_limit = source->session_player_limit;
+  parsed.preferred_character = static_cast<PlayerCharacter>(source->preferred_character);
+  parsed.automatic_port_mapping = source->automatic_port_mapping != 0;
+  parsed.player_collision = source->player_collision != 0;
+  parsed.friendly_fire = source->friendly_fire != 0;
+  preferences = std::move(parsed);
+  return true;
+}
+
+bool write_preferences(const uint32_t address, const MultiplayerPreferences& preferences) {
+  auto* destination = goal_ptr<MultiplayerPreferencesGOAL>(address);
+  if (!destination)
+    return false;
+  auto* name = goal_string(destination->player_name);
+  auto* room_code = goal_string(destination->room_code);
+  if (!name || !room_code || preferences.player_name.size() > name->len ||
+      preferences.room_code.size() > room_code->len) {
+    return false;
+  }
+  std::memset(name->data(), 0, name->len + 1);
+  std::memcpy(name->data(), preferences.player_name.data(), preferences.player_name.size());
+  std::memset(room_code->data(), 0, room_code->len + 1);
+  std::memcpy(room_code->data(), preferences.room_code.data(), preferences.room_code.size());
+  copy_player_appearance_to_goal(preferences.player_appearance, destination->appearance);
+  destination->network_port = preferences.network_port;
+  destination->respawn_delay_seconds = preferences.respawn_delay_seconds;
+  destination->session_player_limit = preferences.session_player_limit;
+  destination->preferred_character = static_cast<uint8_t>(preferences.preferred_character);
+  destination->automatic_port_mapping = preferences.automatic_port_mapping;
+  destination->player_collision = preferences.player_collision;
+  destination->friendly_fire = preferences.friendly_fire;
+  return true;
+}
+
 bool read_appearance(const uint32_t address, MPPlayerAppearance& appearance) {
   const auto* source = goal_ptr<MPPlayerAppearanceGOAL>(address);
   if (!source)
     return false;
   appearance = get_player_appearance_from_goal(*source);
-  return true;
-}
-
-bool write_appearance(const uint32_t address, const MPPlayerAppearance& appearance) {
-  auto* destination = goal_ptr<MPPlayerAppearanceGOAL>(address);
-  if (!destination)
-    return false;
-  copy_player_appearance_to_goal(appearance, *destination);
   return true;
 }
 

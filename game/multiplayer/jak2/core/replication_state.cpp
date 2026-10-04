@@ -156,6 +156,7 @@ bool WorldReplicationState::apply(const WorldState& state, const ApplyContext& c
   world_.money = bootstrap_.world.money;
   world_.gems = bootstrap_.world.gems;
   world_.skill = bootstrap_.world.skill;
+  world_.respawn_delay_seconds = bootstrap_.world.respawn_delay_seconds;
   world_.player_collision = bootstrap_.world.player_collision;
   world_.friendly_fire = bootstrap_.world.friendly_fire;
   return true;
@@ -187,6 +188,7 @@ bool WorldReplicationState::apply_bootstrap(const BootstrapState& state, const S
   world_.money = state.world.money;
   world_.gems = state.world.gems;
   world_.skill = state.world.skill;
+  world_.respawn_delay_seconds = state.world.respawn_delay_seconds;
   world_.player_collision = state.world.player_collision;
   world_.friendly_fire = state.world.friendly_fire;
   return true;

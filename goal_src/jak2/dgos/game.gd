@@ -14,6 +14,7 @@
   "mp-boss-types.o" ;; added
   "mp-airlock-types.o" ;; added
   "mp-gameplay-state-h.o" ;; added
+  "preferences.o" ;; added
   "mp-api-h.o" ;; added
   "mp-event-h.o" ;; added
   "mp-event-types.o" ;; added

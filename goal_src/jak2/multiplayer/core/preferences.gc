@@ -1,0 +1,32 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(deftype multiplayer-preferences (structure)
+  ((appearance             mp-player-appearance :inline)
+   (player-name            string)
+   (room-code              string)
+   (network-port           uint16)
+   (respawn-delay-seconds  uint16)
+   (session-player-limit   uint8)
+   (preferred-character    uint8)
+   (automatic-port-mapping uint8)
+   (player-collision       uint8)
+   (friendly-fire          uint8))
+  :size-assert 273)
+
+(define-extern pc-multi-get-preferences (function multiplayer-preferences int))
+(define-extern pc-multi-set-preferences (function multiplayer-preferences int))
+(define-extern pc-multi-reset-preferences (function none))
+
+(define *multiplayer-preferences* (new 'static 'multiplayer-preferences))
+
+(when (nonnull? *multiplayer-preferences*)
+  (set! (-> *multiplayer-preferences* player-name) (new 'global 'string 15 ""))
+  (set! (-> *multiplayer-preferences* room-code) (new 'global 'string 6 "")))
+
+(defun save-multiplayer-preferences! ()
+  (when (nonnull? *multiplayer-preferences*)
+    (when (= (pc-multi-set-preferences *multiplayer-preferences*) 1)
+      (return 1))
+    (pc-multi-get-preferences *multiplayer-preferences*))
+  0)

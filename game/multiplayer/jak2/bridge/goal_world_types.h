@@ -16,6 +16,7 @@ struct MPWorldSyncStateGOAL {
   float weather_cloud;
   float weather_fog;
   float weather_rain;
+  uint16_t respawn_delay_seconds;
   uint8_t player_collision;
   uint8_t friendly_fire;
   uint8_t task_mask[64];
@@ -37,5 +38,5 @@ struct MPReplicationBootstrapStateGOAL {
 };
 #pragma pack(pop)
 
-static_assert(sizeof(MPWorldSyncStateGOAL) == 178);
+static_assert(sizeof(MPWorldSyncStateGOAL) == 180);
 static_assert(sizeof(MPReplicationBootstrapStateGOAL) == 16454);

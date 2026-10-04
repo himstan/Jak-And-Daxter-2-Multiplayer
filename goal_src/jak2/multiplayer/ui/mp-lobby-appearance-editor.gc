@@ -107,7 +107,9 @@
                             (-> *mp-player-color-progress* lobby-source?)
                             (= (pc-multi-get-session-status) (mp-connection-status lobby)))
                      (the-as mp-player-character (pc-multi-get-local-player-character))
-                     (the-as mp-player-character (pc-multi-get-preference-player-character)))))
+                     (if (nonnull? *multiplayer-preferences*)
+                       (the-as mp-player-character (-> *multiplayer-preferences* preferred-character))
+                       (mp-player-character jak)))))
     (if (mp-player-character-valid? character) character (mp-player-character jak))))
 
 (defun mp-player-color-progress-preview-skeleton ((character mp-player-character))
@@ -351,6 +353,8 @@
       (mp-player-appearance-normalize-reserved-slots! draft-appearance)
       (if (= (pc-multi-lobby-set-appearance draft-appearance) 1)
         (begin
+          (when (nonnull? *multiplayer-preferences*)
+            (pc-multi-get-preferences *multiplayer-preferences*))
           (mp-player-color-progress-apply-local! draft-appearance)
           (mp-player-color-progress-deactivate!)
           (pop-state p)
@@ -361,12 +365,10 @@
   (none))
 
 (defun mp-player-color-progress-enter! ((p progress))
-  (when (and p
-             (nonzero? p)
-             *mp-player-color-progress*
-             (nonzero? *mp-player-color-progress*)
-             (not (mp-player-color-progress-active?)))
-    (when (= (pc-multi-get-player-appearance (-> *mp-player-color-progress* original-appearance)) 1)
+  (when (and (nonnull? p *mp-player-color-progress* *multiplayer-preferences*) (not (mp-player-color-progress-active?)))
+    (when (= (pc-multi-get-preferences *multiplayer-preferences*) 1)
+      (mp-player-appearance-copy! (-> *mp-player-color-progress* original-appearance)
+                                  (-> *multiplayer-preferences* appearance))
       (mp-player-appearance-copy! (-> *mp-player-color-progress* draft-appearance)
                                   (-> *mp-player-color-progress* original-appearance))
       (set! (-> *mp-player-color-progress* selected-slider) 0)

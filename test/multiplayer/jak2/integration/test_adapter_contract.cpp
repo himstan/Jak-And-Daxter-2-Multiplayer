@@ -1435,6 +1435,8 @@ TEST(Jak2AdapterIntegration, HostRulesReachLateJoinAndReconnectBootstrap) {
     auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
     frame->local_player_id = 0;
     frame->host_player_id = 0;
+    const uint16_t delay = generation == 1 ? 0 : 35;
+    frame->world.respawn_delay_seconds = delay;
     frame->world.player_collision = generation == 1;
     frame->world.friendly_fire = generation == 2;
     frame->bootstrap.host_continue[0] = 'a';
@@ -1444,12 +1446,15 @@ TEST(Jak2AdapterIntegration, HostRulesReachLateJoinAndReconnectBootstrap) {
     client.tick(generation * 100);
     const auto remote = client.mailbox().take_remote_frame();
     ASSERT_TRUE(remote);
+    EXPECT_EQ(remote->world.respawn_delay_seconds, delay);
+    EXPECT_EQ(remote->bootstrap.world.respawn_delay_seconds, delay);
     EXPECT_EQ(remote->world.player_collision, generation == 1);
     EXPECT_EQ(remote->world.friendly_fire, generation == 2);
     EXPECT_EQ(remote->bootstrap.world.player_collision, generation == 1);
     EXPECT_EQ(remote->bootstrap.world.friendly_fire, generation == 2);
     jak2::core::WorldState live_world = {};
     live_world.clock = generation * 1000;
+    live_world.respawn_delay_seconds = 65535;
     live_world.player_collision = generation != 1;
     live_world.friendly_fire = generation != 2;
     const auto payload = platform::wire::encode_packet(jak2::wire::to_packet(live_world));
@@ -1466,6 +1471,7 @@ TEST(Jak2AdapterIntegration, HostRulesReachLateJoinAndReconnectBootstrap) {
     const auto updated = client.mailbox().take_remote_frame();
     ASSERT_TRUE(updated);
     EXPECT_EQ(updated->world.clock, live_world.clock);
+    EXPECT_EQ(updated->world.respawn_delay_seconds, delay);
     EXPECT_EQ(updated->world.player_collision, generation == 1);
     EXPECT_EQ(updated->world.friendly_fire, generation == 2);
     client.session_reset();

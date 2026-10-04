@@ -58,10 +58,14 @@
 (defun mp-respawn-policy-blocks-remote-placement? ()
   (the symbol (or *mp-block-local-respawn-on-remote?* (mp-any-remote-blocks-respawn?))))
 
+(defun get-respawn-delay-seconds ()
+  (if (nonnull? *mp-world-state*) (the int (-> *mp-world-state* respawn-delay-seconds)) 20))
+
 (defun mp-should-use-local-respawn? ()
   (the symbol
        (and (mp-session-in-game?)
-            (or (not (mp-any-remote-gameplay-player-connected?)) (mp-respawn-policy-blocks-remote-placement?)))))
+            (or (not (mp-any-remote-gameplay-player-connected?))
+                (and (> (get-respawn-delay-seconds) 0) (mp-respawn-policy-blocks-remote-placement?))))))
 
 (defun mp-prepare-local-respawn! ((player target))
   (mp-spectate-reset!)

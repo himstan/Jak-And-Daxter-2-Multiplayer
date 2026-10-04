@@ -32,18 +32,17 @@
   (none))
 
 (defun mp-session-update-local-player-record! ((local-player-id uint) (local-character mp-player-character))
-  (when (and *mp-player-controller*
-             (nonzero? *mp-player-controller*)
+  (when (and (nonnull? *mp-player-controller* *multiplayer-preferences*)
              (mp-player-id-valid? local-player-id)
              (mp-player-character-valid? local-character))
     (when (not (mp-local-player-record))
       (mp-player-controller-register! *mp-player-controller* local-player-id local-character)
       (log 'debug "[MP-Session] Registered local player ~D (character ~D).~%" local-player-id local-character))
     (let ((local-record (mp-local-player-record)))
-      (when (and local-record (nonzero? local-record))
+      (when (nonnull? local-record)
         (set! (-> local-record identity character) local-character)
         (when (not (mp-player-color-progress-active?))
-          (pc-multi-get-player-appearance (-> local-record identity appearance))))))
+          (mp-player-appearance-copy! (-> local-record identity appearance) (-> *multiplayer-preferences* appearance))))))
   (none))
 
 (defun mp-session-ensure-local-player! ()

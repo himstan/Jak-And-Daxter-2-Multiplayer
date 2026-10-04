@@ -374,6 +374,7 @@
 (defmethod update ((obj pc-settings-jak2))
   "Set the default misc settings"
 
+  (mp-player-controller-led-sync-saved!)
   ((method-of-type pc-settings update) obj)
 
   (set! *hires-sky* (-> obj hires-clouds?))
@@ -469,7 +470,6 @@
 (defmethod update-led ((obj pc-settings-jak2))
   "set the controller led color by modifying the controller-led-color vector"
 
-  (mp-player-controller-led-sync-saved!)
   (when (and obj (nonzero? obj))
     (pc-controller-led-apply-base! (-> obj controller-led-color)))
 

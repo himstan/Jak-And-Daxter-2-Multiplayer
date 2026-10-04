@@ -70,9 +70,8 @@
   (or (= character (mp-player-character jak)) (= character (mp-player-character daxter))))
 
 (defun mp-sync-preferences-to-session-host-config! ()
-  (let ((limit (pc-multi-get-preference-player-limit)))
-    (when (and (>= limit (the uint 2)) (<= limit (the uint MP_MAX_PLAYERS)))
-      (mp-set-session-player-limit! limit)))
+  (when (and (nonnull? *multiplayer-preferences*) (= (pc-multi-get-preferences *multiplayer-preferences*) 1))
+    (mp-set-session-player-limit! (the uint (-> *multiplayer-preferences* session-player-limit))))
   (none))
 
 (defun mp-setup-host-bridge! ((internet-host? object))

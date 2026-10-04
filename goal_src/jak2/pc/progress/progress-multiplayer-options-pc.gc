@@ -5,6 +5,50 @@
 (define-extern mp-player-color-progress-enter! (function progress none))
 (define-extern refresh-generic-text-fields! (function menu-option-list none))
 
+(defun get-multiplayer-preference-text ((field int))
+  (when (nonnull? *multiplayer-preferences*)
+    (case field
+      ((0) (return (format #f "~D" (-> *multiplayer-preferences* network-port))))
+      ((1) (return (-> *multiplayer-preferences* room-code)))
+      ((2) (return (-> *multiplayer-preferences* player-name)))
+      ((3) (return (format #f "~D" (-> *multiplayer-preferences* respawn-delay-seconds))))))
+  "")
+
+(defun parse-multiplayer-preference-number ((value string))
+  (when (nonnull? value)
+    (let ((digits (-> value data))
+          (size (length value)))
+      (when (and (nonnull? digits) (> size 0) (<= size 5))
+        (dotimes (index size)
+          (when (or (< (-> digits index) 48) (> (-> digits index) 57))
+            (return -1)))
+        (let ((number (string->int value)))
+          (when (<= number 65535)
+            (return number))))))
+  -1)
+
+(defun set-multiplayer-preference-text! ((field int) (value string))
+  (when (nonnull? *multiplayer-preferences* value)
+    (case field
+      ((0 3)
+       (let ((number (parse-multiplayer-preference-number value)))
+         (when (< number 0)
+           (return 0))
+         (if (= field 0)
+           (set! (-> *multiplayer-preferences* network-port) (the-as uint16 number))
+           (set! (-> *multiplayer-preferences* respawn-delay-seconds) (the-as uint16 number)))))
+      ((1)
+       (when (or (> (length value) 6) (not (nonnull? (-> *multiplayer-preferences* room-code))))
+         (return 0))
+       (copy-string<-string (-> *multiplayer-preferences* room-code) value))
+      ((2)
+       (when (or (> (length value) 15) (not (nonnull? (-> *multiplayer-preferences* player-name))))
+         (return 0))
+       (copy-string<-string (-> *multiplayer-preferences* player-name) value))
+      (else (return 0)))
+    (return (save-multiplayer-preferences!)))
+  0)
+
 (deftype menu-multiplayer-large-link-option (menu-generic-link-option) ())
 
 (define-extern *multiplayer-options-pc* menu-option-list)
@@ -76,8 +120,8 @@
     (new 'static 'menu-generic-text-field-option
       :name (text-id progress-username)
       :field 2
-      :get-value-fn (lambda ((field int)) (pc-multi-get-preference-field field))
-      :set-value-fn (lambda ((field int) (value string)) (pc-multi-set-preference-field field value))
+      :get-value-fn (lambda ((field int)) (get-multiplayer-preference-text field))
+      :set-value-fn (lambda ((field int) (value string)) (set-multiplayer-preference-text! field value))
       :max-bytes 15
       :allowed-characters "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
       :uppercase? #f
@@ -87,10 +131,14 @@
       :truthy-text (text-id progress-multiplayer-char-jak)
       :falsey-text (text-id progress-multiplayer-char-daxter)
       :get-value-fn (lambda ()
-        (= (pc-multi-get-preference-player-character) (mp-player-character jak)))
+        (and (nonnull? *multiplayer-preferences*)
+             (= (-> *multiplayer-preferences* preferred-character) (mp-player-character jak))))
       :on-confirm (lambda ((value symbol))
-        (pc-multi-set-preference-player-character
-          (the uint (if value (mp-player-character jak) (mp-player-character daxter))))))
+        (when (nonnull? *multiplayer-preferences*)
+          (set! (-> *multiplayer-preferences* preferred-character)
+                (the-as uint8 (if value (mp-player-character jak) (mp-player-character daxter))))
+          (save-multiplayer-preferences!))
+        (none)))
     (new 'static 'menu-generic-button-option
       :name (text-id progress-lobby-color-title)
       :on-confirm (lambda ((the-progress progress))
@@ -109,34 +157,54 @@
         :on-confirm (lambda ((index int) (the-progress progress))
           (let ((limit (+ index 2)))
             (mp-set-session-player-limit! (the uint limit))
-            (pc-multi-set-preference-player-limit (the uint limit)))))
+            (when (nonnull? *multiplayer-preferences*)
+              (set! (-> *multiplayer-preferences* session-player-limit) (the-as uint8 limit))
+              (save-multiplayer-preferences!)))
+          (none)))
       (new 'static 'menu-generic-boolean-option
         :name (text-id progress-multiplayer-friendly-fire)
         :truthy-text (text-id progress-on)
         :falsey-text (text-id progress-off)
-        :get-value-fn (lambda () (= (pc-multi-get-friendly-fire) 1))
+        :get-value-fn (lambda ()
+          (and (nonnull? *multiplayer-preferences*) (= (-> *multiplayer-preferences* friendly-fire) 1)))
         :on-confirm (lambda ((value symbol))
-          (pc-multi-set-friendly-fire (if value 1 0))))
+          (when (nonnull? *multiplayer-preferences*)
+            (set! (-> *multiplayer-preferences* friendly-fire) (the-as uint8 (if value 1 0)))
+            (save-multiplayer-preferences!))
+          (none)))
       (new 'static 'menu-generic-boolean-option
         :name (text-id progress-multiplayer-player-collision)
         :truthy-text (text-id progress-on)
         :falsey-text (text-id progress-off)
-        :get-value-fn (lambda () (= (pc-multi-get-player-collision) 1))
+        :get-value-fn (lambda ()
+          (and (nonnull? *multiplayer-preferences*) (= (-> *multiplayer-preferences* player-collision) 1)))
         :on-confirm (lambda ((value symbol))
-          (pc-multi-set-player-collision (if value 1 0))))
+          (when (nonnull? *multiplayer-preferences*)
+            (set! (-> *multiplayer-preferences* player-collision) (the-as uint8 (if value 1 0)))
+            (save-multiplayer-preferences!))
+          (none)))
+      (new 'static 'menu-generic-text-field-option
+        :name (text-id progress-multiplayer-respawn-delay)
+        :zero-value-label (text-id progress-field-disabled-label)
+        :field 3
+        :get-value-fn (lambda ((field int)) (get-multiplayer-preference-text field))
+        :set-value-fn (lambda ((field int) (value string)) (set-multiplayer-preference-text! field value))
+        :max-bytes 5
+        :allowed-characters "0123456789"
+        :session (new 'static 'pc-text-input-session))
       (new 'static 'menu-generic-text-field-option
         :name (text-id progress-port)
         :field 0
-        :get-value-fn (lambda ((field int)) (pc-multi-get-preference-field field))
-        :set-value-fn (lambda ((field int) (value string)) (pc-multi-set-preference-field field value))
+        :get-value-fn (lambda ((field int)) (get-multiplayer-preference-text field))
+        :set-value-fn (lambda ((field int) (value string)) (set-multiplayer-preference-text! field value))
         :max-bytes 5
         :allowed-characters "0123456789"
         :session (new 'static 'pc-text-input-session))
       (new 'static 'menu-generic-text-field-option
         :name (text-id progress-multiplayer-room-code)
         :field 1
-        :get-value-fn (lambda ((field int)) (pc-multi-get-preference-field field))
-        :set-value-fn (lambda ((field int) (value string)) (pc-multi-set-preference-field field value))
+        :get-value-fn (lambda ((field int)) (get-multiplayer-preference-text field))
+        :set-value-fn (lambda ((field int) (value string)) (set-multiplayer-preference-text! field value))
         :max-bytes 6
         :allowed-characters "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
         :uppercase? #t
@@ -145,9 +213,13 @@
         :name (text-id progress-multiplayer-auto-port-mapping)
         :truthy-text (text-id progress-on)
         :falsey-text (text-id progress-off)
-        :get-value-fn (lambda () (= (pc-multi-get-automatic-port-mapping) 1))
+        :get-value-fn (lambda ()
+          (and (nonnull? *multiplayer-preferences*) (= (-> *multiplayer-preferences* automatic-port-mapping) 1)))
         :on-confirm (lambda ((value symbol))
-          (pc-multi-set-automatic-port-mapping (if value 1 0))))
+          (when (nonnull? *multiplayer-preferences*)
+            (set! (-> *multiplayer-preferences* automatic-port-mapping) (the-as uint8 (if value 1 0)))
+            (save-multiplayer-preferences!))
+          (none)))
       (new 'static 'menu-generic-button-option
         :name (text-id progress-multiplayer-reset-defaults)
         :on-confirm (lambda ((the-progress progress))

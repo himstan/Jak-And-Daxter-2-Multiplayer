@@ -62,7 +62,8 @@
    (allowed-characters string)
    (uppercase? symbol)
    (session pc-text-input-session)
-   (cached-value string)))
+   (cached-value string)
+   (zero-value-label text-id)))
 
 (deftype menu-generic-scrolling-page (menu-generic-option)
   "A menu option that holds menu options"

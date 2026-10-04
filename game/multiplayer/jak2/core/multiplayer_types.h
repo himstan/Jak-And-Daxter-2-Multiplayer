@@ -23,6 +23,7 @@ inline constexpr size_t kMaxAirlockStatesPerSnapshot = 4;
 inline constexpr size_t kMaxEnemies = 128;
 inline constexpr size_t kMaxReplicatedEnemies = kMaxEnemies * kMaxPlayers;
 inline constexpr size_t kMaxBootstrapAids = 4096;
+inline constexpr uint16_t kDefaultRespawnDelaySeconds = 20;
 inline constexpr size_t kMaxPedestrians = 128;
 inline constexpr size_t kMaxVehicles = 64;
 inline constexpr PlayerId kInvalidPlayerId = platform::kInvalidPlayerId;
@@ -357,6 +358,7 @@ struct WorldState {
   float weather_cloud = 0.0f;
   float weather_fog = 0.0f;
   float weather_rain = 0.0f;
+  uint16_t respawn_delay_seconds = kDefaultRespawnDelaySeconds;
   bool player_collision = false;
   bool friendly_fire = false;
   std::array<uint8_t, 64> task_mask = {};

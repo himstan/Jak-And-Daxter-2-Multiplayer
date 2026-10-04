@@ -302,65 +302,25 @@ static int pc_multi_connect_direct() {
   return accepted ? 1 : 0;
 }
 
-static u64 pc_multi_get_preference_field(const int field) {
-  const std::string display = get_multiplayer_preference_display(field);
-  return jak2::make_string_from_c(display.c_str());
-}
-
-static u64 pc_multi_get_player_name() {
-  return jak2::make_string_from_c(multiplayer_preferences().player_name.c_str());
-}
-
-static int pc_multi_set_preference_field(const int field, const u32 value_ptr) {
-  std::string value;
-  return multiplayer::jak2::bridge::read_string(value_ptr, value) &&
-                 set_multiplayer_preference(field, value)
+static int pc_multi_get_preferences(const u32 preferences_ptr) {
+  return multiplayer::jak2::bridge::write_preferences(preferences_ptr,
+                                                      get_multiplayer_preferences())
              ? 1
              : 0;
 }
 
-static int pc_multi_get_automatic_port_mapping() {
-  return multiplayer_preferences().automatic_port_mapping ? 1 : 0;
-}
-
-static void pc_multi_set_automatic_port_mapping(const int enabled) {
-  set_automatic_port_mapping(enabled != 0);
-}
-
-static int pc_multi_get_player_collision() {
-  return multiplayer_preferences().player_collision ? 1 : 0;
-}
-
-static void pc_multi_set_player_collision(const int enabled) {
-  set_player_collision(enabled != 0);
-}
-
-static int pc_multi_get_friendly_fire() {
-  return multiplayer_preferences().friendly_fire ? 1 : 0;
-}
-
-static void pc_multi_set_friendly_fire(const int enabled) {
-  set_friendly_fire(enabled != 0);
+static int pc_multi_set_preferences(const u32 preferences_ptr) {
+  MultiplayerPreferences preferences;
+  return multiplayer::jak2::bridge::read_preferences(preferences_ptr, preferences) &&
+                 set_multiplayer_preferences(std::move(preferences)) &&
+                 multiplayer::jak2::bridge::write_preferences(preferences_ptr,
+                                                              multiplayer_preferences())
+             ? 1
+             : 0;
 }
 
 static void pc_multi_reset_preferences() {
   reset_multiplayer_preferences();
-}
-
-static u32 pc_multi_get_preference_player_limit() {
-  return get_session_player_limit_preference();
-}
-
-static void pc_multi_set_preference_player_limit(const u32 limit) {
-  set_session_player_limit_preference(limit);
-}
-
-static u32 pc_multi_get_preference_player_character() {
-  return get_player_character_preference();
-}
-
-static void pc_multi_set_preference_player_character(const u32 character) {
-  set_player_character_preference(character);
 }
 
 static int pc_multi_is_lobby_host() {
@@ -415,18 +375,6 @@ static int64_t pc_multi_lobby_get_countdown_remaining_ms() {
 
 static int pc_multi_lobby_is_countdown() {
   return runtime().snapshot().session.countdown_active ? 1 : 0;
-}
-
-static u32 pc_multi_get_player_color() {
-  return multiplayer_preferences()
-      .player_appearance.colors[player_appearance_group_index(MPPlayerAppearanceGroup::PRIMARY)];
-}
-
-static int pc_multi_get_player_appearance(const u32 appearance_ptr) {
-  return multiplayer::jak2::bridge::write_appearance(appearance_ptr,
-                                                     multiplayer_preferences().player_appearance)
-             ? 1
-             : 0;
 }
 
 static int pc_multi_lobby_set_appearance(const u32 appearance_ptr) {
@@ -546,22 +494,9 @@ void init_jak2_bridge() {
   register_symbol("pc-multi-set-direct-field", &pc_multi_set_direct_field);
   register_symbol("pc-multi-direct-connect-ready", &pc_multi_direct_connect_ready);
   register_symbol("pc-multi-connect-direct", &pc_multi_connect_direct);
-  register_symbol("pc-multi-get-preference-field", &pc_multi_get_preference_field);
-  register_symbol("pc-multi-get-player-name", &pc_multi_get_player_name);
-  register_symbol("pc-multi-set-preference-field", &pc_multi_set_preference_field);
-  register_symbol("pc-multi-get-player-collision", &pc_multi_get_player_collision);
-  register_symbol("pc-multi-set-player-collision", &pc_multi_set_player_collision);
-  register_symbol("pc-multi-get-friendly-fire", &pc_multi_get_friendly_fire);
-  register_symbol("pc-multi-set-friendly-fire", &pc_multi_set_friendly_fire);
-  register_symbol("pc-multi-get-automatic-port-mapping", &pc_multi_get_automatic_port_mapping);
-  register_symbol("pc-multi-set-automatic-port-mapping", &pc_multi_set_automatic_port_mapping);
+  register_symbol("pc-multi-get-preferences", &pc_multi_get_preferences);
+  register_symbol("pc-multi-set-preferences", &pc_multi_set_preferences);
   register_symbol("pc-multi-reset-preferences", &pc_multi_reset_preferences);
-  register_symbol("pc-multi-get-preference-player-limit", &pc_multi_get_preference_player_limit);
-  register_symbol("pc-multi-set-preference-player-limit", &pc_multi_set_preference_player_limit);
-  register_symbol("pc-multi-get-preference-player-character",
-                  &pc_multi_get_preference_player_character);
-  register_symbol("pc-multi-set-preference-player-character",
-                  &pc_multi_set_preference_player_character);
   register_symbol("pc-multi-is-lobby-host", &pc_multi_is_lobby_host);
   register_symbol("pc-multi-get-session-player-limit", &pc_multi_get_session_player_limit);
   register_symbol("pc-multi-lobby-start-game", &pc_multi_lobby_start_game);
@@ -572,8 +507,6 @@ void init_jak2_bridge() {
   register_symbol("pc-multi-lobby-get-countdown-remaining-ms",
                   &pc_multi_lobby_get_countdown_remaining_ms);
   register_symbol("pc-multi-lobby-is-countdown", &pc_multi_lobby_is_countdown);
-  register_symbol("pc-multi-get-player-color", &pc_multi_get_player_color);
-  register_symbol("pc-multi-get-player-appearance", &pc_multi_get_player_appearance);
   register_symbol("pc-multi-lobby-set-appearance", &pc_multi_lobby_set_appearance);
   register_symbol("pc-multi-get-host-lifecycle", &pc_multi_get_host_lifecycle);
   register_symbol("pc-multi-get-host-mapping-state", &pc_multi_get_host_mapping_state);

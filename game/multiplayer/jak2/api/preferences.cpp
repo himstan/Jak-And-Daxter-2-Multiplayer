@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <random>
 #include <stdexcept>
 
@@ -15,9 +16,6 @@
 #include "game/runtime.h"
 
 namespace {
-constexpr int kNetworkPortField = 0;
-constexpr int kRoomCodeField = 1;
-constexpr int kPlayerNameField = 2;
 constexpr std::string_view kSettingsFileName = "multiplayer-profile.json";
 
 MultiplayerPreferences g_preferences;
@@ -246,11 +244,16 @@ void parse_preferences_root(const json& root, MultiplayerPreferences& parsed, bo
     if (root.contains("friendly_fire") && root.at("friendly_fire").is_boolean()) {
       parsed.friendly_fire = root.at("friendly_fire").get<bool>();
     }
+    if (root.contains("respawn_delay_seconds") &&
+        root.at("respawn_delay_seconds").is_number_unsigned() &&
+        root.at("respawn_delay_seconds") <= std::numeric_limits<uint16_t>::max()) {
+      parsed.respawn_delay_seconds = root.at("respawn_delay_seconds").get<uint16_t>();
+    }
     if (root.contains("session_player_limit") &&
         root.at("session_player_limit").is_number_unsigned()) {
       if (const uint32_t limit = root.at("session_player_limit").get<uint32_t>();
           limit >= 2 && limit <= kMPMaxPlayers) {
-        parsed.session_player_limit = limit;
+        parsed.session_player_limit = static_cast<uint8_t>(limit);
       }
     }
   } catch (const std::exception& error) {
@@ -349,6 +352,7 @@ void save_multiplayer_preferences() {
   root["player_texture_groups"] = std::move(texture_groups);
   root["player_collision"] = g_preferences.player_collision;
   root["friendly_fire"] = g_preferences.friendly_fire;
+  root["respawn_delay_seconds"] = g_preferences.respawn_delay_seconds;
   root["automatic_port_mapping"] = g_preferences.automatic_port_mapping;
   root["session_player_limit"] = g_preferences.session_player_limit;
   const auto path = settings_path();
@@ -400,71 +404,41 @@ std::string get_resolved_host_room_code() {
   return multiplayer::platform::generate_room_code();
 }
 
-std::string get_multiplayer_preference_display(const int field) {
-  if (field == kNetworkPortField) {
-    return std::to_string(g_preferences.network_port);
-  }
-  if (field == kRoomCodeField) {
-    return g_preferences.room_code;
-  }
-  if (field == kPlayerNameField) {
-    return g_preferences.player_name;
-  }
-  return {};
+MultiplayerPreferences get_multiplayer_preferences() {
+  auto preferences = g_preferences;
+  multiplayer::platform::StoredPlayerProfile identity;
+  load_common_profile(identity);
+  preferences.preferred_character = identity.preferred_character;
+  return preferences;
 }
 
-bool set_multiplayer_preference(const int field, const std::string_view value) {
-  if (field == kNetworkPortField) {
-    uint16_t port = 0;
-    if (!multiplayer::platform::parse_network_port(value, port)) {
+bool set_multiplayer_preferences(MultiplayerPreferences preferences) {
+  std::string name;
+  std::string room_code;
+  if (!multiplayer::platform::is_port_valid(preferences.network_port) ||
+      !normalize_player_name(preferences.player_name, name) ||
+      !multiplayer::platform::normalize_room_code(preferences.room_code, room_code) ||
+      !is_player_appearance_valid(preferences.player_appearance) ||
+      preferences.session_player_limit < 2 || preferences.session_player_limit > kMPMaxPlayers ||
+      (preferences.preferred_character != PlayerCharacter::JAK &&
+       preferences.preferred_character != PlayerCharacter::DAXTER)) {
+    return false;
+  }
+  multiplayer::platform::StoredPlayerProfile identity;
+  if (!load_common_profile(identity)) {
+    return false;
+  }
+  if (identity.preferred_character != preferences.preferred_character) {
+    identity.preferred_character = preferences.preferred_character;
+    if (!save_common_profile(identity)) {
       return false;
     }
-    g_preferences.network_port = port;
-    save_after_edit();
-    return true;
   }
-  if (field == kRoomCodeField) {
-    std::string normalized;
-    if (!multiplayer::platform::normalize_room_code(value, normalized)) {
-      return false;
-    }
-    g_preferences.room_code = std::move(normalized);
-    save_after_edit();
-    return true;
-  }
-  if (field == kPlayerNameField) {
-    std::string normalized;
-    if (!normalize_player_name(value, normalized)) {
-      return false;
-    }
-    g_preferences.player_name = std::move(normalized);
-    save_after_edit();
-    return true;
-  }
-  return false;
-}
-
-bool set_automatic_port_mapping(const bool enabled) {
-  if (g_preferences.automatic_port_mapping == enabled) {
-    return true;
-  }
-  g_preferences.automatic_port_mapping = enabled;
+  preferences.player_name = std::move(name);
+  preferences.room_code = std::move(room_code);
+  g_preferences = std::move(preferences);
   save_after_edit();
   return true;
-}
-
-void set_player_collision(const bool enabled) {
-  if (g_preferences.player_collision != enabled) {
-    g_preferences.player_collision = enabled;
-    save_after_edit();
-  }
-}
-
-void set_friendly_fire(const bool enabled) {
-  if (g_preferences.friendly_fire != enabled) {
-    g_preferences.friendly_fire = enabled;
-    save_after_edit();
-  }
 }
 
 bool set_player_appearance(const MPPlayerAppearance& appearance) {
@@ -476,54 +450,6 @@ bool set_player_appearance(const MPPlayerAppearance& appearance) {
     return true;
   }
   g_preferences.player_appearance = appearance;
-  save_after_edit();
-  return true;
-}
-
-uint32_t get_session_player_limit_preference() {
-  return g_preferences.session_player_limit;
-}
-
-bool set_session_player_limit_preference(const uint32_t limit) {
-  if (limit < 2 || limit > kMPMaxPlayers) {
-    return false;
-  }
-  if (g_preferences.session_player_limit == limit) {
-    return true;
-  }
-  g_preferences.session_player_limit = limit;
-  save_after_edit();
-  return true;
-}
-
-uint32_t get_player_character_preference() {
-  multiplayer::platform::StoredPlayerProfile identity;
-  load_common_profile(identity);
-  return static_cast<uint32_t>(identity.preferred_character);
-}
-
-bool set_player_character_preference(const uint32_t character) {
-  if (character != static_cast<uint32_t>(PlayerCharacter::JAK) &&
-      character != static_cast<uint32_t>(PlayerCharacter::DAXTER)) {
-    return false;
-  }
-  multiplayer::platform::StoredPlayerProfile identity;
-  if (!load_common_profile(identity)) {
-    return false;
-  }
-  identity.preferred_character = static_cast<PlayerCharacter>(character);
-  return save_common_profile(identity);
-}
-
-bool set_room_code_preference(const std::string_view room_code) {
-  std::string normalized;
-  if (!multiplayer::platform::normalize_room_code(room_code, normalized, true)) {
-    return false;
-  }
-  if (g_preferences.room_code == normalized) {
-    return true;
-  }
-  g_preferences.room_code = std::move(normalized);
   save_after_edit();
   return true;
 }

@@ -15,8 +15,14 @@
   (none))
 
 (defun mp-player-controller-led-sync-saved! ()
-  (unless *mp-player-controller-led-synced?*
-    (mp-player-controller-led-sync! (pc-multi-get-player-color)))
+  (when (and (not *mp-player-controller-led-synced?*)
+             (nonnull? *multiplayer-preferences*)
+             (= (pc-multi-get-preferences *multiplayer-preferences*) 1))
+    (mp-player-controller-led-sync! (the uint
+                                         (-> *multiplayer-preferences*
+                                             appearance
+                                             colors
+                                             MP_PLAYER_PRIMARY_APPEARANCE_SLOT))))
   (none))
 
 (defun mp-player-color-record-by-id ((player-id int))

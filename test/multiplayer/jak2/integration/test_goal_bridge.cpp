@@ -24,6 +24,7 @@
 #include "game/multiplayer/jak2/application/presentation_runtime.h"
 #include "game/multiplayer/jak2/application/replication_mailbox.h"
 #include "game/multiplayer/jak2/bridge/goal_bridge.h"
+#include "game/multiplayer/jak2/bridge/goal_preferences_types.h"
 #include "game/multiplayer/jak2/bridge/goal_replication_types.h"
 #include "game/multiplayer/jak2/wire/event_types.h"
 #include "gtest/gtest.h"
@@ -86,6 +87,15 @@ class GoalMemoryFixture {
   u8* previous_memory_ = nullptr;
   std::vector<u8> memory_;
 };
+
+MultiplayerPreferencesGOAL& preferences_state(GoalMemoryFixture& memory) {
+  auto& state = memory.at<MultiplayerPreferencesGOAL>(0x11000);
+  state.player_name = 0x10000;
+  state.room_code = 0x10100;
+  memory.at<String>(state.player_name).len = 15;
+  memory.at<String>(state.room_code).len = 6;
+  return state;
+}
 
 MPReplicationStateGOAL& replication_state(GoalMemoryFixture& memory) {
   auto& state = memory.at<MPReplicationStateGOAL>(0x12000);
@@ -277,18 +287,27 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
   types.add_builtin_types(GameVersion::Jak2);
   goos::Reader reader;
   std::vector<std::string> envelopes;
+  goos::EnvironmentMap constants;
   const auto read = [&](const std::string& path) {
     return reader.read_from_file({std::string(MP_SOURCE_ROOT) + "/goal_src/jak2/" + path});
   };
   const auto load_types = [&](const std::string& path, const std::string& selected = "") {
     const auto source = read(path);
     goos::for_each_in_list(source.as_pair()->cdr, [&](const goos::Object& form) {
-      if (!form.is_pair() || !form.as_pair()->car.is_symbol("deftype"))
+      if (!form.is_pair())
         return;
       const auto& definition = form.as_pair()->cdr;
+      if (form.as_pair()->car.is_symbol("defconstant")) {
+        const auto& value = definition.as_pair()->cdr.as_pair()->car;
+        if (value.is_int())
+          constants.set(definition.as_pair()->car.as_symbol(), value);
+        return;
+      }
+      if (!form.as_pair()->car.is_symbol("deftype"))
+        return;
       const auto name = definition.as_pair()->car.as_symbol().name_ptr;
       if (selected.empty() || selected == name) {
-        parse_deftype(definition, &types);
+        parse_deftype(definition, &types, &constants);
         if (selected.empty() && std::string(name) != "mp-event" &&
             types.tc(types.make_typespec("mp-event"), types.make_typespec(name)))
           envelopes.emplace_back(name);
@@ -299,10 +318,25 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
   load_types("kernel/gcommon.gc", "inline-array-class");
   load_types("kernel/gkernel-h.gc", "time-frame");
   load_types("engine/math/quaternion-h.gc", "quaternion");
+  load_types("multiplayer/player/mp-player-types.gc", "mp-player-appearance");
+  load_types("multiplayer/core/preferences.gc", "multiplayer-preferences");
+  EXPECT_EQ(types.lookup_type("multiplayer-preferences")->get_size_in_memory(),
+            sizeof(MultiplayerPreferencesGOAL));
+  for (const auto& [field, offset] : std::initializer_list<std::pair<const char*, size_t>>{
+           {"appearance", offsetof(MultiplayerPreferencesGOAL, appearance)},
+           {"player-name", offsetof(MultiplayerPreferencesGOAL, player_name)},
+           {"network-port", offsetof(MultiplayerPreferencesGOAL, network_port)},
+           {"respawn-delay-seconds", offsetof(MultiplayerPreferencesGOAL, respawn_delay_seconds)},
+           {"session-player-limit", offsetof(MultiplayerPreferencesGOAL, session_player_limit)},
+           {"friendly-fire", offsetof(MultiplayerPreferencesGOAL, friendly_fire)}}) {
+    EXPECT_EQ(types.lookup_field_info("multiplayer-preferences", field).field.offset(), offset);
+  }
   load_types("multiplayer/event/mp-event-h.gc");
   load_types("multiplayer/data/mp-world-h.gc", "mp-world-sync-state");
   EXPECT_EQ(types.lookup_type("mp-world-sync-state")->get_size_in_memory(),
             sizeof(MPWorldSyncStateGOAL));
+  EXPECT_EQ(types.lookup_field_info("mp-world-sync-state", "respawn-delay-seconds").field.offset(),
+            offsetof(MPWorldSyncStateGOAL, respawn_delay_seconds));
   EXPECT_EQ(types.lookup_field_info("mp-world-sync-state", "player-collision").field.offset(),
             offsetof(MPWorldSyncStateGOAL, player_collision));
   EXPECT_EQ(types.lookup_field_info("mp-world-sync-state", "friendly-fire").field.offset(),
@@ -480,8 +514,11 @@ TEST(Jak2GoalBridge, FreeBridgeFunctionsReadAndWriteGoalValues) {
   }
   MPPlayerAppearance appearance = {};
   ASSERT_TRUE(multiplayer::jak2::bridge::read_appearance(0x11500, appearance));
-  ASSERT_TRUE(multiplayer::jak2::bridge::write_appearance(0x11800, appearance));
-  const auto& destination = memory.at<MPPlayerAppearanceGOAL>(0x11800);
+  auto& preferences = preferences_state(memory);
+  MultiplayerPreferences values;
+  values.player_appearance = appearance;
+  ASSERT_TRUE(multiplayer::jak2::bridge::write_preferences(0x11000, values));
+  const auto& destination = preferences.appearance;
   EXPECT_EQ(std::memcmp(&source, &destination, sizeof(source)), 0);
 }
 
@@ -795,54 +832,61 @@ TEST(Jak2GoalBridge, RepeatedRemoteExchangeClearsStaleDataAndPreservesLocalFrame
 }
 
 TEST(Jak2GoalBridge, RoomCodeGeneratedWhenPreferenceEmpty) {
-  use_test_profiles();
-  const auto original_prefs = multiplayer_preferences();
-
-  set_room_code_preference("");
+  ScopedPreferencesRoot preferences_root;
+  auto preferences = get_multiplayer_preferences();
+  preferences.room_code.clear();
+  ASSERT_TRUE(set_multiplayer_preferences(preferences));
   EXPECT_TRUE(multiplayer_preferences().room_code.empty());
-
   const std::string resolved = get_resolved_host_room_code();
   EXPECT_EQ(resolved.size(), multiplayer::platform::kMultiplayerRoomCodeLength);
   std::string normalized;
   EXPECT_TRUE(multiplayer::platform::normalize_room_code(resolved, normalized, false));
   EXPECT_EQ(resolved, normalized);
-
-  set_room_code_preference(original_prefs.room_code);
 }
 
 TEST(Jak2GoalBridge, RoomCodeResolutionPreservesConfiguredPreferences) {
-  use_test_profiles();
-  const auto original_prefs = multiplayer_preferences();
-
-  EXPECT_TRUE(set_room_code_preference("ABC123"));
+  ScopedPreferencesRoot preferences_root;
+  auto preferences = get_multiplayer_preferences();
+  preferences.room_code = "ABC123";
+  ASSERT_TRUE(set_multiplayer_preferences(preferences));
   EXPECT_EQ(get_resolved_host_room_code(), "ABC123");
-
-  EXPECT_TRUE(set_room_code_preference("xyz789"));
+  preferences.room_code = "xyz789";
+  ASSERT_TRUE(set_multiplayer_preferences(preferences));
   EXPECT_EQ(get_resolved_host_room_code(), "XYZ789");
-
-  set_room_code_preference(original_prefs.room_code);
 }
 
-TEST(Jak2GoalBridge, PreferenceFieldsValidateBeforeMutation) {
-  use_test_profiles();
-  const auto original_prefs = multiplayer_preferences();
-
-  EXPECT_FALSE(set_multiplayer_preference(0, "1023"));
-  EXPECT_EQ(multiplayer_preferences().network_port, original_prefs.network_port);
-  EXPECT_TRUE(set_multiplayer_preference(0, "26212"));
-  EXPECT_EQ(multiplayer_preferences().network_port, 26212);
-
-  EXPECT_FALSE(set_multiplayer_preference(1, "bad-code"));
-  EXPECT_TRUE(set_multiplayer_preference(1, "abc123"));
-  EXPECT_EQ(multiplayer_preferences().room_code, "ABC123");
-
-  EXPECT_FALSE(set_multiplayer_preference(2, "bad name"));
-  EXPECT_TRUE(set_multiplayer_preference(2, "Player2"));
-  EXPECT_EQ(multiplayer_preferences().player_name, "Player2");
-
-  EXPECT_TRUE(set_multiplayer_preference(0, std::to_string(original_prefs.network_port)));
-  EXPECT_TRUE(set_multiplayer_preference(1, original_prefs.room_code));
-  EXPECT_TRUE(set_multiplayer_preference(2, original_prefs.player_name));
+TEST(Jak2GoalBridge, PreferencesValidateBeforeMutation) {
+  ScopedPreferencesRoot preferences_root;
+  const auto original = get_multiplayer_preferences();
+  const auto saved = file_util::read_text_file(preferences_root.path());
+  const auto reject = [&](const MultiplayerPreferences& invalid) {
+    EXPECT_FALSE(set_multiplayer_preferences(invalid));
+    EXPECT_EQ(file_util::read_text_file(preferences_root.path()), saved);
+    EXPECT_EQ(multiplayer_preferences().player_name, original.player_name);
+    EXPECT_EQ(multiplayer_preferences().network_port, original.network_port);
+  };
+  auto invalid = original;
+  invalid.player_name = "bad name";
+  reject(invalid);
+  invalid = original;
+  invalid.room_code = "bad-code";
+  reject(invalid);
+  invalid = original;
+  invalid.network_port = 1023;
+  reject(invalid);
+  invalid.network_port = multiplayer::platform::kMultiplayerDiscoveryPort;
+  reject(invalid);
+  invalid = original;
+  invalid.session_player_limit = 1;
+  reject(invalid);
+  invalid.session_player_limit = kMPMaxPlayers + 1;
+  reject(invalid);
+  invalid = original;
+  invalid.preferred_character = PlayerCharacter::UNKNOWN;
+  reject(invalid);
+  invalid = original;
+  invalid.player_appearance.strengths[0] = 2.0f;
+  reject(invalid);
 }
 
 TEST(Jak2GoalBridge, TexturePreferencesKeepValidGroupsAndRepairInvalidGroups) {
@@ -880,31 +924,38 @@ TEST(Jak2GoalBridge, TexturePreferencesKeepValidGroupsAndRepairInvalidGroups) {
 TEST(Jak2GoalBridge, CharacterPreferenceBelongsToIdentityAndSurvivesOtherSettings) {
   ScopedPreferencesRoot preferences_root;
   const auto identity_path = preferences_root.path().parent_path() / "identity.json";
-  ASSERT_TRUE(set_player_character_preference(static_cast<uint32_t>(PlayerCharacter::DAXTER)));
+  auto preferences = get_multiplayer_preferences();
+  preferences.preferred_character = PlayerCharacter::DAXTER;
+  ASSERT_TRUE(set_multiplayer_preferences(preferences));
   auto identity = parse_commented_json(file_util::read_text_file(identity_path), "identity.json");
   EXPECT_EQ(identity["preferred_character"], static_cast<uint8_t>(PlayerCharacter::DAXTER));
-  EXPECT_FALSE(set_player_character_preference(static_cast<uint32_t>(PlayerCharacter::UNKNOWN)));
+  preferences.preferred_character = PlayerCharacter::UNKNOWN;
+  EXPECT_FALSE(set_multiplayer_preferences(preferences));
 
   auto settings =
       parse_commented_json(file_util::read_text_file(preferences_root.path()), "preferences.json");
   settings["session_characters"] = {1, 1, 1, 1, 1, 1, 1, 1};
   file_util::write_text_file(preferences_root.path(), settings.dump(2));
   load_multiplayer_preferences();
-  EXPECT_EQ(get_player_character_preference(), static_cast<uint32_t>(PlayerCharacter::DAXTER));
+  EXPECT_EQ(get_multiplayer_preferences().preferred_character, PlayerCharacter::DAXTER);
   settings =
       parse_commented_json(file_util::read_text_file(preferences_root.path()), "preferences.json");
   EXPECT_FALSE(settings.contains("session_characters"));
 
-  ASSERT_TRUE(set_multiplayer_preference(2, "Player2"));
+  preferences = get_multiplayer_preferences();
+  preferences.player_name = "Player2";
+  ASSERT_TRUE(set_multiplayer_preferences(preferences));
   reset_multiplayer_preferences();
   load_multiplayer_preferences();
-  EXPECT_EQ(get_player_character_preference(), static_cast<uint32_t>(PlayerCharacter::DAXTER));
+  EXPECT_EQ(get_multiplayer_preferences().preferred_character, PlayerCharacter::DAXTER);
   identity = parse_commented_json(file_util::read_text_file(identity_path), "identity.json");
   EXPECT_EQ(identity["display_name"], "Player2");
   identity["preferred_character"] = static_cast<uint8_t>(PlayerCharacter::JAK);
   file_util::write_text_file(identity_path, identity.dump(2));
-  ASSERT_TRUE(set_automatic_port_mapping(false));
-  EXPECT_EQ(get_player_character_preference(), static_cast<uint32_t>(PlayerCharacter::JAK));
+  preferences = get_multiplayer_preferences();
+  preferences.automatic_port_mapping = false;
+  ASSERT_TRUE(set_multiplayer_preferences(preferences));
+  EXPECT_EQ(get_multiplayer_preferences().preferred_character, PlayerCharacter::JAK);
 }
 
 TEST(Jak2GoalBridge, LifecycleChangeDiscardsAlreadyCopiedEventsFromPreviousOccupant) {
@@ -1171,8 +1222,10 @@ TEST(Jak2GoalBridge, PlayerRulesPersistAndResetToOff) {
   ScopedPreferencesRoot preferences_root;
   EXPECT_FALSE(multiplayer_preferences().player_collision);
   EXPECT_FALSE(multiplayer_preferences().friendly_fire);
-  set_player_collision(true);
-  set_friendly_fire(true);
+  auto preferences = get_multiplayer_preferences();
+  preferences.player_collision = true;
+  preferences.friendly_fire = true;
+  ASSERT_TRUE(set_multiplayer_preferences(preferences));
   load_multiplayer_preferences();
   EXPECT_TRUE(multiplayer_preferences().player_collision);
   EXPECT_TRUE(multiplayer_preferences().friendly_fire);
@@ -1190,22 +1243,131 @@ TEST(Jak2GoalBridge, PlayerRulesPersistAndResetToOff) {
   EXPECT_FALSE(multiplayer_preferences().friendly_fire);
 }
 
+TEST(Jak2GoalBridge, RespawnDelayValidatesPersistsAndResets) {
+  ScopedPreferencesRoot preferences_root;
+  EXPECT_EQ(get_multiplayer_preferences().respawn_delay_seconds, 20);
+  for (const uint16_t delay : {0, 35, 65535}) {
+    auto preferences = get_multiplayer_preferences();
+    preferences.respawn_delay_seconds = delay;
+    ASSERT_TRUE(set_multiplayer_preferences(preferences));
+    load_multiplayer_preferences();
+    EXPECT_EQ(get_multiplayer_preferences().respawn_delay_seconds, delay);
+    const auto root = parse_commented_json(file_util::read_text_file(preferences_root.path()),
+                                           "preferences.json");
+    EXPECT_EQ(root.at("respawn_delay_seconds"), delay);
+    EXPECT_EQ(parse_multiplayer_preferences(root.dump()).respawn_delay_seconds, delay);
+  }
+  for (const std::string_view invalid : {"-1", "1.5", "\"35\"", "true", "65536", "4294967296"}) {
+    EXPECT_EQ(
+        parse_multiplayer_preferences("{\"respawn_delay_seconds\":" + std::string(invalid) + "}")
+            .respawn_delay_seconds,
+        multiplayer::jak2::core::kDefaultRespawnDelaySeconds);
+  }
+  EXPECT_EQ(parse_multiplayer_preferences("{}").respawn_delay_seconds,
+            multiplayer::jak2::core::kDefaultRespawnDelaySeconds);
+  reset_multiplayer_preferences();
+  load_multiplayer_preferences();
+  EXPECT_EQ(get_multiplayer_preferences().respawn_delay_seconds, 20);
+}
+
+TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
+  ScopedPreferencesRoot preferences_root;
+  GoalMemoryFixture memory;
+  auto& state = preferences_state(memory);
+  auto preferences = get_multiplayer_preferences();
+  preferences.player_name = "Player2";
+  preferences.room_code = "xyz789";
+  preferences.network_port = 26212;
+  preferences.respawn_delay_seconds = 65535;
+  preferences.session_player_limit = kMPMaxPlayers;
+  preferences.preferred_character = PlayerCharacter::DAXTER;
+  preferences.automatic_port_mapping = false;
+  preferences.player_collision = true;
+  preferences.friendly_fire = true;
+  preferences.player_appearance = get_default_player_appearance(0x123456);
+  std::memset(memory.at<String>(state.player_name).data(), 'x', 16);
+  ASSERT_TRUE(multiplayer::jak2::bridge::write_preferences(0x11000, preferences));
+  EXPECT_EQ(state.respawn_delay_seconds, 65535);
+  EXPECT_EQ(state.session_player_limit, kMPMaxPlayers);
+  EXPECT_EQ(state.preferred_character, static_cast<uint8_t>(PlayerCharacter::DAXTER));
+  EXPECT_EQ(state.automatic_port_mapping, 0);
+  EXPECT_EQ(state.player_collision, 1);
+  EXPECT_EQ(state.friendly_fire, 1);
+
+  MultiplayerPreferences restored;
+  ASSERT_TRUE(multiplayer::jak2::bridge::read_preferences(0x11000, restored));
+  EXPECT_EQ(restored.player_name, preferences.player_name);
+  EXPECT_EQ(restored.network_port, preferences.network_port);
+  EXPECT_EQ(restored.player_appearance.colors, preferences.player_appearance.colors);
+  EXPECT_EQ(restored.player_appearance.strengths, preferences.player_appearance.strengths);
+  ASSERT_TRUE(set_multiplayer_preferences(restored));
+  load_multiplayer_preferences();
+  const auto saved = get_multiplayer_preferences();
+  ASSERT_TRUE(multiplayer::jak2::bridge::write_preferences(0x11000, saved));
+  ASSERT_TRUE(multiplayer::jak2::bridge::read_preferences(0x11000, restored));
+  EXPECT_EQ(restored.player_name, "Player2");
+  EXPECT_EQ(restored.room_code, "XYZ789");
+  EXPECT_EQ(restored.network_port, 26212);
+  EXPECT_EQ(restored.respawn_delay_seconds, 65535);
+  EXPECT_EQ(restored.session_player_limit, kMPMaxPlayers);
+  EXPECT_EQ(restored.preferred_character, PlayerCharacter::DAXTER);
+  EXPECT_FALSE(restored.automatic_port_mapping);
+  EXPECT_TRUE(restored.player_collision);
+  EXPECT_TRUE(restored.friendly_fire);
+  EXPECT_EQ(restored.player_appearance.colors, preferences.player_appearance.colors);
+  EXPECT_EQ(restored.player_appearance.strengths, preferences.player_appearance.strengths);
+  const auto root =
+      parse_commented_json(file_util::read_text_file(preferences_root.path()), "preferences.json");
+  EXPECT_FALSE(root.contains("preferred_character"));
+}
+
+TEST(Jak2GoalBridge, PreferencesSnapshotRejectsInvalidBuffersAndFlags) {
+  GoalMemoryFixture memory;
+  auto& state = preferences_state(memory);
+  MultiplayerPreferences values;
+  values.player_name = "Player2";
+  values.room_code = "ABC123";
+  ASSERT_TRUE(multiplayer::jak2::bridge::write_preferences(0x11000, values));
+  for (uint8_t* flag :
+       {&state.automatic_port_mapping, &state.player_collision, &state.friendly_fire}) {
+    const auto saved = *flag;
+    *flag = 2;
+    EXPECT_FALSE(multiplayer::jak2::bridge::read_preferences(0x11000, values));
+    *flag = saved;
+  }
+  EXPECT_FALSE(multiplayer::jak2::bridge::read_preferences(0, values));
+  EXPECT_FALSE(multiplayer::jak2::bridge::write_preferences(EE_MAIN_MEM_SIZE - 1, values));
+  memory.at<String>(state.room_code).len = 2;
+  values.network_port = 30000;
+  EXPECT_FALSE(multiplayer::jak2::bridge::write_preferences(0x11000, values));
+  EXPECT_EQ(state.network_port, multiplayer::platform::kDefaultMultiplayerPort);
+  EXPECT_STREQ(memory.at<String>(state.player_name).data(), "Player2");
+  memory.at<String>(state.room_code).len = 6;
+  state.player_name = 0;
+  EXPECT_FALSE(multiplayer::jak2::bridge::read_preferences(0x11000, values));
+  EXPECT_FALSE(multiplayer::jak2::bridge::write_preferences(0x11000, values));
+}
+
 TEST(Jak2GoalBridge, PlayerRulesCrossTheWorldBridge) {
   GoalMemoryFixture memory;
   auto& state = replication_state(memory);
+  state.local.world.respawn_delay_seconds = 0;
   state.local.world.player_collision = 1;
   state.local.world.friendly_fire = 1;
   multiplayer::jak2::application::ReplicationMailbox mailbox;
   ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
   const auto local = mailbox.take_local_frame();
   ASSERT_TRUE(local);
+  EXPECT_EQ(local->world.respawn_delay_seconds, 0);
   EXPECT_TRUE(local->world.player_collision);
   EXPECT_TRUE(local->world.friendly_fire);
   auto remote = std::make_unique<multiplayer::jak2::application::RemoteReplicationFrame>();
   remote->world = local->world;
+  remote->world.respawn_delay_seconds = 65535;
   remote->world.friendly_fire = false;
   mailbox.publish_remote_frame(std::move(remote));
   ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
+  EXPECT_EQ(state.remote.world.respawn_delay_seconds, 65535);
   EXPECT_EQ(state.remote.world.player_collision, 1);
   EXPECT_EQ(state.remote.world.friendly_fire, 0);
 }
