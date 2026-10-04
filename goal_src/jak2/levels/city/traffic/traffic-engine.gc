@@ -761,7 +761,7 @@
                    (not (logtest? (-> this traffic alert-state flags) (traffic-alert-flag alert-ending)))
                    )
                )
-      (let ((s4-0 (new 'stack-no-clear 'mystery-traffic-object-spawn-params)))
+      (let ((s4-0 (new 'stack 'mystery-traffic-object-spawn-params)))
         (let ((s2-0 (-> arg1 branch)))
           (set! (-> s4-0 params object-type) arg0)
           (set! (-> s4-0 params guard-type) (-> v1-2 guard-type))
