@@ -14,7 +14,8 @@
 
 
 (deftype hal-help-kid (hal)
-  ((nav-mesh    nav-mesh)
+  ((nav-mesh          nav-mesh)
+   (battle-start-time time-frame)
    (alley-bbox  bounding-box                :inline)
    (suppress    traffic-suppression-params  2 :inline)
    )
@@ -50,6 +51,8 @@
     (set! (-> v1-3 id) -1)
     (mem-copy! (the-as pointer (-> v1-3 bbox)) (the-as pointer a1-4) 32)
     )
+  (when (nonnull? this)
+    (set! (-> this battle-start-time) (the-as time-frame 0)))
   (set! (-> this channel) (gui-channel guard))
   (none)
   )
@@ -137,6 +140,69 @@
        (scene-release? arg0)
        )
   )
+
+(defun help-kid-spawn-transport! ((owner hal-help-kid))
+  (when (nonnull? owner (-> owner course) (-> owner nav-mesh))
+    (let ((course (the-as hal3-course (-> owner course))))
+      (unless (logtest? (-> owner bot-task-bits) (bot-task-bits botbits-4))
+        (let ((params (new 'stack 'transport-params)))
+          (set-vector! (-> params spawn-pos) 2689966.0 65208.32 -481075.2 1.0)
+          (quaternion-copy! (-> params quat) *unity-quaternion*)
+          (set! (-> params nav-mesh) (-> owner nav-mesh))
+          (set! (-> params max-guard) (the uint 0))
+          (set! (-> params turret?) #f)
+          (set! (-> params speeches?) #f)
+          (let ((transport-handle (ppointer->handle (process-spawn transport params :to owner))))
+            (when (nonnull? (handle->process-safe transport-handle))
+              (logior! (-> owner bot-task-bits) (bot-task-bits botbits-4)))
+            (set! (-> course transport) transport-handle)
+            (mp-traffic-register-transport! (the uint MP_TRAFFIC_TRANSPORT_ID_HAL3) transport-handle))))))
+  (none))
+
+(defun help-kid-enter-dark-battle! ((owner hal-help-kid))
+  (when (and (nonnull? owner (-> owner course)) (zero? (-> owner battle-start-time)))
+    (let ((setup (-> owner course waypoints 3 on-set)))
+      (when (nonnull? setup)
+        (setup owner))))
+  (when (and (nonnull? owner *target* (-> *target* control))
+             (not (logtest? (-> owner bot-task-bits) (bot-task-bits botbits-1)))
+             (send-event *target* 'change-mode 'darkjak #f (darkjak-stage active)))
+    (logior! (-> owner bot-task-bits) (bot-task-bits botbits-1)))
+  (none))
+
+(defun help-kid-update-battle-phase! ((owner hal-help-kid))
+  (when (nonnull? owner (-> owner waypoint) (-> owner course))
+    (let ((waypoint-id (-> owner waypoint waypoint-id))
+          (transport-proc (handle->process-safe (-> (the-as hal3-course (-> owner course)) transport))))
+      (cond
+        ((and (mp-session-host?) (= waypoint-id 4)
+              (<= (send-event *traffic-manager* 'get-object-remaining-count (traffic-type crimson-guard-1)) 12))
+         (go-to-waypoint! owner 5 #f))
+        ((and (mp-session-host?) (= waypoint-id 5) (nonnull? transport-proc (-> transport-proc state))
+              (= (-> transport-proc state name) 'leave))
+         (go-to-waypoint! owner 6 #f))
+        ((and (= waypoint-id 6) (nonnull? transport-proc (-> transport-proc state))
+              (not (= (-> transport-proc state name) 'leave)))
+         (send-event transport-proc 'leave)))))
+  (none))
+
+(defun help-kid-battle-update! ((owner hal-help-kid))
+  (when (nonnull? owner (-> owner waypoint) *gui-control*)
+    (gui-control-method-12 *gui-control* owner (gui-channel art-load) (gui-action queue)
+                          "city-help-kid-resolution" 0 -1.0 (new 'static 'sound-id))
+    (when (or (= (-> owner waypoint waypoint-id) 6)
+              (time-elapsed? (-> owner battle-start-time) (seconds 3)))
+      (help-kid-spawn-transport! owner))
+    (help-kid-update-battle-phase! owner)
+    (hal-help-kid-method-227 owner)
+    (when (and (not (logtest? (-> owner waypoint-bits) (waypoint-bits wabits-0)))
+               (time-elapsed? (-> owner waypoint-time0) (seconds 0.2))
+               (nonnull? (-> owner actor-group)))
+      (logior! (-> owner waypoint-bits) (waypoint-bits wabits-0))
+      (let ((actor (-> owner actor-group 0 data 2 actor)))
+        (when (nonnull? actor (-> actor extra) (-> actor extra process))
+          (send-event (-> actor extra process) 'request 'waypoint 6)))))
+  (none))
 
 (define *hal3-course*
   (new 'static 'hal3-course
@@ -329,6 +395,9 @@
         :waypoint-id 4
         :skip-to -1
         :on-set (lambda ((arg0 hal-help-kid))
+          (when (nonnull? arg0 (-> arg0 course))
+            (set-time! (-> arg0 battle-start-time))
+            (set! (-> (the-as hal3-course (-> arg0 course)) transport) (the-as handle #f)))
           (with-pp
             (set-setting! 'sound-mode #f 0.0 1)
             (let ((a1-1 (new 'stack-no-clear 'event-message-block)))
@@ -390,7 +459,8 @@
                       (function halt-wait-spot hal symbol)
                       (lambda ((arg0 object) (arg1 hal-help-kid))
                         (cond
-                          ((and (logtest? (-> arg1 bot-task-bits) (bot-task-bits botbits-0))
+                          ((and (mp-session-host?)
+                                (logtest? (-> arg1 bot-task-bits) (bot-task-bits botbits-0))
                                 (not (logtest? (-> arg1 bot-flags) (bot-flags bf09)))
                                 )
                            (ai-task-control-method-12 (-> arg1 ai-ctrl) arg1)
@@ -398,7 +468,8 @@
                            (ai-task-control-method-10 (-> arg1 ai-ctrl) arg1)
                            #t
                            )
-                          ((zero? (send-event *traffic-manager* 'get-object-remaining-count (traffic-type crimson-guard-1)))
+                          ((and (mp-session-host?)
+                                (zero? (send-event *traffic-manager* 'get-object-remaining-count (traffic-type crimson-guard-1))))
                            (let ((v1-16 *target*))
                              (when v1-16
                                (cond
@@ -426,76 +497,24 @@
             (none)
             )
           )
-        :on-update (lambda ((arg0 hal-help-kid))
-          (with-pp
-            (gui-control-method-12
-              *gui-control*
-              arg0
-              (gui-channel art-load)
-              (gui-action queue)
-              "city-help-kid-resolution"
-              0
-              -1.0
-              (new 'static 'sound-id)
-              )
-            (let ((a1-1 (new 'stack-no-clear 'event-message-block)))
-              (set! (-> a1-1 from) (process->ppointer pp))
-              (set! (-> a1-1 num-params) 1)
-              (set! (-> a1-1 message) 'get-object-remaining-count)
-              (set! (-> a1-1 param 0) (the-as uint 6))
-              (let ((v1-6 (send-event-function *traffic-manager* a1-1)))
-                (if (and (not (logtest? (-> arg0 bot-task-bits) (bot-task-bits botbits-1)))
-                         (and (>= 12 (the-as int v1-6)) (send-event *target* 'change-mode 'darkjak #f (darkjak-stage active)))
-                         )
-                    (logior! (-> arg0 bot-task-bits) (bot-task-bits botbits-1))
-                    )
-                )
-              )
-            (when (and (not (logtest? (-> arg0 waypoint-bits) (waypoint-bits wabits-1)))
-                       (time-elapsed? (-> arg0 waypoint-time0) (seconds 3))
-                       )
-              (logior! (-> arg0 waypoint-bits) (waypoint-bits wabits-1))
-              (let ((s5-0 (new 'stack-no-clear 'transport-params)))
-                (set-vector! (-> s5-0 spawn-pos) 2689966.0 65208.32 -481075.2 1.0)
-                (quaternion-copy! (-> s5-0 quat) *unity-quaternion*)
-                (set! (-> s5-0 nav-mesh) (-> arg0 nav-mesh))
-                (set! (-> s5-0 max-guard) (the-as uint 0))
-                (set! (-> s5-0 turret?) #f)
-                (set! (-> s5-0 speeches?) #f)
-                (let ((transport-handle (ppointer->handle (process-spawn transport s5-0 :to arg0))))
-                  (set! (-> (the-as hal3-course (-> arg0 course)) transport) transport-handle)
-                  (mp-traffic-register-transport! (the uint MP_TRAFFIC_TRANSPORT_ID_HAL3) transport-handle)
-                  )
-                )
-              )
-            (hal-help-kid-method-227 arg0)
-            (when (and (not (logtest? (-> arg0 waypoint-bits) (waypoint-bits wabits-0)))
-                       (time-elapsed? (-> arg0 waypoint-time0) (seconds 0.2))
-                       )
-              (logior! (-> arg0 waypoint-bits) (waypoint-bits wabits-0))
-              (let ((a1-7 (new 'stack-no-clear 'event-message-block)))
-                (set! (-> a1-7 from) (process->ppointer pp))
-                (set! (-> a1-7 num-params) 2)
-                (set! (-> a1-7 message) 'request)
-                (set! (-> a1-7 param 0) (the-as uint 'waypoint))
-                (set! (-> a1-7 param 1) (the-as uint 6))
-                (let ((t9-8 send-event-function)
-                      (v1-52 (-> arg0 actor-group 0 data 2 actor))
-                      )
-                  (t9-8
-                    (if v1-52
-                        (-> v1-52 extra process)
-                        )
-                    a1-7
-                    )
-                  )
-                )
-              )
-            )
-          )
+        :on-update (lambda ((owner hal-help-kid)) (help-kid-battle-update! owner))
         :on-skipping-here #f
         :check-too-far #f
         )
+      (new 'static 'bot-waypoint
+        :waypoint-id 5
+        :skip-to -1
+        :on-set (lambda ((owner hal-help-kid)) (help-kid-enter-dark-battle! owner))
+        :on-update (lambda ((owner hal-help-kid)) (help-kid-battle-update! owner))
+        :on-skipping-here #f
+        :check-too-far #f)
+      (new 'static 'bot-waypoint
+        :waypoint-id 6
+        :skip-to -1
+        :on-set (lambda ((owner hal-help-kid)) (help-kid-enter-dark-battle! owner))
+        :on-update (lambda ((owner hal-help-kid)) (help-kid-battle-update! owner))
+        :on-skipping-here #f
+        :check-too-far #f)
       (new 'static 'bot-waypoint
         :waypoint-id 7
         :skip-to -1

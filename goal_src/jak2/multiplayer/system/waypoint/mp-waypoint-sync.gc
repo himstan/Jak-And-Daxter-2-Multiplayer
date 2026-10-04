@@ -479,9 +479,18 @@
   (set! *mp-waypoint-applying-remote?* #f)
   (none))
 
+(defun waypoint-target-retired? ((name string))
+  (when (nonnull? name *level*)
+    (let ((ent (entity-by-name name)))
+      (when (and (nonnull? ent) (type? ent entity-actor))
+        (return (mp-aid-dead-perm? (-> (the-as entity-actor ent) aid))))))
+  #f)
+
 (defun mp-waypoint-try-apply-event! ((evt mp-waypoint-event) (name string))
-  (when (or (not (nonnull? evt)) (not (nonzero? evt)) (not name) (not (nonzero? name)))
+  (unless (nonnull? evt name)
     (return #f))
+  (when (waypoint-target-retired? name)
+    (return #t))
   (let ((course-bot (mp-waypoint-find-bot (-> evt payload course-id) name)))
     (cond
       ((not course-bot) (mp-waypoint-debug-log! 'apply-no-bot evt course-bot name) #f)
@@ -588,7 +597,10 @@
   (none))
 
 (defun mp-waypoint-retry-pending! ()
-  (when (and (mp-waypoint-sync-ready?) (> *mp-waypoint-pending-count* 0))
+  (when (and (mp-waypoint-sync-ready?)
+             (not *mp-pending-scene-sync?*)
+             (not (mp-waypoint-local-scene-active?))
+             (> *mp-waypoint-pending-count* 0))
     (dotimes (offset 32)
       (let* ((idx (mp-waypoint-pending-retry-index offset))
              (pending (-> *mp-pending-waypoints* idx)))

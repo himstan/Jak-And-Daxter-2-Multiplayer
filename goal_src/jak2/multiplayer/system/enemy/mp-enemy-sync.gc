@@ -20,7 +20,7 @@
     (logior! (-> proc enemy-flags) (enemy-flag stop-syncing))
     (process-mask-clear! (-> proc mask) sleep sleep-code)
     (when (not (mp-enemy-death-presentation-active? proc))
-      (send-event proc 'instant-death)))
+      (send-event proc (if (type? proc bot) 'die-fast 'instant-death))))
   (none))
 
 (defun mp-enemy-terminal-sync? ((e-proc enemy) (enemy-aid uint))

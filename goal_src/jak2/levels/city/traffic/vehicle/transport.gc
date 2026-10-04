@@ -319,7 +319,9 @@
     (if (and *mp-traffic-local-authoritative?* (-> self spawn?))
         (spawn-guard-in-transport self (the-as uint #f))
         )
-    (if (and (zero? (-> self leave-time))
+    (if (and (or (mp-session-host?)
+                 (!= (mp-traffic-transport-id-for-process self) (the uint MP_TRAFFIC_TRANSPORT_ID_HAL3)))
+             (zero? (-> self leave-time))
              (begin
                (let ((gp-1 #t)
                      (a1-0 (new 'stack-no-clear 'event-message-block))
