@@ -83,7 +83,10 @@
   (let ((primary-id (mp-player-primary-level-id record)))
     (when (> primary-id 0)
       (let ((level-symbol (mp-level-id->symbol primary-id)))
-        (when (and level-symbol (not (mp-level-active? level-symbol)))
+        (when (and level-symbol
+                   (not (mp-level-active? level-symbol))
+                   (not (and (nonnull? *target*)
+                             (= (get-jak-rider (mp-player-record-target record)) *target*))))
           (when (player-replica-valid? (mp-player-record-target record))
             (player-replica-deactivate! record 'level-inactive))
           (return #f)))))
