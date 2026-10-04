@@ -128,6 +128,12 @@
       (set! (-> e-proc incoming attack-direction quad) (-> attack-dir quad))))
   (none))
 
+(defun remote-darkjak-melee-hit? ((attacker process) (evt mp-actor-attack-event))
+  (and (nonnull? attacker evt)
+       (type? attacker target)
+       (logtest? (-> evt payload penetrate) (penetrate dark-skin dark-punch))
+       (logtest? (-> evt payload penetrate) (penetrate punch spin flop uppercut roll bonk lunge))))
+
 (defun mp-actor-apply-authoritative-remote-damage! ((e-proc enemy)
                                                     (attacker process)
                                                     (evt mp-actor-attack-event)
@@ -164,6 +170,7 @@
     (return #f))
   (let ((atk (new 'stack-no-clear 'attack-info))
         (old-hp (-> e-proc hit-points))
+        (darkjak-hit? (remote-darkjak-melee-hit? attacker evt))
         (old-remote-context *mp-processing-remote-event*)
         (old-attack-event *mp-actor-remote-attack-event*))
     (mp-actor-fill-attack-info-from-event! atk evt)
@@ -176,6 +183,8 @@
                                (-> evt payload attack-dir))
     (set! *mp-processing-remote-event* #t)
     (send-event e-proc 'attack attacker atk)
+    (when darkjak-hit?
+      (start-darkjak-hit-effect! (the-as target attacker) e-proc))
     (let ((authoritative-hp (max 0 (-> evt payload new-hp))))
       (when (!= (-> e-proc hit-points) authoritative-hp)
         (set! (-> e-proc hit-points) authoritative-hp))
