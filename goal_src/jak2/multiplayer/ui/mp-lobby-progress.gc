@@ -38,8 +38,7 @@
   (let ((rem-ms (pc-multi-lobby-get-countdown-remaining-ms))) (if (<= rem-ms 0) 0 (+ (/ rem-ms 1000) 1))))
 
 (defun mp-lobby-local-player-ready? ()
-  (let ((record (mp-local-player-record)))
-    (and (nonnull? record) (nonzero? (-> record identity lobby-ready?)))))
+  (let ((record (mp-local-player-record))) (and (nonnull? record) (nonzero? (-> record identity lobby-ready?)))))
 
 (defun mp-lobby-player-ready? ((player-index int))
   (let ((record (mp-player-record-by-id (the-as uint player-index))))
