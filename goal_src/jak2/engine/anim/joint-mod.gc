@@ -448,7 +448,15 @@
   )
 
 (defbehavior joint-mod-gun-look-at-handler process ((arg0 cspace) (arg1 transformq))
-  (real-joint-mod-gun-look-at-handler arg0 arg1)
+  (when (nonnull? arg0 (-> arg0 bone) (-> arg0 param1) arg1)
+    (let* ((modifier (the-as joint-mod (-> arg0 param1)))
+           (backward? (= (-> modifier nose) 5)))
+      (when backward?
+        (quaternion-rotate-local-y! (-> arg1 quat) (-> arg1 quat) 32768.0))
+      (real-joint-mod-gun-look-at-handler arg0 arg1)
+      (when backward?
+        (vector-negate-in-place! (-> arg0 bone transform vector 0))
+        (vector-negate-in-place! (-> arg0 bone transform vector 2)))))
   (none)
   )
 

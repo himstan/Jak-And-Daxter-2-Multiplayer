@@ -20,11 +20,6 @@
       (set-falloff! *gui-control* (-> self control unknown-sound-id00) #t -1 100 2)))
   (none))
 
-(defbehavior target-indax-death-post target ()
-  (daxter-gun-update-eco-aura!)
-  (target-no-stick-post)
-  (none))
-
 (defstate target-indax-death (target)
   :event
     (-> target-death
@@ -138,4 +133,4 @@
       (initialize! (-> self game) 'life (the-as game-save #f) (the-as string #f))
       (set-time! (-> self state-time))
       (sleep-code))
-  :post target-indax-death-post)
+  :post target-no-stick-post)

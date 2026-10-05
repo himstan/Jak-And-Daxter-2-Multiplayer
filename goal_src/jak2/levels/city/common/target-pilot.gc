@@ -29,6 +29,91 @@
 
 (define *pilot-mods* (new 'static 'surface :name 'empty :seek0 1.0 :seek90 1.0 :seek180 1.0 :fric 1.0))
 
+(deftype daxter-seat-offsets (structure)
+  ((driver vector :inline)
+   (driver-gun vector :inline)
+   (passenger vector :inline)
+   (passenger-gun vector :inline)))
+
+(define *daxter-bikea-seat-offsets*
+  (new 'static 'daxter-seat-offsets
+    :driver (new 'static 'vector :y 0.35 :z 0.65)
+    :driver-gun (new 'static 'vector :y 0.35 :z 0.65)
+    :passenger (new 'static 'vector :y 0.4 :z -0.3)
+    :passenger-gun (new 'static 'vector :y 0.4 :z -0.3)))
+
+(define *daxter-bikeb-seat-offsets*
+  (new 'static 'daxter-seat-offsets
+    :driver (new 'static 'vector :y 0.35 :z 0.65)
+    :driver-gun (new 'static 'vector :y 0.35 :z 0.65)
+    :passenger (new 'static 'vector :y 0.4 :z -0.3)
+    :passenger-gun (new 'static 'vector :y 0.4 :z -0.3)))
+
+(define *daxter-bikec-seat-offsets*
+  (new 'static 'daxter-seat-offsets
+    :driver (new 'static 'vector :y 0.35 :z 0.65)
+    :driver-gun (new 'static 'vector :y 0.35 :z 0.65)
+    :passenger (new 'static 'vector :y 0.4 :z -0.3)
+    :passenger-gun (new 'static 'vector :y 0.4 :z -0.3)))
+
+(define *daxter-guard-bike-seat-offsets*
+  (new 'static 'daxter-seat-offsets
+    :driver (new 'static 'vector :y 0.35 :z 0.65)
+    :driver-gun (new 'static 'vector :y 0.35 :z 0.65)
+    :passenger (new 'static 'vector :y 0.4 :z -0.3)
+    :passenger-gun (new 'static 'vector :y 0.4 :z -0.3)))
+
+(define *daxter-cara-seat-offsets*
+  (new 'static 'daxter-seat-offsets
+    :driver (new 'static 'vector :z -0.4)
+    :driver-gun (new 'static 'vector :z -0.4)
+    :passenger (new 'static 'vector :z -0.4)
+    :passenger-gun (new 'static 'vector :z -0.4)))
+
+(define *daxter-carb-seat-offsets*
+  (new 'static 'daxter-seat-offsets
+    :driver (new 'static 'vector :z -0.4)
+    :driver-gun (new 'static 'vector :z -0.4)
+    :passenger (new 'static 'vector :z -0.4)
+    :passenger-gun (new 'static 'vector :z -0.4)))
+
+(define *daxter-carc-seat-offsets*
+  (new 'static 'daxter-seat-offsets
+    :driver (new 'static 'vector :z -0.4)
+    :driver-gun (new 'static 'vector :z -0.4)
+    :passenger (new 'static 'vector :z -0.4)
+    :passenger-gun (new 'static 'vector :z -0.4)))
+
+(define *daxter-hellcat-seat-offsets*
+  (new 'static 'daxter-seat-offsets
+    :driver (new 'static 'vector :z -0.4)
+    :driver-gun (new 'static 'vector :z -0.4)
+    :passenger (new 'static 'vector :z -0.4)
+    :passenger-gun (new 'static 'vector :z -0.4)))
+
+(defun get-daxter-seat-offset ((tgt target))
+  (unless (nonnull? tgt (-> tgt pilot)) (return (the-as vector #f)))
+  (when (daxter-stadium-bike? tgt) (return (the-as vector #f)))
+  (let ((vehicle (as-type (handle->process (-> tgt pilot vehicle)) vehicle)))
+    (unless (nonnull? vehicle) (return (the-as vector #f)))
+    (let ((offsets
+            (case (-> vehicle traffic-type)
+              (((traffic-type bikea)) *daxter-bikea-seat-offsets*)
+              (((traffic-type bikeb)) *daxter-bikeb-seat-offsets*)
+              (((traffic-type bikec)) *daxter-bikec-seat-offsets*)
+              (((traffic-type guard-bike)) *daxter-guard-bike-seat-offsets*)
+              (((traffic-type cara)) *daxter-cara-seat-offsets*)
+              (((traffic-type carb)) *daxter-carb-seat-offsets*)
+              (((traffic-type carc)) *daxter-carc-seat-offsets*)
+              (((traffic-type hellcat)) *daxter-hellcat-seat-offsets*)
+              (else (if (zero? (-> tgt pilot stance))
+                      *daxter-bikea-seat-offsets* *daxter-cara-seat-offsets*))))
+          (armed? (and (nonnull? (-> tgt gun)) (using-gun? tgt))))
+      (unless (nonnull? offsets) (return (the-as vector #f)))
+      (if (zero? (-> tgt pilot seat-index))
+        (if armed? (-> offsets driver-gun) (-> offsets driver))
+        (if armed? (-> offsets passenger-gun) (-> offsets passenger))))))
+
 (defun get-player-pilot-hit-state ((player target) (attacker process) (attack attack-info))
   (cond
     ((and (nonnull? player attacker attack)
@@ -489,19 +574,21 @@
           )
         )
       (cond
-        ((-> gp-2 as-daxter?)
-         (enable-set! (-> self arm-ik 0) #f)
-         (enable-set! (-> self arm-ik 1) #f)
-         )
-        ((zero? (-> gp-2 seat-index))
+        ((and (zero? (-> gp-2 seat-index)) (not (daxter-stadium-bike? self)))
          (let ((s4-1 (new 'stack-no-clear 'matrix)))
            (compute-rider-hand-position (the-as vehicle s5-0) (the-as vector (-> s4-1 vector)) 0 0)
            (compute-rider-hand-position (the-as vehicle s5-0) (-> s4-1 vector 1) 0 1)
-           (enable-set! (-> self arm-ik 0) #t)
-           (enable-set! (-> self arm-ik 1) #t)
-           (handle-copy! (-> self arm-ik 0) (the-as vector (-> s4-1 vector)))
-           (handle-copy! (-> self arm-ik 1) (-> s4-1 vector 1))
+           (when (nonnull? self (-> self arm-ik 0) (-> self arm-ik 1))
+             (enable-set! (-> self arm-ik 0) (rider-hand-ik? self 0))
+             (enable-set! (-> self arm-ik 1) (rider-hand-ik? self 1))
+             (handle-copy! (-> self arm-ik 0) (the-as vector (-> s4-1 vector)))
+             (handle-copy! (-> self arm-ik 1) (-> s4-1 vector 1)))
            )
+         )
+        ((-> gp-2 as-daxter?)
+         (when (nonnull? self (-> self arm-ik 0) (-> self arm-ik 1))
+           (enable-set! (-> self arm-ik 0) #f)
+           (enable-set! (-> self arm-ik 1) #f))
          )
         (else
           (let ((s4-1 (new 'stack-no-clear 'matrix))
@@ -514,10 +601,11 @@
             (vector-orient-by-quat! (-> s4-1 vector 1) v-knee-r (-> self control quat))
             (vector+! (the-as vector (-> s4-1 vector)) (-> self control trans) (the-as vector (-> s4-1 vector)))
             (vector+! (-> s4-1 vector 1) (-> self control trans) (-> s4-1 vector 1))
-            (enable-set! (-> self arm-ik 0) #t)
-            (enable-set! (-> self arm-ik 1) #t)
-            (handle-copy! (-> self arm-ik 0) (the-as vector (-> s4-1 vector)))
-            (handle-copy! (-> self arm-ik 1) (-> s4-1 vector 1))
+            (when (nonnull? self (-> self arm-ik 0) (-> self arm-ik 1))
+              (enable-set! (-> self arm-ik 0) (rider-hand-ik? self 0))
+              (enable-set! (-> self arm-ik 1) (rider-hand-ik? self 1))
+              (handle-copy! (-> self arm-ik 0) (the-as vector (-> s4-1 vector)))
+              (handle-copy! (-> self arm-ik 1) (-> s4-1 vector 1)))
             )
           )
         )
@@ -571,9 +659,6 @@
   (update-transforms (-> self control))
   (do-target-gspot)
   (target-powerup-process)
-  (when (focus-test? self indax)
-    (daxter-gun-update-eco-aura!)
-    )
   (let ((v1-130 (-> *perf-stats* data 17)))
     (b! (zero? (-> v1-130 ctrl)) cfg-43 :delay (nop!))
     (.mtc0 Perf 0)

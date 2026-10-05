@@ -207,7 +207,7 @@
     (until #f
       (cond
         ((or (and *target*
-                  (focus-test? *target* dead grabbed under-water pole flut board mech dark carry indax teleporting)
+                  (focus-test? *target* dead grabbed under-water pole flut board mech dark carry teleporting)
                   )
              (and *target* (not (logtest? (focus-status in-head gun) (-> *target* focus-status))))
              (and *target* (not (-> self start-pilot?)) (focus-test? *target* pilot))

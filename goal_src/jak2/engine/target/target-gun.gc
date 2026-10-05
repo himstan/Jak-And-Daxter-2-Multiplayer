@@ -4,6 +4,103 @@
 (define-extern mp-local-player-dead-or-spectating? (function symbol))
 (define-extern mp-player-queue-gun-shot! (function uint none))
 
+(defun gun-joint-under? ((node cspace) (ancestor cspace))
+  (when (nonnull? ancestor)
+    (while (nonnull? node)
+      (when (= node ancestor) (return #t))
+      (set! node (-> node parent))))
+  #f)
+
+(defun set-gun-joint-mask! ((owner process-drawable) (top top-anim-joint-control) (whole-body? symbol))
+  (unless (nonnull? owner (-> owner node-list) top) (return 0))
+  (let ((root (cspace-by-name owner (if whole-body?
+                                    (if (nonnull? (as-type owner sidekick)) "upper_body" "waist_prog")
+                                    (if (nonnull? (as-type owner sidekick)) "Lshoulder" "Rshould"))))
+        (hips (if whole-body? (cspace-by-name owner "hips") (the-as cspace #f)))
+        (gun (cspace-by-name owner "gun")))
+    (set! (-> top interp-select 0) 0)
+    (set! (-> top interp-select 1) 0)
+    (dotimes (index (min 128 (- (-> owner node-list length) 1)))
+      (let ((node (-> owner node-list data (+ index 1))))
+        (when (or (and (nonnull? gun) (= node gun))
+                  (and (gun-joint-under? node root) (not (gun-joint-under? node hips))))
+          (logior! (-> top interp-select (if (< index 64) 0 1))
+                   (the-as uint (ash 1 (mod index 64))))))))
+  0)
+
+(defun gun-frame-matrix! ((result matrix) (node cspace) (frame joint-anim-frame) (joint-count int))
+  (unless (nonnull? result frame) (return 0))
+  (matrix-identity! result)
+  (let ((local (new 'stack-no-clear 'matrix)))
+    (while (nonnull? node (-> node joint))
+      (let ((index (- (-> node joint number) 2)))
+        (unless (and (>= index 0) (< index (- joint-count 2))) (return 0))
+        (matrix<-transformq! local (-> frame data index))
+        (matrix*! result result local)
+        (set! node (-> node parent)))))
+  0)
+
+(defun rebase-rider-gun-joint! ((frame joint-anim-frame) (top joint-anim-frame)
+                               (node cspace) (joint-count int) (shift vector))
+  (unless (nonnull? frame top node (-> node joint) (-> node parent) shift) (return 0))
+  (let ((index (- (-> node joint number) 2))
+        (parent (new 'stack-no-clear 'matrix))
+        (inverse (new 'stack-no-clear 'matrix))
+        (pose (new 'stack-no-clear 'matrix)))
+    (unless (and (>= index 0) (< index (- joint-count 2))) (return 0))
+    (gun-frame-matrix! parent (-> node parent) frame joint-count)
+    (matrix-4x4-inverse! inverse parent)
+    (gun-frame-matrix! pose node top joint-count)
+    (vector+! (-> pose trans) (-> pose trans) shift)
+    (matrix*! pose pose inverse)
+    (matrix->transformq (-> frame data index) pose))
+  0)
+
+(defun prepare-rider-gun-frame! ((frame joint-anim-frame) (joint-count int) (skel joint-control))
+  (let* ((owner (as-type PP process-drawable))
+         (tgt (if (nonnull? (as-type owner sidekick) (-> owner parent))
+                (as-type (ppointer->process (-> owner parent)) target) (as-type owner target))))
+    (unless (and (nonnull? frame owner (-> owner node-list) *gsf-buffer*)
+                 (rider-gun-pose? tgt) (zero? (-> tgt pilot seat-index))
+                 (gun-upper-body-overlay? skel)) (return 0))
+    (let ((arm (cspace-by-name owner (if (nonnull? (as-type owner sidekick)) "Lshoulder" "Rshould")))
+          (gun (cspace-by-name owner "gun"))
+          (top (the-as joint-anim-frame *gsf-buffer*))
+          (seated (new 'stack-no-clear 'matrix))
+          (aiming (new 'stack-no-clear 'matrix))
+          (shift (new 'stack-no-clear 'vector)))
+      (unless (nonnull? arm gun) (return 0))
+      (gun-frame-matrix! seated arm frame joint-count)
+      (gun-frame-matrix! aiming arm top joint-count)
+      (vector-! shift (-> seated trans) (-> aiming trans))
+      (set! (-> shift w) 0.0)
+      (rebase-rider-gun-joint! frame top arm joint-count shift)
+      (rebase-rider-gun-joint! frame top gun joint-count shift)))
+  0)
+
+(defun rebase-gun-upper-body! ((frame joint-anim-frame) (joint-count int) (skel joint-control))
+  (let ((owner (as-type PP process-drawable)))
+    (when (and (nonnull? frame owner (-> owner node-list) *gsf-buffer*)
+               (gun-upper-body-overlay? skel)
+               (or (nonnull? (as-type owner sidekick))
+                   (rider-gun-pose? (as-type owner target))))
+      (let ((main-index (cspace-index-by-name owner "main"))
+            (upper-index (cspace-index-by-name owner
+                           (if (nonnull? (as-type owner sidekick)) "upper_body" "waist_prog"))))
+        (when (and (>= main-index 3) (>= upper-index 3)
+                   (< main-index (+ joint-count 1)) (< upper-index (+ joint-count 1)))
+          (let ((base-main (-> frame data (- main-index 3)))
+                (top-main (-> (the-as joint-anim-frame *gsf-buffer*) data (- main-index 3)))
+                (upper (-> frame data (- upper-index 3)))
+                (rotation (new 'stack-no-clear 'quaternion)))
+            (when (nonnull? base-main top-main upper)
+              (quaternion-inverse! rotation (-> base-main quat))
+              (quaternion-normalize! (quaternion*! rotation rotation (-> top-main quat)))
+              (vector-matrix*! (-> upper trans) (-> upper trans)
+                              (quaternion->matrix (new 'stack-no-clear 'matrix) rotation))
+              (quaternion-normalize! (quaternion*! (-> upper quat) rotation (-> upper quat)))))))))
+  0)
+
 ;; name: target-gun.gc
 ;; name in dgo: target-gun
 ;; dgos: ENGINE, GAME
@@ -196,39 +293,41 @@
   (none)
   )
 
+(defun get-target-pose-owner ((tgt target))
+  (if (nonnull? tgt)
+    (if (focus-test? tgt indax)
+      (the-as process-drawable (get-daxter-pose-owner tgt))
+      (the-as process-drawable tgt))
+    (the-as process-drawable #f)))
+
+(defun bind-target-gun-joints! ((tgt target))
+  (when (nonnull? tgt (-> tgt gun))
+    (let ((owner (get-target-pose-owner tgt))
+          (gun (-> tgt gun)))
+      (when (nonnull? owner (-> owner node-list))
+        (let ((hips (cspace-by-name owner "hips")))
+          (when (nonnull? hips)
+            (if (nonnull? (-> gun hips) (-> gun hips joint))
+              (begin
+                (mode-set! (-> gun hips) (joint-mod-mode reset))
+                (set! (-> gun hips process) owner)
+                (set! (-> gun hips joint) hips)
+                (set! (-> gun hips base-joint) (the-as uint (cspace-index-by-name owner "hips"))))
+              (set! (-> gun hips)
+                    (new 'process 'joint-mod (joint-mod-mode rotate) owner (cspace-index-by-name owner "hips"))))
+            (mode-set! (-> gun hips) (joint-mod-mode rotate))))
+        (set! (-> gun upper-body)
+              (if (focus-test? tgt indax) (-> (the-as sidekick owner) upper-body) (-> tgt upper-body)))
+        (when (nonnull? (-> gun upper-body) (-> gun upper-body joint))
+          (mode-set! (-> gun upper-body) (joint-mod-mode gun-look-at))))))
+  (none))
+
 (defbehavior target-gun-init target ((arg0 pickup-type))
   (let ((gp-0 (-> self gun)))
-    (if (focus-test? self indax)
-        (when (and (-> self sidekick) (zero? (-> gp-0 hips)))
-          (set! (-> gp-0 hips) (new 'process 'joint-mod (joint-mod-mode rotate) (-> self sidekick 0) 29))
-        )
-        (when (zero? (-> gp-0 hips))
-          (set! (-> gp-0 hips) (new 'process 'joint-mod (joint-mod-mode rotate) self 26))
-        )
-    )
-    (if (focus-test? self indax)
-        (let ((sidekick-ptr (-> self sidekick)))
-          (when (and sidekick-ptr (nonzero? sidekick-ptr))
-            (let ((sidekick-proc (the-as sidekick (ppointer->process sidekick-ptr))))
-              (when (and sidekick-proc (nonzero? sidekick-proc))
-                (let ((daxter-upper-body (-> sidekick-proc upper-body)))
-                  (when (and daxter-upper-body (nonzero? daxter-upper-body))
-                    (set! (-> gp-0 upper-body) daxter-upper-body)
-                    (mode-set! daxter-upper-body (joint-mod-mode flex-blend))
-                    )
-                  )
-                )
-              )
-            )
-          )
-        (when (zero? (-> gp-0 upper-body))
-          (set! (-> gp-0 upper-body) (-> self upper-body))))
-    (mode-set! (-> gp-0 hips) (joint-mod-mode rotate))
+    (bind-target-gun-joints! self)
     (set! (-> gp-0 gun-roty) (y-angle (-> self control)))
     (reset (-> self skel top-anim))
-    (when (not (focus-test? self indax))
-      (set! (-> self skel top-anim interp) 1.0)
-    )
+    (set! (-> self skel top-anim interp) 1.0)
     (quaternion-identity! (the-as quaternion (-> self gun top-anim-twist)))
     (quaternion-identity! (the-as quaternion (-> self gun top-anim-twist-targ)))
     (set! (-> self gun top-anim-twist-reset) (the-as uint 0))
@@ -269,13 +368,12 @@
           )
         )
     (cond
-      ((focus-test? self indax))
-      ((focus-test? self pilot-riding)
+      ((pilot-gun-pose? self)
        (case (-> self gun gun-type)
          (((pickup-type eco-yellow))
           (push-anim-to-targ
             (-> self skel top-anim)
-            (the-as art-joint-anim jakb-pilot-gun-yellow-takeout-ja)
+            (the-as art-joint-anim (pilot-gun-anim yellow-takeout))
             0.0
             0
             15
@@ -287,7 +385,7 @@
          (((pickup-type eco-red))
           (push-anim-to-targ
             (-> self skel top-anim)
-            (the-as art-joint-anim jakb-pilot-gun-red-takeout-ja)
+            (the-as art-joint-anim (pilot-gun-anim red-takeout))
             0.0
             0
             15
@@ -299,7 +397,7 @@
          (((pickup-type eco-blue))
           (push-anim-to-targ
             (-> self skel top-anim)
-            (the-as art-joint-anim jakb-pilot-gun-blue-takeout-ja)
+            (the-as art-joint-anim (pilot-gun-anim blue-takeout))
             0.0
             0
             15
@@ -311,7 +409,7 @@
          (((pickup-type eco-dark))
           (push-anim-to-targ
             (-> self skel top-anim)
-            (the-as art-joint-anim jakb-pilot-gun-dark-takeout-ja)
+            (the-as art-joint-anim (pilot-gun-anim dark-takeout))
             0.0
             0
             15
@@ -439,15 +537,12 @@
             )
        (sound-play "gun-putaway")
        (cond
-         ((focus-test? self indax)
-            (set! (-> self skel top-anim interp) 0.0)
-          )
-         ((focus-test? self pilot-riding)
+         ((pilot-gun-pose? self)
           (case (-> self gun gun-type)
             (((pickup-type eco-yellow))
              (push-anim-to-targ
                (-> self skel top-anim)
-               (the-as art-joint-anim jakb-pilot-gun-yellow-takeout-ja)
+               (the-as art-joint-anim (pilot-gun-anim yellow-takeout))
                0.0
                10
                0
@@ -460,7 +555,7 @@
             (((pickup-type eco-red))
              (push-anim-to-targ
                (-> self skel top-anim)
-               (the-as art-joint-anim jakb-pilot-gun-red-takeout-ja)
+               (the-as art-joint-anim (pilot-gun-anim red-takeout))
                0.0
                10
                0
@@ -473,7 +568,7 @@
             (((pickup-type eco-blue))
              (push-anim-to-targ
                (-> self skel top-anim)
-               (the-as art-joint-anim jakb-pilot-gun-blue-takeout-ja)
+               (the-as art-joint-anim (pilot-gun-anim blue-takeout))
                0.0
                10
                0
@@ -486,7 +581,7 @@
             (((pickup-type eco-dark))
              (push-anim-to-targ
                (-> self skel top-anim)
-               (the-as art-joint-anim jakb-pilot-gun-dark-takeout-ja)
+               (the-as art-joint-anim (pilot-gun-anim dark-takeout))
                0.0
                10
                0
@@ -714,9 +809,7 @@
   (set! (-> self gun gun-control) (the-as uint 1))
   (set! (-> self gun fire-spin) 0.0)
   (set! (-> self gun fire-spinv) 0.0)
-  (when (not (focus-test? self indax))
-    (set! (-> self gun fire-time) 0)
-    )
+  (set! (-> self gun fire-time) 0)
   (set! (-> self gun laser-active?) #t)
   (set! (-> self gun top-anim-gun-height) 5283.84)
   (set! (-> self gun top-anim-low-high) 0.0)
@@ -726,9 +819,6 @@
     (let ((s5-0 (-> self gun gun-type)))
       (set! (-> self gun gun-type) (the-as pickup-type arg0))
       (set! (-> self gun using-gun-type) (the-as pickup-type arg0))
-      (if (focus-test? self indax)
-          (set-time! (-> self gun gun-get-on-time))
-          )
       (case (the-as int arg0)
         ((3)
          (set! (-> self gun gun-control) (the-as uint 4))
@@ -793,14 +883,13 @@
       (quat<-gun! (the-as quaternion (-> self gun top-anim-twist-targ)) (the-as quaternion arg0))
       (set! (-> self skel top-anim frame-post-blend) 0.1333333)
       (cond
-        ((focus-test? self indax))
-        ((focus-test? self pilot-riding)
+        ((pilot-gun-pose? self)
          (let ((v1-164 (the-as int arg0)))
            (cond
              ((and (= s5-0 (pickup-type eco-red)) (= v1-164 4))
               (push-anim-to-targ
                 (-> self skel top-anim)
-                (the-as art-joint-anim jakb-pilot-gun-red-dark-ja)
+                (the-as art-joint-anim (pilot-gun-anim red-dark))
                 0.0
                 30
                 19
@@ -812,7 +901,7 @@
              ((and (= s5-0 (pickup-type eco-dark)) (= v1-164 2))
               (push-anim-to-targ
                 (-> self skel top-anim)
-                (the-as art-joint-anim jakb-pilot-gun-red-dark-ja)
+                (the-as art-joint-anim (pilot-gun-anim red-dark))
                 0.0
                 30
                 0
@@ -824,7 +913,7 @@
              ((and (= s5-0 (pickup-type eco-red)) (= v1-164 1))
               (push-anim-to-targ
                 (-> self skel top-anim)
-                (the-as art-joint-anim jakb-pilot-gun-red-yellow-ja)
+                (the-as art-joint-anim (pilot-gun-anim red-yellow))
                 0.0
                 30
                 19
@@ -836,7 +925,7 @@
              ((and (= s5-0 (pickup-type eco-yellow)) (= v1-164 2))
               (push-anim-to-targ
                 (-> self skel top-anim)
-                (the-as art-joint-anim jakb-pilot-gun-red-yellow-ja)
+                (the-as art-joint-anim (pilot-gun-anim red-yellow))
                 0.0
                 30
                 0
@@ -848,7 +937,7 @@
              ((and (= s5-0 (pickup-type eco-red)) (= v1-164 3))
               (push-anim-to-targ
                 (-> self skel top-anim)
-                (the-as art-joint-anim jakb-pilot-gun-red-blue-ja)
+                (the-as art-joint-anim (pilot-gun-anim red-blue))
                 0.0
                 30
                 19
@@ -860,7 +949,7 @@
              ((and (= s5-0 (pickup-type eco-blue)) (= v1-164 2))
               (push-anim-to-targ
                 (-> self skel top-anim)
-                (the-as art-joint-anim jakb-pilot-gun-red-blue-ja)
+                (the-as art-joint-anim (pilot-gun-anim red-blue))
                 0.0
                 30
                 0
@@ -872,7 +961,7 @@
              ((and (= s5-0 (pickup-type eco-yellow)) (= v1-164 3))
               (push-anim-to-targ
                 (-> self skel top-anim)
-                (the-as art-joint-anim jakb-pilot-gun-yellow-blue-ja)
+                (the-as art-joint-anim (pilot-gun-anim yellow-blue))
                 0.0
                 30
                 19
@@ -884,7 +973,7 @@
              ((and (= s5-0 (pickup-type eco-blue)) (= v1-164 1))
               (push-anim-to-targ
                 (-> self skel top-anim)
-                (the-as art-joint-anim jakb-pilot-gun-yellow-blue-ja)
+                (the-as art-joint-anim (pilot-gun-anim yellow-blue))
                 0.0
                 30
                 0
@@ -896,7 +985,7 @@
              ((and (= s5-0 (pickup-type eco-dark)) (= v1-164 1))
               (push-anim-to-targ
                 (-> self skel top-anim)
-                (the-as art-joint-anim jakb-pilot-gun-red-yellow-ja)
+                (the-as art-joint-anim (pilot-gun-anim red-yellow))
                 0.0
                 30
                 19
@@ -908,7 +997,7 @@
              ((and (= s5-0 (pickup-type eco-dark)) (= v1-164 3))
               (push-anim-to-targ
                 (-> self skel top-anim)
-                (the-as art-joint-anim jakb-pilot-gun-red-blue-ja)
+                (the-as art-joint-anim (pilot-gun-anim red-blue))
                 0.0
                 30
                 19
@@ -920,7 +1009,7 @@
              ((and (= s5-0 (pickup-type eco-blue)) (= v1-164 4))
               (push-anim-to-targ
                 (-> self skel top-anim)
-                (the-as art-joint-anim jakb-pilot-gun-red-blue-ja)
+                (the-as art-joint-anim (pilot-gun-anim red-blue))
                 0.0
                 30
                 0
@@ -932,7 +1021,7 @@
              ((and (= s5-0 (pickup-type eco-yellow)) (= v1-164 4))
               (push-anim-to-targ
                 (-> self skel top-anim)
-                (the-as art-joint-anim jakb-pilot-gun-red-yellow-ja)
+                (the-as art-joint-anim (pilot-gun-anim red-yellow))
                 0.0
                 30
                 0
@@ -1154,60 +1243,45 @@
   (none)
   )
 
+(defun gun-takeout-animation? ((anim art-joint-anim))
+  (and (nonnull? anim (-> anim name))
+       (nmember (-> anim name)
+                '("jakb-gun-red-takeout" "jakb-gun-yellow-takeout" "jakb-gun-blue-takeout" "jakb-gun-dark-takeout"
+                  "jakb-pilot-gun-red-takeout" "jakb-pilot-gun-yellow-takeout" "jakb-pilot-gun-blue-takeout" "jakb-pilot-gun-dark-takeout"
+                  "daxter-pilot-gun-red-takeout" "daxter-pilot-gun-yellow-takeout" "daxter-pilot-gun-blue-takeout" "daxter-pilot-gun-dark-takeout"))))
+
+(defun gun-animation-allows-fire? ((anim art-joint-anim) (frame float) (check-frame? symbol))
+  (or (not (nonnull? anim (-> anim name)))
+      (and (not (gun-takeout-animation? anim))
+           (not (nmember (-> anim name)
+                         '("jakb-pilot-gun-red-dark" "jakb-pilot-gun-red-yellow" "jakb-pilot-gun-red-blue" "jakb-pilot-gun-yellow-blue"
+                           "daxter-pilot-gun-red-dark" "daxter-pilot-gun-red-yellow" "daxter-pilot-gun-red-blue" "daxter-pilot-gun-yellow-blue"
+                           "jakb-gun-dark-fire-twirl" "jakb-gun-yellow-fire-twirl" "jakb-gun-transformation-twirl"
+                           "jakb-gun-front-to-side-hop" "jakb-gun-side-to-front-hop" "jakb-gun-blue-to-front-hop" "jakb-gun-front-to-blue-hop"
+                           "jakb-gun-hit-from-front" "jakb-gun-hit-from-back")))
+           (not (and check-frame? (<= frame 6.8)
+                     (nmember (-> anim name) '("jakb-gun-attack-butt-end" "jakb-gun-attack-butt-blue-end")))))))
+
 (defun handle-gun-equip-marking-menu ((this target) (gun-type uint))
-  (when (and this
-             (nonzero? this)
-             (-> this gun)
-             (nonzero? (-> this gun)))
-    (local-vars (current-type uint)
-                (requested-type uint)
-                (target-frame object))
-    (set! current-type (the-as uint (-> this gun gun-type)))
-    (set! requested-type (the-as uint (-> this gun using-gun-type)))
-    (set! target-frame #f)
-    (when (and (not (focus-test? this indax))
-               (-> this skel)
-               (nonzero? (-> this skel))
-               (-> this skel top-anim)
-               (nonzero? (-> this skel top-anim)))
-      (set! target-frame (-> this skel top-anim frame-targ))
-      )
-    (when (and (nonzero? gun-type)
-               (logtest? (the-as game-feature (ash 1 (+ gun-type 5)))
-                         (logand (-> this game features)
-                                 (-> *setting-control* user-current features)))
-               (or (not (focus-test? this pilot))
-                   (and (-> this pilot)
-                        (nonzero? (-> this pilot))
-                        (-> this pilot gun?)))
-               (!= gun-type current-type)
-               (!= gun-type requested-type)
-               (or (focus-test? this indax)
-                   (not target-frame)
-                   (and (-> this draw)
-                        (nonzero? (-> this draw))
-                        (-> this draw art-group)
-                        (nonzero? (-> this draw art-group))
-                        (or (= target-frame (-> this draw art-group data 304))
-                            (= target-frame (-> this draw art-group data 300))
-                            (= target-frame (-> this draw art-group data 305))
-                            (= target-frame (-> this draw art-group data 301)))))
-               (not (handle->process (-> this gun charge-active?))))
+  (when (nonnull? this (-> this gun) (-> this game) (-> this skel) (-> this skel top-anim)
+                  *setting-control* (-> *setting-control* user-current))
+    (let ((top (-> this skel top-anim)))
+      (when (and (nonzero? gun-type)
+                 (logtest? (the-as game-feature (ash 1 (+ gun-type 5)))
+                           (logand (-> this game features) (-> *setting-control* user-current features)))
+                 (or (not (focus-test? this pilot)) (and (nonnull? (-> this pilot)) (-> this pilot gun?)))
+                 (!= gun-type (the-as uint (-> this gun gun-type)))
+                 (!= gun-type (the-as uint (-> this gun using-gun-type)))
+                 (or (not (nonnull? (-> top frame-targ))) (gun-takeout-animation? (-> top frame-targ)))
+                 (not (handle->process (-> this gun charge-active?))))
         (set! (-> this gun using-gun-type) (the-as pickup-type gun-type))
         (cond
           ((using-gun? this)
-           (if (not-player-replica? this)
-               (sound-play "select-option"))
-           (send-event this 'gun-type gun-type)
-           )
+           (when (not-player-replica? this) (sound-play "select-option"))
+           (send-event this 'gun-type gun-type))
           ((want-to-gun? this #t)
-           (send-event this 'change-mode 'gun #f gun-type)
-           )
-          )
-        )
-    )
-  (none)
-  )
+           (send-event this 'change-mode 'gun #f gun-type))))))
+  (none))
 
 (defun target-gun-marking-menu ((this target))
   (when (and (not (mp-local-player-dead-or-spectating?))
@@ -1288,23 +1362,20 @@
                         )
                    (or (logtest? (surface-flag gun-direct) (-> self control current-surface flags))
                        (= (-> self gun gun-type) (pickup-type eco-dark))
-                       (focus-test? self indax)
                        )
                    )
                (>= (current-time) (-> self gun track-target-hold-time))
                )
       (target-gun-build-track-list)
-      (let ((t2-0 (if (focus-test? self indax)
-                      (-> self node-list data 0 bone transform trans)
-                      (vector<-cspace! (new 'stack-no-clear 'vector) (joint-node jakb-lod0-jg neckB))
-                      )
-                  )
-            )
-        (if (not (focus-test? self indax))
-            (+! (-> t2-0 y) 2048.0)
-            )
+      (let* ((owner (get-target-pose-owner self))
+             (neck (if (nonnull? owner (-> owner node-list)) (cspace-by-name owner "neckB") (the-as cspace #f)))
+             (t2-0 (new 'stack-no-clear 'vector)))
+        (if (nonnull? neck (-> neck bone))
+          (vector<-cspace! t2-0 neck)
+          (vector-copy! t2-0 (-> self control trans)))
+        (when (not (focus-test? self indax)) (+! (-> t2-0 y) 2048.0))
         (cond
-          ((or (logtest? (surface-flag gun-strafe) (-> self control current-surface flags)) (focus-test? self indax))
+          ((logtest? (surface-flag gun-strafe) (-> self control current-surface flags))
            (set! gp-0 (find-nearest-focusable
                         (-> self focus-search)
                         (-> self control trans)
@@ -1313,7 +1384,7 @@
                         (the-as search-info-flag (-> self gun track-require))
                         (-> self gun track-dir)
                         t2-0
-                        (if (focus-test? self indax) 14563.556 10922.667)
+                        10922.667
                         )
                  )
            )
@@ -1389,7 +1460,7 @@
                      (and (not (and (nonzero? (-> self gun track-target-hold-time)) (< (current-time) (-> self gun track-target-hold-time)))
                                )
                           (and (not (logtest? (surface-flag spin) (-> self control current-surface flags)))
-                               (let ((f30-0 (if (focus-test? self indax) 16384.0 21845.334))
+                               (let ((f30-0 21845.334)
                                      (s4-0 (-> self control))
                                      (s2-0 (-> self gun track-trans))
                                      )
@@ -1508,13 +1579,12 @@
 
 (defbehavior target-top-anim-base-mode target ((arg0 int))
   (cond
-    ((focus-test? self indax))
-    ((focus-test? self pilot-riding)
+    ((pilot-gun-pose? self)
      (case (-> self gun gun-type)
        (((pickup-type eco-yellow))
         (push-anim-to-targ
           (-> self skel top-anim)
-          (the-as art-joint-anim jakb-pilot-gun-yellow-idle-ja)
+          (the-as art-joint-anim (pilot-gun-anim yellow-idle))
           0.0
           arg0
           0
@@ -1526,7 +1596,7 @@
        (((pickup-type eco-blue))
         (push-anim-to-targ
           (-> self skel top-anim)
-          (the-as art-joint-anim jakb-pilot-gun-blue-idle-ja)
+          (the-as art-joint-anim (pilot-gun-anim blue-idle))
           0.0
           arg0
           0
@@ -1538,7 +1608,7 @@
        (((pickup-type eco-red))
         (push-anim-to-targ
           (-> self skel top-anim)
-          (the-as art-joint-anim jakb-pilot-gun-red-idle-ja)
+          (the-as art-joint-anim (pilot-gun-anim red-idle))
           0.0
           arg0
           0
@@ -1550,7 +1620,7 @@
        (((pickup-type eco-dark))
         (push-anim-to-targ
           (-> self skel top-anim)
-          (the-as art-joint-anim jakb-pilot-gun-dark-idle-ja)
+          (the-as art-joint-anim (pilot-gun-anim dark-idle))
           0.0
           arg0
           0
@@ -1975,9 +2045,9 @@
        )
      )
     (else
-      (seek! (-> self upper-body flex-blend) 0.0 (* 16.0 (seconds-per-frame)))
-      (seek! (-> self upper-body twist z) 0.0 (* 65536.0 (seconds-per-frame)))
-      )
+      (when (nonnull? (-> self gun upper-body))
+        (seek! (-> self gun upper-body flex-blend) 0.0 (* 16.0 (seconds-per-frame)))
+        (seek! (-> self gun upper-body twist z) 0.0 (* 65536.0 (seconds-per-frame)))))
     )
   0
   (none)
@@ -1986,21 +2056,33 @@
 (defbehavior target-gun-joint-pre target ()
   (local-vars (gp-0 art-element))
   (target-gun-joint-pre0)
+  (when (and (nonnull? self (-> self gun) (-> self gun upper-body))
+             (rider-gun-pose? self) (zero? (-> self pilot seat-index)))
+    (set! (-> self gun upper-body flex-blend) 0.0)
+    (set! (-> self gun upper-body twist z) 0.0))
+  (when (nonnull? self (-> self skel))
+    (cond
+      ((and (rider-gun-pose? self) (not (focus-test? self indax)))
+       (set! (-> self skel prebind-function)
+             (if (zero? (-> self pilot seat-index)) prepare-rider-gun-frame! rebase-gun-upper-body!)))
+      ((or (= (-> self skel prebind-function) prepare-rider-gun-frame!)
+           (= (-> self skel prebind-function) rebase-gun-upper-body!))
+       (set! (-> self skel prebind-function) #f))))
   (cond
-    ((focus-test? self pilot-riding)
+    ((pilot-gun-pose? self)
      (let ((v1-3 (-> self gun gun-type)))
        (set! (-> self skel top-anim base-anim) (cond
                                                  ((= v1-3 (pickup-type eco-yellow))
-                                                  jakb-pilot-gun-yellow-idle-ja
+                                                  (pilot-gun-anim yellow-idle)
                                                   )
                                                  ((= v1-3 (pickup-type eco-red))
-                                                  jakb-pilot-gun-red-idle-ja
+                                                  (pilot-gun-anim red-idle)
                                                   )
                                                  ((= v1-3 (pickup-type eco-blue))
-                                                  jakb-pilot-gun-blue-idle-ja
+                                                  (pilot-gun-anim blue-idle)
                                                   )
                                                  (else
-                                                   jakb-pilot-gun-dark-idle-ja
+                                                   (pilot-gun-anim dark-idle)
                                                    )
                                                  )
              )
@@ -2162,58 +2244,55 @@
   (none)
   )
 
+(defun gun-on-ledge? ((self target))
+  (and (nonnull? self (-> self gun) (-> self skel) (-> self draw) (-> self draw art-group))
+       (using-gun? self) (focus-test? self edge-grab)
+       (let ((clip (ja-group)))
+         (and (nonnull? clip)
+              (if (focus-test? self indax)
+                (or (= clip daxter-indax-jump-loop-ja)
+                    (= clip daxter-falling-to-edge-grab-ja)
+                    (= clip daxter-edge-grab-stance0-ja)
+                    (= clip daxter-edge-grab-stance1-ja))
+                (or (= clip jakb-jump-loop-ja)
+                    (= clip jakb-falling-to-edge-grab-ja)
+                    (= clip jakb-edge-grab-stance0-ja)
+                    (= clip jakb-edge-grab-stance1-ja)))))))
+
+(defun place-gun-on-ledge! ((tgt target) (attachment matrix))
+  (when (nonnull? tgt (-> tgt gun) (-> tgt control) (-> tgt edge-grab-state)
+                  (-> tgt edge-grab-state info) (-> tgt node-list) (-> tgt node-list data 0)
+                  (-> tgt node-list data 0 bone) attachment)
+    (let ((offset (new 'static 'vector :y 491.52 :w 1.0))
+          (rotation (new 'static 'vector :x -16384.0 :z -16384.0 :w 1.0))
+          (orientation (new 'stack-no-clear 'quaternion)))
+      (matrix-rotate-xyz! attachment rotation)
+      (matrix->quaternion orientation attachment)
+      (vector+! (-> tgt gun gun-pos trans) (-> tgt edge-grab-state info center-hold) offset)
+      (vector+float*! (-> tgt gun gun-pos trans) (-> tgt gun gun-pos trans)
+                     (-> tgt node-list data 0 bone transform vector 2) 778.24)
+      (quaternion-normalize! (quaternion*! (-> tgt gun gun-pos quat) (-> tgt control quat) orientation))))
+  (none))
+
 (defbehavior target-gun-compute-pos target ()
-  (let ((a1-0 (if (focus-test? self indax)
-                  (-> self node-list data 23 bone transform)
-                  (-> self node-list data 24 bone transform)
-                  )
-              )
-        (a2-0 (cond
-                ((-> self sidekick)
-                 (-> self sidekick 0 node-list data 28 bone transform)
-                 )
-                ((focus-test? self indax)
-                 (-> self node-list data 28 bone transform)
-                 )
-                (else
-                  (-> self node-list data 24 bone transform)
-                  )
-                )
-              )
-        (gp-0 (new 'stack-no-clear 'matrix))
-        )
-    (matrix-lerp! gp-0 a1-0 a2-0 (-> self gun gun-daxter))
+  (let* ((owner (get-target-pose-owner self))
+         (gun-joint (if (nonnull? owner (-> owner node-list)) (cspace-by-name owner "gun") (the-as cspace #f)))
+         (gp-0 (new 'stack-no-clear 'matrix)))
+    (matrix-identity! gp-0)
+    (unless (nonnull? self (-> self gun) (-> self control) gun-joint (-> gun-joint bone))
+      (return gp-0))
+    (let ((passenger (if (nonnull? (-> self sidekick))
+                       (as-type (ppointer->process (-> self sidekick)) sidekick)
+                       (the-as sidekick #f))))
+      (if (and (< 0.0 (-> self gun gun-daxter)) (nonnull? passenger (-> passenger node-list)))
+        (let ((passenger-gun (cspace-by-name passenger "gun")))
+          (if (nonnull? passenger-gun (-> passenger-gun bone))
+            (matrix-lerp! gp-0 (-> gun-joint bone transform) (-> passenger-gun bone transform) (-> self gun gun-daxter))
+            (matrix-copy! gp-0 (-> gun-joint bone transform))))
+        (matrix-copy! gp-0 (-> gun-joint bone transform))))
     (matrix->transformq (-> self gun gun-pos) gp-0)
     (set! (-> self gun gun-pos scale quad) (-> self control scale quad))
-    (when (and (using-gun? self)
-               (and (focus-test? self edge-grab) (let ((v1-18 (ja-group)))
-                                                   (and v1-18 (or (= v1-18 jakb-jump-loop-ja)
-                                                                  (= v1-18 jakb-falling-to-edge-grab-ja)
-                                                                  (= v1-18 jakb-edge-grab-stance0-ja)
-                                                                  (= v1-18 jakb-edge-grab-stance1-ja)
-                                                                  )
-                                                        )
-                                                   )
-                    )
-               )
-      (let ((s4-0 (new 'static 'vector :y 491.52 :w 1.0))
-            (a1-5 (new 'static 'vector :x -16384.0 :z -16384.0 :w 1.0))
-            (s5-0 (new 'stack-no-clear 'quaternion))
-            )
-        (matrix-rotate-xyz! gp-0 a1-5)
-        (matrix->quaternion s5-0 gp-0)
-        (let ((v1-100 (-> self edge-grab-state info)))
-          (vector+! (the-as vector (-> self gun gun-pos)) (-> v1-100 center-hold) s4-0)
-          )
-        (vector+float*!
-          (the-as vector (-> self gun gun-pos))
-          (the-as vector (-> self gun gun-pos))
-          (-> self node-list data 0 bone transform vector 2)
-          778.24
-          )
-        (quaternion-normalize! (quaternion*! (-> self gun gun-pos quat) (-> self control quat) s5-0))
-        )
-      )
+    (when (gun-on-ledge? self) (place-gun-on-ledge! self gp-0))
     gp-0
     )
   )
@@ -2221,7 +2300,7 @@
 (defbehavior target-gun-joint-points target ()
   (when (-> self gun gun)
     (set! (-> self gun gun-daxter)
-          (if (and (focus-test? self pilot-riding)
+          (if (and (focus-test? self pilot-riding) (not (rider-gun-pose? self))
                    (nonzero? (-> self skel float-channels))
                    (= (-> (get-channel (-> self skel top-anim) (the-as int (+ (-> self skel float-channels) -1))) frame-interp 1)
                       1.0
@@ -2242,92 +2321,28 @@
             )
            ((handle->process (-> self gun charge-active?))
             (cond
-              ((and (= (-> v1-24 frame-group) jakb-gun-dark-fire-ja) (>= (-> v1-24 frame-num) 8.5))
+              ((and (not (focus-test? self indax)) (= (-> v1-24 frame-group) jakb-gun-dark-fire-ja) (>= (-> v1-24 frame-num) 8.5))
                (set! (-> v1-24 frame-num) 5.0)
                )
-              ((and (= (-> v1-24 frame-group) jakb-pilot-gun-dark-fire-ja) (>= (-> v1-24 frame-num) 8.0))
+              ((and (= (-> v1-24 frame-group) (pilot-gun-anim dark-fire)) (>= (-> v1-24 frame-num) 8.0))
                (set! (-> v1-24 frame-num) 3.0)
                )
               )
             )
-           ((and (= (-> v1-24 frame-group) jakb-gun-dark-fire-ja) (< (-> v1-24 frame-num) 9.0))
+           ((and (not (focus-test? self indax)) (= (-> v1-24 frame-group) jakb-gun-dark-fire-ja) (< (-> v1-24 frame-num) 9.0))
             (set! (-> v1-24 frame-num) 10.0)
             )
-           ((and (= (-> v1-24 frame-group) jakb-pilot-gun-dark-fire-ja) (< (-> v1-24 frame-num) 9.0))
+           ((and (= (-> v1-24 frame-group) (pilot-gun-anim dark-fire)) (< (-> v1-24 frame-num) 9.0))
             (set! (-> v1-24 frame-num) 9.0)
             )
            )
          )
        (set! (-> self gun active?)
              (and (not (logtest? (surface-flag gun-inactive gun-hide gun-off) (-> self control current-surface flags)))
-                  (and (time-elapsed? (-> self gun gun-get-on-time) (seconds 0.1))
-                       (>= (current-time) (-> self gun surpress-time))
-                       (or (focus-test? self indax) (let ((v1-35 (-> self skel top-anim frame-group))
-                             (f0-13 (-> self skel top-anim frame-num))
-                             )
-                         (and (not (or (= v1-35 jakb-gun-red-takeout-ja)
-                                       (= v1-35 jakb-gun-blue-takeout-ja)
-                                       (= v1-35 jakb-gun-yellow-takeout-ja)
-                                       (= v1-35 jakb-gun-dark-takeout-ja)
-                                       (and jakb-pilot-gun-red-takeout-ja
-                                            (or (= v1-35 jakb-pilot-gun-red-takeout-ja)
-                                                (= v1-35 jakb-pilot-gun-blue-takeout-ja)
-                                                (= v1-35 jakb-pilot-gun-yellow-takeout-ja)
-                                                (= v1-35 jakb-pilot-gun-dark-takeout-ja)
-                                                (= v1-35 jakb-pilot-gun-red-dark-ja)
-                                                (= v1-35 jakb-pilot-gun-red-yellow-ja)
-                                                (= v1-35 jakb-pilot-gun-red-blue-ja)
-                                                (= v1-35 jakb-pilot-gun-yellow-blue-ja)
-                                                )
-                                            )
-                                       (and (= v1-35 jakb-gun-attack-butt-end-ja) (>= 6.8 f0-13))
-                                       (or (and (= v1-35 jakb-gun-attack-butt-blue-end-ja) (>= 6.8 f0-13))
-                                           (= v1-35 jakb-gun-dark-fire-twirl-ja)
-                                           (= v1-35 jakb-gun-yellow-fire-twirl-ja)
-                                           (= v1-35 jakb-gun-transformation-twirl-ja)
-                                           (= v1-35 jakb-gun-front-to-side-hop-ja)
-                                           (= v1-35 jakb-gun-side-to-front-hop-ja)
-                                           (= v1-35 jakb-gun-blue-to-front-hop-ja)
-                                           (= v1-35 jakb-gun-front-to-blue-hop-ja)
-                                           (= v1-35 jakb-gun-hit-from-front-ja)
-                                           (= v1-35 jakb-gun-hit-from-back-ja)
-                                           )
-                                       )
-                                   )
-                              (let ((v1-40 (-> self skel top-anim frame-group-push)))
-                                (not (or (= v1-40 jakb-gun-red-takeout-ja)
-                                         (= v1-40 jakb-gun-blue-takeout-ja)
-                                         (= v1-40 jakb-gun-yellow-takeout-ja)
-                                         (= v1-40 jakb-gun-dark-takeout-ja)
-                                         (and jakb-pilot-gun-red-takeout-ja
-                                              (or (= v1-40 jakb-pilot-gun-red-takeout-ja)
-                                                  (= v1-40 jakb-pilot-gun-blue-takeout-ja)
-                                                  (= v1-40 jakb-pilot-gun-yellow-takeout-ja)
-                                                  (= v1-40 jakb-pilot-gun-dark-takeout-ja)
-                                                  (= v1-40 jakb-pilot-gun-red-dark-ja)
-                                                  (= v1-40 jakb-pilot-gun-red-yellow-ja)
-                                                  (= v1-40 jakb-pilot-gun-red-blue-ja)
-                                                  (= v1-40 jakb-pilot-gun-yellow-blue-ja)
-                                                  )
-                                              )
-                                         (= v1-40 jakb-gun-dark-fire-twirl-ja)
-                                         (= v1-40 jakb-gun-yellow-fire-twirl-ja)
-                                         (= v1-40 jakb-gun-transformation-twirl-ja)
-                                         (= v1-40 jakb-gun-front-to-side-hop-ja)
-                                         (= v1-40 jakb-gun-side-to-front-hop-ja)
-                                         (= v1-40 jakb-gun-blue-to-front-hop-ja)
-                                         (= v1-40 jakb-gun-front-to-blue-hop-ja)
-                                         (= v1-40 jakb-gun-hit-from-front-ja)
-                                         (= v1-40 jakb-gun-hit-from-back-ja)
-                                         )
-                                     )
-                                )
-                              )
-                         )
-                       )
-                    )
-                  )
-             )
+                  (time-elapsed? (-> self gun gun-get-on-time) (seconds 0.1))
+                  (>= (current-time) (-> self gun surpress-time))
+                  (gun-animation-allows-fire? (-> self skel top-anim frame-group) (-> self skel top-anim frame-num) #t)
+                  (gun-animation-allows-fire? (-> self skel top-anim frame-group-push) 0.0 #f)))
        (if (-> self gun active?)
            (set-time! (-> self gun active-time))
            )
@@ -2437,17 +2452,16 @@
          (case (-> gp-0 gun-type)
            (((pickup-type eco-blue))
             (cond
-              ((focus-test? self indax))
-              ((focus-test? self pilot-riding)
+              ((pilot-gun-pose? self)
                (let ((v1-15 (get-channel (-> self skel top-anim) 0)))
-                 (when (not (or (= (-> self skel top-anim frame-group) jakb-pilot-gun-blue-fire-ja)
-                                (and v1-15 (= (-> v1-15 frame-group) jakb-pilot-gun-blue-fire-ja))
+                 (when (not (or (= (-> self skel top-anim frame-group) (pilot-gun-anim blue-fire))
+                                (and v1-15 (= (-> v1-15 frame-group) (pilot-gun-anim blue-fire)))
                                 )
                             )
                    (if (< 4096.0 (-> self control ctrl-xz-vel))
                        (push-anim-to-targ
                          (-> self skel top-anim)
-                         (the-as art-joint-anim jakb-pilot-gun-blue-fire-single-ja)
+                         (the-as art-joint-anim (pilot-gun-anim blue-fire-single))
                          1.0
                          9
                          9
@@ -2457,7 +2471,7 @@
                          )
                        (push-anim-to-targ
                          (-> self skel top-anim)
-                         (the-as art-joint-anim jakb-pilot-gun-blue-fire-single-ja)
+                         (the-as art-joint-anim (pilot-gun-anim blue-fire-single))
                          1.0
                          6
                          6
@@ -2471,7 +2485,7 @@
                )
               (else
                 (let ((v1-32 (get-channel (-> self skel top-anim) 0)))
-                  (when (not (or (= (-> self skel top-anim frame-group) jakb-gun-blue-fire-ja)
+                  (when (not (or (and (not (focus-test? self indax)) (= (-> self skel top-anim frame-group) jakb-gun-blue-fire-ja))
                                  (and v1-32 (= (-> v1-32 frame-group) jakb-gun-blue-fire-ja))
                                  )
                              )
@@ -2505,11 +2519,10 @@
             )
            (((pickup-type eco-yellow))
             (cond
-              ((focus-test? self indax))
-              ((focus-test? self pilot-riding)
+              ((pilot-gun-pose? self)
                (push-anim-to-targ
                  (-> self skel top-anim)
-                 (the-as art-joint-anim jakb-pilot-gun-yellow-fire-ja)
+                 (the-as art-joint-anim (pilot-gun-anim yellow-fire))
                  0.0
                  15
                  0
@@ -2545,11 +2558,10 @@
                          )
                   )
               (cond
-                ((focus-test? self indax))
-                ((focus-test? self pilot-riding)
+                ((pilot-gun-pose? self)
                  (push-anim-to-targ
                    (-> self skel top-anim)
-                   (the-as art-joint-anim jakb-pilot-gun-red-fire-ja)
+                   (the-as art-joint-anim (pilot-gun-anim red-fire))
                    0.0
                    15
                    0
@@ -2625,11 +2637,10 @@
             )
            (((pickup-type eco-dark))
             (cond
-              ((focus-test? self indax))
-              ((focus-test? self pilot-riding)
+              ((pilot-gun-pose? self)
                (push-anim-to-targ
                  (-> self skel top-anim)
-                 (the-as art-joint-anim jakb-pilot-gun-dark-fire-ja)
+                 (the-as art-joint-anim (pilot-gun-anim dark-fire))
                  0.0
                  0
                  15
@@ -2682,7 +2693,11 @@
   (when (using-gun? self)
     (let ((gp-0 (-> self gun)))
       (cond
-        ((and (focus-test? self pilot-riding) (nonzero? (-> self skel float-channels)))
+        ((focus-test? self indax))
+        ((rider-gun-pose? self)
+         (set-gun-joint-mask! self (-> self skel top-anim) (nonzero? (-> self pilot seat-index))))
+        ((and (focus-test? self pilot-riding) (not (rider-gun-pose? self))
+              (nonzero? (-> self skel float-channels)))
          (set! (-> self skel top-anim interp-select 0) (the-as uint #x800000))
          (set! (-> self skel top-anim interp-select 1) (the-as uint 0))
          0
@@ -2804,8 +2819,8 @@
                              (logtest? (state-flags sf16) (-> self state-flags))
                              (logtest? (-> self game secrets) (game-secrets endless-ammo))
                              )
-                         (and (-> gp-0 active?) (not (or (= (-> self skel top-anim frame-group) jakb-gun-blue-fire-ja)
-                                                         (= (-> self skel top-anim frame-group) jakb-pilot-gun-blue-fire-ja)
+                         (and (-> gp-0 active?) (not (or (and (not (focus-test? self indax)) (= (-> self skel top-anim frame-group) jakb-gun-blue-fire-ja))
+                                                         (= (-> self skel top-anim frame-group) (pilot-gun-anim blue-fire))
                                                          )
                                                      )
                               )
@@ -2817,8 +2832,8 @@
              (set! (-> self gun top-anim-blue-cycle) f0-24)
              (push-anim-to-targ
                (-> self skel top-anim)
-               (the-as art-joint-anim (if (focus-test? self pilot-riding)
-                                          jakb-pilot-gun-blue-fire-ja
+               (the-as art-joint-anim (if (pilot-gun-pose? self)
+                                          (pilot-gun-anim blue-fire)
                                           jakb-gun-blue-fire-ja
                                           )
                        )
@@ -2914,7 +2929,7 @@
   (none)
   )
 
-(defbehavior target-gun-real-post target ()
+(defbehavior target-gun-post target ()
   (let ((f30-0 (-> self clock clock-ratio)))
     (let ((gp-1 (max 1 (the int (-> self clock time-adjust-ratio)))))
       (update-rates! (-> self clock) (/ f30-0 (the float gp-1)))
@@ -3045,13 +3060,5 @@
   (joint-points)
   (do-target-gspot)
   (target-powerup-process)
-  (none)
-  )
-
-(defbehavior target-gun-post target ()
-  (target-gun-real-post)
-  (when (focus-test? self indax)
-    (daxter-gun-update-eco-aura!)
-    )
   (none)
   )

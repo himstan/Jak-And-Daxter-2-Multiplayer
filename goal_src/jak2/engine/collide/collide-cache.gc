@@ -821,6 +821,12 @@
 (defmethod-mips2c "(method 10 collide-cache-prim)" 10 collide-cache-prim)
 
 (defmethod fill-and-probe-using-spheres ((this collide-cache) (arg0 collide-query))
+  (when (and (nonnull? arg0 *target* (-> *target* control) *collide-edge-work*)
+             (= (-> *collide-edge-work* cshape) (-> *target* control))
+             (= (-> arg0 num-spheres) 6)
+             (or (= (-> arg0 spheres) (-> *collide-edge-work* world-player-hanging-spheres))
+                 (= (-> arg0 spheres) (-> *collide-edge-work* world-player-leap-up-spheres))))
+    (set! (-> arg0 ignore-process0) *target*))
   (fill-using-spheres this arg0)
   (probe-using-spheres this arg0)
   )

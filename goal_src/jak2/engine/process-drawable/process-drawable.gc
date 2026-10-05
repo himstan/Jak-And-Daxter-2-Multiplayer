@@ -409,6 +409,11 @@
       (return 0))
 
   (with-pp
+    (when (and (nonnull? arg1)
+               (logtest? (-> arg1 status) (joint-control-status external-pose)))
+      (when (nonnull? (-> arg1 postbind-function))
+        ((-> arg1 postbind-function) this arg0 arg1))
+      (return 0))
     (cond
       ((logtest? (-> this status) (draw-control-status no-draw no-draw-temp))
        )

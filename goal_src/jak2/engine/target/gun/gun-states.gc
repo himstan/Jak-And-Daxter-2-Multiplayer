@@ -14,7 +14,7 @@
        (let ((gp-0 (-> block param 0))
              (v0-0 (if (focus-test? self indax) (target-indax-handler proc argc message block) (target-standard-event-handler proc argc message block)))
              )
-         (when v0-0
+         (when (and v0-0 (not (focus-test? self indax)))
            (cond
              ((= gp-0 2)
               (if (logtest? (-> self game features) (game-feature gun-upgrade-speed))
@@ -118,7 +118,7 @@
   :code (behavior ()
     (local-vars (v1-232 object))
     (let ((gp-0 (-> self skel top-anim frame-targ)))
-      (when (and gp-0 (or (= gp-0 jakb-gun-red-takeout-ja)
+      (when (and (not (focus-test? self indax)) gp-0 (or (= gp-0 jakb-gun-red-takeout-ja)
                 (= gp-0 jakb-gun-yellow-takeout-ja)
                 (= gp-0 jakb-gun-blue-takeout-ja)
                 (= gp-0 jakb-gun-dark-takeout-ja)
@@ -134,12 +134,6 @@
     (while (using-gun? self)
       (let* ((v1-33 (-> self gun gun-type))
              (gp-1 (cond
-                     ((and (focus-test? self indax)
-                           (-> self gun)
-                           (nonzero? (-> self gun))
-                           (not (time-elapsed? (-> self gun fire-time) (seconds 0.45))))
-                      daxter-indax-running-attack-ja
-                      )
                      ((focus-test? self indax)
                       daxter-indax-stance-ja
                       )
@@ -283,7 +277,7 @@
     )
     (let ((gp-2 (-> self skel top-anim frame-targ)))
       (cond
-         ((and gp-2 (or (= gp-2 jakb-gun-red-takeout-ja) (= gp-2 jakb-gun-yellow-takeout-ja) (= gp-2 jakb-gun-dark-takeout-ja)))
+         ((and (not (focus-test? self indax)) gp-2 (or (= gp-2 jakb-gun-red-takeout-ja) (= gp-2 jakb-gun-yellow-takeout-ja) (= gp-2 jakb-gun-dark-takeout-ja)))
          (ja-channel-push! 1 (seconds 0.1))
          (ja-no-eval :group! gp-2 :num! (seek! 0.0) :frame-num max)
          (until (ja-done? 0)

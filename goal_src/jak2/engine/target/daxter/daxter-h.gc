@@ -3,6 +3,9 @@
 
 (define *indax-walk-anim-speed* 0.65)
 
+(define-extern daxter-bind-pose! (function target none))
+(define-extern daxter-unbind-pose! (function target none))
+
 (define-extern *indax-walk-mods* surface)
 (define-extern *indax-jump-mods* surface)
 (define-extern *indax-double-jump-mods* surface)
@@ -16,7 +19,6 @@
 (define-extern target-indax-init (function symbol none :behavior target))
 (define-extern target-indax-align! (function symbol :behavior target))
 (define-extern target-indax-exit (function none :behavior target))
-(define-extern target-indax-real-post (function none :behavior target))
 (define-extern target-indax-post (function none :behavior target))
 (define-extern target-indax-walk-anim (function none :behavior target))
 (define-extern target-indax-stance (state target))
@@ -38,7 +40,6 @@
 (define-extern target-indax-grab (state symbol target))
 (define-extern target-indax-attack (state target))
 (define-extern target-indax-attack-air (state symbol target))
-(define-extern daxter-gun-update-eco-aura! (function none :behavior target))
 (define-extern target-indax-uppercut-go (function object))
 (define-extern target-indax-attack-uppercut (state float float target))
 (define-extern target-indax-attack-uppercut-jump (state float float target))

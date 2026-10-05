@@ -8,10 +8,18 @@
 (define-extern *setting-control* setting-control)
 (define-extern can-exit-duck? (function target symbol))
 (define-extern target-collide-set! (function symbol float int :behavior target))
+(define-extern get-jak-rider (function target target))
 
 (declare-type gun-blue-shot projectile)
 (declare-type gun-yellow-shot projectile)
 (declare-type gun-red-shot process-drawable)
+
+(define *daxter-gun-scale* 0.75)
+
+(defmacro pilot-gun-anim (name)
+  `(if (focus-test? self indax)
+     ,(string->symbol-format "daxter-pilot-gun-{}-ja" name)
+     ,(string->symbol-format "jakb-pilot-gun-{}-ja" name)))
 
 (defenum gun-track-flags
   :bitfield #t
@@ -156,7 +164,7 @@
   (local-vars (v1-36 symbol))
   (and (logtest? (-> arg0 game features) (game-feature gun))
        (nonzero? (-> arg0 gun))
-       (time-elapsed? (-> arg0 gun gun-time) (if (mp-target-daxter? arg0) (seconds 0.3) (seconds 0.1)))
+       (time-elapsed? (-> arg0 gun gun-time) (seconds 0.1))
        (not (focus-test? arg0 dead hit board mech dark teleporting))
        (not (logtest? (surface-flag gun-inactive gun-hide gun-off) (-> arg0 control current-surface flags)))
        (not (logtest? (state-flags prevent-gun) (-> arg0 state-flags)))
@@ -185,6 +193,40 @@
 (defun using-gun? ((arg0 target))
   (and (nonzero? (-> arg0 gun)) (nonzero? (-> arg0 gun gun-type)))
   )
+
+(defun daxter-stadium-bike? ((tgt target))
+  (and (nonnull? tgt (-> tgt pilot))
+       (-> tgt pilot as-daxter?)
+       (let ((vehicle (handle->process (-> tgt pilot vehicle))))
+         (and (nonnull? vehicle (-> vehicle type))
+              (case (-> vehicle type symbol)
+                (('race-bike-d 'race-bike-e) #t)
+                (else #f))))))
+
+(defun rider-gun-pose? ((tgt target))
+  (if (and (nonnull? tgt (-> tgt pilot)) (focus-test? tgt pilot-riding)
+           (not (daxter-stadium-bike? tgt))
+           (or (and (focus-test? tgt indax) (zero? (-> tgt pilot seat-index)))
+               (and (not (focus-test? tgt indax))
+                    (not (and (!= (-> tgt riding-along-player-id) MP_INVALID_PLAYER_ID)
+                              (nonnull? (get-jak-rider tgt))))))) #t #f))
+
+(defun pilot-gun-pose? ((tgt target))
+  (if (and (nonnull? tgt)
+           (or (focus-test? tgt indax)
+               (and (focus-test? tgt pilot-riding) (not (rider-gun-pose? tgt))))) #t #f))
+
+(defun gun-upper-body-overlay? ((skel joint-control))
+  (if (and (nonnull? skel) (nonzero? (-> skel float-channels))
+           (= (-> skel generate-frame-function) create-interpolated2-joint-animation-frame)) #t #f))
+
+(defun rider-hand-ik? ((tgt target) (hand int))
+  (if (and (nonnull? tgt)
+           (or (not (rider-gun-pose? tgt))
+               (not (nonnull? (-> tgt gun)))
+               (not (or (using-gun? tgt) (gun-upper-body-overlay? (-> tgt skel))))
+               (and (or (focus-test? tgt indax) (zero? (-> tgt pilot seat-index)))
+                    (!= hand (if (focus-test? tgt indax) 0 1))))) #t #f))
 
 (defun enabled-gun? ((arg0 target))
   (and (nonzero? (-> arg0 gun)) (nonzero? (-> arg0 gun using-gun-type)))

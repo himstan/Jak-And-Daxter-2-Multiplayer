@@ -291,6 +291,18 @@
     )
   )
 
+(defbehavior target-daxter-passenger-anim-loop target ()
+  (when (nonnull? self (-> self pilot))
+    (let ((passenger-anim (if (zero? (-> self pilot stance))
+                          daxter-gun-stance-ja daxter-duck-stance-ja)))
+      (ja-channel-push! 1 (seconds 0.15))
+      (until #f
+        (ja-no-eval :group! passenger-anim :num! (seek!) :frame-num 0.0)
+        (until (ja-done? 0)
+          (suspend)
+          (ja :num! (seek!))))))
+  (none))
+
 (defstate target-pilot-stance (target)
   :event target-pilot-handler
   :exit target-pilot-exit
@@ -303,6 +315,10 @@
     (set! (-> self control mod-surface) *pilot-mods*)
     (logior! (-> self control status) (collide-status on-surface on-ground))
     (cond
+      ((and (nonnull? self (-> self pilot)) (-> self pilot as-daxter?)
+            (nonzero? (-> self pilot seat-index)) (not (daxter-stadium-bike? self)))
+       (target-daxter-passenger-anim-loop)
+       )
       ((-> self pilot as-daxter?)
        (target-daxter-pilot-car-anim-loop)
        )

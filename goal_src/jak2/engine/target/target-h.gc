@@ -19,6 +19,9 @@
 (declare-type turret-info basic)
 (declare-type sparticle-launcher basic)
 
+(define-extern daxter-update-render-pose! (function sidekick none))
+(define-extern get-daxter-pose-owner (function target sidekick))
+
 ;; NOTE - for level-info, defined in `logic-target`
 (define-extern start (function symbol continue-point target))
 
@@ -389,6 +392,9 @@
    (mirror               (pointer process-drawable))
    (upper-body           joint-mod)
    (head                 joint-mod)
+   (neck                 joint-mod)
+   (arm-ik               joint-mod-ik 2)
+   (pose-time            time-frame)
    )
   (:states
     sidekick-clone

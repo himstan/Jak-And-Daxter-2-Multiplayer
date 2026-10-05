@@ -463,8 +463,8 @@
   "hud-ring-ag.go"
   "jakb-ag.go"
   "daxter-ag.go"
+  "daxter-anim.o" ;; added
   "daxter.o" ;; added
-  "daxter-aura.o" ;; added
   "daxter-stance.o" ;; added
   "daxter-walk.o" ;; added
   "daxter-duck.o" ;; added
