@@ -119,6 +119,8 @@
   (apply-settings *setting-control*)
   (let ((start-time (mp-death-spectate-now)))
     (loop
+      (while (or (mp-session-reconnecting?) (mp-session-terminal?))
+        (suspend))
       (when (not (mp-spectate-requested?))
         (remove-setting! 'mode-name)
         (return #t))
