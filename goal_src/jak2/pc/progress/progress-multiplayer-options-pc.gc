@@ -55,7 +55,7 @@
 (define-extern draw-generic-stacked-option-label (function menu-generic-option progress font-context int symbol none))
 
 (defun can-edit-host-options? ()
-  (or (not (mp-session-active?)) (mp-session-host?)))
+  (or (not (mp-session-active?)) (= (pc-multi-is-lobby-host) 1)))
 
 (defun get-host-rule-value ((field int))
   (when (and (mp-session-active?) (not (mp-session-host?)) (nonnull? *mp-world-state*))
@@ -233,6 +233,10 @@
         :max-bytes 5
         :allowed-characters "0123456789"
         :session (new 'static 'pc-text-input-session))
+      (new 'static 'menu-generic-button-option
+        :name (text-id progress-multiplayer-reset-defaults)
+        :should-disable? (lambda () (not (can-edit-host-options?)))
+        :on-confirm (lambda ((the-progress progress)) (reset-multiplayer-option-defaults! 2)))
       (progress-new-generic-link-to-scrolling-page (text-id progress-multiplayer-connection-options)
         :on-load (lambda () (mp-load-multiplayer-options!))
         (new 'static 'menu-generic-carousel-option
@@ -282,8 +286,4 @@
             (none)))
         (new 'static 'menu-generic-button-option
           :name (text-id progress-multiplayer-reset-defaults)
-          :on-confirm (lambda ((the-progress progress)) (reset-multiplayer-option-defaults! 3))))
-       (new 'static 'menu-generic-button-option
-               :name (text-id progress-multiplayer-reset-defaults)
-               :should-disable? (lambda () (not (can-edit-host-options?)))
-               :on-confirm (lambda ((the-progress progress)) (reset-multiplayer-option-defaults! 2))))))
+          :on-confirm (lambda ((the-progress progress)) (reset-multiplayer-option-defaults! 3)))))))
