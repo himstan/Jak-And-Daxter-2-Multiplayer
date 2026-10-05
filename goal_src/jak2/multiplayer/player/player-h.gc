@@ -244,6 +244,7 @@
 (define-extern player-projectile-contact! (function projectile none))
 (define-extern player-friendly-attack-blocked? (function process symbol))
 (define-extern player-position-clear? (function target vector symbol))
+(define-extern player-set-ride-contact! (function target symbol none))
 (define-extern mp-session-host? (function symbol))
 (define-extern mp-session-client? (function symbol))
 (define-extern *mp-culling-override-mask* uint)

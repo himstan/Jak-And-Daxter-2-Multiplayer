@@ -44,10 +44,14 @@
 
 (defun release-ride-along! ((rider target))
   (when (nonnull? rider)
+    (when (and (nonnull? (-> rider indax))
+               (mp-player-id-valid? (the uint (-> rider riding-along-player-id))))
+      (set! (-> rider indax departing-player-id) (-> rider riding-along-player-id)))
     (let ((jak-target (mp-player-target-by-id (-> rider riding-along-player-id))))
       (when (and (nonnull? jak-target) (= (-> jak-target riding-along-player-id) (-> rider player-id)))
         (set! (-> jak-target riding-along-player-id) MP_INVALID_PLAYER_ID)))
-    (set! (-> rider riding-along-player-id) MP_INVALID_PLAYER_ID))
+    (set! (-> rider riding-along-player-id) MP_INVALID_PLAYER_ID)
+    (player-set-ride-contact! rider #t))
   (none))
 
 (defun get-ride-along-position! ((position vector) (jak-target target))
@@ -106,6 +110,7 @@
       (set! (-> self control transv quad) (the-as uint128 0))
       (set! (-> self control ctrl-xz-vel) 0.0)
       (set! (-> self control root-prim prim-core action) (collide-action))
+      (player-set-ride-contact! self #f)
       (logior! (-> self focus-status) (focus-status indax ignore))
       (logior! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
       (when (and (not-player-replica? self) (mp-target-daxter? self))
@@ -183,7 +188,8 @@
       (set! (-> self control transv quad) (the-as uint128 0))
       (vector-copy! (-> self alt-cam-pos) (-> self control trans))
       (logclear! (-> self draw status) (draw-control-status no-draw))
-      (logior! (-> self draw status) (draw-control-status no-draw-bounds2)))
+      (logior! (-> self draw status) (draw-control-status no-draw-bounds2))
+      (player-set-ride-contact! self #f))
   :exit
     (behavior ()
       (unless (and (nonnull? (-> self next-state)) (= (-> self next-state name) 'target-ride-along))

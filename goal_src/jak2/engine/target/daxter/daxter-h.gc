@@ -75,6 +75,7 @@
 (define-extern skel-sidekick skeleton-group)
 
 (deftype indax-info (basic)
-  ((indax-start-time time-frame)
-   (indax-time       time-frame)
-   (art-group-backup art-group)))
+  ((indax-start-time    time-frame)
+   (indax-time          time-frame)
+   (art-group-backup    art-group)
+   (departing-player-id uint8)))

@@ -226,7 +226,12 @@
   (target-exit)
   (logior! (-> self game features) (game-feature sidekick))
   (target-sidekick-setup #t)
-  (if (zero? (-> self indax)) (set! (-> self indax) (new 'process 'indax-info)))
+  (when (not (nonnull? (-> self indax)))
+    (set! (-> self indax) (new 'process 'indax-info))
+    (when (nonnull? (-> self indax))
+      (set! (-> self indax departing-player-id) MP_INVALID_PLAYER_ID)))
+  (when (and reset-velocity? (nonnull? (-> self indax)))
+    (set! (-> self indax departing-player-id) MP_INVALID_PLAYER_ID))
   (set! (-> self riding-along-player-id) MP_INVALID_PLAYER_ID)
   (set! (-> self control reaction) target-collision-reaction)
   (when reset-velocity?
