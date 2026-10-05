@@ -4,7 +4,7 @@
 #include <cstdint>
 
 #include "game/multiplayer/jak2/core/multiplayer_types.h"
-#include "game/multiplayer/jak2/player_appearance.h"
+#include "game/multiplayer/jak2/player_skin.h"
 
 inline constexpr size_t kMultiplayerPlayerNameSize = 16;
 inline constexpr uint32_t kMPMaxPlayers = 8;

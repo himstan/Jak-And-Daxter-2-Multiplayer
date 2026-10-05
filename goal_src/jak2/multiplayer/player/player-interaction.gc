@@ -179,7 +179,8 @@
   #t)
 
 (defun player-update-departure-contact! ((player target))
-  (when (and (player-body-shape-ready? player) (nonnull? (-> player indax))
+  (when (and (player-body-shape-ready? player)
+             (nonnull? (-> player indax))
              (!= (-> player indax departing-player-id) MP_INVALID_PLAYER_ID))
     (let ((other (mp-player-target-by-id (-> player indax departing-player-id))))
       (when (or (not (player-target-alive? player))

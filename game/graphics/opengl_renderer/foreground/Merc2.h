@@ -1,7 +1,7 @@
 #pragma once
 #include <array>
 #include "game/graphics/opengl_renderer/BucketRenderer.h"
-#include "game/multiplayer/jak2/player_appearance.h"
+#include "game/multiplayer/jak2/player_skin.h"
 
 struct MercDebugStats {
   int num_models = 0;
@@ -243,8 +243,8 @@ class Merc2 {
     u32 first_bone;
     float darkjak_interp = -1.f;
     u32 eye_instance_id = UINT32_MAX;
-    std::array<u32, kMPPlayerAppearanceSlotCount> player_tint_colors = {};
-    std::array<float, kMPPlayerAppearanceSlotCount> player_tint_strengths = {};
+    std::array<u32, kMPPlayerSkinSlotCount> player_tint_colors = {};
+    std::array<float, kMPPlayerSkinSlotCount> player_tint_strengths = {};
     u32 player_tint_character = 0;
     const std::vector<u8>* player_tint_texture_groups = nullptr;
   };

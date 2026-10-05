@@ -1,6 +1,6 @@
 (in-package goal)
 
-(defconstant MP_PLAYER_APPEARANCE_SLOT_COUNT 32)
+(defconstant MP_PLAYER_SKIN_SLOT_COUNT 32)
 (defconstant MP_PLAYER_LEVEL_SLOT_COUNT 6)
 (defconstant MP_PLAYER_LEVEL_MODE_MASK #x03)
 (defconstant MP_PLAYER_LEVEL_FORCE_VIS #x04)
@@ -9,7 +9,7 @@
 (defconstant MP_PLAYER_LEVEL_BORROW_OWNER_SHIFT 4)
 (defconstant MP_PLAYER_LEVEL_BORROW_SLOT #x80)
 
-(defenum mp-player-appearance-group
+(defenum mp-player-skin-group
   (primary 0)
   (jak-jacket 1)
   (jak-armor 2)
@@ -23,9 +23,9 @@
   (daxter-hat 16)
   (daxter-fur 17))
 
-(deftype mp-player-appearance (structure)
-  ((colors    uint32 MP_PLAYER_APPEARANCE_SLOT_COUNT)
-   (strengths float MP_PLAYER_APPEARANCE_SLOT_COUNT))
+(deftype mp-player-skin (structure)
+  ((colors    uint32 MP_PLAYER_SKIN_SLOT_COUNT)
+   (strengths float MP_PLAYER_SKIN_SLOT_COUNT))
   :size-assert 256)
 
 (defenum mp-target-state-id

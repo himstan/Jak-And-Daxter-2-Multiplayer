@@ -41,8 +41,8 @@ multiplayer::platform::PlayerProfile local_profile() {
   multiplayer::platform::PlayerProfile profile;
   profile.display_name = std::move(identity.display_name);
   profile.character = identity.preferred_character;
-  const auto* begin = reinterpret_cast<const uint8_t*>(&preferences.player_appearance);
-  profile.game_extension.assign(begin, begin + sizeof(preferences.player_appearance));
+  const auto* begin = reinterpret_cast<const uint8_t*>(&preferences.player_skin);
+  profile.game_extension.assign(begin, begin + sizeof(preferences.player_skin));
   for (const auto session = runtime().snapshot().session; const auto& player : session.players) {
     if (player.player_id == session.state.local_player_id) {
       profile.player_id = player.player_id;
@@ -332,10 +332,10 @@ static int pc_multi_set_preferences(const u32 preferences_ptr) {
       (session.state.status != multiplayer::platform::SessionStatus::LOBBY || profile.ready ||
        session.countdown_active))
     return 0;
-  const bool profile_changed =
-      character_changed || preferences.player_name != previous.player_name ||
-      preferences.player_appearance.colors != previous.player_appearance.colors ||
-      preferences.player_appearance.strengths != previous.player_appearance.strengths;
+  const bool profile_changed = character_changed ||
+                               preferences.player_name != previous.player_name ||
+                               preferences.player_skin.colors != previous.player_skin.colors ||
+                               preferences.player_skin.strengths != previous.player_skin.strengths;
   if (!set_multiplayer_preferences(std::move(preferences)))
     return 0;
   if (profile_changed && session.state.role != multiplayer::platform::SessionRole::NONE) {
@@ -407,12 +407,12 @@ static int pc_multi_lobby_is_countdown() {
   return runtime().snapshot().session.countdown_active ? 1 : 0;
 }
 
-static int pc_multi_lobby_set_appearance(const u32 appearance_ptr) {
-  MPPlayerAppearance appearance = {};
-  if (!multiplayer::jak2::bridge::read_appearance(appearance_ptr, appearance)) {
+static int pc_multi_lobby_set_skin(const u32 skin_ptr) {
+  MPPlayerSkin skin = {};
+  if (!multiplayer::jak2::bridge::read_skin(skin_ptr, skin)) {
     return 0;
   }
-  if (!set_player_appearance(appearance)) {
+  if (!set_player_skin(skin)) {
     return 0;
   }
   auto profile = local_profile();
@@ -529,7 +529,7 @@ void init_jak2_bridge() {
   register_symbol("pc-multi-lobby-get-countdown-remaining-ms",
                   &pc_multi_lobby_get_countdown_remaining_ms);
   register_symbol("pc-multi-lobby-is-countdown", &pc_multi_lobby_is_countdown);
-  register_symbol("pc-multi-lobby-set-appearance", &pc_multi_lobby_set_appearance);
+  register_symbol("pc-multi-lobby-set-skin", &pc_multi_lobby_set_skin);
   register_symbol("pc-multi-get-host-lifecycle", &pc_multi_get_host_lifecycle);
   register_symbol("pc-multi-get-host-mapping-state", &pc_multi_get_host_mapping_state);
   register_symbol("pc-multi-get-host-port", &pc_multi_get_host_port);

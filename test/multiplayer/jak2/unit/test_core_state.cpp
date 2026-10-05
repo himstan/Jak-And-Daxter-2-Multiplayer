@@ -19,7 +19,7 @@ ApplyContext from(const PlayerId source,
 PlayerIdentity identity(const PlayerId player_id) {
   PlayerIdentity result = {.player_id = player_id,
                            .character = PlayerCharacter::JAK,
-                           .appearance = get_default_player_appearance(0x112233)};
+                           .skin = get_default_player_skin(0x112233)};
   result.name[0] = 'J';
   result.name[1] = 'a';
   result.name[2] = 'k';
@@ -27,14 +27,14 @@ PlayerIdentity identity(const PlayerId player_id) {
 }
 }  // namespace
 
-TEST(Jak2Replication, IdentityUsesSharedAppearanceValidation) {
+TEST(Jak2Replication, IdentityUsesSharedSkinValidation) {
   ReplicationState state;
   auto valid = identity(1);
   ASSERT_TRUE(state.update_player_identity(valid));
   EXPECT_TRUE(state.players().identities()[1].joined);
 
   auto invalid = identity(2);
-  invalid.appearance.colors[5] = 0xff000000u;
+  invalid.skin.colors[5] = 0xff000000u;
   EXPECT_FALSE(state.update_player_identity(invalid));
   EXPECT_FALSE(state.players().identities()[2].joined);
 }

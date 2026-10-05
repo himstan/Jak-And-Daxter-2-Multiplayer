@@ -66,10 +66,10 @@
               (visual-secrets (if (= character (mp-player-character jak)) (mp-local-player-visual-secrets) (the-as mp-player-visual-secrets 0))))
           (if (nonnull? owner)
             (begin
-              (mp-apply-render-appearance! draw-control (-> owner identity appearance))
+              (mp-apply-render-skin! draw-control (-> owner identity skin))
               (set! visual-secrets
                     (if (= (-> owner identity player-id) (mp-local-player-id)) (mp-local-player-visual-secrets) (-> owner action visual-secrets))))
-            (mp-clear-render-appearance! draw-control))
+            (mp-clear-render-skin! draw-control))
           (when (type? actor-process manipy)
             (cutscene-apply-visual-secrets! (the-as manipy actor-process) character visual-secrets))))))
   (none))

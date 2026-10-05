@@ -10,7 +10,7 @@
 
 using multiplayer::platform::PlayerCharacter;
 
-enum class MPPlayerAppearanceGroup : uint32_t {
+enum class MPPlayerSkinGroup : uint32_t {
   PRIMARY = 0,
   JAK_JACKET = 1,
   JAK_ARMOR = 2,
@@ -31,30 +31,28 @@ enum class MPPlayerTintPolicy : uint8_t {
   WHITE_BASE = 1,
 };
 
-inline constexpr size_t kMPPlayerAppearanceSlotCount = 32;
-inline constexpr size_t kMPJakAppearanceSlotBegin = 1;
-inline constexpr size_t kMPJakAppearanceSlotEnd = 16;
-inline constexpr size_t kMPDaxterAppearanceSlotBegin = 16;
-inline constexpr size_t kMPDaxterAppearanceSlotEnd = kMPPlayerAppearanceSlotCount;
-inline constexpr uint8_t kMPInvalidPlayerAppearanceSlot = 0xff;
+inline constexpr size_t kMPPlayerSkinSlotCount = 32;
+inline constexpr size_t kMPJakSkinSlotBegin = 1;
+inline constexpr size_t kMPJakSkinSlotEnd = 16;
+inline constexpr size_t kMPDaxterSkinSlotBegin = 16;
+inline constexpr size_t kMPDaxterSkinSlotEnd = kMPPlayerSkinSlotCount;
+inline constexpr uint8_t kMPInvalidPlayerSkinSlot = 0xff;
 
-static_assert(kMPJakAppearanceSlotBegin < kMPJakAppearanceSlotEnd);
-static_assert(kMPJakAppearanceSlotEnd == kMPDaxterAppearanceSlotBegin);
-static_assert(kMPDaxterAppearanceSlotEnd <= kMPInvalidPlayerAppearanceSlot);
-static_assert(static_cast<size_t>(MPPlayerAppearanceGroup::JAK_GLOVES) < kMPJakAppearanceSlotEnd);
-static_assert(static_cast<size_t>(MPPlayerAppearanceGroup::DAXTER_HAT) >=
-              kMPDaxterAppearanceSlotBegin);
-static_assert(static_cast<size_t>(MPPlayerAppearanceGroup::DAXTER_FUR) <
-              kMPDaxterAppearanceSlotEnd);
+static_assert(kMPJakSkinSlotBegin < kMPJakSkinSlotEnd);
+static_assert(kMPJakSkinSlotEnd == kMPDaxterSkinSlotBegin);
+static_assert(kMPDaxterSkinSlotEnd <= kMPInvalidPlayerSkinSlot);
+static_assert(static_cast<size_t>(MPPlayerSkinGroup::JAK_GLOVES) < kMPJakSkinSlotEnd);
+static_assert(static_cast<size_t>(MPPlayerSkinGroup::DAXTER_HAT) >= kMPDaxterSkinSlotBegin);
+static_assert(static_cast<size_t>(MPPlayerSkinGroup::DAXTER_FUR) < kMPDaxterSkinSlotEnd);
 
-struct MPPlayerAppearance {
-  std::array<uint32_t, kMPPlayerAppearanceSlotCount> colors = {};
-  std::array<float, kMPPlayerAppearanceSlotCount> strengths = {};
+struct MPPlayerSkin {
+  std::array<uint32_t, kMPPlayerSkinSlotCount> colors = {};
+  std::array<float, kMPPlayerSkinSlotCount> strengths = {};
 };
-static_assert(sizeof(MPPlayerAppearance) == 256);
+static_assert(sizeof(MPPlayerSkin) == 256);
 
 struct MPPlayerTextureGroupDefinition {
-  MPPlayerAppearanceGroup group;
+  MPPlayerSkinGroup group;
   std::string_view name;
   std::string_view preference_key;
   PlayerCharacter character;
@@ -112,67 +110,67 @@ inline constexpr std::array<std::string_view, 20> kMPDaxterFurTextures = {
 };
 
 inline constexpr auto kMPPlayerTextureGroups = std::to_array<MPPlayerTextureGroupDefinition>({
-    {.group = MPPlayerAppearanceGroup::JAK_JACKET,
+    {.group = MPPlayerSkinGroup::JAK_JACKET,
      .name = "Jacket",
      .preference_key = "jak_jacket",
      .character = PlayerCharacter::JAK,
      .tint_policy = MPPlayerTintPolicy::GRAYSCALE_DETAIL,
      .textures = kMPJakJacketTextures},
-    {.group = MPPlayerAppearanceGroup::JAK_ARMOR,
+    {.group = MPPlayerSkinGroup::JAK_ARMOR,
      .name = "Armor",
      .preference_key = "jak_armor",
      .character = PlayerCharacter::JAK,
      .tint_policy = MPPlayerTintPolicy::GRAYSCALE_DETAIL,
      .textures = kMPJakArmorTextures},
-    {.group = MPPlayerAppearanceGroup::JAK_LEGGINGS,
+    {.group = MPPlayerSkinGroup::JAK_LEGGINGS,
      .name = "Leggings",
      .preference_key = "jak_leggings",
      .character = PlayerCharacter::JAK,
      .tint_policy = MPPlayerTintPolicy::GRAYSCALE_DETAIL,
      .textures = kMPJakLeggingsTextures},
-    {.group = MPPlayerAppearanceGroup::JAK_PANTS,
+    {.group = MPPlayerSkinGroup::JAK_PANTS,
      .name = "Pants",
      .preference_key = "jak_pants",
      .character = PlayerCharacter::JAK,
      .tint_policy = MPPlayerTintPolicy::GRAYSCALE_DETAIL,
      .textures = kMPJakPantsTextures},
-    {.group = MPPlayerAppearanceGroup::JAK_BOOTS,
+    {.group = MPPlayerSkinGroup::JAK_BOOTS,
      .name = "Boots",
      .preference_key = "jak_boots",
      .character = PlayerCharacter::JAK,
      .tint_policy = MPPlayerTintPolicy::GRAYSCALE_DETAIL,
      .textures = kMPJakBootsTextures},
-    {.group = MPPlayerAppearanceGroup::JAK_SCARF,
+    {.group = MPPlayerSkinGroup::JAK_SCARF,
      .name = "Scarf",
      .preference_key = "jak_scarf",
      .character = PlayerCharacter::JAK,
      .tint_policy = MPPlayerTintPolicy::GRAYSCALE_DETAIL,
      .textures = kMPJakScarfTextures},
-    {.group = MPPlayerAppearanceGroup::JAK_POUCH,
+    {.group = MPPlayerSkinGroup::JAK_POUCH,
      .name = "Pouch",
      .preference_key = "jak_pouch",
      .character = PlayerCharacter::JAK,
      .tint_policy = MPPlayerTintPolicy::GRAYSCALE_DETAIL,
      .textures = kMPJakPouchTextures},
-    {.group = MPPlayerAppearanceGroup::JAK_STRAPS,
+    {.group = MPPlayerSkinGroup::JAK_STRAPS,
      .name = "Straps",
      .preference_key = "jak_straps",
      .character = PlayerCharacter::JAK,
      .tint_policy = MPPlayerTintPolicy::GRAYSCALE_DETAIL,
      .textures = kMPJakStrapsTextures},
-    {.group = MPPlayerAppearanceGroup::JAK_GLOVES,
+    {.group = MPPlayerSkinGroup::JAK_GLOVES,
      .name = "Gloves",
      .preference_key = "jak_gloves",
      .character = PlayerCharacter::JAK,
      .tint_policy = MPPlayerTintPolicy::GRAYSCALE_DETAIL,
      .textures = kMPJakGlovesTextures},
-    {.group = MPPlayerAppearanceGroup::DAXTER_HAT,
+    {.group = MPPlayerSkinGroup::DAXTER_HAT,
      .name = "Hat",
      .preference_key = "daxter_hat",
      .character = PlayerCharacter::DAXTER,
      .tint_policy = MPPlayerTintPolicy::WHITE_BASE,
      .textures = kMPDaxterHatTextures},
-    {.group = MPPlayerAppearanceGroup::DAXTER_FUR,
+    {.group = MPPlayerSkinGroup::DAXTER_FUR,
      .name = "Fur",
      .preference_key = "daxter_fur",
      .character = PlayerCharacter::DAXTER,
@@ -180,7 +178,7 @@ inline constexpr auto kMPPlayerTextureGroups = std::to_array<MPPlayerTextureGrou
      .textures = kMPDaxterFurTextures},
 });
 
-constexpr size_t player_appearance_group_index(MPPlayerAppearanceGroup group) {
+constexpr size_t player_skin_group_index(MPPlayerSkinGroup group) {
   return static_cast<size_t>(group);
 }
 
@@ -189,7 +187,7 @@ constexpr bool is_player_character_valid(const PlayerCharacter character) {
 }
 
 inline const MPPlayerTextureGroupDefinition* get_player_texture_group_definition(
-    const MPPlayerAppearanceGroup group) {
+    const MPPlayerSkinGroup group) {
   for (const auto& definition : kMPPlayerTextureGroups) {
     if (definition.group == group) {
       return &definition;
@@ -198,20 +196,19 @@ inline const MPPlayerTextureGroupDefinition* get_player_texture_group_definition
   return nullptr;
 }
 
-inline bool is_player_appearance_slot_registered(const size_t slot) {
-  if (slot == player_appearance_group_index(MPPlayerAppearanceGroup::PRIMARY)) {
+inline bool is_player_skin_slot_registered(const size_t slot) {
+  if (slot == player_skin_group_index(MPPlayerSkinGroup::PRIMARY)) {
     return true;
   }
   for (const auto& definition : kMPPlayerTextureGroups) {
-    if (player_appearance_group_index(definition.group) == slot) {
+    if (player_skin_group_index(definition.group) == slot) {
       return true;
     }
   }
   return false;
 }
 
-inline MPPlayerAppearanceGroup get_player_texture_group_for_name(
-    const std::string_view texture_name) {
+inline MPPlayerSkinGroup get_player_texture_group_for_name(const std::string_view texture_name) {
   for (const auto& definition : kMPPlayerTextureGroups) {
     for (const auto candidate : definition.textures) {
       if (candidate == texture_name) {
@@ -219,7 +216,7 @@ inline MPPlayerAppearanceGroup get_player_texture_group_for_name(
       }
     }
   }
-  return MPPlayerAppearanceGroup::INVALID;
+  return MPPlayerSkinGroup::INVALID;
 }
 
 inline PlayerCharacter get_player_model_character(const std::string_view model_name) {
@@ -232,29 +229,27 @@ inline PlayerCharacter get_player_model_character(const std::string_view model_n
   return PlayerCharacter::UNKNOWN;
 }
 
-inline bool is_player_appearance_valid(const MPPlayerAppearance& appearance) {
-  constexpr size_t primary_slot = player_appearance_group_index(MPPlayerAppearanceGroup::PRIMARY);
-  for (size_t slot = 0; slot < kMPPlayerAppearanceSlotCount; ++slot) {
-    if ((appearance.colors[slot] & 0xff000000u) != 0 ||
-        !std::isfinite(appearance.strengths[slot]) || appearance.strengths[slot] < 0.0f ||
-        appearance.strengths[slot] > 1.0f) {
+inline bool is_player_skin_valid(const MPPlayerSkin& skin) {
+  constexpr size_t primary_slot = player_skin_group_index(MPPlayerSkinGroup::PRIMARY);
+  for (size_t slot = 0; slot < kMPPlayerSkinSlotCount; ++slot) {
+    if ((skin.colors[slot] & 0xff000000u) != 0 || !std::isfinite(skin.strengths[slot]) ||
+        skin.strengths[slot] < 0.0f || skin.strengths[slot] > 1.0f) {
       return false;
     }
-    if (!is_player_appearance_slot_registered(slot) &&
-        (appearance.colors[slot] != appearance.colors[primary_slot] ||
-         appearance.strengths[slot] != 0.0f)) {
+    if (!is_player_skin_slot_registered(slot) &&
+        (skin.colors[slot] != skin.colors[primary_slot] || skin.strengths[slot] != 0.0f)) {
       return false;
     }
   }
-  return appearance.strengths[primary_slot] == 0.0f;
+  return skin.strengths[primary_slot] == 0.0f;
 }
 
-inline MPPlayerAppearance get_default_player_appearance(const uint32_t primary_color) {
-  MPPlayerAppearance appearance = {};
-  for (size_t slot = 0; slot < kMPPlayerAppearanceSlotCount; ++slot) {
-    appearance.colors[slot] = primary_color;
+inline MPPlayerSkin get_default_player_skin(const uint32_t primary_color) {
+  MPPlayerSkin skin = {};
+  for (size_t slot = 0; slot < kMPPlayerSkinSlotCount; ++slot) {
+    skin.colors[slot] = primary_color;
   }
-  appearance.strengths[player_appearance_group_index(MPPlayerAppearanceGroup::JAK_JACKET)] = 1.0f;
-  appearance.strengths[player_appearance_group_index(MPPlayerAppearanceGroup::DAXTER_HAT)] = 1.0f;
-  return appearance;
+  skin.strengths[player_skin_group_index(MPPlayerSkinGroup::JAK_JACKET)] = 1.0f;
+  skin.strengths[player_skin_group_index(MPPlayerSkinGroup::DAXTER_HAT)] = 1.0f;
+  return skin;
 }

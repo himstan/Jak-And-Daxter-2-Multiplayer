@@ -213,7 +213,7 @@ void parse_preferences_root(const json& root, MultiplayerPreferences& parsed, bo
     if (root.contains("player_color") && root.at("player_color").is_string()) {
       parse_player_color(root.at("player_color").get<std::string>(), primary_color);
     }
-    parsed.player_appearance = get_default_player_appearance(primary_color);
+    parsed.player_skin = get_default_player_skin(primary_color);
     if (!root.contains("player_texture_groups") || !root.at("player_texture_groups").is_object()) {
       needs_save = true;
     } else {
@@ -230,9 +230,9 @@ void parse_preferences_root(const json& root, MultiplayerPreferences& parsed, bo
           needs_save = true;
           continue;
         }
-        const size_t slot = player_appearance_group_index(definition.group);
-        parsed.player_appearance.colors[slot] = group_color;
-        parsed.player_appearance.strengths[slot] = group_strength;
+        const size_t slot = player_skin_group_index(definition.group);
+        parsed.player_skin.colors[slot] = group_color;
+        parsed.player_skin.strengths[slot] = group_strength;
       }
     }
     if (root.contains("automatic_port_mapping") && root.at("automatic_port_mapping").is_boolean()) {
@@ -295,7 +295,7 @@ void load_multiplayer_preferences() {
     g_preferences.player_name = identity.display_name;
     const auto path = settings_path();
     if (!file_util::file_exists(path.string())) {
-      g_preferences.player_appearance = get_default_player_appearance(generate_player_color());
+      g_preferences.player_skin = get_default_player_skin(generate_player_color());
       save_after_edit();
       return;
     }
@@ -309,26 +309,26 @@ void load_multiplayer_preferences() {
     g_preferences = {};
     lg::error("[Multiplayer] Could not load multiplayer settings: {}", error.what());
   }
-  auto& [colors, strengths] = g_preferences.player_appearance;
-  constexpr size_t primary_slot = player_appearance_group_index(MPPlayerAppearanceGroup::PRIMARY);
+  auto& [colors, strengths] = g_preferences.player_skin;
+  constexpr size_t primary_slot = player_skin_group_index(MPPlayerSkinGroup::PRIMARY);
   if ((colors[primary_slot] & 0xff000000u) != 0) {
     colors[primary_slot] = generate_player_color();
     needs_save = true;
   }
   for (const auto& definition : kMPPlayerTextureGroups) {
-    if (const size_t slot = player_appearance_group_index(definition.group);
+    if (const size_t slot = player_skin_group_index(definition.group);
         (colors[slot] & 0xff000000u) != 0 || !std::isfinite(strengths[slot]) ||
         strengths[slot] < 0.0f || strengths[slot] > 1.0f) {
       colors[slot] = colors[primary_slot];
-      strengths[slot] = definition.group == MPPlayerAppearanceGroup::JAK_JACKET ||
-                                definition.group == MPPlayerAppearanceGroup::DAXTER_HAT
+      strengths[slot] = definition.group == MPPlayerSkinGroup::JAK_JACKET ||
+                                definition.group == MPPlayerSkinGroup::DAXTER_HAT
                             ? 1.0f
                             : 0.0f;
       needs_save = true;
     }
   }
-  for (size_t slot = 0; slot < kMPPlayerAppearanceSlotCount; ++slot) {
-    if (!is_player_appearance_slot_registered(slot) &&
+  for (size_t slot = 0; slot < kMPPlayerSkinSlotCount; ++slot) {
+    if (!is_player_skin_slot_registered(slot) &&
         (colors[slot] != colors[primary_slot] || strengths[slot] != 0.0f)) {
       colors[slot] = colors[primary_slot];
       strengths[slot] = 0.0f;
@@ -346,12 +346,12 @@ void save_multiplayer_preferences() {
   json root;
   root["network_port"] = g_preferences.network_port;
   root["room_code"] = g_preferences.room_code;
-  const auto& [colors, strengths] = g_preferences.player_appearance;
+  const auto& [colors, strengths] = g_preferences.player_skin;
   root["player_color"] =
-      format_player_color(colors[player_appearance_group_index(MPPlayerAppearanceGroup::PRIMARY)]);
+      format_player_color(colors[player_skin_group_index(MPPlayerSkinGroup::PRIMARY)]);
   json texture_groups = json::object();
   for (const auto& definition : kMPPlayerTextureGroups) {
-    const size_t slot = player_appearance_group_index(definition.group);
+    const size_t slot = player_skin_group_index(definition.group);
     texture_groups[std::string(definition.preference_key)] = {
         {"color", format_player_color(colors[slot])},
         {"tint_strength", strengths[slot]},
@@ -385,10 +385,10 @@ void set_multiplayer_preferences_root(fs::path root) {
 
 void reset_multiplayer_preferences() {
   const std::string player_name = g_preferences.player_name;
-  const MPPlayerAppearance player_appearance = g_preferences.player_appearance;
+  const MPPlayerSkin player_skin = g_preferences.player_skin;
   g_preferences = {};
   g_preferences.player_name = player_name;
-  g_preferences.player_appearance = player_appearance;
+  g_preferences.player_skin = player_skin;
   save_after_edit();
 }
 
@@ -444,7 +444,7 @@ bool set_multiplayer_preferences(MultiplayerPreferences preferences) {
   if (!multiplayer::platform::is_port_valid(preferences.network_port) ||
       !normalize_player_name(preferences.player_name, name) ||
       !multiplayer::platform::normalize_room_code(preferences.room_code, room_code) ||
-      !is_player_appearance_valid(preferences.player_appearance) ||
+      !is_player_skin_valid(preferences.player_skin) ||
       preferences.nametag_visibility > PlayerNametagVisibility::OFF ||
       preferences.session_player_limit < 2 || preferences.session_player_limit > kMPMaxPlayers ||
       (preferences.preferred_character != PlayerCharacter::JAK &&
@@ -468,15 +468,15 @@ bool set_multiplayer_preferences(MultiplayerPreferences preferences) {
   return true;
 }
 
-bool set_player_appearance(const MPPlayerAppearance& appearance) {
-  if (!is_player_appearance_valid(appearance)) {
+bool set_player_skin(const MPPlayerSkin& skin) {
+  if (!is_player_skin_valid(skin)) {
     return false;
   }
-  if (g_preferences.player_appearance.colors == appearance.colors &&
-      g_preferences.player_appearance.strengths == appearance.strengths) {
+  if (g_preferences.player_skin.colors == skin.colors &&
+      g_preferences.player_skin.strengths == skin.strengths) {
     return true;
   }
-  g_preferences.player_appearance = appearance;
+  g_preferences.player_skin = skin;
   save_after_edit();
   return true;
 }

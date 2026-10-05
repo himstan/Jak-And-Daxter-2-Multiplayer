@@ -52,8 +52,8 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
 #### Changing your name
 - In **Multiplayer Options** press <img src="docs/img/common/dpad-x.png" alt="PS2 X button" width="16">/**SPACE** to select the **Player Name** field, and using your keyboard you're free to type in a maximum of 16 characters as your name.
 
-#### Changing your appearance
-- You can edit the color your name and map marker will appear under **Multiplayer Options** -> **Edit Appearance** or in the **Lobby** by pressing <img src="docs/img/common/dpad-circle.png" alt="PS2 Circle button" width="16">
+#### Changing your skin
+- You can edit the color your name and map marker will appear under **Multiplayer Options** -> **Edit Skin** or in the **Lobby** by pressing <img src="docs/img/common/dpad-circle.png" alt="PS2 Circle button" width="16">
 - You're also free to customize the colors of some textures for your Jak or Daxter model.
 
 #### Changing the character you'll play as
@@ -137,7 +137,7 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
    <img src="docs/img/mp/client-lobby.png" alt="In the lobby as a Client" width="400">
 
 - As the Client you also have the ability to switch the Character you want to play as by pressing **L1** or **R1**
-- You can edit your appearance in the lobby by pressing <img src="docs/img/common/dpad-circle.png" alt="PS2 Circle button" width="16"> also
+- You can edit your skin in the lobby by pressing <img src="docs/img/common/dpad-circle.png" alt="PS2 Circle button" width="16"> also
 - These options are disabled if you've readied up, if you change your mind you must unready first
 
 ## Local Split Screen

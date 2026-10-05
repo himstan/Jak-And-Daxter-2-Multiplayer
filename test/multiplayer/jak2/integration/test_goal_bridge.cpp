@@ -318,12 +318,12 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
   load_types("kernel/gcommon.gc", "inline-array-class");
   load_types("kernel/gkernel-h.gc", "time-frame");
   load_types("engine/math/quaternion-h.gc", "quaternion");
-  load_types("multiplayer/player/mp-player-types.gc", "mp-player-appearance");
+  load_types("multiplayer/player/mp-player-types.gc", "mp-player-skin");
   load_types("multiplayer/core/preferences.gc", "multiplayer-preferences");
   EXPECT_EQ(types.lookup_type("multiplayer-preferences")->get_size_in_memory(),
             sizeof(MultiplayerPreferencesGOAL));
   for (const auto& [field, offset] : std::initializer_list<std::pair<const char*, size_t>>{
-           {"appearance", offsetof(MultiplayerPreferencesGOAL, appearance)},
+           {"skin", offsetof(MultiplayerPreferencesGOAL, skin)},
            {"player-name", offsetof(MultiplayerPreferencesGOAL, player_name)},
            {"network-port", offsetof(MultiplayerPreferencesGOAL, network_port)},
            {"respawn-delay-seconds", offsetof(MultiplayerPreferencesGOAL, respawn_delay_seconds)},
@@ -488,15 +488,15 @@ TEST(Jak2GoalBridge, DirectionalAggregateHasCanonicalCompactAbi) {
   EXPECT_EQ(offsetof(MPReplicationStateGOAL, inbound_events), 190192u);
 }
 
-TEST(Jak2GoalBridge, PlayerAppearanceConversionRoundTripsValues) {
-  MPPlayerAppearanceGOAL goal = {};
-  for (size_t index = 0; index < kMPPlayerAppearanceSlotCount; ++index) {
+TEST(Jak2GoalBridge, PlayerSkinConversionRoundTripsValues) {
+  MPPlayerSkinGOAL goal = {};
+  for (size_t index = 0; index < kMPPlayerSkinSlotCount; ++index) {
     goal.colors[index] = static_cast<uint32_t>(index) * 0x010203u;
     goal.strengths[index] = static_cast<float>(index) / 32.0f;
   }
-  const auto appearance = get_player_appearance_from_goal(goal);
-  MPPlayerAppearanceGOAL round_trip = {};
-  copy_player_appearance_to_goal(appearance, round_trip);
+  const auto skin = get_player_skin_from_goal(goal);
+  MPPlayerSkinGOAL round_trip = {};
+  copy_player_skin_to_goal(skin, round_trip);
   EXPECT_EQ(std::memcmp(&goal, &round_trip, sizeof(goal)), 0);
 }
 
@@ -509,18 +509,18 @@ TEST(Jak2GoalBridge, FreeBridgeFunctionsReadAndWriteGoalValues) {
   ASSERT_TRUE(multiplayer::jak2::bridge::read_string(0x10000, text));
   EXPECT_EQ(text, "hello");
 
-  auto& source = memory.at<MPPlayerAppearanceGOAL>(0x11500);
-  for (size_t index = 0; index < kMPPlayerAppearanceSlotCount; ++index) {
+  auto& source = memory.at<MPPlayerSkinGOAL>(0x11500);
+  for (size_t index = 0; index < kMPPlayerSkinSlotCount; ++index) {
     source.colors[index] = static_cast<uint32_t>(index + 1);
     source.strengths[index] = static_cast<float>(index) / 10.0f;
   }
-  MPPlayerAppearance appearance = {};
-  ASSERT_TRUE(multiplayer::jak2::bridge::read_appearance(0x11500, appearance));
+  MPPlayerSkin skin = {};
+  ASSERT_TRUE(multiplayer::jak2::bridge::read_skin(0x11500, skin));
   auto& preferences = preferences_state(memory);
   MultiplayerPreferences values;
-  values.player_appearance = appearance;
+  values.player_skin = skin;
   ASSERT_TRUE(multiplayer::jak2::bridge::write_preferences(0x11000, values));
-  const auto& destination = preferences.appearance;
+  const auto& destination = preferences.skin;
   EXPECT_EQ(std::memcmp(&source, &destination, sizeof(source)), 0);
 }
 
@@ -887,7 +887,7 @@ TEST(Jak2GoalBridge, PreferencesValidateBeforeMutation) {
   invalid.preferred_character = PlayerCharacter::UNKNOWN;
   reject(invalid);
   invalid = original;
-  invalid.player_appearance.strengths[0] = 2.0f;
+  invalid.player_skin.strengths[0] = 2.0f;
   reject(invalid);
 }
 
@@ -907,10 +907,10 @@ TEST(Jak2GoalBridge, TexturePreferencesKeepValidGroupsAndRepairInvalidGroups) {
   groups["jak_leggings"]["tint_strength"] = 2.0f;
   file_util::write_text_file(preferences_root.path(), root.dump(2));
   load_multiplayer_preferences();
-  constexpr auto primary = player_appearance_group_index(MPPlayerAppearanceGroup::PRIMARY);
-  constexpr auto leggings = player_appearance_group_index(MPPlayerAppearanceGroup::JAK_LEGGINGS);
-  constexpr auto straps = player_appearance_group_index(MPPlayerAppearanceGroup::JAK_STRAPS);
-  const auto& [colors, strengths] = multiplayer_preferences().player_appearance;
+  constexpr auto primary = player_skin_group_index(MPPlayerSkinGroup::PRIMARY);
+  constexpr auto leggings = player_skin_group_index(MPPlayerSkinGroup::JAK_LEGGINGS);
+  constexpr auto straps = player_skin_group_index(MPPlayerSkinGroup::JAK_STRAPS);
+  const auto& [colors, strengths] = multiplayer_preferences().player_skin;
   EXPECT_EQ(colors[leggings], colors[primary]);
   EXPECT_FLOAT_EQ(strengths[leggings], 0.0f);
   EXPECT_EQ(colors[straps], colors[primary]);
@@ -1321,7 +1321,7 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   preferences.friendly_fire = true;
   preferences.nametag_visibility = PlayerNametagVisibility::OFF;
   preferences.player_map_marker = false;
-  preferences.player_appearance = get_default_player_appearance(0x123456);
+  preferences.player_skin = get_default_player_skin(0x123456);
   std::memset(memory.at<String>(state.player_name).data(), 'x', 16);
   ASSERT_TRUE(multiplayer::jak2::bridge::write_preferences(0x11000, preferences));
   EXPECT_EQ(state.respawn_delay_seconds, 65535);
@@ -1337,8 +1337,8 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   ASSERT_TRUE(multiplayer::jak2::bridge::read_preferences(0x11000, restored));
   EXPECT_EQ(restored.player_name, preferences.player_name);
   EXPECT_EQ(restored.network_port, preferences.network_port);
-  EXPECT_EQ(restored.player_appearance.colors, preferences.player_appearance.colors);
-  EXPECT_EQ(restored.player_appearance.strengths, preferences.player_appearance.strengths);
+  EXPECT_EQ(restored.player_skin.colors, preferences.player_skin.colors);
+  EXPECT_EQ(restored.player_skin.strengths, preferences.player_skin.strengths);
   ASSERT_TRUE(set_multiplayer_preferences(restored));
   load_multiplayer_preferences();
   const auto saved = get_multiplayer_preferences();
@@ -1355,8 +1355,8 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   EXPECT_TRUE(restored.friendly_fire);
   EXPECT_EQ(restored.nametag_visibility, PlayerNametagVisibility::OFF);
   EXPECT_FALSE(restored.player_map_marker);
-  EXPECT_EQ(restored.player_appearance.colors, preferences.player_appearance.colors);
-  EXPECT_EQ(restored.player_appearance.strengths, preferences.player_appearance.strengths);
+  EXPECT_EQ(restored.player_skin.colors, preferences.player_skin.colors);
+  EXPECT_EQ(restored.player_skin.strengths, preferences.player_skin.strengths);
   const auto root =
       parse_commented_json(file_util::read_text_file(preferences_root.path()), "preferences.json");
   EXPECT_FALSE(root.contains("preferred_character"));

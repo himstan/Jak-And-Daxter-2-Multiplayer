@@ -17,6 +17,6 @@ bool exchange_state(uint32_t state_address, application::ReplicationMailbox& mai
 bool read_string(uint32_t address, std::string& value);
 bool read_preferences(uint32_t address, MultiplayerPreferences& preferences);
 bool write_preferences(uint32_t address, const MultiplayerPreferences& preferences);
-bool read_appearance(uint32_t address, MPPlayerAppearance& appearance);
+bool read_skin(uint32_t address, MPPlayerSkin& skin);
 
 }  // namespace multiplayer::jak2::bridge

@@ -87,7 +87,7 @@
    (spectator-only? uint8)
    (name            uint8 MP_PLAYER_NAME_SIZE)
    (lobby-ready?    uint8)
-   (appearance      mp-player-appearance :inline))
+   (skin            mp-player-skin :inline))
   :size-assert 288)
 
 (defenum mp-player-activity
@@ -223,8 +223,8 @@
 (define-extern player-replica-deactivate! (function mp-player-record symbol none))
 (define-extern mp-trigger-death-taunt! (function target none))
 (define-extern mp-player-blocks-respawn? (function mp-player-record symbol))
-(define-extern mp-apply-player-render-appearance! (function target none))
-(define-extern mp-refresh-player-render-appearances! (function none))
+(define-extern mp-apply-player-render-skin! (function target none))
+(define-extern mp-refresh-player-render-skins! (function none))
 (define-extern mp-player-record-by-id (function uint mp-player-record))
 (define-extern mp-player-runtime-flag? (function mp-player-record mp-player-runtime-flags symbol))
 (define-extern mp-player-runtime-set-flag! (function mp-player-record mp-player-runtime-flags mp-player-runtime-flags))

@@ -1087,13 +1087,13 @@
 
 (defun get-lid-tint-color ((draw-control draw-control) (daxter-eye? symbol))
   (if daxter-eye?
-    (-> draw-control pc-player-tint-colors (mp-player-appearance-group daxter-fur))
+    (-> draw-control pc-player-tint-colors (mp-player-skin-group daxter-fur))
     (the uint 0))
   )
 
 (defun get-lid-tint-strength ((draw-control draw-control) (daxter-eye? symbol))
   (if daxter-eye?
-    (-> draw-control pc-player-tint-strengths (mp-player-appearance-group daxter-fur))
+    (-> draw-control pc-player-tint-strengths (mp-player-skin-group daxter-fur))
     0.0)
   )
 

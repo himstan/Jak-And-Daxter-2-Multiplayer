@@ -212,7 +212,7 @@
           (set! (-> player-target player-id) (the-as uint32 player-id))
           (when (and (-> player-target draw) (nonzero? (-> player-target draw)))
             (set! (-> player-target draw pc-eye-instance-id) player-id))
-          (mp-apply-player-render-appearance! player-target)
+          (mp-apply-player-render-skin! player-target)
           (set! (-> record runtime target-handle) (process->handle player-target))
           (let* ((leased-pad-index (mp-player-controller-lease-pad! controller record))
                  (target-pad-index (mp-player-controller-target-pad-index controller player-id leased-pad-index)))

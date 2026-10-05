@@ -406,7 +406,7 @@
   "async-task.o" ;; added
   "progress-multiplayer-options-pc.o" ;; added
   "progress-static-pc.o" ;; added
-  "mp-lobby-appearance-editor.o" ;; added
+  "mp-lobby-skin-editor.o" ;; added
   "mp-lobby-progress.o" ;; added
   "progress.o"
   "progress-pc.o" ;; added

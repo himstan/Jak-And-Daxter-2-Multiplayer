@@ -8,7 +8,7 @@
 #include "common/log/log.h"
 
 #include "game/multiplayer/jak2/core/validation.h"
-#include "game/multiplayer/jak2/player_appearance.h"
+#include "game/multiplayer/jak2/player_skin.h"
 #include "game/multiplayer/jak2/wire/packets/bootstrap_state_packet.h"
 #include "game/multiplayer/platform/core/compatibility_identity.h"
 #include "game/multiplayer/platform/runtime/multiplayer_runtime.h"
@@ -22,7 +22,7 @@ Jak2Adapter::Jak2Adapter()
     : descriptor_{.game_id = "jak2",
                   .maximum_payload_bytes = 32768,
                   .maximum_players = core::kMaxPlayers,
-                  .maximum_profile_extension_bytes = sizeof(core::PlayerAppearance),
+                  .maximum_profile_extension_bytes = sizeof(core::PlayerSkin),
                   .supported_characters = {PlayerCharacter::JAK, PlayerCharacter::DAXTER},
                   .allow_in_game_character_changes = true},
       packets_(make_packet_handlers(), descriptor_.maximum_payload_bytes) {}
@@ -61,11 +61,11 @@ void Jak2Adapter::session_reset() {
 
 bool Jak2Adapter::validate_profile_extension(const std::span<const uint8_t> extension,
                                              std::vector<uint8_t>& canonical) {
-  if (extension.size() != sizeof(core::PlayerAppearance))
+  if (extension.size() != sizeof(core::PlayerSkin))
     return false;
-  core::PlayerAppearance appearance;
-  std::memcpy(&appearance, extension.data(), sizeof(appearance));
-  if (!is_player_appearance_valid(appearance))
+  core::PlayerSkin skin;
+  std::memcpy(&skin, extension.data(), sizeof(skin));
+  if (!is_player_skin_valid(skin))
     return false;
   canonical.assign(extension.begin(), extension.end());
   return true;
@@ -95,8 +95,8 @@ void Jak2Adapter::player_profile_changed(const platform::PlayerProfile& profile)
   identity.lobby_ready = profile.ready;
   const auto name_size = std::min(profile.display_name.size(), identity.name.size() - 1);
   std::memcpy(identity.name.data(), profile.display_name.data(), name_size);
-  if (profile.game_extension.size() == sizeof(identity.appearance))
-    std::memcpy(&identity.appearance, profile.game_extension.data(), sizeof(identity.appearance));
+  if (profile.game_extension.size() == sizeof(identity.skin))
+    std::memcpy(&identity.skin, profile.game_extension.data(), sizeof(identity.skin));
   if (!state_.update_player_identity(identity)) {
     lg::error("[MP-Jak2] Rejected canonical platform profile for player {}.", profile.player_id);
   }

@@ -4,31 +4,30 @@
 #include <array>
 #include <cstdint>
 
-#include "game/multiplayer/jak2/player_appearance.h"
+#include "game/multiplayer/jak2/player_skin.h"
 #include "game/multiplayer/jak2/wire/multiplayer_protocol.h"
 
-struct MPPlayerAppearanceGOAL {
-  uint32_t colors[kMPPlayerAppearanceSlotCount];
-  float strengths[kMPPlayerAppearanceSlotCount];
+struct MPPlayerSkinGOAL {
+  uint32_t colors[kMPPlayerSkinSlotCount];
+  float strengths[kMPPlayerSkinSlotCount];
 };
-static_assert(sizeof(MPPlayerAppearanceGOAL) == 256);
+static_assert(sizeof(MPPlayerSkinGOAL) == 256);
 
-inline MPPlayerAppearance get_player_appearance_from_goal(const MPPlayerAppearanceGOAL& goal) {
-  MPPlayerAppearance appearance = {};
-  std::ranges::copy(goal.colors, appearance.colors.begin());
-  std::ranges::copy(goal.strengths, appearance.strengths.begin());
-  return appearance;
+inline MPPlayerSkin get_player_skin_from_goal(const MPPlayerSkinGOAL& goal) {
+  MPPlayerSkin skin = {};
+  std::ranges::copy(goal.colors, skin.colors.begin());
+  std::ranges::copy(goal.strengths, skin.strengths.begin());
+  return skin;
 }
 
-inline void copy_player_appearance_to_goal(const MPPlayerAppearance& appearance,
-                                           MPPlayerAppearanceGOAL& goal) {
-  std::ranges::copy(appearance.colors, std::begin(goal.colors));
-  std::ranges::copy(appearance.strengths, std::begin(goal.strengths));
+inline void copy_player_skin_to_goal(const MPPlayerSkin& skin, MPPlayerSkinGOAL& goal) {
+  std::ranges::copy(skin.colors, std::begin(goal.colors));
+  std::ranges::copy(skin.strengths, std::begin(goal.strengths));
 }
 
 #pragma pack(push, 1)
 struct MPReplicationPlayerIdentityGOAL {
-  MPPlayerAppearanceGOAL appearance;
+  MPPlayerSkinGOAL skin;
   uint8_t name[16];
   uint8_t player_id;
   uint8_t character;

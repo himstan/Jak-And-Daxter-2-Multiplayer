@@ -70,9 +70,9 @@ core::PlayerIdentity read_identity(const MPReplicationPlayerIdentityGOAL& source
   result.lobby_ready = source.lobby_ready != 0;
   std::ranges::copy_n(reinterpret_cast<const uint8_t*>(source.name), result.name.size(),
                       result.name.begin());
-  const auto [colors, strengths] = get_player_appearance_from_goal(source.appearance);
-  std::ranges::copy(colors, result.appearance.colors.begin());
-  std::ranges::copy(strengths, result.appearance.strengths.begin());
+  const auto [colors, strengths] = get_player_skin_from_goal(source.skin);
+  std::ranges::copy(colors, result.skin.colors.begin());
+  std::ranges::copy(strengths, result.skin.strengths.begin());
   return result;
 }
 
@@ -385,10 +385,10 @@ void write_identity(const core::PlayerIdentity& source,
   std::memset(destination.name, 0, sizeof(destination.name));
   std::ranges::copy(source.name.begin(), source.name.end(),
                     reinterpret_cast<uint8_t*>(destination.name));
-  std::ranges::copy(source.appearance.colors.begin(), source.appearance.colors.end(),
-                    std::begin(destination.appearance.colors));
-  std::ranges::copy(source.appearance.strengths.begin(), source.appearance.strengths.end(),
-                    std::begin(destination.appearance.strengths));
+  std::ranges::copy(source.skin.colors.begin(), source.skin.colors.end(),
+                    std::begin(destination.skin.colors));
+  std::ranges::copy(source.skin.strengths.begin(), source.skin.strengths.end(),
+                    std::begin(destination.skin.strengths));
 }
 
 void write_vehicle(const core::VehicleState& source, MPReplicationVehicleStateGOAL& destination) {
@@ -771,7 +771,7 @@ bool read_preferences(const uint32_t address, MultiplayerPreferences& preference
       !read_string(source->room_code, parsed.room_code)) {
     return false;
   }
-  parsed.player_appearance = get_player_appearance_from_goal(source->appearance);
+  parsed.player_skin = get_player_skin_from_goal(source->skin);
   parsed.network_port = source->network_port;
   parsed.respawn_delay_seconds = source->respawn_delay_seconds;
   parsed.session_player_limit = source->session_player_limit;
@@ -799,7 +799,7 @@ bool write_preferences(const uint32_t address, const MultiplayerPreferences& pre
   std::memcpy(name->data(), preferences.player_name.data(), preferences.player_name.size());
   std::memset(room_code->data(), 0, room_code->len + 1);
   std::memcpy(room_code->data(), preferences.room_code.data(), preferences.room_code.size());
-  copy_player_appearance_to_goal(preferences.player_appearance, destination->appearance);
+  copy_player_skin_to_goal(preferences.player_skin, destination->skin);
   destination->network_port = preferences.network_port;
   destination->respawn_delay_seconds = preferences.respawn_delay_seconds;
   destination->session_player_limit = preferences.session_player_limit;
@@ -812,11 +812,11 @@ bool write_preferences(const uint32_t address, const MultiplayerPreferences& pre
   return true;
 }
 
-bool read_appearance(const uint32_t address, MPPlayerAppearance& appearance) {
-  const auto* source = goal_ptr<MPPlayerAppearanceGOAL>(address);
+bool read_skin(const uint32_t address, MPPlayerSkin& skin) {
+  const auto* source = goal_ptr<MPPlayerSkinGOAL>(address);
   if (!source)
     return false;
-  appearance = get_player_appearance_from_goal(*source);
+  skin = get_player_skin_from_goal(*source);
   return true;
 }
 

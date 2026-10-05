@@ -6,7 +6,7 @@
 
 #pragma pack(push, 1)
 struct MultiplayerPreferencesGOAL {
-  MPPlayerAppearanceGOAL appearance;
+  MPPlayerSkinGOAL skin;
   uint32_t player_name;
   uint32_t room_code;
   uint16_t network_port;

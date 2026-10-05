@@ -473,19 +473,19 @@
         (set! (-> self draw color-emissive quad) v1-89)
         )
       (if (and (mp-target-jak? (-> self parent 0)) (!= MP_INVALID_PLAYER_ID (-> self parent 0 riding-along-player-id)))
-        (let ((appearance-record
+        (let ((skin-record
                 (mp-player-color-record-by-id
                   (the-as int (-> self parent 0 riding-along-player-id)))))
-          (if (and appearance-record (nonzero? appearance-record))
-              (mp-apply-render-appearance!
+          (if (and skin-record (nonzero? skin-record))
+              (mp-apply-render-skin!
                 (-> self draw)
-                (-> appearance-record identity appearance))
-              (mp-clear-render-appearance! (-> self draw))))
-        (dotimes (appearance-slot MP_PLAYER_APPEARANCE_SLOT_COUNT)
-          (set! (-> self draw pc-player-tint-colors appearance-slot)
-                (-> self parent 0 draw pc-player-tint-colors appearance-slot))
-          (set! (-> self draw pc-player-tint-strengths appearance-slot)
-                (-> self parent 0 draw pc-player-tint-strengths appearance-slot)))
+                (-> skin-record identity skin))
+              (mp-clear-render-skin! (-> self draw))))
+        (dotimes (skin-slot MP_PLAYER_SKIN_SLOT_COUNT)
+          (set! (-> self draw pc-player-tint-colors skin-slot)
+                (-> self parent 0 draw pc-player-tint-colors skin-slot))
+          (set! (-> self draw pc-player-tint-strengths skin-slot)
+                (-> self parent 0 draw pc-player-tint-strengths skin-slot)))
         )
       (sidekick-update-eye-instance-id! self)
       (set! (-> self draw force-fade) (-> self parent 0 draw force-fade))

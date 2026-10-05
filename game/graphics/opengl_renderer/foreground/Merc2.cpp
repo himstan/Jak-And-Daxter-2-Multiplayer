@@ -537,8 +537,8 @@ void Merc2::handle_pc_model(const DmaTransfer& setup,
     u8 bitflags;
     u8 eye_instance_id;
     float darkjak_interp;
-    u32 player_tint_colors[kMPPlayerAppearanceSlotCount];
-    float player_tint_strengths[kMPPlayerAppearanceSlotCount];
+    u32 player_tint_colors[kMPPlayerSkinSlotCount];
+    float player_tint_strengths[kMPPlayerSkinSlotCount];
   };
 
   constexpr size_t kPcMercFlagsPacketSize = 18 * 16;
@@ -1141,8 +1141,8 @@ const std::vector<u8>& Merc2::get_player_tint_texture_groups(const LevelData* le
   }
   groups.assign(textures.size(), 0xff);
   for (size_t i = 0; i < textures.size(); ++i) {
-    if (const auto group = get_player_texture_group_for_name(textures[i].debug_name); group != MPPlayerAppearanceGroup::INVALID) {
-      groups[i] = static_cast<u8>(player_appearance_group_index(group));
+    if (const auto group = get_player_texture_group_for_name(textures[i].debug_name); group != MPPlayerSkinGroup::INVALID) {
+      groups[i] = static_cast<u8>(player_skin_group_index(group));
     }
   }
   return groups;
@@ -1172,8 +1172,8 @@ Merc2::Draw* Merc2::alloc_normal_draw(const tfrag3::MercDraw& mdraw, const DrawA
   draw->texture = mdraw.eye_id == 0xff ? mdraw.tree_tex_id : (0xefffff00 | mdraw.eye_id);
   if (args.player_tint_texture_groups && mdraw.eye_id == 0xff && mdraw.tree_tex_id >= 0 &&
       static_cast<size_t>(mdraw.tree_tex_id) < args.player_tint_texture_groups->size()) {
-    if (const u8 group_id = (*args.player_tint_texture_groups)[mdraw.tree_tex_id]; group_id < kMPPlayerAppearanceSlotCount) {
-      const auto group = static_cast<MPPlayerAppearanceGroup>(group_id);
+    if (const u8 group_id = (*args.player_tint_texture_groups)[mdraw.tree_tex_id]; group_id < kMPPlayerSkinSlotCount) {
+      const auto group = static_cast<MPPlayerSkinGroup>(group_id);
       const auto* definition = get_player_texture_group_definition(group);
       if (const auto character = static_cast<PlayerCharacter>(args.player_tint_character); 
         definition && definition->character == character && args.player_tint_strengths[group_id] > 0.f) {

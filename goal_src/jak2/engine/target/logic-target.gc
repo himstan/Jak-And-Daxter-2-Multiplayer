@@ -3334,7 +3334,7 @@
 ;; WARN: Return type mismatch object vs none.
 (defbehavior target-init target ((arg0 continue-point))
   (init-target self arg0 #f)
-  (mp-apply-player-render-appearance! self)
+  (mp-apply-player-render-skin! self)
   (set! (-> self event-hook) (-> target-continue event))
   (logior! (-> self focus-status) (focus-status teleporting))
   (go target-continue arg0)

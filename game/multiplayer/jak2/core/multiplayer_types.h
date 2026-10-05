@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "game/multiplayer/jak2/player_appearance.h"
+#include "game/multiplayer/jak2/player_skin.h"
 #include "game/multiplayer/platform/core/types.h"
 #include "game/multiplayer/platform/session/session_state.h"
 
@@ -16,7 +16,7 @@ using EntityId = uint32_t;
 using Sequence = uint32_t;
 
 inline constexpr size_t kPlayerNameSize = 16;
-inline constexpr size_t kAppearanceSlotCount = kMPPlayerAppearanceSlotCount;
+inline constexpr size_t kPlayerSkinSlotCount = kMPPlayerSkinSlotCount;
 
 inline constexpr uint8_t kMaxPlayers = 8;
 inline constexpr size_t kMaxAirlockStatesPerSnapshot = 4;
@@ -52,7 +52,7 @@ using platform::SessionRole;
 using platform::SessionState;
 using platform::SessionStatus;
 
-using PlayerAppearance = MPPlayerAppearance;
+using PlayerSkin = MPPlayerSkin;
 
 struct PlayerIdentity {
   PlayerId player_id = kInvalidPlayerId;
@@ -63,7 +63,7 @@ struct PlayerIdentity {
   bool spectator_only = false;
   bool lobby_ready = false;
   std::array<uint8_t, kPlayerNameSize> name = {};
-  PlayerAppearance appearance = {};
+  PlayerSkin skin = {};
 };
 
 enum class PlayerLevelDisplayMode : uint8_t {

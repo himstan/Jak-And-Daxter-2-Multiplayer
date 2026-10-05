@@ -120,7 +120,7 @@ bool PlayerReplicationState::apply(const TurretState& state, const ApplyContext&
 
 bool PlayerReplicationState::update_identity(const PlayerIdentity& identity) {
   if (!valid_index(identity.player_id, kMaxPlayers) || !valid_character(identity.character) ||
-      !valid_name(identity.name) || !is_player_appearance_valid(identity.appearance)) {
+      !valid_name(identity.name) || !is_player_skin_valid(identity.skin)) {
     return false;
   }
   identities_[identity.player_id] = identity;

@@ -3,7 +3,7 @@
 
 (defconstant MP_DEFAULT_PLAYER_COLOR_RGB (the uint #x00e5ff))
 (defconstant MP_PLAYER_MARKER_ALPHA (the uint #x80))
-(defconstant MP_PLAYER_PRIMARY_APPEARANCE_SLOT (the int 0))
+(defconstant MP_PLAYER_PRIMARY_SKIN_SLOT (the int 0))
 
 (define *mp-player-controller-led-synced?* #f)
 
@@ -18,11 +18,7 @@
   (when (and (not *mp-player-controller-led-synced?*)
              (nonnull? *multiplayer-preferences*)
              (= (pc-multi-get-preferences *multiplayer-preferences*) 1))
-    (mp-player-controller-led-sync! (the uint
-                                         (-> *multiplayer-preferences*
-                                             appearance
-                                             colors
-                                             MP_PLAYER_PRIMARY_APPEARANCE_SLOT))))
+    (mp-player-controller-led-sync! (the uint (-> *multiplayer-preferences* skin colors MP_PLAYER_PRIMARY_SKIN_SLOT))))
   (none))
 
 (defun mp-player-color-record-by-id ((player-id int))
@@ -45,14 +41,13 @@
 (defun mp-player-marker-color-by-id ((player-id int) (fallback-color rgba))
   (let ((record (mp-player-color-record-by-id player-id)))
     (if (and record (nonzero? record))
-      (mp-player-rgb->rgba (-> record identity appearance colors MP_PLAYER_PRIMARY_APPEARANCE_SLOT)
-                           MP_PLAYER_MARKER_ALPHA)
+      (mp-player-rgb->rgba (-> record identity skin colors MP_PLAYER_PRIMARY_SKIN_SLOT) MP_PLAYER_MARKER_ALPHA)
       fallback-color)))
 
 (defun mp-player-font-color-by-id ((player-id int))
   (let ((record (mp-player-color-record-by-id player-id)))
     (if (and record (nonzero? record))
-      (font-color-from-rgb (-> record identity appearance colors MP_PLAYER_PRIMARY_APPEARANCE_SLOT))
+      (font-color-from-rgb (-> record identity skin colors MP_PLAYER_PRIMARY_SKIN_SLOT))
       (font-color default))))
 
 (defun mp-player-marker-color ((marker-key object) (fallback-color rgba))

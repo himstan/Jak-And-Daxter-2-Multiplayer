@@ -19,8 +19,7 @@ struct MultiplayerPreferences {
   uint16_t respawn_delay_seconds = multiplayer::jak2::core::kDefaultRespawnDelaySeconds;
   std::string room_code;
   std::string player_name;
-  MPPlayerAppearance player_appearance =
-      get_default_player_appearance(kInvalidMultiplayerPlayerColor);
+  MPPlayerSkin player_skin = get_default_player_skin(kInvalidMultiplayerPlayerColor);
   bool automatic_port_mapping = true;
   bool player_collision = false;
   bool friendly_fire = false;
@@ -49,4 +48,4 @@ bool set_multiplayer_preferences(MultiplayerPreferences preferences);
 bool can_edit_multiplayer_preferences(const MultiplayerPreferences& previous,
                                       const MultiplayerPreferences& next,
                                       const multiplayer::platform::SessionState& session);
-bool set_player_appearance(const MPPlayerAppearance& appearance);
+bool set_player_skin(const MPPlayerSkin& skin);

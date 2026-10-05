@@ -42,7 +42,7 @@
       (when (nonnull? local-record)
         (apply-player-character-change! local-record local-character)
         (when (not (mp-player-color-progress-active?))
-          (mp-player-appearance-copy! (-> local-record identity appearance) (-> *multiplayer-preferences* appearance))))))
+          (mp-player-skin-copy! (-> local-record identity skin) (-> *multiplayer-preferences* skin))))))
   (none))
 
 (defun mp-session-ensure-local-player! ()
@@ -315,7 +315,7 @@
       (mp-network-exchange-state! status)
       (if active?
         (begin
-          (mp-refresh-player-render-appearances!)
+          (mp-refresh-player-render-skins!)
           (set! status (pc-multi-get-session-status))
           (mp-session-ensure-bootstrap-controller! status)
           (when (and (mp-bootstrap-in-progress?) (nonnull? *target* (-> *target* control)))

@@ -1105,7 +1105,7 @@ TEST(Jak2AdapterIntegration, ProfileExtensionAndPlayerLifecycleStayGameSpecific)
   RecordingEndpoint endpoint;
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
-  std::vector<uint8_t> extension(sizeof(jak2::core::PlayerAppearance));
+  std::vector<uint8_t> extension(sizeof(jak2::core::PlayerSkin));
   std::vector<uint8_t> canonical;
   ASSERT_TRUE(adapter.validate_profile_extension(extension, canonical));
   ASSERT_EQ(canonical, extension);
@@ -1133,7 +1133,7 @@ TEST(Jak2AdapterIntegration, RapidRejoinRetainsLifecycleAndStartsFreshPresentati
       .player_id = 1,
       .display_name = "Remote",
       .character = platform::PlayerCharacter::JAK,
-      .game_extension = std::vector<uint8_t>(sizeof(jak2::core::PlayerAppearance))};
+      .game_extension = std::vector<uint8_t>(sizeof(jak2::core::PlayerSkin))};
   adapter.player_profile_changed(profile);
   jak2::core::PlayerState player = {};
   player.player_id = 1;
