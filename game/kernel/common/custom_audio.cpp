@@ -6,7 +6,6 @@
 #include <list>
 #include <map>
 #include <mutex>
-#include <ranges>
 #include <thread>
 
 #include "common/log/log.h"
@@ -239,7 +238,7 @@ void stopMP3(const u32 file_path_ptr) {
 
 void stopAllSounds() {
   std::lock_guard lock(g_active_sounds_mutex);
-  for (auto& sounds : g_sound_map | std::views::values) {
+  for (auto& [file_path, sounds] : g_sound_map) {
     for (auto sound : sounds) {
       ma_sound_stop(&sound);
     }

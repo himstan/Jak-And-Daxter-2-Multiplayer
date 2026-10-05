@@ -3,7 +3,6 @@
 #include <cmath>
 #include <memory>
 #include <mutex>
-#include <ranges>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -341,7 +340,7 @@ bool SetCustomAudioStreamParams(const s32 id, const SoundParams& params) {
 
 void UpdateCustomAudioStreams() {
   std::lock_guard lock(g_stream_mutex);
-  for (auto& instance : g_stream_instances | std::views::values) {
+  for (auto& [id, instance] : g_stream_instances) {
     refresh_status(instance);
     apply_spatial_volume(instance);
   }
@@ -349,7 +348,7 @@ void UpdateCustomAudioStreams() {
 
 void PauseCustomAudioStreams() {
   std::lock_guard lock(g_stream_mutex);
-  for (auto& instance : g_stream_instances | std::views::values) {
+  for (auto& [id, instance] : g_stream_instances) {
     if (instance.source && instance.status == CustomAudioStreamStatus::ACTIVE && !instance.paused) {
       instance.source->pause();
       instance.paused = true;
@@ -359,7 +358,7 @@ void PauseCustomAudioStreams() {
 
 void ContinueCustomAudioStreams() {
   std::lock_guard lock(g_stream_mutex);
-  for (auto& instance : g_stream_instances | std::views::values) {
+  for (auto& [id, instance] : g_stream_instances) {
     if (instance.source && instance.status == CustomAudioStreamStatus::ACTIVE && instance.paused) {
       instance.source->resume();
       instance.paused = false;
@@ -370,7 +369,7 @@ void ContinueCustomAudioStreams() {
 
 void StopCustomAudioStreams() {
   std::lock_guard lock(g_stream_mutex);
-  for (auto& instance : g_stream_instances | std::views::values) {
+  for (auto& [id, instance] : g_stream_instances) {
     if (instance.source) {
       instance.source->stop();
       instance.source.reset();

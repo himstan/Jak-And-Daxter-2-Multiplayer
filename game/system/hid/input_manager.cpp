@@ -249,7 +249,7 @@ void InputManager::release_controller_claim(const int controller_idx) {
 void InputManager::release_controller_claims() {
   std::vector<int> claimed_controller_indices;
   claimed_controller_indices.reserve(m_controller_claims.size());
-  for (const auto& controller_idx : m_controller_claims | std::views::keys) {
+  for (const auto& [controller_idx, claim] : m_controller_claims) {
     claimed_controller_indices.push_back(controller_idx);
   }
   for (const auto controller_idx : claimed_controller_indices) {
