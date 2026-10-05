@@ -7,7 +7,6 @@
 #include <deque>
 #include <limits>
 #include <mutex>
-#include <ranges>
 #include <thread>
 #include <unordered_map>
 
@@ -316,7 +315,7 @@ struct SessionPlatform::Impl {
       return;
     if (graceful)
       drain_reliable_messages();
-    for (const auto& handle : gns_connections | std::views::keys) {
+    for (const auto& [handle, connection] : gns_connections) {
       sockets->CloseConnection(handle, reason, "transport shutdown", graceful);
     }
     sockets->RunCallbacks();
