@@ -1277,6 +1277,7 @@
         (set! (-> this gun using-gun-type) (the-as pickup-type gun-type))
         (cond
           ((using-gun? this)
+           (set-time! (-> this gun gun-get-on-time))
            (when (not-player-replica? this) (sound-play "select-option"))
            (send-event this 'gun-type gun-type))
           ((want-to-gun? this #t)
