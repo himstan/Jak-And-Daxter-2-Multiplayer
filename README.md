@@ -7,13 +7,13 @@
 A Jak II multiplayer mod for OpenGOAL.<br>
 Can be played Online or LAN and even in "faked" split-screen.<br>
 Supports up to 8 players at the moment. The mod is capable of supporting more, it just hasn't been seriously tested with more so far, the limit can be overriden in a developmental build.<br>
-The intentional experience is tailored around 2 players where one plays as Jak, the other as Daxter (why Daxter got back his name in the mod title), but should be able to progress through the story with even 8 players, the experience will be just even more funky
+The intentional experience is tailored around 2 players where one plays as Jak, the other as Daxter (why Daxter got back his name in the mod title), but should be able to progress through the story with even 8 players, the experience will be just even funkier
 
 ## Current State
 
-This is a very early MVP multiplayer build, so expect a ton of bugs, unstability and crashes. Currently only Act I (up until the palace Baron bossfight) is playable, the game will lock further progress after you've completed that mission.<br>
+This is a very early MVP multiplayer build, so expect a ton of bugs, unstability and crashes. Currently only Act I (-2 missions, up until the palace Baron bossfight) is playable, the game will lock further progress after you've completed that mission.<br>
 The goal is to make the full Jak II campaign playable together.<br>
-Currently, this mod primarily serves as a Co-op mod, when the Campaign is in a finished state, more game modes are going to be supported as well.<br>
+Currently, this mod primarily serves as a Co-op mod, when the full Story is in a finished state, more game modes are planned to be supported as well.<br>
 If at least the Host is in debug mode then a lot of constraints I've put in to block progression can be bypassed.
 
 ## Disclaimers
@@ -26,7 +26,7 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
 
 - **IMPORTANT**: The invite will contain your public IP address, so be careful who you're sharing it with.
 - An **Invite** is a **URI** you can easily copy and share with your friends, whom if they have it on their clipboard, can just click a button to join your session.
-- It can only be obtained as the Host, and only if your port is successfully opened. The **Invite** contains your public IP address and the Port you're hosting on, and also the session **Room Code**, which is automatically generated if it's not set in the **Multiplayer Options**
+- It's generated upon a successful lobby creation for the **Host**, and only if your port is successfully opened. The **Invite** contains your public IP address and the Port you're hosting on, and also the session **Room Code**, which is automatically generated if it's not set in the **Multiplayer Options**
 - Example: `jad2mp://1.1.1.1:26210/1A2B3C`
 
 ### Room Code
@@ -38,23 +38,36 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
 - The mod was mainly tested with the NTSC-U (`SCUS-97265`) version of the game. If you notice bugs please record what version you were using.
 - Make sure to align with what each version of the mod all players have installed. You cannot join a session that is running on a different version of the mod. You can see the mod version in-game in the bottom right corner.
 - When you Host you'll get a prompt to allow `gk` through the firewall, if you want to Host Online, you'll need to give it access.
-- The mod has **UPnP (Universal Plug and Play)** support, which means that if your router supports it, and you're not behind a CGNAT for example, then the game will attempt to do an automatic port mapping on your router, so you don't have to manually port forward. This is temporary, and after your host session ends, the mapping is removed. This feature can be turned off in the **Multiplayer Settings** in game.
+- The mod has **UPnP (Universal Plug and Play)** support, which means that if your router supports it, and you're not behind a CGNAT for example, then the game will attempt to do an automatic port mapping on your router, so you don't have to manually port forward. This is temporary, and after your host session ends, the mapping is removed. This feature can be turned off in the **Multiplayer Options** in game.
 - UPnP is not expected to work for everyone especially nowadays, so if you can't port-forward I'd suggest to use some private VPN solution like Hamachi, Radmin, Tailscale etc...
-- The default game port is `26210` which can be configured in the **Multiplayer Settings**
-- Port `26211` is reserved for LAN discovery
+- The default game port is `26210` which can be configured in the **Multiplayer Options**.
+- Port `26211` is reserved for LAN discovery.
 
 ### Good to know
 
-#### Changing your in-game name
-- To change your name you have to go into **Options** -> **Multiplayer Options**
-- Press <img src="docs/img/common/dpad-x.png" alt="PS2 X button" width="16"> to select the **Username** field, and using your keyboard you're free to type in a maximum of 16 characters as your name.
+#### Options you should definitely take a look at
+
+- There is a **Multiplayer Options** settings page which can be accessed either from the **Main Menu**'s **Options** tab, or while in game through the **Game Options** tab.
+
+#### Changing your name
+- In **Multiplayer Options** press <img src="docs/img/common/dpad-x.png" alt="PS2 X button" width="16">/**SPACE** to select the **Player Name** field, and using your keyboard you're free to type in a maximum of 16 characters as your name.
 
 #### Changing your appearance
-- You can edit the color your name and map marker will appear in under **Options** -> **Multiplayer Options** -> **Edit Appearance**<br> or in the **Lobby** by pressing <img src="docs/img/common/dpad-circle.png" alt="PS2 Circle button" width="16">
-- You're also free to customize the colors of your Jak or Daxter avatar
+- You can edit the color your name and map marker will appear under **Multiplayer Options** -> **Edit Appearance** or in the **Lobby** by pressing <img src="docs/img/common/dpad-circle.png" alt="PS2 Circle button" width="16">
+- You're also free to customize the colors of some textures for your Jak or Daxter model.
+
+#### Changing the character you'll play as
+**Multiplayer Options** -> **Character** or in the **Lobby** by pressing **L1** or **R1** while having yourself selected.
+
+#### Changing the nametag visibility
+- **Multiplayer Options** -> **Nametag Visibility** this setting has three options: **Always**, **Hold** and **Off**
+- **Always** means that you'll see the nametags well, always. **Hold** only shows nametags if you hold down **SELECT**, which also shows the player list. **Off** never shows the nametags (useful for like hide-and-seek maybe)
+
+#### Player Map Marker
+- **Multiplayer Options** -> **Player Map Marker** this setting toggles the visibility of the big/minimap player markers.
 
 #### Custom keybinds
-- **SELECT** - While in game you can press it to show the player list, and also the nametags above each player.
+- **SELECT** - While in game you can press it to show the player list, and also the nametags above each player if the visibility setting is set to **Hold** (it's the default)
 - L1 + <img src="docs/img/common/dpad-triangle.png" alt="PS2 X button" width="16"> - While near an empty vehicle will get you into it's passenger seat.
 
 ## Hosting A Game
@@ -69,27 +82,20 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
 
 ### Choose **New Game** or **Load Game**
 
-   <img src="docs/img/mp/host-new-game.png" alt="Host Game menu showing New Game and Load Game" width="400">
-
-   <img src="docs/img/mp/host-select-save.png" alt="Host save selection menu" width="400">
+   <img src="docs/img/mp/host-new-game.png" alt="Host Game menu showing New Game and Load Game" width="400"> <img src="docs/img/mp/host-select-save.png" alt="Host save selection menu" width="400">
 
 ### Inside the **Lobby** as the **Host**
 
-   <img src="docs/img/mp/host-lobby-nat-open.png" alt="Host in lobby with NAT Open" width="400">
-   <img src="docs/img/mp/host-lobby-strict-lan.png" alt="Host in lobby with NAT Strict/LAN" width="400">
-   <img src="docs/img/mp/host-lobby-lan.png" alt="Host in lobby with NAT LAN" width="400">
+   <img src="docs/img/mp/host-lobby-nat-open.png" alt="Host in lobby with NAT Open" width="325"> <img src="docs/img/mp/host-lobby-strict-lan.png" alt="Host in lobby with NAT Strict/LAN" width="325"> <img src="docs/img/mp/host-lobby-lan.png" alt="Host in lobby with NAT LAN" width="325">
 
   - In the **Lobby** you can wait for the other players to join, or just start the game, since the mod supports late joiners mid game also. 
-  - As **Host** you also have the ability to Swap between playing **Jak** or **Daxter** with **R1** and **L1**<br>
   - If you have your game port successful opened then you can press <img src="docs/img/common/dpad-square.png" alt="PS2 Square button" width="16"> to copy an invite which will contain your public ip and port, with your custom or generated **Room Code**. You can share this to your friends who then can use it to join easily.
   - If the port isn't open and you see **NAT: Strict/LAN** or you Hosted **LAN** and see **NAT: LAN** then you can only copy a **Room Code** which is not required in case you want to play via **LAN**
   - The game can only be started after each player has readied up
 
-### Once you press <img src="docs/img/common/dpad-x.png" alt="PS2 x button" width="16"> everyone in the lobby be will put inside the game
+### Once you press <img src="docs/img/common/dpad-x.png" alt="PS2 x button" width="16"> everyone in the lobby be will enter the game after you load in
 
    <img src="docs/img/mp/host-in-game.png" alt="Host player in game after connection" width="400">
-
-  - In general it's a good practice to let the Host lead the important game progression
 
 ## Joining A Game
 
