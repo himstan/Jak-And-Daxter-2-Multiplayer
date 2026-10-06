@@ -10,6 +10,8 @@
 
 namespace multiplayer::platform {
 
+constexpr uint16_t kUnknownPlayerPing = UINT16_MAX;
+
 enum class RejectionReason : uint8_t {
   NONE,
   HOST_FULL,
@@ -57,6 +59,7 @@ enum class ControlKind : uint8_t {
   START_GAME = 8,
   BOOTSTRAP_ACK = 9,
   SESSION_CLOSE = 10,
+  PLAYER_PINGS = 11,
 };
 
 bool control_allowed_from(ControlKind kind, SessionRole sender);
@@ -65,6 +68,7 @@ struct ControlMessage {
   ControlKind kind = ControlKind::PROFILE;
   PlayerProfile profile;
   std::vector<PlayerProfile> roster;
+  std::vector<uint16_t> player_pings;
   PlayerId player_id = kInvalidPlayerId;
   PlayerCharacter character = PlayerCharacter::UNKNOWN;
   bool ready = false;

@@ -120,7 +120,7 @@ bool control_allowed_from(const ControlKind kind, const SessionRole sender) {
     return kind == ControlKind::PROFILE || kind == ControlKind::ROSTER ||
            kind == ControlKind::DEPARTURE || kind == ControlKind::START_COUNTDOWN ||
            kind == ControlKind::CANCEL_COUNTDOWN || kind == ControlKind::START_GAME ||
-           kind == ControlKind::SESSION_CLOSE;
+           kind == ControlKind::SESSION_CLOSE || kind == ControlKind::PLAYER_PINGS;
   }
   if (sender == SessionRole::CLIENT) {
     return kind == ControlKind::PROFILE || kind == ControlKind::SET_CHARACTER ||
@@ -151,6 +151,14 @@ std::vector<uint8_t> encode_control_message(const ControlMessage& message,
         return {};
       out.push_back(message.player_id);
       out.push_back(message.reason);
+      break;
+    case ControlKind::PLAYER_PINGS:
+      if (message.player_pings.size() < 2 ||
+          message.player_pings.size() > (std::numeric_limits<uint8_t>::max)())
+        return {};
+      out.push_back(static_cast<uint8_t>(message.player_pings.size()));
+      for (const auto ping : message.player_pings)
+        write_u16(out, ping);
       break;
     case ControlKind::SET_CHARACTER:
       if (!valid_character(message.character))
@@ -195,6 +203,17 @@ bool decode_control_message(const std::span<const uint8_t> bytes,
       message.roster.resize(count);
       for (auto& profile : message.roster) {
         if (!decode_profile(bytes, cursor, maximum_extension_bytes, maximum_players, profile))
+          return false;
+      }
+      break;
+    }
+    case ControlKind::PLAYER_PINGS: {
+      uint8_t count = 0;
+      if (!read_u8(bytes, cursor, count) || count != maximum_players)
+        return false;
+      message.player_pings.resize(count);
+      for (auto& ping : message.player_pings) {
+        if (!read_u16(bytes, cursor, ping))
           return false;
       }
       break;

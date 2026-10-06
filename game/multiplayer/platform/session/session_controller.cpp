@@ -24,6 +24,7 @@ constexpr uint64_t kRejectionThrottleMs = 30'000;
 constexpr uint8_t kRejectionsPerWindow = 5;
 constexpr int kInvalidProtocolReason = 4;
 constexpr uint64_t kControlBudgetRefillMs = 100;
+constexpr uint64_t kPlayerPingPublishMs = 1000;
 constexpr int kGameplaySendFailureReason = 2005;
 constexpr int kSessionCloseReasonBase = 1000;
 constexpr int kSessionCloseReasonMaximum = kSessionCloseReasonBase + 255;
@@ -203,6 +204,7 @@ void SessionController::disconnect(const int reason) {
   room_code_.clear();
   last_applied_bootstrap_ = 0;
   host_bootstrap_generation_ = 0;
+  last_ping_publish_ms_ = 0;
   bootstrap_send_deferred_ = false;
   gameplay_send_observed_ = false;
   gameplay_receive_observed_ = false;
@@ -241,6 +243,12 @@ void SessionController::pump(const uint64_t now_ms) {
   auto connections = transport_.connection_snapshots();
   snapshot_.statistics = aggregate_connection_snapshots(connections);
   update_snapshot(std::move(connections));
+  if (snapshot_.state.role == SessionRole::HOST &&
+      now_ms - last_ping_publish_ms_ >= kPlayerPingPublishMs) {
+    send_control({.kind = ControlKind::PLAYER_PINGS, .player_pings = snapshot_.player_pings},
+                 Audience::everyone());
+    last_ping_publish_ms_ = now_ms;
+  }
 }
 
 void SessionController::handle_event(TransportEvent event, const uint64_t now_ms) {
@@ -258,6 +266,7 @@ void SessionController::handle_event(TransportEvent event, const uint64_t now_ms
   } else {
     lg::debug("[MP-Session] Host connection closed (reason {}, detail '{}').", event.close_reason,
               event.detail);
+    snapshot_.player_pings.clear();
     if (event.close_reason >= kSessionCloseReasonBase &&
         event.close_reason <= kSessionCloseReasonMaximum) {
       snapshot_.state.status = SessionStatus::HOST_LEFT;
@@ -587,6 +596,12 @@ void SessionController::handle_client_control(const ConnectionId connection,
         adapter_.player_profile_changed(profile);
       }
     }
+  } else if (message.kind == ControlKind::PLAYER_PINGS) {
+    if (message.player_pings[snapshot_.state.host_player_id] != 0) {
+      transport_.close_connection(connection, kInvalidProtocolReason, "invalid host ping");
+      return;
+    }
+    snapshot_.player_pings = std::move(message.player_pings);
   } else if (message.kind == ControlKind::DEPARTURE) {
     if (message.player_id == snapshot_.state.host_player_id ||
         message.player_id >= profiles_.size()) {
@@ -594,6 +609,8 @@ void SessionController::handle_client_control(const ConnectionId connection,
       return;
     }
     profiles_[message.player_id] = {};
+    if (message.player_id < snapshot_.player_pings.size())
+      snapshot_.player_pings[message.player_id] = kUnknownPlayerPing;
     adapter_.player_departed(message.player_id);
     clear_countdown();
   } else if (message.kind == ControlKind::START_COUNTDOWN) {
@@ -607,6 +624,7 @@ void SessionController::handle_client_control(const ConnectionId connection,
   } else if (message.kind == ControlKind::SESSION_CLOSE) {
     snapshot_.state.status = SessionStatus::HOST_LEFT;
     snapshot_.close_reason = message.reason;
+    snapshot_.player_pings.clear();
     clear_countdown();
     reset_adapter_session();
     transport_.close_connection(connection, message.reason, "session closed by host");
@@ -988,15 +1006,28 @@ void SessionController::enter_lobby() {
 }
 
 void SessionController::update_snapshot(std::vector<ConnectionSnapshot> connections) {
+  if (snapshot_.state.role == SessionRole::HOST) {
+    snapshot_.player_pings.assign(profiles_.size(), kUnknownPlayerPing);
+    snapshot_.player_pings[snapshot_.state.host_player_id] = 0;
+  }
   snapshot_.players.clear();
   for (const auto& profile : profiles_) {
     if (profile.player_id != kInvalidPlayerId)
       snapshot_.players.push_back(profile);
   }
+  for (size_t player_id = 0; player_id < snapshot_.player_pings.size(); ++player_id) {
+    if (profiles_[player_id].player_id == kInvalidPlayerId)
+      snapshot_.player_pings[player_id] = kUnknownPlayerPing;
+  }
   snapshot_.connections.clear();
   snapshot_.connections.reserve(connections.size());
   for (auto& connection : connections) {
     const auto* binding = registry_.find_connection(connection.connection_id);
+    if (snapshot_.state.role == SessionRole::HOST && binding && binding->identity_ready &&
+        connection.ping_ms >= 0) {
+      snapshot_.player_pings[binding->player_id] =
+          static_cast<uint16_t>(std::min(connection.ping_ms, int{kUnknownPlayerPing - 1}));
+    }
     snapshot_.connections.push_back({.player_id = binding ? binding->player_id : kInvalidPlayerId,
                                      .network = std::move(connection)});
   }

@@ -143,7 +143,7 @@ TEST(PlatformCore, NetworkStatisticsAggregateCapacityQueuesAndWorstHealth) {
   EXPECT_EQ(multiplayer::platform::kReliableBacklogLimitBytes, 384 * 1024);
 }
 
-TEST(PlatformSession, PlayerPingUsesOnlyThatPlayersConnection) {
+TEST(PlatformSession, PlayerPingIsRelativeToTheHostForEveryViewer) {
   using namespace multiplayer::platform;
   SessionSnapshot snapshot;
   EXPECT_FALSE(snapshot.player_ping_ms(kInvalidPlayerId));
@@ -152,27 +152,25 @@ TEST(PlatformSession, PlayerPingUsesOnlyThatPlayersConnection) {
   snapshot.state.role = SessionRole::HOST;
   snapshot.state.local_player_id = 0;
   snapshot.state.host_player_id = 0;
-  snapshot.connections = {
-      {.player_id = 2, .network = {.connection_id = 11, .ping_ms = 61}},
-      {.player_id = 1, .network = {.connection_id = 10, .ping_ms = 24}},
-      {.player_id = kInvalidPlayerId, .network = {.connection_id = 12, .ping_ms = 9}},
-  };
+  snapshot.player_pings = {0, 83, 145, kUnknownPlayerPing};
   EXPECT_EQ(snapshot.player_ping_ms(0), 0);
-  EXPECT_EQ(snapshot.player_ping_ms(1), 24);
-  EXPECT_EQ(snapshot.player_ping_ms(2), 61);
+  EXPECT_EQ(snapshot.player_ping_ms(1), 83);
+  EXPECT_EQ(snapshot.player_ping_ms(2), 145);
   EXPECT_FALSE(snapshot.player_ping_ms(3));
+  EXPECT_FALSE(snapshot.player_ping_ms(4));
   EXPECT_FALSE(snapshot.player_ping_ms(kInvalidPlayerId));
-  snapshot.connections[0].network.ping_ms = -1;
-  EXPECT_FALSE(snapshot.player_ping_ms(2));
 
   snapshot.state.role = SessionRole::CLIENT;
   snapshot.state.local_player_id = 1;
-  snapshot.connections = {{.player_id = 0, .network = {.connection_id = 10, .ping_ms = 24}}};
-  EXPECT_EQ(snapshot.player_ping_ms(0), 24);
-  EXPECT_EQ(snapshot.player_ping_ms(1), 0);
+  snapshot.connections = {{.player_id = 0, .network = {.connection_id = 10, .ping_ms = 83}}};
+  EXPECT_EQ(snapshot.player_ping_ms(0), 0);
+  EXPECT_EQ(snapshot.player_ping_ms(1), 83);
+  EXPECT_EQ(snapshot.player_ping_ms(2), 145);
+  snapshot.state.local_player_id = 2;
+  EXPECT_EQ(snapshot.player_ping_ms(1), 83);
+  EXPECT_EQ(snapshot.player_ping_ms(2), 145);
+  snapshot.player_pings.clear();
   EXPECT_FALSE(snapshot.player_ping_ms(2));
-  snapshot.connections.clear();
-  EXPECT_FALSE(snapshot.player_ping_ms(0));
 }
 
 TEST(PlatformSession, MessageFrameKeepsAuthenticatedOriginOutsideGameplayPayload) {

@@ -1212,6 +1212,55 @@ TEST(GnsTransportIntegration, SessionAdmissionProfilesAndRelayStayAboveTransport
   EXPECT_EQ(observer_adapter.received.back().payload, std::vector<uint8_t>({0x62}));
 }
 
+TEST(GnsTransportIntegration, HostSharesPlayerPingsWithEveryClientAndClearsDepartedPlayers) {
+  RecordingAdapter host_adapter;
+  RecordingAdapter client_adapter;
+  RecordingAdapter observer_adapter;
+  SessionController host(host_adapter);
+  SessionController client(client_adapter);
+  SessionController observer(observer_adapter);
+  ASSERT_TRUE(host.host(host_config(available_udp_port(), 3)));
+  ASSERT_TRUE(client.connect(client_config(host.local_port())));
+  ASSERT_TRUE(observer.connect(client_config(host.local_port())));
+  auto clock = now_ms();
+  const auto pump = [&] {
+    host.pump(clock);
+    client.pump(clock);
+    observer.pump(clock);
+  };
+  ASSERT_TRUE(pump_until(pump, [&] {
+    return host.snapshot().players.size() == 3 && client.snapshot().players.size() == 3 &&
+           observer.snapshot().players.size() == 3;
+  }));
+  clock += 1000;
+  pump();
+  const auto published = host.snapshot().player_pings;
+  ASSERT_EQ(published.size(), 3u);
+  EXPECT_EQ(published[0], 0);
+  EXPECT_NE(published[1], kUnknownPlayerPing);
+  EXPECT_NE(published[2], kUnknownPlayerPing);
+  ASSERT_TRUE(pump_until(pump, [&] {
+    return client.snapshot().player_pings == published &&
+           observer.snapshot().player_pings == published;
+  }));
+  for (PlayerId id = 0; id < 3; ++id) {
+    EXPECT_EQ(client.snapshot().player_ping_ms(id), published[id]);
+    EXPECT_EQ(observer.snapshot().player_ping_ms(id), published[id]);
+  }
+  const auto departed = client.snapshot().state.local_player_id;
+  client.disconnect();
+  ASSERT_TRUE(pump_until(pump, [&] {
+    return host.snapshot().players.size() == 2 && observer.snapshot().players.size() == 2;
+  }));
+  EXPECT_FALSE(host.snapshot().player_ping_ms(departed));
+  EXPECT_FALSE(observer.snapshot().player_ping_ms(departed));
+  host.disconnect();
+  ASSERT_TRUE(pump_until(pump, [&] {
+    return observer.snapshot().state.status == SessionStatus::HOST_LEFT;
+  }));
+  EXPECT_TRUE(observer.snapshot().player_pings.empty());
+}
+
 TEST(GnsTransportIntegration, DuplicateControlsAreSuppressedAndFloodClosesOnlyTheSender) {
   RecordingAdapter host_adapter;
   RecordingAdapter client_adapter;

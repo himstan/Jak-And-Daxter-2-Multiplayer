@@ -171,6 +171,27 @@ TEST(PlatformSession, GameplayEnvelopesRejectZeroSequences) {
   }
 }
 
+TEST(PlatformSession, PlayerPingsUseCompactHostMeasurementsAndRejectMalformedLists) {
+  using namespace multiplayer::platform;
+  const ControlMessage message = {.kind = ControlKind::PLAYER_PINGS,
+                                  .player_pings = {0, 83, 145, kUnknownPlayerPing}};
+  const auto bytes = encode_control_message(message, 16);
+  EXPECT_EQ(bytes, (std::vector<uint8_t>{11, 4, 0, 0, 83, 0, 145, 0, 255, 255}));
+  ControlMessage decoded;
+  ASSERT_TRUE(decode_control_message(bytes, 16, 4, decoded));
+  EXPECT_EQ(decoded.player_pings, message.player_pings);
+  for (size_t size = 0; size < bytes.size(); ++size)
+    EXPECT_FALSE(decode_control_message(std::span(bytes).first(size), 16, 4, decoded));
+  auto trailing = bytes;
+  trailing.push_back(0);
+  EXPECT_FALSE(decode_control_message(trailing, 16, 4, decoded));
+  EXPECT_FALSE(decode_control_message(bytes, 16, 3, decoded));
+  EXPECT_FALSE(decode_control_message(bytes, 16, 5, decoded));
+  EXPECT_TRUE(encode_control_message({.kind = ControlKind::PLAYER_PINGS}, 16).empty());
+  EXPECT_TRUE(encode_control_message({.kind = ControlKind::PLAYER_PINGS, .player_pings = {0}}, 16)
+                  .empty());
+}
+
 TEST(PlatformSession, AdmissionGateCodecsAreTypedAndRejectTruncation) {
   const multiplayer::platform::ClientGate request = {
       .game_id = "jak3", .compatibility_identity = "v1.2.3", .room_code = "ABC123"};
@@ -222,7 +243,8 @@ TEST(PlatformSession, EveryCommonControlMessageHasExplicitHostClientAuthority) {
       multiplayer::platform::control_allowed_from(ControlKind::PROFILE, SessionRole::CLIENT));
   for (const auto kind :
        {ControlKind::ROSTER, ControlKind::DEPARTURE, ControlKind::START_COUNTDOWN,
-        ControlKind::CANCEL_COUNTDOWN, ControlKind::START_GAME, ControlKind::SESSION_CLOSE}) {
+        ControlKind::CANCEL_COUNTDOWN, ControlKind::START_GAME, ControlKind::SESSION_CLOSE,
+        ControlKind::PLAYER_PINGS}) {
     EXPECT_TRUE(multiplayer::platform::control_allowed_from(kind, SessionRole::HOST));
     EXPECT_FALSE(multiplayer::platform::control_allowed_from(kind, SessionRole::CLIENT));
   }

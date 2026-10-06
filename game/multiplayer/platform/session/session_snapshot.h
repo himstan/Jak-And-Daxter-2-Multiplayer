@@ -20,6 +20,7 @@ struct SessionSnapshot {
   SessionState state;
   std::vector<PlayerProfile> players;
   std::vector<SessionConnectionSnapshot> connections;
+  std::vector<uint16_t> player_pings;
   bool countdown_active = false;
   uint64_t countdown_target_ms = 0;
   AggregateSnapshot statistics;
@@ -30,12 +31,10 @@ struct SessionSnapshot {
   std::optional<int> player_ping_ms(const PlayerId player_id) const {
     if (state.role == SessionRole::NONE || player_id == kInvalidPlayerId)
       return std::nullopt;
-    if (player_id == state.local_player_id)
+    if (player_id == state.host_player_id)
       return 0;
-    for (const auto& [conn_player_id, conn_network] : connections) {
-      if (conn_player_id == player_id && conn_network.ping_ms >= 0)
-        return conn_network.ping_ms;
-    }
+    if (player_id < player_pings.size() && player_pings[player_id] != kUnknownPlayerPing)
+      return player_pings[player_id];
     return std::nullopt;
   }
 };

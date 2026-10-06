@@ -136,6 +136,7 @@ class SessionController final : public GameSessionEndpoint {
   uint32_t last_applied_bootstrap_ = 0;
   uint32_t host_bootstrap_generation_ = 0;
   uint64_t last_pump_ms_ = 0;
+  uint64_t last_ping_publish_ms_ = 0;
   bool adapter_session_active_ = false;
   bool bootstrap_send_deferred_ = false;
   bool gameplay_send_observed_ = false;
