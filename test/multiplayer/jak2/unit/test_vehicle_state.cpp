@@ -216,12 +216,12 @@ TEST(Jak2Replication, TrafficExpiryDiscardsAllDriverSnapshotsButKeepsPassengers)
   authority.assignments[0] = 0;
   ASSERT_TRUE(state.traffic().apply(authority, {.source = {.from_host = true}}));
   ASSERT_TRUE(state.traffic().select_authority(0));
-  TrafficSnapshot traffic = {.kind = TrafficSnapshot::Kind::VEHICLES,
-                             .source_player_id = 0,
-                             .authority_revision = 1,
-                             .vehicles = {player_vehicle(0x21000001u, 1),
-                                          player_vehicle(0x21000002u, 2),
-                                          player_vehicle(0x21000003u, 3)}};
+  TrafficSnapshot traffic = {
+      .kind = TrafficSnapshot::Kind::VEHICLES,
+      .source_player_id = 0,
+      .authority_revision = 1,
+      .vehicles = {player_vehicle(0x21000001u, 1), player_vehicle(0x21000002u, 2),
+                   player_vehicle(0x21000003u, 3)}};
   ASSERT_TRUE(state.traffic().apply(traffic, from(0, 1, 1000)));
   for (PlayerId player_id = 1; player_id <= 3; ++player_id) {
     PlayerVehicleState detail = {.player_id = player_id,

@@ -765,14 +765,12 @@
   #f)
 
 (defun mission-failure-pending-choice-tick! ()
-  (when (and (mp-session-in-game?)
-             (mp-fail-mission-choice-event? *mp-mission-failed-pending-choice*))
+  (when (and (mp-session-in-game?) (mp-fail-mission-choice-event? *mp-mission-failed-pending-choice*))
     (cond
       ((mp-session-host?)
        (when (mp-event-enqueue-actor-name! *mp-mission-failed-pending-choice* "")
          (set! *mp-mission-failed-pending-choice* (the uint 0))))
-      ((and (mp-session-client?)
-            (nonnull? *fail-mission-control* (get-proc *fail-mission-control*)))
+      ((and (mp-session-client?) (nonnull? *fail-mission-control* (get-proc *fail-mission-control*)))
        (mp-apply-pending-mission-failed-choice!))))
   (none))
 

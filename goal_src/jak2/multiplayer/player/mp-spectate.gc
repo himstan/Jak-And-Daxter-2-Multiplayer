@@ -723,9 +723,7 @@
       (logclear! (-> manager options flags) flags))))
 
 (defbehavior mp-spectate-manager-pending-update! mp-spectate-manager ()
-  (when (and (nonnull? self)
-             (= (-> self phase) (mp-spectate-phase pending))
-             (not (end-death-spectate-if-needed! self)))
+  (when (and (nonnull? self) (= (-> self phase) (mp-spectate-phase pending)) (not (end-death-spectate-if-needed! self)))
     (set! (-> self level-request-owned?) #f)
     (mp-spectate-apply-presence! self)
     (when (mp-spectate-manager-inert? self)

@@ -98,15 +98,13 @@
   (none))
 
 (defun local-mission-failure-active? ()
-  (and (nonnull? *fail-mission-control*)
-       (nonnull? (get-proc *fail-mission-control*))))
+  (and (nonnull? *fail-mission-control*) (nonnull? (get-proc *fail-mission-control*))))
 
 (defun end-death-spectate-if-needed! ((manager mp-spectate-manager))
   (when (and (nonnull? manager)
              (= (-> manager owner) 'death)
              (or (local-mission-failure-active?)
-                 (and (nonnull? *target* (-> *target* control))
-                      (not (focus-test? *target* dead)))))
+                 (and (nonnull? *target* (-> *target* control)) (not (focus-test? *target* dead)))))
     (mp-death-spectate-abort!)
     (return #t))
   #f)
@@ -133,9 +131,7 @@
   (apply-settings *setting-control*)
   (let ((start-time (mp-death-spectate-now)))
     (loop
-      (while (or (mp-session-reconnecting?)
-                 (mp-session-terminal?)
-                 (local-mission-failure-active?))
+      (while (or (mp-session-reconnecting?) (mp-session-terminal?) (local-mission-failure-active?))
         (suspend))
       (when (not (mp-spectate-requested?))
         (remove-setting! 'mode-name)

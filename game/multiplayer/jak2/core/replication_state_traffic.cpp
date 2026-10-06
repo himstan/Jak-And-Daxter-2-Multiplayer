@@ -37,8 +37,8 @@ void TrafficReplicationState::reset() {
   clear();
 }
 
-void TrafficReplicationState::expire(
-    const uint64_t now_ms, const std::span<const PlayerVehicleState> player_vehicles) {
+void TrafficReplicationState::expire(const uint64_t now_ms,
+                                     const std::span<const PlayerVehicleState> player_vehicles) {
   bool changed = false;
   for (PlayerId source = 0; source < kMaxPlayers; ++source) {
     changed |= expire_entities(pedestrian_snapshots_[source].pedestrians, now_ms);

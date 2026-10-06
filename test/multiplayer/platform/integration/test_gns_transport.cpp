@@ -1282,9 +1282,8 @@ TEST(GnsTransportIntegration, HostSharesPlayerPingsWithEveryClientAndClearsDepar
   EXPECT_FALSE(host.snapshot().player_ping_ms(departed));
   EXPECT_FALSE(observer.snapshot().player_ping_ms(departed));
   host.disconnect();
-  ASSERT_TRUE(pump_until(pump, [&] {
-    return observer.snapshot().state.status == SessionStatus::HOST_LEFT;
-  }));
+  ASSERT_TRUE(pump_until(
+      pump, [&] { return observer.snapshot().state.status == SessionStatus::HOST_LEFT; }));
   EXPECT_TRUE(observer.snapshot().player_pings.empty());
 }
 

@@ -188,8 +188,8 @@ TEST(PlatformSession, PlayerPingsUseCompactHostMeasurementsAndRejectMalformedLis
   EXPECT_FALSE(decode_control_message(bytes, 16, 3, decoded));
   EXPECT_FALSE(decode_control_message(bytes, 16, 5, decoded));
   EXPECT_TRUE(encode_control_message({.kind = ControlKind::PLAYER_PINGS}, 16).empty());
-  EXPECT_TRUE(encode_control_message({.kind = ControlKind::PLAYER_PINGS, .player_pings = {0}}, 16)
-                  .empty());
+  EXPECT_TRUE(
+      encode_control_message({.kind = ControlKind::PLAYER_PINGS, .player_pings = {0}}, 16).empty());
 }
 
 TEST(PlatformSession, AdmissionGateCodecsAreTypedAndRejectTruncation) {
@@ -241,10 +241,9 @@ TEST(PlatformSession, EveryCommonControlMessageHasExplicitHostClientAuthority) {
   EXPECT_TRUE(multiplayer::platform::control_allowed_from(ControlKind::PROFILE, SessionRole::HOST));
   EXPECT_TRUE(
       multiplayer::platform::control_allowed_from(ControlKind::PROFILE, SessionRole::CLIENT));
-  for (const auto kind :
-       {ControlKind::ROSTER, ControlKind::DEPARTURE, ControlKind::START_COUNTDOWN,
-        ControlKind::CANCEL_COUNTDOWN, ControlKind::START_GAME, ControlKind::SESSION_CLOSE,
-        ControlKind::PLAYER_PINGS}) {
+  for (const auto kind : {ControlKind::ROSTER, ControlKind::DEPARTURE, ControlKind::START_COUNTDOWN,
+                          ControlKind::CANCEL_COUNTDOWN, ControlKind::START_GAME,
+                          ControlKind::SESSION_CLOSE, ControlKind::PLAYER_PINGS}) {
     EXPECT_TRUE(multiplayer::platform::control_allowed_from(kind, SessionRole::HOST));
     EXPECT_FALSE(multiplayer::platform::control_allowed_from(kind, SessionRole::CLIENT));
   }
