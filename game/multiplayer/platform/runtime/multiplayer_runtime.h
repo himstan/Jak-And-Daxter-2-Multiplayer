@@ -90,11 +90,11 @@ class MultiplayerRuntime {
                                HostSnapshot host,
                                std::string compatibility_identity);
   CommandResult& result_for(CommandDomain domain);
-  void run(const std::stop_token& stop_token);
+  void run();
   void clear_locked();
 
   mutable std::mutex mutex_;
-  std::condition_variable_any wake_cv_;
+  std::condition_variable wake_cv_;
   std::unique_ptr<GameAdapter> adapter_;
   std::optional<ProfileLease> profile_lease_;
   StoredPlayerProfile stored_profile_;
@@ -102,7 +102,7 @@ class MultiplayerRuntime {
   RuntimeSnapshot snapshot_;
   uint32_t next_revision_ = 0;
   bool accepting_commands_ = false;
-  std::jthread worker_;
+  std::thread worker_;
 };
 
 MultiplayerRuntime& multiplayer_runtime();

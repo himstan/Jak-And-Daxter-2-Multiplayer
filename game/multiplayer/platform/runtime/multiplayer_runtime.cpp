@@ -45,7 +45,7 @@ bool MultiplayerRuntime::install(std::unique_ptr<GameAdapter> adapter,
   profile_lease_ = std::move(lease);
   stored_profile_ = std::move(stored_profile);
   accepting_commands_ = true;
-  worker_ = std::jthread([this](const std::stop_token& stop_token) { run(stop_token); });
+  worker_ = std::thread([this] { run(); });
   return true;
 }
 
@@ -126,7 +126,7 @@ RuntimeSnapshot MultiplayerRuntime::snapshot() const {
 }
 
 void MultiplayerRuntime::shutdown() {
-  std::jthread worker;
+  std::thread worker;
   {
     std::lock_guard lock(mutex_);
     accepting_commands_ = false;
@@ -134,7 +134,6 @@ void MultiplayerRuntime::shutdown() {
       clear_locked();
       return;
     }
-    worker_.request_stop();
     worker = std::move(worker_);
   }
   wake_cv_.notify_all();
@@ -179,14 +178,14 @@ fs::path MultiplayerRuntime::game_preferences_path() const {
   return profile_lease_ ? profile_lease_->game_preferences_path() : fs::path{};
 }
 
-void MultiplayerRuntime::run(const std::stop_token& stop_token) {
+void MultiplayerRuntime::run() {
   GameAdapter* current = nullptr;
   {
     std::lock_guard lock(mutex_);
     current = adapter_.get();
   }
   if (current)
-    RuntimeWorker(*this, *current).run(stop_token);
+    RuntimeWorker(*this, *current).run();
 }
 
 MultiplayerRuntime& multiplayer_runtime() {

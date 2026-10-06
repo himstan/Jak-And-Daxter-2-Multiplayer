@@ -14,7 +14,7 @@ class RuntimeWorker final : public ConnectionExecutionPort,
                             public RuntimeControlExecutionPort {
  public:
   RuntimeWorker(MultiplayerRuntime& runtime, GameAdapter& adapter);
-  void run(std::stop_token stop_token);
+  void run();
 
  private:
   struct CanonicalEndpoint {

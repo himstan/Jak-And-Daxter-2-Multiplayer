@@ -840,6 +840,33 @@ TEST(GnsTransportIntegration, RuntimeOwnsAdapterWorkerAndShutsDownIdempotently) 
   runtime.shutdown();
 }
 
+TEST(GnsTransportIntegration, RuntimeCanReinstallAfterImmediateShutdown) {
+  MultiplayerRuntime runtime;
+  auto first = std::make_shared<RuntimeAdapterState>();
+  ASSERT_TRUE(runtime.install(std::make_unique<RuntimeAdapter>(first)));
+  runtime.shutdown();
+  EXPECT_TRUE(first->stopped.load());
+  EXPECT_FALSE(runtime.active());
+  EXPECT_EQ(runtime.adapter("test"), nullptr);
+
+  auto second = std::make_shared<RuntimeAdapterState>();
+  ASSERT_TRUE(runtime.install(std::make_unique<RuntimeAdapter>(second)));
+  ASSERT_TRUE(pump_until([] {}, [&] { return second->ticks.load() != 0; }));
+  EXPECT_TRUE(runtime.active());
+  runtime.shutdown();
+  EXPECT_TRUE(second->stopped.load());
+}
+
+TEST(GnsTransportIntegration, RuntimeDestructorStopsAndJoinsWorker) {
+  auto state = std::make_shared<RuntimeAdapterState>();
+  {
+    MultiplayerRuntime runtime;
+    ASSERT_TRUE(runtime.install(std::make_unique<RuntimeAdapter>(state)));
+    ASSERT_TRUE(pump_until([] {}, [&] { return state->ticks.load() != 0; }));
+  }
+  EXPECT_TRUE(state->stopped.load());
+}
+
 TEST(GnsTransportIntegration, RuntimeRejectsInactiveAndFullMailboxesWithoutLosingNewerResult) {
   MultiplayerRuntime runtime;
   EXPECT_FALSE(runtime.enqueue<StopDiscoveryCommand>());

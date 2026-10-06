@@ -118,8 +118,10 @@ void RuntimeWorker::publish(const SessionSnapshot& session) {
   runtime_.publish_worker_snapshot(session, discovery, std::move(host), compatibility_identity_);
 }
 
-void RuntimeWorker::run(const std::stop_token stop_token) {
-  while (!stop_token.stop_requested()) {
+void RuntimeWorker::run() {
+  std::unique_lock lock(runtime_.mutex_);
+  while (runtime_.accepting_commands_) {
+    lock.unlock();
     process_commands();
     const auto now_ms = steady_time_ms();
     controller_.pump(now_ms);
@@ -129,10 +131,11 @@ void RuntimeWorker::run(const std::stop_token stop_token) {
     const auto session = controller_.snapshot();
     update_host_advertisement(session);
     publish(session);
-    std::unique_lock lock(runtime_.mutex_);
-    runtime_.wake_cv_.wait_for(lock, stop_token, std::chrono::milliseconds(2),
-                               [] { return false; });
+    lock.lock();
+    runtime_.wake_cv_.wait_for(lock, std::chrono::milliseconds(2),
+                               [this] { return !runtime_.accepting_commands_; });
   }
+  lock.unlock();
   stop_connection_services();
   controller_.disconnect();
   adapter_.stop();
