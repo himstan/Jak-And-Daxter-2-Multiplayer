@@ -6128,6 +6128,8 @@
 
 (defmethod draw-option ((this menu-restart-mission-qr-option) (arg0 progress) (arg1 font-context) (arg2 int) (arg3 symbol))
   (local-vars (a0-11 string))
+  (when (not (nonnull? this arg0 arg1 *progress-state*))
+    (return 0))
   (let ((f0-1 (* 2.0 (- 0.5 (-> arg0 menu-transition))))
         (name (if (mp-session-client?) (text-id progress-reconnect-button) (-> this name)))
         )
@@ -6143,6 +6145,11 @@
     (let ((s4-0 (&-> *progress-state* yes-no-choice)))
       (set! a0-11
             (cond
+              ((mp-local-player-dead-or-spectating?)
+               (set-color! arg1 (font-color progress-option-off))
+               (format (clear *temp-string*) "~S" (lookup-text! *common-text* name #f))
+               *temp-string*
+               )
               ((and (zero? (-> *progress-state* qr-options-item-selected)) (-> *progress-state* qr-options-item-picked))
                (let ((a0-2 arg1))
                  (set! (-> a0-2 color) (font-color progress-force-selected))
