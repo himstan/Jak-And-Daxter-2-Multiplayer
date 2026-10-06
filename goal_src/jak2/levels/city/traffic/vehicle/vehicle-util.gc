@@ -8,6 +8,7 @@
 (define-extern mp-should-apply-vehicle-camera? (function vehicle symbol))
 (define-extern mp-vehicle-clear-stale-player-driver! (function vehicle none))
 (define-extern mp-vehicle-is-local-authoritative? (function vehicle symbol))
+(define-extern vehicle-local-release? (function vehicle symbol))
 (define-extern mp-vehicle-remote-driven? (function vehicle symbol))
 (define-extern mp-vehicle-remote-needs-physics? (function vehicle symbol))
 
@@ -1463,7 +1464,10 @@
 
 (defmethod vehicle-needs-physics? ((this vehicle))
   (if (mp-vehicle-is-local-authoritative? this)
-      (logtest? (rigid-body-object-flag disturbed player-touching player-driving in-pursuit) (-> this flags))
+      (the-as symbol
+        (or (vehicle-local-release? this)
+            (and (nonnull? this)
+                 (logtest? (rigid-body-object-flag disturbed player-touching player-driving in-pursuit) (-> this flags)))))
       (mp-vehicle-remote-needs-physics? this)
       )
   )
@@ -1476,7 +1480,9 @@
          (vf2 :class vf)
          )
     (init-vf0-vector)
-    (when (time-elapsed? (-> this disturbed-time) (seconds 2))
+    (when (and (nonnull? this)
+               (not (vehicle-local-release? this))
+               (time-elapsed? (-> this disturbed-time) (seconds 2)))
       (cond
         ((logtest? (rigid-body-object-flag ai-driving) (-> this flags))
          (when (and (not (logtest? (-> this controller flags) (vehicle-controller-flag off-path)))

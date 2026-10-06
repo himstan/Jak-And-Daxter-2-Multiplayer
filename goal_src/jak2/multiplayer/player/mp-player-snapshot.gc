@@ -213,7 +213,8 @@
     (set! (-> (mp-local-player-record) vehicle turret-roty) 0.0)
     (set! (-> (mp-local-player-record) vehicle turret-rotx) 0.0)
     (mp-vehicle-pack-local-player-snapshot!)
-    (mp-pack-local-turret-snapshot!))
+    (mp-pack-local-turret-snapshot!)
+    (vehicle-cache-local-snapshot!))
   (none))
 
 (defun mp-pack-local-level-snapshot! ()

@@ -894,6 +894,50 @@ TEST(Jak2AdapterIntegration, PlayerVehiclePacketsUseGameFrameCaptureTime) {
   EXPECT_EQ(decoded.vehicle.sample_time_ms, 77u);
 }
 
+TEST(Jak2AdapterIntegration, ReleasedVehicleContinuesSendingMovingSnapshotsUntilGraceExpires) {
+  jak2::application::Jak2Adapter adapter;
+  RecordingEndpoint endpoint;
+  adapter.installed(endpoint);
+  adapter.session_started(endpoint.session_snapshot.state);
+  const auto publish = [&](bool driving, float x, uint64_t now_ms) {
+    auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
+    frame->local_player_id = 0;
+    frame->host_player_id = 0;
+    frame->selected_traffic_authority = 1;
+    frame->sample_time_ms = static_cast<uint32_t>(now_ms);
+    frame->players[0].player_id = 0;
+    frame->players[0].state_ready = true;
+    frame->players[0].vehicle_id = driving ? 0x21000001u : 0;
+    frame->player_vehicle =
+        jak2::core::PlayerVehicleState{.player_id = 0,
+                                       .vehicle = {.net_id = 0x21000001u,
+                                                   .position = {x, 0, 0},
+                                                   .quaternion = {0, 0, 0, 1},
+                                                   .linear_velocity = {4096, 0, 0}}};
+    endpoint.sent.clear();
+    adapter.mailbox().publish_local_frame(std::move(frame));
+    adapter.tick(now_ms);
+  };
+  publish(true, 4096, 1000);
+  publish(false, 8192, 1100);
+  publish(false, 12288, 3099);
+  const auto vehicle_packet = std::ranges::find_if(endpoint.sent, [](const auto& sent) {
+    return sent.id == static_cast<uint8_t>(PacketType::PLAYER_VEHICLE_STATE);
+  });
+  ASSERT_NE(vehicle_packet, endpoint.sent.end());
+  jak2::core::PlayerVehicleState detail;
+  ASSERT_TRUE(decode_player_vehicle_packet(vehicle_packet->payload, detail));
+  EXPECT_FLOAT_EQ(detail.vehicle.position[0], 12288);
+  EXPECT_FLOAT_EQ(detail.vehicle.linear_velocity[0], 4096);
+  const auto remote = adapter.mailbox().take_remote_frame();
+  ASSERT_TRUE(remote);
+  EXPECT_EQ(remote->players[0].vehicle_id, 0u);
+  publish(false, 16384, 3100);
+  EXPECT_TRUE(std::ranges::none_of(endpoint.sent, [](const auto& sent) {
+    return sent.id == static_cast<uint8_t>(PacketType::PLAYER_VEHICLE_STATE);
+  }));
+}
+
 TEST(Jak2AdapterIntegration, PresentationTimelinePredictsBeyondTheRawPlayerTransform) {
   jak2::application::Jak2Adapter adapter;
   RecordingEndpoint endpoint;

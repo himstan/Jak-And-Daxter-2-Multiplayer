@@ -29,6 +29,7 @@ void PlayerReplicationState::reset() {
   player_states_ = {};
   player_vehicles_ = {};
   player_vehicle_sequences_ = {};
+  vehicle_release_deadlines_ = {};
   turrets_ = {};
   turret_sequences_ = {};
 }
@@ -36,6 +37,11 @@ void PlayerReplicationState::reset() {
 void PlayerReplicationState::expire(const uint64_t now_ms) {
   for (PlayerId player_id = 0; player_id < kMaxPlayers; ++player_id) {
     auto& player = player_states_[player_id];
+    if (vehicle_release_deadlines_[player_id] != 0 &&
+        now_ms >= vehicle_release_deadlines_[player_id]) {
+      player_vehicles_[player_id] = {};
+      vehicle_release_deadlines_[player_id] = 0;
+    }
     if (!player.state_ready || now_ms - player.received_time_ms <= 2000)
       continue;
     lg::debug("[MP-PlayerState] Expiring player {}: age={}ms sequence={} activity={} vehicle={}.",
@@ -45,6 +51,7 @@ void PlayerReplicationState::expire(const uint64_t now_ms) {
     identities_[player_id].state_ready = false;
     player_vehicles_[player_id] = {};
     player_vehicle_sequences_[player_id] = 0;
+    vehicle_release_deadlines_[player_id] = 0;
     turrets_[player_id] = {};
     turret_sequences_[player_id] = 0;
   }
@@ -61,14 +68,42 @@ bool PlayerReplicationState::apply(const PlayerState& state, const ApplyContext&
   }
   auto& current = player_states_[state.player_id];
   if (current.vehicle_id != state.vehicle_id) {
-    player_vehicles_[state.player_id] = {};
-    player_vehicle_sequences_[state.player_id] = 0;
+    const bool releasing_driver =
+        state.vehicle_id == 0 && current.vehicle_id != 0 && current.vehicle_seat == 0 &&
+        !state.spectator_only && state.selected_traffic_authority < kMaxPlayers &&
+        state.selected_traffic_authority != state.player_id &&
+        (current.vehicle_id & kTrafficNetIdClassMask) != kFixedTrafficNetIdClass &&
+        player_vehicles_[state.player_id].vehicle.net_id == current.vehicle_id &&
+        std::ranges::none_of(player_states_, [&](const auto& player) {
+          return player.player_id != state.player_id && player.vehicle_id == current.vehicle_id &&
+                 player.vehicle_seat == 0;
+        });
+    vehicle_release_deadlines_[state.player_id] =
+        releasing_driver ? context.received_at_ms + 2000 : 0;
+    if (!releasing_driver) {
+      player_vehicles_[state.player_id] = {};
+      player_vehicle_sequences_[state.player_id] = 0;
+    }
     turrets_[state.player_id] = {};
     turret_sequences_[state.player_id] = 0;
   }
   current = state;
   current.last_sequence = context.sequence;
   current.received_time_ms = context.received_at_ms;
+  if (state.spectator_only || (vehicle_release_deadlines_[state.player_id] != 0 &&
+                               state.selected_traffic_authority == state.player_id)) {
+    vehicle_release_deadlines_[state.player_id] = 0;
+    player_vehicles_[state.player_id] = {};
+  }
+  if (state.vehicle_id != 0 && state.vehicle_seat == 0) {
+    for (PlayerId other = 0; other < kMaxPlayers; ++other) {
+      if (other != state.player_id && vehicle_release_deadlines_[other] != 0 &&
+          player_vehicles_[other].vehicle.net_id == state.vehicle_id) {
+        vehicle_release_deadlines_[other] = 0;
+        player_vehicles_[other] = {};
+      }
+    }
+  }
   player_vehicles_[state.player_id].seat_index = state.vehicle_seat;
   if (identities_[state.player_id].joined) {
     identities_[state.player_id].state_ready = state.state_ready;
@@ -86,20 +121,31 @@ bool PlayerReplicationState::apply(const PlayerVehicleState& state, const ApplyC
       !source_allows_player(context.source, state.player_id) ||
       !valid_player_vehicle_state(state.vehicle) ||
       (player_states_[state.player_id].last_sequence != 0 &&
-       player_states_[state.player_id].vehicle_id != state.vehicle.net_id) ||
+       !owns_vehicle(state.player_id, state.vehicle.net_id, context.received_at_ms)) ||
       !platform::sequence_is_newer(context.sequence, player_vehicle_sequences_[state.player_id])) {
     return false;
   }
   auto& player = player_states_[state.player_id];
-  player.vehicle_id = state.vehicle.net_id;
-  if (player.last_sequence == 0)
+  if (player.last_sequence == 0) {
+    player.vehicle_id = state.vehicle.net_id;
     player.vehicle_seat = state.seat_index;
+  }
   player_vehicle_sequences_[state.player_id] = context.sequence;
   player_vehicles_[state.player_id] = state;
   player_vehicles_[state.player_id].seat_index = player.vehicle_seat;
   player_vehicles_[state.player_id].vehicle.last_sequence = context.sequence;
   player_vehicles_[state.player_id].vehicle.received_time_ms = context.received_at_ms;
   return true;
+}
+
+bool PlayerReplicationState::owns_vehicle(const PlayerId player_id,
+                                          const EntityId net_id,
+                                          const uint64_t now_ms) const {
+  if (!valid_index(player_id, kMaxPlayers) || net_id == 0)
+    return false;
+  return player_states_[player_id].vehicle_id == net_id ||
+         (vehicle_release_deadlines_[player_id] > now_ms &&
+          player_vehicles_[player_id].vehicle.net_id == net_id);
 }
 
 bool PlayerReplicationState::apply(const TurretState& state, const ApplyContext& context) {
@@ -136,6 +182,7 @@ void PlayerReplicationState::depart(const PlayerId player_id) {
   player_states_[player_id] = {};
   player_vehicles_[player_id] = {};
   player_vehicle_sequences_[player_id] = 0;
+  vehicle_release_deadlines_[player_id] = 0;
   turrets_[player_id] = {};
   turret_sequences_[player_id] = 0;
 }
@@ -270,8 +317,8 @@ void ReplicationState::reset() {
 }
 
 void ReplicationState::expire(const uint64_t now_ms) {
+  traffic_.expire(now_ms, players_.player_vehicles());
   players_.expire(now_ms);
-  traffic_.expire(now_ms);
   entities_.expire(now_ms);
 }
 

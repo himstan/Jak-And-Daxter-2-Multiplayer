@@ -2,6 +2,7 @@
 
 #include <array>
 #include <deque>
+#include <span>
 
 #include "game/multiplayer/jak2/core/multiplayer_types.h"
 #include "game/multiplayer/platform/session/game_adapter.h"
@@ -19,6 +20,7 @@ class PlayerReplicationState {
   bool apply(const TurretState& state, const ApplyContext& context);
   bool update_identity(const PlayerIdentity& identity);
   void depart(PlayerId player_id);
+  bool owns_vehicle(PlayerId player_id, EntityId net_id, uint64_t now_ms) const;
 
   const auto& identities() const { return identities_; }
   const auto& players() const { return player_states_; }
@@ -31,6 +33,7 @@ class PlayerReplicationState {
   std::array<PlayerState, kMaxPlayers> player_states_ = {};
   std::array<PlayerVehicleState, kMaxPlayers> player_vehicles_ = {};
   std::array<Sequence, kMaxPlayers> player_vehicle_sequences_ = {};
+  std::array<uint64_t, kMaxPlayers> vehicle_release_deadlines_ = {};
   std::array<TurretState, kMaxPlayers> turrets_ = {};
   std::array<Sequence, kMaxPlayers> turret_sequences_ = {};
 };
@@ -38,7 +41,7 @@ class PlayerReplicationState {
 class TrafficReplicationState {
  public:
   void reset();
-  void expire(uint64_t now_ms);
+  void expire(uint64_t now_ms, std::span<const PlayerVehicleState> player_vehicles);
   bool apply(const TrafficAuthority& authority, const ApplyContext& context);
   bool apply(const TrafficSnapshot& snapshot, const ApplyContext& context);
   bool select_authority(PlayerId source_player_id);

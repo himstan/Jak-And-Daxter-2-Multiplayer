@@ -208,7 +208,8 @@ void Jak2Adapter::add_player_handlers(Handlers& handlers) {
         const auto local_id = endpoint.snapshot().state.local_player_id;
         const auto& player = local_frame_->players[local_id];
         if (!local_frame_->player_vehicle || player.spectator_only || player.vehicle_seat != 0 ||
-            local_frame_->player_vehicle->vehicle.net_id != player.vehicle_id)
+            !state_.players().owns_vehicle(local_id, local_frame_->player_vehicle->vehicle.net_id,
+                                           now_ms))
           return;
         auto vehicle = *local_frame_->player_vehicle;
         vehicle.player_id = local_id;

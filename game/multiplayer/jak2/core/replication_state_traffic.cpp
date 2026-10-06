@@ -37,11 +37,18 @@ void TrafficReplicationState::reset() {
   clear();
 }
 
-void TrafficReplicationState::expire(const uint64_t now_ms) {
+void TrafficReplicationState::expire(
+    const uint64_t now_ms, const std::span<const PlayerVehicleState> player_vehicles) {
   bool changed = false;
   for (PlayerId source = 0; source < kMaxPlayers; ++source) {
     changed |= expire_entities(pedestrian_snapshots_[source].pedestrians, now_ms);
-    changed |= expire_entities(vehicle_snapshots_[source].vehicles, now_ms);
+    changed |= std::erase_if(vehicle_snapshots_[source].vehicles, [&](const auto& vehicle) {
+                 return now_ms - vehicle.received_time_ms > 2000 ||
+                        std::ranges::any_of(player_vehicles, [&](const auto& player_vehicle) {
+                          return player_vehicle.seat_index == 0 &&
+                                 player_vehicle.vehicle.net_id == vehicle.net_id;
+                        });
+               }) != 0;
   }
   if (changed) {
     rebuild_aggregate();

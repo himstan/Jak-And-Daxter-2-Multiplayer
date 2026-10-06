@@ -571,6 +571,22 @@ TEST(Jak2GoalBridge, ExchangeCopiesLocalStateAndAcknowledgesOnlyAcceptedEvents) 
   EXPECT_EQ(state.outbound_event_count, 1);
 }
 
+TEST(Jak2GoalBridge, ExchangeCapturesReleasedVehicleStateWithoutSeatOccupancy) {
+  GoalMemoryFixture memory;
+  auto& state = replication_state(memory);
+  state.local.players[0].vehicle.vehicle_id = 0;
+  state.local.players[0].vehicle.state.net_id = 0x21000001;
+  state.local.players[0].vehicle.state.x = 42;
+  multiplayer::jak2::application::ReplicationMailbox mailbox;
+  ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
+  const auto local = mailbox.take_local_frame();
+  ASSERT_TRUE(local);
+  ASSERT_TRUE(local->player_vehicle);
+  EXPECT_EQ(local->players[0].vehicle_id, 0u);
+  EXPECT_EQ(local->player_vehicle->vehicle.net_id, 0x21000001u);
+  EXPECT_FLOAT_EQ(local->player_vehicle->vehicle.position[0], 42);
+}
+
 TEST(Jak2GoalBridge, ExchangePreservesFullBootstrapAidCapacity) {
   GoalMemoryFixture memory;
   auto& state = replication_state(memory);

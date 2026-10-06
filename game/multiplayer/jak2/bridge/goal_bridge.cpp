@@ -319,7 +319,7 @@ bool capture_local(MPReplicationStateGOAL& state, application::ReplicationMailbo
     frame->players[i] = read_player(state.local.players[i]);
   }
   const auto& player = state.local.players[state.local_player_id];
-  if (player.vehicle.vehicle_id != 0) {
+  if (player.vehicle.state.net_id != 0) {
     frame->player_vehicle = core::PlayerVehicleState{.player_id = state.local_player_id,
                                                      .seat_index = player.vehicle.seat_index,
                                                      .vehicle = read_vehicle(player.vehicle.state)};
