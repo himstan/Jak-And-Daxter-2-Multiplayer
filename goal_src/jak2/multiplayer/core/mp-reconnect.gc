@@ -17,6 +17,7 @@
 
 (defun mp-reconnect-reset-gameplay-if-needed! ()
   (when (and (mp-session-client?) (not *mp-reconnect-gameplay-reset?*))
+    (mp-close-local-fail-mission!)
     (mp-reset-gameplay-state)
     (mp-bootstrap-controller-reset!)
     (set! *mp-reconnect-gameplay-reset?* #t)

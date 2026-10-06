@@ -223,6 +223,7 @@
   (none))
 
 (defun mp-enter-host-left-terminal-state! ()
+  (mp-close-local-fail-mission!)
   (when (mp-local-player-dead-or-spectating?)
     (remove-setting! 'allow-progress)
     (mp-death-spectate-abort!))
@@ -378,6 +379,7 @@
   (none))
 
 (defun mp-ui-trigger-tick ()
+  (mission-failure-health-check)
   (let ((status (pc-multi-get-session-status)))
     (mp-update-reconnect-ui! status)
     (mp-update-host-left-ui! status)

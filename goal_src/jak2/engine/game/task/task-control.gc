@@ -33,6 +33,7 @@
 
 (declare-type fail-mission process)
 (define-extern mp-apply-pending-mission-failed-choice! (function symbol))
+(define-extern *mp-mission-failed-pending-choice* uint)
 
 ;; DECOMP BEGINS
 
@@ -1471,6 +1472,7 @@
    (reset-delay     uint32)
    (grabbed-time    time-frame)
    (retry           symbol)
+   (choice-time     time-frame)
    (task            game-task)
    (message-id      sound-id)
    (fail-message    text-id)
@@ -1496,12 +1498,16 @@
   )
 
 (defun mp-fail-mission-apply-choice! ((fail-proc fail-mission) (event-type uint))
-  (when (or (nonnull? fail-proc)
+  (when (or (not (nonnull? fail-proc))
             (not (mp-fail-mission-choice-event? event-type)))
     (return #f)
     )
-  (set! (-> fail-proc retry) (= event-type MP_EVENT_MISSION_FAILED_RETRY_YES))
-  (logior! (-> fail-proc flags) (fail-mission-flags famflags-7))
+  (when (< (-> fail-proc choice-time) 0)
+    (set! (-> fail-proc retry) (= event-type MP_EVENT_MISSION_FAILED_RETRY_YES))
+    (when (nonnull? *display* (-> *display* real-clock))
+      (set! (-> fail-proc choice-time) (-> *display* real-clock frame-counter)))
+    (logior! (-> fail-proc flags) (fail-mission-flags famflags-7))
+    )
   #t
   )
 
@@ -1510,9 +1516,12 @@
              (mp-fail-mission-choice-event? event-type)
              (mp-session-host?)
              (mp-session-in-game?)
-             (not (mp-fail-mission-coordinated? fail-proc))
-             (mp-event-enqueue-actor-name! event-type ""))
+             (not (mp-fail-mission-coordinated? fail-proc)))
+    (set! *mp-mission-failed-pending-choice* event-type)
     (mp-fail-mission-apply-choice! fail-proc event-type)
+    (when (mp-event-enqueue-actor-name! event-type "")
+      (set! *mp-mission-failed-pending-choice* (the uint 0))
+      )
     (return #t)
     )
   #f
@@ -1548,22 +1557,14 @@
       #t)
   )
 
-(defun mp-fail-mission-arm-bootstrap-fallback! ((fail-proc fail-mission))
-  (when (and fail-proc
-             (nonzero? fail-proc)
+(defun mp-fail-mission-arm-bootstrap-fallback! ((fail-proc fail-mission) (await-spawn? symbol))
+  (when (and (nonnull? fail-proc)
              (mp-session-host?)
              (mp-session-in-game?))
-    (if (mp-fail-mission-coordinated? fail-proc)
-        (log 'debug "[Task-Control] Executing coordinated mission restart.")
-        (begin
-          (log 'debug
-            "[Task-Control] Non-coordinated mission restart. Waiting for post-reload bootstrap.~%")
-          (set! *mp-mission-failed-bootstrap-await-spawn?* #t)
-          (set! *mp-mission-failed-bootstrap-pending?* #f)
-          (set! *mp-mission-failed-bootstrap-ready-time* (the-as time-frame 0))
-          )
-        )
-      )
+    (set! *mp-mission-failed-bootstrap-await-spawn?* await-spawn?)
+    (set! *mp-mission-failed-bootstrap-pending?* (not await-spawn?))
+    (set! *mp-mission-failed-bootstrap-ready-time* (if await-spawn? (the-as time-frame 0) (current-time)))
+    )
   (none)
   )
 
@@ -1630,6 +1631,11 @@
   :virtual #t
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
     (case message
+      (('mission-failure-recover)
+       (when (mp-fail-mission-client-choice-ready? self)
+         (go-virtual resetting)
+         )
+       )
       (('reset)
        (cond
          ((logtest? (-> self flags) (fail-mission-flags famflags-1))
@@ -1848,7 +1854,7 @@
                (set-continue! *game-info* a1-6 #t)
                )
            )
-         (mp-fail-mission-arm-bootstrap-fallback! self)
+         (mp-fail-mission-arm-bootstrap-fallback! self #t)
          (initialize! *game-info* 'life (the-as game-save #f) (the-as string #f))
        )
       (((fail-mission-message fammsg-1))
@@ -1859,17 +1865,18 @@
                 (set-continue! *game-info* a1-8 #t)
                 )
             )
-          (mp-fail-mission-arm-bootstrap-fallback! self)
+          (mp-fail-mission-arm-bootstrap-fallback! self #t)
           (initialize! *game-info* 'try (the-as game-save #f) (the-as string #f))
           )
          ((begin (set! a1-10 (-> self fail-continue)) a1-10)
           (set-continue! *game-info* a1-10 #t)
-          (mp-fail-mission-arm-bootstrap-fallback! self)
+          (mp-fail-mission-arm-bootstrap-fallback! self #t)
           (initialize! *game-info* 'life (the-as game-save #f) (the-as string #f))
           )
          (else
            (task-node-reset 'life)
            (update-task-masks 'life)
+           (mp-fail-mission-arm-bootstrap-fallback! self #f)
            (if (and (nonnull? *target*)
                     (focus-test? *target* dead grabbed))
                (send-event *target* 'end-mode)
@@ -1886,6 +1893,8 @@
   )
 
 (defbehavior fail-mission-init-by-other fail-mission ((arg0 fail-mission-params))
+  (when (nonnull? self)
+    (set! (-> self choice-time) (the-as time-frame -1)))
   (set! (-> self message) (-> arg0 message))
   (set! (-> self flags) (-> arg0 flags))
   (set! (-> self retry-continue) (-> arg0 retry-continue))
