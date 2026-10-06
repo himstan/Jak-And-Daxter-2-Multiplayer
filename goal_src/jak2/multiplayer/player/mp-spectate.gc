@@ -723,7 +723,9 @@
       (logclear! (-> manager options flags) flags))))
 
 (defbehavior mp-spectate-manager-pending-update! mp-spectate-manager ()
-  (when (= (-> self phase) (mp-spectate-phase pending))
+  (when (and (nonnull? self)
+             (= (-> self phase) (mp-spectate-phase pending))
+             (not (recover-death-spectate-if-alive! self)))
     (set! (-> self level-request-owned?) #f)
     (mp-spectate-apply-presence! self)
     (when (mp-spectate-manager-inert? self)
@@ -771,7 +773,9 @@
   (none))
 
 (defun mp-spectate-manager-active-update! ((manager mp-spectate-manager))
-  (when (and manager (nonzero? manager) (= (-> manager phase) (mp-spectate-phase active)))
+  (when (and (nonnull? manager)
+             (= (-> manager phase) (mp-spectate-phase active))
+             (not (recover-death-spectate-if-alive! manager)))
     (set! (-> manager level-request-owned?) #f)
     (if (and (logtest? (-> manager options flags) (mp-spectate-flags end-on-scene)) *scene-player*)
       (mp-spectate-stop! (-> manager owner) 'scene-started)

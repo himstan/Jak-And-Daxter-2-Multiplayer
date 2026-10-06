@@ -88,14 +88,22 @@
   (none))
 
 (defun mp-death-spectate-abort! ()
-  (when (not (mp-spectate-stop! 'death 'abort))
-    (mp-spectate-reset!))
   (remove-setting! 'mode-name)
   (apply-settings *setting-control*)
   (set! *mp-death-respawn-event-pending?* #f)
   (set! *mp-death-party-wipe-pending?* #f)
   (mp-set-local-player-respawning! #f)
+  (when (not (mp-spectate-stop! 'death 'abort))
+    (mp-spectate-reset!))
   (none))
+
+(defun recover-death-spectate-if-alive! ((manager mp-spectate-manager))
+  (when (and (nonnull? manager *target* (-> *target* control))
+             (= (-> manager owner) 'death)
+             (not (focus-test? *target* dead)))
+    (mp-death-spectate-abort!)
+    (return #t))
+  #f)
 
 (defun mp-death-spectate-reset-needed? ()
   (cond
