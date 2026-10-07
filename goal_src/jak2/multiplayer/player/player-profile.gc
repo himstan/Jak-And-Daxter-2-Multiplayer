@@ -81,7 +81,7 @@
     (behavior ((health float))
       (when (nonnull? self (-> self control) (-> self fact))
         (when (mp-target-daxter? self)
-          (target-indax-init #f))
+          (target-indax-init #f #f))
         (set! (-> self fact health) health)
         (animate-player-character-size!)
         (if (mp-target-daxter? self) (go target-indax-stance) (go target-stance))))

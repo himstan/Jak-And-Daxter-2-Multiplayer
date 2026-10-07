@@ -31,11 +31,8 @@
 
 (defun mp-enemy-debug-focus-player-id-label ((focus-player-id uint))
   (cond
-    ((zero? focus-player-id) "NONE")
-    ((and (mp-local-player-record)
-          (nonzero? (mp-local-player-record))
-          (= focus-player-id (the uint (+ 1 (-> (mp-local-player-record) identity player-id)))))
-     "LOCAL")
+    ((not (mp-player-id-valid? focus-player-id)) "NONE")
+    ((= focus-player-id (mp-local-player-id)) "LOCAL")
     (else "REMOTE")))
 
 (defun mp-enemy-debug-owner? ((rec mp-enemy-auth-record))

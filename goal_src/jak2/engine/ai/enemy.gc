@@ -6,6 +6,7 @@
 ;; dgos: GAME, COMMON
 
 (define-extern mp-combat-nearest-player-target (function process-focusable process-focusable symbol process-focusable))
+(define-extern mp-combat-player-in-scope? (function process-focusable process-focusable object))
 (define-extern mp-actor-broadcast-attack (function enemy process event-message-block symbol))
 (define-extern mp-actor-handle-attack-hijack (function enemy process event-message-block symbol))
 (define-extern mp-enemy-authoritative? (function enemy symbol))
@@ -193,8 +194,10 @@
 
 ;; WARN: Return type mismatch object vs symbol.
 (defmethod enemy-method-53 ((this enemy) (proc-focus process-focusable))
-  "TODO"
-  (the-as symbol (and proc-focus (!= this proc-focus) (collide-check? (-> this focus) proc-focus)))
+  (the-as symbol (and (nonnull? this (-> this focus) proc-focus)
+                      (!= this proc-focus)
+                      (mp-combat-player-in-scope? this proc-focus)
+                      (collide-check? (-> this focus) proc-focus)))
   )
 
 (defmethod get-trans ((this enemy) (arg0 int))
@@ -411,6 +414,9 @@
   )
 
 (defmethod enemy-method-63 ((this enemy) (arg0 process-focusable) (arg1 enemy-aware))
+  (when (or (not (nonnull? this (-> this focus)))
+            (not (mp-combat-player-in-scope? this arg0)))
+    (return #f))
   (if arg1
       (enemy-focus-method-13 (-> this focus) arg0 arg1)
       (try-update-focus (-> this focus) arg0 this)
@@ -1337,7 +1343,9 @@
       (when a1-0
         (let ((v1-4 (-> this enemy-flags)))
           (cond
-            ((and a1-0 (not (logtest? (-> (the-as process-focusable a1-0) focus-status) (focus-status disable dead))))
+            ((and (nonnull? a1-0)
+                  (mp-combat-player-in-scope? this (the-as process-focusable a1-0))
+                  (not (logtest? (-> (the-as process-focusable a1-0) focus-status) (focus-status disable dead))))
              (when (and (logtest? (enemy-flag multi-focus) v1-4)
                         (not (logtest? (enemy-flag lock-focus) v1-4))
                         (not (logtest? (-> gp-0 flags) (enemy-flag look-at-focus)))
@@ -1391,7 +1399,7 @@
             (let ((v1-5 (the-as collide-shape (-> (the-as connection v1-4) param1))))
               (when (logtest? s4-0 (-> v1-5 root-prim prim-core collide-as))
                 (let ((a1-1 (as-type (-> v1-5 process) process-focusable)))
-                  (if (and a1-1 (and a1-1 (not (logtest? (-> a1-1 focus-status) (focus-status disable dead)))) (!= this a1-1))
+                  (if (enemy-method-53 this a1-1)
                       (update-target-awareness! this a1-1 gp-0)
                       )
                   )
@@ -1413,7 +1421,7 @@
               (let ((v1-20 (the-as collide-shape (-> (the-as connection v1-19) param1))))
                 (when (logtest? s4-0 (-> v1-20 root-prim prim-core collide-as))
                   (let ((a1-3 (as-type (-> v1-20 process) process-focusable)))
-                    (if (and a1-3 (and a1-3 (not (logtest? (-> a1-3 focus-status) (focus-status disable dead)))) (!= this a1-3))
+                    (if (enemy-method-53 this a1-3)
                         (update-target-awareness! this a1-3 gp-0)
                         )
                     )
@@ -1434,7 +1442,7 @@
               (let ((v1-33 (the-as collide-shape (-> (the-as connection v1-32) param1))))
                 (when (logtest? s4-0 (-> v1-33 root-prim prim-core collide-as))
                   (let ((a1-5 (as-type (-> v1-33 process) process-focusable)))
-                    (if (and a1-5 (and a1-5 (not (logtest? (-> a1-5 focus-status) (focus-status disable dead)))) (!= this a1-5))
+                    (if (enemy-method-53 this a1-5)
                         (update-target-awareness! this a1-5 gp-0)
                         )
                     )

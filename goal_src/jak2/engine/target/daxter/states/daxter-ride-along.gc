@@ -137,7 +137,7 @@
       (when (and (nonnull? (-> self next-state)) (= (-> self next-state name) 'target-indax-grab))
         (set! *local-riding-before-grabbed?* #t))
       (release-ride-along! self)
-      (target-indax-init #f))
+      (target-indax-init #f #f))
   :trans
     (behavior ()
       (unless (nonnull? (get-attached-jak-proc self))

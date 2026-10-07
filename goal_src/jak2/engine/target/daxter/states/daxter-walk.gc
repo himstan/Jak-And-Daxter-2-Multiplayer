@@ -64,11 +64,11 @@
     (behavior ()
       (set-time! (-> self state-time))
       (set! (-> self control mod-surface) *indax-walk-mods*)
-      (target-indax-init #f))
+      (target-indax-init #f #f))
   :exit
     (behavior ()
       (target-effect-exit)
-      (target-indax-init #f)
+      (target-indax-init #f #f)
       (target-state-hook-exit)
       (target-indax-exit))
   :trans

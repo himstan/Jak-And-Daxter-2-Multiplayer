@@ -1247,7 +1247,7 @@
         )
     (set! (-> self control did-move-to-pole-or-max-jump-height) (the-as float arg2))
     (warp-gate-enter-arrival-state! self arg0 arg1 arg2)
-    (target-indax-init #f)
+    (target-indax-init #f #f)
     (target-indax-align!)
     (hide-model self)
     )

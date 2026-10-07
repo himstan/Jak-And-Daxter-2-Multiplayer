@@ -73,7 +73,7 @@
 
 (defun mp-respawn-local-target! ((player target))
   (mp-clear-local-vehicle-occupancy! player)
-  (if (mp-local-player-daxter?) (go-process player target-indax-start (the handle #f)) (go-process player target-stance))
+  (if (mp-local-player-daxter?) (go-process player target-indax-spectate-respawn) (go-process player target-stance))
   (none))
 
 (defun mp-extract-local-stats ()

@@ -204,16 +204,7 @@
     (set! (-> self indax art-group-backup) (-> self draw art-group)))
   (none))
 
-(defun target-indax-should-refill-health? ((tgt target) (reset-velocity? symbol))
-  (if (and tgt
-           (nonzero? tgt)
-           (mp-session-in-game?)
-           (> (-> tgt fact health) 0.0)
-           (or (mp-local-player-respawning?) (not reset-velocity?)))
-    #f
-    #t))
-
-(defbehavior target-indax-init target ((reset-velocity? symbol))
+(defbehavior target-indax-init target ((reset-velocity? symbol) (refill-health? symbol))
   (let ((surf (-> self control current-surface)))
     (if (and surf
              (not (zero? (the-as uint surf)))
@@ -237,9 +228,11 @@
   (logior! (-> self focus-status) (focus-status indax))
   (set! (-> self control bend-target) 0.0)
   (target-collide-set! 'indax 0.0)
-  (if (target-indax-should-refill-health? self reset-velocity?) (set! (-> self fact health) (-> self fact health-max)))
-  (when (not-player-replica? self)
-    (mp-set-local-player-respawning! #f))
+  (when (and (nonnull? self (-> self fact))
+             (or refill-health?
+                 (not (mp-session-in-game?))
+                 (<= (-> self fact health) 0.0)))
+    (set! (-> self fact health) (-> self fact health-max)))
   (set-time! (-> self indax indax-start-time))
   (target-indax-update-art-group-backup!)
   (if (and (-> self sidekick) (!= (the-as uint (-> self sidekick)) 0))

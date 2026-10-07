@@ -69,9 +69,6 @@
 
 (defun mp-prepare-local-respawn! ((player target))
   (mp-spectate-reset!)
-  (let ((local-record (mp-local-player-record)))
-    (when (and local-record (nonzero? local-record))
-      (mp-player-runtime-clear-flag! local-record (mp-player-runtime-flags respawning))))
   (mp-for-each-player-record (player-id record)
     (mp-player-runtime-clear-flag! record (mp-player-runtime-flags force-presentation)))
   (when (and player (nonzero? player))

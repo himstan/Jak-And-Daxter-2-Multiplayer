@@ -7,7 +7,14 @@
   :event target-standard-event-handler
   :code
     (behavior ((arg0 handle))
-      (target-indax-init #t))
+      (target-indax-init #t #t))
+  :post target-indax-post)
+
+(defstate target-indax-spectate-respawn (target)
+  :event target-standard-event-handler
+  :code
+    (behavior ()
+      (target-indax-init #t #f))
   :post target-indax-post)
 
 (defstate target-indax-stance (target)

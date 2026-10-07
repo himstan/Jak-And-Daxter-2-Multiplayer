@@ -489,17 +489,6 @@
       (return #t)))
   #f)
 
-(defun mp-local-player-respawning? ()
-  (mp-player-runtime-flag? (mp-local-player-record) (mp-player-runtime-flags respawning)))
-
-(defun mp-set-local-player-respawning! ((respawning? symbol))
-  (let ((record (mp-local-player-record)))
-    (when (and record (nonzero? record))
-      (if respawning?
-        (mp-player-runtime-set-flag! record (mp-player-runtime-flags respawning))
-        (mp-player-runtime-clear-flag! record (mp-player-runtime-flags respawning)))))
-  (none))
-
 (defun mp-player-record-position ((record mp-player-record))
   (when (and record (nonzero? record))
     (let ((player-target (mp-player-record-target record)))

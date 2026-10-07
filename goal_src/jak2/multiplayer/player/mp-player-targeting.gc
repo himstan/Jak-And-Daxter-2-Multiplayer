@@ -31,6 +31,7 @@
 (defun mp-combat-player-in-scope? ((source process-focusable) (candidate process-focusable))
   (and (nonnull? source candidate)
        (or (not (type? source enemy))
+           (not (type? candidate target))
            (not (or (mp-session-host?) (mp-session-client?)))
            (mp-enemy-player-eligible? (mp-player-process-record candidate) (mp-enemy-level-id (the-as enemy source))))))
 

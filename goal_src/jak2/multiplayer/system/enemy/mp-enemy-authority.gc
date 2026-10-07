@@ -50,7 +50,6 @@
                       (nonzero? (-> record connection state-cached?))
                       (= (-> record connection activity) (mp-player-activity in-game))))
              (not (mp-player-record-dead-or-dying? record))
-             (not (mp-player-runtime-flag? record (mp-player-runtime-flags respawning)))
              (or (!= (the uint (-> record identity player-id)) (mp-local-player-id))
                  (and (not (mp-bootstrap-in-progress?)) (nonnull? (mp-enemy-local-player-pos)))))
     (dotimes (index MP_PLAYER_LEVEL_SLOT_COUNT)
