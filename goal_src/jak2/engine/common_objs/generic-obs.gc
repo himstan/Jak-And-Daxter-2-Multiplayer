@@ -304,7 +304,7 @@
         (if (swingpole-regrab-blocked? pole player-slot)
             (set! (-> pole player-release-times player-slot) (current-time))
             (when (send-event proc 'pole-grab touch-entry)
-              (return (swingpole-track-target! pole proc))
+              (return #t)
               )
             )
         )

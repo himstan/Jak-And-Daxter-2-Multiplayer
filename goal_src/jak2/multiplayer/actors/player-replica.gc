@@ -194,7 +194,8 @@
                (set! (-> gun-info using-gun-type) (pickup-type none))
                (when (using-gun? proc)
                  (send-event proc 'mp-put-gun-away))))
-            ((and (!= weapon active-type) (!= (mp-equipped-weapon->pickup-type weapon) requested-type))
+            ((and (!= weapon active-type)
+                  (or (zero? active-type) (!= (mp-equipped-weapon->pickup-type weapon) requested-type)))
              (handle-gun-equip-marking-menu proc (mp-equipped-weapon->pickup-type weapon))))))))
   (none))
 

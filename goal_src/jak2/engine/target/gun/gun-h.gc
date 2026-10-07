@@ -165,7 +165,7 @@
   (and (logtest? (-> arg0 game features) (game-feature gun))
        (nonzero? (-> arg0 gun))
        (time-elapsed? (-> arg0 gun gun-time) (seconds 0.1))
-       (not (focus-test? arg0 dead hit board mech dark teleporting))
+       (not (focus-test? arg0 dead hit board mech dark teleporting pole))
        (not (logtest? (surface-flag gun-inactive gun-hide gun-off) (-> arg0 control current-surface flags)))
        (not (logtest? (state-flags prevent-gun) (-> arg0 state-flags)))
        (logtest? (logand (-> *setting-control* user-current features) (game-feature gun-yellow gun-red gun-blue gun-dark))

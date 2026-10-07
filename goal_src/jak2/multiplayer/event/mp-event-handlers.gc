@@ -1177,7 +1177,6 @@
         (when (and pole-proc (nonzero? pole-proc))
           (let ((pole-handle (process->handle pole-proc)))
             (when (not (and (focus-test? replica pole) (= (-> replica control anim-handle) pole-handle)))
-              (send-event pole-proc 'mp-pole-grab (process->handle replica))
               (send-event replica 'mp-pole-grab pole-handle)))))))
   (none))
 
