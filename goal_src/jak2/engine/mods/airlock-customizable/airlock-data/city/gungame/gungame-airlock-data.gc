@@ -11,7 +11,7 @@
                 :on-exit #f
                 :on-cross '(begin (want-vis 'ctyport) (want-continue "ctyport-gungame"))
                 :on-inside #f
-                :on-deactivate '(begin (want-display 'ctyport #f) (want-display 'ctywide #f))
+                :on-deactivate #f
                 )
               )
   )

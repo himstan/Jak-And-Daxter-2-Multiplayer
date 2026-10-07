@@ -11,7 +11,7 @@
                 :on-exit #f
                 :on-cross '(want-vis 'ctyport)
                 :on-inside #f
-                :on-deactivate '(begin (want-display 'ctyport #f) (want-display 'ctywide #f))
+                :on-deactivate #f
                 )
               (static-airlock-data
                 :airlock-name "hip-door-a-7" ;; UNUSED
