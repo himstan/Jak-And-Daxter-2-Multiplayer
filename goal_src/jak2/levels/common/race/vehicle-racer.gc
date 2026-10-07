@@ -864,9 +864,14 @@
   :enter
     (behavior ()
       (set-time! (-> self state-time))
-      (set! (-> self damage-factor) (-> self info damage-factor))
+      (set! (-> self damage-factor) 0.0)
       (update-navmesh-membership! self)
       (logior! (-> self flags) (rigid-body-object-flag ignition)))
+  :exit
+    (behavior ()
+      (when (and (nonnull? self (-> self info) (-> self race) (-> self race state))
+                 (logtest? (-> self race state flags) (race-flags begun)))
+        (set! (-> self damage-factor) (-> self info damage-factor))))
   :code sleep-code
   :post
     (behavior ()
