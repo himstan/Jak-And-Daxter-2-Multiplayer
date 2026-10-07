@@ -234,6 +234,60 @@
   :init-specs ((:r 64.0 32.0) (:g 64.0 32.0) (:b 128.0 32.0) (:next-time (seconds 0) (seconds 1.497)) (:next-launcher 3322))
   )
 
+(deftype reflected-door (process-drawable)
+  ()
+  (:state-methods
+    idle
+    )
+  )
+
+(defstate idle (reflected-door)
+  :virtual #t
+  :code sleep-code
+  :post (behavior ()
+    (when (nonnull? self (-> self draw) (-> self skel))
+      (let ((door (as-type (process-by-ename "hip-door-b-1") hip-door-b)))
+        (if (nonnull? door (-> door skel) (-> door draw) (-> door root))
+            (clone-anim-once (process->handle door) #f "")
+            (begin
+              (ja-post)
+              (logior! (-> self draw status) (draw-control-status no-draw-temp))
+              )
+            )
+        )
+      )
+    )
+  )
+
+(defmethod init-from-entity! ((this reflected-door) (entity entity-actor))
+  (when (nonnull? this entity (-> entity extra) *level*)
+    (let ((skeleton (the-as skeleton-group
+                     (art-group-get-by-name *level* "skel-hip-door-b" (the-as (pointer uint32) #f)))))
+      (when (nonnull? skeleton)
+        (set! (-> this root) (new 'process 'trsqv))
+        (process-drawable-from-entity! this entity)
+        (initialize-skeleton this skeleton (the-as pair 0))
+        (go (method-of-object this idle))
+        )
+      )
+    )
+  (none)
+  )
+
+(defun hiphog-enable-reflected-door! ()
+  (let ((entity (as-type (entity-by-name "hip-door-a-7") entity-actor)))
+    (when (nonnull? entity (-> entity extra))
+      (set! (-> entity etype) reflected-door)
+      (logclear! (-> entity kill-mask) (task-mask never))
+      (logclear! (-> entity extra kill-mask) (task-mask never))
+      (when (not (nonnull? (-> entity extra process)))
+        (birth! entity)
+        )
+      )
+    )
+  (none)
+  )
+
 (defun hiphog-activate ()
   (let ((mirror (entity-by-name "hip-mirror-2")))
     (when mirror
@@ -241,6 +295,7 @@
       (vector-rotate-y! (-> *math-camera* mirror-normal) (new 'static 'vector :x 1.0 :w 1.0) -10297.162)
       )
     )
+  (hiphog-enable-reflected-door!)
   )
 
 (defpartgroup group-whack-gun-yellow-shot-fired
