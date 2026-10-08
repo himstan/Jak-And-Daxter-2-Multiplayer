@@ -12,6 +12,7 @@
 (define-extern mp-get-local-airlock-state (function uint mp-airlock-state-id))
 (define-extern mp-get-local-airlock-level-id (function uint int))
 (define-extern mp-airlock-all-connected-remotes-state-id? (function uint mp-airlock-state-id symbol))
+(define-extern format-airlock-waiting-text! (function string uint string))
 (define-extern mp-any-remote-airlock-level-differs? (function uint int symbol))
 (define-extern mp-level-symbol->id (function symbol uint))
 (define-extern mp-airlock-has-local-commit? (function symbol))

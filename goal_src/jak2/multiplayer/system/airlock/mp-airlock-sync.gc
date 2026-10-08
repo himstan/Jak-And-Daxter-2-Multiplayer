@@ -251,6 +251,41 @@
               (return #f))))))
     (> remote-count 0)))
 
+(defun format-airlock-waiting-text! ((destination string) (airlock-aid uint))
+  (when (not (nonnull? destination
+                       *common-text*
+                       *mp-player-controller*
+                       *mp-player-name-scratch*
+                       *pc-encoded-temp-string*))
+    (return destination))
+  (clear destination)
+  (let ((name-count 0))
+    (mp-for-each-player-record (player-id record)
+      (when (and (mp-remote-gameplay-player-connected? record)
+                 (not (mp-is-remote-state-id-for-player? airlock-aid
+                                                         (the-as uint player-id)
+                                                         (mp-airlock-state-id commit))))
+        (when (< name-count 2)
+          (mp-player-copy-name! *mp-player-name-scratch* (the-as uint player-id))
+          (pc-encode-utf8-string *mp-player-name-scratch* *pc-encoded-temp-string*)
+          (format destination
+                  (if (zero? name-count)
+                    (lookup-text! *common-text* (text-id airlock-waiting-for-players) #f)
+                    (lookup-text! *common-text* (text-id airlock-waiting-next-player) #f))
+                  *pc-encoded-temp-string*))
+        (+! name-count 1)))
+    (cond
+      ((zero? name-count)
+       (copy-string<-string destination (lookup-text! *common-text* (text-id airlock-waiting-for-other-player) #f)))
+      ((> name-count 2)
+       (format destination
+               (lookup-text! *common-text*
+                             (if (= name-count 3) (text-id airlock-waiting-for-one-other) (text-id airlock-waiting-for-more-players))
+                             #f)
+               (- name-count 2)))
+      (else (format destination (lookup-text! *common-text* (text-id airlock-waiting-end) #f)))))
+  destination)
+
 (defun mp-any-remote-airlock-level-differs? ((airlock-aid uint) (local-level-id int))
   (when (and (nonnull? *mp-player-controller*) (nonnull? *mp-remote-airlock-state*))
     (dotimes (player-id MP_MAX_PLAYERS)

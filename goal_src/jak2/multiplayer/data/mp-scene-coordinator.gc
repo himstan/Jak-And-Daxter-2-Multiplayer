@@ -347,10 +347,7 @@
         (vote-count (mp-scene-coordinator-vote-count))
         (local-voted? (and (nonnull? *mp-player-controller*)
                            (logtest? *mp-scene-coordinator-vote-mask* (mp-scene-player-bit (mp-local-player-id))))))
-    (when (and (mp-session-in-game?)
-               (> player-count 1)
-               (> vote-count 0)
-               (nonnull? *mp-scene-vote-text*))
+    (when (and (mp-session-in-game?) (> player-count 1) (> vote-count 0) (nonnull? *mp-scene-vote-text*))
       (let ((font-ctx (new 'stack
                            'font-context
                            *font-default-matrix*
