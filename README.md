@@ -45,6 +45,15 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
 
 ### Good to know
 
+#### When playing Daxter
+
+- You can jump on a Jak's shoulder if they're crouching by going near them and pressing <img src="docs/img/common/dpad-triangle.png" alt="PS2 Triangle button" width="16">.
+- You can jump off the Jak's shoulder anytime by pressing <img src="docs/img/common/dpad-x.png" alt="PS2 X button" width="16">
+
+#### Custom keybinds
+- **SELECT** - While in game you can press it to show the player list, and also the nametags above each player if the visibility setting is set to **Hold** (it's the default)
+- L1 + <img src="docs/img/common/dpad-triangle.png" alt="PS2 Triangle button" width="16"> - While near an empty vehicle will get you into it's passenger seat.
+
 #### Options you should definitely take a look at
 
 - There is a **Multiplayer Options** settings page which can be accessed either from the **Main Menu**'s **Options** tab, or while in game through the **Game Options** tab.
@@ -65,10 +74,6 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
 
 #### Player Map Marker
 - **Multiplayer Options** -> **Player Map Marker** this setting toggles the visibility of the big/minimap player markers.
-
-#### Custom keybinds
-- **SELECT** - While in game you can press it to show the player list, and also the nametags above each player if the visibility setting is set to **Hold** (it's the default)
-- L1 + <img src="docs/img/common/dpad-triangle.png" alt="PS2 X button" width="16"> - While near an empty vehicle will get you into it's passenger seat.
 
 ## Hosting A Game
 

@@ -49,12 +49,9 @@
 
 
 (defun mp-local-target-ride-along-block-vehicle-entry? ((tgt target) (veh vehicle))
-  (or (and tgt
-             (nonzero? tgt)
-             (= tgt *target*)
-             *target*
-             (nonzero? *target*)
-             (mp-target-ride-along? *target*))
+  (or (and (nonnull? tgt)
+           (= tgt *target*)
+           (player-ride-contact-disabled? tgt))
       ;; Block boarding guard vehicles for now, they're broken as hell now
       ;; TODO: to fix the guard vehicle handling
       (and veh (nonzero? veh) (type? veh vehicle-guard))
@@ -288,7 +285,9 @@
 (defmethod check-player-get-on ((this vehicle))
   (with-pp
      (let ((tgt *target*))
-        (when (and tgt (nonzero? tgt) (-> tgt control) (not (focus-test? tgt pilot teleporting)))
+        (when (and (nonnull? tgt (-> tgt control))
+                   (not (focus-test? tgt pilot teleporting))
+                   (not (nonnull? (get-ride-along-mount-record tgt))))
           (let ((f0-0 (vector-vector-distance-squared (-> this root trans) (-> tgt control trans)))
                 (f1-0 102400.0)
                 )

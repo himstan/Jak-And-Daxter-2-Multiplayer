@@ -107,6 +107,8 @@
   :event target-ride-along-handler
   :enter
     (behavior ()
+      (when (nonnull? self)
+        (set-time! (-> self state-time)))
       (set! (-> self control transv quad) (the-as uint128 0))
       (set! (-> self control ctrl-xz-vel) 0.0)
       (set! (-> self control root-prim prim-core action) (collide-action))
@@ -142,7 +144,8 @@
     (behavior ()
       (unless (nonnull? (get-attached-jak-proc self))
         (jump-off-jak))
-      (draw-ride-along-prompt! (text-id press-x-to-hop-off))
+      (when (and (nonnull? self) (not (time-elapsed? (-> self state-time) (seconds 3))))
+        (draw-ride-along-prompt! (text-id press-x-to-hop-off)))
       (when (and (not-player-replica? self)
                  (not (real-movie?))
                  (nonnull? (-> self control) (-> self control cpad))
@@ -179,6 +182,7 @@
       (let ((jak-proc (mp-player-target-by-id jak-player-id)))
         (unless (and (nonnull? jak-proc (-> jak-proc control))
                      (mp-target-jak? jak-proc)
+                     (or (player-replica? self) (jak-crouching? jak-proc))
                      (not (focus-test? jak-proc dead inactive)))
           (go target-indax-stance))
         (let ((rider (get-jak-rider jak-proc))) (when (and (nonnull? rider) (!= rider self)) (go target-indax-stance)))
