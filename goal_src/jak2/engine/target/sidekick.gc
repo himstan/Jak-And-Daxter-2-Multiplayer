@@ -449,6 +449,9 @@
           (set! (-> self skel prebind-function) #f)
           (when (nonnull? (-> self neck))
             (set! (-> self neck flex-blend) 0.0))
+          (when (and (nonnull? self (-> self head))
+                     (!= (-> self head mode) (joint-mod-mode joint-set*)))
+            (mode-set! (-> self head) (joint-mod-mode joint-set*)))
           (joint-control-remap!
             (-> self skel)
             (-> self draw art-group)
