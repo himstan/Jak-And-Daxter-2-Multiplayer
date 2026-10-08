@@ -476,7 +476,6 @@ Disassembly Debugger::disassemble_at_rip(const InstructionPointerInfo& info) {
 void Debugger::reload_break_state() {
   m_memory_map = m_listener->build_memory_map();
   // lg::print("{}", m_memory_map.print());
-  read_symbol_table();
   // xdbg::Regs uses the x86 register layout and the macOS backend is not implemented.
   m_regs_valid = xdbg::get_regs_now(m_debug_context.tid, &m_regs_at_break);
 
@@ -510,9 +509,18 @@ void Debugger::update_break_info(std::optional<std::string> dump_path) {
   reload_break_state();
 
   if (regs_valid()) {
-    get_backtrace(m_regs_at_break.rip, m_regs_at_break.gprs[emitter::RSP], dump_path);
-    auto dis = disassemble_at_rip(m_break_info);
-    lg::print("{}\n", dis.text);
+    try {
+      get_backtrace(m_regs_at_break.rip, m_regs_at_break.gprs[emitter::RSP], dump_path);
+    } catch (const std::exception&) {
+      lg::print("[Debugger] Backtrace generation failed; continuing with disassembly and registers.\n");
+    }
+
+    try {
+      auto dis = disassemble_at_rip(m_break_info);
+      lg::print("{}\n", dis.text);
+    } catch (const std::exception&) {
+      lg::print("[Debugger] Crash-site disassembly failed; continuing with registers.\n");
+    }
   }
 
   if (!m_regs_valid) {

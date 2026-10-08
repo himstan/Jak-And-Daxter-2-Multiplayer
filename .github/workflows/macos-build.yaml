@@ -76,7 +76,7 @@ jobs:
 
       - name: Run Multiplayer Tests
         timeout-minutes: 10
-        run: python3 ./tools/run_multiplayer_tests.py --group all --bin-dir ./build/test
+        run: python3 ./tools/run_multiplayer_tests.py --group all --bin-dir ./build
 
       - name: Prepare artifacts
         if: ${{ inputs.uploadArtifacts }}
