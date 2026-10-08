@@ -455,6 +455,7 @@
 (defun can-draw-ride-along-prompt? ((rider target))
   (if (and (nonnull? rider *font-default-matrix* *common-text*)
            (not-player-replica? rider) (mp-target-daxter? rider)
+           (not (focus-test? rider grabbed))
            (not (movie?)) (not (real-movie?)) (not (nonnull? *progress-process*)))
     #t
     #f))
