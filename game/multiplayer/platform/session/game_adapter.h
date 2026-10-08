@@ -93,7 +93,7 @@ class GameAdapter {
   virtual std::vector<uint8_t> create_bootstrap(PlayerId) { return {}; }
   virtual bool apply_bootstrap(uint32_t, std::span<const uint8_t>) { return false; }
   virtual void player_profile_changed(const PlayerProfile&) {}
-  virtual void player_departed(PlayerId) {}
+  virtual void player_departed(PlayerId, PlayerDepartureReason = PlayerDepartureReason::LEFT) {}
 };
 
 }  // namespace multiplayer::platform

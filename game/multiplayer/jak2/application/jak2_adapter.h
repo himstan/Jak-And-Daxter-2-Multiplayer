@@ -30,7 +30,9 @@ class Jak2Adapter final : public platform::GameAdapter {
   std::vector<uint8_t> create_bootstrap(platform::PlayerId player_id) override;
   bool apply_bootstrap(uint32_t generation, std::span<const uint8_t> payload) override;
   void player_profile_changed(const platform::PlayerProfile& profile) override;
-  void player_departed(platform::PlayerId player_id) override;
+  void player_departed(
+      platform::PlayerId player_id,
+      platform::PlayerDepartureReason reason = platform::PlayerDepartureReason::LEFT) override;
   void tick(uint64_t now_ms) override;
   void stop() override;
 
@@ -54,6 +56,7 @@ class Jak2Adapter final : public platform::GameAdapter {
   std::optional<uint64_t> last_remote_publish_ms_;
   uint32_t remote_generation_ = 0;
   std::array<uint32_t, core::kMaxPlayers> player_lifecycles_ = {};
+  std::array<platform::PlayerDepartureReason, core::kMaxPlayers> player_departures_ = {};
   PresentationRuntime presentation_;
   platform::GameDescriptor descriptor_;
   platform::PacketRegistry packets_;

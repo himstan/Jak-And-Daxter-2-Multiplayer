@@ -235,6 +235,26 @@ TEST(PlatformSession, AdmissionGateCodecsAreTypedAndRejectTruncation) {
   EXPECT_FALSE(multiplayer::platform::decode_server_gate(old_rejection, decoded_response));
 }
 
+TEST(PlatformSession, DepartureReasonsRoundTripAndRejectUnknownValues) {
+  using namespace multiplayer::platform;
+  for (const auto reason : {PlayerDepartureReason::LEFT, PlayerDepartureReason::TIMED_OUT}) {
+    const auto bytes = encode_control_message(
+        {.kind = ControlKind::DEPARTURE, .player_id = 1, .reason = static_cast<uint8_t>(reason)},
+        16);
+    ASSERT_EQ(bytes.size(), 3u);
+    ControlMessage decoded;
+    ASSERT_TRUE(decode_control_message(bytes, 16, 8, decoded));
+    EXPECT_EQ(decoded.player_id, 1u);
+    EXPECT_EQ(decoded.reason, static_cast<uint8_t>(reason));
+    auto invalid = bytes;
+    invalid.back() = 2;
+    EXPECT_FALSE(decode_control_message(invalid, 16, 8, decoded));
+  }
+  EXPECT_TRUE(
+      encode_control_message({.kind = ControlKind::DEPARTURE, .player_id = 1, .reason = 2}, 16)
+          .empty());
+}
+
 TEST(PlatformSession, EveryCommonControlMessageHasExplicitHostClientAuthority) {
   using multiplayer::platform::ControlKind;
   using multiplayer::platform::SessionRole;

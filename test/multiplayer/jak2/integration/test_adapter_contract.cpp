@@ -1167,6 +1167,7 @@ TEST(Jak2AdapterIntegration, ProfileExtensionAndPlayerLifecycleStayGameSpecific)
   remote = adapter.mailbox().take_remote_frame();
   ASSERT_TRUE(remote);
   EXPECT_FALSE(remote->identities[1].joined);
+  EXPECT_EQ(remote->player_departures[1], platform::PlayerDepartureReason::LEFT);
 }
 TEST(Jak2AdapterIntegration, RapidRejoinRetainsLifecycleAndStartsFreshPresentation) {
   jak2::application::Jak2Adapter adapter;
@@ -1195,7 +1196,7 @@ TEST(Jak2AdapterIntegration, RapidRejoinRetainsLifecycleAndStartsFreshPresentati
                 .disposition,
             platform::PayloadDisposition::REJECT);
   adapter.tick(100);
-  adapter.player_departed(1);
+  adapter.player_departed(1, platform::PlayerDepartureReason::TIMED_OUT);
   adapter.player_profile_changed(profile);
   player.position = {400.0f, 500.0f, 600.0f};
   ASSERT_TRUE(encode_player_packet(player, body));
@@ -1213,6 +1214,7 @@ TEST(Jak2AdapterIntegration, RapidRejoinRetainsLifecycleAndStartsFreshPresentati
   ASSERT_TRUE(frame);
   EXPECT_TRUE(frame->identities[1].joined);
   EXPECT_EQ(frame->player_lifecycles[1], 1u);
+  EXPECT_EQ(frame->player_departures[1], platform::PlayerDepartureReason::TIMED_OUT);
   EXPECT_EQ(frame->players[1].last_sequence, 1u);
   EXPECT_TRUE(frame->player_targets[1].valid);
   EXPECT_EQ(frame->player_targets[1].position, frame->players[1].position);

@@ -1,0 +1,24 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defconstant NOTIFICATION_VISIBLE_COUNT 4)
+(defconstant NOTIFICATION_QUEUE_CAPACITY (* MP_MAX_PLAYERS 4))
+(defconstant NOTIFICATION_ROW_HEIGHT 30)
+(defconstant NOTIFICATION_SLIDE_TIME (seconds 0.35))
+(defconstant NOTIFICATION_HOLD_TIME (seconds 4))
+
+(deftype notification-entry (structure)
+  ((started time-frame)
+   (row-y   float)
+   (text    text-id)
+   (name    string)))
+
+(deftype notification-manager (mp-overlay-layout-process)
+  ((entries notification-entry NOTIFICATION_QUEUE_CAPACITY :inline)
+   (head    uint8)
+   (count   uint8))
+  (:state-methods
+   notification-active))
+
+(define-extern ensure-player-notifications! (function process none))
+(define-extern notify-player! (function uint text-id none))

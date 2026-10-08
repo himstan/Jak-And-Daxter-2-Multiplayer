@@ -8,6 +8,7 @@
    (mp-main-update! (_type_) symbol)))
 
 (defmethod mp-main-update! ((this main-multiplayer-manager))
+  (ensure-player-notifications! this)
   (mp-session-tick)
   (let ((status (pc-multi-get-session-status)))
     (mp-update-synchronized-gameplay-state!)

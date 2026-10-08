@@ -239,7 +239,10 @@ class RecordingAdapter final : public GameAdapter {
   void player_profile_changed(const PlayerProfile& value) override {
     profile_changes.push_back(value);
   }
-  void player_departed(PlayerId player_id) override { departures.push_back(player_id); }
+  void player_departed(PlayerId player_id, PlayerDepartureReason reason) override {
+    departures.push_back(player_id);
+    departure_reasons.push_back(reason);
+  }
 
   PacketRegistry& packets() override { return packets_; }
   PacketRegistry packets_;
@@ -256,6 +259,7 @@ class RecordingAdapter final : public GameAdapter {
   std::vector<ReceivedGameplay> received;
   std::vector<PlayerProfile> profile_changes;
   std::vector<PlayerId> departures;
+  std::vector<PlayerDepartureReason> departure_reasons;
 };
 
 struct RuntimeAdapterState {
@@ -1553,6 +1557,8 @@ TEST(GnsTransportIntegration, SpoofedClientOriginClosesOnlyThatPlayer) {
   EXPECT_TRUE(host_adapter.received.empty());
   ASSERT_EQ(host_adapter.departures.size(), 1u);
   EXPECT_EQ(host_adapter.departures.front(), 1u);
+  ASSERT_EQ(host_adapter.departure_reasons.size(), 1u);
+  EXPECT_EQ(host_adapter.departure_reasons.front(), PlayerDepartureReason::LEFT);
 }
 
 TEST(GnsTransportIntegration, SessionReportsTypedGateRejections) {

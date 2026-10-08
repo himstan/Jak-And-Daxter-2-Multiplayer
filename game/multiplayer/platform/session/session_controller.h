@@ -96,7 +96,7 @@ class SessionController final : public GameSessionEndpoint {
                         PlayerId origin,
                         Delivery delivery,
                         std::span<const uint8_t> payload);
-  void host_departure(ConnectionId connection, int reason);
+  void host_departure(ConnectionId connection, int reason, bool timed_out = false);
   void reject(ConnectionId connection, RejectionReason reason, std::string_view required = {});
   FrameSendResult send_frame(FrameKind kind,
                              const Audience& audience,

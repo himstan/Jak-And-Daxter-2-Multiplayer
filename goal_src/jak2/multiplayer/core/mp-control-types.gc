@@ -17,6 +17,11 @@
   (lan 1)
   (directed 2))
 
+(defenum player-departure-reason
+  :type uint8
+  (left 0)
+  (timed-out 1))
+
 (defenum mp-discovery-status
   :type uint8
   (idle 0)

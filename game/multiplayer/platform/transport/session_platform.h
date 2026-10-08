@@ -36,6 +36,7 @@ struct TransportEvent {
   Delivery delivery = Delivery::UNRELIABLE_REALTIME;
   TransportLane lane = TransportLane::REALTIME_NORMAL;
   int close_reason = 0;
+  bool timed_out = false;
   std::string detail;
   std::string remote_address;
   std::vector<uint8_t> payload;

@@ -219,11 +219,14 @@ struct SessionPlatform::Impl {
         state == k_ESteamNetworkingConnectionState_ProblemDetectedLocally) {
       if (const auto found = gns_connections.find(callback.m_hConn);
           found != gns_connections.end()) {
-        events.push_back({.kind = TransportEventKind::CLOSED,
-                          .connection_id = found->second.id,
-                          .close_reason = callback.m_info.m_eEndReason,
-                          .detail = callback.m_info.m_szEndDebug,
-                          .remote_address = found->second.remote_address});
+        events.push_back(
+            {.kind = TransportEventKind::CLOSED,
+             .connection_id = found->second.id,
+             .close_reason = callback.m_info.m_eEndReason,
+             .timed_out = callback.m_info.m_eEndReason == k_ESteamNetConnectionEnd_Remote_Timeout ||
+                          callback.m_info.m_eEndReason == k_ESteamNetConnectionEnd_Misc_Timeout,
+             .detail = callback.m_info.m_szEndDebug,
+             .remote_address = found->second.remote_address});
         remove_connection(callback.m_hConn);
       }
       sockets->CloseConnection(callback.m_hConn, 0, nullptr, false);

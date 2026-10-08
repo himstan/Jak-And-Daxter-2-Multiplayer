@@ -987,10 +987,13 @@ TEST(Jak2GoalBridge, LifecycleChangeDiscardsAlreadyCopiedEventsFromPreviousOccup
   multiplayer::jak2::application::ReplicationMailbox mailbox;
   auto frame = std::make_unique<multiplayer::jak2::application::RemoteReplicationFrame>();
   frame->player_lifecycles[1] = 4;
+  frame->player_departures[1] = multiplayer::platform::PlayerDepartureReason::TIMED_OUT;
   frame->identities[1].joined = true;
   mailbox.publish_remote_frame(std::move(frame));
   ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
   EXPECT_EQ(state.remote.players[1].lifecycle_generation, 4u);
+  EXPECT_EQ(state.remote.players[1].departure_reason,
+            static_cast<uint8_t>(multiplayer::platform::PlayerDepartureReason::TIMED_OUT));
   ASSERT_EQ(state.inbound_event_count, 1u);
   EXPECT_EQ(state.inbound_events[0].source_player_id, 2u);
 }

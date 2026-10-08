@@ -147,7 +147,8 @@ std::vector<uint8_t> encode_control_message(const ControlMessage& message,
       }
       break;
     case ControlKind::DEPARTURE:
-      if (message.player_id == kInvalidPlayerId)
+      if (message.player_id == kInvalidPlayerId ||
+          message.reason > static_cast<uint8_t>(PlayerDepartureReason::TIMED_OUT))
         return {};
       out.push_back(message.player_id);
       out.push_back(message.reason);
@@ -220,7 +221,8 @@ bool decode_control_message(const std::span<const uint8_t> bytes,
     }
     case ControlKind::DEPARTURE:
       if (!read_u8(bytes, cursor, message.player_id) || !read_u8(bytes, cursor, message.reason) ||
-          message.player_id >= maximum_players)
+          message.player_id >= maximum_players ||
+          message.reason > static_cast<uint8_t>(PlayerDepartureReason::TIMED_OUT))
         return false;
       break;
     case ControlKind::SET_CHARACTER: {

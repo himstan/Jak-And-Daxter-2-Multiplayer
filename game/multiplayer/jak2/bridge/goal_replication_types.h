@@ -47,6 +47,7 @@ struct alignas(16) MPReplicationPlayerGOAL {
   uint8_t activity;
   uint8_t valid;
   uint8_t mission_flags;
+  uint8_t departure_reason;
 };
 static_assert(sizeof(MPReplicationPlayerGOAL) == 544);
 static_assert(offsetof(MPReplicationPlayerGOAL, identity) == 48);

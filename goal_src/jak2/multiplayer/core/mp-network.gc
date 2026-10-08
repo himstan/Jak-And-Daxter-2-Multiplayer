@@ -83,12 +83,23 @@
     (set! (-> destination mission-flags) (the-as uint8 (-> source runtime mission-flags))))
   (none))
 
-(defun mp-network-copy-player-from-replication! ((destination mp-player-record) (source mp-replication-player))
+(defun mp-network-copy-player-from-replication! ((destination mp-player-record)
+                                                 (source mp-replication-player)
+                                                 (notify-joins? symbol))
+  (local-vars (joining? symbol))
   (when (nonnull? destination source)
+    (set! joining?
+          (and (nonzero? (-> source identity joined?))
+               (or (zero? (-> destination identity joined?))
+                   (!= (-> destination connection lifecycle-generation) (-> source lifecycle-generation)))))
     (when (!= (-> destination connection lifecycle-generation) (-> source lifecycle-generation))
       (let ((previous-player-id (the uint (-> destination identity player-id))))
         (if (and (nonzero? (-> destination identity joined?)) (mp-player-id-valid? previous-player-id))
           (begin
+            (notify-player! previous-player-id
+                            (if (= (-> source departure-reason) (player-departure-reason timed-out))
+                              (text-id notification-player-timed-out)
+                              (text-id notification-player-left)))
             (reassign-player-owned-enemies previous-player-id)
             (mp-player-controller-release-slot! *mp-player-controller* previous-player-id))
           (reset-player-replica-state! destination)))
@@ -98,6 +109,8 @@
       (let ((character (-> destination identity character)))
         (set! (-> destination identity character) previous-character)
         (apply-player-character-change! destination character)))
+    (when (and joining? notify-joins?)
+      (notify-player! (the uint (-> destination identity player-id)) (text-id notification-player-joined)))
     (vector-copy! (-> destination transform position) (-> source presentation-position))
     (vector-copy! (-> destination transform velocity) (-> source presentation-velocity))
     (vector-copy! (-> destination runtime presentation-position) (-> source presentation-position))
@@ -456,7 +469,7 @@
                  (* 64 (size-of mp-event)))))
   (none))
 
-(defun mp-network-consume-remote-replication! ()
+(defun mp-network-consume-remote-replication! ((notify-joins? symbol))
   (when (nonnull? *mp-replication-state*
                   *mp-player-controller*
                   *mp-world-state*
@@ -471,7 +484,8 @@
     (dotimes (player-id MP_MAX_PLAYERS)
       (when (!= player-id (the-as int (-> *mp-replication-state* local-player-id)))
         (mp-network-copy-player-from-replication! (-> *mp-player-controller* records player-id)
-                                                  (-> *mp-replication-state* remote players player-id))))
+                                                  (-> *mp-replication-state* remote players player-id)
+                                                  notify-joins?)))
     (when (mp-session-client?)
       (when (!= (-> *mp-replication-state* remote world-valid?) 0)
         (mem-copy! (the-as pointer *mp-world-state*)
@@ -544,7 +558,18 @@
     (mp-network-capture-local-replication!)
     (gungame-prepare-exchange!))
   (when (nonnull? *mp-replication-state*)
-    (pc-multi-exchange-state (the-as uint *mp-replication-state*))
-    (when (mp-network-status-ready? status)
-      (mp-network-consume-remote-replication!)))
+    (let* ((local-player-id (the uint (-> *mp-replication-state* local-player-id)))
+           (notify-joins? (if (and (mp-player-id-valid? local-player-id)
+                                   (or (= local-player-id (-> *mp-replication-state* host-player-id))
+                                       (nonzero? (-> *mp-replication-state*
+                                                     remote
+                                                     players
+                                                     local-player-id
+                                                     identity
+                                                     joined?))))
+                            #t
+                            #f)))
+      (pc-multi-exchange-state (the-as uint *mp-replication-state*))
+      (when (mp-network-status-ready? status)
+        (mp-network-consume-remote-replication! notify-joins?))))
   (none))

@@ -262,7 +262,7 @@ void SessionController::handle_event(TransportEvent event, const uint64_t now_ms
   } else if (snapshot_.state.role == SessionRole::HOST) {
     pending_gates_.erase(event.connection_id);
     pending_rejection_closes_.erase(event.connection_id);
-    host_departure(event.connection_id, event.close_reason);
+    host_departure(event.connection_id, event.close_reason, event.timed_out);
   } else {
     lg::debug("[MP-Session] Host connection closed (reason {}, detail '{}').", event.close_reason,
               event.detail);
@@ -407,7 +407,9 @@ void SessionController::handle_pending_message(const TransportEvent& event) {
                Audience::one(event.connection_id));
 }
 
-void SessionController::host_departure(const ConnectionId connection, const int reason) {
+void SessionController::host_departure(const ConnectionId connection,
+                                       const int reason,
+                                       const bool timed_out) {
   const auto* player = registry_.find_connection(connection);
   if (!player)
     return;
@@ -418,11 +420,11 @@ void SessionController::host_departure(const ConnectionId connection, const int 
   registry_.release_connection(connection);
   lg::debug("[MP-Session] Player {} (connection {}) departed with reason {}.", id, connection,
             reason);
-  send_control({.kind = ControlKind::DEPARTURE,
-                .player_id = id,
-                .reason = static_cast<uint8_t>(std::clamp(reason, 0, 255))},
-               Audience::everyone());
-  adapter_.player_departed(id);
+  const auto departure = timed_out ? PlayerDepartureReason::TIMED_OUT : PlayerDepartureReason::LEFT;
+  send_control(
+      {.kind = ControlKind::DEPARTURE, .player_id = id, .reason = static_cast<uint8_t>(departure)},
+      Audience::everyone());
+  adapter_.player_departed(id, departure);
   clear_countdown();
 }
 
@@ -611,7 +613,7 @@ void SessionController::handle_client_control(const ConnectionId connection,
     profiles_[message.player_id] = {};
     if (message.player_id < snapshot_.player_pings.size())
       snapshot_.player_pings[message.player_id] = kUnknownPlayerPing;
-    adapter_.player_departed(message.player_id);
+    adapter_.player_departed(message.player_id, static_cast<PlayerDepartureReason>(message.reason));
     clear_countdown();
   } else if (message.kind == ControlKind::START_COUNTDOWN) {
     snapshot_.countdown_active = true;

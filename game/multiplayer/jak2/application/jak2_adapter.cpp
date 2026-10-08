@@ -102,9 +102,11 @@ void Jak2Adapter::player_profile_changed(const platform::PlayerProfile& profile)
   }
 }
 
-void Jak2Adapter::player_departed(const platform::PlayerId player_id) {
+void Jak2Adapter::player_departed(const platform::PlayerId player_id,
+                                  const platform::PlayerDepartureReason reason) {
   if (player_id < core::kMaxPlayers) {
     ++player_lifecycles_[player_id];
+    player_departures_[player_id] = reason;
     presentation_.reset_player(player_id);
     mailbox_.discard_player_events(player_id);
   }
@@ -145,6 +147,7 @@ void Jak2Adapter::publish_remote_frame(const platform::SessionState& session,
   auto profile = scoped_prof("multiplayer::jak2::publish_remote_frame");
   auto frame = std::make_unique<RemoteReplicationFrame>();
   frame->player_lifecycles = player_lifecycles_;
+  frame->player_departures = player_departures_;
   frame->identities = state_.players().identities();
   frame->players = state_.players().players();
   frame->player_vehicles = state_.players().player_vehicles();

@@ -23,6 +23,8 @@ enum class RejectionReason : uint8_t {
   THROTTLED,
 };
 
+enum class PlayerDepartureReason : uint8_t { LEFT, TIMED_OUT };
+
 struct ClientGate {
   std::string game_id;
   std::string compatibility_identity;

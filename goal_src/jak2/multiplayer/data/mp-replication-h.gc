@@ -66,8 +66,9 @@
    (lifecycle-generation    uint32)
    (activity                mp-player-activity)
    (valid?                  uint8)
-   (mission-flags           uint8))
-  :size-assert 535)
+   (mission-flags           uint8)
+   (departure-reason        player-departure-reason))
+  :size-assert 536)
 
 (deftype mp-replication-bootstrap-state (structure)
   ((host-spawn-position    vector :inline)

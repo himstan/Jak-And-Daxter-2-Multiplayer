@@ -166,6 +166,7 @@
   "mp-player-texture-groups.o" ;; added
   "mp-cutscene-appearance.o" ;; added
   "mp-overlay-layout-h.o" ;; added
+  "notification-h.o" ;; added
   "mp-spectate-h.o" ;; added
   "mp-player-list-h.o" ;; added
   "mp-world-h.o" ;; added
@@ -671,6 +672,7 @@
   "player-profile.o" ;; added
   "mp-remote.o" ;; added
   "mp-overlay-layout.o" ;; added
+  "notification.o" ;; added
   "mp-player-list.o" ;; added
   "mp-spectate.o" ;; added
   "mp-death-spectate.o" ;; added

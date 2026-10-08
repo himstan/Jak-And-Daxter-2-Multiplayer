@@ -648,6 +648,7 @@ bool publish_remote(MPReplicationStateGOAL& state, application::ReplicationMailb
       write_player(frame->players[i], player_vehicle, frame->turrets[i], frame->player_targets[i],
                    state.remote.players[i]);
       state.remote.players[i].lifecycle_generation = frame->player_lifecycles[i];
+      state.remote.players[i].departure_reason = static_cast<uint8_t>(frame->player_departures[i]);
     }
     state.remote.world_valid = frame->world.sequence != 0;
     state.remote.world_generation = frame->generation;

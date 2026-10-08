@@ -9,6 +9,7 @@
 
 #include "game/multiplayer/jak2/core/multiplayer_types.h"
 #include "game/multiplayer/platform/core/mailbox.h"
+#include "game/multiplayer/platform/protocol/session_protocol.h"
 
 namespace multiplayer::jak2::application {
 
@@ -45,6 +46,7 @@ struct PresentationTarget {
 
 struct RemoteReplicationFrame {
   std::array<uint32_t, core::kMaxPlayers> player_lifecycles = {};
+  std::array<platform::PlayerDepartureReason, core::kMaxPlayers> player_departures = {};
   std::array<core::PlayerIdentity, core::kMaxPlayers> identities = {};
   std::array<core::PlayerState, core::kMaxPlayers> players = {};
   std::array<core::PlayerVehicleState, core::kMaxPlayers> player_vehicles = {};
