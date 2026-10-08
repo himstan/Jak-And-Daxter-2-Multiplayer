@@ -1,6 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern tomb-boulder-prepare-local-respawn! (function symbol))
+
 (defconstant MP_RESPAWN_FLAG_BLOCK_REMOTE_ON_ME #x1)
 
 (define-perm *mp-block-remote-respawn-on-me?* symbol #f)
@@ -83,12 +85,9 @@
   (none))
 
 (defun mp-begin-local-death-respawn-policy! ((player target))
-  (when (and player
-             (nonzero? player)
-             *target*
-             (nonzero? *target*)
+  (when (and (nonnull? player *target*)
              (not-player-replica? player)
-             (mp-should-use-local-respawn?))
+             (or (tomb-boulder-prepare-local-respawn!) (mp-should-use-local-respawn?)))
     (mp-prepare-local-respawn! player)
     (return #t))
   #f)
