@@ -1038,6 +1038,26 @@
         (if is-daxter? (mp-play-random-vo speaker *mp-daxter-death-vo*) (mp-play-random-vo speaker *mp-jak-death-vo*)))))
   (none))
 
+(defun player-replica-reconcile-respawn! ((proc target) (record mp-player-record) (target-record target-record))
+  (unless (and (nonnull? proc record target-record (-> proc control)) (-> target-record active?))
+    (return #f))
+  (let ((record-state (mp-target-get-state-from-id (-> target-record state-id))))
+    (unless (and (nonnull? record-state)
+                 (not (mp-target-death-state? record-state))
+                 (or (and (nonnull? (-> proc state)) (mp-target-death-state? (-> proc state name)))
+                     (and (nonnull? (-> proc next-state)) (mp-target-death-state? (-> proc next-state name)))))
+      (return #f)))
+  (logclear! (-> proc mask) (process-mask pause sleep actor-pause))
+  (player-replica-release-vehicle! proc)
+  (player-replica-clear-pending-gun-shot! record)
+  (mp-player-runtime-clear-flag! record (mp-player-runtime-flags dying dead))
+  (set! (-> record runtime state-mismatch-count) 0)
+  (set! (-> record runtime last-action-sequence) (-> record action authoritative-sequence))
+  (if (mp-player-daxter? record) (go-process proc target-indax-start (the handle #f)) (go-process proc target-stance))
+  (player-replica-snap-to-record-on-spawn! proc)
+  (player-replica-start-hit-flash! proc)
+  #t)
+
 (defun player-replica-apply-record-correction! ((proc target))
   (let ((record (mp-player-controller-target-record *mp-player-controller* proc)))
     (when (nonnull? record)
@@ -1045,6 +1065,7 @@
         (when (and (nonnull? proc target-record (-> proc control))
                    (not (player-changing-character? proc))
                    (-> target-record active?)
+                   (not (player-replica-reconcile-respawn! proc record target-record))
                    (not (player-replica-reconcile-vehicle-exit! proc
                                                                 record
                                                                 (if (nonnull? (-> proc state)) (-> proc state name) #f))))
@@ -1063,6 +1084,7 @@
                 (cond
                   ((and (mp-target-death-state? record-state)
                         (not (mp-target-death-state? cur-state))
+                        (not (and (nonnull? (-> proc next-state)) (mp-target-death-state? (-> proc next-state name))))
                         (not (mp-player-blocks-respawn? record)))
                    (log 'debug "[PlayerReplica] Authoritative Death! Bumping ~A -> ~A~%" cur-state record-state)
                    (mp-player-runtime-set-flag! record (mp-player-runtime-flags dying))
