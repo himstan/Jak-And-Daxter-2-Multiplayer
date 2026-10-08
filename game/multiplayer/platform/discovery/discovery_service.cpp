@@ -16,6 +16,10 @@
 
 #include <WS2tcpip.h>
 #include <WinSock2.h>
+#else
+#include <ifaddrs.h>
+
+#include <net/if.h>
 #endif
 
 namespace multiplayer::platform {
@@ -27,6 +31,16 @@ std::vector<sockaddr_in> broadcast_targets(const uint16_t port) {
   global.sin_port = htons(port);
   global.sin_addr.s_addr = INADDR_BROADCAST;
   targets.push_back(global);
+  const auto add_target = [&](const uint32_t address) {
+    if (std::ranges::any_of(
+            targets, [&](const auto& existing) { return existing.sin_addr.s_addr == address; }))
+      return;
+    sockaddr_in target = {};
+    target.sin_family = AF_INET;
+    target.sin_port = htons(port);
+    target.sin_addr.s_addr = address;
+    targets.push_back(target);
+  };
 #ifdef _WIN32
   ULONG size = 15 * 1024;
   std::vector<uint8_t> buffer(size);
@@ -54,17 +68,23 @@ std::vector<sockaddr_in> broadcast_targets(const uint16_t port) {
       const uint32_t ip = ntohl(local->sin_addr.s_addr);
       const uint32_t mask =
           unicast->OnLinkPrefixLength == 0 ? 0 : 0xffffffffu << (32 - unicast->OnLinkPrefixLength);
-      sockaddr_in target = {};
-      target.sin_family = AF_INET;
-      target.sin_port = htons(port);
-      target.sin_addr.s_addr = htonl((ip & mask) | ~mask);
-      const bool duplicate = std::ranges::any_of(targets, [&](const auto& existing) {
-        return existing.sin_addr.s_addr == target.sin_addr.s_addr;
-      });
-      if (!duplicate)
-        targets.push_back(target);
+      add_target(htonl((ip & mask) | ~mask));
     }
   }
+#else
+  ifaddrs* interfaces = nullptr;
+  if (getifaddrs(&interfaces) != 0)
+    return targets;
+  for (const auto* interface = interfaces; interface; interface = interface->ifa_next) {
+    if (!(interface->ifa_flags & IFF_UP) || !(interface->ifa_flags & IFF_BROADCAST) ||
+        (interface->ifa_flags & IFF_LOOPBACK) || !interface->ifa_addr ||
+        interface->ifa_addr->sa_family != AF_INET || !interface->ifa_broadaddr ||
+        interface->ifa_broadaddr->sa_family != AF_INET)
+      continue;
+    const auto* broadcast = reinterpret_cast<const sockaddr_in*>(interface->ifa_broadaddr);
+    add_target(broadcast->sin_addr.s_addr);
+  }
+  freeifaddrs(interfaces);
 #endif
   return targets;
 }

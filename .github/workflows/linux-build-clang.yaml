@@ -64,10 +64,9 @@ jobs:
       - name: Build Project
         run: cmake --build build --parallel $((`nproc`))
 
-#      - name: Run Tests
-#        env:
-#          GTEST_OUTPUT: "xml:opengoal-test-report.xml"
-#        run: ./test.sh
+      - name: Run Multiplayer Tests
+        timeout-minutes: 10
+        run: python3 ./tools/run_multiplayer_tests.py --group all --bin-dir ./build/test
 
       - name: Prepare artifacts
         if: ${{ inputs.uploadArtifacts }}

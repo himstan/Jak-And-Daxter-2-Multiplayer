@@ -97,11 +97,11 @@ const multiplayer::platform::CommandResult& command_result(
 
 }  // namespace
 
-static u8 pc_multi_get_local_player_id() {
+static int pc_multi_get_local_player_id() {
   return runtime().snapshot().session.state.local_player_id;
 }
 
-static u8 pc_multi_get_host_player_id() {
+static int pc_multi_get_host_player_id() {
   return runtime().snapshot().session.state.host_player_id;
 }
 
@@ -445,8 +445,17 @@ static int pc_multi_copy_host_access() {
   if (payload.empty()) {
     return 0;
   }
-  const bool copied = SDL_SetClipboardText(payload.c_str());
-  return copied ? 1 : 0;
+  struct ClipboardCopy {
+    const char* text;
+    bool copied = false;
+  } copy{payload.c_str()};
+  const bool dispatched = SDL_RunOnMainThread(
+      [](void* userdata) {
+        auto& copy = *static_cast<ClipboardCopy*>(userdata);
+        copy.copied = SDL_SetClipboardText(copy.text);
+      },
+      &copy, true);
+  return dispatched && copy.copied ? 1 : 0;
 }
 
 static void pc_multi_clear_staged_invite() {
@@ -454,8 +463,11 @@ static void pc_multi_clear_staged_invite() {
 }
 
 static int pc_multi_stage_clipboard_invite() {
-  char* clipboard_text = SDL_GetClipboardText();
-  if (!clipboard_text) {
+  char* clipboard_text = nullptr;
+  const bool dispatched = SDL_RunOnMainThread(
+      [](void* userdata) { *static_cast<char**>(userdata) = SDL_GetClipboardText(); },
+      &clipboard_text, true);
+  if (!dispatched || !clipboard_text) {
     return 0;
   }
 

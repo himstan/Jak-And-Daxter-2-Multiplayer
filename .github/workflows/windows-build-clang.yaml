@@ -70,11 +70,9 @@ jobs:
         shell: cmd
         run: cmake --build build --parallel %NUMBER_OF_PROCESSORS%
 
-#      - name: Run Tests
-#        timeout-minutes: 10
-#        env:
-#          GTEST_OUTPUT: "xml:opengoal-test-report.xml"
-#        run: ./build/bin/goalc-test.exe --gtest_color=yes --gtest_brief=0 --gtest_filter="-*MANUAL_TEST*"
+      - name: Run Multiplayer Tests
+        timeout-minutes: 10
+        run: python ./tools/run_multiplayer_tests.py --group all --bin-dir ./build/bin
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7

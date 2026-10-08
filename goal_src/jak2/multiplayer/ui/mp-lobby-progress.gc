@@ -11,6 +11,7 @@
 
 (define *mp-lobby-countdown-seconds* 3)
 (define *mp-lobby-last-countdown-sec* -1)
+(define *lobby-copy-show-success-until* (the-as time-frame 0))
 
 (defconstant MP_LOBBY_HOST_WAIT_TIMEOUT_TICKS 300)
 
@@ -95,11 +96,18 @@
      (lookup-text! *common-text* (text-id progress-multiplayer-char-daxter) #f))
     (else "Unknown")))
 
+(defun lobby-copy-feedback-active? ()
+  (< (current-time) *lobby-copy-show-success-until*))
+
 (defun mp-lobby-copy-host-access! ()
-  (when (= (pc-multi-is-lobby-host) 1)
+  (when (and (= (pc-multi-is-lobby-host) 1) (not (lobby-copy-feedback-active?)))
     (let ((copy-mode (pc-multi-get-host-access-kind)))
       (when (!= copy-mode 0)
-        (if (= (pc-multi-copy-host-access) 1) (sound-play "generic-beep") (sound-play "menu-error")))))
+        (if (= (pc-multi-copy-host-access) 1)
+          (begin
+            (set! *lobby-copy-show-success-until* (+ (current-time) (seconds 1)))
+            (sound-play "generic-beep"))
+          (sound-play "menu-error")))))
   (none))
 
 (defun mp-lobby-host-status-text ((font-ctx font-context))
@@ -351,6 +359,7 @@
 (defun draw-lobby-player-details ((font-ctx font-context) (player-index int) (alpha float))
   (let ((limit (the int (pc-multi-get-session-player-limit)))
         (setup-status (mp-host-setup-ui-state))
+        (copied? (lobby-copy-feedback-active?))
         (player-name (get-player-name player-index))
         (record (mp-player-record-by-id (the-as uint player-index)))
         (details-x 265)
@@ -425,22 +434,21 @@
                          44
                          (bucket-id progress))
         (set! (-> font-ctx origin y) 280.0)
-        (if (or (= setup-status 1) (= setup-status 2) (mp-lobby-countdown-active?))
+        (if (or copied? (= setup-status 1) (= setup-status 2) (mp-lobby-countdown-active?))
           (set-color! font-ctx (font-color progress-option-off))
           (set-color! font-ctx (font-color progress)))
         (let ((copy-mode (pc-multi-get-host-access-kind)))
           (when (!= copy-mode 0)
-            (if (= copy-mode 1)
-              (print-game-text (lookup-text! *common-text* (text-id progress-lobby-copy-invite) #f)
-                               font-ctx
-                               #f
-                               44
-                               (bucket-id progress))
-              (print-game-text (lookup-text! *common-text* (text-id progress-lobby-copy-room-code) #f)
-                               font-ctx
-                               #f
-                               44
-                               (bucket-id progress)))))
+            (print-game-text (lookup-text! *common-text*
+                                           (cond
+                                             (copied? (text-id progress-lobby-copied))
+                                             ((= copy-mode 1) (text-id progress-lobby-copy-invite))
+                                             (else (text-id progress-lobby-copy-room-code)))
+                                           #f)
+                             font-ctx
+                             #f
+                             44
+                             (bucket-id progress))))
         (set! (-> font-ctx origin y) 300.0)
         (if (mp-lobby-countdown-active?)
           (begin
@@ -628,6 +636,7 @@
 (defun mp-lobby-setup-options! ((p progress))
   (when (nonnull? p *mp-lobby-options-pc*)
     (set! *mp-lobby-last-countdown-sec* -1)
+    (set! *lobby-copy-show-success-until* (the-as time-frame 0))
     (mp-lobby-build-player-options!)
     (set! (-> *mp-lobby-options-pc* options) *mp-lobby-player-options*)
     (set! (-> p state-pos) (min (-> p state-pos) 1))
