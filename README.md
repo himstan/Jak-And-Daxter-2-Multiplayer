@@ -27,7 +27,7 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
 - **IMPORTANT**: The invite will contain your public IP address, so be careful who you're sharing it with.
 - An **Invite** is a **URI** you can easily copy and share with your friends, whom if they have it on their clipboard, can just click a button to join your session.
 - It's generated upon a successful lobby creation for the **Host**, and only if your port is successfully opened. The **Invite** contains your public IP address and the Port you're hosting on, and also the session **Room Code**, which is automatically generated if it's not set in the **Multiplayer Options**
-- Example: `jad2mp://1.1.1.1:26210/1A2B3C`
+- Example: `jadmp://1.1.1.1:26210/1A2B3C`
 
 ### Room Code
 - A six character code that can contain uppercase letters (`A-Z`) and digits (`0-9`), which is used as your session's "password". It is only used as a protection for Online Sessions, it's not needed for LAN.
@@ -35,8 +35,8 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
 
 ## Before You Play
 
-- The mod was mainly tested with the NTSC-U (`SCUS-97265`) version of the game. If you notice bugs please record what version you were using.
 - Make sure to align with what each version of the mod all players have installed. You cannot join a session that is running on a different version of the mod. You can see the mod version in-game in the bottom right corner.
+- The mod was mainly tested with the NTSC-U (`SCUS-97265`) version of the game on Windows. If you notice bugs please record what platform you're on and what version you were using.
 - When you Host you'll get a prompt to allow `gk` through the firewall, if you want to Host Online, you'll need to give it access.
 - The mod has **UPnP (Universal Plug and Play)** support, which means that if your router supports it, and you're not behind a CGNAT for example, then the game will attempt to do an automatic port mapping on your router, so you don't have to manually port forward. This is temporary, and after your host session ends, the mapping is removed. This feature can be turned off in the **Multiplayer Options** in game.
 - UPnP is not expected to work for everyone especially nowadays, so if you can't port-forward I'd suggest to use some private VPN solution like Hamachi, Radmin, Tailscale etc...
@@ -137,14 +137,14 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
    <img src="docs/img/mp/client-lobby.png" alt="In the lobby as a Client" width="400">
 
 - As the Client you also have the ability to switch the Character you want to play as by pressing **L1** or **R1**
-- You can edit your skin in the lobby by pressing <img src="docs/img/common/dpad-circle.png" alt="PS2 Circle button" width="16"> also
+- You can open the **Multiplayer Options** from the lobby by pressing <img src="docs/img/common/dpad-circle.png" alt="PS2 Circle button" width="16">
 - These options are disabled if you've readied up, if you change your mind you must unready first
 
 ## Local Split Screen
 
-You can play locally by more instances of the game in windowed mode and placing them next to each other. Have one instance choose **Host Game**, then the others choose **Join Game** and **Scan LAN**.
+You can play locally by booting up more instances of the game in windowed mode and placing them next to each other. Have one instance choose **Host Game**, then the others choose **Join Game** and **Scan LAN**.
 
-Each instance should recognize a connected controller. If you only have one controller, use the controller for one game window and the keyboard for the other.
+Each instance should recognize a connected controller. If you only have one controller, use the controller for one game window and the keyboard for the other, you can mess around with what controller each game window owns, by opening up the ImGui view by pressing **Alt**
 
 ## Playing Together
 
