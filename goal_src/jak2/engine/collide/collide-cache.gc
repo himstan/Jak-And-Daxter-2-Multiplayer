@@ -2,6 +2,7 @@
 (in-package goal)
 
 (define-extern mp-traffic-level-collision-ready? (function level symbol))
+(define-extern filter-player-body-cache! (function collide-cache int process process none))
 
 ;; name: collide-cache.gc
 ;; name in dgo: collide-cache
@@ -563,7 +564,9 @@
         (when (logtest? s5-0 (-> v1-26 root-prim prim-core collide-as))
           (let ((a0-13 (-> v1-26 process)))
             (if (not (or (= a0-13 (-> this ignore-processes 0)) (= a0-13 (-> this ignore-processes 1))))
-                (add-fg-prim-using-box (-> v1-26 root-prim) this)
+                (let ((start (-> this num-prims)))
+                  (add-fg-prim-using-box (-> v1-26 root-prim) this)
+                  (filter-player-body-cache! this start (-> this ignore-processes 0) a0-13))
                 )
             )
           )
@@ -697,7 +700,9 @@
           (when (logtest? s4-0 (-> v1-58 root-prim prim-core collide-as))
             (let ((a0-37 (-> v1-58 process)))
               (if (not (or (= a0-37 (-> this ignore-processes 0)) (= a0-37 (-> this ignore-processes 1))))
-                  (add-fg-prim-using-line-sphere (-> v1-58 root-prim) this arg0)
+                  (let ((start (-> this num-prims)))
+                    (add-fg-prim-using-line-sphere (-> v1-58 root-prim) this arg0)
+                    (filter-player-body-cache! this start (-> this ignore-processes 0) a0-37))
                   )
               )
             )

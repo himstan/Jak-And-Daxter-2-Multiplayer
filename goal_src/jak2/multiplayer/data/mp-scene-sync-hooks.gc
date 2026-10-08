@@ -53,6 +53,8 @@
       (cam-master-activate-slave #t))))
 
 (defun mp-scene-sync-after-local-end! ((scene-name string))
+  (mp-for-each-player-target (player-id record player)
+    (player-note-placement! player))
   (when (and scene-name (nonzero? scene-name) (nonzero? (length scene-name)))
     (cond
       ((string= scene-name "ruins-tower-victory") (repair-local-camera-after-scene scene-name))))

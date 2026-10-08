@@ -89,7 +89,8 @@ PresentationTarget PresentationRuntime::prepare_player(const core::PlayerId play
     return {};
   }
   const uint32_t primary_level = core::primary_level_id(player.levels);
-  const bool reset = history.sequence != 0 && history.level_id != primary_level;
+  const bool reset = history.sequence != 0 &&
+                     (history.level_id != primary_level || history.context != player.scene_active);
   if (reset)
     history.timeline.reset();
   if (reset || history.sequence != player.last_sequence) {
@@ -103,6 +104,7 @@ PresentationTarget PresentationRuntime::prepare_player(const core::PlayerId play
                           player.received_time_ms, 20.0f * kGoalUnitsPerMeter);
     history.sequence = player.last_sequence;
     history.level_id = primary_level;
+    history.context = player.scene_active;
     ++history.generation;
   }
   return make_target(player_id, present_timeline(history.timeline, now_ms, kCriticalProfile),

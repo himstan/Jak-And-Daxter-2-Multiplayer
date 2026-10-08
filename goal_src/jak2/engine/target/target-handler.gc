@@ -544,6 +544,7 @@
         (logclear! (-> self state-flags) (state-flags sf12))
         (let ((gp-1 (-> arg3 param 1)))
           (move-to-point! (-> self control) (the-as vector (+ gp-1 0)))
+          (player-note-placement! self)
           (quaternion-copy! (-> self control quat) (the-as quaternion (+ gp-1 16)))
           )
         (rot->dir-targ! (-> self control))

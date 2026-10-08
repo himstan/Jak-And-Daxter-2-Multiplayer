@@ -179,7 +179,13 @@
                    (-> control transv y)
                    (-> control transv z)
                    0.0))
-    (set! (-> (mp-local-player-record) action scene-state) (if *scene-player* (the uint8 1) (the uint8 0))))
+    (let ((record (mp-local-player-record)))
+      (when (nonnull? record)
+        (set! (-> record action scene-state)
+              (if (or *scene-player*
+                      (and (nonzero? (-> record action scene-state)) (player-scene-placement-active? *target*)))
+                (the uint8 1)
+                (the uint8 0))))))
   (none))
 
 (defun mp-pack-local-turret-snapshot! ()

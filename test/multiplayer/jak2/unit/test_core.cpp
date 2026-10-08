@@ -1,4 +1,5 @@
 #include <limits>
+#include <memory>
 #include <vector>
 
 #include "game/multiplayer/jak2/application/presentation_runtime.h"
@@ -123,4 +124,32 @@ TEST(Jak2Protocol, SnapshotTimelineUsesGoalScaleForTeleportDetection) {
   const auto teleported = timeline.present(3233, 1000, 33, 1500, 250);
   ASSERT_TRUE(teleported.valid);
   EXPECT_FLOAT_EQ(teleported.position[0], 25.0f * kGoalUnitsPerMeter);
+}
+
+TEST(Jak2Presentation, SceneTransitionsPresentTheirPlacementWithoutOldSceneHistory) {
+  using namespace multiplayer::jak2;
+  core::ReplicationState state;
+  application::PresentationRuntime presentation;
+  auto frame = std::make_unique<application::RemoteReplicationFrame>();
+  const auto present = [&](bool in_scene, float position_meters, uint32_t sequence) {
+    auto& player = frame->players[1];
+    player.player_id = 1;
+    player.state_ready = true;
+    player.scene_active = in_scene;
+    player.position = {position_meters * application::kGoalUnitsPerMeter, 0.0f, 0.0f};
+    player.sample_time_ms = 1000 + sequence * 33;
+    player.received_time_ms = player.sample_time_ms + 100;
+    player.last_sequence = sequence;
+    presentation.prepare(*frame, state, player.received_time_ms);
+    EXPECT_TRUE(frame->player_targets[1].valid);
+    return frame->player_targets[1].position[0];
+  };
+
+  EXPECT_FLOAT_EQ(present(true, 0.0f, 1), 0.0f);
+  EXPECT_FLOAT_EQ(present(true, 0.0f, 2), 0.0f);
+  EXPECT_FLOAT_EQ(present(false, 16.0f, 3), 16.0f * application::kGoalUnitsPerMeter);
+  const auto ordinary_motion = present(false, 16.1f, 4);
+  EXPECT_GE(ordinary_motion, 16.0f * application::kGoalUnitsPerMeter);
+  EXPECT_LT(ordinary_motion, 16.1f * application::kGoalUnitsPerMeter);
+  EXPECT_FLOAT_EQ(present(true, 0.0f, 5), 0.0f);
 }

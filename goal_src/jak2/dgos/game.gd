@@ -160,6 +160,7 @@
   "find-nearest-h.o"
   "target-h.o"
   "player-h.o" ;; added
+  "player-interaction-h.o"
   "player.o" ;; added
   "mp-player-color.o" ;; added
   "mp-player-texture-groups.o" ;; added

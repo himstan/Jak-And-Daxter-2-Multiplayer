@@ -1,0 +1,16 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(deftype player-contact-state (structure)
+  ((target-handle      handle)
+   (teleport-time      time-frame)
+   (ready?             uint8)
+   (placement-pending? uint8)
+   (nonblocking        uint8 MP_MAX_PLAYERS)
+   (planned?           uint8)
+   (planned-position   vector :inline)))
+
+(deftype player-contact-table (structure)
+  ((players player-contact-state MP_MAX_PLAYERS :inline)))
+
+(define *player-contacts* (new 'static 'player-contact-table))

@@ -280,6 +280,8 @@ it returns a triangle and normal direction to push in.
 
 (defmethod should-push-away-test ((this collide-shape-prim-sphere) (other collide-shape-prim) (cquery collide-query))
   "Sphere against anything test."
+  (when (player-body-primitives-ignore? this other)
+    (return (the-as none 0)))
   (local-vars (v1-3 float))
   (rlet ((acc :class vf)
          (Q :class vf)
@@ -557,6 +559,8 @@ it returns a triangle and normal direction to push in.
   )
 
 (defmethod collide-with-collide-cache-prim-sphere ((this collide-shape-prim-sphere) (arg0 collide-query) (arg1 collide-cache-prim))
+  (when (and (nonnull? arg1) (player-body-primitives-ignore? this (-> arg1 prim)))
+    (return (the-as none 0)))
   (rlet ((vf1 :class vf)
          (vf2 :class vf)
          (vf3 :class vf)
@@ -2887,6 +2891,8 @@ it returns a triangle and normal direction to push in.
 ;; definition for method 13 of type collide-shape-prim
 ;; WARN: Return type mismatch object vs symbol.
 (defmethod overlaps-others-group ((this collide-shape-prim) (arg0 overlaps-others-params) (arg1 collide-shape-prim-group))
+  (when (player-body-primitives-ignore? this arg1)
+    (return #f))
   (local-vars (a0-4 float))
   (rlet ((acc :class vf)
          (vf0 :class vf)
@@ -2946,6 +2952,8 @@ it returns a triangle and normal direction to push in.
 
 ;; definition for method 12 of type collide-shape-prim-sphere
 (defmethod overlaps-others-test ((this collide-shape-prim-sphere) (arg0 overlaps-others-params) (arg1 collide-shape-prim))
+  (when (player-body-primitives-ignore? this arg1)
+    (return #f))
   (local-vars (v1-11 uint) (s4-0 uint))
   (let ((v1-0 (-> arg1 prim-core prim-type)))
     (b! (nonzero? v1-0) cfg-2 :delay (set! s4-0 (the-as uint (-> arg0 options))))
