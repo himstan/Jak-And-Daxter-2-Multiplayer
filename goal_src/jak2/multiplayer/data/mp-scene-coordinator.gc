@@ -344,12 +344,13 @@
 
 (defun mp-scene-coordinator-draw-votes! ()
   (let ((player-count (mp-scene-coordinator-player-count))
-        (vote-count (mp-scene-coordinator-vote-count)))
+        (vote-count (mp-scene-coordinator-vote-count))
+        (local-voted? (and (nonnull? *mp-player-controller*)
+                           (logtest? *mp-scene-coordinator-vote-mask* (mp-scene-player-bit (mp-local-player-id))))))
     (when (and (mp-session-in-game?)
                (> player-count 1)
                (> vote-count 0)
-               *mp-scene-vote-text*
-               (nonzero? *mp-scene-vote-text*))
+               (nonnull? *mp-scene-vote-text*))
       (let ((font-ctx (new 'stack
                            'font-context
                            *font-default-matrix*
@@ -358,7 +359,8 @@
                            0.0
                            (font-color default)
                            (font-flags shadow kerning))))
-        (when (and font-ctx (nonzero? font-ctx))
+        (when (nonnull? font-ctx)
+          (set-alpha! font-ctx (if local-voted? 1.0 0.5))
           (set! (-> font-ctx width) (the float 472))
           (set! (-> font-ctx height) (the float 40))
           (set! (-> font-ctx scale) 0.6)
