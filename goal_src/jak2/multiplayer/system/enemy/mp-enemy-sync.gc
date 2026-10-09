@@ -8,8 +8,16 @@
     (('knocked 'knocked-vicinity 'hit 'get-up-front 'get-up-back 'die 'die-falling 'die-fast) #t)
     (else #f)))
 
+(defun enemy-state-pauses-sync? ((e enemy) (state-name symbol))
+  (and (is-in-pausable-state? state-name)
+       (not (and (nonnull? e)
+                 (type? e hover-enemy)
+                 (case state-name
+                   (('hit 'knocked 'knocked-vicinity 'get-up-front 'get-up-back) #t)
+                   (else #f))))))
+
 (defun is-enemy-in-pausable-state? ((e enemy))
-  (let ((state-name (if (-> e state) (-> e state name) #f))) (is-in-pausable-state? state-name)))
+  (if (nonnull? e (-> e state)) (enemy-state-pauses-sync? e (-> e state name)) #f))
 
 (defun mp-enemy-death-presentation-active? ((e enemy))
   (and (nonnull? e)
@@ -218,7 +226,7 @@
                    (not (mp-enemy-authoritative? e-proc))
                    (not (mp-enemy-terminal-sync? e-proc enemy-aid))
                    (not (is-enemy-in-pausable-state? e-proc))
-                   (not (is-in-pausable-state? target-state))))))
+                   (not (enemy-state-pauses-sync? e-proc target-state))))))
   #f)
 
 (defun mp-enemy-converge-presentation! ((root collide-shape)

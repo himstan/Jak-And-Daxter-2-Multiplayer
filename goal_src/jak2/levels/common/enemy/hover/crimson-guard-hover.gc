@@ -1430,9 +1430,10 @@
   )
 
 (defmethod kill-prefer-falling ((this crimson-guard-hover))
-  "If available in `enemy-info`, [[go]] to the [[die-falling]] state, if not, [[die]]"
+  (unless (and (nonnull? this (-> this enemy-info)) (mp-enemy-allow-kill-prefer-falling? this))
+    (return (the-as none 0)))
   (cond
-    ((and (-> this next-state) (= (-> this next-state name) 'knocked))
+    ((and (nonnull? (-> this next-state)) (= (-> this next-state name) 'knocked))
      (go (method-of-object this die-now))
      )
     ((-> this enemy-info use-die-falling)

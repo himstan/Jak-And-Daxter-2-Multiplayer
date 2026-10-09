@@ -7,6 +7,13 @@
 
 ;; DECOMP BEGINS
 
+(defmethod enemy-method-58 ((this hover-enemy) (attacker process) (event-block event-message-block))
+  (unless (nonnull? this)
+    (return #f))
+  (if (and (mp-session-in-game?) (> (-> this hit-points) 0) (not (mp-enemy-authoritative? this)))
+    #f
+    (call-parent-method this attacker event-block)))
+
 (defmethod general-event-handler ((this hover-enemy) (arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   "Handles various events for the enemy
    @TODO - unsure if there is a pattern for the events and this should have a more specific name"
