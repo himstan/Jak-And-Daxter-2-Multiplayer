@@ -1558,7 +1558,7 @@
 (defstate target-float (target)
   :event target-generic-event-handler
   :enter (behavior ()
-    (sound-play-by-spec (static-sound-spec "menu-pick" :fo-curve 1) (new-sound-id) (the-as vector #t))
+    (sound-play-by-spec (static-sound-spec "menu-pick" :fo-min 5 :fo-max 30 :fo-curve 2) (new-sound-id) (the-as vector #t))
     (set! (-> self control additional-decaying-velocity-end-time) 0)
     (vector-reset! (-> self control additional-decaying-velocity))
     (let ((v1-3 (new-stack-vector0)))
@@ -1583,7 +1583,7 @@
     (target-darkjak-end-mode)
     )
   :exit (behavior ()
-    (sound-play-by-spec (static-sound-spec "menu-back" :fo-curve 1) (new-sound-id) (the-as vector #t))
+    (sound-play-by-spec (static-sound-spec "menu-back" :fo-min 5 :fo-max 30 :fo-curve 2) (new-sound-id) (the-as vector #t))
     (set! (-> self control dynam gravity-max) (-> self control standard-dynamics gravity-max))
     (set! (-> self control dynam gravity-length) (-> self control standard-dynamics gravity-length))
     (target-exit)

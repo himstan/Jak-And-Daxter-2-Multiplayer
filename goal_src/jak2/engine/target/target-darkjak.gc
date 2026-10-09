@@ -284,6 +284,13 @@
   (none)
   )
 
+(defbehavior play-darkjak-transform-sound target ()
+  (if (player-replica? self)
+      (sound-play-by-spec (static-sound-spec "djak-transform" :fo-min 5 :fo-max 30 :fo-curve 2) (new-sound-id) (the-as vector #t))
+      (sound-play "djak-transform")
+      )
+  )
+
 (defstate target-darkjak-get-on (target)
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
     (case message
@@ -364,7 +371,7 @@
         (suspend)
         )
       )
-    (let ((s5-2 (sound-play "djak-transform")))
+    (let ((s5-2 (play-darkjak-transform-sound)))
       (cond
         ((task-node-open? (game-task-node city-help-kid-battle))
          (ja-channel-push! 1 (seconds 0.1))
@@ -1057,6 +1064,7 @@
     (set! (-> self control unknown-sound-id00)
           (add-process *gui-control* self (gui-channel jak) (gui-action queue) "darkbom0" -99.0 0)
           )
+    (set-dark-bomb-sound-falloff!)
     )
   :exit (behavior ()
     (set-action!
@@ -1408,9 +1416,32 @@
                                           :radius 2048.0
                                           :duration 300.0
                                           :duration-rand 90.0
-                                          :sound (static-sound-spec "transform-zap")
+                                          :sound (static-sound-spec "transform-zap" :fo-min 15 :fo-max 75 :fo-curve 2)
                                           )
       )
+
+(define *giant-dark-bomb-lightning*
+  (let ((spec (if (nonnull? *lightning-spec-id-table* (-> *lightning-spec-id-table* 10))
+                 (copy (-> *lightning-spec-id-table* 10) 'global)
+                 (the-as lightning-spec #f)
+                 )))
+    (when (nonnull? spec)
+      (set! (-> spec sound) (static-sound-spec "transform-zap" :fo-min 30 :fo-max 150 :fo-curve 2))
+      )
+    spec
+    )
+  )
+
+(defbehavior dark-bomb-lightning-spec target ()
+  (if (and (nonnull? self (-> self darkjak))
+           (logtest? (-> self darkjak stage) (darkjak-stage giant)))
+      *giant-dark-bomb-lightning*
+      (if (nonnull? *lightning-spec-id-table*)
+          (-> *lightning-spec-id-table* 10)
+          (the-as lightning-spec #f)
+          )
+      )
+  )
 
 ;; WARN: Return type mismatch object vs none.
 (defbehavior target-bomb1-fire-shot target ((arg0 (pointer handle)) (arg1 int) (arg2 int) (arg3 int))
@@ -1428,7 +1459,7 @@
            (process-spawn
              lightning-tracker
              :init lightning-tracker-init
-             (-> *lightning-spec-id-table* 10)
+             (dark-bomb-lightning-spec)
              0
              lightning-probe-callback
              gp-0
@@ -1471,7 +1502,7 @@
             (let ((s5-1 run-function-in-process)
                   (s4-1 gp-1)
                   (s3-0 lightning-tracker-init)
-                  (s2-0 (-> *lightning-spec-id-table* 10))
+                  (s2-0 (dark-bomb-lightning-spec))
                   (s1-0 0)
                   (s0-0 lightning-probe-callback)
                   (sv-128 self)
@@ -1853,7 +1884,7 @@
     (set! (-> self control mod-surface) *darkjak-trans-mods*)
     (logior! (-> self darkjak stage) (darkjak-stage giant))
     (set! (-> self darkjak want-stage) (-> self darkjak stage))
-    (sound-play "djak-transform")
+    (play-darkjak-transform-sound)
     (let ((gp-1 (new 'stack-no-clear 'collide-query)))
       (let ((s5-1 (new 'stack-no-clear 'inline-array 'sphere 1)))
         (dotimes (s4-0 1)
@@ -1870,7 +1901,7 @@
                                           (collide-spec civilian enemy vehicle-sphere projectile)
                                           )
                 )
-          (set! (-> v1-29 ignore-process0) #f)
+          (set! (-> v1-29 ignore-process0) self)
           (set! (-> v1-29 ignore-process1) #f)
           (set! (-> v1-29 ignore-pat) (new 'static 'pat-surface :noentity #x1 :nojak #x1 :probe #x1 :noendlessfall #x1))
           (set! (-> v1-29 best-my-prim) (the-as collide-shape-prim #t))

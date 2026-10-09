@@ -1507,6 +1507,23 @@
   (none)
   )
 
+(defbehavior set-dark-bomb-sound-falloff! target ()
+  (when (and (nonnull? self (-> self control) *gui-control*) (player-replica? self))
+    (let ((giant? (and (nonnull? (-> self darkjak))
+                      (logtest? (-> self darkjak stage) (darkjak-stage giant)))))
+      (set-falloff! *gui-control* (-> self control unknown-sound-id00) #t
+                    (if giant? 30 15) (if giant? 150 75) 2)
+      )
+    )
+  )
+
+(defbehavior play-spin-kick-sound target ()
+  (if (player-replica? self)
+      (sound-play-by-spec (static-sound-spec "spin-kick" :fo-min 5 :fo-max 30 :fo-curve 2) (new-sound-id) (the-as vector #t))
+      (sound-play "spin-kick")
+      )
+  )
+
 ;; WARN: Return type mismatch symbol vs none.
 (defbehavior target-attack-air-anim target ()
   (when (using-gun? self)
@@ -1541,7 +1558,7 @@
   (set! (-> self control unknown-float41) 0.0)
   (set! (-> self control unknown-float42) 0.0)
   (ja-channel-push! 1 (seconds 0.075))
-  (set! (-> self control unknown-sound-id01) (sound-play "spin-kick"))
+  (set! (-> self control unknown-sound-id01) (play-spin-kick-sound))
   (ja-no-eval :group! jakb-attack-from-jump-ja :num! (seek!) :frame-num 0.0)
   (until (ja-done? 0)
     (compute-alignment! (-> self align))
@@ -1549,7 +1566,7 @@
     (suspend)
     (ja :num! (seek!))
     )
-  (set! (-> self control unknown-sound-id01) (sound-play "spin-kick"))
+  (set! (-> self control unknown-sound-id01) (play-spin-kick-sound))
   (ja :group! jakb-attack-from-jump-loop-ja :num! min)
   (let ((f30-0 -393216.0))
     (let ((f0-11 (target-height-above-ground))
