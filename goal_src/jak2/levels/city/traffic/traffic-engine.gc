@@ -30,12 +30,21 @@
            (traffic-node-loaded? (-> branch dest-node)))
       #f))
 
+(defun traffic-branch-has-loaded-exit? ((branch nav-branch))
+  (when (nonnull? branch (-> branch dest-node))
+    (let ((dest-node (-> branch dest-node)))
+      (when (nonnull? (-> dest-node branch-array))
+        (dotimes (idx (-> dest-node branch-count))
+          (when (traffic-branch-loaded? (-> dest-node branch-array idx))
+            (return #t))))))
+  #f)
+
 (defun traffic-path-risk? ((proc vehicle))
-  (if (and (nonnull? proc (-> proc controller)) (type? proc vehicle))
+  (if (and (nonnull? proc) (type? proc vehicle) (nonnull? (-> proc controller)))
     (let ((controller (-> proc controller)))
       (and (logtest? (-> controller flags) (vehicle-controller-flag attached))
-           (or (not (nonnull? (-> controller branch)))
-               (not (traffic-node-loaded? (-> controller branch src-node))))))
+           (or (not (traffic-branch-loaded? (-> controller branch)))
+               (not (traffic-branch-has-loaded-exit? (-> controller branch))))))
     #t))
 
 (defun traffic-cell-distance-squared ((sphere vector))
@@ -751,6 +760,8 @@
 
 (defmethod activate-by-type ((this traffic-tracker) (arg0 traffic-type) (arg1 nav-segment) (arg2 float))
   "If possible, activate a process of the given type."
+  (when (not (nonnull? this (-> this traffic)))
+    (return 0))
   (let ((v1-2 (-> this traffic object-type-info-array arg0)))
     (when (and (> (-> v1-2 inactive-count) 0)
                (> (-> v1-2 reserve-count) 0)
@@ -1156,13 +1167,6 @@
   (none)
   )
 
-(defun mp-traffic-density-scale-for-type ((object-type int))
-  (if (mp-session-active?)
-      (fmax 0.0 (fmin 1.0 (if (< object-type 11) *mp-traffic-veh-density-scale* *mp-traffic-ped-density-scale*)))
-      1.0
-      )
-  )
-
 (defun mp-traffic-valid-player-target? ((target-proc process-focusable))
   (and target-proc
        (nonzero? target-proc)
@@ -1272,22 +1276,6 @@
     source (the-as process-focusable #f) #f)
   )
 
-(defun mp-traffic-density-scale-for-tracker ((tracker-id int))
-  (if (mp-session-active?)
-      (fmax 0.0 (fmin 1.0 (if (= tracker-id 1) *mp-traffic-veh-density-scale* *mp-traffic-ped-density-scale*)))
-      1.0
-      )
-  )
-
-(defun mp-traffic-scaled-inv-density-factor ((base-factor float) (tracker-id int))
-  (let ((scale (mp-traffic-density-scale-for-tracker tracker-id)))
-    (if (> scale 0.01)
-        (/ base-factor scale)
-        10000000000000000000000000000000000000.0
-        )
-    )
-  )
-
 (defmethod handle-new-vis-cell ((this traffic-engine) (arg0 vis-cell))
   (dotimes (s4-0 (-> arg0 segment-count))
     (let* ((s3-0 (-> arg0 segment-array s4-0))
@@ -1303,28 +1291,27 @@
                       )
                  )
         (let* ((s2-0 (-> this tracker-array s1-0))
-               (density-factor (mp-traffic-scaled-inv-density-factor (-> this inv-density-factor) s1-0))
-               (f30-0 (* (-> s2-0 rand) density-factor (-> s3-0 spawn-spacing)))
+               (f30-0 (* (-> s2-0 rand) (-> this inv-density-factor) (-> s3-0 spawn-spacing)))
                )
           (cond
             ((= s1-0 1)
              (when (nonzero? (-> s3-0 nav-mesh-id))
                (while (and (< f30-0 (-> s3-0 length)) (> (-> s2-0 inactive-object-count) 0))
                  (activate-one-vehicle this s3-0 f30-0)
-                 (set! f30-0 (+ 24576.0 (* (-> s2-0 rand) density-factor (-> s3-0 spawn-spacing)) f30-0))
+                 (set! f30-0 (+ 24576.0 (* (-> s2-0 rand) (-> this inv-density-factor) (-> s3-0 spawn-spacing)) f30-0))
                  )
                )
              )
             (else
               (while (and (< f30-0 (-> s3-0 length)) (> (-> s2-0 inactive-object-count) 0))
                 (activate-one-citizen this s3-0 f30-0)
-                (set! f30-0 (+ 49152.0 (* (-> s2-0 rand) density-factor (-> s3-0 spawn-spacing)) f30-0))
+                (set! f30-0 (+ 49152.0 (* (-> s2-0 rand) (-> this inv-density-factor) (-> s3-0 spawn-spacing)) f30-0))
                 )
               )
             )
           (if (>= f30-0 (-> s3-0 length))
               (set! (-> s2-0 rand)
-                    (fmax 0.0 (- (-> s2-0 rand) (/ (-> s3-0 length) (* (-> s3-0 spawn-spacing) density-factor))))
+                    (fmax 0.0 (- (-> s2-0 rand) (/ (-> s3-0 length) (* (-> s3-0 spawn-spacing) (-> this inv-density-factor)))))
                     )
               )
           )
@@ -2574,7 +2561,7 @@
   (set! (-> this alert-state guard-target-level) arg0)
   (dotimes (v1-0 21)
     (let ((a2-2 (-> this object-type-info-array v1-0)))
-      (set! (-> a2-2 target-count) (the int (* arg0 (mp-traffic-density-scale-for-type v1-0) (the float (max 0 (+ (-> a2-2 want-count) -1))))))
+      (set! (-> a2-2 target-count) (the int (* arg0 (the float (max 0 (+ (-> a2-2 want-count) -1))))))
       )
     )
   0
@@ -3281,17 +3268,26 @@
   (none)
   )
 
+(defun deactivate-traffic-tracker-from-level! ((tracker traffic-tracker) (name symbol))
+  (when (not (nonnull? tracker))
+    (return (the-as none 0)))
+  (countdown (idx (-> tracker active-object-count))
+    (let ((proc (the-as process-focusable (handle->process-safe (-> tracker active-object-list idx)))))
+      (when (nonnull? proc)
+        (let ((controller (cond
+                            ((type? proc vehicle) (-> (the-as vehicle proc) controller))
+                            ((type? proc citizen) (-> (the-as citizen proc) controller))
+                            (else (the-as vehicle-controller #f)))))
+          (when (or (focus-test? proc inactive)
+                    (and (nonnull? controller (-> controller branch))
+                         (mp-traffic-branch-in-level? (-> controller branch) name)))
+            (deactivate-object tracker (the int idx) #t))))))
+  (none))
+
 (defmethod deactivate-all-from-level ((this traffic-engine) (name symbol))
   (when (nonnull? this)
-    (countdown (idx (-> this citizen-tracker-array active-object-count))
-      (let ((proc (the-as vehicle (handle->process (-> this citizen-tracker-array active-object-list idx)))))
-        (when (nonnull? proc)
-          (cond
-            ((focus-test? proc inactive)
-             (deactivate-object (-> this citizen-tracker-array) (the int idx) #f))
-            ((and (nonnull? (-> proc controller) (-> proc controller branch))
-                  (mp-traffic-branch-in-level? (-> proc controller branch) name))
-             (deactivate-object (-> this citizen-tracker-array) (the int idx) #t)))))))
+    (deactivate-traffic-tracker-from-level! (-> this citizen-tracker-array) name)
+    (deactivate-traffic-tracker-from-level! (-> this vehicle-tracker-array) name))
   (none))
 
 (defmethod set-object-auto-activate ((this traffic-engine) (arg0 int) (arg1 object))
@@ -3307,7 +3303,7 @@
 
 (defmethod set-object-target-level ((this traffic-engine) (arg0 int) (arg1 float))
   (let ((v1-2 (-> this object-type-info-array arg0)))
-    (set! (-> v1-2 target-count) (the int (* arg1 (mp-traffic-density-scale-for-type arg0) (the float (max 0 (+ (-> v1-2 want-count) -1))))))
+    (set! (-> v1-2 target-count) (the int (* arg1 (the float (max 0 (+ (-> v1-2 want-count) -1))))))
     )
   0
   (none)

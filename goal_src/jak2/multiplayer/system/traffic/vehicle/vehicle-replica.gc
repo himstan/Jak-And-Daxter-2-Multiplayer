@@ -20,6 +20,7 @@
 (define *mp-vehicle-last-driver-net-ids* (new 'static 'array uint32 MP_MAX_PLAYERS))
 
 (define-extern vehicle-resume-released-physics! (function uint none))
+(define-extern traffic-path-risk? (function vehicle symbol))
 
 (defun mp-vehicle-clear-authority-handoff-record! ((handoff mp-vehicle-authority-handoff))
   (when (nonnull? handoff)
@@ -744,6 +745,30 @@
               (else (mp-vehicle-apply-ambient-presentation! veh rec target-trans)))))
         (when (nonnull? (-> veh rbody state))
           (rigid-body-method-26 (-> veh rbody state) (-> veh root trans) (-> veh root quat))))))
+  (none))
+
+(defun retire-unroutable-traffic-vehicle! ((veh vehicle))
+  (when (and *mp-traffic-local-authoritative?*
+             (nonnull? veh)
+             (not (focus-test? veh inactive))
+             (or (logtest? (-> veh flags) (rigid-body-object-flag traffic-managed))
+                 (= (logand (-> veh net-id) (the uint #xf0000000)) MP_TRAFFIC_VEHICLE_NET_ID_BASE))
+             (not (mp-mission-vehicle-id? (-> veh net-id)))
+             (not (mp-race-vehicle-id? (-> veh net-id)))
+             (traffic-path-risk? veh)
+             (not (mp-vehicle-refuse-traffic-off? veh)))
+    (send-event veh 'traffic-off-force))
+  (none))
+
+(defun retire-unroutable-traffic! ((manager process))
+  (when (and *mp-traffic-local-authoritative?* (nonnull? manager))
+    (let ((child (-> manager child)))
+      (while (nonnull? child (-> child 0))
+        (let ((proc (ppointer->process child))
+              (next-child (-> child 0 brother)))
+          (when (and (nonnull? proc) (type? proc vehicle))
+            (retire-unroutable-traffic-vehicle! (the-as vehicle proc)))
+          (set! child next-child)))))
   (none))
 
 (defun mp-vehicle-common-post-sync ((this vehicle))

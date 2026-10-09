@@ -1,6 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern retire-unroutable-traffic! (function process none))
+
 ;; name: traffic-manager.gc
 ;; name in dgo: traffic-manager
 ;; dgos: CWI
@@ -93,6 +95,7 @@
   )
 
 (defmethod update ((this traffic-manager))
+  (retire-unroutable-traffic! this)
   (update-traffic (-> this traffic-engine))
   (kill-excess-once this)
   (spawn-all this)
@@ -169,8 +172,10 @@
 
 (defmethod spawn-all ((this traffic-manager))
 
-  (when (and *mp-traffic-local-authoritative?*
-             (or (mp-session-host?) (mp-is-traffic-spawn-ready?)))
+  (when (and (nonnull? this (-> this traffic-engine))
+             *mp-traffic-local-authoritative?*
+             (not *mp-traffic-drain-active*)
+             (mp-is-traffic-spawn-ready?))
 
     (dotimes (i 21)
       (let ((s4-0 (-> this traffic-engine object-type-info-array i)))
