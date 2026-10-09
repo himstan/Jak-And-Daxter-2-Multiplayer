@@ -266,9 +266,7 @@
   )
 
 (defun sig0-in-repair-gun? ((arg0 sig-atoll))
-  (and arg0
-       (nonzero? arg0)
-       (-> arg0 next-state)
+  (and (nonnull? arg0 (-> arg0 next-state))
        (= (-> arg0 next-state name) 'repair-gun)
        (time-elapsed? (-> arg0 state-time) (seconds 1))
        )
@@ -276,6 +274,7 @@
 
 (defun sig0-final-repair-complete? ((arg0 sig-atoll))
   (and (sig0-in-repair-gun? arg0)
+       (mp-enemy-authoritative? arg0)
        (or (>= (- (sig0-final-battle-die-count arg0) (-> arg0 waypoint-int32a)) 5)
            (sig0-final-battle-beaten? arg0)
            (time-elapsed? (-> arg0 state-time) (seconds 12))
@@ -2595,13 +2594,17 @@
               (set! (-> (the-as sigt-wait-spot v1-12) check-done)
                     (the-as
                       (function sigt-wait-spot sig symbol)
-                      (lambda ((arg0 object) (arg1 sig-atoll)) (when (not (logtest? (bot-flags bf19) (-> arg1 bot-flags)))
-                                                                 (ai-task-control-method-12 (-> arg1 ai-ctrl) arg1)
-                                                                 (go-to-waypoint! arg1 35 #f)
-                                                                 (ai-task-control-method-10 (-> arg1 ai-ctrl) arg1)
-                                                                 #t
-                                                                 )
-                              )
+                      (lambda ((arg0 object) (arg1 sig-atoll))
+                        (when (and (nonnull? arg1 (-> arg1 ai-ctrl))
+                                   (mp-enemy-authoritative? arg1)
+                                   (not (logtest? (bot-flags bf19) (-> arg1 bot-flags)))
+                                   )
+                          (ai-task-control-method-12 (-> arg1 ai-ctrl) arg1)
+                          (go-to-waypoint! arg1 35 #f)
+                          (ai-task-control-method-10 (-> arg1 ai-ctrl) arg1)
+                          #t
+                          )
+                        )
                       )
                     )
               )
