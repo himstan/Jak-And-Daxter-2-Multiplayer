@@ -1325,6 +1325,7 @@
         (send-event
           this
           'attack
+          :from this
           #f
           (static-attack-info ((id (new-attack-id)) (vector s5-1) (knock (knocked-type knocked-type-7))))
           )

@@ -190,20 +190,22 @@
   )
 
 (defun vehicle-eject-civilian-riders! ((veh vehicle))
-  (when (and veh (nonzero? veh))
+  (when (nonnull? veh)
     (dotimes (seat-index (get-seat-count veh))
       (let ((rider-proc (get-rider-in-seat veh seat-index)))
-        (when (and rider-proc
-                   (nonzero? rider-proc)
-                   (or (type? rider-proc citizen-norm-rider)
-                       (type? rider-proc crimson-guard-rider)))
-          (if *mp-traffic-local-authoritative?*
-              (send-event rider-proc 'knocked-off)
-              (begin
-                (send-event rider-proc 'rider-off)
-                (deactivate rider-proc)
-                )
+        (when (and (nonnull? rider-proc)
+                   (or (type? rider-proc vehicle-rider)
+                       (and *mp-traffic-local-authoritative?* (type? rider-proc citizen))))
+          (cond
+            ((type? rider-proc citizen)
+             (throw-off-vehicle (the-as citizen rider-proc)))
+            (*mp-traffic-local-authoritative?*
+             (send-event rider-proc 'knocked-off))
+            (else
+              (send-event rider-proc 'rider-off)
+              (deactivate rider-proc)
               )
+            )
           (when (= (get-rider-in-seat veh seat-index) rider-proc)
             (put-rider-in-seat veh seat-index (the-as process-focusable #f))
             )

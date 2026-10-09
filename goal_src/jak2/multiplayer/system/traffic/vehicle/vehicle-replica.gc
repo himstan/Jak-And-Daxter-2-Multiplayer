@@ -977,6 +977,15 @@
         (set! (-> proc hit-points) 0.0))))
   (none))
 
+(defun vehicle-apply-player-record! ((proc vehicle) (record mp-player-record))
+  (when (nonnull? proc record)
+    (when (and *mp-traffic-local-authoritative?*
+               (nonzero? (-> record vehicle vehicle-id))
+               (zero? (-> record vehicle seat-index)))
+      (vehicle-eject-civilian-riders! proc))
+    (vehicle-apply-record proc (-> record vehicle state)))
+  (none))
+
 (defun vehicle-spawn-replica ((slot mp-vehicle-state))
   (let ((spawned? #f))
     (when (and slot
@@ -1030,10 +1039,8 @@
             (if (<= (-> record vehicle state state-id) 2)
               (when vehicle-can-spawn?
                 (mp-vehicle-force-cull-local! proc))
-              (vehicle-apply-record proc
-                                    (-> record
-                                        vehicle
-                                        state))))
+              (vehicle-apply-player-record! proc
+                                            record)))
           (when (and spawn-ready?
                      vehicle-can-spawn?
                      (> (-> record vehicle state state-id) 2)
