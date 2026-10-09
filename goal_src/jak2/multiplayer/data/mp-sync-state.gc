@@ -528,7 +528,7 @@
                   (when (and (logtest? (-> active-mask byte-idx) (ash 1 bit-idx))
                              (task-node-closed? (the-as game-task-node i)))
                     (let ((should-open? #t))
-                      (when (or (mp-scene-coordinator-vote-active?) *mp-processing-remote-event* *scene-player*)
+                      (when (or *mp-scene-coordinator-active?* *mp-processing-remote-event* *scene-player*)
                         (set! should-open? #f))
                       (when (mp-tomb-boulder-block-remote-task-open? i)
                         (set! should-open? #f))

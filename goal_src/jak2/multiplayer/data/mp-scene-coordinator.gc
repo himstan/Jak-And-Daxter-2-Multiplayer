@@ -8,6 +8,7 @@
 (define-perm *mp-scene-coordinator-vote-mask* uint (the uint 0))
 (define-perm *mp-scene-coordinator-catchup-mask* uint (the uint 0))
 (define-perm *mp-scene-coordinator-active?* symbol #f)
+(define-perm *scene-entry-start-time* time-frame (the-as time-frame 0))
 (define-perm *mp-scene-coordinator-finalized?* symbol #f)
 (define-perm *mp-scene-coordinator-finalized-time* time-frame (the-as time-frame 0))
 (define-perm *mp-scene-vote-text* string (new 'global 'string 64 ""))
@@ -29,6 +30,13 @@
        (nonzero? *mp-scene-coordinator-name*)
        (nonzero? (length scene-name))
        (string= scene-name *mp-scene-coordinator-name*)))
+
+(defun scene-start-finalized? ((scene-name string))
+  (and (mp-session-in-game?)
+       *mp-scene-coordinator-finalized?*
+       (or (mp-scene-coordinator-name-matches? scene-name)
+           (and (mp-intro-chain-scene? scene-name)
+                (mp-intro-chain-scene? *mp-scene-coordinator-name*)))))
 
 (defun mp-scene-current-local-name-matches? ((scene-name string))
   (when (and scene-name (nonzero? scene-name) *scene-player* (nonzero? *scene-player*))
@@ -102,6 +110,7 @@
   (set! *mp-scene-coordinator-vote-mask* (the uint 0))
   (set! *mp-scene-coordinator-catchup-mask* (the uint 0))
   (set! *mp-scene-coordinator-active?* #f)
+  (set! *scene-entry-start-time* (the-as time-frame 0))
   (set! *mp-scene-coordinator-finalized?* #f)
   (set! *mp-scene-coordinator-finalized-time* (the-as time-frame 0))
   (none))
@@ -112,6 +121,7 @@
   (copy-string<-string *mp-scene-coordinator-name* scene-name)
   (set! *mp-scene-coordinator-initiator-id* initiator-id)
   (set! *mp-scene-coordinator-active?* #t)
+  (set! *scene-entry-start-time* (current-time))
   (log 'debug
        "[MP-Scene] Cohort ~D started for ~S by player ~D.~%"
        *mp-scene-coordinator-generation*
@@ -209,16 +219,28 @@
 (defun mp-scene-coordinator-note-remote-vote! ((player-id uint) (scene-name string))
   (mp-scene-coordinator-note-vote! player-id scene-name))
 
+(defun scene-player-awaiting-intro-entry? ((record mp-player-record))
+  (and (nonnull? record)
+       (mp-intro-chain-scene? *mp-scene-coordinator-name*)
+       (not (time-elapsed? *scene-entry-start-time* (seconds 15)))
+       (or (< (-> record connection activity) (mp-player-activity in-game))
+           (zero? (-> record identity state-ready?))
+           (= (-> record action target-state-id) (mp-target-state-id none)))))
+
 (defun mp-scene-player-active-in-cohort? ((player-id uint))
   (let ((player-bit (mp-scene-player-bit player-id))
         (record (mp-player-record-by-id player-id)))
-    (when (or (zero? player-bit)
-              (not (logtest? *mp-scene-coordinator-entered-mask* player-bit))
+    (when (or (not (nonnull? record))
+              (zero? player-bit)
               (not (mp-scene-player-record-session-active? record)))
       (return #f))
     (if (= player-id (mp-local-player-id))
       (mp-scene-current-local-name-matches? *mp-scene-coordinator-name*)
-      (or (nonzero? (-> record action scene-state)) (nonzero? (-> record action scene-latched?))))))
+      (and (or (logtest? *mp-scene-coordinator-entered-mask* player-bit)
+               (mp-intro-chain-scene? *mp-scene-coordinator-name*))
+           (or (nonzero? (-> record action scene-state))
+               (nonzero? (-> record action scene-latched?))
+               (scene-player-awaiting-intro-entry? record))))))
 
 (defun mp-scene-coordinator-player-mask ()
   (let ((player-mask (the uint 0)))
@@ -254,7 +276,7 @@
          (= (logand *mp-scene-coordinator-vote-mask* player-mask) player-mask))))
 
 (defun mp-scene-coordinator-mark-finalized! ()
-  (when *mp-scene-coordinator-active?*
+  (when (and *mp-scene-coordinator-active?* (not *mp-scene-coordinator-finalized?*))
     (set! *mp-scene-coordinator-finalized?* #t)
     (set! *mp-scene-coordinator-finalized-time* (current-time))
     (set! *mp-scene-coordinator-vote-mask* (the uint 0))

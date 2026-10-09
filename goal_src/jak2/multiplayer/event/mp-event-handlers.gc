@@ -547,6 +547,8 @@
   (when *mp-pending-scene-sync?*
     (let ((source-record (mp-scene-coordinator-source-record)))
       (cond
+        ((scene-start-finalized? *mp-pending-scene-sync-name*)
+         (mp-cancel-pending-scene-sync! "scene skip is already finalized"))
         ((mp-local-scene-name-matches? *mp-pending-scene-sync-name*)
          (log 'debug
               "[MP-Event-Handlers] Pending remote scene ~S is already active locally; consuming it.~%"
