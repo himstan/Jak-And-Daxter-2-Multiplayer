@@ -612,7 +612,21 @@ Then, apply the normal parented transform."
 
 ;; og:preserve-this added macro
 (defmacro target-look-at-me! (&key trans &key (message 'nothing-special))
-  "make target look at a trans in self. PC PORT NOTE : added check to see if lods have been set"
-  `(if (and (not (logtest? (-> self draw status) (draw-control-status uninited no-draw-temp))) *target*)
-      (look-at! (-> *target* neck) ,trans ,message self)))
+  "make target and remote replicas look at a trans in self. PC PORT NOTE : added check to see if lods have been set"
+  (with-gensyms (look-pos look-message player-id record player)
+    `(when (and (nonnull? self (-> self draw))
+                (not (logtest? (-> self draw status) (draw-control-status uninited no-draw-temp))))
+       (let ((,look-pos ,trans)
+             (,look-message ,message))
+         (when (nonnull? ,look-pos)
+           (when (nonnull? *target* (-> *target* control) (-> *target* neck))
+             (look-at! (-> *target* neck) ,look-pos ,look-message self))
+           (mp-for-each-player-target (,player-id ,record ,player)
+             (when (and (nonnull? ,player (-> ,player control) (-> ,player neck) (-> ,player root) *math-camera*)
+                        (!= ,player *target*)
+                        (player-replica? ,player)
+                        (not (focus-test? ,player disable dead inactive))
+                        (<= (vector-vector-distance-squared (-> ,player root trans) (-> *math-camera* trans))
+                            (square (meters 50.0))))
+               (look-at! (-> ,player neck) ,look-pos ,look-message self))))))))
 
