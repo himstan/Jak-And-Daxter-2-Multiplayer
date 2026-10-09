@@ -271,9 +271,12 @@
           #t)))
     #f))
 
-(defun mp-process-allow-local-state-transition? ((proc process))
+(defun mp-process-allow-local-state-transition? ((proc process) (entering-state? symbol))
   (when (and (nonnull? proc) (type? proc citizen) (pedestrian-replica-locked? (the-as citizen proc)))
-    (return #t))
+    (return (or (not entering-state?)
+                *mp-processing-remote-event*
+                (logtest? (-> (the-as citizen proc) enemy-flags) (enemy-flag stop-syncing))
+                (is-enemy-in-pausable-state? (the-as citizen proc)))))
   (if (and proc (nonzero? proc) (logtest? (-> proc mask) (process-mask enemy)) (type? proc enemy))
     (mp-enemy-allow-local-state-transition? (the-as enemy proc))
     #t))

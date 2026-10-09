@@ -51,7 +51,7 @@ It type checks the arguments for the entry function.
 
 ;; DECOMP BEGINS
 
-(define-extern mp-process-allow-local-state-transition? (function process symbol))
+(define-extern mp-process-allow-local-state-transition? (function process symbol symbol))
 (define-extern pedestrian-state-entry-allowed? (function process symbol symbol))
 (define-extern mp-handle-engine-event! (function process-tree event-message-block none))
 
@@ -431,7 +431,7 @@ It type checks the arguments for the entry function.
              )
          (set! (-> pp post-hook) (-> new-state post))
          (set! (-> pp trans-hook)
-               (if (mp-process-allow-local-state-transition? pp)
+               (if (mp-process-allow-local-state-transition? pp #f)
                    (-> new-state trans)
                    (the-as function #f)))
 
@@ -446,7 +446,7 @@ It type checks the arguments for the entry function.
          ;; run the trans function before the code.
          ;; we don't run the trans on enemies that we do not "own", easiest way to simulate enemies, syncing them that way
          (let ((trans-func (-> new-state trans)))
-           (if (and trans-func (mp-process-allow-local-state-transition? pp))
+           (if (and trans-func (mp-process-allow-local-state-transition? pp #t))
                (trans-func)
                )
            )
