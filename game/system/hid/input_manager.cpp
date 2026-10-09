@@ -334,7 +334,12 @@ void InputManager::process_sdl_event(const SDL_Event& event) {
 }
 
 void InputManager::poll_keyboard_data() {
-  if (m_text_editor.active()) {
+  const auto keyboard_state = SDL_GetKeyboardState(nullptr);
+  m_text_input_keyboard_captured =
+      m_text_editor.active() ||
+      (m_text_input_keyboard_captured &&
+       (keyboard_state[SDL_SCANCODE_RETURN] || keyboard_state[SDL_SCANCODE_KP_ENTER]));
+  if (m_text_input_keyboard_captured) {
     clear_keyboard_actions();
     return;
   }

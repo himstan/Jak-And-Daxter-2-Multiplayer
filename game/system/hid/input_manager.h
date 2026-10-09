@@ -187,6 +187,7 @@ class InputManager {
   CommandBindingGroups m_command_binds;
 
   bool m_mouse_enabled = false;
+  bool m_text_input_keyboard_captured = false;
   int m_skip_polling_for_n_frames = 0;
   bool m_auto_hide_mouse = true;
   bool m_mouse_currently_hidden = false;
