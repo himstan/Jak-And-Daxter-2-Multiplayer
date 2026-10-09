@@ -578,7 +578,7 @@
       ((begin
          (target-timed-invulnerable (-> arg0 invinc-time) self 1)
          (rumble-local-controller self 0 255 (seconds 0.5))
-         (focus-test? self indax)
+         (or (mp-target-daxter? self) (focus-test? self indax))
          )
        (let* ((v1-14 (rand-vu-int-count 4))
               (t0-1 (cond
