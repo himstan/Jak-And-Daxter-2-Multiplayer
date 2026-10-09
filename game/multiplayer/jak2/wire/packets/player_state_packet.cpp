@@ -10,7 +10,7 @@ bool validate_packet(const PlayerStatePacket& packet) {
          platform::wire::valid_angle(packet.angle) &&
          platform::wire::valid_linear_velocity_array(packet.velocity) && packet.state_id <= 0xffu &&
          core::valid_player_level_state(packet.levels) && packet.vehicle_seat <= 3u &&
-         packet.equipped_weapon <= 4u && packet.flags <= 0x3fu &&
+         packet.equipped_weapon <= 4u && packet.flags <= 0x7fu &&
          platform::wire::valid_angle(packet.camera_angle_y) && packet.action_sequence <= 0xffu &&
          packet.action_state_id <= 0xffu &&
          valid_wire_player_reference(packet.riding_along_player_id) &&
@@ -31,7 +31,8 @@ PlayerStatePacket to_packet(const core::PlayerState& state) {
           .leftx = state.leftx,
           .lefty = state.lefty,
           .flags = pack_player_state_flags(state.spectator_only, state.scene_active,
-                                           state.turret_active, state.respawn_flags),
+                                           state.turret_active, state.respawn_flags,
+                                           state.hit_invulnerable),
           .camera_angle_y = platform::wire::canonical_angle(state.camera_angle_y),
           .vehicle_id = state.vehicle_id,
           .vehicle_seat = state.vehicle_seat,
@@ -64,6 +65,7 @@ void from_packet(const PlayerStatePacket& packet, core::PlayerState& state) {
   state.spectator_only = is_player_state_flag_spectator(packet.flags);
   state.scene_active = is_player_state_flag_scene_active(packet.flags);
   state.turret_active = is_player_state_flag_turret_active(packet.flags);
+  state.hit_invulnerable = is_player_state_flag_hit_invulnerable(packet.flags);
   state.respawn_flags = has_player_state_flag_respawn_flags(packet.flags);
   state.camera_angle_y = packet.camera_angle_y;
   state.vehicle_id = packet.vehicle_id;

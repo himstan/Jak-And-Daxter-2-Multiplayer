@@ -67,7 +67,7 @@ bool serialize_fields(Stream& stream, PacketT&& packet) {
       !platform::wire::serialize_u16(stream, packet.buttons) ||
       !platform::wire::serialize_u8(stream, packet.leftx) ||
       !platform::wire::serialize_u8(stream, packet.lefty) ||
-      !platform::wire::serialize_uint_bits(stream, packet.flags, 6) ||
+      !platform::wire::serialize_uint_bits(stream, packet.flags, 7) ||
       !platform::wire::serialize_angle(stream, packet.camera_angle_y) ||
       !platform::wire::serialize_u32(stream, packet.vehicle_id) ||
       !platform::wire::serialize_uint_bits(stream, packet.vehicle_seat, 2) ||

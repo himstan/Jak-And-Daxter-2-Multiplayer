@@ -166,6 +166,7 @@ struct PlayerState {
   bool spectator_only = false;
   bool scene_active = false;
   bool turret_active = false;
+  bool hit_invulnerable = false;
   PlayerLevelState levels{};
   std::array<float, 3> position = {};
   std::array<float, 3> velocity = {};

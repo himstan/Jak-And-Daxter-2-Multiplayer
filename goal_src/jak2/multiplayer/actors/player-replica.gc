@@ -988,17 +988,13 @@
             (set-subtitle! *gui-control* s-id #f))))))
   (none))
 
-(defun player-replica-start-hit-flash! ((proc target))
-  (when (and proc
-             (nonzero? proc)
-             (-> proc control)
-             (nonzero? (-> proc control))
-             (-> proc clock)
-             (nonzero? (-> proc clock))
-             *TARGET-bank*
-             (nonzero? *TARGET-bank*)
-             (not (logtest? (-> proc state-flags) (state-flags tinvul1))))
-    (target-timed-invulnerable (the-as time-frame (-> *TARGET-bank* hit-invulnerable-timeout)) proc 1))
+(defun player-replica-sync-hit-flash! ((proc target) (record mp-player-record))
+  (when (nonnull? proc record (-> proc control) (-> proc clock) *TARGET-bank*)
+    (if (nonzero? (-> record action hit-invulnerable?))
+      (unless (logtest? (-> proc state-flags) (state-flags tinvul1))
+        (target-timed-invulnerable (the-as time-frame (-> *TARGET-bank* hit-invulnerable-timeout)) proc 1))
+      (when (logtest? (-> proc state-flags) (state-flags tinvul1))
+        (target-timed-invulnerable-off proc 1))))
   (none))
 
 (defun mp-trigger-death-taunt! ((dead-target target))
@@ -1055,7 +1051,7 @@
   (set! (-> record runtime last-action-sequence) (-> record action authoritative-sequence))
   (if (mp-player-daxter? record) (go-process proc target-indax-start (the handle #f)) (go-process proc target-stance))
   (player-replica-snap-to-record-on-spawn! proc)
-  (player-replica-start-hit-flash! proc)
+  (player-replica-sync-hit-flash! proc record)
   #t)
 
 (defun player-replica-apply-record-correction! ((proc target))
@@ -1070,6 +1066,7 @@
                                                                 record
                                                                 (if (nonnull? (-> proc state)) (-> proc state name) #f))))
           (logclear! (-> proc mask) (process-mask pause sleep actor-pause))
+          (player-replica-sync-hit-flash! proc record)
           (mp-darkjak-apply-remote-stage! proc (-> record action darkjak-stage))
           (player-replica-apply-input! proc target-record)
           ;; if someone even after player-replica-go-authoritative-action! get unsynced then this should grab them out of that state/mode 
@@ -1094,9 +1091,7 @@
                   ((and (mp-target-death-state? record-state) (mp-target-death-state? cur-state))
                    (set! (-> record runtime state-mismatch-count) 0))
                   ((or (= record-state 'target-hit) (= record-state 'target-indax-hit))
-                   (when (not (logtest? (-> proc state-flags) (state-flags tinvul1)))
-                     (player-replica-start-hit-flash! proc)
-                     (send-event proc 'mp-hit))
+                   (send-event proc 'mp-hit)
                    (set! (-> record runtime state-mismatch-count) 0))
                   ((and (= record-state 'target-ride-along) (!= 'target-indax-jump-on cur-state))
                    (log 'debug "[PlayerReplica] Authoritative Ride Along! Bumping ~A -> ~A~%" cur-state record-state)

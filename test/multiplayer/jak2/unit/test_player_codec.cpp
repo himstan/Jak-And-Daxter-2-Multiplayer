@@ -84,9 +84,29 @@ TEST(Jak2Protocol, TrafficInterestFitsPlayerPacketAndRejectsInvalidSources) {
     EXPECT_FALSE(platform::wire::encode_packet(invalid));
     auto bytes = platform::wire::encode_packet(jak2::wire::PlayerStatePacket{});
     ASSERT_TRUE(bytes);
-    (*bytes)[48] = ((*bytes)[48] & 0x1f) | ((source & 7) << 5);
-    (*bytes)[49] = source >> 3;
+    (*bytes)[48] = ((*bytes)[48] & 0x3f) | ((source & 3) << 6);
+    (*bytes)[49] = source >> 2;
     EXPECT_FALSE(platform::wire::decode_packet<jak2::wire::PlayerStatePacket>(*bytes));
+  }
+}
+
+TEST(Jak2Protocol, HitInvulnerabilityRoundTrips) {
+  using namespace multiplayer;
+  for (const bool hit_invulnerable : {false, true}) {
+    for (uint8_t respawn_flags = 0; respawn_flags < 8; ++respawn_flags) {
+      jak2::core::PlayerState input;
+      input.hit_invulnerable = hit_invulnerable;
+      input.respawn_flags = respawn_flags;
+      const auto bytes = platform::wire::encode_packet(jak2::wire::to_packet(input));
+      ASSERT_TRUE(bytes);
+      EXPECT_EQ(bytes->size(), 50u);
+      const auto packet = platform::wire::decode_packet<jak2::wire::PlayerStatePacket>(*bytes);
+      ASSERT_TRUE(packet);
+      jak2::core::PlayerState output;
+      jak2::wire::from_packet(*packet, output);
+      EXPECT_EQ(output.hit_invulnerable, hit_invulnerable);
+      EXPECT_EQ(output.respawn_flags, respawn_flags);
+    }
   }
 }
 

@@ -488,6 +488,42 @@ TEST(Jak2GoalBridge, DirectionalAggregateHasCanonicalCompactAbi) {
   EXPECT_EQ(offsetof(MPReplicationStateGOAL, inbound_events), 190192u);
 }
 
+TEST(Jak2GoalBridge, PlayerActionLayoutMatchesGoal) {
+  TypeSystem types;
+  types.add_builtin_types(GameVersion::Jak2);
+  goos::Reader reader;
+  const auto source = reader.read_from_file(
+      {std::string(MP_SOURCE_ROOT) + "/goal_src/jak2/multiplayer/data/mp-replication-h.gc"});
+  goos::for_each_in_list(source.as_pair()->cdr, [&](const goos::Object& form) {
+    if (form.is_pair() && form.as_pair()->car.is_symbol("deftype") &&
+        form.as_pair()->cdr.as_pair()->car.is_symbol("mp-replication-player-action")) {
+      parse_deftype(form.as_pair()->cdr, &types);
+    }
+  });
+  EXPECT_EQ(types.lookup_type("mp-replication-player-action")->get_size_in_memory(),
+            sizeof(MPReplicationPlayerActionGOAL));
+  EXPECT_EQ(types.lookup_field_info("mp-replication-player-action", "hit-invulnerable?").field.offset(),
+            offsetof(MPReplicationPlayerActionGOAL, hit_invulnerable));
+}
+
+TEST(Jak2GoalBridge, ExchangePreservesAndClearsPlayerHitInvulnerability) {
+  using namespace multiplayer::jak2;
+  GoalMemoryFixture memory;
+  auto& state = replication_state(memory);
+  application::ReplicationMailbox mailbox;
+  for (const bool hit_invulnerable : {true, false}) {
+    state.local.players[0].action.hit_invulnerable = hit_invulnerable;
+    auto remote = std::make_unique<application::RemoteReplicationFrame>();
+    remote->players[1].hit_invulnerable = hit_invulnerable;
+    mailbox.publish_remote_frame(std::move(remote));
+    ASSERT_TRUE(bridge::exchange_state(0x12000, mailbox));
+    const auto local = mailbox.take_local_frame();
+    ASSERT_TRUE(local);
+    EXPECT_EQ(local->players[0].hit_invulnerable, hit_invulnerable);
+    EXPECT_EQ(state.remote.players[1].action.hit_invulnerable, hit_invulnerable);
+  }
+}
+
 TEST(Jak2GoalBridge, PlayerSkinConversionRoundTripsValues) {
   MPPlayerSkinGOAL goal = {};
   for (size_t index = 0; index < kMPPlayerSkinSlotCount; ++index) {

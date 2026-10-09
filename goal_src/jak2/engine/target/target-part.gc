@@ -196,17 +196,19 @@
     )
   )
 
-(defun part-tracker-track-target-joint ((arg0 int) (arg1 sparticle-cpuinfo) (arg2 sparticle-launchinfo))
-  (let* ((v1-0 *target*)
-         (v1-2 (vector<-cspace! (new 'stack-no-clear 'vector) (-> v1-0 node-list data (the int (-> arg1 user-float)))))
-         )
-    (set! (-> arg2 launchrot x) (-> v1-2 x))
-    (set! (-> arg2 launchrot y) (-> v1-2 y))
-    (set! (-> arg2 launchrot z) (-> v1-2 z))
-    )
-  0
-  (none)
-  )
+(defun part-tracker-track-owner-joint! ((arg0 int) (particle sparticle-cpuinfo) (launch sparticle-launchinfo))
+  (unless (nonnull? particle launch (-> particle key) (-> particle key proc))
+    (return (the-as none 0)))
+  (let ((owner (-> particle key proc parent)))
+    (when (and (nonnull? owner) (type? owner target))
+      (let ((player (the-as target owner)))
+        (when (nonnull? (-> player node-list))
+          (let ((joint-position (vector<-cspace! (new-stack-vector0)
+                                                (-> player node-list data (the int (-> particle user-float))))))
+            (set! (-> launch launchrot x) (-> joint-position x))
+            (set! (-> launch launchrot y) (-> joint-position y))
+            (set! (-> launch launchrot z) (-> joint-position z)))))))
+  (none))
 
 (defpartgroup group-target-hit
   :id 9
@@ -388,7 +390,7 @@
     (:timer (seconds 2.015))
     (:flags (sp-cpuinfo-flag-3))
     (:userdata 9.0)
-    (:func 'part-tracker-track-target-joint)
+    (:func 'part-tracker-track-owner-joint!)
     )
   )
 

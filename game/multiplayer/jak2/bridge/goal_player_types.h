@@ -59,6 +59,7 @@ struct MPReplicationPlayerActionGOAL {
   uint8_t respawn_flags;
   uint8_t riding_along_player_id;
   uint8_t visual_secrets;
+  uint8_t hit_invulnerable;
 };
 
 struct MPReplicationPlayerInputGOAL {
@@ -73,5 +74,5 @@ struct MPReplicationPlayerInputGOAL {
 static_assert(sizeof(MPReplicationPlayerIdentityGOAL) == 279);
 static_assert(sizeof(MPPlayerLevelSlotGOAL) == 2);
 static_assert(sizeof(MPReplicationPlayerTransformGOAL) == 48);
-static_assert(sizeof(MPReplicationPlayerActionGOAL) == 17);
+static_assert(sizeof(MPReplicationPlayerActionGOAL) == 18);
 static_assert(sizeof(MPReplicationPlayerInputGOAL) == 9);

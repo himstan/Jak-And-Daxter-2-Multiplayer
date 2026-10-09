@@ -99,8 +99,8 @@ void expect_exact_packet(const Model& payload, const std::vector<uint8_t>& expec
 TEST(Jak2Protocol, PlayerStateWireFormatPreservesEveryField) {
   const std::vector<uint8_t> bytes = {120, 86,  52, 18,  3,  0,   16,  0,   0,   1,   0,   16,  0,
                                       16,  0,   32, 0,   64, 1,   128, 98,  136, 2,   102, 12,  68,
-                                      16,  34,  6,  170, 36, 204, 70,  5,   154, 87,  35,  220, 91,
-                                      0,   160, 20, 0,   0,  160, 88,  106, 59,  183, 0};
+                                      16,  34,  6,  170, 36, 204, 70,  5,   154, 87,  35,  220, 219,
+                                      0,   64,  41, 0,   0,  64,  177, 212, 118, 110, 1};
   multiplayer::jak2::core::PlayerState state = {};
   state.player_id = 2;
   state.sample_time_ms = 0x12345678;
@@ -122,6 +122,7 @@ TEST(Jak2Protocol, PlayerStateWireFormatPreservesEveryField) {
   state.spectator_only = true;
   state.turret_active = true;
   state.respawn_flags = 5;
+  state.hit_invulnerable = true;
   state.camera_angle_y = -0.25f;
   state.vehicle_id = 0x40000029;
   state.vehicle_seat = 1;
@@ -159,6 +160,7 @@ TEST(Jak2Protocol, PlayerStateWireFormatPreservesEveryField) {
   EXPECT_FALSE(actual.scene_active);
   EXPECT_TRUE(actual.turret_active);
   EXPECT_EQ(actual.respawn_flags, 5u);
+  EXPECT_TRUE(actual.hit_invulnerable);
   EXPECT_NEAR(actual.camera_angle_y, -0.25f, multiplayer::platform::wire::kAngleResolution / 2.0f);
   EXPECT_EQ(actual.vehicle_id, 0x40000029u);
   EXPECT_EQ(actual.vehicle_seat, 1u);
