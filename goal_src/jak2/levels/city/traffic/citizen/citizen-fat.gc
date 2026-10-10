@@ -220,7 +220,7 @@
   )
 
 (defmethod enemy-method-51 ((this citizen-fat))
-  (let ((f30-0 (quaternion-y-angle (-> this root quat))))
+  (let ((f30-0 (enemy-hit-facing-angle this)))
     (case (-> this incoming knocked-type)
       (((knocked-type knocked-type-4) (knocked-type knocked-type-6))
        (let ((a0-5 (handle->process (-> this focus handle))))
@@ -228,7 +228,7 @@
            (get-trans (the-as process-focusable a0-5) 0)
            (let ((s5-0 (new 'stack-no-clear 'vector)))
              (set! (-> s5-0 quad) (-> this root transv quad))
-             (if (< (vector-dot (-> this root transv) (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> this root quat)))
+             (if (< (vector-dot (-> this root transv) (enemy-hit-forward! this (new 'stack-no-clear 'vector)))
                     0.0
                     )
                  (vector-negate-in-place! s5-0)
@@ -241,7 +241,7 @@
       (else
         (let ((s5-1 (new 'stack-no-clear 'vector)))
           (set! (-> s5-1 quad) (-> this root transv quad))
-          (if (< (vector-dot s5-1 (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> this root quat))) 0.0)
+          (if (< (vector-dot s5-1 (enemy-hit-forward! this (new 'stack-no-clear 'vector))) 0.0)
               (vector-negate-in-place! s5-1)
               )
           (let* ((f28-0 (atan (-> s5-1 x) (-> s5-1 z)))
@@ -333,8 +333,8 @@
   (case (-> this incoming knocked-type)
     (((knocked-type knocked-type-4))
      (ja-channel-push! 1 (seconds 0.01))
-     (let* ((a2-0 (ash 1 (-> this info prev-yellow-hit)))
-            (v1-3 (rnd-bit this 1 a2-0))
+     (let* ((a2-0 (enemy-hit-history-mask this (-> this info prev-yellow-hit)))
+            (v1-3 (enemy-hit-rand-bit this 1 a2-0))
             (a1-7
               (-> this
                   draw
@@ -360,8 +360,8 @@
      )
     (((knocked-type knocked-type-6))
      (ja-channel-push! 1 (seconds 0.01))
-     (let* ((a2-2 (ash 1 (-> this info prev-blue-hit)))
-            (v1-12 (rnd-bit this 3 a2-2))
+     (let* ((a2-2 (enemy-hit-history-mask this (-> this info prev-blue-hit)))
+            (v1-12 (enemy-hit-rand-bit this 3 a2-2))
             (a1-14
               (-> this
                   draw

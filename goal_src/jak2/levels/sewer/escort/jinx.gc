@@ -438,10 +438,10 @@
              (s5-1 (new 'stack-no-clear 'vector))
              )
          (enemy-method-50 this s4-0)
-         (vector-z-quaternion! s5-1 (-> this root quat))
+         (enemy-hit-forward! this s5-1)
          (cond
            ((>= (vector-dot s4-0 s5-1) 0.0)
-            (let* ((v1-7 (rnd-bit this 3 (ash 1 (-> *jinx-global-info* prev-blue-hit-back))))
+            (let* ((v1-7 (enemy-hit-rand-bit this 3 (enemy-hit-history-mask this (-> *jinx-global-info* prev-blue-hit-back))))
                    (s5-2 (-> this draw art-group data (-> *jinx-global-info* blue-hit-back-anim v1-7)))
                    )
               (set! (-> *jinx-global-info* prev-blue-hit-back) v1-7)
@@ -465,7 +465,7 @@
               )
             )
            (else
-             (let* ((v1-24 (rnd-bit this 3 (ash 1 (-> *jinx-global-info* prev-blue-hit-front))))
+             (let* ((v1-24 (enemy-hit-rand-bit this 3 (enemy-hit-history-mask this (-> *jinx-global-info* prev-blue-hit-front))))
                     (s5-3 (-> this draw art-group data (-> *jinx-global-info* blue-hit-front-anim v1-24)))
                     )
                (set! (-> *jinx-global-info* prev-blue-hit-front) v1-24)
@@ -503,7 +503,7 @@
          (joint-control-channel-group! a0-34 (the-as art-joint-anim (-> this draw art-group data 23)) num-func-seek!)
          )
        )
-      ((zero? (rnd-int-count this 3))
+      ((zero? (enemy-hit-rand-count this 3))
        (ja-channel-push! 1 (seconds 0.17))
        (let ((a0-37 (-> this skel root-channel 0)))
          (set! (-> a0-37 frame-group) (the-as art-joint-anim (-> this draw art-group data 21)))
@@ -519,7 +519,7 @@
         (let ((s4-1 (new 'stack-no-clear 'vector)))
           0.0
           0.0
-          (vector-z-quaternion! s4-1 (-> this root quat))
+          (enemy-hit-forward! this s4-1)
           (let ((f30-0 (atan (-> s4-1 x) (-> s4-1 z))))
             (enemy-method-50 this s4-1)
             (let* ((f0-24 (atan (-> s4-1 x) (-> s4-1 z)))

@@ -447,7 +447,7 @@
       (case (-> this incoming knocked-type)
         (((knocked-type knocked-type-6))
          (ja-channel-push! 1 (seconds 0.01))
-         (let ((v1-32 (rnd-int-count this 2)))
+         (let ((v1-32 (enemy-hit-rand-count this 2)))
            (cond
              ((zero? v1-32)
               (let ((a0-10 (-> this skel root-channel 0)))

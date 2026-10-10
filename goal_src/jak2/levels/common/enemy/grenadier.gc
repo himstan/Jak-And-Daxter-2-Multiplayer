@@ -982,7 +982,7 @@
         (new 'static 'rgba :r #x80 :g #x80 :b #x80 :a #x80)
         )
       (add-debug-quaternion #t (bucket-id debug-no-zbuf1) (-> self root trans) (-> self root quat))
-      (let ((f0-0 (quaternion-vector-y-angle (-> self root quat) gp-0)))
+      (let ((f0-0 (deg-diff (enemy-hit-facing-angle self) (atan (-> gp-0 x) (-> gp-0 z)))))
         (cond
           ((and (< -8192.0 f0-0) (>= 8192.0 f0-0))
            (set! v1-10 26)

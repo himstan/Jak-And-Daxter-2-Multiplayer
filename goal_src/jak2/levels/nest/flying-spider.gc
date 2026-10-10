@@ -504,7 +504,7 @@
     )
   :code (behavior ()
     (ja-channel-push! 1 (seconds 0.075))
-    (let ((f30-0 (rnd-float-range self 0.8 1.2)))
+    (let ((f30-0 (enemy-knocked-rand-factor self 0.8 1.2)))
       (ja-no-eval :group! (-> self draw art-group data (-> self enemy-info die-anim))
                   :num! (seek! max f30-0)
                   :frame-num 0.0
@@ -550,15 +550,7 @@
        ((zero? (-> this hit-points))
         (let ((s5-1 (-> this incoming knocked-type)))
           (cond
-            ((and (= s5-1 (knocked-type knocked-type-4))
-                  (not (and (-> this next-state) (let ((v1-32 (-> this next-state name)))
-                                                   (or (= v1-32 'knocked) (= v1-32 'jump) (= v1-32 'jump-land))
-                                                   )
-                            )
-                       )
-                  (zero? (rnd-int-count this 3))
-                  (>= (vector-vector-distance-squared (-> this root trans) (target-pos 0)) (square 32768.0))
-                  )
+            ((enemy-hit-yellow-fatal-fall? this)
              (kill-prefer-falling this)
              )
             ((or (= s5-1 (knocked-type knocked-type-4)) (= s5-1 (knocked-type knocked-type-6)))
@@ -703,7 +695,7 @@
   )
 
 (defmethod enemy-method-51 ((this flying-spider))
-  (quaternion-y-angle (-> this root quat))
+  (enemy-hit-facing-angle this)
   )
 
 (defmethod coin-flip? ((this flying-spider))

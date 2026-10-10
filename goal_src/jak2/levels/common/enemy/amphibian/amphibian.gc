@@ -383,6 +383,8 @@
 
 (defmethod enemy-method-51 ((this amphibian))
   (local-vars (f0-1 float))
+  (when (and (enemy-hit-deterministic? this) (nonnull? this) (nonzero? (-> this hit-points)) (zero? (-> this fated-time)))
+    (return (atan (- (-> this incoming attack-direction x)) (- (-> this incoming attack-direction z)))))
   0.0
   (set! f0-1
         (cond
@@ -390,7 +392,7 @@
            ((method-of-type nav-enemy enemy-method-51) this)
            )
           (else
-            (set! f0-1 (quaternion-y-angle (-> this root quat)))
+            (set! f0-1 (enemy-hit-facing-angle this))
             (let ((a0-5 (handle->process (-> this focus handle))))
               (when a0-5
                 (let ((v1-12 (get-trans (the-as process-focusable a0-5) 0)))
@@ -425,7 +427,7 @@
 (defmethod enemy-method-77 ((this amphibian) (arg0 enemy-knocked-info))
   (case (-> this incoming knocked-type)
     (((knocked-type knocked-type-6))
-     (let* ((v1-3 (rnd-bit this 3 (ash 1 (-> *amphibian-global-info* prev-blue-hit))))
+     (let* ((v1-3 (enemy-hit-rand-bit this 3 (enemy-hit-history-mask this (-> *amphibian-global-info* prev-blue-hit))))
             (s5-1 (-> this draw art-group data (-> *amphibian-global-info* blue-hit-anim v1-3)))
             )
        (set! (-> *amphibian-global-info* prev-blue-hit) v1-3)
@@ -442,8 +444,8 @@
     (else
       (let ((v1-11 0))
         (when (or (zero? (-> this hit-points)) (nonzero? (-> this fated-time)))
-          (let ((a2-5 (logior (ash 1 (-> *amphibian-global-info* prev-knocked)) 1)))
-            (set! v1-11 (rnd-bit this 3 a2-5))
+          (let ((a2-5 (logior (enemy-hit-history-mask this (-> *amphibian-global-info* prev-knocked)) 1)))
+            (set! v1-11 (enemy-hit-rand-bit this 3 a2-5))
             )
           )
         (set! (-> *amphibian-global-info* prev-knocked) v1-11)

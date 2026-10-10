@@ -467,41 +467,10 @@
 
 ;; WARN: Return type mismatch object vs none.
 (defmethod enemy-method-52 ((this wasp) (arg0 vector))
-  (let ((s4-0 (-> this root)))
-    (case (-> this incoming knocked-type)
-      (((knocked-type knocked-type-2))
-       (let ((gp-1 (-> this root transv)))
-         (let ((a1-1 (handle->process (-> this incoming attacker-handle))))
-           (if a1-1
-               (vector-! gp-1 (-> (the-as process-focusable a1-1) root trans) (-> this root trans))
-               (vector-! gp-1 (-> this incoming attacker-pos) (-> this root trans))
-               )
-           )
-         (set! (-> gp-1 y) 0.0)
-         (vector-normalize! gp-1 1.0)
-         (vector-rotate90-around-y! gp-1 gp-1)
-         (if (< 0.0 (vector-dot
-                      (vector-! (new 'stack-no-clear 'vector) (-> this incoming attacker-pos) (-> s4-0 trans))
-                      (vector-x-quaternion! (new 'stack-no-clear 'vector) (-> s4-0 quat))
-                      )
-                )
-             (vector-negate! gp-1 gp-1)
-             )
-         (let ((f30-1 (enemy-knocked-rand-factor this 0.0 1.0))
-               (s5-1 (-> this enemy-info))
-               )
-           (vector-float*! gp-1 gp-1 (lerp (-> s5-1 knocked-hard-vxz-lo) (-> s5-1 knocked-hard-vxz-hi) f30-1))
-           (set! (-> gp-1 y) (lerp (-> s5-1 knocked-hard-vy-lo) (-> s5-1 knocked-hard-vy-hi) f30-1))
-           )
-         )
-       )
-      (else
-        (call-parent-method this arg0)
-        )
-      )
-    )
-  (none)
-  )
+  (if (= (-> this incoming knocked-type) (knocked-type knocked-type-2))
+    (enemy-hover-knock-velocity! this arg0)
+    (call-parent-method this arg0))
+  (none))
 
 ;; WARN: Return type mismatch object vs none.
 (defmethod go-idle ((this wasp))
@@ -1062,7 +1031,7 @@
 
 (defmethod enemy-method-77 ((this wasp) (arg0 enemy-knocked-info))
   (cond
-    ((rnd-percent? this 0.5)
+    ((>= 0.5 (enemy-knocked-rand-factor this 0.0 1.0))
      (set! (-> this knocked-anim) 10)
      (set! (-> this knocked-recover-anim) 11)
      )

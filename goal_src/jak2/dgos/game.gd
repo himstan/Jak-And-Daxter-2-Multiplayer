@@ -617,6 +617,7 @@
   "mp-gem-permanence.o" ;; added
   "mp-enemy-tombstone.o" ;; added
   "actor-record-sync.o" ;; added
+  "enemy-hit-reaction.o"
   "mp-actor-hit-sync.o" ;; added
   "player-interaction.o" ;; added
   "mp-enemy-state-mapper.o" ;; added

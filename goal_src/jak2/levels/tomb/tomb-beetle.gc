@@ -663,7 +663,7 @@
   :virtual #t
   :code (behavior ()
     (ja-channel-push! 1 (seconds 0.075))
-    (let ((f30-0 (rnd-float-range self 1.8 2.2)))
+    (let ((f30-0 (enemy-knocked-rand-factor self 1.8 2.2)))
       (ja-no-eval :group! (-> self draw art-group data (-> self enemy-info die-anim))
                   :num! (seek! max f30-0)
                   :frame-num 0.0

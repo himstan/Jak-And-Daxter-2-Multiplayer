@@ -797,7 +797,7 @@
                  (s2-0 (new 'stack-no-clear 'vector))
                  )
              (let ((s1-0 (-> self root trans)))
-               (let ((v1-27 (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> self root quat))))
+               (let ((v1-27 (enemy-hit-forward! self (new 'stack-no-clear 'vector))))
                  (let ((a0-7 20480.0))
                    (.mov vf7 a0-7)
                    )

@@ -40,7 +40,7 @@
                                   mp-aid-event-data
                                   (mp-event-handler-break (-> (the-as mp-aid-event evt) payload aid)))
                   (MP_EVENT_ATTACK_ENEMY 4
-                                         mp-actor-attack-event-data
+                                         enemy-hit-event-data
                                          (mp-event-handler-attack-enemy (the-as mp-actor-attack-event evt)))
                   (MP_EVENT_ENEMY_DEATH 5
                                         mp-aid-event-data

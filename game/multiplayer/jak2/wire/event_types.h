@@ -15,7 +15,7 @@ inline constexpr std::array<EventDescriptor, 57> kEvents = {{
     {1, "ORB", 12},
     {2, "GEM", 12},
     {3, "BREAK", 4},
-    {4, "ATTACK_ENEMY", 63},
+    {4, "ATTACK_ENEMY", 64},
     {5, "ENEMY_DEATH", 4},
     {6, "SCENE_START", 64},
     {7, "SCENE_REQUEST_SKIP", 64},

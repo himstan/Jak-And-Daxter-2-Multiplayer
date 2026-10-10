@@ -153,7 +153,12 @@
    (last-applied-remote-state   mp-enemy-state-id)
    (last-remote-state-bump-time time-frame)
    (locomotion-animation        int16)
-   (locomotion-frame            float)))
+   (locomotion-frame            float)
+   (reaction-attack-id          uint32)
+   (reaction-distance-squared   float)
+   (reaction-facing-angle       float)
+   (reaction-flags              uint8)
+   (reaction-variant            uint8)))
 
 (deftype mp-enemy-auth-table (structure)
   ((records mp-enemy-auth-record MP_MAX_ENEMY_AUTH_RECORDS :inline)))

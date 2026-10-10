@@ -35,7 +35,7 @@ TEST(Jak2Protocol, GameplayBodyAndHostReencodeAreCanonical) {
 
 TEST(Jak2Protocol, EventEnvelopesPreserveEveryPayloadByte) {
   constexpr std::array<uint8_t, 61> sizes = {
-      12,   12, 4,    63,   4,  64, 64, 64, 17, 5,  64, 0,  0, 62, 62, 0,  0,  32, 39, 39, 39,
+      12,   12, 4,    64,   4,  64, 64, 64, 17, 5,  64, 0,  0, 62, 62, 0,  0,  32, 39, 39, 39,
       4,    55, 9,    62,   13, 20, 37, 46, 1,  53, 17, 37, 9, 17, 1,  32, 32, 0,  0,  52, 0xff,
       0xff, 8,  0xff, 0xff, 4,  4,  4,  4,  1,  28, 18, 0,  0, 0,  31, 0,  12, 4,  1};
   for (uint8_t id = 1; id <= sizes.size(); ++id) {

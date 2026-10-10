@@ -572,7 +572,7 @@
   :code (behavior ()
     (set! (-> self smush-target) (the-as smush-control #t))
     (ja-channel-push! 1 (seconds 0.075))
-    (let ((f30-0 (rnd-float-range self 0.8 1.2))
+    (let ((f30-0 (enemy-knocked-rand-factor self 0.8 1.2))
           (gp-0 #t)
           )
       (ja-no-eval :group! (-> self draw art-group data (-> self enemy-info die-anim))
@@ -602,7 +602,7 @@
   :code (behavior ()
     (local-vars (v1-67 enemy-flag) (v1-75 enemy-flag))
     (ja-channel-push! 1 (seconds 0.2))
-    (let ((f30-0 (rnd-float-range self 0.9 1.1)))
+    (let ((f30-0 (enemy-knocked-rand-factor self 0.9 1.1)))
       (ja-no-eval :group! (-> self draw art-group data (-> self enemy-info hit-anim))
                   :num! (seek! max f30-0)
                   :frame-num 0.0

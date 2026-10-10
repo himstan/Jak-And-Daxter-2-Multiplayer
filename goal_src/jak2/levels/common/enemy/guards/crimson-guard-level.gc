@@ -3212,7 +3212,7 @@
     (set! (-> self hit-face)
           (the-as
             uint
-            (if (< (vector-dot (-> self root transv) (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> self root quat)))
+            (if (< (vector-dot (-> self root transv) (enemy-hit-forward! self (new 'stack-no-clear 'vector)))
                    0.0
                    )
                 1
@@ -3261,7 +3261,7 @@
          (ja-channel-push! 1 (seconds 0.01))
          (cond
            ((= (-> this small-hit) 1)
-            (set! (-> this yellow-anim anim-index-front) (rnd-int-count this 2))
+            (set! (-> this yellow-anim anim-index-front) (enemy-hit-rand-count this 2))
             (let ((a1-8
                     (-> this
                         draw
@@ -3450,7 +3450,7 @@
       ((enemy-method-133 self)
        (ja-channel-push! 1 (seconds 0.2))
        (let ((gp-0 (-> self draw art-group data (-> self enemy-info die-falling-anim)))
-             (f30-0 (rnd-float-range self 0.8 1.2))
+             (f30-0 (enemy-knocked-rand-factor self 0.8 1.2))
              )
          (ja-no-eval :group! gp-0 :num! (seek! max f30-0) :frame-num 0.0)
          (until (ja-done? 0)

@@ -1354,7 +1354,7 @@
     (set! (-> self hit-face)
           (the-as
             uint
-            (if (< (vector-dot (-> self root transv) (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> self root quat)))
+            (if (< (vector-dot (-> self root transv) (enemy-hit-forward! self (new 'stack-no-clear 'vector)))
                    0.0
                    )
                 1

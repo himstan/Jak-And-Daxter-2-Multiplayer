@@ -50,6 +50,7 @@
 (defconstant MP_GUNGAME_SPAWN_CIT_D (the-as int 13))
 (defconstant MP_ACTOR_ATTACK_HAS_SOURCE_POS (the-as uint8 1))
 (defconstant MP_ACTOR_ATTACK_HAS_DIRECTION (the-as uint8 2))
+(defconstant ENEMY_HIT_AIRBORNE (the uint8 4))
 (defconstant MP_MOUNTAIN_RESOLUTION_LENS (the-as uint8 1))
 (defconstant MP_MOUNTAIN_RESOLUTION_GEAR (the-as uint8 2))
 (defconstant MP_MOUNTAIN_RESOLUTION_SHARD (the-as uint8 3))
@@ -261,14 +262,16 @@
   ((payload mp-palace-squid-event-data :inline :overlay-at (-> data 0)))
   :size-assert 80)
 
-(deftype mp-actor-attack-event-data (structure)
+(deftype actor-hit-event-data (structure)
   ((source-pos   vector :inline)
    (attack-dir   vector :inline)
    (penetrate    uint64)
    (net-id       uint32)
    (attack-id    uint32)
-   (new-hp       int32)
-   (shove-back   float)
+   (new-hp       int32)))
+
+(deftype mp-actor-attack-event-data (actor-hit-event-data)
+  ((shove-back   float)
    (shove-up     float)
    (flags        uint8)
    (knocked-type uint8)
@@ -276,6 +279,19 @@
 
 (deftype mp-ped-attack-event-data (mp-actor-attack-event-data)
   ((traffic-authority-player-id uint8)))
+
+(deftype enemy-hit-event-data (actor-hit-event-data)
+  ((distance-squared float)
+   (facing-angle     float)
+   (flags            uint8)
+   (knocked-type     uint8)
+   (hit-sound-id     uint8)
+   (blue-juggle-count uint8))
+  :size-assert 64)
+
+(deftype enemy-hit-event (mp-event)
+  ((payload enemy-hit-event-data :inline :overlay-at (-> data 0)))
+  :size-assert 80)
 
 (deftype mp-actor-attack-event (mp-event)
   ((payload mp-ped-attack-event-data :inline :overlay-at (-> data 0)))

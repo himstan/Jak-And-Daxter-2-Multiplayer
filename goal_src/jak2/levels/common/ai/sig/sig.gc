@@ -812,7 +812,7 @@
 (defmethod enemy-method-77 ((this sig) (arg0 enemy-knocked-info))
   (case (-> this incoming knocked-type)
     (((knocked-type knocked-type-6))
-     (let* ((v1-3 (rnd-bit this 3 (ash 1 (-> *sig-global-info* prev-blue-hit))))
+     (let* ((v1-3 (enemy-hit-rand-bit this 3 (enemy-hit-history-mask this (-> *sig-global-info* prev-blue-hit))))
             (s5-1 (-> this draw art-group data (-> *sig-global-info* blue-hit-anim v1-3 anim-index)))
             )
        (set! (-> *sig-global-info* prev-blue-hit) v1-3)
@@ -853,7 +853,7 @@
       (let ((s4-0 (new 'stack-no-clear 'vector)))
         0.0
         0.0
-        (vector-z-quaternion! s4-0 (-> this root quat))
+        (enemy-hit-forward! this s4-0)
         (let ((f30-0 (atan (-> s4-0 x) (-> s4-0 z))))
           (enemy-method-50 this s4-0)
           (let* ((f0-14 (atan (-> s4-0 x) (-> s4-0 z)))
