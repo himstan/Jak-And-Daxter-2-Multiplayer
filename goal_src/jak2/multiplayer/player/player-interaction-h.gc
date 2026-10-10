@@ -14,3 +14,5 @@
   ((players player-contact-state MP_MAX_PLAYERS :inline)))
 
 (define *player-contacts* (new 'static 'player-contact-table))
+
+(define-extern player-ride-contact-disabled? (function target symbol))

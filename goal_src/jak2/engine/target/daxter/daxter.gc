@@ -455,7 +455,7 @@
 (defun can-draw-ride-along-prompt? ((rider target))
   (if (and (nonnull? rider *font-default-matrix* *common-text*)
            (not-player-replica? rider) (mp-target-daxter? rider)
-           (not (focus-test? rider grabbed))
+           (not (focus-test? rider grabbed teleporting))
            (not (movie?)) (not (real-movie?)) (not (nonnull? *progress-process*)))
     #t
     #f))
@@ -481,10 +481,8 @@
     #f))
 
 (defun get-ride-along-mount-record ((rider target))
-  (when (and (nonnull? rider (-> rider control) (-> rider state))
-             (can-draw-ride-along-prompt? rider)
-             (let ((state-name (-> rider state name)))
-               (or (= state-name 'target-indax-stance) (= state-name 'target-indax-walk))))
+  (when (and (nonnull? rider (-> rider control))
+             (can-draw-ride-along-prompt? rider))
     (let* ((jak-record (mp-jak-record-for rider))
            (jak-target (mp-player-record-target jak-record)))
       (when (and (nonnull? jak-record jak-target (-> jak-target control))
@@ -498,7 +496,8 @@
 
 (defbehavior target-indax-ride-along-check target ()
   (let ((jak-record (get-ride-along-mount-record self)))
-    (when (nonnull? jak-record)
+    (when (and (nonnull? self jak-record)
+               (= (-> self state) (-> self next-state)))
       (draw-ride-along-prompt! (text-id press-triangle-to-hop-on))
       (when (recently-pressed? triangle)
         (go target-indax-jump-on (-> jak-record identity player-id)))))

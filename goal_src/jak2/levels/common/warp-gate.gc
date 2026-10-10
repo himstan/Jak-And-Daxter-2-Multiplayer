@@ -523,8 +523,10 @@
   )
 
 (defun warp-gate-target-blocked? ()
-  (or (focus-test? *target* in-head edge-grab pole flut tube board pilot mech)
-      (and (focus-test? *target* indax) (mp-target-ride-along? *target*))
+  (or (not (nonnull? *target*))
+      (focus-test? *target* in-head edge-grab pole flut tube board pilot mech)
+      (player-ride-contact-disabled? *target*)
+      (nonnull? (get-ride-along-mount-record *target*))
       )
   )
 
