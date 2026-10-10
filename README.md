@@ -11,7 +11,7 @@ The intentional experience is tailored around 2 players where one plays as Jak, 
 
 ## Current State
 
-This is a very early MVP multiplayer build, so expect a ton of bugs, unstability and crashes. Currently only Act I (-2 missions, up until the palace Baron bossfight) is playable, the game will lock further progress after you've completed that mission.<br>
+This is a very early MVP multiplayer build, so expect a ton of bugs, unstability and crashes. Currently the story is only playable until the Palace Baron fight, the game will lock further progress after you've completed that mission.<br>
 The goal is to make the full Jak II campaign playable together.<br>
 Currently, this mod primarily serves as a Co-op mod, when the full Story is in a finished state, more game modes are planned to be supported as well.<br>
 If at least the Host is in debug mode then a lot of constraints I've put in to block progression can be bypassed.
