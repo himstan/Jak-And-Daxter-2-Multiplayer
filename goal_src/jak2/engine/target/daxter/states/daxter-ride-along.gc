@@ -108,7 +108,8 @@
   :enter
     (behavior ()
       (when (nonnull? self)
-        (set-time! (-> self state-time)))
+        (set-time! (-> self state-time))
+        (logior! (-> self state-flags) (state-flags prevent-gun)))
       (set! (-> self control transv quad) (the-as uint128 0))
       (set! (-> self control ctrl-xz-vel) 0.0)
       (set! (-> self control root-prim prim-core action) (collide-action))
@@ -127,6 +128,8 @@
             (send-event sidekick-proc 'matrix #f)))))
   :exit
     (behavior ()
+      (when (nonnull? self)
+        (logclear! (-> self state-flags) (state-flags prevent-gun)))
       (update-ride-along-transform!)
       (set! (-> self control ctrl-xz-vel) (vector-xz-length (-> self control transv)))
       (set! (-> self control root-prim prim-core action) (collide-action solid can-ride stuck-wall-escape))
@@ -188,6 +191,9 @@
         (let ((rider (get-jak-rider jak-proc))) (when (and (nonnull? rider) (!= rider self)) (go target-indax-stance)))
         (set! (-> self riding-along-player-id) jak-player-id)
         (set! (-> jak-proc riding-along-player-id) (-> self player-id)))
+      (when (nonnull? self)
+        (logior! (-> self state-flags) (state-flags prevent-gun)))
+      (put-away-gun-immediate! #t)
       (set! (-> self control mod-surface) *empty-mods*)
       (set! (-> self control transv quad) (the-as uint128 0))
       (vector-copy! (-> self alt-cam-pos) (-> self control trans))
@@ -196,6 +202,8 @@
       (player-set-ride-contact! self #f))
   :exit
     (behavior ()
+      (when (nonnull? self)
+        (logclear! (-> self state-flags) (state-flags prevent-gun)))
       (unless (and (nonnull? (-> self next-state)) (= (-> self next-state name) 'target-ride-along))
         (release-ride-along! self))
       (target-indax-exit))

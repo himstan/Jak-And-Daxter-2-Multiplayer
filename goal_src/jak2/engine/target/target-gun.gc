@@ -683,9 +683,9 @@
     )
   )
 
-(defbehavior put-away-gun-for-pole! target ()
+(defbehavior put-away-gun-immediate! target ((force? symbol))
   (when (nonnull? self (-> self control) (-> self gun) (-> self skel) (-> self skel top-anim))
-    (target-gun-end-mode #f)
+    (target-gun-end-mode force?)
     (let ((top (-> self skel top-anim))
           (upper-body (-> self gun upper-body)))
       (reset top)

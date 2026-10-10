@@ -80,7 +80,7 @@
 
 ;; target-gun - TODO move to `gun-h` perhaps?
 (define-extern target-gun-end-mode (function symbol symbol :behavior target))
-(define-extern put-away-gun-for-pole! (function none :behavior target))
+(define-extern put-away-gun-immediate! (function symbol none :behavior target))
 (define-extern target-gun-marking-menu (function target none))
 (define-extern gun-init (function none :behavior gun))
 (declare-type gun-red-shot process-drawable)
