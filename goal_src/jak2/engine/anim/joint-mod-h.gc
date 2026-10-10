@@ -99,6 +99,7 @@ This is used to make jak look toward an enemy, for example."
    (polar-internal-radius    float)
    (polar-external-tilt-max  float)
    (polar-external-radius    float)
+   (gun-aim-reference        quaternion  :inline)
    )
   (:methods
     (new (symbol type joint-mod-mode process-drawable int) _type_)
