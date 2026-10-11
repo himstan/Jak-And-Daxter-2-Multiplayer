@@ -293,6 +293,7 @@
     (('progress)
      (when (and (cpad-hold? 0 start)
                 (nonnull? *progress-process* (-> *progress-process* 0) (-> *progress-process* 0 current))
+                (!= (-> *progress-process* 0 current) 'mp-lobby)
                 (!= (-> *progress-process* 0 current) 'reconnect)
                 (!= (-> *progress-process* 0 current) 'host-left))
          (hide-progress-screen)
