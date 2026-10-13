@@ -269,7 +269,11 @@
   )
 
 (defmethod new joint-mod-ik ((allocation symbol) (type-to-make type) (proc process-drawable) (joint-id int) (hand-dist float))
+  (unless (nonnull? type-to-make proc (-> proc node-list))
+    (return (the-as joint-mod-ik #f)))
   (let ((v0-0 (object-new allocation type-to-make (the-as int (-> type-to-make size)))))
+    (unless (nonnull? v0-0)
+      (return (the-as joint-mod-ik #f)))
     (set! (-> v0-0 process) proc)
     (set! (-> v0-0 hand-dist) hand-dist)
     (set! (-> v0-0 elbow-pole-vector-axis) (the-as uint 0))

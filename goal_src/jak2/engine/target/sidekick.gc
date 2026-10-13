@@ -297,6 +297,16 @@
           (set! (-> sidekick-proc draw pc-eye-instance-id) instance-id)))))
   (none))
 
+(defbehavior initialize-sidekick-arm-ik! sidekick ()
+  (unless (nonnull? self (-> self node-list))
+    (return (the-as none 0)))
+  (dotimes (hand 2)
+    (when (not (nonnull? (-> self arm-ik hand)))
+      (let ((elbow-index (cspace-index-by-name self (if (zero? hand) "Lelbow" "Relbow"))))
+        (when (>= elbow-index 3)
+          (set! (-> self arm-ik hand) (new 'process 'joint-mod-ik self elbow-index 0.0))))))
+  (none))
+
 (defstate sidekick-clone (sidekick)
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
     (local-vars (v0-0 object))
@@ -397,6 +407,7 @@
                     (= (-> (ppointer->process (-> self parent)) next-state name) 'process-drawable-art-error)
                     )
                )
+      (initialize-sidekick-arm-ik!)
       (quaternion-rotate-y!
         (-> self root quat)
         (-> self parent 0 control quat)
@@ -682,6 +693,7 @@
   (set! (-> self neck parented-scale?) #t)
   (set! (-> self neck base-joint) 8)
   (set! (-> self neck ignore-angle) 16384.0)
+  (initialize-sidekick-arm-ik!)
   (set! (-> self shadow-in-movie?) #t)
   (set! (-> self mirror) (the-as (pointer process-drawable) #f))
   (go sidekick-clone)
