@@ -11,6 +11,8 @@
 (define-extern mp-traffic-link-graph! (function nav-graph none))
 (define-extern mp-traffic-unlink-graph! (function nav-graph nav-graph none))
 (define-extern mp-traffic-branch-in-level? (function nav-branch symbol symbol))
+(define-extern traffic-node-resident? (function nav-node symbol))
+(define-extern traffic-branch-resident? (function nav-branch symbol))
 ;; DECOMP BEGINS
 
 (define *traffic-suppress-activation* #f)
@@ -20,18 +22,19 @@
 (define *traffic-rigid-body-queue* (new 'static 'rigid-body-queue))
 
 (defun traffic-node-loaded? ((node nav-node))
-  (if (nonnull? node (-> node level))
+  (if (and (nonnull? node) (traffic-node-resident? node) (nonnull? (-> node level)))
       (and (mp-level-active? (-> node level)) (!= (-> node id) 65535))
       #f))
 
 (defun traffic-branch-loaded? ((branch nav-branch))
-  (if (nonnull? branch)
+  (if (and (nonnull? branch) (traffic-branch-resident? branch))
       (and (traffic-node-loaded? (-> branch src-node))
            (traffic-node-loaded? (-> branch dest-node)))
       #f))
 
 (defun traffic-branch-has-loaded-exit? ((branch nav-branch))
-  (when (nonnull? branch (-> branch dest-node))
+  (when (and (nonnull? branch) (traffic-branch-resident? branch)
+             (nonnull? (-> branch dest-node)) (traffic-node-resident? (-> branch dest-node)))
     (let ((dest-node (-> branch dest-node)))
       (when (nonnull? (-> dest-node branch-array))
         (dotimes (idx (-> dest-node branch-count))

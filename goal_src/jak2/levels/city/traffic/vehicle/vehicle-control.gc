@@ -2,6 +2,8 @@
 (in-package goal)
 
 (define-extern traffic-branch-loaded? (function nav-branch symbol))
+(define-extern traffic-node-resident? (function nav-node symbol))
+(define-extern traffic-branch-resident? (function nav-branch symbol))
 
 ;; name: vehicle-control.gc
 ;; name in dgo: vehicle-control
@@ -146,7 +148,8 @@
 
 (defmethod vehicle-controller-method-15 ((this vehicle-controller))
   (let ((next-branch (the-as nav-branch #f)))
-    (when (nonnull? this (-> this branch) (-> this branch dest-node))
+    (when (and (nonnull? this (-> this branch)) (traffic-branch-resident? (-> this branch))
+               (nonnull? (-> this branch dest-node)) (traffic-node-resident? (-> this branch dest-node)))
       (let* ((dest-node (-> this branch dest-node))
              (branch-count (the int (-> dest-node branch-count)))
              (branch-index (if (> branch-count 1) (rand-vu-int-count branch-count) 0))
@@ -511,25 +514,19 @@
   )
 
 (defmethod vehicle-controller-method-11 ((this vehicle-controller))
-  (when (logtest? (-> this flags) (vehicle-controller-flag attached))
-    (logclear! (-> this flags) (vehicle-controller-flag attached))
-    (let ((v1-5 (-> this branch)))
-      (if (> (-> v1-5 user-count) 0)
-          (+! (-> v1-5 user-count) -1)
-          )
-      )
-    (when (logtest? (-> this flags) (vehicle-controller-flag blocking-dest-node))
-      (logclear! (-> this flags) (vehicle-controller-flag blocking-dest-node))
-      (logclear! (-> this branch dest-node flags) (nav-node-flag-byte blocked))
-      )
-    )
-  (set! (-> this branch) (the-as nav-branch 0))
-  (if (logtest? (-> this flags) (vehicle-controller-flag blocking-dest-node))
-      (format #t "blocking-dest-node bit set after detach~%")
-      )
-  0
-  (none)
-  )
+  (when (nonnull? this)
+    (let ((branch (-> this branch)))
+      (when (and (logtest? (-> this flags) (vehicle-controller-flag attached))
+                 (nonnull? branch) (traffic-branch-resident? branch))
+        (when (> (-> branch user-count) 0)
+          (+! (-> branch user-count) -1))
+        (let ((node (-> branch dest-node)))
+          (when (and (logtest? (-> this flags) (vehicle-controller-flag blocking-dest-node))
+                     (nonnull? node) (traffic-node-resident? node))
+            (logclear! (-> node flags) (nav-node-flag-byte blocked)))))
+      (logclear! (-> this flags) (vehicle-controller-flag attached blocking-dest-node))
+      (set! (-> this branch) (the-as nav-branch 0))))
+  (none))
 
 (defmethod vehicle-controller-method-12 ((this vehicle-controller)
                                         (arg0 rigid-body-vehicle-constants)
