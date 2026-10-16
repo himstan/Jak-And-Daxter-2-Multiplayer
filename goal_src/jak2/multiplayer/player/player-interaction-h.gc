@@ -15,4 +15,5 @@
 
 (define *player-contacts* (new 'static 'player-contact-table))
 
+(define-extern player-collision-enabled? (function symbol))
 (define-extern player-ride-contact-disabled? (function target symbol))

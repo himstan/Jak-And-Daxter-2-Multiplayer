@@ -7,6 +7,7 @@
 
 (declare-type mech process-drawable)
 (define-extern mech-init (function entity-actor matrix3 handle float none :behavior mech))
+(define-extern mech-reserved-by-remote? (function process-drawable symbol))
 
 ;; DECOMP BEGINS
 
@@ -45,10 +46,27 @@
   (none)
   )
 
+(defbehavior restore-mech-spawn! mech ()
+  (when (nonnull? self (-> self entity) (-> self entity extra) (-> self root))
+    (set! (-> self entity extra trans quad) (-> self entity trans quad))
+    (process-drawable-from-entity! self (-> self entity))
+    (set-yaw-angle-clear-roll-pitch! (-> self root) (res-lump-float (-> self entity) 'rotoffset))
+    (set! (-> self shield-value) 100.0)
+    (set! (-> self rider) (the-as uint #f))
+    (go-virtual idle))
+  (none))
+
 (defstate wait-for-start (mech)
   :virtual #t
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
     (case message
+      (('replica-board)
+       (when (and (nonnull? self proc) (type? proc target) (player-replica? (the-as target proc)))
+         (when (send-event proc 'change-mode 'mech self (-> self shield-value))
+           (set! (-> self rider) (the-as uint (process->handle proc)))
+           (go-virtual pickup (method-of-object self wait-for-return))))
+       (the-as structure #f)
+       )
       (('attack 'bonk)
        (send-event proc 'target-mech-get-off (seconds 0.3))
        (send-event
@@ -135,13 +153,14 @@
             )
           (set-time! (-> self probe-time))
           )
-        (when (and (and *target* (and (>= f30-0 (vector-vector-distance (-> self root trans) (-> *target* control trans)))
+        (when (and (and (nonnull? *target* (-> *target* control)) (and (>= f30-0 (vector-vector-distance (-> self root trans) (-> *target* control trans)))
                                       (not (logtest? (focus-status teleporting) (-> *target* focus-status)))
                                       )
                         )
                    (not (focus-test? *target* in-head pole board mech dark))
                    (can-display-query? self (the-as string #f) -99.0)
                    (-> *setting-control* user-current pilot)
+                   (not (mech-reserved-by-remote? self))
                    )
           (let ((gp-0
                   (new 'stack 'font-context *font-default-matrix* 32 320 0.0 (font-color default) (font-flags shadow kerning))
@@ -166,7 +185,9 @@
               )
             )
           (if (and (cpad-pressed? 0 triangle) (send-event *target* 'change-mode 'mech self (-> self shield-value)))
-              (go-virtual pickup (method-of-object self wait-for-return))
+              (begin
+                (set! (-> self rider) (the-as uint (process->handle *target*)))
+                (go-virtual pickup (method-of-object self wait-for-return)))
               )
           )
         ;; og:preserve-this target-look-at-me! macro
@@ -223,20 +244,26 @@
   :code (behavior ((arg0 (state mech)))
     (ja-channel-set! 0)
     (ja-post)
-    (while (zero? (ja-group-size))
-      (if (or (not *target*) (or (< 24576.0 (vector-vector-distance (-> self root trans) (-> *target* control trans)))
-                                 (focus-test? *target* teleporting)
-                                 )
-              )
+    (when (mp-session-in-game?)
+      (suspend))
+    (while (and (not (mp-session-in-game?)) (zero? (ja-group-size)))
+      (if (let ((rider (the-as target (handle->process-safe (the-as handle (-> self rider))))))
+            (or (not (nonnull? rider (-> rider control)))
+                (< 24576.0 (vector-vector-distance (-> self root trans) (-> rider control trans)))
+                (focus-test? rider teleporting)))
           (go arg0)
           )
       (mech-method-24 self)
       (suspend)
       )
-    (while (and *target* (focus-test? *target* mech))
+    (while (let ((rider (the-as target (handle->process-safe (the-as handle (-> self rider))))))
+             (and (nonnull? rider) (focus-test? rider mech) (not (focus-test? rider dead))))
       (mech-method-24 self)
       (suspend)
       )
+    (let ((rider (the-as target (handle->process-safe (the-as handle (-> self rider))))))
+      (when (and (mp-session-in-game?) (or (not (nonnull? rider)) (focus-test? rider dead)))
+        (restore-mech-spawn!)))
     (suspend-for (seconds 1) (mech-method-24 self))
     (go arg0)
     )
@@ -274,6 +301,8 @@
 
 ;; WARN: Return type mismatch object vs none.
 (defbehavior mech-init mech ((arg0 entity-actor) (arg1 matrix3) (arg2 handle) (arg3 float))
+  (when (nonnull? self (-> self main-thread))
+    (stack-size-set! (-> self main-thread) 512))
   (let ((s2-0 (new 'process 'collide-shape-moving self (collide-list-enum usually-hit-by-player))))
     (set! (-> s2-0 dynam) (copy *standard-dynamics* 'process))
     (set! (-> s2-0 reaction) cshape-reaction-default)
@@ -299,6 +328,8 @@
   (set! (-> self rider) (the-as uint arg2))
   (when arg0
     (process-entity-set! self arg0)
+    (when (nonnull? self arg0 (-> arg0 extra))
+      (set! (-> arg0 extra process) self))
     (process-drawable-from-entity! self arg0)
     (set-yaw-angle-clear-roll-pitch! (-> self root) (res-lump-float arg0 'rotoffset))
     )

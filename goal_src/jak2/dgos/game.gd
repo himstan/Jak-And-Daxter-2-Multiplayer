@@ -651,6 +651,7 @@
   "mp-oracle-darkjak.o" ;; added
   "rumble-utils.o" ;; added
   "mp-target-state-mapper.o" ;; added
+  "mech-replica.o"
   "player-replica.o" ;; added
   "player-replica-debug.o" ;; added
   "mp-gun-debug.o" ;; added

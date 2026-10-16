@@ -233,6 +233,7 @@
     (set! (-> (mp-local-player-record) vehicle turret-rotx) 0.0)
     (mp-vehicle-pack-local-player-snapshot!)
     (mp-pack-local-turret-snapshot!)
+    (pack-local-mech-snapshot!)
     (vehicle-cache-local-snapshot!))
   (none))
 

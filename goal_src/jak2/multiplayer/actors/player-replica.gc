@@ -413,6 +413,7 @@
        (not (focus-test? proc pilot tube flut))
        (not (mp-target-death-state? cur-state))
        (darkjak-replica-action-compatible? proc action-state)
+       (or (not (player-mech-state? action-state)) (focus-test? proc mech))
        (or (not (mp-target-authoritative-board-action-state? action-state))
            (focus-test? proc board)
            (mp-target-authoritative-board-action-state? cur-state))))
@@ -708,7 +709,7 @@
 
 (defun player-replica-apply-transform-correction! ((proc target) (record target-record) (cur-state symbol))
   (when (and (nonnull? proc record (-> proc control))
-             (not (focus-test? proc pilot tube flut mech pole))
+             (not (focus-test? proc pilot tube flut pole))
              (!= cur-state 'target-indax-jump-on)
              (!= cur-state 'target-ride-along))
     (player-replica-ensure-can-ride! proc cur-state)
@@ -1064,7 +1065,8 @@
                    (not (player-replica-reconcile-respawn! proc record target-record))
                    (not (player-replica-reconcile-vehicle-exit! proc
                                                                 record
-                                                                (if (nonnull? (-> proc state)) (-> proc state name) #f))))
+                                                                (if (nonnull? (-> proc state)) (-> proc state name) #f)))
+                   (not (reconcile-player-mech! proc record (if (nonnull? (-> proc state)) (-> proc state name) #f))))
           (logclear! (-> proc mask) (process-mask pause sleep actor-pause))
           (player-replica-sync-hit-flash! proc record)
           (mp-darkjak-apply-remote-stage! proc (-> record action darkjak-stage))
@@ -1163,7 +1165,7 @@
                          (set! (-> turret-proc rider) (process->handle proc))
                          (set! (-> turret-proc available-for-pickup) #f)
                          (send-event proc 'change-state target-turret-get-on (process->handle turret-proc))))))
-                  ((nonzero? riding-veh-id)
+                  ((and (nonzero? riding-veh-id) (not (player-mech-state? record-state)))
                    (let ((v-proc (mp-vehicle-find-by-net-id riding-veh-id)))
                      (when (and v-proc (nonzero? v-proc))
                        (let ((seat-index (the int riding-seat-index)))

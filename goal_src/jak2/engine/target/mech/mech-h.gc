@@ -7,8 +7,35 @@
 
 ;; DECOMP BEGINS
 
+(deftype grunt-mech-hold (structure)
+  ((reserve-mask  uint8)
+   (lower-hold    int8)
+   (grunt-handle  handle)
+   (timeout       uint64)
+   (local-pos     vector  :inline)
+   (local-rot     vector  :inline)
+   (local-mat     matrix  :inline)
+   (world-mat     matrix  :inline)
+   )
+  )
+
+
+(deftype grunt-mech-info (basic)
+  ((rider             handle)
+   (reserved-mask     uint8)
+   (last-update-time  time-frame)
+   (holds             grunt-mech-hold  6 :inline)
+   )
+  (:methods
+    (grunt-mech-info-method-9 (_type_ int process symbol) symbol)
+    (grunt-mech-info-method-10 (_type_) none)
+    )
+  )
+
+
 (deftype mech-info (basic)
   ((entity                 basic)
+   (grunt-holds             grunt-mech-info)
    (hud                    handle          1)
    (mech-trans             vector          :inline)
    (mech-quat              vector          :inline)
