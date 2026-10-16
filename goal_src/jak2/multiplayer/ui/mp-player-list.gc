@@ -7,6 +7,9 @@
     (cond
       ((< binding-index (the uint MP_MAX_PLAYERS))
        (mp-player-copy-name! destination binding-index)
+       (let ((record (mp-player-record-by-id binding-index)))
+         (when (mp-player-record-dead-or-dying? record)
+           (format destination (mp-overlay-localized-text (text-id mp-player-list-dead-suffix)))))
        (return (> (length destination) 0)))
       ((< binding-index (the uint (* MP_MAX_PLAYERS 2)))
        (let ((ping (pc-multi-get-player-ping (- binding-index MP_MAX_PLAYERS)))
