@@ -17,7 +17,8 @@ WorldStatePacket to_packet(const core::WorldState& state) {
           .weather_fog = state.weather_fog,
           .weather_rain = state.weather_rain,
           .task_mask = state.task_mask,
-          .active_task_mask = state.active_task_mask};
+          .active_task_mask = state.active_task_mask,
+          .completed_task_mask = state.completed_task_mask};
 }
 
 void from_packet(const WorldStatePacket& packet, core::WorldState& state) {
@@ -30,6 +31,7 @@ void from_packet(const WorldStatePacket& packet, core::WorldState& state) {
   state.weather_rain = packet.weather_rain;
   state.task_mask = packet.task_mask;
   state.active_task_mask = packet.active_task_mask;
+  state.completed_task_mask = packet.completed_task_mask;
 }
 
 }  // namespace multiplayer::jak2::wire

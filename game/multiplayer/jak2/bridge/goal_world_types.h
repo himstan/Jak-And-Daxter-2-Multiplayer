@@ -21,6 +21,7 @@ struct MPWorldSyncStateGOAL {
   uint8_t friendly_fire;
   uint8_t task_mask[64];
   uint8_t active_task_mask[64];
+  uint8_t completed_task_mask[multiplayer::jak2::core::kGameTaskCompletionBytes];
 };
 #pragma pack(pop)
 
@@ -38,5 +39,5 @@ struct MPReplicationBootstrapStateGOAL {
 };
 #pragma pack(pop)
 
-static_assert(sizeof(MPWorldSyncStateGOAL) == 180);
+static_assert(sizeof(MPWorldSyncStateGOAL) == 194);
 static_assert(sizeof(MPReplicationBootstrapStateGOAL) == 16454);

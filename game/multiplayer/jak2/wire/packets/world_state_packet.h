@@ -9,7 +9,7 @@
 
 namespace multiplayer::jak2::wire {
 
-inline constexpr size_t kWorldStatePacketWireSize = 148;
+inline constexpr size_t kWorldStatePacketWireSize = 148 + core::kGameTaskCompletionBytes;
 
 struct WorldStatePacket : platform::wire::Packet<WorldStatePacket, PacketType::WORLD_STATE> {
   static constexpr platform::GameMessagePolicy kPolicy = {
@@ -28,6 +28,7 @@ struct WorldStatePacket : platform::wire::Packet<WorldStatePacket, PacketType::W
   float weather_rain = 0.0f;
   std::array<uint8_t, 64> task_mask = {};
   std::array<uint8_t, 64> active_task_mask = {};
+  std::array<uint8_t, core::kGameTaskCompletionBytes> completed_task_mask = {};
 };
 
 template <typename Stream, typename PacketT>
@@ -46,6 +47,8 @@ bool serialize_fields(Stream& stream, PacketT&& packet) {
                                                           packet.task_mask.size()) ||
       !platform::wire::serialization::serialize_raw_bytes(stream, packet.active_task_mask.data(),
                                                           packet.active_task_mask.size()) ||
+      !platform::wire::serialization::serialize_raw_bytes(stream, packet.completed_task_mask.data(),
+                                                          packet.completed_task_mask.size()) ||
       !platform::wire::serialize_byte_align(stream)) {
     return false;
   }

@@ -30,9 +30,9 @@ PlayerStatePacket to_packet(const core::PlayerState& state) {
           .buttons = state.buttons,
           .leftx = state.leftx,
           .lefty = state.lefty,
-          .flags = pack_player_state_flags(state.spectator_only, state.scene_active,
-                                           state.turret_active, state.respawn_flags,
-                                           state.hit_invulnerable),
+          .flags =
+              pack_player_state_flags(state.spectator_only, state.scene_active, state.turret_active,
+                                      state.respawn_flags, state.hit_invulnerable),
           .camera_angle_y = platform::wire::canonical_angle(state.camera_angle_y),
           .vehicle_id = state.vehicle_id,
           .vehicle_seat = state.vehicle_seat,

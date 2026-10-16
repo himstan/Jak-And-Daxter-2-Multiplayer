@@ -16,8 +16,7 @@
     (rnd-int-count proc count)))
 
 (defun enemy-hit-rand-bit ((proc enemy) (count int) (excluded int))
-  (if (not (enemy-hit-deterministic? proc))
-    (return (rnd-bit proc count excluded)))
+  (if (not (enemy-hit-deterministic? proc)) (return (rnd-bit proc count excluded)))
   (let ((available 0))
     (dotimes (index count)
       (unless (logtest? excluded (ash 1 index))
@@ -51,8 +50,7 @@
 (defun enemy-hit-forward! ((proc enemy) (direction vector))
   (when (nonnull? proc direction (-> proc root))
     (if (nonnull? (enemy-hit-record proc))
-      (let ((angle (enemy-hit-facing-angle proc)))
-        (set-vector! direction (sin angle) 0.0 (cos angle) 0.0))
+      (let ((angle (enemy-hit-facing-angle proc))) (set-vector! direction (sin angle) 0.0 (cos angle) 0.0))
       (vector-z-quaternion! direction (-> proc root quat))))
   direction)
 
@@ -64,9 +62,7 @@
   (let ((record (enemy-hit-record proc)))
     (if (nonnull? record)
       (-> record reaction-distance-squared)
-      (if (nonnull? proc fallback (-> proc root))
-        (vector-vector-xz-distance-squared fallback (-> proc root trans))
-        0.0))))
+      (if (nonnull? proc fallback (-> proc root)) (vector-vector-xz-distance-squared fallback (-> proc root trans)) 0.0))))
 
 (defun enemy-hit-remember-variant! ((proc enemy) (variant int))
   (let ((record (enemy-hit-record proc)))
@@ -75,8 +71,7 @@
   variant)
 
 (defun enemy-hit-landing-variant ((proc enemy) (fallback int))
-  (let ((record (enemy-hit-record proc)))
-    (if (nonnull? record) (the int (-> record reaction-variant)) fallback)))
+  (let ((record (enemy-hit-record proc))) (if (nonnull? record) (the int (-> record reaction-variant)) fallback)))
 
 (defun enemy-hit-posture-flags ((proc enemy))
   (when (nonnull? proc (-> proc root))
@@ -95,8 +90,7 @@
   (the uint8 0))
 
 (defun enemy-hit-prepare! ((proc enemy) (remote-event mp-actor-attack-event))
-  (when (and (nonnull? proc remote-event)
-             (= (-> remote-event payload attack-id) (-> proc incoming attack-id)))
+  (when (and (nonnull? proc remote-event) (= (-> remote-event payload attack-id) (-> proc incoming attack-id)))
     (when (logtest? (-> remote-event payload flags) MP_ACTOR_ATTACK_HAS_SOURCE_POS)
       (vector-copy! (-> proc incoming attacker-pos) (-> remote-event payload source-pos)))
     (when (logtest? (-> remote-event payload flags) MP_ACTOR_ATTACK_HAS_DIRECTION)
@@ -137,9 +131,7 @@
           (logior! (-> payload flags) (enemy-hit-posture-flags proc))
           (set! (-> payload blue-juggle-count)
                 (if (= (-> payload knocked-type) (the uint8 (knocked-type knocked-type-6)))
-                  (if (time-elapsed? (-> proc incoming attack-time) (seconds 1))
-                    1
-                    (min 255 (+ 1 (-> proc incoming blue-juggle-count))))
+                  (if (time-elapsed? (-> proc incoming attack-time) (seconds 1)) 1 (min 255 (+ 1 (-> proc incoming blue-juggle-count))))
                   0))))))
   (none))
 
@@ -158,9 +150,9 @@
       (vector-rotate90-around-y! velocity velocity)
       (when (if networked?
               (zero? (enemy-hit-rand-count proc 2))
-              (< 0.0 (vector-dot
-                       (vector-! (new 'stack-no-clear 'vector) (-> proc incoming attacker-pos) (-> root trans))
-                       (vector-x-quaternion! (new 'stack-no-clear 'vector) (-> root quat)))))
+              (< 0.0
+                 (vector-dot (vector-! (new 'stack-no-clear 'vector) (-> proc incoming attacker-pos) (-> root trans))
+                             (vector-x-quaternion! (new 'stack-no-clear 'vector) (-> root quat)))))
         (vector-negate! velocity velocity))
       (let ((factor (enemy-knocked-rand-factor proc 0.0 1.0)))
         (vector-float*! velocity velocity (lerp (-> info knocked-hard-vxz-lo) (-> info knocked-hard-vxz-hi) factor))

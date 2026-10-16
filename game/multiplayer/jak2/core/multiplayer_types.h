@@ -23,6 +23,8 @@ inline constexpr size_t kMaxAirlockStatesPerSnapshot = 4;
 inline constexpr size_t kMaxEnemies = 128;
 inline constexpr size_t kMaxReplicatedEnemies = kMaxEnemies * kMaxPlayers;
 inline constexpr size_t kMaxBootstrapAids = 4096;
+inline constexpr size_t kGameTaskCount = 110;
+inline constexpr size_t kGameTaskCompletionBytes = (kGameTaskCount + 7) / 8;
 inline constexpr uint16_t kDefaultRespawnDelaySeconds = 20;
 inline constexpr size_t kMaxPedestrians = 128;
 inline constexpr size_t kMaxVehicles = 64;
@@ -371,6 +373,7 @@ struct WorldState {
   bool friendly_fire = false;
   std::array<uint8_t, 64> task_mask = {};
   std::array<uint8_t, 64> active_task_mask = {};
+  std::array<uint8_t, kGameTaskCompletionBytes> completed_task_mask = {};
 };
 
 enum class GungamePhase : uint8_t { INACTIVE, RED_INTRO, YELLOW_INTRO, COURSE, FINISHED };

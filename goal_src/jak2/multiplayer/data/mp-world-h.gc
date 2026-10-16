@@ -2,6 +2,7 @@
 (in-package goal)
 
 (defconstant MP_MAX_BOOTSTRAP_AIDS 4096)
+(defconstant GAME_TASK_COMPLETION_MASK_SIZE 14)
 
 (deftype mp-world-sync-state (structure)
   ((money                 float)
@@ -18,8 +19,9 @@
    (player-collision      uint8)
    (friendly-fire         uint8)
    (task-mask             uint8 64)
-   (active-task-mask      uint8 64))
-  :size-assert 180)
+   (active-task-mask      uint8 64)
+   (completed-task-mask   uint8 GAME_TASK_COMPLETION_MASK_SIZE))
+  :size-assert 194)
 
 (deftype mp-bootstrap-sync-state (structure)
   ((phase                  uint32)

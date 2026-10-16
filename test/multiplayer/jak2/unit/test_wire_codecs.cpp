@@ -254,6 +254,8 @@ TEST(Jak2Protocol, WorldStateRoundTripsExactPacketSize) {
   input.weather_cloud = 0.5f;
   input.task_mask[4] = 1;
   input.active_task_mask[9] = 1;
+  input.completed_task_mask.front() = 0x02;
+  input.completed_task_mask.back() = 0x20;
 
   std::vector<uint8_t> bytes;
   ASSERT_TRUE(encode_core<multiplayer::jak2::wire::WorldStatePacket>(
@@ -265,8 +267,11 @@ TEST(Jak2Protocol, WorldStateRoundTripsExactPacketSize) {
   EXPECT_EQ(output.clock, input.clock);
   EXPECT_EQ(output.task_mask, input.task_mask);
   EXPECT_EQ(output.active_task_mask, input.active_task_mask);
+  EXPECT_EQ(output.completed_task_mask, input.completed_task_mask);
   EXPECT_FALSE(decode_core<multiplayer::jak2::wire::WorldStatePacket>(
       std::span(bytes).first(bytes.size() - 1), output));
+  bytes.push_back(0);
+  EXPECT_FALSE(decode_core<multiplayer::jak2::wire::WorldStatePacket>(bytes, output));
 }
 
 TEST(Jak2Protocol, EnemySnapshotRoundTripsExactCountedSize) {
@@ -397,6 +402,8 @@ TEST(Jak2Protocol, BootstrapAndAirlockKeepFixedWireSizes) {
   bootstrap.world.money = 12.0f;
   bootstrap.world.clock = 44;
   bootstrap.world.task_mask[3] = 1;
+  bootstrap.world.completed_task_mask.front() = 0x02;
+  bootstrap.world.completed_task_mask.back() = 0x20;
   bootstrap.host_task = 7;
   bootstrap.host_spawn_position = {1.0f, 2.0f, 3.0f};
   bootstrap.host_camera_angle_y = 0.75f;
@@ -406,7 +413,7 @@ TEST(Jak2Protocol, BootstrapAndAirlockKeepFixedWireSizes) {
   std::vector<uint8_t> bytes;
   ASSERT_TRUE(multiplayer::platform::wire::encode_packet(
       multiplayer::jak2::wire::to_packet(bootstrap), bytes));
-  ASSERT_EQ(bytes.size(), 216u);
+  ASSERT_EQ(bytes.size(), 230u);
   const auto bootstrap_packet =
       multiplayer::platform::wire::decode_packet<multiplayer::jak2::wire::BootstrapStatePacket>(
           bytes);
@@ -414,11 +421,16 @@ TEST(Jak2Protocol, BootstrapAndAirlockKeepFixedWireSizes) {
   multiplayer::jak2::core::BootstrapState decoded_bootstrap = {};
   multiplayer::jak2::wire::from_packet(*bootstrap_packet, decoded_bootstrap);
   EXPECT_EQ(decoded_bootstrap.world.clock, bootstrap.world.clock);
+  EXPECT_EQ(decoded_bootstrap.world.completed_task_mask, bootstrap.world.completed_task_mask);
   EXPECT_EQ(decoded_bootstrap.synchronized_aids[0], bootstrap.synchronized_aids[0]);
   EXPECT_FALSE(
       multiplayer::platform::wire::decode_packet<multiplayer::jak2::wire::BootstrapStatePacket>(
           std::span(bytes).first(bytes.size() - 1))
           .has_value());
+  bytes.push_back(0);
+  EXPECT_FALSE(
+      multiplayer::platform::wire::decode_packet<multiplayer::jak2::wire::BootstrapStatePacket>(
+          bytes));
 
   multiplayer::jak2::core::AirlockSnapshot airlocks = {};
   airlocks.states.push_back({.airlock_aid = 1, .state_id = 2, .level_id = 3, .sequence = 4});

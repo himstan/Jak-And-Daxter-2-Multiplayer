@@ -35,8 +35,7 @@
   (and (mp-session-in-game?)
        *mp-scene-coordinator-finalized?*
        (or (mp-scene-coordinator-name-matches? scene-name)
-           (and (mp-intro-chain-scene? scene-name)
-                (mp-intro-chain-scene? *mp-scene-coordinator-name*)))))
+           (and (mp-intro-chain-scene? scene-name) (mp-intro-chain-scene? *mp-scene-coordinator-name*)))))
 
 (defun mp-scene-current-local-name-matches? ((scene-name string))
   (when (and scene-name (nonzero? scene-name) *scene-player* (nonzero? *scene-player*))
@@ -230,9 +229,7 @@
 (defun mp-scene-player-active-in-cohort? ((player-id uint))
   (let ((player-bit (mp-scene-player-bit player-id))
         (record (mp-player-record-by-id player-id)))
-    (when (or (not (nonnull? record))
-              (zero? player-bit)
-              (not (mp-scene-player-record-session-active? record)))
+    (when (or (not (nonnull? record)) (zero? player-bit) (not (mp-scene-player-record-session-active? record)))
       (return #f))
     (if (= player-id (mp-local-player-id))
       (mp-scene-current-local-name-matches? *mp-scene-coordinator-name*)

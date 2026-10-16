@@ -19,6 +19,7 @@ struct BootstrapStatePacket : platform::wire::Packet<BootstrapStatePacket, Packe
   std::array<uint8_t, 32> host_continue = {};
   std::array<uint8_t, 64> task_mask = {};
   std::array<uint8_t, 64> active_task_mask = {};
+  std::array<uint8_t, core::kGameTaskCompletionBytes> completed_task_mask = {};
   uint32_t synchronized_aid_count = 0;
   std::vector<uint32_t> synchronized_aids;
   uint64_t clock = 0;
@@ -50,7 +51,9 @@ bool serialize_fields(Stream& stream, PacketT&& packet) {
       !platform::wire::serialization::serialize_raw_bytes(stream, packet.task_mask.data(),
                                                           packet.task_mask.size()) ||
       !platform::wire::serialization::serialize_raw_bytes(stream, packet.active_task_mask.data(),
-                                                          packet.active_task_mask.size())) {
+                                                          packet.active_task_mask.size()) ||
+      !platform::wire::serialization::serialize_raw_bytes(stream, packet.completed_task_mask.data(),
+                                                          packet.completed_task_mask.size())) {
     return false;
   }
 

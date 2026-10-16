@@ -27,6 +27,7 @@ BootstrapStatePacket to_packet(const core::BootstrapState& state) {
   packet.host_continue = state.host_continue;
   packet.task_mask = state.world.task_mask;
   packet.active_task_mask = state.world.active_task_mask;
+  packet.completed_task_mask = state.world.completed_task_mask;
   packet.synchronized_aid_count = state.synchronized_aid_count;
   const auto copied_count =
       std::min<size_t>(state.synchronized_aid_count, state.synchronized_aids.size());
@@ -55,6 +56,7 @@ void from_packet(const BootstrapStatePacket& packet, core::BootstrapState& state
   state.host_continue = packet.host_continue;
   state.world.task_mask = packet.task_mask;
   state.world.active_task_mask = packet.active_task_mask;
+  state.world.completed_task_mask = packet.completed_task_mask;
   state.synchronized_aid_count = static_cast<uint32_t>(packet.synchronized_aids.size());
   std::ranges::copy(packet.synchronized_aids, state.synchronized_aids.begin());
   state.world.clock = packet.clock;

@@ -500,6 +500,28 @@ TEST(Jak2AdapterIntegration, BootstrapPayloadFitsAllPermanentAids) {
   EXPECT_EQ(decoded->synchronized_aids.back(), 0x10000fffu);
 }
 
+TEST(Jak2AdapterIntegration, CompletionOnlyChangesRefreshBootstrap) {
+  jak2::application::Jak2Adapter host;
+  RecordingEndpoint endpoint;
+  host.installed(endpoint);
+  host.session_started(endpoint.session_snapshot.state);
+  uint64_t now_ms = 100;
+  for (const uint8_t completed : {0x20, 0, 0x04}) {
+    auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
+    frame->local_player_id = 0;
+    frame->host_player_id = 0;
+    frame->bootstrap.host_continue[0] = 'a';
+    frame->world.completed_task_mask.back() = completed;
+    host.mailbox().publish_local_frame(std::move(frame));
+    host.tick(now_ms);
+    const auto packet =
+        platform::wire::decode_packet<jak2::wire::BootstrapStatePacket>(host.create_bootstrap(1));
+    ASSERT_TRUE(packet);
+    EXPECT_EQ(packet->completed_task_mask.back(), completed);
+    now_ms += 100;
+  }
+}
+
 TEST(Jak2AdapterIntegration, LocalTimersKeep64BitTimeAcross32BitBoundary) {
   jak2::application::Jak2Adapter adapter;
   RecordingEndpoint endpoint;
@@ -1467,7 +1489,7 @@ TEST(Jak2AdapterIntegration, RegistryContainsEveryGameplayIdWithoutSharedControl
             platform::PayloadDisposition::REJECT);
 }
 
-TEST(Jak2AdapterIntegration, HostRulesReachLateJoinAndReconnectBootstrap) {
+TEST(Jak2AdapterIntegration, HostRulesAndTaskCompletionReachLateJoinAndReconnectBootstrap) {
   jak2::application::Jak2Adapter host;
   RecordingEndpoint host_endpoint;
   host.installed(host_endpoint);
@@ -1486,6 +1508,8 @@ TEST(Jak2AdapterIntegration, HostRulesReachLateJoinAndReconnectBootstrap) {
     frame->world.respawn_delay_seconds = delay;
     frame->world.player_collision = generation == 1;
     frame->world.friendly_fire = generation == 2;
+    frame->world.completed_task_mask.front() = 0x02;
+    frame->world.completed_task_mask.back() = generation == 1 ? 0x20 : 0;
     frame->bootstrap.host_continue[0] = 'a';
     host.mailbox().publish_local_frame(std::move(frame));
     host.tick(generation * 100);
@@ -1499,11 +1523,16 @@ TEST(Jak2AdapterIntegration, HostRulesReachLateJoinAndReconnectBootstrap) {
     EXPECT_EQ(remote->world.friendly_fire, generation == 2);
     EXPECT_EQ(remote->bootstrap.world.player_collision, generation == 1);
     EXPECT_EQ(remote->bootstrap.world.friendly_fire, generation == 2);
+    EXPECT_EQ(remote->world.completed_task_mask.front(), 0x02);
+    EXPECT_EQ(remote->world.completed_task_mask.back(), generation == 1 ? 0x20 : 0);
+    EXPECT_EQ(remote->bootstrap.world.completed_task_mask, remote->world.completed_task_mask);
     jak2::core::WorldState live_world = {};
     live_world.clock = generation * 1000;
     live_world.respawn_delay_seconds = 65535;
     live_world.player_collision = generation != 1;
     live_world.friendly_fire = generation != 2;
+    live_world.completed_task_mask.front() = 0x02;
+    live_world.completed_task_mask.back() = generation == 1 ? 0 : 0x20;
     const auto payload = platform::wire::encode_packet(jak2::wire::to_packet(live_world));
     ASSERT_TRUE(payload);
     EXPECT_EQ(client.packets()
@@ -1521,6 +1550,7 @@ TEST(Jak2AdapterIntegration, HostRulesReachLateJoinAndReconnectBootstrap) {
     EXPECT_EQ(updated->world.respawn_delay_seconds, delay);
     EXPECT_EQ(updated->world.player_collision, generation == 1);
     EXPECT_EQ(updated->world.friendly_fire, generation == 2);
+    EXPECT_EQ(updated->world.completed_task_mask, live_world.completed_task_mask);
     client.session_reset();
     client.session_started(client_endpoint.session_snapshot.state);
   }

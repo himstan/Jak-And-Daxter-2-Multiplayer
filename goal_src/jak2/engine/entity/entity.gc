@@ -8,6 +8,7 @@
 
 (define-extern birth-viewer (function process entity-actor object))
 (define-extern mp-handle-process-entity-status! (function process entity-perm-status symbol none))
+(define-extern bootstrap-apply-task-snapshot! (function symbol))
 
 ;; DECOMP BEGINS
 
@@ -1982,6 +1983,8 @@
   )
 
 (defun reset-actors ((arg0 symbol))
+  (local-vars (bootstrap-tasks-applied? symbol))
+  (set! bootstrap-tasks-applied? #f)
   (let* ((v1-0 arg0)
          (s5-0 (cond
                  ((or (= v1-0 'life) (= v1-0 'debug))
@@ -2058,6 +2061,8 @@
   (if #t
       (task-node-reset arg0)
       )
+  (when (= arg0 'game)
+    (set! bootstrap-tasks-applied? (bootstrap-apply-task-snapshot!)))
   (dotimes (s5-2 (-> *level* length))
     (let ((s4-2 (-> *level* level s5-2)))
       (when (= (-> s4-2 status) 'active)
@@ -2072,7 +2077,7 @@
       )
     )
   (set! (-> *ACTOR-bank* birth-max) 1000)
-  (update-task-masks arg0)
+  (update-task-masks (if bootstrap-tasks-applied? 'mp-bootstrap-snapshot arg0))
   0
   (none)
   )

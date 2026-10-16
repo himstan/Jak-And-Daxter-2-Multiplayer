@@ -30,6 +30,7 @@ into 7 sections, which might explain the weird sizes in the center.
 (define-extern mp-traffic-level-event! (function level symbol none))
 (define-extern mp-traffic-prefetch-levels! (function load-state int))
 (define-extern mp-traffic-clear-prefetch-requests! (function load-state int none))
+(define-extern bootstrap-level-packages-ready? (function load-state symbol))
 
 (defglobalconstant NUM_LEVEL_PAGES 146)
 (defglobalconstant LEVEL_PAGE_SIZE_KB 126) ;; original value
@@ -1623,6 +1624,7 @@ into 7 sections, which might explain the weird sizes in the center.
           )
         )
       )
+    (clear-level-ocean-map! this)
     (set! (-> this bsp) #f)
     (set! (-> this entity) #f)
     (set! (-> this status) 'inactive)
@@ -2568,6 +2570,9 @@ into 7 sections, which might explain the weird sizes in the center.
         )
       )
     )
+
+  (when (not (bootstrap-level-packages-ready? this))
+    (return 0))
 
   ;; process other changes in want.
   ;; loop over all wanted levels

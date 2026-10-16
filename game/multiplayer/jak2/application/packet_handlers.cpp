@@ -74,7 +74,8 @@ bool bootstrap_equal(const core::BootstrapState& left, const core::BootstrapStat
          a.respawn_delay_seconds == b.respawn_delay_seconds &&
          a.player_collision == b.player_collision && a.friendly_fire == b.friendly_fire &&
          a.task_mask == b.task_mask && a.active_task_mask == b.active_task_mask &&
-         left.host_task == right.host_task && left.host_continue == right.host_continue &&
+         a.completed_task_mask == b.completed_task_mask && left.host_task == right.host_task &&
+         left.host_continue == right.host_continue &&
          left.host_spawn_position == right.host_spawn_position &&
          left.host_spawn_angle == right.host_spawn_angle &&
          left.host_camera_angle_y == right.host_camera_angle_y &&

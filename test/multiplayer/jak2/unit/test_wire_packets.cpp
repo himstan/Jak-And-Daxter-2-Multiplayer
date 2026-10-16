@@ -97,10 +97,10 @@ void expect_exact_packet(const Model& payload, const std::vector<uint8_t>& expec
 }  // namespace
 
 TEST(Jak2Protocol, PlayerStateWireFormatPreservesEveryField) {
-  const std::vector<uint8_t> bytes = {120, 86,  52, 18,  3,  0,   16,  0,   0,   1,   0,   16,  0,
-                                      16,  0,   32, 0,   64, 1,   128, 98,  136, 2,   102, 12,  68,
-                                      16,  34,  6,  170, 36, 204, 70,  5,   154, 87,  35,  220, 219,
-                                      0,   64,  41, 0,   0,  64,  177, 212, 118, 110, 1};
+  const std::vector<uint8_t> bytes = {120, 86, 52, 18,  3,  0,   16,  0,   0,   1,   0,   16,  0,
+                                      16,  0,  32, 0,   64, 1,   128, 98,  136, 2,   102, 12,  68,
+                                      16,  34, 6,  170, 36, 204, 70,  5,   154, 87,  35,  220, 219,
+                                      0,   64, 41, 0,   0,  64,  177, 212, 118, 110, 1};
   multiplayer::jak2::core::PlayerState state = {};
   state.player_id = 2;
   state.sample_time_ms = 0x12345678;
@@ -596,7 +596,7 @@ TEST(Jak2Protocol, PlayerRulesRoundTripOnlyInBootstrap) {
         bootstrap.world = world;
         bytes = platform::wire::encode_packet(jak2::wire::to_packet(bootstrap));
         ASSERT_TRUE(bytes);
-        EXPECT_EQ(bytes->size(), 212u);
+        EXPECT_EQ(bytes->size(), 226u);
         auto initial = platform::wire::decode_packet<jak2::wire::BootstrapStatePacket>(*bytes);
         ASSERT_TRUE(initial);
         jak2::core::BootstrapState restored;

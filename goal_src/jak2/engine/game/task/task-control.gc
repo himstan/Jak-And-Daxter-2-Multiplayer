@@ -364,7 +364,7 @@
             )
        )
      (cond
-       ((= arg0 'debug)
+       ((or (= arg0 'debug) (not (nonnull? *ocean-map-sewer*)))
         )
        ((task-complete? *game-info* (game-task sewer-board))
         (set! *ocean-height-hack* (ocean-height-hack sewer-lo))

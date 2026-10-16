@@ -297,6 +297,11 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
       if (!form.is_pair())
         return;
       const auto& definition = form.as_pair()->cdr;
+      if (form.as_pair()->car.is_symbol("defenum") &&
+          definition.as_pair()->car.is_symbol(selected)) {
+        parse_defenum(definition, &types, nullptr);
+        return;
+      }
       if (form.as_pair()->car.is_symbol("defconstant")) {
         const auto& value = definition.as_pair()->cdr.as_pair()->car;
         if (value.is_int())
@@ -334,6 +339,10 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
     EXPECT_EQ(types.lookup_field_info("multiplayer-preferences", field).field.offset(), offset);
   }
   load_types("multiplayer/event/mp-event-h.gc");
+  load_types("engine/game/task/game-task-h.gc", "game-task");
+  ASSERT_NE(types.try_enum_lookup("game-task"), nullptr);
+  EXPECT_EQ(types.try_enum_lookup("game-task")->entries().at("max"),
+            multiplayer::jak2::core::kGameTaskCount);
   load_types("multiplayer/data/mp-world-h.gc", "mp-world-sync-state");
   EXPECT_EQ(types.lookup_type("mp-world-sync-state")->get_size_in_memory(),
             sizeof(MPWorldSyncStateGOAL));
@@ -345,6 +354,8 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
             offsetof(MPWorldSyncStateGOAL, friendly_fire));
   EXPECT_EQ(types.lookup_field_info("mp-world-sync-state", "task-mask").field.offset(),
             offsetof(MPWorldSyncStateGOAL, task_mask));
+  EXPECT_EQ(types.lookup_field_info("mp-world-sync-state", "completed-task-mask").field.offset(),
+            offsetof(MPWorldSyncStateGOAL, completed_task_mask));
   load_types("multiplayer/data/mp-replication-h.gc", "gungame-target-record");
   EXPECT_EQ(types.get_deref_info(types.make_inline_array_typespec("gungame-target-record")).stride,
             sizeof(GungameTargetRecordGOAL));
@@ -480,12 +491,12 @@ TEST(Jak2GoalBridge, DirectionalAggregateHasCanonicalCompactAbi) {
   EXPECT_EQ(sizeof(MPReplicationPedestrianStateGOAL), 60u);
   EXPECT_EQ(sizeof(MPReplicationTrafficSetGOAL), 13328u);
   EXPECT_EQ(sizeof(MPReplicationBootstrapStateGOAL), 16454u);
-  EXPECT_EQ(sizeof(MPReplicationFrameGOAL), 92512u);
-  EXPECT_EQ(sizeof(MPReplicationStateGOAL), 195312u);
+  EXPECT_EQ(sizeof(MPReplicationFrameGOAL), 92528u);
+  EXPECT_EQ(sizeof(MPReplicationStateGOAL), 195344u);
   EXPECT_EQ(offsetof(MPReplicationStateGOAL, local), 16u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, remote), 92528u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, outbound_events), 185056u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, inbound_events), 190192u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, remote), 92544u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, outbound_events), 185088u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, inbound_events), 190224u);
 }
 
 TEST(Jak2GoalBridge, PlayerActionLayoutMatchesGoal) {
@@ -502,8 +513,9 @@ TEST(Jak2GoalBridge, PlayerActionLayoutMatchesGoal) {
   });
   EXPECT_EQ(types.lookup_type("mp-replication-player-action")->get_size_in_memory(),
             sizeof(MPReplicationPlayerActionGOAL));
-  EXPECT_EQ(types.lookup_field_info("mp-replication-player-action", "hit-invulnerable?").field.offset(),
-            offsetof(MPReplicationPlayerActionGOAL, hit_invulnerable));
+  EXPECT_EQ(
+      types.lookup_field_info("mp-replication-player-action", "hit-invulnerable?").field.offset(),
+      offsetof(MPReplicationPlayerActionGOAL, hit_invulnerable));
 }
 
 TEST(Jak2GoalBridge, ExchangePreservesAndClearsPlayerHitInvulnerability) {
@@ -1447,12 +1459,14 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRejectsInvalidBuffersAndFlags) {
   EXPECT_FALSE(multiplayer::jak2::bridge::write_preferences(0x11000, values));
 }
 
-TEST(Jak2GoalBridge, PlayerRulesCrossTheWorldBridge) {
+TEST(Jak2GoalBridge, PlayerRulesAndTaskCompletionCrossTheWorldBridge) {
   GoalMemoryFixture memory;
   auto& state = replication_state(memory);
   state.local.world.respawn_delay_seconds = 0;
   state.local.world.player_collision = 1;
   state.local.world.friendly_fire = 1;
+  state.local.world.completed_task_mask[0] = 0x02;
+  state.local.world.completed_task_mask[13] = 0x20;
   multiplayer::jak2::application::ReplicationMailbox mailbox;
   ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
   const auto local = mailbox.take_local_frame();
@@ -1460,15 +1474,20 @@ TEST(Jak2GoalBridge, PlayerRulesCrossTheWorldBridge) {
   EXPECT_EQ(local->world.respawn_delay_seconds, 0);
   EXPECT_TRUE(local->world.player_collision);
   EXPECT_TRUE(local->world.friendly_fire);
+  EXPECT_EQ(local->world.completed_task_mask.front(), 0x02);
+  EXPECT_EQ(local->world.completed_task_mask.back(), 0x20);
   auto remote = std::make_unique<multiplayer::jak2::application::RemoteReplicationFrame>();
   remote->world = local->world;
   remote->world.respawn_delay_seconds = 65535;
   remote->world.friendly_fire = false;
+  remote->world.completed_task_mask.front() = 0;
   mailbox.publish_remote_frame(std::move(remote));
   ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
   EXPECT_EQ(state.remote.world.respawn_delay_seconds, 65535);
   EXPECT_EQ(state.remote.world.player_collision, 1);
   EXPECT_EQ(state.remote.world.friendly_fire, 0);
+  EXPECT_EQ(state.remote.world.completed_task_mask[0], 0);
+  EXPECT_EQ(state.remote.world.completed_task_mask[13], 0x20);
 }
 
 TEST(Jak2Preferences, ActiveSessionsProtectConnectionSettingsAndClientHostRules) {

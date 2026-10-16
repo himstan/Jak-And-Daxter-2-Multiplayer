@@ -204,6 +204,7 @@ core::WorldState read_world(const MPWorldSyncStateGOAL& source) {
   std::ranges::copy(source.task_mask, result.task_mask.begin());
   std::ranges::copy(std::begin(source.active_task_mask), std::end(source.active_task_mask),
                     result.active_task_mask.begin());
+  std::ranges::copy(source.completed_task_mask, result.completed_task_mask.begin());
   return result;
 }
 
@@ -489,6 +490,7 @@ void write_world(const core::WorldState& source, MPWorldSyncStateGOAL& destinati
                     std::begin(destination.task_mask));
   std::ranges::copy(source.active_task_mask.begin(), source.active_task_mask.end(),
                     std::begin(destination.active_task_mask));
+  std::ranges::copy(source.completed_task_mask, std::begin(destination.completed_task_mask));
 }
 
 void write_bootstrap(const core::BootstrapState& source,
