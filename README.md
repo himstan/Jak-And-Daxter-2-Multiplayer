@@ -26,7 +26,7 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
 
 - **IMPORTANT**: The invite will contain your public IP address, so be careful who you're sharing it with.
 - An **Invite** is a **URI** you can easily copy and share with your friends, whom if they have it on their clipboard, can just click a button to join your session.
-- It's generated upon a successful lobby creation for the **Host**, and only if your port is successfully opened. The **Invite** contains your public IP address and the Port you're hosting on, and also the session **Room Code**, which is automatically generated if it's not set in the **Multiplayer Options**
+- It's generated upon a successful lobby creation for the **Host**, and only if you have uPnP enabled and the port mapping was successful. The **Invite** contains your public IP address and the Port you're hosting on, and also the session **Room Code**, which is automatically generated if it's not set in the **Multiplayer Options**
 - Example: `jadmp://1.1.1.1:26210/1A2B3C`
 
 ### Room Code
@@ -39,7 +39,7 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
 - The mod was mainly tested with the NTSC-U (`SCUS-97265`) version of the game on Windows. If you notice bugs please record what platform you're on and what version you were using.
 - When you Host you'll get a prompt to allow `gk` through the firewall, if you want to Host Online, you'll need to give it access.
 - The mod has **UPnP (Universal Plug and Play)** support, which means that if your router supports it, and you're not behind a CGNAT for example, then the game will attempt to do an automatic port mapping on your router, so you don't have to manually port forward. This is temporary, and after your host session ends, the mapping is removed. This feature can be turned off in the **Multiplayer Options** in game.
-- UPnP is not expected to work for everyone especially nowadays, so if you can't port-forward I'd suggest to use some private VPN solution like Hamachi, Radmin, Tailscale etc...
+- UPnP is not expected to work for everyone especially nowadays, so if you can't port-forward I'd suggest to use some VLAN solution like Hamachi, Radmin etc...
 - The default game port is `26210` which can be configured in the **Multiplayer Options**.
 - Port `26211` is reserved for LAN discovery.
 
@@ -94,8 +94,9 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
    <img src="docs/img/mp/host-lobby-nat-open.png" alt="Host in lobby with NAT Open" width="325"> <img src="docs/img/mp/host-lobby-strict-lan.png" alt="Host in lobby with NAT Strict/LAN" width="325"> <img src="docs/img/mp/host-lobby-lan.png" alt="Host in lobby with NAT LAN" width="325">
 
   - In the **Lobby** you can wait for the other players to join, or just start the game, since the mod supports late joiners mid game also. 
-  - If you have your game port successful opened then you can press <img src="docs/img/common/dpad-square.png" alt="PS2 Square button" width="16"> to copy an invite which will contain your public ip and port, with your custom or generated **Room Code**. You can share this to your friends who then can use it to join easily.
-  - If the port isn't open and you see **NAT: Strict/LAN** or you Hosted **LAN** and see **NAT: LAN** then you can only copy a **Room Code** which is not required in case you want to play via **LAN**
+  - If you have your game port successful opened via uPnP then you can press <img src="docs/img/common/dpad-square.png" alt="PS2 Square button" width="16"> to copy an invite which will contain your public ip and port, with your custom or generated **Room Code**. You can share this to your friends who then can use it to join easily.
+  - If the uPnP port mapping failed and you see **NAT: Strict/LAN** or you Hosted **LAN** and see **NAT: LAN** then you can only copy a **Room Code** which is not required in case you want to play via **LAN**
+  - If you manually port forward without having uPnP enabled, you'll still see **NAT: Strict/LAN** in the lobby. This does mean you will have to send you IP, port and room code to your friends manually, but they'll still be able to connect.
   - The game can only be started after each player has readied up
 
 ### Once you press <img src="docs/img/common/dpad-x.png" alt="PS2 x button" width="16"> everyone in the lobby be will enter the game after you load in
@@ -124,7 +125,7 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
 
 ### Option 2: Scan LAN
 
-- Use this option when playing on the same local network (LAN), through a local VPN solution like Radmin or Hamachi or just want to play split-screen
+- Use this option when playing on the same local network (LAN), through a VLAN solution like Radmin or Hamachi or just want to play split-screen
 
 1. Choose **Scan LAN**.
 2. The game will search for active hosts on your private network and connect automatically.
@@ -170,8 +171,8 @@ The Reconnect button is going to act as your primary safeline while playing this
 ### The Client Cannot Find The Host
 
 Especially when playing Online make sure to check the Firewall on the **Host**'s side and allow the game/OpenGOAL through it.<br>
-If you're trying to connect through the Internet make sure that the Host has a little **NAT: Open** prompt shown in the lobby.<br>
-If the Host has **NAT: Strict/LAN** or **NAT: Failed** then the Host is unable to serve the session through the internet, probably their port can't be forwarded, try a private VPN solution like Radmin, Hamachi etc..<br>
+If you're trying to play Online make sure that the Host has a little **NAT: Open** prompt shown in the lobby, otherwise they will have to manually port forward.<br>
+If the Host has **NAT: Strict/LAN** or **NAT: Failed** then the Host might be unable to serve the session through the internet, the uPnP automatic port mapping was unsuccessful, try manually port forwarding or if that doesn't play then just use a VLAN solution like Radmin, Hamachi etc..<br>
 
 ## Known issues
 
