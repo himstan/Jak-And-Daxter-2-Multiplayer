@@ -7,6 +7,13 @@
   (hold 1)
   (off 2))
 
+(defenum host-visibility
+  :type uint8
+  (public 0)
+  (friends-only 1)
+  (invite-only 2)
+  (lan-only 3))
+
 (deftype multiplayer-preferences (structure)
   ((skin                   mp-player-skin :inline)
    (player-name            string)
@@ -19,8 +26,9 @@
    (player-collision       uint8)
    (friendly-fire          uint8)
    (nametag-visibility     uint8)
-   (player-map-marker      uint8))
-  :size-assert 275)
+   (player-map-marker      uint8)
+   (host-visibility        uint8))
+  :size-assert 276)
 
 (define-extern pc-multi-get-preferences (function multiplayer-preferences int))
 (define-extern pc-multi-set-preferences (function multiplayer-preferences int))

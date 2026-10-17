@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -14,6 +15,7 @@
 #include "devices/game_controller.h"
 #include "devices/keyboard.h"
 #include "devices/mouse.h"
+#include "devices/steam_pad.h"
 #include "game/settings/settings.h"
 #include "game/system/hid/input_bindings.h"
 #include "game/system/hid/text_input_editor.h"
@@ -59,6 +61,7 @@ class InputManager {
   void clear_keyboard_actions();
   void poll_mouse_data();
   void clear_mouse_actions();
+  void poll_steam_pad_data();
   // Any cleanup that should happen after polling has completed for this frame
   void finish_polling();
   /// Any event coming from the EE thread that interacts directly with SDL should be enqueued as an
@@ -66,6 +69,7 @@ class InputManager {
   void process_ee_events();
   void register_command(const CommandBinding::Source source, const CommandBinding bind);
 
+  bool text_input_shortcut(bool enabled);
   uint32_t begin_text_input(std::string_view initial_text, TextInputEditor::Policy policy);
   TextInputEditor::Snapshot text_input_snapshot(uint32_t token = 0) const;
   bool submit_text_input(uint32_t token);
@@ -118,7 +122,9 @@ class InputManager {
   // the InputManager, so it shouldn't hurt (they don't need to be enqueued)
   // Also these are generally waiting for a response and...OpenGOAL does not have an async/await
   // pattern!
-  int get_num_controllers() const { return m_available_controllers.size(); }
+  int get_num_controllers() const {
+    return m_available_controllers.size() + m_steam_pad.pads().size();
+  }
   std::string get_controller_name(const int controller_id);
   std::string get_current_bind(const int port,
                                const InputDeviceType device_type,
@@ -147,6 +153,7 @@ class InputManager {
   bool is_keyboard_enabled() {
     return m_settings->keyboard_enabled || m_settings->_keyboard_temp_enabled;
   }
+  bool steam_layout_mismatch() const { return m_steam_pad.layout_mismatch(); }
   bool is_pressure_sensitivity_enabled() { return m_settings->enable_pressure_sensitivity; }
   bool set_pressure_sensitivity_enabled(bool enabled) {
     return m_settings->enable_pressure_sensitivity = enabled;
@@ -175,6 +182,7 @@ class InputManager {
   /// You can have many mice plugged into a computer, but we do not differentiate between
   /// them it's all aggregated under one device.
   MouseDevice m_mouse;
+  SteamPadDevice m_steam_pad;
   TextInputEditor m_text_editor;
   /// A mapping between port numbers and the controller index. Connect as many controllers as
   /// you want.
@@ -188,6 +196,8 @@ class InputManager {
 
   bool m_mouse_enabled = false;
   bool m_text_input_keyboard_captured = false;
+  std::atomic<bool> m_text_input_shortcut_enabled = false;
+  std::atomic<bool> m_text_input_requested = false;
   int m_skip_polling_for_n_frames = 0;
   bool m_auto_hide_mouse = true;
   bool m_mouse_currently_hidden = false;
@@ -200,6 +210,7 @@ class InputManager {
   std::optional<InputBindAssignmentMeta> m_waiting_for_bind = std::nullopt;
 
   void refresh_device_list();
+  std::optional<uint64_t> steam_pad_at(const int controller_id) const;
   void clear_inputs();
   bool try_claim_controller(const int controller_idx);
   void release_controller_claim(const int controller_idx);

@@ -4,6 +4,8 @@
 #include <array>
 #include <limits>
 
+#include "common/util/unicode_util.h"
+
 namespace multiplayer::platform {
 namespace {
 constexpr std::array<uint8_t, 4> kGateMagic = {'J', 'M', 'P', 'G'};
@@ -17,6 +19,10 @@ void write_u16(std::vector<uint8_t>& out, const uint16_t value) {
 void write_u32(std::vector<uint8_t>& out, const uint32_t value) {
   for (uint32_t shift = 0; shift < 32; shift += 8)
     out.push_back(value >> shift);
+}
+void write_u64(std::vector<uint8_t>& out, const uint64_t value) {
+  for (uint32_t shift = 0; shift < 64; shift += 8)
+    out.push_back(static_cast<uint8_t>(value >> shift));
 }
 bool read_u8(std::span<const uint8_t> bytes, size_t& cursor, uint8_t& value) {
   if (cursor == bytes.size())
@@ -39,6 +45,14 @@ bool read_u32(std::span<const uint8_t> bytes, size_t& cursor, uint32_t& value) {
   for (uint32_t shift = 0; shift < 32; shift += 8) {
     value |= static_cast<uint32_t>(bytes[cursor++]) << shift;
   }
+  return true;
+}
+bool read_u64(std::span<const uint8_t> bytes, size_t& cursor, uint64_t& value) {
+  if (bytes.size() - cursor < 8)
+    return false;
+  value = 0;
+  for (uint32_t shift = 0; shift < 64; shift += 8)
+    value |= static_cast<uint64_t>(bytes[cursor++]) << shift;
   return true;
 }
 bool write_string(std::vector<uint8_t>& out, const std::string_view value) {
@@ -83,6 +97,7 @@ bool encode_profile(std::vector<uint8_t>& out,
   out.push_back(profile.ready ? 1 : 0);
   out.push_back(static_cast<uint8_t>(profile.display_name.size()));
   write_u16(out, static_cast<uint16_t>(profile.game_extension.size()));
+  write_u64(out, profile.steam_id);
   out.insert(out.end(), profile.display_name.begin(), profile.display_name.end());
   out.insert(out.end(), profile.game_extension.begin(), profile.game_extension.end());
   return true;
@@ -98,7 +113,8 @@ bool decode_profile(const std::span<const uint8_t> bytes,
   uint16_t extension_size = 0;
   if (!read_u8(bytes, cursor, profile.player_id) || !read_u8(bytes, cursor, character) ||
       !read_u8(bytes, cursor, ready) || !read_u8(bytes, cursor, name_size) ||
-      !read_u16(bytes, cursor, extension_size) || profile.player_id >= maximum_players ||
+      !read_u16(bytes, cursor, extension_size) || !read_u64(bytes, cursor, profile.steam_id) ||
+      profile.player_id >= maximum_players ||
       ready > 1 || name_size > kMaximumDisplayNameBytes ||
       extension_size > maximum_extension_bytes ||
       bytes.size() - cursor < static_cast<size_t>(name_size) + extension_size)
@@ -115,16 +131,33 @@ bool decode_profile(const std::span<const uint8_t> bytes,
 }
 }  // namespace
 
+bool valid_chat_text(const std::string_view text) {
+  if (text.empty() || text.size() > kMaximumChatBytes)
+    return false;
+  size_t offset = 0;
+  bool visible = false;
+  while (offset < text.size()) {
+    char32_t codepoint = 0;
+    if (!unicode::decode_utf8_codepoint(text, offset, codepoint) || codepoint < 0x20 ||
+        (codepoint >= 0x7f && codepoint <= 0x9f) || codepoint == 0x2028 || codepoint == 0x2029)
+      return false;
+    visible |= codepoint != ' ';
+  }
+  return visible;
+}
+
 bool control_allowed_from(const ControlKind kind, const SessionRole sender) {
   if (sender == SessionRole::HOST) {
     return kind == ControlKind::PROFILE || kind == ControlKind::ROSTER ||
            kind == ControlKind::DEPARTURE || kind == ControlKind::START_COUNTDOWN ||
            kind == ControlKind::CANCEL_COUNTDOWN || kind == ControlKind::START_GAME ||
-           kind == ControlKind::SESSION_CLOSE || kind == ControlKind::PLAYER_PINGS;
+           kind == ControlKind::SESSION_CLOSE || kind == ControlKind::PLAYER_PINGS ||
+           kind == ControlKind::CHAT;
   }
   if (sender == SessionRole::CLIENT) {
     return kind == ControlKind::PROFILE || kind == ControlKind::SET_CHARACTER ||
-           kind == ControlKind::SET_READY || kind == ControlKind::BOOTSTRAP_ACK;
+           kind == ControlKind::SET_READY || kind == ControlKind::BOOTSTRAP_ACK ||
+           kind == ControlKind::CHAT;
   }
   return false;
 }
@@ -133,6 +166,12 @@ std::vector<uint8_t> encode_control_message(const ControlMessage& message,
                                             const uint16_t maximum_extension_bytes) {
   std::vector<uint8_t> out = {static_cast<uint8_t>(message.kind)};
   switch (message.kind) {
+    case ControlKind::CHAT:
+      if (!valid_chat_text(message.chat_text))
+        return {};
+      out.push_back(static_cast<uint8_t>(message.chat_text.size()));
+      out.insert(out.end(), message.chat_text.begin(), message.chat_text.end());
+      break;
     case ControlKind::PROFILE:
       if (!encode_profile(out, message.profile, maximum_extension_bytes))
         return {};
@@ -148,7 +187,7 @@ std::vector<uint8_t> encode_control_message(const ControlMessage& message,
       break;
     case ControlKind::DEPARTURE:
       if (message.player_id == kInvalidPlayerId ||
-          message.reason > static_cast<uint8_t>(PlayerDepartureReason::TIMED_OUT))
+          message.reason > static_cast<uint8_t>(PlayerDepartureReason::KICKED))
         return {};
       out.push_back(message.player_id);
       out.push_back(message.reason);
@@ -193,6 +232,17 @@ bool decode_control_message(const std::span<const uint8_t> bytes,
   message.kind = static_cast<ControlKind>(bytes[0]);
   size_t cursor = 1;
   switch (message.kind) {
+    case ControlKind::CHAT: {
+      uint8_t size = 0;
+      if (!read_u8(bytes, cursor, size) || size > kMaximumChatBytes ||
+          bytes.size() - cursor != size)
+        return false;
+      message.chat_text.assign(reinterpret_cast<const char*>(bytes.data() + cursor), size);
+      if (!valid_chat_text(message.chat_text))
+        return false;
+      cursor += size;
+      break;
+    }
     case ControlKind::PROFILE:
       if (!decode_profile(bytes, cursor, maximum_extension_bytes, maximum_players, message.profile))
         return false;
@@ -222,7 +272,7 @@ bool decode_control_message(const std::span<const uint8_t> bytes,
     case ControlKind::DEPARTURE:
       if (!read_u8(bytes, cursor, message.player_id) || !read_u8(bytes, cursor, message.reason) ||
           message.player_id >= maximum_players ||
-          message.reason > static_cast<uint8_t>(PlayerDepartureReason::TIMED_OUT))
+          message.reason > static_cast<uint8_t>(PlayerDepartureReason::KICKED))
         return false;
       break;
     case ControlKind::SET_CHARACTER: {
@@ -357,7 +407,7 @@ bool decode_server_gate(const std::span<const uint8_t> bytes, ServerGate& gate) 
   uint8_t reason = 0;
   if (!read_gate_header(bytes, kRejectedGateKind, cursor) || !read_u8(bytes, cursor, reason) ||
       reason == static_cast<uint8_t>(RejectionReason::NONE) ||
-      reason > static_cast<uint8_t>(RejectionReason::THROTTLED) ||
+      reason > static_cast<uint8_t>(RejectionReason::KICKED) ||
       !read_string(bytes, cursor, gate.required_identity) || cursor != bytes.size())
     return false;
   gate.rejection = static_cast<RejectionReason>(reason);

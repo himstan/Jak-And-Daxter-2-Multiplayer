@@ -32,6 +32,11 @@ enum class ConnectionAction : uint8_t {
   START_DISCOVERY,
   STOP_DISCOVERY,
   CONNECT_DISCOVERED,
+  SEARCH_LOBBIES,
+  JOIN_LOBBY,
+  INVITE_FRIENDS,
+  SET_LOBBY_DETAILS,
+  SET_LOBBY_PRIVACY,
   RECONNECT,
   DISCONNECT,
 };
@@ -46,6 +51,8 @@ enum class SessionAction : uint8_t {
   ENTER_LOBBY,
   ENTER_GAME,
   REQUEST_BOOTSTRAP,
+  KICK_PLAYER,
+  SEND_CHAT,
 };
 enum class ControlAction : uint8_t { NONE, CONFIGURE_IDENTITY, NETWORK_SIMULATION };
 
@@ -61,14 +68,20 @@ struct HostSessionRequest {
   uint16_t discovery_port = 0;
   bool internet = false;
   bool automatic_port_mapping = false;
+  LobbyPrivacy privacy = LobbyPrivacy::PUBLIC;
 };
 
-enum class DiscoveryKind : uint8_t { NONE, LAN, DIRECTED };
+enum class DiscoveryKind : uint8_t { NONE, LAN, DIRECTED, STEAM };
 
 struct DiscoveryRequest {
   uint16_t discovery_port = 0;
   uint16_t expected_game_port = 0;
   std::string directed_address;
+  PlayerProfile profile;
+};
+
+struct JoinLobbyRequest {
+  uint64_t lobby_id = 0;
   PlayerProfile profile;
 };
 
@@ -80,6 +93,11 @@ class ConnectionExecutionPort {
   virtual CommandError start_discovery(DiscoveryRequest) = 0;
   virtual CommandError stop_discovery() = 0;
   virtual CommandError connect_discovered() = 0;
+  virtual CommandError search_lobbies() = 0;
+  virtual CommandError join_lobby(JoinLobbyRequest) = 0;
+  virtual CommandError invite_friends() = 0;
+  virtual CommandError set_lobby_details(std::string details) = 0;
+  virtual CommandError set_lobby_privacy(LobbyPrivacy) = 0;
   virtual CommandError reconnect() = 0;
   virtual CommandError disconnect(int reason) = 0;
 };
@@ -96,6 +114,8 @@ class SessionExecutionPort {
   virtual CommandError enter_lobby() = 0;
   virtual CommandError enter_game() = 0;
   virtual CommandError request_bootstrap() = 0;
+  virtual CommandError kick_player(PlayerId) = 0;
+  virtual CommandError send_chat(std::string) = 0;
 };
 
 class RuntimeControlExecutionPort {
@@ -204,6 +224,34 @@ MP_SIMPLE_COMMAND(ConnectDiscoveredCommand,
                   ConnectionAction::CONNECT_DISCOVERED,
                   ConnectionExecutionPort,
                   port.connect_discovered());
+MP_SIMPLE_COMMAND(SearchLobbiesCommand,
+                  ConnectionCommand,
+                  ConnectionAction::SEARCH_LOBBIES,
+                  ConnectionExecutionPort,
+                  port.search_lobbies());
+MP_VALUE_COMMAND(JoinLobbyCommand,
+                 ConnectionCommand,
+                 ConnectionAction::JOIN_LOBBY,
+                 JoinLobbyRequest,
+                 ConnectionExecutionPort,
+                 join_lobby);
+MP_SIMPLE_COMMAND(InviteFriendsCommand,
+                  ConnectionCommand,
+                  ConnectionAction::INVITE_FRIENDS,
+                  ConnectionExecutionPort,
+                  port.invite_friends());
+MP_VALUE_COMMAND(SetLobbyDetailsCommand,
+                 ConnectionCommand,
+                 ConnectionAction::SET_LOBBY_DETAILS,
+                 std::string,
+                 ConnectionExecutionPort,
+                 set_lobby_details);
+MP_VALUE_COMMAND(SetLobbyPrivacyCommand,
+                 ConnectionCommand,
+                 ConnectionAction::SET_LOBBY_PRIVACY,
+                 LobbyPrivacy,
+                 ConnectionExecutionPort,
+                 set_lobby_privacy);
 MP_SIMPLE_COMMAND(ReconnectCommand,
                   ConnectionCommand,
                   ConnectionAction::RECONNECT,
@@ -237,6 +285,18 @@ MP_VALUE_COMMAND(SetReadyCommand,
                  bool,
                  SessionExecutionPort,
                  set_ready);
+MP_VALUE_COMMAND(SendChatCommand,
+                 SessionCommand,
+                 SessionAction::SEND_CHAT,
+                 std::string,
+                 SessionExecutionPort,
+                 send_chat);
+MP_VALUE_COMMAND(KickPlayerCommand,
+                 SessionCommand,
+                 SessionAction::KICK_PLAYER,
+                 PlayerId,
+                 SessionExecutionPort,
+                 kick_player);
 MP_VALUE_COMMAND(StartCountdownCommand,
                  SessionCommand,
                  SessionAction::START_COUNTDOWN,

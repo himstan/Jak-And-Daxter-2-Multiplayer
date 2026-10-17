@@ -5,6 +5,7 @@
 
 #include "common/log/log.h"
 
+#include "game/external/steam/steam_client.h"
 #include "game/multiplayer/platform/core/sequence.h"
 #include "game/multiplayer/platform/discovery/invite.h"
 #include "game/multiplayer/platform/profile/profile_store.h"
@@ -140,8 +141,9 @@ bool SessionController::host(const ControllerHostConfig& config) {
     lg::error("[MP-Session] Host rejected: local player profile is invalid.");
     return false;
   }
-  if (!transport_.host({.port = config.port})) {
-    lg::error("[MP-Session] Host transport setup failed on UDP port {}.", config.port);
+  local_profile_.steam_id = config.steam ? steam::local_steam_id() : 0;
+  if (!transport_.host({.port = config.port, .steam = config.steam})) {
+    lg::error("[MP-Session] Host transport setup failed.");
     return false;
   }
   registry_.configure(config.player_limit);
@@ -172,8 +174,9 @@ bool SessionController::connect(const ControllerClientConfig& config) {
     return false;
   }
   local_profile_ = config.local_profile;
-  if (!transport_.connect({.endpoint = config.endpoint, .port = config.port})) {
-    lg::error("[MP-Session] Could not start a connection to {}:{}.", config.endpoint, config.port);
+  if (!transport_.connect(
+          {.endpoint = config.endpoint, .port = config.port, .steam_host = config.steam_host})) {
+    lg::error("[MP-Session] Could not start a connection to the host.");
     return false;
   }
   room_code_ = config.room_code;
@@ -201,6 +204,7 @@ void SessionController::disconnect(const int reason) {
   pending_gates_.clear();
   pending_rejection_closes_.clear();
   rejection_throttles_.clear();
+  banned_addresses_.clear();
   room_code_.clear();
   last_applied_bootstrap_ = 0;
   host_bootstrap_generation_ = 0;
@@ -245,6 +249,7 @@ void SessionController::pump(const uint64_t now_ms) {
   update_snapshot(std::move(connections));
   if (snapshot_.state.role == SessionRole::HOST &&
       now_ms - last_ping_publish_ms_ >= kPlayerPingPublishMs) {
+    sample_player_pings();
     send_control({.kind = ControlKind::PLAYER_PINGS, .player_pings = snapshot_.player_pings},
                  Audience::everyone());
     last_ping_publish_ms_ = now_ms;
@@ -262,17 +267,16 @@ void SessionController::handle_event(TransportEvent event, const uint64_t now_ms
   } else if (snapshot_.state.role == SessionRole::HOST) {
     pending_gates_.erase(event.connection_id);
     pending_rejection_closes_.erase(event.connection_id);
-    host_departure(event.connection_id, event.close_reason, event.timed_out);
+    host_departure(
+        event.connection_id, event.close_reason,
+        event.timed_out ? PlayerDepartureReason::TIMED_OUT : PlayerDepartureReason::LEFT);
   } else {
     lg::debug("[MP-Session] Host connection closed (reason {}, detail '{}').", event.close_reason,
               event.detail);
     snapshot_.player_pings.clear();
     if (event.close_reason >= kSessionCloseReasonBase &&
         event.close_reason <= kSessionCloseReasonMaximum) {
-      snapshot_.state.status = SessionStatus::HOST_LEFT;
-      snapshot_.close_reason = static_cast<uint8_t>(event.close_reason - kSessionCloseReasonBase);
-      clear_countdown();
-      reset_adapter_session();
+      host_closed_session(static_cast<uint8_t>(event.close_reason - kSessionCloseReasonBase));
     } else if (snapshot_.state.status != SessionStatus::FAILED &&
                snapshot_.state.status != SessionStatus::HOST_LEFT) {
       snapshot_.state.status = SessionStatus::RECONNECTING;
@@ -301,7 +305,8 @@ void SessionController::handle_connected(const TransportEvent& event, const uint
     }
     const auto& throttle = rejection_throttles_[event.remote_address];
     pending_gates_[event.connection_id] = {.deadline_ms = now_ms + kGateTimeoutMs,
-                                           .remote_address = event.remote_address};
+                                           .remote_address = event.remote_address,
+                                           .steam_id = event.steam_id};
     if (throttle.blocked_until_ms > now_ms || pending_gates_.size() > kMaximumPendingGates) {
       reject(event.connection_id, RejectionReason::THROTTLED);
       return;
@@ -341,6 +346,9 @@ void SessionController::handle_pending_message(const TransportEvent& event) {
     }
     if (gate.game_id != descriptor.game_id)
       return reject(event.connection_id, RejectionReason::WRONG_GAME);
+    const auto pending = pending_gates_[event.connection_id];
+    if (banned_addresses_.contains(pending.remote_address))
+      return reject(event.connection_id, RejectionReason::KICKED);
     if (gate.room_code != room_code_)
       return reject(event.connection_id, RejectionReason::WRONG_ROOM_CODE);
     const PlayerId next = [&]() {
@@ -352,8 +360,11 @@ void SessionController::handle_pending_message(const TransportEvent& event) {
     }();
     if (next == kInvalidPlayerId)
       return reject(event.connection_id, RejectionReason::HOST_FULL);
-    if (!registry_.bind(event.connection_id, next, PlayerCharacter::UNKNOWN))
+    auto* session = registry_.bind(event.connection_id, next, PlayerCharacter::UNKNOWN);
+    if (!session)
       return reject(event.connection_id, RejectionReason::HOST_FULL);
+    session->remote_address = pending.remote_address;
+    session->steam_id = pending.steam_id;
     pending_gates_.erase(event.connection_id);
     lg::debug("[MP-Session] Accepted connection {} as player {}.", event.connection_id, next);
     const auto response = encode_server_gate({.accepted = true,
@@ -409,7 +420,7 @@ void SessionController::handle_pending_message(const TransportEvent& event) {
 
 void SessionController::host_departure(const ConnectionId connection,
                                        const int reason,
-                                       const bool timed_out) {
+                                       const PlayerDepartureReason departure) {
   const auto* player = registry_.find_connection(connection);
   if (!player)
     return;
@@ -420,7 +431,6 @@ void SessionController::host_departure(const ConnectionId connection,
   registry_.release_connection(connection);
   lg::debug("[MP-Session] Player {} (connection {}) departed with reason {}.", id, connection,
             reason);
-  const auto departure = timed_out ? PlayerDepartureReason::TIMED_OUT : PlayerDepartureReason::LEFT;
   send_control(
       {.kind = ControlKind::DEPARTURE, .player_id = id, .reason = static_cast<uint8_t>(departure)},
       Audience::everyone());
@@ -482,6 +492,17 @@ void SessionController::handle_control(const ConnectionId connection,
     transport_.close_connection(connection, kInvalidProtocolReason, "invalid control message");
     return;
   }
+  if (message.kind == ControlKind::CHAT) {
+    if (origin_id >= profiles_.size() || profiles_[origin_id].player_id == kInvalidPlayerId)
+      return;
+    if (snapshot_.state.role == SessionRole::HOST) {
+      const auto* player = registry_.find_player(player_id);
+      if (!player || !player->identity_ready)
+        return;
+    }
+    receive_chat(origin_id, std::move(message.chat_text));
+    return;
+  }
   if (snapshot_.state.role == SessionRole::HOST)
     handle_host_control(connection, player_id, std::move(message));
   else if (connection == transport_.host_connection_id() &&
@@ -505,6 +526,7 @@ void SessionController::handle_host_control(const ConnectionId connection,
       transport_.close_connection(connection, kInvalidProtocolReason, "invalid player profile");
       return;
     }
+    message.profile.steam_id = session->steam_id;
     if (session->identity_ready && message.profile.character != profile.character &&
         !character_change_allowed(profile))
       return;
@@ -624,11 +646,8 @@ void SessionController::handle_client_control(const ConnectionId connection,
     snapshot_.state.status = SessionStatus::GAME_STARTING;
     clear_countdown();
   } else if (message.kind == ControlKind::SESSION_CLOSE) {
-    snapshot_.state.status = SessionStatus::HOST_LEFT;
-    snapshot_.close_reason = message.reason;
     snapshot_.player_pings.clear();
-    clear_countdown();
-    reset_adapter_session();
+    host_closed_session(message.reason);
     transport_.close_connection(connection, message.reason, "session closed by host");
   }
 }
@@ -784,10 +803,37 @@ bool SessionController::severe_pressure_sustained(const uint64_t now_ms) const {
          now_ms - pressure_.severe_since_ms() >= 2000;
 }
 
-std::string SessionController::invite_for_address(const std::string_view address) const {
+std::string SessionController::invite_for_address(const std::string_view address,
+                                                  const uint16_t port) const {
   if (snapshot_.state.role != SessionRole::HOST || address.empty())
     return {};
-  return make_invite(address, transport_.local_port(), room_code_);
+  return make_invite(address, port, room_code_);
+}
+
+void SessionController::host_closed_session(const uint8_t reason) {
+  snapshot_.state.status = SessionStatus::HOST_LEFT;
+  snapshot_.close_reason = reason;
+  if (reason == kSessionCloseKicked)
+    snapshot_.rejection = RejectionReason::KICKED;
+  clear_countdown();
+  reset_adapter_session();
+}
+
+bool SessionController::kick(const PlayerId player_id) {
+  if (snapshot_.state.role != SessionRole::HOST || player_id == snapshot_.state.local_player_id)
+    return false;
+  const auto* player = registry_.find_player(player_id);
+  if (!player)
+    return false;
+  const auto connection = player->connection_id;
+  banned_addresses_.insert(player->remote_address);
+  send_control({.kind = ControlKind::SESSION_CLOSE, .reason = kSessionCloseKicked},
+               Audience::one(connection));
+  host_departure(connection, kSessionCloseReasonBase + kSessionCloseKicked,
+                 PlayerDepartureReason::KICKED);
+  transport_.close_connection(connection, kSessionCloseReasonBase + kSessionCloseKicked,
+                              "removed by host");
+  return true;
 }
 
 void SessionController::reject(const ConnectionId connection,
@@ -901,6 +947,37 @@ void SessionController::send_control(const ControlMessage& message, const Audien
   }
 }
 
+bool SessionController::send_chat(std::string text) {
+  if (!valid_chat_text(text) || snapshot_.state.local_player_id == kInvalidPlayerId ||
+      (snapshot_.state.status != SessionStatus::LOBBY &&
+       snapshot_.state.status != SessionStatus::GAME_STARTING &&
+       snapshot_.state.status != SessionStatus::IN_GAME))
+    return false;
+  if (snapshot_.state.role == SessionRole::HOST) {
+    receive_chat(snapshot_.state.local_player_id, std::move(text));
+  } else {
+    send_control({.kind = ControlKind::CHAT, .chat_text = std::move(text)},
+                 Audience::one(transport_.host_connection_id()));
+  }
+  return true;
+}
+
+void SessionController::receive_chat(const PlayerId player_id, std::string text) {
+  if (snapshot_.chat.size() == kChatHistoryCapacity)
+    snapshot_.chat.erase(snapshot_.chat.begin());
+  snapshot_.chat.push_back({.serial = advance_nonzero_sequence(chat_serial_),
+                            .player_id = player_id,
+                            .display_name = profiles_[player_id].display_name,
+                            .text = std::move(text)});
+  if (snapshot_.state.role == SessionRole::HOST) {
+    const auto bytes =
+        encode_control_message({.kind = ControlKind::CHAT, .chat_text = snapshot_.chat.back().text},
+                               adapter_.descriptor().maximum_profile_extension_bytes);
+    send_frame(FrameKind::CONTROL, Audience::everyone(), player_id, bytes,
+               TransportLane::CONTROL_RELIABLE);
+  }
+}
+
 void SessionController::broadcast_profile(const PlayerProfile& profile) {
   send_control({.kind = ControlKind::PROFILE, .profile = profile}, Audience::everyone());
 }
@@ -930,6 +1007,7 @@ bool SessionController::set_local_profile(PlayerProfile profile) {
     return false;
   if (profile.character != local_profile_.character && !character_change_allowed(local_profile_))
     return false;
+  profile.steam_id = local_profile_.steam_id;
   local_profile_ = profile;
   if (snapshot_.state.role == SessionRole::HOST) {
     profiles_[profile.player_id] = profile;
@@ -1008,10 +1086,6 @@ void SessionController::enter_lobby() {
 }
 
 void SessionController::update_snapshot(std::vector<ConnectionSnapshot> connections) {
-  if (snapshot_.state.role == SessionRole::HOST) {
-    snapshot_.player_pings.assign(profiles_.size(), kUnknownPlayerPing);
-    snapshot_.player_pings[snapshot_.state.host_player_id] = 0;
-  }
   snapshot_.players.clear();
   for (const auto& profile : profiles_) {
     if (profile.player_id != kInvalidPlayerId)
@@ -1025,11 +1099,6 @@ void SessionController::update_snapshot(std::vector<ConnectionSnapshot> connecti
   snapshot_.connections.reserve(connections.size());
   for (auto& connection : connections) {
     const auto* binding = registry_.find_connection(connection.connection_id);
-    if (snapshot_.state.role == SessionRole::HOST && binding && binding->identity_ready &&
-        connection.ping_ms >= 0) {
-      snapshot_.player_pings[binding->player_id] =
-          static_cast<uint16_t>(std::min(connection.ping_ms, int{kUnknownPlayerPing - 1}));
-    }
     snapshot_.connections.push_back({.player_id = binding ? binding->player_id : kInvalidPlayerId,
                                      .network = std::move(connection)});
   }
@@ -1037,6 +1106,19 @@ void SessionController::update_snapshot(std::vector<ConnectionSnapshot> connecti
                                               const SessionConnectionSnapshot& right) {
     return left.player_id < right.player_id;
   });
+}
+
+
+void SessionController::sample_player_pings() {
+  snapshot_.player_pings.assign(profiles_.size(), kUnknownPlayerPing);
+  snapshot_.player_pings[snapshot_.state.host_player_id] = 0;
+  for (const auto& connection : snapshot_.connections) {
+    const auto* binding = registry_.find_connection(connection.network.connection_id);
+    if (binding && binding->identity_ready && connection.network.ping_ms >= 0) {
+      snapshot_.player_pings[binding->player_id] = static_cast<uint16_t>(
+          std::min(connection.network.ping_ms, int{kUnknownPlayerPing - 1}));
+    }
+  }
 }
 
 }  // namespace multiplayer::platform

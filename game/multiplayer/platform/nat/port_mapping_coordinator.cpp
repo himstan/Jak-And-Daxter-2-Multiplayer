@@ -3,6 +3,8 @@
 #include <chrono>
 #include <utility>
 
+#include "common/log/log.h"
+
 namespace multiplayer::platform {
 namespace {
 constexpr auto kRefreshInterval = std::chrono::hours(1);
@@ -67,24 +69,23 @@ void PortMappingCoordinator::run(const uint16_t local_port, const uint16_t exter
     stopped = stopping_;
     if (!stopped) {
       snapshot_.state = usable ? MPPortMappingState::READY : MPPortMappingState::FAILED;
+      snapshot_.external_port = usable ? mapping.external_port : 0;
       snapshot_.method = usable ? mapping.method : MPPortMappingMethod::NONE;
       snapshot_.external_address = usable ? mapping.external_ip : std::string{};
       snapshot_.error = usable ? std::string{} : mapping.error;
     }
   }
 
+  if (!stopped && !usable) {
+    lg::warn("[Multiplayer] Automatic port mapping for UDP port {} failed: {}.", external_port,
+             mapping.success ? "the router's external address " + mapping.external_ip +
+                                   " is private (double NAT)"
+                             : mapping.error);
+  }
   if (stopped || !usable) {
     if (mapping.success) {
-      close_udp_port_mapping(mapping, local_port, external_port);
+      close_udp_port_mapping(mapping, local_port);
     }
-    return;
-  }
-
-  if (mapping.method == MPPortMappingMethod::UPNP_IGD) {
-    std::unique_lock lock(mutex_);
-    cv_.wait(lock, [this] { return stopping_; });
-    lock.unlock();
-    close_udp_port_mapping(mapping, local_port, external_port);
     return;
   }
 
@@ -93,19 +94,20 @@ void PortMappingCoordinator::run(const uint16_t local_port, const uint16_t exter
     std::string error;
 
     for (int attempt = 0; attempt < kRefreshAttempts; ++attempt) {
-      auto result = refresh_udp_port_mapping(mapping, local_port, external_port);
-      if (result.success) {
+      error = refresh_udp_port_mapping(mapping, local_port);
+      if (error.empty()) {
         refreshed = true;
         break;
       }
 
-      error = std::move(result.error);
       if (attempt + 1 < kRefreshAttempts && wait_for_stop(kRefreshRetryDelay)) {
         break;
       }
     }
 
     if (!refreshed) {
+      lg::warn("[Multiplayer] Refreshing the port mapping for UDP port {} failed: {}.",
+               mapping.external_port, error);
       std::lock_guard lock(mutex_);
       if (!stopping_) {
         snapshot_.state = MPPortMappingState::FAILED;
@@ -117,7 +119,7 @@ void PortMappingCoordinator::run(const uint16_t local_port, const uint16_t exter
     }
   }
 
-  close_udp_port_mapping(mapping, local_port, external_port);
+  close_udp_port_mapping(mapping, local_port);
 }
 
 }  // namespace multiplayer::platform

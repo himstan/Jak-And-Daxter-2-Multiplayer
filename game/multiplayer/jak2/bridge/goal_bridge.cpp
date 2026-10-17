@@ -766,12 +766,23 @@ bool read_string(const uint32_t address, std::string& value) {
   return true;
 }
 
+bool write_string(const uint32_t address, const std::string_view value) {
+  auto* string = goal_string(address);
+  if (!string)
+    return false;
+  const auto size = (std::min)(value.size(), static_cast<size_t>(string->len));
+  std::memcpy(string->data(), value.data(), size);
+  string->data()[size] = '\0';
+  return true;
+}
+
 bool read_preferences(const uint32_t address, MultiplayerPreferences& preferences) {
   const auto* source = goal_ptr<MultiplayerPreferencesGOAL>(address);
   MultiplayerPreferences parsed;
   if (!source || source->automatic_port_mapping > 1 || source->player_collision > 1 ||
       source->friendly_fire > 1 || source->player_map_marker > 1 ||
       source->nametag_visibility > static_cast<uint8_t>(PlayerNametagVisibility::OFF) ||
+      source->host_visibility > static_cast<uint8_t>(HostVisibility::LAN_ONLY) ||
       !read_string(source->player_name, parsed.player_name) ||
       !read_string(source->room_code, parsed.room_code)) {
     return false;
@@ -786,6 +797,7 @@ bool read_preferences(const uint32_t address, MultiplayerPreferences& preference
   parsed.friendly_fire = source->friendly_fire != 0;
   parsed.nametag_visibility = static_cast<PlayerNametagVisibility>(source->nametag_visibility);
   parsed.player_map_marker = source->player_map_marker != 0;
+  parsed.host_visibility = static_cast<HostVisibility>(source->host_visibility);
   preferences = std::move(parsed);
   return true;
 }
@@ -814,6 +826,7 @@ bool write_preferences(const uint32_t address, const MultiplayerPreferences& pre
   destination->friendly_fire = preferences.friendly_fire;
   destination->nametag_visibility = static_cast<uint8_t>(preferences.nametag_visibility);
   destination->player_map_marker = preferences.player_map_marker;
+  destination->host_visibility = static_cast<uint8_t>(preferences.host_visibility);
   return true;
 }
 

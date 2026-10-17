@@ -17,6 +17,8 @@ enum class SessionStatus : uint8_t {
   FAILED,
 };
 
+enum class LobbyPrivacy : uint8_t { PUBLIC, FRIENDS_ONLY, INVITE_ONLY };
+
 struct SessionState {
   SessionRole role = SessionRole::NONE;
   SessionStatus status = SessionStatus::IDLE;

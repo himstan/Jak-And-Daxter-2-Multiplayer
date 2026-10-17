@@ -13,15 +13,18 @@
 namespace multiplayer::platform {
 
 inline constexpr size_t kMaximumTransportMessagesPerPump = 256;
+inline constexpr size_t kMaximumTransportMessagesPerConnectionPerPump = 64;
 
 struct TransportHostConfig {
   uint16_t port = 0;
   size_t maximum_pending_connections = 64;
+  bool steam = false;
 };
 
 struct TransportClientConfig {
   std::string endpoint;
   uint16_t port = 0;
+  uint64_t steam_host = 0;
 };
 
 enum class TransportEventKind : uint8_t {
@@ -39,6 +42,7 @@ struct TransportEvent {
   bool timed_out = false;
   std::string detail;
   std::string remote_address;
+  uint64_t steam_id = 0;
   std::vector<uint8_t> payload;
 };
 

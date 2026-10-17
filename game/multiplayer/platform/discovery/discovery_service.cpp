@@ -24,6 +24,9 @@
 
 namespace multiplayer::platform {
 namespace {
+constexpr int kDirectedAttempts = 10;
+constexpr int kBroadcastAttempts = 4;
+
 std::vector<sockaddr_in> broadcast_targets(const uint16_t port) {
   std::vector<sockaddr_in> targets;
   sockaddr_in global = {};
@@ -94,7 +97,6 @@ bool discovery_advertisement_matches(const DiscoveryConfig& config,
                                      const DiscoveryAdvertisement& advertisement,
                                      const std::string_view source_address) {
   return advertisement.game_id == config.game_id &&
-         advertisement.compatibility_identity == config.compatibility_identity &&
          (config.directed_address.empty() ||
           (source_address == config.directed_address &&
            advertisement.game_port == config.expected_game_port)) &&
@@ -116,10 +118,6 @@ bool DiscoveryScanner::start(DiscoveryConfig config) {
     lg::error("[Discovery] Scanner start failed: game_id is empty.");
     return false;
   }
-  if (config.compatibility_identity.empty()) {
-    lg::error("[Discovery] Scanner start failed: compatibility_identity is empty.");
-    return false;
-  }
   if (!config.directed_address.empty()) {
     sockaddr_in address = {};
     if (inet_pton(AF_INET, config.directed_address.c_str(), &address.sin_addr) != 1) {
@@ -136,7 +134,7 @@ bool DiscoveryScanner::start(DiscoveryConfig config) {
   status_ = DiscoveryStatus::SEARCHING;
   {
     std::lock_guard lock(result_mutex_);
-    result_.reset();
+    results_.clear();
   }
   thread_ = std::thread([this, config = std::move(config)]() mutable { scan(std::move(config)); });
   return true;
@@ -148,17 +146,25 @@ void DiscoveryScanner::stop() {
     thread_.join();
   status_ = DiscoveryStatus::IDLE;
   std::lock_guard lock(result_mutex_);
-  result_.reset();
+  results_.clear();
 }
 
-std::optional<DiscoveryResult> DiscoveryScanner::take_result() {
+std::vector<DiscoveryResult> DiscoveryScanner::results() {
   std::lock_guard lock(result_mutex_);
-  auto result = std::move(result_);
-  result_.reset();
-  if (status_ == DiscoveryStatus::FOUND) {
-    status_ = DiscoveryStatus::IDLE;
+  return results_;
+}
+
+bool DiscoveryScanner::add_result(DiscoveryResult result) {
+  std::lock_guard lock(result_mutex_);
+  const auto existing = std::ranges::find_if(results_, [&](const DiscoveryResult& found) {
+    return found.advertisement.room_code == result.advertisement.room_code;
+  });
+  if (existing != results_.end()) {
+    existing->advertisement = std::move(result.advertisement);
+    return false;
   }
-  return result;
+  results_.push_back(std::move(result));
+  return true;
 }
 
 void DiscoveryScanner::scan(DiscoveryConfig config) {
@@ -182,52 +188,56 @@ void DiscoveryScanner::scan(DiscoveryConfig config) {
     targets.push_back(target);
   }
   const auto query = encode_discovery_query(config.game_id);
-  for (int attempt = 0; attempt < 10 && !stopping_; ++attempt) {
+  const bool directed = !config.directed_address.empty();
+  const int attempts = directed ? kDirectedAttempts : kBroadcastAttempts;
+  for (int attempt = 0; attempt < attempts && !stopping_; ++attempt) {
     for (const auto& target : targets) {
       sendto(socket, reinterpret_cast<const char*>(query.data()), query.size(), 0,
              reinterpret_cast<const sockaddr*>(&target), sizeof(target));
     }
-    uint8_t buffer[512] = {};
-    sockaddr_in source = {};
-    socklen_t source_size = sizeof(source);
-    const int received = recvfrom(socket, reinterpret_cast<char*>(buffer), sizeof(buffer), 0,
-                                  reinterpret_cast<sockaddr*>(&source), &source_size);
-    if (received <= 0) {
-      if (received < 0 && !stopping_) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    while (!stopping_) {
+      uint8_t buffer[512] = {};
+      sockaddr_in source = {};
+      socklen_t source_size = sizeof(source);
+      const int received = recvfrom(socket, reinterpret_cast<char*>(buffer), sizeof(buffer), 0,
+                                    reinterpret_cast<sockaddr*>(&source), &source_size);
+      if (received <= 0) {
+        if (received < 0 && !stopping_)
+          std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        break;
       }
-      continue;
+      DiscoveryAdvertisement advertisement;
+      if (ntohs(source.sin_port) != config.discovery_port ||
+          !decode_discovery_advertisement({buffer, static_cast<size_t>(received)}, advertisement)) {
+        continue;
+      }
+      const std::string address = address_to_string(source);
+      if (!discovery_advertisement_matches(config, advertisement, address))
+        continue;
+      const uint16_t game_port = advertisement.game_port;
+      const std::string room_code = advertisement.room_code;
+      if (add_result({.invite = make_invite(address, game_port, room_code),
+                      .advertisement = std::move(advertisement)})) {
+        lg::info("[Discovery] Discovered host at {}:{} (room: {}).", address, game_port, room_code);
+      }
+      if (directed) {
+        status_ = DiscoveryStatus::FOUND;
+        close_socket(socket);
+        return;
+      }
     }
-    DiscoveryAdvertisement advertisement;
-    if (ntohs(source.sin_port) != config.discovery_port ||
-        !decode_discovery_advertisement({buffer, static_cast<size_t>(received)}, advertisement)) {
-      continue;
-    }
-    const std::string address = address_to_string(source);
-    if (!discovery_advertisement_matches(config, advertisement, address))
-      continue;
-    const uint16_t game_port = advertisement.game_port;
-    const std::string room_code = advertisement.room_code;
-    {
-      DiscoveryResult result = {.invite = make_invite(address, game_port, room_code),
-                                .advertisement = std::move(advertisement)};
-      std::lock_guard lock(result_mutex_);
-      result_ = std::move(result);
-    }
-    status_ = DiscoveryStatus::FOUND;
-    lg::info("[Discovery] Discovered host at {}:{} (room: {}).", address, game_port, room_code);
-    close_socket(socket);
-    return;
   }
   if (!stopping_) {
-    status_ = DiscoveryStatus::TIMED_OUT;
-    if (!config.directed_address.empty()) {
+    if (!results().empty())
+      status_ = DiscoveryStatus::FOUND;
+    else if (directed) {
+      status_ = DiscoveryStatus::TIMED_OUT;
       lg::warn(
           "[Discovery] Directed discovery timed out for {}:{} (no response on discovery port {}).",
           config.directed_address, config.expected_game_port, config.discovery_port);
     } else {
-      lg::warn("[Discovery] LAN discovery timed out (no hosts responded on discovery port {}).",
-               config.discovery_port);
+      status_ = DiscoveryStatus::TIMED_OUT;
+      lg::info("[Discovery] No LAN hosts responded on discovery port {}.", config.discovery_port);
     }
   }
   close_socket(socket);
@@ -318,7 +328,8 @@ void DiscoveryResponder::respond(const uint16_t discovery_port) {
     if (received <= 0)
       continue;
     std::string requested_game;
-    if (!decode_discovery_query({buffer, static_cast<size_t>(received)}, requested_game))
+    if (!listed_ ||
+        !decode_discovery_query({buffer, static_cast<size_t>(received)}, requested_game))
       continue;
     DiscoveryAdvertisement advertisement;
     {

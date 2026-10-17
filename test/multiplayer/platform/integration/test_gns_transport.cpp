@@ -130,21 +130,21 @@ class GnsSimulationScope {
                                                       0.0f);
     SteamNetworkingUtils()->SetGlobalConfigValueInt32(k_ESteamNetworkingConfig_FakePacketLag_Send,
                                                       0);
-    SteamNetworkingUtils()->SetGlobalConfigValueInt32(
-        k_ESteamNetworkingConfig_FakeRateLimit_Send_Rate, 0);
-    SteamNetworkingUtils()->SetGlobalConfigValueInt32(
-        k_ESteamNetworkingConfig_FakeRateLimit_Send_Burst, 16 * 1024);
+    SteamNetworkingUtils()->SetGlobalConfigValueInt32(k_ESteamNetworkingConfig_SendRateMax,
+                                                      256 * 1024);
+    SteamNetworkingUtils()->SetGlobalConfigValueInt32(k_ESteamNetworkingConfig_SendRateMin,
+                                                      256 * 1024);
   }
   void loss(float percent) {
     ASSERT_TRUE(SteamNetworkingUtils()->SetGlobalConfigValueFloat(
         k_ESteamNetworkingConfig_FakePacketLoss_Send, percent))
         << "GNS_TEST_SEED=" << seed_;
   }
-  void rate_limit(const int32_t bytes_per_second, const int32_t burst_bytes) {
+  void send_rate(const int32_t bytes_per_second) {
     ASSERT_TRUE(SteamNetworkingUtils()->SetGlobalConfigValueInt32(
-        k_ESteamNetworkingConfig_FakeRateLimit_Send_Rate, bytes_per_second));
+        k_ESteamNetworkingConfig_SendRateMin, bytes_per_second));
     ASSERT_TRUE(SteamNetworkingUtils()->SetGlobalConfigValueInt32(
-        k_ESteamNetworkingConfig_FakeRateLimit_Send_Burst, burst_bytes));
+        k_ESteamNetworkingConfig_SendRateMax, bytes_per_second));
   }
   unsigned int seed() const { return seed_; }
 
@@ -427,6 +427,23 @@ TEST(GnsTransportIntegration, CapacityRejectionsDoNotPreventLaterConnections) {
       }));
 }
 
+TEST(GnsTransportIntegration, SteamRoutesFailWithoutSteamAndLeaveDirectTransportUsable) {
+  SessionPlatform platform;
+  EXPECT_FALSE(platform.host({.steam = true}));
+  EXPECT_FALSE(platform.active());
+  EXPECT_FALSE(platform.connect({.steam_host = 76561197960287930ull}));
+  EXPECT_FALSE(platform.active());
+  ASSERT_TRUE(platform.host({.port = available_udp_port()}));
+  SessionPlatform client;
+  ASSERT_TRUE(client.connect({.endpoint = "127.0.0.1", .port = platform.local_port()}));
+  EXPECT_TRUE(pump_until(
+      [&] {
+        platform.pump();
+        client.pump();
+      },
+      [&] { return platform.connection_snapshots().size() == 1; }));
+}
+
 TEST(GnsTransportIntegration, RawTransportConfiguresLanesAndDeliversLargeMessagesWhole) {
   SessionPlatform host;
   SessionPlatform client;
@@ -504,7 +521,7 @@ TEST(GnsTransportIntegration, RawTransportPreservesOrderAcrossReceivePumpBudget)
         return client_connection != 0;
       }));
 
-  constexpr size_t kMessageCount = kMaximumTransportMessagesPerPump + 64;
+  constexpr size_t kMessageCount = kMaximumTransportMessagesPerConnectionPerPump + 64;
   for (size_t index = 0; index < kMessageCount; ++index) {
     const std::array<uint8_t, 2> payload = {static_cast<uint8_t>(index),
                                             static_cast<uint8_t>(index >> 8)};
@@ -522,7 +539,7 @@ TEST(GnsTransportIntegration, RawTransportPreservesOrderAcrossReceivePumpBudget)
                          static_cast<uint16_t>(event.payload[1] << 8));
     }
   }
-  ASSERT_EQ(received.size(), kMaximumTransportMessagesPerPump);
+  ASSERT_EQ(received.size(), kMaximumTransportMessagesPerConnectionPerPump);
 
   ASSERT_TRUE(pump_until(
       [&] {
@@ -547,6 +564,55 @@ TEST(GnsTransportIntegration, RawTransportPreservesOrderAcrossReceivePumpBudget)
   client.shutdown();
 }
 
+TEST(GnsTransportIntegration, FloodingPeerCannotDelayAnotherPeersMessages) {
+  SessionPlatform host;
+  SessionPlatform flooder;
+  SessionPlatform quiet;
+  ASSERT_TRUE(host.host({.port = available_udp_port()}));
+  ASSERT_TRUE(flooder.connect({.endpoint = "127.0.0.1", .port = host.local_port()}));
+  ASSERT_TRUE(quiet.connect({.endpoint = "127.0.0.1", .port = host.local_port()}));
+  size_t connected = 0;
+  ASSERT_TRUE(pump_until(
+      [&] {
+        host.pump();
+        flooder.pump();
+        quiet.pump();
+      },
+      [&] {
+        TransportEvent event;
+        for (const auto* platform : {&host, &flooder, &quiet}) {
+          while (platform->poll_event(event)) {
+            if (event.kind == TransportEventKind::CONNECTED)
+              ++connected;
+          }
+        }
+        return connected == 4;
+      }));
+
+  for (size_t index = 0; index < kMaximumTransportMessagesPerPump; ++index) {
+    ASSERT_TRUE(flooder.send(flooder.host_connection_id(), std::array<uint8_t, 1>{0xf1},
+                             Delivery::RELIABLE_ORDERED));
+  }
+  ASSERT_TRUE(quiet.send(quiet.host_connection_id(), std::array<uint8_t, 1>{0x51},
+                         Delivery::RELIABLE_ORDERED));
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+  host.pump();
+  size_t flooded = 0;
+  size_t quiet_messages = 0;
+  TransportEvent event;
+  while (host.poll_event(event)) {
+    if (event.kind != TransportEventKind::MESSAGE)
+      continue;
+    if (event.payload == std::vector<uint8_t>{0xf1})
+      ++flooded;
+    if (event.payload == std::vector<uint8_t>{0x51})
+      ++quiet_messages;
+  }
+  EXPECT_EQ(flooded, kMaximumTransportMessagesPerConnectionPerPump);
+  EXPECT_EQ(quiet_messages, 1u);
+}
+
 TEST(GnsTransportIntegration, CriticalRealtimePreemptsAConstrainedBulkBacklog) {
   SessionPlatform host;
   SessionPlatform client;
@@ -566,7 +632,7 @@ TEST(GnsTransportIntegration, CriticalRealtimePreemptsAConstrainedBulkBacklog) {
         return client_connection != 0 && !host.connection_snapshots().empty();
       }));
 
-  simulation.rate_limit(32 * 1024, 1200);
+  simulation.send_rate(32 * 1024);
   constexpr size_t kBulkMessageCount = 24;
   const std::vector<uint8_t> bulk(5 * 1024, 0xb0);
   for (size_t index = 0; index < kBulkMessageCount; ++index)
@@ -598,7 +664,6 @@ TEST(GnsTransportIntegration, CriticalRealtimePreemptsAConstrainedBulkBacklog) {
       std::chrono::seconds(2)));
   EXPECT_TRUE(critical_received);
   EXPECT_LT(bulk_before_critical, kBulkMessageCount);
-  simulation.rate_limit(0, 16 * 1024);
   client.shutdown();
   host.shutdown();
 }
@@ -1182,6 +1247,7 @@ TEST(GnsTransportIntegration, SessionAdmissionProfilesAndRelayStayAboveTransport
   EXPECT_EQ(host.snapshot().connections[1].player_id, 2u);
   EXPECT_NE(host.snapshot().connections[0].network.connection_id, 0u);
   EXPECT_NE(host.snapshot().connections[1].network.connection_id, 0u);
+  EXPECT_FALSE(host.snapshot().connections[0].network.relayed);
   ASSERT_EQ(client.snapshot().connections.size(), 1u);
   EXPECT_EQ(client.snapshot().connections.front().player_id, 0u);
   EXPECT_EQ(client.snapshot().connections.front().network.connection_id,
@@ -1274,6 +1340,7 @@ TEST(GnsTransportIntegration, HostSharesPlayerPingsWithEveryClientAndClearsDepar
     return client.snapshot().player_pings == published &&
            observer.snapshot().player_pings == published;
   }));
+  EXPECT_EQ(host.snapshot().player_pings, published);
   for (PlayerId id = 0; id < 3; ++id) {
     EXPECT_EQ(client.snapshot().player_ping_ms(id), published[id]);
     EXPECT_EQ(observer.snapshot().player_ping_ms(id), published[id]);
@@ -1289,6 +1356,133 @@ TEST(GnsTransportIntegration, HostSharesPlayerPingsWithEveryClientAndClearsDepar
   ASSERT_TRUE(pump_until(
       pump, [&] { return observer.snapshot().state.status == SessionStatus::HOST_LEFT; }));
   EXPECT_TRUE(observer.snapshot().player_pings.empty());
+}
+
+TEST(GnsTransportIntegration, UnlistedHostsIgnoreDiscoveryUntilListedAgain) {
+  const auto discovery_port = available_udp_port();
+  DiscoveryResponder responder;
+  responder.set_listed(false);
+  ASSERT_TRUE(responder.start(discovery_port, {.game_port = 26210,
+                                               .current_players = 1,
+                                               .player_limit = 2,
+                                               .game_id = "test",
+                                               .compatibility_identity = "test-build",
+                                               .room_code = "ABC123",
+                                               .host_name = "Host"}));
+  DiscoveryScanner scanner;
+  ASSERT_TRUE(scanner.start({.discovery_port = discovery_port,
+                             .expected_game_port = 26210,
+                             .game_id = "test",
+                             .directed_address = "127.0.0.1"}));
+  std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+  EXPECT_TRUE(scanner.results().empty());
+  responder.set_listed(true);
+  ASSERT_TRUE(pump_until([] {}, [&] { return !scanner.results().empty(); }));
+  EXPECT_EQ(scanner.results().front().advertisement.room_code, "ABC123");
+}
+
+TEST(GnsTransportIntegration, ChatRelaysAuthenticatedSendersInLobbyAndGameWithBoundedHistory) {
+  RecordingAdapter host_adapter;
+  RecordingAdapter client_adapter;
+  RecordingAdapter observer_adapter;
+  SessionController host(host_adapter);
+  SessionController client(client_adapter);
+  SessionController observer(observer_adapter);
+  EXPECT_FALSE(client.send_chat("offline"));
+  ASSERT_TRUE(host.host(host_config(available_udp_port(), 3)));
+  host.enter_lobby();
+  ASSERT_TRUE(client.connect(client_config(host.local_port())));
+  ASSERT_TRUE(observer.connect(client_config(host.local_port())));
+  const auto pump = [&] {
+    const auto now = now_ms();
+    host.pump(now);
+    client.pump(now);
+    observer.pump(now);
+  };
+  ASSERT_TRUE(pump_until(pump, [&] {
+    return host.snapshot().players.size() == 3 && client.snapshot().players.size() == 3 &&
+           observer.snapshot().players.size() == 3;
+  }));
+  const auto sender = client.snapshot().state.local_player_id;
+  ASSERT_TRUE(client.send_chat("Hello from lobby"));
+  ASSERT_TRUE(pump_until(pump, [&] {
+    return host.snapshot().chat.size() == 1 && client.snapshot().chat.size() == 1 &&
+           observer.snapshot().chat.size() == 1;
+  }));
+  for (const auto* session : {&host, &client, &observer}) {
+    EXPECT_EQ(session->snapshot().chat.front().player_id, sender);
+    EXPECT_EQ(session->snapshot().chat.front().display_name, "Client");
+    EXPECT_EQ(session->snapshot().chat.front().text, "Hello from lobby");
+  }
+  host.enter_game();
+  client.enter_game();
+  observer.enter_game();
+  EXPECT_FALSE(host.send_chat("\n"));
+  for (int index = 0; index < kChatHistoryCapacity + 2; ++index) {
+    ASSERT_TRUE(host.send_chat("In game " + std::to_string(index)));
+    ASSERT_TRUE(pump_until(pump, [&] {
+      return observer.snapshot().chat.back().text == "In game " + std::to_string(index) &&
+             client.snapshot().chat.back().text == "In game " + std::to_string(index);
+    }));
+  }
+  for (const auto* session : {&host, &client, &observer}) {
+    ASSERT_EQ(session->snapshot().chat.size(), kChatHistoryCapacity);
+    EXPECT_EQ(session->snapshot().chat.front().text, "In game 2");
+    EXPECT_EQ(session->snapshot().chat.back().player_id, 0);
+  }
+  const auto payload =
+      encode_control_message({.kind = ControlKind::CHAT, .chat_text = "spoof"}, 16);
+  const auto frame = encode_message_frame(FrameKind::CONTROL, 0, payload);
+  ASSERT_TRUE(client.transport().send(client.transport().host_connection_id(), frame,
+                                      Delivery::RELIABLE_ORDERED));
+  ASSERT_TRUE(pump_until(pump, [&] { return host.snapshot().players.size() == 2; }));
+  EXPECT_NE(host.snapshot().chat.back().text, "spoof");
+  EXPECT_NE(observer.snapshot().chat.back().text, "spoof");
+  host.disconnect();
+  EXPECT_TRUE(host.snapshot().chat.empty());
+  EXPECT_FALSE(host.send_chat("offline"));
+}
+
+TEST(GnsTransportIntegration, KickedPlayersLeaveAndCannotRejoinTheHostedSession) {
+  RecordingAdapter host_adapter;
+  RecordingAdapter client_adapter;
+  RecordingAdapter observer_adapter;
+  SessionController host(host_adapter);
+  SessionController client(client_adapter);
+  SessionController observer(observer_adapter);
+  ASSERT_TRUE(host.host(host_config(available_udp_port(), 3)));
+  ASSERT_TRUE(client.connect(client_config(host.local_port())));
+  ASSERT_TRUE(observer.connect(client_config(host.local_port())));
+  const auto pump = [&] {
+    const auto now = now_ms();
+    host.pump(now);
+    client.pump(now);
+    observer.pump(now);
+  };
+  ASSERT_TRUE(pump_until(pump, [&] {
+    return host.snapshot().players.size() == 3 && client.snapshot().players.size() == 3 &&
+           observer.snapshot().players.size() == 3;
+  }));
+  const auto kicked = client.snapshot().state.local_player_id;
+  EXPECT_FALSE(host.kick(host.snapshot().state.local_player_id));
+  EXPECT_FALSE(client.kick(observer.snapshot().state.local_player_id));
+  ASSERT_TRUE(host.kick(kicked));
+  ASSERT_TRUE(pump_until(pump, [&] {
+    return client.snapshot().state.status == SessionStatus::HOST_LEFT &&
+           observer.snapshot().players.size() == 2;
+  }));
+  EXPECT_EQ(client.snapshot().rejection, RejectionReason::KICKED);
+  ASSERT_EQ(observer_adapter.departures.size(), 1u);
+  EXPECT_EQ(observer_adapter.departures.front(), kicked);
+  EXPECT_EQ(observer_adapter.departure_reasons.front(), PlayerDepartureReason::KICKED);
+  EXPECT_EQ(observer.snapshot().state.status, SessionStatus::LOBBY);
+
+  client.disconnect();
+  ASSERT_TRUE(client.connect(client_config(host.local_port())));
+  ASSERT_TRUE(
+      pump_until(pump, [&] { return client.snapshot().state.status == SessionStatus::FAILED; }));
+  EXPECT_EQ(client.snapshot().rejection, RejectionReason::KICKED);
+  EXPECT_EQ(host.snapshot().players.size(), 2u);
 }
 
 TEST(GnsTransportIntegration, DuplicateControlsAreSuppressedAndFloodClosesOnlyTheSender) {
@@ -1942,11 +2136,13 @@ TEST(GnsTransportIntegration, AdapterPolicyAllowsLiveProfilesWithoutUnlockingRea
   observer_adapter.descriptor_.allow_in_game_character_changes = true;
   updated.display_name = "Updated";
   updated.game_extension = {1, 2, 3};
+  updated.steam_id = 76561197960287930ull;
   ASSERT_TRUE(client.set_local_profile(updated));
   const auto matches = [&](const SessionController& controller) {
     return std::ranges::any_of(controller.snapshot().players, [&](const auto& value) {
       return value.player_id == updated.player_id && value.display_name == updated.display_name &&
-             value.character == updated.character && value.game_extension == updated.game_extension;
+             value.character == updated.character &&
+             value.game_extension == updated.game_extension && value.steam_id == 0;
     });
   };
   ASSERT_TRUE(
@@ -1954,11 +2150,12 @@ TEST(GnsTransportIntegration, AdapterPolicyAllowsLiveProfilesWithoutUnlockingRea
   auto host_profile = host.local_profile();
   host_profile.character = PlayerCharacter::DAXTER;
   host_profile.display_name = "NewHost";
+  host_profile.steam_id = 76561197960287930ull;
   ASSERT_TRUE(host.set_local_profile(host_profile));
   ASSERT_TRUE(pump_until(pump, [&] {
     return std::ranges::any_of(observer.snapshot().players, [](const auto& value) {
       return value.player_id == 0 && value.display_name == "NewHost" &&
-             value.character == PlayerCharacter::DAXTER;
+             value.character == PlayerCharacter::DAXTER && value.steam_id == 0;
     });
   }));
 }

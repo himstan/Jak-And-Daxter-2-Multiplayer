@@ -4,13 +4,14 @@
 #include <array>
 #include <utility>
 
+#include "game/multiplayer/platform/profile/profile_store.h"
 #include "game/multiplayer/platform/session/connection_input.h"
 #include "game/multiplayer/platform/session/session_state.h"
 
 namespace multiplayer::platform {
 namespace {
 constexpr std::array<uint8_t, 4> kMagic = {'J', 'M', 'P', 'D'};
-constexpr uint8_t kVersion = 1;
+constexpr uint8_t kVersion = 2;
 constexpr uint8_t kQuery = 1;
 constexpr uint8_t kAdvertisement = 2;
 
@@ -19,8 +20,10 @@ void append_u16(std::vector<uint8_t>& bytes, const uint16_t value) {
   bytes.push_back(static_cast<uint8_t>(value >> 8));
 }
 
-bool append_string(std::vector<uint8_t>& bytes, const std::string_view value) {
-  if (value.empty() || value.size() > UINT8_MAX)
+bool append_string(std::vector<uint8_t>& bytes,
+                   const std::string_view value,
+                   const bool allow_empty = false) {
+  if ((value.empty() && !allow_empty) || value.size() > UINT8_MAX)
     return false;
   bytes.push_back(static_cast<uint8_t>(value.size()));
   bytes.insert(bytes.end(), value.begin(), value.end());
@@ -43,17 +46,30 @@ bool read_u16(const std::span<const uint8_t> bytes, size_t& cursor, uint16_t& va
   return true;
 }
 
-bool read_string(const std::span<const uint8_t> bytes, size_t& cursor, std::string& value) {
+bool read_string(const std::span<const uint8_t> bytes,
+                 size_t& cursor,
+                 std::string& value,
+                 const bool allow_empty = false) {
   if (cursor >= bytes.size())
     return false;
   const size_t size = bytes[cursor++];
-  if (size == 0 || cursor + size > bytes.size())
+  if ((size == 0 && !allow_empty) || cursor + size > bytes.size())
     return false;
   value.assign(reinterpret_cast<const char*>(bytes.data() + cursor), size);
   cursor += size;
   return true;
 }
+
+bool valid_details(const DiscoveryAdvertisement& advertisement) {
+  return valid_display_name(advertisement.host_name) && valid_game_details(advertisement.details);
+}
 }  // namespace
+
+bool valid_game_details(const std::string_view details) {
+  return details.size() <= kMaximumGameDetailsBytes &&
+         std::ranges::all_of(details,
+                             [](const unsigned char ch) { return ch >= 0x20 && ch <= 0x7e; });
+}
 
 std::vector<uint8_t> encode_discovery_query(const std::string_view game_id) {
   std::vector<uint8_t> bytes(kMagic.begin(), kMagic.end());
@@ -75,7 +91,8 @@ std::vector<uint8_t> encode_discovery_advertisement(const DiscoveryAdvertisement
       !valid_player_limit(advertisement.player_limit) ||
       advertisement.current_players > advertisement.player_limit ||
       advertisement.room_code.size() != kMultiplayerRoomCodeLength ||
-      advertisement.game_id.empty() || advertisement.compatibility_identity.empty())
+      advertisement.game_id.empty() || advertisement.compatibility_identity.empty() ||
+      !valid_details(advertisement))
     return {};
   std::vector<uint8_t> bytes(kMagic.begin(), kMagic.end());
   bytes.push_back(kVersion);
@@ -85,7 +102,9 @@ std::vector<uint8_t> encode_discovery_advertisement(const DiscoveryAdvertisement
   bytes.push_back(advertisement.player_limit);
   if (!append_string(bytes, advertisement.game_id) ||
       !append_string(bytes, advertisement.compatibility_identity) ||
-      !append_string(bytes, advertisement.room_code))
+      !append_string(bytes, advertisement.room_code) ||
+      !append_string(bytes, advertisement.host_name) ||
+      !append_string(bytes, advertisement.details, true))
     return {};
   return bytes;
 }
@@ -101,8 +120,11 @@ bool decode_discovery_advertisement(const std::span<const uint8_t> bytes,
   parsed.player_limit = bytes[cursor++];
   if (!read_string(bytes, cursor, parsed.game_id) ||
       !read_string(bytes, cursor, parsed.compatibility_identity) ||
-      !read_string(bytes, cursor, parsed.room_code) || cursor != bytes.size() ||
-      parsed.game_port == 0 || parsed.current_players == 0 ||
+      !read_string(bytes, cursor, parsed.room_code) ||
+      !read_string(bytes, cursor, parsed.host_name) ||
+      !read_string(bytes, cursor, parsed.details, true) || cursor != bytes.size())
+    return false;
+  if (!valid_details(parsed) || parsed.game_port == 0 || parsed.current_players == 0 ||
       parsed.room_code.size() != kMultiplayerRoomCodeLength ||
       !valid_player_limit(parsed.player_limit) || parsed.current_players > parsed.player_limit ||
       parsed.game_id.empty() || parsed.compatibility_identity.empty())

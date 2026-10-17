@@ -85,6 +85,7 @@
 #include "game/system/Deci2Server.h"
 #include "game/system/iop_thread.h"
 #include "game/multiplayer/platform/runtime/multiplayer_runtime.h"
+#include "game/external/steam/steam_client.h"
 #include "sce/deci2.h"
 #include "sce/iop.h"
 #include "sce/libcdvd_ee.h"
@@ -434,6 +435,11 @@ RuntimeExitStatus exec_runtime(GameLaunchOptions game_options, int argc, const c
     init_discord_rpc();
   }
 
+  if (g_game_version == GameVersion::Jak2) {
+    auto p = scoped_prof("startup::exec_runtime::init_steam");
+    steam::initialize(steam::kSpacewarAppId);
+  }
+
   // initialize graphics first - the EE code will upload textures during boot and we
   // want the graphics system to catch them.
   {
@@ -514,6 +520,7 @@ RuntimeExitStatus exec_runtime(GameLaunchOptions game_options, int argc, const c
   if (enable_display) {
     Gfx::Exit();
   }
+  steam::shutdown();
   lg::info("GOAL Runtime Shutdown (code {})", fmt::underlying(MasterExit));
   munmap(g_ee_main_mem, EE_MAIN_MEM_SIZE);
   Discord_Shutdown();

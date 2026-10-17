@@ -112,11 +112,15 @@ void MultiplayerRuntime::complete_command(const CommandDomain domain,
 void MultiplayerRuntime::publish_worker_snapshot(SessionSnapshot session,
                                                  const DiscoverySnapshot discovery,
                                                  HostSnapshot host,
+                                                 SteamSnapshot steam,
+                                                 BrowserSnapshot browser,
                                                  std::string compatibility_identity) {
   std::lock_guard lock(mutex_);
   snapshot_.session = std::move(session);
   snapshot_.discovery = discovery;
   snapshot_.host = std::move(host);
+  snapshot_.steam = std::move(steam);
+  snapshot_.browser = std::move(browser);
   snapshot_.compatibility_identity = std::move(compatibility_identity);
 }
 

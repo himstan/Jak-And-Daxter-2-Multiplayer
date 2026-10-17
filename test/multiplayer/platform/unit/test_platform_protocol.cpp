@@ -13,6 +13,32 @@
 
 namespace {
 
+TEST(PlatformSession, ChatIsBoundedUtf8WithExactFraming) {
+  using namespace multiplayer::platform;
+  for (const auto& text : {std::string("Hello ~35L <PAD_X>"), std::string("Hej \xc3\xa5"),
+                           std::string(kMaximumChatBytes, 'x')}) {
+    const auto bytes = encode_control_message({.kind = ControlKind::CHAT, .chat_text = text}, 16);
+    ASSERT_EQ(bytes.size(), text.size() + 2);
+    ControlMessage decoded;
+    ASSERT_TRUE(decode_control_message(bytes, 16, 8, decoded));
+    EXPECT_EQ(decoded.chat_text, text);
+    for (size_t size = 0; size < bytes.size(); ++size)
+      EXPECT_FALSE(decode_control_message(std::span(bytes).first(size), 16, 8, decoded));
+    auto trailing = bytes;
+    trailing.push_back(0);
+    EXPECT_FALSE(decode_control_message(trailing, 16, 8, decoded));
+  }
+  for (const auto& text : {std::string(), std::string("   "), std::string("a\nb"),
+                           std::string("a\0b", 3), std::string("\xc0\x80"),
+                           std::string("\xe2\x80\xa8"), std::string(kMaximumChatBytes + 1, 'x')}) {
+    EXPECT_FALSE(valid_chat_text(text));
+    EXPECT_TRUE(encode_control_message({.kind = ControlKind::CHAT, .chat_text = text}, 16).empty());
+  }
+  EXPECT_TRUE(control_allowed_from(ControlKind::CHAT, SessionRole::HOST));
+  EXPECT_TRUE(control_allowed_from(ControlKind::CHAT, SessionRole::CLIENT));
+  EXPECT_FALSE(control_allowed_from(ControlKind::CHAT, SessionRole::NONE));
+}
+
 TEST(PlatformCore, GameplayPoliciesEnforceDirectionPayloadAndCadence) {
   constexpr std::array policies = {
       multiplayer::platform::GameMessagePolicy{
@@ -126,12 +152,14 @@ TEST(PlatformSession, CommonProtocolRoundTripsAndRejectsMalformedFrames) {
                   .display_name = "Player2",
                   .character = multiplayer::platform::PlayerCharacter::DAXTER,
                   .ready = true,
-                  .game_extension = {1, 2, 3}}};
+                  .game_extension = {1, 2, 3},
+                  .steam_id = 76561197960287930ull}};
   const auto control_bytes = multiplayer::platform::encode_control_message(control, 16);
   multiplayer::platform::ControlMessage decoded;
   ASSERT_TRUE(multiplayer::platform::decode_control_message(control_bytes, 16, 8, decoded));
   EXPECT_EQ(decoded.profile.display_name, "Player2");
   EXPECT_EQ(decoded.profile.game_extension, std::vector<uint8_t>({1, 2, 3}));
+  EXPECT_EQ(decoded.profile.steam_id, 76561197960287930ull);
   auto trailing = control_bytes;
   trailing.push_back(0);
   EXPECT_FALSE(multiplayer::platform::decode_control_message(trailing, 16, 8, decoded));
@@ -237,7 +265,8 @@ TEST(PlatformSession, AdmissionGateCodecsAreTypedAndRejectTruncation) {
 
 TEST(PlatformSession, DepartureReasonsRoundTripAndRejectUnknownValues) {
   using namespace multiplayer::platform;
-  for (const auto reason : {PlayerDepartureReason::LEFT, PlayerDepartureReason::TIMED_OUT}) {
+  for (const auto reason : {PlayerDepartureReason::LEFT, PlayerDepartureReason::TIMED_OUT,
+                            PlayerDepartureReason::KICKED}) {
     const auto bytes = encode_control_message(
         {.kind = ControlKind::DEPARTURE, .player_id = 1, .reason = static_cast<uint8_t>(reason)},
         16);
@@ -247,11 +276,11 @@ TEST(PlatformSession, DepartureReasonsRoundTripAndRejectUnknownValues) {
     EXPECT_EQ(decoded.player_id, 1u);
     EXPECT_EQ(decoded.reason, static_cast<uint8_t>(reason));
     auto invalid = bytes;
-    invalid.back() = 2;
+    invalid.back() = 3;
     EXPECT_FALSE(decode_control_message(invalid, 16, 8, decoded));
   }
   EXPECT_TRUE(
-      encode_control_message({.kind = ControlKind::DEPARTURE, .player_id = 1, .reason = 2}, 16)
+      encode_control_message({.kind = ControlKind::DEPARTURE, .player_id = 1, .reason = 3}, 16)
           .empty());
 }
 

@@ -5,6 +5,8 @@
 
 #include "common/log/log.h"
 
+#include "game/external/steam/steam_client.h"
+
 namespace multiplayer::platform {
 
 namespace {
@@ -69,25 +71,52 @@ void RuntimeWorker::persist_profile() {
 }
 
 void RuntimeWorker::update_discovery() {
-  if (auto result = discovery_scanner_.take_result())
-    discovery_result_ = std::move(result);
+  if (discovery_kind_ != DiscoveryKind::DIRECTED || discovery_result_)
+    return;
+  if (auto results = discovery_scanner_.results(); !results.empty())
+    discovery_result_ = std::move(results.front());
+}
+
+void RuntimeWorker::update_steam() {
+  steam_lobby_.pump();
+  if (steam_lobby_.take_create_failure())
+    lg::warn("[Multiplayer] Steam lobby creation failed; players can still join directly.");
+  if (auto target = steam_lobby_.take_join_target()) {
+    if (connect_canonical({.room_code = std::move(target->room_code),
+                           .steam_host = target->host_id}) != CommandError::NONE) {
+      lg::error("[Multiplayer] Could not connect to Steam host {}.", target->host_id);
+      discovery_kind_ = DiscoveryKind::STEAM;
+      steam_lobby_.fail_join();
+    }
+  }
 }
 
 void RuntimeWorker::update_host_advertisement(const SessionSnapshot& session) {
-  if (session.state.role != SessionRole::HOST || !discovery_responder_.active())
+  if (session.state.role != SessionRole::HOST)
+    return;
+  const auto players = static_cast<uint8_t>(session.players.size());
+  const auto details =
+      session.state.status == SessionStatus::LOBBY ? std::string() : lobby_details_;
+  steam_lobby_.update_players(players);
+  steam_lobby_.update_details(details);
+  if (!discovery_responder_.active())
     return;
   const auto& descriptor = adapter_.descriptor();
   discovery_responder_.update({.game_port = controller_.local_port(),
-                               .current_players = static_cast<uint8_t>(session.players.size()),
+                               .current_players = players,
                                .player_limit = session.state.player_limit,
                                .game_id = descriptor.game_id,
                                .compatibility_identity = compatibility_identity_,
-                               .room_code = controller_.room_code()});
+                               .room_code = controller_.room_code(),
+                               .host_name = controller_.local_profile().display_name,
+                               .details = details});
 }
 
 void RuntimeWorker::publish(const SessionSnapshot& session) {
   DiscoverySnapshot discovery = {.kind = discovery_kind_,
-                                 .status = discovery_scanner_.status(),
+                                 .status = discovery_kind_ == DiscoveryKind::STEAM
+                                               ? steam_lobby_.join_status()
+                                               : discovery_scanner_.status(),
                                  .result_available = discovery_result_.has_value()};
   if (discovery.result_available)
     discovery.status = DiscoveryStatus::FOUND;
@@ -109,13 +138,28 @@ void RuntimeWorker::publish(const SessionSnapshot& session) {
       else if (mapping.state == MPPortMappingState::READY) {
         host.mapping = HostMappingState::READY;
         host.access = HostAccessKind::INVITE;
-        host.access_text = controller_.invite_for_address(mapping.external_address);
+        host.access_text =
+            controller_.invite_for_address(mapping.external_address, mapping.external_port);
       } else if (mapping.state == MPPortMappingState::FAILED)
         host.mapping = HostMappingState::FAILED;
     }
+    if (steam_lobby_.creating())
+      host.lifecycle = HostLifecycle::STARTING;
+    else if (steam_lobby_.hosting())
+      host.access = HostAccessKind::STEAM;
   }
   host_ = host;
-  runtime_.publish_worker_snapshot(session, discovery, std::move(host), compatibility_identity_);
+  const bool browsing_lan = discovery_kind_ == DiscoveryKind::LAN;
+  const auto lan_games =
+      browsing_lan ? discovery_scanner_.results() : std::vector<DiscoveryResult>{};
+  auto games = merge_game_listings(lan_games, steam_lobby_.listings(), compatibility_identity_);
+  const auto status =
+      browser_status(browsing_lan ? discovery_scanner_.status() : DiscoveryStatus::IDLE,
+                     steam_lobby_.search_status(), !games.empty());
+  runtime_.publish_worker_snapshot(
+      session, discovery, std::move(host),
+      {.available = steam::networking().has_value(), .invite_lobby = steam_lobby_.invite()},
+      {.status = status, .games = std::move(games)}, compatibility_identity_);
 }
 
 void RuntimeWorker::run() {
@@ -128,6 +172,7 @@ void RuntimeWorker::run() {
     pump_reconnect(now_ms);
     adapter_.tick(now_ms);
     update_discovery();
+    update_steam();
     const auto session = controller_.snapshot();
     update_host_advertisement(session);
     publish(session);

@@ -16,9 +16,17 @@ struct SessionConnectionSnapshot {
   ConnectionSnapshot network;
 };
 
+struct ChatMessage {
+  uint32_t serial = 0;
+  PlayerId player_id = kInvalidPlayerId;
+  std::string display_name;
+  std::string text;
+};
+
 struct SessionSnapshot {
   SessionState state;
   std::vector<PlayerProfile> players;
+  std::vector<ChatMessage> chat;
   std::vector<SessionConnectionSnapshot> connections;
   std::vector<uint16_t> player_pings;
   bool countdown_active = false;

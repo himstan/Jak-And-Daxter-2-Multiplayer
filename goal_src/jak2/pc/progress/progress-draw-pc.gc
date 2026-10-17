@@ -2424,7 +2424,11 @@
     (*! (-> arg1 width) (-> *pc-settings* aspect-ratio-reciprocal))
     )
   (print-game-text
-    (lookup-text! *common-text* (text-id progress-multi-host-left-msg) #f)
+    (lookup-text! *common-text*
+                  (if (= (pc-multi-get-session-rejection) (mp-session-rejection kicked))
+                      (text-id progress-multi-kicked-msg)
+                      (text-id progress-multi-host-left-msg))
+                  #f)
     arg1
     #f
     44

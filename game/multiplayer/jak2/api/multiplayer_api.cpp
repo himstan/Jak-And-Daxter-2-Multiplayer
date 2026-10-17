@@ -1,11 +1,13 @@
 #include "game/multiplayer/jak2/api/multiplayer_api.h"
 
 #include <algorithm>
-#include <array>
 #include <chrono>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "common/log/log.h"
 #include "common/versions/versions.h"
@@ -17,6 +19,7 @@
 #include "game/multiplayer/jak2/bridge/goal_bridge.h"
 #include "game/multiplayer/jak2/wire/multiplayer_protocol.h"
 #include "game/multiplayer/platform/core/compatibility_identity.h"
+#include "game/multiplayer/platform/core/sequence.h"
 #include "game/multiplayer/platform/discovery/invite.h"
 #include "game/multiplayer/platform/runtime/multiplayer_runtime.h"
 #include "game/multiplayer/platform/session/connection_draft.h"
@@ -82,7 +85,92 @@ void enqueue_host(const uint32_t player_limit, const bool internet) {
           .config = host_config(player_limit),
           .discovery_port = multiplayer::platform::kMultiplayerDiscoveryPort,
           .internet = internet,
-          .automatic_port_mapping = internet && multiplayer_preferences().automatic_port_mapping});
+          .automatic_port_mapping = internet && multiplayer_preferences().automatic_port_mapping,
+          .privacy = lobby_privacy(multiplayer_preferences().host_visibility)});
+}
+
+int command_line_index(const std::string_view name) {
+  for (int i = 1; i < g_argc; i++) {
+    if (g_argv[i] && name == g_argv[i])
+      return i;
+  }
+  return -1;
+}
+
+bool mock_lobbies_enabled() {
+  static const bool enabled = command_line_index("-mp-mock-lobbies") >= 0;
+  return enabled;
+}
+
+std::vector<multiplayer::platform::GameListing> mock_games() {
+  struct MockGame {
+    const char* host;
+    uint8_t players;
+    uint8_t limit;
+    const char* details;
+    bool friend_host;
+    bool lan;
+    bool compatible;
+  };
+  const MockGame mocks[] = {{"Torn", 4, 4, "88% - Palace", true, false, true},
+                            {"Ashelin", 1, 4, "", false, true, true},
+                            {"Keira", 2, 2, "63% - Mountain Temple", false, false, true},
+                            {"Sig", 5, 8, "71% - Weapons Factory", false, false, false},
+                            {"Krimzon Guard 1", 1, 3, "35% - Strip Mine", false, false, true},
+                            {"Samos", 6, 8, "52% - Haven Forest", false, false, true},
+                            {"Onin", 2, 4, "58% - Dig Site", false, false, true},
+                            {"WWWWWWWWWWWWWWW", 1, 2, "79% - Drill Platform", false, false, true},
+                            {"Krew", 3, 8, "6% - Fortress", false, false, false}};
+  std::vector<multiplayer::platform::DiscoveryResult> lan;
+  std::vector<multiplayer::platform::SteamLobbyListing> steam;
+  uint64_t lobby_id = 1;
+  for (const auto& mock : mocks) {
+    const std::string identity = mock.compatible ? "mock" : "mock-old";
+    if (mock.lan) {
+      lan.push_back({.invite = "jadmp://127.0.0.1:26210/ABC123",
+                     .advertisement = {.current_players = mock.players,
+                                       .player_limit = mock.limit,
+                                       .compatibility_identity = identity,
+                                       .room_code = mock.host,
+                                       .host_name = mock.host,
+                                       .details = mock.details}});
+    } else {
+      steam.push_back({.lobby_id = lobby_id++,
+                       .metadata = {.compatibility_identity = identity,
+                                    .room_code = mock.host,
+                                    .host_name = mock.host,
+                                    .details = mock.details,
+                                    .players = mock.players,
+                                    .player_limit = mock.limit},
+                       .friend_host = mock.friend_host});
+    }
+  }
+  return multiplayer::platform::merge_game_listings(lan, steam, "mock");
+}
+
+std::vector<multiplayer::platform::GameListing> browser_games() {
+  if (mock_lobbies_enabled()) {
+    static const auto mock = mock_games();
+    return mock;
+  }
+  return runtime().snapshot().browser.games;
+}
+
+std::string game_field(const multiplayer::platform::GameListing& game, const uint32_t column) {
+  switch (column) {
+    case 0:
+      return game.host_name;
+    case 1:
+      return std::to_string(game.players) + "/" + std::to_string(game.player_limit);
+    default:
+      return game.details.empty() ? "In Lobby" : game.details;
+  }
+}
+
+bool enqueue_lobby_join(const uint64_t lobby_id) {
+  return lobby_id != 0 && runtime().enqueue<multiplayer::platform::JoinLobbyCommand>(
+                              multiplayer::platform::JoinLobbyRequest{.lobby_id = lobby_id,
+                                                                      .profile = local_profile()});
 }
 
 const multiplayer::platform::CommandResult& command_result(
@@ -96,6 +184,28 @@ const multiplayer::platform::CommandResult& command_result(
 }
 
 }  // namespace
+
+static int pc_multi_send_chat(const u32 text_address) {
+  std::string text;
+  return multiplayer::jak2::bridge::read_string(text_address, text) &&
+         multiplayer::platform::valid_chat_text(text) &&
+         runtime().enqueue<multiplayer::platform::SendChatCommand>(std::move(text));
+}
+
+static u64 pc_multi_copy_chat(const u32 after_serial,
+                              const u32 name_address,
+                              const u32 text_address) {
+  const auto snapshot = runtime().snapshot();
+  for (const auto& message : snapshot.session.chat) {
+    if (!multiplayer::platform::sequence_is_newer(message.serial, after_serial))
+      continue;
+    if (!multiplayer::jak2::bridge::write_string(name_address, message.display_name) ||
+        !multiplayer::jak2::bridge::write_string(text_address, message.text))
+      return 0;
+    return (static_cast<u64>(message.serial) << 8) | message.player_id;
+  }
+  return 0;
+}
 
 static int pc_multi_get_local_player_id() {
   return runtime().snapshot().session.state.local_player_id;
@@ -246,24 +356,15 @@ static void pc_multi_stop_search() {
   runtime().enqueue<multiplayer::platform::StopDiscoveryCommand>();
 }
 
-static void pc_multi_start_search() {
-  runtime().enqueue<multiplayer::platform::StartDiscoveryCommand>(
-      multiplayer::platform::DiscoveryRequest{
-          .discovery_port = multiplayer::platform::kMultiplayerDiscoveryPort,
-          .profile = local_profile()});
-}
-
 static u64 pc_multi_get_command_line_arg(const u32 str_ptr) {
   std::string arg_name;
   if (!multiplayer::jak2::bridge::read_string(str_ptr, arg_name)) {
     return s7.offset;
   }
-  for (int i = 1; i < g_argc; i++) {
-    if (g_argv[i] && arg_name == g_argv[i]) {
-      return jak2::make_string_from_c(i + 1 < g_argc ? g_argv[i + 1] : "");
-    }
-  }
-  return s7.offset;
+  const int index = command_line_index(arg_name);
+  if (index < 0)
+    return s7.offset;
+  return jak2::make_string_from_c(index + 1 < g_argc ? g_argv[index + 1] : "");
 }
 
 static int pc_multi_reconnect() {
@@ -310,6 +411,75 @@ static int pc_multi_connect_direct() {
   return accepted ? 1 : 0;
 }
 
+static int pc_multi_steam_available() {
+  return runtime().snapshot().steam.available ? 1 : 0;
+}
+
+static void pc_multi_search_lobbies() {
+  runtime().enqueue<multiplayer::platform::SearchLobbiesCommand>();
+}
+
+static int pc_multi_get_lobby_search_status() {
+  return static_cast<int>(mock_lobbies_enabled() ? multiplayer::platform::DiscoveryStatus::FOUND
+                                                 : runtime().snapshot().browser.status);
+}
+
+static int pc_multi_get_lobby_count() {
+  return static_cast<int>(browser_games().size());
+}
+
+static int pc_multi_get_lobby_field(const u32 index, const u32 column, const u32 destination) {
+  const auto games = browser_games();
+  return index < games.size() && multiplayer::jak2::bridge::write_string(
+                                     destination, game_field(games[index], column))
+             ? 1
+             : 0;
+}
+
+static int pc_multi_lobby_friend(const u32 index) {
+  const auto games = browser_games();
+  return index < games.size() && games[index].friend_host ? 1 : 0;
+}
+
+static int pc_multi_lobby_lan(const u32 index) {
+  const auto games = browser_games();
+  return index < games.size() && !games[index].invite.empty() ? 1 : 0;
+}
+
+static int pc_multi_lobby_compatible(const u32 index) {
+  const auto games = browser_games();
+  return index < games.size() && games[index].compatible ? 1 : 0;
+}
+
+static int pc_multi_join_lobby(const u32 index) {
+  const auto games = browser_games();
+  if (index >= games.size())
+    return 0;
+  const auto& game = games[index];
+  const bool joined = game.invite.empty() ? enqueue_lobby_join(game.lobby_id)
+                                          : enqueue_invite(game.invite, local_profile());
+  return joined ? 1 : 0;
+}
+
+static int pc_multi_steam_invite_pending() {
+  return runtime().snapshot().steam.invite_lobby != 0 ? 1 : 0;
+}
+
+static int pc_multi_join_steam_invite() {
+  return enqueue_lobby_join(runtime().snapshot().steam.invite_lobby) ? 1 : 0;
+}
+
+static void pc_multi_set_lobby_details(const u32 details_ptr) {
+  std::string details;
+  multiplayer::jak2::bridge::read_string(details_ptr, details);
+  details.resize((std::min)(details.size(), multiplayer::platform::kMaximumGameDetailsBytes));
+  runtime().enqueue<multiplayer::platform::SetLobbyDetailsCommand>(std::move(details));
+}
+
+static int pc_multi_invite_friends() {
+  return runtime().enqueue<multiplayer::platform::InviteFriendsCommand>() ? 1 : 0;
+}
+
 static int pc_multi_get_preferences(const u32 preferences_ptr) {
   return multiplayer::jak2::bridge::write_preferences(preferences_ptr,
                                                       get_multiplayer_preferences())
@@ -336,8 +506,12 @@ static int pc_multi_set_preferences(const u32 preferences_ptr) {
                                preferences.player_name != previous.player_name ||
                                preferences.player_skin.colors != previous.player_skin.colors ||
                                preferences.player_skin.strengths != previous.player_skin.strengths;
+  const bool privacy_changed = preferences.host_visibility != previous.host_visibility;
   if (!set_multiplayer_preferences(std::move(preferences)))
     return 0;
+  if (privacy_changed && session.state.role == multiplayer::platform::SessionRole::HOST)
+    runtime().enqueue<multiplayer::platform::SetLobbyPrivacyCommand>(
+        lobby_privacy(multiplayer_preferences().host_visibility));
   if (profile_changed && session.state.role != multiplayer::platform::SessionRole::NONE) {
     auto updated = local_profile();
     if (character_changed)
@@ -379,6 +553,14 @@ static int pc_multi_lobby_set_character(u32 character) {
 
 static int pc_multi_lobby_set_ready(const u32 ready) {
   return runtime().enqueue<multiplayer::platform::SetReadyCommand>(ready != 0) ? 1 : 0;
+}
+
+static int pc_multi_lobby_kick(const u32 player_id) {
+  return player_id <= (std::numeric_limits<multiplayer::platform::PlayerId>::max)() &&
+                 runtime().enqueue<multiplayer::platform::KickPlayerCommand>(
+                     static_cast<multiplayer::platform::PlayerId>(player_id))
+             ? 1
+             : 0;
 }
 
 static int pc_multi_lobby_start_countdown(const u32 seconds) {
@@ -515,7 +697,6 @@ void init_jak2_bridge() {
   register_symbol("pc-multi-session-enter-lobby", &pc_multi_session_enter_lobby);
   register_symbol("pc-multi-request-bootstrap", &pc_multi_request_bootstrap);
   register_symbol("pc-multi-stop-search", &pc_multi_stop_search);
-  register_symbol("pc-multi-start-search", &pc_multi_start_search);
   register_symbol("pc-multi-connect-found-host", &pc_multi_connect_found_host);
   register_symbol("pc-multi-get-host-access-kind", &pc_multi_get_host_access_kind);
   register_symbol("pc-multi-copy-host-access", &pc_multi_copy_host_access);
@@ -529,6 +710,19 @@ void init_jak2_bridge() {
   register_symbol("pc-multi-set-direct-field", &pc_multi_set_direct_field);
   register_symbol("pc-multi-direct-connect-ready", &pc_multi_direct_connect_ready);
   register_symbol("pc-multi-connect-direct", &pc_multi_connect_direct);
+  register_symbol("pc-multi-steam-available", &pc_multi_steam_available);
+  register_symbol("pc-multi-search-lobbies", &pc_multi_search_lobbies);
+  register_symbol("pc-multi-get-lobby-search-status", &pc_multi_get_lobby_search_status);
+  register_symbol("pc-multi-get-lobby-count", &pc_multi_get_lobby_count);
+  register_symbol("pc-multi-get-lobby-field", &pc_multi_get_lobby_field);
+  register_symbol("pc-multi-join-lobby", &pc_multi_join_lobby);
+  register_symbol("pc-multi-lobby-friend?", &pc_multi_lobby_friend);
+  register_symbol("pc-multi-lobby-lan?", &pc_multi_lobby_lan);
+  register_symbol("pc-multi-lobby-compatible?", &pc_multi_lobby_compatible);
+  register_symbol("pc-multi-steam-invite-pending", &pc_multi_steam_invite_pending);
+  register_symbol("pc-multi-join-steam-invite", &pc_multi_join_steam_invite);
+  register_symbol("pc-multi-invite-friends", &pc_multi_invite_friends);
+  register_symbol("pc-multi-set-lobby-details", &pc_multi_set_lobby_details);
   register_symbol("pc-multi-get-preferences", &pc_multi_get_preferences);
   register_symbol("pc-multi-set-preferences", &pc_multi_set_preferences);
   register_symbol("pc-multi-is-lobby-host", &pc_multi_is_lobby_host);
@@ -536,6 +730,7 @@ void init_jak2_bridge() {
   register_symbol("pc-multi-lobby-start-game", &pc_multi_lobby_start_game);
   register_symbol("pc-multi-lobby-set-character", &pc_multi_lobby_set_character);
   register_symbol("pc-multi-lobby-set-ready", &pc_multi_lobby_set_ready);
+  register_symbol("pc-multi-lobby-kick", &pc_multi_lobby_kick);
   register_symbol("pc-multi-lobby-start-countdown", &pc_multi_lobby_start_countdown);
   register_symbol("pc-multi-lobby-cancel-countdown", &pc_multi_lobby_cancel_countdown);
   register_symbol("pc-multi-lobby-get-countdown-remaining-ms",
@@ -548,6 +743,8 @@ void init_jak2_bridge() {
   register_symbol("pc-multi-exchange-state", &pc_multi_exchange_state);
   register_symbol("pc-multi-get-local-player-id", &pc_multi_get_local_player_id);
   register_symbol("pc-multi-get-host-player-id", &pc_multi_get_host_player_id);
+  register_symbol("pc-multi-send-chat", &pc_multi_send_chat);
+  register_symbol("pc-multi-copy-chat", &pc_multi_copy_chat);
   register_symbol("pc-multi-get-player-ping", &pc_multi_get_player_ping);
   register_symbol("pc-multi-get-local-player-character", &pc_multi_get_local_player_character);
   register_symbol("pc-multi-disconnect", &pc_multi_disconnect);

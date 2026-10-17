@@ -19,6 +19,17 @@ class ConnectionPort final : public ConnectionExecutionPort {
   CommandError connect_discovered() override {
     return called(ConnectionAction::CONNECT_DISCOVERED);
   }
+  CommandError search_lobbies() override { return called(ConnectionAction::SEARCH_LOBBIES); }
+  CommandError join_lobby(JoinLobbyRequest) override {
+    return called(ConnectionAction::JOIN_LOBBY);
+  }
+  CommandError invite_friends() override { return called(ConnectionAction::INVITE_FRIENDS); }
+  CommandError set_lobby_privacy(LobbyPrivacy) override {
+    return called(ConnectionAction::SET_LOBBY_PRIVACY);
+  }
+  CommandError set_lobby_details(std::string) override {
+    return called(ConnectionAction::SET_LOBBY_DETAILS);
+  }
   CommandError reconnect() override { return called(ConnectionAction::RECONNECT); }
   CommandError disconnect(int) override { return called(ConnectionAction::DISCONNECT); }
 
@@ -44,6 +55,8 @@ class SessionPort final : public SessionExecutionPort {
   CommandError enter_lobby() override { return called(SessionAction::ENTER_LOBBY); }
   CommandError enter_game() override { return called(SessionAction::ENTER_GAME); }
   CommandError request_bootstrap() override { return called(SessionAction::REQUEST_BOOTSTRAP); }
+  CommandError send_chat(std::string) override { return called(SessionAction::SEND_CHAT); }
+  CommandError kick_player(PlayerId) override { return called(SessionAction::KICK_PLAYER); }
 
   CommandError called(SessionAction value) {
     action = value;
@@ -113,6 +126,11 @@ TEST(RuntimeCommands, EveryConnectionActionHasAnExplicitCommand) {
   StartDiscoveryCommand start_discovery({});
   StopDiscoveryCommand stop_discovery;
   ConnectDiscoveredCommand connect_discovered;
+  SearchLobbiesCommand search_lobbies;
+  JoinLobbyCommand join_lobby({});
+  InviteFriendsCommand invite_friends;
+  SetLobbyDetailsCommand set_lobby_details({});
+  SetLobbyPrivacyCommand set_lobby_privacy(LobbyPrivacy::FRIENDS_ONLY);
   ReconnectCommand reconnect;
   DisconnectSessionCommand disconnect;
   execute(host, ports);
@@ -120,9 +138,14 @@ TEST(RuntimeCommands, EveryConnectionActionHasAnExplicitCommand) {
   execute(start_discovery, ports);
   execute(stop_discovery, ports);
   execute(connect_discovered, ports);
+  execute(search_lobbies, ports);
+  execute(join_lobby, ports);
+  execute(invite_friends, ports);
+  execute(set_lobby_details, ports);
+  execute(set_lobby_privacy, ports);
   execute(reconnect, ports);
   execute(disconnect, ports);
-  EXPECT_EQ(connection.calls, 7);
+  EXPECT_EQ(connection.calls, 12);
   EXPECT_EQ(connection.action, ConnectionAction::DISCONNECT);
 }
 
@@ -140,6 +163,8 @@ TEST(RuntimeCommands, EverySessionActionHasAnExplicitCommand) {
   EnterLobbyCommand enter_lobby;
   EnterGameCommand enter_game;
   RequestBootstrapCommand request_bootstrap;
+  KickPlayerCommand kick_player(1);
+  SendChatCommand send_chat("Hello");
   execute(set_profile, ports);
   execute(set_character, ports);
   execute(set_ready, ports);
@@ -149,7 +174,9 @@ TEST(RuntimeCommands, EverySessionActionHasAnExplicitCommand) {
   execute(enter_lobby, ports);
   execute(enter_game, ports);
   execute(request_bootstrap, ports);
-  EXPECT_EQ(session.calls, 9);
-  EXPECT_EQ(session.action, SessionAction::REQUEST_BOOTSTRAP);
+  execute(kick_player, ports);
+  execute(send_chat, ports);
+  EXPECT_EQ(session.calls, 11);
+  EXPECT_EQ(session.action, SessionAction::SEND_CHAT);
 }
 }  // namespace

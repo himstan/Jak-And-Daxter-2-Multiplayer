@@ -1,5 +1,7 @@
+#include <map>
 #include <thread>
 
+#include "game/external/steam/steam_client.h"
 #include "game/multiplayer/platform/core/compatibility_identity.h"
 #include "game/multiplayer/platform/core/limits.h"
 #include "game/multiplayer/platform/core/mailbox.h"
@@ -9,11 +11,13 @@
 #include "game/multiplayer/platform/discovery/discovery_service.h"
 #include "game/multiplayer/platform/nat/port_mapping_coordinator.h"
 #include "game/multiplayer/platform/protocol/message_frame.h"
+#include "game/multiplayer/platform/runtime/game_browser.h"
 #include "game/multiplayer/platform/runtime/multiplayer_runtime.h"
 #include "game/multiplayer/platform/session/player_registry.h"
 #include "game/multiplayer/platform/session/reconnect_policy.h"
 #include "game/multiplayer/platform/session/session_snapshot.h"
 #include "game/multiplayer/platform/session/session_state.h"
+#include "game/multiplayer/platform/steam/steam_lobby.h"
 #include "gtest/gtest.h"
 
 namespace {
@@ -191,7 +195,9 @@ TEST(PlatformDiscovery, AdvertisementRoundTripsAndRejectsMalformedInput) {
       .player_limit = 8,
       .game_id = "jak2",
       .compatibility_identity = "v1.2.3",
-      .room_code = "ABC123"};
+      .room_code = "ABC123",
+      .host_name = "Host",
+      .details = "42% - Haven City"};
   const auto bytes = multiplayer::platform::encode_discovery_advertisement(expected);
   multiplayer::platform::DiscoveryAdvertisement decoded;
   ASSERT_TRUE(multiplayer::platform::decode_discovery_advertisement(bytes, decoded));
@@ -199,6 +205,13 @@ TEST(PlatformDiscovery, AdvertisementRoundTripsAndRejectsMalformedInput) {
   EXPECT_EQ(decoded.compatibility_identity, expected.compatibility_identity);
   EXPECT_EQ(decoded.room_code, expected.room_code);
   EXPECT_EQ(decoded.game_port, expected.game_port);
+  EXPECT_EQ(decoded.host_name, "Host");
+  EXPECT_EQ(decoded.details, "42% - Haven City");
+  auto in_lobby = expected;
+  in_lobby.details.clear();
+  ASSERT_TRUE(multiplayer::platform::decode_discovery_advertisement(
+      multiplayer::platform::encode_discovery_advertisement(in_lobby), decoded));
+  EXPECT_TRUE(decoded.details.empty());
   EXPECT_FALSE(multiplayer::platform::decode_discovery_advertisement(
       {bytes.data(), bytes.size() - 1}, decoded));
   auto trailing = bytes;
@@ -213,6 +226,12 @@ TEST(PlatformDiscovery, AdvertisementRoundTripsAndRejectsMalformedInput) {
   invalid = expected;
   invalid.player_limit = 1;
   EXPECT_TRUE(multiplayer::platform::encode_discovery_advertisement(invalid).empty());
+  invalid = expected;
+  invalid.host_name.clear();
+  EXPECT_TRUE(multiplayer::platform::encode_discovery_advertisement(invalid).empty());
+  invalid = expected;
+  invalid.details.assign(multiplayer::platform::kMaximumGameDetailsBytes + 1, 'a');
+  EXPECT_TRUE(multiplayer::platform::encode_discovery_advertisement(invalid).empty());
 }
 
 TEST(PlatformDiscovery, QueryCarriesTheRequestedGame) {
@@ -222,11 +241,10 @@ TEST(PlatformDiscovery, QueryCarriesTheRequestedGame) {
   EXPECT_EQ(game_id, "jak3");
 }
 
-TEST(PlatformDiscovery, FilteringRejectsWrongIdentityGamePortAndCapacity) {
+TEST(PlatformDiscovery, FilteringRejectsWrongGamePortAndCapacityButKeepsOtherVersions) {
   const multiplayer::platform::DiscoveryConfig config = {.discovery_port = 26211,
                                                          .expected_game_port = 26210,
                                                          .game_id = "jak3",
-                                                         .compatibility_identity = "v1.2.3",
                                                          .directed_address = "127.0.0.1"};
   multiplayer::platform::DiscoveryAdvertisement advertisement = {.game_port = 26210,
                                                                  .current_players = 1,
@@ -247,9 +265,8 @@ TEST(PlatformDiscovery, FilteringRejectsWrongIdentityGamePortAndCapacity) {
       multiplayer::platform::discovery_advertisement_matches(config, advertisement, "127.0.0.1"));
   advertisement.game_id = "jak3";
   advertisement.compatibility_identity = "v1.2.4";
-  EXPECT_FALSE(
+  EXPECT_TRUE(
       multiplayer::platform::discovery_advertisement_matches(config, advertisement, "127.0.0.1"));
-  advertisement.compatibility_identity = "v1.2.3";
   ++advertisement.game_port;
   EXPECT_FALSE(
       multiplayer::platform::discovery_advertisement_matches(config, advertisement, "127.0.0.1"));
@@ -261,6 +278,125 @@ TEST(PlatformDiscovery, FilteringRejectsWrongIdentityGamePortAndCapacity) {
   include_full.include_full_sessions = true;
   EXPECT_TRUE(multiplayer::platform::discovery_advertisement_matches(include_full, advertisement,
                                                                      "127.0.0.1"));
+}
+
+TEST(PlatformSteam, LobbyMetadataRoundTripsAndRejectsUnjoinableLobbies) {
+  const multiplayer::platform::SteamLobbyMetadata hosted = {.game_id = "jak3",
+                                                            .compatibility_identity = "v1.2.3",
+                                                            .room_code = "ABC123",
+                                                            .host_name = "Host",
+                                                            .details = "42% - Haven City",
+                                                            .host_id = 76561197960287930ull,
+                                                            .players = 2,
+                                                            .player_limit = 4};
+  std::map<std::string, std::string> fields;
+  for (const auto& [key, value] : multiplayer::platform::encode_steam_lobby(hosted))
+    fields[key] = value;
+  const auto decode = [&](const std::string_view game_id = "jak3") {
+    return multiplayer::platform::decode_steam_lobby(
+        [&](const char* key) { return fields.contains(key) ? fields.at(key) : std::string(); },
+        game_id);
+  };
+  const auto decoded = decode();
+  ASSERT_TRUE(decoded);
+  EXPECT_EQ(decoded->compatibility_identity, "v1.2.3");
+  EXPECT_EQ(decoded->room_code, "ABC123");
+  EXPECT_EQ(decoded->host_name, "Host");
+  EXPECT_EQ(decoded->host_id, hosted.host_id);
+  EXPECT_EQ(decoded->players, 2);
+  EXPECT_EQ(decoded->player_limit, 4);
+  EXPECT_EQ(decoded->details, "42% - Haven City");
+  EXPECT_FALSE(decode("jak2"));
+  const std::vector<std::pair<std::string, std::string>> invalid_fields = {
+      {"room", "ABC12"},
+      {"host", "0"},
+      {"host", "12x"},
+      {"players", "5"},
+      {"players", "0"},
+      {"limit", "1"},
+      {"name", std::string(16, 'n')},
+      {"details", std::string(multiplayer::platform::kMaximumGameDetailsBytes + 1, 'a')}};
+  for (const auto& [key, value] : invalid_fields) {
+    const auto original = fields[key];
+    fields[key] = value;
+    EXPECT_FALSE(decode()) << key << "=" << value;
+    fields[key] = original;
+  }
+  fields.erase("details");
+  const auto without_details = decode();
+  ASSERT_TRUE(without_details);
+  EXPECT_TRUE(without_details->details.empty());
+}
+
+TEST(PlatformSteam, UnavailableSteamRejectsLobbyOperationsWithoutSideEffects) {
+  EXPECT_FALSE(steam::networking());
+  multiplayer::platform::SteamLobby lobby;
+  lobby.pump();
+  EXPECT_FALSE(lobby.create({.room_code = "ABC123", .players = 1, .player_limit = 4},
+                            multiplayer::platform::LobbyPrivacy::FRIENDS_ONLY));
+  lobby.set_privacy(multiplayer::platform::LobbyPrivacy::INVITE_ONLY);
+  EXPECT_FALSE(lobby.creating());
+  EXPECT_FALSE(lobby.hosting());
+  EXPECT_FALSE(lobby.search("jak3"));
+  EXPECT_EQ(lobby.search_status(), multiplayer::platform::DiscoveryStatus::FAILED);
+  EXPECT_FALSE(lobby.join(1, "jak3"));
+  EXPECT_EQ(lobby.join_status(), multiplayer::platform::DiscoveryStatus::FAILED);
+  EXPECT_FALSE(lobby.invite_friends());
+  EXPECT_TRUE(lobby.listings().empty());
+  EXPECT_FALSE(lobby.take_join_target());
+}
+
+TEST(PlatformBrowser, MergeListsCompatibleThenFriendsFirstAndEachGameOnce) {
+  using multiplayer::platform::DiscoveryStatus;
+  const std::vector<multiplayer::platform::DiscoveryResult> lan = {
+      {.invite = "jadmp://10.0.0.2:26210/LAN111",
+       .advertisement = {.current_players = 1,
+                         .player_limit = 4,
+                         .compatibility_identity = "v0",
+                         .room_code = "LAN111",
+                         .host_name = "Neighbor"}},
+      {.invite = "jadmp://10.0.0.3:26210/BOTH22",
+       .advertisement = {.current_players = 2,
+                         .player_limit = 4,
+                         .room_code = "BOTH22",
+                         .host_name = "Roommate"}}};
+  const std::vector<multiplayer::platform::SteamLobbyListing> steam = {
+      {.lobby_id = 1, .metadata = {.room_code = "STRA33", .host_name = "Stranger"}},
+      {.lobby_id = 2,
+       .metadata = {.room_code = "BOTH22", .host_name = "Roommate"},
+       .friend_host = true},
+      {.lobby_id = 3,
+       .metadata = {.room_code = "FRND44", .host_name = "Friend"},
+       .friend_host = true},
+      {.lobby_id = 4,
+       .metadata = {.compatibility_identity = "v0",
+                    .room_code = "OLDF55",
+                    .host_name = "OldFriend"},
+       .friend_host = true}};
+  const auto games = multiplayer::platform::merge_game_listings(lan, steam, "");
+  ASSERT_EQ(games.size(), 5u);
+  EXPECT_EQ(games[0].host_name, "Roommate");
+  EXPECT_TRUE(games[0].friend_host);
+  EXPECT_EQ(games[0].invite, "jadmp://10.0.0.3:26210/BOTH22");
+  EXPECT_EQ(games[0].lobby_id, 0u);
+  EXPECT_EQ(games[1].host_name, "Friend");
+  EXPECT_EQ(games[1].lobby_id, 3u);
+  EXPECT_EQ(games[2].host_name, "Stranger");
+  EXPECT_TRUE(games[2].compatible);
+  EXPECT_EQ(games[3].host_name, "OldFriend");
+  EXPECT_FALSE(games[3].compatible);
+  EXPECT_EQ(games[4].host_name, "Neighbor");
+  EXPECT_FALSE(games[4].friend_host);
+  EXPECT_FALSE(games[4].compatible);
+  EXPECT_EQ(multiplayer::platform::browser_status(DiscoveryStatus::SEARCHING,
+                                                  DiscoveryStatus::FOUND, true),
+            DiscoveryStatus::SEARCHING);
+  EXPECT_EQ(multiplayer::platform::browser_status(DiscoveryStatus::TIMED_OUT,
+                                                  DiscoveryStatus::FAILED, true),
+            DiscoveryStatus::FOUND);
+  EXPECT_EQ(multiplayer::platform::browser_status(DiscoveryStatus::TIMED_OUT,
+                                                  DiscoveryStatus::FAILED, false),
+            DiscoveryStatus::TIMED_OUT);
 }
 
 TEST(PlatformSession, PlayerRegistryAllocatesRejectsDuplicatesAndReusesSlots) {

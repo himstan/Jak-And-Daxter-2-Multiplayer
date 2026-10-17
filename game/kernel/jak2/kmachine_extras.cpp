@@ -191,6 +191,19 @@ inline u64 bool_to_symbol(const bool val) {
   return val ? static_cast<u64>(s7.offset) + true_symbol_offset(g_game_version) : s7.offset;
 }
 
+u64 pc_get_level_display_name(u32 level_name, u32 dest) {
+  const char* name =
+      get_full_level_name(level_names, level_name_remap, Ptr<String>(level_name).c()->data());
+  if (!strcmp(name, "unknown")) {
+    return bool_to_symbol(false);
+  }
+  auto* destination = Ptr<String>(dest).c();
+  const size_t size = std::min<size_t>(strlen(name), destination->len);
+  memcpy(destination->data(), name, size);
+  destination->data()[size] = '\0';
+  return bool_to_symbol(true);
+}
+
 inline bool symbol_to_bool(const u32 symptr) {
   return symptr != s7.offset;
 }

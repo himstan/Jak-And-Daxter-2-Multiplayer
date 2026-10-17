@@ -18,7 +18,8 @@ struct MultiplayerPreferencesGOAL {
   uint8_t friendly_fire;
   uint8_t nametag_visibility;
   uint8_t player_map_marker;
+  uint8_t host_visibility;
 };
 #pragma pack(pop)
 
-static_assert(sizeof(MultiplayerPreferencesGOAL) == 275);
+static_assert(sizeof(MultiplayerPreferencesGOAL) == 276);

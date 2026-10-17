@@ -12,7 +12,11 @@
 
 #include "common/log/log.h"
 
+#include "game/external/steam/steam_client.h"
 #include "game/multiplayer/platform/core/limits.h"
+#ifdef ENABLE_NETWORK_SIMULATION
+#include "game/multiplayer/platform/transport/network_simulation.h"
+#endif
 #include "steam/isteamnetworkingutils.h"
 #include "steam/steamnetworkingsockets.h"
 
@@ -22,7 +26,6 @@ constexpr int kCloseTransportSetup = 4000;
 constexpr int kCloseReliableBacklog = 4001;
 constexpr auto kGracefulShutdownTimeout = std::chrono::milliseconds(500);
 constexpr int kLaneCount = 5;
-constexpr size_t kReceiveBatchSize = 32;
 
 Delivery lane_delivery(const TransportLane lane) {
   return lane == TransportLane::CONTROL_RELIABLE || lane == TransportLane::GAMEPLAY_RELIABLE
@@ -38,6 +41,9 @@ Delivery message_delivery(const int flags) {
 bool valid_lane(const int lane) {
   return lane >= 0 && lane < kLaneCount;
 }
+
+constexpr size_t kDirectBackend = 0;
+constexpr size_t kSteamBackend = 1;
 
 std::mutex g_init_mutex;
 size_t g_init_references = 0;
@@ -90,23 +96,57 @@ struct SessionPlatform::Impl {
     bool connected = false;
     bool lanes_configured = false;
     std::string remote_address;
+    uint64_t steam_id = 0;
   };
 
-  ISteamNetworkingSockets* sockets = nullptr;
-  HSteamListenSocket listen_socket = k_HSteamListenSocket_Invalid;
-  HSteamNetPollGroup poll_group = k_HSteamNetPollGroup_Invalid;
-  HSteamNetConnection host_connection = k_HSteamNetConnection_Invalid;
+  struct Backend {
+    ISteamNetworkingSockets* sockets = nullptr;
+    ISteamNetworkingUtils* utils = nullptr;
+    HSteamListenSocket listen_socket = k_HSteamListenSocket_Invalid;
+    bool open = false;
+    std::unordered_map<HSteamNetConnection, Connection> connections;
+
+    bool active() const { return sockets && open; }
+
+    bool owns(const SteamNetConnectionStatusChangedCallback_t& info) const {
+      return connections.contains(info.m_hConn) || (listen_socket != k_HSteamListenSocket_Invalid &&
+                                                    info.m_info.m_hListenSocket == listen_socket);
+    }
+
+    void close(const int reason, const bool graceful) {
+      if (!active())
+        return;
+      for (const auto& [handle, connection] : connections)
+        sockets->CloseConnection(handle, reason, "transport shutdown", graceful);
+      sockets->RunCallbacks();
+      connections.clear();
+      if (listen_socket != k_HSteamListenSocket_Invalid)
+        sockets->CloseListenSocket(listen_socket);
+      listen_socket = k_HSteamListenSocket_Invalid;
+      open = false;
+    }
+  };
+
+  struct Handle {
+    Backend* backend = nullptr;
+    HSteamNetConnection connection = k_HSteamNetConnection_Invalid;
+  };
+
+  std::array<Backend, 2> backends;
+  ConnectionId host_connection = 0;
   bool hosting = false;
   bool running = false;
   size_t maximum_pending_connections = 16;
   ConnectionId next_connection_id = 1;
-  std::unordered_map<HSteamNetConnection, Connection> gns_connections;
-  std::unordered_map<ConnectionId, HSteamNetConnection> connection_handles;
+  size_t next_receive_source = 0;
+  std::unordered_map<ConnectionId, Handle> connection_handles;
   std::deque<TransportEvent> events;
 
   Impl() {
-    if (acquire_gns())
-      sockets = SteamNetworkingSockets();
+    if (acquire_gns()) {
+      backends[kDirectBackend].sockets = SteamNetworkingSockets();
+      backends[kDirectBackend].utils = SteamNetworkingUtils();
+    }
     std::lock_guard lock(g_init_mutex);
     g_instances.push_back(this);
   }
@@ -120,105 +160,125 @@ struct SessionPlatform::Impl {
     release_gns();
   }
 
-  bool owns(const SteamNetConnectionStatusChangedCallback_t& info) const {
-    return gns_connections.contains(info.m_hConn) ||
-           (listen_socket != k_HSteamListenSocket_Invalid &&
-            info.m_info.m_hListenSocket == listen_socket);
-  }
-
+  template <size_t BackendIndex>
   static void connection_callback(const SteamNetConnectionStatusChangedCallback_t* info) {
     std::lock_guard lock(g_init_mutex);
     for (auto* instance : g_instances) {
-      if (instance->owns(*info)) {
-        instance->on_connection_changed(*info);
+      if (auto& backend = instance->backends[BackendIndex]; backend.owns(*info)) {
+        instance->on_connection_changed(backend, *info);
         return;
       }
     }
   }
 
-  static std::string address_string(const SteamNetworkingIPAddr& address) {
+  static SteamNetworkingConfigValue_t callback_option(const size_t backend) {
+    SteamNetworkingConfigValue_t option;
+    option.SetPtr(
+        k_ESteamNetworkingConfig_Callback_ConnectionStatusChanged,
+        reinterpret_cast<void*>(backend == kSteamBackend ? connection_callback<kSteamBackend>
+                                                         : connection_callback<kDirectBackend>));
+    return option;
+  }
+
+  static std::string remote_string(const SteamNetConnectionInfo_t& info) {
+    if (info.m_identityRemote.GetSteamID64() != 0) {
+      char text[SteamNetworkingIdentity::k_cchMaxString] = {};
+      info.m_identityRemote.ToString(text, sizeof(text));
+      return text;
+    }
     char text[SteamNetworkingIPAddr::k_cchMaxString] = {};
-    address.ToString(text, sizeof(text), false);
+    info.m_addrRemote.ToString(text, sizeof(text), false);
     return text;
   }
 
-  bool configure_connection(const HSteamNetConnection connection) const {
+  bool use_steam() {
+    const auto networking = steam::networking();
+    auto& steam = backends[kSteamBackend];
+    steam.sockets = networking ? networking->sockets : nullptr;
+    steam.utils = networking ? networking->utils : nullptr;
+#ifdef ENABLE_NETWORK_SIMULATION
+    if (networking)
+      apply_steam_network_simulation(*networking->utils);
+#endif
+    return networking.has_value();
+  }
+
+  static bool configure_connection(const Backend& backend, const HSteamNetConnection connection) {
     const int priorities[kLaneCount] = {0, 0, 1, 1, 2};
     const uint16 weights[kLaneCount] = {1, 4, 1, 1, 1};
-    return sockets->ConfigureConnectionLanes(connection, kLaneCount, priorities, weights) ==
+    return backend.sockets->ConfigureConnectionLanes(connection, kLaneCount, priorities, weights) ==
            k_EResultOK;
   }
 
-  Connection& add_connection(const HSteamNetConnection connection,
-                             const SteamNetworkingIPAddr* remote = nullptr) {
-    auto [found, inserted] = gns_connections.try_emplace(connection);
+  Connection& add_connection(Backend& backend,
+                             const HSteamNetConnection connection,
+                             const SteamNetConnectionInfo_t* remote = nullptr) {
+    auto [found, inserted] = backend.connections.try_emplace(connection);
     if (inserted) {
       found->second.connection = connection;
       found->second.id = next_connection_id++;
-      connection_handles[found->second.id] = connection;
+      connection_handles[found->second.id] = {&backend, connection};
     }
-    if (remote)
-      found->second.remote_address = address_string(*remote);
+    if (remote) {
+      found->second.remote_address = remote_string(*remote);
+      if (&backend == &backends[kSteamBackend])
+        found->second.steam_id = remote->m_identityRemote.GetSteamID64();
+    }
     return found->second;
   }
 
-  void remove_connection(const HSteamNetConnection connection) {
-    const auto found = gns_connections.find(connection);
-    if (found == gns_connections.end())
+  void remove_connection(Backend& backend, const HSteamNetConnection connection) {
+    const auto found = backend.connections.find(connection);
+    if (found == backend.connections.end())
       return;
     connection_handles.erase(found->second.id);
-    gns_connections.erase(found);
+    backend.connections.erase(found);
   }
 
-  void on_connection_changed(const SteamNetConnectionStatusChangedCallback_t& callback) {
+  void on_connection_changed(Backend& backend,
+                             const SteamNetConnectionStatusChangedCallback_t& callback) {
+    auto* sockets = backend.sockets;
     const auto state = callback.m_info.m_eState;
     if (state == k_ESteamNetworkingConnectionState_Connecting && hosting) {
-      if (!gns_connections.contains(callback.m_hConn) &&
-          gns_connections.size() >= maximum_pending_connections) {
+      if (!backend.connections.contains(callback.m_hConn) &&
+          connection_handles.size() >= maximum_pending_connections) {
         sockets->CloseConnection(callback.m_hConn, kCloseTransportSetup,
                                  "transport capacity exceeded", false);
         return;
       }
-      auto& connection = add_connection(callback.m_hConn, &callback.m_info.m_addrRemote);
-      connection.lanes_configured = configure_connection(callback.m_hConn);
+      auto& connection = add_connection(backend, callback.m_hConn, &callback.m_info);
+      connection.lanes_configured = configure_connection(backend, callback.m_hConn);
       if (!connection.lanes_configured ||
-          sockets->AcceptConnection(callback.m_hConn) != k_EResultOK ||
-          !sockets->SetConnectionPollGroup(callback.m_hConn, poll_group)) {
+          sockets->AcceptConnection(callback.m_hConn) != k_EResultOK) {
         sockets->CloseConnection(callback.m_hConn, kCloseTransportSetup, "transport setup failed",
                                  false);
-        remove_connection(callback.m_hConn);
+        remove_connection(backend, callback.m_hConn);
       }
       return;
     }
     if (state == k_ESteamNetworkingConnectionState_Connected) {
-      auto& connection = add_connection(callback.m_hConn, &callback.m_info.m_addrRemote);
-      if (!((connection.lanes_configured = configure_connection(callback.m_hConn)))) {
+      auto& connection = add_connection(backend, callback.m_hConn, &callback.m_info);
+      if (!((connection.lanes_configured = configure_connection(backend, callback.m_hConn)))) {
         sockets->CloseConnection(callback.m_hConn, kCloseTransportSetup,
                                  "could not configure message lanes", false);
-        remove_connection(callback.m_hConn);
+        remove_connection(backend, callback.m_hConn);
         return;
       }
-      if (!hosting) {
-        host_connection = callback.m_hConn;
-        if (!sockets->SetConnectionPollGroup(callback.m_hConn, poll_group)) {
-          sockets->CloseConnection(callback.m_hConn, kCloseTransportSetup,
-                                   "could not configure poll group", false);
-          remove_connection(callback.m_hConn);
-          return;
-        }
-      }
+      if (!hosting)
+        host_connection = connection.id;
       if (!connection.connected) {
         connection.connected = true;
         events.push_back({.kind = TransportEventKind::CONNECTED,
                           .connection_id = connection.id,
-                          .remote_address = connection.remote_address});
+                          .remote_address = connection.remote_address,
+                          .steam_id = connection.steam_id});
       }
       return;
     }
     if (state == k_ESteamNetworkingConnectionState_ClosedByPeer ||
         state == k_ESteamNetworkingConnectionState_ProblemDetectedLocally) {
-      if (const auto found = gns_connections.find(callback.m_hConn);
-          found != gns_connections.end()) {
+      if (const auto found = backend.connections.find(callback.m_hConn);
+          found != backend.connections.end()) {
         events.push_back(
             {.kind = TransportEventKind::CLOSED,
              .connection_id = found->second.id,
@@ -227,15 +287,16 @@ struct SessionPlatform::Impl {
                           callback.m_info.m_eEndReason == k_ESteamNetConnectionEnd_Misc_Timeout,
              .detail = callback.m_info.m_szEndDebug,
              .remote_address = found->second.remote_address});
-        remove_connection(callback.m_hConn);
+        remove_connection(backend, callback.m_hConn);
       }
       sockets->CloseConnection(callback.m_hConn, 0, nullptr, false);
     }
   }
 
-  bool send_raw(const HSteamNetConnection connection,
-                const std::span<const uint8_t> bytes,
-                const TransportLane lane) const {
+  static bool send_raw(const Backend& backend,
+                       const HSteamNetConnection connection,
+                       const std::span<const uint8_t> bytes,
+                       const TransportLane lane) {
     if (bytes.empty() || bytes.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
       return false;
     }
@@ -244,7 +305,7 @@ struct SessionPlatform::Impl {
         delivery == Delivery::RELIABLE_ORDERED
             ? k_nSteamNetworkingSend_Reliable | k_nSteamNetworkingSend_NoNagle
             : k_nSteamNetworkingSend_UnreliableNoNagle | k_nSteamNetworkingSend_NoDelay;
-    auto* message = SteamNetworkingUtils()->AllocateMessage(bytes.size());
+    auto* message = backend.utils->AllocateMessage(bytes.size());
     if (!message)
       return false;
     std::memcpy(message->m_pData, bytes.data(), bytes.size());
@@ -254,83 +315,91 @@ struct SessionPlatform::Impl {
     message->m_idxLane = static_cast<uint16>(lane);
     ISteamNetworkingMessage* messages[1] = {message};
     int64 result = 0;
-    sockets->SendMessages(1, messages, &result, true);
+    backend.sockets->SendMessages(1, messages, &result, true);
     return result >= 0;
   }
 
+  void run_callbacks() {
+    for (const auto& backend : backends) {
+      if (backend.active())
+        backend.sockets->RunCallbacks();
+    }
+  }
+
   void receive_messages() {
+    std::vector<std::pair<const Backend*, const Connection*>> sources;
+    for (const auto& backend : backends) {
+      for (const auto& [handle, connection] : backend.connections) {
+        if (backend.active() && connection.connected)
+          sources.emplace_back(&backend, &connection);
+      }
+    }
     size_t received = 0;
-    while (running && received < kMaximumTransportMessagesPerPump) {
-      std::array<ISteamNetworkingMessage*, kReceiveBatchSize> messages = {};
+    for (size_t offset = 0; offset < sources.size() && received < kMaximumTransportMessagesPerPump;
+         ++offset) {
+      const auto& [backend, connection] = sources[(next_receive_source + offset) % sources.size()];
+      std::array<ISteamNetworkingMessage*, kMaximumTransportMessagesPerConnectionPerPump> messages =
+          {};
       const auto remaining = kMaximumTransportMessagesPerPump - received;
-      const int batch_size = static_cast<int>((std::min)(remaining, messages.size()));
-      const int count =
-          sockets->ReceiveMessagesOnPollGroup(poll_group, messages.data(), batch_size);
+      const int count = backend->sockets->ReceiveMessagesOnConnection(
+          connection->connection, messages.data(),
+          static_cast<int>((std::min)(remaining, messages.size())));
       if (count <= 0)
-        return;
+        continue;
       received += static_cast<size_t>(count);
       for (int index = 0; index < count; ++index) {
         auto* message = messages[index];
-        if (const auto found = gns_connections.find(message->m_conn);
-            found != gns_connections.end() && found->second.connected && message->m_cbSize > 0 &&
-            valid_lane(message->m_idxLane)) {
+        if (message->m_cbSize > 0 && valid_lane(message->m_idxLane)) {
           const auto* begin = static_cast<const uint8_t*>(message->m_pData);
-          const auto lane = static_cast<TransportLane>(message->m_idxLane);
           events.push_back({.kind = TransportEventKind::MESSAGE,
-                            .connection_id = found->second.id,
+                            .connection_id = connection->id,
                             .delivery = message_delivery(message->m_nFlags),
-                            .lane = lane,
-                            .remote_address = found->second.remote_address,
+                            .lane = static_cast<TransportLane>(message->m_idxLane),
+                            .remote_address = connection->remote_address,
                             .payload = std::vector(begin, begin + message->m_cbSize)});
         }
         message->Release();
       }
     }
+    ++next_receive_source;
+  }
+
+  bool reliable_messages_drained() const {
+    for (const auto& backend : backends) {
+      for (const auto& [handle, connection] : backend.connections) {
+        SteamNetConnectionRealTimeStatus_t status = {};
+        if (connection.connected &&
+            backend.sockets->GetConnectionRealTimeStatus(handle, &status, 0, nullptr) ==
+                k_EResultOK &&
+            (status.m_cbPendingReliable != 0 || status.m_cbSentUnackedReliable != 0)) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   void drain_reliable_messages() {
-    for (const auto& [handle, connection] : gns_connections) {
-      if (connection.connected)
-        sockets->FlushMessagesOnConnection(handle);
+    for (const auto& backend : backends) {
+      for (const auto& [handle, connection] : backend.connections) {
+        if (connection.connected)
+          backend.sockets->FlushMessagesOnConnection(handle);
+      }
     }
     const auto deadline = std::chrono::steady_clock::now() + kGracefulShutdownTimeout;
-    while (std::chrono::steady_clock::now() < deadline) {
-      bool drained = true;
-      for (const auto& [handle, connection] : gns_connections) {
-        if (!connection.connected)
-          continue;
-        SteamNetConnectionRealTimeStatus_t status = {};
-        if (sockets->GetConnectionRealTimeStatus(handle, &status, 0, nullptr) == k_EResultOK &&
-            (status.m_cbPendingReliable != 0 || status.m_cbSentUnackedReliable != 0)) {
-          drained = false;
-          break;
-        }
-      }
-      if (drained)
-        return;
-      sockets->RunCallbacks();
+    while (std::chrono::steady_clock::now() < deadline && !reliable_messages_drained()) {
+      run_callbacks();
       std::this_thread::yield();
     }
   }
 
   void shutdown(const int reason, const bool graceful = false) {
-    if (!sockets)
-      return;
     if (graceful)
       drain_reliable_messages();
-    for (const auto& [handle, connection] : gns_connections) {
-      sockets->CloseConnection(handle, reason, "transport shutdown", graceful);
-    }
-    sockets->RunCallbacks();
-    gns_connections.clear();
+    for (auto& backend : backends)
+      backend.close(reason, graceful);
     connection_handles.clear();
-    if (listen_socket != k_HSteamListenSocket_Invalid)
-      sockets->CloseListenSocket(listen_socket);
-    if (poll_group != k_HSteamNetPollGroup_Invalid)
-      sockets->DestroyPollGroup(poll_group);
-    listen_socket = k_HSteamListenSocket_Invalid;
-    poll_group = k_HSteamNetPollGroup_Invalid;
-    host_connection = k_HSteamNetConnection_Invalid;
+    host_connection = 0;
     hosting = false;
     running = false;
     events.clear();
@@ -342,8 +411,11 @@ SessionPlatform::~SessionPlatform() = default;
 
 bool SessionPlatform::host(const TransportHostConfig& config) const {
   impl_->shutdown(0);
-  if (!impl_->sockets) {
-    lg::error("[GNS-Transport] Host failed: GNS sockets are unavailable.");
+  auto& direct = impl_->backends[kDirectBackend];
+  auto& steam = impl_->backends[kSteamBackend];
+  if (!direct.sockets || (config.steam && !impl_->use_steam())) {
+    lg::error("[GNS-Transport] Host failed: {} sockets are unavailable.",
+              direct.sockets ? "Steam" : "GNS");
     return false;
   }
   if (config.maximum_pending_connections == 0) {
@@ -352,20 +424,21 @@ bool SessionPlatform::host(const TransportHostConfig& config) const {
   }
   impl_->hosting = true;
   impl_->maximum_pending_connections = config.maximum_pending_connections;
-  impl_->poll_group = impl_->sockets->CreatePollGroup();
-  if (impl_->poll_group == k_HSteamNetPollGroup_Invalid) {
-    lg::error("[GNS-Transport] Host failed: could not create the poll group.");
-    return false;
-  }
+  direct.open = true;
+  steam.open = config.steam;
   SteamNetworkingIPAddr address;
   address.Clear();
   address.m_port = config.port;
-  SteamNetworkingConfigValue_t option;
-  option.SetPtr(k_ESteamNetworkingConfig_Callback_ConnectionStatusChanged,
-                reinterpret_cast<void*>(Impl::connection_callback));
-  impl_->listen_socket = impl_->sockets->CreateListenSocketIP(address, 1, &option);
-  if (impl_->listen_socket == k_HSteamListenSocket_Invalid) {
-    lg::error("[GNS-Transport] Host failed: could not bind UDP port {}.", config.port);
+  auto direct_option = Impl::callback_option(kDirectBackend);
+  direct.listen_socket = direct.sockets->CreateListenSocketIP(address, 1, &direct_option);
+  if (config.steam && direct.listen_socket != k_HSteamListenSocket_Invalid) {
+    auto steam_option = Impl::callback_option(kSteamBackend);
+    steam.listen_socket = steam.sockets->CreateListenSocketP2P(0, 1, &steam_option);
+  }
+  if (direct.listen_socket == k_HSteamListenSocket_Invalid ||
+      (config.steam && steam.listen_socket == k_HSteamListenSocket_Invalid)) {
+    lg::error("[GNS-Transport] Host failed: could not open the {} listen socket.",
+              direct.listen_socket == k_HSteamListenSocket_Invalid ? "UDP" : "Steam P2P");
     impl_->shutdown(0);
     return false;
   }
@@ -375,42 +448,51 @@ bool SessionPlatform::host(const TransportHostConfig& config) const {
 
 bool SessionPlatform::connect(const TransportClientConfig& config) const {
   impl_->shutdown(0);
-  if (!impl_->sockets) {
-    lg::error("[GNS-Transport] Connect failed: GNS sockets are unavailable.");
-    return false;
-  }
-  if (config.endpoint.empty()) {
-    lg::error("[GNS-Transport] Connect failed: endpoint is empty.");
-    return false;
-  }
-  if (config.port == 0) {
-    lg::error("[GNS-Transport] Connect failed: port is zero.");
+  const bool steam = config.steam_host != 0;
+  const size_t backend_index = steam ? kSteamBackend : kDirectBackend;
+  auto& backend = impl_->backends[backend_index];
+  if (steam ? !impl_->use_steam() : !backend.sockets) {
+    lg::error("[GNS-Transport] Connect failed: {} sockets are unavailable.",
+              steam ? "Steam" : "GNS");
     return false;
   }
   SteamNetworkingIPAddr address;
   address.Clear();
-  if (!address.ParseString(config.endpoint.c_str())) {
-    lg::error("[GNS-Transport] Connect failed: '{}' is not an IP address.", config.endpoint);
-    return false;
+  if (!steam) {
+    if (config.endpoint.empty()) {
+      lg::error("[GNS-Transport] Connect failed: endpoint is empty.");
+      return false;
+    }
+    if (config.port == 0) {
+      lg::error("[GNS-Transport] Connect failed: port is zero.");
+      return false;
+    }
+    if (!address.ParseString(config.endpoint.c_str())) {
+      lg::error("[GNS-Transport] Connect failed: '{}' is not an IP address.", config.endpoint);
+      return false;
+    }
+    address.m_port = config.port;
   }
-  address.m_port = config.port;
   impl_->hosting = false;
-  impl_->poll_group = impl_->sockets->CreatePollGroup();
-  if (impl_->poll_group == k_HSteamNetPollGroup_Invalid) {
-    lg::error("[GNS-Transport] Connect failed: could not create the poll group.");
-    return false;
+  backend.open = true;
+  auto option = Impl::callback_option(backend_index);
+  HSteamNetConnection handle = k_HSteamNetConnection_Invalid;
+  if (steam) {
+    SteamNetworkingIdentity identity;
+    identity.SetSteamID64(config.steam_host);
+    handle = backend.sockets->ConnectP2P(identity, 0, 1, &option);
+  } else {
+    handle = backend.sockets->ConnectByIPAddress(address, 1, &option);
   }
-  SteamNetworkingConfigValue_t option;
-  option.SetPtr(k_ESteamNetworkingConfig_Callback_ConnectionStatusChanged,
-                reinterpret_cast<void*>(Impl::connection_callback));
-  impl_->host_connection = impl_->sockets->ConnectByIPAddress(address, 1, &option);
-  if (impl_->host_connection == k_HSteamNetConnection_Invalid) {
-    lg::error("[GNS-Transport] ConnectByIPAddress failed for {}:{}.", config.endpoint, config.port);
+  if (handle == k_HSteamNetConnection_Invalid) {
+    lg::error("[GNS-Transport] Connect failed for {}.",
+              steam ? std::to_string(config.steam_host) : config.endpoint);
     impl_->shutdown(0);
     return false;
   }
-  auto& connection = impl_->add_connection(impl_->host_connection);
-  connection.lanes_configured = impl_->configure_connection(impl_->host_connection);
+  auto& connection = impl_->add_connection(backend, handle);
+  connection.lanes_configured = Impl::configure_connection(backend, handle);
+  impl_->host_connection = connection.id;
   impl_->running = true;
   return true;
 }
@@ -422,7 +504,7 @@ void SessionPlatform::shutdown(const int reason, const bool graceful) const {
 void SessionPlatform::pump() const {
   if (!impl_->running)
     return;
-  impl_->sockets->RunCallbacks();
+  impl_->run_callbacks();
   impl_->receive_messages();
   for (const auto& snapshot : connection_snapshots()) {
     if (snapshot.pending_reliable_bytes + snapshot.sent_unacked_reliable_bytes >
@@ -454,31 +536,32 @@ bool SessionPlatform::send(const ConnectionId connection,
   const auto found = impl_->connection_handles.find(connection);
   if (!impl_->running || found == impl_->connection_handles.end())
     return false;
-  const auto record = impl_->gns_connections.find(found->second);
-  return record != impl_->gns_connections.end() && record->second.connected &&
-         impl_->send_raw(found->second, payload, lane);
+  const auto& [backend, handle] = found->second;
+  const auto record = backend->connections.find(handle);
+  return record != backend->connections.end() && record->second.connected &&
+         Impl::send_raw(*backend, handle, payload, lane);
 }
 
 void SessionPlatform::close_connection(const ConnectionId connection,
                                        const int reason,
                                        const std::string_view detail) const {
-  if (const auto found = impl_->connection_handles.find(connection);
-      found != impl_->connection_handles.end()) {
-    const auto handle = found->second;
-    const auto record = impl_->gns_connections.find(handle);
-    if (record == impl_->gns_connections.end())
-      return;
-    const std::string text(detail);
-    impl_->events.push_back({.kind = TransportEventKind::CLOSED,
-                             .connection_id = connection,
-                             .close_reason = reason,
-                             .detail = text,
-                             .remote_address = record->second.remote_address});
-    impl_->sockets->CloseConnection(handle, reason, text.c_str(), true);
-    if (impl_->host_connection == handle)
-      impl_->host_connection = k_HSteamNetConnection_Invalid;
-    impl_->remove_connection(handle);
-  }
+  const auto found = impl_->connection_handles.find(connection);
+  if (found == impl_->connection_handles.end())
+    return;
+  const auto [backend, handle] = found->second;
+  const auto record = backend->connections.find(handle);
+  if (record == backend->connections.end())
+    return;
+  const std::string text(detail);
+  impl_->events.push_back({.kind = TransportEventKind::CLOSED,
+                           .connection_id = connection,
+                           .close_reason = reason,
+                           .detail = text,
+                           .remote_address = record->second.remote_address});
+  backend->sockets->CloseConnection(handle, reason, text.c_str(), true);
+  if (impl_->host_connection == connection)
+    impl_->host_connection = 0;
+  impl_->remove_connection(*backend, handle);
 }
 
 bool SessionPlatform::active() const {
@@ -489,48 +572,54 @@ bool SessionPlatform::is_host() const {
 }
 
 uint16_t SessionPlatform::local_port() const {
-  if (!impl_->running || impl_->listen_socket == k_HSteamListenSocket_Invalid)
+  const auto& direct = impl_->backends[kDirectBackend];
+  if (!impl_->running || direct.listen_socket == k_HSteamListenSocket_Invalid)
     return 0;
   SteamNetworkingIPAddr address;
-  return impl_->sockets->GetListenSocketAddress(impl_->listen_socket, &address) ? address.m_port
+  return direct.sockets->GetListenSocketAddress(direct.listen_socket, &address) ? address.m_port
                                                                                 : 0;
 }
 
 ConnectionId SessionPlatform::host_connection_id() const {
-  const auto found = impl_->gns_connections.find(impl_->host_connection);
-  return found == impl_->gns_connections.end() ? 0 : found->second.id;
+  return impl_->connection_handles.contains(impl_->host_connection) ? impl_->host_connection : 0;
 }
 
 std::vector<ConnectionSnapshot> SessionPlatform::connection_snapshots() const {
   std::vector<ConnectionSnapshot> result;
-  for (const auto& [handle, connection] : impl_->gns_connections) {
-    if (!connection.connected || !connection.lanes_configured)
-      continue;
-    SteamNetConnectionRealTimeStatus_t status = {};
-    SteamNetConnectionRealTimeLaneStatus_t lanes[kLaneCount] = {};
-    if (impl_->sockets->GetConnectionRealTimeStatus(handle, &status, kLaneCount, lanes) !=
-            k_EResultOK ||
-        status.m_eState != k_ESteamNetworkingConnectionState_Connected) {
-      continue;
+  for (const auto& backend : impl_->backends) {
+    for (const auto& [handle, connection] : backend.connections) {
+      if (!connection.connected || !connection.lanes_configured)
+        continue;
+      SteamNetConnectionRealTimeStatus_t status = {};
+      SteamNetConnectionRealTimeLaneStatus_t lanes[kLaneCount] = {};
+      if (backend.sockets->GetConnectionRealTimeStatus(handle, &status, kLaneCount, lanes) !=
+              k_EResultOK ||
+          status.m_eState != k_ESteamNetworkingConnectionState_Connected) {
+        continue;
+      }
+      SteamNetConnectionInfo_t info = {};
+      const bool relayed = backend.sockets->GetConnectionInfo(handle, &info) &&
+                           (info.m_nFlags & k_nSteamNetworkConnectionInfoFlags_Relayed) != 0;
+      result.push_back(
+          {.connection_id = connection.id,
+           .ping_ms = status.m_nPing,
+           .jitter_us = status.m_usecMaxJitter,
+           .local_quality = status.m_flConnectionQualityLocal,
+           .remote_quality = status.m_flConnectionQualityRemote,
+           .send_bytes_per_second = status.m_flOutBytesPerSec,
+           .receive_bytes_per_second = status.m_flInBytesPerSec,
+           .send_rate_bytes_per_second = status.m_nSendRateBytesPerSecond,
+           .pending_unreliable_bytes = status.m_cbPendingUnreliable,
+           .pending_reliable_bytes = status.m_cbPendingReliable,
+           .sent_unacked_reliable_bytes = status.m_cbSentUnackedReliable,
+           .critical_queue_time_us = static_cast<int>(
+               lanes[static_cast<size_t>(TransportLane::REALTIME_CRITICAL)].m_usecQueueTime),
+           .normal_queue_time_us = static_cast<int>(
+               lanes[static_cast<size_t>(TransportLane::REALTIME_NORMAL)].m_usecQueueTime),
+           .bulk_queue_time_us = static_cast<int>(
+               lanes[static_cast<size_t>(TransportLane::REALTIME_BULK)].m_usecQueueTime),
+           .relayed = relayed});
     }
-    result.push_back(
-        {.connection_id = connection.id,
-         .ping_ms = status.m_nPing,
-         .jitter_us = status.m_usecMaxJitter,
-         .local_quality = status.m_flConnectionQualityLocal,
-         .remote_quality = status.m_flConnectionQualityRemote,
-         .send_bytes_per_second = status.m_flOutBytesPerSec,
-         .receive_bytes_per_second = status.m_flInBytesPerSec,
-         .send_rate_bytes_per_second = status.m_nSendRateBytesPerSecond,
-         .pending_unreliable_bytes = status.m_cbPendingUnreliable,
-         .pending_reliable_bytes = status.m_cbPendingReliable,
-         .sent_unacked_reliable_bytes = status.m_cbSentUnackedReliable,
-         .critical_queue_time_us = static_cast<int>(
-             lanes[static_cast<size_t>(TransportLane::REALTIME_CRITICAL)].m_usecQueueTime),
-         .normal_queue_time_us = static_cast<int>(
-             lanes[static_cast<size_t>(TransportLane::REALTIME_NORMAL)].m_usecQueueTime),
-         .bulk_queue_time_us = static_cast<int>(
-             lanes[static_cast<size_t>(TransportLane::REALTIME_BULK)].m_usecQueueTime)});
   }
   return result;
 }

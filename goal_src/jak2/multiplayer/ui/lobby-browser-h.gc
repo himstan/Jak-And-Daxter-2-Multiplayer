@@ -1,0 +1,20 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defconstant LOBBY_BROWSER_VISIBLE_ROWS 8)
+(defconstant LOBBY_BROWSER_TOP 110.0)
+(defconstant LOBBY_BROWSER_HEADER_Y 116.0)
+(defconstant LOBBY_BROWSER_DIVIDER_Y 134.0)
+(defconstant LOBBY_BROWSER_ROW_Y 140.0)
+(defconstant LOBBY_BROWSER_ROW_HEIGHT 20.0)
+(defconstant LOBBY_BROWSER_PROMPT_Y 306.0)
+(defconstant LOBBY_BROWSER_PROMPT_GAP 20.0)
+(defconstant LOBBY_BROWSER_ROW_SCALE 0.4)
+(defconstant LOBBY_BROWSER_INCOMPATIBLE_ALPHA 0.4)
+(defconstant LOBBY_BROWSER_SCROLL_PAUSE (seconds 1.5))
+(defconstant LOBBY_BROWSER_SCROLL_STEP (seconds 0.2))
+
+(deftype menu-lobby-browser-option (menu-option)
+  ((selected-row int16)
+   (first-row    int16)
+   (selected-at  time-frame)))

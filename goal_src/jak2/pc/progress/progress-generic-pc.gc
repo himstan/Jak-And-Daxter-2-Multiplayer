@@ -193,7 +193,7 @@
     (set! (-> *progress-state* which-slot) (-> this option-index))
     (sound-play "generic-beep")
     (push-state this)
-    (set-next-state this 'host-to-lobby 0)
+    (set-next-state this 'host-settings 0)
     (return 0)
     )
 

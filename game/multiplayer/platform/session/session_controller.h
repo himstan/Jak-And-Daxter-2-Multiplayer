@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "game/multiplayer/platform/protocol/message_frame.h"
@@ -21,6 +22,7 @@ struct ControllerHostConfig {
   uint8_t player_limit = 0;
   std::string room_code;
   PlayerProfile local_profile;
+  bool steam = false;
 };
 
 struct ControllerClientConfig {
@@ -28,6 +30,7 @@ struct ControllerClientConfig {
   uint16_t port = 0;
   std::string room_code;
   PlayerProfile local_profile;
+  uint64_t steam_host = 0;
 };
 
 class SessionController final : public GameSessionEndpoint {
@@ -44,11 +47,13 @@ class SessionController final : public GameSessionEndpoint {
   const PlayerProfile& local_profile() const { return local_profile_; }
   bool set_character(PlayerCharacter character);
   bool set_ready(bool ready);
+  bool send_chat(std::string text);
   bool start_countdown(uint32_t seconds);
   bool cancel_countdown();
   bool start_game();
   void enter_game();
   void enter_lobby();
+  bool kick(PlayerId player_id);
 
   std::optional<uint32_t> send_gameplay(uint8_t message_id,
                                         const Audience& audience,
@@ -62,7 +67,7 @@ class SessionController final : public GameSessionEndpoint {
 
   uint16_t local_port() const { return transport_.local_port(); }
   std::string room_code() const { return room_code_; }
-  std::string invite_for_address(std::string_view address) const;
+  std::string invite_for_address(std::string_view address, uint16_t port) const;
   SessionPlatform& transport() { return transport_; }
 
  private:
@@ -96,7 +101,10 @@ class SessionController final : public GameSessionEndpoint {
                         PlayerId origin,
                         Delivery delivery,
                         std::span<const uint8_t> payload);
-  void host_departure(ConnectionId connection, int reason, bool timed_out = false);
+  void host_departure(ConnectionId connection,
+                      int reason,
+                      PlayerDepartureReason departure = PlayerDepartureReason::LEFT);
+  void host_closed_session(uint8_t reason);
   void reject(ConnectionId connection, RejectionReason reason, std::string_view required = {});
   FrameSendResult send_frame(FrameKind kind,
                              const Audience& audience,
@@ -104,14 +112,17 @@ class SessionController final : public GameSessionEndpoint {
                              std::span<const uint8_t> payload,
                              TransportLane lane);
   void send_control(const ControlMessage& message, const Audience& audience);
+  void receive_chat(PlayerId player_id, std::string text);
   void broadcast_profile(const PlayerProfile& profile);
   void publish_roster(ConnectionId connection);
   void update_snapshot(std::vector<ConnectionSnapshot> connections);
+  void sample_player_pings();
   void send_pending_bootstraps(uint64_t now_ms);
 
   struct PendingGate {
     uint64_t deadline_ms = 0;
     std::string remote_address;
+    uint64_t steam_id = 0;
   };
 
   struct RejectionThrottle {
@@ -132,7 +143,9 @@ class SessionController final : public GameSessionEndpoint {
   std::unordered_map<ConnectionId, PendingGate> pending_gates_;
   std::unordered_map<ConnectionId, uint64_t> pending_rejection_closes_;
   std::unordered_map<std::string, RejectionThrottle> rejection_throttles_;
+  std::unordered_set<std::string> banned_addresses_;
   std::string room_code_;
+  uint32_t chat_serial_ = 0;
   uint32_t last_applied_bootstrap_ = 0;
   uint32_t host_bootstrap_generation_ = 0;
   uint64_t last_pump_ms_ = 0;

@@ -3,14 +3,12 @@
 
 (define *nametag-string* (new 'global 'string 128 (the-as string #f)))
 
-(deftype mp-player-list-manager (structure)
-  ((layout       mp-overlay-layout :inline)
-   (overlay      (pointer mp-overlay-layout-process))
-   (initialized? symbol)
-   (visible?     symbol)))
+(deftype menu-player-list-option (menu-option)
+  ((selected-player int8)
+   (open?           symbol)))
 
-(define-perm *mp-player-list* mp-player-list-manager (new 'static 'mp-player-list-manager))
-
+(defconstant PLAYER_LIST_PANEL_TOP 66.0)
+(defconstant PLAYER_LIST_PANEL_BOTTOM 330.0)
 (defconstant PLAYER_NAMETAG_MAX_DISTANCE (meters 100.0))
 (defconstant PLAYER_NAMETAG_GLYPH_HEIGHT (meters 0.3))
 (defconstant PLAYER_NAMETAG_JAK_CLEARANCE (meters 0.4))
@@ -18,7 +16,6 @@
 (defconstant PLAYER_NAMETAG_DAXTER_RIDING_CLEARANCE (meters 0.2))
 
 (define-extern draw-player-nametags! (function none))
-(define-extern mp-player-list-update! (function symbol))
-(define-extern mp-player-list-show! (function symbol))
-(define-extern mp-player-list-hide! (function symbol))
-(define-extern mp-player-list-visible? (function symbol))
+(define-extern update-player-list-input! (function none))
+(define-extern draw-player-list! (function none))
+(define-extern player-list-open? (function symbol))

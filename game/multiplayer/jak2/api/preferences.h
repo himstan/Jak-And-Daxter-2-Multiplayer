@@ -14,6 +14,8 @@ inline constexpr uint32_t kInvalidMultiplayerPlayerColor = 0xffffffffu;
 
 enum class PlayerNametagVisibility : uint8_t { ALWAYS, HOLD, OFF };
 
+enum class HostVisibility : uint8_t { PUBLIC, FRIENDS_ONLY, INVITE_ONLY, LAN_ONLY };
+
 struct MultiplayerPreferences {
   uint16_t network_port = multiplayer::platform::kDefaultMultiplayerPort;
   uint16_t respawn_delay_seconds = multiplayer::jak2::core::kDefaultRespawnDelaySeconds;
@@ -27,9 +29,12 @@ struct MultiplayerPreferences {
   PlayerNametagVisibility nametag_visibility = PlayerNametagVisibility::HOLD;
   uint8_t session_player_limit = 2;
   PlayerCharacter preferred_character = PlayerCharacter::JAK;
+  HostVisibility host_visibility = HostVisibility::PUBLIC;
 };
 
+multiplayer::platform::LobbyPrivacy lobby_privacy(HostVisibility visibility);
 bool normalize_player_name(std::string_view input, std::string& output, bool allow_empty = true);
+std::string player_name_from_steam(std::string_view persona_name);
 bool parse_player_color(std::string_view input, uint32_t& output);
 std::string format_player_color(uint32_t color_rgb);
 uint32_t generate_player_color();

@@ -371,10 +371,12 @@ set(RUNTIME_SOURCE
         system/Deci2Server.cpp
         system/hid/devices/dualsense_effects.cpp
         system/hid/devices/game_controller.cpp
+        system/hid/devices/steam_pad.cpp
         system/hid/devices/keyboard.cpp
         system/hid/devices/mouse.cpp
         system/hid/display_manager.cpp
         system/hid/input_bindings.cpp
+        system/hid/device_claim.cpp
         system/hid/input_manager.cpp
         system/hid/text_input_editor.cpp
         system/hid/sdl_util.cpp
@@ -428,11 +430,13 @@ set(MULTIPLAYER_PLATFORM_SOURCE
         multiplayer/platform/session/cadence_scheduler.cpp
         multiplayer/platform/session/reconnect_policy.cpp
         multiplayer/platform/protocol/message_frame.cpp
+        multiplayer/platform/runtime/game_browser.cpp
         multiplayer/platform/runtime/multiplayer_runtime.cpp
         multiplayer/platform/runtime/multiplayer_runtime_commands.cpp
         multiplayer/platform/runtime/multiplayer_runtime_worker.cpp
         multiplayer/platform/session/session_controller.cpp
         multiplayer/platform/session/session_state.cpp
+        multiplayer/platform/steam/steam_lobby.cpp
         multiplayer/platform/transport/session_platform.cpp
         multiplayer/platform/nat/port_mapping.cpp
         multiplayer/platform/nat/port_mapping_coordinator.cpp)
@@ -446,11 +450,15 @@ endif()
 
 add_subdirectory(sound)
 
+add_library(steam-client STATIC external/steam/steam_client.cpp external/steam/steam_input.cpp)
+target_include_directories(steam-client PUBLIC "${PROJECT_SOURCE_DIR}")
+target_link_libraries(steam-client PRIVATE common GameNetworkingSockets::static ${CMAKE_DL_LIBS})
+
 add_library(multiplayer-platform STATIC ${MULTIPLAYER_PLATFORM_SOURCE})
 if(ENABLE_NETWORK_SIMULATION)
     target_compile_definitions(multiplayer-platform PUBLIC ENABLE_NETWORK_SIMULATION)
 endif()
-target_link_libraries(multiplayer-platform PRIVATE GameNetworkingSockets::static common
+target_link_libraries(multiplayer-platform PRIVATE GameNetworkingSockets::static common steam-client
         "$<TARGET_FILE:libminiupnpc-static>" "$<TARGET_FILE:natpmp>")
 add_dependencies(multiplayer-platform libminiupnpc-static natpmp)
 target_include_directories(multiplayer-platform PUBLIC "${PROJECT_SOURCE_DIR}")
@@ -492,7 +500,7 @@ set_property(SOURCE multiplayer/platform/nat/port_mapping.cpp APPEND PROPERTY
         ENABLE_STRNATPMPERR
         NATPMP_MAX_RETRIES=3)
 
-target_link_libraries(runtime common fmt multiplayer-platform multiplayer-jak2 SDL3::SDL3 imgui discord-rpc sound stb_image libco
+target_link_libraries(runtime common fmt multiplayer-platform multiplayer-jak2 steam-client SDL3::SDL3 imgui discord-rpc sound stb_image libco
         libcurl "$<TARGET_FILE:libminiupnpc-static>" "$<TARGET_FILE:natpmp>")
 add_dependencies(runtime libminiupnpc-static natpmp)
 if(WIN32)

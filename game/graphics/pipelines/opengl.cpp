@@ -605,6 +605,7 @@ void GLDisplay::render() {
     } else {
       m_input_manager->poll_mouse_data();
     }
+    m_input_manager->poll_steam_pad_data();
     m_input_manager->finish_polling();
   }
   // Now process SDL Events

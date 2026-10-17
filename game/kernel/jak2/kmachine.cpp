@@ -566,6 +566,8 @@ void InitMachine_PCPort() {
 
   // discord rich presence
   make_function_symbol_from_c("pc-discord-rpc-update", (void*)kmachine_extras::update_discord_rpc);
+  make_function_symbol_from_c("pc-get-level-display-name",
+                              (void*)kmachine_extras::pc_get_level_display_name);
 
   // debugging tools
   make_function_symbol_from_c("alloc-vagdir-names", (void*)kmachine_extras::alloc_vagdir_names);

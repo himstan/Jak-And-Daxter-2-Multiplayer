@@ -13,14 +13,16 @@
 
 #include "game/multiplayer/platform/discovery/discovery_service.h"
 #include "game/multiplayer/platform/profile/profile_store.h"
+#include "game/multiplayer/platform/runtime/game_browser.h"
 #include "game/multiplayer/platform/runtime/runtime_command.h"
 #include "game/multiplayer/platform/session/game_adapter.h"
+#include "game/multiplayer/platform/steam/steam_lobby.h"
 
 namespace multiplayer::platform {
 
 enum class HostLifecycle : uint8_t { IDLE, STARTING, READY, FAILED };
 enum class HostMappingState : uint8_t { NOT_REQUESTED, DISABLED, PENDING, READY, FAILED };
-enum class HostAccessKind : uint8_t { NONE, INVITE, ROOM_CODE };
+enum class HostAccessKind : uint8_t { NONE, INVITE, ROOM_CODE, STEAM };
 
 struct DiscoverySnapshot {
   DiscoveryKind kind = DiscoveryKind::NONE;
@@ -36,10 +38,17 @@ struct HostSnapshot {
   std::string access_text;
 };
 
+struct SteamSnapshot {
+  bool available = false;
+  uint64_t invite_lobby = 0;
+};
+
 struct RuntimeSnapshot {
   SessionSnapshot session;
   DiscoverySnapshot discovery;
   HostSnapshot host;
+  SteamSnapshot steam;
+  BrowserSnapshot browser;
   CommandResult connection_result;
   CommandResult session_result;
   CommandResult control_result;
@@ -88,6 +97,8 @@ class MultiplayerRuntime {
   void publish_worker_snapshot(SessionSnapshot session,
                                DiscoverySnapshot discovery,
                                HostSnapshot host,
+                               SteamSnapshot steam,
+                               BrowserSnapshot browser,
                                std::string compatibility_identity);
   CommandResult& result_for(CommandDomain domain);
   void run();

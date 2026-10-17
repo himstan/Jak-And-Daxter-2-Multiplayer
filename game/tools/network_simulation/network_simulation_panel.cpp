@@ -162,8 +162,9 @@ void NetworkSimulationPanel::draw(bool* open) {
     return;
   }
 
-  ImGui::TextColored({1.0f, 0.72f, 0.2f, 1.0f},
-                     "Developer tool: these settings affect every GNS connection in this process.");
+  ImGui::TextColored(
+      {1.0f, 0.72f, 0.2f, 1.0f},
+      "Developer tool: these settings affect every direct and Steam connection in this process.");
   if (ImGui::Button("Normal")) {
     settings_ = {};
     apply();

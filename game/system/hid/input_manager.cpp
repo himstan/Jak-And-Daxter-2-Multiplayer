@@ -1,11 +1,10 @@
 #include "input_manager.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
+#include "device_claim.h"
 #include "input_manager.h"
 #include "sdl_util.h"
 
@@ -23,13 +22,13 @@
 #include "third-party/imgui/imgui.h"
 
 namespace {
-u64 stable_controller_claim_hash(const std::string& claim_key) {
-  u64 hash = 14695981039346656037ull;
-  for (const auto character : claim_key) {
-    hash ^= (u8)character;
-    hash *= 1099511628211ull;
-  }
-  return hash;
+constexpr Uint16 kValveVendorId = 0x28de;
+constexpr Uint16 kSteamVirtualGamepadProductId = 0x11ff;
+
+// needed for steam deck
+bool owned_by_steam_input(const SDL_JoystickID joystick) {
+  return steam::input_active() && SDL_GetJoystickVendorForID(joystick) == kValveVendorId &&
+         SDL_GetJoystickProductForID(joystick) != kSteamVirtualGamepadProductId;
 }
 }  // namespace
 
@@ -80,6 +79,9 @@ InputManager::InputManager(SDL_Window* window)
     } else {
       lg::error("Could not find SDL Controller DB at path `{}`", mapping_path);
     }
+    steam::initialize_input(
+        (file_util::get_jak_project_dir() / "game" / "assets" / "steam_input" / "actions.vdf")
+            .string());
     // Initialize atleast 2 ports, because that's normal for Jak
     // more will be allocated if more controllers are found
     m_data[0] = std::make_shared<PadData>();
@@ -126,6 +128,9 @@ void InputManager::refresh_device_list() {
     auto joysticks = SDL_GetJoysticks(&num_joysticks);
     if (num_joysticks > 0) {
       for (int i = 0; i < num_joysticks; i++) {
+        if (owned_by_steam_input(joysticks[i])) {
+          continue;
+        }
         if (!SDL_IsGamepad(joysticks[i])) {
           lg::error("Controller with device id {} is not avaiable via the GameController API", i);
           continue;
@@ -208,28 +213,12 @@ bool InputManager::try_claim_controller(const int controller_idx) {
     return true;
   }
 
-#ifdef _WIN32
-  const auto& controller = m_available_controllers.at(controller_idx);
-  const auto claim_hash = stable_controller_claim_hash(controller->get_claim_key());
-  const auto mutex_name = fmt::format("Local\\OpenGOALControllerClaim_{:016x}", claim_hash);
-  const HANDLE claim_mutex = CreateMutexA(nullptr, false, mutex_name.c_str());
-  if (!claim_mutex) {
-    lg::warn("Unable to create controller claim mutex for {}; allowing controller assignment",
-             controller->get_name());
-    return true;
+  const auto claim = claim_device(m_available_controllers.at(controller_idx)->get_claim_key());
+  if (!claim) {
+    return false;
   }
-
-  if (const auto wait_result = WaitForSingleObject(claim_mutex, 0); wait_result == WAIT_OBJECT_0 || wait_result == WAIT_ABANDONED) {
-    m_controller_claims[controller_idx] = claim_mutex;
-    return true;
-  }
-
-  CloseHandle(claim_mutex);
-  return false;
-#else
-  m_controller_claims[controller_idx] = nullptr;
+  m_controller_claims[controller_idx] = *claim;
   return true;
-#endif
 }
 
 void InputManager::release_controller_claim(const int controller_idx) {
@@ -237,12 +226,7 @@ void InputManager::release_controller_claim(const int controller_idx) {
   if (claim == m_controller_claims.end()) {
     return;
   }
-#ifdef _WIN32
-  if (claim->second) {
-    ReleaseMutex((HANDLE)claim->second);
-    CloseHandle((HANDLE)claim->second);
-  }
-#endif
+  release_device(claim->second);
   m_controller_claims.erase(claim);
 }
 
@@ -287,6 +271,13 @@ void InputManager::hide_cursor(const bool hide_cursor) {
 
 void InputManager::process_sdl_event(const SDL_Event& event) {
   if (m_text_editor.handle_event(event)) {
+    return;
+  }
+
+  if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_T &&
+      !event.key.repeat && m_text_input_shortcut_enabled && !m_waiting_for_bind &&
+      (event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) == 0) {
+    m_text_input_requested = true;
     return;
   }
 
@@ -338,7 +329,8 @@ void InputManager::poll_keyboard_data() {
   m_text_input_keyboard_captured =
       m_text_editor.active() ||
       (m_text_input_keyboard_captured &&
-       (keyboard_state[SDL_SCANCODE_RETURN] || keyboard_state[SDL_SCANCODE_KP_ENTER]));
+       (keyboard_state[SDL_SCANCODE_RETURN] || keyboard_state[SDL_SCANCODE_KP_ENTER] ||
+        keyboard_state[SDL_SCANCODE_ESCAPE] || keyboard_state[SDL_SCANCODE_T]));
   if (m_text_input_keyboard_captured) {
     clear_keyboard_actions();
     return;
@@ -372,6 +364,29 @@ void InputManager::clear_mouse_actions() {
       m_mouse.clear_actions(m_data.at(m_keyboard_and_mouse_port));
     }
   }
+}
+
+void InputManager::poll_steam_pad_data() {
+  const auto port = m_data.find(0);
+  if (port == m_data.end()) {
+    return;
+  }
+  m_steam_pad.refresh_pads();
+  if (m_controller_port_mapping.contains(0)) {
+    m_steam_pad.release(port->second);
+    return;
+  }
+  if (m_waiting_for_bind || m_skip_polling_for_n_frames > 0) {
+    m_steam_pad.clear_actions(port->second);
+    return;
+  }
+  m_steam_pad.poll_state(port->second, m_settings->axis_scale,
+                         SDL_GetWindowFlags(m_window) & SDL_WINDOW_INPUT_FOCUS);
+  const bool keyboard_fallback = !m_steam_pad.connected();
+  if (m_settings->_keyboard_temp_enabled && !keyboard_fallback) {
+    clear_keyboard_actions();
+  }
+  m_settings->_keyboard_temp_enabled = keyboard_fallback;
 }
 
 void InputManager::finish_polling() {
@@ -446,6 +461,12 @@ void InputManager::process_ee_events() {
     }
     ee_event_queue.pop();
   }
+}
+
+bool InputManager::text_input_shortcut(const bool enabled) {
+  m_text_input_shortcut_enabled = enabled;
+  const bool requested = m_text_input_requested.exchange(false);
+  return enabled && requested && !m_text_editor.active();
 }
 
 uint32_t InputManager::begin_text_input(const std::string_view initial_text,
@@ -523,11 +544,21 @@ std::optional<std::shared_ptr<PadData>> InputManager::get_current_data(const int
   return m_data.at(port);
 }
 
-std::string InputManager::get_controller_name(const int controller_id) {
-  if ((size_t)controller_id >= m_available_controllers.size()) {
-    return "";
+std::optional<uint64_t> InputManager::steam_pad_at(const int controller_id) const {
+  const auto& pads = m_steam_pad.pads();
+  const int index = controller_id - (int)m_available_controllers.size();
+  if (index < 0 || index >= (int)pads.size()) {
+    return std::nullopt;
   }
-  return m_available_controllers.at(controller_id)->get_name();
+  return pads.at(index);
+}
+
+std::string InputManager::get_controller_name(const int controller_id) {
+  if (controller_id >= 0 && controller_id < (int)m_available_controllers.size()) {
+    return m_available_controllers.at(controller_id)->get_name();
+  }
+  const auto pad = steam_pad_at(controller_id);
+  return pad ? steam::pad_name(*pad) : "";
 }
 
 std::string InputManager::get_current_bind(const int port,
@@ -569,13 +600,29 @@ std::string InputManager::get_current_bind(const int port,
 }
 
 int InputManager::get_controller_index(const int port) {
-  if (m_controller_port_mapping.find(port) == m_controller_port_mapping.end()) {
+  if (m_controller_port_mapping.find(port) != m_controller_port_mapping.end()) {
+    return m_controller_port_mapping.at(port);
+  }
+  const auto& pads = m_steam_pad.pads();
+  const auto pad = m_steam_pad.pad();
+  const auto steam_pad = pad ? std::ranges::find(pads, *pad) : pads.end();
+  if (port != 0 || steam_pad == pads.end()) {
     return 0;
   }
-  return m_controller_port_mapping.at(port);
+  return (int)m_available_controllers.size() + (int)(steam_pad - pads.begin());
 }
 
 void InputManager::set_controller_for_port(const int controller_id, const int port) {
+  if (const auto pad = steam_pad_at(controller_id); pad && port == 0) {
+    clear_inputs();
+    if (const auto mapped = m_controller_port_mapping.find(0);
+        mapped != m_controller_port_mapping.end()) {
+      release_controller_claim(mapped->second);
+      m_controller_port_mapping.erase(mapped);
+    }
+    m_steam_pad.select(*pad);
+    return;
+  }
   if (controller_id < (int)m_available_controllers.size() && try_claim_controller(controller_id)) {
     // Reset inputs as this device won't be able to be read from again!
     clear_inputs();
@@ -596,7 +643,7 @@ void InputManager::set_controller_for_port(const int controller_id, const int po
 
 bool InputManager::controller_has_led(const int port) {
   if (m_controller_port_mapping.find(port) == m_controller_port_mapping.end()) {
-    return false;
+    return port == 0 && m_steam_pad.has_led();
   }
   const auto id = m_controller_port_mapping.at(port);
   if (id >= (int)m_available_controllers.size()) {
@@ -607,7 +654,7 @@ bool InputManager::controller_has_led(const int port) {
 
 bool InputManager::controller_has_rumble(const int port) {
   if (m_controller_port_mapping.find(port) == m_controller_port_mapping.end()) {
-    return false;
+    return port == 0 && m_steam_pad.connected();
   }
   const auto id = m_controller_port_mapping.at(port);
   if (id >= (int)m_available_controllers.size()) {
@@ -640,7 +687,7 @@ bool InputManager::controller_has_trigger_effect_support(const int port) {
 
 int InputManager::controller_send_rumble(int port, u8 low_intensity, u8 high_intensity) {
   if (m_controller_port_mapping.find(port) == m_controller_port_mapping.end()) {
-    return 0;
+    return port == 0 ? m_steam_pad.send_rumble(low_intensity, high_intensity) : 0;
   }
   return m_available_controllers.at(m_controller_port_mapping.at(port))
       ->send_rumble(low_intensity, high_intensity);
@@ -733,6 +780,9 @@ void InputManager::enqueue_set_controller_led(const int port,
 
 void InputManager::set_controller_led(const int port, const u8 red, const u8 green, const u8 blue) {
   if (m_controller_port_mapping.find(port) == m_controller_port_mapping.end()) {
+    if (port == 0) {
+      m_steam_pad.set_led(red, green, blue);
+    }
     return;
   }
   const auto id = m_controller_port_mapping.at(port);

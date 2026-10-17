@@ -8,6 +8,10 @@
 
 namespace multiplayer::platform {
 
+inline constexpr size_t kMaximumGameDetailsBytes = 32;
+
+bool valid_game_details(std::string_view details);
+
 struct DiscoveryAdvertisement {
   uint16_t game_port = 0;
   uint8_t current_players = 0;
@@ -15,6 +19,8 @@ struct DiscoveryAdvertisement {
   std::string game_id;
   std::string compatibility_identity;
   std::string room_code;
+  std::string host_name;
+  std::string details;
 };
 
 std::vector<uint8_t> encode_discovery_query(std::string_view game_id);

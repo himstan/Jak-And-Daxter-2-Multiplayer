@@ -11,6 +11,7 @@ void pc_set_levels(u32 lev_list);
 void pc_set_active_levels(u32 lev_list);
 u32 alloc_vagdir_names(u32 heap_sym);
 inline u64 bool_to_symbol(const bool val);
+u64 pc_get_level_display_name(u32 level_name, u32 dest);
 void init_autosplit_struct();
 void callback_fetch_external_speedrun_times(bool success,
                                             const std::string& cache_id,

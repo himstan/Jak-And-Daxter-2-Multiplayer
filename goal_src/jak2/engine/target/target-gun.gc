@@ -1307,6 +1307,7 @@
 
 (defun target-gun-marking-menu ((this target))
   (when (and (not (mp-local-player-dead-or-spectating?))
+             (not (player-list-open?))
              (not (paused?))
              (not (and (focus-test? this dark) (nonzero? (-> this darkjak))))
              (not (logtest? (-> this focus-status) (focus-status grabbed)))

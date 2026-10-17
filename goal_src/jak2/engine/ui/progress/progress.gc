@@ -790,7 +790,7 @@
   "Set the next menu state specified by arg0 at the index specified by arg1."
   (set! (-> *progress-state* clear-screen) #f)
   (when (!= arg0 (-> this current))
-    (when (and (= (-> this current) 'searching-game)
+    (when (and (= (-> this current) 'steam-joining)
                (!= arg0 'go-away)
                (!= arg0 'mp-lobby))
       (log 'debug "[Progress] Canceling search/join from Progress menu.~%")

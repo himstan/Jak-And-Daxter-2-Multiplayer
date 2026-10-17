@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 #include "game/multiplayer/platform/discovery/discovery_protocol.h"
 
@@ -24,7 +25,6 @@ struct DiscoveryConfig {
   uint16_t discovery_port = 0;
   uint16_t expected_game_port = 0;
   std::string game_id;
-  std::string compatibility_identity;
   std::string directed_address;
   bool include_full_sessions = false;
 };
@@ -45,15 +45,16 @@ class DiscoveryScanner {
   bool start(DiscoveryConfig config);
   void stop();
   DiscoveryStatus status() const { return status_; }
-  std::optional<DiscoveryResult> take_result();
+  std::vector<DiscoveryResult> results();
 
  private:
   void scan(DiscoveryConfig config);
+  bool add_result(DiscoveryResult result);
 
   std::atomic<bool> stopping_{false};
   std::atomic<DiscoveryStatus> status_{DiscoveryStatus::IDLE};
   std::mutex result_mutex_;
-  std::optional<DiscoveryResult> result_;
+  std::vector<DiscoveryResult> results_;
   std::thread thread_;
 };
 
@@ -63,6 +64,7 @@ class DiscoveryResponder {
 
   bool start(uint16_t discovery_port, DiscoveryAdvertisement advertisement);
   void update(DiscoveryAdvertisement advertisement);
+  void set_listed(bool listed) { listed_ = listed; }
   void stop();
   bool active() const { return active_; }
 
@@ -70,6 +72,7 @@ class DiscoveryResponder {
   void respond(uint16_t discovery_port);
 
   std::atomic<bool> active_{false};
+  std::atomic<bool> listed_{true};
   std::mutex advertisement_mutex_;
   DiscoveryAdvertisement advertisement_;
   std::thread thread_;

@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+class ISteamNetworkingUtils;
+
 namespace multiplayer::platform {
 
 struct NetworkSimulationSettings {
@@ -29,5 +31,6 @@ struct NetworkSimulationSettings {
 
 bool valid_network_simulation_settings(const NetworkSimulationSettings& settings);
 bool apply_network_simulation(const NetworkSimulationSettings& settings);
+void apply_steam_network_simulation(ISteamNetworkingUtils& utils);
 
 }  // namespace multiplayer::platform

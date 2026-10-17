@@ -23,6 +23,7 @@ struct ConnectionSnapshot {
   int critical_queue_time_us = 0;
   int normal_queue_time_us = 0;
   int bulk_queue_time_us = 0;
+  bool relayed = false;
 };
 
 struct AggregateSnapshot {

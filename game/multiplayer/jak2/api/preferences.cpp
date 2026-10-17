@@ -10,6 +10,7 @@
 #include "common/util/FileUtil.h"
 #include "common/util/json_util.h"
 
+#include "game/external/steam/steam_client.h"
 #include "game/multiplayer/jak2/wire/multiplayer_protocol.h"
 #include "game/multiplayer/platform/profile/profile_store.h"
 #include "game/multiplayer/platform/runtime/multiplayer_runtime.h"
@@ -92,6 +93,11 @@ int hex_digit(const char value) {
   return -1;
 }
 
+bool valid_player_name_character(const char character) {
+  return (character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z') ||
+         (character >= '0' && character <= '9');
+}
+
 uint8_t color_channel(const float value) {
   return static_cast<uint8_t>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f));
 }
@@ -106,17 +112,21 @@ bool normalize_player_name(const std::string_view input,
   if (input.size() >= kMultiplayerPlayerNameSize) {
     return false;
   }
-  for (const char character : input) {
-    const bool valid = (character >= 'A' && character <= 'Z') ||
-                       (character >= 'a' && character <= 'z') ||
-                       (character >= '0' && character <= '9');
-    if (!valid) {
-      output.clear();
-      return false;
-    }
-  }
+  if (!std::ranges::all_of(input, valid_player_name_character))
+    return false;
   output.assign(input);
   return true;
+}
+
+std::string player_name_from_steam(const std::string_view persona_name) {
+  std::string name;
+  for (const char character : persona_name) {
+    if (name.size() + 1 >= kMultiplayerPlayerNameSize)
+      break;
+    if (valid_player_name_character(character))
+      name.push_back(character);
+  }
+  return name;
 }
 
 bool parse_player_color(const std::string_view input, uint32_t& output) {
@@ -252,6 +262,11 @@ void parse_preferences_root(const json& root, MultiplayerPreferences& parsed, bo
       parsed.nametag_visibility =
           static_cast<PlayerNametagVisibility>(root.at("nametag_visibility").get<uint8_t>());
     }
+    if (root.contains("host_visibility") && root.at("host_visibility").is_number_unsigned() &&
+        root.at("host_visibility") <= static_cast<uint8_t>(HostVisibility::LAN_ONLY)) {
+      parsed.host_visibility =
+          static_cast<HostVisibility>(root.at("host_visibility").get<uint8_t>());
+    }
     if (root.contains("respawn_delay_seconds") &&
         root.at("respawn_delay_seconds").is_number_unsigned() &&
         root.at("respawn_delay_seconds") <= std::numeric_limits<uint16_t>::max()) {
@@ -291,6 +306,11 @@ void load_multiplayer_preferences() {
     multiplayer::platform::StoredPlayerProfile identity;
     if (!load_common_profile(identity)) {
       throw std::runtime_error("invalid multiplayer identity profile");
+    }
+    if (identity.display_name.empty()) {
+      identity.display_name = player_name_from_steam(steam::persona_name());
+      if (!identity.display_name.empty())
+        save_common_profile(identity);
     }
     g_preferences.player_name = identity.display_name;
     const auto path = settings_path();
@@ -365,6 +385,7 @@ void save_multiplayer_preferences() {
   root["respawn_delay_seconds"] = g_preferences.respawn_delay_seconds;
   root["automatic_port_mapping"] = g_preferences.automatic_port_mapping;
   root["session_player_limit"] = g_preferences.session_player_limit;
+  root["host_visibility"] = static_cast<uint8_t>(g_preferences.host_visibility);
   const auto path = settings_path();
   file_util::create_dir_if_needed_for_file(path);
   file_util::write_text_file(path, root.dump(2));
@@ -422,6 +443,12 @@ MultiplayerPreferences get_multiplayer_preferences() {
   return preferences;
 }
 
+multiplayer::platform::LobbyPrivacy lobby_privacy(const HostVisibility visibility) {
+  return visibility == HostVisibility::LAN_ONLY
+             ? multiplayer::platform::LobbyPrivacy::PUBLIC
+             : static_cast<multiplayer::platform::LobbyPrivacy>(visibility);
+}
+
 bool can_edit_multiplayer_preferences(const MultiplayerPreferences& previous,
                                       const MultiplayerPreferences& next,
                                       const multiplayer::platform::SessionState& session) {
@@ -430,12 +457,15 @@ bool can_edit_multiplayer_preferences(const MultiplayerPreferences& previous,
     return true;
   if (previous.network_port != next.network_port || previous.room_code != next.room_code ||
       previous.session_player_limit != next.session_player_limit ||
-      previous.automatic_port_mapping != next.automatic_port_mapping)
+      previous.automatic_port_mapping != next.automatic_port_mapping ||
+      (previous.host_visibility == HostVisibility::LAN_ONLY) !=
+          (next.host_visibility == HostVisibility::LAN_ONLY))
     return false;
   return session.role == SessionRole::HOST ||
          (previous.friendly_fire == next.friendly_fire &&
           previous.player_collision == next.player_collision &&
-          previous.respawn_delay_seconds == next.respawn_delay_seconds);
+          previous.respawn_delay_seconds == next.respawn_delay_seconds &&
+          previous.host_visibility == next.host_visibility);
 }
 
 bool set_multiplayer_preferences(MultiplayerPreferences preferences) {
@@ -446,6 +476,7 @@ bool set_multiplayer_preferences(MultiplayerPreferences preferences) {
       !multiplayer::platform::normalize_room_code(preferences.room_code, room_code) ||
       !is_player_skin_valid(preferences.player_skin) ||
       preferences.nametag_visibility > PlayerNametagVisibility::OFF ||
+      preferences.host_visibility > HostVisibility::LAN_ONLY ||
       preferences.session_player_limit < 2 || preferences.session_player_limit > kMPMaxPlayers ||
       (preferences.preferred_character != PlayerCharacter::JAK &&
        preferences.preferred_character != PlayerCharacter::DAXTER)) {

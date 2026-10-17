@@ -335,7 +335,8 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
            {"session-player-limit", offsetof(MultiplayerPreferencesGOAL, session_player_limit)},
            {"friendly-fire", offsetof(MultiplayerPreferencesGOAL, friendly_fire)},
            {"nametag-visibility", offsetof(MultiplayerPreferencesGOAL, nametag_visibility)},
-           {"player-map-marker", offsetof(MultiplayerPreferencesGOAL, player_map_marker)}}) {
+           {"player-map-marker", offsetof(MultiplayerPreferencesGOAL, player_map_marker)},
+           {"host-visibility", offsetof(MultiplayerPreferencesGOAL, host_visibility)}}) {
     EXPECT_EQ(types.lookup_field_info("multiplayer-preferences", field).field.offset(), offset);
   }
   load_types("multiplayer/event/mp-event-h.gc");
@@ -556,6 +557,9 @@ TEST(Jak2GoalBridge, FreeBridgeFunctionsReadAndWriteGoalValues) {
   std::string text;
   ASSERT_TRUE(multiplayer::jak2::bridge::read_string(0x10000, text));
   EXPECT_EQ(text, "hello");
+  ASSERT_TRUE(multiplayer::jak2::bridge::write_string(0x10000, "goodbye"));
+  ASSERT_TRUE(multiplayer::jak2::bridge::read_string(0x10000, text));
+  EXPECT_EQ(text, "goodb");
 
   auto& source = memory.at<MPPlayerSkinGOAL>(0x11500);
   for (size_t index = 0; index < kMPPlayerSkinSlotCount; ++index) {
@@ -1339,6 +1343,16 @@ TEST(Jak2GoalBridge, RespawnDelayValidatesPersistsAndResets) {
   EXPECT_EQ(get_multiplayer_preferences().respawn_delay_seconds, 20);
 }
 
+TEST(Jak2Preferences, SteamNamesKeepOnlySupportedCharactersWithinTheNameLimit) {
+  EXPECT_EQ(player_name_from_steam("Stan"), "Stan");
+  EXPECT_EQ(player_name_from_steam("[TAG] Dark_Jak Ã© 2"), "TAGDarkJak2");
+  EXPECT_EQ(player_name_from_steam("abcdefghijklmnopqrstuvwxyz"), "abcdefghijklmno");
+  EXPECT_EQ(player_name_from_steam("!!! ???"), "");
+  std::string normalized;
+  EXPECT_TRUE(
+      normalize_player_name(player_name_from_steam("A very long Steam name 123"), normalized));
+}
+
 TEST(Jak2Preferences, PlayerDisplayPreferencesPersistAndValidate) {
   ScopedPreferencesRoot preferences_root;
   const auto defaults = get_multiplayer_preferences();
@@ -1387,6 +1401,7 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   preferences.player_collision = true;
   preferences.friendly_fire = true;
   preferences.nametag_visibility = PlayerNametagVisibility::OFF;
+  preferences.host_visibility = HostVisibility::LAN_ONLY;
   preferences.player_map_marker = false;
   preferences.player_skin = get_default_player_skin(0x123456);
   std::memset(memory.at<String>(state.player_name).data(), 'x', 16);
@@ -1399,6 +1414,7 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   EXPECT_EQ(state.friendly_fire, 1);
   EXPECT_EQ(state.nametag_visibility, static_cast<uint8_t>(PlayerNametagVisibility::OFF));
   EXPECT_EQ(state.player_map_marker, 0);
+  EXPECT_EQ(state.host_visibility, static_cast<uint8_t>(HostVisibility::LAN_ONLY));
 
   MultiplayerPreferences restored;
   ASSERT_TRUE(multiplayer::jak2::bridge::read_preferences(0x11000, restored));
@@ -1422,6 +1438,7 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   EXPECT_TRUE(restored.friendly_fire);
   EXPECT_EQ(restored.nametag_visibility, PlayerNametagVisibility::OFF);
   EXPECT_FALSE(restored.player_map_marker);
+  EXPECT_EQ(restored.host_visibility, HostVisibility::LAN_ONLY);
   EXPECT_EQ(restored.player_skin.colors, preferences.player_skin.colors);
   EXPECT_EQ(restored.player_skin.strengths, preferences.player_skin.strengths);
   const auto root =
@@ -1523,7 +1540,15 @@ TEST(Jak2Preferences, ActiveSessionsProtectConnectionSettingsAndClientHostRules)
         changed.automatic_port_mapping = false;
       EXPECT_FALSE(can_edit_multiplayer_preferences(original, changed, session));
     }
+    changed = original;
+    changed.host_visibility = HostVisibility::INVITE_ONLY;
+    EXPECT_TRUE(can_edit_multiplayer_preferences(original, changed, session));
+    changed.host_visibility = HostVisibility::LAN_ONLY;
+    EXPECT_FALSE(can_edit_multiplayer_preferences(original, changed, session));
   }
+  EXPECT_EQ(lobby_privacy(HostVisibility::FRIENDS_ONLY),
+            multiplayer::platform::LobbyPrivacy::FRIENDS_ONLY);
+  EXPECT_EQ(lobby_privacy(HostVisibility::LAN_ONLY), multiplayer::platform::LobbyPrivacy::PUBLIC);
   session.role = multiplayer::platform::SessionRole::NONE;
   EXPECT_TRUE(can_edit_multiplayer_preferences(original, changed, session));
 }

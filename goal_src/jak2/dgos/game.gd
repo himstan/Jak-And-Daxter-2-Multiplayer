@@ -166,9 +166,7 @@
   "mp-player-texture-groups.o" ;; added
   "mp-cutscene-appearance.o" ;; added
   "mp-overlay-layout-h.o" ;; added
-  "notification-h.o" ;; added
   "mp-spectate-h.o" ;; added
-  "mp-player-list-h.o" ;; added
   "mp-world-h.o" ;; added
   "mp-replication-h.o" ;; added
   "target-helper.o" ;; added
@@ -196,7 +194,9 @@
   "progress-h.o"
   "progress-h-pc.o" ;; added
   "text-input.o" ;; added
+  "notification-h.o"
   "progress-generic-h-pc.o" ;; added
+  "mp-player-list-h.o" ;; added
   "rpc-h.o"
   "path-h.o"
   "static-actor-h.o" ;; added
@@ -410,6 +410,8 @@
   "progress-static-pc.o" ;; added
   "mp-lobby-skin-editor.o" ;; added
   "mp-lobby-progress.o" ;; added
+  "lobby-browser-h.o" ;; added
+  "lobby-browser.o" ;; added
   "progress.o"
   "progress-pc.o" ;; added
   "progress-generic-pc.o" ;; added

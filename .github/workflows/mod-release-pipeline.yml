@@ -157,6 +157,7 @@ jobs:
           versionName=${{ needs.create_release.outputs.bundleTagName }}
           chmod +x ./.github/scripts/releases/extract_mod_build_windows.sh
           ./.github/scripts/releases/extract_mod_build_windows.sh ./ci-artifacts/windows ./ci-artifacts/opengoal-windows-static ./
+          bash ./.github/scripts/releases/download_steam_redist.sh ./ci-artifacts/windows steam_api64.dll
           TAG_VAL=${{ needs.create_release.outputs.bundleTagName }}
           7z a -tzip ${{ inputs.outputDir }}/dist/windows-${TAG_VAL}.zip ./ci-artifacts/windows/*
 
@@ -214,6 +215,7 @@ jobs:
           versionName=${{ needs.create_release.outputs.bundleTagName }}
           chmod +x ./.github/scripts/releases/extract_mod_build_unix.sh
           ./.github/scripts/releases/extract_mod_build_unix.sh ./ci-artifacts/linux ./ci-artifacts/opengoal-linux-static ./
+          bash ./.github/scripts/releases/download_steam_redist.sh ./ci-artifacts/linux libsteam_api.so
           pushd ci-artifacts/linux
           TAG_VAL=${{ needs.create_release.outputs.bundleTagName }}
           tar czf ../../${{ inputs.outputDir }}/dist/linux-${TAG_VAL}.tar.gz .
@@ -273,6 +275,7 @@ jobs:
           versionName=${{ needs.create_release.outputs.bundleTagName }}
           chmod +x ./.github/scripts/releases/extract_mod_build_unix.sh
           ./.github/scripts/releases/extract_mod_build_unix.sh ./ci-artifacts/macos-intel ./ci-artifacts/opengoal-macos-static ./
+          bash ./.github/scripts/releases/download_steam_redist.sh ./ci-artifacts/macos-intel libsteam_api.dylib
           pushd ci-artifacts/macos-intel
           TAG_VAL=${{ needs.create_release.outputs.bundleTagName }}
           tar czf ../../${{ inputs.outputDir }}/dist/macos-intel-${TAG_VAL}.tar.gz .

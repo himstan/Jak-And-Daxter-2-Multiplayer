@@ -1,6 +1,12 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(defun overlay-slide-offset ((age time-frame) (slide-time time-frame) (hold-time time-frame) (width float))
+  (let* ((enter-progress (min 1.0 (/ (the float age) slide-time)))
+         (exit-progress (max 0.0 (/ (- (the float age) (+ slide-time hold-time)) slide-time)))
+         (remaining (- 1.0 enter-progress)))
+    (the int (* (- width) (max (* remaining remaining remaining) (min 1.0 exit-progress))))))
+
 (define-perm *mp-overlay-occupancy* mp-overlay-occupancy-snapshot (new 'static 'mp-overlay-occupancy-snapshot))
 
 (defun mp-overlay-current-real-frame ()

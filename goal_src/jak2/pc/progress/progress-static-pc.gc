@@ -81,6 +81,26 @@ This gives us more freedom to write code how we want.
       (the-as string #f))
   )
 
+(defun prepare-steam-join! ()
+  (mp-clear-version-mismatch-ui!)
+  (when (nonnull? *pc-settings*)
+    (set! (-> *pc-settings* is-host?) #f)
+    (set! (-> *pc-settings* is-host-online?) #f))
+  (mp-configure-bridge-version!)
+  (none))
+
+(defun begin-steam-join! ((p progress) (joined? int))
+  (if (= joined? 1)
+      (set-next-state p 'steam-joining 0)
+      (sound-play "menu-error"))
+  (none))
+
+(defun accept-steam-invite! ((p progress))
+  (when (and (nonnull? p) (= (-> p next) 'none) (= (pc-multi-steam-invite-pending) 1))
+    (prepare-steam-join!)
+    (begin-steam-join! p (pc-multi-join-steam-invite)))
+  (none))
+
 (defun mp-draw-invite-action ((label text-id) (status int) (show-status? symbol)
                               (p progress) (font-ctx font-context) (option-index int))
   (when (and p (nonzero? (the-as uint p))
@@ -191,7 +211,7 @@ This gives us more freedom to write code how we want.
                         (option-index int) (selected? symbol))
   (let ((copy-mode (pc-multi-get-host-access-kind)))
     (when (!= copy-mode 0)
-      (mp-draw-invite-action (if (= copy-mode 1)
+      (mp-draw-invite-action (if (= (pc-multi-get-host-mapping-state) 3)
                                  (text-id progress-copy-invite)
                                  (text-id progress-copy-room-code))
                              0 #f p font-ctx option-index)))
@@ -206,7 +226,7 @@ This gives us more freedom to write code how we want.
       (new 'static 'menu-sub-menu-option
         :name (text-id progress-host-game)
         :scale #t
-        :next-state 'host-mode
+        :next-state 'host-game
         )
       (new 'static 'menu-sub-menu-option
         :name (text-id progress-join-game)
@@ -228,6 +248,7 @@ This gives us more freedom to write code how we want.
         :scale #f
         )
       )
+    :on-tick (lambda ((the-progress progress)) (accept-steam-invite! the-progress) (none))
     )
   )
 
@@ -965,26 +986,6 @@ This gives us more freedom to write code how we want.
     )
   )
 
-(define *host-mode-options-pc*
-  (new 'static 'menu-option-list
-    :y-center #xc6
-    :y-space 30
-    :scale 0.82
-    :options (new 'static 'boxed-array :type menu-option
-      (new 'static 'menu-sub-menu-option
-        :name (text-id progress-host-online)
-        :scale #t
-        :next-state 'host-online
-        )
-      (new 'static 'menu-sub-menu-option
-        :name (text-id progress-host-lan)
-        :scale #t
-        :next-state 'host-lan
-        )
-      )
-    )
-  )
-
 (define *host-game-options-pc*
   (new 'static 'menu-option-list
     :y-center #xc6
@@ -1018,11 +1019,13 @@ This gives us more freedom to write code how we want.
     ((= rejection (mp-session-rejection wrong-room-code)) (text-id progress-room-code-rejected))
     ((= rejection (mp-session-rejection host-full)) (text-id progress-host-full))
     ((= rejection (mp-session-rejection version-mismatch)) (text-id progress-version-mismatch))
+    ((= rejection (mp-session-rejection kicked)) (text-id progress-multi-kicked-msg))
     ((or (= discovery-status (mp-discovery-status timed-out))
          (= discovery-status (mp-discovery-status failed)))
-     (if (= discovery-kind (mp-discovery-kind directed))
-       (text-id progress-credential-discovery-failed)
-       (text-id progress-lan-search-timeout)))
+     (cond
+       ((= discovery-kind (mp-discovery-kind directed)) (text-id progress-credential-discovery-failed))
+       ((= discovery-kind (mp-discovery-kind steam)) (text-id progress-host-unreachable))
+       (else (text-id progress-lan-search-timeout))))
     ((and (= command-outcome (mp-command-outcome rejected))
           (= command-error (mp-command-error invalid-request)))
      (text-id progress-invalid-invite))
@@ -1115,7 +1118,7 @@ This gives us more freedom to write code how we want.
     )
   )
 
-(define *join-game-options-pc*
+(define *manual-join-options-pc*
   (new 'static 'menu-option-list
     :y-center #xc6
     :y-space 30
@@ -1127,16 +1130,12 @@ This gives us more freedom to write code how we want.
         :next-state 'invite
         )
       (new 'static 'menu-sub-menu-option
-        :name (text-id progress-find-game)
-        :scale #t
-        :next-state 'searching-game
-        )
-      (new 'static 'menu-sub-menu-option
         :name (text-id progress-direct-connect)
         :scale #t
         :next-state 'direct-connect
         )
       )
+    :on-tick (lambda ((the-progress progress)) (accept-steam-invite! the-progress) (none))
     )
   )
 

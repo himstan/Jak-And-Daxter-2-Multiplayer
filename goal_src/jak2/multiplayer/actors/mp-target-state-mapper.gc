@@ -295,6 +295,5 @@
     (('target-pole-flip-up-jump) (the uint (mp-target-state-id pole-flip-up-jump)))
     (('target-pole-flip-forward) (the uint (mp-target-state-id pole-flip-forward)))
     (('target-pole-flip-forward-jump) (the uint (mp-target-state-id pole-flip-forward-jump)))
-    (else (if (player-mech-state? state)
-            (the uint (mp-target-state-id mech-stance))
-            (the uint (mp-target-state-id none))))))
+    (else
+     (if (player-mech-state? state) (the uint (mp-target-state-id mech-stance)) (the uint (mp-target-state-id none))))))

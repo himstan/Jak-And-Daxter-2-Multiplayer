@@ -1,7 +1,9 @@
 #include "common/log/log.h"
 
+#include "game/external/steam/steam_client.h"
 #include "game/multiplayer/platform/discovery/invite.h"
 #include "game/multiplayer/platform/runtime/multiplayer_runtime_worker.h"
+#include "game/multiplayer/platform/session/connection_input.h"
 #ifdef ENABLE_NETWORK_SIMULATION
 #include "game/multiplayer/platform/transport/network_simulation.h"
 #endif
@@ -18,10 +20,13 @@ void RuntimeWorker::stop_connection_services() {
   stop_discovery();
   discovery_responder_.stop();
   port_mapping_.stop();
+  steam_lobby_.leave();
 }
 
 void RuntimeWorker::reset_host_state() {
   host_ = {};
+  lobby_details_ = {};
+  privacy_ = LobbyPrivacy::PUBLIC;
   internet_host_ = false;
   automatic_port_mapping_ = false;
 }
@@ -34,8 +39,11 @@ void RuntimeWorker::reset_for_new_connection() {
 }
 
 CommandError RuntimeWorker::connect_canonical(CanonicalEndpoint endpoint, const bool reset_retry) {
-  if (endpoint.address.empty() || endpoint.port == 0 || endpoint.room_code.size() != 6)
+  const bool direct = endpoint.steam_host == 0;
+  if ((direct && (endpoint.address.empty() || endpoint.port == 0)) ||
+      endpoint.room_code.size() != 6) {
     return CommandError::INVALID_REQUEST;
+  }
   stop_connection_services();
   reset_host_state();
   client_.endpoint = std::move(endpoint);
@@ -44,8 +52,12 @@ CommandError RuntimeWorker::connect_canonical(CanonicalEndpoint endpoint, const 
   ControllerClientConfig config = {.endpoint = client_.endpoint->address,
                                    .port = client_.endpoint->port,
                                    .room_code = client_.endpoint->room_code,
-                                   .local_profile = client_.profile};
-  lg::debug("[Multiplayer] Connecting to {}:{}.", config.endpoint, config.port);
+                                   .local_profile = client_.profile,
+                                   .steam_host = client_.endpoint->steam_host};
+  if (direct)
+    lg::debug("[Multiplayer] Connecting to {}:{}.", config.endpoint, config.port);
+  else
+    lg::debug("[Multiplayer] Connecting to Steam host {}.", config.steam_host);
   return controller_.connect(config) ? CommandError::NONE : CommandError::START_FAILED;
 }
 
@@ -53,32 +65,52 @@ CommandError RuntimeWorker::host(HostSessionRequest request) {
   reset_for_new_connection();
   internet_host_ = request.internet;
   automatic_port_mapping_ = request.automatic_port_mapping;
+  privacy_ = request.privacy;
   host_ = {.lifecycle = HostLifecycle::STARTING,
            .mapping = request.internet
                           ? (request.automatic_port_mapping ? HostMappingState::PENDING
                                                             : HostMappingState::DISABLED)
                           : HostMappingState::NOT_REQUESTED};
-  lg::debug("[Multiplayer] Starting host on UDP port {}.", request.config.port);
-  if (!controller_.host(request.config)) {
+  auto& config = request.config;
+  config.steam = request.internet && steam::networking().has_value();
+  lg::debug("[Multiplayer] Starting host on UDP port {}.", config.port);
+  bool started = controller_.host(config);
+  if (!started && config.steam) {
+    lg::warn("[Multiplayer] Steam hosting failed; hosting directly instead.");
+    config.steam = false;
+    started = controller_.host(config);
+  }
+  if (!started) {
     host_.lifecycle = HostLifecycle::FAILED;
     return CommandError::START_FAILED;
   }
   const auto host_port = controller_.local_port();
   if (request.discovery_port != 0) {
     const auto& descriptor = adapter_.descriptor();
+    discovery_responder_.set_listed(privacy_ == LobbyPrivacy::PUBLIC);
     if (!discovery_responder_.start(request.discovery_port,
                                     {.game_port = host_port,
                                      .current_players = 1,
-                                     .player_limit = request.config.player_limit,
+                                     .player_limit = config.player_limit,
                                      .game_id = descriptor.game_id,
                                      .compatibility_identity = compatibility_identity_,
-                                     .room_code = request.config.room_code})) {
+                                     .room_code = config.room_code,
+                                     .host_name = config.local_profile.display_name})) {
       lg::error("[Multiplayer] Host discovery responder failed on UDP port {}.",
                 request.discovery_port);
     }
   }
   if (request.internet && request.automatic_port_mapping)
     port_mapping_.start(host_port, host_port);
+  if (config.steam && !steam_lobby_.create({.game_id = adapter_.descriptor().game_id,
+                                            .compatibility_identity = compatibility_identity_,
+                                            .room_code = config.room_code,
+                                            .host_name = config.local_profile.display_name,
+                                            .players = 1,
+                                            .player_limit = config.player_limit},
+                                           privacy_)) {
+    lg::warn("[Multiplayer] Steam lobby creation failed; players can still join directly.");
+  }
   return CommandError::NONE;
 }
 
@@ -101,7 +133,6 @@ CommandError RuntimeWorker::start_discovery(DiscoveryRequest request) {
           {.discovery_port = request.discovery_port,
            .expected_game_port = request.expected_game_port,
            .game_id = descriptor.game_id,
-           .compatibility_identity = compatibility_identity_,
            .directed_address = std::move(request.directed_address),
            .include_full_sessions = discovery_kind_ == DiscoveryKind::DIRECTED})) {
     discovery_kind_ = DiscoveryKind::NONE;
@@ -127,6 +158,44 @@ CommandError RuntimeWorker::connect_discovered() {
     return CommandError::INVALID_REQUEST;
   return connect_canonical(
       {.address = std::move(address), .port = port, .room_code = std::move(room_code)});
+}
+
+CommandError RuntimeWorker::search_lobbies() {
+  const auto& game_id = adapter_.descriptor().game_id;
+  discovery_result_.reset();
+  discovery_kind_ =
+      discovery_scanner_.start({.discovery_port = kMultiplayerDiscoveryPort, .game_id = game_id})
+          ? DiscoveryKind::LAN
+          : DiscoveryKind::NONE;
+  const bool steam = steam_lobby_.search(game_id);
+  return discovery_kind_ == DiscoveryKind::LAN || steam ? CommandError::NONE
+                                                        : CommandError::UNAVAILABLE;
+}
+
+CommandError RuntimeWorker::join_lobby(JoinLobbyRequest request) {
+  reset_for_new_connection();
+  controller_.disconnect();
+  client_.profile = std::move(request.profile);
+  if (!steam_lobby_.join(request.lobby_id, adapter_.descriptor().game_id))
+    return CommandError::UNAVAILABLE;
+  discovery_kind_ = DiscoveryKind::STEAM;
+  return CommandError::NONE;
+}
+
+CommandError RuntimeWorker::invite_friends() {
+  return steam_lobby_.invite_friends() ? CommandError::NONE : CommandError::UNAVAILABLE;
+}
+
+CommandError RuntimeWorker::set_lobby_privacy(const LobbyPrivacy privacy) {
+  privacy_ = privacy;
+  steam_lobby_.set_privacy(privacy);
+  discovery_responder_.set_listed(privacy == LobbyPrivacy::PUBLIC);
+  return CommandError::NONE;
+}
+
+CommandError RuntimeWorker::set_lobby_details(std::string details) {
+  lobby_details_ = std::move(details);
+  return CommandError::NONE;
 }
 
 CommandError RuntimeWorker::reconnect() {
@@ -168,6 +237,15 @@ CommandError RuntimeWorker::set_ready(const bool ready) {
   if (ready)
     persist_profile();
   return CommandError::NONE;
+}
+
+CommandError RuntimeWorker::send_chat(std::string text) {
+  return controller_.send_chat(std::move(text)) ? CommandError::NONE
+                                                : CommandError::INVALID_REQUEST;
+}
+
+CommandError RuntimeWorker::kick_player(const PlayerId player_id) {
+  return controller_.kick(player_id) ? CommandError::NONE : CommandError::INVALID_STATE;
 }
 
 CommandError RuntimeWorker::start_countdown(const uint32_t seconds) {

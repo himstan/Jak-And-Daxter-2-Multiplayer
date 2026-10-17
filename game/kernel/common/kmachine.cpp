@@ -20,6 +20,7 @@
 #include "common/util/Timer.h"
 #include "common/util/font/font_utils.h"
 #include "common/util/string_util.h"
+#include "common/util/unicode_util.h"
 
 #include "game/external/discord.h"
 #include "game/graphics/display.h"
@@ -882,6 +883,13 @@ void pc_set_controller(u32 controller_id, u32 port) {
   }
 }
 
+u32 pc_get_steam_layout_mismatch() {
+  if (Display::GetMainDisplay()) {
+    return bool_to_symbol(Display::GetMainDisplay()->get_input_manager()->steam_layout_mismatch());
+  }
+  return bool_to_symbol(false);
+}
+
 u32 pc_get_keyboard_enabled() {
   if (Display::GetMainDisplay()) {
     return bool_to_symbol(Display::GetMainDisplay()->get_input_manager()->is_keyboard_enabled());
@@ -1224,6 +1232,36 @@ std::shared_ptr<InputManager> main_input_manager() {
   return Display::g_displays.front()->get_input_manager();
 }
 
+u64 pc_text_input_shortcut(const u32 enabled) {
+  const auto input = main_input_manager();
+  return bool_to_symbol(input && input->text_input_shortcut(symbol_to_bool(enabled)));
+}
+
+std::string encode_literal_text(const std::string& text) {
+  const auto* font = get_font_bank_from_game_version(g_game_version);
+  std::string result;
+  size_t offset = 0;
+  while (offset < text.size()) {
+    const size_t start = offset;
+    char32_t codepoint = 0;
+    if (!unicode::decode_utf8_codepoint(text, offset, codepoint))
+      break;
+    if (codepoint == '~')
+      result.push_back(0x14);
+    else
+      result += font->convert_utf8_to_game(text.substr(start, offset - start));
+  }
+  return result;
+}
+
+void pc_encode_utf8_literal(const u32 source, const u32 destination) {
+  const auto text = encode_literal_text(Ptr<String>(source).c()->data());
+  auto* target = Ptr<String>(destination).c();
+  target->data()[0] = 0;
+  if (text.size() <= target->len)
+    std::memcpy(target->data(), text.c_str(), text.size() + 1);
+}
+
 u32 pc_text_input_begin(const u32 initial_ptr,
                         const u32 max_bytes,
                         const u32 allowed_ptr,
@@ -1253,6 +1291,31 @@ u64 pc_text_input_text(const u32 token) {
   const auto input = main_input_manager();
   const auto text = input ? input->text_input_snapshot(token).text : std::string();
   return g_pc_port_funcs.make_string_from_c(text.c_str());
+}
+
+void pc_text_input_display(const u32 token, const u32 destination) {
+  const auto input = main_input_manager();
+  if (!input)
+    return;
+  const auto state = input->text_input_snapshot(token);
+  size_t start = state.cursor;
+  for (int count = 0; count < 20 && start > 0; ++count)
+    start = unicode::previous_utf8_boundary(state.text, start);
+  size_t end = state.cursor;
+  for (int count = 0; count < 8 && end < state.text.size(); ++count)
+    end = unicode::next_utf8_boundary(state.text, end);
+  const auto before = (start != 0 ? std::string("...") : std::string()) +
+                      encode_literal_text(state.text.substr(start, state.cursor - start));
+  const auto after = encode_literal_text(state.text.substr(state.cursor, end - state.cursor)) +
+                     (end != state.text.size() ? "..." : "");
+  const auto composition = encode_literal_text(state.composition.substr(
+      0, unicode::utf8_codepoint_to_byte_offset(state.composition, 20)));
+  const auto display = before + "~Y~-4H~35L" + static_cast<char>(0x84) + "~Z~1L" +
+                       composition + after;
+  auto* target = Ptr<String>(destination).c();
+  target->data()[0] = 0;
+  if (display.size() <= target->len)
+    std::memcpy(target->data(), display.c_str(), display.size() + 1);
 }
 
 u32 pc_text_input_cursor(const u32 token) {
@@ -1392,6 +1455,7 @@ void init_common_pc_port_functions(
   make_func_symbol_func("pc-get-controller-index", (void*)pc_get_controller_index);
   make_func_symbol_func("pc-set-controller!", (void*)pc_set_controller);
   make_func_symbol_func("pc-get-keyboard-enabled?", (void*)pc_get_keyboard_enabled);
+  make_func_symbol_func("pc-steam-layout-mismatch?", (void*)pc_get_steam_layout_mismatch);
   make_func_symbol_func("pc-set-keyboard-enabled!", (void*)pc_set_keyboard_enabled);
   make_func_symbol_func("pc-set-mouse-options!", (void*)pc_set_mouse_options);
   make_func_symbol_func("pc-set-mouse-camera-sens!", (void*)pc_set_mouse_camera_sens);
@@ -1487,6 +1551,9 @@ void init_common_pc_port_functions(
   make_func_symbol_func("pc-encode-utf8-string", (void*)pc_encode_utf8_string);
 
   // debugging tools
+  make_func_symbol_func("pc-text-input-shortcut", (void*)pc_text_input_shortcut);
+  make_func_symbol_func("pc-text-input-display", (void*)pc_text_input_display);
+  make_func_symbol_func("pc-encode-utf8-literal", (void*)pc_encode_utf8_literal);
   make_func_symbol_func("pc-text-input-begin", (void*)pc_text_input_begin);
   make_func_symbol_func("pc-text-input-status", (void*)pc_text_input_status);
   make_func_symbol_func("pc-text-input-revision", (void*)pc_text_input_revision);

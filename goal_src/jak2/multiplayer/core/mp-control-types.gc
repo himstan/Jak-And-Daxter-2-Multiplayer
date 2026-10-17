@@ -15,12 +15,14 @@
   :type uint8
   (none 0)
   (lan 1)
-  (directed 2))
+  (directed 2)
+  (steam 3))
 
 (defenum player-departure-reason
   :type uint8
   (left 0)
-  (timed-out 1))
+  (timed-out 1)
+  (kicked 2))
 
 (defenum mp-discovery-status
   :type uint8
@@ -64,7 +66,8 @@
   (version-mismatch 4)
   (malformed-gate 5)
   (gate-timeout 6)
-  (throttled 7))
+  (throttled 7)
+  (kicked 8))
 
 (defun mp-connection-status-active? ((status mp-connection-status))
   (!= status (mp-connection-status idle)))

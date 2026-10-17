@@ -6,6 +6,7 @@
 #include "game/multiplayer/platform/nat/port_mapping_coordinator.h"
 #include "game/multiplayer/platform/runtime/multiplayer_runtime.h"
 #include "game/multiplayer/platform/session/reconnect_policy.h"
+#include "game/multiplayer/platform/steam/steam_lobby.h"
 
 namespace multiplayer::platform {
 
@@ -21,6 +22,7 @@ class RuntimeWorker final : public ConnectionExecutionPort,
     std::string address;
     uint16_t port = 0;
     std::string room_code;
+    uint64_t steam_host = 0;
   };
   struct ClientConnectionState {
     PlayerProfile profile;
@@ -31,6 +33,11 @@ class RuntimeWorker final : public ConnectionExecutionPort,
   CommandError start_discovery(DiscoveryRequest request) override;
   CommandError stop_discovery() override;
   CommandError connect_discovered() override;
+  CommandError search_lobbies() override;
+  CommandError join_lobby(JoinLobbyRequest request) override;
+  CommandError invite_friends() override;
+  CommandError set_lobby_details(std::string details) override;
+  CommandError set_lobby_privacy(LobbyPrivacy privacy) override;
   CommandError reconnect() override;
   CommandError disconnect(int reason) override;
   CommandError set_profile(PlayerProfile profile) override;
@@ -42,6 +49,8 @@ class RuntimeWorker final : public ConnectionExecutionPort,
   CommandError enter_lobby() override;
   CommandError enter_game() override;
   CommandError request_bootstrap() override;
+  CommandError kick_player(PlayerId player_id) override;
+  CommandError send_chat(std::string text) override;
   CommandError configure_compatibility_identity(std::string identity) override;
 #ifdef ENABLE_NETWORK_SIMULATION
   CommandError set_network_simulation(NetworkSimulationSettings settings) override;
@@ -57,6 +66,7 @@ class RuntimeWorker final : public ConnectionExecutionPort,
   void pump_reconnect(uint64_t now_ms);
   void persist_profile();
   void update_discovery();
+  void update_steam();
   void update_host_advertisement(const SessionSnapshot& session);
   void publish(const SessionSnapshot& session);
 
@@ -66,11 +76,14 @@ class RuntimeWorker final : public ConnectionExecutionPort,
   DiscoveryScanner discovery_scanner_;
   DiscoveryResponder discovery_responder_;
   PortMappingCoordinator port_mapping_;
+  SteamLobby steam_lobby_;
   std::optional<DiscoveryResult> discovery_result_;
   ReconnectState reconnect_;
   ClientConnectionState client_;
   DiscoveryKind discovery_kind_ = DiscoveryKind::NONE;
   HostSnapshot host_;
+  std::string lobby_details_;
+  LobbyPrivacy privacy_ = LobbyPrivacy::PUBLIC;
   std::string compatibility_identity_;
   bool internet_host_ = false;
   bool automatic_port_mapping_ = false;

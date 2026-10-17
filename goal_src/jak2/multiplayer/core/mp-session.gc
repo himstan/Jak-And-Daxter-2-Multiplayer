@@ -296,6 +296,26 @@
       (mp-bootstrap-controller-start!)))
   (none))
 
+(define *lobby-details-published-at* (the-as time-frame 0))
+(define *lobby-area-text* (new 'global 'string 32 (the-as string #f)))
+(define *lobby-details-text* (new 'global 'string 48 (the-as string #f)))
+
+(defun lobby-details ((info game-info))
+  (format (clear *lobby-details-text*) "~D%" (min 100 (the int (calculate-percentage info))))
+  (let ((level (and (nonnull? *load-state*) (-> *load-state* vis-nick))))
+    (when (and level (pc-get-level-display-name (symbol->string level) (clear *lobby-area-text*)))
+      (format *lobby-details-text* " - ~S" *lobby-area-text*)))
+  *lobby-details-text*)
+
+(defun publish-lobby-details! ((status mp-connection-status))
+  (when (and (= status (mp-connection-status in-game))
+             (= (pc-multi-is-lobby-host) 1)
+             (nonnull? *display* *game-info*)
+             (> (- (-> *display* real-clock frame-counter) *lobby-details-published-at*) (seconds 2)))
+    (set! *lobby-details-published-at* (-> *display* real-clock frame-counter))
+    (pc-multi-set-lobby-details (lobby-details *game-info*)))
+  (none))
+
 (defun mp-session-tick ()
   (let ((status (mp-connect-discovered-host-if-ready! (pc-multi-get-session-status))))
     (when (not (= status (mp-connection-status in-game)))
@@ -312,7 +332,8 @@
                        (= status (mp-connection-status host-left)))))
       (when active?
         (set! status (pc-multi-get-session-status))
-        (mp-session-refresh-bridge-identity! status))
+        (mp-session-refresh-bridge-identity! status)
+        (publish-lobby-details! status))
       (mp-network-exchange-state! status)
       (if active?
         (begin
@@ -400,7 +421,6 @@
   (mp-reset-remote-marker-state!)
   (mp-reset-environment-sync)
   (mp-tomb-daxter-wait-reset!)
-  (mp-player-list-hide!)
   (eye-control-reset-all!)
   (mp-bootstrap-controller-reset!)
   (none))

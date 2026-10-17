@@ -239,11 +239,12 @@ void draw_connection_table(const SessionSnapshot& session) {
   constexpr ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                                     ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollX |
                                     ImGuiTableFlags_SizingFixedFit;
-  if (!ImGui::BeginTable("connection-stats", 13, flags, ImVec2(0.0f, 220.0f)))
+  if (!ImGui::BeginTable("connection-stats", 14, flags, ImVec2(0.0f, 220.0f)))
     return;
   ImGui::TableSetupColumn("Player");
   ImGui::TableSetupColumn("Player");
   ImGui::TableSetupColumn("Connection");
+  ImGui::TableSetupColumn("Route");
   ImGui::TableSetupColumn("Character");
   ImGui::TableSetupColumn("Ping");
   ImGui::TableSetupColumn("Jitter");
@@ -267,6 +268,8 @@ void draw_connection_table(const SessionSnapshot& session) {
     ImGui::TextUnformatted(format_player(connection.player_id).c_str());
     ImGui::TableNextColumn();
     ImGui::Text("%u", stats.connection_id);
+    ImGui::TableNextColumn();
+    ImGui::TextUnformatted(stats.relayed ? "Relayed" : "Direct");
     ImGui::TableNextColumn();
     ImGui::TextUnformatted(profile ? character_name(profile->character) : "—");
     ImGui::TableNextColumn();

@@ -98,9 +98,11 @@
         (if (and (nonzero? (-> destination identity joined?)) (mp-player-id-valid? previous-player-id))
           (begin
             (notify-player! previous-player-id
-                            (if (= (-> source departure-reason) (player-departure-reason timed-out))
-                              (text-id notification-player-timed-out)
-                              (text-id notification-player-left)))
+                            (let ((reason (-> source departure-reason)))
+                              (cond
+                                ((= reason (player-departure-reason timed-out)) (text-id notification-player-timed-out))
+                                ((= reason (player-departure-reason kicked)) (text-id notification-player-kicked))
+                                (else (text-id notification-player-left)))))
             (reassign-player-owned-enemies previous-player-id)
             (mp-player-controller-release-slot! *mp-player-controller* previous-player-id))
           (reset-player-replica-state! destination)))

@@ -15,6 +15,8 @@ struct PlayerSession {
   PlayerId player_id = kInvalidPlayerId;
   PlayerCharacter character = PlayerCharacter::UNKNOWN;
   PlayerProfile profile;
+  std::string remote_address;
+  uint64_t steam_id = 0;
   std::vector<uint8_t> bootstrap_payload;
   uint64_t last_bootstrap_send_time = 0;
   uint64_t control_budget_updated_ms = 0;

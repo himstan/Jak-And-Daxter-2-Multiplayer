@@ -3,12 +3,17 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "game/multiplayer/platform/core/limits.h"
 #include "game/multiplayer/platform/core/types.h"
 
 namespace multiplayer::platform {
+
+constexpr uint8_t kMaximumChatBytes = 192;
+constexpr uint8_t kChatHistoryCapacity = 32;
+bool valid_chat_text(std::string_view text);
 
 constexpr uint16_t kUnknownPlayerPing = UINT16_MAX;
 
@@ -21,9 +26,12 @@ enum class RejectionReason : uint8_t {
   MALFORMED_GATE,
   GATE_TIMEOUT,
   THROTTLED,
+  KICKED,
 };
 
-enum class PlayerDepartureReason : uint8_t { LEFT, TIMED_OUT };
+enum class PlayerDepartureReason : uint8_t { LEFT, TIMED_OUT, KICKED };
+
+inline constexpr uint8_t kSessionCloseKicked = 1;
 
 struct ClientGate {
   std::string game_id;
@@ -46,6 +54,7 @@ struct PlayerProfile {
   PlayerCharacter character = PlayerCharacter::UNKNOWN;
   bool ready = false;
   std::vector<uint8_t> game_extension;
+  uint64_t steam_id = 0;
 
   bool operator==(const PlayerProfile&) const = default;
 };
@@ -62,6 +71,7 @@ enum class ControlKind : uint8_t {
   BOOTSTRAP_ACK = 9,
   SESSION_CLOSE = 10,
   PLAYER_PINGS = 11,
+  CHAT = 12,
 };
 
 bool control_allowed_from(ControlKind kind, SessionRole sender);
@@ -76,6 +86,7 @@ struct ControlMessage {
   bool ready = false;
   uint32_t value = 0;
   uint8_t reason = 0;
+  std::string chat_text;
 };
 
 struct GameplayEnvelope {

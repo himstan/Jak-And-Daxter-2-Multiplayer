@@ -28,15 +28,21 @@ struct MPPortMappingContext {
   MPPortMappingMethod method = MPPortMappingMethod::NONE;
   std::string upnp_control_url;
   std::string upnp_service_type;
+  std::string upnp_local_address;
+  std::string upnp_lease;
 };
 
 namespace {
 constexpr uint32_t kPortMappingLeaseSeconds = 7200;
 constexpr int kUpnpDiscoveryDelayMilliseconds = 2000;
 constexpr auto kNatPmpOperationDeadline = std::chrono::milliseconds(2500);
+constexpr int kUpnpConflictInMappingEntry = 718;
+constexpr int kUpnpOnlyPermanentLeasesSupported = 725;
+constexpr int kAlternateExternalPorts = 8;
 
 struct AttemptResult {
   bool success = false;
+  uint16_t external_port = 0;
   std::string external_ip;
   std::string error;
   std::shared_ptr<MPPortMappingContext> context;
@@ -101,7 +107,26 @@ std::string describe_status(const int status) {
   }
 }
 
-AttemptResult add_mapping(const uint16_t local_port, const uint16_t external_port) {
+int upnp_add(MPPortMappingContext& context,
+             const uint16_t local_port,
+             const uint16_t external_port) {
+  const std::string local_port_text = std::to_string(local_port);
+  const std::string external_port_text = std::to_string(external_port);
+  const auto add = [&] {
+    return UPNP_AddPortMapping(context.upnp_control_url.c_str(), context.upnp_service_type.c_str(),
+                               external_port_text.c_str(), local_port_text.c_str(),
+                               context.upnp_local_address.c_str(), "OpenGOAL Jak II Multiplayer",
+                               "UDP", "", context.upnp_lease.c_str());
+  };
+  int result = add();
+  if (result == kUpnpOnlyPermanentLeasesSupported) {
+    context.upnp_lease = "0";
+    result = add();
+  }
+  return result;
+}
+
+AttemptResult add_mapping(const uint16_t local_port, const uint16_t preferred_port) {
   int discovery_error = UPNPDISCOVER_UNKNOWN_ERROR;
   const std::unique_ptr<UPNPDev, UpnpDeviceListDeleter> devices(
       upnpDiscover(kUpnpDiscoveryDelayMilliseconds, nullptr, nullptr, UPNP_LOCAL_PORT_ANY, 0, 2,
@@ -126,21 +151,28 @@ AttemptResult add_mapping(const uint16_t local_port, const uint16_t external_por
     return {.external_ip = external_address, .error = "UPnP IGD returned incomplete mapping data"};
   }
 
-  const std::string local_port_text = std::to_string(local_port);
-  const std::string external_port_text = std::to_string(external_port);
-  const int result = UPNP_AddPortMapping(
-      urls.get()->controlURL, data.first.servicetype, external_port_text.c_str(),
-      local_port_text.c_str(), local_address, "OpenGOAL Jak II Multiplayer", "UDP", "", "0");
-  if (result != UPNPCOMMAND_SUCCESS) {
-    return {.external_ip = external_address, .error = "UPnP mapping failed: " + upnp_error(result)};
-  }
-
   auto context = std::make_shared<MPPortMappingContext>();
   context->method = MPPortMappingMethod::UPNP_IGD;
   context->upnp_control_url = urls.get()->controlURL;
   context->upnp_service_type = data.first.servicetype;
+  context->upnp_local_address = local_address;
+  context->upnp_lease = std::to_string(kPortMappingLeaseSeconds);
 
-  return {.success = true, .external_ip = external_address, .context = std::move(context)};
+  int result = UPNPCOMMAND_UNKNOWN_ERROR;
+  for (int port = preferred_port;
+       port <= preferred_port + kAlternateExternalPorts && port <= UINT16_MAX; ++port) {
+    const auto external_port = static_cast<uint16_t>(port);
+    result = upnp_add(*context, local_port, external_port);
+    if (result == UPNPCOMMAND_SUCCESS) {
+      return {.success = true,
+              .external_port = external_port,
+              .external_ip = external_address,
+              .context = std::move(context)};
+    }
+    if (result != kUpnpConflictInMappingEntry)
+      break;
+  }
+  return {.external_ip = external_address, .error = "UPnP mapping failed: " + upnp_error(result)};
 }
 
 void delete_mapping(const MPPortMappingContext& context, const uint16_t external_port) {
@@ -240,14 +272,7 @@ AttemptResult request_mapping(const uint16_t local_port,
     return {.error = "NAT-PMP returned an unexpected response type"};
   }
 
-  if (lifetime_seconds != 0 && response.pnu.newportmapping.mappedpublicport != external_port) {
-    (void)request_mapping(local_port, 0, 0);
-    return {.error = "NAT-PMP assigned UDP port " +
-                     std::to_string(response.pnu.newportmapping.mappedpublicport) + " instead of " +
-                     std::to_string(external_port)};
-  }
-
-  return {.success = true};
+  return {.success = true, .external_port = response.pnu.newportmapping.mappedpublicport};
 }
 
 AttemptResult query_external_ip() {
@@ -287,20 +312,21 @@ bool is_private_ipv4(const std::string& address) {
          (ip & 0xffff0000) == 0xc0a80000 || (ip & 0xffc00000) == 0x64400000;
 }
 
-MPPortMappingResult open_port_mapping(const uint16_t local_port, const uint16_t external_port) {
+MPPortMappingResult open_port_mapping(const uint16_t local_port, const uint16_t preferred_port) {
   if (std::string error; !initialize_socket_runtime(error)) {
     return {.error = std::move(error)};
   }
 
-  auto [success, external_ip, error, context] = add_mapping(local_port, external_port);
+  auto [success, upnp_port, external_ip, error, context] = add_mapping(local_port, preferred_port);
   if (success) {
     return {.success = true,
             .method = MPPortMappingMethod::UPNP_IGD,
+            .external_port = upnp_port,
             .external_ip = std::move(external_ip),
             .context = std::move(context)};
   }
 
-  auto natpmp = request_mapping(local_port, external_port, kPortMappingLeaseSeconds);
+  auto natpmp = request_mapping(local_port, preferred_port, kPortMappingLeaseSeconds);
   if (natpmp.success) {
     auto mapping_context = std::make_shared<MPPortMappingContext>();
     mapping_context->method = MPPortMappingMethod::NAT_PMP;
@@ -308,6 +334,7 @@ MPPortMappingResult open_port_mapping(const uint16_t local_port, const uint16_t 
     auto address = query_external_ip();
     return {.success = true,
             .method = MPPortMappingMethod::NAT_PMP,
+            .external_port = natpmp.external_port,
             .external_ip = std::move(address.external_ip),
             .error = address.success ? std::string{} : std::move(address.error),
             .context = std::move(mapping_context)};
@@ -317,43 +344,42 @@ MPPortMappingResult open_port_mapping(const uint16_t local_port, const uint16_t 
                    "; NAT-PMP: " + (natpmp.error.empty() ? "unknown failure" : natpmp.error)};
 }
 
-MPPortMappingResult refresh_udp_port_mapping(const MPPortMappingResult& mapping,
-                                             const uint16_t local_port,
-                                             const uint16_t external_port) {
+std::string refresh_udp_port_mapping(const MPPortMappingResult& mapping,
+                                     const uint16_t local_port) {
   if (!mapping.context || mapping.context->method != mapping.method) {
-    return {.method = mapping.method, .error = "active port-mapping context is missing"};
+    return "active port-mapping context is missing";
   }
 
   if (mapping.method == MPPortMappingMethod::UPNP_IGD) {
-    return {.success = true, .method = mapping.method, .context = mapping.context};
+    const int result = upnp_add(*mapping.context, local_port, mapping.external_port);
+    return result == UPNPCOMMAND_SUCCESS ? std::string{} : upnp_error(result);
   }
 
   if (mapping.method != MPPortMappingMethod::NAT_PMP) {
-    return {.method = mapping.method, .error = "no active port-mapping method"};
+    return "no active port-mapping method";
   }
 
-  auto refresh = request_mapping(local_port, external_port, kPortMappingLeaseSeconds);
-  return {.success = refresh.success,
-          .method = mapping.method,
-          .error = std::move(refresh.error),
-          .context = mapping.context};
+  auto refresh = request_mapping(local_port, mapping.external_port, kPortMappingLeaseSeconds);
+  if (!refresh.success)
+    return refresh.error.empty() ? "unknown failure" : refresh.error;
+  if (refresh.external_port != mapping.external_port)
+    return "NAT-PMP moved the mapping to UDP port " + std::to_string(refresh.external_port);
+  return {};
 }
 
-void close_udp_port_mapping(const MPPortMappingResult& mapping,
-                            const uint16_t local_port,
-                            const uint16_t external_port) {
+void close_udp_port_mapping(const MPPortMappingResult& mapping, const uint16_t local_port) {
   if (!mapping.context || mapping.context->method != mapping.method) {
     return;
   }
 
   if (mapping.method == MPPortMappingMethod::UPNP_IGD) {
-    delete_mapping(*mapping.context, external_port);
+    delete_mapping(*mapping.context, mapping.external_port);
     return;
   }
 
   if (mapping.method == MPPortMappingMethod::NAT_PMP) {
     if (auto result = request_mapping(local_port, 0, 0); !result.success) {
-      lg::debug("[Multiplayer] NAT-PMP cleanup for UDP port {} failed: {}.", external_port,
+      lg::debug("[Multiplayer] NAT-PMP cleanup for UDP port {} failed: {}.", mapping.external_port,
                 result.error.empty() ? "unknown failure" : result.error);
     }
   }
