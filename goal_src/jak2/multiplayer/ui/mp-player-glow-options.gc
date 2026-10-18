@@ -5,7 +5,6 @@
 ;; Jak, glowing with the current settings, on the right. Changes preview live and save on the way out.
 
 (define-extern draw-savegame-box (function menu-option float float float float pointer))
-(define-extern draw-decoration-load-save (function menu-option font-context float text-id pointer))
 
 (deftype mp-player-glow-progress-state (structure)
   ((active?              symbol)
@@ -22,6 +21,9 @@
 (defconstant MP_PLAYER_GLOW_ROW_COUNT 7)
 (defconstant MP_PLAYER_GLOW_FIRST_SLIDER_ROW 1)
 (defconstant MP_PLAYER_GLOW_PREVIEW_ROTATION 32768.0) ;; facing the screen
+(defconstant MP_PLAYER_GLOW_PREVIEW_X -445.0) ;; centered in the right panel
+(defconstant MP_PLAYER_GLOW_PANEL_LEFT 345) ;; the right panel only needs room for Jak
+(defconstant MP_PLAYER_GLOW_PANEL_RIGHT 434)
 
 (define *mp-player-glow-row-names*
   (new 'static 'boxed-array :type text-id
@@ -151,7 +153,7 @@
                        (* MP_PLAYER_COLOR_PREVIEW_JAK_SCALE MP_PLAYER_COLOR_PREVIEW_XZ_SCALE)
                        1.0)
           (set-vector! (-> preview-root trans)
-                       MP_PLAYER_COLOR_PREVIEW_X
+                       MP_PLAYER_GLOW_PREVIEW_X
                        MP_PLAYER_COLOR_PREVIEW_Y
                        MP_PLAYER_COLOR_PREVIEW_Z
                        1.0))
@@ -268,7 +270,7 @@
       (mp-player-glow-progress-handle-input!)))
   0)
 
-;;;; drawing, with the save screen's measurements (see draw-decoration-load-save)
+;;;; drawing, with the save screen's measurements (see draw-decoration-load-save) and a narrower right panel
 
 (defun mp-player-glow-layout-x ((x int))
   (if (-> *pc-settings* use-vis?) x (adjust-game-x-int x)))
@@ -293,28 +295,36 @@
     (let* ((alpha (fmax 0.0 (* 2.0 (- 0.5 (-> p menu-transition)))))
            (wide? (!= (get-aspect-ratio) 'aspect4x3))
            (left (mp-player-glow-layout-x (if wide? 79 69)))
-           (right (mp-player-glow-layout-x 245)) ;; where the save screen's right panel starts
+           (right (mp-player-glow-layout-x MP_PLAYER_GLOW_PANEL_LEFT))
+           (panel-right (mp-player-glow-layout-x MP_PLAYER_GLOW_PANEL_RIGHT))
            (top 110)
            (row-height (/ (if wide? 248 218) MP_PLAYER_GLOW_ROW_COUNT))
            (bottom (+ top (* row-height MP_PLAYER_GLOW_ROW_COUNT)))
            (selected (-> *mp-player-glow-progress* selected-row))
            (selected-top (+ top (* row-height selected)))
            (selected-bottom (+ selected-top row-height)))
-      (draw-decoration-load-save this font-ctx alpha (text-id progress-multiplayer-player-glow))
-      ;; the selected row opens into the right panel, like the selected save slot
+      ;; title, the line under it and the right panel
+      (set! (-> font-ctx alpha) alpha)
+      (set-color! font-ctx (font-color progress))
+      (set-scale! font-ctx 0.65)
+      (mp-player-glow-print font-ctx (lookup-text! *common-text* (text-id progress-multiplayer-player-glow) #f)
+                            left 80 (- right left) (font-flags kerning middle large))
       (set-vector! (-> this box 0 color) 64 128 128 (the int (* 128.0 alpha)))
+      (draw-savegame-box this (the float left) (the float panel-right) (the float top) (the float top))
+      (mp-player-glow-draw-sprite right top (- panel-right right) (- bottom top)
+                                  (new 'static 'rgba :r #x40 :g #x40 :b #x40 :a (the int (* 64.0 alpha))))
+      ;; the selected row opens into the right panel, like the selected save slot
       (draw-savegame-box this (the float left) (the float right) (the float selected-top) (the float selected-top))
       (draw-savegame-box this (the float left) (the float right) (the float selected-bottom) (the float selected-bottom))
       (draw-savegame-box this (the float right) (the float right) (the float top) (the float selected-top))
       (draw-savegame-box this (the float right) (the float right) (the float selected-bottom) (the float (+ bottom 2)))
       (mp-player-glow-draw-sprite left selected-top (- right left) row-height
                                   (new 'static 'rgba :r #x40 :g #x40 :b #x40 :a (the int (* 64.0 alpha))))
-      (set! (-> font-ctx alpha) alpha)
-      (set-scale! font-ctx 0.42)
+      (set-scale! font-ctx 0.38)
       (dotimes (row MP_PLAYER_GLOW_ROW_COUNT)
         (let ((row-top (+ top (* row row-height)))
-              (text-left (+ left 6))
-              (text-width (- right left 12)))
+              (text-left (+ left 8))
+              (text-width (- right left 16)))
           (set-color! font-ctx (if (= row selected) (font-color progress-force-selected) (font-color progress)))
           (mp-player-glow-print font-ctx (lookup-text! *common-text* (-> *mp-player-glow-row-names* row) #f)
                                 text-left (+ row-top 3) text-width (font-flags kerning large))
