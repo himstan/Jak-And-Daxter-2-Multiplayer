@@ -776,6 +776,24 @@ bool write_string(const uint32_t address, const std::string_view value) {
   return true;
 }
 
+bool read_player_glow(const uint32_t address, PlayerGlowPreferences& glow) {
+  const auto* source = goal_ptr<MultiplayerPreferencesGOAL>(address);
+  if (!source || source->glow_mode > static_cast<uint8_t>(PlayerGlowVisibility::ALWAYS))
+    return false;
+  PlayerGlowPreferences parsed;
+  parsed.mode = static_cast<PlayerGlowVisibility>(source->glow_mode);
+  parsed.width = source->glow_width;
+  parsed.rounding = source->glow_rounding;
+  parsed.blur = source->glow_blur;
+  parsed.fade_in_ms = source->glow_fade_in_ms;
+  parsed.fade_out_ms = source->glow_fade_out_ms;
+  parsed.fade_distance = source->glow_fade_distance;
+  if (!parsed.valid())
+    return false;
+  glow = parsed;
+  return true;
+}
+
 bool read_preferences(const uint32_t address, MultiplayerPreferences& preferences) {
   const auto* source = goal_ptr<MultiplayerPreferencesGOAL>(address);
   MultiplayerPreferences parsed;
@@ -783,6 +801,7 @@ bool read_preferences(const uint32_t address, MultiplayerPreferences& preference
       source->friendly_fire > 1 || source->player_map_marker > 1 ||
       source->nametag_visibility > static_cast<uint8_t>(PlayerNametagVisibility::OFF) ||
       source->host_visibility > static_cast<uint8_t>(HostVisibility::LAN_ONLY) ||
+      !read_player_glow(address, parsed.player_glow) ||
       !read_string(source->player_name, parsed.player_name) ||
       !read_string(source->room_code, parsed.room_code)) {
     return false;
@@ -827,6 +846,14 @@ bool write_preferences(const uint32_t address, const MultiplayerPreferences& pre
   destination->nametag_visibility = static_cast<uint8_t>(preferences.nametag_visibility);
   destination->player_map_marker = preferences.player_map_marker;
   destination->host_visibility = static_cast<uint8_t>(preferences.host_visibility);
+  const auto& glow = preferences.player_glow;
+  destination->glow_mode = static_cast<uint8_t>(glow.mode);
+  destination->glow_width = glow.width;
+  destination->glow_rounding = glow.rounding;
+  destination->glow_blur = glow.blur;
+  destination->glow_fade_in_ms = glow.fade_in_ms;
+  destination->glow_fade_out_ms = glow.fade_out_ms;
+  destination->glow_fade_distance = glow.fade_distance;
   return true;
 }
 

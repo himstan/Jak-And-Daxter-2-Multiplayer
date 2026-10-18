@@ -1,0 +1,343 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; Multiplayer Options > Player Glow. Laid out like the save screen: the settings on the left and
+;; Jak, glowing with the current settings, on the right. Changes preview live and save on the way out.
+
+(define-extern draw-savegame-box (function menu-option float float float float pointer))
+(define-extern draw-decoration-load-save (function menu-option font-context float text-id pointer))
+
+(deftype mp-player-glow-progress-state (structure)
+  ((active?              symbol)
+   (selected-row         int32)
+   (last-adjust-time     time-frame)
+   (last-navigation-time time-frame)
+   (preview              (pointer manipy))))
+
+(deftype menu-mp-player-glow-option (menu-option) ())
+
+(define *mp-player-glow-progress* (new 'static 'mp-player-glow-progress-state))
+
+;; rows: 0 glow enabled, 1 fade in, 2 fade out, 3 fade distance, 4 width, 5 rounding, 6 blur
+(defconstant MP_PLAYER_GLOW_ROW_COUNT 7)
+(defconstant MP_PLAYER_GLOW_FIRST_SLIDER_ROW 1)
+(defconstant MP_PLAYER_GLOW_PREVIEW_ROTATION 32768.0) ;; facing the screen
+
+(define *mp-player-glow-row-names*
+  (new 'static 'boxed-array :type text-id
+    (text-id progress-glow-enabled)
+    (text-id progress-glow-fade-in)
+    (text-id progress-glow-fade-out)
+    (text-id progress-glow-fade-distance)
+    (text-id progress-glow-width)
+    (text-id progress-glow-rounding)
+    (text-id progress-glow-blur)))
+
+(defun mp-player-glow-progress-active? ()
+  (when (and (nonnull? *progress-process*) (-> *mp-player-glow-progress* active?))
+    (let ((p (-> *progress-process* 0)))
+      (when (nonnull? p)
+        (return (or (= (-> p current) 'mp-player-glow) (= (-> p next) 'mp-player-glow))))))
+  #f)
+
+;;;; settings
+
+(defun mp-player-glow-row-value ((row int))
+  (let ((prefs *multiplayer-preferences*))
+    (case row
+      ((0) (the int (-> prefs glow-mode)))
+      ((1) (the int (-> prefs glow-fade-in-ms)))
+      ((2) (the int (-> prefs glow-fade-out-ms)))
+      ((3) (the int (-> prefs glow-fade-distance)))
+      ((4) (the int (-> prefs glow-width)))
+      ((5) (the int (-> prefs glow-rounding)))
+      (else (the int (-> prefs glow-blur))))))
+
+(defun mp-player-glow-row-min ((row int))
+  (if (= row 4) 1 0))
+
+(defun mp-player-glow-row-max ((row int))
+  (case row
+    ((0) 2)
+    ((1 2) 2000) ;; ms
+    ((3) 500)    ;; meters
+    ((4) 64)     ;; pixels at 1080p
+    (else 100))) ;; percent
+
+(defun mp-player-glow-row-step ((row int))
+  (case row
+    ((1 2) 50)
+    ((3 5 6) 5)
+    (else 1)))
+
+(defun mp-player-glow-set-row-value! ((row int) (value int))
+  (let ((prefs *multiplayer-preferences*))
+    (case row
+      ((0) (set! (-> prefs glow-mode) (the-as uint8 value)))
+      ((1) (set! (-> prefs glow-fade-in-ms) (the-as uint16 value)))
+      ((2) (set! (-> prefs glow-fade-out-ms) (the-as uint16 value)))
+      ((3) (set! (-> prefs glow-fade-distance) (the-as uint16 value)))
+      ((4) (set! (-> prefs glow-width) (the-as uint8 value)))
+      ((5) (set! (-> prefs glow-rounding) (the-as uint8 value)))
+      ((6) (set! (-> prefs glow-blur) (the-as uint8 value)))))
+  (none))
+
+(defun mp-player-glow-adjust! ((direction int))
+  "Choices wrap around, sliders stop at their ends."
+  (let* ((row (-> *mp-player-glow-progress* selected-row))
+         (low (mp-player-glow-row-min row))
+         (high (mp-player-glow-row-max row))
+         (value (+ (mp-player-glow-row-value row) (* direction (mp-player-glow-row-step row)))))
+    (mp-player-glow-set-row-value! row
+                                   (if (< row MP_PLAYER_GLOW_FIRST_SLIDER_ROW)
+                                     (+ low (mod (+ (- value low) (- high low) 1) (+ (- high low) 1)))
+                                     (max low (min high value))))
+    (pc-multi-preview-player-glow *multiplayer-preferences*))
+  (none))
+
+(defun mp-player-glow-slider-fill ((row int) (width int))
+  (let ((low (mp-player-glow-row-min row)))
+    (the int (/ (* (the float width) (the float (- (mp-player-glow-row-value row) low)))
+                (the float (- (mp-player-glow-row-max row) low))))))
+
+(defun mp-player-glow-row-text ((row int))
+  (let ((value (mp-player-glow-row-value row)))
+    (case row
+      ((0)
+       (lookup-text! *common-text*
+                     (case value
+                       ((0) (text-id progress-field-disabled-label))
+                       ((1) (text-id progress-glow-wall))
+                       (else (text-id progress-glow-always)))
+                     #f))
+      ((1 2) (format (clear *temp-string*) "~,,2fs" (* 0.001 (the float value))) *temp-string*)
+      ((3)
+       (if (zero? value)
+         (lookup-text! *common-text* (text-id progress-glow-infinite) #f)
+         (begin (format (clear *temp-string*) "~Dm" value) *temp-string*)))
+      ((4) (format (clear *temp-string*) "~D" value) *temp-string*)
+      (else (format (clear *temp-string*) "~D%" value) *temp-string*))))
+
+;;;; preview: default Jak, standing still and facing the screen, drawn like the skin editor's
+
+(defun mp-player-glow-progress-preview-process ()
+  (let ((preview (-> *mp-player-glow-progress* preview)))
+    (when (nonnull? preview)
+      (let ((preview-process (ppointer->process preview)))
+        (when (and (nonnull? preview-process)
+                   (valid? preview-process process (the-as string #f) #f 0)
+                   (type? preview-process manipy))
+          (return (the-as manipy preview-process))))))
+  (the-as manipy #f))
+
+(defun mp-player-glow-progress-destroy-preview! ()
+  (let ((preview-process (mp-player-glow-progress-preview-process)))
+    (when (nonnull? preview-process)
+      (when (nonnull? (-> preview-process draw))
+        (set! (-> preview-process draw pc-eye-instance-id) MP_INVALID_PLAYER_ID))
+      (deactivate preview-process)))
+  (set! (-> *mp-player-glow-progress* preview) (the-as (pointer manipy) #f))
+  (none))
+
+(defun mp-player-glow-progress-update-preview! ()
+  (let ((preview-process (mp-player-glow-progress-preview-process)))
+    (when (nonnull? preview-process)
+      (let ((preview-root (-> preview-process root))
+            (preview-draw (-> preview-process draw)))
+        (when (nonnull? preview-root)
+          (set-vector! (-> preview-root scale)
+                       (* MP_PLAYER_COLOR_PREVIEW_JAK_SCALE MP_PLAYER_COLOR_PREVIEW_XZ_SCALE)
+                       MP_PLAYER_COLOR_PREVIEW_JAK_SCALE
+                       (* MP_PLAYER_COLOR_PREVIEW_JAK_SCALE MP_PLAYER_COLOR_PREVIEW_XZ_SCALE)
+                       1.0)
+          (set-vector! (-> preview-root trans)
+                       MP_PLAYER_COLOR_PREVIEW_X
+                       MP_PLAYER_COLOR_PREVIEW_Y
+                       MP_PLAYER_COLOR_PREVIEW_Z
+                       1.0))
+        (when (nonnull? preview-draw)
+          (set! (-> preview-draw pc-player-glow-color)
+                (logior #xff000000 (logand (-> *multiplayer-preferences* skin colors MP_PLAYER_PRIMARY_SKIN_SLOT) #xffffff)))
+          (set! (-> preview-draw pc-player-glow-flags) (pc-player-glow-flags preview))))))
+  (none))
+
+(defun mp-player-glow-progress-create-preview! ((p progress))
+  (mp-player-glow-progress-destroy-preview!)
+  (let ((skeleton (mp-player-color-progress-preview-skeleton (mp-player-character jak))))
+    (when (nonnull? skeleton)
+      (set! (-> *mp-player-glow-progress* preview)
+            (the-as (pointer manipy)
+                    (process-spawn manipy :init manipy-init (new 'static 'vector :w 1.0) #f skeleton #f 0 :to p)))))
+  (let ((preview-process (mp-player-glow-progress-preview-process)))
+    (when (nonnull? preview-process)
+      (let ((preview-draw (-> preview-process draw))
+            (preview-root (-> preview-process root))
+            (preview-skel (-> preview-process skel)))
+        (when (nonnull? preview-draw)
+          (set! (-> preview-draw dma-add-func)
+                (the-as (function process-drawable draw-control symbol object none) dma-add-mp-player-color-preview))
+          (set! (-> preview-draw shadow) #f)
+          (set! (-> preview-draw pc-eye-instance-id) PC_EYE_PREVIEW_INSTANCE_ID)
+          (logior! (-> preview-draw status) (draw-control-status disable-fog))
+          (mp-clear-render-skin! preview-draw)
+          (let ((preview-animation (mp-player-color-progress-preview-animation preview-draw (mp-player-character jak))))
+            (when (nonnull? preview-animation)
+              (set! (-> preview-process new-joint-anim) preview-animation)
+              (set! (-> preview-process anim-mode) 'loop))))
+        (when (nonnull? preview-root)
+          (quaternion-identity! (-> preview-root quat))
+          (quaternion-rotate-y! (-> preview-root quat) (-> preview-root quat) MP_PLAYER_GLOW_PREVIEW_ROTATION))
+        (when (nonnull? preview-skel)
+          (logior! (-> preview-skel status) (joint-control-status eye-anim))))
+      (logior! (-> preview-process mask) (process-mask freeze pause))
+      (logclear! (-> preview-process mask) (process-mask menu progress))
+      (send-event preview-process 'draw #t)
+      (mp-player-glow-progress-update-preview!)))
+  (none))
+
+;;;; enter / leave
+
+(defun mp-player-glow-progress-enter! ((p progress))
+  (when (and (nonnull? p *multiplayer-preferences*)
+             (not (mp-player-glow-progress-active?))
+             (= (pc-multi-get-preferences *multiplayer-preferences*) 1))
+    (set! (-> *mp-player-glow-progress* selected-row) 0)
+    (set! (-> *mp-player-glow-progress* last-adjust-time) 0)
+    (set! (-> *mp-player-glow-progress* last-navigation-time) 0)
+    (set! (-> *mp-player-glow-progress* active?) #t)
+    (push-state p)
+    (set-next-state p 'mp-player-glow 0)
+    (mp-player-glow-progress-create-preview! p))
+  (none))
+
+(defun mp-player-glow-progress-exit! ((p progress))
+  (save-multiplayer-preferences!)
+  ;; whether or not the save went through, draw with what's saved again
+  (pc-multi-preview-player-glow *multiplayer-preferences*)
+  (mp-player-glow-progress-destroy-preview!)
+  (set! (-> *mp-player-glow-progress* active?) #f)
+  (pop-state p)
+  (set! (-> p selected-option) #f)
+  (mp-reset-multiplayer-options-selection!)
+  (none))
+
+;;;; input
+
+(defun mp-player-glow-progress-handle-input! ()
+  (let ((now (current-time))
+        (state *mp-player-glow-progress*))
+    (cond
+      ((cpad-pressed? 0 up l-analog-up)
+       (set! (-> state selected-row) (mod (+ (-> state selected-row) (+ MP_PLAYER_GLOW_ROW_COUNT -1)) MP_PLAYER_GLOW_ROW_COUNT))
+       (set! (-> state last-navigation-time) now)
+       (sound-play "generic-beep"))
+      ((cpad-pressed? 0 down l-analog-down)
+       (set! (-> state selected-row) (mod (+ (-> state selected-row) 1) MP_PLAYER_GLOW_ROW_COUNT))
+       (set! (-> state last-navigation-time) now)
+       (sound-play "generic-beep"))
+      ((cpad-pressed? 0 left l-analog-left)
+       (mp-player-glow-adjust! -1)
+       (set! (-> state last-adjust-time) now)
+       (sound-play "generic-beep"))
+      ((cpad-pressed? 0 right l-analog-right)
+       (mp-player-glow-adjust! 1)
+       (set! (-> state last-adjust-time) now)
+       (sound-play "generic-beep"))
+      ((cpad-pressed? 0 confirm)
+       (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons confirm))
+       (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons confirm))
+       (when (< (-> state selected-row) MP_PLAYER_GLOW_FIRST_SLIDER_ROW)
+         (mp-player-glow-adjust! 1)
+         (sound-play "generic-beep")))
+      ;; holding repeats on the sliders
+      ((and (>= (-> state selected-row) MP_PLAYER_GLOW_FIRST_SLIDER_ROW)
+            (>= (- now (-> state last-adjust-time)) (seconds 0.08)))
+       (cond
+         ((cpad-hold? 0 left l-analog-left) (mp-player-glow-adjust! -1) (set! (-> state last-adjust-time) now))
+         ((cpad-hold? 0 right l-analog-right) (mp-player-glow-adjust! 1) (set! (-> state last-adjust-time) now))))))
+  (none))
+
+(defmethod respond-progress ((this menu-mp-player-glow-option) (p progress) (selected? symbol))
+  (when (and (nonnull? this p) (mp-player-glow-progress-active?))
+    (if (cpad-pressed? 0 triangle)
+      (begin
+        (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons triangle))
+        (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons triangle))
+        (sound-play "menu-back")
+        (mp-player-glow-progress-exit! p))
+      (mp-player-glow-progress-handle-input!)))
+  0)
+
+;;;; drawing, with the save screen's measurements (see draw-decoration-load-save)
+
+(defun mp-player-glow-layout-x ((x int))
+  (if (-> *pc-settings* use-vis?) x (adjust-game-x-int x)))
+
+(defun mp-player-glow-draw-sprite ((x int) (y int) (width int) (height int) (color rgba))
+  (with-dma-buffer-add-bucket ((buffer (-> *display* frames (-> *display* on-screen) global-buf))
+                               (bucket-id particles))
+    (draw-sprite2d-xy buffer x y width height color))
+  (none))
+
+(defun mp-player-glow-print ((font-ctx font-context) (text string) (x int) (y int) (width int) (flags font-flags))
+  (set! (-> font-ctx origin x) (the float x))
+  (set! (-> font-ctx origin y) (the float y))
+  (set-width! font-ctx width)
+  (set-height! font-ctx 20)
+  (set-flags! font-ctx flags)
+  (print-game-text text font-ctx #f 44 (bucket-id progress))
+  (none))
+
+(defmethod draw-option ((this menu-mp-player-glow-option) (p progress) (font-ctx font-context) (option-index int) (selected? symbol))
+  (when (and (nonnull? this p font-ctx) (mp-player-glow-progress-active?))
+    (let* ((alpha (fmax 0.0 (* 2.0 (- 0.5 (-> p menu-transition)))))
+           (wide? (!= (get-aspect-ratio) 'aspect4x3))
+           (left (mp-player-glow-layout-x (if wide? 79 69)))
+           (right (mp-player-glow-layout-x 245)) ;; where the save screen's right panel starts
+           (top 110)
+           (row-height (/ (if wide? 248 218) MP_PLAYER_GLOW_ROW_COUNT))
+           (bottom (+ top (* row-height MP_PLAYER_GLOW_ROW_COUNT)))
+           (selected (-> *mp-player-glow-progress* selected-row))
+           (selected-top (+ top (* row-height selected)))
+           (selected-bottom (+ selected-top row-height)))
+      (draw-decoration-load-save this font-ctx alpha (text-id progress-multiplayer-player-glow))
+      ;; the selected row opens into the right panel, like the selected save slot
+      (set-vector! (-> this box 0 color) 64 128 128 (the int (* 128.0 alpha)))
+      (draw-savegame-box this (the float left) (the float right) (the float selected-top) (the float selected-top))
+      (draw-savegame-box this (the float left) (the float right) (the float selected-bottom) (the float selected-bottom))
+      (draw-savegame-box this (the float right) (the float right) (the float top) (the float selected-top))
+      (draw-savegame-box this (the float right) (the float right) (the float selected-bottom) (the float (+ bottom 2)))
+      (mp-player-glow-draw-sprite left selected-top (- right left) row-height
+                                  (new 'static 'rgba :r #x40 :g #x40 :b #x40 :a (the int (* 64.0 alpha))))
+      (set! (-> font-ctx alpha) alpha)
+      (set-scale! font-ctx 0.42)
+      (dotimes (row MP_PLAYER_GLOW_ROW_COUNT)
+        (let ((row-top (+ top (* row row-height)))
+              (text-left (+ left 6))
+              (text-width (- right left 12)))
+          (set-color! font-ctx (if (= row selected) (font-color progress-force-selected) (font-color progress)))
+          (mp-player-glow-print font-ctx (lookup-text! *common-text* (-> *mp-player-glow-row-names* row) #f)
+                                text-left (+ row-top 3) text-width (font-flags kerning large))
+          ;; right aligned text ends at its origin
+          (mp-player-glow-print font-ctx (mp-player-glow-row-text row)
+                                (+ text-left text-width) (+ row-top 3) text-width (font-flags kerning right large))
+          (when (>= row MP_PLAYER_GLOW_FIRST_SLIDER_ROW)
+            (let ((fill (mp-player-glow-slider-fill row text-width)))
+              (mp-player-glow-draw-sprite text-left (+ row-top (- row-height 8)) text-width 3
+                                          (new 'static 'rgba :r #x30 :g #x30 :b #x38 :a (the int (* 128.0 alpha))))
+              (mp-player-glow-draw-sprite text-left (+ row-top (- row-height 8)) fill 3
+                                          (new 'static 'rgba :r #x40 :g #x80 :b #x80 :a (the int (* 128.0 alpha))))))))))
+  0
+  (none))
+
+(define *mp-player-glow-options-pc*
+  (new 'static 'menu-option-list
+       :y-center 0
+       :y-space 0
+       :scale 1.0
+       :options (new 'static 'boxed-array :type menu-option
+                  (new 'static 'menu-mp-player-glow-option :name (text-id progress-multiplayer-player-glow)))
+       :on-tick (lambda ((p progress))
+                  (when (mp-player-glow-progress-active?)
+                    (mp-player-glow-progress-update-preview!))
+                  (none))))

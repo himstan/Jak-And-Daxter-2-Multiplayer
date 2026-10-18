@@ -13,6 +13,26 @@
 inline constexpr uint32_t kInvalidMultiplayerPlayerColor = 0xffffffffu;
 
 enum class PlayerNametagVisibility : uint8_t { ALWAYS, HOLD, OFF };
+enum class PlayerGlowVisibility : uint8_t { DISABLED, WALL, ALWAYS };
+
+struct PlayerGlowPreferences {
+  static constexpr uint16_t kMaxFadeMs = 2000;
+  static constexpr uint16_t kMaxFadeDistance = 500;
+  static constexpr uint8_t kMinWidth = 1;
+  static constexpr uint8_t kMaxWidth = 64;
+  static constexpr uint8_t kMaxPercent = 100;
+
+  PlayerGlowVisibility mode = PlayerGlowVisibility::WALL;
+  uint8_t width = 22;  // pixels at 1080p
+  uint8_t rounding = 100;
+  uint8_t blur = 50;
+  uint16_t fade_in_ms = 200;
+  uint16_t fade_out_ms = 100;
+  uint16_t fade_distance = 0;  // meters, 0 = infinite
+
+  bool valid() const;
+  bool operator==(const PlayerGlowPreferences&) const = default;
+};
 
 enum class HostVisibility : uint8_t { PUBLIC, FRIENDS_ONLY, INVITE_ONLY, LAN_ONLY };
 
@@ -27,6 +47,7 @@ struct MultiplayerPreferences {
   bool friendly_fire = false;
   bool player_map_marker = true;
   PlayerNametagVisibility nametag_visibility = PlayerNametagVisibility::HOLD;
+  PlayerGlowPreferences player_glow;
   uint8_t session_player_limit = 2;
   PlayerCharacter preferred_character = PlayerCharacter::JAK;
   HostVisibility host_visibility = HostVisibility::PUBLIC;

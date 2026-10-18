@@ -279,6 +279,13 @@
   )
 
 
+(defenum pc-player-glow-flags
+  "Multiplayer player glow, matching PlayerGlowFlags in Merc2.h"
+  :type uint8
+  :bitfield #t
+  (player 0)   ;; another player: glows by the player glow settings
+  (preview 1)) ;; menu preview: always glows, unless glow is disabled
+
 (deftype draw-control (basic)
   ((process               process-drawable)
    (status                draw-control-status)
@@ -324,6 +331,9 @@
    (pc-eye-instance-id    uint32)
    (pc-player-tint-colors    uint32 MP_PLAYER_SKIN_SLOT_COUNT)
    (pc-player-tint-strengths float MP_PLAYER_SKIN_SLOT_COUNT)
+   (pc-player-glow-color     uint32)
+   (pc-player-glow-flags     pc-player-glow-flags)
+   (pc-player-glow-id        uint8)
    )
   (:methods
     (new (symbol type process symbol) _type_)

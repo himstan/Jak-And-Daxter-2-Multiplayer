@@ -336,7 +336,11 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
            {"friendly-fire", offsetof(MultiplayerPreferencesGOAL, friendly_fire)},
            {"nametag-visibility", offsetof(MultiplayerPreferencesGOAL, nametag_visibility)},
            {"player-map-marker", offsetof(MultiplayerPreferencesGOAL, player_map_marker)},
-           {"host-visibility", offsetof(MultiplayerPreferencesGOAL, host_visibility)}}) {
+           {"host-visibility", offsetof(MultiplayerPreferencesGOAL, host_visibility)},
+           {"glow-mode", offsetof(MultiplayerPreferencesGOAL, glow_mode)},
+           {"glow-blur", offsetof(MultiplayerPreferencesGOAL, glow_blur)},
+           {"glow-fade-in-ms", offsetof(MultiplayerPreferencesGOAL, glow_fade_in_ms)},
+           {"glow-fade-distance", offsetof(MultiplayerPreferencesGOAL, glow_fade_distance)}}) {
     EXPECT_EQ(types.lookup_field_info("multiplayer-preferences", field).field.offset(), offset);
   }
   load_types("multiplayer/event/mp-event-h.gc");
@@ -1386,6 +1390,45 @@ TEST(Jak2Preferences, PlayerDisplayPreferencesPersistAndValidate) {
   EXPECT_TRUE(get_multiplayer_preferences().player_map_marker);
 }
 
+TEST(Jak2Preferences, PlayerGlowPreferencesPersistAndValidate) {
+  ScopedPreferencesRoot preferences_root;
+  EXPECT_EQ(get_multiplayer_preferences().player_glow, PlayerGlowPreferences{});
+  auto preferences = get_multiplayer_preferences();
+  preferences.player_glow = {.mode = PlayerGlowVisibility::ALWAYS,
+                             .width = 40,
+                             .rounding = 0,
+                             .blur = 100,
+                             .fade_in_ms = 1500,
+                             .fade_out_ms = 0,
+                             .fade_distance = 500};
+  ASSERT_TRUE(set_multiplayer_preferences(preferences));
+  load_multiplayer_preferences();
+  EXPECT_EQ(get_multiplayer_preferences().player_glow, preferences.player_glow);
+  for (const auto& invalid :
+       std::initializer_list<PlayerGlowPreferences>{{.mode = static_cast<PlayerGlowVisibility>(3)},
+                                                    {.width = 0},
+                                                    {.width = 65},
+                                                    {.rounding = 101},
+                                                    {.blur = 101},
+                                                    {.fade_in_ms = 2001},
+                                                    {.fade_out_ms = 2001},
+                                                    {.fade_distance = 501}}) {
+    auto rejected = get_multiplayer_preferences();
+    rejected.player_glow = invalid;
+    EXPECT_FALSE(set_multiplayer_preferences(rejected));
+  }
+  EXPECT_EQ(get_multiplayer_preferences().player_glow, preferences.player_glow);
+  const auto parsed = parse_multiplayer_preferences(
+      R"({"player_glow":{"mode":3,"width":0,"blur":30,"fade_distance":501}})");
+  EXPECT_EQ(parsed.player_glow.mode, PlayerGlowVisibility::WALL);
+  EXPECT_EQ(parsed.player_glow.width, PlayerGlowPreferences{}.width);
+  EXPECT_EQ(parsed.player_glow.blur, 30);
+  EXPECT_EQ(parsed.player_glow.fade_distance, 0);
+  reset_multiplayer_preferences();
+  load_multiplayer_preferences();
+  EXPECT_EQ(get_multiplayer_preferences().player_glow, PlayerGlowPreferences{});
+}
+
 TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   ScopedPreferencesRoot preferences_root;
   GoalMemoryFixture memory;
@@ -1403,6 +1446,13 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   preferences.nametag_visibility = PlayerNametagVisibility::OFF;
   preferences.host_visibility = HostVisibility::LAN_ONLY;
   preferences.player_map_marker = false;
+  preferences.player_glow = {.mode = PlayerGlowVisibility::DISABLED,
+                             .width = 64,
+                             .rounding = 25,
+                             .blur = 75,
+                             .fade_in_ms = 2000,
+                             .fade_out_ms = 300,
+                             .fade_distance = 120};
   preferences.player_skin = get_default_player_skin(0x123456);
   std::memset(memory.at<String>(state.player_name).data(), 'x', 16);
   ASSERT_TRUE(multiplayer::jak2::bridge::write_preferences(0x11000, preferences));
@@ -1415,6 +1465,9 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   EXPECT_EQ(state.nametag_visibility, static_cast<uint8_t>(PlayerNametagVisibility::OFF));
   EXPECT_EQ(state.player_map_marker, 0);
   EXPECT_EQ(state.host_visibility, static_cast<uint8_t>(HostVisibility::LAN_ONLY));
+  EXPECT_EQ(state.glow_mode, static_cast<uint8_t>(PlayerGlowVisibility::DISABLED));
+  EXPECT_EQ(state.glow_fade_in_ms, 2000);
+  EXPECT_EQ(state.glow_fade_distance, 120);
 
   MultiplayerPreferences restored;
   ASSERT_TRUE(multiplayer::jak2::bridge::read_preferences(0x11000, restored));
@@ -1439,6 +1492,7 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   EXPECT_EQ(restored.nametag_visibility, PlayerNametagVisibility::OFF);
   EXPECT_FALSE(restored.player_map_marker);
   EXPECT_EQ(restored.host_visibility, HostVisibility::LAN_ONLY);
+  EXPECT_EQ(restored.player_glow, preferences.player_glow);
   EXPECT_EQ(restored.player_skin.colors, preferences.player_skin.colors);
   EXPECT_EQ(restored.player_skin.strengths, preferences.player_skin.strengths);
   const auto root =
@@ -1463,6 +1517,15 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRejectsInvalidBuffersAndFlags) {
   state.nametag_visibility = 3;
   EXPECT_FALSE(multiplayer::jak2::bridge::read_preferences(0x11000, values));
   state.nametag_visibility = static_cast<uint8_t>(PlayerNametagVisibility::HOLD);
+  for (uint8_t* glow : {&state.glow_mode, &state.glow_width, &state.glow_blur}) {
+    const auto saved = *glow;
+    *glow = *glow == 0 ? 3 : 101;
+    EXPECT_FALSE(multiplayer::jak2::bridge::read_preferences(0x11000, values));
+    *glow = saved;
+  }
+  state.glow_fade_distance = 501;
+  EXPECT_FALSE(multiplayer::jak2::bridge::read_preferences(0x11000, values));
+  state.glow_fade_distance = 0;
   EXPECT_FALSE(multiplayer::jak2::bridge::read_preferences(0, values));
   EXPECT_FALSE(multiplayer::jak2::bridge::write_preferences(EE_MAIN_MEM_SIZE - 1, values));
   memory.at<String>(state.room_code).len = 2;

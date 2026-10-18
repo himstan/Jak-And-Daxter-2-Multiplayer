@@ -1387,6 +1387,12 @@ void OpenGLRenderer::dispatch_buckets_jak2(DmaFollower dma,
     vif_interrupt_callback(bucket_id + 1);
     m_category_times[(int)m_bucket_categories[bucket_id]] += bucket_prof.get_elapsed_time();
 
+    // multiplayer player glow: once the 3D world is drawn, and again for the menu's model preview
+    if (bucket_id == (int)jak2::BucketId::GMERC_WARP ||
+        bucket_id == (int)jak2::BucketId::BUCKET_323) {
+      m_merc2->composite_player_glow(&m_render_state);
+    }
+
     // hack to draw the collision mesh in the middle the drawing
     if (bucket_id + 1 == (int)jak2::BucketId::TEX_L0_ALPHA &&
         Gfx::g_global_settings.collision_enable) {

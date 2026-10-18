@@ -2,6 +2,7 @@
 (in-package goal)
 
 (define-extern mp-player-color-progress-enter! (function progress none))
+(define-extern mp-player-glow-progress-enter! (function progress none))
 (define-extern refresh-generic-text-fields! (function menu-option-list none))
 (define-extern get-host-rule-value (function int int))
 
@@ -270,6 +271,10 @@
           (set! (-> *multiplayer-preferences* player-map-marker) (the-as uint8 (if value 1 0)))
           (save-multiplayer-preferences!))
         (none)))
+    (new 'static 'menu-generic-button-option
+      :name (text-id progress-multiplayer-player-glow)
+      :on-confirm (lambda ((the-progress progress))
+        (mp-player-glow-progress-enter! the-progress)))
     (progress-new-generic-link-to-scrolling-page (text-id progress-multiplayer-host-options)
       :on-load (lambda () (load-host-options-page!))
       (new 'static 'menu-generic-boolean-option

@@ -12,6 +12,7 @@
 #include "common/log/log.h"
 #include "common/versions/versions.h"
 
+#include "game/graphics/gfx.h"
 #include "game/kernel/common/kmachine.h"
 #include "game/kernel/jak2/kscheme.h"
 #include "game/multiplayer/jak2/api/preferences.h"
@@ -35,6 +36,16 @@ auto& runtime() {
 auto& connection_draft() {
   static multiplayer::platform::ConnectionDraft draft;
   return draft;
+}
+
+void apply_player_glow(const PlayerGlowPreferences& glow) {
+  auto& settings = Gfx::g_global_settings.player_glow;
+  settings.mode = static_cast<PlayerGlowMode>(glow.mode);
+  settings.width = glow.width;
+  settings.rounding = glow.rounding / 100.f;
+  settings.blur = glow.blur / 100.f;
+  settings.fade_in_seconds = glow.fade_in_ms / 1000.f;
+  settings.fade_out_seconds = glow.fade_out_ms / 1000.f;
 }
 
 multiplayer::platform::PlayerProfile local_profile() {
@@ -509,6 +520,7 @@ static int pc_multi_set_preferences(const u32 preferences_ptr) {
   const bool privacy_changed = preferences.host_visibility != previous.host_visibility;
   if (!set_multiplayer_preferences(std::move(preferences)))
     return 0;
+  apply_player_glow(multiplayer_preferences().player_glow);
   if (privacy_changed && session.state.role == multiplayer::platform::SessionRole::HOST)
     runtime().enqueue<multiplayer::platform::SetLobbyPrivacyCommand>(
         lobby_privacy(multiplayer_preferences().host_visibility));
@@ -587,6 +599,15 @@ static int64_t pc_multi_lobby_get_countdown_remaining_ms() {
 
 static int pc_multi_lobby_is_countdown() {
   return runtime().snapshot().session.countdown_active ? 1 : 0;
+}
+
+// The Player Glow options show their changes before they're saved.
+static int pc_multi_preview_player_glow(const u32 preferences_ptr) {
+  PlayerGlowPreferences glow;
+  if (!multiplayer::jak2::bridge::read_player_glow(preferences_ptr, glow))
+    return 0;
+  apply_player_glow(glow);
+  return 1;
 }
 
 static int pc_multi_lobby_set_skin(const u32 skin_ptr) {
@@ -676,6 +697,7 @@ static void pc_multi_connect_staged_invite() {
 
 void init_jak2_bridge() {
   load_multiplayer_preferences();
+  apply_player_glow(multiplayer_preferences().player_glow);
   const auto register_symbol = [](const char* name, auto function) {
     jak2::make_function_symbol_from_c(name, reinterpret_cast<void*>(function));
   };
@@ -725,6 +747,7 @@ void init_jak2_bridge() {
   register_symbol("pc-multi-set-lobby-details", &pc_multi_set_lobby_details);
   register_symbol("pc-multi-get-preferences", &pc_multi_get_preferences);
   register_symbol("pc-multi-set-preferences", &pc_multi_set_preferences);
+  register_symbol("pc-multi-preview-player-glow", &pc_multi_preview_player_glow);
   register_symbol("pc-multi-is-lobby-host", &pc_multi_is_lobby_host);
   register_symbol("pc-multi-get-session-player-limit", &pc_multi_get_session_player_limit);
   register_symbol("pc-multi-lobby-start-game", &pc_multi_lobby_start_game);

@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include "game/graphics/opengl_renderer/BucketRenderer.h"
+#include "game/graphics/opengl_renderer/foreground/PlayerGlow.h"
 #include "game/multiplayer/jak2/player_skin.h"
 
 struct MercDebugStats {
@@ -53,6 +54,9 @@ class Merc2 {
               MercDebugStats* stats,
               bool clear_depth_before_draw = false);
   static constexpr int kMaxBlerc = 40;
+
+  // Adds the glow drawn since the last call to the picture (see PlayerGlow).
+  void composite_player_glow(SharedRenderState* render_state);
 
  private:
   const std::vector<GLuint>* m_anim_slot_array;
@@ -147,7 +151,9 @@ class Merc2 {
     GLuint player_tint_enabled;
     GLuint player_tint_strength;
     GLuint player_tint_white_base;
-    
+
+    GLuint glow;  // player glow pass: rgb, w = 1 halo source, 2 mask only
+
     GLuint fade;
   };
 
@@ -197,6 +203,12 @@ class Merc2 {
     PLAYER_TINT_WHITE_BASE = 16,
   };
 
+  // matching enum pc-player-glow-flags in art-h.gc
+  enum PlayerGlowFlags {
+    PLAYER_GLOW = 1,          // another player: glows by the player glow settings
+    PLAYER_GLOW_PREVIEW = 2,  // menu preview: always glows, unless glow is disabled
+  };
+
   struct Draw {
     u32 first_index;
     u32 index_count;
@@ -215,6 +227,9 @@ class Merc2 {
     u32 eye_instance_id = UINT32_MAX;
     u32 player_tint_color = 0;
     float player_tint_strength = 0.f;
+    u32 player_glow_color = 0;  // #xAARRGGBB, a = how much they glow
+    u8 player_glow_flags = 0;
+    u8 player_glow_id = 0;
   };
 
   struct LevelDrawBucket {
@@ -247,6 +262,9 @@ class Merc2 {
     std::array<float, kMPPlayerSkinSlotCount> player_tint_strengths = {};
     u32 player_tint_character = 0;
     const std::vector<u8>* player_tint_texture_groups = nullptr;
+    u32 player_glow_color = 0;
+    u8 player_glow_flags = 0;
+    u8 player_glow_id = 0;
   };
   
   const std::vector<u8>& get_player_tint_texture_groups(const LevelData* level);
@@ -265,6 +283,14 @@ class Merc2 {
                 ScopedProfilerNode& prof,
                 bool set_fade,
                 SharedRenderState* render_state);
+
+  void draw_player_glow(const Draw* draw_array,
+                        const LevelData* lev,
+                        u32 num_draws,
+                        const Uniforms& uniforms,
+                        ScopedProfilerNode& prof,
+                        SharedRenderState* render_state);
+  PlayerGlow m_player_glow;
 
   static constexpr int MAX_LIGHTS = 1024;
   VuLights m_lights_buffer[MAX_LIGHTS];

@@ -238,6 +238,7 @@
     (dotimes (skin-slot MP_PLAYER_SKIN_SLOT_COUNT)
       (set! (-> v0-0 pc-player-tint-colors skin-slot) #x000000)
       (set! (-> v0-0 pc-player-tint-strengths skin-slot) 0.0))
+    (set! (-> v0-0 pc-player-glow-flags) (pc-player-glow-flags))
     v0-0
     )
   )

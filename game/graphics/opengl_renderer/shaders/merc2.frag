@@ -26,6 +26,9 @@ uniform int decal_enable;
 
 uniform int gfx_hack_no_tex;
 
+// multiplayer player glow pass (see PlayerGlow.h): w = 1 draws a halo source in rgb, w = 2 a mask
+uniform vec4 glow;
+
 const vec3 PLAYER_TINT_LUMINANCE_WEIGHTS = vec3(0.2126, 0.7152, 0.0722);
 const float PLAYER_TINT_MATERIAL_NORMALIZATION = 0.5;
 const float PLAYER_TINT_DETAIL_CONTRAST = 0.65;
@@ -77,6 +80,14 @@ vec3 player_tint_white_base_detail(
 
 
 void main() {
+  if (glow.w > 1.5) {
+    color = vec4(0.0, 0.0, 0.0, 0.25);
+    return;
+  }
+  if (glow.w > 0.5) {
+    color = vec4(glow.rgb, 1.0);
+    return;
+  }
   if (gfx_hack_no_tex == 0) {
     vec4 T0 = texture(tex_T0, vtx_st);
   

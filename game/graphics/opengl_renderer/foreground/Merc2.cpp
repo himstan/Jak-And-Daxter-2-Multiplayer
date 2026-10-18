@@ -539,6 +539,9 @@ void Merc2::handle_pc_model(const DmaTransfer& setup,
     float darkjak_interp;
     u32 player_tint_colors[kMPPlayerSkinSlotCount];
     float player_tint_strengths[kMPPlayerSkinSlotCount];
+    u32 player_glow_color;  // jak 2 only
+    u8 player_glow_flags;
+    u8 player_glow_id;
   };
 
   constexpr size_t kPcMercFlagsPacketSize = 18 * 16;
@@ -546,7 +549,9 @@ void Merc2::handle_pc_model(const DmaTransfer& setup,
   static_assert(offsetof(PcMercFlags, darkjak_interp) == 20);
   static_assert(offsetof(PcMercFlags, player_tint_colors) == 24);
   static_assert(offsetof(PcMercFlags, player_tint_strengths) == 152);
-  static_assert(sizeof(PcMercFlags) == 280);
+  static_assert(offsetof(PcMercFlags, player_glow_color) == 280);
+  static_assert(offsetof(PcMercFlags, player_glow_id) == 285);
+  static_assert(sizeof(PcMercFlags) == kPcMercFlagsPacketSize);
   auto* flags = (const PcMercFlags*)input_data;
   const bool model_uses_darkjak_instance_morph = flags->bitflags & 32;
   int num_effects = flags->effect_count;  // mostly just a sanity check
@@ -654,6 +659,11 @@ void Merc2::handle_pc_model(const DmaTransfer& setup,
   args.player_tint_character = static_cast<u32>(get_player_model_character(model->name));
   args.player_tint_texture_groups = &get_player_tint_texture_groups(lev);
   args.darkjak_interp = model_uses_darkjak_instance_morph ? flags->darkjak_interp : -1.f;
+  if (render_state->version == GameVersion::Jak2) {
+    args.player_glow_color = flags->player_glow_color;
+    args.player_glow_flags = flags->player_glow_flags;
+    args.player_glow_id = flags->player_glow_id;
+  }
 
   // loop over effects, creating draws for each
   for (size_t ei = 0; ei < model->effects.size(); ei++) {
@@ -789,6 +799,8 @@ void Merc2::init_shader_common(Shader& shader, Uniforms* uniforms, bool include_
     glUniform3f(uniforms->player_tint_color, 1.f, 0.f, 0.f);
     glUniform1i(uniforms->player_tint_enabled, 0);
     glUniform1i(uniforms->player_tint_white_base, 0);
+    uniforms->glow = glGetUniformLocation(id, "glow");
+    glUniform4f(uniforms->glow, 0.f, 0.f, 0.f, 0.f);
   }
 }
 
@@ -1159,6 +1171,9 @@ Merc2::Draw* Merc2::alloc_normal_draw(const tfrag3::MercDraw& mdraw, const DrawA
   draw->darkjak_interp = args.darkjak_interp;
   draw->player_tint_color = 0;
   draw->player_tint_strength = 0.f;
+  draw->player_glow_color = args.player_glow_color;
+  draw->player_glow_flags = args.player_glow_flags;
+  draw->player_glow_id = args.player_glow_id;
   if (args.jak1_water_mode) {
     draw->mode.set_ab(true);
     draw->mode.disable_depth_write();
@@ -1310,6 +1325,10 @@ void Merc2::do_draws(const Draw* draw_array,
   bool normal_vtx_buffer_bound = true;
 
   bool fog_on = true;
+
+  if (!set_fade) {
+    draw_player_glow(draw_array, lev, num_draws, uniforms, prof, render_state);
+  }
 
   for (u32 di = 0; di < num_draws; di++) {
     auto& draw = draw_array[di];
@@ -1496,4 +1515,109 @@ void Merc2::do_draws(const Draw* draw_array,
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, lev->merc_indices);
     glBindBuffer(GL_ARRAY_BUFFER, lev->merc_vertices);
   }
+}
+
+void Merc2::draw_player_glow(const Draw* draw_array,
+                             const LevelData* lev,
+                             u32 num_draws,
+                             const Uniforms& uniforms,
+                             ScopedProfilerNode& prof,
+                             SharedRenderState* render_state) {
+  // Drawn before any of this bucket's models, so only what's already drawn (the level) can hide a
+  // player, never their own body. Depth is "greater = closer": GL_LESS keeps the hidden parts.
+  const auto& settings = Gfx::g_global_settings.player_glow;
+  if (settings.mode == PlayerGlowMode::DISABLED) {
+    return;
+  }
+  u32 wall_players = 0;  // bit per player id glowing by visibility
+  bool any_glow = false;
+  for (u32 di = 0; di < num_draws; di++) {
+    const auto& draw = draw_array[di];
+    any_glow |= draw.player_glow_flags != 0;
+    if ((draw.player_glow_flags & PLAYER_GLOW) && !(draw.player_glow_flags & PLAYER_GLOW_PREVIEW) &&
+        settings.mode == PlayerGlowMode::WALL && draw.player_glow_id < 32) {
+      wall_players |= 1u << draw.player_glow_id;
+    }
+  }
+  if (!any_glow || !m_player_glow.begin(render_state)) {
+    return;
+  }
+
+  glDepthMask(GL_FALSE);
+  glDisable(GL_BLEND);
+  glUniform1i(uniforms.ignore_alpha, 1);
+  bool normal_vtx_buffer_bound = true;
+  auto draw_silhouette = [&](const Draw& draw) {
+    if (draw.flags & MOD_VTX) {
+      glBindVertexArray(draw.mod_vtx_buffer.vao);
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, lev->merc_indices);
+      glBindBuffer(GL_ARRAY_BUFFER, lev->merc_vertices);
+      normal_vtx_buffer_bound = false;
+    } else if (!normal_vtx_buffer_bound) {
+      glBindVertexArray(m_vao);
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, lev->merc_indices);
+      glBindBuffer(GL_ARRAY_BUFFER, lev->merc_vertices);
+      normal_vtx_buffer_bound = true;
+    }
+    glBindBufferRange(GL_UNIFORM_BUFFER, 1, m_bones_buffer,
+                      sizeof(math::Vector4f) * draw.first_bone, 128 * sizeof(ShaderMercMat));
+    prof.add_draw_call();
+    prof.add_tri(draw.num_triangles);
+    glDrawElements(draw.no_strip ? GL_TRIANGLES : GL_TRIANGLE_STRIP, draw.index_count,
+                   GL_UNSIGNED_INT, (void*)(sizeof(u32) * draw.first_index));
+  };
+
+  // 1. the halo sources: hidden parts (WALL), or the whole player (ALWAYS and the menu preview)
+  for (u32 di = 0; di < num_draws; di++) {
+    const auto& draw = draw_array[di];
+    if (!draw.player_glow_flags) {
+      continue;
+    }
+    const bool wall = draw.player_glow_id < 32 && (wall_players & (1u << draw.player_glow_id));
+    const float fade =
+        wall ? m_player_glow.player_fade(draw.player_glow_id, render_state->frame_idx) : 1.f;
+    const float strength = fade * (draw.player_glow_color >> 24) / 255.f;
+    if (strength < 0.01f) {
+      continue;
+    }
+    const u32 rgb = draw.player_glow_color;  // the player's primary color
+    math::Vector3f color(((rgb >> 16) & 0xff) / 255.f, ((rgb >> 8) & 0xff) / 255.f,
+                         (rgb & 0xff) / 255.f);
+    // as bright as it gets, whatever the color
+    color /= std::max(std::max(color.x(), color.y()), std::max(color.z(), 0.001f));
+    set_uniform(uniforms.glow, math::Vector4f(color.x() * strength, color.y() * strength,
+                                              color.z() * strength, 1));
+    glDepthFunc(wall ? GL_LESS : GL_ALWAYS);
+    draw_silhouette(draw);
+  }
+
+  // 2. WALL: the visible parts, masked out (no halo over them) and counted, so a player who can be
+  // seen at all stops glowing next frame
+  glDepthFunc(GL_GEQUAL);
+  set_uniform(uniforms.glow, math::Vector4f(0, 0, 0, 2));
+  for (u8 id = 0; id < 32; id++) {
+    if (!(wall_players & (1u << id))) {
+      continue;
+    }
+    m_player_glow.begin_visibility_query(id);
+    for (u32 di = 0; di < num_draws; di++) {
+      const auto& draw = draw_array[di];
+      if ((draw.player_glow_flags & PLAYER_GLOW) &&
+          !(draw.player_glow_flags & PLAYER_GLOW_PREVIEW) && draw.player_glow_id == id) {
+        draw_silhouette(draw);
+      }
+    }
+    m_player_glow.end_visibility_query(id);
+  }
+
+  set_uniform(uniforms.glow, math::Vector4f(0, 0, 0, 0));
+  glDepthMask(GL_TRUE);
+  glBindVertexArray(m_vao);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, lev->merc_indices);
+  glBindBuffer(GL_ARRAY_BUFFER, lev->merc_vertices);
+  m_player_glow.end(render_state);
+}
+
+void Merc2::composite_player_glow(SharedRenderState* render_state) {
+  m_player_glow.composite(render_state);
 }

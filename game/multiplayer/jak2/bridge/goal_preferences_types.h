@@ -19,7 +19,14 @@ struct MultiplayerPreferencesGOAL {
   uint8_t nametag_visibility;
   uint8_t player_map_marker;
   uint8_t host_visibility;
+  uint16_t glow_fade_in_ms;
+  uint16_t glow_fade_out_ms;
+  uint16_t glow_fade_distance;
+  uint8_t glow_mode;
+  uint8_t glow_width;
+  uint8_t glow_rounding;
+  uint8_t glow_blur;
 };
 #pragma pack(pop)
 
-static_assert(sizeof(MultiplayerPreferencesGOAL) == 276);
+static_assert(sizeof(MultiplayerPreferencesGOAL) == 286);

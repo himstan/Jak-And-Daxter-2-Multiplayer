@@ -5,6 +5,7 @@
 #include <limits>
 #include <random>
 #include <stdexcept>
+#include <type_traits>
 
 #include "common/log/log.h"
 #include "common/util/FileUtil.h"
@@ -204,6 +205,27 @@ bool parse_texture_group(const json& group, uint32_t& color, float& strength) {
   return std::isfinite(strength) && strength >= 0.0f && strength <= 1.0f;
 }
 
+void parse_player_glow(const json& glow, PlayerGlowPreferences& parsed) {
+  if (!glow.is_object())
+    return;
+  const auto number = [&](const char* key, const uint32_t min, const uint32_t max, auto& output) {
+    if (glow.contains(key) && glow.at(key).is_number_unsigned()) {
+      if (const uint32_t value = glow.at(key).get<uint32_t>(); value >= min && value <= max) {
+        output = static_cast<std::remove_reference_t<decltype(output)>>(value);
+      }
+    }
+  };
+  uint8_t mode = static_cast<uint8_t>(parsed.mode);
+  number("mode", 0, static_cast<uint8_t>(PlayerGlowVisibility::ALWAYS), mode);
+  parsed.mode = static_cast<PlayerGlowVisibility>(mode);
+  number("width", PlayerGlowPreferences::kMinWidth, PlayerGlowPreferences::kMaxWidth, parsed.width);
+  number("rounding", 0, PlayerGlowPreferences::kMaxPercent, parsed.rounding);
+  number("blur", 0, PlayerGlowPreferences::kMaxPercent, parsed.blur);
+  number("fade_in_ms", 0, PlayerGlowPreferences::kMaxFadeMs, parsed.fade_in_ms);
+  number("fade_out_ms", 0, PlayerGlowPreferences::kMaxFadeMs, parsed.fade_out_ms);
+  number("fade_distance", 0, PlayerGlowPreferences::kMaxFadeDistance, parsed.fade_distance);
+}
+
 void parse_preferences_root(const json& root, MultiplayerPreferences& parsed, bool& needs_save) {
   needs_save |= root.contains("session_characters");
   try {
@@ -267,6 +289,9 @@ void parse_preferences_root(const json& root, MultiplayerPreferences& parsed, bo
       parsed.host_visibility =
           static_cast<HostVisibility>(root.at("host_visibility").get<uint8_t>());
     }
+    if (root.contains("player_glow")) {
+      parse_player_glow(root.at("player_glow"), parsed.player_glow);
+    }
     if (root.contains("respawn_delay_seconds") &&
         root.at("respawn_delay_seconds").is_number_unsigned() &&
         root.at("respawn_delay_seconds") <= std::numeric_limits<uint16_t>::max()) {
@@ -285,6 +310,12 @@ void parse_preferences_root(const json& root, MultiplayerPreferences& parsed, bo
 }
 
 }  // namespace
+
+bool PlayerGlowPreferences::valid() const {
+  return mode <= PlayerGlowVisibility::ALWAYS && width >= kMinWidth && width <= kMaxWidth &&
+         rounding <= kMaxPercent && blur <= kMaxPercent && fade_in_ms <= kMaxFadeMs &&
+         fade_out_ms <= kMaxFadeMs && fade_distance <= kMaxFadeDistance;
+}
 
 MultiplayerPreferences parse_multiplayer_preferences(const std::string_view contents) {
   MultiplayerPreferences parsed;
@@ -382,6 +413,16 @@ void save_multiplayer_preferences() {
   root["friendly_fire"] = g_preferences.friendly_fire;
   root["player_map_marker"] = g_preferences.player_map_marker;
   root["nametag_visibility"] = static_cast<uint8_t>(g_preferences.nametag_visibility);
+  const auto& glow = g_preferences.player_glow;
+  root["player_glow"] = {
+      {"mode", static_cast<uint8_t>(glow.mode)},
+      {"width", glow.width},
+      {"rounding", glow.rounding},
+      {"blur", glow.blur},
+      {"fade_in_ms", glow.fade_in_ms},
+      {"fade_out_ms", glow.fade_out_ms},
+      {"fade_distance", glow.fade_distance},
+  };
   root["respawn_delay_seconds"] = g_preferences.respawn_delay_seconds;
   root["automatic_port_mapping"] = g_preferences.automatic_port_mapping;
   root["session_player_limit"] = g_preferences.session_player_limit;
@@ -476,7 +517,7 @@ bool set_multiplayer_preferences(MultiplayerPreferences preferences) {
       !multiplayer::platform::normalize_room_code(preferences.room_code, room_code) ||
       !is_player_skin_valid(preferences.player_skin) ||
       preferences.nametag_visibility > PlayerNametagVisibility::OFF ||
-      preferences.host_visibility > HostVisibility::LAN_ONLY ||
+      preferences.host_visibility > HostVisibility::LAN_ONLY || !preferences.player_glow.valid() ||
       preferences.session_player_limit < 2 || preferences.session_player_limit > kMPMaxPlayers ||
       (preferences.preferred_character != PlayerCharacter::JAK &&
        preferences.preferred_character != PlayerCharacter::DAXTER)) {

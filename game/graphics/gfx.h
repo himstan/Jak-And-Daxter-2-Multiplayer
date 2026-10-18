@@ -53,6 +53,17 @@ struct GfxRendererModule {
   const char* name;
 };
 
+// multiplayer: how other players glow (set from the Player Glow options, see PlayerGlow.h)
+enum class PlayerGlowMode : u8 { DISABLED = 0, WALL = 1, ALWAYS = 2 };
+struct PlayerGlowSettings {
+  PlayerGlowMode mode = PlayerGlowMode::WALL;
+  float fade_in_seconds = 0.2f;
+  float fade_out_seconds = 0.1f;
+  float width = 22.f;    // halo width in pixels at 1080p
+  float rounding = 1.f;  // 0 = square corners, 1 = round
+  float blur = 0.5f;     // 0 = hard edge, 1 = fades out across the whole width
+};
+
 // runtime settings
 static constexpr int PAT_MOD_COUNT = 4;
 static constexpr int PAT_EVT_COUNT = 20;
@@ -110,6 +121,8 @@ struct GfxGlobalSettings {
   u32 collision_skip_mask = 0;
   u32 collision_skip_hide_mask = 0;
   bool collision_skip_nomask_allowed = true;
+
+  PlayerGlowSettings player_glow;
 };
 
 namespace Gfx {

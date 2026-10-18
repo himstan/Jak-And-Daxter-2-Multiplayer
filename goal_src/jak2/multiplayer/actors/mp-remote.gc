@@ -55,7 +55,25 @@
           (return (vector-vector-distance focus-position presentation-position))))))
   (meters 1000000.0))
 
-(defun player-replica-cull-vehicle! ((record mp-player-record))
+(defun mp-player-glow-strength ((record mp-player-record))
+  "How much a remote player glows, 0-255. Fades out over the last 20% of the fade distance."
+  (let ((fade-distance (meters (the float (-> *multiplayer-preferences* glow-fade-distance)))))
+    (if (<= fade-distance 0.0)
+      255
+      (let ((amount (/ (- fade-distance (get-player-replica-distance-from-focus record)) (* 0.2 fade-distance))))
+        (the int (* 255.0 (fmax 0.0 (fmin 1.0 amount))))))))
+
+(defun mp-player-glow-update! ((record mp-player-record) (replica target))
+  (let ((draw (-> replica draw)))
+    (when (nonnull? draw)
+      (set! (-> draw pc-player-glow-color)
+            (logior (ash (the-as uint (mp-player-glow-strength record)) 24)
+                    (logand (-> record identity skin colors MP_PLAYER_PRIMARY_SKIN_SLOT) #xffffff)))
+      (set! (-> draw pc-player-glow-flags) (pc-player-glow-flags player))
+      (set! (-> draw pc-player-glow-id) (mp-player-controller-record-id *mp-player-controller* record))))
+  (none))
+
+(defun player-replica-cull-vehicle!((record mp-player-record))
   (when (and record (nonzero? record))
     (let ((vehicle-net-id (-> record vehicle state net-id)))
       (when (nonzero? vehicle-net-id)
@@ -138,7 +156,8 @@
               (set! replica (mp-player-record-target record))
               (when (player-replica-valid? replica)
                 (set! (-> record runtime replica-lifecycle) (player-replica-lifecycle active))
-                (player-replica-apply-record-correction! replica))))
+                (player-replica-apply-record-correction! replica)
+                (mp-player-glow-update! record replica))))
           (mp-remote-player-marker-update! record))
         (begin
           (mp-remote-player-marker-kill! record)

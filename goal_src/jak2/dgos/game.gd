@@ -409,6 +409,7 @@
   "progress-multiplayer-options-pc.o" ;; added
   "progress-static-pc.o" ;; added
   "mp-lobby-skin-editor.o" ;; added
+  "mp-player-glow-options.o" ;; added
   "mp-lobby-progress.o" ;; added
   "lobby-browser-h.o" ;; added
   "lobby-browser.o" ;; added
