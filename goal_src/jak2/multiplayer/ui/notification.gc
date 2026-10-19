@@ -248,23 +248,3 @@
   (when (and (nonnull? owner *active-pool*) (not (nonnull? (process-by-type-exact 'notification-manager *active-pool*))))
     (process-spawn notification-manager :init notification-init :to owner))
   (none))
-
-(defun draw-steam-layout-notice! ()
-  (when (pc-steam-layout-mismatch?)
-    (let ((font-ctx (new 'stack
-                         'font-context
-                         *font-default-matrix*
-                         32
-                         366
-                         0.0
-                         (font-color yellow)
-                         (font-flags shadow kerning middle large))))
-      (set-width! font-ctx 448)
-      (set-height! font-ctx 44)
-      (set-scale! font-ctx 0.4)
-      (print-game-text (lookup-text! *common-text* (text-id steam-layout-notice) #f)
-                       font-ctx
-                       #f
-                       44
-                       (bucket-id progress))))
-  (none))

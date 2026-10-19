@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 #include "steam/steam_api_common.h"
 
@@ -18,6 +19,17 @@ struct CallbackMessage {
   int id;
   uint8_t* data;
   int size;
+};
+
+struct InputConfigurationLoaded {
+  static constexpr int kId = 2803;
+  uint32_t app_id;
+  uint64_t controller;
+  uint64_t creator;
+  uint32_t major_revision;
+  uint32_t minor_revision;
+  bool uses_actions;
+  bool uses_gamepad;
 };
 
 struct ApiCallCompleted {
@@ -83,6 +95,7 @@ struct SteamApi {
   void (*run_frame)(HSteamPipe) = nullptr;
   bool (*next_callback)(HSteamPipe, CallbackMessage*) = nullptr;
   void (*free_callback)(HSteamPipe) = nullptr;
+  void (*dispatch_callback)(const CallbackMessage&) = nullptr;
   bool (*call_result)(HSteamPipe, SteamApiCall, void*, int, int, bool*) = nullptr;
   void* matchmaking = nullptr;
   void* friends = nullptr;
@@ -105,46 +118,8 @@ struct SteamApi {
   bool (*friend_game_played)(void*, uint64_t, FriendGameInfo*) = nullptr;
 };
 
-#pragma pack(push, 1)
-struct DigitalActionData {
-  bool state;
-  bool active;
-};
-
-struct AnalogActionData {
-  int mode;
-  float x;
-  float y;
-  bool active;
-};
-#pragma pack(pop)
-
-inline constexpr int kMaximumInputControllers = 16;
-inline constexpr int kMaximumActionOrigins = 8;
-
-struct InputApi {
-  void* input = nullptr;
-  bool (*init)(void*, bool) = nullptr;
-  bool (*shutdown)(void*) = nullptr;
-  bool (*set_manifest)(void*, const char*) = nullptr;
-  void (*run_frame)(void*, bool) = nullptr;
-  int (*connected_controllers)(void*, uint64_t*) = nullptr;
-  uint64_t (*action_set)(void*, const char*) = nullptr;
-  void (*activate_action_set)(void*, uint64_t, uint64_t) = nullptr;
-  uint64_t (*digital_action)(void*, const char*) = nullptr;
-  DigitalActionData (*digital_data)(void*, uint64_t, uint64_t) = nullptr;
-  uint64_t (*analog_action)(void*, const char*) = nullptr;
-  AnalogActionData (*analog_data)(void*, uint64_t, uint64_t) = nullptr;
-  void (*vibrate)(void*, uint64_t, unsigned short, unsigned short) = nullptr;
-  int (*digital_origins)(void*, uint64_t, uint64_t, uint64_t, int*) = nullptr;
-  int (*analog_origins)(void*, uint64_t, uint64_t, uint64_t, int*) = nullptr;
-  bool (*show_binding_panel)(void*, uint64_t) = nullptr;
-  int (*input_type)(void*, uint64_t) = nullptr;
-  void (*set_led)(void*, uint64_t, uint8_t, uint8_t, uint8_t, unsigned int) = nullptr;
-};
-
 const SteamApi* steam_api();
-const InputApi* input_api();
-void shutdown_input();
+void dispatch_callback(const CallbackMessage& message);
+std::optional<bool> controller_layout_uses_gamepad(uint64_t handle);
 
 }  // namespace steam::detail

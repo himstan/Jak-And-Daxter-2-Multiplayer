@@ -9,13 +9,14 @@
 #include <unordered_map>
 #include <variant>
 
+#include "device_claim.h"
+
 #include "common/common_types.h"
 
 #include "devices/dualsense_effects.h"
 #include "devices/game_controller.h"
 #include "devices/keyboard.h"
 #include "devices/mouse.h"
-#include "devices/steam_pad.h"
 #include "game/settings/settings.h"
 #include "game/system/hid/input_bindings.h"
 #include "game/system/hid/text_input_editor.h"
@@ -39,13 +40,14 @@ class InputManager {
     CONTROLLER_SEND_TRIGGER_RUMBLE,
     SET_TRIGGER_EFFECTS_ENABLED,
     START_TEXT_INPUT,
-    STOP_TEXT_INPUT
+    STOP_TEXT_INPUT,
+    SET_CONTROLLER_FOR_PORT
   };
 
   struct EEInputEvent {
     EEInputEventType type;
     std::variant<bool, int> param1 = {};
-    std::variant<bool, u8, u16, dualsense_effects::TriggerEffectOption> param2 = {};
+    std::variant<bool, int, u8, u16, dualsense_effects::TriggerEffectOption> param2 = {};
     std::variant<bool, u8, u16> param3 = {};
     std::variant<u8, u32> param4 = {};
     std::variant<u8, u32> param5 = {};
@@ -61,9 +63,9 @@ class InputManager {
   void clear_keyboard_actions();
   void poll_mouse_data();
   void clear_mouse_actions();
-  void poll_steam_pad_data();
   // Any cleanup that should happen after polling has completed for this frame
   void finish_polling();
+  bool controller_layout_notice(bool enabled);
   /// Any event coming from the EE thread that interacts directly with SDL should be enqueued as an
   /// event so it can be ran from the proper thread context (the graphics thread)
   void process_ee_events();
@@ -122,9 +124,7 @@ class InputManager {
   // the InputManager, so it shouldn't hurt (they don't need to be enqueued)
   // Also these are generally waiting for a response and...OpenGOAL does not have an async/await
   // pattern!
-  int get_num_controllers() const {
-    return m_available_controllers.size() + m_steam_pad.pads().size();
-  }
+  int get_num_controllers() const { return m_available_controllers.size(); }
   std::string get_controller_name(const int controller_id);
   std::string get_current_bind(const int port,
                                const InputDeviceType device_type,
@@ -153,7 +153,6 @@ class InputManager {
   bool is_keyboard_enabled() {
     return m_settings->keyboard_enabled || m_settings->_keyboard_temp_enabled;
   }
-  bool steam_layout_mismatch() const { return m_steam_pad.layout_mismatch(); }
   bool is_pressure_sensitivity_enabled() { return m_settings->enable_pressure_sensitivity; }
   bool set_pressure_sensitivity_enabled(bool enabled) {
     return m_settings->enable_pressure_sensitivity = enabled;
@@ -182,13 +181,12 @@ class InputManager {
   /// You can have many mice plugged into a computer, but we do not differentiate between
   /// them it's all aggregated under one device.
   MouseDevice m_mouse;
-  SteamPadDevice m_steam_pad;
   TextInputEditor m_text_editor;
   /// A mapping between port numbers and the controller index. Connect as many controllers as
   /// you want.
   std::unordered_map<int, int> m_controller_port_mapping;
   /// Per-process claims to automatically map each controller to each process, just makes local play easier.
-  std::unordered_map<int, void*> m_controller_claims;
+  std::unordered_map<std::string, std::unique_ptr<DeviceClaim>> m_controller_claims;
   /// The port that the keyboard and mouse will be used for PadData
   int m_keyboard_and_mouse_port = 0;
   /// Collection of arbitrary commands to run on user actions
@@ -202,6 +200,10 @@ class InputManager {
   bool m_auto_hide_mouse = true;
   bool m_mouse_currently_hidden = false;
   bool m_ignore_background_controller_events = false;
+  std::atomic<bool> m_controller_notice_enabled = false;
+  std::atomic<uint64_t> m_controller_layout_issue = 0;
+  uint64_t m_controller_layout_candidate = 0;
+  uint64_t m_controller_layout_since = 0;
 
   /// No inputs will be processed while in this mode the first input detected from the relevant
   /// device type will be used to set the bind and clear the flag
@@ -209,12 +211,12 @@ class InputManager {
   /// The game will poll for the status of this flag to know if a bind has been assigned
   std::optional<InputBindAssignmentMeta> m_waiting_for_bind = std::nullopt;
 
-  void refresh_device_list();
-  std::optional<uint64_t> steam_pad_at(const int controller_id) const;
+  void refresh_device_list(SDL_JoystickID preferred_remote = 0);
+  void update_controller_layout_notice();
   void clear_inputs();
   bool try_claim_controller(const int controller_idx);
-  void release_controller_claim(const int controller_idx);
-  void release_controller_claims();
+  void release_unused_controller_claims();
+  void assign_controller_to_port(int controller_id, int port);
 
   void ignore_background_controller_events(const bool ignore);
   void set_controller_led(const int port, const u8 red, const u8 green, const u8 blue);

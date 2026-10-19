@@ -1,5 +1,9 @@
 "Action Manifest"
 {
+	"major_revision"		"1"
+	"minor_revision"		"0"
+	"major_revision_affects_xinput"		"0"
+	"major_revision_affects_mousekb"		"0"
 	"configurations"
 	{
 		"controller_xbox360"
@@ -10,6 +14,20 @@
 			}
 		}
 		"controller_xboxone"
+		{
+			"0"
+			{
+				"path"		"gamepad.vdf"
+			}
+		}
+		"controller_xboxelite"
+		{
+			"0"
+			{
+				"path"		"gamepad.vdf"
+			}
+		}
+		"controller_ps3"
 		{
 			"0"
 			{
@@ -30,6 +48,13 @@
 				"path"		"gamepad.vdf"
 			}
 		}
+		"controller_ps5_edge"
+		{
+			"0"
+			{
+				"path"		"gamepad.vdf"
+			}
+		}
 		"controller_switch_pro"
 		{
 			"0"
@@ -37,7 +62,49 @@
 				"path"		"gamepad.vdf"
 			}
 		}
+		"controller_switch2_pro"
+		{
+			"0"
+			{
+				"path"		"gamepad.vdf"
+			}
+		}
+		"controller_switch_joycon_left"
+		{
+			"0"
+			{
+				"path"		"gamepad.vdf"
+			}
+		}
+		"controller_switch_joycon_right"
+		{
+			"0"
+			{
+				"path"		"gamepad.vdf"
+			}
+		}
+		"controller_switch_joycon_pair"
+		{
+			"0"
+			{
+				"path"		"gamepad.vdf"
+			}
+		}
+		"controller_mobile_touch"
+		{
+			"0"
+			{
+				"path"		"gamepad.vdf"
+			}
+		}
 		"controller_neptune"
+		{
+			"0"
+			{
+				"path"		"neptune.vdf"
+			}
+		}
+		"controller_steamcontroller_gordon"
 		{
 			"0"
 			{
@@ -54,43 +121,17 @@
 	}
 	"actions"
 	{
-		"Gameplay"
+		"Gamepad"
 		{
-			"title"		"#Set_Gameplay"
+			"title"		"#Set_Gamepad"
 			"StickPadGyro"
 			{
-				"LeftStick"
-				{
-					"title"		"#Action_LeftStick"
-					"input_mode"		"joystick_move"
-				}
-				"RightStick"
-				{
-					"title"		"#Action_RightStick"
-					"input_mode"		"joystick_move"
-				}
 			}
 			"AnalogTrigger"
 			{
-				"L2"		"#Action_L2"
-				"R2"		"#Action_R2"
 			}
 			"Button"
 			{
-				"Cross"		"#Action_Cross"
-				"Circle"		"#Action_Circle"
-				"Square"		"#Action_Square"
-				"Triangle"		"#Action_Triangle"
-				"L1"		"#Action_L1"
-				"R1"		"#Action_R1"
-				"L3"		"#Action_L3"
-				"R3"		"#Action_R3"
-				"Start"		"#Action_Start"
-				"Select"		"#Action_Select"
-				"DpadUp"		"#Action_DpadUp"
-				"DpadDown"		"#Action_DpadDown"
-				"DpadLeft"		"#Action_DpadLeft"
-				"DpadRight"		"#Action_DpadRight"
 			}
 		}
 	}
@@ -98,25 +139,7 @@
 	{
 		"english"
 		{
-			"Set_Gameplay"		"Gameplay"
-			"Action_LeftStick"		"Left Stick"
-			"Action_RightStick"		"Right Stick"
-			"Action_L2"		"L2"
-			"Action_R2"		"R2"
-			"Action_Cross"		"Cross"
-			"Action_Circle"		"Circle"
-			"Action_Square"		"Square"
-			"Action_Triangle"		"Triangle"
-			"Action_L1"		"L1"
-			"Action_R1"		"R1"
-			"Action_L3"		"L3"
-			"Action_R3"		"R3"
-			"Action_Start"		"Start"
-			"Action_Select"		"Select"
-			"Action_DpadUp"		"D-Pad Up"
-			"Action_DpadDown"		"D-Pad Down"
-			"Action_DpadLeft"		"D-Pad Left"
-			"Action_DpadRight"		"D-Pad Right"
+			"Set_Gamepad"		"Gamepad"
 		}
 	}
 }

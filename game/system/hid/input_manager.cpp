@@ -1,36 +1,18 @@
 #include "input_manager.h"
 
 #include <algorithm>
-#include <atomic>
-#include <cmath>
 
-#include "device_claim.h"
-#include "input_manager.h"
 #include "sdl_util.h"
 
 #include "common/global_profiler/GlobalProfiler.h"
 #include "common/log/log.h"
-#include "common/util/Assert.h"
 #include "common/util/FileUtil.h"
 
-#include "game/graphics/pipelines/opengl.h"
+#include "game/external/steam/steam_client.h"
 #include "game/runtime.h"
 
-#include "third-party/SDL/include/SDL3/SDL_hints.h"
 #include "third-party/SDL/include/SDL3/SDL_clipboard.h"
-#include "fmt/format.h"
-#include "third-party/imgui/imgui.h"
-
-namespace {
-constexpr Uint16 kValveVendorId = 0x28de;
-constexpr Uint16 kSteamVirtualGamepadProductId = 0x11ff;
-
-// needed for steam deck
-bool owned_by_steam_input(const SDL_JoystickID joystick) {
-  return steam::input_active() && SDL_GetJoystickVendorForID(joystick) == kValveVendorId &&
-         SDL_GetJoystickProductForID(joystick) != kSteamVirtualGamepadProductId;
-}
-}  // namespace
+#include "third-party/SDL/include/SDL3/SDL_hints.h"
 
 InputManager::InputManager(SDL_Window* window)
     : m_window(window),
@@ -61,6 +43,9 @@ InputManager::InputManager(SDL_Window* window)
       sdl_util::log_error("Unable to set SDL_HINT_JOYSTICK_HIDAPI_PS3 to true!");
     }
 #endif
+    SDL_setenv_unsafe("SDL_GAMECONTROLLER_ALLOW_STEAM_VIRTUAL_GAMEPAD", "1", 0);
+    steam::update_controller_input();
+    ignore_background_controller_events(false);
     {
       auto p = scoped_prof("input_manager::init::sdl_init_subsystem");
       // initializing the controllers on startup can sometimes take a very long time
@@ -79,9 +64,6 @@ InputManager::InputManager(SDL_Window* window)
     } else {
       lg::error("Could not find SDL Controller DB at path `{}`", mapping_path);
     }
-    steam::initialize_input(
-        (file_util::get_jak_project_dir() / "game" / "assets" / "steam_input" / "actions.vdf")
-            .string());
     // Initialize atleast 2 ports, because that's normal for Jak
     // more will be allocated if more controllers are found
     m_data[0] = std::make_shared<PadData>();
@@ -94,7 +76,6 @@ InputManager::InputManager(SDL_Window* window)
     }
     m_command_binds = CommandBindingGroups();
     refresh_device_list();
-    ignore_background_controller_events(false);
     hide_cursor(m_auto_hide_mouse);
   }
 }
@@ -103,7 +84,10 @@ InputManager::~InputManager() {
   prof().instant_event("ROOT");
   {
     auto p = scoped_prof("input_manager::destroy");
-    release_controller_claims();
+    for (const auto& [port, index] : m_controller_port_mapping) {
+      m_available_controllers.at(index)->clear_trigger_effect(
+          dualsense_effects::TriggerEffectOption::BOTH);
+    }
     for (auto& device : m_available_controllers) {
       device->close_device();
     }
@@ -111,134 +95,121 @@ InputManager::~InputManager() {
     if (m_text_editor.active()) {
       SDL_StopTextInput(m_window);
     }
+    SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
   }
 }
 
-void InputManager::refresh_device_list() {
+void InputManager::refresh_device_list(const SDL_JoystickID preferred_remote) {
   prof().instant_event("ROOT");
-  {
-    auto p = scoped_prof("input_manager::refresh_device_list");
-    release_controller_claims();
-    m_available_controllers.clear();
-    m_controller_port_mapping.clear();
-    // Enumerate devices
-    // TODO - if this was done on a separate thread, there would be no hitch in the game thread
-    // but of course, that presents other synchronization challenges.
-    int num_joysticks = 0;
-    auto joysticks = SDL_GetJoysticks(&num_joysticks);
-    if (num_joysticks > 0) {
-      for (int i = 0; i < num_joysticks; i++) {
-        if (owned_by_steam_input(joysticks[i])) {
-          continue;
-        }
-        if (!SDL_IsGamepad(joysticks[i])) {
-          lg::error("Controller with device id {} is not avaiable via the GameController API", i);
-          continue;
-        }
-        auto controller = std::make_shared<GameController>(joysticks[i], m_settings);
-        if (!controller->is_loaded()) {
-          lg::error("Unable to successfully connect to GameController with id {}, skipping", i);
-          continue;
-        }
-        m_available_controllers.push_back(controller);
-        // Allocate a PadData if this is a new port
-        if (m_data.find(i) == m_data.end()) {
-          m_data[i] = std::make_shared<PadData>();
-        }
-      }
-
-      bool claimed_controller = false;
-      // If the controller that was last selected to be port 0 is around, prioritize it.
-      if (!m_settings->last_selected_controller_guid.empty()) {
-        for (size_t i = 0; i < m_available_controllers.size(); i++) {
-          const auto& controller_guid = m_available_controllers.at(i)->get_guid();
-          if (controller_guid == m_settings->last_selected_controller_guid &&
-              try_claim_controller(i)) {
-            m_controller_port_mapping[0] = i;
-            m_settings->controller_port_mapping[controller_guid] = 0;
-            claimed_controller = true;
-            break;
-          }
-        }
-      }
-
-      // prefer any controller that was explicitly mapped to port 0.
-      if (!claimed_controller) {
-        for (size_t i = 0; i < m_available_controllers.size(); i++) {
-          const auto& controller_guid = m_available_controllers.at(i)->get_guid();
-          const auto saved_mapping = m_settings->controller_port_mapping.find(controller_guid);
-          if (saved_mapping != m_settings->controller_port_mapping.end() &&
-              saved_mapping->second == 0 && try_claim_controller(i)) {
-            m_controller_port_mapping[0] = i;
-            claimed_controller = true;
-            break;
-          }
-        }
-      }
-
-      // claim the first controller not already claimed by another local game process.
-      if (!claimed_controller) {
-        for (size_t i = 0; i < m_available_controllers.size(); i++) {
-          if (try_claim_controller(i)) {
-            const auto& controller_guid = m_available_controllers.at(i)->get_guid();
-            m_controller_port_mapping[0] = i;
-            m_settings->controller_port_mapping[controller_guid] = 0;
-            if (m_settings->last_selected_controller_guid.empty()) {
-              m_settings->last_selected_controller_guid = controller_guid;
-            }
-            claimed_controller = true;
-            break;
-          }
-        }
-      }
-    }
-    if (m_controller_port_mapping.empty()) {
-      lg::warn(
-          "No unclaimed game controllers could be found or loaded successfully - keyboard input "
-          "will be temporarily enabled.");
-      m_settings->_keyboard_temp_enabled = true;
-    } else {
-      lg::info("Found {} controllers, claimed controller {} for port 0",
-               m_available_controllers.size(), m_controller_port_mapping.at(0));
-      m_settings->_keyboard_temp_enabled = false;
+  auto p = scoped_prof("input_manager::refresh_device_list");
+  auto previous = std::move(m_available_controllers);
+  const auto previous_mapping = std::move(m_controller_port_mapping);
+  m_available_controllers.clear();
+  m_controller_port_mapping.clear();
+  int count = 0;
+  auto gamepads = SDL_GetGamepads(&count);
+  for (int i = 0; i < count; ++i) {
+    const auto found = std::find_if(previous.begin(), previous.end(), [&](const auto& controller) {
+      return controller->get_id() == gamepads[i];
+    });
+    auto controller = found != previous.end()
+                          ? *found
+                          : std::make_shared<GameController>(gamepads[i], m_settings);
+    if (controller->is_loaded()) {
+      controller->refresh_metadata();
+      m_available_controllers.push_back(std::move(controller));
     }
   }
+  SDL_free(gamepads);
+
+  for (const auto& [port, old_index] : previous_mapping) {
+    for (int i = 0; i < static_cast<int>(m_available_controllers.size()); ++i) {
+      if (m_available_controllers[i]->get_id() == previous.at(old_index)->get_id() &&
+          try_claim_controller(i)) {
+        m_controller_port_mapping[port] = i;
+        break;
+      }
+    }
+    if (!m_controller_port_mapping.contains(port)) {
+      m_data.at(port)->clear();
+    }
+  }
+
+  if (SDL_GetWindowFlags(m_window) & SDL_WINDOW_INPUT_FOCUS) {
+    for (int i = 0; i < static_cast<int>(m_available_controllers.size()); ++i) {
+      const auto& controller = m_available_controllers[i];
+      const bool newly_connected =
+          std::none_of(previous.begin(), previous.end(),
+                       [&](const auto& old) { return old->get_id() == controller->get_id(); });
+      if ((newly_connected || controller->get_id() == preferred_remote) &&
+          controller->is_remote() && try_claim_controller(i)) {
+        m_controller_port_mapping[0] = i;
+        m_data.at(0)->clear();
+        break;
+      }
+    }
+  }
+
+  if (!m_controller_port_mapping.contains(0)) {
+    std::vector<int> candidates;
+    for (int i = 0; i < static_cast<int>(m_available_controllers.size()); ++i) {
+      candidates.push_back(i);
+    }
+    const auto preference = [&](const int index) {
+      const auto guid = m_available_controllers[index]->get_guid();
+      if (guid == m_settings->last_selected_controller_guid)
+        return 0;
+      const auto saved = m_settings->controller_port_mapping.find(guid);
+      return saved != m_settings->controller_port_mapping.end() && saved->second == 0 ? 1 : 2;
+    };
+    std::stable_sort(candidates.begin(), candidates.end(), [&](const int left, const int right) {
+      return preference(left) < preference(right);
+    });
+    for (const int index : candidates) {
+      const bool mapped =
+          std::any_of(m_controller_port_mapping.begin(), m_controller_port_mapping.end(),
+                      [&](const auto& mapping) { return mapping.second == index; });
+      if (!mapped && try_claim_controller(index)) {
+        m_controller_port_mapping[0] = index;
+        break;
+      }
+    }
+  }
+  release_unused_controller_claims();
+  m_settings->_keyboard_temp_enabled = !m_controller_port_mapping.contains(0);
 }
 
 bool InputManager::try_claim_controller(const int controller_idx) {
   if (controller_idx < 0 || controller_idx >= (int)m_available_controllers.size()) {
     return false;
   }
-  if (m_controller_claims.find(controller_idx) != m_controller_claims.end()) {
+  const auto key = m_available_controllers.at(controller_idx)->get_claim_key();
+  if (m_controller_claims.contains(key)) {
     return true;
   }
-
-  const auto claim = claim_device(m_available_controllers.at(controller_idx)->get_claim_key());
-  if (!claim) {
-    return false;
+  if (auto claim = DeviceClaim::acquire(key)) {
+    m_controller_claims.emplace(key, std::move(claim));
+    m_available_controllers.at(controller_idx)->clear_trigger_effect(
+        dualsense_effects::TriggerEffectOption::BOTH);
+    return true;
   }
-  m_controller_claims[controller_idx] = *claim;
-  return true;
+  return false;
 }
 
-void InputManager::release_controller_claim(const int controller_idx) {
-  const auto claim = m_controller_claims.find(controller_idx);
-  if (claim == m_controller_claims.end()) {
-    return;
-  }
-  release_device(claim->second);
-  m_controller_claims.erase(claim);
-}
-
-void InputManager::release_controller_claims() {
-  std::vector<int> claimed_controller_indices;
-  claimed_controller_indices.reserve(m_controller_claims.size());
-  for (const auto& [controller_idx, claim] : m_controller_claims) {
-    claimed_controller_indices.push_back(controller_idx);
-  }
-  for (const auto controller_idx : claimed_controller_indices) {
-    release_controller_claim(controller_idx);
-  }
+void InputManager::release_unused_controller_claims() {
+  std::erase_if(m_controller_claims, [&](const auto& claim) {
+    for (const auto& [port, index] : m_controller_port_mapping) {
+      if (m_available_controllers.at(index)->get_claim_key() == claim.first) {
+        return false;
+      }
+    }
+    for (auto& controller : m_available_controllers) {
+      if (controller->get_claim_key() == claim.first) {
+        controller->clear_trigger_effect(dualsense_effects::TriggerEffectOption::BOTH);
+      }
+    }
+    return true;
+  });
 }
 
 void InputManager::enqueue_ignore_background_controller_events(const bool ignore) {
@@ -270,6 +241,14 @@ void InputManager::hide_cursor(const bool hide_cursor) {
 }
 
 void InputManager::process_sdl_event(const SDL_Event& event) {
+  if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_F1 &&
+      !event.key.repeat && (event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) == 0 &&
+      m_controller_notice_enabled && !m_text_editor.active() && !m_waiting_for_bind) {
+    if (const auto controller = m_controller_layout_issue.load()) {
+      steam::show_controller_settings(controller);
+      return;
+    }
+  }
   if (m_text_editor.handle_event(event)) {
     return;
   }
@@ -281,10 +260,10 @@ void InputManager::process_sdl_event(const SDL_Event& event) {
     return;
   }
 
-  // TODO - perhaps should handle `SDL_CONTROLLERDEVICEREMAPPED`?
   // Detect controller connections and disconnects
-  if (sdl_util::is_any_event_type(event.type,
-                                  {SDL_EVENT_GAMEPAD_ADDED, SDL_EVENT_GAMEPAD_REMOVED})) {
+  if (sdl_util::is_any_event_type(
+          event.type, {SDL_EVENT_GAMEPAD_ADDED, SDL_EVENT_GAMEPAD_REMOVED,
+                       SDL_EVENT_GAMEPAD_REMAPPED, SDL_EVENT_GAMEPAD_STEAM_HANDLE_UPDATED})) {
     lg::info("Controller added or removed. refreshing controller device list");
     refresh_device_list();
   }
@@ -366,34 +345,55 @@ void InputManager::clear_mouse_actions() {
   }
 }
 
-void InputManager::poll_steam_pad_data() {
-  const auto port = m_data.find(0);
-  if (port == m_data.end()) {
-    return;
-  }
-  m_steam_pad.refresh_pads();
-  if (m_controller_port_mapping.contains(0)) {
-    m_steam_pad.release(port->second);
-    return;
-  }
-  if (m_waiting_for_bind || m_skip_polling_for_n_frames > 0) {
-    m_steam_pad.clear_actions(port->second);
-    return;
-  }
-  m_steam_pad.poll_state(port->second, m_settings->axis_scale,
-                         SDL_GetWindowFlags(m_window) & SDL_WINDOW_INPUT_FOCUS);
-  const bool keyboard_fallback = !m_steam_pad.connected();
-  if (m_settings->_keyboard_temp_enabled && !keyboard_fallback) {
-    clear_keyboard_actions();
-  }
-  m_settings->_keyboard_temp_enabled = keyboard_fallback;
-}
-
 void InputManager::finish_polling() {
   m_skip_polling_for_n_frames--;
   if (m_skip_polling_for_n_frames < 0) {
     m_skip_polling_for_n_frames = 0;
   }
+  steam::update_controller_input();
+  bool changed = false;
+  SDL_JoystickID preferred_remote = 0;
+  for (auto& controller : m_available_controllers) {
+    if (controller->refresh_metadata()) {
+      changed = true;
+      if (controller->is_remote()) {
+        preferred_remote = controller->get_id();
+      }
+    }
+  }
+  if (changed) {
+    refresh_device_list(preferred_remote);
+  }
+  update_controller_layout_notice();
+}
+
+bool InputManager::controller_layout_notice(const bool enabled) {
+  m_controller_notice_enabled = enabled;
+  if (!enabled)
+    m_controller_layout_issue = 0;
+  return enabled && m_controller_layout_issue.load() != 0;
+}
+
+void InputManager::update_controller_layout_notice() {
+  uint64_t candidate = 0;
+  if (m_controller_notice_enabled && !m_controller_port_mapping.contains(0)) {
+    for (const auto handle : steam::controllers_without_gamepad_layout()) {
+      const auto key = fmt::format("steam|{:016x}", handle);
+      const bool available_in_sdl =
+          std::any_of(m_available_controllers.begin(), m_available_controllers.end(),
+                      [&](const auto& controller) { return controller->get_claim_key() == key; });
+      if (!available_in_sdl && DeviceClaim::acquire(key)) {
+        candidate = handle;
+        break;
+      }
+    }
+  }
+  const auto now = SDL_GetTicks();
+  if (candidate != m_controller_layout_candidate) {
+    m_controller_layout_candidate = candidate;
+    m_controller_layout_since = now;
+  }
+  m_controller_layout_issue = candidate && now - m_controller_layout_since >= 3000 ? candidate : 0;
 }
 
 void InputManager::process_ee_events() {
@@ -456,6 +456,14 @@ void InputManager::process_ee_events() {
       case EEInputEventType::STOP_TEXT_INPUT:
         if (!SDL_StopTextInput(m_window)) {
           sdl_util::log_error("Unable to stop text input");
+        }
+        break;
+      case EEInputEventType::SET_CONTROLLER_FOR_PORT:
+        for (int i = 0; i < static_cast<int>(m_available_controllers.size()); ++i) {
+          if (m_available_controllers[i]->get_id() == std::get<u32>(evt.param4)) {
+            assign_controller_to_port(i, std::get<int>(evt.param2));
+            break;
+          }
         }
         break;
     }
@@ -544,21 +552,11 @@ std::optional<std::shared_ptr<PadData>> InputManager::get_current_data(const int
   return m_data.at(port);
 }
 
-std::optional<uint64_t> InputManager::steam_pad_at(const int controller_id) const {
-  const auto& pads = m_steam_pad.pads();
-  const int index = controller_id - (int)m_available_controllers.size();
-  if (index < 0 || index >= (int)pads.size()) {
-    return std::nullopt;
-  }
-  return pads.at(index);
-}
-
 std::string InputManager::get_controller_name(const int controller_id) {
-  if (controller_id >= 0 && controller_id < (int)m_available_controllers.size()) {
-    return m_available_controllers.at(controller_id)->get_name();
+  if ((size_t)controller_id >= m_available_controllers.size()) {
+    return "";
   }
-  const auto pad = steam_pad_at(controller_id);
-  return pad ? steam::pad_name(*pad) : "";
+  return m_available_controllers.at(controller_id)->get_name();
 }
 
 std::string InputManager::get_current_bind(const int port,
@@ -600,38 +598,37 @@ std::string InputManager::get_current_bind(const int port,
 }
 
 int InputManager::get_controller_index(const int port) {
-  if (m_controller_port_mapping.find(port) != m_controller_port_mapping.end()) {
-    return m_controller_port_mapping.at(port);
+  if (m_controller_port_mapping.find(port) == m_controller_port_mapping.end()) {
+    return -1;
   }
-  const auto& pads = m_steam_pad.pads();
-  const auto pad = m_steam_pad.pad();
-  const auto steam_pad = pad ? std::ranges::find(pads, *pad) : pads.end();
-  if (port != 0 || steam_pad == pads.end()) {
-    return 0;
-  }
-  return (int)m_available_controllers.size() + (int)(steam_pad - pads.begin());
+  return m_controller_port_mapping.at(port);
 }
 
 void InputManager::set_controller_for_port(const int controller_id, const int port) {
-  if (const auto pad = steam_pad_at(controller_id); pad && port == 0) {
-    clear_inputs();
-    if (const auto mapped = m_controller_port_mapping.find(0);
-        mapped != m_controller_port_mapping.end()) {
-      release_controller_claim(mapped->second);
-      m_controller_port_mapping.erase(mapped);
-    }
-    m_steam_pad.select(*pad);
+  if (controller_id < 0 || controller_id >= static_cast<int>(m_available_controllers.size())) {
     return;
   }
-  if (controller_id < (int)m_available_controllers.size() && try_claim_controller(controller_id)) {
+  const std::lock_guard lock(m_event_queue_mtx);
+  ee_event_queue.push({EEInputEventType::SET_CONTROLLER_FOR_PORT,
+                       {},
+                       port,
+                       {},
+                       m_available_controllers[controller_id]->get_id()});
+}
+
+void InputManager::assign_controller_to_port(const int controller_id, const int port) {
+  if (port >= 0 && try_claim_controller(controller_id)) {
     // Reset inputs as this device won't be able to be read from again!
     clear_inputs();
-    if (m_controller_port_mapping.find(port) != m_controller_port_mapping.end() &&
-        m_controller_port_mapping.at(port) != controller_id) {
-      release_controller_claim(m_controller_port_mapping.at(port));
-    }
+    std::erase_if(m_controller_port_mapping,
+                  [&](const auto& mapping) { return mapping.second == controller_id; });
     auto& controller = m_available_controllers.at(controller_id);
     m_controller_port_mapping[port] = controller_id;
+    if (!m_data.contains(port)) {
+      m_data[port] = std::make_shared<PadData>();
+    }
+    release_unused_controller_claims();
+    m_settings->_keyboard_temp_enabled = !m_controller_port_mapping.contains(0);
     m_settings->controller_port_mapping[controller->get_guid()] = port;
     // NOTE - only tracking port 0 for now
     if (port == 0) {
@@ -643,7 +640,7 @@ void InputManager::set_controller_for_port(const int controller_id, const int po
 
 bool InputManager::controller_has_led(const int port) {
   if (m_controller_port_mapping.find(port) == m_controller_port_mapping.end()) {
-    return port == 0 && m_steam_pad.has_led();
+    return false;
   }
   const auto id = m_controller_port_mapping.at(port);
   if (id >= (int)m_available_controllers.size()) {
@@ -654,7 +651,7 @@ bool InputManager::controller_has_led(const int port) {
 
 bool InputManager::controller_has_rumble(const int port) {
   if (m_controller_port_mapping.find(port) == m_controller_port_mapping.end()) {
-    return port == 0 && m_steam_pad.connected();
+    return false;
   }
   const auto id = m_controller_port_mapping.at(port);
   if (id >= (int)m_available_controllers.size()) {
@@ -687,7 +684,7 @@ bool InputManager::controller_has_trigger_effect_support(const int port) {
 
 int InputManager::controller_send_rumble(int port, u8 low_intensity, u8 high_intensity) {
   if (m_controller_port_mapping.find(port) == m_controller_port_mapping.end()) {
-    return port == 0 ? m_steam_pad.send_rumble(low_intensity, high_intensity) : 0;
+    return 0;
   }
   return m_available_controllers.at(m_controller_port_mapping.at(port))
       ->send_rumble(low_intensity, high_intensity);
@@ -780,9 +777,6 @@ void InputManager::enqueue_set_controller_led(const int port,
 
 void InputManager::set_controller_led(const int port, const u8 red, const u8 green, const u8 blue) {
   if (m_controller_port_mapping.find(port) == m_controller_port_mapping.end()) {
-    if (port == 0) {
-      m_steam_pad.set_led(red, green, blue);
-    }
     return;
   }
   const auto id = m_controller_port_mapping.at(port);

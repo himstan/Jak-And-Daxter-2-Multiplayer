@@ -1,8 +1,12 @@
 #include "game/external/steam/steam_client.h"
 
+#include <array>
 #include <cstdlib>
+#include <cstring>
 #include <initializer_list>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -32,6 +36,24 @@ constexpr const char* kLibraryName = "libsteam_api.so";
 #endif
 constexpr int kInitOk = 0;
 constexpr size_t kInitErrorBytes = 1024;
+struct ControllerInput {
+  void* input = nullptr;
+  bool (*init)(void*, bool) = nullptr;
+  bool (*shutdown)(void*) = nullptr;
+  bool (*set_manifest)(void*, const char*) = nullptr;
+  void (*run_frame)(void*, bool) = nullptr;
+  uint64_t (*action_set)(void*, const char*) = nullptr;
+  void (*activate_action_set)(void*, uint64_t, uint64_t) = nullptr;
+  uint64_t (*controller_for_index)(void*, int) = nullptr;
+  int (*connected_controllers)(void*, uint64_t*) = nullptr;
+  bool (*show_binding_panel)(void*, uint64_t) = nullptr;
+  int (*input_type)(void*, uint64_t) = nullptr;
+  void (*set_led)(void*, uint64_t, uint8_t, uint8_t, uint8_t, unsigned int) = nullptr;
+  uint32_t (*remote_session)(void*, uint64_t) = nullptr;
+  bool attempted = false;
+  bool started = false;
+  uint64_t gamepad_action_set = 0;
+};
 
 struct SteamClient {
   void* library = nullptr;
@@ -39,10 +61,12 @@ struct SteamClient {
   const char* (*persona_name)(void*) = nullptr;
   Networking networking;
   SteamApi api;
-  InputApi input;
+  ControllerInput controllers;
 };
 
 std::optional<SteamClient> g_client;
+std::mutex g_controller_layout_mutex;
+std::unordered_map<uint64_t, bool> g_controller_layouts;
 
 void* open_library() {
   const auto path = fs::path(file_util::get_current_executable_path()).parent_path() / kLibraryName;
@@ -145,40 +169,32 @@ bool resolve_entry_points(void* library, SteamEntryPoints& entry, SteamClient& c
          resolve(library, api.friend_game_played, {"SteamAPI_ISteamFriends_GetFriendGamePlayed"});
 }
 
-bool resolve_input_entry_points(void* library, SteamEntryPoints& entry, InputApi& input) {
+bool resolve_controller_entry_points(void* library,
+                                     SteamEntryPoints& entry,
+                                     ControllerInput& controllers) {
   return resolve(library, entry.input, {"SteamAPI_SteamInput_v007", "SteamAPI_SteamInput_v006"}) &&
-         resolve(library, input.init, {"SteamAPI_ISteamInput_Init"}) &&
-         resolve(library, input.shutdown, {"SteamAPI_ISteamInput_Shutdown"}) &&
-         resolve(library, input.set_manifest,
+         resolve(library, controllers.init, {"SteamAPI_ISteamInput_Init"}) &&
+         resolve(library, controllers.shutdown, {"SteamAPI_ISteamInput_Shutdown"}) &&
+         resolve(library, controllers.set_manifest,
                  {"SteamAPI_ISteamInput_SetInputActionManifestFilePath"}) &&
-         resolve(library, input.run_frame, {"SteamAPI_ISteamInput_RunFrame"}) &&
-         resolve(library, input.connected_controllers,
+         resolve(library, controllers.run_frame, {"SteamAPI_ISteamInput_RunFrame"}) &&
+         resolve(library, controllers.action_set, {"SteamAPI_ISteamInput_GetActionSetHandle"}) &&
+         resolve(library, controllers.activate_action_set,
+                 {"SteamAPI_ISteamInput_ActivateActionSet"}) &&
+         resolve(library, controllers.controller_for_index,
+                 {"SteamAPI_ISteamInput_GetControllerForGamepadIndex"}) &&
+         resolve(library, controllers.connected_controllers,
                  {"SteamAPI_ISteamInput_GetConnectedControllers"}) &&
-         resolve(library, input.action_set, {"SteamAPI_ISteamInput_GetActionSetHandle"}) &&
-         resolve(library, input.activate_action_set, {"SteamAPI_ISteamInput_ActivateActionSet"}) &&
-         resolve(library, input.digital_action, {"SteamAPI_ISteamInput_GetDigitalActionHandle"}) &&
-         resolve(library, input.digital_data, {"SteamAPI_ISteamInput_GetDigitalActionData"}) &&
-         resolve(library, input.analog_action, {"SteamAPI_ISteamInput_GetAnalogActionHandle"}) &&
-         resolve(library, input.analog_data, {"SteamAPI_ISteamInput_GetAnalogActionData"}) &&
-         resolve(library, input.vibrate, {"SteamAPI_ISteamInput_TriggerVibration"}) &&
-         resolve(library, input.digital_origins,
-                 {"SteamAPI_ISteamInput_GetDigitalActionOrigins"}) &&
-         resolve(library, input.analog_origins, {"SteamAPI_ISteamInput_GetAnalogActionOrigins"}) &&
-         resolve(library, input.show_binding_panel, {"SteamAPI_ISteamInput_ShowBindingPanel"}) &&
-         resolve(library, input.input_type, {"SteamAPI_ISteamInput_GetInputTypeForHandle"}) &&
-         resolve(library, input.set_led, {"SteamAPI_ISteamInput_SetLEDColor"});
-}
-
-// useful for steam deck if gk is added as a non steam game and run like that
-bool launched_as_other_app(const uint32_t app_id) {
-  const char* launched_game = std::getenv("SteamGameId");
-  return launched_game && *launched_game && launched_game != std::to_string(app_id);
+         resolve(library, controllers.show_binding_panel,
+                 {"SteamAPI_ISteamInput_ShowBindingPanel"}) &&
+         resolve(library, controllers.input_type, {"SteamAPI_ISteamInput_GetInputTypeForHandle"}) &&
+         resolve(library, controllers.set_led, {"SteamAPI_ISteamInput_SetLEDColor"}) &&
+         resolve(library, controllers.remote_session,
+                 {"SteamAPI_ISteamInput_GetRemotePlaySessionID"});
 }
 
 bool start_client(SteamClient& client, const SteamEntryPoints& entry, const uint32_t app_id) {
-  const bool use_steam_input = entry.input && !launched_as_other_app(app_id);
   set_environment("SteamAppId", std::to_string(app_id));
-  set_environment("SteamGameId", std::to_string(app_id));
   char error[kInitErrorBytes] = {};
   if (entry.init(error) != kInitOk) {
     lg::info("[Steam] Steam is unavailable ({}); using direct connections.", error);
@@ -207,10 +223,9 @@ bool start_client(SteamClient& client, const SteamEntryPoints& entry, const uint
   }
   client.networking.utils->InitRelayNetworkAccess();
   client.networking.sockets->InitAuthentication();
-  if (use_steam_input)
-    client.input.input = entry.input();
-  else if (entry.input)
-    lg::info("[Steam] Launched by Steam as another app; its controller layout drives input.");
+  if (entry.input) {
+    client.controllers.input = entry.input();
+  }
   return true;
 }
 }  // namespace
@@ -230,13 +245,14 @@ bool initialize(const uint32_t app_id) {
     close_library(client.library);
     return false;
   }
-  if (!resolve_input_entry_points(client.library, entry, client.input))
+  if (!resolve_controller_entry_points(client.library, entry, client.controllers))
     entry.input = nullptr;
   if (!start_client(client, entry, app_id)) {
     close_library(client.library);
     return false;
   }
   g_client = client;
+  g_client->api.dispatch_callback = detail::dispatch_callback;
   lg::info("[Steam] Steam is running this game as app {}.", app_id);
   return true;
 }
@@ -244,9 +260,12 @@ bool initialize(const uint32_t app_id) {
 void shutdown() {
   if (!g_client)
     return;
-  shutdown_input();
+  if (g_client->controllers.started)
+    g_client->controllers.shutdown(g_client->controllers.input);
   g_client->shutdown();
   g_client.reset();
+  const std::lock_guard lock(g_controller_layout_mutex);
+  g_controller_layouts.clear();
 }
 
 std::optional<Networking> networking() {
@@ -273,12 +292,122 @@ uint64_t local_steam_id() {
              : 0;
 }
 
-const detail::SteamApi* detail::steam_api() {
-  return g_client ? &g_client->api : nullptr;
+void update_controller_input() {
+  if (!g_client || !g_client->controllers.input)
+    return;
+  auto& controllers = g_client->controllers;
+  if (!controllers.attempted) {
+    controllers.attempted = true;
+    const auto manifest = fs::absolute(file_util::get_jak_project_dir() / "game" / "assets" /
+                                       "steam_input" / "actions.vdf");
+    if (!controllers.set_manifest(controllers.input, manifest.string().c_str())) {
+      lg::warn("[Steam] Steam Input rejected the bundled gamepad layouts at {}.",
+               manifest.string());
+    }
+    controllers.started = controllers.init(controllers.input, true);
+  }
+  if (controllers.started) {
+    controllers.run_frame(controllers.input, false);
+    if (!controllers.gamepad_action_set)
+      controllers.gamepad_action_set = controllers.action_set(controllers.input, "Gamepad");
+    if (controllers.gamepad_action_set)
+      controllers.activate_action_set(controllers.input, UINT64_MAX,
+                                      controllers.gamepad_action_set);
+  }
 }
 
-const detail::InputApi* detail::input_api() {
-  return g_client && g_client->input.input ? &g_client->input : nullptr;
+uint64_t controller_for_gamepad_index(const int index) {
+  if (!g_client || !g_client->controllers.started || index < 0)
+    return 0;
+  return g_client->controllers.controller_for_index(g_client->controllers.input, index);
+}
+
+std::string controller_name(const uint64_t handle) {
+  if (!handle || !g_client || !g_client->controllers.started)
+    return "";
+  constexpr std::array<const char*, 15> names = {"Controller",
+                                                 "Steam Controller",
+                                                 "Xbox 360 Controller",
+                                                 "Xbox One Controller",
+                                                 "Gamepad",
+                                                 "PS4 Controller",
+                                                 "MFi Controller",
+                                                 "Android Controller",
+                                                 "Joy-Con Pair",
+                                                 "Joy-Con",
+                                                 "Switch Pro Controller",
+                                                 "Touch Controller",
+                                                 "PS3 Controller",
+                                                 "PS5 Controller",
+                                                 "Steam Deck"};
+  const auto& controllers = g_client->controllers;
+  const int type = controllers.input_type(controllers.input, handle);
+  const char* name = type >= 0 && type < static_cast<int>(names.size()) ? names[type] : names[0];
+  return std::string(name) + " (Steam Input)";
+}
+
+bool controller_has_led(const uint64_t handle) {
+  if (!handle || !g_client || !g_client->controllers.started)
+    return false;
+  const auto& controllers = g_client->controllers;
+  const int type = controllers.input_type(controllers.input, handle);
+  return type == 5 || type == 13;  // ESteamInputType: PS4, PS5
+}
+
+void set_controller_led(const uint64_t handle,
+                        const uint8_t red,
+                        const uint8_t green,
+                        const uint8_t blue) {
+  if (controller_has_led(handle)) {
+    const auto& controllers = g_client->controllers;
+    controllers.set_led(controllers.input, handle, red, green, blue, 0);
+  }
+}
+
+bool is_remote_controller(const uint64_t handle) {
+  return handle && g_client && g_client->controllers.started &&
+         g_client->controllers.remote_session(g_client->controllers.input, handle) != 0;
+}
+
+std::vector<uint64_t> controllers_without_gamepad_layout() {
+  if (!g_client || !g_client->controllers.started)
+    return {};
+  const auto& controllers = g_client->controllers;
+  std::array<uint64_t, 16> connected{};
+  const int count = controllers.connected_controllers(controllers.input, connected.data());
+  std::vector<uint64_t> result;
+  for (int index = 0; index < count && index < static_cast<int>(connected.size()); ++index) {
+    if (detail::controller_layout_uses_gamepad(connected[index]) == false)
+      result.push_back(connected[index]);
+  }
+  return result;
+}
+
+bool show_controller_settings(const uint64_t handle) {
+  return handle && g_client && g_client->controllers.started &&
+         g_client->controllers.show_binding_panel(g_client->controllers.input, handle);
+}
+
+void detail::dispatch_callback(const CallbackMessage& message) {
+  if (message.id != InputConfigurationLoaded::kId || !message.data ||
+      message.size < static_cast<int>(sizeof(InputConfigurationLoaded)))
+    return;
+  InputConfigurationLoaded configuration;
+  std::memcpy(&configuration, message.data, sizeof(configuration));
+  if (configuration.app_id == kSpacewarAppId && configuration.controller) {
+    const std::lock_guard lock(g_controller_layout_mutex);
+    g_controller_layouts[configuration.controller] = configuration.uses_gamepad;
+  }
+}
+
+std::optional<bool> detail::controller_layout_uses_gamepad(const uint64_t handle) {
+  const std::lock_guard lock(g_controller_layout_mutex);
+  const auto found = g_controller_layouts.find(handle);
+  return found == g_controller_layouts.end() ? std::nullopt : std::optional(found->second);
+}
+
+const detail::SteamApi* detail::steam_api() {
+  return g_client ? &g_client->api : nullptr;
 }
 
 }  // namespace steam

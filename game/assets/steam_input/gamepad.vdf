@@ -1,21 +1,19 @@
+// Adapted from Valve Steam Input template: controller_xboxone_gamepad_joystick.vdf
 "controller_mappings"
 {
 	"version"		"3"
-	"revision"		"1"
 	"title"		"OpenGOAL Gamepad"
-	"description"		"PlayStation 2 style layout"
-	"creator"		"0"
+	"description"		"Gamepad input for OpenGOAL"
 	"controller_type"		"controller_xboxone"
+	"major_revision"		"1"
+	"minor_revision"		"0"
 	"actions"
 	{
-		"Gameplay"
+		"Gamepad"
 		{
-			"title"		"#Set_Gameplay"
+			"title"		"#Set_Gamepad"
 			"legacy_set"		"0"
 		}
-	}
-	"action_layers"
-	{
 	}
 	"group"
 	{
@@ -31,7 +29,7 @@
 					{
 						"bindings"
 						{
-							"binding"		"game_action Gameplay Cross, , "
+							"binding"		"xinput_button A"
 						}
 					}
 				}
@@ -44,7 +42,7 @@
 					{
 						"bindings"
 						{
-							"binding"		"game_action Gameplay Circle, , "
+							"binding"		"xinput_button B"
 						}
 					}
 				}
@@ -57,7 +55,7 @@
 					{
 						"bindings"
 						{
-							"binding"		"game_action Gameplay Square, , "
+							"binding"		"xinput_button X"
 						}
 					}
 				}
@@ -70,92 +68,7 @@
 					{
 						"bindings"
 						{
-							"binding"		"game_action Gameplay Triangle, , "
-						}
-					}
-				}
-			}
-		}
-	}
-	"group"
-	{
-		"id"		"1"
-		"mode"		"dpad"
-		"inputs"
-		{
-			"dpad_north"
-			{
-				"activators"
-				{
-					"Full_Press"
-					{
-						"bindings"
-						{
-							"binding"		"game_action Gameplay DpadUp, , "
-						}
-					}
-				}
-			}
-			"dpad_south"
-			{
-				"activators"
-				{
-					"Full_Press"
-					{
-						"bindings"
-						{
-							"binding"		"game_action Gameplay DpadDown, , "
-						}
-					}
-				}
-			}
-			"dpad_east"
-			{
-				"activators"
-				{
-					"Full_Press"
-					{
-						"bindings"
-						{
-							"binding"		"game_action Gameplay DpadRight, , "
-						}
-					}
-				}
-			}
-			"dpad_west"
-			{
-				"activators"
-				{
-					"Full_Press"
-					{
-						"bindings"
-						{
-							"binding"		"game_action Gameplay DpadLeft, , "
-						}
-					}
-				}
-			}
-		}
-	}
-	"group"
-	{
-		"id"		"2"
-		"mode"		"joystick_move"
-		"gameactions"
-		{
-			"Gameplay"		"LeftStick"
-		}
-		"inputs"
-		{
-			"click"
-			{
-				"activators"
-				{
-					"Full_Press"
-					{
-						"bindings"
-						{
-							"binding"		"game_action Gameplay L3, , "
+							"binding"		"xinput_button Y"
 						}
 					}
 				}
@@ -166,10 +79,6 @@
 	{
 		"id"		"3"
 		"mode"		"joystick_move"
-		"gameactions"
-		{
-			"Gameplay"		"RightStick"
-		}
 		"inputs"
 		{
 			"click"
@@ -180,7 +89,11 @@
 					{
 						"bindings"
 						{
-							"binding"		"game_action Gameplay R3, , "
+							"binding"		"xinput_button JOYSTICK_LEFT"
+						}
+						"settings"
+						{
+							"haptic_intensity"		"2"
 						}
 					}
 				}
@@ -191,29 +104,63 @@
 	{
 		"id"		"4"
 		"mode"		"trigger"
-		"gameactions"
-		{
-			"Gameplay"		"L2"
-		}
 		"inputs"
 		{
+			"click"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"xinput_button TRIGGER_LEFT"
+						}
+						"settings"
+						{
+							"haptic_intensity"		"2"
+						}
+					}
+				}
+			}
+		}
+		"settings"
+		{
+			"output_trigger"		"1"
 		}
 	}
 	"group"
 	{
 		"id"		"5"
 		"mode"		"trigger"
-		"gameactions"
-		{
-			"Gameplay"		"R2"
-		}
 		"inputs"
 		{
+			"click"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"xinput_button TRIGGER_RIGHT"
+						}
+						"settings"
+						{
+							"haptic_intensity"		"2"
+						}
+					}
+				}
+			}
+		}
+		"settings"
+		{
+			"output_trigger"		"2"
 		}
 	}
 	"group"
 	{
-		"id"		"6"
+		"id"		"7"
 		"mode"		"switches"
 		"inputs"
 		{
@@ -225,7 +172,7 @@
 					{
 						"bindings"
 						{
-							"binding"		"game_action Gameplay Start, , "
+							"binding"		"xinput_button start"
 						}
 					}
 				}
@@ -238,7 +185,7 @@
 					{
 						"bindings"
 						{
-							"binding"		"game_action Gameplay Select, , "
+							"binding"		"xinput_button select"
 						}
 					}
 				}
@@ -251,7 +198,7 @@
 					{
 						"bindings"
 						{
-							"binding"		"game_action Gameplay L1, , "
+							"binding"		"xinput_button shoulder_left"
 						}
 					}
 				}
@@ -264,7 +211,169 @@
 					{
 						"bindings"
 						{
-							"binding"		"game_action Gameplay R1, , "
+							"binding"		"xinput_button shoulder_right"
+						}
+					}
+				}
+			}
+			"button_back_left"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"xinput_button y"
+						}
+					}
+				}
+			}
+			"button_back_left_upper"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"xinput_button x"
+						}
+					}
+				}
+			}
+			"button_back_right_upper"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"xinput_button b"
+						}
+					}
+				}
+			}
+			"button_back_right"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"xinput_button a"
+						}
+					}
+				}
+			}
+			"button_capture"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"controller_action SCREENSHOT"
+						}
+					}
+				}
+			}
+		}
+	}
+	"group"
+	{
+		"id"		"8"
+		"mode"		"joystick_move"
+		"inputs"
+		{
+			"click"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"xinput_button JOYSTICK_RIGHT"
+						}
+					}
+				}
+			}
+		}
+	}
+	"group"
+	{
+		"id"		"9"
+		"mode"		"dpad"
+		"inputs"
+		{
+			"dpad_north"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"xinput_button DPAD_UP"
+						}
+						"settings"
+						{
+							"haptic_intensity"		"1"
+						}
+					}
+				}
+			}
+			"dpad_south"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"xinput_button DPAD_DOWN"
+						}
+						"settings"
+						{
+							"haptic_intensity"		"1"
+						}
+					}
+				}
+			}
+			"dpad_east"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"xinput_button DPAD_RIGHT"
+						}
+						"settings"
+						{
+							"haptic_intensity"		"1"
+						}
+					}
+				}
+			}
+			"dpad_west"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"xinput_button DPAD_LEFT"
+						}
+						"settings"
+						{
+							"haptic_intensity"		"1"
 						}
 					}
 				}
@@ -274,19 +383,16 @@
 	"preset"
 	{
 		"id"		"0"
-		"name"		"Gameplay"
+		"name"		"Gamepad"
 		"group_source_bindings"
 		{
+			"7"		"switch active"
 			"0"		"button_diamond active"
-			"1"		"dpad active"
-			"2"		"joystick active"
-			"3"		"right_joystick active"
+			"3"		"joystick active"
 			"4"		"left_trigger active"
 			"5"		"right_trigger active"
-			"6"		"switch active"
+			"8"		"right_joystick active"
+			"9"		"dpad active"
 		}
-	}
-	"settings"
-	{
 	}
 }

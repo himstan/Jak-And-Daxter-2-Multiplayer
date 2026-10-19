@@ -189,6 +189,7 @@
 ;; Input Related Functions
 ;; TODO - add get current controller index
 (define-extern pc-get-controller-count (function int))
+(define-extern pc-controller-layout-notice (function symbol symbol))
 (define-extern pc-get-controller-name (function int string string))
 (deftype bind-assignment-info (structure)
   ((port int32)
@@ -203,7 +204,6 @@
 (define-extern pc-get-controller-index (function int int))
 (define-extern pc-set-controller! (function int int none))
 (define-extern pc-get-keyboard-enabled? (function symbol))
-(define-extern pc-steam-layout-mismatch? (function symbol))
 (define-extern pc-set-keyboard-enabled! (function symbol none))
 (define-extern pc-set-mouse-options! (function symbol symbol symbol none))
 (define-extern pc-set-mouse-camera-sens! (function float float none))

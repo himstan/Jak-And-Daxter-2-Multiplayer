@@ -47,6 +47,7 @@
 
 (defmethod deactivate ((this title-control))
   "Make a process dead, clean it up, remove it from the active pool, and return to dead pool."
+  (pc-controller-layout-notice #f)
   (dotimes (s5-0 2)
     (set-pending-file (-> this buffer s5-0) (the-as string #f) -1 (the-as handle #f) 100000000.0)
     )
@@ -519,7 +520,7 @@
            (return (the-as object (-> self selected)))
            )
           )
-        (when (< (mod (current-time) 300) 210)
+        (when (and (not (pc-controller-layout-notice #t)) (< (mod (current-time) 300) 210))
           (let ((sv-112
                   (new 'stack 'font-context *font-default-matrix* 64 312 0.0 (font-color default) (font-flags shadow kerning))
                   )
@@ -608,6 +609,24 @@
         )
       )
   )
+
+(defun title-controller-notice! ((enabled? symbol))
+  (when (and (pc-controller-layout-notice enabled?) (nonnull? *common-text*))
+    (let ((context (new 'stack 'font-context *font-default-matrix* 32 304 0.0
+                        (font-color yellow) (font-flags shadow kerning middle large))))
+      (when (nonnull? context)
+        (set-width! context 448)
+        (set-height! context 80)
+        (set-scale! context 0.6)
+        (print-game-text
+          (lookup-text! *common-text* (text-id controller-layout-unavailable) #f)
+          context #f 33 (bucket-id progress))
+        (set-origin! context 32 332)
+        (set-scale! context 0.4)
+        (print-game-text
+          (lookup-text! *common-text* (text-id controller-layout-instructions) #f)
+          context #f 33 (bucket-id progress)))))
+  (none))
 
 (defstate startup (title-control)
   :virtual #t
@@ -713,6 +732,11 @@
     )
   :post (behavior ()
     (local-vars (v1-73 external-art-buffer))
+    (title-controller-notice!
+      (if (and (nonnull? self (-> self state))
+               (or (= (-> self state name) 'startup) (= (-> self state name) 'wait)))
+          #t
+          #f))
     (let ((gp-0 (command-get-process "jak-logo" (the-as process #f))))
       (when (and gp-0 (nonzero? (-> (the-as process-drawable gp-0) draw)))
         (let ((s5-0 (lookup-light-sphere-by-name "big-title1" (-> self level bsp light-hash)))

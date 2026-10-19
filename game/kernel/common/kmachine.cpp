@@ -870,6 +870,12 @@ u64 pc_get_controller_count() {
   return 0;
 }
 
+u64 pc_controller_layout_notice(u32 enabled) {
+  const auto display = Display::GetMainDisplay();
+  return bool_to_symbol(
+      display && display->get_input_manager()->controller_layout_notice(symbol_to_bool(enabled)));
+}
+
 u64 pc_get_controller_index(u32 port) {
   if (Display::GetMainDisplay()) {
     return Display::GetMainDisplay()->get_input_manager()->get_controller_index(port);
@@ -881,13 +887,6 @@ void pc_set_controller(u32 controller_id, u32 port) {
   if (Display::GetMainDisplay()) {
     Display::GetMainDisplay()->get_input_manager()->set_controller_for_port(controller_id, port);
   }
-}
-
-u32 pc_get_steam_layout_mismatch() {
-  if (Display::GetMainDisplay()) {
-    return bool_to_symbol(Display::GetMainDisplay()->get_input_manager()->steam_layout_mismatch());
-  }
-  return bool_to_symbol(false);
 }
 
 u32 pc_get_keyboard_enabled() {
@@ -1452,10 +1451,10 @@ void init_common_pc_port_functions(
   make_func_symbol_func("pc-get-controller-name", (void*)pc_get_controller_name);
   make_func_symbol_func("pc-get-current-bind", (void*)pc_get_current_bind);
   make_func_symbol_func("pc-get-controller-count", (void*)pc_get_controller_count);
+  make_func_symbol_func("pc-controller-layout-notice", (void*)pc_controller_layout_notice);
   make_func_symbol_func("pc-get-controller-index", (void*)pc_get_controller_index);
   make_func_symbol_func("pc-set-controller!", (void*)pc_set_controller);
   make_func_symbol_func("pc-get-keyboard-enabled?", (void*)pc_get_keyboard_enabled);
-  make_func_symbol_func("pc-steam-layout-mismatch?", (void*)pc_get_steam_layout_mismatch);
   make_func_symbol_func("pc-set-keyboard-enabled!", (void*)pc_set_keyboard_enabled);
   make_func_symbol_func("pc-set-mouse-options!", (void*)pc_set_mouse_options);
   make_func_symbol_func("pc-set-mouse-camera-sens!", (void*)pc_set_mouse_camera_sens);

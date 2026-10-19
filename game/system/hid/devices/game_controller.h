@@ -6,7 +6,8 @@
 // https://wiki.libsdl.org/SDL3/CategoryGamepad
 class GameController : public InputDevice {
  public:
-  GameController(int sdl_device_id, std::shared_ptr<game_settings::InputSettings> settings);
+  GameController(SDL_JoystickID sdl_device_id,
+                 std::shared_ptr<game_settings::InputSettings> settings);
   ~GameController() { close_device(); }
 
   void process_event(const SDL_Event& event,
@@ -31,26 +32,30 @@ class GameController : public InputDevice {
                                   u8 end_position,
                                   u8 strength);
   std::string get_name() const { return m_device_name; }
-  bool has_led() { return m_has_led; }
+  bool has_led();
   bool has_rumble() { return m_has_rumble; }
   void set_led(const u8 red, const u8 green, const u8 blue);
   std::string get_guid() { return m_guid; }
-  std::string get_claim_key() { return m_claim_key; }
+  std::string get_claim_key() const;
+  SDL_JoystickID get_id() const { return m_sdl_instance_id; }
+  bool refresh_metadata();
+  bool is_remote() const;
   bool is_dualsense() { return m_is_dualsense; }
   bool has_trigger_rumble() { return m_has_trigger_rumble; }
   bool has_trigger_effect_support() { return has_trigger_rumble() || is_dualsense(); }
   bool has_pressure_sensitivity_support() { return m_has_pressure_sensitive_buttons; }
 
  private:
-  int m_sdl_instance_id = -1;
-  SDL_Gamepad* m_device_handle;
-  SDL_Joystick* m_low_device_handle;
+  SDL_JoystickID m_sdl_instance_id = 0;
+  SDL_Gamepad* m_device_handle = nullptr;
+  SDL_Joystick* m_low_device_handle = nullptr;
   std::string m_device_name = "";
-  bool m_has_led;
-  bool m_has_rumble;
+  bool m_has_led = false;
+  bool m_has_rumble = false;
   std::string m_guid = "";
   std::string m_claim_key = "";
+  uint64_t m_steam_handle = 0;
   bool m_has_pressure_sensitive_buttons = false;
-  bool m_is_dualsense;
-  bool m_has_trigger_rumble;
+  bool m_is_dualsense = false;
+  bool m_has_trigger_rumble = false;
 };

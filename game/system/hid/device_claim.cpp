@@ -1,53 +1,55 @@
 #include "device_claim.h"
 
 #ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
 
-#include "common/common_types.h"
-#include "common/log/log.h"
+#include <sys/file.h>
+#endif
+
+#include "common/util/FileUtil.h"
 
 #include "fmt/format.h"
 
-namespace {
-u64 stable_claim_hash(const std::string& claim_key) {
-  u64 hash = 14695981039346656037ull;
-  for (const auto character : claim_key) {
-    hash ^= (u8)character;
-    hash *= 1099511628211ull;
+std::unique_ptr<DeviceClaim> DeviceClaim::acquire(const std::string_view key) {
+  uint64_t hash = 14695981039346656037ull;
+  for (const unsigned char character : key) {
+    hash = (hash ^ character) * 1099511628211ull;
   }
-  return hash;
-}
-}  // namespace
-#endif
-
-std::optional<void*> claim_device(const std::string& claim_key) {
 #ifdef _WIN32
-  const auto mutex_name =
-      fmt::format("Local\\OpenGOALControllerClaim_{:016x}", stable_claim_hash(claim_key));
-  const HANDLE claim_mutex = CreateMutexA(nullptr, false, mutex_name.c_str());
-  if (!claim_mutex) {
-    lg::warn("Unable to create device claim mutex for {}; allowing device assignment", claim_key);
+  const auto name = fmt::format("Local\\OpenGOALControllerClaim_{:016x}", hash);
+  const HANDLE handle = CreateMutexA(nullptr, false, name.c_str());
+  if (!handle) {
     return nullptr;
   }
-  if (const auto wait_result = WaitForSingleObject(claim_mutex, 0);
-      wait_result == WAIT_OBJECT_0 || wait_result == WAIT_ABANDONED) {
-    return claim_mutex;
+  if (GetLastError() == ERROR_ALREADY_EXISTS) {
+    CloseHandle(handle);
+    return nullptr;
   }
-  CloseHandle(claim_mutex);
-  return std::nullopt;
+  return std::unique_ptr<DeviceClaim>(new DeviceClaim(reinterpret_cast<intptr_t>(handle)));
 #else
-  (void)claim_key;
-  return nullptr;
+  const auto path = fs::temp_directory_path() /
+                    fmt::format("opengoal-controller-{}-{:016x}.lock", getuid(), hash);
+  const int handle = open(path.c_str(), O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0600);
+  if (handle < 0) {
+    return nullptr;
+  }
+  if (flock(handle, LOCK_EX | LOCK_NB) != 0) {
+    close(handle);
+    return nullptr;
+  }
+  return std::unique_ptr<DeviceClaim>(new DeviceClaim(handle));
 #endif
 }
 
-void release_device(void* claim) {
+DeviceClaim::~DeviceClaim() {
 #ifdef _WIN32
-  if (claim) {
-    ReleaseMutex((HANDLE)claim);
-    CloseHandle((HANDLE)claim);
-  }
+  CloseHandle(reinterpret_cast<HANDLE>(m_handle));
 #else
-  (void)claim;
+  close(static_cast<int>(m_handle));
 #endif
 }

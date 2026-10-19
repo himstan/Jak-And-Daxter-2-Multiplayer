@@ -1,15 +1,16 @@
 #include "game_controller.h"
 
 #include <optional>
+#include <string_view>
 
 #include "dualsense_effects.h"
-#include "game_controller.h"
 
+#include "game/external/steam/steam_client.h"
 #include "game/system/hid/sdl_util.h"
 
 #include "fmt/format.h"
 
-GameController::GameController(int sdl_device_id,
+GameController::GameController(SDL_JoystickID sdl_device_id,
                                std::shared_ptr<game_settings::InputSettings> settings)
     : m_sdl_instance_id(sdl_device_id) {
   m_settings = settings;
@@ -27,7 +28,6 @@ GameController::GameController(int sdl_device_id,
         fmt::format("Could not get underlying joystick for gamecontroller: id {}", sdl_device_id));
     return;
   }
-  auto test = SDL_GetNumJoystickAxes(m_low_device_handle);
   m_sdl_instance_id = SDL_GetJoystickID(m_low_device_handle);
   if (!m_sdl_instance_id) {
     sdl_util::log_error(
@@ -62,11 +62,13 @@ GameController::GameController(int sdl_device_id,
 
   const auto path = SDL_GetJoystickPath(m_low_device_handle);
   const auto serial = SDL_GetJoystickSerial(m_low_device_handle);
-  if (path || serial) {
-    m_claim_key = fmt::format("{}|{}|{}|{}", m_guid, path ? path : "", serial ? serial : "",
-                              m_device_name);
+  if (serial && *serial) {
+    m_claim_key = fmt::format("{}|serial|{}", m_guid, serial);
+  } else if (path && *path) {
+    m_claim_key = fmt::format("{}|path|{}", m_guid, path);
   } else {
-    m_claim_key = fmt::format("{}|{}|{}", m_guid, m_device_name, m_sdl_instance_id);
+    m_claim_key =
+        fmt::format("{}|{}|{}", m_guid, m_device_name, SDL_GetGamepadPlayerIndex(m_device_handle));
   }
 
   auto properties = SDL_GetGamepadProperties(m_device_handle);
@@ -82,8 +84,7 @@ GameController::GameController(int sdl_device_id,
     m_has_rumble = SDL_GetBooleanProperty(properties, SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
     m_has_trigger_rumble =
         SDL_GetBooleanProperty(properties, SDL_PROP_GAMEPAD_CAP_TRIGGER_RUMBLE_BOOLEAN, false);
-    m_is_dualsense = SDL_GetGamepadType(m_device_handle) == SDL_GAMEPAD_TYPE_PS5;
-    clear_trigger_effect(dualsense_effects::TriggerEffectOption::BOTH);
+    m_is_dualsense = m_has_led && SDL_GetRealGamepadType(m_device_handle) == SDL_GAMEPAD_TYPE_PS5;
   }
 
   if (m_settings->controller_binds.find(m_guid) == m_settings->controller_binds.end()) {
@@ -98,6 +99,47 @@ GameController::GameController(int sdl_device_id,
     lg::info("Detected a PS3 controller with support for pressure sensitive buttons");
   }
   m_loaded = true;
+  refresh_metadata();
+}
+
+bool GameController::refresh_metadata() {
+  uint64_t handle = SDL_GetGamepadSteamHandle(m_device_handle);
+  if (!handle) {
+    const char* path = SDL_GetGamepadPath(m_device_handle);
+    if (path && std::string_view(path).starts_with("XInput#") && path[7] >= '0' && path[7] <= '3' &&
+        path[8] == '\0') {
+      handle = steam::controller_for_gamepad_index(path[7] - '0');
+    } else {
+      Uint16 vendor = 0;
+      Uint16 product = 0;
+      SDL_GetJoystickGUIDInfo(SDL_GetJoystickGUID(m_low_device_handle), &vendor, &product, nullptr,
+                              nullptr);
+      if (vendor == 0x28de && product == 0x11ff) {
+        handle = steam::controller_for_gamepad_index(SDL_GetGamepadPlayerIndex(m_device_handle));
+      }
+    }
+  }
+  const bool changed = handle != m_steam_handle;
+  m_steam_handle = handle;
+  const auto name = steam::controller_name(handle);
+  const auto sdl_name = SDL_GetGamepadName(m_device_handle);
+  const std::string display_name = !name.empty() ? name : sdl_name ? sdl_name : "Controller";
+  if (display_name != m_device_name) {
+    m_device_name = display_name;
+  }
+  return changed;
+}
+
+std::string GameController::get_claim_key() const {
+  return m_steam_handle ? fmt::format("steam|{:016x}", m_steam_handle) : m_claim_key;
+}
+
+bool GameController::is_remote() const {
+  return steam::is_remote_controller(m_steam_handle);
+}
+
+bool GameController::has_led() {
+  return m_has_led || steam::controller_has_led(m_steam_handle);
 }
 
 static std::unordered_map<int, int> button_to_pressure_axes = {
@@ -278,7 +320,6 @@ void GameController::process_event(const SDL_Event& event,
 
 void GameController::close_device() {
   if (m_device_handle) {
-    clear_trigger_effect(dualsense_effects::TriggerEffectOption::BOTH);
     SDL_CloseGamepad(m_device_handle);
     m_device_handle = NULL;
   }
@@ -381,11 +422,13 @@ void GameController::send_trigger_effect_weapon(dualsense_effects::TriggerEffect
 
 void GameController::set_led(const u8 red, const u8 green, const u8 blue) {
   if (!m_has_led) {
+    steam::set_controller_led(m_steam_handle, red, green, blue);
     return;
   }
   if (m_device_handle) {
     if (!SDL_SetGamepadLED(m_device_handle, red, green, blue)) {
       m_has_led = false;
+      steam::set_controller_led(m_steam_handle, red, green, blue);
     }
   }
 }

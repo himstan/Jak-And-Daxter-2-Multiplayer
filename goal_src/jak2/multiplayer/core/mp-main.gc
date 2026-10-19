@@ -10,7 +10,6 @@
 (defmethod mp-main-update! ((this main-multiplayer-manager))
   (when (nonnull? this)
     (ensure-player-notifications! this))
-  (draw-steam-layout-notice!)
   (mp-session-tick)
   (let ((status (pc-multi-get-session-status)))
     (mp-update-synchronized-gameplay-state!)

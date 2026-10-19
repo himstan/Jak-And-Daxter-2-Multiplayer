@@ -196,6 +196,8 @@ void SteamLobby::pump() {
   api->run_frame(pipe);
   CallbackMessage message = {};
   while (api->next_callback(pipe, &message)) {
+    if (api->dispatch_callback)
+      api->dispatch_callback(message);
     if (message.id == ApiCallCompleted::kId) {
       if (const auto completed = callback_body<ApiCallCompleted>(message)) {
         if (completed->id == LobbyCreated::kId)

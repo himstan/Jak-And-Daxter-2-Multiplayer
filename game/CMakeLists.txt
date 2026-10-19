@@ -371,12 +371,11 @@ set(RUNTIME_SOURCE
         system/Deci2Server.cpp
         system/hid/devices/dualsense_effects.cpp
         system/hid/devices/game_controller.cpp
-        system/hid/devices/steam_pad.cpp
         system/hid/devices/keyboard.cpp
         system/hid/devices/mouse.cpp
         system/hid/display_manager.cpp
-        system/hid/input_bindings.cpp
         system/hid/device_claim.cpp
+        system/hid/input_bindings.cpp
         system/hid/input_manager.cpp
         system/hid/text_input_editor.cpp
         system/hid/sdl_util.cpp
@@ -450,7 +449,7 @@ endif()
 
 add_subdirectory(sound)
 
-add_library(steam-client STATIC external/steam/steam_client.cpp external/steam/steam_input.cpp)
+add_library(steam-client STATIC external/steam/steam_client.cpp)
 target_include_directories(steam-client PUBLIC "${PROJECT_SOURCE_DIR}")
 target_link_libraries(steam-client PRIVATE common GameNetworkingSockets::static ${CMAKE_DL_LIBS})
 

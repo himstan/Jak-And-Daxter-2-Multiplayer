@@ -1,7 +1,17 @@
 #pragma once
 
-#include <optional>
-#include <string>
+#include <cstdint>
+#include <memory>
+#include <string_view>
 
-std::optional<void*> claim_device(const std::string& claim_key);
-void release_device(void* claim);
+class DeviceClaim {
+ public:
+  static std::unique_ptr<DeviceClaim> acquire(std::string_view key);
+  ~DeviceClaim();
+  DeviceClaim(const DeviceClaim&) = delete;
+  DeviceClaim& operator=(const DeviceClaim&) = delete;
+
+ private:
+  explicit DeviceClaim(intptr_t handle) : m_handle(handle) {}
+  intptr_t m_handle;
+};
