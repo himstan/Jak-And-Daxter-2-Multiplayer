@@ -508,11 +508,17 @@
          (set-color! font-ctx (font-color progress-option-off))
          (print-game-text (lookup-text! *common-text* (-> option zero-value-label) #f) font-ctx #f 44 (bucket-id progress)))
         ((nonnull? (-> option cached-value))
-         (if (= (length (-> option cached-value)) 0)
-             (print-game-text "---" font-ctx #f 44 (bucket-id progress))
-             (begin
-               (pc-encode-utf8-string (-> option cached-value) *pc-encoded-temp-string*)
-               (print-game-text *pc-encoded-temp-string* font-ctx #f 44 (bucket-id progress))))))))
+         (cond
+           ((= (length (-> option cached-value)) 0)
+            (print-game-text "---" font-ctx #f 44 (bucket-id progress)))
+           ((= (-> option masked?) #t)
+            (clear *progress-generic-temp-string*)
+            (dotimes (index (length (-> option cached-value)))
+              (format *progress-generic-temp-string* "*"))
+            (print-game-text *progress-generic-temp-string* font-ctx #f 44 (bucket-id progress)))
+           (else
+            (pc-encode-utf8-string (-> option cached-value) *pc-encoded-temp-string*)
+            (print-game-text *pc-encoded-temp-string* font-ctx #f 44 (bucket-id progress))))))))
   (none))
 
 (defmethod draw-option ((obj menu-generic-link-option) (progress progress) (font-ctx font-context) (option-index int) (selected? symbol))

@@ -315,6 +315,7 @@
         :max-bytes 6
         :allowed-characters "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
         :uppercase? #t
+        :masked? #t
         :session (new 'static 'pc-text-input-session)))
     (progress-new-generic-category (text-id progress-multiplayer-category-network)
       :visible-fn (lambda () (not (mp-session-active?)))
