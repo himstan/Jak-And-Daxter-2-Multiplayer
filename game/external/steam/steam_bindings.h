@@ -110,6 +110,7 @@ struct SteamApi {
   SteamApiCall (*request_lobby_list)(void*) = nullptr;
   uint64_t (*lobby_by_index)(void*, int) = nullptr;
   void (*invite_dialog)(void*, uint64_t) = nullptr;
+  void (*user_overlay)(void*, const char*, uint64_t) = nullptr;
   int (*friend_relationship)(void*, uint64_t) = nullptr;
   bool (*set_lobby_type)(void*, uint64_t, int) = nullptr;
   SteamApiCall (*join_lobby)(void*, uint64_t) = nullptr;

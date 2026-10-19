@@ -163,12 +163,14 @@
     (sound-play "menu-error"))
   (none))
 
+(defun kick-lobby-action-player! ()
+  (if (= (pc-multi-lobby-kick (the-as uint *lobby-action-player*)) 1) (sound-play "generic-beep") (sound-play "menu-error"))
+  (set! *lobby-action-player* -1)
+  (none))
+
 (defun respond-lobby-player-actions! ()
   (cond
-    ((cpad-pressed? 0 confirm)
-     (cpad-clear! 0 confirm)
-     (if (= (pc-multi-lobby-kick (the-as uint *lobby-action-player*)) 1) (sound-play "generic-beep") (sound-play "menu-error"))
-     (set! *lobby-action-player* -1))
+    ((cpad-pressed? 0 confirm) (cpad-clear! 0 confirm) (kick-lobby-action-player!))
     ((cpad-pressed? 0 triangle) (cpad-clear! 0 triangle) (set! *lobby-action-player* -1) (sound-play "generic-beep")))
   (none))
 

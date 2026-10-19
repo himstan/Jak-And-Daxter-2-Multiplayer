@@ -241,6 +241,14 @@ static int pc_multi_get_player_connection_type(const u32 player_id) {
   return static_cast<int>(profile->lan ? ConnectionType::LAN : ConnectionType::INTERNET);
 }
 
+static int pc_multi_open_player_steam_profile(const u32 player_id) {
+  const auto snapshot = runtime().snapshot();
+  const auto& players = snapshot.session.players;
+  const auto profile =
+      std::ranges::find(players, player_id, &multiplayer::platform::PlayerProfile::player_id);
+  return profile != players.end() && steam::show_profile(profile->steam_id) ? 1 : 0;
+}
+
 static u32 pc_multi_get_local_player_character() {
   for (const auto snapshot = runtime().snapshot(); const auto& profile : snapshot.session.players) {
     if (profile.player_id == snapshot.session.state.local_player_id)
@@ -764,6 +772,7 @@ void init_jak2_bridge() {
   register_symbol("pc-multi-copy-chat", &pc_multi_copy_chat);
   register_symbol("pc-multi-get-player-ping", &pc_multi_get_player_ping);
   register_symbol("pc-multi-get-player-connection-type", &pc_multi_get_player_connection_type);
+  register_symbol("pc-multi-open-player-steam-profile", &pc_multi_open_player_steam_profile);
   register_symbol("pc-multi-get-local-player-character", &pc_multi_get_local_player_character);
   register_symbol("pc-multi-disconnect", &pc_multi_disconnect);
   register_symbol("pc-multi-reconnect", &pc_multi_reconnect);

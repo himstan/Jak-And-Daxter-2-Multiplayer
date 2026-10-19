@@ -160,6 +160,7 @@ bool resolve_entry_points(void* library, SteamEntryPoints& entry, SteamClient& c
          resolve(library, api.lobby_by_index, {"SteamAPI_ISteamMatchmaking_GetLobbyByIndex"}) &&
          resolve(library, api.invite_dialog,
                  {"SteamAPI_ISteamFriends_ActivateGameOverlayInviteDialog"}) &&
+         resolve(library, api.user_overlay, {"SteamAPI_ISteamFriends_ActivateGameOverlayToUser"}) &&
          resolve(library, api.friend_relationship,
                  {"SteamAPI_ISteamFriends_GetFriendRelationship"}) &&
          resolve(library, api.set_lobby_type, {"SteamAPI_ISteamMatchmaking_SetLobbyType"}) &&
@@ -296,6 +297,14 @@ bool is_friend(const uint64_t steam_id) {
   const auto* api = steam_api();
   return api && steam_id != 0 &&
          api->friend_relationship(api->friends, steam_id) == kFriendRelationshipFriend;
+}
+
+bool show_profile(const uint64_t steam_id) {
+  const auto* api = steam_api();
+  if (!api || steam_id == 0)
+    return false;
+  api->user_overlay(api->friends, "steamid", steam_id);
+  return true;
 }
 
 void update_controller_input() {
