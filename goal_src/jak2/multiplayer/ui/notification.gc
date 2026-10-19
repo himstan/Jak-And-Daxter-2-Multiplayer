@@ -11,9 +11,14 @@
     (if (or (and (or (= status (mp-connection-status lobby)) (= status (mp-connection-status game-starting)))
                  (nonnull? *progress-process* (-> *progress-process* 0))
                  (= (-> *progress-process* 0 current) 'mp-lobby))
-            (and (= status (mp-connection-status in-game)) (= *master-mode* 'game) (not *progress-process*)))
+            (= status (mp-connection-status in-game)))
       #t
       #f)))
+
+(defun chat-input-allowed? ()
+  (and (notification-visible?)
+       (or (!= (pc-multi-get-session-status) (mp-connection-status in-game))
+           (and (= *master-mode* 'game) (not *progress-process*)))))
 
 (defun notification-make-room! ((manager notification-manager))
   (when (nonnull? manager)
@@ -194,7 +199,12 @@
                          0.0
                          (font-color white)
                          (font-flags shadow kerning large))))
-      (when (nonnull? context)
+      (when (nonnull? context *display* (-> *display* frames (-> *display* on-screen) global-buf))
+        (with-dma-buffer-add-bucket ((buffer (-> *display* frames (-> *display* on-screen) global-buf))
+                                     (bucket-id progress))
+          (dma-buffer-add-gs-set-flusha buffer
+                                        (alpha-1 (new 'static 'gs-alpha :b #x1 :d #x1))
+                                        (tex1-1 (new 'static 'gs-tex1 :mmag #x1 :mmin #x1))))
         (set-scale! context NOTIFICATION_TEXT_SCALE)
         (notification-draw-messages! manager context base-y)
         (chat-draw-input! manager context input-y))))
@@ -203,7 +213,7 @@
 (defun notification-update! ((manager notification-manager))
   (when (nonnull? manager)
     (let ((visible? (notification-visible?)))
-      (chat-update-editor! manager visible?)
+      (chat-update-editor! manager (chat-input-allowed?))
       (if (or (< (pc-multi-get-session-status) (mp-connection-status lobby))
               (> (pc-multi-get-session-status) (mp-connection-status in-game)))
         (set! (-> manager count) (the uint8 0))
