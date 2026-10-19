@@ -135,6 +135,8 @@
         (remove-setting! 'mode-name)
         (return #t))
       (when (mp-death-spectate-reset-needed?)
+        (when (mp-session-host?)
+          (mp-fail-pending-missions-on-death!))
         (while (and (mp-is-fail-mission-pending?) (mp-session-host?))
           (suspend))
         (remove-setting! 'mode-name)

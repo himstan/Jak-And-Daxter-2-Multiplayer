@@ -467,13 +467,11 @@
   #f)
 
 (defun mp-all-remote-players-dead? ()
-  (let ((found-remote? #f))
-    (mp-for-each-player-record (player-id record)
-      (when (mp-remote-gameplay-player-connected? record)
-        (set! found-remote? #t)
-        (when (not (mp-player-runtime-flag? record (mp-player-runtime-flags dead)))
-          (return #f))))
-    found-remote?))
+  (mp-for-each-player-record (player-id record)
+    (when (and (mp-remote-gameplay-player-connected? record)
+               (not (mp-player-runtime-flag? record (mp-player-runtime-flags dead))))
+      (return #f)))
+  #t)
 
 (defun mp-any-remote-player-connected? ()
   (mp-for-each-player-record (player-id record)
