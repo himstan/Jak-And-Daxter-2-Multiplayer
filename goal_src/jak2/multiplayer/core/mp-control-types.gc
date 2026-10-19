@@ -24,6 +24,14 @@
   (timed-out 1)
   (kicked 2))
 
+(defenum connection-type
+  :type uint8
+  (none 0)
+  (friend 1)
+  (steam 2)
+  (lan 3)
+  (internet 4))
+
 (defenum mp-discovery-status
   :type uint8
   (idle 0)

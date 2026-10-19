@@ -98,6 +98,7 @@ bool encode_profile(std::vector<uint8_t>& out,
   out.push_back(static_cast<uint8_t>(profile.display_name.size()));
   write_u16(out, static_cast<uint16_t>(profile.game_extension.size()));
   write_u64(out, profile.steam_id);
+  out.push_back(profile.lan ? 1 : 0);
   out.insert(out.end(), profile.display_name.begin(), profile.display_name.end());
   out.insert(out.end(), profile.game_extension.begin(), profile.game_extension.end());
   return true;
@@ -111,18 +112,19 @@ bool decode_profile(const std::span<const uint8_t> bytes,
   uint8_t ready = 0;
   uint8_t name_size = 0;
   uint16_t extension_size = 0;
+  uint8_t lan = 0;
   if (!read_u8(bytes, cursor, profile.player_id) || !read_u8(bytes, cursor, character) ||
       !read_u8(bytes, cursor, ready) || !read_u8(bytes, cursor, name_size) ||
       !read_u16(bytes, cursor, extension_size) || !read_u64(bytes, cursor, profile.steam_id) ||
-      profile.player_id >= maximum_players ||
-      ready > 1 || name_size > kMaximumDisplayNameBytes ||
-      extension_size > maximum_extension_bytes ||
+      !read_u8(bytes, cursor, lan) || profile.player_id >= maximum_players || ready > 1 ||
+      lan > 1 || name_size > kMaximumDisplayNameBytes || extension_size > maximum_extension_bytes ||
       bytes.size() - cursor < static_cast<size_t>(name_size) + extension_size)
     return false;
   profile.character = static_cast<PlayerCharacter>(character);
   if (!valid_character(profile.character))
     return false;
   profile.ready = ready != 0;
+  profile.lan = lan != 0;
   profile.display_name.assign(reinterpret_cast<const char*>(bytes.data() + cursor), name_size);
   cursor += name_size;
   profile.game_extension.assign(bytes.begin() + cursor, bytes.begin() + cursor + extension_size);

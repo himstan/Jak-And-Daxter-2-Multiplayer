@@ -3,8 +3,8 @@
 
 (define *lobby-browser-text* (new 'global 'string 64 (the-as string #f)))
 (define *overlay-fit-text* (new 'global 'string 512 (the-as string #f)))
-(define *lobby-browser-column-starts* (new 'static 'boxed-array :type float 0.03 0.32 0.47))
-(define *lobby-browser-column-widths* (new 'static 'boxed-array :type float 0.29 0.13 0.5))
+(define *lobby-browser-column-starts* (new 'static 'boxed-array :type float 0.09 0.82 0.35))
+(define *lobby-browser-column-widths* (new 'static 'boxed-array :type float 0.24 0.15 0.45))
 (define *lobby-browser-headers*
   (new 'static
        'boxed-array
@@ -116,9 +116,16 @@
                                  (width float)
                                  (column int)
                                  (y float))
-  (set-width! font-ctx (the int (lobby-browser-column-width width column)))
-  (if (= column 1) (set-flags! font-ctx (font-flags kerning middle large)) (set-flags! font-ctx (font-flags kerning large)))
-  (print-lobby-browser-text font-ctx text (+ left (* width (-> *lobby-browser-column-starts* column))) y)
+  (let ((right? (= column 1)))
+    (set-width! font-ctx (the int (lobby-browser-column-width width column)))
+    (set-flags! font-ctx (if right? (font-flags kerning right large) (font-flags kerning large)))
+    (print-lobby-browser-text font-ctx
+                              text
+                              (+ left
+                                 (* width
+                                    (+ (-> *lobby-browser-column-starts* column)
+                                       (if right? (-> *lobby-browser-column-widths* column) 0.0))))
+                              y))
   (none))
 
 (defun fit-overlay-text ((text string) (font-ctx font-context) (max-width float))
@@ -202,12 +209,23 @@
                         (new 'static 'rgba :r #x40 :g #x40 :b #x40 :a (the int (* 64.0 alpha))))))
   (none))
 
-(defun lobby-browser-row-color ((lobby-index int) (selected? symbol))
-  (cond
-    ((= (pc-multi-lobby-friend? lobby-index) 1) (font-color green))
-    ((= (pc-multi-lobby-lan? lobby-index) 1) (font-color orange))
-    (selected? (font-color progress-force-selected))
-    (else (font-color progress))))
+(defun connection-type-icon ((connection connection-type))
+  (let ((label (case connection
+                 (((connection-type friend)) (text-id connection-icon-friend))
+                 (((connection-type steam)) (text-id connection-icon-steam))
+                 (((connection-type lan)) (text-id connection-icon-lan))
+                 (((connection-type internet)) (text-id connection-icon-internet))
+                 (else (text-id null)))))
+    (if (= label (text-id null))
+      (the-as string #f)
+      (lookup-text! *common-text* label #f))))
+
+(defun print-lobby-browser-icon ((font-ctx font-context) (lobby-index int) (left float) (width float) (y float))
+  (let ((icon (connection-type-icon (pc-multi-get-lobby-connection-type lobby-index))))
+    (when icon
+      (set-flags! font-ctx (font-flags kerning large))
+      (print-lobby-browser-text font-ctx icon (+ left (* 0.03 width)) y)))
+  (none))
 
 (defun draw-lobby-browser-row ((font-ctx font-context)
                                (lobby-index int)
@@ -221,7 +239,8 @@
     (set! (-> font-ctx alpha)
           (if (= (pc-multi-lobby-compatible? lobby-index) 1) alpha (* LOBBY_BROWSER_INCOMPATIBLE_ALPHA alpha)))
     (set-scale! font-ctx LOBBY_BROWSER_ROW_SCALE)
-    (set-color! font-ctx (lobby-browser-row-color lobby-index selected?))
+    (set-color! font-ctx (if selected? (font-color progress-force-selected) (font-color progress)))
+    (print-lobby-browser-icon font-ctx lobby-index left width y)
     (dotimes (column (-> *lobby-browser-headers* length))
       (when (= (pc-multi-get-lobby-field lobby-index column *lobby-browser-text*) 1)
         (let ((max-width (lobby-browser-column-width width column)))

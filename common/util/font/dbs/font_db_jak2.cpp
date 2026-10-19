@@ -211,6 +211,9 @@ std::vector<ReplaceInfo> replace_info_jak2 = {
     {"~Y~22L<~Z~Y~26L;~Z~Y~1L>~Z~Y~23L[~Z~+26H", "<PAD_TRIANGLE>"},
     {"~Y~22L<~Z~Y~25L@~Z~Y~1L>~Z~Y~23L[~Z~+26H", "<PAD_CIRCLE>"},
     {"~Y~22L<~Z~Y~24L#~Z~Y~1L>~Z~Y~23L[~Z~+26H", "<PAD_SQUARE>"},
+    // - start/select
+    {"~Y~22L<~Z~Y~1L<PAD_PART_START_SYMBOL>~Z~Y~1L>~Z~Y~23L[~Z~+26H", "<PAD_START>"},
+    {"~Y~22L<~Z~Y~1L<PAD_PART_SELECT_SYMBOL>~Z~Y~1L>~Z~Y~23L[~Z~+26H", "<PAD_SELECT>"},
     // - dpad
     {"~Y~22L<PAD_PART_DPAD_L>~Z~3L~+17H~-13V<PAD_PART_DPAD_U>~Z~22L~+17H~+14V<PAD_PART_DPAD_D>~Z~"
      "22L~+32H<PAD_PART_DPAD_R>~Z~+56H",
@@ -253,6 +256,18 @@ std::vector<ReplaceInfo> replace_info_jak2 = {
     // icons
     {"~Y~6L<~Z~Y~1L>~Z~Y~23L[~Z~+26H", "<ICON_MISSION_COMPLETE>"},
     {"~Y~3L<~Z~Y~1L>~Z~Y~23L[~Z~+26H", "<ICON_MISSION_TODO>"},
+    {"~Y~-8H~-18V<ICON_PART_STEAM_TL>~Z~Y~+15H~-18V<ICON_PART_STEAM_TR>~Z~Y~-8H~+11V<ICON_PART_"
+     "STEAM_BL>~Z~Y~+15H~+11V<ICON_PART_STEAM_BR>~Z~+33H",
+     "<ICON_STEAM>"},
+    {"~Y~-8H~-18V<ICON_PART_LAN_TL>~Z~Y~+15H~-18V<ICON_PART_LAN_TR>~Z~Y~-8H~+11V<ICON_PART_LAN_BL>"
+     "~Z~Y~+15H~+11V<ICON_PART_LAN_BR>~Z~+33H",
+     "<ICON_LAN>"},
+    {"~Y~-8H~-18V<ICON_PART_INTERNET_TL>~Z~Y~+15H~-18V<ICON_PART_INTERNET_TR>~Z~Y~-8H~+11V<ICON_"
+     "PART_INTERNET_BL>~Z~Y~+15H~+11V<ICON_PART_INTERNET_BR>~Z~+33H",
+     "<ICON_INTERNET>"},
+    {"~Y~-8H~-18V<ICON_PART_FRIEND_TL>~Z~Y~+15H~-18V<ICON_PART_FRIEND_TR>~Z~Y~-8H~+11V<ICON_PART_"
+     "FRIEND_BL>~Z~Y~+15H~+11V<ICON_PART_FRIEND_BR>~Z~+33H",
+     "<ICON_FRIEND>"},
 
     // flags
     {"~Y~6L<FLAG_PART_VERT_STRIPE_LARGE>~Z~+15H~1L<FLAG_PART_VERT_STRIPE_LARGE>~Z~+30H~3L<FLAG_"
@@ -470,6 +485,25 @@ std::vector<EncodeInfo> encode_info_jak2 = {
     {"<PAD_PART_SHOULDER_BOTTOM_RIGHT>", "\xb1"},
     {"<PAD_PART_TRIGGER_BOTTOM_LEFT>", "\xb2"},
     {"<PAD_PART_TRIGGER_BOTTOM_RIGHT>", "\xb3"},
+
+    {"<ICON_PART_STEAM_TL>", "\xba"},
+    {"<ICON_PART_STEAM_TR>", "\xbb"},
+    {"<ICON_PART_STEAM_BL>", "\xc4"},
+    {"<ICON_PART_STEAM_BR>", "\xc5"},
+    {"<ICON_PART_LAN_TL>", "\xbc"},
+    {"<ICON_PART_LAN_TR>", "\xbd"},
+    {"<ICON_PART_LAN_BL>", "\xc6"},
+    {"<ICON_PART_LAN_BR>", "\xc7"},
+    {"<ICON_PART_INTERNET_TL>", "\xbe"},
+    {"<ICON_PART_INTERNET_TR>", "\xbf"},
+    {"<ICON_PART_INTERNET_BL>", "\xc8"},
+    {"<ICON_PART_INTERNET_BR>", "\xc9"},
+    {"<ICON_PART_FRIEND_TL>", "\xc0"},
+    {"<ICON_PART_FRIEND_TR>", "\xc1"},
+    {"<ICON_PART_FRIEND_BL>", "\xca"},
+    {"<ICON_PART_FRIEND_BR>", "\xcb"},
+    {"<PAD_PART_START_SYMBOL>", "\xc2"},
+    {"<PAD_PART_SELECT_SYMBOL>", "\xc3"},
     // {"入", "\x1\x00"}},
     // {"年", "\x1\x01"}},
     // punctuation

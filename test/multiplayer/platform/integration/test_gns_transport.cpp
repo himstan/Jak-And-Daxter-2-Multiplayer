@@ -2142,7 +2142,7 @@ TEST(GnsTransportIntegration, AdapterPolicyAllowsLiveProfilesWithoutUnlockingRea
     return std::ranges::any_of(controller.snapshot().players, [&](const auto& value) {
       return value.player_id == updated.player_id && value.display_name == updated.display_name &&
              value.character == updated.character &&
-             value.game_extension == updated.game_extension && value.steam_id == 0;
+             value.game_extension == updated.game_extension && value.steam_id == 0 && value.lan;
     });
   };
   ASSERT_TRUE(
@@ -2151,11 +2151,12 @@ TEST(GnsTransportIntegration, AdapterPolicyAllowsLiveProfilesWithoutUnlockingRea
   host_profile.character = PlayerCharacter::DAXTER;
   host_profile.display_name = "NewHost";
   host_profile.steam_id = 76561197960287930ull;
+  host_profile.lan = true;
   ASSERT_TRUE(host.set_local_profile(host_profile));
   ASSERT_TRUE(pump_until(pump, [&] {
     return std::ranges::any_of(observer.snapshot().players, [](const auto& value) {
       return value.player_id == 0 && value.display_name == "NewHost" &&
-             value.character == PlayerCharacter::DAXTER && value.steam_id == 0;
+             value.character == PlayerCharacter::DAXTER && value.steam_id == 0 && !value.lan;
     });
   }));
 }

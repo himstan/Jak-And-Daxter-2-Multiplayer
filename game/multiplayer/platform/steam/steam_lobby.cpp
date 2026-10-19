@@ -279,9 +279,7 @@ void SteamLobby::add_listing(const uint64_t lobby_id) {
   auto metadata = read(lobby_id, search_game_id_);
   if (!metadata || metadata->host_id == steam::local_steam_id())
     return;
-  const auto& api = *steam_api();
-  const bool friend_host =
-      api.friend_relationship(api.friends, metadata->host_id) == kFriendRelationshipFriend;
+  const bool friend_host = steam::is_friend(metadata->host_id);
   listings_.push_back({lobby_id, std::move(*metadata), friend_host});
 }
 

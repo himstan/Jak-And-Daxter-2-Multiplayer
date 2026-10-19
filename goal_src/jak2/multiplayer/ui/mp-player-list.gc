@@ -98,13 +98,17 @@
 
 (defun draw-player-list-row ((font-ctx font-context) (player-id int) (row int) (left float) (width float))
   (set-scale! font-ctx LOBBY_BROWSER_ROW_SCALE)
-  (let ((player-name (player-list-name player-id font-ctx (* 0.66 width)))
-        (y (+ LOBBY_BROWSER_ROW_Y (* LOBBY_BROWSER_ROW_HEIGHT (the float row)))))
+  (let* ((icon (connection-type-icon (pc-multi-get-player-connection-type (the-as uint player-id))))
+         (icon-width (if icon (-> (get-string-length icon font-ctx) length) 0.0))
+         (player-name (player-list-name player-id font-ctx (- (* 0.66 width) icon-width)))
+         (y (+ LOBBY_BROWSER_ROW_Y (* LOBBY_BROWSER_ROW_HEIGHT (the float row)))))
     (when player-name
       (when (= player-id (-> *player-list* selected-player))
         (draw-lobby-browser-highlight left width y 1.0))
       (set-color! font-ctx (mp-player-font-color-by-id player-id))
-      (print-player-list-cell font-ctx player-name left width #f y)
+      (when icon
+        (print-player-list-cell font-ctx icon left width #f y))
+      (print-player-list-cell font-ctx player-name (+ left icon-width) width #f y)
       (print-player-list-cell font-ctx (player-list-ping player-id) left width #t y))
     player-name))
 

@@ -37,6 +37,7 @@ struct DiscoveryResult {
 bool discovery_advertisement_matches(const DiscoveryConfig& config,
                                      const DiscoveryAdvertisement& advertisement,
                                      std::string_view source_address);
+bool is_lan_address(const std::string& address);
 
 class DiscoveryScanner {
  public:

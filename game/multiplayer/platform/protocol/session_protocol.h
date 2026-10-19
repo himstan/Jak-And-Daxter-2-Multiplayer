@@ -55,6 +55,7 @@ struct PlayerProfile {
   bool ready = false;
   std::vector<uint8_t> game_extension;
   uint64_t steam_id = 0;
+  bool lan = false;
 
   bool operator==(const PlayerProfile&) const = default;
 };

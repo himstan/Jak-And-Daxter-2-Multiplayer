@@ -12,6 +12,7 @@
 #include "common/log/log.h"
 #include "common/versions/versions.h"
 
+#include "game/external/steam/steam_client.h"
 #include "game/kernel/common/kmachine.h"
 #include "game/kernel/jak2/kscheme.h"
 #include "game/multiplayer/jak2/api/preferences.h"
@@ -27,6 +28,8 @@
 #include "third-party/SDL/include/SDL3/SDL.h"
 
 namespace {
+
+enum class ConnectionType { NONE, FRIEND, STEAM, LAN, INTERNET };
 
 auto& runtime() {
   return multiplayer::platform::multiplayer_runtime();
@@ -221,6 +224,21 @@ static int64_t pc_multi_get_player_ping(const u32 player_id) {
   const auto snapshot = runtime().snapshot();
   return snapshot.session.player_ping_ms(static_cast<multiplayer::platform::PlayerId>(player_id))
       .value_or(-1);
+}
+
+static int pc_multi_get_player_connection_type(const u32 player_id) {
+  const auto snapshot = runtime().snapshot();
+  const auto& players = snapshot.session.players;
+  const auto profile =
+      std::ranges::find(players, player_id, &multiplayer::platform::PlayerProfile::player_id);
+  if (profile == players.end())
+    return static_cast<int>(ConnectionType::NONE);
+  if (profile->steam_id != 0)
+    return static_cast<int>(steam::is_friend(profile->steam_id) ? ConnectionType::FRIEND
+                                                                : ConnectionType::STEAM);
+  if (profile->player_id == snapshot.session.state.host_player_id)
+    return static_cast<int>(ConnectionType::NONE);
+  return static_cast<int>(profile->lan ? ConnectionType::LAN : ConnectionType::INTERNET);
 }
 
 static u32 pc_multi_get_local_player_character() {
@@ -436,14 +454,14 @@ static int pc_multi_get_lobby_field(const u32 index, const u32 column, const u32
              : 0;
 }
 
-static int pc_multi_lobby_friend(const u32 index) {
+static int pc_multi_get_lobby_connection_type(const u32 index) {
   const auto games = browser_games();
-  return index < games.size() && games[index].friend_host ? 1 : 0;
-}
-
-static int pc_multi_lobby_lan(const u32 index) {
-  const auto games = browser_games();
-  return index < games.size() && !games[index].invite.empty() ? 1 : 0;
+  if (index >= games.size())
+    return static_cast<int>(ConnectionType::NONE);
+  if (games[index].friend_host)
+    return static_cast<int>(ConnectionType::FRIEND);
+  return static_cast<int>(games[index].invite.empty() ? ConnectionType::INTERNET
+                                                      : ConnectionType::LAN);
 }
 
 static int pc_multi_lobby_compatible(const u32 index) {
@@ -716,8 +734,7 @@ void init_jak2_bridge() {
   register_symbol("pc-multi-get-lobby-count", &pc_multi_get_lobby_count);
   register_symbol("pc-multi-get-lobby-field", &pc_multi_get_lobby_field);
   register_symbol("pc-multi-join-lobby", &pc_multi_join_lobby);
-  register_symbol("pc-multi-lobby-friend?", &pc_multi_lobby_friend);
-  register_symbol("pc-multi-lobby-lan?", &pc_multi_lobby_lan);
+  register_symbol("pc-multi-get-lobby-connection-type", &pc_multi_get_lobby_connection_type);
   register_symbol("pc-multi-lobby-compatible?", &pc_multi_lobby_compatible);
   register_symbol("pc-multi-steam-invite-pending", &pc_multi_steam_invite_pending);
   register_symbol("pc-multi-join-steam-invite", &pc_multi_join_steam_invite);
@@ -746,6 +763,7 @@ void init_jak2_bridge() {
   register_symbol("pc-multi-send-chat", &pc_multi_send_chat);
   register_symbol("pc-multi-copy-chat", &pc_multi_copy_chat);
   register_symbol("pc-multi-get-player-ping", &pc_multi_get_player_ping);
+  register_symbol("pc-multi-get-player-connection-type", &pc_multi_get_player_connection_type);
   register_symbol("pc-multi-get-local-player-character", &pc_multi_get_local_player_character);
   register_symbol("pc-multi-disconnect", &pc_multi_disconnect);
   register_symbol("pc-multi-reconnect", &pc_multi_reconnect);

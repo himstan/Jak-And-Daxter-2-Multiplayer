@@ -27,23 +27,13 @@ namespace {
 constexpr int kDirectedAttempts = 10;
 constexpr int kBroadcastAttempts = 4;
 
-std::vector<sockaddr_in> broadcast_targets(const uint16_t port) {
-  std::vector<sockaddr_in> targets;
-  sockaddr_in global = {};
-  global.sin_family = AF_INET;
-  global.sin_port = htons(port);
-  global.sin_addr.s_addr = INADDR_BROADCAST;
-  targets.push_back(global);
-  const auto add_target = [&](const uint32_t address) {
-    if (std::ranges::any_of(
-            targets, [&](const auto& existing) { return existing.sin_addr.s_addr == address; }))
-      return;
-    sockaddr_in target = {};
-    target.sin_family = AF_INET;
-    target.sin_port = htons(port);
-    target.sin_addr.s_addr = address;
-    targets.push_back(target);
-  };
+struct LocalSubnet {
+  uint32_t address = 0;
+  uint32_t mask = 0;
+};
+
+std::vector<LocalSubnet> local_subnets() {
+  std::vector<LocalSubnet> subnets;
 #ifdef _WIN32
   ULONG size = 15 * 1024;
   std::vector<uint8_t> buffer(size);
@@ -59,7 +49,7 @@ std::vector<sockaddr_in> broadcast_targets(const uint16_t port) {
         nullptr, adapters, &size);
   }
   if (result != NO_ERROR)
-    return targets;
+    return subnets;
   for (const auto* adapter = adapters; adapter; adapter = adapter->Next) {
     if (adapter->OperStatus != IfOperStatusUp || adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK)
       continue;
@@ -68,30 +58,69 @@ std::vector<sockaddr_in> broadcast_targets(const uint16_t port) {
           unicast->OnLinkPrefixLength > 32)
         continue;
       const auto* local = reinterpret_cast<const sockaddr_in*>(unicast->Address.lpSockaddr);
-      const uint32_t ip = ntohl(local->sin_addr.s_addr);
-      const uint32_t mask =
-          unicast->OnLinkPrefixLength == 0 ? 0 : 0xffffffffu << (32 - unicast->OnLinkPrefixLength);
-      add_target(htonl((ip & mask) | ~mask));
+      subnets.push_back({.address = ntohl(local->sin_addr.s_addr),
+                         .mask = unicast->OnLinkPrefixLength == 0
+                                     ? 0
+                                     : 0xffffffffu << (32 - unicast->OnLinkPrefixLength)});
     }
   }
 #else
   ifaddrs* interfaces = nullptr;
   if (getifaddrs(&interfaces) != 0)
-    return targets;
+    return subnets;
   for (const auto* interface = interfaces; interface; interface = interface->ifa_next) {
     if (!(interface->ifa_flags & IFF_UP) || !(interface->ifa_flags & IFF_BROADCAST) ||
         (interface->ifa_flags & IFF_LOOPBACK) || !interface->ifa_addr ||
-        interface->ifa_addr->sa_family != AF_INET || !interface->ifa_broadaddr ||
-        interface->ifa_broadaddr->sa_family != AF_INET)
+        interface->ifa_addr->sa_family != AF_INET || !interface->ifa_netmask ||
+        interface->ifa_netmask->sa_family != AF_INET)
       continue;
-    const auto* broadcast = reinterpret_cast<const sockaddr_in*>(interface->ifa_broadaddr);
-    add_target(broadcast->sin_addr.s_addr);
+    const auto* local = reinterpret_cast<const sockaddr_in*>(interface->ifa_addr);
+    const auto* netmask = reinterpret_cast<const sockaddr_in*>(interface->ifa_netmask);
+    subnets.push_back(
+        {.address = ntohl(local->sin_addr.s_addr), .mask = ntohl(netmask->sin_addr.s_addr)});
   }
   freeifaddrs(interfaces);
 #endif
+  return subnets;
+}
+
+std::vector<sockaddr_in> broadcast_targets(const uint16_t port) {
+  std::vector<sockaddr_in> targets;
+  const auto add_target = [&](const uint32_t address) {
+    if (std::ranges::any_of(
+            targets, [&](const auto& existing) { return existing.sin_addr.s_addr == address; }))
+      return;
+    sockaddr_in target = {};
+    target.sin_family = AF_INET;
+    target.sin_port = htons(port);
+    target.sin_addr.s_addr = address;
+    targets.push_back(target);
+  };
+  add_target(INADDR_BROADCAST);
+  for (const auto& subnet : local_subnets())
+    add_target(htonl((subnet.address & subnet.mask) | ~subnet.mask));
   return targets;
 }
 }  // namespace
+
+bool is_lan_address(const std::string& address) {
+  if (in_addr v4{}; inet_pton(AF_INET, address.c_str(), &v4) == 1) {
+    const uint32_t ip = ntohl(v4.s_addr);
+    return (ip & 0xff000000) == 0x7f000000 || (ip & 0xff000000) == 0x0a000000 ||
+           (ip & 0xfff00000) == 0xac100000 || (ip & 0xffff0000) == 0xc0a80000 ||
+           (ip & 0xffff0000) == 0xa9fe0000 ||
+           std::ranges::any_of(local_subnets(), [&](const auto& subnet) {
+             return subnet.mask != 0 && (ip & subnet.mask) == (subnet.address & subnet.mask);
+           });
+  }
+  in6_addr v6{};
+  if (inet_pton(AF_INET6, address.c_str(), &v6) != 1)
+    return false;
+  const auto* bytes = v6.s6_addr;
+  const bool loopback =
+      std::all_of(bytes, bytes + 15, [](auto b) { return b == 0; }) && bytes[15] == 1;
+  return loopback || (bytes[0] & 0xfe) == 0xfc || (bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80);
+}
 
 bool discovery_advertisement_matches(const DiscoveryConfig& config,
                                      const DiscoveryAdvertisement& advertisement,

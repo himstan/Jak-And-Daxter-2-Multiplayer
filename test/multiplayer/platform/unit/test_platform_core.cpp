@@ -475,4 +475,15 @@ TEST(PlatformSession, PortMappingLifecycleStopsWithoutWaitingForNetworkWork) {
   coordinator.stop();
 }
 
+TEST(PlatformSession, LanAddressesCoverPrivateLoopbackAndLinkLocalRanges) {
+  for (const char* lan : {"127.0.0.1", "10.1.2.3", "172.31.0.9", "192.168.1.20", "169.254.4.4",
+                          "::1", "fd12::1", "fe80::1"}) {
+    EXPECT_TRUE(multiplayer::platform::is_lan_address(lan)) << lan;
+  }
+  for (const char* remote :
+       {"8.8.8.8", "172.32.0.1", "100.64.0.1", "2001:db8::1", "steamid:76561197960287930", ""}) {
+    EXPECT_FALSE(multiplayer::platform::is_lan_address(remote)) << remote;
+  }
+}
+
 }  // namespace

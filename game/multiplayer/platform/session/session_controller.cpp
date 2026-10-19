@@ -7,6 +7,7 @@
 
 #include "game/external/steam/steam_client.h"
 #include "game/multiplayer/platform/core/sequence.h"
+#include "game/multiplayer/platform/discovery/discovery_service.h"
 #include "game/multiplayer/platform/discovery/invite.h"
 #include "game/multiplayer/platform/profile/profile_store.h"
 #include "game/multiplayer/platform/protocol/message_frame.h"
@@ -527,6 +528,7 @@ void SessionController::handle_host_control(const ConnectionId connection,
       return;
     }
     message.profile.steam_id = session->steam_id;
+    message.profile.lan = is_lan_address(session->remote_address);
     if (session->identity_ready && message.profile.character != profile.character &&
         !character_change_allowed(profile))
       return;
@@ -1008,6 +1010,7 @@ bool SessionController::set_local_profile(PlayerProfile profile) {
   if (profile.character != local_profile_.character && !character_change_allowed(local_profile_))
     return false;
   profile.steam_id = local_profile_.steam_id;
+  profile.lan = local_profile_.lan;
   local_profile_ = profile;
   if (snapshot_.state.role == SessionRole::HOST) {
     profiles_[profile.player_id] = profile;

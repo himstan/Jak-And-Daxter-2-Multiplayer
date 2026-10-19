@@ -22,6 +22,7 @@ void shutdown();
 std::optional<Networking> networking();
 std::string persona_name();
 uint64_t local_steam_id();
+bool is_friend(uint64_t steam_id);
 void update_controller_input();
 uint64_t controller_for_gamepad_index(int index);
 std::string controller_name(uint64_t handle);

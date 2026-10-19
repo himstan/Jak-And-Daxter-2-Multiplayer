@@ -153,13 +153,15 @@ TEST(PlatformSession, CommonProtocolRoundTripsAndRejectsMalformedFrames) {
                   .character = multiplayer::platform::PlayerCharacter::DAXTER,
                   .ready = true,
                   .game_extension = {1, 2, 3},
-                  .steam_id = 76561197960287930ull}};
+                  .steam_id = 76561197960287930ull,
+                  .lan = true}};
   const auto control_bytes = multiplayer::platform::encode_control_message(control, 16);
   multiplayer::platform::ControlMessage decoded;
   ASSERT_TRUE(multiplayer::platform::decode_control_message(control_bytes, 16, 8, decoded));
   EXPECT_EQ(decoded.profile.display_name, "Player2");
   EXPECT_EQ(decoded.profile.game_extension, std::vector<uint8_t>({1, 2, 3}));
   EXPECT_EQ(decoded.profile.steam_id, 76561197960287930ull);
+  EXPECT_TRUE(decoded.profile.lan);
   auto trailing = control_bytes;
   trailing.push_back(0);
   EXPECT_FALSE(multiplayer::platform::decode_control_message(trailing, 16, 8, decoded));

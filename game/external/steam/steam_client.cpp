@@ -292,6 +292,12 @@ uint64_t local_steam_id() {
              : 0;
 }
 
+bool is_friend(const uint64_t steam_id) {
+  const auto* api = steam_api();
+  return api && steam_id != 0 &&
+         api->friend_relationship(api->friends, steam_id) == kFriendRelationshipFriend;
+}
+
 void update_controller_input() {
   if (!g_client || !g_client->controllers.input)
     return;
