@@ -29,6 +29,8 @@
    (history-stack-index int32)
    (current-highscore-page-index int32)
    (custom-highscore-score float) ;; TODO - just needed a way to pass a `(pointer float)` to C++, didn't seem like you could do such a thing with a `let` binding?
+   (column-x float)
+   (column-width float)
    )
   (:methods
     (init! (_type_) none)
@@ -73,6 +75,22 @@
    ;; state
    (selected-option-index int32)
    (last-move             time-frame)))
+
+(deftype menu-generic-category (menu-generic-scrolling-page)
+  "A named group of options shown in the detail panel of a [[menu-generic-category-page]]"
+  (;; props
+   (heading text-id)
+   (visible-fn (function symbol))))
+
+(deftype menu-generic-category-page (menu-generic-scrolling-page)
+  "A scrolling page split into a category list and a detail panel showing the active category's options"
+  (;; props
+   (categories (array menu-generic-category))
+   (start-hint text-id)
+   ;; state
+   (category-index int32)
+   (details-focused? symbol)
+   (on-start (function progress none))))
 
 (deftype menu-generic-link-option (menu-generic-option)
   "A very simple link option that allows you to link to any other [[menu-option-list]]"
@@ -222,6 +240,24 @@
      :name ,title
      :menu-options (new 'static 'boxed-array :type menu-option
      ,@options)))))
+
+(defmacro progress-new-generic-category-page (title &key (start-hint #f) &rest categories)
+  `(new 'static 'menu-option-list
+    :options (new 'static 'boxed-array :type menu-option
+    (new 'static 'menu-generic-category-page
+     :name ,title
+     ,@(if start-hint `(:start-hint ,start-hint) '())
+     :details-focused? #f
+     :categories (new 'static 'boxed-array :type menu-generic-category
+     ,@categories)))))
+
+(defmacro progress-new-generic-category (name &key (heading #f) &key (visible-fn #f) &rest options)
+  `(new 'static 'menu-generic-category
+    :name ,name
+    ,@(if heading `(:heading ,heading) '())
+    :visible-fn ,visible-fn
+    :menu-options (new 'static 'boxed-array :type menu-option
+    ,@options)))
 
 (defmacro progress-new-generic-link (text target &key (should-disable? #f))
   `(new 'static 'menu-generic-link-option

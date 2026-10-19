@@ -84,10 +84,7 @@
       ((3)
        (when (mp-session-active?) (return (the-as none 0)))
        (set! (-> *multiplayer-preferences* network-port) 26210)
-       (set! (-> *multiplayer-preferences* automatic-port-mapping) 1)
-       (set! (-> *multiplayer-preferences* session-player-limit) 2)
-       (when (nonnull? (-> *multiplayer-preferences* room-code))
-         (clear (-> *multiplayer-preferences* room-code)))))
+       (set! (-> *multiplayer-preferences* automatic-port-mapping) 1)))
     (save-multiplayer-preferences!)
     (mp-sync-preferences-to-session-host-config!)
     (refresh-generic-text-fields! *multiplayer-options-pc*))
@@ -161,117 +158,111 @@
           option progress context index selected?)))
   (none))
 
-(defun get-options-scrolling-page ((menu-list menu-option-list))
-  (when (and (nonnull? menu-list (-> menu-list options)) (> (-> menu-list options length) 0))
-    (let ((page (-> menu-list options 0)))
-      (when (and (nonnull? page) (type? page menu-generic-scrolling-page))
-        (return (the-as menu-generic-scrolling-page page)))))
-  (the-as menu-generic-scrolling-page #f))
+(define-extern select-generic-category! (function menu-generic-category-page int none))
+
+(defun multiplayer-options-page ()
+  (when (and (nonnull? *multiplayer-options-pc* (-> *multiplayer-options-pc* options))
+             (> (-> *multiplayer-options-pc* options length) 0))
+    (let ((page (-> *multiplayer-options-pc* options 0)))
+      (when (and (nonnull? page) (type? page menu-generic-category-page))
+        (return (the-as menu-generic-category-page page)))))
+  (the-as menu-generic-category-page #f))
 
 (defun mp-reset-multiplayer-options-selection! ()
-  (let ((page (get-options-scrolling-page *multiplayer-options-pc*)))
+  (let ((page (multiplayer-options-page)))
     (when (nonnull? page)
       (set! (-> page selected-option-index) -1)))
   (none))
 
-(define-extern mp-load-multiplayer-options! (function none))
-
-(define *host-privacy-option* (the-as menu-option #f))
-(define *host-connection-option* (the-as menu-option #f))
+(defun select-host-setup-category! ()
+  (let ((page (multiplayer-options-page)))
+    (when (nonnull? page (-> page categories))
+      (dotimes (index (-> page categories length))
+        (let ((category (-> page categories index)))
+          (when (and (nonnull? category) (= (-> category name) (text-id progress-lobby-title)))
+            (select-generic-category! page index))))
+      (set! (-> page details-focused?) #f)))
+  (none))
 
 (defun host-visibility-editable? ()
   (and (mp-session-active?) (= (pc-multi-get-host-access-kind) 3)))
-
-(defun arrange-host-options-page! ((options (array menu-option)))
-  (when (not *host-privacy-option*)
-    (set! *host-privacy-option* (-> options 4))
-    (set! *host-connection-option* (-> options 5)))
-  (let ((count 4))
-    (when (host-visibility-editable?)
-      (set! (-> options count) *host-privacy-option*)
-      (+! count 1))
-    (when (not (mp-session-active?))
-      (set! (-> options count) *host-connection-option*)
-      (+! count 1))
-    (set! (-> options length) count))
-  (none))
-
-(defun load-host-options-page! ()
-  (let ((root (get-options-scrolling-page *multiplayer-options-pc*)))
-    (when (and (nonnull? root (-> root menu-options)) (> (-> root menu-options length) 0))
-      (let* ((link (the-as menu-generic-link-option (-> root menu-options (- (-> root menu-options length) 1))))
-             (page (get-options-scrolling-page (if (nonnull? link) (-> link target) (the-as menu-option-list #f)))))
-        (when (nonnull? page (-> page menu-options))
-          (arrange-host-options-page! (-> page menu-options))))))
-  (mp-load-multiplayer-options!)
-  (none))
 
 (defun mp-load-multiplayer-options! ()
   (mp-sync-preferences-to-session-host-config!)
   (refresh-generic-text-fields! *multiplayer-options-pc*)
   (mp-reset-multiplayer-options-selection!)
+  (let ((page (multiplayer-options-page)))
+    (when (nonnull? page)
+      (set! (-> page on-start) (the-as (function progress none) #f))))
   (when (nonnull? *progress-process* (-> *progress-process* 0))
     (set! (-> (-> *progress-process* 0) selected-option) #f))
   (none))
 
 (define *multiplayer-options-pc*
-  (progress-new-generic-scrolling-page (text-id progress-multiplayer-options)
-    (new 'static 'menu-generic-text-field-option
-      :name (text-id progress-player-name)
-      :field 2
-      :get-value-fn (lambda ((field int)) (get-multiplayer-preference-text field))
-      :set-value-fn (lambda ((field int) (value string)) (set-multiplayer-preference-text! field value))
-      :max-bytes 15
-      :allowed-characters "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-      :uppercase? #f
-      :session (new 'static 'pc-text-input-session))
-    (new 'static 'menu-generic-button-option
-      :name (text-id progress-lobby-color-title)
-      :on-confirm (lambda ((the-progress progress))
-        (mp-player-color-progress-enter! the-progress)))
-    (new 'static 'menu-player-character-option
-      :name (text-id progress-multiplayer-preferred-character)
-      :should-disable? (lambda () (not (can-change-player-character?)))
-      :truthy-text (text-id progress-multiplayer-char-jak)
-      :falsey-text (text-id progress-multiplayer-char-daxter)
-      :get-value-fn (lambda ()
-        (and (nonnull? *multiplayer-preferences*)
-             (= (-> *multiplayer-preferences* preferred-character) (mp-player-character jak))))
-      :on-confirm (lambda ((value symbol))
-        (when (and (nonnull? *multiplayer-preferences*) (can-change-player-character?))
-          (set! (-> *multiplayer-preferences* preferred-character)
-                (the-as uint8 (if value (mp-player-character jak) (mp-player-character daxter))))
-          (save-multiplayer-preferences!))
-        (none)))
-    (new 'static 'menu-generic-choice-option
-      :name (text-id progress-multiplayer-nametag-visibility)
-      :items (new 'static 'boxed-array :type text-id
-        (text-id progress-multiplayer-nametag-always)
-        (text-id progress-multiplayer-nametag-hold)
-        (text-id progress-off))
-      :get-item-index-fn (lambda ()
-        (if (nonnull? *multiplayer-preferences*)
-            (the int (-> *multiplayer-preferences* nametag-visibility))
-            (the int (player-nametag-visibility hold))))
-      :on-confirm (lambda ((index int) (the-progress progress))
-        (when (nonnull? *multiplayer-preferences*)
-          (set! (-> *multiplayer-preferences* nametag-visibility) (the-as uint8 index))
-          (save-multiplayer-preferences!))
-        (none)))
-    (new 'static 'menu-generic-boolean-option
-      :name (text-id progress-multiplayer-player-map-marker)
-      :truthy-text (text-id progress-on)
-      :falsey-text (text-id progress-off)
-      :get-value-fn (lambda ()
-        (and (nonnull? *multiplayer-preferences*)
-             (= (-> *multiplayer-preferences* player-map-marker) 1)))
-      :on-confirm (lambda ((value symbol))
-        (when (nonnull? *multiplayer-preferences*)
-          (set! (-> *multiplayer-preferences* player-map-marker) (the-as uint8 (if value 1 0)))
-          (save-multiplayer-preferences!))
-        (none)))
-    (progress-new-generic-link-to-scrolling-page (text-id progress-multiplayer-host-options)
-      :on-load (lambda () (load-host-options-page!))
+  (progress-new-generic-category-page (text-id progress-multiplayer-options)
+    :start-hint (text-id progress-multiplayer-start-hosting)
+    (progress-new-generic-category (text-id progress-multiplayer-category-player)
+      :heading (text-id progress-multiplayer-group-you)
+      (new 'static 'menu-generic-text-field-option
+        :name (text-id progress-player-name)
+        :field 2
+        :get-value-fn (lambda ((field int)) (get-multiplayer-preference-text field))
+        :set-value-fn (lambda ((field int) (value string)) (set-multiplayer-preference-text! field value))
+        :max-bytes 15
+        :allowed-characters "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        :uppercase? #f
+        :session (new 'static 'pc-text-input-session))
+      (new 'static 'menu-player-character-option
+        :name (text-id progress-multiplayer-preferred-character)
+        :should-disable? (lambda () (not (can-change-player-character?)))
+        :truthy-text (text-id progress-multiplayer-char-jak)
+        :falsey-text (text-id progress-multiplayer-char-daxter)
+        :get-value-fn (lambda ()
+          (and (nonnull? *multiplayer-preferences*)
+               (= (-> *multiplayer-preferences* preferred-character) (mp-player-character jak))))
+        :on-confirm (lambda ((value symbol))
+          (when (and (nonnull? *multiplayer-preferences*) (can-change-player-character?))
+            (set! (-> *multiplayer-preferences* preferred-character)
+                  (the-as uint8 (if value (mp-player-character jak) (mp-player-character daxter))))
+            (save-multiplayer-preferences!))
+          (none)))
+      (new 'static 'menu-generic-button-option
+        :name (text-id progress-lobby-color-title)
+        :on-confirm (lambda ((the-progress progress))
+          (mp-player-color-progress-enter! the-progress))))
+    (progress-new-generic-category (text-id progress-multiplayer-category-display)
+      (new 'static 'menu-generic-choice-option
+        :name (text-id progress-multiplayer-nametag-visibility)
+        :items (new 'static 'boxed-array :type text-id
+          (text-id progress-multiplayer-nametag-always)
+          (text-id progress-multiplayer-nametag-hold)
+          (text-id progress-off))
+        :get-item-index-fn (lambda ()
+          (if (nonnull? *multiplayer-preferences*)
+              (the int (-> *multiplayer-preferences* nametag-visibility))
+              (the int (player-nametag-visibility hold))))
+        :on-confirm (lambda ((index int) (the-progress progress))
+          (when (nonnull? *multiplayer-preferences*)
+            (set! (-> *multiplayer-preferences* nametag-visibility) (the-as uint8 index))
+            (save-multiplayer-preferences!))
+          (none)))
+      (new 'static 'menu-generic-boolean-option
+        :name (text-id progress-multiplayer-player-map-marker)
+        :truthy-text (text-id progress-on)
+        :falsey-text (text-id progress-off)
+        :get-value-fn (lambda ()
+          (and (nonnull? *multiplayer-preferences*)
+               (= (-> *multiplayer-preferences* player-map-marker) 1)))
+        :on-confirm (lambda ((value symbol))
+          (when (nonnull? *multiplayer-preferences*)
+            (set! (-> *multiplayer-preferences* player-map-marker) (the-as uint8 (if value 1 0)))
+            (save-multiplayer-preferences!))
+          (none)))
+      (new 'static 'menu-generic-button-option
+        :name (text-id progress-multiplayer-reset-defaults)
+        :on-confirm (lambda ((the-progress progress)) (reset-multiplayer-option-defaults! 1))))
+    (progress-new-generic-category (text-id progress-host-game-rules)
+      :heading (text-id progress-lobby-browser-host)
       (new 'static 'menu-generic-boolean-option
         :should-disable? (lambda () (not (can-edit-host-options?)))
         :name (text-id progress-multiplayer-friendly-fire)
@@ -299,47 +290,56 @@
       (new 'static 'menu-generic-button-option
         :name (text-id progress-multiplayer-reset-defaults)
         :should-disable? (lambda () (not (can-edit-host-options?)))
-        :on-confirm (lambda ((the-progress progress)) (reset-multiplayer-option-defaults! 2)))
+        :on-confirm (lambda ((the-progress progress)) (reset-multiplayer-option-defaults! 2))))
+    (progress-new-generic-category (text-id progress-lobby-title)
+      :visible-fn (lambda () (or (not (mp-session-active?)) (host-visibility-editable?)))
       (new 'static 'menu-generic-carousel-option
-        :should-disable? (lambda () (not (can-edit-host-options?)))
         :name (text-id progress-multiplayer-lobby-privacy)
         :get-max-size-fn (lambda () (host-visibility-choice-count))
         :get-item-label-fn (lambda ((index int)) (host-visibility-label index))
         :get-item-index-fn (lambda () (host-visibility-choice-index))
         :on-confirm (lambda ((index int) (the-progress progress)) (set-host-visibility-choice! index)))
-      (progress-new-generic-link-to-scrolling-page (text-id progress-multiplayer-connection-options)
-        :on-load (lambda () (mp-load-multiplayer-options!))
-        (new 'static 'menu-generic-text-field-option
-          :name (text-id progress-port)
-          :field 0
-          :get-value-fn (lambda ((field int)) (get-multiplayer-preference-text field))
-          :set-value-fn (lambda ((field int) (value string)) (set-multiplayer-preference-text! field value))
-          :max-bytes 5
-          :allowed-characters "0123456789"
-          :session (new 'static 'pc-text-input-session))
-        (new 'static 'menu-generic-text-field-option
-          :name (text-id progress-multiplayer-room-code)
-          :field 1
-          :get-value-fn (lambda ((field int)) (get-multiplayer-preference-text field))
-          :set-value-fn (lambda ((field int) (value string)) (set-multiplayer-preference-text! field value))
-          :max-bytes 6
-          :allowed-characters "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-          :uppercase? #t
-          :session (new 'static 'pc-text-input-session))
-        (new 'static 'menu-generic-boolean-option
-          :name (text-id progress-multiplayer-auto-port-mapping)
-          :truthy-text (text-id progress-on)
-          :falsey-text (text-id progress-off)
-          :get-value-fn (lambda ()
-            (and (nonnull? *multiplayer-preferences*) (= (-> *multiplayer-preferences* automatic-port-mapping) 1)))
-          :on-confirm (lambda ((value symbol))
-            (when (nonnull? *multiplayer-preferences*)
-              (set! (-> *multiplayer-preferences* automatic-port-mapping) (the-as uint8 (if value 1 0)))
-              (save-multiplayer-preferences!))
-            (none)))
-        (new 'static 'menu-generic-button-option
-          :name (text-id progress-multiplayer-reset-defaults)
-          :on-confirm (lambda ((the-progress progress)) (reset-multiplayer-option-defaults! 3)))))))
+      (new 'static 'menu-generic-carousel-option
+        :should-disable? (lambda () (mp-session-active?))
+        :name (text-id progress-multiplayer-max-players)
+        :get-max-size-fn (lambda () (+ (the int MP_MAX_PLAYERS) -1))
+        :get-item-label-fn (lambda ((index int)) (max-players-label index))
+        :get-item-index-fn (lambda () (+ (the int *mp-session-player-limit*) -2))
+        :on-confirm (lambda ((index int) (the-progress progress)) (set-max-players-choice! index)))
+      (new 'static 'menu-generic-text-field-option
+        :should-disable? (lambda () (mp-session-active?))
+        :name (text-id progress-multiplayer-room-code)
+        :field 1
+        :get-value-fn (lambda ((field int)) (get-multiplayer-preference-text field))
+        :set-value-fn (lambda ((field int) (value string)) (set-multiplayer-preference-text! field value))
+        :max-bytes 6
+        :allowed-characters "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        :uppercase? #t
+        :session (new 'static 'pc-text-input-session)))
+    (progress-new-generic-category (text-id progress-multiplayer-category-network)
+      :visible-fn (lambda () (not (mp-session-active?)))
+      (new 'static 'menu-generic-text-field-option
+        :name (text-id progress-port)
+        :field 0
+        :get-value-fn (lambda ((field int)) (get-multiplayer-preference-text field))
+        :set-value-fn (lambda ((field int) (value string)) (set-multiplayer-preference-text! field value))
+        :max-bytes 5
+        :allowed-characters "0123456789"
+        :session (new 'static 'pc-text-input-session))
+      (new 'static 'menu-generic-boolean-option
+        :name (text-id progress-multiplayer-auto-port-mapping)
+        :truthy-text (text-id progress-on)
+        :falsey-text (text-id progress-off)
+        :get-value-fn (lambda ()
+          (and (nonnull? *multiplayer-preferences*) (= (-> *multiplayer-preferences* automatic-port-mapping) 1)))
+        :on-confirm (lambda ((value symbol))
+          (when (nonnull? *multiplayer-preferences*)
+            (set! (-> *multiplayer-preferences* automatic-port-mapping) (the-as uint8 (if value 1 0)))
+            (save-multiplayer-preferences!))
+          (none)))
+      (new 'static 'menu-generic-button-option
+        :name (text-id progress-multiplayer-reset-defaults)
+        :on-confirm (lambda ((the-progress progress)) (reset-multiplayer-option-defaults! 3))))))
 
 (defun start-hosting! ((p progress))
   (when (nonnull? p *pc-settings* *multiplayer-preferences*)
@@ -348,57 +348,11 @@
     (set-next-state p 'host-to-lobby 0))
   (none))
 
-(define *host-settings-options-pc*
-  (progress-new-generic-scrolling-page (text-id progress-multiplayer-host-options)
-    (new 'static 'menu-generic-carousel-option
-      :should-disable? (lambda () (not (can-edit-host-options?)))
-      :name (text-id progress-multiplayer-lobby-privacy)
-      :get-max-size-fn (lambda () (host-visibility-choice-count))
-      :get-item-label-fn (lambda ((index int)) (host-visibility-label index))
-      :get-item-index-fn (lambda () (host-visibility-choice-index))
-      :on-confirm (lambda ((index int) (the-progress progress)) (set-host-visibility-choice! index)))
-    (new 'static 'menu-generic-carousel-option
-      :name (text-id progress-multiplayer-max-players)
-      :get-max-size-fn (lambda () (+ (the int MP_MAX_PLAYERS) -1))
-      :get-item-label-fn (lambda ((index int)) (max-players-label index))
-      :get-item-index-fn (lambda () (+ (the int *mp-session-player-limit*) -2))
-      :on-confirm (lambda ((index int) (the-progress progress)) (set-max-players-choice! index)))
-    (progress-new-generic-link-to-scrolling-page (text-id progress-host-game-rules)
-      (new 'static 'menu-generic-boolean-option
-        :should-disable? (lambda () (not (can-edit-host-options?)))
-        :name (text-id progress-multiplayer-friendly-fire)
-        :truthy-text (text-id progress-on)
-        :falsey-text (text-id progress-off)
-        :get-value-fn (lambda () (= (get-host-rule-value 0) 1))
-        :on-confirm (lambda ((value symbol)) (set-host-rule-flag! 0 value)))
-      (new 'static 'menu-generic-boolean-option
-        :should-disable? (lambda () (not (can-edit-host-options?)))
-        :name (text-id progress-multiplayer-player-collision)
-        :truthy-text (text-id progress-on)
-        :falsey-text (text-id progress-off)
-        :get-value-fn (lambda () (= (get-host-rule-value 1) 1))
-        :on-confirm (lambda ((value symbol)) (set-host-rule-flag! 1 value)))
-      (new 'static 'menu-generic-text-field-option
-        :should-disable? (lambda () (not (can-edit-host-options?)))
-        :name (text-id progress-multiplayer-respawn-delay)
-        :zero-value-label (text-id progress-field-disabled-label)
-        :field 3
-        :get-value-fn (lambda ((field int)) (get-multiplayer-preference-text field))
-        :set-value-fn (lambda ((field int) (value string)) (set-multiplayer-preference-text! field value))
-        :max-bytes 5
-        :allowed-characters "0123456789"
-        :session (new 'static 'pc-text-input-session)))
-    (new 'static 'menu-generic-button-option
-      :name (text-id progress-host-start)
-      :on-confirm (lambda ((the-progress progress)) (start-hosting! the-progress)))))
-
 (defun open-host-settings! ((p progress))
-  (mp-sync-preferences-to-session-host-config!)
-  (refresh-generic-text-fields! *host-settings-options-pc*)
-  (let ((page (get-options-scrolling-page *host-settings-options-pc*)))
+  (mp-load-multiplayer-options!)
+  (let ((page (multiplayer-options-page)))
     (when (nonnull? page)
-      (set! (-> page selected-option-index) -1)))
+      (set! (-> page on-start) start-hosting!)))
   (when (nonnull? p)
-    (set! (-> p current-options) *host-settings-options-pc*))
+    (set! (-> p current-options) *multiplayer-options-pc*))
   (none))
-

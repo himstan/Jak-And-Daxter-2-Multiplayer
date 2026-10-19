@@ -143,10 +143,7 @@
   *pc-encoded-temp-string*)
 
 (defun next-char-offset ((text string) (offset int))
-  (let ((next (+ offset 1)))
-    (while (= (logand (-> text data next) #xc0) #x80)
-      (+! next 1))
-    next))
+  (let ((next (+ offset 1))) (while (= (logand (-> text data next) #xc0) #x80) (+! next 1)) next))
 
 (defun text-suffix-width ((text string) (offset int) (font-ctx font-context))
   (string<-charp *overlay-fit-text* (&-> text data offset))
@@ -172,11 +169,7 @@
     (string<-charp text (&-> text data offset)))
   text)
 
-(defun draw-lobby-browser-frame ((option menu-option)
-                                 (font-ctx font-context)
-                                 (left float)
-                                 (width float)
-                                 (alpha float))
+(defun draw-lobby-browser-frame ((option menu-option) (font-ctx font-context) (left float) (width float) (alpha float))
   (set-height! font-ctx 30)
   (set-vector! (-> option box 0 color) 64 128 128 (the int (* 128.0 alpha)))
   (draw-lobby-box option left (+ left width) LOBBY_BROWSER_TOP LOBBY_BROWSER_TOP)
@@ -214,9 +207,7 @@
                  (((connection-type lan)) (text-id connection-icon-lan))
                  (((connection-type internet)) (text-id connection-icon-internet))
                  (else (text-id null)))))
-    (if (= label (text-id null))
-      (the-as string #f)
-      (lookup-text! *common-text* label #f))))
+    (if (= label (text-id null)) (the-as string #f) (lookup-text! *common-text* label #f))))
 
 (defun print-lobby-browser-icon ((font-ctx font-context) (lobby-index int) (left float) (width float) (y float))
   (let ((icon (connection-type-icon (pc-multi-get-lobby-connection-type lobby-index))))
@@ -244,7 +235,12 @@
         (let ((max-width (lobby-browser-column-width width column)))
           (when selected?
             (scroll-text! *lobby-browser-text* font-ctx max-width scroll-time))
-          (print-lobby-browser-cell font-ctx (fit-overlay-text *lobby-browser-text* font-ctx max-width) left width column y))))
+          (print-lobby-browser-cell font-ctx
+                                    (fit-overlay-text *lobby-browser-text* font-ctx max-width)
+                                    left
+                                    width
+                                    column
+                                    y))))
     (set! (-> font-ctx alpha) alpha))
   (none))
 
