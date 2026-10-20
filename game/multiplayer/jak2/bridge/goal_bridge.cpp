@@ -12,6 +12,7 @@
 #include "game/kernel/common/Ptr.h"
 #include "game/kernel/common/kscheme.h"
 #include "game/multiplayer/jak2/api/preferences.h"
+#include "game/multiplayer/jak2/application/presentation_runtime.h"
 #include "game/multiplayer/jak2/application/replication_mailbox.h"
 #include "game/multiplayer/jak2/bridge/goal_preferences_types.h"
 #include "game/multiplayer/jak2/bridge/goal_replication_types.h"
@@ -623,6 +624,7 @@ void write_event(const core::GameEvent& source, MPEventGOAL& destination) {
 
 bool publish_remote(MPReplicationStateGOAL& state, application::ReplicationMailbox& mailbox) {
   if (auto frame = mailbox.take_remote_frame()) {
+    application::advance_presentation(*frame, steady_time_ms());
     const auto inbound_count =
         std::min<size_t>(state.inbound_event_count, kMPReplicationEventCapacity);
     const auto end = std::remove_if(

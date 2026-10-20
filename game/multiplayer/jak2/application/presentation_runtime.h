@@ -12,6 +12,8 @@ namespace multiplayer::jak2::application {
 
 inline constexpr float kGoalUnitsPerMeter = 4096.0f;
 
+void advance_presentation(RemoteReplicationFrame& frame, uint64_t now_ms);
+
 class PresentationRuntime {
  public:
   void reset_player(core::PlayerId player_id);

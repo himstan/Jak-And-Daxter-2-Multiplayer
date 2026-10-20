@@ -126,6 +126,27 @@ TEST(Jak2Protocol, SnapshotTimelineUsesGoalScaleForTeleportDetection) {
   EXPECT_FLOAT_EQ(teleported.position[0], 25.0f * kGoalUnitsPerMeter);
 }
 
+TEST(Jak2Presentation, ConsumedTargetsAdvanceByFrameAgeUpToTheLimit) {
+  using namespace multiplayer::jak2;
+  application::RemoteReplicationFrame frame;
+  frame.presented_ms = 1000;
+  frame.player_vehicle_targets[1] = {.position = {100.0f, 0.0f, 0.0f},
+                                     .velocity = {4096.0f, 0.0f, 0.0f},
+                                     .valid = true};
+  frame.player_vehicle_targets[2] = {.position = {100.0f, 0.0f, 0.0f},
+                                     .velocity = {4096.0f, 0.0f, 0.0f}};
+  frame.enemy_targets.push_back(frame.player_vehicle_targets[1]);
+
+  application::advance_presentation(frame, 1020);
+  EXPECT_NEAR(frame.player_vehicle_targets[1].position[0], 100.0f + 4096.0f * 0.02f, 0.001f);
+  EXPECT_FLOAT_EQ(frame.player_vehicle_targets[2].position[0], 100.0f);
+  EXPECT_NEAR(frame.enemy_targets[0].position[0], 100.0f + 4096.0f * 0.02f, 0.001f);
+
+  frame.player_vehicle_targets[1].position = {100.0f, 0.0f, 0.0f};
+  application::advance_presentation(frame, 1500);
+  EXPECT_NEAR(frame.player_vehicle_targets[1].position[0], 100.0f + 4096.0f * 0.05f, 0.001f);
+}
+
 TEST(Jak2Presentation, SceneTransitionsPresentTheirPlacementWithoutOldSceneHistory) {
   using namespace multiplayer::jak2;
   core::ReplicationState state;

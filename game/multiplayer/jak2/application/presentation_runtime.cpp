@@ -1,5 +1,6 @@
 #include "game/multiplayer/jak2/application/presentation_runtime.h"
 
+#include <algorithm>
 #include <cmath>
 #include <unordered_set>
 
@@ -16,10 +17,17 @@ struct TimingProfile {
   float output_smoothing_rate = 0.0f;
 };
 
+constexpr uint64_t kMaximumPresentationAdvanceMs = 50;
+
 constexpr TimingProfile kCriticalProfile = {.nominal_interval_ms = 33,
                                             .minimum_delay_ms = 33,
                                             .maximum_delay_ms = 150,
                                             .maximum_extrapolation_ms = 250};
+constexpr TimingProfile kPlayerVehicleProfile = {.nominal_interval_ms = 33,
+                                                 .minimum_delay_ms = 33,
+                                                 .maximum_delay_ms = 150,
+                                                 .maximum_extrapolation_ms = 250,
+                                                 .output_smoothing_rate = 12.0f};
 constexpr TimingProfile kEnemyProfile = {.nominal_interval_ms = 50,
                                          .minimum_delay_ms = 66,
                                          .maximum_delay_ms = 400,
@@ -57,6 +65,26 @@ PresentationTarget make_target(const uint32_t entity_id,
 }
 
 }  // namespace
+
+void advance_presentation(RemoteReplicationFrame& frame, const uint64_t now_ms) {
+  if (frame.presented_ms == 0)
+    return;
+  const uint64_t age_ms = now_ms > frame.presented_ms ? now_ms - frame.presented_ms : 0;
+  const float seconds =
+      static_cast<float>(std::min(age_ms, kMaximumPresentationAdvanceMs)) / 1000.0f;
+  const auto advance = [seconds](PresentationTarget& target) {
+    if (!target.valid)
+      return;
+    for (size_t axis = 0; axis < target.position.size(); ++axis)
+      target.position[axis] += target.velocity[axis] * seconds;
+  };
+  std::ranges::for_each(frame.player_targets, advance);
+  std::ranges::for_each(frame.player_vehicle_targets, advance);
+  std::ranges::for_each(frame.enemy_targets, advance);
+  std::ranges::for_each(frame.pedestrian_targets, advance);
+  std::ranges::for_each(frame.ambient_vehicle_targets, advance);
+  std::ranges::for_each(frame.boss_targets, advance);
+}
 
 void PresentationRuntime::reset() {
   player_histories_ = {};
@@ -139,7 +167,7 @@ PresentationTarget PresentationRuntime::prepare_player_vehicle(
     history.level_id = primary_level;
     ++history.generation;
   }
-  return make_target(vehicle.net_id, present_timeline(history.timeline, now_ms, kCriticalProfile),
+  return make_target(vehicle.net_id, present_timeline(history.timeline, now_ms, kPlayerVehicleProfile),
                      history.generation);
 }
 
@@ -293,6 +321,7 @@ void PresentationRuntime::prepare(RemoteReplicationFrame& frame,
   prepare_bosses(frame, now_ms);
   frame.enemy_generation = enemy_generation_;
   frame.traffic_generation = traffic_generation_;
+  frame.presented_ms = now_ms;
 }
 
 }  // namespace multiplayer::jak2::application

@@ -66,6 +66,7 @@ struct RemoteReplicationFrame {
   std::array<core::AirlockSnapshot, core::kMaxPlayers> airlocks = {};
   core::TrafficAuthority traffic_authority = {};
   core::PlayerId selected_traffic_authority = core::kInvalidPlayerId;
+  uint64_t presented_ms = 0;
   uint32_t generation = 0;
   uint32_t enemy_generation = 0;
   uint32_t traffic_generation = 0;
