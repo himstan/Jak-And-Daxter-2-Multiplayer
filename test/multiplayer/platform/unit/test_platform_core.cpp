@@ -226,9 +226,11 @@ TEST(PlatformDiscovery, AdvertisementRoundTripsAndRejectsMalformedInput) {
   invalid = expected;
   invalid.player_limit = 1;
   EXPECT_TRUE(multiplayer::platform::encode_discovery_advertisement(invalid).empty());
-  invalid = expected;
-  invalid.host_name.clear();
-  EXPECT_TRUE(multiplayer::platform::encode_discovery_advertisement(invalid).empty());
+  auto unnamed = expected;
+  unnamed.host_name.clear();
+  ASSERT_TRUE(multiplayer::platform::decode_discovery_advertisement(
+      multiplayer::platform::encode_discovery_advertisement(unnamed), decoded));
+  EXPECT_EQ(decoded.host_name, "Host");
   invalid = expected;
   invalid.details.assign(multiplayer::platform::kMaximumGameDetailsBytes + 1, 'a');
   EXPECT_TRUE(multiplayer::platform::encode_discovery_advertisement(invalid).empty());

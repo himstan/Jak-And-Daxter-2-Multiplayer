@@ -14,6 +14,7 @@ constexpr std::array<uint8_t, 4> kMagic = {'J', 'M', 'P', 'D'};
 constexpr uint8_t kVersion = 2;
 constexpr uint8_t kQuery = 1;
 constexpr uint8_t kAdvertisement = 2;
+constexpr std::string_view kUnnamedHost = "Host";
 
 void append_u16(std::vector<uint8_t>& bytes, const uint16_t value) {
   bytes.push_back(static_cast<uint8_t>(value));
@@ -100,10 +101,11 @@ std::vector<uint8_t> encode_discovery_advertisement(const DiscoveryAdvertisement
   append_u16(bytes, advertisement.game_port);
   bytes.push_back(advertisement.current_players);
   bytes.push_back(advertisement.player_limit);
+  const std::string_view host_name =
+      advertisement.host_name.empty() ? kUnnamedHost : std::string_view(advertisement.host_name);
   if (!append_string(bytes, advertisement.game_id) ||
       !append_string(bytes, advertisement.compatibility_identity) ||
-      !append_string(bytes, advertisement.room_code) ||
-      !append_string(bytes, advertisement.host_name) ||
+      !append_string(bytes, advertisement.room_code) || !append_string(bytes, host_name) ||
       !append_string(bytes, advertisement.details, true))
     return {};
   return bytes;
