@@ -421,7 +421,7 @@
        (if (mp-target-daxter? *target*)
             ;; the second hud texture is the one of the three freed up hud health textures thats overriden
             (set! (-> this sprites 0 tex) (get-texture hud-health-02 level-default-minimap))
-            (set! (-> this sprites 0 tex) (get-texture hud-jak-head-01 level-default-minimap))
+            (set! (-> this sprites 0 tex) (get-texture hud-darkjak-head-01 level-default-minimap))
             )
        (set-hud-piece-position!
          (-> this sprites 0)
