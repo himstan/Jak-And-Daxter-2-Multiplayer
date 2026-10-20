@@ -709,6 +709,49 @@ TEST(GnsTransportIntegration, ReliableLanePreservesMessageOrder) {
     EXPECT_EQ(received[index], index);
 }
 
+TEST(GnsTransportIntegration, MessagesSentBeforePeerCloseAreDeliveredBeforeClosed) {
+  SessionPlatform host;
+  SessionPlatform client;
+  ASSERT_TRUE(host.host({.port = available_udp_port()}));
+  ASSERT_TRUE(client.connect({.endpoint = "127.0.0.1", .port = host.local_port()}));
+  ConnectionId host_connection_id = 0;
+  ConnectionId client_connection = 0;
+  ASSERT_TRUE(pump_until(
+      [&] {
+        host.pump();
+        client.pump();
+      },
+      [&] {
+        TransportEvent event;
+        while (host.poll_event(event))
+          if (event.kind == TransportEventKind::CONNECTED)
+            host_connection_id = event.connection_id;
+        while (client.poll_event(event))
+          if (event.kind == TransportEventKind::CONNECTED)
+            client_connection = event.connection_id;
+        return host_connection_id != 0 && client_connection != 0;
+      }));
+
+  ASSERT_TRUE(host.send(host_connection_id, std::array<uint8_t, 1>{0x9e},
+                        TransportLane::CONTROL_RELIABLE));
+  host.close_connection(host_connection_id, 4003, "rejected before client pump");
+  ASSERT_TRUE(
+      pump_until([&] { host.pump(); }, [&] { return client.connection_snapshots().empty(); }));
+
+  client.pump();
+  std::vector<TransportEvent> events;
+  TransportEvent event;
+  while (client.poll_event(event))
+    events.push_back(std::move(event));
+  ASSERT_EQ(events.size(), 2u);
+  EXPECT_EQ(events[0].kind, TransportEventKind::MESSAGE);
+  EXPECT_EQ(events[0].connection_id, client_connection);
+  EXPECT_EQ(events[0].lane, TransportLane::CONTROL_RELIABLE);
+  EXPECT_EQ(events[0].payload, std::vector<uint8_t>{0x9e});
+  EXPECT_EQ(events[1].kind, TransportEventKind::CLOSED);
+  EXPECT_EQ(events[1].connection_id, client_connection);
+}
+
 TEST(GnsTransportIntegration, LossKeepsReliableOrderAndDoesNotReplayRealtimeBacklog) {
   SessionPlatform host;
   SessionPlatform client;

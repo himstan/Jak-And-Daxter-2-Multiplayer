@@ -279,6 +279,7 @@ struct SessionPlatform::Impl {
         state == k_ESteamNetworkingConnectionState_ProblemDetectedLocally) {
       if (const auto found = backend.connections.find(callback.m_hConn);
           found != backend.connections.end()) {
+        drain_messages(backend, found->second);
         events.push_back(
             {.kind = TransportEventKind::CLOSED,
              .connection_id = found->second.id,
@@ -347,21 +348,35 @@ struct SessionPlatform::Impl {
       if (count <= 0)
         continue;
       received += static_cast<size_t>(count);
-      for (int index = 0; index < count; ++index) {
-        auto* message = messages[index];
-        if (message->m_cbSize > 0 && valid_lane(message->m_idxLane)) {
-          const auto* begin = static_cast<const uint8_t*>(message->m_pData);
-          events.push_back({.kind = TransportEventKind::MESSAGE,
-                            .connection_id = connection->id,
-                            .delivery = message_delivery(message->m_nFlags),
-                            .lane = static_cast<TransportLane>(message->m_idxLane),
-                            .remote_address = connection->remote_address,
-                            .payload = std::vector(begin, begin + message->m_cbSize)});
-        }
-        message->Release();
-      }
+      push_messages(*connection, std::span(messages.data(), static_cast<size_t>(count)));
     }
     ++next_receive_source;
+  }
+
+  void push_messages(const Connection& connection,
+                     const std::span<ISteamNetworkingMessage* const> messages) {
+    for (auto* message : messages) {
+      if (message->m_cbSize > 0 && valid_lane(message->m_idxLane)) {
+        const auto* begin = static_cast<const uint8_t*>(message->m_pData);
+        events.push_back({.kind = TransportEventKind::MESSAGE,
+                          .connection_id = connection.id,
+                          .delivery = message_delivery(message->m_nFlags),
+                          .lane = static_cast<TransportLane>(message->m_idxLane),
+                          .remote_address = connection.remote_address,
+                          .payload = std::vector(begin, begin + message->m_cbSize)});
+      }
+      message->Release();
+    }
+  }
+
+  void drain_messages(const Backend& backend, const Connection& connection) {
+    std::array<ISteamNetworkingMessage*, kMaximumTransportMessagesPerConnectionPerPump> messages =
+        {};
+    int count = 0;
+    while ((count = backend.sockets->ReceiveMessagesOnConnection(
+                connection.connection, messages.data(), static_cast<int>(messages.size()))) > 0) {
+      push_messages(connection, std::span(messages.data(), static_cast<size_t>(count)));
+    }
   }
 
   bool reliable_messages_drained() const {
