@@ -169,4 +169,9 @@
                   (MP_EVENT_MISSION_MOUNTAIN_RESOLUTION 61
                                                         uint8
                                                         (mp-mountain-resolution-receive! (the-as mp-mountain-resolution-event
-                                                                                                 evt))))
+                                                                                                 evt)))
+                  (MP_EVENT_PLAYER_GUN_RELEASE 62
+                                               mp-player-gun-shot-event-data
+                                               (player-replica-receive-gun-release! (-> evt source-player-id)
+                                                                                    (the-as mp-player-gun-shot-event
+                                                                                            evt))))

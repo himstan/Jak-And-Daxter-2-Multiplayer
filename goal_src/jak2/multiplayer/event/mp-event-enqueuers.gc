@@ -87,9 +87,9 @@
     (mp-event-enqueue! (mp-event-build-city-power! event turret-id state source-pos)))
   (none))
 
-(defun mp-event-enqueue-player-gun-shot! ((weapon-type uint) (shot-seq uint) (cam-angle-y float))
+(defun mp-event-enqueue-player-gun-shot! ((event-type uint) (weapon-type uint) (shot-seq uint) (cam-angle-y float))
   (let ((event (new 'stack-no-clear 'mp-player-gun-shot-event)))
-    (mp-event-enqueue! (mp-event-build-player-gun-shot! event weapon-type shot-seq cam-angle-y)))
+    (mp-event-enqueue! (mp-event-build-player-gun-shot! event event-type weapon-type shot-seq cam-angle-y)))
   (none))
 
 (defun mp-event-enqueue-edge-grab! ((event-type uint) (packed edge-grab-state-event-data))

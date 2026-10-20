@@ -14,7 +14,7 @@
 (define-extern mp-event-enqueue-krew-pickup! (function int none))
 (define-extern mp-event-enqueue-shuttle! (function uint uint uint time-frame time-frame int uint none))
 (define-extern mp-event-enqueue-city-power! (function uint uint vector none))
-(define-extern mp-event-enqueue-player-gun-shot! (function uint uint float none))
+(define-extern mp-event-enqueue-player-gun-shot! (function uint uint uint float none))
 (define-extern mp-event-enqueue-edge-grab! (function uint edge-grab-state-event-data none))
 (define-extern mp-event-enqueue-scene! (function uint string string none))
 (define-extern mp-event-enqueue-mountain-resolution! (function uint none))

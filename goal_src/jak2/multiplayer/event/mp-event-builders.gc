@@ -138,10 +138,11 @@
 
 (defun mp-event-build-player-gun-shot! ((event
                                           mp-player-gun-shot-event)
+                                        (event-type uint)
                                         (weapon-type uint)
                                         (shot-seq uint)
                                         (cam-angle-y float))
-  (when (and (nonnull? event) (mp-event-prepare! event MP_EVENT_PLAYER_GUN_SHOT))
+  (when (and (nonnull? event) (mp-event-prepare! event event-type))
     (set! (-> event payload weapon-type) (the-as uint8 weapon-type))
     (set! (-> event payload shot-seq) (the-as uint32 shot-seq))
     (set! (-> event payload cam-angle-y) cam-angle-y)

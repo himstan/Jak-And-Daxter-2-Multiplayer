@@ -37,7 +37,18 @@
   (let ((weapon (mp-pickup-type->equipped-weapon gun-type)))
     (when (not (zero? weapon))
       (+! *mp-local-gun-shot-seq* 1)
-      (mp-event-enqueue-player-gun-shot! (the-as uint weapon) *mp-local-gun-shot-seq* (mp-current-camera-angle-y))))
+      (mp-event-enqueue-player-gun-shot! MP_EVENT_PLAYER_GUN_SHOT
+                                         (the-as uint weapon)
+                                         *mp-local-gun-shot-seq*
+                                         (mp-current-camera-angle-y))))
+  (none))
+
+(defun mp-player-queue-gun-release! ()
+  (when (and (mp-session-in-game?) (not *mp-processing-remote-event*))
+    (mp-event-enqueue-player-gun-shot! MP_EVENT_PLAYER_GUN_RELEASE
+                                       (the-as uint (mp-equipped-weapon dark))
+                                       *mp-local-gun-shot-seq*
+                                       (mp-current-camera-angle-y)))
   (none))
 
 (defun mp-clear-local-vehicle-occupancy! ((player target))

@@ -8,6 +8,7 @@
 (declare-type market-object process-focusable)
 (declare-type fruit-stand process-focusable)
 (declare-type crate process-focusable)
+(define-extern mp-player-queue-gun-release! (function none))
 
 ;; DECOMP BEGINS
 
@@ -138,6 +139,37 @@
     )
   )
 
+(defun gun-dark-shot-shooter ((shot gun-dark-shot))
+  (let* ((gun (if (nonnull? shot (-> shot parent)) (ppointer->process (-> shot parent)) (the-as process #f)))
+         (shooter (if (nonnull? gun (-> gun parent)) (ppointer->process (-> gun parent)) (the-as process #f))))
+    (if (and (nonnull? shooter) (type? shooter target))
+      (the-as target shooter)
+      *target*)))
+
+(defun gun-dark-shot-dissipate? ((shot gun-dark-shot))
+  (let ((shooter (gun-dark-shot-shooter shot)))
+    (and shooter
+         (or (focus-test? shooter dead grabbed under-water pole flut board mech dark carry teleporting)
+             (not (logtest? (focus-status in-head gun) (-> shooter focus-status)))
+             (and (not (-> shot start-pilot?)) (focus-test? shooter pilot))))))
+
+(defun gun-dark-shot-charging? ((shot gun-dark-shot))
+  (let ((shooter (gun-dark-shot-shooter shot)))
+    (cond
+      ((not (nonnull? shooter)) #f)
+      ((player-replica? shooter)
+       (not (mp-player-runtime-flag? (mp-player-process-record shooter) (mp-player-runtime-flags gun-released))))
+      (else (cpad-hold? (-> shooter control cpad number) r1)))))
+
+(defun gun-dark-shot-release! ((shot gun-dark-shot))
+  (when (not-player-replica? (gun-dark-shot-shooter shot))
+    (mp-player-queue-gun-release!))
+  (none))
+
+(defun gun-dark-shot-local-in-head? ((shot gun-dark-shot))
+  (let ((shooter (gun-dark-shot-shooter shot)))
+    (and shooter (not-player-replica? shooter) (focus-test? shooter in-head))))
+
 (defmethod init-proj-settings! ((this gun-dark-shot))
   "Init relevant settings for the [[projectile]] such as gravity, speed, timeout, etc"
   (set! (-> this attack-mode) 'eco-dark)
@@ -152,7 +184,8 @@
         (add-process *gui-control* this (gui-channel background) (gui-action queue) "pmkrxplo" -99.0 0)
         )
   (set-falloff! *gui-control* (-> this explode-sound) #t 50 150 11)
-  (set! (-> this start-pilot?) (the-as basic (and *target* (focus-test? *target* pilot))))
+  (let ((shooter (gun-dark-shot-shooter this)))
+    (set! (-> this start-pilot?) (the-as basic (and shooter (focus-test? shooter pilot)))))
   ((method-of-type projectile init-proj-settings!) this)
   0
   (none)
@@ -162,7 +195,7 @@
   "Spawns associated particles with the projectile if applicable"
   (cond
     ((and (and (-> this next-state) (= (-> this next-state name) 'startup))
-          (and *target* (focus-test? *target* in-head))
+          (gun-dark-shot-local-in-head? this)
           )
      (kill-and-free-particles (-> this part))
      )
@@ -206,15 +239,10 @@
     (set-time! (-> self state-time))
     (until #f
       (cond
-        ((or (and *target*
-                  (focus-test? *target* dead grabbed under-water pole flut board mech dark carry teleporting)
-                  )
-             (and *target* (not (logtest? (focus-status in-head gun) (-> *target* focus-status))))
-             (and *target* (not (-> self start-pilot?)) (focus-test? *target* pilot))
-             )
+        ((gun-dark-shot-dissipate? self)
          (go-virtual dissipate)
          )
-        ((or (not (time-elapsed? (-> self state-time) (seconds 0.3))) (cpad-hold? 0 r1))
+        ((or (not (time-elapsed? (-> self state-time) (seconds 0.3))) (gun-dark-shot-charging? self))
          (set! (-> self size-t) (fmin 1.0 (* 0.016666668 (the float (- (current-time) (-> self state-time))))))
          (let ((t9-1 vector<-cspace!)
                (a0-13 (-> self root trans))
@@ -232,9 +260,11 @@
            )
          )
         ((and (logtest? (-> self options) (projectile-options proj-options-8000)) (made-impact? self))
+         (gun-dark-shot-release! self)
          (go-virtual impact)
          )
         (else
+          (gun-dark-shot-release! self)
           (go-virtual moving)
           )
         )
@@ -275,7 +305,7 @@
                                )
             )
       )
-    (when (and *target* (focus-test? *target* in-head))
+    (when (gun-dark-shot-local-in-head? self)
       (set! (-> self core-position quad) (-> (camera-pos) quad))
       (set! (-> self core-velocity quad) (-> (camera-matrix) vector 2 quad))
       )
