@@ -435,7 +435,7 @@ RuntimeExitStatus exec_runtime(GameLaunchOptions game_options, int argc, const c
     init_discord_rpc();
   }
 
-  if (g_game_version == GameVersion::Jak2) {
+  if (g_game_version == GameVersion::Jak2 && !game_options.disable_steam) {
     auto p = scoped_prof("startup::exec_runtime::init_steam");
     steam::initialize(steam::kSpacewarAppId);
   }
