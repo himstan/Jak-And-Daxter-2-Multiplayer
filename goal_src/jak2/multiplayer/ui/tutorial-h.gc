@@ -1,0 +1,18 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defenum multiplayer-tutorial
+  :type uint8
+  :bitfield #t
+  (ride-along 0)
+  (player-list 1))
+
+(deftype tutorial-manager (process)
+  ((player handle)
+   (talker handle)
+   (spawn-time time-frame)
+   (current multiplayer-tutorial))
+  (:state-methods
+   active))
+
+(define-extern start-tutorial-manager! (function none))

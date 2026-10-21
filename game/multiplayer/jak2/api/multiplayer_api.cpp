@@ -513,6 +513,14 @@ static int pc_multi_get_preferences(const u32 preferences_ptr) {
              : 0;
 }
 
+static u32 pc_multi_get_tutorials_seen() {
+  return multiplayer_preferences().tutorials_seen;
+}
+
+static int pc_multi_mark_tutorial_seen(const u32 tutorial) {
+  return mark_multiplayer_tutorial_seen(tutorial) ? 1 : 0;
+}
+
 static int pc_multi_set_preferences(const u32 preferences_ptr) {
   MultiplayerPreferences preferences;
   const auto previous = get_multiplayer_preferences();
@@ -749,6 +757,8 @@ void init_jak2_bridge() {
   register_symbol("pc-multi-invite-friends", &pc_multi_invite_friends);
   register_symbol("pc-multi-set-lobby-details", &pc_multi_set_lobby_details);
   register_symbol("pc-multi-get-preferences", &pc_multi_get_preferences);
+  register_symbol("pc-multi-get-tutorials-seen", &pc_multi_get_tutorials_seen);
+  register_symbol("pc-multi-mark-tutorial-seen", &pc_multi_mark_tutorial_seen);
   register_symbol("pc-multi-set-preferences", &pc_multi_set_preferences);
   register_symbol("pc-multi-is-lobby-host", &pc_multi_is_lobby_host);
   register_symbol("pc-multi-get-session-player-limit", &pc_multi_get_session_player_limit);

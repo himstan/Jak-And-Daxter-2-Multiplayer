@@ -1316,6 +1316,58 @@ TEST(Jak2GoalBridge, PlayerRulesPersistAndResetToOff) {
   EXPECT_FALSE(multiplayer_preferences().friendly_fire);
 }
 
+TEST(Jak2Preferences, TutorialProgressPersistsOutsideEditableSettings) {
+  ScopedPreferencesRoot preferences_root;
+  EXPECT_EQ(multiplayer_preferences().tutorials_seen, 0);
+  const auto stale_preferences = get_multiplayer_preferences();
+  EXPECT_TRUE(
+      mark_multiplayer_tutorial_seen(static_cast<uint8_t>(MultiplayerTutorial::RIDE_ALONG)));
+  load_multiplayer_preferences();
+  EXPECT_EQ(multiplayer_preferences().tutorials_seen, 1);
+  EXPECT_TRUE(
+      mark_multiplayer_tutorial_seen(static_cast<uint8_t>(MultiplayerTutorial::PLAYER_LIST)));
+  const auto saved = file_util::read_text_file(preferences_root.path());
+  EXPECT_TRUE(
+      mark_multiplayer_tutorial_seen(static_cast<uint8_t>(MultiplayerTutorial::PLAYER_LIST)));
+  EXPECT_EQ(file_util::read_text_file(preferences_root.path()), saved);
+  for (const uint32_t invalid : {0u, 3u, 4u, 256u}) {
+    EXPECT_FALSE(mark_multiplayer_tutorial_seen(invalid));
+    EXPECT_EQ(file_util::read_text_file(preferences_root.path()), saved);
+  }
+  ASSERT_TRUE(set_multiplayer_preferences(stale_preferences));
+  reset_multiplayer_preferences();
+  load_multiplayer_preferences();
+  EXPECT_EQ(multiplayer_preferences().tutorials_seen, 3);
+  const auto root =
+      parse_commented_json(file_util::read_text_file(preferences_root.path()), "preferences.json");
+  EXPECT_EQ(root.at("tutorials_seen"), 3);
+  const auto original_root = preferences_root.path().parent_path().parent_path().parent_path();
+  {
+    ScopedPreferencesRoot other_profile;
+    EXPECT_EQ(multiplayer_preferences().tutorials_seen, 0);
+    EXPECT_TRUE(
+        mark_multiplayer_tutorial_seen(static_cast<uint8_t>(MultiplayerTutorial::PLAYER_LIST)));
+    load_multiplayer_preferences();
+    EXPECT_EQ(multiplayer_preferences().tutorials_seen, 2);
+  }
+  set_multiplayer_preferences_root(original_root);
+  load_multiplayer_preferences();
+  EXPECT_EQ(multiplayer_preferences().tutorials_seen, 3);
+}
+
+TEST(Jak2Preferences, TutorialProgressAcceptsOldProfilesAndRejectsMalformedFlags) {
+  EXPECT_EQ(parse_multiplayer_preferences("{}").tutorials_seen, 0);
+  for (const uint8_t seen : {0, 1, 2, 3}) {
+    const json root = {{"tutorials_seen", seen}};
+    EXPECT_EQ(parse_multiplayer_preferences(root.dump()).tutorials_seen, seen);
+  }
+  for (const std::string_view invalid : {"-1", "4", "256", "1.5", "true", "\"1\"", "null"}) {
+    EXPECT_EQ(parse_multiplayer_preferences("{\"tutorials_seen\":" + std::string(invalid) + "}")
+                  .tutorials_seen,
+              0);
+  }
+}
+
 TEST(Jak2GoalBridge, RespawnDelayValidatesPersistsAndResets) {
   ScopedPreferencesRoot preferences_root;
   EXPECT_EQ(get_multiplayer_preferences().respawn_delay_seconds, 20);

@@ -16,6 +16,8 @@ enum class PlayerNametagVisibility : uint8_t { ALWAYS, HOLD, OFF };
 
 enum class HostVisibility : uint8_t { PUBLIC, FRIENDS_ONLY, INVITE_ONLY, LAN_ONLY };
 
+enum class MultiplayerTutorial : uint8_t { RIDE_ALONG = 1, PLAYER_LIST = 2 };
+
 struct MultiplayerPreferences {
   uint16_t network_port = multiplayer::platform::kDefaultMultiplayerPort;
   uint16_t respawn_delay_seconds = multiplayer::jak2::core::kDefaultRespawnDelaySeconds;
@@ -30,6 +32,7 @@ struct MultiplayerPreferences {
   uint8_t session_player_limit = 2;
   PlayerCharacter preferred_character = PlayerCharacter::JAK;
   HostVisibility host_visibility = HostVisibility::PUBLIC;
+  uint8_t tutorials_seen = 0;
 };
 
 multiplayer::platform::LobbyPrivacy lobby_privacy(HostVisibility visibility);
@@ -45,6 +48,7 @@ void set_multiplayer_preferences_root(fs::path root);
 void save_multiplayer_preferences();
 void reset_multiplayer_preferences();
 const MultiplayerPreferences& multiplayer_preferences();
+bool mark_multiplayer_tutorial_seen(uint32_t tutorial);
 uint16_t get_resolved_host_port();
 std::string get_resolved_host_room_code();
 

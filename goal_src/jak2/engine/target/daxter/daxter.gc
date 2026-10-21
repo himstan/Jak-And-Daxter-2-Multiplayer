@@ -489,7 +489,7 @@
                  (jak-crouching? jak-target)
                  (not (focus-test? jak-target dead inactive))
                  (not (nonnull? (get-jak-rider jak-target)))
-                 (< (vector-vector-distance (-> rider control trans) (-> jak-target control trans)) (meters 2.0))
+                 (< (vector-vector-distance (-> rider control trans) (-> jak-target control trans)) RIDE_ALONG_MOUNT_DISTANCE)
                  (zero? (-> jak-record action scene-state)))
         (return jak-record))))
   (the-as mp-player-record #f))

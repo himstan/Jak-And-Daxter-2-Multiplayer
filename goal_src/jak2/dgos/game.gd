@@ -682,7 +682,9 @@
   "mp-death-spectate.o" ;; added
   "mp-network.o" ;; added
   "mp-reconnect.o" ;; added
+  "tutorial-h.o"
   "mp-session.o" ;; added
+  "tutorial.o"
   "mp-main.o" ;; added
   "mp-demo-guard.o" ;; added
   "path-editor-h.o" ;; added - path-editor-h

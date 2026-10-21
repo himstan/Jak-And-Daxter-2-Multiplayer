@@ -1,6 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(defconstant RIDE_ALONG_MOUNT_DISTANCE (meters 2.0))
+
 (define *indax-walk-anim-speed* 0.65)
 
 (define-extern daxter-bind-pose! (function target none))

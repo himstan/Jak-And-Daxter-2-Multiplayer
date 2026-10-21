@@ -212,8 +212,12 @@ std::vector<ReplaceInfo> replace_info_jak2 = {
     {"~Y~22L<~Z~Y~25L@~Z~Y~1L>~Z~Y~23L[~Z~+26H", "<PAD_CIRCLE>"},
     {"~Y~22L<~Z~Y~24L#~Z~Y~1L>~Z~Y~23L[~Z~+26H", "<PAD_SQUARE>"},
     // - start/select
-    {"~Y~22L<~Z~Y~1L<PAD_PART_START_SYMBOL>~Z~Y~1L>~Z~Y~23L[~Z~+26H", "<PAD_START>"},
-    {"~Y~22L<~Z~Y~1L<PAD_PART_SELECT_SYMBOL>~Z~Y~1L>~Z~Y~23L[~Z~+26H", "<PAD_SELECT>"},
+    {"~Y~1L~-18V<PAD_PART_START_TL>~Z~Y~1L~+24H~-18V<PAD_PART_START_TR>~Z"
+     "~Y~1L~+12V<PAD_PART_START_BL>~Z~Y~1L~+24H~+12V<PAD_PART_START_BR>~Z~+48H",
+     "<PAD_START>"},
+    {"~Y~1L~-18V<PAD_PART_SELECT_TL>~Z~Y~1L~+24H~-18V<PAD_PART_SELECT_TR>~Z"
+     "~Y~1L~+12V<PAD_PART_SELECT_BL>~Z~Y~1L~+24H~+12V<PAD_PART_SELECT_BR>~Z~+48H",
+     "<PAD_SELECT>"},
     // - dpad
     {"~Y~22L<PAD_PART_DPAD_L>~Z~3L~+17H~-13V<PAD_PART_DPAD_U>~Z~22L~+17H~+14V<PAD_PART_DPAD_D>~Z~"
      "22L~+32H<PAD_PART_DPAD_R>~Z~+56H",
@@ -502,8 +506,14 @@ std::vector<EncodeInfo> encode_info_jak2 = {
     {"<ICON_PART_FRIEND_TR>", "\xc1"},
     {"<ICON_PART_FRIEND_BL>", "\xca"},
     {"<ICON_PART_FRIEND_BR>", "\xcb"},
-    {"<PAD_PART_START_SYMBOL>", "\xc2"},
-    {"<PAD_PART_SELECT_SYMBOL>", "\xc3"},
+    {"<PAD_PART_START_TL>", "\xce"},
+    {"<PAD_PART_START_TR>", "\xcf"},
+    {"<PAD_PART_START_BL>", "\xd8"},
+    {"<PAD_PART_START_BR>", "\xd9"},
+    {"<PAD_PART_SELECT_TL>", "\xd0"},
+    {"<PAD_PART_SELECT_TR>", "\xd1"},
+    {"<PAD_PART_SELECT_BL>", "\xda"},
+    {"<PAD_PART_SELECT_BR>", "\xdb"},
     // {"入", "\x1\x00"}},
     // {"年", "\x1\x01"}},
     // punctuation

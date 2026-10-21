@@ -18,6 +18,8 @@
 
 namespace {
 constexpr std::string_view kSettingsFileName = "multiplayer-profile.json";
+constexpr uint8_t kAllTutorials = static_cast<uint8_t>(MultiplayerTutorial::RIDE_ALONG) |
+                                  static_cast<uint8_t>(MultiplayerTutorial::PLAYER_LIST);
 
 MultiplayerPreferences g_preferences;
 std::optional<multiplayer::platform::ProfileLease> g_profile_lease;
@@ -219,6 +221,10 @@ void parse_preferences_root(const json& root, MultiplayerPreferences& parsed, bo
         parsed.room_code = std::move(normalized);
       }
     }
+    if (root.contains("tutorials_seen") && root.at("tutorials_seen").is_number_unsigned() &&
+        root.at("tutorials_seen") <= kAllTutorials) {
+      parsed.tutorials_seen = root.at("tutorials_seen").get<uint8_t>();
+    }
     uint32_t primary_color = kInvalidMultiplayerPlayerColor;
     if (root.contains("player_color") && root.at("player_color").is_string()) {
       parse_player_color(root.at("player_color").get<std::string>(), primary_color);
@@ -386,6 +392,7 @@ void save_multiplayer_preferences() {
   root["automatic_port_mapping"] = g_preferences.automatic_port_mapping;
   root["session_player_limit"] = g_preferences.session_player_limit;
   root["host_visibility"] = static_cast<uint8_t>(g_preferences.host_visibility);
+  root["tutorials_seen"] = g_preferences.tutorials_seen;
   const auto path = settings_path();
   file_util::create_dir_if_needed_for_file(path);
   file_util::write_text_file(path, root.dump(2));
@@ -407,14 +414,36 @@ void set_multiplayer_preferences_root(fs::path root) {
 void reset_multiplayer_preferences() {
   const std::string player_name = g_preferences.player_name;
   const MPPlayerSkin player_skin = g_preferences.player_skin;
+  const uint8_t tutorials_seen = g_preferences.tutorials_seen;
   g_preferences = {};
   g_preferences.player_name = player_name;
   g_preferences.player_skin = player_skin;
+  g_preferences.tutorials_seen = tutorials_seen;
   save_after_edit();
 }
 
 const MultiplayerPreferences& multiplayer_preferences() {
   return g_preferences;
+}
+
+bool mark_multiplayer_tutorial_seen(const uint32_t tutorial) {
+  if (tutorial != static_cast<uint8_t>(MultiplayerTutorial::RIDE_ALONG) &&
+      tutorial != static_cast<uint8_t>(MultiplayerTutorial::PLAYER_LIST)) {
+    return false;
+  }
+  if ((g_preferences.tutorials_seen & tutorial) != 0) {
+    return true;
+  }
+  const uint8_t previous = g_preferences.tutorials_seen;
+  g_preferences.tutorials_seen |= static_cast<uint8_t>(tutorial);
+  try {
+    save_multiplayer_preferences();
+    return true;
+  } catch (const std::exception& error) {
+    g_preferences.tutorials_seen = previous;
+    lg::error("[Multiplayer] Could not save tutorial progress: {}", error.what());
+    return false;
+  }
 }
 
 uint16_t get_resolved_host_port() {
@@ -494,6 +523,7 @@ bool set_multiplayer_preferences(MultiplayerPreferences preferences) {
   }
   preferences.player_name = std::move(name);
   preferences.room_code = std::move(room_code);
+  preferences.tutorials_seen = g_preferences.tutorials_seen;
   g_preferences = std::move(preferences);
   save_after_edit();
   return true;

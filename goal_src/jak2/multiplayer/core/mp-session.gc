@@ -204,6 +204,7 @@
       (mp-death-respawn-event-on-spawn!)
       (mp-arm-spawn-sync-state! status))
     (mp-demo-guard-on-local-spawn!))
+  (start-tutorial-manager!)
   (none))
 
 (defun mp-reset-session-state! ()
