@@ -65,6 +65,7 @@ class MultiplayerRuntime {
   MultiplayerRuntime& operator=(const MultiplayerRuntime&) = delete;
   bool install(std::unique_ptr<GameAdapter> adapter,
                const std::optional<ProfileStorageConfig>& profile_config = std::nullopt);
+  bool install(std::unique_ptr<GameAdapter> adapter, ProfileLease profile);
   GameAdapter* adapter(std::string_view game_id) const;
   bool enqueue(std::unique_ptr<RuntimeCommand> command);
 
@@ -103,6 +104,8 @@ class MultiplayerRuntime {
   CommandResult& result_for(CommandDomain domain);
   void run();
   void clear_locked();
+  bool install_with_profile(std::unique_ptr<GameAdapter> adapter,
+                            std::optional<ProfileLease> profile);
 
   mutable std::mutex mutex_;
   std::condition_variable wake_cv_;
@@ -117,7 +120,6 @@ class MultiplayerRuntime {
 };
 
 MultiplayerRuntime& multiplayer_runtime();
-bool install_adapter(std::unique_ptr<GameAdapter> adapter, ProfileStorageConfig profile_config);
 void shutdown();
 
 }  // namespace multiplayer::platform

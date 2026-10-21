@@ -254,6 +254,9 @@ void parse_preferences_root(const json& root, MultiplayerPreferences& parsed, bo
     if (root.contains("automatic_port_mapping") && root.at("automatic_port_mapping").is_boolean()) {
       parsed.automatic_port_mapping = root.at("automatic_port_mapping").get<bool>();
     }
+    if (root.contains("steam_integration") && root.at("steam_integration").is_boolean()) {
+      parsed.steam_integration = root.at("steam_integration").get<bool>();
+    }
     if (root.contains("player_collision") && root.at("player_collision").is_boolean()) {
       parsed.player_collision = root.at("player_collision").get<bool>();
     }
@@ -390,6 +393,7 @@ void save_multiplayer_preferences() {
   root["nametag_visibility"] = static_cast<uint8_t>(g_preferences.nametag_visibility);
   root["respawn_delay_seconds"] = g_preferences.respawn_delay_seconds;
   root["automatic_port_mapping"] = g_preferences.automatic_port_mapping;
+  root["steam_integration"] = g_preferences.steam_integration;
   root["session_player_limit"] = g_preferences.session_player_limit;
   root["host_visibility"] = static_cast<uint8_t>(g_preferences.host_visibility);
   root["tutorials_seen"] = g_preferences.tutorials_seen;

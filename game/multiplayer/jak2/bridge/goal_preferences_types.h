@@ -19,7 +19,8 @@ struct MultiplayerPreferencesGOAL {
   uint8_t nametag_visibility;
   uint8_t player_map_marker;
   uint8_t host_visibility;
+  uint8_t steam_integration;
 };
 #pragma pack(pop)
 
-static_assert(sizeof(MultiplayerPreferencesGOAL) == 276);
+static_assert(sizeof(MultiplayerPreferencesGOAL) == 277);

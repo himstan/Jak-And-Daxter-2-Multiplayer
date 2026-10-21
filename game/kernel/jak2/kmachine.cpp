@@ -1,7 +1,6 @@
 #include "kmachine.h"
 
 #include <bitset>
-#include <stdexcept>
 #include <string>
 
 #include "common/global_profiler/GlobalProfiler.h"
@@ -38,9 +37,6 @@
 #include "game/sce/libgraph.h"
 #include "game/sce/sif_ee.h"
 #include "game/sce/stubs.h"
-#include "game/multiplayer/jak2/application/jak2_adapter.h"
-#include "game/multiplayer/jak2/wire/multiplayer_protocol.h"
-#include "game/multiplayer/platform/runtime/multiplayer_runtime.h"
 
 using namespace ee;
 
@@ -753,17 +749,7 @@ void InitMachineScheme() {
     auto p = scoped_prof("play-boot-func");
     call_goal_function_by_name("play-boot");  // new function for jak2!
   }
-  if (const auto& service = multiplayer::platform::multiplayer_runtime(); service.active()) {
-    if (!service.adapter("jak2")) {
-      throw std::runtime_error("another game adapter is already installed");
-    }
-  } else if (!multiplayer::platform::install_adapter(std::make_unique<multiplayer::jak2::application::Jak2Adapter>(),{
-    .game_id = "jak2",
-    .root_directory = file_util::get_user_settings_dir(g_game_version) / "multiplayer-profiles",
-    .maximum_instances = kMPMaxPlayers})) 
-  {
-    throw std::runtime_error("failed to install Jak 2 adapter");
-  }
+  init_jak2_multiplayer(true);
   init_jak2_bridge();
   lg::info("Jak 2 adapter is installed!");
 }

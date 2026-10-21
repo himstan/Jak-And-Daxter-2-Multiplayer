@@ -5,6 +5,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -24,6 +25,7 @@
 #include "game/multiplayer/platform/discovery/invite.h"
 #include "game/multiplayer/platform/runtime/multiplayer_runtime.h"
 #include "game/multiplayer/platform/session/connection_draft.h"
+#include "game/runtime.h"
 
 #include "third-party/SDL/include/SDL3/SDL.h"
 
@@ -706,6 +708,33 @@ static void pc_multi_connect_staged_invite() {
   multiplayer::platform::ControllerClientConfig request;
   if (connection_draft().build_staged(local_profile(), request))
     runtime().enqueue<multiplayer::platform::ConnectSessionCommand>(std::move(request));
+}
+
+void init_jak2_multiplayer(const bool disable_steam) {
+  if (runtime().active()) {
+    if (!runtime().adapter("jak2"))
+      throw std::runtime_error("another game adapter is already installed");
+    return;
+  }
+  auto profile = multiplayer::platform::ProfileLease::acquire(
+      {.game_id = "jak2",
+       .root_directory = file_util::get_user_settings_dir(g_game_version) / "multiplayer-profiles",
+       .maximum_instances = kMPMaxPlayers});
+  if (!profile)
+    throw std::runtime_error("failed to acquire Jak 2 multiplayer profile");
+  if (!disable_steam) {
+    try {
+      const auto path = profile->game_preferences_path();
+      if (file_util::file_exists(path.string()) &&
+          parse_multiplayer_preferences(file_util::read_text_file(path)).steam_integration)
+        steam::initialize(steam::kSpacewarAppId);
+    } catch (const std::exception& error) {
+      lg::warn("[Multiplayer] Could not read Steam integration preference: {}", error.what());
+    }
+  }
+  if (!runtime().install(std::make_unique<multiplayer::jak2::application::Jak2Adapter>(),
+                         std::move(*profile)))
+    throw std::runtime_error("failed to install Jak 2 adapter");
 }
 
 void init_jak2_bridge() {

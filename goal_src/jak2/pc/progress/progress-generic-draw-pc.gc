@@ -155,6 +155,18 @@
   (draw-page-background font-alpha)
   (none))
 
+(defmethod get-row-height ((option menu-generic-option) (default-height float))
+  (when (nonnull? option)
+    (let ((height (-> option row-height)))
+      (when (> height 0.0)
+        (return height))))
+  default-height)
+
+(defun get-generic-row-height ((option menu-option) (default-height float))
+  (if (and (nonnull? option) (type? option menu-generic-option))
+      (get-row-height (the-as menu-generic-option option) default-height)
+      default-height))
+
 (defun draw-generic-page-rows ((obj menu-generic-scrolling-page) (progress progress) (font-ctx font-context) (focused? symbol))
   ;; the list has a total of 200px of y-height
   ;; with 10px of margin at the top and bottom, that leaves 180 / 4 = 45px per item
@@ -188,17 +200,21 @@
             ;; we add 1 because the scroll effect will reveal 1 extra
            (end-index (min (-> obj menu-options length) (+ start-index max-page-size 1))))
       ;; scroll adjust
-      (-! (-> font-ctx origin y) (* line-height (abs (- (-> *progress-pc-generic-store* current-menu-scroll-index) start-index))))
+      (when (< start-index end-index)
+        (-! (-> font-ctx origin y)
+            (* (get-generic-row-height (-> obj menu-options start-index) line-height)
+               (abs (- (-> *progress-pc-generic-store* current-menu-scroll-index) start-index)))))
       (while (< start-index end-index)
         (let ((menu-option (-> obj menu-options start-index)))
           (when (nonzero? menu-option)
             ;; save the y,x position as who knows where it will end up after the component finishes rendering
             (let ((old-y-pos (-> font-ctx origin y))
-                  (old-x-pos (-> font-ctx origin x)))
+                  (old-x-pos (-> font-ctx origin x))
+                  (row-height (get-generic-row-height menu-option line-height)))
               (draw-option menu-option progress font-ctx start-index
                            (= (-> obj selected-option-index) start-index))
               ;; move to the next line
-              (set! (-> font-ctx origin y) (+ old-y-pos line-height))
+              (set! (-> font-ctx origin y) (+ old-y-pos row-height))
               ;; - debugging, draw the dividing lines to make centering new items easier
               (draw-generic-page-row-line (the int (-> font-ctx origin y)))
               (set! (-> font-ctx origin x) old-x-pos)
@@ -408,7 +424,7 @@
     (print-game-text (lookup-text! *common-text* (-> obj name) #f) font-ctx #f 44 (bucket-id progress))
     (+! (-> font-ctx origin y) 18.0)
     (set! (-> font-ctx scale) 0.35)
-    (set! (-> font-ctx color) (font-color progress))
+    (set-color! font-ctx (if (generic-option-disabled? obj) (font-color progress-option-off) (font-color progress)))
     ;; the value
     (cond
       ((or (< (-> obj item-index) 0) (> (-> obj item-index) (num-items obj)))

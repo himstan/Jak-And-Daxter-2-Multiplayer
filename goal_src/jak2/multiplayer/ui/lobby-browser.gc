@@ -266,6 +266,18 @@
     (text-id progress-searching)
     (text-id progress-no-games-found)))
 
+(defun draw-lobby-browser-steam-status ((font-ctx font-context) (left float) (y float) (width float))
+  (when (and (nonnull? font-ctx) (zero? (pc-multi-steam-available)))
+    (let ((label (if (and (nonnull? *multiplayer-preferences*) (= (-> *multiplayer-preferences* steam-integration) 1))
+                   (text-id progress-steam-inactive)
+                   (text-id progress-steam-disabled))))
+      (set-scale! font-ctx 0.28)
+      (set-width! font-ctx (the int width))
+      (set-color! font-ctx (font-color progress-option-off))
+      (set-flags! font-ctx (font-flags kerning middle large))
+      (print-lobby-browser-text font-ctx (lookup-text! *common-text* label #f) left y)))
+  (none))
+
 (defun selected-lobby-incompatible? ((browser menu-lobby-browser-option))
   (and (nonzero? (pc-multi-get-lobby-count)) (zero? (pc-multi-lobby-compatible? (-> browser selected-row)))))
 
@@ -322,7 +334,11 @@
       (draw-lobby-browser-header font-ctx left width)
       (lobby-browser-clamp! this)
       (if (zero? (pc-multi-get-lobby-count))
-        (print-lobby-browser-centered font-ctx (lobby-browser-status-text) left width 200.0 0.5)
-        (draw-lobby-browser-rows this font-ctx left width alpha))
+        (begin
+          (print-lobby-browser-centered font-ctx (lobby-browser-status-text) left width 200.0 0.5)
+          (draw-lobby-browser-steam-status font-ctx left 265.0 width))
+        (begin
+          (draw-lobby-browser-rows this font-ctx left width alpha)
+          (draw-lobby-browser-steam-status font-ctx left 265.0 width)))
       (print-lobby-browser-prompts this font-ctx left width alpha)))
   (none))

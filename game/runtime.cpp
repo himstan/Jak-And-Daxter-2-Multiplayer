@@ -84,8 +84,9 @@
 #include "game/overlord/jak3/overlord.h"
 #include "game/system/Deci2Server.h"
 #include "game/system/iop_thread.h"
-#include "game/multiplayer/platform/runtime/multiplayer_runtime.h"
 #include "game/external/steam/steam_client.h"
+#include "game/multiplayer/jak2/api/multiplayer_api.h"
+#include "game/multiplayer/platform/runtime/multiplayer_runtime.h"
 #include "sce/deci2.h"
 #include "sce/iop.h"
 #include "sce/libcdvd_ee.h"
@@ -435,9 +436,9 @@ RuntimeExitStatus exec_runtime(GameLaunchOptions game_options, int argc, const c
     init_discord_rpc();
   }
 
-  if (g_game_version == GameVersion::Jak2 && !game_options.disable_steam) {
-    auto p = scoped_prof("startup::exec_runtime::init_steam");
-    steam::initialize(steam::kSpacewarAppId);
+  if (g_game_version == GameVersion::Jak2) {
+    auto p = scoped_prof("startup::exec_runtime::init_multiplayer");
+    init_jak2_multiplayer(game_options.disable_steam);
   }
 
   // initialize graphics first - the EE code will upload textures during boot and we

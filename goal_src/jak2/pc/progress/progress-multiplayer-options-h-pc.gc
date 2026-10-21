@@ -1,0 +1,7 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(deftype menu-player-character-option (menu-generic-boolean-option) ())
+
+(deftype menu-steam-notice-option (menu-generic-button-option)
+  ((get-label-fn (function text-id))))

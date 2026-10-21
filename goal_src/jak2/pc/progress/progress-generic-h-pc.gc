@@ -44,9 +44,11 @@
 
 (deftype menu-generic-option (menu-option)
   ((mounted? symbol)
+   (row-height float)
    (should-disable? (function symbol)))
   (:methods
     (on-mount! "Called when the menu item is first drawn as a means to initialize defaults, etc" (_type_) none)
+    (get-row-height (_type_ float) float)
     (should-disable? (_type_) symbol)))
 
 (deftype menu-generic-button-option (menu-generic-option)

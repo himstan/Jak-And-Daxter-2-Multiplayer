@@ -1,0 +1,32 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defenum player-nametag-visibility
+  :type uint8
+  (always 0)
+  (hold 1)
+  (off 2))
+
+(defenum host-visibility
+  :type uint8
+  (public 0)
+  (friends-only 1)
+  (invite-only 2)
+  (lan-only 3))
+
+(deftype multiplayer-preferences (structure)
+  ((skin                   mp-player-skin :inline)
+   (player-name            string)
+   (room-code              string)
+   (network-port           uint16)
+   (respawn-delay-seconds  uint16)
+   (session-player-limit   uint8)
+   (preferred-character    uint8)
+   (automatic-port-mapping uint8)
+   (player-collision       uint8)
+   (friendly-fire          uint8)
+   (nametag-visibility     uint8)
+   (player-map-marker      uint8)
+   (host-visibility        uint8)
+   (steam-integration      uint8))
+  :size-assert 277)

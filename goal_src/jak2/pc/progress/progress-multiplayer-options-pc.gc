@@ -5,6 +5,36 @@
 (define-extern refresh-generic-text-fields! (function menu-option-list none))
 (define-extern get-host-rule-value (function int int))
 
+(define *steam-restart-required?* #f)
+
+(defmethod get-row-height ((option menu-steam-notice-option) (default-height float))
+  (if (and (nonnull? option (-> option get-label-fn))
+           (!= ((-> option get-label-fn)) (text-id null)))
+      ((method-of-type menu-generic-option get-row-height) option default-height)
+      0.0))
+
+(defmethod draw-option ((option menu-steam-notice-option)
+                        (progress progress) (context font-context) (index int) (selected? symbol))
+  (when (nonnull? option progress context (-> option get-label-fn))
+    (let ((label ((-> option get-label-fn))))
+      (when (= label (text-id null))
+        (return (the-as none 0)))
+      (set! (-> context alpha) (fmax 0.0 (* 2.0 (- 0.5 (-> progress menu-transition)))))
+      (set-flags! context (font-flags kerning middle large))
+      (set-scale! context 0.30)
+      (set-color! context (font-color progress-option-off))
+      (print-game-text (lookup-text! *common-text* label #f) context #f 44 (bucket-id progress))))
+  (none))
+
+(defun set-steam-integration! ((value symbol))
+  (when (nonnull? *multiplayer-preferences*)
+    (let ((enabled (the-as uint8 (if value 1 0))))
+      (when (!= (-> *multiplayer-preferences* steam-integration) enabled)
+        (set! (-> *multiplayer-preferences* steam-integration) enabled)
+        (when (= (save-multiplayer-preferences!) 1)
+          (set! *steam-restart-required?* #t)))))
+  (none))
+
 (defun get-multiplayer-preference-text ((field int))
   (when (nonnull? *multiplayer-preferences*)
     (case field
@@ -83,6 +113,7 @@
        (set! (-> *multiplayer-preferences* respawn-delay-seconds) 20))
       ((3)
        (when (mp-session-active?) (return (the-as none 0)))
+       (set-steam-integration! #f)
        (set! (-> *multiplayer-preferences* network-port) 26210)
        (set! (-> *multiplayer-preferences* automatic-port-mapping) 1)))
     (save-multiplayer-preferences!)
@@ -101,23 +132,21 @@
   (= (pc-multi-steam-available) 1))
 
 (defun host-visibility-choice-count ()
-  (if (and (steam-available?) (not (mp-session-active?))) 4 3))
-
-(defun host-visibility-choice ((index int))
-  (if (and (not (steam-available?)) (> index 0)) (+ index 1) index))
+  (if (mp-session-active?) 3 4))
 
 (defun host-visibility-choice-index ()
-  (let ((value (if (nonnull? *multiplayer-preferences*)
-                   (the int (-> *multiplayer-preferences* host-visibility))
-                   0)))
-    (if (and (not (steam-available?)) (> value 0)) (max 1 (+ value -1)) value)))
+  (if (nonnull? *multiplayer-preferences*)
+      (the int (-> *multiplayer-preferences* host-visibility))
+      0))
 
 (defun host-visibility-label ((index int))
-  (lookup-text! *common-text* (-> *host-visibility-labels* (host-visibility-choice index)) #f))
+  (if (nonnull? *host-visibility-labels*)
+      (lookup-text! *common-text* (-> *host-visibility-labels* index) #f)
+      ""))
 
 (defun set-host-visibility-choice! ((index int))
-  (when (and (nonnull? *multiplayer-preferences*) (can-edit-host-options?))
-    (set! (-> *multiplayer-preferences* host-visibility) (the-as uint8 (host-visibility-choice index)))
+  (when (and (nonnull? *multiplayer-preferences*) (can-edit-host-options?) (steam-available?))
+    (set! (-> *multiplayer-preferences* host-visibility) (the-as uint8 index))
     (save-multiplayer-preferences!))
   (none))
 
@@ -142,8 +171,6 @@
       (set! (-> *multiplayer-preferences* session-player-limit) (the-as uint8 limit))
       (save-multiplayer-preferences!)))
   (none))
-
-(deftype menu-player-character-option (menu-generic-boolean-option) ())
 
 (defmethod draw-option ((option menu-player-character-option)
                         (progress progress) (context font-context) (index int) (selected? symbol))
@@ -295,10 +322,16 @@
       :visible-fn (lambda () (or (not (mp-session-active?)) (host-visibility-editable?)))
       (new 'static 'menu-generic-carousel-option
         :name (text-id progress-multiplayer-lobby-privacy)
+        :should-disable? (lambda () (not (steam-available?)))
         :get-max-size-fn (lambda () (host-visibility-choice-count))
         :get-item-label-fn (lambda ((index int)) (host-visibility-label index))
         :get-item-index-fn (lambda () (host-visibility-choice-index))
         :on-confirm (lambda ((index int) (the-progress progress)) (set-host-visibility-choice! index)))
+      (new 'static 'menu-steam-notice-option
+        :row-height 20.0
+        :should-disable? (lambda () #t)
+        :get-label-fn (lambda ()
+          (if (steam-available?) (text-id null) (text-id progress-steam-visibility-unavailable))))
       (new 'static 'menu-generic-carousel-option
         :should-disable? (lambda () (mp-session-active?))
         :name (text-id progress-multiplayer-max-players)
@@ -319,6 +352,22 @@
         :session (new 'static 'pc-text-input-session)))
     (progress-new-generic-category (text-id progress-multiplayer-category-network)
       :visible-fn (lambda () (not (mp-session-active?)))
+      (new 'static 'menu-generic-boolean-option
+        :name (text-id progress-steam-integration)
+        :truthy-text (text-id progress-on)
+        :falsey-text (text-id progress-off)
+        :get-value-fn (lambda ()
+          (and (nonnull? *multiplayer-preferences*) (= (-> *multiplayer-preferences* steam-integration) 1)))
+        :on-confirm (lambda ((value symbol)) (set-steam-integration! value)))
+      (new 'static 'menu-steam-notice-option
+        :row-height 20.0
+        :should-disable? (lambda () #t)
+        :get-label-fn (lambda ()
+          (cond
+            (*steam-restart-required?* (text-id progress-steam-restart-required))
+            ((and (nonnull? *multiplayer-preferences*) (= (-> *multiplayer-preferences* steam-integration) 1))
+             (text-id null))
+            (else (text-id progress-steam-public-lobbies)))))
       (new 'static 'menu-generic-text-field-option
         :name (text-id progress-port)
         :field 0

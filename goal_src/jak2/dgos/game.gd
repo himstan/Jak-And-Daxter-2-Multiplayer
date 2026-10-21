@@ -14,6 +14,7 @@
   "mp-boss-types.o" ;; added
   "mp-airlock-types.o" ;; added
   "mp-gameplay-state-h.o" ;; added
+  "preferences-h.o" ;; added
   "preferences.o" ;; added
   "mp-api-h.o" ;; added
   "mp-event-h.o" ;; added
@@ -406,6 +407,7 @@
   "hud-classes.o"
   "progress-static.o"
   "async-task.o" ;; added
+  "progress-multiplayer-options-h-pc.o" ;; added
   "progress-multiplayer-options-pc.o" ;; added
   "progress-static-pc.o" ;; added
   "mp-lobby-skin-editor.o" ;; added

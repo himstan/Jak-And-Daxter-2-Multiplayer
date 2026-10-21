@@ -25,6 +25,7 @@ struct MultiplayerPreferences {
   std::string player_name;
   MPPlayerSkin player_skin = get_default_player_skin(kInvalidMultiplayerPlayerColor);
   bool automatic_port_mapping = true;
+  bool steam_integration = false;
   bool player_collision = false;
   bool friendly_fire = false;
   bool player_map_marker = true;

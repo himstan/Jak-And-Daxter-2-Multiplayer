@@ -17,22 +17,34 @@ MultiplayerRuntime::~MultiplayerRuntime() {
 
 bool MultiplayerRuntime::install(std::unique_ptr<GameAdapter> adapter,
                                  const std::optional<ProfileStorageConfig>& profile_config) {
+  if (profile_config && (!adapter || profile_config->game_id != adapter->descriptor().game_id))
+    return false;
+  auto lease =
+      profile_config ? ProfileLease::acquire(*profile_config) : std::optional<ProfileLease>{};
+  if (profile_config && !lease)
+    return false;
+  return install_with_profile(std::move(adapter), std::move(lease));
+}
+
+bool MultiplayerRuntime::install(std::unique_ptr<GameAdapter> adapter, ProfileLease profile) {
+  if (!adapter || profile.directory().parent_path().filename() != adapter->descriptor().game_id)
+    return false;
+  return install_with_profile(std::move(adapter), std::move(profile));
+}
+
+bool MultiplayerRuntime::install_with_profile(std::unique_ptr<GameAdapter> adapter,
+                                              std::optional<ProfileLease> lease) {
   if (!adapter)
     return false;
   const auto& descriptor = adapter->descriptor();
   if (descriptor.game_id.empty() || !valid_player_limit(descriptor.maximum_players) ||
       !validate_message_policies(adapter->packets().policies(), descriptor.maximum_payload_bytes) ||
       descriptor.supported_characters.empty() ||
-      std::ranges::any_of(
-          descriptor.supported_characters,
-          [](const PlayerCharacter character) { return character == PlayerCharacter::UNKNOWN; }) ||
-      (profile_config && profile_config->game_id != descriptor.game_id)) {
+      std::ranges::any_of(descriptor.supported_characters, [](const PlayerCharacter character) {
+        return character == PlayerCharacter::UNKNOWN;
+      })) {
     return false;
   }
-  auto lease =
-      profile_config ? ProfileLease::acquire(*profile_config) : std::optional<ProfileLease>{};
-  if (profile_config && !lease)
-    return false;
   StoredPlayerProfile stored_profile;
   if (lease && !load_player_profile(*lease, stored_profile))
     return false;
@@ -195,10 +207,6 @@ void MultiplayerRuntime::run() {
 MultiplayerRuntime& multiplayer_runtime() {
   static MultiplayerRuntime runtime;
   return runtime;
-}
-
-bool install_adapter(std::unique_ptr<GameAdapter> adapter, ProfileStorageConfig profile_config) {
-  return multiplayer_runtime().install(std::move(adapter), std::move(profile_config));
 }
 
 void shutdown() {

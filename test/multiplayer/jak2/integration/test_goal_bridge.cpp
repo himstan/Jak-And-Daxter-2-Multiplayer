@@ -324,7 +324,7 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
   load_types("kernel/gkernel-h.gc", "time-frame");
   load_types("engine/math/quaternion-h.gc", "quaternion");
   load_types("multiplayer/player/mp-player-types.gc", "mp-player-skin");
-  load_types("multiplayer/core/preferences.gc", "multiplayer-preferences");
+  load_types("multiplayer/core/preferences-h.gc", "multiplayer-preferences");
   EXPECT_EQ(types.lookup_type("multiplayer-preferences")->get_size_in_memory(),
             sizeof(MultiplayerPreferencesGOAL));
   for (const auto& [field, offset] : std::initializer_list<std::pair<const char*, size_t>>{
@@ -336,7 +336,8 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
            {"friendly-fire", offsetof(MultiplayerPreferencesGOAL, friendly_fire)},
            {"nametag-visibility", offsetof(MultiplayerPreferencesGOAL, nametag_visibility)},
            {"player-map-marker", offsetof(MultiplayerPreferencesGOAL, player_map_marker)},
-           {"host-visibility", offsetof(MultiplayerPreferencesGOAL, host_visibility)}}) {
+           {"host-visibility", offsetof(MultiplayerPreferencesGOAL, host_visibility)},
+           {"steam-integration", offsetof(MultiplayerPreferencesGOAL, steam_integration)}}) {
     EXPECT_EQ(types.lookup_field_info("multiplayer-preferences", field).field.offset(), offset);
   }
   load_types("multiplayer/event/mp-event-h.gc");
@@ -1405,6 +1406,34 @@ TEST(Jak2Preferences, SteamNamesKeepOnlySupportedCharactersWithinTheNameLimit) {
       normalize_player_name(player_name_from_steam("A very long Steam name 123"), normalized));
 }
 
+TEST(Jak2Preferences, SteamIntegrationDefaultsOffAndPersistsOnlyBooleanValues) {
+  ScopedPreferencesRoot preferences_root;
+  EXPECT_FALSE(get_multiplayer_preferences().steam_integration);
+  EXPECT_FALSE(parse_multiplayer_preferences("{}").steam_integration);
+  for (const bool enabled : {true, false}) {
+    auto preferences = get_multiplayer_preferences();
+    preferences.steam_integration = enabled;
+    ASSERT_TRUE(set_multiplayer_preferences(preferences));
+    load_multiplayer_preferences();
+    EXPECT_EQ(get_multiplayer_preferences().steam_integration, enabled);
+    const auto root = parse_commented_json(file_util::read_text_file(preferences_root.path()),
+                                           "preferences.json");
+    EXPECT_EQ(root.at("steam_integration"), enabled);
+    EXPECT_EQ(parse_multiplayer_preferences(root.dump()).steam_integration, enabled);
+  }
+  for (const auto invalid : {"0", "1", "-1", "1.5", "\"true\"", "null", "{}", "[]"}) {
+    EXPECT_FALSE(
+        parse_multiplayer_preferences("{\"steam_integration\":" + std::string(invalid) + "}")
+            .steam_integration);
+  }
+  auto preferences = get_multiplayer_preferences();
+  preferences.steam_integration = true;
+  ASSERT_TRUE(set_multiplayer_preferences(preferences));
+  reset_multiplayer_preferences();
+  load_multiplayer_preferences();
+  EXPECT_FALSE(get_multiplayer_preferences().steam_integration);
+}
+
 TEST(Jak2Preferences, PlayerDisplayPreferencesPersistAndValidate) {
   ScopedPreferencesRoot preferences_root;
   const auto defaults = get_multiplayer_preferences();
@@ -1454,6 +1483,7 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   preferences.friendly_fire = true;
   preferences.nametag_visibility = PlayerNametagVisibility::OFF;
   preferences.host_visibility = HostVisibility::LAN_ONLY;
+  preferences.steam_integration = true;
   preferences.player_map_marker = false;
   preferences.player_skin = get_default_player_skin(0x123456);
   std::memset(memory.at<String>(state.player_name).data(), 'x', 16);
@@ -1467,6 +1497,7 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   EXPECT_EQ(state.nametag_visibility, static_cast<uint8_t>(PlayerNametagVisibility::OFF));
   EXPECT_EQ(state.player_map_marker, 0);
   EXPECT_EQ(state.host_visibility, static_cast<uint8_t>(HostVisibility::LAN_ONLY));
+  EXPECT_EQ(state.steam_integration, 1);
 
   MultiplayerPreferences restored;
   ASSERT_TRUE(multiplayer::jak2::bridge::read_preferences(0x11000, restored));
@@ -1491,6 +1522,7 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   EXPECT_EQ(restored.nametag_visibility, PlayerNametagVisibility::OFF);
   EXPECT_FALSE(restored.player_map_marker);
   EXPECT_EQ(restored.host_visibility, HostVisibility::LAN_ONLY);
+  EXPECT_TRUE(restored.steam_integration);
   EXPECT_EQ(restored.player_skin.colors, preferences.player_skin.colors);
   EXPECT_EQ(restored.player_skin.strengths, preferences.player_skin.strengths);
   const auto root =
@@ -1506,7 +1538,7 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRejectsInvalidBuffersAndFlags) {
   values.room_code = "ABC123";
   ASSERT_TRUE(multiplayer::jak2::bridge::write_preferences(0x11000, values));
   for (uint8_t* flag : {&state.automatic_port_mapping, &state.player_collision,
-                        &state.friendly_fire, &state.player_map_marker}) {
+                        &state.friendly_fire, &state.player_map_marker, &state.steam_integration}) {
     const auto saved = *flag;
     *flag = 2;
     EXPECT_FALSE(multiplayer::jak2::bridge::read_preferences(0x11000, values));

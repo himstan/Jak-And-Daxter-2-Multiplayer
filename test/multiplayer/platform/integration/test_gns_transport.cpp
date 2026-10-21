@@ -926,6 +926,35 @@ TEST(GnsTransportIntegration, ReliableBacklogSaturationClosesOnlyTheAffectedPeer
       << "GNS_TEST_SEED=" << simulation.seed();
 }
 
+TEST(GnsTransportIntegration, RuntimeTakesOwnershipOfTheStartupProfileLease) {
+  const ProfileStorageConfig storage = {
+      .game_id = "test",
+      .root_directory = fs::temp_directory_path() / ("jadmp-startup-" + std::to_string(now_ms())),
+      .maximum_instances = 1};
+  auto lease = ProfileLease::acquire(storage);
+  ASSERT_TRUE(lease);
+  const auto preferences_path = lease->game_preferences_path();
+  ASSERT_TRUE(save_player_profile(*lease, {.display_name = "StartupPlayer"}));
+  MultiplayerRuntime runtime;
+  auto state = std::make_shared<RuntimeAdapterState>();
+  ASSERT_TRUE(runtime.install(std::make_unique<RuntimeAdapter>(state), std::move(*lease)));
+  EXPECT_EQ(runtime.game_preferences_path(), preferences_path);
+  EXPECT_FALSE(ProfileLease::acquire(storage));
+  StoredPlayerProfile profile;
+  ASSERT_TRUE(runtime.load_profile(profile));
+  EXPECT_EQ(profile.display_name, "StartupPlayer");
+  runtime.shutdown();
+  EXPECT_TRUE(ProfileLease::acquire(storage));
+
+  const ProfileStorageConfig other_game = {.game_id = "other",
+                                           .root_directory = storage.root_directory};
+  auto mismatched_lease = ProfileLease::acquire(other_game);
+  ASSERT_TRUE(mismatched_lease);
+  EXPECT_FALSE(
+      runtime.install(std::make_unique<RuntimeAdapter>(state), std::move(*mismatched_lease)));
+  EXPECT_FALSE(runtime.active());
+}
+
 TEST(GnsTransportIntegration, RuntimeOwnsAdapterWorkerAndShutsDownIdempotently) {
   auto state = std::make_shared<RuntimeAdapterState>();
   MultiplayerRuntime runtime;

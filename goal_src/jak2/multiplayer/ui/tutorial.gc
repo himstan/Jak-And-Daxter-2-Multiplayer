@@ -5,28 +5,29 @@
 (define-extern pc-multi-mark-tutorial-seen (function uint int))
 
 (define *tutorial-ride-along-message*
-  (new 'static 'talker-speech-class
-    :name "tutorial-ride-along"
-    :channel (gui-channel message)
-    :text-message (text-id tutorial-ride-along)
-    :text-duration (seconds 5)))
-
+  (new 'static
+       'talker-speech-class
+       :name "tutorial-ride-along"
+       :channel (gui-channel message)
+       :text-message (text-id tutorial-ride-along)
+       :text-duration (seconds 5)))
 (define *tutorial-player-list-message*
-  (new 'static 'talker-speech-class
-    :name "tutorial-player-list"
-    :channel (gui-channel message)
-    :text-message (text-id tutorial-player-list)
-    :text-duration (seconds 5)))
+  (new 'static
+       'talker-speech-class
+       :name "tutorial-player-list"
+       :channel (gui-channel message)
+       :text-message (text-id tutorial-player-list)
+       :text-duration (seconds 5)))
 
 (defun multiplayer-tutorial-ready? ()
   (the symbol
-    (and (player-list-allowed?)
-         (nonnull? *target* (-> *target* control) (-> *target* fact) *gui-control* *entity-pool*)
-         (player-target-alive? *target*)
-         (> (-> *target* fact health) 0.0)
-         (not (focus-test? *target* grabbed teleporting pilot board))
-         (not (player-changing-character? *target*))
-         (not (or (movie?) (real-movie?) (paused?) (player-list-open?))))))
+       (and (player-list-allowed?)
+            (nonnull? *target* (-> *target* control) (-> *target* fact) *gui-control* *entity-pool*)
+            (player-target-alive? *target*)
+            (> (-> *target* fact health) 0.0)
+            (not (focus-test? *target* grabbed teleporting pilot board))
+            (not (player-changing-character? *target*))
+            (not (or (movie?) (real-movie?) (paused?) (player-list-open?))))))
 
 (defun tutorial-daxter-nearby? ()
   (when (and (nonnull? *target* (-> *target* control))
@@ -39,17 +40,20 @@
                  (player-target-alive? player)
                  (not (focus-test? player grabbed teleporting pilot board))
                  (zero? (-> record action scene-state))
-                 (< (vector-vector-distance (-> player control trans) (-> *target* control trans)) RIDE_ALONG_MOUNT_DISTANCE))
+                 (< (vector-vector-distance (-> player control trans) (-> *target* control trans))
+                    RIDE_ALONG_MOUNT_DISTANCE))
         (return #t))))
   #f)
 
 (defun start-multiplayer-tutorial! ((manager tutorial-manager) (tutorial multiplayer-tutorial))
   (when (nonnull? manager *target* (-> *target* control) *entity-pool*)
-    (let* ((message (if (= tutorial (multiplayer-tutorial ride-along))
-                     *tutorial-ride-along-message*
-                     *tutorial-player-list-message*))
-           (spawned (process-spawn talker :init talker-init message (-> *target* control trans) (the-as region #f)
-                                  :to *entity-pool*)))
+    (let* ((message (if (= tutorial (multiplayer-tutorial ride-along)) *tutorial-ride-along-message* *tutorial-player-list-message*))
+           (spawned (process-spawn talker
+                                   :init talker-init
+                                   message
+                                   (-> *target* control trans)
+                                   (the-as region #f)
+                                   :to *entity-pool*)))
       (when (nonnull? spawned)
         (let ((talker (ppointer->process spawned)))
           (when (nonnull? talker)
@@ -61,9 +65,7 @@
   (case tutorial
     (((multiplayer-tutorial player-list)) (player-list-open?))
     (((multiplayer-tutorial ride-along))
-     (and (nonnull? *target*)
-          (mp-target-jak? *target*)
-          (nonnull? (get-jak-rider *target*))))
+     (and (nonnull? *target*) (mp-target-jak? *target*) (nonnull? (get-jak-rider *target*))))
     (else #f)))
 
 (defbehavior tutorial-manager-post tutorial-manager ()
@@ -88,8 +90,11 @@
          (set! (-> self player) (process->handle *target*))
          (set-time! (-> self spawn-time)))
        (when (and (time-elapsed? (-> self spawn-time) (seconds 5))
-                  (not (nonnull? (lookup-gui-connection *gui-control* (the-as process #f) (gui-channel message)
-                                                       (the-as string #f) (the-as sound-id 0)))))
+                  (not (nonnull? (lookup-gui-connection *gui-control*
+                                                        (the-as process #f)
+                                                        (gui-channel message)
+                                                        (the-as string #f)
+                                                        (the-as sound-id 0)))))
          (let ((seen (pc-multi-get-tutorials-seen)))
            (cond
              ((and (not (logtest? seen (multiplayer-tutorial ride-along))) (tutorial-daxter-nearby?))

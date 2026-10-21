@@ -8,10 +8,10 @@
   (player-list 1))
 
 (deftype tutorial-manager (process)
-  ((player handle)
-   (talker handle)
+  ((player     handle)
+   (talker     handle)
    (spawn-time time-frame)
-   (current multiplayer-tutorial))
+   (current    multiplayer-tutorial))
   (:state-methods
    active))
 
