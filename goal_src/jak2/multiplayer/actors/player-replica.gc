@@ -663,10 +663,7 @@
   (none))
 
 (defun player-replica-preserve-platform-y? ((proc target) (cur-state symbol))
-  (and proc
-       (nonzero? proc)
-       (-> proc control)
-       (nonzero? (-> proc control))
+  (and (nonnull? proc (-> proc control))
        (not (focus-test? proc pilot tube flut mech pole grabbed))
        (not (mp-target-death-state? cur-state))
        (not (= cur-state 'target-ride-along))))
@@ -712,15 +709,9 @@
   (none))
 
 (defun player-replica-platform-rider-active? ((proc target))
-  (when (and proc
-             (nonzero? proc)
-             (-> proc control)
-             (nonzero? (-> proc control))
+  (when (and (nonnull? proc (-> proc control))
              (!= (-> proc control rider-time) (the-as time-frame 0)))
     (not (time-elapsed? (-> proc control rider-time) (seconds 0.2)))))
-
-(defun player-replica-should-correct-platform-y? ((cur-pos vector) (record-pos vector))
-  (> (fabs (- (-> record-pos y) (-> cur-pos y))) (meters 10.0)))
 
 (defun player-replica-apply-transform-correction! ((proc target) (record target-record) (cur-state symbol))
   (when (and (nonnull? proc record (-> proc control))
@@ -735,7 +726,9 @@
                              (player-replica-preserve-platform-y? proc cur-state)
                              (player-replica-platform-rider-active? proc)))
            (contact-state (if (player-collision-enabled?) (get-player-contact-state proc) (the-as player-contact-state #f)))
-           (dist (vector-vector-distance (-> control trans) (-> record trans))))
+           (dist (if platform-y?
+                   (vector-vector-xz-distance (-> control trans) (-> record trans))
+                   (vector-vector-distance (-> control trans) (-> record trans)))))
       (cond
         ((or (> dist (meters 15.0))
              (and (nonnull? contact-state)
@@ -760,7 +753,7 @@
            (when (not (focus-test? proc grabbed))
              (set! (-> cur-pos x) (+ (-> cur-pos x) (* (- (-> record-pos x) (-> cur-pos x)) xz-factor)))
              (set! (-> cur-pos z) (+ (-> cur-pos z) (* (- (-> record-pos z) (-> cur-pos z)) xz-factor)))
-             (when (or (not platform-y?) (player-replica-should-correct-platform-y? cur-pos record-pos))
+             (when (not platform-y?)
                (if (> (-> record-pos y) (-> cur-pos y))
                  (set! (-> cur-pos y) (+ (-> cur-pos y) (* (- (-> record-pos y) (-> cur-pos y)) up-factor)))
                  (when (not (or (= cur-state 'target-falling)
