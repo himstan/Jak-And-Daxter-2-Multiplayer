@@ -81,13 +81,13 @@ bool Jak2Adapter::validate_profile_extension(const std::span<const uint8_t> exte
 
 std::vector<uint8_t> Jak2Adapter::create_bootstrap(platform::PlayerSlot player_slot,
                                                    uint32_t generation) {
-  auto bootstrap = state_.world().bootstrap();
-  if (bootstrap.host_continue[0] == 0 || player_slot >= core::kMaxPlayers || !local_frame_)
-    return {};
-  bootstrap.player_data = {};
   std::lock_guard lock(player_data_mutex_);
-  if (player_data_load_pending_ || generation == 0)
+  if (player_data_load_pending_ || generation == 0 || player_slot >= core::kMaxPlayers ||
+      !local_frame_ || local_frame_->bootstrap.host_continue[0] == 0)
     return {};
+  auto bootstrap = local_frame_->bootstrap;
+  bootstrap.world = local_frame_->world;
+  bootstrap.player_data = {};
   player_data_generations_[player_slot] = generation;
   if (restore_player_data_[player_slot])
     bootstrap.player_data =
@@ -149,19 +149,20 @@ void Jak2Adapter::tick(const uint64_t now_ms) {
   bool loaded = false;
   {
     std::lock_guard lock(player_data_mutex_);
-    loaded = std::exchange(player_data_load_pending_, false);
-  }
-  if (loaded)
-    local_frame_.reset();
-  state_.expire(now_ms);
-  if (auto frame = mailbox_.take_local_frame()) {
-    if (frame->local_player_slot == session.local_player_slot &&
-        frame->host_player_slot == session.host_player_slot) {
-      local_frame_ = std::move(frame);
-    } else {
+    if (player_data_load_pending_)
       local_frame_.reset();
+    if (auto frame = mailbox_.take_local_frame()) {
+      if (frame->local_player_slot == session.local_player_slot &&
+          frame->host_player_slot == session.host_player_slot &&
+          (!player_data_load_pending_ || frame->bootstrap.host_continue[0] != 0)) {
+        local_frame_ = std::move(frame);
+        loaded = std::exchange(player_data_load_pending_, false);
+      } else {
+        local_frame_.reset();
+      }
     }
   }
+  state_.expire(now_ms);
   packets_.publish(*endpoint_, now_ms);
   if (loaded && session.role == platform::SessionRole::HOST)
     endpoint_->request_bootstrap();

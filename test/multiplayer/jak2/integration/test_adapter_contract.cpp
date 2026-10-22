@@ -638,6 +638,92 @@ TEST_F(PlayerDataScenario, SaveAsAndNewGameHaveExplicitWorldLifetimes) {
   EXPECT_FALSE(bootstrap(1)->player_data);
 }
 
+TEST_F(PlayerDataScenario, LoadWaitsForReadyHostFrameAndBypassesWorldPacketCadence) {
+  receive(1, data, generation);
+  ASSERT_TRUE(host.player_data_save(jak2::PlayerDataSaveAction::CAPTURE, 0));
+  ASSERT_TRUE(host.player_data_save(jak2::PlayerDataSaveAction::COMMIT, 0));
+  auto queued = std::make_unique<jak2::application::LocalReplicationFrame>();
+  queued->local_player_slot = 0;
+  queued->host_player_slot = 0;
+  queued->bootstrap.host_continue[0] = 'a';
+  host.mailbox().publish_local_frame(std::move(queued));
+  ASSERT_TRUE(host.player_data_save(jak2::PlayerDataSaveAction::LOAD, 0));
+  for (uint64_t now = 110; now <= 130; now += 10) {
+    host.tick(now);
+    EXPECT_FALSE(endpoint.bootstrap_requested);
+    EXPECT_TRUE(host.create_bootstrap(1, generation + 1).empty());
+  }
+  auto loading = std::make_unique<jak2::application::LocalReplicationFrame>();
+  loading->local_player_slot = 0;
+  loading->host_player_slot = 0;
+  host.mailbox().publish_local_frame(std::move(loading));
+  host.tick(140);
+  EXPECT_FALSE(endpoint.bootstrap_requested);
+  EXPECT_TRUE(host.create_bootstrap(1, generation + 1).empty());
+
+  endpoint.cadence_enabled = false;
+  auto ready = std::make_unique<jak2::application::LocalReplicationFrame>();
+  ready->local_player_slot = 0;
+  ready->host_player_slot = 0;
+  ready->bootstrap.host_continue[0] = 'b';
+  ready->bootstrap.host_spawn_position = {64, 128, 192};
+  ready->bootstrap.synchronized_aid_count = 1;
+  ready->bootstrap.synchronized_aids[0] = 42;
+  ready->world.money = 123;
+  ready->world.completed_task_mask[0] = 7;
+  host.mailbox().publish_local_frame(std::move(ready));
+  host.tick(150);
+  EXPECT_TRUE(endpoint.bootstrap_requested);
+  ++generation;
+  const auto loaded = bootstrap(1);
+  ASSERT_TRUE(loaded);
+  EXPECT_EQ(loaded->host_continue[0], 'b');
+  EXPECT_EQ(loaded->host_spawn_position, (std::array<float, 3>{64, 128, 192}));
+  EXPECT_EQ(loaded->synchronized_aids, (std::vector<uint32_t>{42}));
+  EXPECT_EQ(loaded->money, 123);
+  EXPECT_EQ(loaded->completed_task_mask[0], 7);
+  EXPECT_EQ(loaded->player_data, data);
+  endpoint.bootstrap_requested = false;
+  host.tick(160);
+  EXPECT_FALSE(endpoint.bootstrap_requested);
+}
+
+TEST_F(PlayerDataScenario, InGameLoadRestoresEachConnectedPlayersSavedData) {
+  host.player_profile_changed({.player_slot = 3,
+                               .player_id = platform::PlayerId::generate(),
+                               .display_name = "Bob",
+                               .character = PlayerCharacter::DAXTER});
+  ASSERT_TRUE(bootstrap(3));
+  auto other = data;
+  other.health = 3;
+  other.ammo = {10, 20, 30, 40};
+  receive(1, data, generation);
+  receive(3, other, generation);
+  ASSERT_TRUE(host.player_data_save(jak2::PlayerDataSaveAction::CAPTURE, 0));
+  ASSERT_TRUE(host.player_data_save(jak2::PlayerDataSaveAction::COMMIT, 0));
+  receive(1, other, generation);
+  receive(3, data, generation);
+  ASSERT_TRUE(host.player_data_save(jak2::PlayerDataSaveAction::LOAD, 0));
+  publish();
+  ++generation;
+  for (const uint8_t slot : {1, 3}) {
+    jak2::application::Jak2Adapter client;
+    RecordingEndpoint client_endpoint;
+    client_endpoint.session_snapshot.state.role = platform::SessionRole::CLIENT;
+    client_endpoint.session_snapshot.state.local_player_slot = slot;
+    client.installed(client_endpoint);
+    client.session_started(client_endpoint.session_snapshot.state);
+    ASSERT_TRUE(client.apply_bootstrap(generation, host.create_bootstrap(slot, generation)));
+    client.tick(200);
+    const auto remote = client.mailbox().take_remote_frame();
+    ASSERT_TRUE(remote);
+    EXPECT_EQ(remote->bootstrap.sequence, generation);
+    EXPECT_EQ(remote->bootstrap.player_data, slot == 1 ? data : other);
+    EXPECT_EQ(remote->bootstrap.host_continue[0], 'a');
+  }
+  EXPECT_EQ(endpoint.session_snapshot.state.status, platform::SessionStatus::IN_GAME);
+}
+
 TEST(Jak2AdapterIntegration, ClientPlayerDataSendsOnlyWhenChangedAndRetriesFailures) {
   jak2::application::Jak2Adapter client;
   RecordingEndpoint endpoint;

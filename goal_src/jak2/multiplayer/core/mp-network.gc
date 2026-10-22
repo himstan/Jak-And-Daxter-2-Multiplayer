@@ -429,6 +429,8 @@
                (the-as pointer *mp-world-state*)
                (size-of mp-world-sync-state))
     (mp-network-copy-bootstrap-to-replication! (-> *mp-replication-state* local bootstrap) *mp-bootstrap-state*)
+    (when (and (mp-session-host?) (not (mp-local-frame-target-ready?)))
+      (set! (-> *mp-replication-state* local bootstrap host-continue 0) (the uint8 0)))
     (capture-player-data!)
     (set! (-> *mp-replication-state* local enemies count)
           (the-as uint8 (min MP_MAX_SYNC_ENEMIES (-> *mp-enemy-buffer* local-count))))

@@ -257,6 +257,8 @@
      (set! (-> obj current-options) *save-options-title*)
      )
     (('loading 'saving 'creating 'formatting)
+     (when (nonnull? *bigmap*)
+       (set! (-> *bigmap* drawing-flag) #t))
      (set! (-> obj current-options) *loading-options*)
      )
     (('unformatted-card 'insufficient-space 'no-memory-card)

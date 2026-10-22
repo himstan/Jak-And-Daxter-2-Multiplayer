@@ -1087,6 +1087,8 @@
   )
 
 (defmethod load-game ((this game-info) (arg0 game-save))
+  (local-vars (saved-continue continue-point))
+  (set! saved-continue (the-as continue-point #f))
   (let ((v1-0 (the-as object (-> arg0 tag))))
     (while (< (the-as int v1-0) (the-as int (&-> arg0 tag 0 user-int8 (-> arg0 length))))
       (case (-> (the-as (inline-array game-save-tag) v1-0) 0 elt-type)
@@ -1211,7 +1213,7 @@
          )
         (((game-save-elt continue))
          (format (clear *temp-string*) "~G" (-> (the-as (inline-array game-save-tag) s4-0) 1))
-         (set-continue! this *temp-string* #f)
+         (set! saved-continue (set-continue! this *temp-string* #f))
          )
         (((game-save-elt life))
          (set! (-> this life) (-> (the-as (inline-array game-save-tag) s4-0) 0 user-float0))
@@ -1548,6 +1550,8 @@
       )
     )
   (label cfg-230)
+  (when (nonnull? this saved-continue)
+    (set! (-> this current-continue) saved-continue))
   arg0
   )
 

@@ -179,7 +179,9 @@
   ;; there's probably a way to consistently do it synchronously
   (load-level-text-files (the-as int (-> *pc-settings* text-language)))
 
-  (when (and (-> *pc-settings* is-host?)
+  (when (and (nonnull? this *pc-settings* *progress-state*)
+             (-> *pc-settings* is-host?)
+             (not (mp-session-active?))
              (or (= (-> this current) 'select-load)
                  (= (-> this current) 'select-save)
                  (= (-> this current) 'select-save-title)

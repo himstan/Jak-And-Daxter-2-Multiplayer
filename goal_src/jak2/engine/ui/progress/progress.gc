@@ -1666,7 +1666,7 @@
                 (symbol->string (-> self current))
                 )
               )
-            (case (-> self next) ;; og:preserve-this patched to next instead of current because we save synchronously
+            (case (if (= (-> self next) 'none) (-> self current) (-> self next))
               (('saving)
                (cond
                  ((= (-> self state-stack 0) 'title)
@@ -1771,7 +1771,7 @@
                (set-next-state self 'insufficient-space 0)
                )
               (else
-                (case (-> self next) ;; og:preserve-this patched to next instead of current because we save synchronously
+                (case (if (= (-> self next) 'none) (-> self current) (-> self next))
                   (('formatting 'format-card)
                    (set-next-state self 'error-formatting 0)
                    ) ;; og:preserve-this jp patch
@@ -2089,6 +2089,8 @@
 
 (defmethod respond-progress ((this menu-main-menu-option) (arg0 progress) (arg1 symbol))
   "Handle progress menu navigation logic."
+  (when (not (nonnull? this arg0 *cpad-list*))
+    (return 0))
   (cond
     ((cpad-pressed? 0 start)
      )
@@ -2111,18 +2113,9 @@
              )
             )
           )
-         ((= (-> this name) (text-id progress-save-game))
-          (if (mp-session-active?)
-              (sound-play "menu-error")
-              (begin
-                (sound-play "window-expand")
-                (push-state arg0)
-                (set-next-state arg0 (-> this next-state) 0)
-                )
-              )
-          )
-         ((= (-> this name) (text-id progress-load-game))
-          (if (mp-session-active?)
+         ((or (= (-> this name) (text-id progress-save-game))
+              (= (-> this name) (text-id progress-load-game)))
+          (if (and (mp-session-active?) (not (and (mp-session-host?) (mp-session-in-game?))))
               (sound-play "menu-error")
               (begin
                 (sound-play "window-expand")
