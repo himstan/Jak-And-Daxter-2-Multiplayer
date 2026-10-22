@@ -54,6 +54,7 @@
 (define-extern mp-traffic-copy-authority-map!
   (function mp-traffic-authority-map mp-traffic-authority-map mp-traffic-authority-map))
 (define-extern mp-traffic-selected-authority-record (function mp-player-record))
+(define-extern mp-traffic-authority-for-player (function mp-traffic-authority-map uint uint))
 (define-extern mp-traffic-ensure-process-net-id! (function process none))
 (define-extern mp-traffic-slot-locally-admitted? (function uint symbol))
 (define-extern mp-traffic-level-materialization-ready? (function uint object))
