@@ -415,7 +415,7 @@
         )
       (set! (-> self anim-seed) (-> self parent 0 anim-seed))
       (set! (-> self draw status) (-> self parent 0 draw status))
-      (when (not (focus-test? self indax))
+      (when (nonnull? self (-> self draw))
         (logclear! (-> self draw status) (draw-control-status no-draw-bounds2))
       )
       (let ((gp-0 0))
