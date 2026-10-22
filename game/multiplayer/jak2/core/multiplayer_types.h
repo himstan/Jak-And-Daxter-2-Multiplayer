@@ -2,8 +2,10 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
+#include "game/multiplayer/jak2/core/player_data.h"
 #include "game/multiplayer/jak2/player_skin.h"
 #include "game/multiplayer/platform/core/player_id.h"
 #include "game/multiplayer/platform/core/types.h"
@@ -402,6 +404,7 @@ struct GungameState {
 };
 
 struct BootstrapState {
+  std::optional<PlayerData> player_data;
   WorldState world = {};
   uint32_t host_task = 0;
   std::array<uint8_t, 32> host_continue = {};

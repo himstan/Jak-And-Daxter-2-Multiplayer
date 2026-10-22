@@ -1989,6 +1989,10 @@ auto-save-post
       (set! (-> self save) (new 'loading-level 'game-save #x20000))
       (save-game *game-info* (-> self save) "save")
       (set! loading-level (the-as kheap gp-0))
+      (when (and (nonnull? self)
+                 (zero? (pc-multi-player-data-save (the uint (player-data-save-action capture))
+                                                   (the uint (-> self which)))))
+        (go-virtual error (mc-status-code write-error)))
       0
       (label cfg-5)
       (set! (-> self result)
@@ -2029,6 +2033,10 @@ auto-save-post
       )
     #f
     (label cfg-18)
+    (when (and (nonnull? self)
+               (zero? (pc-multi-player-data-save (the uint (player-data-save-action commit))
+                                                 (the uint (-> self which)))))
+      (go-virtual error (mc-status-code write-error)))
     (go-virtual done)
     )
   :post auto-save-post
@@ -2230,6 +2238,9 @@ auto-save-post
 (defstate done (auto-save)
   :virtual #t
   :code (behavior ()
+    (when (and (nonnull? self) (= (-> self mode) 'restore))
+      (pc-multi-player-data-save (the uint (player-data-save-action load))
+                                (the uint (-> self which))))
     (if (and (-> self buffer)
              (or (-> *art-control* reserve-buffer) (nonzero? (-> *art-control* dma-reserve-buffer-count)))
              )

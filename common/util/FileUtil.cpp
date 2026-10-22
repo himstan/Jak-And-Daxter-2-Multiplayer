@@ -374,6 +374,23 @@ void write_rgba_png(const fs::path& name, void* data, int w, int h) {
   }
 }
 
+void write_text_file_atomic(const fs::path& path, const std::string& text) {
+  create_dir_if_needed(path.parent_path());
+  const fs::path temporary = path.string() + ".tmp";
+  std::ofstream output;
+  output.exceptions(std::ios::failbit | std::ios::badbit);
+  output.open(temporary, std::ios::out | std::ios::trunc);
+  output << text;
+  output.close();
+#ifdef _WIN32
+  if (!MoveFileExW(temporary.c_str(), path.c_str(),
+                   MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+    throw std::runtime_error("could not replace " + path.string());
+#else
+  fs::rename(temporary, path);
+#endif
+}
+
 void write_text_file(const std::string& file_name, const std::string& text) {
   write_text_file(fs::path(file_name), text);
 }

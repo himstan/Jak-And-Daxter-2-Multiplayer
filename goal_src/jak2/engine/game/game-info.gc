@@ -409,6 +409,8 @@
   (kill-current-talker (the-as symbol '()) '() 'die)
   (case arg0
     (('game)
+     (when (not (nonnull? arg1))
+       (pc-multi-player-data-save (the uint (player-data-save-action load)) (the uint #xff)))
      (+! (-> this task-counter) 1)
      (reset! (-> *display* total-game-clock))
      (set! (-> this features) (game-feature sidekick))

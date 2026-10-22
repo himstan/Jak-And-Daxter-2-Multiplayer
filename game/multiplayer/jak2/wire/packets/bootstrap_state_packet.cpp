@@ -5,7 +5,8 @@
 namespace multiplayer::jak2::wire {
 
 bool validate_packet(const BootstrapStatePacket& packet) {
-  return packet.player_collision <= 1 && packet.friendly_fire <= 1 && std::isfinite(packet.money) &&
+  return (!packet.player_data || core::valid_player_data(*packet.player_data)) &&
+         packet.player_collision <= 1 && packet.friendly_fire <= 1 && std::isfinite(packet.money) &&
          std::isfinite(packet.gems) && std::isfinite(packet.skill) &&
          platform::wire::valid_position_array(packet.host_spawn_position) &&
          packet.synchronized_aid_count <= core::kMaxBootstrapAids &&
@@ -19,6 +20,7 @@ bool validate_packet(const BootstrapStatePacket& packet) {
 
 BootstrapStatePacket to_packet(const core::BootstrapState& state) {
   BootstrapStatePacket packet;
+  packet.player_data = state.player_data;
   packet.money = state.world.money;
   packet.gems = state.world.gems;
   packet.skill = state.world.skill;
@@ -48,6 +50,7 @@ BootstrapStatePacket to_packet(const core::BootstrapState& state) {
 
 void from_packet(const BootstrapStatePacket& packet, core::BootstrapState& state) {
   state = {};
+  state.player_data = packet.player_data;
   state.world.money = packet.money;
   state.world.gems = packet.gems;
   state.world.skill = packet.skill;

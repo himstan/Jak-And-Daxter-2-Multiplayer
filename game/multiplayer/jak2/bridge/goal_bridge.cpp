@@ -210,9 +210,20 @@ core::WorldState read_world(const MPWorldSyncStateGOAL& source) {
   return result;
 }
 
+core::PlayerData read_player_data(const PlayerDataGOAL& source) {
+  core::PlayerData data{.health = source.health,
+                        .dark_eco = source.dark_eco,
+                        .cosmetic_secrets = source.cosmetic_secrets,
+                        .unlocked_cosmetic_secrets = source.unlocked_cosmetic_secrets};
+  std::ranges::copy(source.ammo, data.ammo.begin());
+  return data;
+}
+
 void read_bootstrap(const MPReplicationBootstrapStateGOAL& source, core::BootstrapState& result) {
   result.sequence = source.sequence;
   result.host_task = source.host_task;
+  if (source.player_data_valid)
+    result.player_data = read_player_data(source.player_data);
   std::ranges::copy(std::begin(source.host_continue), std::end(source.host_continue),
                     result.host_continue.begin());
   result.host_spawn_position = {source.host_spawn_position[0], source.host_spawn_position[1],
@@ -318,6 +329,9 @@ bool capture_local(MPReplicationStateGOAL& state, application::ReplicationMailbo
   frame->sample_time_ms = static_cast<uint32_t>(steady_time_ms());
   frame->local_player_slot = state.local_player_slot;
   frame->host_player_slot = state.host_player_slot;
+  if (state.player_data_valid)
+    frame->player_data = read_player_data(state.player_data);
+  frame->player_data_generation = state.remote.bootstrap.sequence;
   for (size_t i = 0; i < core::kMaxPlayers; ++i) {
     frame->identities[i] = read_identity(state.local.players[i].identity);
     frame->players[i] = read_player(state.local.players[i]);
@@ -501,6 +515,15 @@ void write_bootstrap(const core::BootstrapState& source,
   destination = {};
   destination.sequence = source.sequence;
   destination.host_task = source.host_task;
+  destination.player_data_valid = source.player_data.has_value();
+  if (source.player_data) {
+    destination.player_data.health = source.player_data->health;
+    destination.player_data.dark_eco = source.player_data->dark_eco;
+    destination.player_data.cosmetic_secrets = source.player_data->cosmetic_secrets;
+    destination.player_data.unlocked_cosmetic_secrets =
+        source.player_data->unlocked_cosmetic_secrets;
+    std::ranges::copy(source.player_data->ammo, destination.player_data.ammo);
+  }
   std::ranges::copy(source.host_continue.begin(), source.host_continue.end(),
                     std::begin(destination.host_continue));
   std::ranges::copy(source.host_spawn_position.begin(), source.host_spawn_position.end(),

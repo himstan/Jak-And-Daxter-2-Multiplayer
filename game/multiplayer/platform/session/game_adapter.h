@@ -90,7 +90,7 @@ class GameAdapter {
   virtual bool validate_profile_extension(std::span<const uint8_t>, std::vector<uint8_t>&) {
     return false;
   }
-  virtual std::vector<uint8_t> create_bootstrap(PlayerSlot) { return {}; }
+  virtual std::vector<uint8_t> create_bootstrap(PlayerSlot, uint32_t) { return {}; }
   virtual bool apply_bootstrap(uint32_t, std::span<const uint8_t>) { return false; }
   virtual void player_profile_changed(const PlayerProfile&) {}
   virtual void player_departed(PlayerSlot, PlayerDepartureReason = PlayerDepartureReason::LEFT) {}

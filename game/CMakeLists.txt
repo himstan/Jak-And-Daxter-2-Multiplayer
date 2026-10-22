@@ -399,6 +399,7 @@ set(MULTIPLAYER_JAK2_SOURCE
         multiplayer/jak2/application/jak2_adapter.cpp
         multiplayer/jak2/api/multiplayer_api.cpp
         multiplayer/jak2/api/preferences.cpp
+        multiplayer/jak2/api/player_data_store.cpp
         multiplayer/jak2/wire/packets/traffic_authority_state_packet.cpp
         multiplayer/jak2/wire/packets/player_state_packet.cpp
         multiplayer/jak2/wire/packets/player_vehicle_state_packet.cpp

@@ -233,7 +233,8 @@ bool WorldReplicationState::apply(const PlayerRulesState& state, const ApplyCont
 }
 
 bool WorldReplicationState::apply_bootstrap(const BootstrapState& state, const Sequence sequence) {
-  if (!valid_world_state(state.world) ||
+  if ((state.player_data && !valid_player_data(*state.player_data)) ||
+      !valid_world_state(state.world) ||
       state.synchronized_aid_count > state.synchronized_aids.size() ||
       !finite_vector(state.host_spawn_position) || !finite(state.host_spawn_angle) ||
       !finite(state.host_camera_angle_y) ||

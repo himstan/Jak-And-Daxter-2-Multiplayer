@@ -1,0 +1,11 @@
+(in-package goal)
+
+(defconstant PLAYER_COSMETIC_SECRETS_MASK (game-secrets toggle-beard hflip-screen big-head little-head))
+
+(deftype player-data (structure)
+  ((health                    float)
+   (dark-eco                  float)
+   (ammo                      float 4)
+   (cosmetic-secrets          game-secrets)
+   (unlocked-cosmetic-secrets game-secrets))
+  :size-assert 32)

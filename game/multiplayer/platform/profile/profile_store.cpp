@@ -1,6 +1,5 @@
 #include "game/multiplayer/platform/profile/profile_store.h"
 
-#include <fstream>
 #include <utility>
 
 #include "common/log/log.h"
@@ -186,19 +185,7 @@ bool save_player_profile(const ProfileLease& lease, const StoredPlayerProfile& p
     root["display_name"] = profile.display_name;
     root["preferred_character"] = static_cast<uint8_t>(profile.preferred_character);
     const auto path = lease.common_profile_path();
-    const fs::path temporary = path.string() + ".tmp";
-    std::ofstream output;
-    output.exceptions(std::ios::failbit | std::ios::badbit);
-    output.open(temporary, std::ios::out | std::ios::trunc);
-    output << root.dump(2) << '\n';
-    output.close();
-#ifdef _WIN32
-    if (!MoveFileExW(temporary.c_str(), path.c_str(),
-                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
-      throw std::runtime_error("could not replace player identity file");
-#else
-    fs::rename(temporary, path);
-#endif
+    file_util::write_text_file_atomic(path, root.dump(2) + "\n");
     return true;
   } catch (const std::exception& error) {
     lg::error("[Multiplayer] Could not save player profile: {}", error.what());

@@ -52,6 +52,7 @@ void write_binary_file(const fs::path& name, const void* data, size_t size);
 void write_rgba_png(const fs::path& name, void* data, int w, int h);
 void write_text_file(const std::string& file_name, const std::string& text);
 void write_text_file(const fs::path& file_name, const std::string& text);
+void write_text_file_atomic(const fs::path& path, const std::string& text);
 std::vector<uint8_t> read_binary_file(const std::string& filename);
 std::vector<uint8_t> read_binary_file(const fs::path& filename);
 std::string read_text_file(const std::string& path);

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include "game/multiplayer/jak2/bridge/goal_player_data_types.h"
 #include "game/multiplayer/jak2/core/multiplayer_types.h"
 
 #pragma pack(push, 1)
@@ -30,14 +31,16 @@ struct MPReplicationBootstrapStateGOAL {
   float host_spawn_position[4];
   uint32_t synchronized_aids[multiplayer::jak2::core::kMaxBootstrapAids];
   uint8_t host_continue[32];
+  PlayerDataGOAL player_data;
   uint32_t phase;
   uint32_t sequence;
   uint32_t host_task;
   float host_spawn_angle;
   float host_camera_angle_y;
   uint16_t synchronized_aid_count;
+  uint8_t player_data_valid;
 };
 #pragma pack(pop)
 
 static_assert(sizeof(MPWorldSyncStateGOAL) == 194);
-static_assert(sizeof(MPReplicationBootstrapStateGOAL) == 16454);
+static_assert(sizeof(MPReplicationBootstrapStateGOAL) == 16487);

@@ -169,6 +169,7 @@
   "mp-overlay-layout-h.o" ;; added
   "mp-spectate-h.o" ;; added
   "mp-world-h.o" ;; added
+  "player-data-h.o"
   "mp-replication-h.o" ;; added
   "target-helper.o" ;; added
   "stats-h.o"

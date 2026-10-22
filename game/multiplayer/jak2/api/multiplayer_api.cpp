@@ -378,6 +378,18 @@ static void pc_multi_session_enter_lobby() {
   runtime().enqueue<multiplayer::platform::EnterLobbyCommand>();
 }
 
+static int pc_multi_player_data_save(u32 action, u32 save_slot) {
+  using namespace multiplayer::jak2;
+  if (runtime().snapshot().session.state.role == multiplayer::platform::SessionRole::CLIENT)
+    return 1;
+  if (action > static_cast<u32>(PlayerDataSaveAction::LOAD) ||
+      (save_slot >= 4 &&
+       !(action == static_cast<u32>(PlayerDataSaveAction::LOAD) && save_slot == 0xff)))
+    return 0;
+  return application::jak2_adapter().player_data_save(static_cast<PlayerDataSaveAction>(action),
+                                                      static_cast<uint8_t>(save_slot));
+}
+
 static void pc_multi_request_bootstrap() {
   runtime().enqueue<multiplayer::platform::RequestBootstrapCommand>();
 }
@@ -734,8 +746,9 @@ void init_jak2_multiplayer(const bool disable_steam) {
       lg::warn("[Multiplayer] Could not read Steam integration preference: {}", error.what());
     }
   }
-  if (!runtime().install(std::make_unique<multiplayer::jak2::application::Jak2Adapter>(),
-                         std::move(*profile)))
+  if (!runtime().install(
+          std::make_unique<multiplayer::jak2::application::Jak2Adapter>(profile->directory()),
+          std::move(*profile)))
     throw std::runtime_error("failed to install Jak 2 adapter");
 }
 
@@ -761,6 +774,7 @@ void init_jak2_bridge() {
   register_symbol("pc-multi-session-start-game", &pc_multi_session_start_game);
   register_symbol("pc-multi-session-enter-lobby", &pc_multi_session_enter_lobby);
   register_symbol("pc-multi-request-bootstrap", &pc_multi_request_bootstrap);
+  register_symbol("pc-multi-player-data-save", &pc_multi_player_data_save);
   register_symbol("pc-multi-stop-search", &pc_multi_stop_search);
   register_symbol("pc-multi-connect-found-host", &pc_multi_connect_found_host);
   register_symbol("pc-multi-get-host-access-kind", &pc_multi_get_host_access_kind);

@@ -18,8 +18,9 @@ namespace {
 constexpr uint32_t kRemoteFrameIntervalMs = 8;
 }  // namespace
 
-Jak2Adapter::Jak2Adapter()
-    : descriptor_{.game_id = "jak2",
+Jak2Adapter::Jak2Adapter(fs::path profile_directory)
+    : player_data_store_(std::move(profile_directory)),
+      descriptor_{.game_id = "jak2",
                   .maximum_payload_bytes = 32768,
                   .maximum_players = core::kMaxPlayers,
                   .maximum_profile_extension_bytes = sizeof(core::PlayerSkin),
@@ -39,6 +40,12 @@ void Jak2Adapter::installed(platform::GameSessionEndpoint& endpoint) {
 }
 
 void Jak2Adapter::session_started(const platform::SessionState&) {
+  {
+    std::lock_guard lock(player_data_mutex_);
+    restore_player_data_.fill(true);
+    player_data_generations_ = {};
+  }
+  last_player_data_.reset();
   state_.reset();
   local_frame_.reset();
   last_traffic_authority_.reset();
@@ -49,6 +56,7 @@ void Jak2Adapter::session_started(const platform::SessionState&) {
 }
 
 void Jak2Adapter::session_reset() {
+  last_player_data_.reset();
   state_.reset();
   mailbox_.reset();
   local_frame_.reset();
@@ -71,10 +79,19 @@ bool Jak2Adapter::validate_profile_extension(const std::span<const uint8_t> exte
   return true;
 }
 
-std::vector<uint8_t> Jak2Adapter::create_bootstrap(platform::PlayerSlot) {
-  const auto& bootstrap = state_.world().bootstrap();
-  if (bootstrap.host_continue[0] == 0)
+std::vector<uint8_t> Jak2Adapter::create_bootstrap(platform::PlayerSlot player_slot,
+                                                   uint32_t generation) {
+  auto bootstrap = state_.world().bootstrap();
+  if (bootstrap.host_continue[0] == 0 || player_slot >= core::kMaxPlayers || !local_frame_)
     return {};
+  bootstrap.player_data = {};
+  std::lock_guard lock(player_data_mutex_);
+  if (player_data_load_pending_ || generation == 0)
+    return {};
+  player_data_generations_[player_slot] = generation;
+  if (restore_player_data_[player_slot])
+    bootstrap.player_data =
+        player_data_store_.get(state_.players().identities()[player_slot].player_id);
   return platform::wire::encode_packet(wire::to_packet(bootstrap)).value_or(std::vector<uint8_t>{});
 }
 
@@ -89,6 +106,12 @@ bool Jak2Adapter::apply_bootstrap(const uint32_t generation,
 }
 
 void Jak2Adapter::player_profile_changed(const platform::PlayerProfile& profile) {
+  if (profile.player_slot < core::kMaxPlayers &&
+      state_.players().identities()[profile.player_slot].player_id != profile.player_id) {
+    std::lock_guard lock(player_data_mutex_);
+    restore_player_data_[profile.player_slot] = true;
+    player_data_generations_[profile.player_slot] = 0;
+  }
   core::PlayerIdentity identity = {};
   identity.player_slot = profile.player_slot;
   identity.player_id = profile.player_id;
@@ -106,6 +129,11 @@ void Jak2Adapter::player_profile_changed(const platform::PlayerProfile& profile)
 void Jak2Adapter::player_departed(const platform::PlayerSlot player_slot,
                                   const platform::PlayerDepartureReason reason) {
   if (player_slot < core::kMaxPlayers) {
+    {
+      std::lock_guard lock(player_data_mutex_);
+      restore_player_data_[player_slot] = true;
+      player_data_generations_[player_slot] = 0;
+    }
     ++player_lifecycles_[player_slot];
     player_departures_[player_slot] = reason;
     presentation_.reset_player(player_slot);
@@ -118,6 +146,13 @@ void Jak2Adapter::tick(const uint64_t now_ms) {
   if (!endpoint_)
     return;
   const auto session = endpoint_->snapshot().state;
+  bool loaded = false;
+  {
+    std::lock_guard lock(player_data_mutex_);
+    loaded = std::exchange(player_data_load_pending_, false);
+  }
+  if (loaded)
+    local_frame_.reset();
   state_.expire(now_ms);
   if (auto frame = mailbox_.take_local_frame()) {
     if (frame->local_player_slot == session.local_player_slot &&
@@ -128,6 +163,9 @@ void Jak2Adapter::tick(const uint64_t now_ms) {
     }
   }
   packets_.publish(*endpoint_, now_ms);
+  if (loaded && session.role == platform::SessionRole::HOST)
+    endpoint_->request_bootstrap();
+
   if (local_frame_ && session.role != platform::SessionRole::NONE)
     state_.traffic().select_authority(local_frame_->selected_traffic_authority);
   if (const auto available = mailbox_.inbound_event_capacity(); available != 0)
@@ -141,6 +179,24 @@ void Jak2Adapter::tick(const uint64_t now_ms) {
 void Jak2Adapter::stop() {
   session_reset();
   endpoint_ = nullptr;
+}
+
+bool Jak2Adapter::player_data_save(PlayerDataSaveAction action, uint8_t save_slot) {
+  std::lock_guard lock(player_data_mutex_);
+  switch (action) {
+    case PlayerDataSaveAction::CAPTURE:
+      return player_data_store_.stage_save(save_slot);
+    case PlayerDataSaveAction::COMMIT:
+      return player_data_store_.commit_save(save_slot);
+    case PlayerDataSaveAction::LOAD:
+      player_data_store_.load(save_slot);
+      mailbox_.take_local_frame();
+      restore_player_data_.fill(true);
+      player_data_generations_ = {};
+      player_data_load_pending_ = true;
+      return true;
+  }
+  return false;
 }
 
 void Jak2Adapter::publish_remote_frame(const platform::SessionState& session,

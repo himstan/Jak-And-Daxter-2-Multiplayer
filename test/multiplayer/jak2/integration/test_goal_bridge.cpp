@@ -485,6 +485,38 @@ TEST(Jak2GoalBridge, GungameStateHandlersPreserveEventReplies) {
   EXPECT_EQ(forwarding_handlers, 4u);
 }
 
+TEST(Jak2GoalBridge, PlayerDataLayoutAndCosmeticFlagsMatchGoal) {
+  TypeSystem types;
+  types.add_builtin_types(GameVersion::Jak2);
+  goos::Reader reader;
+  for (const auto* path : {"engine/game/game-info-h.gc", "multiplayer/player/player-data-h.gc"}) {
+    const auto source =
+        reader.read_from_file({std::string(MP_SOURCE_ROOT) + "/goal_src/jak2/" + path});
+    goos::for_each_in_list(source.as_pair()->cdr, [&](const goos::Object& form) {
+      if (!form.is_pair() || !form.as_pair()->cdr.is_pair())
+        return;
+      const auto& definition = form.as_pair()->cdr;
+      if (form.as_pair()->car.is_symbol("defenum") &&
+          definition.as_pair()->car.is_symbol("game-secrets"))
+        parse_defenum(definition, &types, nullptr);
+      if (form.as_pair()->car.is_symbol("deftype") &&
+          definition.as_pair()->car.is_symbol("player-data"))
+        parse_deftype(definition, &types);
+    });
+  }
+  EXPECT_EQ(types.lookup_type("player-data")->get_size_in_memory(), sizeof(PlayerDataGOAL));
+  EXPECT_EQ(types.lookup_field_info("player-data", "cosmetic-secrets").field.offset(),
+            offsetof(PlayerDataGOAL, cosmetic_secrets));
+  EXPECT_EQ(types.lookup_field_info("player-data", "unlocked-cosmetic-secrets").field.offset(),
+            offsetof(PlayerDataGOAL, unlocked_cosmetic_secrets));
+  const auto* secrets = types.try_enum_lookup("game-secrets");
+  ASSERT_NE(secrets, nullptr);
+  uint32_t mask = 0;
+  for (const auto* name : {"toggle-beard", "hflip-screen", "big-head", "little-head"})
+    mask |= 1u << secrets->entries().at(name);
+  EXPECT_EQ(mask, multiplayer::jak2::core::kPlayerCosmeticSecretsMask);
+}
+
 TEST(Jak2GoalBridge, DirectionalAggregateHasCanonicalCompactAbi) {
   EXPECT_EQ(sizeof(MPReplicationPlayerIdentityGOAL), 295u);
   EXPECT_EQ(sizeof(MPReplicationPlayerVehicleGOAL), 94u);
@@ -492,13 +524,13 @@ TEST(Jak2GoalBridge, DirectionalAggregateHasCanonicalCompactAbi) {
   EXPECT_EQ(sizeof(MPReplicationEnemySetGOAL), 57360u);
   EXPECT_EQ(sizeof(MPReplicationPedestrianStateGOAL), 60u);
   EXPECT_EQ(sizeof(MPReplicationTrafficSetGOAL), 13328u);
-  EXPECT_EQ(sizeof(MPReplicationBootstrapStateGOAL), 16454u);
-  EXPECT_EQ(sizeof(MPReplicationFrameGOAL), 92656u);
-  EXPECT_EQ(sizeof(MPReplicationStateGOAL), 195600u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, local), 16u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, remote), 92672u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, outbound_events), 185344u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, inbound_events), 190480u);
+  EXPECT_EQ(sizeof(MPReplicationBootstrapStateGOAL), 16487u);
+  EXPECT_EQ(sizeof(MPReplicationFrameGOAL), 92688u);
+  EXPECT_EQ(sizeof(MPReplicationStateGOAL), 195712u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, local), 64u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, remote), 92752u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, outbound_events), 185456u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, inbound_events), 190592u);
 }
 
 TEST(Jak2GoalBridge, PlayerActionLayoutMatchesGoal) {
@@ -663,6 +695,13 @@ TEST(Jak2GoalBridge, ExchangePreservesFullBootstrapAidCapacity) {
   auto& state = replication_state(memory);
   constexpr auto capacity = multiplayer::jak2::core::kMaxBootstrapAids;
   state.local.bootstrap.synchronized_aid_count = static_cast<uint16_t>(capacity);
+  state.player_data_valid = 1;
+  state.remote.bootstrap.sequence = 7;
+  state.player_data.health = 1.5f;
+  state.player_data.dark_eco = 22.75f;
+  state.player_data.ammo[1] = 17.5f;
+  state.player_data.cosmetic_secrets = 1u << 16;
+  state.player_data.unlocked_cosmetic_secrets = multiplayer::jak2::core::kPlayerCosmeticSecretsMask;
   state.local.bootstrap.synchronized_aids[0] = 11;
   state.local.bootstrap.synchronized_aids[128] = 22;
   state.local.bootstrap.synchronized_aids[capacity - 1] = 33;
@@ -670,6 +709,14 @@ TEST(Jak2GoalBridge, ExchangePreservesFullBootstrapAidCapacity) {
   ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
   const auto local = mailbox.take_local_frame();
   ASSERT_TRUE(local != nullptr);
+  EXPECT_EQ(local->player_data_generation, 7);
+  ASSERT_TRUE(local->player_data);
+  EXPECT_EQ(local->player_data->health, 1.5f);
+  EXPECT_EQ(local->player_data->dark_eco, 22.75f);
+  EXPECT_EQ(local->player_data->ammo[1], 17.5f);
+  EXPECT_EQ(local->player_data->cosmetic_secrets, 1u << 16);
+  EXPECT_EQ(local->player_data->unlocked_cosmetic_secrets,
+            multiplayer::jak2::core::kPlayerCosmeticSecretsMask);
   EXPECT_EQ(local->bootstrap.synchronized_aid_count, capacity);
   EXPECT_EQ(local->bootstrap.synchronized_aids[0], 11u);
   EXPECT_EQ(local->bootstrap.synchronized_aids[128], 22u);
@@ -677,9 +724,16 @@ TEST(Jak2GoalBridge, ExchangePreservesFullBootstrapAidCapacity) {
 
   auto remote = std::make_unique<multiplayer::jak2::application::RemoteReplicationFrame>();
   remote->bootstrap = local->bootstrap;
+  remote->bootstrap.player_data = local->player_data;
   mailbox.publish_remote_frame(std::move(remote));
   ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
   EXPECT_EQ(state.remote.bootstrap.synchronized_aid_count, capacity);
+  EXPECT_EQ(state.remote.bootstrap.player_data.health, 1.5f);
+  EXPECT_EQ(state.remote.bootstrap.player_data.dark_eco, 22.75f);
+  EXPECT_EQ(state.remote.bootstrap.player_data.ammo[1], 17.5f);
+  EXPECT_EQ(state.remote.bootstrap.player_data.cosmetic_secrets, 1u << 16);
+  EXPECT_EQ(state.remote.bootstrap.player_data.unlocked_cosmetic_secrets,
+            multiplayer::jak2::core::kPlayerCosmeticSecretsMask);
   EXPECT_EQ(state.remote.bootstrap.synchronized_aids[0], 11u);
   EXPECT_EQ(state.remote.bootstrap.synchronized_aids[128], 22u);
   EXPECT_EQ(state.remote.bootstrap.synchronized_aids[capacity - 1], 33u);

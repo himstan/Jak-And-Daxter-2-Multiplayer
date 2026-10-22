@@ -14,6 +14,7 @@
 #include "game/multiplayer/jak2/wire/packets/game_event_batch_packet.h"
 #include "game/multiplayer/jak2/wire/packets/gungame_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/pedestrian_state_batch_packet.h"
+#include "game/multiplayer/jak2/wire/packets/player_data_packet.h"
 #include "game/multiplayer/jak2/wire/packets/player_rules_packet.h"
 #include "game/multiplayer/jak2/wire/packets/player_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/player_vehicle_state_packet.h"
@@ -163,6 +164,47 @@ std::vector<std::unique_ptr<platform::PacketHandler>> Jak2Adapter::make_packet_h
 
 void Jak2Adapter::add_player_handlers(Handlers& handlers) {
   const auto ready = frame_ready(local_frame_);
+  using DataHandler = platform::TypedPacketHandler<wire::PlayerDataPacket, wire::PlayerDataPacket>;
+  handlers.push_back(std::make_unique<DataHandler>(
+      wire::PlayerDataPacket::kPolicy,
+      DataHandler::Hooks{
+          .to_wire = +[](const wire::PlayerDataPacket& data) { return data; },
+          .canonicalize = +[](wire::PlayerDataPacket&, const platform::MessageOrigin&) {},
+          .apply =
+              [this](const wire::PlayerDataPacket& data, const auto& context) {
+                const auto slot = context.source.authenticated_player_slot;
+                if (slot >= core::kMaxPlayers || context.source.from_host)
+                  return platform::PacketApplyResult::REJECT;
+                std::lock_guard lock(player_data_mutex_);
+                if (data.bootstrap_generation == player_data_generations_[slot]) {
+                  player_data_store_.update(state_.players().identities()[slot].player_id,
+                                            data.data);
+                  restore_player_data_[slot] = false;
+                }
+                return platform::PacketApplyResult::ACCEPT;
+              },
+          .produce =
+              [this](auto& handler, auto& endpoint, uint64_t now_ms) {
+                wire::PlayerDataPacket data;
+                data.bootstrap_generation = local_frame_->player_data_generation;
+                data.data = *local_frame_->player_data;
+                if (handler.send(data, endpoint, now_ms, false))
+                  last_player_data_ = {data.bootstrap_generation, data.data};
+              },
+          .ready = [this]() -> std::optional<bool> {
+            if (!local_frame_ || local_frame_->local_player_slot >= core::kMaxPlayers ||
+                !local_frame_->player_data ||
+                local_frame_->players[local_frame_->local_player_slot].spectator_only ||
+                local_frame_->player_data_generation == 0)
+              return std::nullopt;
+            return !last_player_data_ ||
+                   last_player_data_->first != local_frame_->player_data_generation ||
+                   last_player_data_->second != *local_frame_->player_data;
+          },
+          .relay = [](const auto&,
+                      const auto&) -> std::optional<std::vector<platform::PlayerSlot>> {
+            return std::vector<platform::PlayerSlot>{};
+          }}));
   add_packet_handler<wire::PlayerStatePacket>(
       handlers, wire::to_packet, state_.players(), wire::canonicalize_player,
       [this, failed_at = std::optional<uint64_t>{}](auto& handler, auto& endpoint,

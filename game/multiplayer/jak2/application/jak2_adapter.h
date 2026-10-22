@@ -1,8 +1,10 @@
 #pragma once
 
 #include <cstdint>
+#include <mutex>
 #include <optional>
 
+#include "game/multiplayer/jak2/api/player_data_store.h"
 #include "game/multiplayer/jak2/application/presentation_runtime.h"
 #include "game/multiplayer/jak2/application/replication_mailbox.h"
 #include "game/multiplayer/jak2/core/replication_state.h"
@@ -12,7 +14,7 @@ namespace multiplayer::jak2::application {
 
 class Jak2Adapter final : public platform::GameAdapter {
  public:
-  Jak2Adapter();
+  explicit Jak2Adapter(fs::path profile_directory = {});
   ~Jak2Adapter() noexcept override = default;
 
   Jak2Adapter(const Jak2Adapter&) = delete;
@@ -27,7 +29,9 @@ class Jak2Adapter final : public platform::GameAdapter {
   platform::PacketRegistry& packets() override { return packets_; }
   bool validate_profile_extension(std::span<const uint8_t> extension,
                                   std::vector<uint8_t>& canonical) override;
-  std::vector<uint8_t> create_bootstrap(platform::PlayerSlot player_slot) override;
+  std::vector<uint8_t> create_bootstrap(platform::PlayerSlot player_slot,
+                                        uint32_t generation) override;
+  bool player_data_save(PlayerDataSaveAction action, uint8_t save_slot);
   bool apply_bootstrap(uint32_t generation, std::span<const uint8_t> payload) override;
   void player_profile_changed(const platform::PlayerProfile& profile) override;
   void player_departed(
@@ -48,6 +52,12 @@ class Jak2Adapter final : public platform::GameAdapter {
   void publish_remote_frame(const platform::SessionState& session, uint64_t now_ms);
 
   platform::GameSessionEndpoint* endpoint_ = nullptr;
+  PlayerDataStore player_data_store_;
+  std::mutex player_data_mutex_;
+  bool player_data_load_pending_ = false;
+  std::array<bool, core::kMaxPlayers> restore_player_data_ = {};
+  std::array<uint32_t, core::kMaxPlayers> player_data_generations_ = {};
+  std::optional<std::pair<uint32_t, core::PlayerData>> last_player_data_;
   ReplicationMailbox mailbox_;
   core::ReplicationState state_;
   std::unique_ptr<LocalReplicationFrame> local_frame_;

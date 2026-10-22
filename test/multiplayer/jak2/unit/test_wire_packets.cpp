@@ -596,7 +596,7 @@ TEST(Jak2Protocol, PlayerRulesRoundTripOnlyInBootstrap) {
         bootstrap.world = world;
         bytes = platform::wire::encode_packet(jak2::wire::to_packet(bootstrap));
         ASSERT_TRUE(bytes);
-        EXPECT_EQ(bytes->size(), 226u);
+        EXPECT_EQ(bytes->size(), 227u);
         auto initial = platform::wire::decode_packet<jak2::wire::BootstrapStatePacket>(*bytes);
         ASSERT_TRUE(initial);
         jak2::core::BootstrapState restored;

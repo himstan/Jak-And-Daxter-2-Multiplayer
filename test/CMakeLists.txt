@@ -105,6 +105,7 @@ add_executable(multiplayer-jak2-unit-test
         ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/unit/test_traffic_state.cpp
         ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/unit/test_enemy_state.cpp
         ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/unit/test_player_codec.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/unit/test_player_data.cpp
         ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/unit/test_wire_codecs.cpp
         ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/unit/test_wire_packets.cpp
         ${CMAKE_CURRENT_LIST_DIR}/multiplayer/jak2/unit/test_protocol.cpp

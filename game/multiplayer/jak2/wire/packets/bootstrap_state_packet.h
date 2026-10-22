@@ -5,6 +5,7 @@
 
 #include "game/multiplayer/jak2/core/multiplayer_types.h"
 #include "game/multiplayer/jak2/wire/multiplayer_protocol.h"
+#include "game/multiplayer/jak2/wire/player_data.h"
 #include "game/multiplayer/platform/wire/packet_codec.h"
 #include "game/multiplayer/platform/wire/quantization.h"
 
@@ -32,6 +33,7 @@ struct BootstrapStatePacket : platform::wire::Packet<BootstrapStatePacket, Packe
   uint8_t player_collision = 0;
   uint8_t friendly_fire = 0;
   float host_camera_angle_y = 0.0f;
+  std::optional<core::PlayerData> player_data;
 };
 
 template <typename Stream, typename PacketT>
@@ -84,6 +86,7 @@ bool serialize_fields(Stream& stream, PacketT&& packet) {
          platform::wire::serialize_u8(stream, packet.player_collision) &&
          platform::wire::serialize_u8(stream, packet.friendly_fire) &&
          platform::wire::serialize_angle(stream, packet.host_camera_angle_y) &&
+         serialize_optional_player_data(stream, packet.player_data) &&
          platform::wire::serialize_byte_align(stream);
 }
 

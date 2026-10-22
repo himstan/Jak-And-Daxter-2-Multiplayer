@@ -944,7 +944,8 @@ void SessionController::send_pending_bootstraps(const uint64_t now_ms) {
          now_ms - player.last_bootstrap_send_time < kBootstrapRetryMs))
       continue;
     if (player.bootstrap_payload.empty()) {
-      player.bootstrap_payload = adapter_.create_bootstrap(player.player_slot);
+      player.bootstrap_payload =
+          adapter_.create_bootstrap(player.player_slot, player.bootstrap_generation);
       if (player.bootstrap_payload.empty() ||
           player.bootstrap_payload.size() > adapter_.descriptor().maximum_payload_bytes) {
         continue;

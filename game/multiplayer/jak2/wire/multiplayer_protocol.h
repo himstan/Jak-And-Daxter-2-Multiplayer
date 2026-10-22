@@ -30,7 +30,8 @@ enum class PacketType : uint8_t {
   PLAYER_VEHICLE_STATE = 11,
   GUNGAME_STATE = 12,
   PLAYER_RULES = 13,
-  COUNT = 14
+  PLAYER_DATA = 14,
+  COUNT = 15
 };
 
 inline constexpr uint8_t kMPPlayerStateFlagSpectatorOnly = 1u << 0;

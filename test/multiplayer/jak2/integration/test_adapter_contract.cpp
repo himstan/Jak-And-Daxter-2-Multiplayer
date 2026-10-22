@@ -12,6 +12,7 @@
 #include "game/multiplayer/jak2/wire/packets/game_event_batch_packet.h"
 #include "game/multiplayer/jak2/wire/packets/gungame_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/pedestrian_state_batch_packet.h"
+#include "game/multiplayer/jak2/wire/packets/player_data_packet.h"
 #include "game/multiplayer/jak2/wire/packets/player_rules_packet.h"
 #include "game/multiplayer/jak2/wire/packets/player_state_packet.h"
 #include "game/multiplayer/jak2/wire/packets/player_vehicle_state_packet.h"
@@ -492,13 +493,192 @@ TEST(Jak2AdapterIntegration, BootstrapPayloadFitsAllPermanentAids) {
   adapter.mailbox().publish_local_frame(std::move(frame));
   adapter.tick(100);
 
-  const auto payload = adapter.create_bootstrap(1);
+  const auto payload = adapter.create_bootstrap(1, 1);
   EXPECT_GT(payload.size(), 8192u);
   EXPECT_LE(payload.size(), adapter.descriptor().maximum_payload_bytes);
   const auto decoded = platform::wire::decode_packet<jak2::wire::BootstrapStatePacket>(payload);
   ASSERT_TRUE(decoded.has_value());
   EXPECT_EQ(decoded->synchronized_aids.size(), jak2::core::kMaxBootstrapAids);
   EXPECT_EQ(decoded->synchronized_aids.back(), 0x10000fffu);
+}
+
+class PlayerDataScenario : public testing::Test {
+ protected:
+  jak2::application::Jak2Adapter host;
+  RecordingEndpoint endpoint;
+  const platform::PlayerId id = platform::PlayerId::generate();
+  const jak2::core::PlayerData data = {
+      .health = 1.5f,
+      .dark_eco = 37.25f,
+      .ammo = {2, 0, 4.5f, 6},
+      .cosmetic_secrets = 1u << 16,
+      .unlocked_cosmetic_secrets = jak2::core::kPlayerCosmeticSecretsMask};
+  uint32_t generation = 1;
+
+  void SetUp() override {
+    endpoint.session_snapshot.state.status = platform::SessionStatus::IN_GAME;
+    host.installed(endpoint);
+    host.session_started(endpoint.session_snapshot.state);
+    publish();
+    join(1);
+    bootstrap(1);
+  }
+  void publish() {
+    auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
+    frame->local_player_slot = 0;
+    frame->host_player_slot = 0;
+    frame->bootstrap.host_continue[0] = 'a';
+    host.mailbox().publish_local_frame(std::move(frame));
+    host.tick(100);
+  }
+  void join(uint8_t slot) {
+    host.player_profile_changed({.player_slot = slot,
+                                 .player_id = id,
+                                 .display_name = "Alice",
+                                 .character = PlayerCharacter::JAK});
+  }
+  std::optional<jak2::wire::BootstrapStatePacket> bootstrap(uint8_t slot) {
+    return platform::wire::decode_packet<jak2::wire::BootstrapStatePacket>(
+        host.create_bootstrap(slot, generation));
+  }
+  void receive(uint8_t slot, const jak2::core::PlayerData& value, uint32_t update_generation) {
+    jak2::wire::PlayerDataPacket packet;
+    packet.bootstrap_generation = update_generation;
+    packet.data = value;
+    const auto bytes = platform::wire::encode_packet(packet);
+    ASSERT_TRUE(bytes);
+    const auto result =
+        host.packets().receive({.origin = {.authenticated_player_slot = slot},
+                                .message_id = static_cast<uint8_t>(PacketType::PLAYER_DATA),
+                                .sequence = 1,
+                                .received_at_ms = 100,
+                                .payload = *bytes},
+                               endpoint);
+    EXPECT_NE(result.disposition, platform::PayloadDisposition::REJECT);
+    ASSERT_TRUE(result.relay_recipients);
+    EXPECT_TRUE(result.relay_recipients->empty());
+  }
+};
+
+TEST_F(PlayerDataScenario, ReconnectsAndRehostingPreserveLiveDataByUuid) {
+  receive(1, data, generation);
+  host.player_departed(1);
+  join(3);
+  EXPECT_EQ(bootstrap(3)->player_data, data);
+  host.session_reset();
+  host.session_started(endpoint.session_snapshot.state);
+  publish();
+  join(1);
+  EXPECT_EQ(bootstrap(1)->player_data, data);
+  host.player_profile_changed({.player_slot = 2,
+                               .player_id = platform::PlayerId::generate(),
+                               .display_name = "Bob",
+                               .character = PlayerCharacter::JAK});
+  EXPECT_FALSE(bootstrap(2)->player_data);
+}
+
+TEST_F(PlayerDataScenario, CaptureIsImmediateAndSavesDoNotRequestBootstrap) {
+  receive(1, data, generation);
+  ASSERT_TRUE(host.player_data_save(jak2::PlayerDataSaveAction::CAPTURE, 0));
+  auto later = data;
+  later.health = 0;
+  receive(1, later, generation);
+  ASSERT_TRUE(host.player_data_save(jak2::PlayerDataSaveAction::COMMIT, 0));
+  host.tick(110);
+  EXPECT_FALSE(endpoint.bootstrap_requested);
+  host.player_data_save(jak2::PlayerDataSaveAction::LOAD, 0);
+  publish();
+  EXPECT_EQ(bootstrap(1)->player_data, data);
+}
+
+TEST_F(PlayerDataScenario, LoadRejectsDelayedDataBeforeAndAfterReplacementBootstrap) {
+  receive(1, data, generation);
+  ASSERT_TRUE(host.player_data_save(jak2::PlayerDataSaveAction::CAPTURE, 0));
+  ASSERT_TRUE(host.player_data_save(jak2::PlayerDataSaveAction::COMMIT, 0));
+  ASSERT_TRUE(host.player_data_save(jak2::PlayerDataSaveAction::LOAD, 0));
+  auto stale = data;
+  stale.health = 0;
+  receive(1, stale, generation);
+  EXPECT_TRUE(host.create_bootstrap(1, generation).empty());
+  host.tick(110);
+  EXPECT_TRUE(host.create_bootstrap(1, generation).empty());
+  publish();
+  ++generation;
+  EXPECT_EQ(bootstrap(1)->player_data, data);
+  receive(1, stale, generation - 1);
+  EXPECT_EQ(bootstrap(1)->player_data, data);
+  receive(1, stale, generation);
+  EXPECT_FALSE(bootstrap(1)->player_data);
+  host.player_departed(1);
+  join(1);
+  EXPECT_EQ(bootstrap(1)->player_data, stale);
+  host.tick(120);
+  EXPECT_TRUE(endpoint.bootstrap_requested);
+}
+
+TEST_F(PlayerDataScenario, SaveAsAndNewGameHaveExplicitWorldLifetimes) {
+  receive(1, data, generation);
+  ASSERT_TRUE(host.player_data_save(jak2::PlayerDataSaveAction::CAPTURE, 0));
+  ASSERT_TRUE(host.player_data_save(jak2::PlayerDataSaveAction::COMMIT, 0));
+  auto later = data;
+  later.ammo = {};
+  receive(1, later, generation);
+  ASSERT_TRUE(host.player_data_save(jak2::PlayerDataSaveAction::CAPTURE, 2));
+  ASSERT_TRUE(host.player_data_save(jak2::PlayerDataSaveAction::COMMIT, 2));
+  host.tick(110);
+  EXPECT_FALSE(endpoint.bootstrap_requested);
+  host.player_data_save(jak2::PlayerDataSaveAction::LOAD, 0);
+  publish();
+  EXPECT_EQ(bootstrap(1)->player_data, data);
+  host.player_data_save(jak2::PlayerDataSaveAction::LOAD, 2);
+  publish();
+  EXPECT_EQ(bootstrap(1)->player_data, later);
+  host.player_data_save(jak2::PlayerDataSaveAction::LOAD, 0xff);
+  publish();
+  EXPECT_FALSE(bootstrap(1)->player_data);
+}
+
+TEST(Jak2AdapterIntegration, ClientPlayerDataSendsOnlyWhenChangedAndRetriesFailures) {
+  jak2::application::Jak2Adapter client;
+  RecordingEndpoint endpoint;
+  endpoint.session_snapshot.state.role = platform::SessionRole::CLIENT;
+  endpoint.session_snapshot.state.local_player_slot = 1;
+  endpoint.session_snapshot.state.status = platform::SessionStatus::IN_GAME;
+  client.installed(endpoint);
+  client.session_started(endpoint.session_snapshot.state);
+  const auto publish = [&](uint32_t generation, float health, uint32_t cosmetic_secrets = 0) {
+    auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
+    frame->local_player_slot = 1;
+    frame->host_player_slot = 0;
+    frame->player_data =
+        jak2::core::PlayerData{.health = health, .cosmetic_secrets = cosmetic_secrets};
+    frame->player_data_generation = generation;
+    client.mailbox().publish_local_frame(std::move(frame));
+    client.tick(100);
+  };
+  const auto count = [&]() {
+    return std::ranges::count_if(endpoint.sent, [](const auto& packet) {
+      return packet.id == static_cast<uint8_t>(PacketType::PLAYER_DATA);
+    });
+  };
+  publish(0, 2);
+  EXPECT_EQ(count(), 0);
+  endpoint.accept_sends = false;
+  publish(1, 2);
+  EXPECT_EQ(count(), 0);
+  endpoint.accept_sends = true;
+  client.tick(110);
+  EXPECT_EQ(count(), 1);
+  publish(1, 2);
+  EXPECT_EQ(count(), 1);
+  publish(1, 1);
+  EXPECT_EQ(count(), 2);
+  publish(2, 1);
+  EXPECT_EQ(count(), 3);
+  publish(2, 1, 1u << 16);
+  EXPECT_EQ(count(), 4);
+  publish(2, 1, 1u << 16);
+  EXPECT_EQ(count(), 4);
 }
 
 TEST(Jak2AdapterIntegration, CompletionOnlyChangesRefreshBootstrap) {
@@ -515,8 +695,8 @@ TEST(Jak2AdapterIntegration, CompletionOnlyChangesRefreshBootstrap) {
     frame->world.completed_task_mask.back() = completed;
     host.mailbox().publish_local_frame(std::move(frame));
     host.tick(now_ms);
-    const auto packet =
-        platform::wire::decode_packet<jak2::wire::BootstrapStatePacket>(host.create_bootstrap(1));
+    const auto packet = platform::wire::decode_packet<jak2::wire::BootstrapStatePacket>(
+        host.create_bootstrap(1, 1));
     ASSERT_TRUE(packet);
     EXPECT_EQ(packet->completed_task_mask.back(), completed);
     now_ms += 100;
@@ -1515,7 +1695,7 @@ TEST(Jak2AdapterIntegration, HostRulesAndTaskCompletionReachLateJoinAndReconnect
     frame->bootstrap.host_continue[0] = 'a';
     host.mailbox().publish_local_frame(std::move(frame));
     host.tick(generation * 100);
-    ASSERT_TRUE(client.apply_bootstrap(generation, host.create_bootstrap(1)));
+    ASSERT_TRUE(client.apply_bootstrap(generation, host.create_bootstrap(1, generation)));
     client.tick(generation * 100);
     const auto remote = client.mailbox().take_remote_frame();
     ASSERT_TRUE(remote);
@@ -1585,7 +1765,7 @@ TEST(Jak2AdapterIntegration, PlayerRulesSendOnlyChangesAndRetryFailedSends) {
   endpoint.accept_sends = true;
   EXPECT_EQ(publish(400, 0, true, true), 1);
   EXPECT_EQ(publish(500, 0, true, true), 0);
-  const auto bootstrap = host.create_bootstrap(1);
+  const auto bootstrap = host.create_bootstrap(1, 1);
   const auto decoded = platform::wire::decode_packet<jak2::wire::BootstrapStatePacket>(bootstrap);
   ASSERT_TRUE(decoded);
   EXPECT_EQ(decoded->respawn_delay_seconds, 0);

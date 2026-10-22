@@ -227,7 +227,7 @@ class RecordingAdapter final : public GameAdapter {
     result.relay_recipients = relay_recipients;
     return result;
   }
-  std::vector<uint8_t> create_bootstrap(PlayerSlot player_slot) override {
+  std::vector<uint8_t> create_bootstrap(PlayerSlot player_slot, uint32_t) override {
     return {player_slot, 0x42};
   }
   bool apply_bootstrap(uint32_t generation, std::span<const uint8_t> payload) override {

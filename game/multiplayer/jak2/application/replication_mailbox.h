@@ -16,6 +16,8 @@ namespace multiplayer::jak2::application {
 inline constexpr size_t kReplicationEventCapacity = 256;
 
 struct LocalReplicationFrame {
+  std::optional<core::PlayerData> player_data;
+  uint32_t player_data_generation = 0;
   uint32_t sample_time_ms = 0;
   core::PlayerSlot local_player_slot = core::kInvalidPlayerSlot;
   core::PlayerSlot host_player_slot = core::kInvalidPlayerSlot;

@@ -1,5 +1,12 @@
 (in-package goal)
 
+(defenum player-data-save-action
+  :type uint8
+  (capture 0)
+  (commit 1)
+  (load 2))
+
+(define-extern pc-multi-player-data-save (function uint uint int))
 (define-extern pc-multi-get-command-line-arg (function string string))
 (define-extern pc-multi-get-local-player-slot (function uint))
 (define-extern pc-multi-get-host-player-slot (function uint))
