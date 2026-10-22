@@ -389,14 +389,14 @@
         #t))
     #t))
 
-(defun mp-scene-sync-levels-ready-or-request! ()
+(defun mp-scene-sync-levels-ready-or-request! ((source-record mp-player-record))
   (if (and *mp-pending-scene-sync-continue-name* (nonzero? (length *mp-pending-scene-sync-continue-name*)))
     (if (mp-scene-sync-continue-levels-ready? *mp-pending-scene-sync-continue-name*)
       #t
       (begin
         (mp-scene-sync-request-continue-levels! *mp-pending-scene-sync-continue-name*)
         (mp-scene-sync-continue-levels-ready? *mp-pending-scene-sync-continue-name*)))
-    (mp-remote-teleport-ready-or-request!)))
+    (mp-player-teleport-ready-or-request! source-record)))
 
 (defun mp-pending-scene-sync-scene-ready? ()
   (and *mp-pending-scene-sync-name*
@@ -414,33 +414,15 @@
     #f))
 
 (defun mp-scene-sync-scene-player-has-target? ()
-  (and *scene-player* (nonzero? *scene-player*) *target* (nonzero? *target*) (focus-test? *target* grabbed)))
-
-(defun mp-scene-sync-pin-target-at-hold-pos! ()
-  (when (and *target*
-             (nonzero? *target*)
-             (-> *target* control)
-             (nonzero? (-> *target* control))
-             *mp-scene-sync-target-hold-pos*
-             (nonzero? *mp-scene-sync-target-hold-pos*))
-    (let ((control (-> *target* control)))
-      (vector-copy! (-> control trans) *mp-scene-sync-target-hold-pos*)
-      (set! (-> control transv quad) (the-as uint128 0))
-      (vector-copy! (-> control camera-pos) (-> control trans))
-      (set-blackout-frames (seconds 0.1))))
-  (none))
+  (and (nonnull? *scene-player* *target*)
+       (not (player-teleport-waiting? *target*))
+       (focus-test? *target* grabbed)))
 
 (defun mp-scene-sync-start-target-hold! ()
-  (when (and *target*
-             (nonzero? *target*)
-             (-> *target* control)
-             (nonzero? (-> *target* control))
-             *mp-scene-sync-target-hold-pos*
-             (nonzero? *mp-scene-sync-target-hold-pos*))
-    (vector-copy! *mp-scene-sync-target-hold-pos* (-> *target* control trans))
+  (when (nonnull? *target* (-> *target* control))
     (set! *mp-scene-sync-target-hold?* #t)
     (set! *mp-scene-sync-target-hold-until* (+ (current-time) (seconds 15)))
-    (mp-scene-sync-pin-target-at-hold-pos!))
+    (start-player-teleport-wait! *target* (the uint MP_MAX_PLAYERS) #f #t))
   (none))
 
 (defun mp-process-scene-sync-target-hold! ()
@@ -450,8 +432,7 @@
       ((mp-scene-sync-scene-player-playing?) (set! *mp-scene-sync-target-hold?* #f))
       ((>= (current-time) *mp-scene-sync-target-hold-until*)
        (log 'debug "[MP-Event-Handlers] Releasing scene target hold after timeout.~%")
-       (set! *mp-scene-sync-target-hold?* #f))
-      (else (mp-scene-sync-pin-target-at-hold-pos!))))
+       (set! *mp-scene-sync-target-hold?* #f))))
   (none))
 
 (defun mp-scene-sync-use-entity-trigger? ((scene-name string))
@@ -561,11 +542,16 @@
          (mp-cancel-pending-scene-sync! "no connected scene player remains"))
         ((or (not source-record) (zero? source-record))
          (mp-log-pending-scene-sync-wait! "scene source state is not ready"))
-        ((not (mp-scene-sync-levels-ready-or-request!))
-         (mp-log-pending-scene-sync-wait! "scene continue levels are not loaded"))
-        ((not (mp-pending-scene-sync-scene-ready?)) (mp-log-pending-scene-sync-wait! "scene definition is not loaded"))
         ((not (mp-local-scene-teleport-ready-for-record? source-record))
          (mp-log-pending-scene-sync-wait! "local target is not ready"))
+        ((not (player-teleport-waiting? *target*))
+         (when (nonnull? source-record)
+           (start-player-teleport-wait! *target* (-> source-record identity player-slot) #f #t)))
+        ((not (mp-scene-sync-levels-ready-or-request! source-record))
+         (mp-log-pending-scene-sync-wait! "scene continue levels are not loaded"))
+        ((not (player-teleport-destination-loaded? source-record))
+         (mp-log-pending-scene-sync-wait! "scene destination level is not active"))
+        ((not (mp-pending-scene-sync-scene-ready?)) (mp-log-pending-scene-sync-wait! "scene definition is not loaded"))
         (else (mp-finish-pending-scene-sync! source-record)))))
   (none))
 

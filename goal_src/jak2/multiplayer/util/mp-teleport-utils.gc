@@ -2,6 +2,28 @@
 (in-package goal)
 
 (define-extern mp-vehicle-find-by-net-id (function uint vehicle))
+(define-extern target-player-teleport-wait (state uint symbol symbol target))
+
+(defun player-teleport-waiting? ((player target))
+  (and (nonnull? player)
+       (or (and (nonnull? (-> player state)) (= (-> player state name) 'target-player-teleport-wait))
+           (and (nonnull? (-> player next-state)) (= (-> player next-state name) 'target-player-teleport-wait)))))
+
+(defun start-player-teleport-wait! ((player target) (player-slot uint) (ride-along? symbol) (scene? symbol))
+  (when (and (nonnull? player (-> player control)) (not (player-teleport-waiting? player)))
+    (set-blackout-frames (seconds 0.1))
+    (mp-clear-local-vehicle-occupancy! player)
+    (go-process player target-player-teleport-wait player-slot ride-along? scene?))
+  (none))
+
+(defun player-teleport-destination-loaded? ((record mp-player-record))
+  (when (nonnull? record *level*)
+    (let ((level-name (mp-level-id->symbol (mp-player-primary-level-id record))))
+      (when level-name
+        (let ((lev (level-get *level* level-name)))
+          (when (and (nonnull? lev (-> lev bsp)) (= (-> lev status) 'active))
+            (return #t))))))
+  #f)
 
 (defun mp-teleport-destination-record ()
   (let ((spectated (mp-spectated-player-record)))
@@ -12,10 +34,7 @@
     #f
     (begin
       (mp-ensure-player-level-wanted! record)
-      (mp-player-level-ready? record))))
-
-(defun mp-remote-teleport-ready-or-request! ()
-  (mp-player-teleport-ready-or-request! (mp-teleport-destination-record)))
+      (and (mp-player-level-ready? record) (player-teleport-destination-loaded? record)))))
 
 (defun mp-teleport-target-ready-for-record? ((player target) (record mp-player-record))
   (nonnull? player record (-> player control) (-> player control root-prim)))
@@ -24,15 +43,10 @@
   (mp-teleport-target-ready-for-record? player (mp-teleport-destination-record)))
 
 (defun mp-local-scene-teleport-ready-for-record? ((record mp-player-record))
-  (and *target*
-       (nonzero? *target*)
-       (-> *target* control)
-       (nonzero? (-> *target* control))
-       record
-       (nonzero? record)
+  (and (nonnull? *target* (-> *target* control) record)
        (not (focus-test? *target* teleporting))
-       (not (and (-> *target* state) (= (-> *target* state name) 'target-load-wait)))
-       (not (and (-> *target* next-state) (= (-> *target* next-state name) 'target-load-wait)))))
+       (not (and (nonnull? (-> *target* state)) (= (-> *target* state name) 'target-load-wait)))
+       (not (and (nonnull? (-> *target* next-state)) (= (-> *target* next-state name) 'target-load-wait)))))
 
 (defun mp-teleport-send-camera-event! ()
   (when (and *camera* (nonzero? *camera*))
@@ -95,8 +109,8 @@
     (if (focus-test? player indax) (go-process player target-indax-start (the handle #f)) (go-process player target-stance)))
   (none))
 
-(defun mp-teleport-local-target-to-player! ((record mp-player-record) (ride-along? symbol))
-  (when (mp-teleport-target-ready-for-record? *target* record)
+(defun place-local-player-at-record! ((record mp-player-record) (ride-along? symbol))
+  (when (and (nonnull? *target* record) (mp-teleport-target-ready-for-record? *target* record))
     (when (focus-test? *target* pilot)
       (mp-clear-local-vehicle-occupancy! *target*))
     (cond
@@ -108,7 +122,7 @@
        (let ((riding-veh-id (-> record vehicle vehicle-id)))
          (let ((veh (mp-vehicle-find-by-net-id riding-veh-id)))
            (cond
-             ((and veh (nonzero? veh) (-> veh root) (nonzero? (-> veh root)))
+             ((nonnull? veh (-> veh root))
               (mp-teleport-player-to-vehicle! *target* veh 0.0 0.0)
               (let ((best-seat (mp-teleport-find-last-empty-seat veh #f)))
                 (cond
@@ -126,6 +140,15 @@
        (log 'debug "[MP-Teleport] Remote player on foot. Teleporting to remote player coords.~%")
        (mp-teleport-player-to-record-coords! *target* record 4096.0)
        (mp-teleport-reset-local-base-state! *target*))))
+  (none))
+
+(defun mp-teleport-local-target-to-player! ((record mp-player-record) (ride-along? symbol))
+  (when (and (mp-teleport-target-ready-for-record? *target* record)
+             (nonnull? *target* record)
+             (not (mp-respawn-policy-blocks-remote-placement?)))
+    (if (mp-player-teleport-ready-or-request! record)
+      (place-local-player-at-record! record ride-along?)
+      (start-player-teleport-wait! *target* (-> record identity player-slot) ride-along? #f)))
   (none))
 
 (defun place-respawn-target-at-player! ((player target) (record mp-player-record))
@@ -197,3 +220,36 @@
       (reset-teleport-history! player)
       (return #t)))
   #f)
+
+(defstate target-player-teleport-wait (target)
+  :event (-> target-grab event)
+  :enter (behavior ((player-slot uint) (ride-along? symbol) (scene? symbol))
+    (when (nonnull? self (-> self control))
+      (logior! (-> self focus-status) (focus-status grabbed))
+      (vector-reset! (-> self control transv))
+      (let ((record (mp-player-record-by-slot player-slot)))
+        (when (nonnull? record)
+          (mp-teleport-player-to-record-coords! self record 4096.0)))))
+  :exit target-exit
+  :code (behavior ((player-slot uint) (ride-along? symbol) (scene? symbol))
+    (while (and (mp-session-in-game?) (or scene? (not (mp-respawn-policy-blocks-remote-placement?))))
+      (cond
+        (scene?
+         (when (not (or *mp-pending-scene-sync?* *mp-scene-sync-target-hold?*))
+           (if (nonnull? *scene-player*)
+             (go target-grab 'stance)
+             (mp-teleport-reset-local-base-state! self))))
+        (else
+         (let ((record (mp-player-record-by-slot player-slot)))
+           (unless (mp-remote-gameplay-player-connected? record)
+             (mp-teleport-reset-local-base-state! self))
+           (when (mp-player-teleport-ready-or-request! record)
+             (mp-teleport-local-target-to-player! record ride-along?)))))
+      (suspend))
+    (mp-teleport-reset-local-base-state! self))
+  :post (behavior ()
+    (set-blackout-frames (seconds 0.1))
+    (when (nonnull? self (-> self control))
+      (vector-reset! (-> self control transv))
+      (target-timed-invulnerable (seconds 0.1) self 1)
+      (target-no-move-post))))
