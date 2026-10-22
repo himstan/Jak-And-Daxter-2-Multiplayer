@@ -19,9 +19,9 @@ TEST(Jak2Protocol, PlayerMessagesCommitOnlyWhenFresh) {
   using namespace multiplayer::jak2::core;
   ReplicationState state;
   PlayerState player = {};
-  player.player_id = 2;
+  player.player_slot = 2;
   player.state_id = 17;
-  const SourceContext source{.authenticated_player_id = 2};
+  const SourceContext source{.authenticated_player_slot = 2};
   ASSERT_TRUE(state.players().apply(player, {.sequence = 4, .source = source}));
   EXPECT_EQ(state.players().players()[2].state_id, 17u);
   player.state_id = 99;
@@ -33,11 +33,11 @@ TEST(Jak2Protocol, InvalidFiniteValuesDoNotPartiallyCommit) {
   using namespace multiplayer::jak2::core;
   ReplicationState state;
   PlayerState player = {};
-  player.player_id = 4;
+  player.player_slot = 4;
   player.state_id = 22;
   player.position[1] = std::numeric_limits<float>::quiet_NaN();
   EXPECT_FALSE(
-      state.players().apply(player, {.sequence = 8, .source = {.authenticated_player_id = 4}}));
+      state.players().apply(player, {.sequence = 8, .source = {.authenticated_player_slot = 4}}));
   EXPECT_EQ(state.players().players()[4].state_id, 0u);
   EXPECT_EQ(state.players().players()[4].last_sequence, 0u);
 }
@@ -48,31 +48,31 @@ TEST(Jak2Protocol, SourceSequencesMergeWithoutCrossPeerOverwrite) {
 
   multiplayer::jak2::core::TrafficAuthority authority = {};
   authority.revision = 1;
-  authority.assignments.fill(multiplayer::jak2::core::kInvalidPlayerId);
+  authority.assignments.fill(multiplayer::jak2::core::kInvalidPlayerSlot);
   authority.assignments[1] = 1;
   authority.assignments[2] = 2;
   ASSERT_TRUE(state.traffic().apply(authority, {.sequence = 1, .source = {.from_host = true}}));
 
   multiplayer::jak2::core::TrafficSnapshot first = {};
   first.kind = multiplayer::jak2::core::TrafficSnapshot::Kind::VEHICLES;
-  first.source_player_id = 1;
+  first.source_player_slot = 1;
   first.authority_revision = authority.revision;
   first.vehicles.push_back({.net_id = 0x21000001u});
   ASSERT_TRUE(
-      state.traffic().apply(first, {.sequence = 1, .source = {.authenticated_player_id = 1}}));
+      state.traffic().apply(first, {.sequence = 1, .source = {.authenticated_player_slot = 1}}));
 
   multiplayer::jak2::core::TrafficSnapshot second = {};
   second.kind = multiplayer::jak2::core::TrafficSnapshot::Kind::VEHICLES;
-  second.source_player_id = 2;
+  second.source_player_slot = 2;
   second.authority_revision = authority.revision;
   second.vehicles.push_back({.net_id = 0x22000001u});
   ASSERT_TRUE(
-      state.traffic().apply(second, {.sequence = 1, .source = {.authenticated_player_id = 2}}));
+      state.traffic().apply(second, {.sequence = 1, .source = {.authenticated_player_slot = 2}}));
 
   first.sequence = 2;
   first.vehicles.clear();
   ASSERT_TRUE(
-      state.traffic().apply(first, {.sequence = 2, .source = {.authenticated_player_id = 1}}));
+      state.traffic().apply(first, {.sequence = 2, .source = {.authenticated_player_slot = 1}}));
   ASSERT_EQ(state.traffic().aggregate().vehicles.size(), 1u);
   EXPECT_EQ(state.traffic().aggregate().vehicles[0].net_id, 0x22000001u);
   state.traffic().clear_source(1);
@@ -84,16 +84,16 @@ TEST(Jak2Protocol, EnemyBatchesKeepIndependentAuthoritativeSources) {
   using namespace multiplayer::jak2::core;
   ReplicationState state;
   multiplayer::jak2::core::EnemySnapshot first = {};
-  first.source_player_id = 1;
-  first.enemies.push_back({.actor_id = 41, .owner_player_id = 1});
+  first.source_player_slot = 1;
+  first.enemies.push_back({.actor_id = 41, .owner_player_slot = 1});
   multiplayer::jak2::core::EnemySnapshot second = {};
-  second.source_player_id = 2;
-  second.enemies.push_back({.actor_id = 42, .owner_player_id = 2});
+  second.source_player_slot = 2;
+  second.enemies.push_back({.actor_id = 42, .owner_player_slot = 2});
 
   ASSERT_TRUE(
-      state.entities().apply(first, {.sequence = 1, .source = {.authenticated_player_id = 1}}));
+      state.entities().apply(first, {.sequence = 1, .source = {.authenticated_player_slot = 1}}));
   ASSERT_TRUE(
-      state.entities().apply(second, {.sequence = 1, .source = {.authenticated_player_id = 2}}));
+      state.entities().apply(second, {.sequence = 1, .source = {.authenticated_player_slot = 2}}));
   ASSERT_EQ(state.entities().enemies().enemies.size(), 2u);
   EXPECT_EQ(state.entities().enemies().enemies[0].last_sequence, 1u);
   EXPECT_EQ(state.entities().enemies().enemies[1].last_sequence, 1u);
@@ -130,9 +130,8 @@ TEST(Jak2Presentation, ConsumedTargetsAdvanceByFrameAgeUpToTheLimit) {
   using namespace multiplayer::jak2;
   application::RemoteReplicationFrame frame;
   frame.presented_ms = 1000;
-  frame.player_vehicle_targets[1] = {.position = {100.0f, 0.0f, 0.0f},
-                                     .velocity = {4096.0f, 0.0f, 0.0f},
-                                     .valid = true};
+  frame.player_vehicle_targets[1] = {
+      .position = {100.0f, 0.0f, 0.0f}, .velocity = {4096.0f, 0.0f, 0.0f}, .valid = true};
   frame.player_vehicle_targets[2] = {.position = {100.0f, 0.0f, 0.0f},
                                      .velocity = {4096.0f, 0.0f, 0.0f}};
   frame.enemy_targets.push_back(frame.player_vehicle_targets[1]);
@@ -154,7 +153,7 @@ TEST(Jak2Presentation, SceneTransitionsPresentTheirPlacementWithoutOldSceneHisto
   auto frame = std::make_unique<application::RemoteReplicationFrame>();
   const auto present = [&](bool in_scene, float position_meters, uint32_t sequence) {
     auto& player = frame->players[1];
-    player.player_id = 1;
+    player.player_slot = 1;
     player.state_ready = true;
     player.scene_active = in_scene;
     player.position = {position_meters * application::kGoalUnitsPerMeter, 0.0f, 0.0f};

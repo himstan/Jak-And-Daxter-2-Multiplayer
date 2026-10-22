@@ -24,14 +24,15 @@ bool valid_index(const uint32_t index, const uint32_t limit) {
   return index < limit;
 }
 
-bool source_allows_player(const platform::MessageOrigin& source, const PlayerId player_id) {
-  return source.from_host || source.authenticated_player_id == kInvalidPlayerId ||
-         source.authenticated_player_id == player_id;
+bool source_allows_player(const platform::MessageOrigin& source, const PlayerSlot player_slot) {
+  return source.from_host || source.authenticated_player_slot == kInvalidPlayerSlot ||
+         source.authenticated_player_slot == player_slot;
 }
 
-PlayerId snapshot_source(const PlayerId snapshot_source_id, const platform::MessageOrigin& source) {
+PlayerSlot snapshot_source(const PlayerSlot snapshot_source_id,
+                           const platform::MessageOrigin& source) {
   return valid_index(snapshot_source_id, kMaxPlayers) ? snapshot_source_id
-                                                      : source.authenticated_player_id;
+                                                      : source.authenticated_player_slot;
 }
 
 bool valid_gungame_state(const GungameState& state) {
@@ -78,10 +79,10 @@ bool valid_pedestrian_state(const PedestrianState& pedestrian) {
 
 bool valid_enemy_state(const EnemyState& enemy) {
   return enemy.actor_id != 0 &&
-         (enemy.owner_player_id == kInvalidPlayerId ||
-          valid_index(enemy.owner_player_id, kMaxPlayers)) &&
-         (enemy.focus_player_id == kInvalidPlayerId ||
-          valid_index(enemy.focus_player_id, kMaxPlayers)) &&
+         (enemy.owner_player_slot == kInvalidPlayerSlot ||
+          valid_index(enemy.owner_player_slot, kMaxPlayers)) &&
+         (enemy.focus_player_slot == kInvalidPlayerSlot ||
+          valid_index(enemy.focus_player_slot, kMaxPlayers)) &&
          finite_vector(enemy.position) && finite_quaternion(enemy.quaternion);
 }
 
@@ -96,8 +97,8 @@ bool valid_boss_state(const BossState& boss) {
 
 namespace {
 
-bool valid_traffic_origin(const PlayerId player_id) {
-  return valid_index(player_id, kMaxPlayers);
+bool valid_traffic_origin(const PlayerSlot player_slot) {
+  return valid_index(player_slot, kMaxPlayers);
 }
 
 bool valid_ambient_sequence(const uint32_t sequence, const uint32_t first_sequence) {
@@ -108,8 +109,8 @@ uint32_t traffic_net_id_class(const uint32_t net_id) {
   return net_id & kTrafficNetIdClassMask;
 }
 
-PlayerId traffic_net_id_origin(const uint32_t net_id) {
-  return static_cast<PlayerId>((net_id & kTrafficNetIdOriginMask) >> kTrafficNetIdOriginShift);
+PlayerSlot traffic_net_id_origin(const uint32_t net_id) {
+  return static_cast<PlayerSlot>((net_id & kTrafficNetIdOriginMask) >> kTrafficNetIdOriginShift);
 }
 
 uint32_t traffic_net_id_sequence(const uint32_t net_id) {
@@ -118,13 +119,13 @@ uint32_t traffic_net_id_sequence(const uint32_t net_id) {
 
 }  // namespace
 
-bool valid_traffic_pedestrian_net_id(const uint32_t net_id, const PlayerId source_player_id) {
+bool valid_traffic_pedestrian_net_id(const uint32_t net_id, const PlayerSlot source_player_slot) {
   const uint32_t entity_class = traffic_net_id_class(net_id);
   if (entity_class == kFixedTrafficNetIdClass) {
     return (net_id & kFixedTrafficNetIdNamespaceMask) == kShuttlePedestrianNetIdNamespace;
   }
-  return entity_class == kTrafficPedestrianNetIdClass && valid_traffic_origin(source_player_id) &&
-         traffic_net_id_origin(net_id) == source_player_id &&
+  return entity_class == kTrafficPedestrianNetIdClass && valid_traffic_origin(source_player_slot) &&
+         traffic_net_id_origin(net_id) == source_player_slot &&
          valid_ambient_sequence(traffic_net_id_sequence(net_id), 1u);
 }
 
@@ -144,29 +145,29 @@ bool valid_traffic_vehicle_net_id(const uint32_t net_id) {
 }
 
 bool valid_traffic_vehicle_occupants(const VehicleState& vehicle) {
-  if (vehicle.target_player_id != kInvalidPlayerId &&
-      !valid_index(vehicle.target_player_id, kMaxPlayers)) {
+  if (vehicle.target_player_slot != kInvalidPlayerSlot &&
+      !valid_index(vehicle.target_player_slot, kMaxPlayers)) {
     return false;
   }
-  return std::ranges::all_of(vehicle.rider_player_ids, [](const uint32_t player_id) {
-    return player_id == kInvalidPlayerId || player_id == kTrafficVehicleCivilianRiderId ||
-           valid_index(player_id, kMaxPlayers);
+  return std::ranges::all_of(vehicle.rider_player_slots, [](const uint32_t player_slot) {
+    return player_slot == kInvalidPlayerSlot || player_slot == kTrafficVehicleCivilianRiderId ||
+           valid_index(player_slot, kMaxPlayers);
   });
 }
 
-std::array<PlayerId, kMaxPlayers> normalize_traffic_authority(
-    const std::array<PlayerId, kMaxPlayers>& assignments) {
-  std::array<PlayerId, kMaxPlayers> normalized = {};
-  normalized.fill(kInvalidPlayerId);
-  for (PlayerId player_id = 0; player_id < kMaxPlayers; ++player_id) {
-    if (valid_index(assignments[player_id], kMaxPlayers)) {
-      normalized[player_id] = assignments[player_id];
+std::array<PlayerSlot, kMaxPlayers> normalize_traffic_authority(
+    const std::array<PlayerSlot, kMaxPlayers>& assignments) {
+  std::array<PlayerSlot, kMaxPlayers> normalized = {};
+  normalized.fill(kInvalidPlayerSlot);
+  for (PlayerSlot player_slot = 0; player_slot < kMaxPlayers; ++player_slot) {
+    if (valid_index(assignments[player_slot], kMaxPlayers)) {
+      normalized[player_slot] = assignments[player_slot];
     }
   }
-  for (PlayerId player_id = 0; player_id < kMaxPlayers; ++player_id) {
-    if (const PlayerId source = normalized[player_id];
-        source != kInvalidPlayerId && normalized[source] != source) {
-      normalized[player_id] = kInvalidPlayerId;
+  for (PlayerSlot player_slot = 0; player_slot < kMaxPlayers; ++player_slot) {
+    if (const PlayerSlot source = normalized[player_slot];
+        source != kInvalidPlayerSlot && normalized[source] != source) {
+      normalized[player_slot] = kInvalidPlayerSlot;
     }
   }
   return normalized;

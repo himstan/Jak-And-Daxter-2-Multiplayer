@@ -259,11 +259,11 @@
       (set! (-> (mp-local-player-record) action hit-invulnerable?)
             (if (and (nonnull? *target*) (logtest? (-> *target* state-flags) (state-flags tinvul1))) 1 0))
       (set! (-> (mp-local-player-record) action darkjak-stage) (the uint 0))
-      (set! (-> (mp-local-player-record) action riding-along-player-id) MP_INVALID_PLAYER_ID)
+      (set! (-> (mp-local-player-record) action riding-along-player-slot) MP_INVALID_PLAYER_SLOT)
       (if (and *target* (nonzero? *target*) (-> *target* state) (nonzero? (-> *target* state)))
         (set! local-state (the int (mp-target-get-id-from-state (-> *target* state name) (-> *target* state-param)))))
       (when (and *target* (nonzero? *target*))
-        (set! (-> (mp-local-player-record) action riding-along-player-id) (-> *target* riding-along-player-id)))
+        (set! (-> (mp-local-player-record) action riding-along-player-slot) (-> *target* riding-along-player-slot)))
       (when (and *target*
                  (nonzero? *target*)
                  (focus-test? *target* dark)

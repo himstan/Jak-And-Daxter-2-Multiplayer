@@ -3,12 +3,12 @@
 
 ;; Keep this value in sync with kMPMaxPlayers in multiplayer_protocol.h
 (defglobalconstant MP_MAX_PLAYERS 8)
-(defconstant MP_PLAYER_ID_BITS
+(defconstant MP_PLAYER_SLOT_BITS
   (cond
     ((<= MP_MAX_PLAYERS 2) 1)
     ((<= MP_MAX_PLAYERS 4) 2)
     ((<= MP_MAX_PLAYERS 8) 3)
     ((<= MP_MAX_PLAYERS 16) 4)
     (else 5)))
-(defconstant MP_BATTLE_SPAWN_COUNTER_BITS (- 28 MP_PLAYER_ID_BITS))
+(defconstant MP_BATTLE_SPAWN_COUNTER_BITS (- 28 MP_PLAYER_SLOT_BITS))
 (defconstant MP_BATTLE_SPAWN_COUNTER_LIMIT (ash 1 MP_BATTLE_SPAWN_COUNTER_BITS))

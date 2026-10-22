@@ -158,12 +158,12 @@
   (none))
 
 (defun get-pedestrian-record-focus-proc ((rec traffic-record))
-  (when (and rec (nonzero? rec) (mp-player-id-valid? (the-as uint (-> rec aux-state))))
-    (return (the-as process-focusable (mp-player-target-by-id (the-as uint (-> rec aux-state))))))
+  (when (and rec (nonzero? rec) (mp-player-slot-valid? (the-as uint (-> rec aux-state))))
+    (return (the-as process-focusable (mp-player-target-by-slot (the-as uint (-> rec aux-state))))))
   (the-as process-focusable #f))
 
 (defun mp-pedestrian-sync-guard-target! ((this citizen) (rec traffic-record))
-  (when (mp-player-id-valid? (the-as uint (-> rec aux-state)))
+  (when (mp-player-slot-valid? (the-as uint (-> rec aux-state)))
     (let ((focus-proc (get-pedestrian-record-focus-proc rec)))
       (when (and focus-proc (nonzero? focus-proc))
         (set-guard-target this (process->handle focus-proc)))))

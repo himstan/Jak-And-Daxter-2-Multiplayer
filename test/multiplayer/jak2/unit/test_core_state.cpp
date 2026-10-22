@@ -6,18 +6,18 @@
 namespace {
 using namespace multiplayer::jak2::core;
 
-ApplyContext from(const PlayerId source,
+ApplyContext from(const PlayerSlot source,
                   const Sequence sequence,
                   const uint64_t now_ms = 0,
-                  const PlayerId local = kInvalidPlayerId) {
+                  const PlayerSlot local = kInvalidPlayerSlot) {
   return {.sequence = sequence,
-          .source = {.authenticated_player_id = source},
+          .source = {.authenticated_player_slot = source},
           .received_at_ms = now_ms,
-          .local_player_id = local};
+          .local_player_slot = local};
 }
 
-PlayerIdentity identity(const PlayerId player_id) {
-  PlayerIdentity result = {.player_id = player_id,
+PlayerIdentity identity(const PlayerSlot player_slot) {
+  PlayerIdentity result = {.player_slot = player_slot,
                            .character = PlayerCharacter::JAK,
                            .skin = get_default_player_skin(0x112233)};
   result.name[0] = 'J';
@@ -41,12 +41,12 @@ TEST(Jak2Replication, IdentityUsesSharedSkinValidation) {
 
 TEST(Jak2Replication, DepartureClearsAllGameplayDomains) {
   ReplicationState state;
-  PlayerState player = {.player_id = 1, .state_ready = true};
+  PlayerState player = {.player_slot = 1, .state_ready = true};
   ASSERT_TRUE(state.players().apply(player, from(1, 1)));
-  EnemySnapshot enemies = {.source_player_id = 1,
-                           .enemies = {{.actor_id = 41, .owner_player_id = 1}}};
+  EnemySnapshot enemies = {.source_player_slot = 1,
+                           .enemies = {{.actor_id = 41, .owner_player_slot = 1}}};
   ASSERT_TRUE(state.entities().apply(enemies, from(1, 1)));
-  GameEventBatch events = {.events = {{.event_id = 2, .source_player_id = 1}}};
+  GameEventBatch events = {.events = {{.event_id = 2, .source_player_slot = 1}}};
   ASSERT_EQ(state.events().apply(events, from(1, 1)),
             multiplayer::platform::PacketApplyResult::ACCEPT);
   ASSERT_TRUE(state.depart_player(1));
@@ -85,9 +85,9 @@ TEST(Jak2Replication, InvalidBootstrapDoesNotPartiallyMutateWorld) {
 
 TEST(Jak2Replication, EventsSequencePerSourceAndDrainWithinBounds) {
   ReplicationState state;
-  GameEventBatch first = {
-      .events = {{.event_id = 1, .source_player_id = 1}, {.event_id = 2, .source_player_id = 1}}};
-  GameEventBatch second = {.events = {{.event_id = 3, .source_player_id = 2}}};
+  GameEventBatch first = {.events = {{.event_id = 1, .source_player_slot = 1},
+                                     {.event_id = 2, .source_player_slot = 1}}};
+  GameEventBatch second = {.events = {{.event_id = 3, .source_player_slot = 2}}};
   ASSERT_EQ(state.events().apply(first, from(1, 5)),
             multiplayer::platform::PacketApplyResult::ACCEPT);
   ASSERT_EQ(state.events().apply(second, from(2, 1)),
@@ -103,10 +103,10 @@ TEST(Jak2Replication, EventsSequencePerSourceAndDrainWithinBounds) {
 
 TEST(Jak2Replication, EventsRejectInvalidBoundsBeforeMutation) {
   ReplicationState state;
-  GameEvent invalid = {.event_id = 1, .source_player_id = 1, .payload_size = 65};
+  GameEvent invalid = {.event_id = 1, .source_player_slot = 1, .payload_size = 65};
   EXPECT_EQ(state.events().apply(GameEventBatch{.events = {invalid}}, from(1, 1)),
             multiplayer::platform::PacketApplyResult::REJECT);
-  GameEvent valid = {.event_id = 1, .source_player_id = 1};
+  GameEvent valid = {.event_id = 1, .source_player_slot = 1};
   GameEventBatch oversized;
   oversized.events.assign(256, valid);
   EXPECT_EQ(state.events().apply(oversized, from(1, 1)),
@@ -118,7 +118,7 @@ TEST(Jak2Replication, EventQueueOverflowIsAtomicAndDrainingRestoresCapacity) {
   using multiplayer::platform::PacketApplyResult;
   EventReplicationState state;
   GameEventBatch batch;
-  batch.events.assign(255, {.event_id = 12, .source_player_id = 1});
+  batch.events.assign(255, {.event_id = 12, .source_player_slot = 1});
   for (Sequence sequence = 1; sequence <= 4; ++sequence)
     ASSERT_EQ(state.apply(batch, from(1, sequence)), PacketApplyResult::ACCEPT);
   batch.events.resize(4);
@@ -145,16 +145,16 @@ TEST(Jak2Replication, EventQueueOverflowIsAtomicAndDrainingRestoresCapacity) {
 
 TEST(Jak2Replication, PlayerExpiryClearsDependentVehicleAndTurretState) {
   ReplicationState state;
-  PlayerState player = {.player_id = 1,
+  PlayerState player = {.player_slot = 1,
                         .state_ready = true,
                         .turret_active = true,
                         .vehicle_id = kPlayerVehicleNetIdClass | 1u};
   ASSERT_TRUE(state.players().apply(player, from(1, 1, 1000)));
   PlayerVehicleState vehicle = {
-      .player_id = 1,
+      .player_slot = 1,
       .vehicle = {.net_id = player.vehicle_id, .quaternion = {0.0f, 0.0f, 0.0f, 1.0f}}};
   ASSERT_TRUE(state.players().apply(vehicle, from(1, 1, 1000)));
-  TurretState turret = {.player_id = 1, .turret_aid = player.vehicle_id};
+  TurretState turret = {.player_slot = 1, .turret_aid = player.vehicle_id};
   ASSERT_TRUE(state.players().apply(turret, from(1, 1, 1000)));
   state.expire(3001);
   EXPECT_FALSE(state.players().players()[1].state_ready);
@@ -165,7 +165,7 @@ TEST(Jak2Replication, PlayerExpiryClearsDependentVehicleAndTurretState) {
 TEST(Jak2Replication, PlayerExpiryUsesFullLocalClock) {
   ReplicationState state;
   const uint64_t received_at_ms = (uint64_t{1} << 32) + 1000;
-  PlayerState player = {.player_id = 1, .state_ready = true};
+  PlayerState player = {.player_slot = 1, .state_ready = true};
   ASSERT_TRUE(state.players().apply(player, from(1, 1, received_at_ms)));
   EXPECT_EQ(state.players().players()[1].received_time_ms, received_at_ms);
   state.expire(received_at_ms + 2000);
@@ -184,10 +184,10 @@ TEST(Jak2Replication, BossAndAirlockValidationPrecedesMutation) {
   EXPECT_FALSE(state.entities().apply(boss, from(1, 2, 1500)));
   EXPECT_EQ(state.entities().boss(BossState::Kind::PALACE_SQUID).active, 1u);
 
-  AirlockSnapshot airlocks = {.source_player_id = 1,
+  AirlockSnapshot airlocks = {.source_player_slot = 1,
                               .states = {{.airlock_aid = 17, .state_id = 2}}};
   ASSERT_TRUE(state.entities().apply(airlocks, from(1, 8, 1000, 2)));
-  AirlockSnapshot second_peer_airlocks = {.source_player_id = 2,
+  AirlockSnapshot second_peer_airlocks = {.source_player_slot = 2,
                                           .states = {{.airlock_aid = 18, .state_id = 1}}};
   ASSERT_TRUE(state.entities().apply(second_peer_airlocks, from(2, 1, 1100, 0)));
   airlocks.states[0].state_id = 9;
@@ -198,7 +198,7 @@ TEST(Jak2Replication, BossAndAirlockValidationPrecedesMutation) {
 
 TEST(Jak2Replication, ResetClearsAllComposedState) {
   ReplicationState state;
-  PlayerState player = {.player_id = 1};
+  PlayerState player = {.player_slot = 1};
   ASSERT_TRUE(state.players().apply(player, from(1, 1)));
   WorldState world = {.clock = 9};
   ASSERT_TRUE(state.world().apply(world, {.sequence = 1, .source = {.from_host = true}}));

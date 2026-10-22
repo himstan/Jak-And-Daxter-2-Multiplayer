@@ -7,7 +7,7 @@ struct MPReplicationAirlockStateGOAL {
   uint32_t sequence;
   uint16_t level_id;
   uint8_t state_id;
-  uint8_t source_player_id;
+  uint8_t source_player_slot;
 };
 
 static_assert(sizeof(MPReplicationAirlockStateGOAL) == 12);

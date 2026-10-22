@@ -208,7 +208,7 @@
            (not (daxter-stadium-bike? tgt))
            (or (and (focus-test? tgt indax) (zero? (-> tgt pilot seat-index)))
                (and (not (focus-test? tgt indax))
-                    (not (and (!= (-> tgt riding-along-player-id) MP_INVALID_PLAYER_ID)
+                    (not (and (!= (-> tgt riding-along-player-slot) MP_INVALID_PLAYER_SLOT)
                               (nonnull? (get-jak-rider tgt))))))) #t #f))
 
 (defun pilot-gun-pose? ((tgt target))

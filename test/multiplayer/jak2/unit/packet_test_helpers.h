@@ -20,7 +20,7 @@ template <typename Packet, typename Model, auto Canonicalize>
 std::optional<Model> decode_body(std::span<const uint8_t> bytes,
                                  const platform::MessageOrigin& source) {
   const auto packet = platform::wire::decode_packet<Packet>(bytes);
-  if (!packet || source.authenticated_player_id >= core::kMaxPlayers)
+  if (!packet || source.authenticated_player_slot >= core::kMaxPlayers)
     return std::nullopt;
   Model model = {};
   wire::from_packet(*packet, model);

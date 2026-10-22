@@ -11,7 +11,7 @@ bool validate_packet(const EnemyStateBatchPacket& packet) {
   for (const auto& enemy : packet.enemies) {
     if (!platform::wire::valid_position_array(enemy.position) ||
         !platform::wire::valid_quaternion_array(enemy.quaternion) ||
-        !valid_wire_player_reference(enemy.focus_player_id) || enemy.flags > 3u) {
+        !valid_wire_player_reference(enemy.focus_player_slot) || enemy.flags > 3u) {
       return false;
     }
   }
@@ -29,8 +29,8 @@ EnemyStateBatchPacket to_packet(const core::EnemySnapshot& snapshot) {
          .quaternion = enemy.quaternion,
          .hit_points = enemy.hit_points,
          .state_id = enemy.state_id,
-         .focus_player_id =
-             enemy.focus_player_id < kMPMaxPlayers ? enemy.focus_player_id : kWireInvalidPlayerId,
+         .focus_player_slot = enemy.focus_player_slot < kMPMaxPlayers ? enemy.focus_player_slot
+                                                                      : kWireInvalidPlayerSlot,
          .flags = static_cast<uint8_t>((enemy.attack_active ? 1u : 0u) | (enemy.aggro ? 2u : 0u))});
   }
   return packet;
@@ -40,16 +40,16 @@ void from_packet(const EnemyStateBatchPacket& packet, core::EnemySnapshot& snaps
   snapshot = {};
   snapshot.sample_time_ms = packet.sample_time_ms;
   snapshot.enemies.reserve(packet.enemies.size());
-  for (const auto& [actor_id, position, quaternion, hit_points, state_id, focus_player_id, flags] :
-       packet.enemies) {
+  for (const auto& [actor_id, position, quaternion, hit_points, state_id, focus_player_slot,
+                    flags] : packet.enemies) {
     core::EnemyState state;
     state.actor_id = actor_id;
     state.position = position;
     state.quaternion = quaternion;
     state.hit_points = hit_points;
     state.state_id = state_id;
-    state.focus_player_id =
-        focus_player_id < kMPMaxPlayers ? focus_player_id : core::kInvalidPlayerId;
+    state.focus_player_slot =
+        focus_player_slot < kMPMaxPlayers ? focus_player_slot : core::kInvalidPlayerSlot;
     state.attack_active = (flags & 1u) != 0;
     state.aggro = (flags & 2u) != 0;
     snapshot.enemies.push_back(state);

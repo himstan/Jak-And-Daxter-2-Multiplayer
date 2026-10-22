@@ -77,8 +77,8 @@
     (when (logtest? (actor-option user17) (-> self fact options))
       (let ((trans (-> self root trans)))
         (handle-door-opening trans *target*)
-        (dotimes (player-id MP_MAX_PLAYERS)
-          (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (dotimes (player-slot MP_MAX_PLAYERS)
+          (let ((record (mp-player-record-by-slot (the-as uint player-slot))))
             (when (and record
                        (nonzero? record)
                        (is-record-remote-player? record))

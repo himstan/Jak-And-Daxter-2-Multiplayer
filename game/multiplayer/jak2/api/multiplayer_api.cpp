@@ -47,13 +47,14 @@ multiplayer::platform::PlayerProfile local_profile() {
   multiplayer::platform::StoredPlayerProfile identity = {.display_name = preferences.player_name};
   runtime().load_profile(identity);
   multiplayer::platform::PlayerProfile profile;
+  profile.player_id = identity.player_id;
   profile.display_name = std::move(identity.display_name);
   profile.character = identity.preferred_character;
   const auto* begin = reinterpret_cast<const uint8_t*>(&preferences.player_skin);
   profile.game_extension.assign(begin, begin + sizeof(preferences.player_skin));
   for (const auto session = runtime().snapshot().session; const auto& player : session.players) {
-    if (player.player_id == session.state.local_player_id) {
-      profile.player_id = player.player_id;
+    if (player.player_slot == session.state.local_player_slot) {
+      profile.player_slot = player.player_slot;
       profile.character = player.character;
       profile.ready = player.ready;
       break;
@@ -207,53 +208,54 @@ static u64 pc_multi_copy_chat(const u32 after_serial,
     if (!multiplayer::jak2::bridge::write_string(name_address, message.display_name) ||
         !multiplayer::jak2::bridge::write_string(text_address, message.text))
       return 0;
-    return (static_cast<u64>(message.serial) << 8) | message.player_id;
+    return (static_cast<u64>(message.serial) << 8) | message.player_slot;
   }
   return 0;
 }
 
-static int pc_multi_get_local_player_id() {
-  return runtime().snapshot().session.state.local_player_id;
+static int pc_multi_get_local_player_slot() {
+  return runtime().snapshot().session.state.local_player_slot;
 }
 
-static int pc_multi_get_host_player_id() {
-  return runtime().snapshot().session.state.host_player_id;
+static int pc_multi_get_host_player_slot() {
+  return runtime().snapshot().session.state.host_player_slot;
 }
 
-static int64_t pc_multi_get_player_ping(const u32 player_id) {
-  if (player_id >= kMPMaxPlayers)
+static int64_t pc_multi_get_player_ping(const u32 player_slot) {
+  if (player_slot >= kMPMaxPlayers)
     return -1;
   const auto snapshot = runtime().snapshot();
-  return snapshot.session.player_ping_ms(static_cast<multiplayer::platform::PlayerId>(player_id))
+  return snapshot.session
+      .player_ping_ms(static_cast<multiplayer::platform::PlayerSlot>(player_slot))
       .value_or(-1);
 }
 
-static int pc_multi_get_player_connection_type(const u32 player_id) {
+static int pc_multi_get_player_connection_type(const u32 player_slot) {
   const auto snapshot = runtime().snapshot();
   const auto& players = snapshot.session.players;
   const auto profile =
-      std::ranges::find(players, player_id, &multiplayer::platform::PlayerProfile::player_id);
+      std::ranges::find(players, player_slot, &multiplayer::platform::PlayerProfile::player_slot);
   if (profile == players.end())
     return static_cast<int>(ConnectionType::NONE);
   if (profile->steam_id != 0)
     return static_cast<int>(steam::is_friend(profile->steam_id) ? ConnectionType::FRIEND
                                                                 : ConnectionType::STEAM);
-  if (profile->player_id == snapshot.session.state.host_player_id)
+  if (profile->player_slot == snapshot.session.state.host_player_slot)
     return static_cast<int>(ConnectionType::NONE);
   return static_cast<int>(profile->lan ? ConnectionType::LAN : ConnectionType::INTERNET);
 }
 
-static int pc_multi_open_player_steam_profile(const u32 player_id) {
+static int pc_multi_open_player_steam_profile(const u32 player_slot) {
   const auto snapshot = runtime().snapshot();
   const auto& players = snapshot.session.players;
   const auto profile =
-      std::ranges::find(players, player_id, &multiplayer::platform::PlayerProfile::player_id);
+      std::ranges::find(players, player_slot, &multiplayer::platform::PlayerProfile::player_slot);
   return profile != players.end() && steam::show_profile(profile->steam_id) ? 1 : 0;
 }
 
 static u32 pc_multi_get_local_player_character() {
   for (const auto snapshot = runtime().snapshot(); const auto& profile : snapshot.session.players) {
-    if (profile.player_id == snapshot.session.state.local_player_id)
+    if (profile.player_slot == snapshot.session.state.local_player_slot)
       return static_cast<u32>(profile.character);
   }
   return static_cast<u32>(PlayerCharacter::UNKNOWN);
@@ -591,10 +593,10 @@ static int pc_multi_lobby_set_ready(const u32 ready) {
   return runtime().enqueue<multiplayer::platform::SetReadyCommand>(ready != 0) ? 1 : 0;
 }
 
-static int pc_multi_lobby_kick(const u32 player_id) {
-  return player_id <= (std::numeric_limits<multiplayer::platform::PlayerId>::max)() &&
+static int pc_multi_lobby_kick(const u32 player_slot) {
+  return player_slot <= (std::numeric_limits<multiplayer::platform::PlayerSlot>::max)() &&
                  runtime().enqueue<multiplayer::platform::KickPlayerCommand>(
-                     static_cast<multiplayer::platform::PlayerId>(player_id))
+                     static_cast<multiplayer::platform::PlayerSlot>(player_slot))
              ? 1
              : 0;
 }
@@ -805,8 +807,8 @@ void init_jak2_bridge() {
   register_symbol("pc-multi-get-host-mapping-state", &pc_multi_get_host_mapping_state);
   register_symbol("pc-multi-get-host-port", &pc_multi_get_host_port);
   register_symbol("pc-multi-exchange-state", &pc_multi_exchange_state);
-  register_symbol("pc-multi-get-local-player-id", &pc_multi_get_local_player_id);
-  register_symbol("pc-multi-get-host-player-id", &pc_multi_get_host_player_id);
+  register_symbol("pc-multi-get-local-player-slot", &pc_multi_get_local_player_slot);
+  register_symbol("pc-multi-get-host-player-slot", &pc_multi_get_host_player_slot);
   register_symbol("pc-multi-send-chat", &pc_multi_send_chat);
   register_symbol("pc-multi-copy-chat", &pc_multi_copy_chat);
   register_symbol("pc-multi-get-player-ping", &pc_multi_get_player_ping);

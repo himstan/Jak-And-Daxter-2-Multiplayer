@@ -49,7 +49,7 @@ class RuntimeWorker final : public ConnectionExecutionPort,
   CommandError enter_lobby() override;
   CommandError enter_game() override;
   CommandError request_bootstrap() override;
-  CommandError kick_player(PlayerId player_id) override;
+  CommandError kick_player(PlayerSlot player_slot) override;
   CommandError send_chat(std::string text) override;
   CommandError configure_compatibility_identity(std::string identity) override;
 #ifdef ENABLE_NETWORK_SIMULATION

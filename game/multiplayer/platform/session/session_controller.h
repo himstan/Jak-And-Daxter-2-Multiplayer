@@ -53,7 +53,7 @@ class SessionController final : public GameSessionEndpoint {
   bool start_game();
   void enter_game();
   void enter_lobby();
-  bool kick(PlayerId player_id);
+  bool kick(PlayerSlot player_slot);
 
   std::optional<uint32_t> send_gameplay(uint8_t message_id,
                                         const Audience& audience,
@@ -61,7 +61,7 @@ class SessionController final : public GameSessionEndpoint {
   bool cadence_due(uint8_t message_id, uint64_t now_ms, bool dirty = true) override;
   void request_bootstrap() override;
   const SessionSnapshot& snapshot() const override { return snapshot_; }
-  uint32_t estimated_rtt_ms(PlayerId player_id) const override;
+  uint32_t estimated_rtt_ms(PlayerSlot player_slot) const override;
   NetworkPressure network_pressure() const override { return pressure_.pressure(); }
   bool severe_pressure_sustained(uint64_t now_ms) const override;
 
@@ -75,7 +75,7 @@ class SessionController final : public GameSessionEndpoint {
   bool valid_message_policies(std::string_view action) const;
   bool valid_game_identity(std::string_view action) const;
   bool character_change_allowed(const PlayerProfile& profile) const;
-  bool validate_profile(PlayerProfile& profile, PlayerId player_id) const;
+  bool validate_profile(PlayerProfile& profile, PlayerSlot player_slot) const;
   void reset_adapter_session();
   void clear_countdown();
   uint32_t next_bootstrap_generation();
@@ -84,21 +84,21 @@ class SessionController final : public GameSessionEndpoint {
   void handle_pending_message(const TransportEvent& event);
   void handle_admitted_message(const TransportEvent& event);
   void handle_control(ConnectionId connection,
-                      PlayerId player_id,
-                      PlayerId origin_id,
+                      PlayerSlot player_slot,
+                      PlayerSlot origin_id,
                       Delivery delivery,
                       std::span<const uint8_t> payload,
                       uint64_t now_ms);
-  void handle_host_control(ConnectionId connection, PlayerId player_id, ControlMessage message);
+  void handle_host_control(ConnectionId connection, PlayerSlot player_slot, ControlMessage message);
   void handle_client_control(ConnectionId connection, ControlMessage message, uint64_t now_ms);
   void handle_gameplay(ConnectionId connection,
-                       PlayerId player_id,
-                       PlayerId origin,
+                       PlayerSlot player_slot,
+                       PlayerSlot origin,
                        Delivery delivery,
                        TransportLane lane,
                        std::span<const uint8_t> payload);
   void handle_bootstrap(ConnectionId connection,
-                        PlayerId origin,
+                        PlayerSlot origin,
                         Delivery delivery,
                         std::span<const uint8_t> payload);
   void host_departure(ConnectionId connection,
@@ -108,11 +108,11 @@ class SessionController final : public GameSessionEndpoint {
   void reject(ConnectionId connection, RejectionReason reason, std::string_view required = {});
   FrameSendResult send_frame(FrameKind kind,
                              const Audience& audience,
-                             PlayerId origin,
+                             PlayerSlot origin,
                              std::span<const uint8_t> payload,
                              TransportLane lane);
   void send_control(const ControlMessage& message, const Audience& audience);
-  void receive_chat(PlayerId player_id, std::string text);
+  void receive_chat(PlayerSlot player_slot, std::string text);
   void broadcast_profile(const PlayerProfile& profile);
   void publish_roster(ConnectionId connection);
   void update_snapshot(std::vector<ConnectionSnapshot> connections);

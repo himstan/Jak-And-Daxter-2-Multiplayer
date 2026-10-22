@@ -39,7 +39,7 @@ TEST(Jak2Protocol, VehicleRecordEncodesThreeRidersAndReconstructsFourth) {
   input.state_flags = 0x5;
   input.hit_points = 200;
   input.level_id = 12;
-  input.rider_player_ids = {1, 2, multiplayer::jak2::wire::kWireCivilianRiderId};
+  input.rider_player_slots = {1, 2, multiplayer::jak2::wire::kWireCivilianRiderId};
 
   multiplayer::jak2::wire::VehicleStateBatchPacket packet = {};
   packet.vehicles.push_back(input);
@@ -64,25 +64,26 @@ TEST(Jak2Protocol, VehicleRecordEncodesThreeRidersAndReconstructsFourth) {
   for (size_t component = 0; component < input.quaternion.size(); ++component) {
     EXPECT_FLOAT_EQ(decoded_packet->vehicles[0].quaternion[component], input.quaternion[component]);
   }
-  EXPECT_EQ(decoded_packet->vehicles[0].rider_player_ids, input.rider_player_ids);
+  EXPECT_EQ(decoded_packet->vehicles[0].rider_player_slots, input.rider_player_slots);
 
   multiplayer::jak2::core::TrafficSnapshot decoded = {};
   multiplayer::jak2::wire::from_packet(*decoded_packet, decoded);
   ASSERT_EQ(decoded.vehicles.size(), 1u);
-  EXPECT_EQ(decoded.vehicles[0].rider_player_ids[0], 1u);
-  EXPECT_EQ(decoded.vehicles[0].rider_player_ids[1], 2u);
-  EXPECT_EQ(decoded.vehicles[0].rider_player_ids[2],
+  EXPECT_EQ(decoded.vehicles[0].rider_player_slots[0], 1u);
+  EXPECT_EQ(decoded.vehicles[0].rider_player_slots[1], 2u);
+  EXPECT_EQ(decoded.vehicles[0].rider_player_slots[2],
             multiplayer::jak2::core::kTrafficVehicleCivilianRiderId);
-  EXPECT_EQ(decoded.vehicles[0].rider_player_ids[3], multiplayer::jak2::core::kInvalidPlayerId);
-  EXPECT_EQ(decoded.vehicles[0].target_player_id, 1u);
+  EXPECT_EQ(decoded.vehicles[0].rider_player_slots[3], multiplayer::jak2::core::kInvalidPlayerSlot);
+  EXPECT_EQ(decoded.vehicles[0].target_player_slot, 1u);
 }
 
 TEST(Jak2Protocol, VehicleRecordCivilianDriverReconstructsInvalidTarget) {
   multiplayer::jak2::wire::VehicleStateBatchPacket packet = {};
-  packet.vehicles.push_back({.net_id = 1234,
-                             .rider_player_ids = {multiplayer::jak2::wire::kWireCivilianRiderId,
-                                                  multiplayer::jak2::wire::kWireInvalidPlayerId,
-                                                  multiplayer::jak2::wire::kWireInvalidPlayerId}});
+  packet.vehicles.push_back(
+      {.net_id = 1234,
+       .rider_player_slots = {multiplayer::jak2::wire::kWireCivilianRiderId,
+                              multiplayer::jak2::wire::kWireInvalidPlayerSlot,
+                              multiplayer::jak2::wire::kWireInvalidPlayerSlot}});
 
   const auto bytes = multiplayer::platform::wire::encode_packet(packet);
   ASSERT_TRUE(bytes.has_value());
@@ -93,9 +94,9 @@ TEST(Jak2Protocol, VehicleRecordCivilianDriverReconstructsInvalidTarget) {
   multiplayer::jak2::core::TrafficSnapshot decoded = {};
   multiplayer::jak2::wire::from_packet(*decoded_packet, decoded);
   ASSERT_EQ(decoded.vehicles.size(), 1u);
-  EXPECT_EQ(decoded.vehicles[0].rider_player_ids[0],
+  EXPECT_EQ(decoded.vehicles[0].rider_player_slots[0],
             multiplayer::jak2::core::kTrafficVehicleCivilianRiderId);
-  EXPECT_EQ(decoded.vehicles[0].target_player_id, multiplayer::jak2::core::kInvalidPlayerId);
+  EXPECT_EQ(decoded.vehicles[0].target_player_slot, multiplayer::jak2::core::kInvalidPlayerSlot);
 }
 
 TEST(Jak2Protocol, PedestrianRecordEncodesAndDecodesLosslessly) {
@@ -108,7 +109,7 @@ TEST(Jak2Protocol, PedestrianRecordEncodesAndDecodesLosslessly) {
   input.hit_points = 8;
   input.state_id = 23;
   input.flags = 0x3;
-  input.target_player_id = 4;
+  input.target_player_slot = 4;
   input.vehicle_net_id = 777;
   input.transport_id = 888;
   input.transport_side = 1;

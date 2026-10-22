@@ -9,15 +9,15 @@ uint8_t to_wire_rider(const uint32_t rider_id) {
   if (rider_id == core::kTrafficVehicleCivilianRiderId) {
     return kWireCivilianRiderId;
   }
-  return rider_id < kMPMaxPlayers ? static_cast<uint8_t>(rider_id) : kWireInvalidPlayerId;
+  return rider_id < kMPMaxPlayers ? static_cast<uint8_t>(rider_id) : kWireInvalidPlayerSlot;
 }
 
 uint32_t from_wire_rider(const uint8_t rider_id) {
   if (rider_id == kWireCivilianRiderId) {
     return core::kTrafficVehicleCivilianRiderId;
   }
-  if (rider_id == kWireInvalidPlayerId || rider_id >= kMPMaxPlayers) {
-    return core::kInvalidPlayerId;
+  if (rider_id == kWireInvalidPlayerSlot || rider_id >= kMPMaxPlayers) {
+    return core::kInvalidPlayerSlot;
   }
   return rider_id;
 }
@@ -33,7 +33,7 @@ bool validate_packet(const PlayerVehicleStatePacket& packet) {
       vehicle.state_flags > 31u) {
     return false;
   }
-  for (const uint8_t rider : vehicle.rider_player_ids) {
+  for (const uint8_t rider : vehicle.rider_player_slots) {
     if (!valid_wire_rider_reference(rider)) {
       return false;
     }
@@ -56,8 +56,8 @@ PlayerVehicleStatePacket to_packet(const core::PlayerVehicleState& state) {
   packet.vehicle.state_flags = source.state_flags;
   packet.vehicle.hit_points = source.hit_points;
   packet.vehicle.level_id = source.level_id;
-  for (size_t index = 0; index < source.rider_player_ids.size(); ++index) {
-    packet.vehicle.rider_player_ids[index] = to_wire_rider(source.rider_player_ids[index]);
+  for (size_t index = 0; index < source.rider_player_slots.size(); ++index) {
+    packet.vehicle.rider_player_slots[index] = to_wire_rider(source.rider_player_slots[index]);
   }
   return packet;
 }
@@ -66,7 +66,7 @@ void from_packet(const PlayerVehicleStatePacket& packet, core::PlayerVehicleStat
   state = {};
   const auto& [sample_time_ms, net_id, vehicle_type, color_index, state_id, position, quaternion,
                linear_velocity, angular_velocity, state_flags, hit_points, level_id,
-               rider_player_ids] = packet.vehicle;
+               rider_player_slots] = packet.vehicle;
   auto& vehicle = state.vehicle;
   vehicle.sample_time_ms = sample_time_ms;
   vehicle.net_id = net_id;
@@ -80,12 +80,12 @@ void from_packet(const PlayerVehicleStatePacket& packet, core::PlayerVehicleStat
   vehicle.state_flags = state_flags;
   vehicle.hit_points = hit_points;
   vehicle.level_id = level_id;
-  for (size_t index = 0; index < vehicle.rider_player_ids.size(); ++index) {
-    vehicle.rider_player_ids[index] = from_wire_rider(rider_player_ids[index]);
+  for (size_t index = 0; index < vehicle.rider_player_slots.size(); ++index) {
+    vehicle.rider_player_slots[index] = from_wire_rider(rider_player_slots[index]);
   }
-  vehicle.target_player_id = vehicle.rider_player_ids[0] < core::kMaxPlayers
-                                 ? static_cast<core::PlayerId>(vehicle.rider_player_ids[0])
-                                 : core::kInvalidPlayerId;
+  vehicle.target_player_slot = vehicle.rider_player_slots[0] < core::kMaxPlayers
+                                   ? static_cast<core::PlayerSlot>(vehicle.rider_player_slots[0])
+                                   : core::kInvalidPlayerSlot;
 }
 
 }  // namespace multiplayer::jak2::wire

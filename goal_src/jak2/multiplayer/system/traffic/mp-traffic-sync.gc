@@ -2,7 +2,7 @@
 (in-package goal)
 
 (define-extern mp-traffic-clear-death-spectate-state! (function none))
-(define-extern mp-traffic-interest-player-id (function uint))
+(define-extern mp-traffic-interest-player-slot (function uint))
 
 (defun mp-traffic-ped-valid-for-authoritative-sync? ((proc citizen))
   (and proc
@@ -161,7 +161,7 @@
 (define-perm *mp-traffic-level-context-change-time* time-frame 0)
 (define-perm *mp-traffic-last-local-primary-level-id* uint (the uint 0))
 (define-perm *mp-traffic-last-authority-level-id* uint (the uint 0))
-(define-perm *mp-traffic-last-selected-authority-id* uint MP_INVALID_PLAYER_ID)
+(define-perm *mp-traffic-last-selected-authority-id* uint MP_INVALID_PLAYER_SLOT)
 (define-perm *mp-traffic-refresh-existing-log-time* time-frame 0)
 (define-perm *mp-traffic-status-log-time* time-frame 0)
 
@@ -175,7 +175,7 @@
   (mp-traffic-clear-authority-map! *mp-traffic-authority-assignments*)
   (mp-traffic-clear-authority-map! *mp-traffic-working-authority-map*)
   (set! *mp-traffic-authority-revision* (the uint 0))
-  (set! *mp-traffic-selected-authority-id* MP_INVALID_PLAYER_ID)
+  (set! *mp-traffic-selected-authority-id* MP_INVALID_PLAYER_SLOT)
   (set! *mp-pedestrian-net-id-counter* (the uint 1))
   (set! *mp-vehicle-net-id-counter* (the uint 32768))
   (set! *mp-client-vehicle-net-id-counter* MP_CLIENT_VEHICLE_NET_ID_BASE)
@@ -185,7 +185,7 @@
   (set! *mp-traffic-level-context-change-time* (the-as time-frame 0))
   (set! *mp-traffic-last-local-primary-level-id* (the uint 0))
   (set! *mp-traffic-last-authority-level-id* (the uint 0))
-  (set! *mp-traffic-last-selected-authority-id* MP_INVALID_PLAYER_ID)
+  (set! *mp-traffic-last-selected-authority-id* MP_INVALID_PLAYER_SLOT)
   (set! *mp-traffic-refresh-existing-log-time* (the-as time-frame 0))
   (set! *mp-traffic-status-log-time* (the-as time-frame 0))
   (set! *mp-traffic-death-state-log-time* (the-as time-frame 0))
@@ -196,8 +196,8 @@
   (none))
 
 (defun mp-traffic-local-primary-level-id ()
-  (let* ((interest-player-id (mp-traffic-interest-player-id))
-         (interest-record (mp-player-record-by-id interest-player-id)))
+  (let* ((interest-player-slot (mp-traffic-interest-player-slot))
+         (interest-record (mp-player-record-by-slot interest-player-slot)))
     (if (and interest-record (nonzero? interest-record)) (mp-player-primary-level-id interest-record) (the uint 0))))
 
 (defun mp-traffic-authority-primary-level-id ()

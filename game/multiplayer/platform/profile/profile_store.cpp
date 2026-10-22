@@ -1,5 +1,6 @@
 #include "game/multiplayer/platform/profile/profile_store.h"
 
+#include <fstream>
 #include <utility>
 
 #include "common/log/log.h"
@@ -126,8 +127,16 @@ bool load_player_profile(const ProfileLease& lease, StoredPlayerProfile& profile
   const auto path = lease.common_profile_path();
   lg::info("Loading profile from path: {}", path.string());
   if (!file_util::file_exists(path.string())) {
-    profile = {};
-    return true;
+    try {
+      StoredPlayerProfile created = {.player_id = PlayerId::generate()};
+      if (!save_player_profile(lease, created))
+        return false;
+      profile = std::move(created);
+      return true;
+    } catch (const std::exception& error) {
+      lg::error("[Multiplayer] Could not create player identity: {}", error.what());
+      return false;
+    }
   }
   try {
     const auto root = parse_commented_json(file_util::read_text_file(path), path.string());
@@ -145,6 +154,18 @@ bool load_player_profile(const ProfileLease& lease, StoredPlayerProfile& profile
       return false;
     }
     parsed.preferred_character = static_cast<PlayerCharacter>(character);
+    if (root.contains("player_id")) {
+      if (!root.at("player_id").is_string())
+        return false;
+      const auto id = PlayerId::parse(root.at("player_id").get<std::string>());
+      if (!id)
+        return false;
+      parsed.player_id = *id;
+    } else {
+      parsed.player_id = PlayerId::generate();
+      if (!save_player_profile(lease, parsed))
+        return false;
+    }
     profile = std::move(parsed);
     return true;
   } catch (const std::exception& ex) {
@@ -154,16 +175,30 @@ bool load_player_profile(const ProfileLease& lease, StoredPlayerProfile& profile
 }
 
 bool save_player_profile(const ProfileLease& lease, const StoredPlayerProfile& profile) {
-  if (!valid_display_name(profile.display_name) ||
+  if (!profile.player_id.valid() || !valid_display_name(profile.display_name) ||
       (profile.preferred_character != PlayerCharacter::JAK &&
        profile.preferred_character != PlayerCharacter::DAXTER)) {
     return false;
   }
   try {
     json root;
+    root["player_id"] = profile.player_id.to_string();
     root["display_name"] = profile.display_name;
     root["preferred_character"] = static_cast<uint8_t>(profile.preferred_character);
-    file_util::write_text_file(lease.common_profile_path(), root.dump(2));
+    const auto path = lease.common_profile_path();
+    const fs::path temporary = path.string() + ".tmp";
+    std::ofstream output;
+    output.exceptions(std::ios::failbit | std::ios::badbit);
+    output.open(temporary, std::ios::out | std::ios::trunc);
+    output << root.dump(2) << '\n';
+    output.close();
+#ifdef _WIN32
+    if (!MoveFileExW(temporary.c_str(), path.c_str(),
+                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+      throw std::runtime_error("could not replace player identity file");
+#else
+    fs::rename(temporary, path);
+#endif
     return true;
   } catch (const std::exception& error) {
     lg::error("[Multiplayer] Could not save player profile: {}", error.what());

@@ -1096,8 +1096,8 @@
     )
   (when (mp-session-in-game?)
     (let ((ride-along-found? #f))
-      (dotimes (player-id MP_MAX_PLAYERS)
-        (let ((record (mp-player-record-by-id (the-as uint player-id))))
+      (dotimes (player-slot MP_MAX_PLAYERS)
+        (let ((record (mp-player-record-by-slot (the-as uint player-slot))))
           (when (and record
                      (nonzero? record)
                      (is-record-remote-player? record)

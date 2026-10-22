@@ -62,7 +62,8 @@ const char* goal_string_data(const uint32_t address) {
 
 core::PlayerIdentity read_identity(const MPReplicationPlayerIdentityGOAL& source) {
   core::PlayerIdentity result = {};
-  result.player_id = source.player_id;
+  std::ranges::copy(source.player_id, result.player_id.bytes.begin());
+  result.player_slot = source.player_slot;
   result.character = static_cast<core::PlayerCharacter>(static_cast<uint32_t>(source.character));
   result.identity_ready = source.identity_ready != 0;
   result.state_ready = source.state_ready != 0;
@@ -83,7 +84,7 @@ core::VehicleState read_vehicle(const MPReplicationVehicleStateGOAL& source) {
   result.vehicle_type = source.vehicle_type;
   result.color_index = source.color_index;
   result.state_id = source.state_id;
-  result.target_player_id = source.target_player_id;
+  result.target_player_slot = source.target_player_slot;
   result.position = {source.x, source.y, source.z};
   result.quaternion = {source.quat_x, source.quat_y, source.quat_z, source.quat_w};
   result.linear_velocity = {source.lin_vel_x, source.lin_vel_y, source.lin_vel_z};
@@ -91,13 +92,13 @@ core::VehicleState read_vehicle(const MPReplicationVehicleStateGOAL& source) {
   result.state_flags = source.state_flags;
   result.hit_points = source.hit_points;
   result.level_id = source.level_id;
-  std::ranges::copy(source.rider_player_ids, result.rider_player_ids.begin());
+  std::ranges::copy(source.rider_player_slots, result.rider_player_slots.begin());
   return result;
 }
 
 core::PlayerState read_player(const MPReplicationPlayerGOAL& source) {
   core::PlayerState result = {};
-  result.player_id = source.identity.player_id;
+  result.player_slot = source.identity.player_slot;
   result.activity = static_cast<core::PlayerActivity>(source.activity);
   result.identity_ready = source.identity.identity_ready != 0;
   result.state_ready = source.identity.state_ready != 0;
@@ -126,7 +127,7 @@ core::PlayerState read_player(const MPReplicationPlayerGOAL& source) {
   result.action_state_id = source.action.action_state_id;
   result.vehicle_id = source.vehicle.vehicle_id;
   result.vehicle_seat = source.vehicle.seat_index;
-  result.riding_along_player_id = source.action.riding_along_player_id;
+  result.riding_along_player_slot = source.action.riding_along_player_slot;
   result.mission_flags = source.mission_flags;
   result.visual_secrets = static_cast<uint8_t>(source.action.visual_secrets);
   return result;
@@ -226,10 +227,10 @@ void read_bootstrap(const MPReplicationBootstrapStateGOAL& source, core::Bootstr
 core::EnemyState read_enemy(const MPReplicationEnemyStateGOAL& source) {
   core::EnemyState result = {};
   result.actor_id = source.actor_id;
-  result.owner_player_id = source.owner_player_id;
-  result.focus_player_id = source.focus_player_id < core::kMaxPlayers
-                               ? static_cast<core::PlayerId>(source.focus_player_id)
-                               : core::kInvalidPlayerId;
+  result.owner_player_slot = source.owner_player_slot;
+  result.focus_player_slot = source.focus_player_slot < core::kMaxPlayers
+                                 ? static_cast<core::PlayerSlot>(source.focus_player_slot)
+                                 : core::kInvalidPlayerSlot;
   result.state_id = source.state;
   result.hit_points = source.hp;
   result.position = {source.position[0], source.position[1], source.position[2]};
@@ -247,7 +248,7 @@ core::PedestrianState read_pedestrian(const MPReplicationPedestrianStateGOAL& so
   result.appearance_mask = source.appearance_mask;
   result.state_id = source.state_id;
   result.hit_points = source.hp;
-  result.target_player_id = source.target_player_id;
+  result.target_player_slot = source.target_player_slot;
   result.vehicle_net_id = source.vehicle_net_id;
   result.transport_id = source.transport_id;
   result.transport_side = source.transport_side;
@@ -262,7 +263,7 @@ core::PedestrianState read_pedestrian(const MPReplicationPedestrianStateGOAL& so
 core::GameEvent read_event(const MPEventGOAL& source) {
   core::GameEvent result = {};
   result.event_id = source.etype;
-  result.source_player_id = source.source_player_id;
+  result.source_player_slot = source.source_player_slot;
   result.payload_size = std::min<uint8_t>(source.payload_size, result.payload.size());
   std::ranges::copy_n(std::begin(source.data), result.payload_size, result.payload.begin());
   return result;
@@ -275,9 +276,9 @@ core::BossState read_squid(const MPReplicationPalaceSquidStateGOAL& source) {
   result.stage = source.stage;
   result.hit_points = source.hit_points;
   result.shield_hit_points = source.shield_hit_points;
-  result.target_player_id = source.target_player_id < kMPMaxPlayers
-                                ? static_cast<core::PlayerId>(source.target_player_id)
-                                : core::kInvalidPlayerId;
+  result.target_player_slot = source.target_player_slot < kMPMaxPlayers
+                                  ? static_cast<core::PlayerSlot>(source.target_player_slot)
+                                  : core::kInvalidPlayerSlot;
   result.draw_force_fade = source.draw_force_fade;
   result.action_sequence = source.action_seq;
   result.position = {source.x, source.y, source.z};
@@ -303,8 +304,8 @@ core::BossState read_widow(const MPReplicationWidowStateGOAL& source) {
 }
 
 bool capture_local(MPReplicationStateGOAL& state, application::ReplicationMailbox& mailbox) {
-  if (!core::valid_index(state.local_player_id, core::kMaxPlayers) ||
-      !core::valid_index(state.host_player_id, core::kMaxPlayers) ||
+  if (!core::valid_index(state.local_player_slot, core::kMaxPlayers) ||
+      !core::valid_index(state.host_player_slot, core::kMaxPlayers) ||
       state.local.enemies.count > core::kMaxEnemies ||
       state.local.traffic.pedestrian_count > kMPReplicationPedestrianCapacity ||
       state.local.traffic.vehicle_count > kMPReplicationVehicleCapacity ||
@@ -315,20 +316,20 @@ bool capture_local(MPReplicationStateGOAL& state, application::ReplicationMailbo
   }
   auto frame = std::make_unique<application::LocalReplicationFrame>();
   frame->sample_time_ms = static_cast<uint32_t>(steady_time_ms());
-  frame->local_player_id = state.local_player_id;
-  frame->host_player_id = state.host_player_id;
+  frame->local_player_slot = state.local_player_slot;
+  frame->host_player_slot = state.host_player_slot;
   for (size_t i = 0; i < core::kMaxPlayers; ++i) {
     frame->identities[i] = read_identity(state.local.players[i].identity);
     frame->players[i] = read_player(state.local.players[i]);
   }
-  const auto& player = state.local.players[state.local_player_id];
+  const auto& player = state.local.players[state.local_player_slot];
   if (player.vehicle.state.net_id != 0) {
-    frame->player_vehicle = core::PlayerVehicleState{.player_id = state.local_player_id,
+    frame->player_vehicle = core::PlayerVehicleState{.player_slot = state.local_player_slot,
                                                      .seat_index = player.vehicle.seat_index,
                                                      .vehicle = read_vehicle(player.vehicle.state)};
   }
   if (player.vehicle.turret_active != 0 && player.vehicle.vehicle_id != 0) {
-    frame->turret = core::TurretState{.player_id = state.local_player_id,
+    frame->turret = core::TurretState{.player_slot = state.local_player_slot,
                                       .turret_aid = player.vehicle.vehicle_id,
                                       .rotation_y = player.vehicle.turret_roty,
                                       .rotation_x = player.vehicle.turret_rotx};
@@ -337,7 +338,7 @@ bool capture_local(MPReplicationStateGOAL& state, application::ReplicationMailbo
   if (!read_gungame(state.local.gungame, frame->gungame.emplace()))
     frame->gungame.reset();
   read_bootstrap(state.local.bootstrap, frame->bootstrap);
-  frame->enemies.source_player_id = state.local_player_id;
+  frame->enemies.source_player_slot = state.local_player_slot;
   for (uint8_t i = 0; i < state.local.enemies.count; ++i)
     frame->enemies.enemies.push_back(read_enemy(state.local.enemies.enemies[i]));
   frame->pedestrians.kind = core::TrafficSnapshot::Kind::PEDESTRIANS;
@@ -350,7 +351,7 @@ bool capture_local(MPReplicationStateGOAL& state, application::ReplicationMailbo
   frame->bosses[0] = read_squid(state.local.bosses.squid);
   frame->bosses[1] = read_widow(state.local.bosses.widow);
   frame->airlocks.sequence = state.local.airlocks.sequence;
-  frame->airlocks.source_player_id = state.local_player_id;
+  frame->airlocks.source_player_slot = state.local_player_slot;
   for (uint8_t i = 0; i < state.local.airlocks.count; ++i) {
     const auto& source = state.local.airlocks.states[i].value;
     frame->airlocks.states.push_back({.airlock_aid = source.airlock_aid,
@@ -378,7 +379,8 @@ bool capture_local(MPReplicationStateGOAL& state, application::ReplicationMailbo
 void write_identity(const core::PlayerIdentity& source,
                     MPReplicationPlayerIdentityGOAL& destination) {
   destination = {};
-  destination.player_id = source.player_id;
+  std::ranges::copy(source.player_id.bytes, std::begin(destination.player_id));
+  destination.player_slot = source.player_slot;
   destination.character = static_cast<uint8_t>(source.character);
   destination.identity_ready = source.identity_ready;
   destination.state_ready = source.state_ready;
@@ -400,7 +402,7 @@ void write_vehicle(const core::VehicleState& source, MPReplicationVehicleStateGO
   destination.vehicle_type = source.vehicle_type;
   destination.color_index = source.color_index;
   destination.state_id = source.state_id;
-  destination.target_player_id = source.target_player_id;
+  destination.target_player_slot = source.target_player_slot;
   destination.x = source.position[0];
   destination.y = source.position[1];
   destination.z = source.position[2];
@@ -417,8 +419,8 @@ void write_vehicle(const core::VehicleState& source, MPReplicationVehicleStateGO
   destination.state_flags = source.state_flags;
   destination.hit_points = source.hit_points;
   destination.level_id = source.level_id;
-  std::ranges::copy(source.rider_player_ids.begin(), source.rider_player_ids.end(),
-                    std::begin(destination.rider_player_ids));
+  std::ranges::copy(source.rider_player_slots.begin(), source.rider_player_slots.end(),
+                    std::begin(destination.rider_player_slots));
 }
 
 void write_player(const core::PlayerState& source,
@@ -447,7 +449,7 @@ void write_player(const core::PlayerState& source,
   destination.action.action_state_id = source.action_state_id;
   destination.action.scene_state = source.scene_active;
   destination.action.respawn_flags = source.respawn_flags;
-  destination.action.riding_along_player_id = source.riding_along_player_id;
+  destination.action.riding_along_player_slot = source.riding_along_player_slot;
   destination.action.visual_secrets = source.visual_secrets;
   destination.action.hit_invulnerable = source.hit_invulnerable;
   destination.input.buttons = source.buttons;
@@ -458,9 +460,9 @@ void write_player(const core::PlayerState& source,
   destination.vehicle.vehicle_id = source.vehicle_id;
   destination.vehicle.seat_index = source.vehicle_seat;
   destination.vehicle.turret_active = source.turret_active;
-  if (vehicle.player_id == source.player_id)
+  if (vehicle.player_slot == source.player_slot)
     write_vehicle(vehicle.vehicle, destination.vehicle.state);
-  if (turret.player_id == source.player_id) {
+  if (turret.player_slot == source.player_slot) {
     destination.vehicle.turret_roty = turret.rotation_y;
     destination.vehicle.turret_rotx = turret.rotation_x;
   }
@@ -516,8 +518,8 @@ void write_enemy(const core::EnemyState& source,
                  MPReplicationEnemyStateGOAL& destination) {
   destination = {};
   destination.actor_id = source.actor_id;
-  destination.owner_player_id = source.owner_player_id;
-  destination.focus_player_id = source.focus_player_id;
+  destination.owner_player_slot = source.owner_player_slot;
+  destination.focus_player_slot = source.focus_player_slot;
   destination.state = source.state_id;
   destination.hp = source.hit_points;
   const auto& position = target.valid ? target.position : source.position;
@@ -539,7 +541,7 @@ void write_pedestrian(const core::PedestrianState& source,
   destination.appearance_mask = source.appearance_mask;
   destination.state_id = source.state_id;
   destination.hp = source.hit_points;
-  destination.target_player_id = source.target_player_id;
+  destination.target_player_slot = source.target_player_slot;
   destination.vehicle_net_id = source.vehicle_net_id;
   destination.transport_id = source.transport_id;
   destination.transport_side = source.transport_side;
@@ -567,7 +569,7 @@ void write_squid(const core::BossState& source,
   destination.stage = source.stage;
   destination.hit_points = source.hit_points;
   destination.shield_hit_points = source.shield_hit_points;
-  destination.target_player_id = source.target_player_id;
+  destination.target_player_slot = source.target_player_slot;
   destination.draw_force_fade = source.draw_force_fade;
   destination.action_seq = source.action_sequence;
   destination.x = source.position[0];
@@ -616,7 +618,7 @@ void write_widow(const core::BossState& source,
 void write_event(const core::GameEvent& source, MPEventGOAL& destination) {
   destination = {};
   destination.etype = source.event_id;
-  destination.source_player_id = source.source_player_id;
+  destination.source_player_slot = source.source_player_slot;
   destination.payload_size = std::min<uint8_t>(source.payload_size, sizeof(destination.data));
   std::ranges::copy_n(source.payload.begin(), destination.payload_size,
                       std::begin(destination.data));
@@ -630,9 +632,9 @@ bool publish_remote(MPReplicationStateGOAL& state, application::ReplicationMailb
     const auto end = std::remove_if(
         std::begin(state.inbound_events), std::begin(state.inbound_events) + inbound_count,
         [&](const MPEventGOAL& event) {
-          return event.source_player_id >= core::kMaxPlayers ||
-                 state.remote.players[event.source_player_id].lifecycle_generation !=
-                     frame->player_lifecycles[event.source_player_id];
+          return event.source_player_slot >= core::kMaxPlayers ||
+                 state.remote.players[event.source_player_slot].lifecycle_generation !=
+                     frame->player_lifecycles[event.source_player_slot];
         });
     state.inbound_event_count = static_cast<uint8_t>(end - std::begin(state.inbound_events));
     static_assert(std::is_trivially_copyable_v<MPReplicationFrameGOAL>);
@@ -668,7 +670,7 @@ bool publish_remote(MPReplicationStateGOAL& state, application::ReplicationMailb
     for (size_t i = 0;
          i < frame->enemies.enemies.size() && enemy_count < kMPReplicationEnemyCapacity; ++i) {
       const auto& enemy = frame->enemies.enemies[i];
-      if (enemy.owner_player_id == state.local_player_id) {
+      if (enemy.owner_player_slot == state.local_player_slot) {
         continue;
       }
       const auto target = i < frame->enemy_targets.size() ? frame->enemy_targets[i]
@@ -715,7 +717,7 @@ bool publish_remote(MPReplicationStateGOAL& state, application::ReplicationMailb
     for (const auto& snapshot : frame->airlocks) {
       state.remote.airlocks.valid |= snapshot.sequence != 0;
       state.remote.airlocks.sequence = std::max(state.remote.airlocks.sequence, snapshot.sequence);
-      if (!core::valid_index(snapshot.source_player_id, core::kMaxPlayers))
+      if (!core::valid_index(snapshot.source_player_slot, core::kMaxPlayers))
         continue;
       const auto state_count = std::min(snapshot.states.size(), core::kMaxAirlockStatesPerSnapshot);
       for (size_t state_index = 0; state_index < state_count; ++state_index) {
@@ -727,7 +729,7 @@ bool publish_remote(MPReplicationStateGOAL& state, application::ReplicationMailb
         destination.sequence = sequence;
         destination.level_id = static_cast<uint16_t>(level_id);
         destination.state_id = static_cast<uint8_t>(state_id);
-        destination.source_player_id = snapshot.source_player_id;
+        destination.source_player_slot = snapshot.source_player_slot;
       }
     }
     state.remote.airlocks.count = static_cast<uint8_t>(airlock_index);

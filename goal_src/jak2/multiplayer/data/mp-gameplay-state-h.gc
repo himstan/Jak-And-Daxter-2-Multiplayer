@@ -48,7 +48,7 @@
 (define *visibility-overriden?* #f)
 (define *local-riding-before-grabbed?* #f)
 (define *mp-processing-remote-event* #f)
-(define *mp-current-event-source-player-id* (the uint #xff))
+(define *mp-current-event-source-player-slot* (the uint #xff))
 (define-perm *mp-last-pole-grab-handle* handle (the-as handle #f))
 (define-perm *mp-pole-grab-latched?* symbol #f)
 (define-perm *mp-reconnect-menu-active?* symbol #f)

@@ -32,7 +32,7 @@ class NetworkDebugPanel {
   HistorySeries reliable_pressure_;
   std::chrono::steady_clock::time_point last_sample_;
   multiplayer::platform::SessionRole session_role_ = multiplayer::platform::SessionRole::NONE;
-  multiplayer::platform::PlayerId local_player_id_ = multiplayer::platform::kInvalidPlayerId;
-  multiplayer::platform::PlayerId host_player_id_ = multiplayer::platform::kInvalidPlayerId;
+  multiplayer::platform::PlayerSlot local_player_slot_ = multiplayer::platform::kInvalidPlayerSlot;
+  multiplayer::platform::PlayerSlot host_player_slot_ = multiplayer::platform::kInvalidPlayerSlot;
   bool has_session_ = false;
 };

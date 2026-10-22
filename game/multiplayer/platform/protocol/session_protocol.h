@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "game/multiplayer/platform/core/limits.h"
+#include "game/multiplayer/platform/core/player_id.h"
 #include "game/multiplayer/platform/core/types.h"
 
 namespace multiplayer::platform {
@@ -42,14 +43,15 @@ struct ClientGate {
 struct ServerGate {
   bool accepted = false;
   RejectionReason rejection = RejectionReason::NONE;
-  PlayerId player_id = kInvalidPlayerId;
-  PlayerId host_player_id = 0;
+  PlayerSlot player_slot = kInvalidPlayerSlot;
+  PlayerSlot host_player_slot = 0;
   uint8_t player_capacity = 0;
   std::string required_identity;
 };
 
 struct PlayerProfile {
-  PlayerId player_id = kInvalidPlayerId;
+  PlayerSlot player_slot = kInvalidPlayerSlot;
+  PlayerId player_id;
   std::string display_name;
   PlayerCharacter character = PlayerCharacter::UNKNOWN;
   bool ready = false;
@@ -82,7 +84,7 @@ struct ControlMessage {
   PlayerProfile profile;
   std::vector<PlayerProfile> roster;
   std::vector<uint16_t> player_pings;
-  PlayerId player_id = kInvalidPlayerId;
+  PlayerSlot player_slot = kInvalidPlayerSlot;
   PlayerCharacter character = PlayerCharacter::UNKNOWN;
   bool ready = false;
   uint32_t value = 0;

@@ -17,7 +17,8 @@ class TypedPacketHandler : public PacketHandler {
     std::function<PacketApplyResult(const Model&, const PacketContext&)> apply;
     std::function<void(TypedPacketHandler&, GameSessionEndpoint&, uint64_t)> produce;
     std::function<std::optional<bool>()> ready;
-    std::function<std::optional<std::vector<PlayerId>>(const GameplayMessage&, const SessionState&)>
+    std::function<std::optional<std::vector<PlayerSlot>>(const GameplayMessage&,
+                                                         const SessionState&)>
         relay;
   };
 
@@ -31,7 +32,7 @@ class TypedPacketHandler : public PacketHandler {
   ValidatedPayload receive(const GameplayMessage& message, GameSessionEndpoint& endpoint) final {
     const auto& session = endpoint.snapshot().state;
     if (message.message_id != policy().id ||
-        message.origin.authenticated_player_id >= session.player_limit ||
+        message.origin.authenticated_player_slot >= session.player_limit ||
         message.payload.size() > policy().maximum_payload_bytes)
       return {};
     const auto packet = wire::decode_packet<Packet>(message.payload);
@@ -46,7 +47,7 @@ class TypedPacketHandler : public PacketHandler {
     const auto result = hooks_.apply(model, {.sequence = message.sequence,
                                              .source = message.origin,
                                              .received_at_ms = message.received_at_ms,
-                                             .local_player_id = session.local_player_id});
+                                             .local_player_slot = session.local_player_slot});
     if (result == PacketApplyResult::CAPACITY_EXCEEDED)
       return {.disposition = PayloadDisposition::DISCONNECT};
     if (result != PacketApplyResult::ACCEPT)
@@ -77,10 +78,10 @@ class TypedPacketHandler : public PacketHandler {
     if (sequence && apply_local) {
       const auto& session = endpoint.snapshot().state;
       hooks_.apply(model, {.sequence = *sequence,
-                           .source = {.authenticated_player_id = session.local_player_id,
+                           .source = {.authenticated_player_slot = session.local_player_slot,
                                       .from_host = session.role == SessionRole::HOST},
                            .received_at_ms = now_ms,
-                           .local_player_id = session.local_player_id});
+                           .local_player_slot = session.local_player_slot});
     }
     return sequence;
   }

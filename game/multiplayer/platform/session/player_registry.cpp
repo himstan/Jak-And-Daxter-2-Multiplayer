@@ -42,33 +42,33 @@ const PlayerSession* PlayerRegistry::find_connection(const ConnectionId connecti
   return found == entries_.end() ? nullptr : &*found;
 }
 
-PlayerSession* PlayerRegistry::find_player(const PlayerId player_id) {
-  const auto found = std::ranges::find_if(entries_, [player_id](const auto& player) {
-    return player.accepted && player.player_id == player_id;
+PlayerSession* PlayerRegistry::find_player(const PlayerSlot player_slot) {
+  const auto found = std::ranges::find_if(entries_, [player_slot](const auto& player) {
+    return player.accepted && player.player_slot == player_slot;
   });
   return found == entries_.end() ? nullptr : &*found;
 }
 
-const PlayerSession* PlayerRegistry::find_player(const PlayerId player_id) const {
-  const auto found = std::ranges::find_if(entries_, [player_id](const auto& player) {
-    return player.accepted && player.player_id == player_id;
+const PlayerSession* PlayerRegistry::find_player(const PlayerSlot player_slot) const {
+  const auto found = std::ranges::find_if(entries_, [player_slot](const auto& player) {
+    return player.accepted && player.player_slot == player_slot;
   });
   return found == entries_.end() ? nullptr : &*found;
 }
 
 PlayerSession* PlayerRegistry::bind(const ConnectionId connection,
-                                    const PlayerId player_id,
+                                    const PlayerSlot player_slot,
                                     const PlayerCharacter character) {
-  if (connection == 0 || player_id >= player_limit_ || find_connection(connection) ||
-      find_player(player_id))
+  if (connection == 0 || player_slot >= player_limit_ || find_connection(connection) ||
+      find_player(player_slot))
     return nullptr;
   const auto free = std::ranges::find(entries_, ConnectionId{0}, &PlayerSession::connection_id);
   if (free == entries_.end())
     return nullptr;
   *free = {.connection_id = connection,
-           .player_id = player_id,
+           .player_slot = player_slot,
            .character = character,
-           .profile = {.player_id = player_id, .character = character},
+           .profile = {.player_slot = player_slot, .character = character},
            .accepted = true};
   return &*free;
 }
@@ -77,9 +77,9 @@ PlayerSession* PlayerRegistry::allocate(const ConnectionId connection,
                                         const PlayerCharacter character) {
   if (connection == 0 || find_connection(connection))
     return nullptr;
-  for (PlayerId player_id = 1; player_id < player_limit_; ++player_id) {
-    if (!find_player(player_id))
-      return bind(connection, player_id, character);
+  for (PlayerSlot player_slot = 1; player_slot < player_limit_; ++player_slot) {
+    if (!find_player(player_slot))
+      return bind(connection, player_slot, character);
   }
   return nullptr;
 }
@@ -118,8 +118,9 @@ void PlayerRegistry::request_bootstrap_for_all(const std::optional<uint32_t> gen
   }
 }
 
-bool PlayerRegistry::acknowledge_bootstrap(const PlayerId player_id, const uint32_t generation) {
-  auto* player = find_player(player_id);
+bool PlayerRegistry::acknowledge_bootstrap(const PlayerSlot player_slot,
+                                           const uint32_t generation) {
+  auto* player = find_player(player_slot);
   if (!player || !player->bootstrap_pending || generation == 0 ||
       player->bootstrap_generation != generation)
     return false;

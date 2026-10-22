@@ -4,9 +4,11 @@
 namespace {
 using namespace multiplayer::jak2::core;
 
-ApplyContext from(const PlayerId player_id, const Sequence sequence, const uint64_t now_ms = 0) {
+ApplyContext from(const PlayerSlot player_slot,
+                  const Sequence sequence,
+                  const uint64_t now_ms = 0) {
   return {.sequence = sequence,
-          .source = {.authenticated_player_id = player_id},
+          .source = {.authenticated_player_slot = player_slot},
           .received_at_ms = now_ms};
 }
 
@@ -22,12 +24,12 @@ VehicleState player_vehicle(const uint32_t net_id, const float x) {
 TEST(Jak2Replication, SameVehicleSeatChangeUpdatesDetailedVehicle) {
   ReplicationState state;
   PlayerState driver = {};
-  driver.player_id = 1;
+  driver.player_slot = 1;
   driver.vehicle_id = kPlayerVehicleNetIdClass | 1u;
   ASSERT_TRUE(state.players().apply(driver, from(1, 1)));
 
   PlayerVehicleState detail = {};
-  detail.player_id = 1;
+  detail.player_slot = 1;
   detail.vehicle = player_vehicle(driver.vehicle_id, 10.0f);
   ASSERT_TRUE(state.players().apply(detail, from(1, 2)));
 
@@ -40,12 +42,12 @@ TEST(Jak2Replication, SameVehicleSeatChangeUpdatesDetailedVehicle) {
 TEST(Jak2Replication, LateTurretStateCannotResurrectAfterVehicleDismount) {
   ReplicationState state;
   PlayerState riding = {};
-  riding.player_id = 1;
+  riding.player_slot = 1;
   riding.vehicle_id = kPlayerVehicleNetIdClass | 7u;
   riding.turret_active = true;
   ASSERT_TRUE(state.players().apply(riding, from(1, 1)));
 
-  TurretState turret = {.player_id = 1, .turret_aid = riding.vehicle_id, .rotation_x = 0.25f};
+  TurretState turret = {.player_slot = 1, .turret_aid = riding.vehicle_id, .rotation_x = 0.25f};
   ASSERT_TRUE(state.players().apply(turret, from(1, 2)));
   riding.vehicle_id = 0;
   riding.turret_active = false;
@@ -59,9 +61,9 @@ TEST(Jak2Replication, LateTurretStateCannotResurrectAfterVehicleDismount) {
 
 TEST(Jak2Replication, VehicleExitImmediatelyReleasesDriverStateAndRejectsLateUpdates) {
   PlayerReplicationState state;
-  PlayerState driver = {.player_id = 1, .vehicle_id = 0x21000001u};
+  PlayerState driver = {.player_slot = 1, .vehicle_id = 0x21000001u};
   ASSERT_TRUE(state.apply(driver, from(1, 1, 1000)));
-  PlayerVehicleState detail = {.player_id = 1, .vehicle = player_vehicle(driver.vehicle_id, 10)};
+  PlayerVehicleState detail = {.player_slot = 1, .vehicle = player_vehicle(driver.vehicle_id, 10)};
   ASSERT_TRUE(state.apply(detail, from(1, 1, 1000)));
   driver.vehicle_id = 0;
   ASSERT_TRUE(state.apply(driver, from(1, 2, 1100)));
@@ -72,10 +74,10 @@ TEST(Jak2Replication, VehicleExitImmediatelyReleasesDriverStateAndRejectsLateUpd
 
 TEST(Jak2Replication, ReleasedVehicleKeepsMovingUpdatesForExactlyTwoSecondsWithoutReseatingDriver) {
   PlayerReplicationState state;
-  PlayerState driver = {.player_id = 1, .vehicle_id = 0x21000001u};
+  PlayerState driver = {.player_slot = 1, .vehicle_id = 0x21000001u};
   driver.selected_traffic_authority = 0;
   ASSERT_TRUE(state.apply(driver, from(1, 1, 1000)));
-  PlayerVehicleState detail = {.player_id = 1, .vehicle = player_vehicle(driver.vehicle_id, 10)};
+  PlayerVehicleState detail = {.player_slot = 1, .vehicle = player_vehicle(driver.vehicle_id, 10)};
   ASSERT_TRUE(state.apply(detail, from(1, 1, 1000)));
   driver.vehicle_id = 0;
   ASSERT_TRUE(state.apply(driver, from(1, 2, 1100)));
@@ -95,14 +97,14 @@ TEST(Jak2Replication, ReleasedVehicleKeepsMovingUpdatesForExactlyTwoSecondsWitho
 
 TEST(Jak2Replication, NewDriverImmediatelyRevokesReleaseGraceButPassengerDoesNot) {
   PlayerReplicationState state;
-  PlayerState driver = {.player_id = 1, .vehicle_id = 0x21000001u};
+  PlayerState driver = {.player_slot = 1, .vehicle_id = 0x21000001u};
   driver.selected_traffic_authority = 0;
   ASSERT_TRUE(state.apply(driver, from(1, 1, 1000)));
-  PlayerVehicleState detail = {.player_id = 1, .vehicle = player_vehicle(driver.vehicle_id, 10)};
+  PlayerVehicleState detail = {.player_slot = 1, .vehicle = player_vehicle(driver.vehicle_id, 10)};
   ASSERT_TRUE(state.apply(detail, from(1, 1, 1000)));
   driver.vehicle_id = 0;
   ASSERT_TRUE(state.apply(driver, from(1, 2, 1100)));
-  PlayerState entrant = {.player_id = 2, .vehicle_id = detail.vehicle.net_id, .vehicle_seat = 1};
+  PlayerState entrant = {.player_slot = 2, .vehicle_id = detail.vehicle.net_id, .vehicle_seat = 1};
   ASSERT_TRUE(state.apply(entrant, from(2, 1, 1200)));
   EXPECT_TRUE(state.owns_vehicle(1, entrant.vehicle_id, 1200));
   entrant.vehicle_seat = 0;
@@ -110,7 +112,7 @@ TEST(Jak2Replication, NewDriverImmediatelyRevokesReleaseGraceButPassengerDoesNot
   EXPECT_FALSE(state.owns_vehicle(1, entrant.vehicle_id, 1300));
   EXPECT_EQ(state.player_vehicles()[1].vehicle.net_id, 0u);
   EXPECT_FALSE(state.apply(detail, from(1, 2, 1301)));
-  detail.player_id = 2;
+  detail.player_slot = 2;
   detail.vehicle.position[0] = 50;
   ASSERT_TRUE(state.apply(detail, from(2, 1, 1301)));
   EXPECT_FLOAT_EQ(state.player_vehicles()[2].vehicle.position[0], 50);
@@ -118,13 +120,13 @@ TEST(Jak2Replication, NewDriverImmediatelyRevokesReleaseGraceButPassengerDoesNot
 
 TEST(Jak2Replication, DelayedOldDriverExitCannotStartGraceAfterNewDriverClaimsVehicle) {
   PlayerReplicationState state;
-  PlayerState driver = {.player_id = 1, .vehicle_id = 0x21000001u};
+  PlayerState driver = {.player_slot = 1, .vehicle_id = 0x21000001u};
   driver.selected_traffic_authority = 0;
   ASSERT_TRUE(state.apply(driver, from(1, 1, 1000)));
-  PlayerVehicleState detail = {.player_id = 1, .vehicle = player_vehicle(driver.vehicle_id, 10)};
+  PlayerVehicleState detail = {.player_slot = 1, .vehicle = player_vehicle(driver.vehicle_id, 10)};
   ASSERT_TRUE(state.apply(detail, from(1, 1, 1000)));
-  ASSERT_TRUE(
-      state.apply(PlayerState{.player_id = 2, .vehicle_id = driver.vehicle_id}, from(2, 1, 1100)));
+  ASSERT_TRUE(state.apply(PlayerState{.player_slot = 2, .vehicle_id = driver.vehicle_id},
+                          from(2, 1, 1100)));
   driver.vehicle_id = 0;
   ASSERT_TRUE(state.apply(driver, from(1, 2, 1200)));
   EXPECT_FALSE(state.owns_vehicle(1, detail.vehicle.net_id, 1201));
@@ -134,11 +136,12 @@ TEST(Jak2Replication, DelayedOldDriverExitCannotStartGraceAfterNewDriverClaimsVe
 TEST(Jak2Replication, RootDriversAndPassengersDoNotRetainReleaseGrace) {
   for (const bool passenger : {false, true}) {
     PlayerReplicationState state;
-    PlayerState driver = {.player_id = 1, .vehicle_id = 0x21000001u};
+    PlayerState driver = {.player_slot = 1, .vehicle_id = 0x21000001u};
     driver.vehicle_seat = passenger ? 1 : 0;
     driver.selected_traffic_authority = passenger ? 0 : 1;
     ASSERT_TRUE(state.apply(driver, from(1, 1, 1000)));
-    PlayerVehicleState detail = {.player_id = 1, .vehicle = player_vehicle(driver.vehicle_id, 10)};
+    PlayerVehicleState detail = {.player_slot = 1,
+                                 .vehicle = player_vehicle(driver.vehicle_id, 10)};
     ASSERT_TRUE(state.apply(detail, from(1, 1, 1000)));
     driver.vehicle_id = 0;
     ASSERT_TRUE(state.apply(driver, from(1, 2, 1100)));
@@ -150,10 +153,11 @@ TEST(Jak2Replication, RootDriversAndPassengersDoNotRetainReleaseGrace) {
 TEST(Jak2Replication, ReleasedVehicleAuthorityIsClearedByDepartureAndReset) {
   for (const bool reset : {false, true}) {
     PlayerReplicationState state;
-    PlayerState driver = {.player_id = 1, .vehicle_id = 0x21000001u};
+    PlayerState driver = {.player_slot = 1, .vehicle_id = 0x21000001u};
     driver.selected_traffic_authority = 0;
     ASSERT_TRUE(state.apply(driver, from(1, 1, 1000)));
-    PlayerVehicleState detail = {.player_id = 1, .vehicle = player_vehicle(driver.vehicle_id, 10)};
+    PlayerVehicleState detail = {.player_slot = 1,
+                                 .vehicle = player_vehicle(driver.vehicle_id, 10)};
     ASSERT_TRUE(state.apply(detail, from(1, 1, 1000)));
     driver.vehicle_id = 0;
     ASSERT_TRUE(state.apply(driver, from(1, 2, 1100)));
@@ -167,10 +171,10 @@ TEST(Jak2Replication, ReleasedVehicleAuthorityIsClearedByDepartureAndReset) {
 
 TEST(Jak2Replication, ReleasedVehicleReturnsToNormalTrafficWhenItsPlayerBecomesRoot) {
   PlayerReplicationState state;
-  PlayerState driver = {.player_id = 1, .vehicle_id = 0x21000001u};
+  PlayerState driver = {.player_slot = 1, .vehicle_id = 0x21000001u};
   driver.selected_traffic_authority = 0;
   ASSERT_TRUE(state.apply(driver, from(1, 1, 1000)));
-  PlayerVehicleState detail = {.player_id = 1, .vehicle = player_vehicle(driver.vehicle_id, 10)};
+  PlayerVehicleState detail = {.player_slot = 1, .vehicle = player_vehicle(driver.vehicle_id, 10)};
   ASSERT_TRUE(state.apply(detail, from(1, 1, 1000)));
   driver.vehicle_id = 0;
   ASSERT_TRUE(state.apply(driver, from(1, 2, 1100)));
@@ -184,18 +188,18 @@ TEST(Jak2Replication, ReleasedVehicleReturnsToNormalTrafficWhenItsPlayerBecomesR
 TEST(Jak2Replication, VehicleExitAcceptsFreshRootTrafficAfterDiscardingOldAmbientState) {
   ReplicationState state;
   TrafficAuthority authority = {.revision = 1};
-  authority.assignments.fill(kInvalidPlayerId);
+  authority.assignments.fill(kInvalidPlayerSlot);
   authority.assignments[0] = 0;
   ASSERT_TRUE(state.traffic().apply(authority, {.source = {.from_host = true}}));
   ASSERT_TRUE(state.traffic().select_authority(0));
   TrafficSnapshot traffic = {.kind = TrafficSnapshot::Kind::VEHICLES,
-                             .source_player_id = 0,
+                             .source_player_slot = 0,
                              .authority_revision = 1,
                              .vehicles = {player_vehicle(0x21000001u, 1)}};
   ASSERT_TRUE(state.traffic().apply(traffic, from(0, 1, 1000)));
-  PlayerState driver = {.player_id = 1, .vehicle_id = 0x21000001u};
+  PlayerState driver = {.player_slot = 1, .vehicle_id = 0x21000001u};
   ASSERT_TRUE(state.players().apply(driver, from(1, 1, 1000)));
-  PlayerVehicleState detail = {.player_id = 1, .vehicle = player_vehicle(driver.vehicle_id, 100)};
+  PlayerVehicleState detail = {.player_slot = 1, .vehicle = player_vehicle(driver.vehicle_id, 100)};
   ASSERT_TRUE(state.players().apply(detail, from(1, 1, 1000)));
   state.expire(1001);
   EXPECT_TRUE(state.traffic().selected_snapshot().vehicles.empty());
@@ -212,22 +216,22 @@ TEST(Jak2Replication, VehicleExitAcceptsFreshRootTrafficAfterDiscardingOldAmbien
 TEST(Jak2Replication, TrafficExpiryDiscardsAllDriverSnapshotsButKeepsPassengers) {
   ReplicationState state;
   TrafficAuthority authority = {.revision = 1};
-  authority.assignments.fill(kInvalidPlayerId);
+  authority.assignments.fill(kInvalidPlayerSlot);
   authority.assignments[0] = 0;
   ASSERT_TRUE(state.traffic().apply(authority, {.source = {.from_host = true}}));
   ASSERT_TRUE(state.traffic().select_authority(0));
   TrafficSnapshot traffic = {
       .kind = TrafficSnapshot::Kind::VEHICLES,
-      .source_player_id = 0,
+      .source_player_slot = 0,
       .authority_revision = 1,
       .vehicles = {player_vehicle(0x21000001u, 1), player_vehicle(0x21000002u, 2),
                    player_vehicle(0x21000003u, 3)}};
   ASSERT_TRUE(state.traffic().apply(traffic, from(0, 1, 1000)));
-  for (PlayerId player_id = 1; player_id <= 3; ++player_id) {
-    PlayerVehicleState detail = {.player_id = player_id,
-                                 .seat_index = static_cast<uint8_t>(player_id == 3),
-                                 .vehicle = traffic.vehicles[player_id - 1]};
-    ASSERT_TRUE(state.players().apply(detail, from(player_id, 1, 1000)));
+  for (PlayerSlot player_slot = 1; player_slot <= 3; ++player_slot) {
+    PlayerVehicleState detail = {.player_slot = player_slot,
+                                 .seat_index = static_cast<uint8_t>(player_slot == 3),
+                                 .vehicle = traffic.vehicles[player_slot - 1]};
+    ASSERT_TRUE(state.players().apply(detail, from(player_slot, 1, 1000)));
   }
   state.expire(1001);
   ASSERT_EQ(state.traffic().aggregate().vehicles.size(), 1u);

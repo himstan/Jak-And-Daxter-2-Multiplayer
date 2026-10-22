@@ -287,7 +287,7 @@
       (set! (-> rec state-id) (mp-pedestrian-effective-remote-state-id proc slot))
       (set! (-> rec travel-speed) (-> slot travel-speed))
       (set! (-> rec hp) (-> slot hp))
-      (set! (-> rec aux-state) (-> slot target-player-id))
+      (set! (-> rec aux-state) (-> slot target-player-slot))
       (set! (-> rec last-seen) (current-time))))
   (when (and proc (nonzero? proc))
     (cond

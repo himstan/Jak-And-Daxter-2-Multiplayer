@@ -5,7 +5,7 @@
 
 struct alignas(16) MPEventGOAL {
   uint8_t etype;
-  uint8_t source_player_id;
+  uint8_t source_player_slot;
   uint8_t payload_size;
   alignas(16) uint8_t data[64];
 };

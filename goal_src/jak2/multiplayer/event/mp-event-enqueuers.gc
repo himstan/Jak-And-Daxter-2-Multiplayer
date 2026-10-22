@@ -18,11 +18,11 @@
       (return (mp-event-enqueue! event))))
   #f)
 
-(defun mp-event-enqueue-authority-grant! ((aid uint) (owner-player-id uint))
+(defun mp-event-enqueue-authority-grant! ((aid uint) (owner-player-slot uint))
   (let ((event (new 'stack-no-clear 'mp-enemy-authority-grant-event)))
-    (when (and (< owner-player-id (the uint MP_MAX_PLAYERS)) (mp-event-prepare! event MP_EVENT_ENEMY_AUTHORITY_ACK))
+    (when (and (< owner-player-slot (the uint MP_MAX_PLAYERS)) (mp-event-prepare! event MP_EVENT_ENEMY_AUTHORITY_ACK))
       (set! (-> event payload aid) (the uint32 aid))
-      (set! (-> event payload owner-player-id) (the uint8 owner-player-id))
+      (set! (-> event payload owner-player-slot) (the uint8 owner-player-slot))
       (return (mp-event-enqueue! event))))
   #f)
 

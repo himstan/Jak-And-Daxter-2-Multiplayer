@@ -68,8 +68,8 @@
   (let ((path (mp-mountain-resolution-path scene-name)))
     (and (!= path MP_MOUNTAIN_PATH_UNKNOWN) (= *mp-mountain-path* path))))
 
-(defun mp-mountain-resolution-scene-valid-for-local-player? ((source-player-id uint) (scene-name string))
-  (let ((source-record (mp-player-record-by-id source-player-id))
+(defun mp-mountain-resolution-scene-valid-for-local-player? ((source-player-slot uint) (scene-name string))
+  (let ((source-record (mp-player-record-by-slot source-player-slot))
         (local-record (mp-local-player-record)))
     (and source-record
          (nonzero? source-record)
@@ -89,8 +89,8 @@
              evt
              (nonzero? evt)
              (not *scene-player*)
-             (mp-mountain-resolution-scene-valid-for-local-player? (-> evt source-player-id) scene-name))
-    (let ((source-record (mp-player-record-by-id (-> evt source-player-id)))
+             (mp-mountain-resolution-scene-valid-for-local-player? (-> evt source-player-slot) scene-name))
+    (let ((source-record (mp-player-record-by-slot (-> evt source-player-slot)))
           (scene-obj (scene-lookup scene-name)))
       (when (and source-record
                  (nonzero? source-record)

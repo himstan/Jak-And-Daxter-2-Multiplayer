@@ -308,7 +308,7 @@
   (let ((nearest (the-as target #f))
         (nearest-distance (meters 1000000.0)))
     (when (and (fort-robotank-first-chase? tank) (nonnull? (-> tank root)))
-      (mp-for-each-player-target (player-id record replica)
+      (mp-for-each-player-target (player-slot record replica)
         (when (and (mp-remote-gameplay-player-connected? record)
                    (not (mp-player-record-dead-or-dying? record))
                    (nonnull? replica (-> replica root) (-> replica control))

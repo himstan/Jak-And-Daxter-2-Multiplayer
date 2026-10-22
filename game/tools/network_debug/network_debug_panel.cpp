@@ -89,8 +89,8 @@ std::string format_quality(const float quality) {
   return quality < 0.0f ? "—" : fmt::format("{:.1f}%", quality * 100.0f);
 }
 
-std::string format_player(const PlayerId player_id) {
-  return player_id == kInvalidPlayerId ? "—" : fmt::format("{}", player_id);
+std::string format_player(const PlayerSlot player_slot) {
+  return player_slot == kInvalidPlayerSlot ? "—" : fmt::format("{}", player_slot);
 }
 
 const char* session_status_name(const SessionStatus status) {
@@ -163,8 +163,8 @@ const char* character_name(const PlayerCharacter character) {
   return "Unknown";
 }
 
-const PlayerProfile* find_profile(const SessionSnapshot& session, const PlayerId player_id) {
-  const auto found = std::ranges::find(session.players, player_id, &PlayerProfile::player_id);
+const PlayerProfile* find_profile(const SessionSnapshot& session, const PlayerSlot player_slot) {
+  const auto found = std::ranges::find(session.players, player_slot, &PlayerProfile::player_slot);
   return found == session.players.end() ? nullptr : &*found;
 }
 
@@ -197,8 +197,8 @@ void draw_summary(const RuntimeSnapshot& snapshot) {
     draw_metric("Discovery", fmt::format("{}", static_cast<int>(snapshot.discovery.status)),
                 Health::NEUTRAL);
     draw_metric("Role", role_name(state.role), Health::NEUTRAL);
-    draw_metric("Local ID", format_player(state.local_player_id), Health::NEUTRAL);
-    draw_metric("Host ID", format_player(state.host_player_id), Health::NEUTRAL);
+    draw_metric("Local slot", format_player(state.local_player_slot), Health::NEUTRAL);
+    draw_metric("Host slot", format_player(state.host_player_slot), Health::NEUTRAL);
     draw_metric("Players",
                 fmt::format("{} / {}", snapshot.session.players.size(), state.player_limit),
                 Health::NEUTRAL);
@@ -258,14 +258,14 @@ void draw_connection_table(const SessionSnapshot& session) {
   ImGui::TableHeadersRow();
   for (const auto& connection : session.connections) {
     const auto& stats = connection.network;
-    const auto* profile = find_profile(session, connection.player_id);
+    const auto* profile = find_profile(session, connection.player_slot);
     const float jitter_ms = static_cast<float>(stats.jitter_us) / 1000.0f;
     const int reliable_bytes = stats.pending_reliable_bytes + stats.sent_unacked_reliable_bytes;
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
     ImGui::TextUnformatted(profile ? profile->display_name.c_str() : "Pending admission");
     ImGui::TableNextColumn();
-    ImGui::TextUnformatted(format_player(connection.player_id).c_str());
+    ImGui::TextUnformatted(format_player(connection.player_slot).c_str());
     ImGui::TableNextColumn();
     ImGui::Text("%u", stats.connection_id);
     ImGui::TableNextColumn();
@@ -329,13 +329,13 @@ void NetworkDebugPanel::update_history(const RuntimeSnapshot& snapshot) {
     reset_history();
     return;
   }
-  if (!has_session_ || session_role_ != state.role || local_player_id_ != state.local_player_id ||
-      host_player_id_ != state.host_player_id) {
+  if (!has_session_ || session_role_ != state.role || local_player_slot_ != state.local_player_slot ||
+      host_player_slot_ != state.host_player_slot) {
     reset_history();
     has_session_ = true;
     session_role_ = state.role;
-    local_player_id_ = state.local_player_id;
-    host_player_id_ = state.host_player_id;
+    local_player_slot_ = state.local_player_slot;
+    host_player_slot_ = state.host_player_slot;
   }
   const auto now = std::chrono::steady_clock::now();
   if (last_sample_ != std::chrono::steady_clock::time_point{} &&

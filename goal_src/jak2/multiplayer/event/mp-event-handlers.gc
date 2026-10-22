@@ -51,7 +51,7 @@
 (defun collectable-pickup-authority? ((evt collectable-pickup-event))
   (and (nonnull? evt *game-info* *mp-player-controller*)
        (nonzero? (-> evt payload source-id))
-       (or (mp-session-host?) (= (-> evt source-player-id) (mp-host-player-id)))))
+       (or (mp-session-host?) (= (-> evt source-player-slot) (mp-host-player-slot)))))
 
 (defun collectable-sync-counts! ((evt collectable-pickup-event) (pickup pickup-type) (collected int))
   (when (and (nonnull? evt *game-info* *mp-player-controller*) (>= collected 0))
@@ -186,7 +186,7 @@
          (-> evt payload attack-id))
     (let ((proc (find-enemy-by-aid net-id)))
       (if (and proc (nonzero? proc))
-        (let ((attacker (mp-player-target-by-id (-> evt source-player-id)))
+        (let ((attacker (mp-player-target-by-slot (-> evt source-player-slot)))
               (e-proc (the-as enemy proc))
               (rec (mp-get-enemy-auth net-id)))
           (when (and attacker (nonzero? attacker))
@@ -208,20 +208,20 @@
 
 (defun mp-event-handler-attack-ped ((evt mp-actor-attack-event))
   (when (nonnull? evt)
-    (let ((target-authority (-> evt payload traffic-authority-player-id))
-          (local-player-id (mp-local-player-id)))
+    (let ((target-authority (-> evt payload traffic-authority-player-slot))
+          (local-player-slot (mp-local-player-slot)))
       (when (< target-authority (the uint MP_MAX_PLAYERS))
         (cond
-          ((or (and (= target-authority local-player-id) *mp-traffic-local-authoritative?*)
-               (and (= target-authority local-player-id)
+          ((or (and (= target-authority local-player-slot) *mp-traffic-local-authoritative?*)
+               (and (= target-authority local-player-slot)
                     (let ((v (mp-vehicle-find-by-net-id (-> evt payload net-id))))
                       (and v (nonzero? v) (mp-vehicle-is-local-authoritative? v)))))
            (if (mp-pedestrian-find-by-net-id (-> evt payload net-id))
              (mp-pedestrian-apply-remote-attack! evt)
              (mp-vehicle-apply-remote-attack! evt)))
           ((and (= target-authority *mp-traffic-selected-authority-id*)
-                (!= target-authority local-player-id)
-                (!= (-> evt source-player-id) local-player-id)
+                (!= target-authority local-player-slot)
+                (!= (-> evt source-player-slot) local-player-slot)
                 (not *mp-traffic-local-authoritative?*))
            (mp-pedestrian-replay-remote-attack! evt))))))
   (none))
@@ -582,7 +582,7 @@
 
 (defun mp-event-handler-scene-start ((ev mp-scene-event))
   (let ((s* *mp-scene-name-scratch*)
-        (source-player-id (-> ev source-player-id)))
+        (source-player-slot (-> ev source-player-slot)))
     (when (and s* (nonzero? s*) (nonzero? (length s*)))
       (cond
         ((mp-mountain-resolution-scene? s*) (mp-mountain-resolution-handle-scene-start! s* ev))
@@ -594,34 +594,37 @@
          (log 'debug "[MP-Event-Handlers] Ignoring client initiation of host-owned scene ~S.~%" s*))
         ((mp-tomb-boulder-ignore-remote-scene? s*)
          (if (mp-local-scene-name-matches? s*)
-           (if (mp-scene-coordinator-note-remote-start! source-player-id s*)
+           (if (mp-scene-coordinator-note-remote-start! source-player-slot s*)
              (log 'debug
                   "[MP-Event-Handlers] Recorded player ~D entry for locally active role-owned scene ~S.~%"
-                  source-player-id
+                  source-player-slot
                   s*)
              (log 'debug
                   "[MP-Event-Handlers] Could not record player ~D entry for role-owned scene ~S.~%"
-                  source-player-id
+                  source-player-slot
                   s*))
            (log 'debug "[MP-Event-Handlers] Ignoring role-incompatible tomb scene: ~S~%" s*)))
-        ((not (mp-scene-coordinator-note-remote-start! source-player-id s*))
-         (log 'debug "[MP-Event-Handlers] Ignoring conflicting/finalized scene ~S from player ~D.~%" s* source-player-id))
+        ((not (mp-scene-coordinator-note-remote-start! source-player-slot s*))
+         (log 'debug
+              "[MP-Event-Handlers] Ignoring conflicting/finalized scene ~S from player ~D.~%"
+              s*
+              source-player-slot))
         ((mp-duplicate-scene-start? s*)
-         (log 'debug "[MP-Event-Handlers] Recorded player ~D entry for active scene ~S.~%" source-player-id s*))
+         (log 'debug "[MP-Event-Handlers] Recorded player ~D entry for active scene ~S.~%" source-player-slot s*))
         (else
          (log 'debug
               "[MP-Event-Handlers] Player ~D started scene ~S. Waiting for local readiness.~%"
-              source-player-id
+              source-player-slot
               s*)
          (mp-arm-pending-scene-sync! s* ev)))))
   (none))
 
 (defun mp-event-handler-scene-request-skip ((ev mp-scene-event))
-  (let ((source-player-id (-> ev source-player-id)))
-    (when (mp-scene-coordinator-note-remote-vote! source-player-id *mp-scene-name-scratch*)
+  (let ((source-player-slot (-> ev source-player-slot)))
+    (when (mp-scene-coordinator-note-remote-vote! source-player-slot *mp-scene-name-scratch*)
       (log 'debug
            "[MP-Event-Handlers] Player ~D voted to skip ~S (~D/~D).~%"
-           source-player-id
+           source-player-slot
            *mp-scene-name-scratch*
            (mp-scene-coordinator-vote-count)
            (mp-scene-coordinator-player-count))))
@@ -629,7 +632,7 @@
   (none))
 
 (defun mp-event-handler-scene-skipped ((ev mp-scene-event))
-  (if (mp-scene-coordinator-accept-host-skip! (-> ev source-player-id) *mp-scene-name-scratch*)
+  (if (mp-scene-coordinator-accept-host-skip! (-> ev source-player-slot) *mp-scene-name-scratch*)
     (begin
       (when (or (mp-pending-scene-name-matches? *mp-scene-name-scratch*)
                 (and (mp-intro-chain-scene? *mp-scene-name-scratch*)
@@ -646,12 +649,12 @@
       (mp-arm-intro-skip-bootstrap! *mp-scene-name-scratch*))
     (log 'debug
          "[MP-Event-Handlers] Ignoring invalid scene-finalize from player ~D for ~S.~%"
-         (-> ev source-player-id)
+         (-> ev source-player-slot)
          *mp-scene-name-scratch*))
   (none))
 
-(defun mp-event-handler-change-mode-darkjak ((source-player-id uint))
-  (let ((source-record (mp-player-record-by-id source-player-id)))
+(defun mp-event-handler-change-mode-darkjak ((source-player-slot uint))
+  (let ((source-record (mp-player-record-by-slot source-player-slot)))
     (when (and source-record (nonzero? source-record) (mp-player-jak? source-record))
       (let ((replica (mp-player-record-target source-record)))
         (when (and replica (nonzero? replica))
@@ -660,8 +663,8 @@
           (darkjak-emit-replica-transform-feedback! replica *target*)))))
   (none))
 
-(defun mp-event-handler-end-mode-darkjak ((source-player-id uint))
-  (let ((source-record (mp-player-record-by-id source-player-id)))
+(defun mp-event-handler-end-mode-darkjak ((source-player-slot uint))
+  (let ((source-record (mp-player-record-by-slot source-player-slot)))
     (when (and source-record (nonzero? source-record) (mp-player-jak? source-record))
       (let ((replica (mp-player-record-target source-record)))
         (when (and replica (nonzero? replica))
@@ -796,7 +799,7 @@
     (let ((event-type (-> evt etype)))
       (cond
         ((not (mp-session-client?)) (none))
-        ((!= (-> evt source-player-id) (mp-host-player-id))
+        ((!= (-> evt source-player-slot) (mp-host-player-slot))
          (log 'debug "[MP-Events] Rejected mission-failed choice from a non-host player.~%"))
         ((mp-fail-mission-choice-event? event-type)
          (set! *mp-mission-failed-pending-choice* event-type)
@@ -826,9 +829,9 @@
     (log 'debug
          "[MP-BattleEvent][~A][RECV] owner=~D epoch=~D local=~D aid=~D~%"
          (if (mp-session-host?) "HOST" "CLIENT")
-         (-> evt payload owner-player-id)
+         (-> evt payload owner-player-slot)
          (-> evt payload epoch)
-         (if (and (mp-local-player-record) (nonzero? (mp-local-player-record))) (-> (mp-local-player-record) identity player-id) -1)
+         (if (and (mp-local-player-record) (nonzero? (mp-local-player-record))) (-> (mp-local-player-record) identity player-slot) -1)
          (-> evt payload enemy-aid))
     (mp-battle-receive-event! evt name-str))
   (none))
@@ -836,7 +839,7 @@
 (defun mp-event-handler-hover-enemy-spawn ((evt mp-hover-enemy-spawn-event))
   (when (and (nonnull? evt)
              (mp-session-client?)
-             (= (-> evt source-player-id) (mp-host-player-id))
+             (= (-> evt source-player-slot) (mp-host-player-slot))
              (nonzero? (-> evt payload manager-aid))
              (nonzero? (-> evt payload source-aid))
              (>= (-> evt payload enemy-aid) #x60000000)
@@ -847,15 +850,15 @@
 (defun mp-receive-player-gun-shot-event ((evt mp-player-gun-shot-event))
   (when (not (nonnull? evt))
     (return (the-as none 0)))
-  (player-replica-receive-gun-shot! (-> evt source-player-id) evt)
+  (player-replica-receive-gun-shot! (-> evt source-player-slot) evt)
   (none))
 
 (defun gungame-receive-target-broken! ((event gungame-target-broken-event))
   (when (and (nonnull? event *mp-player-controller*)
              (<= (-> event payload combo?) 1)
              (if (mp-session-host?)
-               (!= (-> event source-player-id) (-> *mp-player-controller* host-player-id))
-               (and (mp-session-client?) (= (-> event source-player-id) (-> *mp-player-controller* host-player-id)))))
+               (!= (-> event source-player-slot) (-> *mp-player-controller* host-player-slot))
+               (and (mp-session-client?) (= (-> event source-player-slot) (-> *mp-player-controller* host-player-slot)))))
     (let ((manager (process-by-type-exact 'training-manager *active-pool*)))
       (when (nonnull? manager)
         (send-event manager 'gungame-target-broken event))))
@@ -970,20 +973,20 @@
 (defun mp-event-handle-stadium-board1! ((evt mp-stadium-board1-event))
   (unless (nonnull? evt)
     (return (the-as none 0)))
-  (let ((source-player-id (-> evt source-player-id))
+  (let ((source-player-slot (-> evt source-player-slot))
         (manager (process-by-type-exact 'hoverboard-training-manager *active-pool*)))
     (log 'debug
          "[Event-Handler] Received event ~D from player ~D. Score: ~D~%"
          (-> evt etype)
-         source-player-id
+         source-player-slot
          (-> evt payload score))
     (when (and manager (nonzero? manager))
       (case (-> evt etype)
-        ((MP_EVENT_MISSION_STADIUM_BOARD1_CHALLENGE_START) (send-event manager 'challenge-start source-player-id))
+        ((MP_EVENT_MISSION_STADIUM_BOARD1_CHALLENGE_START) (send-event manager 'challenge-start source-player-slot))
         ((MP_EVENT_MISSION_STADIUM_BOARD1_SCORE_UPDATE)
-         (send-event manager 'score-update source-player-id (the int (-> evt payload score))))
+         (send-event manager 'score-update source-player-slot (the int (-> evt payload score))))
         ((MP_EVENT_MISSION_STADIUM_BOARD1_CHALLENGE_END)
-         (send-event manager 'challenge-end source-player-id (the int (-> evt payload score))))
+         (send-event manager 'challenge-end source-player-slot (the int (-> evt payload score))))
         ((MP_EVENT_MISSION_STADIUM_BOARD1_BOARD_PICKED_UP) (send-event manager 'notify 'pickup)))))
   (none))
 
@@ -1043,8 +1046,8 @@
               (logior! *mp-city-power-pending-mask* (the uint 16))))
            (set! *mp-city-power-pending?* #t))))
       ((MP_EVENT_MISSION_TOMB_BOULDER_COMPLETE) (mp-tomb-boulder-receive-completion!))
-      ((MP_EVENT_MISSION_TOMB_DAXTER_WAIT_START) (mp-tomb-daxter-wait-receive-start! (-> evt source-player-id)))
-      ((MP_EVENT_MISSION_TOMB_DAXTER_WAIT_END) (mp-tomb-daxter-wait-receive-end! (-> evt source-player-id)))
+      ((MP_EVENT_MISSION_TOMB_DAXTER_WAIT_START) (mp-tomb-daxter-wait-receive-start! (-> evt source-player-slot)))
+      ((MP_EVENT_MISSION_TOMB_DAXTER_WAIT_END) (mp-tomb-daxter-wait-receive-end! (-> evt source-player-slot)))
       (else (log 'debug "[MP-Event] Unknown mission event ~D.~%" event-type))))
   (none))
 
@@ -1172,7 +1175,7 @@
 (defun mp-receive-pole-grab-event ((evt mp-aid-event))
   (unless (nonnull? evt)
     (return (the-as none 0)))
-  (let ((replica (mp-player-target-by-id (-> evt source-player-id)))
+  (let ((replica (mp-player-target-by-slot (-> evt source-player-slot)))
         (ent (entity-by-aid (-> evt payload aid))))
     (when (and replica ent (nonzero? ent))
       (let ((pole-proc (-> ent extra process)))
@@ -1265,7 +1268,7 @@
         ((MP_PALACE_SQUID_EVT_HIT_REQUEST)
          (send-event squid-proc
                      'mp-hit-request
-                     (-> evt source-player-id)
+                     (-> evt source-player-slot)
                      (-> evt payload sequence)
                      (-> evt payload param0)
                      (-> evt payload param1)))
@@ -1284,19 +1287,19 @@
 
 (defun mp-event-dispatch! ((evt mp-event))
   (let ((saved-remote-context *mp-processing-remote-event*)
-        (saved-event-source *mp-current-event-source-player-id*))
+        (saved-event-source *mp-current-event-source-player-slot*))
     (cond
       ((not (nonnull? evt)) (log 'debug "[MP-Event] Dropped null event.~%"))
       ((not (mp-event-known? (-> evt etype))) (log 'debug "[MP-Event] Dropped unknown event ID ~D.~%" (-> evt etype)))
       ((!= (-> evt payload-size) (mp-event-payload-size (-> evt etype)))
        (log 'debug "[MP-Event] Dropped event ID ~D with invalid size ~D.~%" (-> evt etype) (-> evt payload-size)))
-      ((not (mp-player-controller-record *mp-player-controller* (-> evt source-player-id)))
-       (log 'debug "[MP-Event] Dropped event ~D from vacant player ~D.~%" (-> evt etype) (-> evt source-player-id)))
+      ((not (mp-player-controller-record *mp-player-controller* (-> evt source-player-slot)))
+       (log 'debug "[MP-Event] Dropped event ~D from vacant player ~D.~%" (-> evt etype) (-> evt source-player-slot)))
       (else
        (set! *mp-processing-remote-event* #t)
-       (set! *mp-current-event-source-player-id* (-> evt source-player-id))
-       (let ((source-record (mp-player-controller-record *mp-player-controller* (-> evt source-player-id))))
+       (set! *mp-current-event-source-player-slot* (-> evt source-player-slot))
+       (let ((source-record (mp-player-controller-record *mp-player-controller* (-> evt source-player-slot))))
          (mp-event-route! evt source-record))))
     (set! *mp-processing-remote-event* saved-remote-context)
-    (set! *mp-current-event-source-player-id* saved-event-source)
+    (set! *mp-current-event-source-player-slot* saved-event-source)
     (none)))

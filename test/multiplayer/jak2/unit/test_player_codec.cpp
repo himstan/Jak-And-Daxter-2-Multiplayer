@@ -11,7 +11,7 @@
 
 TEST(Jak2Protocol, RoundTripsCorePlayerStateWithStableWireSize) {
   multiplayer::jak2::core::PlayerState input = {};
-  input.player_id = 3;
+  input.player_slot = 3;
   input.state_ready = true;
   input.scene_active = true;
   input.spectator_only = true;
@@ -30,7 +30,7 @@ TEST(Jak2Protocol, RoundTripsCorePlayerStateWithStableWireSize) {
   input.action_state_id = 11;
   input.vehicle_id = 0x11223344;
   input.vehicle_seat = 2;
-  input.riding_along_player_id = 4;
+  input.riding_along_player_slot = 4;
   input.selected_traffic_authority = 7;
   input.mission_flags = 0x2;
   input.visual_secrets = 0x4;
@@ -46,7 +46,7 @@ TEST(Jak2Protocol, RoundTripsCorePlayerStateWithStableWireSize) {
   ASSERT_TRUE(decoded_packet.has_value());
   multiplayer::jak2::core::PlayerState output = {};
   multiplayer::jak2::wire::from_packet(*decoded_packet, output);
-  EXPECT_EQ(output.player_id, multiplayer::jak2::core::kInvalidPlayerId);
+  EXPECT_EQ(output.player_slot, multiplayer::jak2::core::kInvalidPlayerSlot);
   for (size_t axis = 0; axis < input.position.size(); ++axis) {
     EXPECT_NEAR(output.position[axis], input.position[axis],
                 multiplayer::platform::wire::kPositionResolution / 2.0f);
@@ -112,7 +112,7 @@ TEST(Jak2Protocol, HitInvulnerabilityRoundTrips) {
 
 TEST(Jak2Protocol, PlayerCodecRejectsTruncationAndTrailingBytes) {
   multiplayer::jak2::core::PlayerState input = {};
-  input.player_id = 1;
+  input.player_slot = 1;
   const auto packet = multiplayer::jak2::wire::to_packet(input);
   std::vector<uint8_t> bytes;
   ASSERT_TRUE(multiplayer::platform::wire::encode_packet(packet, bytes));
@@ -129,7 +129,7 @@ TEST(Jak2Protocol, PlayerCodecRejectsTruncationAndTrailingBytes) {
 
 TEST(Jak2Protocol, PlayerCodecHandlesOverflowingActionSequenceSafely) {
   multiplayer::jak2::core::PlayerState input = {};
-  input.player_id = 1;
+  input.player_slot = 1;
   input.state_ready = true;
   input.action_sequence = 256;
   input.action_state_id = 260;
@@ -162,15 +162,15 @@ TEST(Jak2Protocol, PlayerCodecHandlesOverflowingActionSequenceSafely) {
 
 TEST(Jak2Protocol, RoundTripsPlayerVehicleAndTurretState) {
   multiplayer::jak2::core::PlayerVehicleState vehicle = {};
-  vehicle.player_id = 2;
+  vehicle.player_slot = 2;
   vehicle.vehicle.net_id = 0x12345678;
   vehicle.vehicle.vehicle_type = 4;
   vehicle.vehicle.position = {1.0f, -2.0f, 3.0f};
   vehicle.vehicle.quaternion = {0.0f, 0.0f, 0.5f, 0.5f};
   vehicle.vehicle.linear_velocity = {4.0f, 5.0f, 6.0f};
   vehicle.vehicle.angular_velocity = {-1.0f, -2.0f, -3.0f};
-  vehicle.vehicle.rider_player_ids = {2, 3, multiplayer::jak2::core::kInvalidPlayerId,
-                                      multiplayer::jak2::core::kTrafficVehicleCivilianRiderId};
+  vehicle.vehicle.rider_player_slots = {2, 3, multiplayer::jak2::core::kInvalidPlayerSlot,
+                                        multiplayer::jak2::core::kTrafficVehicleCivilianRiderId};
 
   std::vector<uint8_t> bytes;
   ASSERT_TRUE(multiplayer::platform::wire::encode_packet(
@@ -188,10 +188,10 @@ TEST(Jak2Protocol, RoundTripsPlayerVehicleAndTurretState) {
                 multiplayer::platform::wire::kVehiclePositionResolution / 2.0f);
   }
   EXPECT_EQ(decoded_vehicle.vehicle.quaternion, vehicle.vehicle.quaternion);
-  EXPECT_EQ(decoded_vehicle.vehicle.rider_player_ids, vehicle.vehicle.rider_player_ids);
+  EXPECT_EQ(decoded_vehicle.vehicle.rider_player_slots, vehicle.vehicle.rider_player_slots);
 
   multiplayer::jak2::core::TurretState turret = {};
-  turret.player_id = 2;
+  turret.player_slot = 2;
   turret.turret_aid = 0xabcdef;
   turret.rotation_y = 1.25f;
   turret.rotation_x = -0.5f;

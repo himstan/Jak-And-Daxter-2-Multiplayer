@@ -93,12 +93,12 @@ class RecordingEndpoint final : public platform::GameSessionEndpoint {
   }
   void request_bootstrap() override { bootstrap_requested = true; }
   const platform::SessionSnapshot& snapshot() const override { return session_snapshot; }
-  uint32_t estimated_rtt_ms(platform::PlayerId) const override { return 17; }
+  uint32_t estimated_rtt_ms(platform::PlayerSlot) const override { return 17; }
 
   platform::SessionSnapshot session_snapshot = {.state = {.role = platform::SessionRole::HOST,
                                                           .status = platform::SessionStatus::LOBBY,
-                                                          .local_player_id = 0,
-                                                          .host_player_id = 0,
+                                                          .local_player_slot = 0,
+                                                          .host_player_slot = 0,
                                                           .player_limit = 8}};
   bool bootstrap_requested = false;
   bool cadence_enabled = true;
@@ -121,12 +121,13 @@ class TrafficRoutingScenario {
 
   TrafficRoutingScenario(platform::SessionRole role, uint8_t local_id) {
     endpoint.session_snapshot.state.role = role;
-    endpoint.session_snapshot.state.local_player_id = local_id;
+    endpoint.session_snapshot.state.local_player_slot = local_id;
     endpoint.session_snapshot.state.status = platform::SessionStatus::IN_GAME;
     endpoint.session_snapshot.state.player_limit = 3;
-    endpoint.session_snapshot.players = {{.player_id = 0}, {.player_id = 1}, {.player_id = 2}};
-    endpoint.session_snapshot.connections = {{.player_id = 1, .network = {.connection_id = 11}},
-                                             {.player_id = 2, .network = {.connection_id = 12}}};
+    endpoint.session_snapshot.players = {
+        {.player_slot = 0}, {.player_slot = 1}, {.player_slot = 2}};
+    endpoint.session_snapshot.connections = {{.player_slot = 1, .network = {.connection_id = 11}},
+                                             {.player_slot = 2, .network = {.connection_id = 12}}};
     endpoint.schedule_traffic = true;
     authority.assignments[0] = 0;
     authority.assignments[1] = 1;
@@ -135,15 +136,15 @@ class TrafficRoutingScenario {
     adapter.session_started(endpoint.session_snapshot.state);
   }
 
-  void publish(uint64_t now_ms, uint8_t selected = jak2::core::kInvalidPlayerId) {
+  void publish(uint64_t now_ms, uint8_t selected = jak2::core::kInvalidPlayerSlot) {
     endpoint.sent.clear();
-    const auto local = endpoint.session_snapshot.state.local_player_id;
+    const auto local = endpoint.session_snapshot.state.local_player_slot;
     if (endpoint.session_snapshot.state.role == platform::SessionRole::CLIENT) {
       const auto packet = platform::wire::encode_packet(jak2::wire::to_packet(authority));
       ASSERT_TRUE(packet);
       ASSERT_NE(
           adapter.packets()
-              .receive({.origin = {.authenticated_player_id = 0, .from_host = true},
+              .receive({.origin = {.authenticated_player_slot = 0, .from_host = true},
                         .message_id = static_cast<uint8_t>(PacketType::TRAFFIC_AUTHORITY_STATE),
                         .sequence = authority.revision,
                         .payload = *packet},
@@ -152,10 +153,10 @@ class TrafficRoutingScenario {
           platform::PayloadDisposition::REJECT);
     }
     auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
-    frame->local_player_id = local;
-    frame->host_player_id = 0;
+    frame->local_player_slot = local;
+    frame->host_player_slot = 0;
     frame->selected_traffic_authority =
-        selected == jak2::core::kInvalidPlayerId ? authority.assignments[local] : selected;
+        selected == jak2::core::kInvalidPlayerSlot ? authority.assignments[local] : selected;
     frame->traffic_authority = authority;
     frame->sample_time_ms = static_cast<uint32_t>(now_ms);
     frame->players[local].state_ready = true;
@@ -174,8 +175,8 @@ class TrafficRoutingScenario {
     adapter.tick(now_ms);
   }
 
-  void select(uint8_t player_id, uint8_t source, uint32_t sequence) {
-    jak2::core::PlayerState player = {.player_id = player_id,
+  void select(uint8_t player_slot, uint8_t source, uint32_t sequence) {
+    jak2::core::PlayerState player = {.player_slot = player_slot,
                                       .activity = jak2::core::PlayerActivity::IN_GAME,
                                       .state_ready = true,
                                       .spectator_only = true};
@@ -183,7 +184,7 @@ class TrafficRoutingScenario {
     const auto packet = platform::wire::encode_packet(jak2::wire::to_packet(player));
     ASSERT_TRUE(packet);
     ASSERT_NE(adapter.packets()
-                  .receive({.origin = {.authenticated_player_id = player_id,
+                  .receive({.origin = {.authenticated_player_slot = player_slot,
                                        .from_host = endpoint.session_snapshot.state.role ==
                                                     platform::SessionRole::CLIENT},
                             .message_id = static_cast<uint8_t>(PacketType::PLAYER_STATE),
@@ -297,7 +298,7 @@ TEST(Jak2AdapterIntegration, TrafficRelayIncludesSpectatorsWithoutSendingToOther
   ASSERT_TRUE(packet);
   const auto relay = [&](uint32_t sequence) {
     return scenario.adapter.packets().receive(
-        {.origin = {.authenticated_player_id = 1},
+        {.origin = {.authenticated_player_slot = 1},
          .message_id = static_cast<uint8_t>(PacketType::VEHICLE_STATE_BATCH),
          .sequence = sequence,
          .payload = *packet},
@@ -305,11 +306,11 @@ TEST(Jak2AdapterIntegration, TrafficRelayIncludesSpectatorsWithoutSendingToOther
   };
   auto result = relay(1);
   ASSERT_TRUE(result.relay_recipients);
-  EXPECT_EQ(*result.relay_recipients, (std::vector<platform::PlayerId>{2}));
+  EXPECT_EQ(*result.relay_recipients, (std::vector<platform::PlayerSlot>{2}));
   scenario.adapter.tick(108);
   const auto remote = scenario.adapter.mailbox().take_remote_frame();
   ASSERT_TRUE(remote);
-  EXPECT_EQ(remote->selected_traffic.source_player_id, 1u);
+  EXPECT_EQ(remote->selected_traffic.source_player_slot, 1u);
   scenario.select(2, 2, 2);
   result = relay(2);
   ASSERT_TRUE(result.relay_recipients);
@@ -323,7 +324,7 @@ TEST(Jak2AdapterIntegration, AdapterRejectsMalformedGameplayBeforeRelay) {
   adapter.session_started(endpoint.session_snapshot.state);
   const std::vector<uint8_t> malformed = {1};
   const auto result =
-      adapter.packets().receive({.origin = {.connection_id = 3, .authenticated_player_id = 1},
+      adapter.packets().receive({.origin = {.connection_id = 3, .authenticated_player_slot = 1},
                                  .message_id = static_cast<uint8_t>(PacketType::PLAYER_STATE),
                                  .sequence = 1,
                                  .payload = malformed},
@@ -338,13 +339,13 @@ TEST(Jak2AdapterIntegration, AdapterCanonicalizesValidatedPayloadBodiesForRelay)
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
   jak2::core::PlayerState player = {};
-  player.player_id = 1;
+  player.player_slot = 1;
   player.position = {1.0f, 2.0f, 3.0f};
   std::vector<uint8_t> body;
   ASSERT_TRUE(encode_player_packet(player, body));
   const uint64_t received_at_ms = (uint64_t{1} << 32) + 1234;
   const auto result =
-      adapter.packets().receive({.origin = {.connection_id = 3, .authenticated_player_id = 1},
+      adapter.packets().receive({.origin = {.connection_id = 3, .authenticated_player_slot = 1},
                                  .message_id = static_cast<uint8_t>(PacketType::PLAYER_STATE),
                                  .sequence = 7,
                                  .received_at_ms = received_at_ms,
@@ -364,12 +365,12 @@ TEST(Jak2AdapterIntegration, RejectedStaleAndSemanticPayloadsDoNotMutateAccepted
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
   jak2::core::PlayerState player = {};
-  player.player_id = 1;
+  player.player_slot = 1;
   player.position = {1.0f, 2.0f, 3.0f};
   std::vector<uint8_t> body;
   ASSERT_TRUE(encode_player_packet(player, body));
   ASSERT_EQ(adapter.packets()
-                .receive({.origin = {.connection_id = 3, .authenticated_player_id = 1},
+                .receive({.origin = {.connection_id = 3, .authenticated_player_slot = 1},
                           .message_id = static_cast<uint8_t>(PacketType::PLAYER_STATE),
                           .sequence = 2,
                           .payload = body},
@@ -380,7 +381,7 @@ TEST(Jak2AdapterIntegration, RejectedStaleAndSemanticPayloadsDoNotMutateAccepted
   player.position = {9.0f, 8.0f, 7.0f};
   ASSERT_TRUE(encode_player_packet(player, body));
   const auto stale =
-      adapter.packets().receive({.origin = {.connection_id = 3, .authenticated_player_id = 1},
+      adapter.packets().receive({.origin = {.connection_id = 3, .authenticated_player_slot = 1},
                                  .message_id = static_cast<uint8_t>(PacketType::PLAYER_STATE),
                                  .sequence = 1,
                                  .payload = body},
@@ -390,14 +391,14 @@ TEST(Jak2AdapterIntegration, RejectedStaleAndSemanticPayloadsDoNotMutateAccepted
 
   jak2::core::TrafficSnapshot unauthorized_traffic = {
       .kind = jak2::core::TrafficSnapshot::Kind::VEHICLES,
-      .source_player_id = 1,
+      .source_player_slot = 1,
       .authority_revision = 1,
       .vehicles = {{.net_id = 0x21000001u, .quaternion = {0.0f, 0.0f, 0.0f, 1.0f}}}};
   const auto encoded_traffic = platform::wire::encode_packet(
       jak2::wire::to_vehicle_state_batch_packet(unauthorized_traffic));
   ASSERT_TRUE(encoded_traffic);
   const auto semantically_rejected = adapter.packets().receive(
-      {.origin = {.connection_id = 3, .authenticated_player_id = 1},
+      {.origin = {.connection_id = 3, .authenticated_player_slot = 1},
        .message_id = static_cast<uint8_t>(PacketType::VEHICLE_STATE_BATCH),
        .sequence = 3,
        .payload = *encoded_traffic},
@@ -416,15 +417,15 @@ TEST(Jak2AdapterIntegration, TrafficRelayTargetsOnlyPlayersAssignedToItsSource) 
   jak2::application::Jak2Adapter adapter;
   RecordingEndpoint endpoint;
   endpoint.session_snapshot.state.player_limit = 4;
-  endpoint.session_snapshot.players = {{.player_id = 0}, {.player_id = 1}, {.player_id = 2}};
+  endpoint.session_snapshot.players = {{.player_slot = 0}, {.player_slot = 1}, {.player_slot = 2}};
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
 
   auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
-  frame->local_player_id = 0;
-  frame->host_player_id = 0;
+  frame->local_player_slot = 0;
+  frame->host_player_slot = 0;
   frame->traffic_authority.revision = 1;
-  frame->traffic_authority.assignments.fill(jak2::core::kInvalidPlayerId);
+  frame->traffic_authority.assignments.fill(jak2::core::kInvalidPlayerSlot);
   frame->traffic_authority.assignments[0] = 0;
   frame->traffic_authority.assignments[1] = 1;
   frame->traffic_authority.assignments[2] = 1;
@@ -432,7 +433,7 @@ TEST(Jak2AdapterIntegration, TrafficRelayTargetsOnlyPlayersAssignedToItsSource) 
   adapter.tick(100);
 
   jak2::core::TrafficSnapshot traffic = {.kind = jak2::core::TrafficSnapshot::Kind::VEHICLES,
-                                         .source_player_id = 1,
+                                         .source_player_slot = 1,
                                          .authority_revision = 1,
                                          .vehicles = {{.net_id = 0x21000001u}}};
   traffic.vehicles[0].quaternion[3] = 1.0f;
@@ -440,7 +441,7 @@ TEST(Jak2AdapterIntegration, TrafficRelayTargetsOnlyPlayersAssignedToItsSource) 
       platform::wire::encode_packet(jak2::wire::to_vehicle_state_batch_packet(traffic));
   ASSERT_TRUE(encoded);
   const auto result = adapter.packets().receive(
-      {.origin = {.connection_id = 3, .authenticated_player_id = 1},
+      {.origin = {.connection_id = 3, .authenticated_player_slot = 1},
        .message_id = static_cast<uint8_t>(PacketType::VEHICLE_STATE_BATCH),
        .sequence = 1,
        .received_at_ms = 110,
@@ -448,7 +449,7 @@ TEST(Jak2AdapterIntegration, TrafficRelayTargetsOnlyPlayersAssignedToItsSource) 
       endpoint);
   EXPECT_EQ(result.disposition, platform::PayloadDisposition::CONSUME_AND_RELAY);
   ASSERT_TRUE(result.relay_recipients);
-  EXPECT_EQ(*result.relay_recipients, (std::vector<platform::PlayerId>{2}));
+  EXPECT_EQ(*result.relay_recipients, (std::vector<platform::PlayerSlot>{2}));
   EXPECT_EQ(result.canonical_payload, *encoded);
 }
 
@@ -459,9 +460,9 @@ TEST(Jak2AdapterIntegration, LocalFrameSendsThroughRecordingSessionEndpoint) {
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
   auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
-  frame->local_player_id = 0;
-  frame->host_player_id = 0;
-  frame->players[0].player_id = 0;
+  frame->local_player_slot = 0;
+  frame->host_player_slot = 0;
+  frame->players[0].player_slot = 0;
   frame->players[0].state_ready = true;
   adapter.mailbox().publish_local_frame(std::move(frame));
   adapter.tick(100);
@@ -479,9 +480,9 @@ TEST(Jak2AdapterIntegration, BootstrapPayloadFitsAllPermanentAids) {
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
   auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
-  frame->local_player_id = 0;
-  frame->host_player_id = 0;
-  frame->players[0].player_id = 0;
+  frame->local_player_slot = 0;
+  frame->host_player_slot = 0;
+  frame->players[0].player_slot = 0;
   frame->players[0].state_ready = true;
   frame->bootstrap.host_continue[0] = 'a';
   frame->bootstrap.synchronized_aid_count = jak2::core::kMaxBootstrapAids;
@@ -508,8 +509,8 @@ TEST(Jak2AdapterIntegration, CompletionOnlyChangesRefreshBootstrap) {
   uint64_t now_ms = 100;
   for (const uint8_t completed : {0x20, 0, 0x04}) {
     auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
-    frame->local_player_id = 0;
-    frame->host_player_id = 0;
+    frame->local_player_slot = 0;
+    frame->host_player_slot = 0;
     frame->bootstrap.host_continue[0] = 'a';
     frame->world.completed_task_mask.back() = completed;
     host.mailbox().publish_local_frame(std::move(frame));
@@ -528,9 +529,9 @@ TEST(Jak2AdapterIntegration, LocalTimersKeep64BitTimeAcross32BitBoundary) {
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
   auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
-  frame->local_player_id = 0;
-  frame->host_player_id = 0;
-  frame->players[0].player_id = 0;
+  frame->local_player_slot = 0;
+  frame->host_player_slot = 0;
+  frame->players[0].player_slot = 0;
   frame->players[0].state_ready = true;
   adapter.mailbox().publish_local_frame(std::move(frame));
 
@@ -563,7 +564,7 @@ TEST(Jak2AdapterIntegration, InboundEventOverflowRequestsDisconnectAndDrainingRe
   ASSERT_TRUE(bytes);
   const auto receive = [&](uint32_t sequence) {
     return adapter.packets()
-        .receive({.origin = {.authenticated_player_id = 1},
+        .receive({.origin = {.authenticated_player_slot = 1},
                   .message_id = static_cast<uint8_t>(PacketType::GAME_EVENT_BATCH),
                   .sequence = sequence,
                   .payload = *bytes},
@@ -584,8 +585,8 @@ TEST(Jak2AdapterIntegration, InboundEventOverflowRequestsDisconnectAndDrainingRe
 TEST(Jak2AdapterIntegration, AdapterEventPublisherPreservesEventBatchContents) {
   jak2::application::Jak2Adapter adapter;
   RecordingEndpoint endpoint;
-  endpoint.session_snapshot.state.local_player_id = 3;
-  endpoint.session_snapshot.state.host_player_id = 3;
+  endpoint.session_snapshot.state.local_player_slot = 3;
+  endpoint.session_snapshot.state.host_player_slot = 3;
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
 
@@ -609,9 +610,9 @@ TEST(Jak2AdapterIntegration, CollectableTotalsUseNormalMixedEventBatchesAndHostR
   jak2::application::Jak2Adapter host, picker, observer;
   RecordingEndpoint host_endpoint, picker_endpoint, observer_endpoint;
   picker_endpoint.session_snapshot.state.role = platform::SessionRole::CLIENT;
-  picker_endpoint.session_snapshot.state.local_player_id = 1;
+  picker_endpoint.session_snapshot.state.local_player_slot = 1;
   observer_endpoint.session_snapshot.state.role = platform::SessionRole::CLIENT;
-  observer_endpoint.session_snapshot.state.local_player_id = 2;
+  observer_endpoint.session_snapshot.state.local_player_slot = 2;
   host.installed(host_endpoint);
   picker.installed(picker_endpoint);
   observer.installed(observer_endpoint);
@@ -625,7 +626,7 @@ TEST(Jak2AdapterIntegration, CollectableTotalsUseNormalMixedEventBatchesAndHostR
   picker.tick(100);
   ASSERT_EQ(picker_endpoint.sent.size(), 1u);
   const auto result =
-      host.packets().receive({.origin = {.authenticated_player_id = 1},
+      host.packets().receive({.origin = {.authenticated_player_slot = 1},
                               .message_id = static_cast<uint8_t>(PacketType::GAME_EVENT_BATCH),
                               .sequence = 1,
                               .payload = picker_endpoint.sent[0].payload},
@@ -635,13 +636,13 @@ TEST(Jak2AdapterIntegration, CollectableTotalsUseNormalMixedEventBatchesAndHostR
   host.tick(101);
   const auto inbound = host.mailbox().take_inbound_events(64);
   ASSERT_EQ(inbound.size(), 3u);
-  EXPECT_EQ(inbound[0].source_player_id, 1u);
+  EXPECT_EQ(inbound[0].source_player_slot, 1u);
   EXPECT_EQ(inbound[0].payload, orb.payload);
   EXPECT_EQ(inbound[1].payload, gem.payload);
   EXPECT_EQ(inbound[2].payload, enemy_gem.payload);
   EXPECT_TRUE(host_endpoint.sent.empty());
   EXPECT_EQ(observer.packets()
-                .receive({.origin = {.authenticated_player_id = 1, .from_host = true},
+                .receive({.origin = {.authenticated_player_slot = 1, .from_host = true},
                           .message_id = static_cast<uint8_t>(PacketType::GAME_EVENT_BATCH),
                           .sequence = 1,
                           .payload = result.canonical_payload},
@@ -651,7 +652,7 @@ TEST(Jak2AdapterIntegration, CollectableTotalsUseNormalMixedEventBatchesAndHostR
   observer.tick(103);
   const auto relayed = observer.mailbox().take_inbound_events(64);
   ASSERT_EQ(relayed.size(), 3u);
-  EXPECT_EQ(relayed[0].source_player_id, 1u);
+  EXPECT_EQ(relayed[0].source_player_slot, 1u);
   EXPECT_EQ(relayed[0].payload, orb.payload);
   EXPECT_EQ(relayed[1].payload, gem.payload);
   EXPECT_EQ(relayed[2].payload, enemy_gem.payload);
@@ -660,8 +661,8 @@ TEST(Jak2AdapterIntegration, CollectableTotalsUseNormalMixedEventBatchesAndHostR
 TEST(Jak2AdapterIntegration, AdapterEventPublisherSplitsBatchesAtPayloadLimit) {
   jak2::application::Jak2Adapter adapter;
   RecordingEndpoint endpoint;
-  endpoint.session_snapshot.state.local_player_id = 3;
-  endpoint.session_snapshot.state.host_player_id = 3;
+  endpoint.session_snapshot.state.local_player_slot = 3;
+  endpoint.session_snapshot.state.host_player_slot = 3;
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
 
@@ -688,8 +689,8 @@ TEST(Jak2AdapterIntegration, AdapterEventPublisherSplitsBatchesAtPayloadLimit) {
 TEST(Jak2AdapterIntegration, AdapterEventPublisherRestoresEventsWhenPlatformRejectsSend) {
   jak2::application::Jak2Adapter adapter;
   RecordingEndpoint endpoint;
-  endpoint.session_snapshot.state.local_player_id = 3;
-  endpoint.session_snapshot.state.host_player_id = 3;
+  endpoint.session_snapshot.state.local_player_slot = 3;
+  endpoint.session_snapshot.state.host_player_slot = 3;
   endpoint.accept_sends = false;
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
@@ -739,8 +740,8 @@ TEST(Jak2AdapterIntegration, RejectedTrafficAuthorityStaysDirtyUntilSubmissionSu
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
   auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
-  frame->local_player_id = 0;
-  frame->host_player_id = 0;
+  frame->local_player_slot = 0;
+  frame->host_player_slot = 0;
   frame->traffic_authority.revision = 1;
   frame->traffic_authority.assignments.fill(0);
   frame->selected_traffic_authority = 0;
@@ -773,9 +774,9 @@ TEST(Jak2AdapterIntegration, RejectedPeriodicSendDoesNotMutateLocalReplicationSt
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
   auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
-  frame->local_player_id = 0;
-  frame->host_player_id = 0;
-  frame->players[0] = {.player_id = 0, .state_ready = true, .state_id = 17};
+  frame->local_player_slot = 0;
+  frame->host_player_slot = 0;
+  frame->players[0] = {.player_slot = 0, .state_ready = true, .state_id = 17};
   adapter.mailbox().publish_local_frame(std::move(frame));
   adapter.tick(100);
   const auto remote = adapter.mailbox().take_remote_frame();
@@ -795,11 +796,11 @@ TEST(Jak2AdapterIntegration, RemoteFramesPublishImmediatelyThenAtEightMillisecon
   ASSERT_TRUE(first);
 
   jak2::core::GameEventBatch inbound_events = {
-      .events = {{.event_id = 1, .source_player_id = 1, .payload_size = 12}}};
+      .events = {{.event_id = 1, .source_player_slot = 1, .payload_size = 12}}};
   const auto encoded_events = platform::wire::encode_packet(jak2::wire::to_packet(inbound_events));
   ASSERT_TRUE(encoded_events);
   ASSERT_EQ(adapter.packets()
-                .receive({.origin = {.connection_id = 3, .authenticated_player_id = 1},
+                .receive({.origin = {.connection_id = 3, .authenticated_player_slot = 1},
                           .message_id = static_cast<uint8_t>(PacketType::GAME_EVENT_BATCH),
                           .sequence = 1,
                           .payload = *encoded_events},
@@ -808,9 +809,9 @@ TEST(Jak2AdapterIntegration, RemoteFramesPublishImmediatelyThenAtEightMillisecon
             platform::PayloadDisposition::CONSUME_AND_RELAY);
 
   auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
-  frame->local_player_id = 0;
-  frame->host_player_id = 0;
-  frame->players[0] = {.player_id = 0, .state_ready = true, .state_id = 17};
+  frame->local_player_slot = 0;
+  frame->host_player_slot = 0;
+  frame->players[0] = {.player_slot = 0, .state_ready = true, .state_id = 17};
   adapter.mailbox().publish_local_frame(std::move(frame));
   adapter.tick(101);
   EXPECT_FALSE(adapter.mailbox().take_remote_frame());
@@ -834,9 +835,9 @@ TEST(Jak2AdapterIntegration, StaleGoalIdentityFrameIsSkipped) {
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
   auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
-  frame->local_player_id = 1;
-  frame->host_player_id = 0;
-  frame->players[1] = {.player_id = 1, .state_ready = true};
+  frame->local_player_slot = 1;
+  frame->host_player_slot = 0;
+  frame->players[1] = {.player_slot = 1, .state_ready = true};
   adapter.mailbox().publish_local_frame(std::move(frame));
   adapter.tick(100);
   EXPECT_TRUE(endpoint.sent.empty());
@@ -848,8 +849,8 @@ TEST(Jak2AdapterIntegration, LocalAirlocksAreSentWithoutLoopbackMutation) {
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
   auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
-  frame->local_player_id = 0;
-  frame->host_player_id = 0;
+  frame->local_player_slot = 0;
+  frame->host_player_slot = 0;
   frame->airlocks.states = {{.airlock_aid = 7, .state_id = 1}};
   adapter.mailbox().publish_local_frame(std::move(frame));
   adapter.tick(100);
@@ -871,8 +872,8 @@ TEST(Jak2AdapterIntegration, SessionResetClearsStateAndMailbox) {
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
   auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
-  frame->local_player_id = 0;
-  frame->host_player_id = 0;
+  frame->local_player_slot = 0;
+  frame->host_player_slot = 0;
   adapter.mailbox().publish_local_frame(std::move(frame));
   ASSERT_TRUE(
       adapter.mailbox().push_outbound_events(std::vector<jak2::core::GameEvent>{{.event_id = 1}}));
@@ -892,14 +893,14 @@ TEST(Jak2AdapterIntegration, PlayerVehiclePacketsUseGameFrameCaptureTime) {
   adapter.session_started(endpoint.session_snapshot.state);
   auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
   frame->sample_time_ms = 77;
-  frame->local_player_id = 0;
-  frame->host_player_id = 0;
-  frame->players[0].player_id = 0;
+  frame->local_player_slot = 0;
+  frame->host_player_slot = 0;
+  frame->players[0].player_slot = 0;
   frame->players[0].state_ready = true;
   frame->players[0].vehicle_id = 42;
   frame->players[0].vehicle_seat = 0;
   frame->player_vehicle = jak2::core::PlayerVehicleState{
-      .player_id = 0,
+      .player_slot = 0,
       .seat_index = 0,
       .vehicle = {.net_id = 42, .quaternion = {0.0f, 0.0f, 0.0f, 1.0f}}};
   adapter.mailbox().publish_local_frame(std::move(frame));
@@ -923,15 +924,15 @@ TEST(Jak2AdapterIntegration, ReleasedVehicleContinuesSendingMovingSnapshotsUntil
   adapter.session_started(endpoint.session_snapshot.state);
   const auto publish = [&](bool driving, float x, uint64_t now_ms) {
     auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
-    frame->local_player_id = 0;
-    frame->host_player_id = 0;
+    frame->local_player_slot = 0;
+    frame->host_player_slot = 0;
     frame->selected_traffic_authority = 1;
     frame->sample_time_ms = static_cast<uint32_t>(now_ms);
-    frame->players[0].player_id = 0;
+    frame->players[0].player_slot = 0;
     frame->players[0].state_ready = true;
     frame->players[0].vehicle_id = driving ? 0x21000001u : 0;
     frame->player_vehicle =
-        jak2::core::PlayerVehicleState{.player_id = 0,
+        jak2::core::PlayerVehicleState{.player_slot = 0,
                                        .vehicle = {.net_id = 0x21000001u,
                                                    .position = {x, 0, 0},
                                                    .quaternion = {0, 0, 0, 1},
@@ -968,7 +969,7 @@ TEST(Jak2AdapterIntegration, PresentationTimelinePredictsBeyondTheRawPlayerTrans
   adapter.tick(1000);
 
   jak2::core::PlayerState player = {};
-  player.player_id = 1;
+  player.player_slot = 1;
   player.activity = multiplayer::jak2::core::PlayerActivity::LOBBY;
   player.state_ready = true;
   player.levels[0].level_id = 7;
@@ -978,7 +979,7 @@ TEST(Jak2AdapterIntegration, PresentationTimelinePredictsBeyondTheRawPlayerTrans
   std::vector<uint8_t> body;
   ASSERT_TRUE(encode_player_packet(player, body));
   ASSERT_EQ(adapter.packets()
-                .receive({.origin = {.connection_id = 3, .authenticated_player_id = 1},
+                .receive({.origin = {.connection_id = 3, .authenticated_player_slot = 1},
                           .message_id = static_cast<uint8_t>(PacketType::PLAYER_STATE),
                           .sequence = 1,
                           .payload = body},
@@ -991,7 +992,7 @@ TEST(Jak2AdapterIntegration, PresentationTimelinePredictsBeyondTheRawPlayerTrans
   player.position[0] = 0.33f;
   ASSERT_TRUE(encode_player_packet(player, body));
   ASSERT_EQ(adapter.packets()
-                .receive({.origin = {.connection_id = 3, .authenticated_player_id = 1},
+                .receive({.origin = {.connection_id = 3, .authenticated_player_slot = 1},
                           .message_id = static_cast<uint8_t>(PacketType::PLAYER_STATE),
                           .sequence = 2,
                           .payload = body},
@@ -1015,9 +1016,9 @@ TEST(Jak2AdapterIntegration, BulkBridgeGenerationsStayStableWithoutNewPackets) {
   adapter.session_started(endpoint.session_snapshot.state);
 
   auto local = std::make_unique<jak2::application::LocalReplicationFrame>();
-  local->local_player_id = 0;
-  local->host_player_id = 0;
-  local->players[0].player_id = 0;
+  local->local_player_slot = 0;
+  local->host_player_slot = 0;
+  local->players[0].player_slot = 0;
   local->players[0].state_ready = true;
   local->traffic_authority.revision = 1;
   local->traffic_authority.assignments[0] = 0;
@@ -1038,12 +1039,12 @@ TEST(Jak2AdapterIntegration, BulkBridgeGenerationsStayStableWithoutNewPackets) {
   ASSERT_TRUE(second);
   EXPECT_EQ(second->traffic_generation, first->traffic_generation);
 
-  jak2::core::EnemySnapshot enemies = {.source_player_id = 1, .sample_time_ms = 1900};
-  enemies.enemies.push_back({.actor_id = 99, .owner_player_id = 1});
+  jak2::core::EnemySnapshot enemies = {.source_player_slot = 1, .sample_time_ms = 1900};
+  enemies.enemies.push_back({.actor_id = 99, .owner_player_slot = 1});
   std::vector<uint8_t> body;
   ASSERT_TRUE(encode_enemy_packet(enemies, body));
   ASSERT_EQ(adapter.packets()
-                .receive({.origin = {.connection_id = 3, .authenticated_player_id = 1},
+                .receive({.origin = {.connection_id = 3, .authenticated_player_slot = 1},
                           .message_id = static_cast<uint8_t>(PacketType::ENEMY_STATE_BATCH),
                           .sequence = 1,
                           .payload = body},
@@ -1062,7 +1063,7 @@ TEST(Jak2AdapterIntegration, BulkBridgeGenerationsStayStableWithoutNewPackets) {
 
 TEST(Jak2AdapterIntegration, PresentationRuntimeKeepsAuthoritativeSnapshotsUnmodified) {
   auto frame = std::make_unique<jak2::application::RemoteReplicationFrame>();
-  frame->players[0] = {.player_id = 0,
+  frame->players[0] = {.player_slot = 0,
                        .state_ready = true,
                        .position = {1.0f, 2.0f, 3.0f},
                        .velocity = {4.0f, 0.0f, 0.0f},
@@ -1070,7 +1071,7 @@ TEST(Jak2AdapterIntegration, PresentationRuntimeKeepsAuthoritativeSnapshotsUnmod
                        .last_sequence = 1,
                        .received_time_ms = 150};
   frame->players[0].levels[0].level_id = 7;
-  frame->player_vehicles[0] = {.player_id = 0,
+  frame->player_vehicles[0] = {.player_slot = 0,
                                .vehicle = {.net_id = 0x40000001,
                                            .position = {5.0f, 6.0f, 7.0f},
                                            .quaternion = {0.0f, 0.0f, 0.0f, 1.0f},
@@ -1079,14 +1080,14 @@ TEST(Jak2AdapterIntegration, PresentationRuntimeKeepsAuthoritativeSnapshotsUnmod
                                            .last_sequence = 1,
                                            .received_time_ms = 150}};
   frame->enemies.enemies.push_back({.actor_id = 21,
-                                    .owner_player_id = 0,
+                                    .owner_player_slot = 0,
                                     .position = {9.0f, 10.0f, 11.0f},
                                     .quaternion = {0.0f, 0.0f, 0.0f, 1.0f},
                                     .sample_time_ms = 100,
                                     .received_time_ms = 150,
                                     .last_sequence = 1});
   frame->selected_traffic.kind = jak2::core::TrafficSnapshot::Kind::PEDESTRIANS;
-  frame->selected_traffic.source_player_id = 0;
+  frame->selected_traffic.source_player_slot = 0;
   frame->selected_traffic.authority_revision = 4;
   frame->selected_traffic.level_id = 7;
   frame->selected_traffic.pedestrians.push_back({.net_id = 31,
@@ -1175,7 +1176,7 @@ TEST(Jak2AdapterIntegration, ProfileExtensionAndPlayerLifecycleStayGameSpecific)
   std::vector<uint8_t> canonical;
   ASSERT_TRUE(adapter.validate_profile_extension(extension, canonical));
   ASSERT_EQ(canonical, extension);
-  adapter.player_profile_changed({.player_id = 1,
+  adapter.player_profile_changed({.player_slot = 1,
                                   .display_name = "Daxter",
                                   .character = platform::PlayerCharacter::DAXTER,
                                   .game_extension = extension});
@@ -1197,19 +1198,20 @@ TEST(Jak2AdapterIntegration, RapidRejoinRetainsLifecycleAndStartsFreshPresentati
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
   const platform::PlayerProfile profile = {
-      .player_id = 1,
+      .player_slot = 1,
+      .player_id = platform::PlayerId::generate(),
       .display_name = "Remote",
       .character = platform::PlayerCharacter::JAK,
       .game_extension = std::vector<uint8_t>(sizeof(jak2::core::PlayerSkin))};
   adapter.player_profile_changed(profile);
   jak2::core::PlayerState player = {};
-  player.player_id = 1;
+  player.player_slot = 1;
   player.activity = jak2::core::PlayerActivity::IN_GAME;
   player.position = {100.0f, 200.0f, 300.0f};
   std::vector<uint8_t> body;
   ASSERT_TRUE(encode_player_packet(player, body));
   ASSERT_NE(adapter.packets()
-                .receive({.origin = {.authenticated_player_id = 1},
+                .receive({.origin = {.authenticated_player_slot = 1},
                           .message_id = static_cast<uint8_t>(PacketType::PLAYER_STATE),
                           .sequence = 100,
                           .received_at_ms = 100,
@@ -1223,7 +1225,7 @@ TEST(Jak2AdapterIntegration, RapidRejoinRetainsLifecycleAndStartsFreshPresentati
   player.position = {400.0f, 500.0f, 600.0f};
   ASSERT_TRUE(encode_player_packet(player, body));
   ASSERT_NE(adapter.packets()
-                .receive({.origin = {.authenticated_player_id = 1},
+                .receive({.origin = {.authenticated_player_slot = 1},
                           .message_id = static_cast<uint8_t>(PacketType::PLAYER_STATE),
                           .sequence = 1,
                           .received_at_ms = 108,
@@ -1243,14 +1245,14 @@ TEST(Jak2AdapterIntegration, RapidRejoinRetainsLifecycleAndStartsFreshPresentati
   EXPECT_EQ(frame->player_targets[1].generation, 1u);
 
   std::vector<jak2::core::GameEvent> events(3);
-  events[0].source_player_id = 1;
-  events[1].source_player_id = 2;
-  events[2].source_player_id = 1;
+  events[0].source_player_slot = 1;
+  events[1].source_player_slot = 2;
+  events[2].source_player_slot = 1;
   ASSERT_TRUE(adapter.mailbox().push_inbound_events(events));
   adapter.player_departed(1);
   const auto pending = adapter.mailbox().take_inbound_events(64);
   ASSERT_EQ(pending.size(), 1u);
-  EXPECT_EQ(pending[0].source_player_id, 2u);
+  EXPECT_EQ(pending[0].source_player_slot, 2u);
 }
 
 TEST(Jak2AdapterIntegration, GungameStateIsPeriodicAndRejectedPublicationDoesNotApplyLocally) {
@@ -1261,8 +1263,8 @@ TEST(Jak2AdapterIntegration, GungameStateIsPeriodicAndRejectedPublicationDoesNot
   adapter.session_started(endpoint.session_snapshot.state);
   const auto publish = [&](uint32_t run, uint64_t time) {
     auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
-    frame->local_player_id = 0;
-    frame->host_player_id = 0;
+    frame->local_player_slot = 0;
+    frame->host_player_slot = 0;
     if (run != 0) {
       frame->gungame = jak2::core::GungameState{
           .run_id = run, .course_id = 3, .phase = jak2::core::GungamePhase::COURSE};
@@ -1311,14 +1313,14 @@ TEST(Jak2AdapterIntegration, MissingGungameCaptureKeepsPlayerAndTrafficPublishin
   jak2::application::Jak2Adapter adapter;
   RecordingEndpoint endpoint;
   endpoint.session_snapshot.state.status = platform::SessionStatus::IN_GAME;
-  endpoint.session_snapshot.players = {{.player_id = 0}, {.player_id = 1}};
-  endpoint.session_snapshot.connections = {{.player_id = 1, .network = {.connection_id = 11}}};
+  endpoint.session_snapshot.players = {{.player_slot = 0}, {.player_slot = 1}};
+  endpoint.session_snapshot.connections = {{.player_slot = 1, .network = {.connection_id = 11}}};
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
   const auto publish = [&](bool capture_gungame, float position, uint64_t time) {
     auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
-    frame->local_player_id = 0;
-    frame->host_player_id = 0;
+    frame->local_player_slot = 0;
+    frame->host_player_slot = 0;
     frame->players[0].state_ready = true;
     frame->players[0].position[0] = position;
     frame->traffic_authority.revision = 1;
@@ -1368,7 +1370,7 @@ TEST(Jak2AdapterIntegration, GungameReceivesCompleteHostStateAndRejectsStaleSequ
   jak2::application::Jak2Adapter adapter;
   RecordingEndpoint endpoint;
   endpoint.session_snapshot.state.role = platform::SessionRole::CLIENT;
-  endpoint.session_snapshot.state.local_player_id = 1;
+  endpoint.session_snapshot.state.local_player_slot = 1;
   adapter.installed(endpoint);
   adapter.session_started(endpoint.session_snapshot.state);
   jak2::core::GungameState state = {.run_id = 8,
@@ -1382,7 +1384,7 @@ TEST(Jak2AdapterIntegration, GungameReceivesCompleteHostStateAndRejectsStaleSequ
     const auto bytes = platform::wire::encode_packet(jak2::wire::to_packet(state));
     EXPECT_TRUE(bytes);
     return adapter.packets()
-        .receive({.origin = {.authenticated_player_id = static_cast<uint8_t>(host ? 0 : 2),
+        .receive({.origin = {.authenticated_player_slot = static_cast<uint8_t>(host ? 0 : 2),
                              .from_host = host},
                   .message_id = static_cast<uint8_t>(PacketType::GUNGAME_STATE),
                   .sequence = sequence,
@@ -1415,13 +1417,13 @@ TEST(Jak2AdapterIntegration, GungameHitRequestsAndConfirmationsPreserveOriginsAn
   jak2::application::Jak2Adapter host, client;
   RecordingEndpoint host_endpoint, client_endpoint;
   client_endpoint.session_snapshot.state.role = platform::SessionRole::CLIENT;
-  client_endpoint.session_snapshot.state.local_player_id = 1;
+  client_endpoint.session_snapshot.state.local_player_slot = 1;
   host.installed(host_endpoint);
   client.installed(client_endpoint);
   host.session_started(host_endpoint.session_snapshot.state);
   client.session_started(client_endpoint.session_snapshot.state);
   jak2::core::GameEvent first = {.event_id = 44,
-                                 .source_player_id = 0,
+                                 .source_player_slot = 0,
                                  .payload_size = 8,
                                  .payload = {9, 0, 0, 0, 0xec, 0x0e, 2, 1}};
   auto second = first;
@@ -1437,7 +1439,7 @@ TEST(Jak2AdapterIntegration, GungameHitRequestsAndConfirmationsPreserveOriginsAn
   ASSERT_EQ(client_endpoint.sent.size(), 1u);
   EXPECT_EQ(client.mailbox().outbound_event_count(), 0u);
   const auto requests =
-      host.packets().receive({.origin = {.authenticated_player_id = 1},
+      host.packets().receive({.origin = {.authenticated_player_slot = 1},
                               .message_id = static_cast<uint8_t>(PacketType::GAME_EVENT_BATCH),
                               .sequence = 1,
                               .payload = client_endpoint.sent.front().payload},
@@ -1448,14 +1450,14 @@ TEST(Jak2AdapterIntegration, GungameHitRequestsAndConfirmationsPreserveOriginsAn
   ASSERT_EQ(accepted.size(), 2u);
   EXPECT_EQ(accepted[0].payload, first.payload);
   EXPECT_EQ(accepted[1].payload, second.payload);
-  EXPECT_EQ(accepted[0].source_player_id, 1u);
-  EXPECT_EQ(accepted[1].source_player_id, 1u);
+  EXPECT_EQ(accepted[0].source_player_slot, 1u);
+  EXPECT_EQ(accepted[1].source_player_slot, 1u);
   // The GOAL manager queues confirmations after validating the run and applying a break.
   ASSERT_TRUE(host.mailbox().push_outbound_events(accepted));
   host.tick(1002);
   ASSERT_EQ(host_endpoint.sent.size(), 1u);
   EXPECT_EQ(client.packets()
-                .receive({.origin = {.authenticated_player_id = 0, .from_host = true},
+                .receive({.origin = {.authenticated_player_slot = 0, .from_host = true},
                           .message_id = static_cast<uint8_t>(PacketType::GAME_EVENT_BATCH),
                           .sequence = 2,
                           .payload = host_endpoint.sent.front().payload},
@@ -1467,8 +1469,8 @@ TEST(Jak2AdapterIntegration, GungameHitRequestsAndConfirmationsPreserveOriginsAn
   ASSERT_EQ(confirmed.size(), 2u);
   EXPECT_EQ(confirmed[0].payload, first.payload);
   EXPECT_EQ(confirmed[1].payload, second.payload);
-  EXPECT_EQ(confirmed[0].source_player_id, 0u);
-  EXPECT_EQ(confirmed[1].source_player_id, 0u);
+  EXPECT_EQ(confirmed[0].source_player_slot, 0u);
+  EXPECT_EQ(confirmed[1].source_player_slot, 0u);
 }
 
 }  // namespace
@@ -1497,13 +1499,13 @@ TEST(Jak2AdapterIntegration, HostRulesAndTaskCompletionReachLateJoinAndReconnect
   jak2::application::Jak2Adapter client;
   RecordingEndpoint client_endpoint;
   client_endpoint.session_snapshot.state.role = platform::SessionRole::CLIENT;
-  client_endpoint.session_snapshot.state.local_player_id = 1;
+  client_endpoint.session_snapshot.state.local_player_slot = 1;
   client.installed(client_endpoint);
   client.session_started(client_endpoint.session_snapshot.state);
   for (uint32_t generation = 1; generation <= 2; ++generation) {
     auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
-    frame->local_player_id = 0;
-    frame->host_player_id = 0;
+    frame->local_player_slot = 0;
+    frame->host_player_slot = 0;
     const uint16_t delay = generation == 1 ? 0 : 35;
     frame->world.respawn_delay_seconds = delay;
     frame->world.player_collision = generation == 1;
@@ -1536,7 +1538,7 @@ TEST(Jak2AdapterIntegration, HostRulesAndTaskCompletionReachLateJoinAndReconnect
     const auto payload = platform::wire::encode_packet(jak2::wire::to_packet(live_world));
     ASSERT_TRUE(payload);
     EXPECT_EQ(client.packets()
-                  .receive({.origin = {.authenticated_player_id = 0, .from_host = true},
+                  .receive({.origin = {.authenticated_player_slot = 0, .from_host = true},
                             .message_id = static_cast<uint8_t>(PacketType::WORLD_STATE),
                             .sequence = generation + 100,
                             .payload = *payload},
@@ -1564,8 +1566,8 @@ TEST(Jak2AdapterIntegration, PlayerRulesSendOnlyChangesAndRetryFailedSends) {
   const auto publish = [&](uint64_t now, uint16_t delay, bool collision, bool friendly) {
     endpoint.sent.clear();
     auto frame = std::make_unique<jak2::application::LocalReplicationFrame>();
-    frame->local_player_id = 0;
-    frame->host_player_id = 0;
+    frame->local_player_slot = 0;
+    frame->host_player_slot = 0;
     frame->world.respawn_delay_seconds = delay;
     frame->world.player_collision = collision;
     frame->world.friendly_fire = friendly;

@@ -63,8 +63,8 @@
                                        (mp-event-handler-attack-ped (the-as mp-actor-attack-event evt)))
                   (MP_EVENT_CHANGE_MODE_DARKJAK 12
                                                 none
-                                                (mp-event-handler-change-mode-darkjak (-> evt source-player-id)))
-                  (MP_EVENT_END_MODE_DARKJAK 13 none (mp-event-handler-end-mode-darkjak (-> evt source-player-id)))
+                                                (mp-event-handler-change-mode-darkjak (-> evt source-player-slot)))
+                  (MP_EVENT_END_MODE_DARKJAK 13 none (mp-event-handler-end-mode-darkjak (-> evt source-player-slot)))
                   (MP_EVENT_EDGE_GRAB 14
                                       edge-grab-state-event-data
                                       (mp-receive-edge-grab-event (mp-player-record-target source-record) evt #f))
@@ -172,6 +172,6 @@
                                                                                                  evt)))
                   (MP_EVENT_PLAYER_GUN_RELEASE 62
                                                mp-player-gun-shot-event-data
-                                               (player-replica-receive-gun-release! (-> evt source-player-id)
+                                               (player-replica-receive-gun-release! (-> evt source-player-slot)
                                                                                     (the-as mp-player-gun-shot-event
                                                                                             evt))))

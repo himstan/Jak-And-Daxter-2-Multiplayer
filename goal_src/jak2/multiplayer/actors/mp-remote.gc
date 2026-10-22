@@ -6,8 +6,8 @@
 
 (defun mp-reset-remote-marker-state! ()
   (when (and *minimap* (nonzero? *minimap*) (-> *minimap* engine) (nonzero? (-> *minimap* engine)))
-    (dotimes (player-id MP_MAX_PLAYERS)
-      (kill-by-key (-> *minimap* engine) (+ MP_REMOTE_PLAYER_MARKER_KEY_BASE player-id))))
+    (dotimes (player-slot MP_MAX_PLAYERS)
+      (kill-by-key (-> *minimap* engine) (+ MP_REMOTE_PLAYER_MARKER_KEY_BASE player-slot))))
   (none))
 
 (defun mp-update-player-transform! ((record mp-player-record))
@@ -164,7 +164,7 @@
   (none))
 
 (defun manage-remote-replicas! ()
-  (mp-for-each-player-record (player-id record)
+  (mp-for-each-player-record (player-slot record)
     (when (is-record-remote-player? record)
       (manage-player-replica! record)))
   (mp-player-controller-for-each-stale-remote! *mp-player-controller* mp-cleanup-stale-player-presentation!)

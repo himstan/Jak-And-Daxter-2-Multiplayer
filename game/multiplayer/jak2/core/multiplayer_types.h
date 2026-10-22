@@ -5,12 +5,13 @@
 #include <vector>
 
 #include "game/multiplayer/jak2/player_skin.h"
+#include "game/multiplayer/platform/core/player_id.h"
 #include "game/multiplayer/platform/core/types.h"
 #include "game/multiplayer/platform/session/session_state.h"
 
 namespace multiplayer::jak2::core {
 
-using PlayerId = platform::PlayerId;
+using PlayerSlot = platform::PlayerSlot;
 using SourceContext = platform::MessageOrigin;
 using EntityId = uint32_t;
 using Sequence = uint32_t;
@@ -28,7 +29,7 @@ inline constexpr size_t kGameTaskCompletionBytes = (kGameTaskCount + 7) / 8;
 inline constexpr uint16_t kDefaultRespawnDelaySeconds = 20;
 inline constexpr size_t kMaxPedestrians = 128;
 inline constexpr size_t kMaxVehicles = 64;
-inline constexpr PlayerId kInvalidPlayerId = platform::kInvalidPlayerId;
+inline constexpr PlayerSlot kInvalidPlayerSlot = platform::kInvalidPlayerSlot;
 enum class PlayerActivity : uint8_t {
   UNAVAILABLE,
   LOBBY,
@@ -57,7 +58,8 @@ using platform::SessionStatus;
 using PlayerSkin = MPPlayerSkin;
 
 struct PlayerIdentity {
-  PlayerId player_id = kInvalidPlayerId;
+  PlayerSlot player_slot = kInvalidPlayerSlot;
+  platform::PlayerId player_id;
   PlayerCharacter character = PlayerCharacter::UNKNOWN;
   bool identity_ready = false;
   bool state_ready = false;
@@ -161,7 +163,7 @@ inline bool valid_player_level_state(const PlayerLevelState& levels) {
 }
 
 struct PlayerState {
-  PlayerId player_id = kInvalidPlayerId;
+  PlayerSlot player_slot = kInvalidPlayerSlot;
   PlayerActivity activity = PlayerActivity::UNAVAILABLE;
   bool identity_ready = false;
   bool state_ready = false;
@@ -185,8 +187,8 @@ struct PlayerState {
   uint32_t action_state_id = 0;
   uint32_t vehicle_id = 0;
   uint8_t vehicle_seat = 0;
-  PlayerId riding_along_player_id = kInvalidPlayerId;
-  PlayerId selected_traffic_authority = kInvalidPlayerId;
+  PlayerSlot riding_along_player_slot = kInvalidPlayerSlot;
+  PlayerSlot selected_traffic_authority = kInvalidPlayerSlot;
   uint8_t mission_flags = 0;
   uint8_t visual_secrets = 0;
   uint32_t sample_time_ms = 0;
@@ -196,9 +198,9 @@ struct PlayerState {
 
 struct TrafficAuthority {
   uint32_t revision = 0;
-  std::array<PlayerId, kMaxPlayers> assignments = [] {
-    std::array<PlayerId, kMaxPlayers> result;
-    result.fill(kInvalidPlayerId);
+  std::array<PlayerSlot, kMaxPlayers> assignments = [] {
+    std::array<PlayerSlot, kMaxPlayers> result;
+    result.fill(kInvalidPlayerSlot);
     return result;
   }();
 };
@@ -208,7 +210,7 @@ struct VehicleState {
   uint8_t vehicle_type = 0;
   uint8_t color_index = 0;
   uint8_t state_id = 0;
-  PlayerId target_player_id = kInvalidPlayerId;
+  PlayerSlot target_player_slot = kInvalidPlayerSlot;
   uint8_t state_flags = 0;
   uint8_t hit_points = 0;
   uint16_t level_id = 0;
@@ -216,8 +218,8 @@ struct VehicleState {
   std::array<float, 4> quaternion = {};
   std::array<float, 3> linear_velocity = {};
   std::array<float, 3> angular_velocity = {};
-  std::array<uint32_t, 4> rider_player_ids = {kInvalidPlayerId, kInvalidPlayerId, kInvalidPlayerId,
-                                              kInvalidPlayerId};
+  std::array<uint32_t, 4> rider_player_slots = {kInvalidPlayerSlot, kInvalidPlayerSlot,
+                                                kInvalidPlayerSlot, kInvalidPlayerSlot};
   uint32_t sample_time_ms = 0;
   uint32_t last_sequence = 0;
   uint64_t received_time_ms = 0;
@@ -225,13 +227,13 @@ struct VehicleState {
 };
 
 struct PlayerVehicleState {
-  PlayerId player_id = kInvalidPlayerId;
+  PlayerSlot player_slot = kInvalidPlayerSlot;
   uint8_t seat_index = 0;
   VehicleState vehicle = {};
 };
 
 struct TurretState {
-  PlayerId player_id = kInvalidPlayerId;
+  PlayerSlot player_slot = kInvalidPlayerSlot;
   uint32_t turret_aid = 0;
   float rotation_y = 0.0f;
   float rotation_x = 0.0f;
@@ -243,7 +245,7 @@ struct PedestrianState {
   uint32_t appearance_mask = 0;
   uint8_t state_id = 0;
   int32_t hit_points = 0;
-  uint8_t target_player_id = kInvalidPlayerId;
+  uint8_t target_player_slot = kInvalidPlayerSlot;
   EntityId vehicle_net_id = 0;
   uint32_t transport_id = 0;
   uint8_t transport_side = 0;
@@ -259,8 +261,8 @@ struct PedestrianState {
 
 struct TrafficEntity {
   EntityId net_id = 0;
-  PlayerId owner_player_id = kInvalidPlayerId;
-  PlayerId target_player_id = kInvalidPlayerId;
+  PlayerSlot owner_player_slot = kInvalidPlayerSlot;
+  PlayerSlot target_player_slot = kInvalidPlayerSlot;
   uint32_t level_id = 0;
   std::array<float, 3> position = {};
   std::array<float, 4> quaternion = {};
@@ -274,7 +276,7 @@ struct TrafficSnapshot {
   };
 
   Kind kind = Kind::PEDESTRIANS;
-  PlayerId source_player_id = kInvalidPlayerId;
+  PlayerSlot source_player_slot = kInvalidPlayerSlot;
   uint32_t authority_revision = 0;
   uint32_t level_id = 0;
   uint32_t sample_time_ms = 0;
@@ -286,8 +288,8 @@ struct TrafficSnapshot {
 
 struct EnemyState {
   EntityId actor_id = 0;
-  PlayerId owner_player_id = kInvalidPlayerId;
-  PlayerId focus_player_id = kInvalidPlayerId;
+  PlayerSlot owner_player_slot = kInvalidPlayerSlot;
+  PlayerSlot focus_player_slot = kInvalidPlayerSlot;
   uint32_t state_id = 0;
   int32_t hit_points = 0;
   std::array<float, 3> position = {};
@@ -301,7 +303,7 @@ struct EnemyState {
 };
 
 struct EnemySnapshot {
-  PlayerId source_player_id = kInvalidPlayerId;
+  PlayerSlot source_player_slot = kInvalidPlayerSlot;
   uint32_t sample_time_ms = 0;
   Sequence sequence = 0;
   std::vector<EnemyState> enemies;
@@ -320,7 +322,7 @@ struct BossState {
   int32_t stage = 0;
   int32_t hit_points = 0;
   float shield_hit_points = 0.0f;
-  PlayerId target_player_id = kInvalidPlayerId;
+  PlayerSlot target_player_slot = kInvalidPlayerSlot;
   uint32_t draw_force_fade = 0;
   std::array<float, 3> position = {};
   std::array<float, 4> quaternion = {};
@@ -344,7 +346,7 @@ struct AirlockState {
 };
 
 struct AirlockSnapshot {
-  PlayerId source_player_id = kInvalidPlayerId;
+  PlayerSlot source_player_slot = kInvalidPlayerSlot;
   Sequence sequence = 0;
   uint64_t received_time_ms = 0;
   std::vector<AirlockState> states;
@@ -413,7 +415,7 @@ struct BootstrapState {
 
 struct GameEvent {
   uint8_t event_id = 0;
-  PlayerId source_player_id = kInvalidPlayerId;
+  PlayerSlot source_player_slot = kInvalidPlayerSlot;
   uint8_t payload_size = 0;
   std::array<uint8_t, 64> payload = {};
 };

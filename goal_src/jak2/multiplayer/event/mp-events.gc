@@ -6,7 +6,7 @@
 
 (defun mp-reset-event-state! ()
   (set! *mp-processing-remote-event* #f)
-  (set! *mp-current-event-source-player-id* MP_INVALID_PLAYER_ID)
+  (set! *mp-current-event-source-player-slot* MP_INVALID_PLAYER_SLOT)
   (mp-event-queue-reset!)
   (set! *gungame-red-intro-step* (the-as uint8 0))
   (set! *gungame-yellow-intro-step* (the-as uint8 0))
@@ -38,7 +38,7 @@
   (set! *mp-local-gun-shot-seq* (the uint 0))
   (mp-race-reset-all!)
   (mp-broadcast-event-to-active-processes 'mp-reset (the uint 0) (the uint 0))
-  (mp-for-each-player-record (player-id record)
+  (mp-for-each-player-record (player-slot record)
     (set! (-> record runtime last-gun-shot-sequence) (the uint 0)))
   (when (and *mp-event-buffer* (nonzero? (the-as uint *mp-event-buffer*)))
     (mem-set32! (the-as pointer *mp-event-buffer*) (/ (size-of mp-event-buffer) 4) 0))

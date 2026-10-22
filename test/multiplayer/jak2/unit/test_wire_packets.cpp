@@ -25,7 +25,7 @@ namespace mp_test = multiplayer::jak2::test;
 TEST(Jak2Protocol, GameplayBodyAndHostReencodeAreCanonical) {
   const std::vector<uint8_t> bytes = {1, 30, 1, 0x7f};
   const auto decoded = mp_test::decode_events(
-      bytes, {.connection_id = 9, .authenticated_player_id = 0, .from_host = true});
+      bytes, {.connection_id = 9, .authenticated_player_slot = 0, .from_host = true});
   ASSERT_TRUE(decoded);
   const auto reencoded =
       multiplayer::platform::wire::encode_packet(multiplayer::jak2::wire::to_packet(*decoded));
@@ -51,7 +51,7 @@ TEST(Jak2Protocol, EventEnvelopesPreserveEveryPayloadByte) {
     if (id == 10) {
       bytes[7] = 2;
     }
-    const auto decoded = mp_test::decode_events(bytes, {.authenticated_player_id = 2});
+    const auto decoded = mp_test::decode_events(bytes, {.authenticated_player_slot = 2});
     ASSERT_TRUE(decoded);
     const auto& batch = *decoded;
     ASSERT_EQ(batch.events.size(), 1u);
@@ -102,7 +102,7 @@ TEST(Jak2Protocol, PlayerStateWireFormatPreservesEveryField) {
                                       16,  34, 6,  170, 36, 204, 70,  5,   154, 87,  35,  220, 219,
                                       0,   64, 41, 0,   0,  64,  177, 212, 118, 110, 1};
   multiplayer::jak2::core::PlayerState state = {};
-  state.player_id = 2;
+  state.player_slot = 2;
   state.sample_time_ms = 0x12345678;
   state.activity = multiplayer::jak2::core::PlayerActivity::IN_GAME;
   state.position = {1.0f, -2.0f, 3.0f};
@@ -129,15 +129,15 @@ TEST(Jak2Protocol, PlayerStateWireFormatPreservesEveryField) {
   state.equipped_weapon = 4;
   state.action_sequence = 0xa5;
   state.action_state_id = 0xb6;
-  state.riding_along_player_id = 3;
+  state.riding_along_player_slot = 3;
   state.mission_flags = 3;
   state.visual_secrets = 5;
   state.selected_traffic_authority = 5;
   expect_exact_packet(state, bytes);
-  const auto decoded = mp_test::decode_player(bytes, {.authenticated_player_id = 2});
+  const auto decoded = mp_test::decode_player(bytes, {.authenticated_player_slot = 2});
   ASSERT_TRUE(decoded);
   const auto& actual = *decoded;
-  EXPECT_EQ(actual.player_id, 2u);
+  EXPECT_EQ(actual.player_slot, 2u);
   EXPECT_EQ(actual.sample_time_ms, 0x12345678u);
   EXPECT_EQ(actual.activity, multiplayer::jak2::core::PlayerActivity::IN_GAME);
   for (size_t axis = 0; axis < state.position.size(); ++axis) {
@@ -167,7 +167,7 @@ TEST(Jak2Protocol, PlayerStateWireFormatPreservesEveryField) {
   EXPECT_EQ(actual.equipped_weapon, 4u);
   EXPECT_EQ(actual.action_sequence, 0xa5u);
   EXPECT_EQ(actual.action_state_id, 0xb6u);
-  EXPECT_EQ(actual.riding_along_player_id, 3u);
+  EXPECT_EQ(actual.riding_along_player_slot, 3u);
   EXPECT_EQ(actual.selected_traffic_authority, 5u);
   EXPECT_EQ(actual.mission_flags, 3u);
   EXPECT_EQ(actual.visual_secrets, 5u);
@@ -179,14 +179,14 @@ TEST(Jak2Protocol, PlayerVehicleWireFormatPreservesCivilianAndVacantRiders) {
                                       0,   0,  0,  0,   0,  127, 0,   0,  5,  0,   10, 0, 4,   0,
                                       4,   0,  4,  0,   36, 145, 105, 36, 32, 252, 1};
   multiplayer::jak2::core::PlayerVehicleState state = {};
-  state.player_id = 2;
+  state.player_slot = 2;
   auto& vehicle = state.vehicle;
   vehicle.sample_time_ms = 0x12345678;
   vehicle.net_id = 0x40000029;
   vehicle.vehicle_type = 3;
   vehicle.color_index = 4;
   vehicle.state_id = 5;
-  vehicle.target_player_id = 0;
+  vehicle.target_player_slot = 0;
   vehicle.position = {1.0f, 2.0f, 3.0f};
   vehicle.quaternion[3] = 1.0f;
   vehicle.linear_velocity = {4.0f, 8.0f, 16.0f};
@@ -194,18 +194,18 @@ TEST(Jak2Protocol, PlayerVehicleWireFormatPreservesCivilianAndVacantRiders) {
   vehicle.state_flags = 0x12;
   vehicle.hit_points = 200;
   vehicle.level_id = 0x1234;
-  vehicle.rider_player_ids = {0, 1, 0xfffffffe, 0xff};
+  vehicle.rider_player_slots = {0, 1, 0xfffffffe, 0xff};
   expect_exact_packet(state, bytes);
-  const auto decoded = mp_test::decode_player_vehicle(bytes, {.authenticated_player_id = 2});
+  const auto decoded = mp_test::decode_player_vehicle(bytes, {.authenticated_player_slot = 2});
   ASSERT_TRUE(decoded);
   const auto& actual = *decoded;
-  EXPECT_EQ(actual.player_id, 2u);
+  EXPECT_EQ(actual.player_slot, 2u);
   EXPECT_EQ(actual.vehicle.sample_time_ms, 0x12345678u);
   EXPECT_EQ(actual.vehicle.net_id, vehicle.net_id);
   EXPECT_EQ(actual.vehicle.vehicle_type, 3u);
   EXPECT_EQ(actual.vehicle.color_index, 4u);
   EXPECT_EQ(actual.vehicle.state_id, 5u);
-  EXPECT_EQ(actual.vehicle.target_player_id, 0u);
+  EXPECT_EQ(actual.vehicle.target_player_slot, 0u);
   for (size_t axis = 0; axis < vehicle.position.size(); ++axis) {
     EXPECT_NEAR(actual.vehicle.position[axis], vehicle.position[axis],
                 multiplayer::platform::wire::kVehiclePositionResolution / 2.0f);
@@ -220,29 +220,29 @@ TEST(Jak2Protocol, PlayerVehicleWireFormatPreservesCivilianAndVacantRiders) {
   EXPECT_EQ(actual.vehicle.state_flags, 0x12u);
   EXPECT_EQ(actual.vehicle.hit_points, 200u);
   EXPECT_EQ(actual.vehicle.level_id, 0x1234u);
-  EXPECT_EQ(actual.vehicle.rider_player_ids, vehicle.rider_player_ids);
+  EXPECT_EQ(actual.vehicle.rider_player_slots, vehicle.rider_player_slots);
   multiplayer::jak2::core::ReplicationState replication;
   ASSERT_TRUE(replication.players().apply(
-      *decoded, {.sequence = 0x01020304, .source = {.authenticated_player_id = 2}}));
-  EXPECT_EQ(replication.players().player_vehicles()[2].vehicle.rider_player_ids,
-            vehicle.rider_player_ids);
+      *decoded, {.sequence = 0x01020304, .source = {.authenticated_player_slot = 2}}));
+  EXPECT_EQ(replication.players().player_vehicles()[2].vehicle.rider_player_slots,
+            vehicle.rider_player_slots);
   auto malformed = bytes;
   malformed[50] = static_cast<uint8_t>((malformed[50] & ~0x18u) | 0x10u);
-  EXPECT_FALSE(mp_test::decode_player_vehicle(malformed, {.authenticated_player_id = 2}));
+  EXPECT_FALSE(mp_test::decode_player_vehicle(malformed, {.authenticated_player_slot = 2}));
 }
 
 TEST(Jak2Protocol, TurretWireFormatKeepsYawBeforePitch) {
   const std::vector<uint8_t> bytes = {0x29, 0, 0, 0x40, 0, 0x40, 0, 0x40};
   multiplayer::jak2::core::TurretState state = {};
-  state.player_id = 2;
+  state.player_slot = 2;
   state.turret_aid = 0x40000029;
   state.rotation_y = -0.5f;
   state.rotation_x = 0.25f;
   expect_exact_packet(state, bytes);
-  const auto decoded = mp_test::decode_turret(bytes, {.authenticated_player_id = 2});
+  const auto decoded = mp_test::decode_turret(bytes, {.authenticated_player_slot = 2});
   ASSERT_TRUE(decoded);
   const auto& actual = *decoded;
-  EXPECT_EQ(actual.player_id, 2u);
+  EXPECT_EQ(actual.player_slot, 2u);
   EXPECT_EQ(actual.turret_aid, 0x40000029u);
   EXPECT_NEAR(actual.rotation_y, -0.5f, multiplayer::platform::wire::kAngleResolution / 2.0f);
   EXPECT_NEAR(actual.rotation_x, 0.25f, multiplayer::platform::wire::kAngleResolution / 2.0f);
@@ -255,7 +255,7 @@ TEST(Jak2Protocol, AuthorityWireFormatKeepsRevisionSeparateFromPacketSequence) {
   authority.assignments = {0, 0, 2, 2, 0xff, 0xff, 2, 0};
   expect_exact_packet(authority, bytes);
   const auto decoded =
-      mp_test::decode_authority(bytes, {.authenticated_player_id = 0, .from_host = true});
+      mp_test::decode_authority(bytes, {.authenticated_player_slot = 0, .from_host = true});
   ASSERT_TRUE(decoded);
   const auto& actual = *decoded;
   EXPECT_EQ(actual.revision, 0x11223344u);
@@ -265,7 +265,7 @@ TEST(Jak2Protocol, AuthorityWireFormatKeepsRevisionSeparateFromPacketSequence) {
 TEST(Jak2Protocol, TrafficAuthorityRoundTripsAllAssignments) {
   multiplayer::jak2::core::TrafficAuthority authority = {};
   authority.revision = 4;
-  authority.assignments.fill(multiplayer::jak2::core::kInvalidPlayerId);
+  authority.assignments.fill(multiplayer::jak2::core::kInvalidPlayerSlot);
   authority.assignments[1] = 1;
   const auto encoded =
       multiplayer::platform::wire::encode_packet(multiplayer::jak2::wire::to_packet(authority));
@@ -277,7 +277,7 @@ TEST(Jak2Protocol, TrafficAuthorityRoundTripsAllAssignments) {
   multiplayer::jak2::wire::from_packet(*packet, decoded);
   EXPECT_EQ(decoded.revision, 4u);
   EXPECT_EQ(decoded.assignments[1], 1u);
-  EXPECT_EQ(decoded.assignments[2], multiplayer::jak2::core::kInvalidPlayerId);
+  EXPECT_EQ(decoded.assignments[2], multiplayer::jak2::core::kInvalidPlayerSlot);
 }
 
 TEST(Jak2Protocol, BootstrapRejectsTruncationAndTrailingBytes) {
@@ -307,7 +307,7 @@ TEST(Jak2Protocol, AirlockUsesCountedWireSize) {
 
 TEST(Jak2Protocol, AirlockPayloadOmitsSequenceAndRelaySource) {
   multiplayer::jak2::core::AirlockSnapshot snapshot = {};
-  snapshot.source_player_id = 2;
+  snapshot.source_player_slot = 2;
   snapshot.sequence = 7;
   snapshot.states = {{.airlock_aid = 11, .state_id = 3}};
   const auto encoded =
@@ -321,12 +321,12 @@ TEST(Jak2Protocol, AirlockPayloadOmitsSequenceAndRelaySource) {
   ASSERT_TRUE(packet);
   multiplayer::jak2::wire::from_packet(*packet, decoded);
   EXPECT_EQ(decoded.sequence, 0u);
-  EXPECT_EQ(decoded.source_player_id, multiplayer::jak2::core::kInvalidPlayerId);
+  EXPECT_EQ(decoded.source_player_slot, multiplayer::jak2::core::kInvalidPlayerSlot);
 }
 
 TEST(Jak2Protocol, EnemyBatchSupportsSchemaCapacityButNoMore) {
   multiplayer::jak2::core::EnemySnapshot snapshot = {};
-  snapshot.source_player_id = 1;
+  snapshot.source_player_slot = 1;
   snapshot.enemies.resize(multiplayer::jak2::core::kMaxEnemies);
   for (uint32_t index = 0; index < snapshot.enemies.size(); ++index) {
     snapshot.enemies[index].actor_id = index + 1;
@@ -357,11 +357,11 @@ TEST(Jak2Protocol, EnemyBatchSupportsSchemaCapacityButNoMore) {
 TEST(Jak2Protocol, PedestrianAndVehiclePacketsRemainSeparate) {
   multiplayer::jak2::core::TrafficSnapshot pedestrians = {};
   pedestrians.kind = multiplayer::jak2::core::TrafficSnapshot::Kind::PEDESTRIANS;
-  pedestrians.source_player_id = 1;
+  pedestrians.source_player_slot = 1;
   pedestrians.pedestrians.push_back({.net_id = 0x10010001u});
   multiplayer::jak2::core::TrafficSnapshot vehicles = {};
   vehicles.kind = multiplayer::jak2::core::TrafficSnapshot::Kind::VEHICLES;
-  vehicles.source_player_id = 1;
+  vehicles.source_player_slot = 1;
   vehicles.vehicles.push_back({.net_id = 0x20010001u});
   const auto pedestrian_bytes = multiplayer::platform::wire::encode_packet(
       multiplayer::jak2::wire::to_pedestrian_state_batch_packet(pedestrians));
@@ -375,22 +375,22 @@ TEST(Jak2Protocol, PedestrianAndVehiclePacketsRemainSeparate) {
 
 TEST(Jak2Protocol, EnemyDecodeInfersOwnerForHostRelay) {
   multiplayer::jak2::core::EnemySnapshot snapshot = {};
-  snapshot.enemies.push_back({.actor_id = 7, .owner_player_id = 2});
+  snapshot.enemies.push_back({.actor_id = 7, .owner_player_slot = 2});
   const auto encoded =
       multiplayer::platform::wire::encode_packet(multiplayer::jak2::wire::to_packet(snapshot));
   ASSERT_TRUE(encoded);
   const auto decoded =
-      mp_test::decode_enemies(*encoded, {.authenticated_player_id = 2, .from_host = true});
+      mp_test::decode_enemies(*encoded, {.authenticated_player_slot = 2, .from_host = true});
   ASSERT_TRUE(decoded);
   const auto& enemy = *decoded;
-  EXPECT_EQ(enemy.source_player_id, 2u);
+  EXPECT_EQ(enemy.source_player_slot, 2u);
 }
 
 TEST(Jak2Protocol, PlayerActivityRoundTripsInTwoBitsWithoutChangingSize) {
   for (uint8_t value = 0; value <= 3; ++value) {
     SCOPED_TRACE(value);
     multiplayer::jak2::core::PlayerState state = {};
-    state.player_id = 1;
+    state.player_slot = 1;
     state.activity = static_cast<multiplayer::jak2::core::PlayerActivity>(value);
     const auto encoded =
         multiplayer::platform::wire::encode_packet(multiplayer::jak2::wire::to_packet(state));
@@ -454,19 +454,19 @@ TEST(Jak2Protocol, StripCoordinatesRoundTripAccurately) {
 
 TEST(Jak2Protocol, CompactReferenceCodesRejectReservedValues) {
   multiplayer::jak2::wire::PlayerStatePacket player = {};
-  player.riding_along_player_id = 8;
+  player.riding_along_player_slot = 8;
   EXPECT_FALSE(multiplayer::platform::wire::encode_packet(player).has_value());
 
   multiplayer::jak2::wire::TrafficAuthorityStatePacket authority = {};
   authority.revision = 1;
-  authority.assignments.fill(multiplayer::jak2::wire::kWireInvalidPlayerId);
+  authority.assignments.fill(multiplayer::jak2::wire::kWireInvalidPlayerSlot);
   authority.assignments[0] = 8;
   EXPECT_FALSE(multiplayer::platform::wire::encode_packet(authority).has_value());
 
   multiplayer::jak2::wire::VehicleStateBatchPacket vehicles = {};
   multiplayer::jak2::wire::VehicleStateRecord vehicle = {};
   vehicle.net_id = 1;
-  vehicle.rider_player_ids[0] = 8;
+  vehicle.rider_player_slots[0] = 8;
   vehicles.vehicles.push_back(vehicle);
   EXPECT_FALSE(multiplayer::platform::wire::encode_packet(vehicles).has_value());
 }

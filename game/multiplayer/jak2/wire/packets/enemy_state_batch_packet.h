@@ -17,7 +17,7 @@ struct EnemyStateRecord {
   std::array<float, 4> quaternion = {};
   int32_t hit_points = 0;
   uint32_t state_id = 0;
-  uint8_t focus_player_id = kWireInvalidPlayerId;
+  uint8_t focus_player_slot = kWireInvalidPlayerSlot;
   uint8_t flags = 0;
 };
 
@@ -45,11 +45,11 @@ bool serialize_enemy_state_record(Stream& stream, RecordT&& enemy) {
       !platform::wire::serialize_quaternion_array(stream, enemy.quaternion) ||
       !platform::wire::serialization::serialize_i32(stream, enemy.hit_points) ||
       !platform::wire::serialize_uint_bits(stream, enemy.state_id, 7) ||
-      !platform::wire::serialize_uint_bits(stream, enemy.focus_player_id, 4) ||
+      !platform::wire::serialize_uint_bits(stream, enemy.focus_player_slot, 4) ||
       !platform::wire::serialize_uint_bits(stream, enemy.flags, 2)) {
     return false;
   }
-  return valid_wire_player_reference(enemy.focus_player_id);
+  return valid_wire_player_reference(enemy.focus_player_slot);
 }
 
 template <typename Stream, typename PacketT>

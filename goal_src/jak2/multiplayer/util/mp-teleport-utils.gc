@@ -103,7 +103,7 @@
       ((and ride-along? (focus-test? *target* indax))
        (log 'debug "[MP-Teleport] Daxter player hopping onto Jak (ride-along)~%")
        (mp-teleport-player-to-record-coords! *target* record 4096.0)
-       (go-process *target* target-indax-jump-on (-> record identity player-id)))
+       (go-process *target* target-indax-jump-on (-> record identity player-slot)))
       ((nonzero? (-> record vehicle vehicle-id))
        (let ((riding-veh-id (-> record vehicle vehicle-id)))
          (let ((veh (mp-vehicle-find-by-net-id riding-veh-id)))
@@ -141,7 +141,7 @@
 
 (defun mp-scene-sync-teleport-to-player! ((record mp-player-record))
   (when (mp-local-scene-teleport-ready-for-record? record)
-    (log 'debug "[MP-SceneTeleport] Snapping to scene initiator player ~D.~%" (-> record identity player-id))
+    (log 'debug "[MP-SceneTeleport] Snapping to scene initiator player ~D.~%" (-> record identity player-slot))
     (mp-teleport-player-to-record-coords! *target* record 4096.0))
   (none))
 

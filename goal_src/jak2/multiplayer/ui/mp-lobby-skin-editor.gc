@@ -138,7 +138,7 @@
       (when (nonnull? preview-process)
         (let ((preview-draw (-> preview-process draw)))
           (when (nonnull? preview-draw)
-            (set! (-> preview-draw pc-eye-instance-id) MP_INVALID_PLAYER_ID)))
+            (set! (-> preview-draw pc-eye-instance-id) MP_INVALID_PLAYER_SLOT)))
         (deactivate preview-process)))
     (set! (-> *mp-player-color-progress* preview) (the-as (pointer manipy) #f))
     (set! (-> *mp-player-color-progress* preview-character) (mp-player-character unknown)))

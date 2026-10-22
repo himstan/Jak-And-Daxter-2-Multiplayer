@@ -4,16 +4,16 @@
 namespace {
 using namespace multiplayer::jak2::core;
 
-TrafficAuthority authority_for(const PlayerId source, const uint32_t revision = 1) {
+TrafficAuthority authority_for(const PlayerSlot source, const uint32_t revision = 1) {
   TrafficAuthority authority = {.revision = revision};
-  authority.assignments.fill(kInvalidPlayerId);
+  authority.assignments.fill(kInvalidPlayerSlot);
   authority.assignments[source] = source;
   return authority;
 }
 
-ApplyContext from(const PlayerId source, const Sequence sequence, const uint32_t now_ms = 0) {
+ApplyContext from(const PlayerSlot source, const Sequence sequence, const uint32_t now_ms = 0) {
   return {.sequence = sequence,
-          .source = {.authenticated_player_id = source},
+          .source = {.authenticated_player_slot = source},
           .received_at_ms = now_ms};
 }
 
@@ -29,7 +29,7 @@ TEST(Jak2Replication, TrafficGenerationAtomicallyReplacesPreviousGeneration) {
   const auto authority = authority_for(1);
   ASSERT_TRUE(state.traffic().apply(authority, {.source = {.from_host = true}}));
   TrafficSnapshot snapshot = {.kind = TrafficSnapshot::Kind::VEHICLES,
-                              .source_player_id = 1,
+                              .source_player_slot = 1,
                               .authority_revision = authority.revision,
                               .vehicles = {vehicle(0x21000001u, 10), vehicle(0x21000002u, 20)}};
   ASSERT_TRUE(state.traffic().apply(snapshot, from(1, 1, 1000)));
@@ -43,7 +43,7 @@ TEST(Jak2Replication, TrafficRejectsInvalidBatchBeforeMutation) {
   ReplicationState state;
   ASSERT_TRUE(state.traffic().apply(authority_for(1), {.source = {.from_host = true}}));
   TrafficSnapshot snapshot = {.kind = TrafficSnapshot::Kind::VEHICLES,
-                              .source_player_id = 1,
+                              .source_player_slot = 1,
                               .authority_revision = 1,
                               .vehicles = {vehicle(0x21000001u)}};
   ASSERT_TRUE(state.traffic().apply(snapshot, from(1, 1)));
@@ -57,11 +57,11 @@ TEST(Jak2Replication, TrafficUsesPerKindSequencesAndExpiresByArrival) {
   ReplicationState state;
   ASSERT_TRUE(state.traffic().apply(authority_for(1), {.source = {.from_host = true}}));
   TrafficSnapshot vehicles = {.kind = TrafficSnapshot::Kind::VEHICLES,
-                              .source_player_id = 1,
+                              .source_player_slot = 1,
                               .authority_revision = 1,
                               .vehicles = {vehicle(0x21000001u)}};
   TrafficSnapshot pedestrians = {.kind = TrafficSnapshot::Kind::PEDESTRIANS,
-                                 .source_player_id = 1,
+                                 .source_player_slot = 1,
                                  .authority_revision = 1,
                                  .pedestrians = {{.net_id = 0x11000001u}}};
   ASSERT_TRUE(state.traffic().apply(vehicles, from(1, 4, 1000)));
@@ -79,7 +79,7 @@ TEST(Jak2Replication, TrafficSelectionAndAuthorityRevisionClearOldState) {
   ASSERT_TRUE(state.traffic().apply(authority_for(1), {.source = {.from_host = true}}));
   ASSERT_TRUE(state.traffic().select_authority(1));
   TrafficSnapshot snapshot = {.kind = TrafficSnapshot::Kind::VEHICLES,
-                              .source_player_id = 1,
+                              .source_player_slot = 1,
                               .authority_revision = 1,
                               .vehicles = {vehicle(0x21000001u)}};
   ASSERT_TRUE(state.traffic().apply(snapshot, from(1, 1)));
@@ -94,13 +94,13 @@ TEST(Jak2Replication, TrafficLevelChangeDropsOtherKindFromPreviousLevel) {
   ReplicationState state;
   ASSERT_TRUE(state.traffic().apply(authority_for(1), {.source = {.from_host = true}}));
   TrafficSnapshot pedestrians = {.kind = TrafficSnapshot::Kind::PEDESTRIANS,
-                                 .source_player_id = 1,
+                                 .source_player_slot = 1,
                                  .authority_revision = 1,
                                  .level_id = 10,
                                  .pedestrians = {{.net_id = 0x11000001u}}};
   ASSERT_TRUE(state.traffic().apply(pedestrians, from(1, 1)));
   TrafficSnapshot vehicles = {.kind = TrafficSnapshot::Kind::VEHICLES,
-                              .source_player_id = 1,
+                              .source_player_slot = 1,
                               .authority_revision = 1,
                               .level_id = 20,
                               .vehicles = {vehicle(0x21000001u)}};

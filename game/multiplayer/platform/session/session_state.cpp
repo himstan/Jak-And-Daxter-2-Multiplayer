@@ -3,13 +3,14 @@
 namespace multiplayer::platform {
 
 bool valid_player_limit(const uint32_t player_limit) {
-  return player_limit >= 2 && player_limit < kInvalidPlayerId;
+  return player_limit >= 2 && player_limit < kInvalidPlayerSlot;
 }
 
 bool can_enter_game(const SessionState& session) {
   return session.status == SessionStatus::LOBBY && session.role != SessionRole::NONE &&
-         valid_player_limit(session.player_limit) && session.local_player_id != kInvalidPlayerId &&
-         session.host_player_id != kInvalidPlayerId;
+         valid_player_limit(session.player_limit) &&
+         session.local_player_slot != kInvalidPlayerSlot &&
+         session.host_player_slot != kInvalidPlayerSlot;
 }
 
 bool should_retry_connection(const SessionState& session) {
@@ -18,14 +19,14 @@ bool should_retry_connection(const SessionState& session) {
 }
 
 void mark_connected(SessionState& session,
-                    const PlayerId local_player_id,
-                    const PlayerId host_player_id) {
-  if (local_player_id >= session.player_limit || host_player_id >= session.player_limit) {
+                    const PlayerSlot local_player_slot,
+                    const PlayerSlot host_player_slot) {
+  if (local_player_slot >= session.player_limit || host_player_slot >= session.player_limit) {
     mark_failed(session);
     return;
   }
-  session.local_player_id = local_player_id;
-  session.host_player_id = host_player_id;
+  session.local_player_slot = local_player_slot;
+  session.host_player_slot = host_player_slot;
   session.status = SessionStatus::LOBBY;
   session.reconnect_attempt_active = false;
   session.waiting_for_bootstrap = false;

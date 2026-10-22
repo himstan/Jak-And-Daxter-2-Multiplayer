@@ -13,6 +13,25 @@
 
 namespace {
 
+TEST(PlatformSession, PlayerIdsUseCanonicalRandomUuids) {
+  using multiplayer::platform::PlayerId;
+  const auto first = PlayerId::generate();
+  EXPECT_TRUE(first.valid());
+  EXPECT_NE(first, PlayerId::generate());
+  EXPECT_EQ(first.bytes[6] >> 4, 4);
+  EXPECT_EQ(first.bytes[8] >> 6, 2);
+  EXPECT_EQ(first.to_string().size(), 36u);
+  EXPECT_EQ(PlayerId::parse(first.to_string()), first);
+  for (const auto text :
+       {"", "00000000-0000-0000-0000-000000000000", "12345678-1234-4234-1234-123456789abc",
+        "12345678-1234-5234-8234-123456789abc", "12345678_1234-4234-8234-123456789abc",
+        "12345678-1234-4234-8234-123456789abg", "12345678-1234-4234-8234-123456789abcx"})
+    EXPECT_FALSE(PlayerId::parse(text)) << text;
+  const auto known = PlayerId::parse("12345678-1234-4234-8234-123456789abc");
+  ASSERT_TRUE(known);
+  EXPECT_EQ(known->to_string(), "12345678-1234-4234-8234-123456789abc");
+}
+
 TEST(PlatformSession, ChatIsBoundedUtf8WithExactFraming) {
   using namespace multiplayer::platform;
   for (const auto& text : {std::string("Hello ~35L <PAD_X>"), std::string("Hej \xc3\xa5"),
@@ -148,7 +167,8 @@ TEST(PlatformCore, PressureClassificationHysteresisAndCadenceProtectCriticalStat
 TEST(PlatformSession, CommonProtocolRoundTripsAndRejectsMalformedFrames) {
   multiplayer::platform::ControlMessage control = {
       .kind = multiplayer::platform::ControlKind::PROFILE,
-      .profile = {.player_id = 2,
+      .profile = {.player_slot = 2,
+                  .player_id = multiplayer::platform::PlayerId::generate(),
                   .display_name = "Player2",
                   .character = multiplayer::platform::PlayerCharacter::DAXTER,
                   .ready = true,
@@ -156,8 +176,17 @@ TEST(PlatformSession, CommonProtocolRoundTripsAndRejectsMalformedFrames) {
                   .steam_id = 76561197960287930ull,
                   .lan = true}};
   const auto control_bytes = multiplayer::platform::encode_control_message(control, 16);
+  ASSERT_EQ(control_bytes.size(), 42u);
   multiplayer::platform::ControlMessage decoded;
   ASSERT_TRUE(multiplayer::platform::decode_control_message(control_bytes, 16, 8, decoded));
+  EXPECT_EQ(decoded.profile.player_id, control.profile.player_id);
+  multiplayer::platform::ControlMessage malformed;
+  for (size_t size = 0; size < control_bytes.size(); ++size)
+    EXPECT_FALSE(multiplayer::platform::decode_control_message(std::span(control_bytes).first(size),
+                                                               16, 8, malformed));
+  auto invalid_uuid = control_bytes;
+  invalid_uuid[8] = 0;
+  EXPECT_FALSE(multiplayer::platform::decode_control_message(invalid_uuid, 16, 8, malformed));
   EXPECT_EQ(decoded.profile.display_name, "Player2");
   EXPECT_EQ(decoded.profile.game_extension, std::vector<uint8_t>({1, 2, 3}));
   EXPECT_EQ(decoded.profile.steam_id, 76561197960287930ull);
@@ -240,13 +269,13 @@ TEST(PlatformSession, AdmissionGateCodecsAreTypedAndRejectTruncation) {
   EXPECT_FALSE(multiplayer::platform::decode_client_gate(old_request, decoded_request));
 
   const multiplayer::platform::ServerGate accepted = {
-      .accepted = true, .player_id = 3, .host_player_id = 0, .player_capacity = 8};
+      .accepted = true, .player_slot = 3, .host_player_slot = 0, .player_capacity = 8};
   const auto accepted_bytes = multiplayer::platform::encode_server_gate(accepted);
   EXPECT_EQ(accepted_bytes.size(), 8u);
   multiplayer::platform::ServerGate decoded_response;
   ASSERT_TRUE(multiplayer::platform::decode_server_gate(accepted_bytes, decoded_response));
   EXPECT_TRUE(decoded_response.accepted);
-  EXPECT_EQ(decoded_response.player_id, 3);
+  EXPECT_EQ(decoded_response.player_slot, 3);
   EXPECT_FALSE(multiplayer::platform::decode_server_gate(
       std::span(accepted_bytes).first(accepted_bytes.size() - 1), decoded_response));
   auto trailing_response = accepted_bytes;
@@ -270,19 +299,19 @@ TEST(PlatformSession, DepartureReasonsRoundTripAndRejectUnknownValues) {
   for (const auto reason : {PlayerDepartureReason::LEFT, PlayerDepartureReason::TIMED_OUT,
                             PlayerDepartureReason::KICKED}) {
     const auto bytes = encode_control_message(
-        {.kind = ControlKind::DEPARTURE, .player_id = 1, .reason = static_cast<uint8_t>(reason)},
+        {.kind = ControlKind::DEPARTURE, .player_slot = 1, .reason = static_cast<uint8_t>(reason)},
         16);
     ASSERT_EQ(bytes.size(), 3u);
     ControlMessage decoded;
     ASSERT_TRUE(decode_control_message(bytes, 16, 8, decoded));
-    EXPECT_EQ(decoded.player_id, 1u);
+    EXPECT_EQ(decoded.player_slot, 1u);
     EXPECT_EQ(decoded.reason, static_cast<uint8_t>(reason));
     auto invalid = bytes;
     invalid.back() = 3;
     EXPECT_FALSE(decode_control_message(invalid, 16, 8, decoded));
   }
   EXPECT_TRUE(
-      encode_control_message({.kind = ControlKind::DEPARTURE, .player_id = 1, .reason = 3}, 16)
+      encode_control_message({.kind = ControlKind::DEPARTURE, .player_slot = 1, .reason = 3}, 16)
           .empty());
 }
 
@@ -323,6 +352,7 @@ TEST(PlatformSession, ProfileLeasesAreIndependentPerGameAndPersistIdentity) {
       .game_id = "jak2", .root_directory = root, .maximum_instances = 2};
   const multiplayer::platform::ProfileStorageConfig jak3 = {
       .game_id = "jak3", .root_directory = root, .maximum_instances = 2};
+  multiplayer::platform::PlayerId persisted_id;
   {
     auto first = multiplayer::platform::ProfileLease::acquire(jak2);
     auto second = multiplayer::platform::ProfileLease::acquire(jak2);
@@ -335,29 +365,67 @@ TEST(PlatformSession, ProfileLeasesAreIndependentPerGameAndPersistIdentity) {
     EXPECT_NE(first->directory(), other_game->directory());
     multiplayer::platform::StoredPlayerProfile default_profile;
     ASSERT_TRUE(multiplayer::platform::load_player_profile(*first, default_profile));
+    ASSERT_TRUE(default_profile.player_id.valid());
+    multiplayer::platform::StoredPlayerProfile reloaded;
+    ASSERT_TRUE(multiplayer::platform::load_player_profile(*first, reloaded));
+    EXPECT_EQ(reloaded.player_id, default_profile.player_id);
+    multiplayer::platform::StoredPlayerProfile second_profile;
+    ASSERT_TRUE(multiplayer::platform::load_player_profile(*second, second_profile));
+    EXPECT_NE(second_profile.player_id, default_profile.player_id);
     EXPECT_EQ(default_profile.display_name, "");
     EXPECT_EQ(default_profile.preferred_character, multiplayer::platform::PlayerCharacter::JAK);
     file_util::write_text_file(first->common_profile_path(),
                                R"({"display_name":"","preferred_character":1})");
     ASSERT_TRUE(multiplayer::platform::load_player_profile(*first, default_profile));
     EXPECT_EQ(default_profile.display_name, "");
+    ASSERT_TRUE(default_profile.player_id.valid());
+    ASSERT_TRUE(multiplayer::platform::load_player_profile(*first, reloaded));
+    EXPECT_EQ(reloaded.player_id, default_profile.player_id);
     EXPECT_TRUE(multiplayer::platform::save_player_profile(
-        *first, {.display_name = "Player1",
+        *first, {.player_id = default_profile.player_id,
+                 .display_name = "Player1",
                  .preferred_character = multiplayer::platform::PlayerCharacter::DAXTER}));
     multiplayer::platform::StoredPlayerProfile loaded;
     ASSERT_TRUE(multiplayer::platform::load_player_profile(*first, loaded));
     EXPECT_EQ(loaded.display_name, "Player1");
+    EXPECT_EQ(loaded.player_id, default_profile.player_id);
     EXPECT_EQ(loaded.preferred_character, multiplayer::platform::PlayerCharacter::DAXTER);
     EXPECT_FALSE(multiplayer::platform::save_player_profile(
-        *first, {.display_name = "1234567890123456",
+        *first, {.player_id = default_profile.player_id,
+                 .display_name = "1234567890123456",
                  .preferred_character = multiplayer::platform::PlayerCharacter::JAK}));
     EXPECT_FALSE(multiplayer::platform::save_player_profile(
-        *first, {.display_name = "Player",
+        *first, {.player_id = default_profile.player_id,
+                 .display_name = "Player",
                  .preferred_character = multiplayer::platform::PlayerCharacter::UNKNOWN}));
     EXPECT_TRUE(multiplayer::platform::save_player_profile(
-        *first,
-        {.display_name = "", .preferred_character = multiplayer::platform::PlayerCharacter::JAK}));
+        *first, {.player_id = default_profile.player_id,
+                 .display_name = "",
+                 .preferred_character = multiplayer::platform::PlayerCharacter::JAK}));
+    EXPECT_FALSE(multiplayer::platform::save_player_profile(*first, {.display_name = "NoId"}));
+    const auto path = first->common_profile_path();
+    file_util::write_text_file(
+        path, R"({"player_id":"broken","display_name":"Player1","preferred_character":2})");
+    const auto corrupted = file_util::read_text_file(path);
+    EXPECT_FALSE(multiplayer::platform::load_player_profile(*first, loaded));
+    EXPECT_EQ(file_util::read_text_file(path), corrupted);
+    file_util::write_text_file(path, R"({"display_name":"Migrated","preferred_character":2})");
+    const auto legacy = file_util::read_text_file(path);
+    fs::create_directory(path.string() + ".tmp");
+    EXPECT_FALSE(multiplayer::platform::load_player_profile(*first, loaded));
+    EXPECT_EQ(file_util::read_text_file(path), legacy);
+    fs::remove(path.string() + ".tmp");
+    ASSERT_TRUE(multiplayer::platform::load_player_profile(*first, loaded));
+    EXPECT_EQ(loaded.display_name, "Migrated");
+    EXPECT_EQ(loaded.preferred_character, multiplayer::platform::PlayerCharacter::DAXTER);
+    persisted_id = loaded.player_id;
   }
+  auto reacquired = multiplayer::platform::ProfileLease::acquire(jak2);
+  ASSERT_TRUE(reacquired);
+  multiplayer::platform::StoredPlayerProfile loaded;
+  ASSERT_TRUE(multiplayer::platform::load_player_profile(*reacquired, loaded));
+  EXPECT_EQ(loaded.player_id, persisted_id);
+  reacquired.reset();
   fs::remove_all(root);
 }
 

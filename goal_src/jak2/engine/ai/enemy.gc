@@ -1725,7 +1725,7 @@
             (send-event (ppointer->process (-> this parent)) 'child-hit)
             0
             (when (= (-> info mode) 'mp-hit-remote)
-              (let ((remote-attacker (mp-player-target-by-id *mp-current-event-source-player-id*)))
+              (let ((remote-attacker (mp-player-target-by-slot *mp-current-event-source-player-slot*)))
                 (when (and remote-attacker (nonzero? remote-attacker))
                   (set! (-> this incoming attacker-handle) (process->handle remote-attacker))))
                 (set! (-> this incoming penetrate-using) (-> info penetrate-using))

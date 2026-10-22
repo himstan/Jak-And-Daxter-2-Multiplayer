@@ -7,9 +7,9 @@ constexpr size_t kFrameHeaderSize = 3;
 }  // namespace
 
 std::vector<uint8_t> encode_message_frame(const FrameKind kind,
-                                          const PlayerId origin,
+                                          const PlayerSlot origin,
                                           const std::span<const uint8_t> payload) {
-  if (origin == kInvalidPlayerId || payload.empty())
+  if (origin == kInvalidPlayerSlot || payload.empty())
     return {};
   std::vector<uint8_t> result;
   result.reserve(kFrameHeaderSize + payload.size());
@@ -23,7 +23,7 @@ std::vector<uint8_t> encode_message_frame(const FrameKind kind,
 bool decode_message_frame(const std::span<const uint8_t> bytes, MessageFrame& frame) {
   if (bytes.size() <= kFrameHeaderSize || bytes[0] != kFrameVersion ||
       bytes[1] < static_cast<uint8_t>(FrameKind::CONTROL) ||
-      bytes[1] > static_cast<uint8_t>(FrameKind::BOOTSTRAP) || bytes[2] == kInvalidPlayerId) {
+      bytes[1] > static_cast<uint8_t>(FrameKind::BOOTSTRAP) || bytes[2] == kInvalidPlayerSlot) {
     return false;
   }
   frame.kind = static_cast<FrameKind>(bytes[1]);

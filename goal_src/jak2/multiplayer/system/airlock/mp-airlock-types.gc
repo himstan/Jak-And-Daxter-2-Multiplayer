@@ -11,11 +11,11 @@
 (defconstant MP_AIRLOCK_STATE_COUNT (* MP_AIRLOCK_LOCAL_STATE_COUNT MP_MAX_PLAYERS))
 
 (deftype mp-airlock-state (structure)
-  ((airlock-aid      uint32)
-   (state-id         uint32)
-   (level-id         uint32)
-   (sequence         uint32)
-   (source-player-id uint8))
+  ((airlock-aid        uint32)
+   (state-id           uint32)
+   (level-id           uint32)
+   (sequence           uint32)
+   (source-player-slot uint8))
   :size-assert 17)
 
 (deftype mp-airlock-state-table (structure)

@@ -114,7 +114,7 @@ class SessionExecutionPort {
   virtual CommandError enter_lobby() = 0;
   virtual CommandError enter_game() = 0;
   virtual CommandError request_bootstrap() = 0;
-  virtual CommandError kick_player(PlayerId) = 0;
+  virtual CommandError kick_player(PlayerSlot) = 0;
   virtual CommandError send_chat(std::string) = 0;
 };
 
@@ -294,7 +294,7 @@ MP_VALUE_COMMAND(SendChatCommand,
 MP_VALUE_COMMAND(KickPlayerCommand,
                  SessionCommand,
                  SessionAction::KICK_PLAYER,
-                 PlayerId,
+                 PlayerSlot,
                  SessionExecutionPort,
                  kick_player);
 MP_VALUE_COMMAND(StartCountdownCommand,

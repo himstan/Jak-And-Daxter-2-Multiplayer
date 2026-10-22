@@ -12,7 +12,7 @@ struct PlayerSession {
   static constexpr uint8_t kControlBudgetMaximum = 32;
 
   ConnectionId connection_id = 0;
-  PlayerId player_id = kInvalidPlayerId;
+  PlayerSlot player_slot = kInvalidPlayerSlot;
   PlayerCharacter character = PlayerCharacter::UNKNOWN;
   PlayerProfile profile;
   std::string remote_address;
@@ -39,15 +39,15 @@ class PlayerRegistry {
 
   PlayerSession* find_connection(ConnectionId connection);
   const PlayerSession* find_connection(ConnectionId connection) const;
-  PlayerSession* find_player(PlayerId player_id);
-  const PlayerSession* find_player(PlayerId player_id) const;
-  PlayerSession* bind(ConnectionId connection, PlayerId player_id, PlayerCharacter character);
+  PlayerSession* find_player(PlayerSlot player_slot);
+  const PlayerSession* find_player(PlayerSlot player_slot) const;
+  PlayerSession* bind(ConnectionId connection, PlayerSlot player_slot, PlayerCharacter character);
   PlayerSession* allocate(ConnectionId connection, PlayerCharacter character);
   bool release_connection(ConnectionId connection);
   static void release(PlayerSession& player_session);
   void reset();
   void request_bootstrap_for_all(std::optional<uint32_t> generation = std::nullopt);
-  bool acknowledge_bootstrap(PlayerId player_id, uint32_t generation);
+  bool acknowledge_bootstrap(PlayerSlot player_slot, uint32_t generation);
 
   std::vector<PlayerSession>& entries() { return entries_; }
   const std::vector<PlayerSession>& entries() const { return entries_; }

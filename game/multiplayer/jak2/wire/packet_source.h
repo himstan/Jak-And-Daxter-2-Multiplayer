@@ -6,18 +6,18 @@ namespace multiplayer::jak2::wire {
 
 template <typename Model>
 void canonicalize_player(Model& model, const platform::MessageOrigin& source) {
-  model.player_id = source.authenticated_player_id;
+  model.player_slot = source.authenticated_player_slot;
 }
 
 template <typename Model>
 void canonicalize_snapshot(Model& model, const platform::MessageOrigin& source) {
-  model.source_player_id = source.authenticated_player_id;
+  model.source_player_slot = source.authenticated_player_slot;
 }
 
 inline void canonicalize_events(core::GameEventBatch& batch,
                                 const platform::MessageOrigin& source) {
   for (auto& event : batch.events)
-    event.source_player_id = source.authenticated_player_id;
+    event.source_player_slot = source.authenticated_player_slot;
 }
 
 template <typename Model>

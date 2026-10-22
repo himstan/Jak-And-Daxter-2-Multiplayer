@@ -20,7 +20,7 @@ TrafficAuthorityStatePacket to_packet(const core::TrafficAuthority& authority) {
   for (size_t index = 0; index < packet.assignments.size(); ++index) {
     packet.assignments[index] = authority.assignments[index] < core::kMaxPlayers
                                     ? authority.assignments[index]
-                                    : kWireInvalidPlayerId;
+                                    : kWireInvalidPlayerSlot;
   }
   return packet;
 }
@@ -31,7 +31,7 @@ void from_packet(const TrafficAuthorityStatePacket& packet, core::TrafficAuthori
   for (size_t index = 0; index < authority.assignments.size(); ++index) {
     authority.assignments[index] = packet.assignments[index] < core::kMaxPlayers
                                        ? packet.assignments[index]
-                                       : core::kInvalidPlayerId;
+                                       : core::kInvalidPlayerSlot;
   }
 }
 

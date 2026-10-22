@@ -55,11 +55,11 @@
 
 (defun mp-remote-vehicle-seat-claimant ((veh vehicle) (seat-index int))
   (let ((claimant (the-as mp-player-record #f)))
-    (mp-for-each-player-record (player-id record)
+    (mp-for-each-player-record (player-slot record)
       (when (and (mp-player-vehicle-seat-claim? record veh seat-index)
                  (or (not claimant)
                      (zero? claimant)
-                     (< (-> record identity player-id) (-> claimant identity player-id))))
+                     (< (-> record identity player-slot) (-> claimant identity player-slot))))
         (set! claimant record)))
     claimant))
 
@@ -71,7 +71,7 @@
              (or (not (mp-local-vehicle-seat-claim? veh seat-index))
                  (and local-record
                       (nonzero? local-record)
-                      (< (-> claimant identity player-id) (-> local-record identity player-id)))))
+                      (< (-> claimant identity player-slot) (-> local-record identity player-slot)))))
       #t
       #f)))
 
@@ -96,6 +96,6 @@
              "[MP-Vehicle] Seat conflict on vehicle ~D seat ~D; local role ~D yielding.~%"
              (-> vehicle-proc net-id)
              seat-index
-             (-> (mp-local-player-record) identity player-id))
+             (-> (mp-local-player-record) identity player-slot))
         (send-event *target* 'end-mode))))
   (none))

@@ -171,7 +171,7 @@
        (set! character (mp-player-character daxter))))
     (if (!= character (mp-player-character unknown))
         (mp-nearest-player-character-record-to-position
-          position character MP_INVALID_PLAYER_ID)
+          position character MP_INVALID_PLAYER_SLOT)
         (the-as mp-player-record #f))))
 
 ;; WARN: Return type mismatch int vs sound-id.

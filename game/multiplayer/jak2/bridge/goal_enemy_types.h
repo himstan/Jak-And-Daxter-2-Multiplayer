@@ -12,9 +12,9 @@ struct MPReplicationEnemyStateGOAL {
   uint32_t actor_id;
   int32_t hp;
   uint32_t state;
-  uint8_t focus_player_id;
+  uint8_t focus_player_slot;
   uint8_t attack_flag;
-  uint8_t owner_player_id;
+  uint8_t owner_player_slot;
   uint8_t is_aggro;
 };
 
@@ -30,7 +30,7 @@ struct MPReplicationPedestrianStateGOAL {
   uint8_t object_type;
   uint8_t state_id;
   uint8_t flags;
-  uint8_t target_player_id;
+  uint8_t target_player_slot;
   uint8_t transport_side;
   uint8_t travel_speed;
 };

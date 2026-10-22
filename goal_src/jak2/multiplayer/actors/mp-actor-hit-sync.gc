@@ -287,7 +287,7 @@
     (set! (-> details shove-up) shove-up)
     (set! (-> details hit-sound-id) hit-sound-id)
     (set! (-> details penetrate) (the-as uint64 penetrate))
-    (set! (-> details traffic-authority-player-id)
+    (set! (-> details traffic-authority-player-slot)
           (the-as uint8 (if (= event-type MP_EVENT_ATTACK_PED) *mp-traffic-selected-authority-id* #xff)))
     (mp-actor-capture-hit-context! details e-proc attacker info)
     (when (= event-type MP_EVENT_ATTACK_ENEMY)

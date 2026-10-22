@@ -7,7 +7,7 @@ struct MPReplicationVehicleStateGOAL {
   uint8_t vehicle_type;
   uint8_t color_index;
   uint8_t state_id;
-  uint8_t target_player_id;
+  uint8_t target_player_slot;
   float x;
   float y;
   float z;
@@ -24,7 +24,7 @@ struct MPReplicationVehicleStateGOAL {
   uint8_t state_flags;
   uint8_t hit_points;
   uint16_t level_id;
-  uint32_t rider_player_ids[4];
+  uint32_t rider_player_slots[4];
 };
 
 static_assert(sizeof(MPReplicationVehicleStateGOAL) == 80);

@@ -207,7 +207,7 @@
   (when *mp-gun-debug?*
     (when (and *target* (nonzero? *target*))
       (mp-draw-target-gun-debug *target* "LOCAL"))
-    (mp-for-each-player-target (player-id record replica)
+    (mp-for-each-player-target (player-slot record replica)
       (when (is-record-remote-player? record)
         (mp-draw-target-gun-debug replica "REPLICA"))))
   (none))

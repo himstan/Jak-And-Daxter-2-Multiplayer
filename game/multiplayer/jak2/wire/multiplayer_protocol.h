@@ -8,7 +8,7 @@
 
 inline constexpr size_t kMultiplayerPlayerNameSize = 16;
 inline constexpr uint32_t kMPMaxPlayers = 8;
-inline constexpr uint8_t kMPInvalidPlayerId = 0xffu;
+inline constexpr uint8_t kMPInvalidPlayerSlot = 0xffu;
 inline constexpr uint32_t kMPVehicleCivilianRiderId = 0xfffffffeu;
 
 static_assert(kMPMaxPlayers >= 2 && kMPMaxPlayers <= 32,

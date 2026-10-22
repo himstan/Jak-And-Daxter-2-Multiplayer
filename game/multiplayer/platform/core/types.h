@@ -4,10 +4,10 @@
 
 namespace multiplayer::platform {
 
-using PlayerId = uint8_t;
+using PlayerSlot = uint8_t;
 using ConnectionId = uint32_t;
 
-inline constexpr PlayerId kInvalidPlayerId = 0xff;
+inline constexpr PlayerSlot kInvalidPlayerSlot = 0xff;
 
 enum class PlayerCharacter : uint8_t {
   UNKNOWN = 0,
@@ -55,7 +55,7 @@ struct Audience {
 
 struct MessageOrigin {
   ConnectionId connection_id = 0;
-  PlayerId authenticated_player_id = kInvalidPlayerId;
+  PlayerSlot authenticated_player_slot = kInvalidPlayerSlot;
   bool from_host = false;
 };
 

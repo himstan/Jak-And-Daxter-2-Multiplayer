@@ -305,8 +305,8 @@
           (set! started? #t)
           )
         )
-      (dotimes (player-id MP_MAX_PLAYERS)
-        (let* ((record (mp-player-record-by-id (the-as uint player-id)))
+      (dotimes (player-slot MP_MAX_PLAYERS)
+        (let* ((record (mp-player-record-by-slot (the-as uint player-slot)))
                (replica (mp-player-record-target record)))
           (when (and record
                      (nonzero? record)

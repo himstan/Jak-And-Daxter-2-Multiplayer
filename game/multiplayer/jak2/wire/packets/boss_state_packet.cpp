@@ -5,7 +5,7 @@ namespace multiplayer::jak2::wire {
 bool validate_packet(const PalaceSquidStatePacket& packet) {
   return packet.active <= 1u && packet.state_id <= 15u &&
          platform::wire::valid_unit(packet.shield_hit_points) &&
-         valid_wire_player_reference(packet.target_player_id) && packet.draw_force_fade <= 128u &&
+         valid_wire_player_reference(packet.target_player_slot) && packet.draw_force_fade <= 128u &&
          platform::wire::valid_position_array(packet.position) &&
          platform::wire::valid_quaternion_array(packet.quaternion) &&
          platform::wire::valid_position_array(packet.root_position) &&
@@ -28,8 +28,9 @@ PalaceSquidStatePacket to_palace_squid_state_packet(const core::BossState& state
           .stage = state.stage,
           .hit_points = state.hit_points,
           .shield_hit_points = state.shield_hit_points,
-          .target_player_id = state.target_player_id < core::kMaxPlayers ? state.target_player_id
-                                                                         : kWireInvalidPlayerId,
+          .target_player_slot = state.target_player_slot < core::kMaxPlayers
+                                    ? state.target_player_slot
+                                    : kWireInvalidPlayerSlot,
           .draw_force_fade = state.draw_force_fade,
           .action_sequence = state.action_sequence,
           .position = state.position,
@@ -59,8 +60,9 @@ void from_packet(const PalaceSquidStatePacket& packet, core::BossState& state) {
   state.stage = packet.stage;
   state.hit_points = packet.hit_points;
   state.shield_hit_points = packet.shield_hit_points;
-  state.target_player_id = packet.target_player_id < core::kMaxPlayers ? packet.target_player_id
-                                                                       : core::kInvalidPlayerId;
+  state.target_player_slot = packet.target_player_slot < core::kMaxPlayers
+                                 ? packet.target_player_slot
+                                 : core::kInvalidPlayerSlot;
   state.draw_force_fade = packet.draw_force_fade;
   state.action_sequence = packet.action_sequence;
   state.position = packet.position;

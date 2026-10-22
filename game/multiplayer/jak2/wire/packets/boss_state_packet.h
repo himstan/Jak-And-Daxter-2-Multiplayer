@@ -26,7 +26,7 @@ struct PalaceSquidStatePacket
   int32_t stage = 0;
   int32_t hit_points = 0;
   float shield_hit_points = 0.0f;
-  uint8_t target_player_id = kWireInvalidPlayerId;
+  uint8_t target_player_slot = kWireInvalidPlayerSlot;
   uint32_t draw_force_fade = 0;
   uint32_t action_sequence = 0;
   std::array<float, 3> position = {};
@@ -72,7 +72,7 @@ bool serialize_fields(Stream& stream, PacketT&& packet) {
       !platform::wire::serialization::serialize_i32(stream, packet.stage) ||
       !platform::wire::serialization::serialize_i32(stream, packet.hit_points) ||
       !platform::wire::serialize_unit(stream, packet.shield_hit_points) ||
-      !platform::wire::serialize_uint_bits(stream, packet.target_player_id, 4) ||
+      !platform::wire::serialize_uint_bits(stream, packet.target_player_slot, 4) ||
       !platform::wire::serialize_uint_bits(stream, packet.draw_force_fade, 8) ||
       !platform::wire::serialize_u32(stream, packet.action_sequence) ||
       !platform::wire::serialize_position_array(stream, packet.position) ||
@@ -86,7 +86,7 @@ bool serialize_fields(Stream& stream, PacketT&& packet) {
       !platform::wire::serialize_byte_align(stream)) {
     return false;
   }
-  return valid_wire_player_reference(packet.target_player_id);
+  return valid_wire_player_reference(packet.target_player_slot);
 }
 
 template <typename Stream, typename PacketT>

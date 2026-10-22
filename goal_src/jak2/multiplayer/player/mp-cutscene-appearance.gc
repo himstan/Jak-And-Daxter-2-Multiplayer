@@ -27,8 +27,8 @@
     (let ((local-record (mp-local-player-record)))
       (when (mp-cutscene-appearance-record-eligible? local-record character)
         (return local-record)))
-    (dotimes (player-id MP_MAX_PLAYERS)
-      (let ((record (mp-player-record-by-id (the-as uint player-id))))
+    (dotimes (player-slot MP_MAX_PLAYERS)
+      (let ((record (mp-player-record-by-slot (the-as uint player-slot))))
         (when (mp-cutscene-appearance-record-eligible? record character)
           (return record)))))
   (the-as mp-player-record #f))
@@ -68,7 +68,9 @@
             (begin
               (mp-apply-render-skin! draw-control (-> owner identity skin))
               (set! visual-secrets
-                    (if (= (-> owner identity player-id) (mp-local-player-id)) (mp-local-player-visual-secrets) (-> owner action visual-secrets))))
+                    (if (= (-> owner identity player-slot) (mp-local-player-slot))
+                      (mp-local-player-visual-secrets)
+                      (-> owner action visual-secrets))))
             (mp-clear-render-skin! draw-control))
           (when (type? actor-process manipy)
             (cutscene-apply-visual-secrets! (the-as manipy actor-process) character visual-secrets))))))

@@ -221,7 +221,7 @@ TEST(Jak2Protocol, QuantizedOutboundValuesRejectNonFiniteAndOutOfRangeInputs) {
 TEST(Jak2Protocol, GameEventRejectsTrailingBytesAndPreservesPayload) {
   multiplayer::jak2::core::GameEvent input = {};
   input.event_id = 1;
-  input.source_player_id = 2;
+  input.source_player_slot = 2;
   input.payload_size = 12;
   input.payload[0] = 0xaa;
   input.payload[1] = 0xbb;
@@ -238,7 +238,7 @@ TEST(Jak2Protocol, GameEventRejectsTrailingBytesAndPreservesPayload) {
   ASSERT_EQ(output_batch.events.size(), 1u);
   const auto& output = output_batch.events.front();
   EXPECT_EQ(output.event_id, input.event_id);
-  EXPECT_EQ(output.source_player_id, multiplayer::jak2::core::kInvalidPlayerId);
+  EXPECT_EQ(output.source_player_slot, multiplayer::jak2::core::kInvalidPlayerSlot);
   EXPECT_EQ(output.payload_size, input.payload_size);
   EXPECT_EQ(output.payload[1], 0xbbu);
 
@@ -281,8 +281,8 @@ TEST(Jak2Protocol, EnemySnapshotRoundTripsExactCountedSize) {
   enemy.actor_id = 17;
   enemy.position = {1.0f, 2.0f, 3.0f};
   enemy.quaternion = {0.0f, 0.0f, 0.0f, 1.0f};
-  enemy.owner_player_id = 1;
-  enemy.focus_player_id = 2;
+  enemy.owner_player_slot = 1;
+  enemy.focus_player_slot = 2;
   enemy.attack_active = true;
   input.enemies.push_back(enemy);
 
@@ -296,14 +296,14 @@ TEST(Jak2Protocol, EnemySnapshotRoundTripsExactCountedSize) {
   ASSERT_EQ(output.enemies.size(), 1u);
   EXPECT_EQ(output.enemies[0].actor_id, 17u);
   EXPECT_TRUE(output.enemies[0].attack_active);
-  EXPECT_EQ(output.enemies[0].owner_player_id, multiplayer::jak2::core::kInvalidPlayerId);
+  EXPECT_EQ(output.enemies[0].owner_player_slot, multiplayer::jak2::core::kInvalidPlayerSlot);
   EXPECT_FALSE(decode_core<multiplayer::jak2::wire::EnemyStateBatchPacket>(
       std::span(bytes).first(bytes.size() - 1), output));
 }
 
 TEST(Jak2Protocol, TrafficSnapshotsRoundTripThroughCoreModels) {
   multiplayer::jak2::core::TrafficSnapshot input = {};
-  input.source_player_id = 1;
+  input.source_player_slot = 1;
   input.authority_revision = 4;
   input.level_id = 0x1234;
   multiplayer::jak2::core::VehicleState vehicle = {};
@@ -327,7 +327,7 @@ TEST(Jak2Protocol, TrafficSnapshotsRoundTripThroughCoreModels) {
 TEST(Jak2Protocol, GenericCodecCanonicalizesCoreSourceContext) {
   multiplayer::jak2::core::GameEvent event = {};
   event.event_id = 30;
-  event.source_player_id = 2;
+  event.source_player_slot = 2;
   event.payload_size = 1;
   event.payload[0] = 0x7f;
   const auto outbound = multiplayer::jak2::core::GameEventBatch{.events = {event}};
@@ -336,11 +336,11 @@ TEST(Jak2Protocol, GenericCodecCanonicalizesCoreSourceContext) {
       multiplayer::platform::wire::encode_packet(multiplayer::jak2::wire::to_packet(outbound));
   ASSERT_TRUE(encoded);
   const auto decoded =
-      mp_test::decode_events(*encoded, {.authenticated_player_id = 2, .from_host = true});
+      mp_test::decode_events(*encoded, {.authenticated_player_slot = 2, .from_host = true});
   ASSERT_TRUE(decoded);
   const auto& batch = *decoded;
   ASSERT_EQ(batch.events.size(), 1u);
-  EXPECT_EQ(batch.events[0].source_player_id, 2);
+  EXPECT_EQ(batch.events[0].source_player_slot, 2);
 }
 
 TEST(Jak2Protocol, BossCodecsPreserveSenderTimeAndRejectWrongSizes) {
@@ -352,7 +352,7 @@ TEST(Jak2Protocol, BossCodecsPreserveSenderTimeAndRejectWrongSizes) {
     input.active = 1;
     input.state_id = 4;
     input.sample_time_ms = UINT32_MAX - 3;
-    input.target_player_id = multiplayer::jak2::core::kInvalidPlayerId;
+    input.target_player_slot = multiplayer::jak2::core::kInvalidPlayerSlot;
     input.position = {1.0f, 2.0f, 3.0f};
     input.quaternion = {0.0f, 0.0f, 0.0f, 1.0f};
     input.root_position = {4.0f, 5.0f, 6.0f};

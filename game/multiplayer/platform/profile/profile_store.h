@@ -8,11 +8,13 @@
 
 #include "common/util/FileUtil.h"
 
+#include "game/multiplayer/platform/core/player_id.h"
 #include "game/multiplayer/platform/core/types.h"
 
 namespace multiplayer::platform {
 
 struct StoredPlayerProfile {
+  PlayerId player_id;
   std::string display_name;
   PlayerCharacter preferred_character = PlayerCharacter::JAK;
 };

@@ -12,7 +12,7 @@
        (type? proc nav-enemy)
        (type? (-> proc enemy-info) nav-enemy-info)
        (mp-enemy-remote-transform-ready? proc slot)
-       (= (-> rec owner-player-id) (-> slot owner-player-id))
+       (= (-> rec owner-player-slot) (-> slot owner-player-slot))
        (= (mp-enemy-get-state-id proc) (-> slot state))
        (or (not (nonnull? (-> proc next-state))) (= (-> proc next-state) (-> proc state)))
        (case (-> proc state name)

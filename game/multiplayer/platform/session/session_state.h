@@ -22,8 +22,8 @@ enum class LobbyPrivacy : uint8_t { PUBLIC, FRIENDS_ONLY, INVITE_ONLY };
 struct SessionState {
   SessionRole role = SessionRole::NONE;
   SessionStatus status = SessionStatus::IDLE;
-  PlayerId local_player_id = kInvalidPlayerId;
-  PlayerId host_player_id = kInvalidPlayerId;
+  PlayerSlot local_player_slot = kInvalidPlayerSlot;
+  PlayerSlot host_player_slot = kInvalidPlayerSlot;
   uint8_t player_limit = 8;
   bool reconnect_attempt_active = false;
   bool waiting_for_bootstrap = false;
@@ -32,7 +32,9 @@ struct SessionState {
 bool valid_player_limit(uint32_t player_limit);
 bool can_enter_game(const SessionState& session);
 bool should_retry_connection(const SessionState& session);
-void mark_connected(SessionState& session, PlayerId local_player_id, PlayerId host_player_id);
+void mark_connected(SessionState& session,
+                    PlayerSlot local_player_slot,
+                    PlayerSlot host_player_slot);
 void mark_reconnecting(SessionState& session);
 void mark_failed(SessionState& session);
 void reset(SessionState& session);

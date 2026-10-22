@@ -105,17 +105,28 @@ uint32_t SessionController::next_bootstrap_generation() {
   return host_bootstrap_generation_;
 }
 
-bool SessionController::validate_profile(PlayerProfile& profile, const PlayerId player_id) const {
-  if (player_id >= adapter_.descriptor().maximum_players ||
+bool SessionController::validate_profile(PlayerProfile& profile,
+                                         const PlayerSlot player_slot) const {
+  if (player_slot >= adapter_.descriptor().maximum_players || !profile.player_id.valid() ||
       !valid_display_name(profile.display_name) || !valid_character(profile.character) ||
       profile.game_extension.size() > adapter_.descriptor().maximum_profile_extension_bytes) {
     return false;
   }
+  for (const auto& existing : profiles_) {
+    if (existing.player_slot == kInvalidPlayerSlot)
+      continue;
+    if ((existing.player_slot == player_slot) != (existing.player_id == profile.player_id))
+      return false;
+  }
+  if (snapshot_.state.role == SessionRole::CLIENT &&
+      player_slot == snapshot_.state.local_player_slot &&
+      profile.player_id != local_profile_.player_id)
+    return false;
   std::vector<uint8_t> canonical;
   if (!adapter_.validate_profile_extension(profile.game_extension, canonical) ||
       canonical.size() > adapter_.descriptor().maximum_profile_extension_bytes)
     return false;
-  profile.player_id = player_id;
+  profile.player_slot = player_slot;
   profile.game_extension = std::move(canonical);
   return true;
 }
@@ -151,8 +162,8 @@ bool SessionController::host(const ControllerHostConfig& config) {
   room_code_ = config.room_code;
   snapshot_.state.role = SessionRole::HOST;
   snapshot_.state.status = SessionStatus::CONNECTING;
-  snapshot_.state.local_player_id = 0;
-  snapshot_.state.host_player_id = 0;
+  snapshot_.state.local_player_slot = 0;
+  snapshot_.state.host_player_slot = 0;
   snapshot_.state.player_limit = config.player_limit;
   profiles_.assign(config.player_limit, {});
   profiles_[0] = local_profile_;
@@ -175,6 +186,8 @@ bool SessionController::connect(const ControllerClientConfig& config) {
     return false;
   }
   local_profile_ = config.local_profile;
+  if (!local_profile_.player_id.valid())
+    return false;
   if (!transport_.connect(
           {.endpoint = config.endpoint, .port = config.port, .steam_host = config.steam_host})) {
     lg::error("[MP-Session] Could not start a connection to the host.");
@@ -352,14 +365,14 @@ void SessionController::handle_pending_message(const TransportEvent& event) {
       return reject(event.connection_id, RejectionReason::KICKED);
     if (gate.room_code != room_code_)
       return reject(event.connection_id, RejectionReason::WRONG_ROOM_CODE);
-    const PlayerId next = [&]() {
-      for (PlayerId id = 1; id < snapshot_.state.player_limit; ++id) {
+    const PlayerSlot next = [&]() {
+      for (PlayerSlot id = 1; id < snapshot_.state.player_limit; ++id) {
         if (!registry_.find_player(id))
           return id;
       }
-      return kInvalidPlayerId;
+      return kInvalidPlayerSlot;
     }();
-    if (next == kInvalidPlayerId)
+    if (next == kInvalidPlayerSlot)
       return reject(event.connection_id, RejectionReason::HOST_FULL);
     auto* session = registry_.bind(event.connection_id, next, PlayerCharacter::UNKNOWN);
     if (!session)
@@ -369,8 +382,8 @@ void SessionController::handle_pending_message(const TransportEvent& event) {
     pending_gates_.erase(event.connection_id);
     lg::debug("[MP-Session] Accepted connection {} as player {}.", event.connection_id, next);
     const auto response = encode_server_gate({.accepted = true,
-                                              .player_id = next,
-                                              .host_player_id = 0,
+                                              .player_slot = next,
+                                              .host_player_slot = 0,
                                               .player_capacity = snapshot_.state.player_limit});
     if (!transport_.send(event.connection_id, response, TransportLane::CONTROL_RELIABLE)) {
       host_departure(event.connection_id, kInvalidProtocolReason);
@@ -392,29 +405,29 @@ void SessionController::handle_pending_message(const TransportEvent& event) {
     transport_.close_connection(event.connection_id, kInvalidProtocolReason, "admission rejected");
     return;
   }
-  if (gate.player_id == gate.host_player_id || gate.host_player_id != 0 ||
-      gate.player_id >= gate.player_capacity || gate.player_capacity < 2 ||
+  if (gate.player_slot == gate.host_player_slot || gate.host_player_slot != 0 ||
+      gate.player_slot >= gate.player_capacity || gate.player_capacity < 2 ||
       !registry_.configure(gate.player_capacity) ||
-      !registry_.bind(event.connection_id, gate.host_player_id, PlayerCharacter::UNKNOWN)) {
+      !registry_.bind(event.connection_id, gate.host_player_slot, PlayerCharacter::UNKNOWN)) {
     transport_.close_connection(event.connection_id, kInvalidProtocolReason,
                                 "invalid player assignment");
     return;
   }
   snapshot_.state.status = SessionStatus::LOBBY;
-  snapshot_.state.local_player_id = gate.player_id;
-  snapshot_.state.host_player_id = gate.host_player_id;
+  snapshot_.state.local_player_slot = gate.player_slot;
+  snapshot_.state.host_player_slot = gate.host_player_slot;
   snapshot_.state.player_limit = gate.player_capacity;
   profiles_.assign(gate.player_capacity, {});
-  local_profile_.player_id = gate.player_id;
-  if (!validate_profile(local_profile_, gate.player_id)) {
+  local_profile_.player_slot = gate.player_slot;
+  if (!validate_profile(local_profile_, gate.player_slot)) {
     transport_.close_connection(event.connection_id, kInvalidProtocolReason,
                                 "invalid local profile");
     return;
   }
   adapter_.session_started(snapshot_.state);
   adapter_session_active_ = true;
-  lg::debug("[MP-Session] Admission accepted; assigned local player {} (host {}).", gate.player_id,
-            gate.host_player_id);
+  lg::debug("[MP-Session] Admission accepted; assigned local player {} (host {}).",
+            gate.player_slot, gate.host_player_slot);
   send_control({.kind = ControlKind::PROFILE, .profile = local_profile_},
                Audience::one(event.connection_id));
 }
@@ -425,16 +438,17 @@ void SessionController::host_departure(const ConnectionId connection,
   const auto* player = registry_.find_connection(connection);
   if (!player)
     return;
-  const auto id = player->player_id;
+  const auto id = player->player_slot;
   if (id >= profiles_.size())
     return;
   profiles_[id] = {};
   registry_.release_connection(connection);
   lg::debug("[MP-Session] Player {} (connection {}) departed with reason {}.", id, connection,
             reason);
-  send_control(
-      {.kind = ControlKind::DEPARTURE, .player_id = id, .reason = static_cast<uint8_t>(departure)},
-      Audience::everyone());
+  send_control({.kind = ControlKind::DEPARTURE,
+                .player_slot = id,
+                .reason = static_cast<uint8_t>(departure)},
+               Audience::everyone());
   adapter_.player_departed(id, departure);
   clear_countdown();
 }
@@ -445,7 +459,7 @@ void SessionController::handle_admitted_message(const TransportEvent& event) {
     return;
   MessageFrame frame;
   if (!decode_message_frame(event.payload, frame) ||
-      (snapshot_.state.role == SessionRole::HOST && frame.origin != player->player_id) ||
+      (snapshot_.state.role == SessionRole::HOST && frame.origin != player->player_slot) ||
       (snapshot_.state.role == SessionRole::CLIENT &&
        event.connection_id != transport_.host_connection_id())) {
     transport_.close_connection(event.connection_id, kInvalidProtocolReason,
@@ -453,19 +467,19 @@ void SessionController::handle_admitted_message(const TransportEvent& event) {
     return;
   }
   if (frame.kind == FrameKind::CONTROL) {
-    handle_control(event.connection_id, player->player_id, frame.origin, event.delivery,
+    handle_control(event.connection_id, player->player_slot, frame.origin, event.delivery,
                    frame.payload, last_pump_ms_);
   } else if (frame.kind == FrameKind::BOOTSTRAP) {
     handle_bootstrap(event.connection_id, frame.origin, event.delivery, frame.payload);
   } else {
-    handle_gameplay(event.connection_id, player->player_id, frame.origin, event.delivery,
+    handle_gameplay(event.connection_id, player->player_slot, frame.origin, event.delivery,
                     event.lane, frame.payload);
   }
 }
 
 void SessionController::handle_control(const ConnectionId connection,
-                                       const PlayerId player_id,
-                                       const PlayerId origin_id,
+                                       const PlayerSlot player_slot,
+                                       const PlayerSlot origin_id,
                                        const Delivery delivery,
                                        const std::span<const uint8_t> payload,
                                        const uint64_t now_ms) {
@@ -494,10 +508,10 @@ void SessionController::handle_control(const ConnectionId connection,
     return;
   }
   if (message.kind == ControlKind::CHAT) {
-    if (origin_id >= profiles_.size() || profiles_[origin_id].player_id == kInvalidPlayerId)
+    if (origin_id >= profiles_.size() || profiles_[origin_id].player_slot == kInvalidPlayerSlot)
       return;
     if (snapshot_.state.role == SessionRole::HOST) {
-      const auto* player = registry_.find_player(player_id);
+      const auto* player = registry_.find_player(player_slot);
       if (!player || !player->identity_ready)
         return;
     }
@@ -505,25 +519,25 @@ void SessionController::handle_control(const ConnectionId connection,
     return;
   }
   if (snapshot_.state.role == SessionRole::HOST)
-    handle_host_control(connection, player_id, std::move(message));
+    handle_host_control(connection, player_slot, std::move(message));
   else if (connection == transport_.host_connection_id() &&
-           origin_id == snapshot_.state.host_player_id)
+           origin_id == snapshot_.state.host_player_slot)
     handle_client_control(connection, std::move(message), now_ms);
 }
 
 void SessionController::handle_host_control(const ConnectionId connection,
-                                            const PlayerId player_id,
+                                            const PlayerSlot player_slot,
                                             ControlMessage message) {
   if (!control_allowed_from(message.kind, SessionRole::CLIENT)) {
     transport_.close_connection(connection, kInvalidProtocolReason, "unauthorized control message");
     return;
   }
-  auto* session = registry_.find_player(player_id);
-  if (!session || player_id == 0 || player_id >= profiles_.size())
+  auto* session = registry_.find_player(player_slot);
+  if (!session || player_slot == 0 || player_slot >= profiles_.size())
     return;
-  auto& profile = profiles_[player_id];
+  auto& profile = profiles_[player_slot];
   if (message.kind == ControlKind::PROFILE) {
-    if (!validate_profile(message.profile, player_id)) {
+    if (!validate_profile(message.profile, player_slot)) {
       transport_.close_connection(connection, kInvalidProtocolReason, "invalid player profile");
       return;
     }
@@ -540,7 +554,7 @@ void SessionController::handle_host_control(const ConnectionId connection,
     session->profile = profile;
     session->identity_ready = true;
     lg::debug("[MP-Session] Player {} profile accepted; gameplay and bootstrap are ready.",
-              player_id);
+              player_slot);
     if (first_profile)
       publish_roster(connection);
     broadcast_profile(profile);
@@ -580,7 +594,7 @@ void SessionController::handle_host_control(const ConnectionId connection,
     broadcast_profile(profile);
     adapter_.player_profile_changed(profile);
   } else if (message.kind == ControlKind::BOOTSTRAP_ACK) {
-    registry_.acknowledge_bootstrap(player_id, message.value);
+    registry_.acknowledge_bootstrap(player_slot, message.value);
   }
 }
 
@@ -592,52 +606,57 @@ void SessionController::handle_client_control(const ConnectionId connection,
     return;
   }
   if (message.kind == ControlKind::PROFILE) {
-    if (message.profile.player_id >= profiles_.size() ||
-        !validate_profile(message.profile, message.profile.player_id)) {
+    if (message.profile.player_slot >= profiles_.size() ||
+        !validate_profile(message.profile, message.profile.player_slot)) {
       transport_.close_connection(connection, kInvalidProtocolReason, "invalid player profile");
       return;
     }
-    const bool changed = profiles_[message.profile.player_id] != message.profile;
-    profiles_[message.profile.player_id] = message.profile;
+    const bool changed = profiles_[message.profile.player_slot] != message.profile;
+    profiles_[message.profile.player_slot] = message.profile;
     if (changed)
       adapter_.player_profile_changed(message.profile);
   } else if (message.kind == ControlKind::ROSTER) {
     std::vector<PlayerProfile> roster(profiles_.size());
     std::vector<bool> seen(profiles_.size(), false);
     for (auto profile : message.roster) {
-      if (profile.player_id >= roster.size() || seen[profile.player_id] ||
-          !validate_profile(profile, profile.player_id)) {
+      if (profile.player_slot >= roster.size() || seen[profile.player_slot] ||
+          !validate_profile(profile, profile.player_slot) ||
+          std::ranges::any_of(roster, [&](const auto& existing) {
+            return existing.player_slot != kInvalidPlayerSlot &&
+                   existing.player_id == profile.player_id;
+          })) {
         transport_.close_connection(connection, kInvalidProtocolReason, "invalid player roster");
         return;
       }
-      seen[profile.player_id] = true;
-      roster[profile.player_id] = std::move(profile);
+      seen[profile.player_slot] = true;
+      roster[profile.player_slot] = std::move(profile);
     }
     const auto previous = std::move(profiles_);
     profiles_ = std::move(roster);
     for (const auto& profile : profiles_) {
-      if (profile.player_id == kInvalidPlayerId)
+      if (profile.player_slot == kInvalidPlayerSlot)
         continue;
-      if (profile.player_id >= previous.size() || previous[profile.player_id] != profile) {
+      if (profile.player_slot >= previous.size() || previous[profile.player_slot] != profile) {
         adapter_.player_profile_changed(profile);
       }
     }
   } else if (message.kind == ControlKind::PLAYER_PINGS) {
-    if (message.player_pings[snapshot_.state.host_player_id] != 0) {
+    if (message.player_pings[snapshot_.state.host_player_slot] != 0) {
       transport_.close_connection(connection, kInvalidProtocolReason, "invalid host ping");
       return;
     }
     snapshot_.player_pings = std::move(message.player_pings);
   } else if (message.kind == ControlKind::DEPARTURE) {
-    if (message.player_id == snapshot_.state.host_player_id ||
-        message.player_id >= profiles_.size()) {
+    if (message.player_slot == snapshot_.state.host_player_slot ||
+        message.player_slot >= profiles_.size()) {
       transport_.close_connection(connection, kInvalidProtocolReason, "invalid player departure");
       return;
     }
-    profiles_[message.player_id] = {};
-    if (message.player_id < snapshot_.player_pings.size())
-      snapshot_.player_pings[message.player_id] = kUnknownPlayerPing;
-    adapter_.player_departed(message.player_id, static_cast<PlayerDepartureReason>(message.reason));
+    profiles_[message.player_slot] = {};
+    if (message.player_slot < snapshot_.player_pings.size())
+      snapshot_.player_pings[message.player_slot] = kUnknownPlayerPing;
+    adapter_.player_departed(message.player_slot,
+                             static_cast<PlayerDepartureReason>(message.reason));
     clear_countdown();
   } else if (message.kind == ControlKind::START_COUNTDOWN) {
     snapshot_.countdown_active = true;
@@ -655,14 +674,15 @@ void SessionController::handle_client_control(const ConnectionId connection,
 }
 
 void SessionController::handle_gameplay(const ConnectionId connection,
-                                        const PlayerId player_id,
-                                        const PlayerId origin,
+                                        const PlayerSlot player_slot,
+                                        const PlayerSlot origin,
                                         const Delivery delivery,
                                         const TransportLane lane,
                                         const std::span<const uint8_t> payload) {
   GameplayEnvelope envelope;
   if (!decode_gameplay_envelope(payload, envelope) || origin >= snapshot_.state.player_limit ||
-      (snapshot_.state.role == SessionRole::CLIENT && origin == snapshot_.state.local_player_id)) {
+      (snapshot_.state.role == SessionRole::CLIENT &&
+       origin == snapshot_.state.local_player_slot)) {
     transport_.close_connection(connection, kInvalidProtocolReason, "invalid gameplay envelope");
     return;
   }
@@ -675,7 +695,7 @@ void SessionController::handle_gameplay(const ConnectionId connection,
   }
   const GameplayMessage message = {
       .origin = {.connection_id = connection,
-                 .authenticated_player_id = origin,
+                 .authenticated_player_slot = origin,
                  .from_host = snapshot_.state.role == SessionRole::CLIENT},
       .message_id = envelope.message_id,
       .sequence = envelope.sequence,
@@ -709,7 +729,7 @@ void SessionController::handle_gameplay(const ConnectionId connection,
       send_frame(FrameKind::GAMEPLAY, Audience::everyone_except_origin(), origin, bytes,
                  gameplay_lane(*policy));
     } else {
-      std::array<bool, static_cast<size_t>(kInvalidPlayerId) + 1> relayed = {};
+      std::array<bool, static_cast<size_t>(kInvalidPlayerSlot) + 1> relayed = {};
       for (const auto target : *relay_recipients) {
         if (target >= snapshot_.state.player_limit || target == origin || relayed[target]) {
           lg::warn("[MP-Session] Adapter supplied an invalid relay target {} for '{}'.", target,
@@ -728,11 +748,11 @@ void SessionController::handle_gameplay(const ConnectionId connection,
 }
 
 void SessionController::handle_bootstrap(const ConnectionId connection,
-                                         const PlayerId origin,
+                                         const PlayerSlot origin,
                                          const Delivery delivery,
                                          const std::span<const uint8_t> payload) {
   if (snapshot_.state.role != SessionRole::CLIENT ||
-      connection != transport_.host_connection_id() || origin != snapshot_.state.host_player_id ||
+      connection != transport_.host_connection_id() || origin != snapshot_.state.host_player_slot ||
       delivery != Delivery::RELIABLE_ORDERED) {
     transport_.close_connection(connection, kInvalidProtocolReason, "unauthorized bootstrap");
     return;
@@ -763,12 +783,12 @@ std::optional<uint32_t> SessionController::send_gameplay(const uint8_t message_i
   if (!gameplay_active(snapshot_.state.status) || !policy ||
       !can_send_message(*policy, snapshot_.state.role) ||
       payload.size() > policy->maximum_payload_bytes ||
-      snapshot_.state.local_player_id == kInvalidPlayerId)
+      snapshot_.state.local_player_slot == kInvalidPlayerSlot)
     return std::nullopt;
   auto& sequence = outbound_sequences_[message_id];
   advance_nonzero_sequence(sequence);
   const auto bytes = encode_gameplay_envelope(message_id, sequence, payload);
-  const auto result = send_frame(FrameKind::GAMEPLAY, audience, snapshot_.state.local_player_id,
+  const auto result = send_frame(FrameKind::GAMEPLAY, audience, snapshot_.state.local_player_slot,
                                  bytes, gameplay_lane(*policy));
   if (result == FrameSendResult::REJECTED)
     return std::nullopt;
@@ -786,14 +806,14 @@ bool SessionController::cadence_due(const uint8_t message_id,
   return policy && cadence_.due(*policy, now_ms, dirty, pressure_.pressure());
 }
 
-uint32_t SessionController::estimated_rtt_ms(const PlayerId player_id) const {
+uint32_t SessionController::estimated_rtt_ms(const PlayerSlot player_slot) const {
   const auto connections = transport_.connection_snapshots();
   if (snapshot_.state.role == SessionRole::CLIENT && !connections.empty()) {
     return static_cast<uint32_t>((std::max)(connections.front().ping_ms, 0));
   }
   for (const auto& connection : connections) {
     if (const auto* binding = registry_.find_connection(connection.connection_id);
-        binding && binding->player_id == player_id) {
+        binding && binding->player_slot == player_slot) {
       return static_cast<uint32_t>((std::max)(connection.ping_ms, 0));
     }
   }
@@ -821,10 +841,10 @@ void SessionController::host_closed_session(const uint8_t reason) {
   reset_adapter_session();
 }
 
-bool SessionController::kick(const PlayerId player_id) {
-  if (snapshot_.state.role != SessionRole::HOST || player_id == snapshot_.state.local_player_id)
+bool SessionController::kick(const PlayerSlot player_slot) {
+  if (snapshot_.state.role != SessionRole::HOST || player_slot == snapshot_.state.local_player_slot)
     return false;
-  const auto* player = registry_.find_player(player_id);
+  const auto* player = registry_.find_player(player_slot);
   if (!player)
     return false;
   const auto connection = player->connection_id;
@@ -864,16 +884,16 @@ void SessionController::reject(const ConnectionId connection,
 
 FrameSendResult SessionController::send_frame(const FrameKind kind,
                                               const Audience& audience,
-                                              const PlayerId origin,
+                                              const PlayerSlot origin,
                                               const std::span<const uint8_t> payload,
                                               const TransportLane lane) {
-  if (payload.empty() || origin == kInvalidPlayerId)
+  if (payload.empty() || origin == kInvalidPlayerSlot)
     return FrameSendResult::REJECTED;
   if (snapshot_.state.role == SessionRole::HOST) {
-    if (origin != snapshot_.state.local_player_id && !registry_.find_player(origin))
+    if (origin != snapshot_.state.local_player_slot && !registry_.find_player(origin))
       return FrameSendResult::REJECTED;
   } else if (snapshot_.state.role == SessionRole::CLIENT) {
-    if (origin != snapshot_.state.local_player_id)
+    if (origin != snapshot_.state.local_player_slot)
       return FrameSendResult::REJECTED;
   } else {
     return FrameSendResult::REJECTED;
@@ -890,7 +910,7 @@ FrameSendResult SessionController::send_frame(const FrameKind kind,
     for (const auto& player : registry_.entries()) {
       if (!player.accepted)
         continue;
-      if (audience.kind == AudienceKind::EVERYONE_EXCEPT_ORIGIN && player.player_id == origin)
+      if (audience.kind == AudienceKind::EVERYONE_EXCEPT_ORIGIN && player.player_slot == origin)
         continue;
       recipients.push_back(player.connection_id);
     }
@@ -924,7 +944,7 @@ void SessionController::send_pending_bootstraps(const uint64_t now_ms) {
          now_ms - player.last_bootstrap_send_time < kBootstrapRetryMs))
       continue;
     if (player.bootstrap_payload.empty()) {
-      player.bootstrap_payload = adapter_.create_bootstrap(player.player_id);
+      player.bootstrap_payload = adapter_.create_bootstrap(player.player_slot);
       if (player.bootstrap_payload.empty() ||
           player.bootstrap_payload.size() > adapter_.descriptor().maximum_payload_bytes) {
         continue;
@@ -943,20 +963,20 @@ void SessionController::send_pending_bootstraps(const uint64_t now_ms) {
 void SessionController::send_control(const ControlMessage& message, const Audience& audience) {
   const auto bytes =
       encode_control_message(message, adapter_.descriptor().maximum_profile_extension_bytes);
-  if (!bytes.empty() && snapshot_.state.local_player_id != kInvalidPlayerId) {
-    send_frame(FrameKind::CONTROL, audience, snapshot_.state.local_player_id, bytes,
+  if (!bytes.empty() && snapshot_.state.local_player_slot != kInvalidPlayerSlot) {
+    send_frame(FrameKind::CONTROL, audience, snapshot_.state.local_player_slot, bytes,
                TransportLane::CONTROL_RELIABLE);
   }
 }
 
 bool SessionController::send_chat(std::string text) {
-  if (!valid_chat_text(text) || snapshot_.state.local_player_id == kInvalidPlayerId ||
+  if (!valid_chat_text(text) || snapshot_.state.local_player_slot == kInvalidPlayerSlot ||
       (snapshot_.state.status != SessionStatus::LOBBY &&
        snapshot_.state.status != SessionStatus::GAME_STARTING &&
        snapshot_.state.status != SessionStatus::IN_GAME))
     return false;
   if (snapshot_.state.role == SessionRole::HOST) {
-    receive_chat(snapshot_.state.local_player_id, std::move(text));
+    receive_chat(snapshot_.state.local_player_slot, std::move(text));
   } else {
     send_control({.kind = ControlKind::CHAT, .chat_text = std::move(text)},
                  Audience::one(transport_.host_connection_id()));
@@ -964,18 +984,18 @@ bool SessionController::send_chat(std::string text) {
   return true;
 }
 
-void SessionController::receive_chat(const PlayerId player_id, std::string text) {
+void SessionController::receive_chat(const PlayerSlot player_slot, std::string text) {
   if (snapshot_.chat.size() == kChatHistoryCapacity)
     snapshot_.chat.erase(snapshot_.chat.begin());
   snapshot_.chat.push_back({.serial = advance_nonzero_sequence(chat_serial_),
-                            .player_id = player_id,
-                            .display_name = profiles_[player_id].display_name,
+                            .player_slot = player_slot,
+                            .display_name = profiles_[player_slot].display_name,
                             .text = std::move(text)});
   if (snapshot_.state.role == SessionRole::HOST) {
     const auto bytes =
         encode_control_message({.kind = ControlKind::CHAT, .chat_text = snapshot_.chat.back().text},
                                adapter_.descriptor().maximum_profile_extension_bytes);
-    send_frame(FrameKind::CONTROL, Audience::everyone(), player_id, bytes,
+    send_frame(FrameKind::CONTROL, Audience::everyone(), player_slot, bytes,
                TransportLane::CONTROL_RELIABLE);
   }
 }
@@ -987,7 +1007,7 @@ void SessionController::broadcast_profile(const PlayerProfile& profile) {
 void SessionController::publish_roster(const ConnectionId connection) {
   ControlMessage roster = {.kind = ControlKind::ROSTER};
   for (const auto& profile : profiles_) {
-    if (profile.player_id != kInvalidPlayerId)
+    if (profile.player_slot != kInvalidPlayerSlot)
       roster.roster.push_back(profile);
   }
   send_control(roster, Audience::one(connection));
@@ -1005,7 +1025,7 @@ bool SessionController::set_local_profile(PlayerProfile profile) {
       (snapshot_.state.status != SessionStatus::LOBBY &&
        snapshot_.state.status != SessionStatus::IN_GAME))
     return false;
-  if (!validate_profile(profile, snapshot_.state.local_player_id))
+  if (!validate_profile(profile, snapshot_.state.local_player_slot))
     return false;
   if (profile.character != local_profile_.character && !character_change_allowed(local_profile_))
     return false;
@@ -1013,7 +1033,7 @@ bool SessionController::set_local_profile(PlayerProfile profile) {
   profile.lan = local_profile_.lan;
   local_profile_ = profile;
   if (snapshot_.state.role == SessionRole::HOST) {
-    profiles_[profile.player_id] = profile;
+    profiles_[profile.player_slot] = profile;
     broadcast_profile(profile);
     adapter_.player_profile_changed(profile);
   } else {
@@ -1091,35 +1111,35 @@ void SessionController::enter_lobby() {
 void SessionController::update_snapshot(std::vector<ConnectionSnapshot> connections) {
   snapshot_.players.clear();
   for (const auto& profile : profiles_) {
-    if (profile.player_id != kInvalidPlayerId)
+    if (profile.player_slot != kInvalidPlayerSlot)
       snapshot_.players.push_back(profile);
   }
-  for (size_t player_id = 0; player_id < snapshot_.player_pings.size(); ++player_id) {
-    if (profiles_[player_id].player_id == kInvalidPlayerId)
-      snapshot_.player_pings[player_id] = kUnknownPlayerPing;
+  for (size_t player_slot = 0; player_slot < snapshot_.player_pings.size(); ++player_slot) {
+    if (profiles_[player_slot].player_slot == kInvalidPlayerSlot)
+      snapshot_.player_pings[player_slot] = kUnknownPlayerPing;
   }
   snapshot_.connections.clear();
   snapshot_.connections.reserve(connections.size());
   for (auto& connection : connections) {
     const auto* binding = registry_.find_connection(connection.connection_id);
-    snapshot_.connections.push_back({.player_id = binding ? binding->player_id : kInvalidPlayerId,
-                                     .network = std::move(connection)});
+    snapshot_.connections.push_back(
+        {.player_slot = binding ? binding->player_slot : kInvalidPlayerSlot,
+         .network = std::move(connection)});
   }
   std::ranges::sort(snapshot_.connections, [](const SessionConnectionSnapshot& left,
                                               const SessionConnectionSnapshot& right) {
-    return left.player_id < right.player_id;
+    return left.player_slot < right.player_slot;
   });
 }
 
-
 void SessionController::sample_player_pings() {
   snapshot_.player_pings.assign(profiles_.size(), kUnknownPlayerPing);
-  snapshot_.player_pings[snapshot_.state.host_player_id] = 0;
+  snapshot_.player_pings[snapshot_.state.host_player_slot] = 0;
   for (const auto& connection : snapshot_.connections) {
     const auto* binding = registry_.find_connection(connection.network.connection_id);
     if (binding && binding->identity_ready && connection.network.ping_ms >= 0) {
-      snapshot_.player_pings[binding->player_id] = static_cast<uint16_t>(
-          std::min(connection.network.ping_ms, int{kUnknownPlayerPing - 1}));
+      snapshot_.player_pings[binding->player_slot] =
+          static_cast<uint16_t>(std::min(connection.network.ping_ms, int{kUnknownPlayerPing - 1}));
     }
   }
 }

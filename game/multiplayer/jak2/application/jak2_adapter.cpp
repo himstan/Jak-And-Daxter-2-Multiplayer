@@ -71,7 +71,7 @@ bool Jak2Adapter::validate_profile_extension(const std::span<const uint8_t> exte
   return true;
 }
 
-std::vector<uint8_t> Jak2Adapter::create_bootstrap(platform::PlayerId) {
+std::vector<uint8_t> Jak2Adapter::create_bootstrap(platform::PlayerSlot) {
   const auto& bootstrap = state_.world().bootstrap();
   if (bootstrap.host_continue[0] == 0)
     return {};
@@ -90,6 +90,7 @@ bool Jak2Adapter::apply_bootstrap(const uint32_t generation,
 
 void Jak2Adapter::player_profile_changed(const platform::PlayerProfile& profile) {
   core::PlayerIdentity identity = {};
+  identity.player_slot = profile.player_slot;
   identity.player_id = profile.player_id;
   identity.character = profile.character;
   identity.lobby_ready = profile.ready;
@@ -98,19 +99,19 @@ void Jak2Adapter::player_profile_changed(const platform::PlayerProfile& profile)
   if (profile.game_extension.size() == sizeof(identity.skin))
     std::memcpy(&identity.skin, profile.game_extension.data(), sizeof(identity.skin));
   if (!state_.update_player_identity(identity)) {
-    lg::error("[MP-Jak2] Rejected canonical platform profile for player {}.", profile.player_id);
+    lg::error("[MP-Jak2] Rejected canonical platform profile for player {}.", profile.player_slot);
   }
 }
 
-void Jak2Adapter::player_departed(const platform::PlayerId player_id,
+void Jak2Adapter::player_departed(const platform::PlayerSlot player_slot,
                                   const platform::PlayerDepartureReason reason) {
-  if (player_id < core::kMaxPlayers) {
-    ++player_lifecycles_[player_id];
-    player_departures_[player_id] = reason;
-    presentation_.reset_player(player_id);
-    mailbox_.discard_player_events(player_id);
+  if (player_slot < core::kMaxPlayers) {
+    ++player_lifecycles_[player_slot];
+    player_departures_[player_slot] = reason;
+    presentation_.reset_player(player_slot);
+    mailbox_.discard_player_events(player_slot);
   }
-  state_.depart_player(player_id);
+  state_.depart_player(player_slot);
 }
 
 void Jak2Adapter::tick(const uint64_t now_ms) {
@@ -119,8 +120,8 @@ void Jak2Adapter::tick(const uint64_t now_ms) {
   const auto session = endpoint_->snapshot().state;
   state_.expire(now_ms);
   if (auto frame = mailbox_.take_local_frame()) {
-    if (frame->local_player_id == session.local_player_id &&
-        frame->host_player_id == session.host_player_id) {
+    if (frame->local_player_slot == session.local_player_slot &&
+        frame->host_player_slot == session.host_player_slot) {
       local_frame_ = std::move(frame);
     } else {
       local_frame_.reset();
@@ -156,11 +157,11 @@ void Jak2Adapter::publish_remote_frame(const platform::SessionState& session,
   frame->gungame = state_.world().gungame();
   frame->bootstrap = state_.world().bootstrap();
   const auto& enemy_snapshot = state_.entities().enemies();
-  frame->enemies.source_player_id = enemy_snapshot.source_player_id;
+  frame->enemies.source_player_slot = enemy_snapshot.source_player_slot;
   frame->enemies.sample_time_ms = enemy_snapshot.sample_time_ms;
   frame->enemies.sequence = enemy_snapshot.sequence;
   for (const auto& enemy : enemy_snapshot.enemies) {
-    if (enemy.owner_player_id != session.local_player_id)
+    if (enemy.owner_player_slot != session.local_player_slot)
       frame->enemies.enemies.push_back(enemy);
   }
   frame->selected_traffic = state_.traffic().selected_snapshot();

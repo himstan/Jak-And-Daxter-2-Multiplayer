@@ -37,7 +37,7 @@ TEST(Jak2Protocol, EncodesOnlyTheDeclaredPayloadLength) {
   multiplayer::jak2::core::GameEvent event = {};
   event.event_id = 26;
   event.payload_size = 13;
-  event.source_player_id = 3;
+  event.source_player_slot = 3;
   event.payload[0] = 0xaa;
   event.payload[1] = 0xbb;
   event.payload[2] = 0xcc;
@@ -61,7 +61,7 @@ TEST(Jak2Protocol, EventCodecRejectsTruncationAndTrailingBytes) {
   multiplayer::jak2::core::GameEvent event = {};
   event.event_id = 30;
   event.payload_size = 1;
-  event.source_player_id = 2;
+  event.source_player_slot = 2;
   event.payload[0] = 4;
   std::vector<uint8_t> encoded;
   const multiplayer::jak2::core::GameEventBatch batch = {.events = {event}};
@@ -76,7 +76,7 @@ TEST(Jak2Protocol, EventCodecRejectsTruncationAndTrailingBytes) {
 TEST(Jak2Protocol, SupportsDefinedZeroLengthPayloads) {
   multiplayer::jak2::core::GameEvent event = {};
   event.event_id = 12;
-  event.source_player_id = 1;
+  event.source_player_slot = 1;
   std::vector<uint8_t> encoded;
   const multiplayer::jak2::core::GameEventBatch batch = {.events = {event}};
   ASSERT_TRUE(encode_event_batch(batch, encoded));
@@ -92,7 +92,7 @@ TEST(Jak2Protocol, EveryEventUsesItsDeclaredPayloadSize) {
   for (const auto& [id, name, payload_size] : multiplayer::jak2::wire::kEvents) {
     multiplayer::jak2::core::GameEvent event = {};
     event.event_id = id;
-    event.source_player_id = 0;
+    event.source_player_slot = 0;
     event.payload_size = payload_size;
     std::vector<uint8_t> encoded;
     const multiplayer::jak2::core::GameEventBatch batch = {.events = {event}};
@@ -113,7 +113,7 @@ TEST(Jak2Protocol, GenericCodecCanonicalizesAuthenticatedEventOrigin) {
   multiplayer::jak2::core::GameEvent event = {};
   event.event_id = 30;
   event.payload_size = 1;
-  event.source_player_id = 2;
+  event.source_player_slot = 2;
   event.payload[0] = 4;
   const auto outbound = multiplayer::jak2::core::GameEventBatch{.events = {event}};
   const auto encoded =
@@ -121,13 +121,13 @@ TEST(Jak2Protocol, GenericCodecCanonicalizesAuthenticatedEventOrigin) {
   ASSERT_TRUE(encoded.has_value());
 
   const multiplayer::jak2::core::SourceContext source = {
-      .connection_id = 1, .authenticated_player_id = 2, .from_host = false};
+      .connection_id = 1, .authenticated_player_slot = 2, .from_host = false};
   const auto decoded = mp_test::decode_events(*encoded, source);
   ASSERT_TRUE(decoded);
   const auto* decoded_batch = &*decoded;
   ASSERT_NE(decoded_batch, nullptr);
   ASSERT_EQ(decoded_batch->events.size(), 1u);
-  EXPECT_EQ(decoded_batch->events[0].source_player_id, 2u);
+  EXPECT_EQ(decoded_batch->events[0].source_player_slot, 2u);
 }
 
 TEST(Jak2Protocol, GameplayPolicyMaximumAppliesToPayloadBody) {

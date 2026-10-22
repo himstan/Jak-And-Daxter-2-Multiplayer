@@ -14,7 +14,7 @@
           (else player-limit)))
   *mp-session-player-limit*)
 
-(defconstant MP_INVALID_PLAYER_ID (the uint8 #xff))
+(defconstant MP_INVALID_PLAYER_SLOT (the uint8 #xff))
 (defconstant MP_INVALID_PAD_INDEX (the uint8 #xff))
 (defconstant MP_REMOTE_PLAYER_MARKER_KEY_BASE (the int #x4d505240))
 (defconstant MP_PLAYER_NAME_SIZE 16)
@@ -79,7 +79,8 @@
   (none))
 
 (deftype mp-player-identity (structure)
-  ((player-id       uint8)
+  ((player-id       uint8 16)
+   (player-slot     uint8)
    (character       mp-player-character)
    (identity-ready? uint8)
    (state-ready?    uint8)
@@ -88,7 +89,7 @@
    (name            uint8 MP_PLAYER_NAME_SIZE)
    (lobby-ready?    uint8)
    (skin            mp-player-skin :inline))
-  :size-assert 288)
+  :size-assert 304)
 
 (defenum mp-player-activity
   :type uint8
@@ -121,18 +122,18 @@
   :size-assert 48)
 
 (deftype mp-player-action-state (structure)
-  ((target-state-id        uint32)
-   (darkjak-stage          uint32)
-   (authoritative-sequence uint32)
-   (action-state-id        uint32)
-   (scene-state            uint8)
-   (respawn-flags          uint8)
-   (death-state            uint8)
-   (scene-latched?         uint8)
-   (last-replayed-sequence uint32)
-   (riding-along-player-id uint8)
-   (hit-invulnerable?      uint8)
-   (visual-secrets         mp-player-visual-secrets))
+  ((target-state-id          uint32)
+   (darkjak-stage            uint32)
+   (authoritative-sequence   uint32)
+   (action-state-id          uint32)
+   (scene-state              uint8)
+   (respawn-flags            uint8)
+   (death-state              uint8)
+   (scene-latched?           uint8)
+   (last-replayed-sequence   uint32)
+   (riding-along-player-slot uint8)
+   (hit-invulnerable?        uint8)
+   (visual-secrets           mp-player-visual-secrets))
   :size-assert 32)
 
 (deftype mp-player-input-state (structure)
@@ -202,14 +203,14 @@
    (input      mp-player-input-state :inline)
    (vehicle    mp-player-vehicle-state :inline)
    (runtime    mp-player-runtime-state :inline))
-  :size-assert 720)
+  :size-assert 736)
 
-(defconstant MP_PLAYER_CONTROLLER_SIZE (+ (* 720 MP_MAX_PLAYERS) 2))
+(defconstant MP_PLAYER_CONTROLLER_SIZE (+ (* 736 MP_MAX_PLAYERS) 2))
 
 (deftype mp-player-controller (structure)
-  ((records         mp-player-record MP_MAX_PLAYERS :inline)
-   (local-player-id uint8)
-   (host-player-id  uint8))
+  ((records           mp-player-record MP_MAX_PLAYERS :inline)
+   (local-player-slot uint8)
+   (host-player-slot  uint8))
   :size-assert MP_PLAYER_CONTROLLER_SIZE)
 
 (define-perm *mp-player-controller* mp-player-controller (new 'static 'mp-player-controller))
@@ -226,7 +227,7 @@
 (define-extern mp-player-blocks-respawn? (function mp-player-record symbol))
 (define-extern mp-apply-player-render-skin! (function target none))
 (define-extern mp-refresh-player-render-skins! (function none))
-(define-extern mp-player-record-by-id (function uint mp-player-record))
+(define-extern mp-player-record-by-slot (function uint mp-player-record))
 (define-extern mp-player-runtime-flag? (function mp-player-record mp-player-runtime-flags symbol))
 (define-extern mp-player-runtime-set-flag! (function mp-player-record mp-player-runtime-flags mp-player-runtime-flags))
 (define-extern mp-player-runtime-clear-flag!

@@ -26,7 +26,7 @@ static_assert(wire::SendablePacket<TestPacket>);
 
 struct Model {
   uint8_t value = 0;
-  PlayerId source = kInvalidPlayerId;
+  PlayerSlot source = kInvalidPlayerSlot;
 };
 
 TestPacket to_packet(const Model& model) {
@@ -53,12 +53,12 @@ class Endpoint final : public GameSessionEndpoint {
   }
   const SessionSnapshot& snapshot() const override { return session; }
   void request_bootstrap() override {}
-  uint32_t estimated_rtt_ms(PlayerId) const override { return 0; }
+  uint32_t estimated_rtt_ms(PlayerSlot) const override { return 0; }
   NetworkPressure network_pressure() const override { return NetworkPressure::NORMAL; }
   bool severe_pressure_sustained(uint64_t) const override { return false; }
 
   SessionSnapshot session = {
-      .state = {.role = SessionRole::HOST, .local_player_id = 0, .player_limit = 8}};
+      .state = {.role = SessionRole::HOST, .local_player_slot = 0, .player_limit = 8}};
   bool due = true;
   bool accept_send = true;
   uint8_t sent_id = 0;
@@ -78,7 +78,7 @@ class PacketHandlersTest : public testing::Test {
         policy, Handler::Hooks{.to_wire = to_packet,
                                .canonicalize =
                                    [](Model& model, const MessageOrigin& origin) {
-                                     model.source = origin.authenticated_player_id;
+                                     model.source = origin.authenticated_player_slot;
                                    },
                                .apply =
                                    [this](const Model& model, const PacketContext& context) {
@@ -95,7 +95,7 @@ class PacketHandlersTest : public testing::Test {
                                .relay =
                                    [this](const auto&, const auto&) {
                                      ++relays;
-                                     return std::optional{std::vector<PlayerId>{2}};
+                                     return std::optional{std::vector<PlayerSlot>{2}};
                                    }});
   }
   PacketRegistry registry() {
@@ -117,7 +117,7 @@ class PacketHandlersTest : public testing::Test {
 TEST_F(PacketHandlersTest, NewGameNeutralPacketRoutesWithoutPlatformDispatchChanges) {
   auto packets = registry();
   const std::array<uint8_t, 1> bytes = {7};
-  const auto result = packets.receive({.origin = {.authenticated_player_id = 3},
+  const auto result = packets.receive({.origin = {.authenticated_player_slot = 3},
                                        .message_id = 37,
                                        .sequence = 41,
                                        .received_at_ms = 123,
@@ -125,11 +125,11 @@ TEST_F(PacketHandlersTest, NewGameNeutralPacketRoutesWithoutPlatformDispatchChan
                                       endpoint);
   EXPECT_EQ(result.disposition, PayloadDisposition::CONSUME_AND_RELAY);
   EXPECT_EQ(result.canonical_payload, (std::vector<uint8_t>{7}));
-  EXPECT_EQ(result.relay_recipients, (std::optional{std::vector<PlayerId>{2}}));
+  EXPECT_EQ(result.relay_recipients, (std::optional{std::vector<PlayerSlot>{2}}));
   EXPECT_EQ(applied.source, 3);
   EXPECT_EQ(last_context.sequence, 41u);
   EXPECT_EQ(last_context.received_at_ms, 123u);
-  EXPECT_EQ(last_context.local_player_id, 0);
+  EXPECT_EQ(last_context.local_player_slot, 0);
   EXPECT_EQ(packets.receive({.message_id = 38, .sequence = 1}, endpoint).disposition,
             PayloadDisposition::REJECT);
   EXPECT_EQ(packets.find(38), nullptr);
@@ -140,9 +140,11 @@ TEST_F(PacketHandlersTest, CapacityFailureRequestsDisconnectWithoutRelaying) {
   auto packets = registry();
   apply_result = PacketApplyResult::CAPACITY_EXCEEDED;
   const std::array<uint8_t, 1> bytes = {7};
-  const auto result = packets.receive(
-      {.origin = {.authenticated_player_id = 3}, .message_id = 37, .sequence = 1, .payload = bytes},
-      endpoint);
+  const auto result = packets.receive({.origin = {.authenticated_player_slot = 3},
+                                       .message_id = 37,
+                                       .sequence = 1,
+                                       .payload = bytes},
+                                      endpoint);
   EXPECT_EQ(result.disposition, PayloadDisposition::DISCONNECT);
   EXPECT_TRUE(result.canonical_payload.empty());
   EXPECT_EQ(applications, 1u);
@@ -153,7 +155,7 @@ TEST_F(PacketHandlersTest, InvalidPayloadsAndCanonicalEncodingFailBeforeApplicat
   auto packets = registry();
   const std::array<uint8_t, 1> invalid = {11};
   EXPECT_EQ(packets
-                .receive({.origin = {.authenticated_player_id = 0},
+                .receive({.origin = {.authenticated_player_slot = 0},
                           .message_id = 37,
                           .sequence = 1,
                           .payload = invalid},
@@ -162,13 +164,13 @@ TEST_F(PacketHandlersTest, InvalidPayloadsAndCanonicalEncodingFailBeforeApplicat
             PayloadDisposition::REJECT);
   EXPECT_EQ(
       packets
-          .receive({.origin = {.authenticated_player_id = 0}, .message_id = 37, .sequence = 1},
+          .receive({.origin = {.authenticated_player_slot = 0}, .message_id = 37, .sequence = 1},
                    endpoint)
           .disposition,
       PayloadDisposition::REJECT);
   const std::array<uint8_t, 2> oversized = {1, 2};
   EXPECT_EQ(packets
-                .receive({.origin = {.authenticated_player_id = 0},
+                .receive({.origin = {.authenticated_player_slot = 0},
                           .message_id = 37,
                           .sequence = 1,
                           .payload = oversized},
@@ -177,7 +179,7 @@ TEST_F(PacketHandlersTest, InvalidPayloadsAndCanonicalEncodingFailBeforeApplicat
             PayloadDisposition::REJECT);
   const std::array<uint8_t, 1> valid = {1};
   EXPECT_EQ(packets
-                .receive({.origin = {.authenticated_player_id = 8},
+                .receive({.origin = {.authenticated_player_slot = 8},
                           .message_id = 37,
                           .sequence = 1,
                           .payload = valid},
@@ -197,7 +199,7 @@ TEST_F(PacketHandlersTest, InvalidPayloadsAndCanonicalEncodingFailBeforeApplicat
                               .relay = [](const auto&, const auto&) { return std::nullopt; }};
   Handler cannot_encode(kPolicy, std::move(hooks));
   EXPECT_EQ(cannot_encode
-                .receive({.origin = {.authenticated_player_id = 0},
+                .receive({.origin = {.authenticated_player_slot = 0},
                           .message_id = 37,
                           .sequence = 1,
                           .payload = valid},
@@ -210,8 +212,10 @@ TEST_F(PacketHandlersTest, InvalidPayloadsAndCanonicalEncodingFailBeforeApplicat
 TEST_F(PacketHandlersTest, ZeroSequenceNeverAppliesOrRelaysAValidPayload) {
   auto packets = registry();
   const std::array<uint8_t, 1> bytes = {7};
-  GameplayMessage message = {
-      .origin = {.authenticated_player_id = 3}, .message_id = 37, .sequence = 0, .payload = bytes};
+  GameplayMessage message = {.origin = {.authenticated_player_slot = 3},
+                             .message_id = 37,
+                             .sequence = 0,
+                             .payload = bytes};
   for (size_t attempt = 0; attempt < 2; ++attempt) {
     const auto result = packets.receive(message, endpoint);
     EXPECT_EQ(result.disposition, PayloadDisposition::REJECT);

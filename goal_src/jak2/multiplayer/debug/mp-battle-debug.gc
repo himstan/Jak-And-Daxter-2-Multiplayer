@@ -16,7 +16,7 @@
                                                  draw-pos
                                                  (new 'static 'rgba :r #xff :g #x80 :b #x0 :a #x80))
                                     (let ((s5-0 (the-as int (-> b-proc max-count)))
-                                          (owner-player-id (mp-battle-owner-player-id b-proc)))
+                                          (owner-player-slot (mp-battle-owner-player-slot b-proc)))
                                       (if (= (the-as uint s5-0) #x20000000) (set! s5-0 0))
                                       (add-debug-text-3d #t
                                                          (bucket-id debug-no-zbuf1)
@@ -24,7 +24,7 @@
                                                                  (format #f
                                                                          "BATTLE: ~S~%OWNER: ~S~%STATE: ~S~%COUNT: ~D / ~D~%CHILDREN: ~D"
                                                                          (-> b-proc name)
-                                                                         (if (mp-battle-owner-player-id-valid? owner-player-id) (format #f "PLAYER ~D" owner-player-id) "NONE")
+                                                                         (if (mp-battle-owner-player-slot-valid? owner-player-slot) (format #f "PLAYER ~D" owner-player-slot) "NONE")
                                                                          (if (-> b-proc state) (-> b-proc state name) "NONE")
                                                                          (-> b-proc count)
                                                                          s5-0

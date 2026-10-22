@@ -219,7 +219,7 @@
 
 (defun sidekick-player-visual-secrets ((record mp-player-record))
   (if (and record (nonzero? record))
-      (if (= (-> record identity player-id) (mp-local-player-id))
+      (if (= (-> record identity player-slot) (mp-local-player-slot))
           (mp-local-player-visual-secrets)
           (the-as mp-player-visual-secrets (-> record action visual-secrets)))
       (the-as mp-player-visual-secrets 0))
@@ -233,9 +233,9 @@
          (set! visual-secrets (mp-target-visual-secrets parent-target))
          )
         ((and (mp-target-jak? parent-target)
-              (!= (-> parent-target riding-along-player-id) MP_INVALID_PLAYER_ID))
+              (!= (-> parent-target riding-along-player-slot) MP_INVALID_PLAYER_SLOT))
          (let ((rider-record
-                 (mp-player-record-by-id (-> parent-target riding-along-player-id))))
+                 (mp-player-record-by-slot (-> parent-target riding-along-player-slot))))
            (when (and rider-record
                       (nonzero? rider-record)
                       (mp-player-daxter? rider-record))
@@ -288,12 +288,12 @@
       (when (nonnull? parent-proc (-> parent-proc draw))
         (let ((instance-id (cond
                              ((and (mp-target-jak? parent-proc)
-                                   (!= MP_INVALID_PLAYER_ID (-> parent-proc riding-along-player-id)))
-                              (the-as uint (-> parent-proc riding-along-player-id)))
+                                   (!= MP_INVALID_PLAYER_SLOT (-> parent-proc riding-along-player-slot)))
+                              (the-as uint (-> parent-proc riding-along-player-slot)))
                              ((mp-target-daxter? parent-proc)
                               (-> parent-proc draw pc-eye-instance-id))
                              (else
-                              MP_INVALID_PLAYER_ID))))
+                              MP_INVALID_PLAYER_SLOT))))
           (set! (-> sidekick-proc draw pc-eye-instance-id) instance-id)))))
   (none))
 
@@ -486,10 +486,10 @@
       (let ((v1-89 (-> self parent 0 draw color-emissive quad)))
         (set! (-> self draw color-emissive quad) v1-89)
         )
-      (if (and (mp-target-jak? (-> self parent 0)) (!= MP_INVALID_PLAYER_ID (-> self parent 0 riding-along-player-id)))
+      (if (and (mp-target-jak? (-> self parent 0)) (!= MP_INVALID_PLAYER_SLOT (-> self parent 0 riding-along-player-slot)))
         (let ((skin-record
-                (mp-player-color-record-by-id
-                  (the-as int (-> self parent 0 riding-along-player-id)))))
+                (mp-player-color-record-by-slot
+                  (the-as int (-> self parent 0 riding-along-player-slot)))))
           (if (and skin-record (nonzero? skin-record))
               (mp-apply-render-skin!
                 (-> self draw)
@@ -675,7 +675,7 @@
     (set! (-> self arm-ik 1) #f))
   (logior! (-> self skel status) (joint-control-status sync-math blend-shape eye-anim))
   (set! (-> self draw light-index) (the-as uint 30))
-  (set! (-> self draw pc-eye-instance-id) MP_INVALID_PLAYER_ID)
+  (set! (-> self draw pc-eye-instance-id) MP_INVALID_PLAYER_SLOT)
   (let ((v1-14 (-> self node-list data)))
     (set! (-> v1-14 0 param0) (the-as (function cspace transformq none) cspace<-cspace+transformq!))
     (set! (-> v1-14 0 param1) (the-as basic (-> self parent 0 control sidekick-root parent)))

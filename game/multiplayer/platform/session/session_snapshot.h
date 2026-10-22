@@ -12,13 +12,13 @@
 namespace multiplayer::platform {
 
 struct SessionConnectionSnapshot {
-  PlayerId player_id = kInvalidPlayerId;
+  PlayerSlot player_slot = kInvalidPlayerSlot;
   ConnectionSnapshot network;
 };
 
 struct ChatMessage {
   uint32_t serial = 0;
-  PlayerId player_id = kInvalidPlayerId;
+  PlayerSlot player_slot = kInvalidPlayerSlot;
   std::string display_name;
   std::string text;
 };
@@ -36,13 +36,13 @@ struct SessionSnapshot {
   uint8_t close_reason = 0;
   std::string required_identity;
 
-  std::optional<int> player_ping_ms(const PlayerId player_id) const {
-    if (state.role == SessionRole::NONE || player_id == kInvalidPlayerId)
+  std::optional<int> player_ping_ms(const PlayerSlot player_slot) const {
+    if (state.role == SessionRole::NONE || player_slot == kInvalidPlayerSlot)
       return std::nullopt;
-    if (player_id == state.host_player_id)
+    if (player_slot == state.host_player_slot)
       return 0;
-    if (player_id < player_pings.size() && player_pings[player_id] != kUnknownPlayerPing)
-      return player_pings[player_id];
+    if (player_slot < player_pings.size() && player_pings[player_slot] != kUnknownPlayerPing)
+      return player_pings[player_slot];
     return std::nullopt;
   }
 };

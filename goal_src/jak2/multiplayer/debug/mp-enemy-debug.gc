@@ -29,10 +29,10 @@
         (return (handle->process-safe (-> focus handle))))))
   (the-as process #f))
 
-(defun mp-enemy-debug-focus-player-id-label ((focus-player-id uint))
+(defun mp-enemy-debug-focus-player-slot-label ((focus-player-slot uint))
   (cond
-    ((not (mp-player-id-valid? focus-player-id)) "NONE")
-    ((= focus-player-id (mp-local-player-id)) "LOCAL")
+    ((not (mp-player-slot-valid? focus-player-slot)) "NONE")
+    ((= focus-player-slot (mp-local-player-slot)) "LOCAL")
     (else "REMOTE")))
 
 (defun mp-enemy-debug-owner? ((rec mp-enemy-auth-record))
@@ -40,7 +40,7 @@
        (nonzero? rec)
        (mp-local-player-record)
        (nonzero? (mp-local-player-record))
-       (= (-> rec owner-player-id) (-> (mp-local-player-record) identity player-id))))
+       (= (-> rec owner-player-slot) (-> (mp-local-player-record) identity player-slot))))
 
 (defun mp-enemy-debug-text-color ((rec mp-enemy-auth-record))
   (if (mp-enemy-debug-owner? rec) (font-color green) (font-color yellow)))
@@ -70,9 +70,9 @@
         (format text-str
                 "RECORD AID: ~D OWNER: ~D~%STATE: ~S FOCUS: ~A"
                 (-> rec aid)
-                (-> rec owner-player-id)
+                (-> rec owner-player-slot)
                 (get-enemy-record-state rec)
-                (mp-enemy-debug-focus-player-id-label (the-as uint (-> rec focus-player-id))))
+                (mp-enemy-debug-focus-player-slot-label (the-as uint (-> rec focus-player-slot))))
         (format text-str
                 "~%SLOT: STATE ~S HP ~D ATTACK ~D"
                 (mp-enemy-debug-slot-state remote-slot)
@@ -81,9 +81,9 @@
       (format text-str
               "RECORD AID: ~D OWNER: ~D~%STATE: ~S FOCUS: ~A~%SLOT NONE"
               (-> rec aid)
-              (-> rec owner-player-id)
+              (-> rec owner-player-slot)
               (get-enemy-record-state rec)
-              (mp-enemy-debug-focus-player-id-label (the-as uint (-> rec focus-player-id))))))
+              (mp-enemy-debug-focus-player-slot-label (the-as uint (-> rec focus-player-slot))))))
   (none))
 
 (defun mp-enemy-debug-text-overlaps? ((e-proc enemy) (rec mp-enemy-auth-record))
@@ -122,7 +122,7 @@
              (nonzero? rec)
              (mp-local-player-record)
              (nonzero? (mp-local-player-record))
-             (!= (-> rec owner-player-id) (-> (mp-local-player-record) identity player-id)))
+             (!= (-> rec owner-player-slot) (-> (mp-local-player-record) identity player-slot)))
     (let ((record-color (static-rgba 255 255 0 160)))
       (add-debug-circle #t (bucket-id debug-no-zbuf1) (-> rec trans) (meters 0.5) record-color (the-as matrix #f))
       (when (and (-> e-proc root) (nonzero? (-> e-proc root)))

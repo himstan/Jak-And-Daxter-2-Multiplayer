@@ -153,7 +153,7 @@ class GnsSimulationScope {
 };
 
 struct ReceivedGameplay {
-  PlayerId origin = kInvalidPlayerId;
+  PlayerSlot origin = kInvalidPlayerSlot;
   uint8_t id = 0;
   uint32_t sequence = 0;
   uint64_t received_at_ms = 0;
@@ -216,7 +216,7 @@ class RecordingAdapter final : public GameAdapter {
     if (disconnect_payloads)
       return {.disposition = PayloadDisposition::DISCONNECT};
     received.push_back(
-        {.origin = message.origin.authenticated_player_id,
+        {.origin = message.origin.authenticated_player_slot,
          .id = message.message_id,
          .sequence = message.sequence,
          .received_at_ms = message.received_at_ms,
@@ -227,7 +227,9 @@ class RecordingAdapter final : public GameAdapter {
     result.relay_recipients = relay_recipients;
     return result;
   }
-  std::vector<uint8_t> create_bootstrap(PlayerId player_id) override { return {player_id, 0x42}; }
+  std::vector<uint8_t> create_bootstrap(PlayerSlot player_slot) override {
+    return {player_slot, 0x42};
+  }
   bool apply_bootstrap(uint32_t generation, std::span<const uint8_t> payload) override {
     ++bootstrap_apply_attempts;
     if (!apply_succeeds)
@@ -239,8 +241,8 @@ class RecordingAdapter final : public GameAdapter {
   void player_profile_changed(const PlayerProfile& value) override {
     profile_changes.push_back(value);
   }
-  void player_departed(PlayerId player_id, PlayerDepartureReason reason) override {
-    departures.push_back(player_id);
+  void player_departed(PlayerSlot player_slot, PlayerDepartureReason reason) override {
+    departures.push_back(player_slot);
     departure_reasons.push_back(reason);
   }
 
@@ -249,7 +251,7 @@ class RecordingAdapter final : public GameAdapter {
   GameDescriptor descriptor_;
   bool relay = false;
   bool disconnect_payloads = false;
-  std::optional<std::vector<PlayerId>> relay_recipients;
+  std::optional<std::vector<PlayerSlot>> relay_recipients;
   bool apply_succeeds = true;
   uint32_t bootstrap_apply_attempts = 0;
   uint32_t applied_generation = 0;
@@ -258,7 +260,7 @@ class RecordingAdapter final : public GameAdapter {
   std::vector<uint8_t> applied_bootstrap;
   std::vector<ReceivedGameplay> received;
   std::vector<PlayerProfile> profile_changes;
-  std::vector<PlayerId> departures;
+  std::vector<PlayerSlot> departures;
   std::vector<PlayerDepartureReason> departure_reasons;
 };
 
@@ -312,7 +314,9 @@ class RuntimeAdapter final : public GameAdapter {
 };
 
 PlayerProfile profile(std::string name = "Player") {
-  return {.display_name = std::move(name), .character = PlayerCharacter::JAK};
+  return {.player_id = PlayerId::generate(),
+          .display_name = std::move(name),
+          .character = PlayerCharacter::JAK};
 }
 
 ControllerHostConfig host_config(uint16_t port, uint8_t limit = 8) {
@@ -732,8 +736,8 @@ TEST(GnsTransportIntegration, MessagesSentBeforePeerCloseAreDeliveredBeforeClose
         return host_connection_id != 0 && client_connection != 0;
       }));
 
-  ASSERT_TRUE(host.send(host_connection_id, std::array<uint8_t, 1>{0x9e},
-                        TransportLane::CONTROL_RELIABLE));
+  ASSERT_TRUE(
+      host.send(host_connection_id, std::array<uint8_t, 1>{0x9e}, TransportLane::CONTROL_RELIABLE));
   host.close_connection(host_connection_id, 4003, "rejected before client pump");
   ASSERT_TRUE(
       pump_until([&] { host.pump(); }, [&] { return client.connection_snapshots().empty(); }));
@@ -934,7 +938,9 @@ TEST(GnsTransportIntegration, RuntimeTakesOwnershipOfTheStartupProfileLease) {
   auto lease = ProfileLease::acquire(storage);
   ASSERT_TRUE(lease);
   const auto preferences_path = lease->game_preferences_path();
-  ASSERT_TRUE(save_player_profile(*lease, {.display_name = "StartupPlayer"}));
+  const auto player_id = PlayerId::generate();
+  ASSERT_TRUE(
+      save_player_profile(*lease, {.player_id = player_id, .display_name = "StartupPlayer"}));
   MultiplayerRuntime runtime;
   auto state = std::make_shared<RuntimeAdapterState>();
   ASSERT_TRUE(runtime.install(std::make_unique<RuntimeAdapter>(state), std::move(*lease)));
@@ -943,6 +949,10 @@ TEST(GnsTransportIntegration, RuntimeTakesOwnershipOfTheStartupProfileLease) {
   StoredPlayerProfile profile;
   ASSERT_TRUE(runtime.load_profile(profile));
   EXPECT_EQ(profile.display_name, "StartupPlayer");
+  EXPECT_EQ(profile.player_id, player_id);
+  auto changed_identity = profile;
+  changed_identity.player_id = PlayerId::generate();
+  EXPECT_FALSE(runtime.save_profile(changed_identity));
   runtime.shutdown();
   EXPECT_TRUE(ProfileLease::acquire(storage));
 
@@ -1151,7 +1161,10 @@ TEST(GnsTransportIntegration, LobbyCharacterPersistsOnlyWhenReadyAndLocksUntilUn
       .root_directory =
           fs::temp_directory_path() / ("jadmp-client-character-" + std::to_string(now_ms()))};
   ASSERT_TRUE(client.install(std::make_unique<RuntimeAdapter>(state), storage));
-  ASSERT_TRUE(client.save_profile({.display_name = "Client"}));
+  StoredPlayerProfile identity;
+  ASSERT_TRUE(client.load_profile(identity));
+  identity.display_name = "Client";
+  ASSERT_TRUE(client.save_profile(identity));
   ASSERT_TRUE(client.enqueue<ConnectSessionCommand>(client_config(host.local_port())));
   auto pump = [&] { host.pump(now_ms()); };
   ASSERT_TRUE(pump_until(pump, [&] { return host.snapshot().players.size() == 2; }));
@@ -1257,9 +1270,9 @@ TEST(GnsTransportIntegration, AbruptLossReconnectsAndLateJoinReceivesBootstrap) 
   EXPECT_EQ(state->bootstraps.load(), 2u);
   EXPECT_EQ(host.snapshot().players.back().character, PlayerCharacter::DAXTER);
   ASSERT_EQ(host.snapshot().connections.size(), 1u);
-  EXPECT_EQ(host.snapshot().connections.front().player_id, 1u);
+  EXPECT_EQ(host.snapshot().connections.front().player_slot, 1u);
   ASSERT_EQ(client.snapshot().session.connections.size(), 1u);
-  EXPECT_EQ(client.snapshot().session.connections.front().player_id, 0u);
+  EXPECT_EQ(client.snapshot().session.connections.front().player_slot, 0u);
 
   const auto connections2 = host.transport().connection_snapshots();
   ASSERT_EQ(connections2.size(), 1u);
@@ -1285,9 +1298,9 @@ TEST(GnsTransportIntegration, AbruptLossReconnectsAndLateJoinReceivesBootstrap) 
   EXPECT_EQ(state->bootstraps.load(), 3u);
   EXPECT_EQ(host.snapshot().players.back().character, PlayerCharacter::DAXTER);
   ASSERT_EQ(host.snapshot().connections.size(), 1u);
-  EXPECT_EQ(host.snapshot().connections.front().player_id, 1u);
+  EXPECT_EQ(host.snapshot().connections.front().player_slot, 1u);
   ASSERT_EQ(client.snapshot().session.connections.size(), 1u);
-  EXPECT_EQ(client.snapshot().session.connections.front().player_id, 0u);
+  EXPECT_EQ(client.snapshot().session.connections.front().player_slot, 0u);
   client.shutdown();
 }
 
@@ -1315,13 +1328,13 @@ TEST(GnsTransportIntegration, SessionAdmissionProfilesAndRelayStayAboveTransport
                host.snapshot().players.size() == 3;
       }));
   ASSERT_EQ(host.snapshot().connections.size(), 2u);
-  EXPECT_EQ(host.snapshot().connections[0].player_id, 1u);
-  EXPECT_EQ(host.snapshot().connections[1].player_id, 2u);
+  EXPECT_EQ(host.snapshot().connections[0].player_slot, 1u);
+  EXPECT_EQ(host.snapshot().connections[1].player_slot, 2u);
   EXPECT_NE(host.snapshot().connections[0].network.connection_id, 0u);
   EXPECT_NE(host.snapshot().connections[1].network.connection_id, 0u);
   EXPECT_FALSE(host.snapshot().connections[0].network.relayed);
   ASSERT_EQ(client.snapshot().connections.size(), 1u);
-  EXPECT_EQ(client.snapshot().connections.front().player_id, 0u);
+  EXPECT_EQ(client.snapshot().connections.front().player_slot, 0u);
   EXPECT_EQ(client.snapshot().connections.front().network.connection_id,
             client.transport().host_connection_id());
   const std::vector<uint8_t> payload(4096, 0x5a);
@@ -1342,7 +1355,7 @@ TEST(GnsTransportIntegration, SessionAdmissionProfilesAndRelayStayAboveTransport
       },
       [&] { return host_adapter.received.size() == 1 && observer_adapter.received.size() == 1; }));
   EXPECT_TRUE(client_adapter.received.empty());
-  EXPECT_EQ(host_adapter.received[0].origin, client.snapshot().state.local_player_id);
+  EXPECT_EQ(host_adapter.received[0].origin, client.snapshot().state.local_player_slot);
   EXPECT_EQ(host_adapter.received[0].received_at_ms, host_receive_pump_ms);
   EXPECT_EQ(observer_adapter.received[0].payload, payload);
   EXPECT_EQ(observer_adapter.profile_changes.size(), 3u);
@@ -1365,10 +1378,10 @@ TEST(GnsTransportIntegration, SessionAdmissionProfilesAndRelayStayAboveTransport
   }
   EXPECT_EQ(observer_adapter.received.size(), 1u);
 
-  const auto observer_id = observer.snapshot().state.local_player_id;
-  ASSERT_NE(observer_id, kInvalidPlayerId);
-  ASSERT_NE(observer_id, client.snapshot().state.local_player_id);
-  host_adapter.relay_recipients = std::vector<PlayerId>{observer_id};
+  const auto observer_id = observer.snapshot().state.local_player_slot;
+  ASSERT_NE(observer_id, kInvalidPlayerSlot);
+  ASSERT_NE(observer_id, client.snapshot().state.local_player_slot);
+  host_adapter.relay_recipients = std::vector<PlayerSlot>{observer_id};
   ASSERT_TRUE(client.send_gameplay(0, Audience::everyone(), std::array<uint8_t, 1>{0x62}));
   ASSERT_TRUE(pump_until(
       [&] {
@@ -1413,11 +1426,11 @@ TEST(GnsTransportIntegration, HostSharesPlayerPingsWithEveryClientAndClearsDepar
            observer.snapshot().player_pings == published;
   }));
   EXPECT_EQ(host.snapshot().player_pings, published);
-  for (PlayerId id = 0; id < 3; ++id) {
+  for (PlayerSlot id = 0; id < 3; ++id) {
     EXPECT_EQ(client.snapshot().player_ping_ms(id), published[id]);
     EXPECT_EQ(observer.snapshot().player_ping_ms(id), published[id]);
   }
-  const auto departed = client.snapshot().state.local_player_id;
+  const auto departed = client.snapshot().state.local_player_slot;
   client.disconnect();
   ASSERT_TRUE(pump_until(pump, [&] {
     return host.snapshot().players.size() == 2 && observer.snapshot().players.size() == 2;
@@ -1475,14 +1488,14 @@ TEST(GnsTransportIntegration, ChatRelaysAuthenticatedSendersInLobbyAndGameWithBo
     return host.snapshot().players.size() == 3 && client.snapshot().players.size() == 3 &&
            observer.snapshot().players.size() == 3;
   }));
-  const auto sender = client.snapshot().state.local_player_id;
+  const auto sender = client.snapshot().state.local_player_slot;
   ASSERT_TRUE(client.send_chat("Hello from lobby"));
   ASSERT_TRUE(pump_until(pump, [&] {
     return host.snapshot().chat.size() == 1 && client.snapshot().chat.size() == 1 &&
            observer.snapshot().chat.size() == 1;
   }));
   for (const auto* session : {&host, &client, &observer}) {
-    EXPECT_EQ(session->snapshot().chat.front().player_id, sender);
+    EXPECT_EQ(session->snapshot().chat.front().player_slot, sender);
     EXPECT_EQ(session->snapshot().chat.front().display_name, "Client");
     EXPECT_EQ(session->snapshot().chat.front().text, "Hello from lobby");
   }
@@ -1500,7 +1513,7 @@ TEST(GnsTransportIntegration, ChatRelaysAuthenticatedSendersInLobbyAndGameWithBo
   for (const auto* session : {&host, &client, &observer}) {
     ASSERT_EQ(session->snapshot().chat.size(), kChatHistoryCapacity);
     EXPECT_EQ(session->snapshot().chat.front().text, "In game 2");
-    EXPECT_EQ(session->snapshot().chat.back().player_id, 0);
+    EXPECT_EQ(session->snapshot().chat.back().player_slot, 0);
   }
   const auto payload =
       encode_control_message({.kind = ControlKind::CHAT, .chat_text = "spoof"}, 16);
@@ -1535,9 +1548,9 @@ TEST(GnsTransportIntegration, KickedPlayersLeaveAndCannotRejoinTheHostedSession)
     return host.snapshot().players.size() == 3 && client.snapshot().players.size() == 3 &&
            observer.snapshot().players.size() == 3;
   }));
-  const auto kicked = client.snapshot().state.local_player_id;
-  EXPECT_FALSE(host.kick(host.snapshot().state.local_player_id));
-  EXPECT_FALSE(client.kick(observer.snapshot().state.local_player_id));
+  const auto kicked = client.snapshot().state.local_player_slot;
+  EXPECT_FALSE(host.kick(host.snapshot().state.local_player_slot));
+  EXPECT_FALSE(client.kick(observer.snapshot().state.local_player_slot));
   ASSERT_TRUE(host.kick(kicked));
   ASSERT_TRUE(pump_until(pump, [&] {
     return client.snapshot().state.status == SessionStatus::HOST_LEFT &&
@@ -1577,12 +1590,12 @@ TEST(GnsTransportIntegration, DuplicateControlsAreSuppressedAndFloodClosesOnlyTh
     return host.snapshot().players.size() == 3 && client.snapshot().players.size() == 3 &&
            observer.snapshot().players.size() == 3;
   }));
-  const auto player_id = client.snapshot().state.local_player_id;
-  auto duplicate = profile("Client");
-  duplicate.player_id = player_id;
+  const auto player_slot = client.snapshot().state.local_player_slot;
+  auto duplicate = client.local_profile();
+  duplicate.player_slot = player_slot;
   const auto send = [&](const ControlMessage& message) {
     const auto payload = encode_control_message(message, 16);
-    const auto frame = encode_message_frame(FrameKind::CONTROL, player_id, payload);
+    const auto frame = encode_message_frame(FrameKind::CONTROL, player_slot, payload);
     return client.transport().send(client.transport().host_connection_id(), frame,
                                    TransportLane::CONTROL_RELIABLE);
   };
@@ -1593,7 +1606,7 @@ TEST(GnsTransportIntegration, DuplicateControlsAreSuppressedAndFloodClosesOnlyTh
   ASSERT_TRUE(send({.kind = ControlKind::SET_READY, .ready = true}));
   ASSERT_TRUE(pump_until(pump, [&] {
     return std::ranges::any_of(observer.snapshot().players, [&](const auto& player) {
-      return player.player_id == player_id && player.ready;
+      return player.player_slot == player_slot && player.ready;
     });
   }));
   ASSERT_EQ(host_adapter.profile_changes.size(), 1u);
@@ -1610,18 +1623,18 @@ TEST(GnsTransportIntegration, DuplicateControlsAreSuppressedAndFloodClosesOnlyTh
   for (size_t update = 0; update < 40; ++update)
     ASSERT_TRUE(send({.kind = ControlKind::SET_READY, .ready = true}));
   ASSERT_TRUE(pump_until(pump, [&] { return host.snapshot().connections.size() == 1; }));
-  EXPECT_EQ(host.snapshot().connections.front().player_id,
-            observer.snapshot().state.local_player_id);
+  EXPECT_EQ(host.snapshot().connections.front().player_slot,
+            observer.snapshot().state.local_player_slot);
   EXPECT_EQ(observer.snapshot().state.status, SessionStatus::LOBBY);
   ASSERT_TRUE(observer.set_ready(true));
   ASSERT_TRUE(pump_until(pump, [&] {
-    return host_adapter.profile_changes.back().player_id ==
-           observer.snapshot().state.local_player_id;
+    return host_adapter.profile_changes.back().player_slot ==
+           observer.snapshot().state.local_player_slot;
   }));
 
   ASSERT_TRUE(client.connect(client_config(host.local_port())));
   ASSERT_TRUE(pump_until(pump, [&] { return host.snapshot().players.size() == 3; }));
-  EXPECT_EQ(client.snapshot().state.local_player_id, player_id);
+  EXPECT_EQ(client.snapshot().state.local_player_slot, player_slot);
 }
 
 TEST(GnsTransportIntegration, AdapterCapacityFailureClosesTheSendingConnection) {
@@ -1750,8 +1763,8 @@ TEST(GnsTransportIntegration, ZeroSequenceGameplayClosesTheSenderBeforeAdapterDi
   const std::array<uint8_t, 1> payload = {0x42};
   auto envelope = encode_gameplay_envelope(0, 1, payload);
   std::fill(envelope.begin() + 1, envelope.begin() + 5, 0);
-  const auto frame =
-      encode_message_frame(FrameKind::GAMEPLAY, client.snapshot().state.local_player_id, envelope);
+  const auto frame = encode_message_frame(FrameKind::GAMEPLAY,
+                                          client.snapshot().state.local_player_slot, envelope);
   ASSERT_TRUE(client.transport().send(client.transport().host_connection_id(), frame,
                                       TransportLane::REALTIME_NORMAL));
   ASSERT_TRUE(pump_until(
@@ -1875,7 +1888,7 @@ TEST(GnsTransportIntegration, HostCapacityAndPlayerSlotReuseAreSessionOwned) {
         first.pump(now);
       },
       [&] { return first.snapshot().state.status == SessionStatus::LOBBY; }));
-  EXPECT_EQ(first.snapshot().state.local_player_id, 1);
+  EXPECT_EQ(first.snapshot().state.local_player_slot, 1);
   ASSERT_TRUE(rejected.connect(client_config(host.local_port())));
   ASSERT_TRUE(pump_until(
       [&] {
@@ -1914,11 +1927,11 @@ TEST(GnsTransportIntegration, HostCapacityAndPlayerSlotReuseAreSessionOwned) {
       << " host_players=" << host.snapshot().players.size()
       << " host_connections=" << host.transport().connection_snapshots().size()
       << " client_connections=" << replacement.transport().connection_snapshots().size();
-  EXPECT_EQ(replacement.snapshot().state.local_player_id, 1);
+  EXPECT_EQ(replacement.snapshot().state.local_player_slot, 1);
   ASSERT_EQ(host.snapshot().connections.size(), 1u);
-  EXPECT_EQ(host.snapshot().connections.front().player_id, 1u);
+  EXPECT_EQ(host.snapshot().connections.front().player_slot, 1u);
   ASSERT_EQ(replacement.snapshot().connections.size(), 1u);
-  EXPECT_EQ(replacement.snapshot().connections.front().player_id, 0u);
+  EXPECT_EQ(replacement.snapshot().connections.front().player_slot, 0u);
 }
 
 TEST(GnsTransportIntegration, BootstrapRetriesUntilSuccessfulApplyAndAcknowledgement) {
@@ -1955,7 +1968,7 @@ TEST(GnsTransportIntegration, BootstrapRetriesUntilSuccessfulApplyAndAcknowledge
       },
       [&] { return client_adapter.applied_generation != 0; }));
   EXPECT_EQ(client_adapter.applied_bootstrap,
-            (std::vector<uint8_t>{client.snapshot().state.local_player_id, 0x42}));
+            (std::vector<uint8_t>{client.snapshot().state.local_player_slot, 0x42}));
 }
 
 TEST(GnsTransportIntegration, HostShutdownUsesTheTypedSessionClosePath) {
@@ -2045,12 +2058,12 @@ TEST(GnsTransportIntegration, HostAdmitsSevenClientsAndRejectsTheEighth) {
                  return client->snapshot().state.status == SessionStatus::LOBBY;
                });
       }));
-  std::vector<PlayerId> assigned;
+  std::vector<PlayerSlot> assigned;
   for (const auto& client : clients) {
-    assigned.push_back(client->snapshot().state.local_player_id);
+    assigned.push_back(client->snapshot().state.local_player_slot);
   }
   std::ranges::sort(assigned);
-  EXPECT_EQ(assigned, (std::vector<PlayerId>{1, 2, 3, 4, 5, 6, 7}));
+  EXPECT_EQ(assigned, (std::vector<PlayerSlot>{1, 2, 3, 4, 5, 6, 7}));
 
   RecordingAdapter overflow_adapter;
   SessionController overflow(overflow_adapter);
@@ -2063,6 +2076,94 @@ TEST(GnsTransportIntegration, HostAdmitsSevenClientsAndRejectsTheEighth) {
       },
       [&] { return overflow.snapshot().state.status == SessionStatus::FAILED; }));
   EXPECT_EQ(overflow.snapshot().rejection, RejectionReason::HOST_FULL);
+}
+
+TEST(GnsTransportIntegration, PlayerIdentitySurvivesSlotReuseAndNewSessions) {
+  RecordingAdapter host_adapter;
+  RecordingAdapter client_adapter;
+  RecordingAdapter other_adapter;
+  SessionController host(host_adapter);
+  SessionController client(client_adapter);
+  SessionController other(other_adapter);
+  auto hosting = host_config(available_udp_port(), 3);
+  ASSERT_TRUE(host.host(hosting));
+  auto joining = client_config(host.local_port());
+  const auto id = joining.local_profile.player_id;
+  const auto pump = [&] {
+    const auto now = now_ms();
+    host.pump(now);
+    client.pump(now);
+    other.pump(now);
+  };
+  ASSERT_TRUE(client.connect(joining));
+  ASSERT_TRUE(pump_until(pump, [&] { return client.snapshot().players.size() == 2; }));
+  const auto first_slot = client.snapshot().state.local_player_slot;
+  EXPECT_EQ(host.snapshot().players.back().player_id, id);
+  auto edited = client.local_profile();
+  edited.display_name = "Renamed";
+  ASSERT_TRUE(client.set_local_profile(edited));
+  edited.player_id = PlayerId::generate();
+  EXPECT_FALSE(client.set_local_profile(edited));
+  auto host_edit = host.local_profile();
+  host_edit.player_id = PlayerId::generate();
+  EXPECT_FALSE(host.set_local_profile(host_edit));
+  client.disconnect();
+  ASSERT_TRUE(pump_until(pump, [&] { return host.snapshot().players.size() == 1; }));
+  ASSERT_TRUE(other.connect(client_config(host.local_port())));
+  ASSERT_TRUE(pump_until(pump, [&] { return other.snapshot().players.size() == 2; }));
+  ASSERT_TRUE(client.connect(joining));
+  ASSERT_TRUE(pump_until(pump, [&] { return client.snapshot().players.size() == 3; }));
+  EXPECT_NE(client.snapshot().state.local_player_slot, first_slot);
+  const auto players = other.snapshot().players;
+  const auto found = std::ranges::find(players, id, &PlayerProfile::player_id);
+  ASSERT_NE(found, players.end());
+  EXPECT_EQ(found->player_slot, client.snapshot().state.local_player_slot);
+  host.disconnect();
+  client.disconnect();
+  other.disconnect();
+  ASSERT_TRUE(host.host(hosting));
+  joining.port = host.local_port();
+  ASSERT_TRUE(client.connect(joining));
+  ASSERT_TRUE(pump_until(pump, [&] { return client.snapshot().players.size() == 2; }));
+  EXPECT_EQ(host.snapshot().players.front().player_id, hosting.local_profile.player_id);
+  EXPECT_EQ(host.snapshot().players.back().player_id, id);
+}
+
+TEST(GnsTransportIntegration, DuplicateUuidsAndIdentityChangesCloseOnlyTheOffendingConnection) {
+  RecordingAdapter host_adapter;
+  RecordingAdapter client_adapter;
+  RecordingAdapter duplicate_adapter;
+  SessionController host(host_adapter);
+  SessionController client(client_adapter);
+  SessionController duplicate(duplicate_adapter);
+  ASSERT_TRUE(host.host(host_config(available_udp_port(), 3)));
+  auto joining = client_config(host.local_port());
+  const auto pump = [&] {
+    const auto now = now_ms();
+    host.pump(now);
+    client.pump(now);
+    duplicate.pump(now);
+  };
+  ASSERT_TRUE(client.connect(joining));
+  ASSERT_TRUE(pump_until(pump, [&] { return client.snapshot().players.size() == 2; }));
+  for (const auto& id : {joining.local_profile.player_id, host.local_profile().player_id}) {
+    auto copied = joining;
+    copied.local_profile.player_id = id;
+    ASSERT_TRUE(duplicate.connect(copied));
+    ASSERT_TRUE(pump_until(
+        pump, [&] { return duplicate.snapshot().state.status == SessionStatus::RECONNECTING; }));
+    EXPECT_EQ(host.snapshot().players.size(), 2u);
+    duplicate.disconnect();
+  }
+  auto forged = client.local_profile();
+  forged.player_id = PlayerId::generate();
+  const auto payload =
+      encode_control_message({.kind = ControlKind::PROFILE, .profile = forged}, 16);
+  const auto frame = encode_message_frame(FrameKind::CONTROL, forged.player_slot, payload);
+  ASSERT_TRUE(client.transport().send(client.transport().host_connection_id(), frame,
+                                      TransportLane::CONTROL_RELIABLE));
+  ASSERT_TRUE(pump_until(pump, [&] { return host.snapshot().players.size() == 1; }));
+  EXPECT_EQ(host.snapshot().players.front().player_id, host.local_profile().player_id);
 }
 
 TEST(GnsTransportIntegration, PendingGateTimesOutWithTypedRejection) {
@@ -2188,7 +2289,7 @@ TEST(GnsTransportIntegration, AdapterPolicyAllowsLiveProfilesWithoutUnlockingRea
   ASSERT_TRUE(client.set_ready(true));
   ASSERT_TRUE(pump_until(pump, [&] {
     return std::ranges::any_of(host.snapshot().players, [&](const auto& profile) {
-      return profile.player_id == client.local_profile().player_id && profile.ready;
+      return profile.player_slot == client.local_profile().player_slot && profile.ready;
     });
   }));
   auto updated = client.local_profile();
@@ -2212,8 +2313,8 @@ TEST(GnsTransportIntegration, AdapterPolicyAllowsLiveProfilesWithoutUnlockingRea
   ASSERT_TRUE(client.set_local_profile(updated));
   const auto matches = [&](const SessionController& controller) {
     return std::ranges::any_of(controller.snapshot().players, [&](const auto& value) {
-      return value.player_id == updated.player_id && value.display_name == updated.display_name &&
-             value.character == updated.character &&
+      return value.player_slot == updated.player_slot &&
+             value.display_name == updated.display_name && value.character == updated.character &&
              value.game_extension == updated.game_extension && value.steam_id == 0 && value.lan;
     });
   };
@@ -2227,7 +2328,7 @@ TEST(GnsTransportIntegration, AdapterPolicyAllowsLiveProfilesWithoutUnlockingRea
   ASSERT_TRUE(host.set_local_profile(host_profile));
   ASSERT_TRUE(pump_until(pump, [&] {
     return std::ranges::any_of(observer.snapshot().players, [](const auto& value) {
-      return value.player_id == 0 && value.display_name == "NewHost" &&
+      return value.player_slot == 0 && value.display_name == "NewHost" &&
              value.character == PlayerCharacter::DAXTER && value.steam_id == 0 && !value.lan;
     });
   }));

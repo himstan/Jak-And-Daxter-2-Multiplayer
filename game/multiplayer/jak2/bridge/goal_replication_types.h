@@ -19,7 +19,7 @@ inline constexpr size_t kMPReplicationVehicleCapacity = 64;
 inline constexpr size_t kMPReplicationAirlockCapacity =
     multiplayer::jak2::core::kMaxPlayers * multiplayer::jak2::core::kMaxAirlockStatesPerSnapshot;
 inline constexpr size_t kMPReplicationEventCapacity = 64;
-inline constexpr uint32_t kMPReplicationStateSize = 195344;
+inline constexpr uint32_t kMPReplicationStateSize = 195600;
 
 #pragma pack(push, 1)
 struct MPReplicationPlayerVehicleGOAL {
@@ -49,14 +49,14 @@ struct alignas(16) MPReplicationPlayerGOAL {
   uint8_t mission_flags;
   uint8_t departure_reason;
 };
-static_assert(sizeof(MPReplicationPlayerGOAL) == 544);
+static_assert(sizeof(MPReplicationPlayerGOAL) == 560);
 static_assert(offsetof(MPReplicationPlayerGOAL, identity) == 48);
-static_assert(offsetof(MPReplicationPlayerGOAL, vehicle) == 336);
-static_assert(offsetof(MPReplicationPlayerGOAL, transform) == 432);
-static_assert(offsetof(MPReplicationPlayerGOAL, action) == 480);
-static_assert(offsetof(MPReplicationPlayerGOAL, input) == 512);
-static_assert(offsetof(MPReplicationPlayerGOAL, generation) == 524);
-static_assert(offsetof(MPReplicationPlayerGOAL, lifecycle_generation) == 528);
+static_assert(offsetof(MPReplicationPlayerGOAL, vehicle) == 352);
+static_assert(offsetof(MPReplicationPlayerGOAL, transform) == 448);
+static_assert(offsetof(MPReplicationPlayerGOAL, action) == 496);
+static_assert(offsetof(MPReplicationPlayerGOAL, input) == 528);
+static_assert(offsetof(MPReplicationPlayerGOAL, generation) == 540);
+static_assert(offsetof(MPReplicationPlayerGOAL, lifecycle_generation) == 544);
 
 struct alignas(16) MPReplicationPedestrianSlotGOAL {
   MPReplicationPedestrianStateGOAL value;
@@ -165,20 +165,20 @@ struct alignas(16) MPReplicationFrameGOAL {
   uint32_t traffic_clear_generation;
   uint32_t boss_clear_generation;
 };
-static_assert(sizeof(MPReplicationFrameGOAL) == 92528);
+static_assert(sizeof(MPReplicationFrameGOAL) == 92656);
 static_assert(offsetof(MPReplicationFrameGOAL, players) == 16);
-static_assert(offsetof(MPReplicationFrameGOAL, world) == 4368);
-static_assert(offsetof(MPReplicationFrameGOAL, bootstrap) == 4576);
-static_assert(offsetof(MPReplicationFrameGOAL, enemies) == 21040);
-static_assert(offsetof(MPReplicationFrameGOAL, traffic) == 78400);
-static_assert(offsetof(MPReplicationFrameGOAL, bosses) == 91728);
-static_assert(offsetof(MPReplicationFrameGOAL, airlocks) == 91920);
-static_assert(offsetof(MPReplicationFrameGOAL, authority) == 92480);
+static_assert(offsetof(MPReplicationFrameGOAL, world) == 4496);
+static_assert(offsetof(MPReplicationFrameGOAL, bootstrap) == 4704);
+static_assert(offsetof(MPReplicationFrameGOAL, enemies) == 21168);
+static_assert(offsetof(MPReplicationFrameGOAL, traffic) == 78528);
+static_assert(offsetof(MPReplicationFrameGOAL, bosses) == 91856);
+static_assert(offsetof(MPReplicationFrameGOAL, airlocks) == 92048);
+static_assert(offsetof(MPReplicationFrameGOAL, authority) == 92608);
 
 struct alignas(16) MPReplicationStateGOAL {
   uint32_t abi_size;
-  uint8_t local_player_id;
-  uint8_t host_player_id;
+  uint8_t local_player_slot;
+  uint8_t host_player_slot;
   alignas(16) MPReplicationFrameGOAL local;
   alignas(16) MPReplicationFrameGOAL remote;
   uint8_t outbound_event_count;
@@ -189,8 +189,8 @@ struct alignas(16) MPReplicationStateGOAL {
 
 static_assert(sizeof(MPReplicationStateGOAL) == kMPReplicationStateSize);
 static_assert(offsetof(MPReplicationStateGOAL, local) == 16);
-static_assert(offsetof(MPReplicationStateGOAL, remote) == 92544);
-static_assert(offsetof(MPReplicationStateGOAL, outbound_event_count) == 185072);
-static_assert(offsetof(MPReplicationStateGOAL, outbound_events) == 185088);
-static_assert(offsetof(MPReplicationStateGOAL, inbound_event_count) == 190208);
-static_assert(offsetof(MPReplicationStateGOAL, inbound_events) == 190224);
+static_assert(offsetof(MPReplicationStateGOAL, remote) == 92672);
+static_assert(offsetof(MPReplicationStateGOAL, outbound_event_count) == 185328);
+static_assert(offsetof(MPReplicationStateGOAL, outbound_events) == 185344);
+static_assert(offsetof(MPReplicationStateGOAL, inbound_event_count) == 190464);
+static_assert(offsetof(MPReplicationStateGOAL, inbound_events) == 190480);

@@ -80,8 +80,8 @@
   (when (or (not state) (zero? state) (not racer) (zero? racer))
     (return #f))
   (let* ((racer-index (mp-race-racer-index state racer))
-         (player-id (mp-race-bound-player-id racer-index)))
-    (or (mp-race-racer-local-player? racer) (and (mp-session-host?) (= player-id (the-as uint MP_RACE_INVALID_INDEX))))))
+         (player-slot (mp-race-bound-player-slot racer-index)))
+    (or (mp-race-racer-local-player? racer) (and (mp-session-host?) (= player-slot (the-as uint MP_RACE_INVALID_INDEX))))))
 
 (defun race-racer-speech-ready? ((racer process))
   (and racer
@@ -438,9 +438,9 @@
 (defun mp-race-bind-player! ((state race-state) (racer racer-state) (racer-index int))
   (when (and state (nonzero? state) racer (nonzero? racer))
     (if (mp-session-in-game?)
-      (let ((player-id (mp-race-bound-player-id racer-index)))
-        (when (< player-id (the uint MP_MAX_PLAYERS))
-          (mp-race-apply-binding! state racer-index player-id)))
+      (let ((player-slot (mp-race-bound-player-slot racer-index)))
+        (when (< player-slot (the uint MP_MAX_PLAYERS))
+          (mp-race-apply-binding! state racer-index player-slot)))
       (when (mp-race-racer-local-player? racer)
         (set! (-> state i-player) racer-index)
         (logior! (-> racer flags) (racer-flags local-player)))))

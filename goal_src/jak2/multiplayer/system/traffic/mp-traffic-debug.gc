@@ -75,12 +75,12 @@
        (let ((is-local (= rider *target*))) (if (mp-target-jak? (the-as process-focusable rider)) "JAK" "DAX")))
       (else "PED"))))
 
-(defun mp-debug-get-net-seat-occupier-str ((player-id uint))
+(defun mp-debug-get-net-seat-occupier-str ((player-slot uint))
   (cond
-    ((= player-id MP_VEHICLE_RIDER_CIVILIAN_ID) "PED")
-    ((= player-id MP_INVALID_PLAYER_ID) "E")
+    ((= player-slot MP_VEHICLE_RIDER_CIVILIAN_ID) "PED")
+    ((= player-slot MP_INVALID_PLAYER_SLOT) "E")
     (else
-     (let ((record (mp-player-record-by-id player-id)))
+     (let ((record (mp-player-record-by-slot player-slot)))
        (cond
          ((mp-player-jak? record) "JAK")
          ((mp-player-daxter? record) "DAX")
@@ -92,8 +92,8 @@
       (let ((local-occupant (mp-debug-get-seat-occupier-str proc i)))
         (clear tmp)
         (if (and driver-record (nonzero? driver-record))
-          (let ((net-player-id (-> driver-record vehicle state rider-player-ids i)))
-            (format tmp " S~D:L:~S/N:~S" i local-occupant (mp-debug-get-net-seat-occupier-str net-player-id)))
+          (let ((net-player-slot (-> driver-record vehicle state rider-player-slots i)))
+            (format tmp " S~D:L:~S/N:~S" i local-occupant (mp-debug-get-net-seat-occupier-str net-player-slot)))
           (format tmp " S~D:L:~S" i local-occupant))
         (cat-string<-string seat-str tmp))))
   (none))
@@ -117,7 +117,7 @@
         (let* ((driver-record (mp-player-driver-record-by-vehicle-id net-id))
                (is-local-driven (and driver-record
                                      (nonzero? driver-record)
-                                     (= (-> driver-record identity player-id) (mp-local-player-id))))
+                                     (= (-> driver-record identity player-slot) (mp-local-player-slot))))
                (is-remote-driven (and driver-record (nonzero? driver-record) (is-record-remote-player? driver-record)))
                (type-str (symbol->string (-> proc type symbol)))
                (cur-state (if (-> proc state) (-> proc state name) 'none)))
@@ -199,7 +199,7 @@
                                             (is-record-remote-player? driver-record)))
                      (is-local-driven (and driver-record
                                            (nonzero? driver-record)
-                                           (= (-> driver-record identity player-id) (mp-local-player-id))))
+                                           (= (-> driver-record identity player-slot) (mp-local-player-slot))))
                      (is-owner (or is-local-driven (and (not is-remote-driven) *mp-traffic-local-authoritative?*))))
                 (clear text-str)
                 (mp-format-generic-veh-info proc text-str)
@@ -218,21 +218,21 @@
     (add-debug-text-3d #t (bucket-id debug-no-zbuf1) label label-pos (font-color white) (the-as vector2h #f)))
   (none))
 
-(defun mp-traffic-debug-root-color ((player-id uint))
+(defun mp-traffic-debug-root-color ((player-slot uint))
   (cond
-    ((= player-id 0) (static-rgba 0 128 255 180))
-    ((= player-id 1) (static-rgba 0 255 128 180))
-    ((= player-id 2) (static-rgba 255 192 0 180))
+    ((= player-slot 0) (static-rgba 0 128 255 180))
+    ((= player-slot 1) (static-rgba 0 255 128 180))
+    ((= player-slot 2) (static-rgba 255 192 0 180))
     (else (static-rgba 255 64 192 180))))
 
-(defun mp-draw-traffic-player-authority-label ((position vector) (player-id uint) (source-player-id uint))
+(defun mp-draw-traffic-player-authority-label ((position vector) (player-slot uint) (source-player-slot uint))
   (when (and position (nonzero? position))
     (let ((label-pos (new 'stack-no-clear 'vector)))
       (vector-copy! label-pos position)
       (set! (-> label-pos y) (+ (-> label-pos y) (meters 3.0)))
       (add-debug-text-3d #t
                          (bucket-id debug-no-zbuf1)
-                         (the-as string (format #f "P~D -> ROOT P~D" player-id source-player-id))
+                         (the-as string (format #f "P~D -> ROOT P~D" player-slot source-player-slot))
                          label-pos
                          (font-color white)
                          (the-as vector2h #f))))
@@ -240,15 +240,15 @@
 
 (defun mp-draw-traffic-authority-bubbles ()
   (when (and *mp-traffic-bubble-debug?* (mp-session-in-game?))
-    (mp-for-each-player-record (player-id record)
+    (mp-for-each-player-record (player-slot record)
       (let ((player-pos (mp-player-record-position record))
-            (source-player-id (mp-traffic-authority-for-player *mp-traffic-authority-assignments*
-                                                               (the-as uint player-id))))
-        (when (and player-pos (nonzero? player-pos) (< source-player-id (the uint MP_MAX_PLAYERS)))
-          (let ((root-color (mp-traffic-debug-root-color source-player-id)))
+            (source-player-slot (mp-traffic-authority-for-player *mp-traffic-authority-assignments*
+                                                                 (the-as uint player-slot))))
+        (when (and player-pos (nonzero? player-pos) (< source-player-slot (the uint MP_MAX_PLAYERS)))
+          (let ((root-color (mp-traffic-debug-root-color source-player-slot)))
             (add-debug-sphere #t (bucket-id debug-no-zbuf1) player-pos (meters 2.0) root-color)
-            (mp-draw-traffic-player-authority-label player-pos (the-as uint player-id) source-player-id)
-            (if (= source-player-id (the-as uint player-id))
+            (mp-draw-traffic-player-authority-label player-pos (the-as uint player-slot) source-player-slot)
+            (if (= source-player-slot (the-as uint player-slot))
               (begin
                 (mp-draw-traffic-bubble-ring player-pos
                                              MP_TRAFFIC_AUTHORITY_ACQUIRE_DISTANCE
@@ -258,7 +258,7 @@
                                              MP_TRAFFIC_AUTHORITY_RETAIN_DISTANCE
                                              (static-rgba 255 255 255 96)
                                              "RETAIN <=310m"))
-              (let ((root-record (mp-player-record-by-id source-player-id)))
+              (let ((root-record (mp-player-record-by-slot source-player-slot)))
                 (when (and root-record (nonzero? root-record))
                   (let ((root-pos (mp-player-record-position root-record)))
                     (when (and root-pos (nonzero? root-pos))
@@ -276,7 +276,7 @@
             "SYNC: ~S  SUPPRESSED: ~S~%"
             (if *mp-traffic-sync-active* "YES" "NO")
             (if *mp-traffic-suppressed* "YES" "NO"))
-    (mp-for-each-player-record (player-id record)
+    (mp-for-each-player-record (player-slot record)
       (when (and (is-record-remote-player? record)
                  *target*
                  (nonzero? *target*)
@@ -286,7 +286,7 @@
           (when (and position (nonzero? position))
             (format *stdcon*
                     "PLAYER ~D DIST: ~m~%"
-                    player-id
+                    player-slot
                     (vector-vector-distance (-> *target* root trans) position))))))
     (format *stdcon* "-------------------------~%"))
   (mp-draw-traffic-authority-bubbles)

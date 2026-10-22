@@ -40,11 +40,11 @@
   (selected-player-name 0))
 
 (deftype mp-spectate-options (structure)
-  ((flags                mp-spectate-flags)
-   (preferred-player-id  uint8)
-   (eligible-player-mask uint32)
-   (custom-widget-index  uint32)
-   (layout               mp-overlay-layout :inline)))
+  ((flags                 mp-spectate-flags)
+   (preferred-player-slot uint8)
+   (eligible-player-mask  uint32)
+   (custom-widget-index   uint32)
+   (layout                mp-overlay-layout :inline)))
 
 (defenum mp-spectate-phase
   :type uint32
@@ -75,8 +75,8 @@
   ((owner                symbol)
    (phase                mp-spectate-phase)
    (options              mp-spectate-options :inline)
-   (selected-player-id   uint8)
-   (camera-player-id     uint8)
+   (selected-player-slot uint8)
+   (camera-player-slot   uint8)
    (level-request-owned? symbol)
    (overlay              (pointer mp-overlay-layout-process))
    (anchor               mp-spectate-anchor-state :inline)

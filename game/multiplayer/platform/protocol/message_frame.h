@@ -16,12 +16,12 @@ enum class FrameKind : uint8_t {
 
 struct MessageFrame {
   FrameKind kind = FrameKind::GAMEPLAY;
-  PlayerId origin = kInvalidPlayerId;
+  PlayerSlot origin = kInvalidPlayerSlot;
   std::span<const uint8_t> payload;
 };
 
 std::vector<uint8_t> encode_message_frame(FrameKind kind,
-                                          PlayerId origin,
+                                          PlayerSlot origin,
                                           std::span<const uint8_t> payload);
 bool decode_message_frame(std::span<const uint8_t> bytes, MessageFrame& frame);
 

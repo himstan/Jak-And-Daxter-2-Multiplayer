@@ -66,8 +66,9 @@ void RuntimeWorker::persist_profile() {
   if (runtime_.load_profile(stored) && stored.display_name == profile.display_name &&
       stored.preferred_character == profile.character)
     return;
-  runtime_.save_profile(
-      {.display_name = profile.display_name, .preferred_character = profile.character});
+  runtime_.save_profile({.player_id = stored.player_id,
+                         .display_name = profile.display_name,
+                         .preferred_character = profile.character});
 }
 
 void RuntimeWorker::update_discovery() {

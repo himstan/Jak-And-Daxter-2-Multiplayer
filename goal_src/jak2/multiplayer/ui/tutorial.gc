@@ -33,7 +33,7 @@
   (when (and (nonnull? *target* (-> *target* control))
              (mp-target-jak? *target*)
              (not (nonnull? (get-jak-rider *target*))))
-    (mp-for-each-player-target (player-id record player)
+    (mp-for-each-player-target (player-slot record player)
       (when (and (nonnull? record player (-> player control))
                  (mp-remote-gameplay-player-connected? record)
                  (mp-target-daxter? player)

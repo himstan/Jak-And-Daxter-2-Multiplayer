@@ -183,7 +183,8 @@ bool MultiplayerRuntime::load_profile(StoredPlayerProfile& profile) const {
 
 bool MultiplayerRuntime::save_profile(const StoredPlayerProfile& profile) {
   std::lock_guard lock(mutex_);
-  if (!profile_lease_ || !save_player_profile(*profile_lease_, profile))
+  if (!profile_lease_ || profile.player_id != stored_profile_.player_id ||
+      !save_player_profile(*profile_lease_, profile))
     return false;
   stored_profile_ = profile;
   return true;

@@ -239,14 +239,15 @@
 
 (defun mp-waypoint-remote-level-fingerprint ()
   (let ((fingerprint (the uint 0)))
-    (mp-for-each-player-record (player-id record)
+    (mp-for-each-player-record (player-slot record)
       (when (and (is-record-remote-player? record) (>= (-> record connection activity) (mp-player-activity lobby)))
-        (set! fingerprint (the-as uint (logior fingerprint (shl (mp-player-primary-level-id record) (* player-id 8)))))))
+        (set! fingerprint
+              (the-as uint (logior fingerprint (shl (mp-player-primary-level-id record) (* player-slot 8)))))))
     fingerprint))
 
 (defun mp-waypoint-all-connected-levels-match? ((local-level-id uint))
   (let ((found-remote? #f))
-    (mp-for-each-player-record (player-id record)
+    (mp-for-each-player-record (player-slot record)
       (when (and (is-record-remote-player? record) (>= (-> record connection activity) (mp-player-activity lobby)))
         (set! found-remote? #t)
         (when (!= local-level-id (mp-player-primary-level-id record))

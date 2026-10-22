@@ -17,8 +17,8 @@ inline constexpr size_t kReplicationEventCapacity = 256;
 
 struct LocalReplicationFrame {
   uint32_t sample_time_ms = 0;
-  core::PlayerId local_player_id = core::kInvalidPlayerId;
-  core::PlayerId host_player_id = core::kInvalidPlayerId;
+  core::PlayerSlot local_player_slot = core::kInvalidPlayerSlot;
+  core::PlayerSlot host_player_slot = core::kInvalidPlayerSlot;
   std::array<core::PlayerIdentity, core::kMaxPlayers> identities = {};
   std::array<core::PlayerState, core::kMaxPlayers> players = {};
   std::optional<core::PlayerVehicleState> player_vehicle;
@@ -32,7 +32,7 @@ struct LocalReplicationFrame {
   std::array<core::BossState, 2> bosses = {};
   core::AirlockSnapshot airlocks = {};
   core::TrafficAuthority traffic_authority = {};
-  core::PlayerId selected_traffic_authority = core::kInvalidPlayerId;
+  core::PlayerSlot selected_traffic_authority = core::kInvalidPlayerSlot;
 };
 
 struct PresentationTarget {
@@ -65,7 +65,7 @@ struct RemoteReplicationFrame {
   std::array<PresentationTarget, 2> boss_targets = {};
   std::array<core::AirlockSnapshot, core::kMaxPlayers> airlocks = {};
   core::TrafficAuthority traffic_authority = {};
-  core::PlayerId selected_traffic_authority = core::kInvalidPlayerId;
+  core::PlayerSlot selected_traffic_authority = core::kInvalidPlayerSlot;
   uint64_t presented_ms = 0;
   uint32_t generation = 0;
   uint32_t enemy_generation = 0;
@@ -108,9 +108,10 @@ class ReplicationMailbox {
     return inbound_events_.push_back(events);
   }
 
-  void discard_player_events(core::PlayerId player_id) {
-    inbound_events_.erase_if(
-        [player_id](const core::GameEvent& event) { return event.source_player_id == player_id; });
+  void discard_player_events(core::PlayerSlot player_slot) {
+    inbound_events_.erase_if([player_slot](const core::GameEvent& event) {
+      return event.source_player_slot == player_slot;
+    });
   }
 
   std::vector<core::GameEvent> take_inbound_events(const size_t max_count) {

@@ -234,7 +234,7 @@
     (set! (-> v0-0 process) (the-as process-drawable arg0))
     (set! (-> v0-0 ripple) #f)
     (set! (-> v0-0 pc-darkjak-interp) -1.0)
-    (set! (-> v0-0 pc-eye-instance-id) MP_INVALID_PLAYER_ID)
+    (set! (-> v0-0 pc-eye-instance-id) MP_INVALID_PLAYER_SLOT)
     (dotimes (skin-slot MP_PLAYER_SKIN_SLOT_COUNT)
       (set! (-> v0-0 pc-player-tint-colors skin-slot) #x000000)
       (set! (-> v0-0 pc-player-tint-strengths skin-slot) 0.0))

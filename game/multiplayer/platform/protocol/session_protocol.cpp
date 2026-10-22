@@ -86,13 +86,14 @@ bool valid_character(const PlayerCharacter character) {
 bool encode_profile(std::vector<uint8_t>& out,
                     const PlayerProfile& profile,
                     const uint16_t maximum_extension_bytes) {
-  if (profile.player_id == kInvalidPlayerId ||
+  if (profile.player_slot == kInvalidPlayerSlot || !profile.player_id.valid() ||
       profile.display_name.size() > kMaximumDisplayNameBytes ||
       profile.game_extension.size() > maximum_extension_bytes ||
       profile.game_extension.size() > (std::numeric_limits<uint16_t>::max)() ||
       !valid_character(profile.character))
     return false;
-  out.push_back(profile.player_id);
+  out.push_back(profile.player_slot);
+  out.insert(out.end(), profile.player_id.bytes.begin(), profile.player_id.bytes.end());
   out.push_back(static_cast<uint8_t>(profile.character));
   out.push_back(profile.ready ? 1 : 0);
   out.push_back(static_cast<uint8_t>(profile.display_name.size()));
@@ -113,10 +114,16 @@ bool decode_profile(const std::span<const uint8_t> bytes,
   uint8_t name_size = 0;
   uint16_t extension_size = 0;
   uint8_t lan = 0;
-  if (!read_u8(bytes, cursor, profile.player_id) || !read_u8(bytes, cursor, character) ||
+  if (!read_u8(bytes, cursor, profile.player_slot) ||
+      bytes.size() - cursor < profile.player_id.bytes.size())
+    return false;
+  std::copy_n(bytes.begin() + cursor, profile.player_id.bytes.size(),
+              profile.player_id.bytes.begin());
+  cursor += profile.player_id.bytes.size();
+  if (!profile.player_id.valid() || !read_u8(bytes, cursor, character) ||
       !read_u8(bytes, cursor, ready) || !read_u8(bytes, cursor, name_size) ||
       !read_u16(bytes, cursor, extension_size) || !read_u64(bytes, cursor, profile.steam_id) ||
-      !read_u8(bytes, cursor, lan) || profile.player_id >= maximum_players || ready > 1 ||
+      !read_u8(bytes, cursor, lan) || profile.player_slot >= maximum_players || ready > 1 ||
       lan > 1 || name_size > kMaximumDisplayNameBytes || extension_size > maximum_extension_bytes ||
       bytes.size() - cursor < static_cast<size_t>(name_size) + extension_size)
     return false;
@@ -188,10 +195,10 @@ std::vector<uint8_t> encode_control_message(const ControlMessage& message,
       }
       break;
     case ControlKind::DEPARTURE:
-      if (message.player_id == kInvalidPlayerId ||
+      if (message.player_slot == kInvalidPlayerSlot ||
           message.reason > static_cast<uint8_t>(PlayerDepartureReason::KICKED))
         return {};
-      out.push_back(message.player_id);
+      out.push_back(message.player_slot);
       out.push_back(message.reason);
       break;
     case ControlKind::PLAYER_PINGS:
@@ -272,8 +279,8 @@ bool decode_control_message(const std::span<const uint8_t> bytes,
       break;
     }
     case ControlKind::DEPARTURE:
-      if (!read_u8(bytes, cursor, message.player_id) || !read_u8(bytes, cursor, message.reason) ||
-          message.player_id >= maximum_players ||
+      if (!read_u8(bytes, cursor, message.player_slot) || !read_u8(bytes, cursor, message.reason) ||
+          message.player_slot >= maximum_players ||
           message.reason > static_cast<uint8_t>(PlayerDepartureReason::KICKED))
         return false;
       break;
@@ -377,11 +384,11 @@ bool decode_client_gate(const std::span<const uint8_t> bytes, ClientGate& gate) 
 std::vector<uint8_t> encode_server_gate(const ServerGate& gate) {
   std::vector<uint8_t> out(kGateMagic.begin(), kGateMagic.end());
   if (gate.accepted) {
-    if (gate.player_id == kInvalidPlayerId || gate.player_capacity < 2)
+    if (gate.player_slot == kInvalidPlayerSlot || gate.player_capacity < 2)
       return {};
     out.push_back(kAcceptedGateKind);
-    out.push_back(gate.player_id);
-    out.push_back(gate.host_player_id);
+    out.push_back(gate.player_slot);
+    out.push_back(gate.host_player_slot);
     out.push_back(gate.player_capacity);
   } else {
     if (gate.rejection == RejectionReason::NONE)
@@ -398,9 +405,10 @@ bool decode_server_gate(const std::span<const uint8_t> bytes, ServerGate& gate) 
   gate = {};
   size_t cursor = 0;
   if (read_gate_header(bytes, kAcceptedGateKind, cursor)) {
-    if (!read_u8(bytes, cursor, gate.player_id) || !read_u8(bytes, cursor, gate.host_player_id) ||
+    if (!read_u8(bytes, cursor, gate.player_slot) ||
+        !read_u8(bytes, cursor, gate.host_player_slot) ||
         !read_u8(bytes, cursor, gate.player_capacity) || cursor != bytes.size() ||
-        gate.player_id == kInvalidPlayerId || gate.player_capacity < 2)
+        gate.player_slot == kInvalidPlayerSlot || gate.player_capacity < 2)
       return false;
     gate.accepted = true;
     return true;

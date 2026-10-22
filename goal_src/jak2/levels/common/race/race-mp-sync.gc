@@ -41,8 +41,8 @@
 (define-extern mp-race-commit-lap! (function race-state int none))
 (define-extern mp-race-reconcile-progress! (function race-state int int int time-frame none))
 
-(defun mp-race-player-bit ((player-id uint))
-  (if (< player-id (the uint MP_MAX_PLAYERS)) (the-as uint (ash 1 player-id)) (the uint 0)))
+(defun mp-race-player-bit ((player-slot uint))
+  (if (< player-slot (the uint MP_MAX_PLAYERS)) (the-as uint (ash 1 player-slot)) (the uint 0)))
 
 (defun mp-race-racer-bit ((racer-index int))
   (if (and (>= racer-index 0) (< racer-index MP_RACE_MAX_RACERS)) (the-as uint (ash 1 racer-index)) (the uint 0)))
@@ -66,7 +66,7 @@
 
 (defun mp-race-record-roster-ready? ((record mp-player-record))
   (and (mp-race-record-connected? record)
-       (or (= (-> record identity player-id) (mp-local-player-id))
+       (or (= (-> record identity player-slot) (mp-local-player-slot))
            (>= (-> record connection activity) (mp-player-activity lobby)))))
 
 (defun mp-race-reset-runtime! ()
@@ -113,7 +113,7 @@
   (+! (-> *mp-race-sync-state* sequence) 1)
   (-> *mp-race-sync-state* sequence))
 
-(defun race-log-event! ((direction symbol) (source-player-id uint) (details mp-race-event-data))
+(defun race-log-event! ((direction symbol) (source-player-slot uint) (details mp-race-event-data))
   (when (nonnull? details)
     (log 'debug
          ("[Race-MP] ~A action=~A source=~D player=~D racer=~D"
@@ -130,8 +130,8 @@
             ((MP_RACE_ACTION_CONFIG_REQUEST) 'config-request)
             ((MP_RACE_ACTION_FINISH_DEADLINE) 'finish-deadline)
             (else 'unknown))
-          source-player-id
-          (-> details player-id)
+          source-player-slot
+          (-> details player-slot)
           (-> details racer-index))
          (" generation=~D race=~D sequence=~D time=~D"
           (-> details generation)
@@ -147,7 +147,7 @@
 
 (defun mp-race-enqueue-event! ((action uint)
                                (racer-index uint)
-                               (player-id uint)
+                               (player-slot uint)
                                (value0 int)
                                (value1 int)
                                (event-time time-frame))
@@ -157,14 +157,14 @@
       (set! (-> details generation) (-> *mp-race-sync-state* generation))
       (set! (-> details race-id) (the-as int8 (-> *mp-race-sync-state* race-id)))
       (set! (-> details racer-index) (the-as uint8 racer-index))
-      (set! (-> details player-id) (the-as uint8 player-id))
+      (set! (-> details player-slot) (the-as uint8 player-slot))
       (set! (-> details player-mask) (the-as uint8 (-> *mp-race-sync-state* player-mask)))
       (set! (-> details open-racer-mask) (the-as uint16 (-> *mp-race-sync-state* open-racer-mask)))
       (set! (-> details value0) value0)
       (set! (-> details value1) value1)
       (set! (-> details sequence) (mp-race-next-sequence!))
       (set! (-> details event-time) event-time)
-      (race-log-event! 'send (mp-local-player-id) details)
+      (race-log-event! 'send (mp-local-player-slot) details)
       (mp-event-enqueue-race! details)))
   (none))
 
@@ -190,7 +190,7 @@
             (+ (mp-race-current-clock) (* (seconds 1) (max 1 (min 600 *stadium-race-finish-seconds*)))))
       (mp-race-enqueue-event! MP_RACE_ACTION_FINISH_DEADLINE
                               (the uint MP_RACE_INVALID_INDEX)
-                              MP_INVALID_PLAYER_ID
+                              MP_INVALID_PLAYER_SLOT
                               0
                               0
                               (-> sync finish-deadline))))
@@ -198,8 +198,8 @@
 
 (defun mp-race-count-players ((player-mask uint))
   (let ((player-count 0))
-    (dotimes (player-id MP_MAX_PLAYERS)
-      (when (logtest? player-mask (mp-race-player-bit (the-as uint player-id)))
+    (dotimes (player-slot MP_MAX_PLAYERS)
+      (when (logtest? player-mask (mp-race-player-bit (the-as uint player-slot)))
         (+! player-count 1)))
     player-count))
 
@@ -236,18 +236,18 @@
 
 (defun mp-race-build-player-mask ()
   (let ((player-mask (the uint 0)))
-    (mp-for-each-player-record (player-id record)
+    (mp-for-each-player-record (player-slot record)
       (when (mp-race-record-roster-ready? record)
-        (set! player-mask (logior player-mask (mp-race-player-bit (the-as uint player-id))))))
+        (set! player-mask (logior player-mask (mp-race-player-bit (the-as uint player-slot))))))
     player-mask))
 
 (defun mp-race-connected-remote-mask ()
   (let ((connected-mask (the uint 0)))
-    (mp-for-each-player-record (player-id record)
+    (mp-for-each-player-record (player-slot record)
       (when (and (mp-race-record-connected? record)
                  (= (-> record connection activity) (mp-player-activity in-game))
                  (is-record-remote-player? record))
-        (set! connected-mask (logior connected-mask (mp-race-player-bit (the-as uint player-id))))))
+        (set! connected-mask (logior connected-mask (mp-race-player-bit (the-as uint player-slot))))))
     connected-mask))
 
 (defun mp-race-player-only? ((racer-info race-racer-info))
@@ -331,7 +331,7 @@
     (set! (-> *mp-race-sync-state* catchup-player-mask) (mp-race-connected-remote-mask))
     (mp-race-enqueue-event! MP_RACE_ACTION_CONFIG
                             (the uint MP_RACE_INVALID_INDEX)
-                            MP_INVALID_PLAYER_ID
+                            MP_INVALID_PLAYER_SLOT
                             (-> *mp-race-sync-state* active-racer-count)
                             player-count
                             (mp-race-current-clock))
@@ -341,7 +341,7 @@
   (when (and (not (mp-session-host?)) info (nonzero? info))
     (mp-race-enqueue-event! MP_RACE_ACTION_CONFIG_REQUEST
                             (the uint MP_RACE_INVALID_INDEX)
-                            (mp-local-player-id)
+                            (mp-local-player-slot)
                             (the-as int (-> info id))
                             0
                             (mp-race-current-clock)))
@@ -393,12 +393,12 @@
   (and (mp-session-in-game?) (logtest? (-> *mp-race-sync-state* retired-racer-mask) (mp-race-racer-bit racer-index))))
 
 (defun mp-race-local-player? ()
-  (let ((player-id (mp-local-player-id)))
+  (let ((player-slot (mp-local-player-slot)))
     (and (mp-session-in-game?)
          *mp-race-sync-state*
          (nonzero? *mp-race-sync-state*)
-         (< player-id (the uint MP_MAX_PLAYERS))
-         (logtest? (-> *mp-race-sync-state* player-mask) (mp-race-player-bit player-id)))))
+         (< player-slot (the uint MP_MAX_PLAYERS))
+         (logtest? (-> *mp-race-sync-state* player-mask) (mp-race-player-bit player-slot)))))
 
 (defun mp-race-racer-local-player? ((racer racer-state))
   (when (and racer (nonzero? racer))
@@ -408,14 +408,14 @@
         (return (= (-> (the-as vehicle vehicle) net-id) (-> local-record vehicle vehicle-id))))))
   #f)
 
-(defun mp-race-bound-player-id ((racer-index int))
+(defun mp-race-bound-player-slot ((racer-index int))
   (if (and (>= racer-index 0) (< racer-index MP_RACE_MAX_RACERS))
     (the-as uint (-> *mp-race-sync-state* bound-player-by-racer racer-index))
-    MP_INVALID_PLAYER_ID))
+    MP_INVALID_PLAYER_SLOT))
 
-(defun mp-race-bound-racer-index ((player-id uint))
-  (if (< player-id (the uint MP_MAX_PLAYERS))
-    (the-as int (-> *mp-race-sync-state* bound-racer-by-player player-id))
+(defun mp-race-bound-racer-index ((player-slot uint))
+  (if (< player-slot (the uint MP_MAX_PLAYERS))
+    (the-as int (-> *mp-race-sync-state* bound-racer-by-player player-slot))
     (the-as int MP_RACE_INVALID_INDEX)))
 
 (defun mp-race-clear-bound-racer-state! ((state race-state) (racer-index int))
@@ -432,57 +432,57 @@
       (set! (-> state i-player) -1)))
   (none))
 
-(defun mp-race-reset-player-result! ((player-id uint))
-  (set! (-> *mp-race-sync-state* bound-racer-by-player player-id) MP_RACE_INVALID_INDEX)
-  (set! (-> *mp-race-sync-state* player-status player-id) (the-as uint8 MP_RACE_STATUS_ACTIVE))
-  (set! (-> *mp-race-sync-state* result-place player-id) -1)
-  (set! (-> *mp-race-sync-state* last-progress-time player-id) (the-as time-frame 0))
-  (set! (-> *mp-race-sync-state* result-finish-time player-id) (the-as time-frame 0))
-  (logclear! (-> *mp-race-sync-state* dnf-request-mask) (mp-race-player-bit player-id))
+(defun mp-race-reset-player-result! ((player-slot uint))
+  (set! (-> *mp-race-sync-state* bound-racer-by-player player-slot) MP_RACE_INVALID_INDEX)
+  (set! (-> *mp-race-sync-state* player-status player-slot) (the-as uint8 MP_RACE_STATUS_ACTIVE))
+  (set! (-> *mp-race-sync-state* result-place player-slot) -1)
+  (set! (-> *mp-race-sync-state* last-progress-time player-slot) (the-as time-frame 0))
+  (set! (-> *mp-race-sync-state* result-finish-time player-slot) (the-as time-frame 0))
+  (logclear! (-> *mp-race-sync-state* dnf-request-mask) (mp-race-player-bit player-slot))
   (none))
 
-(defun mp-race-clear-player-binding! ((state race-state) (player-id uint))
-  (when (or (>= player-id (the uint MP_MAX_PLAYERS)) (not *mp-race-sync-state*) (zero? *mp-race-sync-state*))
+(defun mp-race-clear-player-binding! ((state race-state) (player-slot uint))
+  (when (or (>= player-slot (the uint MP_MAX_PLAYERS)) (not *mp-race-sync-state*) (zero? *mp-race-sync-state*))
     (return #f))
-  (let ((racer-index (mp-race-bound-racer-index player-id)))
+  (let ((racer-index (mp-race-bound-racer-index player-slot)))
     (when (and (>= racer-index 0) (< racer-index MP_RACE_MAX_RACERS))
       (mp-race-clear-bound-racer-state! state racer-index))
-    (mp-race-reset-player-result! player-id))
+    (mp-race-reset-player-result! player-slot))
   #t)
 
 (defun mp-race-clear-stale-bindings! ((state race-state) (player-mask uint) (open-mask uint))
   (dotimes (player-index MP_MAX_PLAYERS)
-    (let* ((player-id (the-as uint player-index))
-           (racer-index (mp-race-bound-racer-index player-id)))
+    (let* ((player-slot (the-as uint player-index))
+           (racer-index (mp-race-bound-racer-index player-slot)))
       (when (and (>= racer-index 0)
                  (< racer-index MP_RACE_MAX_RACERS)
-                 (or (not (logtest? player-mask (mp-race-player-bit player-id)))
+                 (or (not (logtest? player-mask (mp-race-player-bit player-slot)))
                      (not (logtest? open-mask (mp-race-racer-bit racer-index)))))
-        (mp-race-clear-player-binding! state player-id))))
+        (mp-race-clear-player-binding! state player-slot))))
   (none))
 
 (defun mp-race-retained-racer-mask ((player-mask uint))
   (let ((retained-mask (the uint 0)))
     (dotimes (racer-index MP_RACE_MAX_RACERS)
-      (let ((player-id (mp-race-bound-player-id racer-index)))
-        (when (and (< player-id (the uint MP_MAX_PLAYERS))
-                   (logtest? player-mask (mp-race-player-bit player-id))
-                   (= (the-as uint (-> *mp-race-sync-state* player-status player-id)) MP_RACE_STATUS_ACTIVE))
+      (let ((player-slot (mp-race-bound-player-slot racer-index)))
+        (when (and (< player-slot (the uint MP_MAX_PLAYERS))
+                   (logtest? player-mask (mp-race-player-bit player-slot))
+                   (= (the-as uint (-> *mp-race-sync-state* player-status player-slot)) MP_RACE_STATUS_ACTIVE))
           (set! retained-mask (logior retained-mask (mp-race-racer-bit racer-index))))))
     retained-mask))
 
-(defun mp-race-apply-binding! ((state race-state) (racer-index int) (player-id uint))
+(defun mp-race-apply-binding! ((state race-state) (racer-index int) (player-slot uint))
   (when (or (not state)
             (zero? state)
             (< racer-index 0)
             (>= racer-index (-> state racer-count))
-            (>= player-id (the uint MP_MAX_PLAYERS)))
+            (>= player-slot (the uint MP_MAX_PLAYERS)))
     (return #f))
   (let ((racer (-> state racer-array racer-index))
-        (record (mp-player-record-by-id player-id)))
+        (record (mp-player-record-by-slot player-slot)))
     (when (and racer (nonzero? racer) record (nonzero? record))
       (logclear! (-> racer flags) (racer-flags local-player remote-player))
-      (if (= player-id (mp-local-player-id))
+      (if (= player-slot (mp-local-player-slot))
         (begin
           (set! (-> state i-player) racer-index)
           (logior! (-> racer flags) (racer-flags local-player)))
@@ -493,9 +493,9 @@
 (defun mp-race-apply-bindings! ((state race-state))
   (when (and state (nonzero? state))
     (dotimes (racer-index (-> state racer-count))
-      (let ((player-id (mp-race-bound-player-id racer-index)))
-        (when (< player-id (the uint MP_MAX_PLAYERS))
-          (mp-race-apply-binding! state racer-index player-id)))))
+      (let ((player-slot (mp-race-bound-player-slot racer-index)))
+        (when (< player-slot (the uint MP_MAX_PLAYERS))
+          (mp-race-apply-binding! state racer-index player-slot)))))
   (none))
 
 (defun mp-race-host-binding-record ((state race-state) (racer-index int))
@@ -513,24 +513,24 @@
     (return #f))
   (let ((record (mp-race-host-binding-record state racer-index)))
     (when (and record (nonzero? record))
-      (let* ((player-id (the-as uint (-> record identity player-id)))
-             (player-bit (mp-race-player-bit player-id))
-             (current-racer (mp-race-bound-racer-index player-id))
-             (current-player (mp-race-bound-player-id racer-index)))
+      (let* ((player-slot (the-as uint (-> record identity player-slot)))
+             (player-bit (mp-race-player-bit player-slot))
+             (current-racer (mp-race-bound-racer-index player-slot))
+             (current-player (mp-race-bound-player-slot racer-index)))
         (when (and (nonzero? player-bit)
                    (logtest? (-> *mp-race-sync-state* player-mask) player-bit)
                    (or (= current-racer (the-as int MP_RACE_INVALID_INDEX)) (= current-racer racer-index))
-                   (or (= current-player (the-as uint MP_RACE_INVALID_INDEX)) (= current-player player-id)))
+                   (or (= current-player (the-as uint MP_RACE_INVALID_INDEX)) (= current-player player-slot)))
           (when (= current-player (the-as uint MP_RACE_INVALID_INDEX))
-            (set! (-> *mp-race-sync-state* bound-player-by-racer racer-index) (the-as uint8 player-id))
-            (set! (-> *mp-race-sync-state* bound-racer-by-player player-id) (the-as uint8 racer-index))
+            (set! (-> *mp-race-sync-state* bound-player-by-racer racer-index) (the-as uint8 player-slot))
+            (set! (-> *mp-race-sync-state* bound-racer-by-player player-slot) (the-as uint8 racer-index))
             (mp-race-enqueue-event! MP_RACE_ACTION_BIND_COMMIT
                                     (the-as uint racer-index)
-                                    player-id
+                                    player-slot
                                     0
                                     0
                                     (mp-race-current-clock)))
-          (mp-race-apply-binding! state racer-index player-id)))))
+          (mp-race-apply-binding! state racer-index player-slot)))))
   #t)
 
 (defun mp-race-ai-map-icon ((rider uint))
@@ -619,16 +619,16 @@
   (let ((racer-index (+ (-> state racer-count) -1)))
     (while (>= racer-index 0)
       (when (and (mp-race-racer-open? racer-index)
-                 (= (mp-race-bound-player-id racer-index) (the-as uint MP_RACE_INVALID_INDEX))
+                 (= (mp-race-bound-player-slot racer-index) (the-as uint MP_RACE_INVALID_INDEX))
                  (not (mp-race-racer-retired? racer-index)))
         (return racer-index))
       (-! racer-index 1)))
   (the-as int MP_RACE_INVALID_INDEX))
 
-(defun mp-race-apply-dnf! ((state race-state) (player-id uint) (racer-index int))
-  (when (or (>= player-id (the uint MP_MAX_PLAYERS)) (not state) (zero? state))
+(defun mp-race-apply-dnf! ((state race-state) (player-slot uint) (racer-index int))
+  (when (or (>= player-slot (the uint MP_MAX_PLAYERS)) (not state) (zero? state))
     (return #f))
-  (set! (-> *mp-race-sync-state* player-status player-id) (the-as uint8 MP_RACE_STATUS_DNF))
+  (set! (-> *mp-race-sync-state* player-status player-slot) (the-as uint8 MP_RACE_STATUS_DNF))
   (when (= racer-index (the-as int MP_RACE_INVALID_INDEX))
     (set! racer-index (mp-race-find-unclaimed-open-racer state)))
   (when (and (>= racer-index 0) (< racer-index (-> state racer-count)))
@@ -642,11 +642,11 @@
         (mp-race-retire-racer! state racer-index))))
   #t)
 
-(defun mp-race-host-publish-dnf! ((state race-state) (player-id uint) (racer-index int))
-  (mp-race-apply-dnf! state player-id racer-index)
+(defun mp-race-host-publish-dnf! ((state race-state) (player-slot uint) (racer-index int))
+  (mp-race-apply-dnf! state player-slot racer-index)
   (mp-race-enqueue-event! MP_RACE_ACTION_DNF
                           (the-as uint racer-index)
-                          player-id
+                          player-slot
                           (the-as int MP_RACE_STATUS_DNF)
                           0
                           (mp-race-current-clock))
@@ -654,33 +654,33 @@
 
 (defun mp-race-host-update-disconnects! ((state race-state))
   (dotimes (player-index MP_MAX_PLAYERS)
-    (let* ((player-id (the-as uint player-index))
-           (player-bit (mp-race-player-bit player-id)))
+    (let* ((player-slot (the-as uint player-index))
+           (player-bit (mp-race-player-bit player-slot)))
       (when (and (logtest? (-> *mp-race-sync-state* player-mask) player-bit)
                  (= (the-as uint (-> *mp-race-sync-state* player-status player-index)) MP_RACE_STATUS_ACTIVE))
-        (let ((record (mp-player-record-by-id player-id)))
+        (let ((record (mp-player-record-by-slot player-slot)))
           (when (not (mp-race-record-connected? record))
             (log 'debug
                  ("[Race-MP] Host disconnect DNF player=~D racer=~D record-present=~A"
-                  player-id
-                  (mp-race-bound-racer-index player-id)
+                  player-slot
+                  (mp-race-bound-racer-index player-slot)
                   (nonnull? record))
                  (" joined=~D connected=~D cached=~D activity=~D"
                   (if (nonnull? record) (-> record identity joined?) 0)
                   (if (nonnull? record) (-> record connection connected?) 0)
                   (if (nonnull? record) (-> record connection state-cached?) 0)
                   (if (nonnull? record) (-> record connection activity) 0)))
-            (mp-race-host-publish-dnf! state player-id (mp-race-bound-racer-index player-id)))))))
+            (mp-race-host-publish-dnf! state player-slot (mp-race-bound-racer-index player-slot)))))))
   (none))
 
 (defun mp-race-host-dnf-active-racers! ((state race-state))
   (when (and state (nonzero? state) (mp-session-host?) (mp-session-in-game?))
-    (mp-for-each-player-record (player-id record)
-      (let ((player-bit (mp-race-player-bit (the-as uint player-id))))
+    (mp-for-each-player-record (player-slot record)
+      (let ((player-bit (mp-race-player-bit (the-as uint player-slot))))
         (when (and (logtest? (-> *mp-race-sync-state* player-mask) player-bit)
-                   (= (the-as uint (-> *mp-race-sync-state* player-status player-id)) MP_RACE_STATUS_ACTIVE))
-          (let ((racer-index (mp-race-bound-racer-index (the-as uint player-id))))
-            (mp-race-host-publish-dnf! state (the-as uint player-id) racer-index))))))
+                   (= (the-as uint (-> *mp-race-sync-state* player-status player-slot)) MP_RACE_STATUS_ACTIVE))
+          (let ((racer-index (mp-race-bound-racer-index (the-as uint player-slot))))
+            (mp-race-host-publish-dnf! state (the-as uint player-slot) racer-index))))))
   (none))
 
 (defun task-manager-has-race-finisher? ((this task-manager))
@@ -731,12 +731,12 @@
 
 (defun mp-race-host-all-players-bound? ()
   (dotimes (player-index MP_MAX_PLAYERS)
-    (let* ((player-id (the-as uint player-index))
-           (player-bit (mp-race-player-bit player-id))
+    (let* ((player-slot (the-as uint player-index))
+           (player-bit (mp-race-player-bit player-slot))
            (status (the-as uint (-> *mp-race-sync-state* player-status player-index))))
       (when (and (logtest? (-> *mp-race-sync-state* player-mask) player-bit)
                  (= status MP_RACE_STATUS_ACTIVE)
-                 (= (mp-race-bound-racer-index player-id) (the-as int MP_RACE_INVALID_INDEX)))
+                 (= (mp-race-bound-racer-index player-slot) (the-as int MP_RACE_INVALID_INDEX)))
         (return #f))))
   #t)
 
@@ -764,7 +764,7 @@
     (set! (-> *mp-race-sync-state* start-time) (the-as time-frame 0))
     (mp-race-enqueue-event! MP_RACE_ACTION_START
                             (the uint MP_RACE_INVALID_INDEX)
-                            MP_INVALID_PLAYER_ID
+                            MP_INVALID_PLAYER_SLOT
                             0
                             0
                             (mp-race-current-clock)))
@@ -781,7 +781,7 @@
           (+ (mp-race-current-clock) MP_RACE_COUNTDOWN_FRAMES MP_RACE_START_BUFFER_FRAMES))
     (mp-race-enqueue-event! MP_RACE_ACTION_START
                             (the uint MP_RACE_INVALID_INDEX)
-                            MP_INVALID_PLAYER_ID
+                            MP_INVALID_PLAYER_SLOT
                             1
                             0
                             (-> *mp-race-sync-state* start-time)))
@@ -800,12 +800,12 @@
 (defun mp-race-racer-ai-takeover? ((state race-state) (racer-index int))
   (when (and state (nonzero? state) (>= racer-index 0) (< racer-index (-> state racer-count)))
     (let ((info (-> state info))
-          (player-id (mp-race-bound-player-id racer-index)))
+          (player-slot (mp-race-bound-player-slot racer-index)))
       (when (and info
                  (nonzero? info)
                  (< racer-index (-> info racer-count))
-                 (< player-id (the uint MP_MAX_PLAYERS))
-                 (= (the-as uint (-> *mp-race-sync-state* player-status player-id)) MP_RACE_STATUS_DNF)
+                 (< player-slot (the uint MP_MAX_PLAYERS))
+                 (= (the-as uint (-> *mp-race-sync-state* player-status player-slot)) MP_RACE_STATUS_DNF)
                  (mp-race-ai-capable? (-> info racer-array racer-index)))
         (return #t))))
   #f)
@@ -814,9 +814,9 @@
   (when (not (mp-session-host?))
     (return #f))
   (let* ((racer-index (mp-race-racer-index state racer))
-         (player-id (mp-race-bound-player-id racer-index)))
-    (or (= player-id (the-as uint MP_RACE_INVALID_INDEX))
-        (= player-id (mp-local-player-id))
+         (player-slot (mp-race-bound-player-slot racer-index)))
+    (or (= player-slot (the-as uint MP_RACE_INVALID_INDEX))
+        (= player-slot (mp-local-player-slot))
         (mp-race-racer-ai-takeover? state racer-index)
         (and state
              (nonzero? state)
@@ -829,7 +829,7 @@
     (return #f))
   (let* ((racer-index (mp-race-racer-index state racer))
          (racer-bit (mp-race-racer-bit racer-index)))
-    (and (= (mp-race-bound-player-id racer-index) (mp-local-player-id))
+    (and (= (mp-race-bound-player-slot racer-index) (mp-local-player-slot))
          (not (logtest? (-> *mp-race-sync-state* pending-progress-mask) racer-bit)))))
 
 (defun mp-race-client-request-progress! ((state race-state) (racer-index int))
@@ -843,7 +843,7 @@
       (logior! (-> *mp-race-sync-state* pending-progress-mask) (mp-race-racer-bit racer-index))
       (mp-race-enqueue-event! MP_RACE_ACTION_PROGRESS_REQUEST
                               (the-as uint racer-index)
-                              (mp-local-player-id)
+                              (mp-local-player-slot)
                               (the-as int (-> racer lap-count))
                               0
                               (mp-race-current-clock))))
@@ -852,16 +852,16 @@
 (defun mp-race-host-publish-progress! ((state race-state) (racer-index int))
   (when (and (nonnull? state *mp-race-sync-state*) (>= racer-index 0) (< racer-index (-> state racer-count)))
     (let* ((racer (-> state racer-array racer-index))
-           (player-id (mp-race-bound-player-id racer-index)))
-      (when (and (< player-id (the uint MP_MAX_PLAYERS))
-                 (= (the-as uint (-> *mp-race-sync-state* player-status player-id)) MP_RACE_STATUS_ACTIVE)
+           (player-slot (mp-race-bound-player-slot racer-index)))
+      (when (and (< player-slot (the uint MP_MAX_PLAYERS))
+                 (= (the-as uint (-> *mp-race-sync-state* player-status player-slot)) MP_RACE_STATUS_ACTIVE)
                  (logtest? (-> racer flags) (racer-flags finished)))
-        (set! (-> *mp-race-sync-state* player-status player-id) (the-as uint8 MP_RACE_STATUS_FINISHED))
-        (set! (-> *mp-race-sync-state* result-place player-id) (-> racer finish-count))
+        (set! (-> *mp-race-sync-state* player-status player-slot) (the-as uint8 MP_RACE_STATUS_FINISHED))
+        (set! (-> *mp-race-sync-state* result-place player-slot) (-> racer finish-count))
         (stadium-race-host-start-finish-timer!))
       (mp-race-enqueue-event! MP_RACE_ACTION_PROGRESS_COMMIT
                               (the-as uint racer-index)
-                              player-id
+                              player-slot
                               (the-as int (-> racer lap-count))
                               (the-as int (-> racer finish-count))
                               (the-as time-frame (-> racer finish-time)))))
@@ -892,18 +892,18 @@
 (defun mp-race-request-local-dnf! ((state race-state))
   (when (or (not (mp-session-in-game?)) (not (mp-race-world-ready?)) (not state) (zero? state))
     (return #f))
-  (let* ((player-id (mp-local-player-id))
-         (player-bit (mp-race-player-bit player-id))
-         (racer-index (mp-race-bound-racer-index player-id)))
+  (let* ((player-slot (mp-local-player-slot))
+         (player-bit (mp-race-player-bit player-slot))
+         (racer-index (mp-race-bound-racer-index player-slot)))
     (when (and (nonzero? player-bit)
                (logtest? (-> *mp-race-sync-state* player-mask) player-bit)
                (not (logtest? (-> *mp-race-sync-state* dnf-request-mask) player-bit)))
       (logior! (-> *mp-race-sync-state* dnf-request-mask) player-bit)
       (if (mp-session-host?)
-        (mp-race-host-publish-dnf! state player-id racer-index)
+        (mp-race-host-publish-dnf! state player-slot racer-index)
         (mp-race-enqueue-event! MP_RACE_ACTION_DNF
                                 (the-as uint racer-index)
-                                player-id
+                                player-slot
                                 (the-as int MP_RACE_STATUS_DNF)
                                 0
                                 (mp-race-current-clock)))))
@@ -934,16 +934,16 @@
   (let ((success? (mp-race-any-human-won?)))
     (set! (-> *mp-race-sync-state* overall-success?) (if success? (the uint 1) (the uint 0)))
     (dotimes (player-index MP_MAX_PLAYERS)
-      (let* ((player-id (the-as uint player-index))
-             (player-bit (mp-race-player-bit player-id)))
+      (let* ((player-slot (the-as uint player-index))
+             (player-bit (mp-race-player-bit player-slot)))
         (when (logtest? (-> *mp-race-sync-state* player-mask) player-bit)
-          (let* ((racer-index (mp-race-bound-racer-index player-id))
+          (let* ((racer-index (mp-race-bound-racer-index player-slot))
                  (finish-time (if (and (>= racer-index 0) (< racer-index (-> state racer-count)))
                                 (the-as time-frame (-> state racer-array racer-index finish-time))
                                 (the-as time-frame 0))))
             (mp-race-enqueue-event! MP_RACE_ACTION_RESULTS
                                     (the-as uint racer-index)
-                                    player-id
+                                    player-slot
                                     (the-as int (-> *mp-race-sync-state* player-status player-index))
                                     (the-as int (-> *mp-race-sync-state* result-place player-index))
                                     finish-time)
@@ -951,7 +951,7 @@
     (set! (-> *mp-race-sync-state* results-ready?) (the uint 1))
     (mp-race-enqueue-event! MP_RACE_ACTION_RESULTS
                             (the uint MP_RACE_INVALID_INDEX)
-                            MP_INVALID_PLAYER_ID
+                            MP_INVALID_PLAYER_SLOT
                             (if success? 1 0)
                             0
                             (mp-race-current-clock)))
@@ -961,7 +961,7 @@
   (let ((player-count (mp-race-count-players (-> *mp-race-sync-state* player-mask))))
     (mp-race-enqueue-event! MP_RACE_ACTION_CONFIG
                             (the uint MP_RACE_INVALID_INDEX)
-                            MP_INVALID_PLAYER_ID
+                            MP_INVALID_PLAYER_SLOT
                             (-> *mp-race-sync-state* active-racer-count)
                             player-count
                             (mp-race-current-clock)))
@@ -969,11 +969,11 @@
 
 (defun mp-race-host-enqueue-binding-snapshot! ()
   (dotimes (racer-index (-> *mp-race-sync-state* active-racer-count))
-    (let ((player-id (mp-race-bound-player-id racer-index)))
-      (when (< player-id (the uint MP_MAX_PLAYERS))
+    (let ((player-slot (mp-race-bound-player-slot racer-index)))
+      (when (< player-slot (the uint MP_MAX_PLAYERS))
         (mp-race-enqueue-event! MP_RACE_ACTION_BIND_COMMIT
                                 (the-as uint racer-index)
-                                player-id
+                                player-slot
                                 0
                                 0
                                 (mp-race-current-clock)))))
@@ -981,14 +981,14 @@
 
 (defun mp-race-host-enqueue-player-snapshot! ((state race-state))
   (dotimes (player-index MP_MAX_PLAYERS)
-    (let* ((player-id (the-as uint player-index))
-           (player-bit (mp-race-player-bit player-id)))
+    (let* ((player-slot (the-as uint player-index))
+           (player-bit (mp-race-player-bit player-slot)))
       (when (logtest? (-> *mp-race-sync-state* player-mask) player-bit)
-        (let ((racer-index (mp-race-bound-racer-index player-id)))
+        (let ((racer-index (mp-race-bound-racer-index player-slot)))
           (if (= (the-as uint (-> *mp-race-sync-state* player-status player-index)) MP_RACE_STATUS_DNF)
             (mp-race-enqueue-event! MP_RACE_ACTION_DNF
                                     (the-as uint racer-index)
-                                    player-id
+                                    player-slot
                                     (the-as int MP_RACE_STATUS_DNF)
                                     0
                                     (mp-race-current-clock))
@@ -1001,7 +1001,7 @@
     (let ((start-time (-> *mp-race-sync-state* start-time)))
       (mp-race-enqueue-event! MP_RACE_ACTION_START
                               (the uint MP_RACE_INVALID_INDEX)
-                              MP_INVALID_PLAYER_ID
+                              MP_INVALID_PLAYER_SLOT
                               (if (nonzero? start-time) 1 0)
                               0
                               (if (nonzero? start-time) start-time (mp-race-current-clock)))))
@@ -1010,18 +1010,18 @@
 (defun mp-race-host-enqueue-results-snapshot! ()
   (when (nonzero? (-> *mp-race-sync-state* results-ready?))
     (dotimes (player-index MP_MAX_PLAYERS)
-      (let* ((player-id (the-as uint player-index))
-             (player-bit (mp-race-player-bit player-id)))
+      (let* ((player-slot (the-as uint player-index))
+             (player-bit (mp-race-player-bit player-slot)))
         (when (logtest? (-> *mp-race-sync-state* player-mask) player-bit)
           (mp-race-enqueue-event! MP_RACE_ACTION_RESULTS
-                                  (the-as uint (mp-race-bound-racer-index player-id))
-                                  player-id
+                                  (the-as uint (mp-race-bound-racer-index player-slot))
+                                  player-slot
                                   (the-as int (-> *mp-race-sync-state* player-status player-index))
                                   (the-as int (-> *mp-race-sync-state* result-place player-index))
                                   (-> *mp-race-sync-state* result-finish-time player-index)))))
     (mp-race-enqueue-event! MP_RACE_ACTION_RESULTS
                             (the uint MP_RACE_INVALID_INDEX)
-                            MP_INVALID_PLAYER_ID
+                            MP_INVALID_PLAYER_SLOT
                             (if (nonzero? (-> *mp-race-sync-state* overall-success?)) 1 0)
                             0
                             (mp-race-current-clock)))
@@ -1032,7 +1032,7 @@
     (when (!= decision MP_RACE_DECISION_NONE)
       (mp-race-enqueue-event! MP_RACE_ACTION_DECISION
                               (the uint MP_RACE_INVALID_INDEX)
-                              MP_INVALID_PLAYER_ID
+                              MP_INVALID_PLAYER_SLOT
                               (the-as int decision)
                               0
                               (mp-race-current-clock))))
@@ -1048,7 +1048,7 @@
     (when (nonzero? (-> *mp-race-sync-state* finish-deadline))
       (mp-race-enqueue-event! MP_RACE_ACTION_FINISH_DEADLINE
                               (the uint MP_RACE_INVALID_INDEX)
-                              MP_INVALID_PLAYER_ID
+                              MP_INVALID_PLAYER_SLOT
                               0
                               0
                               (-> *mp-race-sync-state* finish-deadline)))
@@ -1123,32 +1123,32 @@
 (defun mp-race-overall-success? ()
   (and (mp-race-results-ready?) (nonzero? (-> *mp-race-sync-state* overall-success?))))
 
-(defun mp-race-result-player? ((player-id uint))
+(defun mp-race-result-player? ((player-slot uint))
   (and (mp-race-results-ready?)
-       (< player-id (the uint MP_MAX_PLAYERS))
-       (logtest? (-> *mp-race-sync-state* player-mask) (mp-race-player-bit player-id))))
+       (< player-slot (the uint MP_MAX_PLAYERS))
+       (logtest? (-> *mp-race-sync-state* player-mask) (mp-race-player-bit player-slot))))
 
 (defun mp-race-result-player-at-place ((place int))
   (when (or (< place 0) (>= place MP_RACE_MAX_RACERS) (not (mp-race-results-ready?)))
     (return (the uint MP_RACE_INVALID_INDEX)))
   (dotimes (player-index MP_MAX_PLAYERS)
-    (let ((player-id (the uint player-index)))
-      (when (and (mp-race-result-player? player-id)
+    (let ((player-slot (the uint player-index)))
+      (when (and (mp-race-result-player? player-slot)
                  (= (-> *mp-race-sync-state* player-status player-index) MP_RACE_STATUS_FINISHED)
                  (= (-> *mp-race-sync-state* result-place player-index) place))
-        (return player-id))))
+        (return player-slot))))
   (the uint MP_RACE_INVALID_INDEX))
 
-(defun mp-race-result-player-dnf? ((player-id uint))
-  (and (mp-race-result-player? player-id)
-       (= (-> *mp-race-sync-state* player-status (the int player-id)) MP_RACE_STATUS_DNF)))
+(defun mp-race-result-player-dnf? ((player-slot uint))
+  (and (mp-race-result-player? player-slot)
+       (= (-> *mp-race-sync-state* player-status (the int player-slot)) MP_RACE_STATUS_DNF)))
 
-(defun mp-race-result-elapsed-time ((player-id uint))
-  (when (or (not (mp-race-result-player? player-id))
-            (!= (-> *mp-race-sync-state* player-status (the int player-id)) MP_RACE_STATUS_FINISHED))
+(defun mp-race-result-elapsed-time ((player-slot uint))
+  (when (or (not (mp-race-result-player? player-slot))
+            (!= (-> *mp-race-sync-state* player-status (the int player-slot)) MP_RACE_STATUS_FINISHED))
     (return (the-as time-frame 0)))
   (let ((start-time (-> *mp-race-sync-state* start-time))
-        (finish-time (-> *mp-race-sync-state* result-finish-time (the int player-id))))
+        (finish-time (-> *mp-race-sync-state* result-finish-time (the int player-slot))))
     (if (and (nonzero? start-time) (>= finish-time start-time)) (- finish-time start-time) (the-as time-frame 0))))
 
 (defun mp-race-host-set-decision! ((decision uint))
@@ -1156,7 +1156,7 @@
     (set! (-> *mp-race-sync-state* decision) decision)
     (mp-race-enqueue-event! MP_RACE_ACTION_DECISION
                             (the uint MP_RACE_INVALID_INDEX)
-                            MP_INVALID_PLAYER_ID
+                            MP_INVALID_PLAYER_SLOT
                             (the-as int decision)
                             0
                             (mp-race-current-clock)))
@@ -1166,7 +1166,7 @@
   (if (mp-session-in-game?) (-> *mp-race-sync-state* decision) MP_RACE_DECISION_NONE))
 
 (defun mp-race-event-from-host? ((event mp-race-event))
-  (and event (nonzero? event) (= (-> event source-player-id) (mp-host-player-id))))
+  (and event (nonzero? event) (= (-> event source-player-slot) (mp-host-player-slot))))
 
 (defun mp-race-event-current-generation? ((event mp-race-event))
   (and (nonnull? event)
@@ -1201,16 +1201,16 @@
 (defun mp-race-receive-bind! ((event mp-race-event))
   (unless (nonnull? event) (return (the-as none 0)))
   (let ((racer-index (the-as int (-> event payload racer-index)))
-        (player-id (-> event payload player-id)))
+        (player-slot (-> event payload player-slot)))
     (when (and (>= racer-index 0)
                (< racer-index MP_RACE_MAX_RACERS)
-               (< player-id (the uint MP_MAX_PLAYERS))
+               (< player-slot (the uint MP_MAX_PLAYERS))
                (mp-race-racer-open? racer-index)
-               (logtest? (-> *mp-race-sync-state* player-mask) (mp-race-player-bit player-id)))
-      (set! (-> *mp-race-sync-state* bound-player-by-racer racer-index) (the-as uint8 player-id))
-      (set! (-> *mp-race-sync-state* bound-racer-by-player player-id) (the-as uint8 racer-index))
+               (logtest? (-> *mp-race-sync-state* player-mask) (mp-race-player-bit player-slot)))
+      (set! (-> *mp-race-sync-state* bound-player-by-racer racer-index) (the-as uint8 player-slot))
+      (set! (-> *mp-race-sync-state* bound-racer-by-player player-slot) (the-as uint8 racer-index))
       (when (and *race-state* (nonzero? *race-state*))
-        (mp-race-apply-binding! *race-state* racer-index player-id))))
+        (mp-race-apply-binding! *race-state* racer-index player-slot))))
   (none))
 
 (defun mp-race-receive-start! ((event mp-race-event))
@@ -1224,18 +1224,18 @@
   (unless (nonnull? event) (return #f))
   (when (or (not *race-state*) (zero? *race-state*))
     (return #f))
-  (let* ((source-player-id (-> event source-player-id))
+  (let* ((source-player-slot (-> event source-player-slot))
          (racer-index (the-as int (-> event payload racer-index)))
-         (record (mp-player-record-by-id source-player-id)))
-    (when (or (>= source-player-id (the uint MP_MAX_PLAYERS))
+         (record (mp-player-record-by-slot source-player-slot)))
+    (when (or (>= source-player-slot (the uint MP_MAX_PLAYERS))
               (< racer-index 0)
               (>= racer-index (-> *race-state* racer-count))
               (not (mp-race-world-ready?))
               (not (logtest? (-> *race-state* flags) (race-flags begun)))
               (zero? (-> *mp-race-sync-state* start-authorized?))
-              (!= (mp-race-bound-player-id racer-index) source-player-id)
+              (!= (mp-race-bound-player-slot racer-index) source-player-slot)
               (not (mp-race-record-connected? record))
-              (!= (the-as uint (-> *mp-race-sync-state* player-status source-player-id)) MP_RACE_STATUS_ACTIVE))
+              (!= (the-as uint (-> *mp-race-sync-state* player-status source-player-slot)) MP_RACE_STATUS_ACTIVE))
       (return #f))
     (let* ((racer (-> *race-state* racer-array racer-index))
            (vehicle (the-as vehicle (handle->process-safe (-> racer racer)))))
@@ -1247,10 +1247,10 @@
     (when (or (not (mp-race-host-progress-transition-valid? *race-state* racer-index))
               (!= (-> event payload value0) (+ (the-as int (-> *race-state* racer-array racer-index lap-count)) 1))
               (<= (-> event payload event-time) (get-race-start-time))
-              (<= (-> event payload event-time) (-> *mp-race-sync-state* last-progress-time source-player-id)))
+              (<= (-> event payload event-time) (-> *mp-race-sync-state* last-progress-time source-player-slot)))
       (mp-race-host-publish-progress! *race-state* racer-index)
       (return #f))
-    (set! (-> *mp-race-sync-state* last-progress-time source-player-id) (-> event payload event-time))
+    (set! (-> *mp-race-sync-state* last-progress-time source-player-slot) (-> event payload event-time))
     (set! (-> *mp-race-sync-state* observed-checkpoint-mask racer-index) (the uint8 1))
     (mp-race-commit-lap! *race-state* racer-index)
     (mp-race-host-publish-progress! *race-state* racer-index))
@@ -1263,42 +1263,42 @@
                (>= racer-index 0) (< racer-index (-> *race-state* racer-count)))
       (logclear! (-> *mp-race-sync-state* pending-progress-mask) (mp-race-racer-bit racer-index))
       (mp-race-reconcile-progress! *race-state* racer-index (-> event payload value0) (-> event payload value1) (-> event payload event-time))
-      (let ((player-id (mp-race-bound-player-id racer-index)))
-        (when (and (< player-id (the uint MP_MAX_PLAYERS))
+      (let ((player-slot (mp-race-bound-player-slot racer-index)))
+        (when (and (< player-slot (the uint MP_MAX_PLAYERS))
                    (stadium-race? (the-as int (-> *mp-race-sync-state* race-id)))
                    (= (-> event payload value0) (-> *race-state* info lap-count))
-                   (!= (-> *mp-race-sync-state* player-status player-id) MP_RACE_STATUS_DNF))
-          (set! (-> *mp-race-sync-state* player-status player-id) (the-as uint8 MP_RACE_STATUS_FINISHED))
-          (set! (-> *mp-race-sync-state* result-place player-id) (the-as int8 (-> event payload value1)))))))
+                   (!= (-> *mp-race-sync-state* player-status player-slot) MP_RACE_STATUS_DNF))
+          (set! (-> *mp-race-sync-state* player-status player-slot) (the-as uint8 MP_RACE_STATUS_FINISHED))
+          (set! (-> *mp-race-sync-state* result-place player-slot) (the-as int8 (-> event payload value1)))))))
   (none))
 
 (defun mp-race-host-accept-dnf! ((event mp-race-event))
   (when (or (not *race-state*) (zero? *race-state*) (not (mp-race-world-ready?)))
     (return #f))
-  (let* ((player-id (-> event source-player-id))
-         (racer-index (mp-race-bound-racer-index player-id)))
-    (when (and (< player-id (the uint MP_MAX_PLAYERS))
-               (logtest? (-> *mp-race-sync-state* player-mask) (mp-race-player-bit player-id))
-               (= (the-as uint (-> *mp-race-sync-state* player-status player-id)) MP_RACE_STATUS_ACTIVE))
-      (mp-race-host-publish-dnf! *race-state* player-id racer-index)))
+  (let* ((player-slot (-> event source-player-slot))
+         (racer-index (mp-race-bound-racer-index player-slot)))
+    (when (and (< player-slot (the uint MP_MAX_PLAYERS))
+               (logtest? (-> *mp-race-sync-state* player-mask) (mp-race-player-bit player-slot))
+               (= (the-as uint (-> *mp-race-sync-state* player-status player-slot)) MP_RACE_STATUS_ACTIVE))
+      (mp-race-host-publish-dnf! *race-state* player-slot racer-index)))
   #t)
 
 (defun mp-race-receive-dnf! ((event mp-race-event))
   (unless (nonnull? event) (return (the-as none 0)))
-  (let ((player-id (-> event payload player-id))
+  (let ((player-slot (-> event payload player-slot))
         (racer-index (the-as int (-> event payload racer-index))))
-    (when (< player-id (the uint MP_MAX_PLAYERS))
-      (mp-race-apply-dnf! *race-state* player-id racer-index)))
+    (when (< player-slot (the uint MP_MAX_PLAYERS))
+      (mp-race-apply-dnf! *race-state* player-slot racer-index)))
   (none))
 
 (defun mp-race-receive-results! ((event mp-race-event))
   (unless (nonnull? event) (return (the-as none 0)))
-  (let ((player-id (-> event payload player-id)))
-    (if (< player-id (the uint MP_MAX_PLAYERS))
+  (let ((player-slot (-> event payload player-slot)))
+    (if (< player-slot (the uint MP_MAX_PLAYERS))
       (begin
-        (set! (-> *mp-race-sync-state* player-status player-id) (the-as uint8 (-> event payload value0)))
-        (set! (-> *mp-race-sync-state* result-place player-id) (the-as int8 (-> event payload value1)))
-        (set! (-> *mp-race-sync-state* result-finish-time player-id) (-> event payload event-time)))
+        (set! (-> *mp-race-sync-state* player-status player-slot) (the-as uint8 (-> event payload value0)))
+        (set! (-> *mp-race-sync-state* result-place player-slot) (the-as int8 (-> event payload value1)))
+        (set! (-> *mp-race-sync-state* result-finish-time player-slot) (-> event payload event-time)))
       (begin
         (set! (-> *mp-race-sync-state* overall-success?) (if (nonzero? (-> event payload value0)) (the uint 1) (the uint 0)))
         (set! (-> *mp-race-sync-state* results-ready?) (the uint 1)))))
@@ -1307,7 +1307,7 @@
 (defun mp-race-receive-event! ((event mp-race-event))
   (when (or (not (nonnull? event)) (zero? event))
     (return #f))
-  (race-log-event! 'receive (-> event source-player-id) (-> event payload))
+  (race-log-event! 'receive (-> event source-player-slot) (-> event payload))
   (case (-> event payload action)
     ((MP_RACE_ACTION_CONFIG) (mp-race-receive-config! event))
     ((MP_RACE_ACTION_CONFIG_REQUEST)

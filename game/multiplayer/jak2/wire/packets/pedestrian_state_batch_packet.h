@@ -20,7 +20,7 @@ struct PedestrianStateRecord {
   int32_t hit_points = 0;
   uint32_t state_id = 0;
   uint8_t flags = 0;
-  uint8_t target_player_id = kWireInvalidPlayerId;
+  uint8_t target_player_slot = kWireInvalidPlayerSlot;
   uint32_t vehicle_net_id = 0;
   uint32_t transport_id = 0;
   uint8_t transport_side = 0;
@@ -56,12 +56,12 @@ bool serialize_pedestrian_state_record(Stream& stream, RecordT&& pedestrian) {
          platform::wire::serialize_uint_bits(stream, pedestrian.hit_points, 8) &&
          platform::wire::serialize_uint_bits(stream, pedestrian.state_id, 6) &&
          platform::wire::serialize_uint_bits(stream, pedestrian.flags, 2) &&
-         platform::wire::serialize_uint_bits(stream, pedestrian.target_player_id, 4) &&
+         platform::wire::serialize_uint_bits(stream, pedestrian.target_player_slot, 4) &&
          platform::wire::serialize_u32(stream, pedestrian.vehicle_net_id) &&
          platform::wire::serialize_u32(stream, pedestrian.transport_id) &&
          platform::wire::serialize_u8(stream, pedestrian.transport_side) &&
          platform::wire::serialize_u16(stream, pedestrian.level_id) &&
-         valid_wire_player_reference(pedestrian.target_player_id);
+         valid_wire_player_reference(pedestrian.target_player_slot);
 }
 
 template <typename Stream, typename PacketT>

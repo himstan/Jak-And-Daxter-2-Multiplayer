@@ -12,7 +12,7 @@
 
 (defun open-player-list! ()
   (set! *lobby-action-player* -1)
-  (set! (-> *player-list* selected-player) (the int (mp-local-player-id)))
+  (set! (-> *player-list* selected-player) (the int (mp-local-player-slot)))
   (set! (-> *player-list* open?) #t)
   (none))
 
@@ -27,36 +27,36 @@
 
 (defun move-player-list-selection! ((step int))
   (let ((limit (player-list-limit))
-        (player-id (the int (-> *player-list* selected-player))))
+        (player-slot (the int (-> *player-list* selected-player))))
     (dotimes (attempt (+ limit -1))
-      (set! player-id (mod (+ player-id step limit) limit))
-      (when (get-player-name player-id)
-        (set! (-> *player-list* selected-player) player-id)
+      (set! player-slot (mod (+ player-slot step limit) limit))
+      (when (get-player-name player-slot)
+        (set! (-> *player-list* selected-player) player-slot)
         (return #t))))
   #f)
 
-(defun close-stale-player-actions! ((player-id int))
+(defun close-stale-player-actions! ((player-slot int))
   (when (and (lobby-player-actions-open?)
-             (or (!= *lobby-action-player* player-id) (not (lobby-player-kickable? player-id))))
+             (or (!= *lobby-action-player* player-slot) (not (lobby-player-kickable? player-slot))))
     (set! *lobby-action-player* -1))
   (none))
 
-(defun steam-player? ((player-id int))
-  (let ((connection (pc-multi-get-player-connection-type (the-as uint player-id))))
+(defun steam-player? ((player-slot int))
+  (let ((connection (pc-multi-get-player-connection-type (the-as uint player-slot))))
     (or (= connection (connection-type steam)) (= connection (connection-type friend)))))
 
-(defun player-profile-available? ((player-id int))
-  (and (steam-player? (the int (mp-local-player-id))) (steam-player? player-id)))
+(defun player-profile-available? ((player-slot int))
+  (and (steam-player? (the int (mp-local-player-slot))) (steam-player? player-slot)))
 
-(defun open-player-profile! ((player-id int))
-  (if (and (player-profile-available? player-id) (= (pc-multi-open-player-steam-profile (the-as uint player-id)) 1))
+(defun open-player-profile! ((player-slot int))
+  (if (and (player-profile-available? player-slot) (= (pc-multi-open-player-steam-profile (the-as uint player-slot)) 1))
     (sound-play "generic-beep")
     (sound-play "menu-error"))
   (none))
 
 (defun respond-player-list! ()
   (when (not (get-player-name (-> *player-list* selected-player)))
-    (set! (-> *player-list* selected-player) (the int (mp-local-player-id))))
+    (set! (-> *player-list* selected-player) (the int (mp-local-player-slot))))
   (close-stale-player-actions! (-> *player-list* selected-player))
   (when (nonzero? (logclear (cpad-pressed 0) (pad-buttons square)))
     (set! *lobby-action-player* -1))
@@ -99,35 +99,35 @@
                           LOBBY_BROWSER_HEADER_Y)
   (none))
 
-(defun player-list-name ((player-id int) (font-ctx font-context) (max-width float))
-  (let ((player-name (the-as string (get-player-name player-id))))
+(defun player-list-name ((player-slot int) (font-ctx font-context) (max-width float))
+  (let ((player-name (the-as string (get-player-name player-slot))))
     (when player-name
-      (when (mp-player-record-dead-or-dying? (mp-player-record-by-id (the-as uint player-id)))
+      (when (mp-player-record-dead-or-dying? (mp-player-record-by-slot (the-as uint player-slot)))
         (format player-name (lookup-text! *common-text* (text-id mp-player-list-dead-suffix) #f)))
       (fit-overlay-text player-name font-ctx max-width))))
 
-(defun player-list-ping ((player-id int))
-  (let ((ping (pc-multi-get-player-ping (the-as uint player-id))))
+(defun player-list-ping ((player-slot int))
+  (let ((ping (pc-multi-get-player-ping (the-as uint player-slot))))
     (if (< ping 0)
       "--"
       (begin
         (format (clear *lobby-browser-text*) (lookup-text! *common-text* (text-id mp-player-list-ping-format) #f) ping)
         *lobby-browser-text*))))
 
-(defun draw-player-list-row ((font-ctx font-context) (player-id int) (row int) (left float) (width float))
+(defun draw-player-list-row ((font-ctx font-context) (player-slot int) (row int) (left float) (width float))
   (set-scale! font-ctx LOBBY_BROWSER_ROW_SCALE)
-  (let* ((icon (connection-type-icon (pc-multi-get-player-connection-type (the-as uint player-id))))
+  (let* ((icon (connection-type-icon (pc-multi-get-player-connection-type (the-as uint player-slot))))
          (icon-width (if icon (-> (get-string-length icon font-ctx) length) 0.0))
-         (player-name (player-list-name player-id font-ctx (- (* 0.66 width) icon-width)))
+         (player-name (player-list-name player-slot font-ctx (- (* 0.66 width) icon-width)))
          (y (+ LOBBY_BROWSER_ROW_Y (* LOBBY_BROWSER_ROW_HEIGHT (the float row)))))
     (when player-name
-      (when (= player-id (-> *player-list* selected-player))
+      (when (= player-slot (-> *player-list* selected-player))
         (draw-lobby-browser-highlight left width y 1.0))
-      (set-color! font-ctx (mp-player-font-color-by-id player-id))
+      (set-color! font-ctx (mp-player-font-color-by-slot player-slot))
       (when icon
         (print-player-list-cell font-ctx icon left width #f y))
       (print-player-list-cell font-ctx player-name (+ left icon-width) width #f y)
-      (print-player-list-cell font-ctx (player-list-ping player-id) left width #t y))
+      (print-player-list-cell font-ctx (player-list-ping player-slot) left width #t y))
     player-name))
 
 (defun print-player-list-prompt ((font-ctx font-context) (label text-id) (right float))
@@ -137,7 +137,7 @@
     (- right (-> (get-string-length text font-ctx) length) LOBBY_BROWSER_PROMPT_GAP)))
 
 (defun draw-player-list-prompts ((font-ctx font-context) (left float) (width float))
-  (let ((player-id (the int (-> *player-list* selected-player)))
+  (let ((player-slot (the int (-> *player-list* selected-player)))
         (right (+ left (* 0.97 width))))
     (set-scale! font-ctx 0.35)
     (set-color! font-ctx (font-color progress))
@@ -147,9 +147,9 @@
                             width
                             #f
                             PLAYER_LIST_PROMPT_Y)
-    (when (player-profile-available? player-id)
+    (when (player-profile-available? player-slot)
       (set! right (print-player-list-prompt font-ctx (text-id mp-player-list-profile) right)))
-    (when (lobby-player-kickable? player-id)
+    (when (lobby-player-kickable? player-slot)
       (print-player-list-prompt font-ctx
                                 (if (lobby-player-actions-open?) (text-id mp-player-list-confirm-kick) (text-id mp-player-list-kick))
                                 right)))
@@ -190,8 +190,8 @@
       (draw-lobby-box *player-list* left (+ left width) PLAYER_LIST_PROMPT_DIVIDER_Y PLAYER_LIST_PROMPT_DIVIDER_Y)
       (draw-player-list-header font-ctx left width)
       (let ((row 0))
-        (dotimes (player-id (player-list-limit))
-          (when (draw-player-list-row font-ctx player-id row left width)
+        (dotimes (player-slot (player-list-limit))
+          (when (draw-player-list-row font-ctx player-slot row left width)
             (+! row 1))))
       (draw-player-list-prompts font-ctx left width)
       (draw-player-list-scanlines left width)))
@@ -263,17 +263,17 @@
                  (transform-point-vector! clipped-position anchor))
       (return #f))
     (set-player-nametag-matrix! projection anchor)
-    (let* ((player-id (the uint (-> record identity player-id)))
+    (let* ((player-slot (the uint (-> record identity player-slot)))
            (context (new 'stack
                          'font-context
                          projection
                          0
                          0
                          0.0
-                         (mp-player-font-color-by-id (the int player-id))
+                         (mp-player-font-color-by-slot (the int player-slot))
                          (font-flags shadow kerning large))))
       (when (nonnull? context)
-        (mp-player-copy-name! *nametag-string* player-id)
+        (mp-player-copy-name! *nametag-string* player-slot)
         (let ((width (-> (get-string-length *nametag-string* context) length)))
           (set! (-> context origin x) (* -0.5 width))
           (set! (-> context origin y) (- (- (-> *font-work* size3-large y)) 40.0))
@@ -320,7 +320,7 @@
                              (zbuf-1 (new 'static 'gs-zbuf :zbp #x130 :psm (gs-psm ct24) :zmsk #x1))
                              (test-1 (new 'static 'gs-test :zte #x1 :ztst (gs-ztest always))))
       (dotimes (i MP_MAX_PLAYERS)
-        (let ((record (mp-player-record-by-id (the uint i))))
+        (let ((record (mp-player-record-by-slot (the uint i))))
           (when (and (nonnull? record) (is-record-remote-player? record))
             (draw-player-nametag! record buffer))))
       (dma-buffer-add-gs-set buffer

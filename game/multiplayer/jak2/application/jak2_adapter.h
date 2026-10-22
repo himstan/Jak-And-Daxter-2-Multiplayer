@@ -27,11 +27,11 @@ class Jak2Adapter final : public platform::GameAdapter {
   platform::PacketRegistry& packets() override { return packets_; }
   bool validate_profile_extension(std::span<const uint8_t> extension,
                                   std::vector<uint8_t>& canonical) override;
-  std::vector<uint8_t> create_bootstrap(platform::PlayerId player_id) override;
+  std::vector<uint8_t> create_bootstrap(platform::PlayerSlot player_slot) override;
   bool apply_bootstrap(uint32_t generation, std::span<const uint8_t> payload) override;
   void player_profile_changed(const platform::PlayerProfile& profile) override;
   void player_departed(
-      platform::PlayerId player_id,
+      platform::PlayerSlot player_slot,
       platform::PlayerDepartureReason reason = platform::PlayerDepartureReason::LEFT) override;
   void tick(uint64_t now_ms) override;
   void stop() override;
@@ -42,8 +42,8 @@ class Jak2Adapter final : public platform::GameAdapter {
   void add_world_handlers(std::vector<std::unique_ptr<platform::PacketHandler>>&);
   void add_entity_handlers(std::vector<std::unique_ptr<platform::PacketHandler>>&);
   void add_traffic_handlers(std::vector<std::unique_ptr<platform::PacketHandler>>&);
-  std::vector<core::PlayerId> traffic_subscribers(core::PlayerId source,
-                                                  const platform::SessionSnapshot& session) const;
+  std::vector<core::PlayerSlot> traffic_subscribers(core::PlayerSlot source,
+                                                    const platform::SessionSnapshot& session) const;
   void add_event_handler(std::vector<std::unique_ptr<platform::PacketHandler>>&);
   void publish_remote_frame(const platform::SessionState& session, uint64_t now_ms);
 

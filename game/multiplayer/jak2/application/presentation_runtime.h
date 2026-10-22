@@ -16,7 +16,7 @@ void advance_presentation(RemoteReplicationFrame& frame, uint64_t now_ms);
 
 class PresentationRuntime {
  public:
-  void reset_player(core::PlayerId player_id);
+  void reset_player(core::PlayerSlot player_slot);
   void prepare(RemoteReplicationFrame& frame, const core::ReplicationState& state, uint64_t now_ms);
   void reset();
 
@@ -27,14 +27,14 @@ class PresentationRuntime {
     uint32_t identity = 0;
     uint32_t context = 0;
     uint32_t level_id = 0;
-    core::PlayerId source = core::kInvalidPlayerId;
+    core::PlayerSlot source = core::kInvalidPlayerSlot;
     platform::replication::SnapshotTimeline timeline;
   };
 
-  PresentationTarget prepare_player(core::PlayerId player_id,
+  PresentationTarget prepare_player(core::PlayerSlot player_slot,
                                     const core::PlayerState& player,
                                     uint64_t now_ms);
-  PresentationTarget prepare_player_vehicle(core::PlayerId player_id,
+  PresentationTarget prepare_player_vehicle(core::PlayerSlot player_slot,
                                             const core::PlayerVehicleState& state,
                                             const core::PlayerState& player,
                                             uint64_t now_ms);
@@ -52,7 +52,7 @@ class PresentationRuntime {
   uint32_t enemy_generation_ = 0;
   uint32_t traffic_generation_ = 0;
   std::array<core::Sequence, core::kMaxPlayers> enemy_source_sequences_ = {};
-  core::PlayerId traffic_signature_source_ = core::kInvalidPlayerId;
+  core::PlayerSlot traffic_signature_source_ = core::kInvalidPlayerSlot;
   core::Sequence pedestrian_signature_sequence_ = 0;
   core::Sequence vehicle_signature_sequence_ = 0;
 };

@@ -19,8 +19,8 @@ class PlayerReplicationState {
   bool apply(const PlayerVehicleState& state, const ApplyContext& context);
   bool apply(const TurretState& state, const ApplyContext& context);
   bool update_identity(const PlayerIdentity& identity);
-  void depart(PlayerId player_id);
-  bool owns_vehicle(PlayerId player_id, EntityId net_id, uint64_t now_ms) const;
+  void depart(PlayerSlot player_slot);
+  bool owns_vehicle(PlayerSlot player_slot, EntityId net_id, uint64_t now_ms) const;
 
   const auto& identities() const { return identities_; }
   const auto& players() const { return player_states_; }
@@ -44,30 +44,30 @@ class TrafficReplicationState {
   void expire(uint64_t now_ms, std::span<const PlayerVehicleState> player_vehicles);
   bool apply(const TrafficAuthority& authority, const ApplyContext& context);
   bool apply(const TrafficSnapshot& snapshot, const ApplyContext& context);
-  bool select_authority(PlayerId source_player_id);
+  bool select_authority(PlayerSlot source_player_slot);
   void clear();
-  void clear_source(PlayerId source_player_id);
-  void clear_source(PlayerId source_player_id, TrafficSnapshot::Kind kind);
+  void clear_source(PlayerSlot source_player_slot);
+  void clear_source(PlayerSlot source_player_slot, TrafficSnapshot::Kind kind);
 
   const TrafficAuthority& authority() const { return authority_; }
-  PlayerId selected_authority() const { return selected_authority_; }
+  PlayerSlot selected_authority() const { return selected_authority_; }
   const TrafficSnapshot& aggregate() const { return aggregate_; }
   const TrafficSnapshot& selected_snapshot() const { return selected_; }
-  const TrafficSnapshot& pedestrian_snapshot(PlayerId source_player_id) const {
-    return pedestrian_snapshots_[source_player_id];
+  const TrafficSnapshot& pedestrian_snapshot(PlayerSlot source_player_slot) const {
+    return pedestrian_snapshots_[source_player_slot];
   }
-  const TrafficSnapshot& vehicle_snapshot(PlayerId source_player_id) const {
-    return vehicle_snapshots_[source_player_id];
+  const TrafficSnapshot& vehicle_snapshot(PlayerSlot source_player_slot) const {
+    return vehicle_snapshots_[source_player_slot];
   }
-  PlayerId vehicle_source(EntityId net_id) const;
+  PlayerSlot vehicle_source(EntityId net_id) const;
 
  private:
-  void prepare_level(PlayerId source_player_id, uint32_t level_id);
+  void prepare_level(PlayerSlot source_player_slot, uint32_t level_id);
   void rebuild_aggregate();
   void rebuild_selected();
 
   TrafficAuthority authority_ = {};
-  PlayerId selected_authority_ = kInvalidPlayerId;
+  PlayerSlot selected_authority_ = kInvalidPlayerSlot;
   TrafficSnapshot aggregate_ = {};
   TrafficSnapshot selected_ = {};
   std::array<Sequence, kMaxPlayers> pedestrian_sequences_ = {};
@@ -102,12 +102,12 @@ class EntityReplicationState {
   bool apply(const EnemySnapshot& snapshot, const ApplyContext& context);
   bool apply(const BossState& state, const ApplyContext& context);
   bool apply(const AirlockSnapshot& snapshot, const ApplyContext& context);
-  void depart(PlayerId player_id);
-  void clear_enemy_source(PlayerId player_id);
+  void depart(PlayerSlot player_slot);
+  void clear_enemy_source(PlayerSlot player_slot);
 
   const EnemySnapshot& enemies() const { return enemies_; }
-  const EnemySnapshot& enemy_snapshot(PlayerId source_player_id) const {
-    return enemy_snapshots_[source_player_id];
+  const EnemySnapshot& enemy_snapshot(PlayerSlot source_player_slot) const {
+    return enemy_snapshots_[source_player_slot];
   }
   const BossState& boss(BossState::Kind kind) const { return bosses_[static_cast<size_t>(kind)]; }
   const std::array<AirlockSnapshot, kMaxPlayers>& airlocks() const { return airlock_snapshots_; }
@@ -128,7 +128,7 @@ class EventReplicationState {
 
   void reset();
   platform::PacketApplyResult apply(const GameEventBatch& batch, const ApplyContext& context);
-  void depart(PlayerId player_id);
+  void depart(PlayerSlot player_slot);
   std::vector<GameEvent> take(size_t maximum);
   const std::deque<GameEvent>& events() const { return events_; }
 
@@ -143,7 +143,7 @@ class ReplicationState {
   void expire(uint64_t now_ms);
   bool apply_bootstrap(const BootstrapState& state, Sequence sequence);
   bool update_player_identity(const PlayerIdentity& identity);
-  bool depart_player(PlayerId player_id);
+  bool depart_player(PlayerSlot player_slot);
 
   PlayerReplicationState& players() { return players_; }
   const PlayerReplicationState& players() const { return players_; }

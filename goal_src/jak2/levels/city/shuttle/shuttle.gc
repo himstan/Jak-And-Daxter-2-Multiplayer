@@ -426,8 +426,8 @@
              (set! driver *target*)
              )
             (else
-              (dotimes (player-id MP_MAX_PLAYERS)
-                (let* ((record (mp-player-record-by-id (the-as uint player-id)))
+              (dotimes (player-slot MP_MAX_PLAYERS)
+                (let* ((record (mp-player-record-by-slot (the-as uint player-slot)))
                        (replica (mp-player-record-target record)))
                   (when (and (not driver)
                              record
@@ -1248,8 +1248,8 @@
       (when (and (-> *target* control)
                  (nonzero? (-> *target* control))
                  (not (focus-test? *target* dead teleporting)))
-        (dotimes (player-id MP_MAX_PLAYERS)
-          (let ((record (mp-player-record-by-id (the-as uint player-id))))
+        (dotimes (player-slot MP_MAX_PLAYERS)
+          (let ((record (mp-player-record-by-slot (the-as uint player-slot))))
             (when (and record
                        (nonzero? record)
                        (is-record-remote-player? record)
@@ -1728,8 +1728,8 @@
                               (set! s4-2 (the-as vehicle (handle->process-safe (-> *target* pilot vehicle))))
                               )
                             (when (not s4-2)
-                              (dotimes (player-id MP_MAX_PLAYERS)
-                                (let* ((record (mp-player-record-by-id (the-as uint player-id)))
+                              (dotimes (player-slot MP_MAX_PLAYERS)
+                                (let* ((record (mp-player-record-by-slot (the-as uint player-slot)))
                                        (replica (mp-player-record-target record)))
                                   (when (and (not s4-2)
                                              record

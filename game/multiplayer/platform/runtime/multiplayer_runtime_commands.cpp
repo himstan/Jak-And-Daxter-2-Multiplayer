@@ -54,6 +54,9 @@ CommandError RuntimeWorker::connect_canonical(CanonicalEndpoint endpoint, const 
                                    .room_code = client_.endpoint->room_code,
                                    .local_profile = client_.profile,
                                    .steam_host = client_.endpoint->steam_host};
+  StoredPlayerProfile stored;
+  if (runtime_.load_profile(stored))
+    config.local_profile.player_id = stored.player_id;
   if (direct)
     lg::debug("[Multiplayer] Connecting to {}:{}.", config.endpoint, config.port);
   else
@@ -72,6 +75,9 @@ CommandError RuntimeWorker::host(HostSessionRequest request) {
                                                             : HostMappingState::DISABLED)
                           : HostMappingState::NOT_REQUESTED};
   auto& config = request.config;
+  StoredPlayerProfile stored;
+  if (runtime_.load_profile(stored))
+    config.local_profile.player_id = stored.player_id;
   config.steam = request.internet && steam::networking().has_value();
   lg::debug("[Multiplayer] Starting host on UDP port {}.", config.port);
   bool started = controller_.host(config);
@@ -244,8 +250,8 @@ CommandError RuntimeWorker::send_chat(std::string text) {
                                                 : CommandError::INVALID_REQUEST;
 }
 
-CommandError RuntimeWorker::kick_player(const PlayerId player_id) {
-  return controller_.kick(player_id) ? CommandError::NONE : CommandError::INVALID_STATE;
+CommandError RuntimeWorker::kick_player(const PlayerSlot player_slot) {
+  return controller_.kick(player_slot) ? CommandError::NONE : CommandError::INVALID_STATE;
 }
 
 CommandError RuntimeWorker::start_countdown(const uint32_t seconds) {

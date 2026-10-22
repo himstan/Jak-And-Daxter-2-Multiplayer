@@ -222,7 +222,7 @@
                                                          local-state-name
                                                          (-> local-state hit-points)
                                                          (-> local-state stage)
-                                                         (-> local-state target-player-id)
+                                                         (-> local-state target-player-slot)
                                                          (-> local-state action-seq)))
                                          draw-pos
                                          color
@@ -238,7 +238,7 @@
                                                            (-> remote-state state-id)
                                                            (-> remote-state hit-points)
                                                            (-> remote-state stage)
-                                                           (-> remote-state target-player-id)
+                                                           (-> remote-state target-player-slot)
                                                            (-> remote-state action-seq)))
                                            remote-pos
                                            (font-color cyan)

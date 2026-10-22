@@ -945,7 +945,7 @@
                                  (nonzero? *target*)
                                  (mp-target-daxter? *target*)
                                  (or (mp-target-ride-along? *target*)
-                                     (!= (-> *target* riding-along-player-id) MP_INVALID_PLAYER_ID)))))
+                                     (!= (-> *target* riding-along-player-slot) MP_INVALID_PLAYER_SLOT)))))
               (set-pos! this (target-pos 0))
               (if (-> *blit-displays-work* horizontal-flip-flag)
                   (set! f30-0 (- f30-0))

@@ -2742,7 +2742,7 @@
                    (mp-nearest-player-character-record
                      self
                      (mp-player-character daxter)
-                     (mp-player-id-from-process self))))
+                     (mp-player-slot-from-process self))))
            (or 
              (cpad-pressed? (-> self control cpad number) r1) 
              (and 

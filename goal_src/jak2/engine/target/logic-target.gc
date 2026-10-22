@@ -3104,8 +3104,8 @@
 
 (defmethod init-target ((this target) (arg0 continue-point) (is-replica? symbol))
   (local-vars (s1-0 int) (s2-0 int) (s3-0 int) (s4-0 int))
-  (set! (-> this player-id) MP_INVALID_PLAYER_ID)
-  (set! (-> self riding-along-player-id) MP_INVALID_PLAYER_ID)
+  (set! (-> this player-slot) MP_INVALID_PLAYER_SLOT)
+  (set! (-> self riding-along-player-slot) MP_INVALID_PLAYER_SLOT)
   (mem-set32!
     (the-as pointer (-> this edge-grab-state))
     (/ (size-of mp-target-edge-grab-state) 4)

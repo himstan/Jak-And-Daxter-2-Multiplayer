@@ -2463,7 +2463,7 @@
                   (task-node-closed? (game-task-node tomb-boss-door)))
          (let ((jak-record
                  (mp-nearest-player-character-record
-                   *target* (mp-player-character jak) MP_INVALID_PLAYER_ID)))
+                   *target* (mp-player-character jak) MP_INVALID_PLAYER_SLOT)))
            (when (and jak-record (nonzero? jak-record))
              (let ((jak-target (mp-player-record-target jak-record)))
                (when (and jak-target (nonzero? jak-target))

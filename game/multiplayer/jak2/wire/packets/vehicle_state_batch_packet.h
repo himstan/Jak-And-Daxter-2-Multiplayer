@@ -28,7 +28,7 @@ struct VehicleStateRecord {
   uint8_t state_flags = 0;
   uint8_t hit_points = 0;
   uint16_t level_id = 0;
-  std::array<uint8_t, kVehicleStateRecordSeatCount> rider_player_ids = {};
+  std::array<uint8_t, kVehicleStateRecordSeatCount> rider_player_slots = {};
 };
 
 struct VehicleStateBatchPacket
@@ -65,7 +65,7 @@ bool serialize_vehicle_state_record(Stream& stream, RecordT&& vehicle) {
       !platform::wire::serialize_u16(stream, vehicle.level_id)) {
     return false;
   }
-  for (auto& rider : vehicle.rider_player_ids) {
+  for (auto& rider : vehicle.rider_player_slots) {
     if (!platform::wire::serialize_uint_bits(stream, rider, 4) ||
         !valid_wire_rider_reference(rider)) {
       return false;

@@ -55,7 +55,7 @@
                      (vector-vector-distance-squared sphere (-> *target* control trans))
                      (the-as float #x7f800000))))
     (when (and *mp-traffic-local-authoritative?* (nonnull? sphere))
-      (mp-for-each-player-record (player-id record)
+      (mp-for-each-player-record (player-slot record)
         (let ((player-pos (mp-player-record-position record)))
           (when (nonnull? player-pos)
             (set! distance (fmin distance (vector-vector-distance-squared sphere player-pos)))))))
@@ -670,7 +670,7 @@
          (+! *mp-pedestrian-net-id-counter* 1)
          (when (> *mp-pedestrian-net-id-counter* MP_TRAFFIC_NET_ID_SEQUENCE_MASK)
            (set! *mp-pedestrian-net-id-counter* (the uint 1)))))
-      (let ((candidate (mp-traffic-build-net-id class-base (mp-local-player-id) sequence)))
+      (let ((candidate (mp-traffic-build-net-id class-base (mp-local-player-slot) sequence)))
         (when (not (mp-traffic-net-id-in-use? candidate entity-kind)) (return candidate)))))
   (the uint 0))
 
@@ -1188,8 +1188,8 @@
 
 (defun mp-traffic-any-valid-remote-target? ()
   (when (mp-session-in-game?)
-    (dotimes (player-id MP_MAX_PLAYERS)
-      (let* ((record (mp-player-record-by-id (the-as uint player-id)))
+    (dotimes (player-slot MP_MAX_PLAYERS)
+      (let* ((record (mp-player-record-by-slot (the-as uint player-slot)))
              (remote (mp-player-record-target record)))
         (when (and record
                    (nonzero? record)
@@ -1211,9 +1211,9 @@
   )
 
 (defun mp-traffic-clear-player-target-visibility! ()
-  (dotimes (player-id MP_MAX_PLAYERS)
+  (dotimes (player-slot MP_MAX_PLAYERS)
     (let ((target-status
-            (mp-traffic-player-target-status-by-id (the-as uint player-id))))
+            (mp-traffic-player-target-status-by-slot (the-as uint player-slot))))
       (when (and target-status (nonzero? target-status))
         (logclear!
           (-> target-status flags)
@@ -1225,9 +1225,9 @@
   )
 
 (defun mp-traffic-set-player-targets-force-visible! ((force-visible? uint))
-  (dotimes (player-id MP_MAX_PLAYERS)
+  (dotimes (player-slot MP_MAX_PLAYERS)
     (let ((target-status
-            (mp-traffic-player-target-status-by-id (the-as uint player-id))))
+            (mp-traffic-player-target-status-by-slot (the-as uint player-slot))))
       (when (and target-status (nonzero? target-status))
         (if (nonzero? force-visible?)
             (logior! (-> target-status flags) (traffic-target-flag force-visible))
@@ -1241,10 +1241,10 @@
 
 (defun mp-traffic-sync-player-target-handles! ((this traffic-engine))
   (when (and this (nonzero? this))
-    (dotimes (player-id MP_MAX_PLAYERS)
+    (dotimes (player-slot MP_MAX_PLAYERS)
       (let ((target-status
-              (mp-traffic-player-target-status-by-id (the-as uint player-id)))
-            (record (mp-player-record-by-id (the-as uint player-id))))
+              (mp-traffic-player-target-status-by-slot (the-as uint player-slot)))
+            (record (mp-player-record-by-slot (the-as uint player-slot))))
         (mp-traffic-clear-target-status! target-status)
         (when (and target-status
                    (nonzero? target-status)
@@ -1264,7 +1264,7 @@
     (when (and (not (mp-session-active?))
                (logtest? (-> this alert-state flags) (traffic-alert-flag target-jak))
                (mp-traffic-valid-local-target?))
-      (let ((target-status (mp-traffic-player-target-status-by-id (the uint 0))))
+      (let ((target-status (mp-traffic-player-target-status-by-slot (the uint 0))))
         (when (and target-status (nonzero? target-status))
           (set! (-> target-status handle) (process->handle *target*))
           )

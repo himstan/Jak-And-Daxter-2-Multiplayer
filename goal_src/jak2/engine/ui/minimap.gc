@@ -1380,11 +1380,11 @@
       (and record
            (nonzero? record)
            (mp-player-daxter? record)
-           (or (!= (-> record action riding-along-player-id) MP_INVALID_PLAYER_ID)
+           (or (!= (-> record action riding-along-player-slot) MP_INVALID_PLAYER_SLOT)
                (and player-target
                     (nonzero? player-target)
                     (or (mp-target-ride-along? player-target)
-                        (!= (-> player-target riding-along-player-id) MP_INVALID_PLAYER_ID))))))))
+                        (!= (-> player-target riding-along-player-slot) MP_INVALID_PLAYER_SLOT))))))))
 
 
 ;; WARN: Return type mismatch pointer vs none.
@@ -2236,7 +2236,7 @@
                  (nonzero? *target*)
                  (not (and (mp-target-daxter? *target*)
                            (or (mp-target-ride-along? *target*)
-                               (!= (-> *target* riding-along-player-id) MP_INVALID_PLAYER_ID)))))
+                               (!= (-> *target* riding-along-player-slot) MP_INVALID_PLAYER_SLOT)))))
         (vector-z-quaternion! (the-as vector sv-52) (-> *target* control quat))
         (vector-xz-normalize! (the-as vector sv-52) 1.0)
         (set! (-> sv-52 vector 0 y) 0.0)

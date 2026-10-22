@@ -1276,9 +1276,9 @@
       (log 'debug
         "[Battle][~A][CTX] owner=~D epoch=~D local=~D mode=~A remote-flag=~A "
         (if (mp-session-host?) "HOST" "CLIENT")
-        (mp-battle-owner-player-id this)
+        (mp-battle-owner-player-slot this)
         (mp-battle-epoch this)
-        (if (and (mp-local-player-record) (nonzero? (mp-local-player-record))) (-> (mp-local-player-record) identity player-id) -1)
+        (if (and (mp-local-player-record) (nonzero? (mp-local-player-record))) (-> (mp-local-player-record) identity player-slot) -1)
         (if local-owner? "OWNER" (if replica-spawn? "REPLICA" "BLOCKED"))
         *mp-processing-remote-event*)
       (log 'debug
@@ -1587,9 +1587,9 @@
     (let ((local-owner? (mp-battle-local-owner? self)))
       (log 'debug
         "[Battle][NOTICE-ENTER] owner=~D epoch=~D local=~D dispatch=~A~%"
-        (mp-battle-owner-player-id self)
+        (mp-battle-owner-player-slot self)
         (mp-battle-epoch self)
-        (if (and (mp-local-player-record) (nonzero? (mp-local-player-record))) (-> (mp-local-player-record) identity player-id) -1)
+        (if (and (mp-local-player-record) (nonzero? (mp-local-player-record))) (-> (mp-local-player-record) identity player-slot) -1)
         (if *mp-processing-remote-event* "REMOTE" "LOCAL")
         )
       (if (and local-owner? (-> self spawn-initial-creatures?))

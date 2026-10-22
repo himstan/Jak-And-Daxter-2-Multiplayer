@@ -56,7 +56,7 @@ class SessionPort final : public SessionExecutionPort {
   CommandError enter_game() override { return called(SessionAction::ENTER_GAME); }
   CommandError request_bootstrap() override { return called(SessionAction::REQUEST_BOOTSTRAP); }
   CommandError send_chat(std::string) override { return called(SessionAction::SEND_CHAT); }
-  CommandError kick_player(PlayerId) override { return called(SessionAction::KICK_PLAYER); }
+  CommandError kick_player(PlayerSlot) override { return called(SessionAction::KICK_PLAYER); }
 
   CommandError called(SessionAction value) {
     action = value;

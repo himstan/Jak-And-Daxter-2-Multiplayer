@@ -77,10 +77,10 @@
   (skipped 3))
 
 (deftype mp-event (structure)
-  ((etype            uint8)
-   (source-player-id uint8)
-   (payload-size     uint8)
-   (data             uint8 64 :offset 16))
+  ((etype              uint8)
+   (source-player-slot uint8)
+   (payload-size       uint8)
+   (data               uint8 64 :offset 16))
   :size-assert 80)
 
 (deftype mp-event-buffer (structure)
@@ -102,7 +102,7 @@
    (action          uint8)
    (race-id         int8)
    (racer-index     uint8)
-   (player-id       uint8)
+   (player-slot     uint8)
    (player-mask     uint8))
   :size-assert 31)
 
@@ -141,7 +141,7 @@
   :size-assert 80)
 
 (deftype mp-enemy-authority-grant-event-data (mp-aid-event-data)
-  ((owner-player-id uint8)))
+  ((owner-player-slot uint8)))
 
 (deftype mp-enemy-authority-grant-event (mp-aid-event)
   ((payload mp-enemy-authority-grant-event-data :inline :override :overlay-at payload))
@@ -278,7 +278,7 @@
    (hit-sound-id uint8)))
 
 (deftype mp-ped-attack-event-data (mp-actor-attack-event-data)
-  ((traffic-authority-player-id uint8)))
+  ((traffic-authority-player-slot uint8)))
 
 (deftype enemy-hit-event-data (actor-hit-event-data)
   ((distance-squared  float)
@@ -370,7 +370,7 @@
    (roster-generation uint32)
    (battle-evt        uint8)
    (initial?          uint8)
-   (owner-player-id   int8)))
+   (owner-player-slot int8)))
 
 (deftype mp-battle-event (mp-event)
   ((payload mp-battle-event-data :inline :overlay-at (-> data 0)))
@@ -433,7 +433,7 @@
    (roster-generation uint32)
    (initial?          symbol)
    (battle-action     uint8)
-   (owner-player-id   int8)))
+   (owner-player-slot int8)))
 
 (deftype mp-palace-squid-build-data (structure)
   ((evt-kind   uint8)

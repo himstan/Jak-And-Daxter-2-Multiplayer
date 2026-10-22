@@ -213,9 +213,9 @@
 
 (defun swingpole-player-slot ((proc process))
   (if (and proc (nonzero? proc) (type? proc target))
-      (let ((player-id (mp-player-id-from-process proc)))
-        (if (mp-player-id-valid? player-id)
-            (the-as int player-id)
+      (let ((player-slot (mp-player-slot-from-process proc)))
+        (if (mp-player-slot-valid? player-slot)
+            (the-as int player-slot)
             0)
         )
       -1)

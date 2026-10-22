@@ -28,7 +28,8 @@ void EntityReplicationState::expire(const uint64_t now_ms) {
       boss.active = 0;
   }
   for (auto& snapshot : airlock_snapshots_) {
-    if (snapshot.source_player_id != kInvalidPlayerId && now_ms - snapshot.received_time_ms > 2000)
+    if (snapshot.source_player_slot != kInvalidPlayerSlot &&
+        now_ms - snapshot.received_time_ms > 2000)
       snapshot = {};
   }
 }
@@ -38,30 +39,32 @@ bool EntityReplicationState::apply(const EnemySnapshot& incoming, const ApplyCon
       !std::ranges::all_of(incoming.enemies, valid_enemy_state)) {
     return false;
   }
-  const auto source_player_id = snapshot_source(incoming.source_player_id, context.source);
-  if (!valid_index(source_player_id, kMaxPlayers) ||
-      (!context.source.from_host && context.source.authenticated_player_id != kInvalidPlayerId &&
-       source_player_id != context.source.authenticated_player_id) ||
-      !platform::sequence_is_newer(context.sequence, enemy_snapshots_[source_player_id].sequence)) {
+  const auto source_player_slot = snapshot_source(incoming.source_player_slot, context.source);
+  if (!valid_index(source_player_slot, kMaxPlayers) ||
+      (!context.source.from_host &&
+       context.source.authenticated_player_slot != kInvalidPlayerSlot &&
+       source_player_slot != context.source.authenticated_player_slot) ||
+      !platform::sequence_is_newer(context.sequence,
+                                   enemy_snapshots_[source_player_slot].sequence)) {
     return false;
   }
-  auto& snapshot = enemy_snapshots_[source_player_id];
+  auto& snapshot = enemy_snapshots_[source_player_slot];
   snapshot = incoming;
   for (size_t index = 0; index < incoming.enemies.size(); ++index) {
     auto enemy = incoming.enemies[index];
-    for (PlayerId other = 0; other < kMaxPlayers; ++other) {
-      if (other != source_player_id) {
+    for (PlayerSlot other = 0; other < kMaxPlayers; ++other) {
+      if (other != source_player_slot) {
         std::erase_if(enemy_snapshots_[other].enemies,
                       [&](const auto& cached) { return cached.actor_id == enemy.actor_id; });
       }
     }
-    enemy.owner_player_id = source_player_id;
+    enemy.owner_player_slot = source_player_slot;
     enemy.last_sequence = context.sequence;
     enemy.sample_time_ms = incoming.sample_time_ms;
     enemy.received_time_ms = context.received_at_ms;
     snapshot.enemies[index] = enemy;
   }
-  snapshot.source_player_id = source_player_id;
+  snapshot.source_player_slot = source_player_slot;
   snapshot.sequence = context.sequence;
   rebuild_enemies();
   enemies_.sample_time_ms = incoming.sample_time_ms;
@@ -87,33 +90,34 @@ bool EntityReplicationState::apply(const AirlockSnapshot& incoming, const ApplyC
       })) {
     return false;
   }
-  const auto source_player_id = snapshot_source(incoming.source_player_id, context.source);
-  if (!valid_index(source_player_id, kMaxPlayers) || source_player_id == context.local_player_id ||
-      !source_allows_player(context.source, source_player_id) ||
-      !platform::sequence_is_newer(context.sequence, airlock_sequences_[source_player_id])) {
+  const auto source_player_slot = snapshot_source(incoming.source_player_slot, context.source);
+  if (!valid_index(source_player_slot, kMaxPlayers) ||
+      source_player_slot == context.local_player_slot ||
+      !source_allows_player(context.source, source_player_slot) ||
+      !platform::sequence_is_newer(context.sequence, airlock_sequences_[source_player_slot])) {
     return false;
   }
-  auto& snapshot = airlock_snapshots_[source_player_id];
+  auto& snapshot = airlock_snapshots_[source_player_slot];
   snapshot = incoming;
-  snapshot.source_player_id = source_player_id;
+  snapshot.source_player_slot = source_player_slot;
   snapshot.sequence = context.sequence;
-  airlock_sequences_[source_player_id] = context.sequence;
+  airlock_sequences_[source_player_slot] = context.sequence;
   snapshot.received_time_ms = context.received_at_ms;
   return true;
 }
 
-void EntityReplicationState::depart(const PlayerId player_id) {
-  if (!valid_index(player_id, kMaxPlayers))
+void EntityReplicationState::depart(const PlayerSlot player_slot) {
+  if (!valid_index(player_slot, kMaxPlayers))
     return;
-  airlock_sequences_[player_id] = 0;
-  airlock_snapshots_[player_id] = {};
-  clear_enemy_source(player_id);
+  airlock_sequences_[player_slot] = 0;
+  airlock_snapshots_[player_slot] = {};
+  clear_enemy_source(player_slot);
 }
 
-void EntityReplicationState::clear_enemy_source(const PlayerId player_id) {
-  if (!valid_index(player_id, kMaxPlayers))
+void EntityReplicationState::clear_enemy_source(const PlayerSlot player_slot) {
+  if (!valid_index(player_slot, kMaxPlayers))
     return;
-  enemy_snapshots_[player_id] = {};
+  enemy_snapshots_[player_slot] = {};
   rebuild_enemies();
 }
 
@@ -121,7 +125,7 @@ void EntityReplicationState::rebuild_enemies() {
   const auto sample_time_ms = enemies_.sample_time_ms;
   enemies_ = {};
   enemies_.sample_time_ms = sample_time_ms;
-  for (PlayerId source = 0; source < kMaxPlayers; ++source) {
+  for (PlayerSlot source = 0; source < kMaxPlayers; ++source) {
     const auto& snapshot = enemy_snapshots_[source];
     for (const auto& enemy : snapshot.enemies) {
       const auto existing = std::ranges::find_if(enemies_.enemies, [&](const EnemyState& state) {
@@ -136,7 +140,7 @@ void EntityReplicationState::rebuild_enemies() {
       }
     }
     if (snapshot.sequence >= enemies_.sequence) {
-      enemies_.source_player_id = snapshot.source_player_id;
+      enemies_.source_player_slot = snapshot.source_player_slot;
       enemies_.sequence = snapshot.sequence;
     }
   }

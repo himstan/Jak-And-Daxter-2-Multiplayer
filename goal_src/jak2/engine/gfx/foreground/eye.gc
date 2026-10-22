@@ -91,7 +91,7 @@
           (set! (-> (the-as (inline-array vector4w) v1-23) 0 quad) (-> *eye-work* sprite-tmpl dma-vif quad))
           (set! (-> (the-as (inline-array vector4w) v1-23) 1 quad) (-> *eye-work* sprite-tmpl quad 1))
           (set-vector! (-> (the-as (inline-array vector4w) v1-23) 2) 128 128 128 128)
-          (if (!= arg3 MP_INVALID_PLAYER_ID)
+          (if (!= arg3 MP_INVALID_PLAYER_SLOT)
               (set-vector! (-> (the-as (inline-array vector4w) v1-23) 3) (the int arg3) #x4d504559 (the int lid-tint-color) (the-as int lid-tint-strength))
               (set-vector! (-> (the-as (inline-array vector4w) v1-23) 3) 0 0 (the int lid-tint-color) (the-as int lid-tint-strength)))
           (set-vector! (-> (the-as (inline-array vector4w) v1-23) 4) (* s4-0 16) (* s3-0 16) #xffffff 0)
@@ -302,7 +302,7 @@
           (set! (-> (the-as (inline-array vector4w) v1-23) 0 quad) (-> *eye-work* sprite-tmpl dma-vif quad))
           (set! (-> (the-as (inline-array vector4w) v1-23) 1 quad) (-> *eye-work* sprite-tmpl quad 1))
           (set-vector! (-> (the-as (inline-array vector4w) v1-23) 2) 128 128 128 128)
-          (if (!= arg3 MP_INVALID_PLAYER_ID)
+          (if (!= arg3 MP_INVALID_PLAYER_SLOT)
               (set-vector! (-> (the-as (inline-array vector4w) v1-23) 3) (the int arg3) #x4d504559 (the int lid-tint-color) (the-as int lid-tint-strength))
               (set-vector! (-> (the-as (inline-array vector4w) v1-23) 3) 0 0 (the int lid-tint-color) (the-as int lid-tint-strength)))
           (set-vector! (-> (the-as (inline-array vector4w) v1-23) 4) (* s4-0 16) (* s3-0 16) #xffffff 0)
@@ -570,7 +570,7 @@
           (set! (-> (the-as (inline-array vector4w) v1-23) 0 quad) (-> *eye-work* sprite-tmpl dma-vif quad))
           (set! (-> (the-as (inline-array vector4w) v1-23) 1 quad) (-> *eye-work* sprite-tmpl quad 1))
           (set-vector! (-> (the-as (inline-array vector4w) v1-23) 2) 128 128 128 128)
-          (if (!= arg3 MP_INVALID_PLAYER_ID)
+          (if (!= arg3 MP_INVALID_PLAYER_SLOT)
               (set-vector! (-> (the-as (inline-array vector4w) v1-23) 3) (the int arg3) #x4d504559 (the int lid-tint-color) (the-as int lid-tint-strength))
               (set-vector! (-> (the-as (inline-array vector4w) v1-23) 3) 0 0 (the int lid-tint-color) (the-as int lid-tint-strength)))
           (set-vector! (-> (the-as (inline-array vector4w) v1-23) 4) (* s4-0 16) (* s3-0 16) #xffffff 0)
@@ -781,7 +781,7 @@
           (set! (-> (the-as (inline-array vector4w) v1-23) 0 quad) (-> *eye-work* sprite-tmpl dma-vif quad))
           (set! (-> (the-as (inline-array vector4w) v1-23) 1 quad) (-> *eye-work* sprite-tmpl quad 1))
           (set-vector! (-> (the-as (inline-array vector4w) v1-23) 2) 128 128 128 128)
-          (if (!= arg3 MP_INVALID_PLAYER_ID)
+          (if (!= arg3 MP_INVALID_PLAYER_SLOT)
               (set-vector! (-> (the-as (inline-array vector4w) v1-23) 3) (the int arg3) #x4d504559 (the int lid-tint-color) (the-as int lid-tint-strength))
               (set-vector! (-> (the-as (inline-array vector4w) v1-23) 3) 0 0 (the int lid-tint-color) (the-as int lid-tint-strength)))
           (set-vector! (-> (the-as (inline-array vector4w) v1-23) 4) (* s4-0 16) (* s3-0 16) #xffffff 0)
@@ -1182,7 +1182,7 @@
             (update-eye-control! control
                                  eye-group
                                  eye-slot
-                                 MP_INVALID_PLAYER_ID
+                                 MP_INVALID_PLAYER_SLOT
                                  (vanilla-eye-control-render? eye-group eye-slot)))))
       (dotimes (instance-id MP_MAX_PLAYERS)
         (update-pc-eye-control! (-> *pc-eye-control-array* data instance-id)

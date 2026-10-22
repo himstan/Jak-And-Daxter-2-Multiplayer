@@ -275,19 +275,19 @@
 (define-perm *mp-traffic-player-target-registry* mp-traffic-player-target-registry
   (new 'static 'mp-traffic-player-target-registry))
 
-(defun mp-traffic-player-target-status-by-id ((player-id uint))
+(defun mp-traffic-player-target-status-by-slot ((player-slot uint))
   (if (and *mp-traffic-player-target-registry*
            (nonzero? *mp-traffic-player-target-registry*)
-           (mp-player-id-valid? player-id))
-      (-> *mp-traffic-player-target-registry* status-array player-id)
+           (mp-player-slot-valid? player-slot))
+      (-> *mp-traffic-player-target-registry* status-array player-slot)
       (the-as traffic-target-status #f))
   )
 
 (defun mp-traffic-player-target-status-by-handle ((target-handle handle))
   (when (and target-handle (nonzero? target-handle))
-    (dotimes (player-id MP_MAX_PLAYERS)
+    (dotimes (player-slot MP_MAX_PLAYERS)
       (let ((target-status
-              (mp-traffic-player-target-status-by-id (the-as uint player-id))))
+              (mp-traffic-player-target-status-by-slot (the-as uint player-slot))))
         (when (and target-status
                    (nonzero? target-status)
                    (= (-> target-status handle) target-handle))
@@ -301,25 +301,25 @@
 
 (defun mp-traffic-player-target-status-for-process ((target-proc process))
   (when (and target-proc (nonzero? target-proc))
-    (let ((player-id (mp-player-id-from-process target-proc)))
-      (when (mp-player-id-valid? player-id)
-        (return (mp-traffic-player-target-status-by-id player-id))
+    (let ((player-slot (mp-player-slot-from-process target-proc)))
+      (when (mp-player-slot-valid? player-slot)
+        (return (mp-traffic-player-target-status-by-slot player-slot))
         )
       )
     (when (and (not (mp-session-active?))
                *target*
                (nonzero? *target*)
                (= target-proc *target*))
-      (return (mp-traffic-player-target-status-by-id (the uint 0)))
+      (return (mp-traffic-player-target-status-by-slot (the uint 0)))
       )
     )
   (the-as traffic-target-status #f)
   )
 
 (defun mp-traffic-reset-player-target-registry! ()
-  (dotimes (player-id MP_MAX_PLAYERS)
+  (dotimes (player-slot MP_MAX_PLAYERS)
     (let ((target-status
-            (mp-traffic-player-target-status-by-id (the-as uint player-id))))
+            (mp-traffic-player-target-status-by-slot (the-as uint player-slot))))
       (when (and target-status (nonzero? target-status))
         (mem-set32!
           (the-as pointer target-status)

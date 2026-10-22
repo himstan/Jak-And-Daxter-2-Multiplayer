@@ -418,6 +418,7 @@ set(MULTIPLAYER_PLATFORM_SOURCE
         multiplayer/platform/session/connection_input.cpp
         multiplayer/platform/core/compatibility_identity.cpp
         multiplayer/platform/core/message_policy.cpp
+        multiplayer/platform/core/player_id.cpp
         multiplayer/platform/core/sequence.cpp
         multiplayer/platform/profile/profile_store.cpp
         multiplayer/platform/protocol/session_protocol.cpp
@@ -462,7 +463,7 @@ target_link_libraries(multiplayer-platform PRIVATE GameNetworkingSockets::static
 add_dependencies(multiplayer-platform libminiupnpc-static natpmp)
 target_include_directories(multiplayer-platform PUBLIC "${PROJECT_SOURCE_DIR}")
 if(WIN32)
-    target_link_libraries(multiplayer-platform PRIVATE iphlpapi ws2_32)
+    target_link_libraries(multiplayer-platform PRIVATE iphlpapi ws2_32 bcrypt)
 elseif(UNIX)
     target_link_libraries(multiplayer-platform PRIVATE pthread)
 endif()

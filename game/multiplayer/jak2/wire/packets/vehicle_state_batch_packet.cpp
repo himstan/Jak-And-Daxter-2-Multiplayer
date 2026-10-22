@@ -9,14 +9,14 @@ uint8_t to_wire_rider(const uint32_t rider_id) {
   if (rider_id == core::kTrafficVehicleCivilianRiderId) {
     return kWireCivilianRiderId;
   }
-  return rider_id < kMPMaxPlayers ? static_cast<uint8_t>(rider_id) : kWireInvalidPlayerId;
+  return rider_id < kMPMaxPlayers ? static_cast<uint8_t>(rider_id) : kWireInvalidPlayerSlot;
 }
 
 uint32_t from_wire_rider(const uint8_t rider_id) {
   if (rider_id == kWireCivilianRiderId) {
     return core::kTrafficVehicleCivilianRiderId;
   }
-  return rider_id < kMPMaxPlayers ? rider_id : core::kInvalidPlayerId;
+  return rider_id < kMPMaxPlayers ? rider_id : core::kInvalidPlayerSlot;
 }
 
 }  // namespace
@@ -33,7 +33,7 @@ bool validate_packet(const VehicleStateBatchPacket& packet) {
         vehicle.state_id > 17u || vehicle.state_flags > 31u) {
       return false;
     }
-    for (const uint8_t rider : vehicle.rider_player_ids) {
+    for (const uint8_t rider : vehicle.rider_player_slots) {
       if (!valid_wire_rider_reference(rider)) {
         return false;
       }
@@ -61,8 +61,8 @@ VehicleStateBatchPacket to_vehicle_state_batch_packet(const core::TrafficSnapsho
     record.state_flags = vehicle.state_flags;
     record.hit_points = vehicle.hit_points;
     record.level_id = vehicle.level_id;
-    for (size_t rider = 0; rider < record.rider_player_ids.size(); ++rider) {
-      record.rider_player_ids[rider] = to_wire_rider(vehicle.rider_player_ids[rider]);
+    for (size_t rider = 0; rider < record.rider_player_slots.size(); ++rider) {
+      record.rider_player_slots[rider] = to_wire_rider(vehicle.rider_player_slots[rider]);
     }
     packet.vehicles.push_back(record);
   }
@@ -78,7 +78,7 @@ void from_packet(const VehicleStateBatchPacket& packet, core::TrafficSnapshot& s
   snapshot.vehicles.reserve(packet.vehicles.size());
   for (const auto& [net_id, vehicle_type, color_index, state_id, position, quaternion,
                     linear_velocity, angular_velocity, state_flags, hit_points, level_id,
-                    rider_player_ids] : packet.vehicles) {
+                    rider_player_slots] : packet.vehicles) {
     core::VehicleState vehicle;
     vehicle.net_id = net_id;
     vehicle.vehicle_type = vehicle_type;
@@ -91,13 +91,13 @@ void from_packet(const VehicleStateBatchPacket& packet, core::TrafficSnapshot& s
     vehicle.state_flags = state_flags;
     vehicle.hit_points = hit_points;
     vehicle.level_id = level_id;
-    for (size_t rider = 0; rider < rider_player_ids.size(); ++rider) {
-      vehicle.rider_player_ids[rider] = from_wire_rider(rider_player_ids[rider]);
+    for (size_t rider = 0; rider < rider_player_slots.size(); ++rider) {
+      vehicle.rider_player_slots[rider] = from_wire_rider(rider_player_slots[rider]);
     }
-    vehicle.rider_player_ids[3] = core::kInvalidPlayerId;
-    vehicle.target_player_id = vehicle.rider_player_ids[0] < core::kMaxPlayers
-                                   ? static_cast<core::PlayerId>(vehicle.rider_player_ids[0])
-                                   : core::kInvalidPlayerId;
+    vehicle.rider_player_slots[3] = core::kInvalidPlayerSlot;
+    vehicle.target_player_slot = vehicle.rider_player_slots[0] < core::kMaxPlayers
+                                     ? static_cast<core::PlayerSlot>(vehicle.rider_player_slots[0])
+                                     : core::kInvalidPlayerSlot;
     snapshot.vehicles.push_back(vehicle);
   }
 }

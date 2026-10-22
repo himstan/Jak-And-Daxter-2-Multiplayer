@@ -150,27 +150,27 @@ TEST(PlatformCore, NetworkStatisticsAggregateCapacityQueuesAndWorstHealth) {
 TEST(PlatformSession, PlayerPingIsRelativeToTheHostForEveryViewer) {
   using namespace multiplayer::platform;
   SessionSnapshot snapshot;
-  EXPECT_FALSE(snapshot.player_ping_ms(kInvalidPlayerId));
+  EXPECT_FALSE(snapshot.player_ping_ms(kInvalidPlayerSlot));
   EXPECT_FALSE(snapshot.player_ping_ms(0));
 
   snapshot.state.role = SessionRole::HOST;
-  snapshot.state.local_player_id = 0;
-  snapshot.state.host_player_id = 0;
+  snapshot.state.local_player_slot = 0;
+  snapshot.state.host_player_slot = 0;
   snapshot.player_pings = {0, 83, 145, kUnknownPlayerPing};
   EXPECT_EQ(snapshot.player_ping_ms(0), 0);
   EXPECT_EQ(snapshot.player_ping_ms(1), 83);
   EXPECT_EQ(snapshot.player_ping_ms(2), 145);
   EXPECT_FALSE(snapshot.player_ping_ms(3));
   EXPECT_FALSE(snapshot.player_ping_ms(4));
-  EXPECT_FALSE(snapshot.player_ping_ms(kInvalidPlayerId));
+  EXPECT_FALSE(snapshot.player_ping_ms(kInvalidPlayerSlot));
 
   snapshot.state.role = SessionRole::CLIENT;
-  snapshot.state.local_player_id = 1;
-  snapshot.connections = {{.player_id = 0, .network = {.connection_id = 10, .ping_ms = 83}}};
+  snapshot.state.local_player_slot = 1;
+  snapshot.connections = {{.player_slot = 0, .network = {.connection_id = 10, .ping_ms = 83}}};
   EXPECT_EQ(snapshot.player_ping_ms(0), 0);
   EXPECT_EQ(snapshot.player_ping_ms(1), 83);
   EXPECT_EQ(snapshot.player_ping_ms(2), 145);
-  snapshot.state.local_player_id = 2;
+  snapshot.state.local_player_slot = 2;
   EXPECT_EQ(snapshot.player_ping_ms(1), 83);
   EXPECT_EQ(snapshot.player_ping_ms(2), 145);
   snapshot.player_pings.clear();

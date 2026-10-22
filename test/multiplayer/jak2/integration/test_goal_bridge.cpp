@@ -100,10 +100,10 @@ MultiplayerPreferencesGOAL& preferences_state(GoalMemoryFixture& memory) {
 MPReplicationStateGOAL& replication_state(GoalMemoryFixture& memory) {
   auto& state = memory.at<MPReplicationStateGOAL>(0x12000);
   state.abi_size = kMPReplicationStateSize;
-  state.local_player_id = 0;
-  state.host_player_id = 0;
-  state.local.authority.selected = kMPInvalidPlayerId;
-  state.remote.authority.selected = kMPInvalidPlayerId;
+  state.local_player_slot = 0;
+  state.host_player_slot = 0;
+  state.local.authority.selected = kMPInvalidPlayerSlot;
+  state.remote.authority.selected = kMPInvalidPlayerSlot;
   return state;
 }
 
@@ -486,19 +486,19 @@ TEST(Jak2GoalBridge, GungameStateHandlersPreserveEventReplies) {
 }
 
 TEST(Jak2GoalBridge, DirectionalAggregateHasCanonicalCompactAbi) {
-  EXPECT_EQ(sizeof(MPReplicationPlayerIdentityGOAL), 279u);
+  EXPECT_EQ(sizeof(MPReplicationPlayerIdentityGOAL), 295u);
   EXPECT_EQ(sizeof(MPReplicationPlayerVehicleGOAL), 94u);
-  EXPECT_EQ(sizeof(MPReplicationPlayerGOAL), 544u);
+  EXPECT_EQ(sizeof(MPReplicationPlayerGOAL), 560u);
   EXPECT_EQ(sizeof(MPReplicationEnemySetGOAL), 57360u);
   EXPECT_EQ(sizeof(MPReplicationPedestrianStateGOAL), 60u);
   EXPECT_EQ(sizeof(MPReplicationTrafficSetGOAL), 13328u);
   EXPECT_EQ(sizeof(MPReplicationBootstrapStateGOAL), 16454u);
-  EXPECT_EQ(sizeof(MPReplicationFrameGOAL), 92528u);
-  EXPECT_EQ(sizeof(MPReplicationStateGOAL), 195344u);
+  EXPECT_EQ(sizeof(MPReplicationFrameGOAL), 92656u);
+  EXPECT_EQ(sizeof(MPReplicationStateGOAL), 195600u);
   EXPECT_EQ(offsetof(MPReplicationStateGOAL, local), 16u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, remote), 92544u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, outbound_events), 185088u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, inbound_events), 190224u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, remote), 92672u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, outbound_events), 185344u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, inbound_events), 190480u);
 }
 
 TEST(Jak2GoalBridge, PlayerActionLayoutMatchesGoal) {
@@ -536,6 +536,24 @@ TEST(Jak2GoalBridge, ExchangePreservesAndClearsPlayerHitInvulnerability) {
     EXPECT_EQ(local->players[0].hit_invulnerable, hit_invulnerable);
     EXPECT_EQ(state.remote.players[1].action.hit_invulnerable, hit_invulnerable);
   }
+}
+
+TEST(Jak2GoalBridge, PlayerUuidCrossesTheBridgeInBothDirections) {
+  using namespace multiplayer::jak2;
+  GoalMemoryFixture memory;
+  auto& state = replication_state(memory);
+  application::ReplicationMailbox mailbox;
+  const auto id = multiplayer::platform::PlayerId::generate();
+  std::ranges::copy(id.bytes, std::begin(state.local.players[0].identity.player_id));
+  auto remote = std::make_unique<application::RemoteReplicationFrame>();
+  remote->identities[1].player_id = id;
+  remote->identities[1].player_slot = 1;
+  mailbox.publish_remote_frame(std::move(remote));
+  ASSERT_TRUE(bridge::exchange_state(0x12000, mailbox));
+  const auto local = mailbox.take_local_frame();
+  ASSERT_TRUE(local);
+  EXPECT_EQ(local->identities[0].player_id, id);
+  EXPECT_TRUE(std::ranges::equal(state.remote.players[1].identity.player_id, id.bytes));
 }
 
 TEST(Jak2GoalBridge, PlayerSkinConversionRoundTripsValues) {
@@ -670,11 +688,11 @@ TEST(Jak2GoalBridge, ExchangePreservesFullBootstrapAidCapacity) {
 TEST(Jak2GoalBridge, InvalidLocalCaptureStillPublishesRemoteStateAndEvents) {
   GoalMemoryFixture memory;
   auto& state = replication_state(memory);
-  state.local_player_id = kMPInvalidPlayerId;
+  state.local_player_slot = kMPInvalidPlayerSlot;
   auto remote = std::make_unique<multiplayer::jak2::application::RemoteReplicationFrame>();
   remote->generation = 9;
   std::vector<multiplayer::jak2::core::GameEvent> events = {
-      {.event_id = 7, .source_player_id = 1, .payload_size = 1, .payload = {42}}};
+      {.event_id = 7, .source_player_slot = 1, .payload_size = 1, .payload = {42}}};
   multiplayer::jak2::application::ReplicationMailbox mailbox;
   mailbox.publish_remote_frame(std::move(remote));
   ASSERT_TRUE(mailbox.push_inbound_events(events));
@@ -708,7 +726,7 @@ TEST(Jak2GoalBridge, ExchangePublishesTargetsAndPreservesLocalHalf) {
   state.local.traffic.pedestrians[0].value.appearance_mask = 0xff7ffeb1;
   auto remote = std::make_unique<multiplayer::jak2::application::RemoteReplicationFrame>();
   remote->generation = 9;
-  remote->players[1].player_id = 1;
+  remote->players[1].player_slot = 1;
   remote->players[1].state_ready = true;
   remote->player_targets[1].valid = true;
   remote->player_targets[1].generation = 4;
@@ -774,11 +792,11 @@ TEST(Jak2GoalBridge, EmptyRemoteAirlockSnapshotClearsPreviousGoalRecords) {
   multiplayer::jak2::application::ReplicationMailbox mailbox;
 
   auto populated = std::make_unique<multiplayer::jak2::application::RemoteReplicationFrame>();
-  populated->airlocks[1].source_player_id = 1;
+  populated->airlocks[1].source_player_slot = 1;
   populated->airlocks[1].sequence = 7;
   populated->airlocks[1].states = {{.airlock_aid = 17, .state_id = 1},
                                    {.airlock_aid = 18, .state_id = 3}};
-  populated->airlocks[2].source_player_id = 2;
+  populated->airlocks[2].source_player_slot = 2;
   populated->airlocks[2].sequence = 9;
   populated->airlocks[2].states = {{.airlock_aid = 19, .state_id = 2}};
   mailbox.publish_remote_frame(std::move(populated));
@@ -786,12 +804,12 @@ TEST(Jak2GoalBridge, EmptyRemoteAirlockSnapshotClearsPreviousGoalRecords) {
   ASSERT_EQ(state.remote.airlocks.count, 3u);
   EXPECT_EQ(state.remote.airlocks.states[0].value.airlock_aid, 17u);
   EXPECT_EQ(state.remote.airlocks.states[1].value.airlock_aid, 18u);
-  EXPECT_EQ(state.remote.airlocks.states[0].value.source_player_id, 1u);
+  EXPECT_EQ(state.remote.airlocks.states[0].value.source_player_slot, 1u);
   EXPECT_EQ(state.remote.airlocks.states[2].value.airlock_aid, 19u);
-  EXPECT_EQ(state.remote.airlocks.states[2].value.source_player_id, 2u);
+  EXPECT_EQ(state.remote.airlocks.states[2].value.source_player_slot, 2u);
 
   auto empty = std::make_unique<multiplayer::jak2::application::RemoteReplicationFrame>();
-  empty->airlocks[1].source_player_id = 1;
+  empty->airlocks[1].source_player_slot = 1;
   empty->airlocks[1].sequence = 8;
   mailbox.publish_remote_frame(std::move(empty));
   ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
@@ -807,20 +825,20 @@ TEST(Jak2GoalBridge, EmptyRemoteAirlockSnapshotClearsPreviousGoalRecords) {
 TEST(Jak2GoalBridge, RemoteReplicationIgnoresLocallyOwnedEnemies) {
   GoalMemoryFixture memory;
   auto& state = replication_state(memory);
-  state.local_player_id = 0;
+  state.local_player_slot = 0;
   multiplayer::jak2::application::ReplicationMailbox mailbox;
 
   auto frame = std::make_unique<multiplayer::jak2::application::RemoteReplicationFrame>();
   frame->enemies.sequence = 12;
   frame->enemies.enemies = {
-      {.actor_id = 101, .owner_player_id = 0, .hit_points = 4},
-      {.actor_id = 102, .owner_player_id = 1, .hit_points = 3},
+      {.actor_id = 101, .owner_player_slot = 0, .hit_points = 4},
+      {.actor_id = 102, .owner_player_slot = 1, .hit_points = 3},
   };
   mailbox.publish_remote_frame(std::move(frame));
   ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
   ASSERT_EQ(state.remote.enemies.count, 1u);
   EXPECT_EQ(state.remote.enemies.enemies[0].actor_id, 102u);
-  EXPECT_EQ(state.remote.enemies.enemies[0].owner_player_id, 1u);
+  EXPECT_EQ(state.remote.enemies.enemies[0].owner_player_slot, 1u);
   EXPECT_EQ(state.remote.enemies.enemies[0].hp, 3);
 }
 
@@ -879,7 +897,7 @@ TEST(Jak2GoalBridge, RepeatedRemoteExchangeClearsStaleDataAndPreservesLocalFrame
       remote->bootstrap.synchronized_aid_count = multiplayer::jak2::core::kMaxBootstrapAids;
       remote->bootstrap.synchronized_aids.fill(123);
       remote->enemies.sequence = generation;
-      remote->enemies.enemies.push_back({.actor_id = 101, .owner_player_id = 1});
+      remote->enemies.enemies.push_back({.actor_id = 101, .owner_player_slot = 1});
       remote->selected_traffic.sequence = generation;
       remote->selected_traffic.pedestrians.push_back({.net_id = 0x11000001});
       remote->selected_traffic.vehicles.push_back({.net_id = 0x12000001});
@@ -1034,9 +1052,9 @@ TEST(Jak2GoalBridge, LifecycleChangeDiscardsAlreadyCopiedEventsFromPreviousOccup
   auto& state = replication_state(memory);
   state.remote.players[1].lifecycle_generation = 3;
   state.inbound_event_count = 3;
-  state.inbound_events[0].source_player_id = 1;
-  state.inbound_events[1].source_player_id = 2;
-  state.inbound_events[2].source_player_id = 1;
+  state.inbound_events[0].source_player_slot = 1;
+  state.inbound_events[1].source_player_slot = 2;
+  state.inbound_events[2].source_player_slot = 1;
   multiplayer::jak2::application::ReplicationMailbox mailbox;
   auto frame = std::make_unique<multiplayer::jak2::application::RemoteReplicationFrame>();
   frame->player_lifecycles[1] = 4;
@@ -1048,7 +1066,7 @@ TEST(Jak2GoalBridge, LifecycleChangeDiscardsAlreadyCopiedEventsFromPreviousOccup
   EXPECT_EQ(state.remote.players[1].departure_reason,
             static_cast<uint8_t>(multiplayer::platform::PlayerDepartureReason::TIMED_OUT));
   ASSERT_EQ(state.inbound_event_count, 1u);
-  EXPECT_EQ(state.inbound_events[0].source_player_id, 2u);
+  EXPECT_EQ(state.inbound_events[0].source_player_slot, 2u);
 }
 
 TEST(Jak2GoalBridge, ExpiredHostRetainsRawDestinationButCannotBePresentedAsReady) {
@@ -1057,13 +1075,13 @@ TEST(Jak2GoalBridge, ExpiredHostRetainsRawDestinationButCannotBePresentedAsReady
   auto& state = replication_state(memory);
   core::ReplicationState replication;
   core::PlayerState player;
-  player.player_id = 1;
+  player.player_slot = 1;
   player.position = {123.0f, 456.0f, 789.0f};
   player.activity = core::PlayerActivity::IN_GAME;
   player.state_ready = true;
   player.levels[0].level_id = 1;
   ASSERT_TRUE(replication.players().apply(
-      player, {.sequence = 1, .source = {.authenticated_player_id = 1}, .received_at_ms = 100}));
+      player, {.sequence = 1, .source = {.authenticated_player_slot = 1}, .received_at_ms = 100}));
   replication.expire(2101);
   auto frame = std::make_unique<application::RemoteReplicationFrame>();
   frame->players = replication.players().players();
@@ -1104,13 +1122,13 @@ TEST(Jak2GoalBridge, RemoteEnemiesPreserveFullCapacityAcrossPlayers) {
     for (uint32_t index = 0; index < multiplayer::jak2::core::kMaxEnemies; ++index)
       frame->enemies.enemies.push_back(
           {.actor_id = source * static_cast<uint32_t>(multiplayer::jak2::core::kMaxEnemies) + index,
-           .owner_player_id = source});
+           .owner_player_slot = source});
   }
   mailbox.publish_remote_frame(std::move(frame));
   ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
   ASSERT_EQ(state.remote.enemies.count, kMPReplicationEnemyCapacity);
-  EXPECT_EQ(state.remote.enemies.enemies[0].owner_player_id, 1u);
-  EXPECT_EQ(state.remote.enemies.enemies[kMPReplicationEnemyCapacity - 1].owner_player_id,
+  EXPECT_EQ(state.remote.enemies.enemies[0].owner_player_slot, 1u);
+  EXPECT_EQ(state.remote.enemies.enemies[kMPReplicationEnemyCapacity - 1].owner_player_slot,
             multiplayer::jak2::core::kMaxPlayers - 1);
   mailbox.publish_remote_frame(
       std::make_unique<multiplayer::jak2::application::RemoteReplicationFrame>());
@@ -1256,7 +1274,7 @@ TEST(Jak2GoalBridge, InvalidGungameCaptureDoesNotBlockOtherDomainsOrEvents) {
   state.local.traffic.pedestrian_count = 1;
   state.local.traffic.pedestrians[0].value.net_id = 0x10000001;
   state.outbound_event_count = 1;
-  state.outbound_events[0] = {.etype = 44, .source_player_id = 0, .payload_size = 8};
+  state.outbound_events[0] = {.etype = 44, .source_player_slot = 0, .payload_size = 8};
   application::ReplicationMailbox mailbox;
   float position = 10.0f;
   const auto capture = [&](bool valid_gungame) {

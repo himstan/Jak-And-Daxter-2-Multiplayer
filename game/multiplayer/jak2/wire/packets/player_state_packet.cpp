@@ -13,7 +13,7 @@ bool validate_packet(const PlayerStatePacket& packet) {
          packet.equipped_weapon <= 4u && packet.flags <= 0x7fu &&
          platform::wire::valid_angle(packet.camera_angle_y) && packet.action_sequence <= 0xffu &&
          packet.action_state_id <= 0xffu &&
-         valid_wire_player_reference(packet.riding_along_player_id) &&
+         valid_wire_player_reference(packet.riding_along_player_slot) &&
          packet.mission_flags <= 0x03u && packet.visual_secrets <= 0x07u &&
          valid_wire_player_reference(packet.selected_traffic_authority);
 }
@@ -39,14 +39,14 @@ PlayerStatePacket to_packet(const core::PlayerState& state) {
           .equipped_weapon = state.equipped_weapon,
           .action_sequence = static_cast<uint8_t>(state.action_sequence & 0xffu),
           .action_state_id = static_cast<uint8_t>(state.action_state_id & 0xffu),
-          .riding_along_player_id = state.riding_along_player_id < kMPMaxPlayers
-                                        ? state.riding_along_player_id
-                                        : kWireInvalidPlayerId,
+          .riding_along_player_slot = state.riding_along_player_slot < kMPMaxPlayers
+                                          ? state.riding_along_player_slot
+                                          : kWireInvalidPlayerSlot,
           .mission_flags = state.mission_flags,
           .visual_secrets = state.visual_secrets,
           .selected_traffic_authority = state.selected_traffic_authority < kMPMaxPlayers
                                             ? state.selected_traffic_authority
-                                            : kWireInvalidPlayerId};
+                                            : kWireInvalidPlayerSlot};
 }
 
 void from_packet(const PlayerStatePacket& packet, core::PlayerState& state) {
@@ -73,14 +73,14 @@ void from_packet(const PlayerStatePacket& packet, core::PlayerState& state) {
   state.equipped_weapon = packet.equipped_weapon;
   state.action_sequence = packet.action_sequence;
   state.action_state_id = packet.action_state_id;
-  state.riding_along_player_id = packet.riding_along_player_id < kMPMaxPlayers
-                                     ? packet.riding_along_player_id
-                                     : core::kInvalidPlayerId;
+  state.riding_along_player_slot = packet.riding_along_player_slot < kMPMaxPlayers
+                                       ? packet.riding_along_player_slot
+                                       : core::kInvalidPlayerSlot;
   state.mission_flags = packet.mission_flags;
   state.visual_secrets = packet.visual_secrets;
   state.selected_traffic_authority = packet.selected_traffic_authority < kMPMaxPlayers
                                          ? packet.selected_traffic_authority
-                                         : core::kInvalidPlayerId;
+                                         : core::kInvalidPlayerSlot;
   state.sample_time_ms = packet.sample_time_ms;
 }
 

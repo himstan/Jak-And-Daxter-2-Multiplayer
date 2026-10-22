@@ -96,22 +96,22 @@ void PresentationRuntime::reset() {
   enemy_generation_ = 0;
   traffic_generation_ = 0;
   enemy_source_sequences_ = {};
-  traffic_signature_source_ = core::kInvalidPlayerId;
+  traffic_signature_source_ = core::kInvalidPlayerSlot;
   pedestrian_signature_sequence_ = 0;
   vehicle_signature_sequence_ = 0;
 }
 
-void PresentationRuntime::reset_player(const core::PlayerId player_id) {
-  if (player_id >= core::kMaxPlayers)
+void PresentationRuntime::reset_player(const core::PlayerSlot player_slot) {
+  if (player_slot >= core::kMaxPlayers)
     return;
-  player_histories_[player_id] = {};
-  player_vehicle_histories_[player_id] = {};
+  player_histories_[player_slot] = {};
+  player_vehicle_histories_[player_slot] = {};
 }
 
-PresentationTarget PresentationRuntime::prepare_player(const core::PlayerId player_id,
+PresentationTarget PresentationRuntime::prepare_player(const core::PlayerSlot player_slot,
                                                        const core::PlayerState& player,
                                                        const uint64_t now_ms) {
-  auto& history = player_histories_[player_id];
+  auto& history = player_histories_[player_slot];
   if (!player.state_ready || player.last_sequence == 0) {
     history = {};
     return {};
@@ -135,18 +135,18 @@ PresentationTarget PresentationRuntime::prepare_player(const core::PlayerId play
     history.context = player.scene_active;
     ++history.generation;
   }
-  return make_target(player_id, present_timeline(history.timeline, now_ms, kCriticalProfile),
+  return make_target(player_slot, present_timeline(history.timeline, now_ms, kCriticalProfile),
                      history.generation);
 }
 
 PresentationTarget PresentationRuntime::prepare_player_vehicle(
-    const core::PlayerId player_id,
+    const core::PlayerSlot player_slot,
     const core::PlayerVehicleState& state,
     const core::PlayerState& player,
     const uint64_t now_ms) {
   const auto& vehicle = state.vehicle;
-  auto& history = player_vehicle_histories_[player_id];
-  if (state.player_id != player_id || vehicle.net_id == 0 || vehicle.last_sequence == 0) {
+  auto& history = player_vehicle_histories_[player_slot];
+  if (state.player_slot != player_slot || vehicle.net_id == 0 || vehicle.last_sequence == 0) {
     history = {};
     return {};
   }
@@ -167,7 +167,8 @@ PresentationTarget PresentationRuntime::prepare_player_vehicle(
     history.level_id = primary_level;
     ++history.generation;
   }
-  return make_target(vehicle.net_id, present_timeline(history.timeline, now_ms, kPlayerVehicleProfile),
+  return make_target(vehicle.net_id,
+                     present_timeline(history.timeline, now_ms, kPlayerVehicleProfile),
                      history.generation);
 }
 
@@ -179,11 +180,11 @@ void PresentationRuntime::prepare_enemies(RemoteReplicationFrame& frame, const u
     present.insert(enemy.actor_id);
     auto& history = enemy_histories_[enemy.actor_id];
     const uint32_t level_id =
-        core::valid_index(enemy.owner_player_id, core::kMaxPlayers)
-            ? core::primary_level_id(frame.players[enemy.owner_player_id].levels)
+        core::valid_index(enemy.owner_player_slot, core::kMaxPlayers)
+            ? core::primary_level_id(frame.players[enemy.owner_player_slot].levels)
             : 0;
     const bool reset =
-        (history.source != core::kInvalidPlayerId && history.source != enemy.owner_player_id) ||
+        (history.source != core::kInvalidPlayerSlot && history.source != enemy.owner_player_slot) ||
         (history.level_id != 0 && history.level_id != level_id);
     if (reset)
       history.timeline.reset();
@@ -194,7 +195,7 @@ void PresentationRuntime::prepare_enemies(RemoteReplicationFrame& frame, const u
                             enemy.received_time_ms, 5.0f * kGoalUnitsPerMeter);
       history.sequence = enemy.last_sequence;
       history.level_id = level_id;
-      history.source = enemy.owner_player_id;
+      history.source = enemy.owner_player_slot;
       ++history.generation;
     }
     frame.enemy_targets.push_back(
@@ -216,8 +217,8 @@ void PresentationRuntime::prepare_traffic(RemoteReplicationFrame& frame, const u
       const bool reset =
           (history.context != 0 && history.context != frame.selected_traffic.authority_revision) ||
           (history.level_id != 0 && history.level_id != frame.selected_traffic.level_id) ||
-          (history.source != core::kInvalidPlayerId &&
-           history.source != frame.selected_traffic.source_player_id);
+          (history.source != core::kInvalidPlayerSlot &&
+           history.source != frame.selected_traffic.source_player_slot);
       if (reset)
         history.timeline.reset();
       if (reset || history.sequence != entity.last_sequence) {
@@ -233,7 +234,7 @@ void PresentationRuntime::prepare_traffic(RemoteReplicationFrame& frame, const u
         history.sequence = entity.last_sequence;
         history.context = frame.selected_traffic.authority_revision;
         history.level_id = frame.selected_traffic.level_id;
-        history.source = frame.selected_traffic.source_player_id;
+        history.source = frame.selected_traffic.source_player_slot;
         ++history.generation;
       }
       targets.push_back(make_target(entity.net_id,
@@ -280,7 +281,7 @@ void PresentationRuntime::prepare_bosses(RemoteReplicationFrame& frame, const ui
 
 void PresentationRuntime::update_packet_generations(const core::ReplicationState& state) {
   bool enemy_changed = false;
-  for (core::PlayerId source = 0; source < core::kMaxPlayers; ++source) {
+  for (core::PlayerSlot source = 0; source < core::kMaxPlayers; ++source) {
     if (const auto sequence = state.entities().enemy_snapshot(source).sequence;
         sequence != enemy_source_sequences_[source]) {
       enemy_source_sequences_[source] = sequence;
@@ -311,10 +312,11 @@ void PresentationRuntime::prepare(RemoteReplicationFrame& frame,
                                   const core::ReplicationState& state,
                                   const uint64_t now_ms) {
   update_packet_generations(state);
-  for (core::PlayerId player_id = 0; player_id < core::kMaxPlayers; ++player_id) {
-    frame.player_targets[player_id] = prepare_player(player_id, frame.players[player_id], now_ms);
-    frame.player_vehicle_targets[player_id] = prepare_player_vehicle(
-        player_id, frame.player_vehicles[player_id], frame.players[player_id], now_ms);
+  for (core::PlayerSlot player_slot = 0; player_slot < core::kMaxPlayers; ++player_slot) {
+    frame.player_targets[player_slot] =
+        prepare_player(player_slot, frame.players[player_slot], now_ms);
+    frame.player_vehicle_targets[player_slot] = prepare_player_vehicle(
+        player_slot, frame.player_vehicles[player_slot], frame.players[player_slot], now_ms);
   }
   prepare_enemies(frame, now_ms);
   prepare_traffic(frame, now_ms);

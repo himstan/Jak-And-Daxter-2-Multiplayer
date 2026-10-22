@@ -8,7 +8,7 @@ struct MPReplicationPalaceSquidStateGOAL {
   int32_t stage;
   int32_t hit_points;
   float shield_hit_points;
-  uint8_t target_player_id;
+  uint8_t target_player_slot;
   uint8_t draw_force_fade;
   uint32_t action_seq;
   float x;

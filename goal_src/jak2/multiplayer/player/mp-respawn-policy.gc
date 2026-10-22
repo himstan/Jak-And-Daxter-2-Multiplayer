@@ -33,13 +33,13 @@
   (let ((local (mp-local-player-record)))
     (when (and local (nonzero? local))
       (set! (-> local action respawn-flags) (the uint8 0))))
-  (mp-for-each-player-record (player-id record)
+  (mp-for-each-player-record (player-slot record)
     (when (is-record-remote-player? record)
       (set! (-> record action respawn-flags) (the uint8 0))))
   (none))
 
 (defun mp-clear-remote-respawn-policy! ()
-  (mp-for-each-player-record (player-id record)
+  (mp-for-each-player-record (player-slot record)
     (when (is-record-remote-player? record)
       (set! (-> record action respawn-flags) (the uint8 0))))
   (none))
@@ -52,7 +52,7 @@
             (logtest? (-> record action respawn-flags) MP_RESPAWN_FLAG_BLOCK_REMOTE_ON_ME))))
 
 (defun mp-any-remote-blocks-respawn? ()
-  (mp-for-each-player-record (player-id record)
+  (mp-for-each-player-record (player-slot record)
     (when (and (is-record-remote-player? record) (mp-player-blocks-respawn? record))
       (return #t)))
   #f)
@@ -71,7 +71,7 @@
 
 (defun mp-prepare-local-respawn! ((player target))
   (mp-spectate-reset!)
-  (mp-for-each-player-record (player-id record)
+  (mp-for-each-player-record (player-slot record)
     (mp-player-runtime-clear-flag! record (mp-player-runtime-flags force-presentation)))
   (when (and player (nonzero? player))
     (mp-clear-local-vehicle-occupancy! player)

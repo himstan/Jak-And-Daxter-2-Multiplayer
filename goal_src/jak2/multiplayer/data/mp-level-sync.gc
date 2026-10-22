@@ -196,7 +196,7 @@
   (when (not (and *load-state* (nonzero? *load-state*)))
     (return #t))
   (let ((local-level-id (mp-level-symbol->id (-> *load-state* vis-nick))))
-    (mp-for-each-player-record (player-id record)
+    (mp-for-each-player-record (player-slot record)
       (when (and (is-record-remote-player? record) (>= (-> record connection activity) (mp-player-activity lobby)))
         (let ((remote-level-id (mp-player-primary-level-id record)))
           (when (and (nonzero? local-level-id) (nonzero? remote-level-id) (!= local-level-id remote-level-id))
