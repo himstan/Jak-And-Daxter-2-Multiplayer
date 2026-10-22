@@ -241,15 +241,12 @@
   #f)
 
 (defun mp-airlock-all-connected-remotes-state-id? ((airlock-aid uint) (expected-state-id mp-airlock-state-id))
-  (let ((remote-count (the uint 0)))
-    (when (nonnull? *mp-player-controller*)
-      (dotimes (player-slot MP_MAX_PLAYERS)
-        (let ((record (mp-player-record-by-slot (the-as uint player-slot))))
-          (when (mp-remote-gameplay-player-connected? record)
-            (+! remote-count 1)
-            (when (not (mp-is-remote-state-id-for-player? airlock-aid (the-as uint player-slot) expected-state-id))
-              (return #f))))))
-    (> remote-count 0)))
+  (mp-for-each-player-record (player-slot record)
+    (when (and (mp-remote-gameplay-player-connected? record)
+               (not (mp-player-record-dead-or-dying? record))
+               (not (mp-is-remote-state-id-for-player? airlock-aid (the-as uint player-slot) expected-state-id)))
+      (return #f)))
+  #t)
 
 (defun format-airlock-waiting-text! ((destination string) (airlock-aid uint))
   (when (not (nonnull? destination
@@ -262,6 +259,7 @@
   (let ((name-count 0))
     (mp-for-each-player-record (player-slot record)
       (when (and (mp-remote-gameplay-player-connected? record)
+                 (not (mp-player-record-dead-or-dying? record))
                  (not (mp-is-remote-state-id-for-player? airlock-aid
                                                          (the-as uint player-slot)
                                                          (mp-airlock-state-id commit))))
