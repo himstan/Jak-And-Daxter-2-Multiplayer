@@ -174,4 +174,7 @@
                                                mp-player-gun-shot-event-data
                                                (player-replica-receive-gun-release! (-> evt source-player-slot)
                                                                                     (the-as mp-player-gun-shot-event
-                                                                                            evt))))
+                                                                                            evt)))
+                  (MP_EVENT_GUARD_VEHICLE_SHOT 63
+                                               mp-aid-event-data
+                                               (receive-guard-vehicle-shot! (the-as mp-aid-event evt) source-record)))

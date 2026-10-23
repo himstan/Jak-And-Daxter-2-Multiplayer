@@ -48,17 +48,6 @@
   )
 
 
-(defun mp-local-target-ride-along-block-vehicle-entry? ((tgt target) (veh vehicle))
-  (or (and (nonnull? tgt)
-           (= tgt *target*)
-           (player-ride-contact-disabled? tgt))
-      ;; Block boarding guard vehicles for now, they're broken as hell now
-      ;; TODO: to fix the guard vehicle handling
-      (and veh (nonzero? veh) (type? veh vehicle-guard))
-  )
-)
-
-
 (defmethod clear-vehicle-hud-requests! ((this vehicle-hud-requests))
   (dotimes (v1-0 4)
     (let ((a1-2 (-> this requests v1-0)))
@@ -452,7 +441,7 @@
                                              (can-display-query? this (the-as string #f) (/ 1.0 (-> boarding-work floats 3)))
                                              )
                                    )
-                          (let ((block-local-boarding? (mp-local-target-ride-along-block-vehicle-entry? tgt this)) (pad-idx (-> tgt control cpad number)))
+                          (let ((block-local-boarding? (player-ride-contact-disabled? tgt)) (pad-idx (-> tgt control cpad number)))
                           (let ((s3-1
                                   (new 'stack 'font-context *font-default-matrix* 32 320 0.0 (font-color default) (font-flags shadow kerning))
                                   )
@@ -524,6 +513,9 @@
            )
          )
        )
+      ((mp-vehicle-local-target-riding? this)
+        (enable-player-vehicle-camera! this)
+        )
       (else
         (disable-player-vehicle-camera! this)
         )

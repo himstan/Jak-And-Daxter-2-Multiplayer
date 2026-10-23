@@ -348,12 +348,7 @@
 
 (defun player-replica-apply-input! ((proc target) (target-record target-record))
   (let ((record (mp-player-controller-target-record *mp-player-controller* proc)))
-    (when (and record
-               (nonzero? record)
-               (-> proc control)
-               (nonzero? (-> proc control))
-               (-> proc control cpad)
-               (nonzero? (-> proc control cpad)))
+    (when (nonnull? record proc (-> proc control) (-> proc control cpad) target-record)
       (let ((buttons (the-as uint16 (-> target-record buttons))))
         (when (nonzero? (the-as uint (-> target-record equipped-weapon)))
           (set! buttons (logclear buttons (pad-buttons r1))))
@@ -907,12 +902,7 @@
   (none))
 
 (defun player-replica-start-vehicle-entry! ((proc target) (v-proc vehicle) (seat-index int))
-  (when (and proc
-             (nonzero? proc)
-             (-> proc control)
-             (nonzero? (-> proc control))
-             v-proc
-             (nonzero? v-proc)
+  (when (and (nonnull? proc (-> proc control) v-proc (-> v-proc info))
              (>= seat-index 0)
              (< seat-index 4))
     (vehicle-eject-civilian-riders! v-proc)
@@ -922,12 +912,7 @@
   (none))
 
 (defun player-replica-repair-vehicle-seat-claim! ((proc target) (v-proc vehicle) (seat-index int))
-  (when (and proc
-             (nonzero? proc)
-             v-proc
-             (nonzero? v-proc)
-             (-> v-proc info)
-             (nonzero? (-> v-proc info))
+  (when (and (nonnull? proc v-proc (-> v-proc info))
              (>= seat-index 0)
              (< seat-index (-> v-proc info seat-count))
              (focus-test? proc pilot-riding)

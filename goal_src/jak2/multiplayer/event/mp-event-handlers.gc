@@ -839,6 +839,16 @@
   (player-replica-receive-gun-shot! (-> evt source-player-slot) evt)
   (none))
 
+(defun receive-guard-vehicle-shot! ((evt mp-aid-event) (source-record mp-player-record))
+  (when (and (nonnull? evt source-record)
+             (is-record-remote-player? source-record)
+             (nonzero? (-> evt payload aid)))
+    (let ((veh (mp-vehicle-find-by-net-id (-> evt payload aid)))
+          (driver (mp-player-record-target source-record)))
+      (when (and (nonnull? veh driver) (type? veh vehicle-guard))
+        (send-event veh 'replay-guard-shot :from driver))))
+  (none))
+
 (defun gungame-receive-target-broken! ((event gungame-target-broken-event))
   (when (and (nonnull? event *mp-player-controller*)
              (<= (-> event payload combo?) 1)

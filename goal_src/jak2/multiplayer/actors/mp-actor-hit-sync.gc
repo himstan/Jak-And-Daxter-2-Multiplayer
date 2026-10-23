@@ -46,15 +46,22 @@
                            (-> e-proc root trans)))))
   (none))
 
+(defun get-attacker-parent ((proc process))
+  (when (nonnull? proc)
+    (when (type? proc projectile)
+      (let ((owner (handle->process-safe (-> (the-as projectile proc) owner-handle))))
+        (when (and (nonnull? owner) (!= owner proc))
+          (return owner))))
+    (when (nonnull? (-> proc parent))
+      (return (the-as process (ppointer->process (-> proc parent))))))
+  (the-as process #f))
+
 (defun mp-is-local-attacker? ((proc process))
   (if (or (not proc) (zero? proc)) (return #f))
   (let ((curr proc))
     (while (and curr (nonzero? curr))
       (if (= curr *target*) (return #t))
-      (set! curr
-            (if (and (-> curr parent) (nonzero? (-> curr parent)))
-              (the-as process (ppointer->process (-> curr parent)))
-              (the-as process #f)))))
+      (set! curr (get-attacker-parent curr))))
   #f)
 
 (defun mp-remote-attacker-record ((proc process))
@@ -64,10 +71,7 @@
         (let ((record (mp-player-process-record curr)))
           (when (and record (nonzero? record) (is-record-remote-player? record))
             (return record)))
-        (set! curr
-              (if (and (-> curr parent) (nonzero? (-> curr parent)))
-                (the-as process (ppointer->process (-> curr parent)))
-                (the-as process #f))))))
+        (set! curr (get-attacker-parent curr)))))
   (the-as mp-player-record #f))
 
 (defun mp-is-remote-attacker? ((proc process))

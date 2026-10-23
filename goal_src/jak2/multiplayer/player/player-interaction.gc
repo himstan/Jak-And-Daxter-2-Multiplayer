@@ -31,10 +31,6 @@
 
 (defun get-player-attacker ((attacker process))
   (when (mp-session-in-game?)
-    (when (and (nonnull? attacker) (type? attacker projectile))
-      (let ((owner (handle->process-safe (-> (the-as projectile attacker) owner-handle))))
-        (when (nonnull? owner)
-          (set! attacker owner))))
     (when (mp-is-local-attacker? attacker)
       (return *target*))
     (let ((record (mp-remote-attacker-record attacker)))
