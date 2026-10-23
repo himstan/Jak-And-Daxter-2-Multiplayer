@@ -844,9 +844,9 @@
              (is-record-remote-player? source-record)
              (nonzero? (-> evt payload aid)))
     (let ((veh (mp-vehicle-find-by-net-id (-> evt payload aid)))
-          (driver (mp-player-record-target source-record)))
-      (when (and (nonnull? veh driver) (type? veh vehicle-guard))
-        (send-event veh 'replay-guard-shot :from driver))))
+          (shooter (mp-player-record-target source-record)))
+      (when (and (nonnull? veh shooter) (type? veh vehicle-guard))
+        (send-event veh 'replay-guard-shot (-> source-record vehicle seat-index) :from shooter))))
   (none))
 
 (defun gungame-receive-target-broken! ((event gungame-target-broken-event))

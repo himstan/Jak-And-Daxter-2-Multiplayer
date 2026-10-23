@@ -20,6 +20,7 @@
   "transport.o"
   "bike.o"
   "car.o"
+  "hellcat-gunner.o" ;; added
   "test-bike.o"
   "test-car.o"
   "citizen.o"

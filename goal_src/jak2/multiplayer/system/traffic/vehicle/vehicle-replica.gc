@@ -610,8 +610,9 @@
           (vehicle-resume-released-physics! (-> v-proc net-id)))
         (set! (-> (mp-local-player-record) vehicle vehicle-id) (-> v-proc net-id))
         (set! (-> (mp-local-player-record) vehicle seat-index) (the uint8 (-> pilot-info seat-index)))
-        (when (zero? (-> pilot-info seat-index))
-          (mp-vehicle-pack v-proc (-> (mp-local-player-record) vehicle state))))))
+        (if (zero? (-> pilot-info seat-index))
+          (mp-vehicle-pack v-proc (-> (mp-local-player-record) vehicle state))
+          (send-event v-proc 'pack-gunner-aim (-> (mp-local-player-record) vehicle))))))
   (none))
 
 (defun mp-vehicle-guard-ensure-remote-combat! ((veh vehicle-guard))

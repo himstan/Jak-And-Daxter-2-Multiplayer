@@ -642,7 +642,7 @@
       (suspend)
       (let ((a1-7 (handle->process (-> self pilot vehicle))))
         (if a1-7
-            (set! (-> self alt-cam-pos quad) (-> (the-as vehicle a1-7) rbody state position quad))
+            (set! (-> self alt-cam-pos quad) (-> (the-as vehicle a1-7) root trans quad))
             )
         )
       (ja :num! (seek!))

@@ -1552,8 +1552,36 @@
                                               )
         )
 
+(define *hellcat-rear-turret-control-info* (new 'static 'turret-control-info
+                                             :joint-index 6
+                                             :barrel-count 2
+                                             :shot-speed 819200.0
+                                             :attack-range 286720.0
+                                             :rot-min (new 'static 'array float 2 -2730.6667 -32768.0)
+                                             :rot-max (new 'static 'array float 2 6371.5557 32768.0)
+                                             :local-pos (new 'static 'vector :y -819.2 :z 6144.0 :w 1.0)
+                                             :local-dir (new 'static 'vector :z 1.0 :w 1.0)
+                                             :barrel-array (new 'static 'inline-array turret-barrel-info 4
+                                               (new 'static 'turret-barrel-info
+                                                 :local-pos (new 'static 'vector :x 5734.4 :y -819.2 :z 6144.0 :w 1.0)
+                                                 :local-dir (new 'static 'vector :z 1.0 :w 1.0)
+                                                 )
+                                               (new 'static 'turret-barrel-info
+                                                 :local-pos (new 'static 'vector :x -5734.4 :y -819.2 :z 6144.0 :w 1.0)
+                                                 :local-dir (new 'static 'vector :z 1.0 :w 1.0)
+                                                 )
+                                               (new 'static 'turret-barrel-info)
+                                               (new 'static 'turret-barrel-info)
+                                               )
+                                             )
+        )
+
 (deftype hellcat (vehicle-guard)
-  ((turret-jm  joint-mod-rotate-local)
+  ((turret-jm             joint-mod-rotate-local)
+   (rear-turret           turret-control :inline)
+   (rear-turret-yaw-jm    joint-mod-rotate-local)
+   (rear-turret-pitch-jm  joint-mod-rotate-local)
+   (gunner-camera?        symbol)
    )
   )
 
@@ -1561,6 +1589,12 @@
 (defmethod relocate ((this hellcat) (offset int))
   (if (nonzero? (-> this turret-jm))
       (&+! (-> this turret-jm) offset)
+      )
+  (if (nonzero? (-> this rear-turret-yaw-jm))
+      (&+! (-> this rear-turret-yaw-jm) offset)
+      )
+  (if (nonzero? (-> this rear-turret-pitch-jm))
+      (&+! (-> this rear-turret-pitch-jm) offset)
       )
   (call-parent-method this offset)
   )
@@ -1642,6 +1676,9 @@
   (alloc-and-init-rigid-body-control this *hellcat-constants*)
   (set-info (-> this turret) *hellcat-front-turret-control-info*)
   (set! (-> this turret-jm) (new 'process 'joint-mod-rotate-local this (-> this turret info joint-index) #t))
+  (set-info (-> this rear-turret) *hellcat-rear-turret-control-info*)
+  (set! (-> this rear-turret-yaw-jm) (new 'process 'joint-mod-rotate-local this 5 #t))
+  (set! (-> this rear-turret-pitch-jm) (new 'process 'joint-mod-rotate-local this 6 #t))
   0
   (none)
   )
