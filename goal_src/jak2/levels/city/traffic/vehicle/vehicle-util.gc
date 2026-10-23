@@ -456,7 +456,7 @@
                                        (not (real-movie?))
                                        (not (and *progress-process* (nonzero? *progress-process*))))
                               (let ((msg (cond
-                                           ((not can-board-seat?) (text-id press-triangle-to-hang))
+                                           ((not can-board-seat?) (text-id press-triangle-to-grab))
                                            ((and (not (cpad-hold? pad-idx l1)) (not driver-seat-player?)) (text-id press-triangle-to-drive))
                                            ((or (cpad-hold? pad-idx l1) driver-seat-player?) (text-id press-triangle-to-ride))
                                            (else (text-id press-triangle-to-use))
