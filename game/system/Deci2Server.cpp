@@ -7,10 +7,14 @@
 // clang-format off
 #include "Deci2Server.h"
 
+#include <algorithm>
+#include <cstring>
+#include <limits>
+
 #include "common/cross_sockets/XSocket.h"
 #include "common/versions/versions.h"
 #include "common/listener_common.h"
-#include "common/util/Assert.h"
+#include "game/kernel/common/kprint.h"
 
 #include "fmt/format.h"
 
@@ -98,36 +102,50 @@ void Deci2Server::send_proto_ready(Deci2Driver* drivers, int* driver_count) {
   cv.notify_all();
 }
 
+bool Deci2Server::read_bytes(char* destination, int size) {
+  int received = 0;
+  while (received < size && !want_exit_callback()) {
+    const int count = read_from_socket(accepted_socket, destination + received, size - received);
+    if (count == 0 || (count < 0 && !socket_timed_out())) {
+      client_connected = false;
+      return false;
+    }
+    if (count > 0) {
+      received += count;
+    }
+  }
+  return received == size;
+}
+
 void Deci2Server::read_data() {
   if (!is_client_connected()) {
     return;
   }
 
-  int desired_size = (int)sizeof(Deci2Header);
-  int got = 0;
-
-  while (got < desired_size) {
-    ASSERT(got + desired_size < (int)buffer.size());
-    auto x = read_from_socket(accepted_socket, buffer.data() + got, desired_size - got);
-    if (want_exit_callback()) {
-      return;
-    }
-    got += x > 0 ? x : 0;
+  ListenerMessageHeader header = {};
+  if (!read_bytes(reinterpret_cast<char*>(&header), sizeof(header))) {
+    return;
+  }
+  const auto maximum_size = std::min(buffer.size(), size_t{DEBUG_MESSAGE_BUFFER_SIZE - 1});
+  if (!valid_listener_message_header(header, maximum_size) || header.deci2_header.src != 'H' ||
+      header.deci2_header.dst != 'E') {
+    client_connected = false;
+    return;
+  }
+  std::memcpy(buffer.data(), &header, sizeof(header));
+  if (!read_bytes(buffer.data() + sizeof(header), header.msg_size)) {
+    return;
   }
 
-  auto* hdr = (Deci2Header*)(buffer.data());
-  fprintf(stderr, "[DECI2] Got message: %d %d 0x%x %c -> %c\n", hdr->len, hdr->rsvd, hdr->proto,
-          hdr->src, hdr->dst);
-
-  hdr->rsvd = got;
-
   // see what protocol we got:
-  lock();
-
+  std::lock_guard guard(server_mutex);
+  if (!d2_drivers || !d2_driver_count) {
+    return;
+  }
   int handler = -1;
   for (int i = 0; i < *d2_driver_count; i++) {
     auto& prot = d2_drivers[i];
-    if (prot.active && prot.protocol) {
+    if (prot.active && prot.protocol == header.deci2_header.proto) {
       if (handler != -1) {
         printf("[DECI2] Warning: more than on protocol handler for this message!\n");
       }
@@ -137,38 +155,27 @@ void Deci2Server::read_data() {
 
   if (handler == -1) {
     printf("[DECI2] Warning: no handler for this message, ignoring...\n");
-    unlock();
     return;
   }
 
   auto& driver = d2_drivers[handler];
-
   u32 sent_to_program = 0;
-  while (!want_exit_callback() && (hdr->rsvd < hdr->len || sent_to_program < hdr->rsvd)) {
+  while (sent_to_program < header.deci2_header.len && !want_exit_callback()) {
     // send what we have to the program
-    if (sent_to_program < hdr->rsvd) {
-      //      driver.next_recv_size = 0;
-      //      driver.next_recv = nullptr;
-      driver.recv_buffer = buffer.data() + sent_to_program;
-      driver.available_to_receive = hdr->rsvd - sent_to_program;
-      (driver.handler)(DECI2_READ, driver.available_to_receive, driver.opt);
-      //      memcpy(driver.next_recv, buffer + sent_to_program, driver.next_recv_size);
-      sent_to_program += driver.recv_size;
+    driver.recv_buffer = buffer.data() + sent_to_program;
+    driver.available_to_receive =
+        std::min<u32>(header.deci2_header.len - sent_to_program, std::numeric_limits<u16>::max());
+    driver.recv_size = 0;
+    (driver.handler)(DECI2_READ, driver.available_to_receive, driver.opt);
+    if (driver.recv_size <= 0 || driver.recv_size > driver.available_to_receive) {
+      client_connected = false;
+      return;
     }
-
-    // receive from network
-    if (hdr->rsvd < hdr->len) {
-      auto x = read_from_socket(accepted_socket, buffer.data() + hdr->rsvd, hdr->len - hdr->rsvd);
-      if (want_exit_callback()) {
-        return;
-      }
-      got += x > 0 ? x : 0;
-      hdr->rsvd = got;
-    }
+    sent_to_program += driver.recv_size;
   }
-
-  (driver.handler)(DECI2_READDONE, 0, driver.opt);
-  unlock();
+  if (!want_exit_callback()) {
+    (driver.handler)(DECI2_READDONE, 0, driver.opt);
+  }
 }
 
 void Deci2Server::send_data(void* buf, u16 len) {
@@ -176,9 +183,13 @@ void Deci2Server::send_data(void* buf, u16 len) {
   if (!client_connected) {
     printf("[DECI2] send while not connected, not sending!\n");
   } else {
-    uint16_t prog = 0;
+    u32 prog = 0;
     while (prog < len) {
       int wrote = write_to_socket(accepted_socket, (char*)(buf) + prog, len - prog);
+      if (wrote <= 0) {
+        client_connected = false;
+        break;
+      }
       prog += wrote;
       if (!client_connected || want_exit_callback()) {
         unlock();

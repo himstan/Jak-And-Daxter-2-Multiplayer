@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 
 #include "deci_common.h"
@@ -30,6 +31,7 @@ class Deci2Server : public XSocketServer {
   void accept_thread_func();
 
  private:
+  bool read_bytes(char* destination, int size);
   bool want_shutdown = false;
   bool protocols_ready = false;
   std::condition_variable cv;
@@ -37,11 +39,11 @@ class Deci2Server : public XSocketServer {
   int* d2_driver_count = nullptr;
 
   int accepted_socket = -1;
-  bool kill_accept_thread = false;
+  std::atomic_bool kill_accept_thread = false;
   bool accept_thread_running = false;
 
   std::thread accept_thread;
   std::mutex server_mutex;
 
-  bool client_connected = false;
+  std::atomic_bool client_connected = false;
 };

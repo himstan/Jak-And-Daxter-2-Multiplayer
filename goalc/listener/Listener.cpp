@@ -193,6 +193,22 @@ bool Listener::connect_to_target(int n_tries, const std::string& ip, int port) {
   last_sent_id = 0;
 }
 
+bool Listener::receive_bytes(char* destination, u32 size) {
+  u32 received = 0;
+  while (m_connected && received < size) {
+    const int count = read_from_socket(listen_socket, destination + received, size - received);
+    // kick us out if we got a bogus read result
+    if (count == 0 || (count < 0 && !socket_timed_out())) {
+      m_connected = false;
+      return false;
+    }
+    if (count > 0) {
+      received += count;
+    }
+  }
+  return received == size;
+}
+
 /*!
  * Runs in a separate thread to receive messages.
  * Will print messages to stdout, or optionally save them.
@@ -200,25 +216,16 @@ bool Listener::connect_to_target(int n_tries, const std::string& ip, int port) {
 void Listener::receive_func() {
   while (m_connected) {
     // attempt to receive a ListenerMessageHeader
-    u32 rcvd = 0;
-    u32 rcvd_desired = sizeof(ListenerMessageHeader);
-    char buff[sizeof(ListenerMessageHeader)];
-    while (rcvd < rcvd_desired) {
-      auto got = read_from_socket(listen_socket, buff + rcvd, rcvd_desired - rcvd);
-      rcvd += got > 0 ? got : 0;
-
-      // kick us out if we got a bogus read result
-      if (got == 0 || (got == -1 && !socket_timed_out())) {
-        m_connected = false;
-      }
-
-      // exit this loop if we don't want to be running any more
-      if (!m_connected) {
-        return;
-      }
+    ListenerMessageHeader header = {};
+    auto* hdr = &header;
+    if (!receive_bytes(reinterpret_cast<char*>(hdr), sizeof(header))) {
+      return;
     }
-
-    ListenerMessageHeader* hdr = (ListenerMessageHeader*)buff;
+    if (!valid_listener_message_header(header, BUFFER_SIZE - 1) || header.deci2_header.src != 'E' ||
+        header.deci2_header.dst != 'H') {
+      m_connected = false;
+      return;
+    }
     if (debug_listener) {
       printf("[T -> L] received %d bytes, kind %d\n", hdr->deci2_header.len, int(hdr->msg_kind));
     }
@@ -242,18 +249,10 @@ void Listener::receive_func() {
 
         if (hdr->deci2_header.len < 512) {
           // ack's should be < 512 bytes (they are just "ack").
-          int ack_recv_prog = 0;
-          while (rcvd < hdr->deci2_header.len) {
-            if (!m_connected)
-              return;
-            int got = read_from_socket(listen_socket, ack_recv_buff + ack_recv_prog,
-                                       hdr->deci2_header.len - rcvd);
-            got = got > 0 ? got : 0;
-            rcvd += got;
-            ack_recv_prog += got;
+          if (!receive_bytes(ack_recv_buff, hdr->msg_size)) {
+            return;
           }
-          ack_recv_buff[ack_recv_prog] = '\0';
-          ASSERT(ack_recv_prog < 512);
+          ack_recv_buff[hdr->msg_size] = '\0';
           got_ack = true;
           last_recvd_id = hdr->msg_id;
           if (last_recvd_id > last_sent_id) {
@@ -264,49 +263,46 @@ void Listener::receive_func() {
           }
         } else {
           printf("[Listener] got invalid ack!\n");
+          m_connected = false;
+          return;
         }
         break;
 
       case ListenerMessageKind::MSG_OUTPUT:
       case ListenerMessageKind::MSG_PRINT: {
-        auto* str_buff = new char[hdr->msg_size + 1];  // plus one for the null terminator
-        int msg_prog = 0;
-        ASSERT(hdr->msg_id == 0);
-        while (rcvd < hdr->deci2_header.len) {
-          if (!m_connected) {
-            return;
-          }
-
-          int got =
-              read_from_socket(listen_socket, str_buff + msg_prog, hdr->deci2_header.len - rcvd);
-          got = got > 0 ? got : 0;
-          rcvd += got;
-          msg_prog += got;
-          if (got == 0 || (got == -1 && !socket_timed_out())) {
-            m_connected = false;
-          }
+        if (hdr->msg_id != 0) {
+          m_connected = false;
+          return;
         }
-        str_buff[hdr->msg_size] = '\0';
+        std::vector<char> message(hdr->msg_size + 1, 0);  // plus one for the null terminator
+        auto* str_buff = message.data();
+        if (!receive_bytes(str_buff, hdr->msg_size)) {
+          return;
+        }
 
         if (hdr->msg_kind == ListenerMessageKind::MSG_PRINT) {
           printf("%s\n", str_buff);
         }
 
-        rcv_mtx.lock();
+        std::lock_guard guard(rcv_mtx);
         if (hdr->msg_kind == filter) {
           message_record.emplace_back(str_buff);
         }
 
         if (hdr->msg_kind == ListenerMessageKind::MSG_OUTPUT) {
-          handle_output_message(str_buff);
+          try {
+            handle_output_message(str_buff);
+          } catch (const std::exception&) {
+            m_connected = false;
+            return;
+          }
         }
-        rcv_mtx.unlock();
-        delete[] str_buff;
       } break;
 
       default:
         printf("unhandled message type %d from target\n", int(hdr->msg_kind));
-        break;
+        m_connected = false;
+        return;
     }
   }
 }
@@ -502,19 +498,24 @@ void Listener::handle_output_message(const char* msg) {
     line = all.find('\n', last_line);
 
     auto x = str.find(' ');
+    const auto require_argument = [&] {
+      if (x == std::string::npos || x + 1 >= str.length()) {
+        throw std::runtime_error("missing listener output argument");
+      }
+    };
     auto kind = str.substr(0, x);
     if (kind == "reset") {
-      ASSERT(x + 1 < str.length());
+      require_argument();
       auto next = str.find(' ', x + 1);
       auto s7_str = str.substr(x, next - x);
       x = next;
 
-      ASSERT(x + 1 < str.length());
+      require_argument();
       next = str.find(' ', x + 1);
       auto base_str = str.substr(x, next - x);
       x = next;
 
-      ASSERT(x + 1 < str.length());
+      require_argument();
       next = str.find(' ', x + 1);
       auto tid_str = str.substr(x, next - x);
 
@@ -525,12 +526,12 @@ void Listener::handle_output_message(const char* msg) {
       }
 
     } else if (kind == "load") {
-      ASSERT(x + 1 < str.length());
+      require_argument();
       auto next = str.find(' ', x + 1);
       auto name_str = str.substr(x, next - x);
       x = next;
 
-      ASSERT(x + 1 < str.length());
+      require_argument();
       next = str.find(' ', x + 1);
       auto load_kind_str = str.substr(x, next - x);
       x = next;
@@ -538,7 +539,7 @@ void Listener::handle_output_message(const char* msg) {
       std::string seg_strings[6];
 
       for (auto& seg_string : seg_strings) {
-        ASSERT(x + 1 < str.length());
+        require_argument();
         next = str.find(' ', x + 1);
         seg_string = str.substr(x, next - x);
         x = next;

@@ -11,7 +11,6 @@
 #include <mutex>
 #include <optional>
 #include <queue>
-#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -40,8 +39,7 @@ class DebugServer : public XSocketServer {
 
   int max_clients = 4;
   std::vector<char> m_read_buffer = std::vector<char>(64 * 1024);
-  std::set<int> m_client_sockets = {};
-  std::string m_pending_input;
+  std::map<int, std::string> m_clients;
 
   std::mutex m_event_mutex;
   std::queue<std::string> m_event_queue;

@@ -72,7 +72,7 @@ bool XSocketServer::init_server(bool failure_may_occur) {
   }
 
   addr.sin_family = AF_INET;
-  addr.sin_addr.s_addr = INADDR_ANY;
+  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   addr.sin_port = htons(tcp_port);
 
   if (bind(listening_socket, (sockaddr*)&addr, sizeof(addr)) < 0) {

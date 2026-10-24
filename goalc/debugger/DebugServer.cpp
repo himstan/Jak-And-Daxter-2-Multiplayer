@@ -165,7 +165,7 @@ std::string signal_kind_to_reason(xdbg::SignalInfo::Kind kind) {
 }  // namespace
 
 DebugServer::~DebugServer() {
-  for (const int& sock : m_client_sockets) {
+  for (const auto& [sock, pending] : m_clients) {
     close_socket(sock);
   }
 }
@@ -204,10 +204,10 @@ void DebugServer::push_event(const std::string& event_name, const json& body) {
 void DebugServer::send_line(int socket, const std::string& line) {
   const std::string payload = line + "\n";
   auto resp = write_to_socket(socket, payload.c_str(), (int)payload.size());
-  if (resp == -1) {
+  if (resp != (int)payload.size()) {
     lg::warn("[DebugServer:{}] client disconnected while writing", tcp_port);
     close_socket(socket);
-    m_client_sockets.erase(socket);
+    m_clients.erase(socket);
   }
 }
 
@@ -222,14 +222,14 @@ void DebugServer::accept_new_clients() {
     return;
   }
 
-  if ((int)m_client_sockets.size() >= max_clients) {
+  if ((int)m_clients.size() >= max_clients) {
     lg::warn("[DebugServer:{}] maximum clients reached, rejecting connection", tcp_port);
     close_socket(new_socket);
     return;
   }
 
   lg::info("[DebugServer:{}] new connection: {}", tcp_port, address_to_string(addr));
-  m_client_sockets.insert(new_socket);
+  m_clients.emplace(new_socket, std::string{});
 
   // say hello, so the client can confirm it's talking to the right thing
   json hello;
@@ -244,7 +244,7 @@ void DebugServer::service_client(int socket) {
   if (got == 0) {
     lg::warn("[DebugServer:{}] client disconnected", tcp_port);
     close_socket(socket);
-    m_client_sockets.erase(socket);
+    m_clients.erase(socket);
     return;
   }
   if (got < 0) {
@@ -252,31 +252,45 @@ void DebugServer::service_client(int socket) {
     return;
   }
 
-  m_pending_input.append(m_read_buffer.data(), got);
+  constexpr size_t kMaximumRequestSize = 1024 * 1024;
+  auto& pending = m_clients.at(socket);
+  pending.append(m_read_buffer.data(), got);
 
   // requests are newline delimited, handle every complete one we have
   size_t newline_pos;
-  while ((newline_pos = m_pending_input.find('\n')) != std::string::npos) {
-    const std::string line = m_pending_input.substr(0, newline_pos);
-    m_pending_input.erase(0, newline_pos + 1);
+  while ((newline_pos = pending.find('\n')) != std::string::npos) {
+    if (newline_pos > kMaximumRequestSize) {
+      break;
+    }
+    const std::string line = pending.substr(0, newline_pos);
+    pending.erase(0, newline_pos + 1);
     if (line.empty()) {
       continue;
     }
 
     json response;
-    auto parsed = safe_parse_json(line);
-    if (!parsed) {
+    try {
+      auto parsed = json::parse(line, [](int depth, json::parse_event_t, json&) {
+        if (depth > 64) {
+          throw std::runtime_error("request nesting limit exceeded");
+        }
+        return true;
+      });
+      response = handle_request(parsed);
+    } catch (const std::exception&) {
       response["ok"] = false;
       response["error"] = "malformed json request";
-    } else {
-      response = handle_request(*parsed);
     }
     send_line(socket, response.dump());
 
-    if (m_client_sockets.find(socket) == m_client_sockets.end()) {
+    if (!m_clients.contains(socket)) {
       // the write above disconnected us
       return;
     }
+  }
+  if (pending.size() > kMaximumRequestSize) {
+    close_socket(socket);
+    m_clients.erase(socket);
   }
 }
 
@@ -291,8 +305,8 @@ void DebugServer::flush_events() {
     const std::string line = to_send.front();
     to_send.pop();
     // events go to everyone connected
-    for (auto it = m_client_sockets.begin(); it != m_client_sockets.end();) {
-      const int sock = *it;
+    for (auto it = m_clients.begin(); it != m_clients.end();) {
+      const int sock = it->first;
       ++it;
       send_line(sock, line);
     }
@@ -308,7 +322,7 @@ void DebugServer::run_once() {
   FD_ZERO(&read_sockets);
   FD_SET(listening_socket, &read_sockets);
   int max_sd = listening_socket;
-  for (const int& sock : m_client_sockets) {
+  for (const auto& [sock, pending] : m_clients) {
     if (sock > max_sd) {
       max_sd = sock;
     }
@@ -319,8 +333,10 @@ void DebugServer::run_once() {
 
   struct timeval timeout = {0, 50000};
   const auto activity = select(max_sd + 1, &read_sockets, nullptr, nullptr, &timeout);
-  if (activity < 0 && errno != EINTR) {
-    lg::error("[DebugServer:{}] select error: {}", tcp_port, strerror(errno));
+  if (activity <= 0) {
+    if (activity < 0 && errno != EINTR) {
+      lg::error("[DebugServer:{}] select error: {}", tcp_port, strerror(errno));
+    }
     return;
   }
 
@@ -329,9 +345,12 @@ void DebugServer::run_once() {
   }
 
   // copy, because servicing a client can close it and mutate the set
-  const std::set<int> clients = m_client_sockets;
+  std::vector<int> clients;
+  for (const auto& [sock, pending] : m_clients) {
+    clients.push_back(sock);
+  }
   for (const int sock : clients) {
-    if (FD_ISSET(sock, &read_sockets) && m_client_sockets.find(sock) != m_client_sockets.end()) {
+    if (FD_ISSET(sock, &read_sockets) && m_clients.contains(sock)) {
       service_client(sock);
     }
   }
@@ -341,20 +360,25 @@ void DebugServer::run_once() {
 
 json DebugServer::handle_request(const json& request) {
   json response;
-  if (request.contains("seq")) {
-    response["seq"] = request["seq"];
-  }
-
-  const std::string cmd = request.value("cmd", "");
-  const json args = request.contains("args") ? request["args"] : json::object();
-
-  if (!m_compiler || !m_compiler_mutex) {
-    response["ok"] = false;
-    response["error"] = "compiler is not available";
-    return response;
-  }
-
   try {
+    if (!request.is_object() || !request.contains("cmd") || !request["cmd"].is_string() ||
+        (request.contains("args") && !request["args"].is_object()) ||
+        (request.contains("seq") && !request["seq"].is_number_integer())) {
+      throw std::runtime_error("invalid request fields");
+    }
+    if (request.contains("seq")) {
+      response["seq"] = request["seq"];
+    }
+
+    const std::string cmd = request.value("cmd", "");
+    const json args = request.contains("args") ? request["args"] : json::object();
+
+    if (!m_compiler || !m_compiler_mutex) {
+      response["ok"] = false;
+      response["error"] = "compiler is not available";
+      return response;
+    }
+
     std::lock_guard<std::mutex> lock(*m_compiler_mutex);
     m_compiler->get_debugger().refresh_break_state();
 

@@ -9,6 +9,7 @@
 #ifndef JAK1_LISTENER_H
 #define JAK1_LISTENER_H
 
+#include <atomic>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -54,10 +55,10 @@ class Listener {
   void handle_output_message(const char* msg);
 
   int m_default_port = DECI2_PORT;
-  char* m_buffer = nullptr;             //! buffer for incoming messages
-  bool m_connected = false;             //! do we think we are connected?
-  bool receive_thread_running = false;  //! is the receive thread unjoined?
-  int listen_socket = -1;               //! socket
+  char* m_buffer = nullptr;              //! buffer for incoming messages
+  std::atomic_bool m_connected = false;  //! do we think we are connected?
+  bool receive_thread_running = false;   //! is the receive thread unjoined?
+  int listen_socket = -1;                //! socket
   bool got_ack = false;
   bool waiting_for_ack = false;
 
@@ -66,6 +67,7 @@ class Listener {
   std::thread rcv_thread;
   std::mutex rcv_mtx;
   void receive_func();
+  bool receive_bytes(char* destination, u32 size);
   ListenerMessageKind filter = ListenerMessageKind::MSG_INVALID;
   std::vector<std::string> message_record;
   std::unordered_map<std::string, LoadEntry> m_load_entries;

@@ -22,26 +22,21 @@ u32 ReceiveToBuffer(char* buff) {
 
   // FlushCache(0);
   ListenerMessageHeader* gbuff = protoBlock.receive_buffer;
-  u32 msg_size = gbuff->msg_size;
-
-  // check it's our protocol
-  if (gbuff->deci2_header.proto == DECI2_PROTOCOL) {
-    // null terminate
-    ((u8*)gbuff)[sizeof(ListenerMessageHeader) + msg_size] = '\0';
-    // copy stuff to block
-    protoBlock.msg_kind = u32(gbuff->msg_kind);
-    protoBlock.msg_id = gbuff->msg_id;
-    // and mark message as received!
-    protoBlock.last_receive_size = -1;
-  } else {
-    // not our protocol, something has gone wrong.
-    MsgErr("dkernel: got a bad packet to goal proto (goal #x%lx bytes %d %d %d %ld %d)\n",
-           (int64_t)protoBlock.receive_buffer, protoBlock.last_receive_size,
-           u32(protoBlock.receive_buffer->msg_kind), protoBlock.receive_buffer->u6,
-           protoBlock.receive_buffer->msg_id, msg_size);
+  if (!gbuff || !valid_listener_message_header(*gbuff, DEBUG_MESSAGE_BUFFER_SIZE - 1) ||
+      gbuff->deci2_header.len != static_cast<u32>(protoBlock.last_receive_size) ||
+      gbuff->deci2_header.src != 'H' || gbuff->deci2_header.dst != 'E') {
     protoBlock.last_receive_size = -1;
     return -1;
   }
+  u32 msg_size = gbuff->msg_size;
+
+  // null terminate
+  ((u8*)gbuff)[sizeof(ListenerMessageHeader) + msg_size] = '\0';
+  // copy stuff to block
+  protoBlock.msg_kind = u32(gbuff->msg_kind);
+  protoBlock.msg_id = gbuff->msg_id;
+  // and mark message as received!
+  protoBlock.last_receive_size = -1;
   return msg_size;
 }
 

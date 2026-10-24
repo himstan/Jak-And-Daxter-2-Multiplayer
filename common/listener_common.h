@@ -5,6 +5,8 @@
  * Common types shared between the compiler and the runtime for the listener connection.
  */
 
+#include <cstddef>
+
 #include "common/common_types.h"
 
 /*!
@@ -12,7 +14,7 @@
  * NOTE: we've changed this to use 32-bit integers for len/rsvd
  */
 struct Deci2Header {
-  u32 len;    //! size of data following header
+  u32 len;    //! total message size, including header
   u32 rsvd;   //! zero, used internally by runtime.
   u16 proto;  //! protocol identification number
   u8 src;     //! identification code of sender
@@ -63,3 +65,11 @@ constexpr int DECI2_PORT = 8112;  // TODO - is this a good choice?
 constexpr int DEBUG_SERVER_PORT = 8128;
 
 constexpr u16 DECI2_PROTOCOL = 0xe042;
+
+inline bool valid_listener_message_header(const ListenerMessageHeader& header,
+                                          std::size_t maximum_message_size) {
+  return header.deci2_header.proto == DECI2_PROTOCOL &&
+         header.deci2_header.len >= sizeof(ListenerMessageHeader) &&
+         header.deci2_header.len <= maximum_message_size &&
+         header.msg_size == header.deci2_header.len - sizeof(ListenerMessageHeader);
+}

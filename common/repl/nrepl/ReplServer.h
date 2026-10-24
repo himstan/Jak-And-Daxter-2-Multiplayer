@@ -1,7 +1,7 @@
 #pragma once
 
+#include <map>
 #include <optional>
-#include <set>
 
 #include "common/cross_sockets/XSocketServer.h"
 
@@ -23,10 +23,14 @@ class ReplServer : public XSocketServer {
 
  private:
   int max_clients = 50;
-  std::vector<char> header_buffer = std::vector<char>((int)sizeof(ReplServerHeader));
-  fd_set read_sockets;
-  std::set<int> client_sockets = {};
+  struct Client {
+    ReplServerHeader header = {};
+    size_t header_received = 0;
+    std::string body;
+  };
+  std::map<int, Client> clients;
 
-  void error_response(int socket, const std::string& error);
+  void close_client(int socket);
+  std::optional<std::string> read_client(int socket);
   void ping_response(int socket);
 };
