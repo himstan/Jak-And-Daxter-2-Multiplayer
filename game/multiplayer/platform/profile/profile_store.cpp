@@ -21,6 +21,7 @@
 
 namespace multiplayer::platform {
 namespace {
+#ifdef _WIN32
 std::string lock_name(std::string game_id, const fs::path& root, const uint8_t slot) {
   for (auto& ch : game_id) {
     if (!std::isalnum(static_cast<unsigned char>(ch)))
@@ -33,6 +34,7 @@ std::string lock_name(std::string game_id, const fs::path& root, const uint8_t s
   return "Local\\OpenGOALMultiplayerProfile_" + game_id + "_" + std::to_string(root_hash) + "_" +
          std::to_string(slot);
 }
+#endif
 }  // namespace
 
 class ProfileLease::Impl {

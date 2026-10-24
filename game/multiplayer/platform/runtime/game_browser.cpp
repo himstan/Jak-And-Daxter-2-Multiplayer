@@ -1,6 +1,7 @@
 #include "game/multiplayer/platform/runtime/game_browser.h"
 
 #include <algorithm>
+#include <functional>
 
 namespace multiplayer::platform {
 
@@ -32,8 +33,8 @@ std::vector<GameListing> merge_game_listings(const std::span<const DiscoveryResu
                      .compatible = lobby.compatibility_identity == compatibility_identity,
                      .lobby_id = lobby_id});
   }
-  std::ranges::stable_partition(games, &GameListing::friend_host);
-  std::ranges::stable_partition(games, &GameListing::compatible);
+  std::stable_partition(games.begin(), games.end(), std::mem_fn(&GameListing::friend_host));
+  std::stable_partition(games.begin(), games.end(), std::mem_fn(&GameListing::compatible));
   return games;
 }
 

@@ -1,15 +1,6 @@
 #include "game/multiplayer/platform/core/player_id.h"
 
-#include <stdexcept>
-
-#ifdef _WIN32
-#define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
-#include <bcrypt.h>
-#else
-#include <unistd.h>
-#endif
+#include <random>
 
 namespace multiplayer::platform {
 namespace {
@@ -17,14 +8,10 @@ constexpr std::string_view kHex = "0123456789abcdef";
 }
 
 PlayerId PlayerId::generate() {
+  std::random_device entropy;
   PlayerId id;
-#ifdef _WIN32
-  if (BCryptGenRandom(nullptr, id.bytes.data(), static_cast<ULONG>(id.bytes.size()),
-                      BCRYPT_USE_SYSTEM_PREFERRED_RNG) != 0)
-#else
-  if (getentropy(id.bytes.data(), id.bytes.size()) != 0)
-#endif
-    throw std::runtime_error("could not generate a player UUID");
+  for (auto& byte : id.bytes)
+    byte = static_cast<uint8_t>(entropy());
   id.bytes[6] = (id.bytes[6] & 0x0f) | 0x40;
   id.bytes[8] = (id.bytes[8] & 0x3f) | 0x80;
   return id;

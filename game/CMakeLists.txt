@@ -464,7 +464,7 @@ target_link_libraries(multiplayer-platform PRIVATE GameNetworkingSockets::static
 add_dependencies(multiplayer-platform libminiupnpc-static natpmp)
 target_include_directories(multiplayer-platform PUBLIC "${PROJECT_SOURCE_DIR}")
 if(WIN32)
-    target_link_libraries(multiplayer-platform PRIVATE iphlpapi ws2_32 bcrypt)
+    target_link_libraries(multiplayer-platform PRIVATE iphlpapi ws2_32)
 elseif(UNIX)
     target_link_libraries(multiplayer-platform PRIVATE pthread)
 endif()

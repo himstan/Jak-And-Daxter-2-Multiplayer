@@ -2121,6 +2121,7 @@ TEST(GnsTransportIntegration, PlayerIdentitySurvivesSlotReuseAndNewSessions) {
   host.disconnect();
   client.disconnect();
   other.disconnect();
+  hosting.port = available_udp_port();
   ASSERT_TRUE(host.host(hosting));
   joining.port = host.local_port();
   ASSERT_TRUE(client.connect(joining));
