@@ -222,7 +222,10 @@
   #f)
 
 (defstate target-player-teleport-wait (target)
-  :event (-> target-grab event)
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (if (focus-test? self indax)
+      ((-> target-indax-grab event) proc argc message block)
+      ((-> target-grab event) proc argc message block)))
   :enter (behavior ((player-slot uint) (ride-along? symbol) (scene? symbol))
     (when (nonnull? self (-> self control))
       (logior! (-> self focus-status) (focus-status grabbed))
@@ -230,15 +233,17 @@
       (let ((record (mp-player-record-by-slot player-slot)))
         (when (nonnull? record)
           (mp-teleport-player-to-record-coords! self record 4096.0)))))
-  :exit target-exit
+  :exit (behavior ()
+    (if (focus-test? self indax) (target-indax-exit) (target-exit)))
   :code (behavior ((player-slot uint) (ride-along? symbol) (scene? symbol))
     (while (and (mp-session-in-game?) (or scene? (not (mp-respawn-policy-blocks-remote-placement?))))
       (cond
         (scene?
          (when (not (or *mp-pending-scene-sync?* *mp-scene-sync-target-hold?*))
-           (if (nonnull? *scene-player*)
-             (go target-grab 'stance)
-             (mp-teleport-reset-local-base-state! self))))
+           (cond
+             ((not (nonnull? *scene-player*)) (mp-teleport-reset-local-base-state! self))
+             ((focus-test? self indax) (go target-indax-grab 'stance))
+             (else (go target-grab 'stance)))))
         (else
          (let ((record (mp-player-record-by-slot player-slot)))
            (unless (mp-remote-gameplay-player-connected? record)
