@@ -504,6 +504,9 @@
   :event target-board-handler
   :exit target-board-exit
   :code (behavior ((arg0 object))
+    (when (focus-test? self indax)
+      (target-indax-exit)
+      )
     (target-board-init)
     (remove-exit)
     (go target-board-get-on)
