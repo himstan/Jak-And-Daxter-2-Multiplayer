@@ -266,7 +266,7 @@
            (color (if (= player-slot (mp-local-player-slot)) (font-color yellow) (font-color white))))
       (set! (-> this strings label-index scale) 0.5)
       (set! (-> this strings label-index flags) (font-flags kerning large))
-      (set! (-> this strings label-index color) color)
+      (set! (-> this strings label-index color) (mp-player-font-color-by-slot (the int player-slot)))
       (set-hud-piece-position! (the-as hud-sprite (-> this strings label-index pos)) 104 row-y)
       (mp-race-format-final-player-label! (-> this strings label-index text) player-slot place)
       (set! (-> this strings time-index scale) 0.5)
