@@ -203,11 +203,12 @@
    )
   )
 
+(defconstant ANIM_CACHE_SLOT_COUNT (* 64 MP_MAX_PLAYERS))
 
 (deftype art-joint-anim-manager (basic)
   ((kheap       kheap                        :inline)
    (free-index  int32)
-   (slot        art-joint-anim-manager-slot  64 :inline)
+   (slot        art-joint-anim-manager-slot  ANIM_CACHE_SLOT_COUNT :inline)
    )
   (:methods
     (new (symbol type int) _type_)

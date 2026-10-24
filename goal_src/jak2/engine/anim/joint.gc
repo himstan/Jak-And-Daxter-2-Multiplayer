@@ -196,7 +196,9 @@
     (dotimes (chan-idx num-channels)
       (let ((weight (-> this blend-stack 0 weights chan-idx))
             (chan (-> jc channel chan-idx)))
-        (when (> weight 0.001) ;; only both if weight is nonzero
+        (when (and (> weight 0.001) ;; only both if weight is nonzero
+                   (nonnull? (-> chan frame-group) (-> chan frame-group frames))
+                   (not (logtest? (-> chan frame-group frames flags) 1)))
           (let* ((req (-> this requests (-> this num-requests))) ;; request to create
                  (jacc (-> chan frame-group frames))             ;; compressed animation
                  (frame-num (-> chan frame-num))                 ;; floating-point frame (eg 1.23)
@@ -2271,23 +2273,35 @@
   arg0
   )
 
+(defun anim-cache-stale-slot ((cache art-joint-anim-manager))
+  (let ((oldest -1)
+        (frame (-> *display* base-clock frame-counter))
+        )
+    (dotimes (index (-> cache free-index))
+      (let ((stamp (-> cache slot index time-stamp)))
+        (when (and (!= stamp frame)
+                   (or (< oldest 0) (< stamp (-> cache slot oldest time-stamp)))
+                   )
+          (set! oldest index)
+          )
+        )
+      )
+    oldest
+    )
+  )
+
 (defmethod decompress ((this art-joint-anim-manager) (arg0 art-joint-anim))
   (let* ((s5-0 (-> arg0 frames))
          (s3-0 (* (+ (-> s5-0 fixed-qwc) (* (-> s5-0 num-frames) (-> s5-0 frame-qwc))) 16))
          )
     (while (or (< (the-as uint (&- (-> this kheap top) (the-as uint (-> this kheap current)))) (+ s3-0 64))
-               (>= (-> this free-index) 64)
+               (>= (-> this free-index) ANIM_CACHE_SLOT_COUNT)
                )
-      (let ((a1-2 -1))
-        (let ((a0-3 0))
-          (dotimes (v1-2 (-> this free-index))
-            (when (or (< a1-2 0) (< (the-as int (-> this slot v1-2 time-stamp)) a0-3))
-              (set! a0-3 (the-as int (-> this slot v1-2 time-stamp)))
-              (set! a1-2 v1-2)
-              )
+      (let ((stale-slot (anim-cache-stale-slot this)))
+        (if (< stale-slot 0)
+            (return arg0)
             )
-          )
-        (unload-from-slot this a1-2)
+        (unload-from-slot this stale-slot)
         )
       )
     (let ((v1-15 (-> this slot (-> this free-index))))
@@ -2334,6 +2348,6 @@
 
 (kmemopen global "anim-manager")
 
-(define *anim-manager* (new 'global 'art-joint-anim-manager #x30000))
+(define *anim-manager* (new 'global 'art-joint-anim-manager (* #x30000 MP_MAX_PLAYERS)))
 
 (kmemclose)
