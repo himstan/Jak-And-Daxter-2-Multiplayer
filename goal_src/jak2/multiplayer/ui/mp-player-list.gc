@@ -8,7 +8,10 @@
   (-> *player-list* open?))
 
 (defun player-list-allowed? ()
-  (and (mp-session-in-game?) (= *master-mode* 'game) (not *progress-process*) (progress-allowed?)))
+  (and (mp-session-in-game?)
+       (= *master-mode* 'game)
+       (not *progress-process*)
+       (or (progress-allowed?) (nonnull? *scene-player*))))
 
 (defun open-player-list! ()
   (set! *lobby-action-player* -1)
@@ -104,6 +107,8 @@
     (when player-name
       (when (mp-player-record-dead-or-dying? (mp-player-record-by-slot (the-as uint player-slot)))
         (format player-name (lookup-text! *common-text* (text-id mp-player-list-dead-suffix) #f)))
+      (when (scene-skip-voted? (the-as uint player-slot))
+        (format player-name (lookup-text! *common-text* (text-id mp-player-list-skipped-suffix) #f)))
       (fit-overlay-text player-name font-ctx max-width))))
 
 (defun player-list-ping ((player-slot int))

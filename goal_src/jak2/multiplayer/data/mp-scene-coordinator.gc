@@ -263,6 +263,9 @@
 (defun mp-scene-coordinator-vote-active? ()
   (nonzero? (logand *mp-scene-coordinator-vote-mask* (mp-scene-coordinator-player-mask))))
 
+(defun scene-skip-voted? ((player-slot uint))
+  (logtest? (logand *mp-scene-coordinator-vote-mask* (mp-scene-coordinator-player-mask)) (mp-scene-player-bit player-slot)))
+
 (defun mp-scene-coordinator-host-skip-ready? ()
   (let ((player-mask (mp-scene-coordinator-player-mask)))
     (and (mp-session-host?)
