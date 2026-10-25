@@ -99,10 +99,6 @@ static_assert(sizeof(PlayerLevelSlot) == 2);
 using PlayerLevelState = std::array<PlayerLevelSlot, kPlayerLevelSlotCount>;
 static_assert(sizeof(PlayerLevelState) == 12);
 
-constexpr uint8_t primary_level_id(const PlayerLevelState& levels) {
-  return levels[0].level_id;
-}
-
 constexpr int player_level_borrow_owner_index(const PlayerLevelSlot& level) {
   const auto encoded =
       static_cast<uint8_t>((level.flags & LEVEL_BORROW_OWNER_MASK) >> LEVEL_BORROW_OWNER_SHIFT);
@@ -113,7 +109,10 @@ constexpr uint8_t player_level_borrow_slot(const PlayerLevelSlot& level) {
   return (level.flags & LEVEL_BORROW_SLOT) != 0 ? 1 : 0;
 }
 
-inline bool valid_player_level_state(const PlayerLevelState& levels) {
+inline bool valid_player_level_state(const PlayerLevelState& levels, uint8_t primary_slot) {
+  if (primary_slot >= levels.size() || (primary_slot != 0 && levels[primary_slot].level_id == 0)) {
+    return false;
+  }
   bool saw_empty = false;
   for (size_t i = 0; i < levels.size(); ++i) {
     const auto& level = levels[i];
@@ -174,6 +173,7 @@ struct PlayerState {
   bool turret_active = false;
   bool hit_invulnerable = false;
   PlayerLevelState levels{};
+  uint8_t primary_level_slot = 0;
   std::array<float, 3> position = {};
   std::array<float, 3> velocity = {};
   float angle = 0.0f;
@@ -197,6 +197,12 @@ struct PlayerState {
   uint32_t last_sequence = 0;
   uint64_t received_time_ms = 0;
 };
+
+constexpr uint8_t primary_level_id(const PlayerState& player) {
+  return player.primary_level_slot < player.levels.size()
+             ? player.levels[player.primary_level_slot].level_id
+             : 0;
+}
 
 struct TrafficAuthority {
   uint32_t revision = 0;

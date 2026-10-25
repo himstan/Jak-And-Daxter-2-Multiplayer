@@ -115,11 +115,12 @@
   :size-assert 2)
 
 (deftype mp-player-transform-state (structure)
-  ((position vector :inline)
-   (velocity vector :inline)
-   (angle    float)
-   (levels   mp-player-level-slot MP_PLAYER_LEVEL_SLOT_COUNT :inline))
-  :size-assert 48)
+  ((position           vector :inline)
+   (velocity           vector :inline)
+   (angle              float)
+   (levels             mp-player-level-slot MP_PLAYER_LEVEL_SLOT_COUNT :inline)
+   (primary-level-slot uint8))
+  :size-assert 49)
 
 (deftype mp-player-action-state (structure)
   ((target-state-id          uint32)
@@ -203,9 +204,9 @@
    (input      mp-player-input-state :inline)
    (vehicle    mp-player-vehicle-state :inline)
    (runtime    mp-player-runtime-state :inline))
-  :size-assert 736)
+  :size-assert 752)
 
-(defconstant MP_PLAYER_CONTROLLER_SIZE (+ (* 736 MP_MAX_PLAYERS) 2))
+(defconstant MP_PLAYER_CONTROLLER_SIZE (+ (* 752 MP_MAX_PLAYERS) 2))
 
 (deftype mp-player-controller (structure)
   ((records           mp-player-record MP_MAX_PLAYERS :inline)

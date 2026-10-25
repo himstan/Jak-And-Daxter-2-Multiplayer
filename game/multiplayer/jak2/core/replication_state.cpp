@@ -61,7 +61,7 @@ bool PlayerReplicationState::apply(const PlayerState& state, const ApplyContext&
   if (!valid_index(state.player_slot, kMaxPlayers) ||
       !source_allows_player(context.source, state.player_slot) || !finite_vector(state.position) ||
       !finite_vector(state.velocity) || !finite(state.angle) || !finite(state.camera_angle_y) ||
-      !valid_player_level_state(state.levels) ||
+      !valid_player_level_state(state.levels, state.primary_level_slot) ||
       !platform::sequence_is_newer(context.sequence,
                                    player_states_[state.player_slot].last_sequence)) {
     return false;

@@ -26,6 +26,7 @@ struct PlayerStatePacket : platform::wire::Packet<PlayerStatePacket, PacketType:
   std::array<float, 3> velocity = {};
   uint32_t state_id = 0;
   core::PlayerLevelState levels = {};
+  uint8_t primary_level_slot = 0;
   uint8_t darkjak_stage = 0;
   uint16_t buttons = 0;
   uint8_t leftx = 0;
@@ -63,7 +64,8 @@ bool serialize_fields(Stream& stream, PacketT&& packet) {
       return false;
     }
   }
-  if (!platform::wire::serialize_u8(stream, packet.darkjak_stage) ||
+  if (!platform::wire::serialize_uint_bits(stream, packet.primary_level_slot, 3) ||
+      !platform::wire::serialize_u8(stream, packet.darkjak_stage) ||
       !platform::wire::serialize_u16(stream, packet.buttons) ||
       !platform::wire::serialize_u8(stream, packet.leftx) ||
       !platform::wire::serialize_u8(stream, packet.lefty) ||

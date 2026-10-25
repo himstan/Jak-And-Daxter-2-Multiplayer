@@ -110,6 +110,7 @@ core::PlayerState read_player(const MPReplicationPlayerGOAL& source) {
     result.levels[i].level_id = source.transform.levels[i].level_id;
     result.levels[i].flags = source.transform.levels[i].flags;
   }
+  result.primary_level_slot = source.primary_level_slot;
   result.position = {source.transform.position[0], source.transform.position[1],
                      source.transform.position[2]};
   result.velocity = {source.transform.velocity[0], source.transform.velocity[1],
@@ -457,6 +458,7 @@ void write_player(const core::PlayerState& source,
     destination.transform.levels[i].level_id = source.levels[i].level_id;
     destination.transform.levels[i].flags = source.levels[i].flags;
   }
+  destination.primary_level_slot = source.primary_level_slot;
   destination.action.target_state_id = source.state_id;
   destination.action.darkjak_stage = source.darkjak_stage;
   destination.action.authoritative_sequence = source.action_sequence;

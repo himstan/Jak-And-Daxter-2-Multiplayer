@@ -97,10 +97,10 @@ void expect_exact_packet(const Model& payload, const std::vector<uint8_t>& expec
 }  // namespace
 
 TEST(Jak2Protocol, PlayerStateWireFormatPreservesEveryField) {
-  const std::vector<uint8_t> bytes = {120, 86, 52, 18,  3,  0,   16,  0,   0,   1,   0,   16,  0,
-                                      16,  0,  32, 0,   64, 1,   128, 98,  136, 2,   102, 12,  68,
-                                      16,  34, 6,  170, 36, 204, 70,  5,   154, 87,  35,  220, 219,
-                                      0,   64, 41, 0,   0,  64,  177, 212, 118, 110, 1};
+  const std::vector<uint8_t> bytes = {120, 86,  52,  18,  3,   0,   16,  0,   0,   1,   0,   16,  0,
+                                      16,  0,   32,  0,   64,  1,   128, 98,  136, 2,   102, 12,  68,
+                                      16,  34,  6,   170, 36,  204, 70,  39,  208, 188, 26,  225, 222,
+                                      6,   0,   74,  1,   0,   0,   138, 165, 182, 115, 11};
   multiplayer::jak2::core::PlayerState state = {};
   state.player_slot = 2;
   state.sample_time_ms = 0x12345678;
@@ -115,6 +115,7 @@ TEST(Jak2Protocol, PlayerStateWireFormatPreservesEveryField) {
   state.levels[3] = {.level_id = 0x11, .flags = 0x03};
   state.levels[4] = {.level_id = 0x55, .flags = 0x12};
   state.levels[5] = {.level_id = 0x66, .flags = 0xa3};
+  state.primary_level_slot = 3;
   state.darkjak_stage = 2;
   state.buttons = 0xabcd;
   state.leftx = 0x11;
@@ -152,6 +153,7 @@ TEST(Jak2Protocol, PlayerStateWireFormatPreservesEveryField) {
     EXPECT_EQ(actual.levels[level].level_id, state.levels[level].level_id);
     EXPECT_EQ(actual.levels[level].flags, state.levels[level].flags);
   }
+  EXPECT_EQ(actual.primary_level_slot, 3u);
   EXPECT_EQ(actual.darkjak_stage, 2u);
   EXPECT_EQ(actual.buttons, 0xabcdu);
   EXPECT_EQ(actual.leftx, 0x11u);

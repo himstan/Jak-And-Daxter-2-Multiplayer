@@ -402,8 +402,7 @@ void Jak2Adapter::add_traffic_handlers(Handlers& handlers) {
     }
     snapshot.source_player_slot = session.local_player_slot;
     snapshot.authority_revision = revision;
-    snapshot.level_id =
-        core::primary_level_id(local_frame_->players[session.local_player_slot].levels);
+    snapshot.level_id = core::primary_level_id(local_frame_->players[session.local_player_slot]);
     snapshot.sample_time_ms = local_frame_->sample_time_ms;
     if (session.role == platform::SessionRole::CLIENT) {
       handler.send(snapshot, endpoint, now_ms);

@@ -25,6 +25,7 @@ TEST(Jak2Protocol, RoundTripsCorePlayerStateWithStableWireSize) {
   input.levels[3] = {.level_id = 0x11, .flags = 0x03};
   input.levels[4] = {.level_id = 0x55, .flags = 0x12};
   input.levels[5] = {.level_id = 0x66, .flags = 0xa3};
+  input.primary_level_slot = 4;
   input.state_id = 17;
   input.action_sequence = 9;
   input.action_state_id = 11;
@@ -58,10 +59,25 @@ TEST(Jak2Protocol, RoundTripsCorePlayerStateWithStableWireSize) {
     EXPECT_EQ(output.levels[level].level_id, input.levels[level].level_id);
     EXPECT_EQ(output.levels[level].flags, input.levels[level].flags);
   }
+  EXPECT_EQ(output.primary_level_slot, input.primary_level_slot);
+  EXPECT_EQ(multiplayer::jak2::core::primary_level_id(output), 0x55);
   EXPECT_EQ(output.vehicle_id, input.vehicle_id);
   EXPECT_EQ(output.selected_traffic_authority, input.selected_traffic_authority);
   EXPECT_TRUE(output.spectator_only);
   EXPECT_TRUE(output.scene_active);
+}
+
+TEST(Jak2Protocol, PrimaryLevelSlotMustNameAnAdvertisedLevel) {
+  using multiplayer::jak2::core::valid_player_level_state;
+  multiplayer::jak2::core::PlayerLevelState levels = {};
+  EXPECT_TRUE(valid_player_level_state(levels, 0));
+  EXPECT_FALSE(valid_player_level_state(levels, 1));
+
+  levels[0] = {.level_id = 0x10, .flags = 0x00};
+  levels[1] = {.level_id = 0x20, .flags = 0x01};
+  EXPECT_TRUE(valid_player_level_state(levels, 1));
+  EXPECT_FALSE(valid_player_level_state(levels, 2));
+  EXPECT_FALSE(valid_player_level_state(levels, 6));
 }
 
 TEST(Jak2Protocol, TrafficInterestFitsPlayerPacketAndRejectsInvalidSources) {
@@ -84,8 +100,7 @@ TEST(Jak2Protocol, TrafficInterestFitsPlayerPacketAndRejectsInvalidSources) {
     EXPECT_FALSE(platform::wire::encode_packet(invalid));
     auto bytes = platform::wire::encode_packet(jak2::wire::PlayerStatePacket{});
     ASSERT_TRUE(bytes);
-    (*bytes)[48] = ((*bytes)[48] & 0x3f) | ((source & 3) << 6);
-    (*bytes)[49] = source >> 2;
+    (*bytes)[49] = static_cast<uint8_t>(((*bytes)[49] & 0xe1) | (source << 1));
     EXPECT_FALSE(platform::wire::decode_packet<jak2::wire::PlayerStatePacket>(*bytes));
   }
 }

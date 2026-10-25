@@ -48,6 +48,7 @@ struct alignas(16) MPReplicationPlayerGOAL {
   uint8_t valid;
   uint8_t mission_flags;
   uint8_t departure_reason;
+  uint8_t primary_level_slot;
 };
 static_assert(sizeof(MPReplicationPlayerGOAL) == 560);
 static_assert(offsetof(MPReplicationPlayerGOAL, identity) == 48);
@@ -57,6 +58,7 @@ static_assert(offsetof(MPReplicationPlayerGOAL, action) == 496);
 static_assert(offsetof(MPReplicationPlayerGOAL, input) == 528);
 static_assert(offsetof(MPReplicationPlayerGOAL, generation) == 540);
 static_assert(offsetof(MPReplicationPlayerGOAL, lifecycle_generation) == 544);
+static_assert(offsetof(MPReplicationPlayerGOAL, primary_level_slot) == 552);
 
 struct alignas(16) MPReplicationPedestrianSlotGOAL {
   MPReplicationPedestrianStateGOAL value;

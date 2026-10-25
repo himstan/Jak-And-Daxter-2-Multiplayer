@@ -69,8 +69,9 @@
    (activity                mp-player-activity)
    (valid?                  uint8)
    (mission-flags           uint8)
-   (departure-reason        player-departure-reason))
-  :size-assert 552)
+   (departure-reason        player-departure-reason)
+   (primary-level-slot      uint8))
+  :size-assert 553)
 
 (deftype mp-replication-bootstrap-state (structure)
   ((host-spawn-position    vector :inline)

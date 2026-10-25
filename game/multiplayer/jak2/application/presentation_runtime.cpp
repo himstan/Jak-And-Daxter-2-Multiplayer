@@ -116,7 +116,7 @@ PresentationTarget PresentationRuntime::prepare_player(const core::PlayerSlot pl
     history = {};
     return {};
   }
-  const uint32_t primary_level = core::primary_level_id(player.levels);
+  const uint32_t primary_level = core::primary_level_id(player);
   const bool reset = history.sequence != 0 &&
                      (history.level_id != primary_level || history.context != player.scene_active);
   if (reset)
@@ -150,7 +150,7 @@ PresentationTarget PresentationRuntime::prepare_player_vehicle(
     history = {};
     return {};
   }
-  const uint32_t primary_level = core::primary_level_id(player.levels);
+  const uint32_t primary_level = core::primary_level_id(player);
   const bool reset = (history.identity != 0 && history.identity != vehicle.net_id) ||
                      (history.level_id != 0 && history.level_id != primary_level);
   if (reset)
@@ -181,7 +181,7 @@ void PresentationRuntime::prepare_enemies(RemoteReplicationFrame& frame, const u
     auto& history = enemy_histories_[enemy.actor_id];
     const uint32_t level_id =
         core::valid_index(enemy.owner_player_slot, core::kMaxPlayers)
-            ? core::primary_level_id(frame.players[enemy.owner_player_slot].levels)
+            ? core::primary_level_id(frame.players[enemy.owner_player_slot])
             : 0;
     const bool reset =
         (history.source != core::kInvalidPlayerSlot && history.source != enemy.owner_player_slot) ||

@@ -9,7 +9,7 @@ bool validate_packet(const PlayerStatePacket& packet) {
          platform::wire::valid_position_array(packet.position) &&
          platform::wire::valid_angle(packet.angle) &&
          platform::wire::valid_linear_velocity_array(packet.velocity) && packet.state_id <= 0xffu &&
-         core::valid_player_level_state(packet.levels) && packet.vehicle_seat <= 3u &&
+         core::valid_player_level_state(packet.levels, packet.primary_level_slot) && packet.vehicle_seat <= 3u &&
          packet.equipped_weapon <= 4u && packet.flags <= 0x7fu &&
          platform::wire::valid_angle(packet.camera_angle_y) && packet.action_sequence <= 0xffu &&
          packet.action_state_id <= 0xffu &&
@@ -26,6 +26,7 @@ PlayerStatePacket to_packet(const core::PlayerState& state) {
           .velocity = state.velocity,
           .state_id = static_cast<uint8_t>(state.state_id & 0xffu),
           .levels = state.levels,
+          .primary_level_slot = state.primary_level_slot,
           .darkjak_stage = state.darkjak_stage,
           .buttons = state.buttons,
           .leftx = state.leftx,
@@ -58,6 +59,7 @@ void from_packet(const PlayerStatePacket& packet, core::PlayerState& state) {
   state.velocity = packet.velocity;
   state.state_id = packet.state_id;
   state.levels = packet.levels;
+  state.primary_level_slot = packet.primary_level_slot;
   state.darkjak_stage = packet.darkjak_stage;
   state.buttons = packet.buttons;
   state.leftx = packet.leftx;
