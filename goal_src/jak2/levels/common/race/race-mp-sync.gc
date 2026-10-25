@@ -358,7 +358,7 @@
 
 (defun mp-race-manager-config-ready? ((info race-info))
   (when (not (mp-session-in-game?))
-    (return #t))
+    (return (not (and (mp-session-client?) (mp-session-connected?)))))
   (when (or (not info) (zero? info))
     (return #f))
   (let ((sync *mp-race-sync-state*))
@@ -373,6 +373,7 @@
 
 (defun mp-race-manager-end! ()
   (mp-culling-clear-override! (mp-culling-override-flags race))
+  (mp-spectate-stop! 'race 'race-ended)
   (when (and *mp-race-sync-state* (nonzero? *mp-race-sync-state*))
     (mp-race-reset-runtime!)
     (set! (-> *mp-race-sync-state* manager-generation) (the uint 0))
@@ -417,6 +418,35 @@
   (if (< player-slot (the uint MP_MAX_PLAYERS))
     (the-as int (-> *mp-race-sync-state* bound-racer-by-player player-slot))
     (the-as int MP_RACE_INVALID_INDEX)))
+
+(defun race-local-spectator? ()
+  (and (mp-session-in-game?)
+       (nonnull? *mp-race-sync-state*)
+       (nonzero? (-> *mp-race-sync-state* start-time))
+       (not (mp-race-local-player?))))
+
+(defun race-spectate-options! ((options mp-spectate-options))
+  (mp-spectate-default-options! options)
+  (logclear! (-> options flags) (mp-spectate-flags end-on-scene))
+  (logior! (-> options flags) (mp-spectate-flags inert-local-anchor roster-only-presence))
+  (set! (-> options eligible-player-mask) (-> *mp-race-sync-state* player-mask))
+  options)
+
+(defun race-follow-spectated-racer! ((state race-state))
+  (let ((record (mp-spectate-selected-player-record)))
+    (when (nonnull? record state)
+      (let ((racer-index (mp-race-bound-racer-index (-> record identity player-slot))))
+        (when (< racer-index (-> state racer-count))
+          (set! (-> state i-player) racer-index)))))
+  (none))
+
+(defun race-update-spectate! ((state race-state))
+  (when (not (race-local-spectator?))
+    (return #f))
+  (when (not (mp-spectate-requested?))
+    (mp-spectate-start! 'race (race-spectate-options! (new 'stack 'mp-spectate-options))))
+  (race-follow-spectated-racer! state)
+  #t)
 
 (defun mp-race-clear-bound-racer-state! ((state race-state) (racer-index int))
   (set! (-> *mp-race-sync-state* bound-player-by-racer racer-index) MP_RACE_INVALID_INDEX)

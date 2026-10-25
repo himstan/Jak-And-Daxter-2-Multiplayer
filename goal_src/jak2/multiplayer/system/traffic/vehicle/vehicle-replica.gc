@@ -336,10 +336,15 @@
         (else *mp-traffic-local-authoritative?*)))
     #f))
 
+(defun vehicle-spectated? ((veh vehicle))
+  (let ((record (mp-spectated-player-record)))
+    (and (mp-spectate-active?)
+         (nonnull? veh record)
+         (nonzero? (-> veh net-id))
+         (= (-> record vehicle vehicle-id) (-> veh net-id)))))
+
 (defun mp-should-apply-vehicle-camera? ((veh vehicle))
-  (cond
-    ((mp-vehicle-local-target-riding? veh) #t)
-    (else (mp-vehicle-is-local-authoritative? veh))))
+  (or (mp-vehicle-local-target-riding? veh) (vehicle-spectated? veh) (mp-vehicle-is-local-authoritative? veh)))
 
 (defun mp-vehicle-find-by-net-id ((net-id uint))
   (let ((found-proc (the-as vehicle #f)))

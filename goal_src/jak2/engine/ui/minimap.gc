@@ -2860,6 +2860,8 @@
                    (when (and proc (nonzero? proc))
                      (let ((local-driving? (and *target*
                                                 (nonzero? *target*)
+                                                (focus-test? *target* pilot)
+                                                (nonzero? (-> *target* pilot))
                                                 (handle->process (-> *target* pilot vehicle))
                                                 (= (handle->process (-> *target* pilot vehicle)) proc))))
                        (when (and (not local-driving?)

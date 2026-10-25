@@ -6,6 +6,7 @@
 ;; dgos: CWI
 
 (define-extern mp-should-apply-vehicle-camera? (function vehicle symbol))
+(define-extern vehicle-spectated? (function vehicle symbol))
 (define-extern mp-vehicle-clear-stale-player-driver! (function vehicle none))
 (define-extern mp-vehicle-is-local-authoritative? (function vehicle symbol))
 (define-extern vehicle-local-release? (function vehicle symbol))
@@ -513,7 +514,7 @@
            )
          )
        )
-      ((mp-vehicle-local-target-riding? this)
+      ((or (mp-vehicle-local-target-riding? this) (vehicle-spectated? this))
         (enable-player-vehicle-camera! this)
         )
       (else
