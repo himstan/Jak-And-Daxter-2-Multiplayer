@@ -6,6 +6,35 @@
 (defun mp-oracle-darkjak-training-allowed? ()
   (or (not (mp-session-in-game?)) (mp-local-player-jak?)))
 
+(defbehavior oracle-training-start-darkjak! task-manager ()
+  (set! (-> self data-int32 0) (if (mp-oracle-darkjak-training-allowed?) 1 0))
+  (set! (-> self data-int32 1) 0)
+  (set! (-> self sound-id 0) (the-as sound-id 0))
+  (when (nonzero? (-> self data-int32 0))
+    (set! (-> self sound-id 0)
+          (add-process *gui-control* self (gui-channel message) (gui-action play) (-> self name) 81920.0 0)))
+  (when (and (nonzero? (-> self data-int32 0)) (nonnull? *target*))
+    (set! (-> self data-float 0) (the-as float (send-event *target* 'test-pickup (pickup-type eco-pill-dark))))
+    (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim))
+    (send-event *target* 'get-notify self))
+  (none))
+
+(defbehavior oracle-training-hold-darkjak! task-manager ((complete-on-exit? symbol))
+  (when (and (nonzero? (-> self data-int32 0)) (nonnull? *target*))
+    (cond
+      ((focus-test? *target* dark) (set! (-> self data-int32 1) 1))
+      ((and complete-on-exit? (nonzero? (-> self data-int32 1))) (go-virtual complete))
+      (else (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim)))))
+  (none))
+
+(defbehavior oracle-training-stop-darkjak! task-manager ()
+  (when (and (nonzero? (-> self data-int32 0)) (nonnull? *target*))
+    (send-event *target* 'get-pickup (pickup-type eco-pill-dark) (-> self data-float 0))
+    (if (focus-test? *target* dark)
+      (send-event *target* 'change-mode 'darkjak #f (darkjak-stage disable-force-on)))
+    (send-event *target* 'get-notify #f))
+  (none))
+
 (defun mp-darkjak-persistent-stage ((stage uint))
   (the uint (logand stage (darkjak-stage active bomb0 bomb1 invinc giant))))
 

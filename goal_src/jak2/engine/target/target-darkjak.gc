@@ -313,7 +313,8 @@
     (remove-setting! 'bg-b)
     (remove-setting! 'bg-a)
     (persist-with-delay *setting-control* 'bg-a-speed (seconds 3) 'bg-a-speed 'abs 0.5 0)
-    (if (not (and (-> self next-state) (= (-> self next-state name) 'target-darkjak-get-off)))
+    (if (and (not-player-replica? self)
+             (not (and (-> self next-state) (= (-> self next-state name) 'target-darkjak-get-off))))
         (pickup-collectable!
           (-> self fact)
           (pickup-type eco-pill-dark)

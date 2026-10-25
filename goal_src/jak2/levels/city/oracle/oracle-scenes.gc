@@ -61,7 +61,9 @@
                      (740 (fadeout (frame-time-30 (new 'static 'bfloat :data 15.0))))
                      (10000
                        (task-close! "city-oracle-introduction")
-                       (talker-spawn "demo004")
+                       (when (apply ,(lambda () (mp-oracle-darkjak-training-allowed?)))
+                         (talker-spawn "demo004")
+                         )
                        (send-event *target* 'get-pickup (unbox 7) (unbox (new 'static 'bfloat :data 100.0)))
                        (when (< (test-pickup gem) 25)
                          (talker-spawn "ora009")
