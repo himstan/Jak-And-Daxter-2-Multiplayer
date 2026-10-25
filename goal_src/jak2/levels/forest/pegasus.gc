@@ -190,12 +190,52 @@
           )
   )
 
+(defun pegasus-following-remote? ((this pegasus))
+  (and (mp-session-in-game?) (> (-> this hit-points) 0) (not (mp-enemy-authoritative? this))))
+
+(defun pegasus-align-speed-to-facing! ((this pegasus))
+  (let ((path (-> this path-info (-> this current-path))))
+    (vector-z-quaternion! (-> this facing) (-> this root quat))
+    (displacement-between-points-at-percent-normalized! (-> path path-data) (-> this tangent) (-> this curve-position))
+    (set! (-> this speed)
+          (if (< (vector-dot (-> this facing) (-> this tangent)) 0.0) (- (fabs (-> this speed))) (fabs (-> this speed))))
+    (set! (-> this can-run) (and (> (-> path num-data) 0) (!= (-> path control-data 0) 0.0))))
+  (none))
+
+(defun pegasus-path-usable? ((path curve-control))
+  (and (nonnull? path) (not (logtest? (-> path flags) (path-control-flag not-found)))))
+
+(defun pegasus-project-onto-paths! ((this pegasus))
+  (when (not (nonnull? (-> this root)))
+    (return (the-as none 0)))
+  (let ((trans (-> this root trans))
+        (point (new 'stack-no-clear 'vector))
+        (best-distance -1.0))
+    (dotimes (path-index (-> this num-paths))
+      (let ((path (-> this path-info path-index path-data)))
+        (when (pegasus-path-usable? path)
+          (let* ((percent (get-path-percentage-at-furthest-point path trans))
+                 (distance (vector-vector-distance (get-point-at-percent-along-path! path point percent 'interp) trans)))
+            (when (or (< best-distance 0.0) (< distance best-distance))
+              (set! best-distance distance)
+              (set! (-> this current-path) path-index)
+              (set! (-> this previous-path) path-index)
+              (set! (-> this curve-position) percent)
+              (set! (-> this y-offset) (- (-> trans y) (-> point y))))))))
+    (when (>= best-distance 0.0)
+      (set! (-> this y-vel) 0.0)
+      (pegasus-align-speed-to-facing! this)))
+  (none))
+
 (defmethod general-event-handler ((this pegasus) (proc process) (arg2 int) (event-type symbol) (event event-message-block))
   "Handles various events for the enemy
    @TODO - unsure if there is a pattern for the events and this should have a more specific name"
   (case event-type
     (('track)
      #f
+     )
+    (('mp-authority-taken)
+     (pegasus-project-onto-paths! this)
      )
     (('hit 'hit-knocked)
      (cond
@@ -238,9 +278,11 @@
     (let ((attack-info (the-as attack-info (-> arg1 param 1))))
       (case (-> arg1 message)
         (('attack)
-         (if (and (logtest? (-> attack-info mask) (attack-mask mode)) (= (-> attack-info mode) 'board))
-             (set! hitpoints (-> this hit-points))
-             )
+         (when (logtest? (-> attack-info mask) (attack-mask mode))
+           (case (-> attack-info mode)
+             (('board) (set! hitpoints (-> this hit-points)))
+             (('mp-hit-remote) (set! hitpoints ((method-of-type enemy damage-amount-from-attack) this arg0 arg1))))
+           )
          )
         )
       )
@@ -333,6 +375,8 @@
    @param angle The hopeful angle to use when constructing the rotation matrix, ultimately limited to `0.25` (radians?) though
    @see [[target-pos]] and [[matrix-from-two-vectors-max-angle-partial!]]
    @TODO - `float` should be `degrees` -- The usual amount passed in is `(degrees 100.0835)`"
+  (when (pegasus-following-remote? self)
+    (return (the-as none 0)))
   (let ((rotation-matrix (new 'stack-no-clear 'matrix))
         (flee-direction-vec (new 'stack-no-clear 'vector))
         )
@@ -515,10 +559,31 @@
   #f
   )
 
+(defbehavior pegasus-update-shadow! pegasus ((ground-y float) (draw-shadow? symbol))
+  (when (nonnull? (-> self draw) (-> self draw shadow-ctrl))
+    (let ((shadow-ctrl (-> self draw shadow-ctrl)))
+      (cond
+        (draw-shadow?
+         (logclear! (-> shadow-ctrl settings flags) (shadow-flags disable-draw))
+         (set! (-> shadow-ctrl settings bot-plane w) (- (+ (- -6144.0 (-> self root trans y)) ground-y))))
+        (else
+         (logior! (-> shadow-ctrl settings flags) (shadow-flags disable-draw))))))
+  (none))
+
+(defbehavior pegasus-follow-remote-shadow! pegasus ()
+  (let* ((cquery (new 'stack 'collide-query))
+         (start-pos (vector-copy! (new 'stack-no-clear 'vector) (-> self root trans)))
+         (above-ground? (enemy-above-ground? self cquery start-pos (collide-spec backgnd) 12288.0 81920.0 1024.0)))
+    (pegasus-update-shadow! (-> cquery best-other-tri intersect y) above-ground?))
+  (none))
+
 (defbehavior pegasus-move pegasus ((explicit-y-vel float) (adjust-y-offset? symbol))
   "Moves the pegasus along the path by smoothly interpolating along it
    @param explicit-y-vel Normally `0.0` but this value is used when the pegasus needs to switch direction
    @param adjust-y-offset? Normally [[#f]] which forces the movement to reflect the result of the collison query - the [[pegasus]] will stay close to the ground.  [[#t]] ignores this"
+  (when (pegasus-following-remote? self)
+    (pegasus-follow-remote-shadow!)
+    (return (the-as none 0)))
   (+! (-> self curve-position)
       (/ (the float (* (- (current-time) (-> self clock old-frame-counter)) (the int (-> self speed))))
          (total-distance (-> self path-info (-> self current-path) path-data))
@@ -582,24 +647,7 @@
       (set! (-> self y-vel) (fmax 0.0 (-> self y-vel)))
       )
     (set! (-> self on-ground) (< (fabs (- (-> self root trans y) y-pos)) 409.6))
-    (cond
-      (draw-shadow?
-        (let ((shadow-ctrl (-> self draw shadow-ctrl)))
-          (logclear! (-> shadow-ctrl settings flags) (shadow-flags disable-draw))
-          )
-        0
-        (let ((_shadow-ctrl (-> self draw shadow-ctrl)))
-          (set! (-> _shadow-ctrl settings bot-plane w) (- (+ (- -6144.0 (-> self root trans y)) y-pos)))
-          )
-        0
-        )
-      (else
-        (let ((__shadow-ctrl (-> self draw shadow-ctrl)))
-          (logior! (-> __shadow-ctrl settings flags) (shadow-flags disable-draw))
-          )
-        0
-        )
-      )
+    (pegasus-update-shadow! y-pos draw-shadow?)
     )
   (none)
   )
@@ -738,6 +786,8 @@
 (defstate die (pegasus)
   :virtual #t
   :code (behavior ()
+    (when (and (mp-session-in-game?) (not (mp-enemy-authoritative? self)))
+      (pegasus-project-onto-paths! self))
     (process-entity-status! self (entity-perm-status subtask-complete) #t)
     (let ((evt (new 'stack-no-clear 'event-message-block)))
       (set! (-> evt from) (process->ppointer self))
@@ -1379,7 +1429,7 @@
         (when (-> self actor-group 0)
           (dotimes (actor-group (the-as int (-> self actor-group 0 0)))
             (let ((actor (-> (&+ (-> self actor-group 0) (* actor-group 8)) 3)))
-              (if (and actor (logtest? (-> actor extra perm status) (entity-perm-status subtask-complete)))
+              (if (and actor (logtest? (-> actor extra perm status) (entity-perm-status dead subtask-complete)))
                   (+! data -1)
                   )
               )

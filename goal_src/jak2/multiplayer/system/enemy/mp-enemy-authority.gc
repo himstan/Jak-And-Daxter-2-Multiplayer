@@ -480,6 +480,7 @@
     (mp-enemy-restore-local-state-transition! proc)
     (when (nonnull? (-> proc root))
       (enemy-snap-to-record-on-takeover! proc rec (the uint (-> rec aid)))
+      (send-event proc 'mp-authority-taken)
       (set! (-> rec just-taken-authority) #f)))
   (none))
 

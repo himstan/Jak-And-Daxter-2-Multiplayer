@@ -97,6 +97,7 @@
       (('mech-lunge) (the-as uint32 (mp-enemy-state-id mech-lunge)))
       (('mech-hold) (the-as uint32 (send-event e-proc 'mech-animation-state)))
       (('mech-dismount) (the-as uint32 (mp-enemy-state-id mech-dismount)))
+      (('pegasus-tired) (the-as uint32 (mp-enemy-state-id pegasus-tired)))
       (else (the-as uint32 0)))))
 
 (defun mp-enemy-get-state-from-id ((id uint))
@@ -199,4 +200,5 @@
       (mp-enemy-state-id mech-grab))
      'mech-hold)
     (((mp-enemy-state-id mech-dismount)) 'mech-dismount)
+    (((mp-enemy-state-id pegasus-tired)) 'pegasus-tired)
     (else 'active)))
