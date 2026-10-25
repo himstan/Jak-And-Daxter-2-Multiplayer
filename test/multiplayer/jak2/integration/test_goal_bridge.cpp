@@ -520,17 +520,17 @@ TEST(Jak2GoalBridge, PlayerDataLayoutAndCosmeticFlagsMatchGoal) {
 TEST(Jak2GoalBridge, DirectionalAggregateHasCanonicalCompactAbi) {
   EXPECT_EQ(sizeof(MPReplicationPlayerIdentityGOAL), 295u);
   EXPECT_EQ(sizeof(MPReplicationPlayerVehicleGOAL), 94u);
-  EXPECT_EQ(sizeof(MPReplicationPlayerGOAL), 560u);
+  EXPECT_EQ(sizeof(MPReplicationPlayerGOAL), 576u);
   EXPECT_EQ(sizeof(MPReplicationEnemySetGOAL), 57360u);
   EXPECT_EQ(sizeof(MPReplicationPedestrianStateGOAL), 60u);
   EXPECT_EQ(sizeof(MPReplicationTrafficSetGOAL), 13328u);
   EXPECT_EQ(sizeof(MPReplicationBootstrapStateGOAL), 16487u);
-  EXPECT_EQ(sizeof(MPReplicationFrameGOAL), 92688u);
-  EXPECT_EQ(sizeof(MPReplicationStateGOAL), 195712u);
+  EXPECT_EQ(sizeof(MPReplicationFrameGOAL), 92816u);
+  EXPECT_EQ(sizeof(MPReplicationStateGOAL), 195968u);
   EXPECT_EQ(offsetof(MPReplicationStateGOAL, local), 64u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, remote), 92752u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, outbound_events), 185456u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, inbound_events), 190592u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, remote), 92880u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, outbound_events), 185712u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, inbound_events), 190848u);
 }
 
 TEST(Jak2GoalBridge, PlayerActionLayoutMatchesGoal) {
@@ -568,6 +568,27 @@ TEST(Jak2GoalBridge, ExchangePreservesAndClearsPlayerHitInvulnerability) {
     EXPECT_EQ(local->players[0].hit_invulnerable, hit_invulnerable);
     EXPECT_EQ(state.remote.players[1].action.hit_invulnerable, hit_invulnerable);
   }
+}
+
+TEST(Jak2GoalBridge, RideAnchorCrossesTheBridgeInBothDirections) {
+  using namespace multiplayer::jak2;
+  GoalMemoryFixture memory;
+  auto& state = replication_state(memory);
+  state.local.players[0].anchor_id = 0x4321;
+  state.local.players[0].anchor_offset[2] = 512.0f;
+  auto remote = std::make_unique<application::RemoteReplicationFrame>();
+  remote->player_anchor_targets[1] = {
+      .entity_id = 0x8765, .position = {1.0f, 2.0f, 3.0f}, .valid = true};
+  application::ReplicationMailbox mailbox;
+  mailbox.publish_remote_frame(std::move(remote));
+  ASSERT_TRUE(bridge::exchange_state(0x12000, mailbox));
+  const auto local = mailbox.take_local_frame();
+  ASSERT_TRUE(local);
+  EXPECT_EQ(local->players[0].anchor_id, 0x4321u);
+  EXPECT_FLOAT_EQ(local->players[0].anchor_offset[2], 512.0f);
+  EXPECT_EQ(state.remote.players[1].anchor_id, 0x8765u);
+  EXPECT_FLOAT_EQ(state.remote.players[1].anchor_offset[1], 2.0f);
+  EXPECT_EQ(state.remote.players[0].anchor_id, 0u);
 }
 
 TEST(Jak2GoalBridge, PlayerUuidCrossesTheBridgeInBothDirections) {

@@ -15,7 +15,8 @@ bool validate_packet(const PlayerStatePacket& packet) {
          packet.action_state_id <= 0xffu &&
          valid_wire_player_reference(packet.riding_along_player_slot) &&
          packet.mission_flags <= 0x03u && packet.visual_secrets <= 0x07u &&
-         valid_wire_player_reference(packet.selected_traffic_authority);
+         valid_wire_player_reference(packet.selected_traffic_authority) &&
+         platform::wire::valid_position_array(packet.anchor_offset);
 }
 
 PlayerStatePacket to_packet(const core::PlayerState& state) {
@@ -47,7 +48,9 @@ PlayerStatePacket to_packet(const core::PlayerState& state) {
           .visual_secrets = state.visual_secrets,
           .selected_traffic_authority = state.selected_traffic_authority < kMPMaxPlayers
                                             ? state.selected_traffic_authority
-                                            : kWireInvalidPlayerSlot};
+                                            : kWireInvalidPlayerSlot,
+          .anchor_id = state.anchor_id,
+          .anchor_offset = state.anchor_offset};
 }
 
 void from_packet(const PlayerStatePacket& packet, core::PlayerState& state) {
@@ -72,6 +75,8 @@ void from_packet(const PlayerStatePacket& packet, core::PlayerState& state) {
   state.camera_angle_y = packet.camera_angle_y;
   state.vehicle_id = packet.vehicle_id;
   state.vehicle_seat = packet.vehicle_seat;
+  state.anchor_id = packet.anchor_id;
+  state.anchor_offset = packet.anchor_offset;
   state.equipped_weapon = packet.equipped_weapon;
   state.action_sequence = packet.action_sequence;
   state.action_state_id = packet.action_state_id;

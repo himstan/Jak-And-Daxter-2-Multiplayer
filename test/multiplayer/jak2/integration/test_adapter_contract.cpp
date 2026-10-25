@@ -1433,6 +1433,41 @@ TEST(Jak2AdapterIntegration, PresentationRuntimeKeepsAuthoritativeSnapshotsUnmod
   EXPECT_GT(frame->ambient_vehicle_targets[0].position[0], ambient_x);
 }
 
+TEST(Jak2AdapterIntegration, PresentationRuntimePresentsRideAnchorBesideWorldTimeline) {
+  auto frame = std::make_unique<jak2::application::RemoteReplicationFrame>();
+  frame->players[0] = {.player_slot = 0,
+                       .state_ready = true,
+                       .position = {4096.0f, 0.0f, 0.0f},
+                       .anchor_id = 5,
+                       .anchor_offset = {64.0f, 0.0f, 0.0f},
+                       .sample_time_ms = 100,
+                       .last_sequence = 1,
+                       .received_time_ms = 150};
+  jak2::core::ReplicationState core;
+  jak2::application::PresentationRuntime presentation;
+  presentation.prepare(*frame, core, 183);
+  ASSERT_TRUE(frame->player_targets[0].valid);
+  ASSERT_TRUE(frame->player_anchor_targets[0].valid);
+  EXPECT_EQ(frame->player_anchor_targets[0].entity_id, 5u);
+  EXPECT_FLOAT_EQ(frame->player_anchor_targets[0].position[0], 64.0f);
+  EXPECT_FLOAT_EQ(frame->player_targets[0].position[0], 4096.0f);
+
+  frame->players[0].anchor_id = 6;
+  frame->players[0].sample_time_ms = 133;
+  frame->players[0].last_sequence = 2;
+  frame->players[0].received_time_ms = 183;
+  presentation.prepare(*frame, core, 216);
+  EXPECT_EQ(frame->player_anchor_targets[0].entity_id, 6u);
+  EXPECT_EQ(frame->player_anchor_targets[0].generation, 1u);
+  EXPECT_EQ(frame->player_targets[0].generation, 2u);
+
+  frame->players[0].anchor_id = 0;
+  frame->players[0].last_sequence = 3;
+  presentation.prepare(*frame, core, 249);
+  EXPECT_FALSE(frame->player_anchor_targets[0].valid);
+  EXPECT_TRUE(frame->player_targets[0].valid);
+}
+
 TEST(Jak2AdapterIntegration, ProfileExtensionAndPlayerLifecycleStayGameSpecific) {
   jak2::application::Jak2Adapter adapter;
   RecordingEndpoint endpoint;

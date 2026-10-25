@@ -70,8 +70,10 @@
    (valid?                  uint8)
    (mission-flags           uint8)
    (departure-reason        player-departure-reason)
-   (primary-level-slot      uint8))
-  :size-assert 553)
+   (primary-level-slot      uint8)
+   (anchor-id               uint32)
+   (anchor-offset           vector :inline))
+  :size-assert 576)
 
 (deftype mp-replication-bootstrap-state (structure)
   ((host-spawn-position    vector :inline)
@@ -257,9 +259,9 @@
    (enemy-clear-generation   uint32)
    (traffic-clear-generation uint32)
    (boss-clear-generation    uint32))
-  :size-assert 92688)
+  :size-assert 92816)
 
-(defconstant MP_REPLICATION_STATE_SIZE 195712)
+(defconstant MP_REPLICATION_STATE_SIZE 195968)
 
 (deftype mp-replication-state (structure)
   ((abi-size             uint32)

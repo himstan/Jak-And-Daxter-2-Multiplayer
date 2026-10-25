@@ -39,8 +39,7 @@ TEST(Jak2Protocol, RoundTripsCorePlayerStateWithStableWireSize) {
   const auto packet = multiplayer::jak2::wire::to_packet(input);
   std::vector<uint8_t> bytes;
   ASSERT_TRUE(multiplayer::platform::wire::encode_packet(packet, bytes));
-  ASSERT_EQ(bytes.size(),
-            (&multiplayer::jak2::wire::PlayerStatePacket::kPolicy)->maximum_payload_bytes);
+  ASSERT_EQ(bytes.size(), 50u);
 
   const auto decoded_packet =
       multiplayer::platform::wire::decode_packet<multiplayer::jak2::wire::PlayerStatePacket>(bytes);
@@ -158,8 +157,7 @@ TEST(Jak2Protocol, PlayerCodecHandlesOverflowingActionSequenceSafely) {
 
   std::vector<uint8_t> bytes;
   ASSERT_TRUE(multiplayer::platform::wire::encode_packet(packet, bytes));
-  EXPECT_EQ(bytes.size(),
-            (&multiplayer::jak2::wire::PlayerStatePacket::kPolicy)->maximum_payload_bytes);
+  EXPECT_EQ(bytes.size(), 50u);
 
   const auto decoded_packet =
       multiplayer::platform::wire::decode_packet<multiplayer::jak2::wire::PlayerStatePacket>(bytes);

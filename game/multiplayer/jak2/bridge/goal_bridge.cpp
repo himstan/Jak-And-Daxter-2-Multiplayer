@@ -128,6 +128,9 @@ core::PlayerState read_player(const MPReplicationPlayerGOAL& source) {
   result.action_state_id = source.action.action_state_id;
   result.vehicle_id = source.vehicle.vehicle_id;
   result.vehicle_seat = source.vehicle.seat_index;
+  result.anchor_id = source.anchor_id;
+  result.anchor_offset = {source.anchor_offset[0], source.anchor_offset[1],
+                          source.anchor_offset[2]};
   result.riding_along_player_slot = source.action.riding_along_player_slot;
   result.mission_flags = source.mission_flags;
   result.visual_secrets = static_cast<uint8_t>(source.action.visual_secrets);
@@ -442,6 +445,7 @@ void write_player(const core::PlayerState& source,
                   const core::PlayerVehicleState& vehicle,
                   const core::TurretState& turret,
                   const application::PresentationTarget& target,
+                  const application::PresentationTarget& anchor,
                   MPReplicationPlayerGOAL& destination) {
   destination.valid = target.valid;
   destination.generation = target.generation;
@@ -488,6 +492,11 @@ void write_player(const core::PlayerState& source,
                     std::begin(destination.presentation_quaternion));
   std::ranges::copy(target.velocity.begin(), target.velocity.end(),
                     std::begin(destination.presentation_velocity));
+  if (anchor.valid) {
+    destination.anchor_id = anchor.entity_id;
+    std::ranges::copy(anchor.position.begin(), anchor.position.end(),
+                      std::begin(destination.anchor_offset));
+  }
 }
 
 void write_world(const core::WorldState& source, MPWorldSyncStateGOAL& destination) {
@@ -679,7 +688,7 @@ bool publish_remote(MPReplicationStateGOAL& state, application::ReplicationMailb
         player_vehicle.vehicle.linear_velocity = vehicle_target.velocity;
       }
       write_player(frame->players[i], player_vehicle, frame->turrets[i], frame->player_targets[i],
-                   state.remote.players[i]);
+                   frame->player_anchor_targets[i], state.remote.players[i]);
       state.remote.players[i].lifecycle_generation = frame->player_lifecycles[i];
       state.remote.players[i].departure_reason = static_cast<uint8_t>(frame->player_departures[i]);
     }

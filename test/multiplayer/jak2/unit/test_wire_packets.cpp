@@ -397,8 +397,7 @@ TEST(Jak2Protocol, PlayerActivityRoundTripsInTwoBitsWithoutChangingSize) {
     const auto encoded =
         multiplayer::platform::wire::encode_packet(multiplayer::jak2::wire::to_packet(state));
     ASSERT_TRUE(encoded);
-    ASSERT_EQ(encoded->size(),
-              (&multiplayer::jak2::wire::PlayerStatePacket::kPolicy)->maximum_payload_bytes);
+    ASSERT_EQ(encoded->size(), 50u);
     multiplayer::jak2::core::PlayerState decoded = {};
     const auto packet =
         multiplayer::platform::wire::decode_packet<multiplayer::jak2::wire::PlayerStatePacket>(
@@ -411,6 +410,28 @@ TEST(Jak2Protocol, PlayerActivityRoundTripsInTwoBitsWithoutChangingSize) {
   multiplayer::jak2::wire::PlayerStatePacket invalid = {};
   invalid.activity = static_cast<multiplayer::jak2::core::PlayerActivity>(4);
   EXPECT_FALSE(multiplayer::platform::wire::encode_packet(invalid));
+}
+
+TEST(Jak2Protocol, PlayerRideAnchorIsOptionalAndRoundTrips) {
+  multiplayer::jak2::core::PlayerState state = {};
+  state.activity = multiplayer::jak2::core::PlayerActivity::IN_GAME;
+  state.position = {8192.0f, 4096.0f, -8192.0f};
+  state.anchor_id = 0x12345;
+  state.anchor_offset = {128.0f, -64.0f, 4096.0f};
+  const auto encoded =
+      multiplayer::platform::wire::encode_packet(multiplayer::jak2::wire::to_packet(state));
+  ASSERT_TRUE(encoded);
+  EXPECT_EQ(encoded->size(),
+            (&multiplayer::jak2::wire::PlayerStatePacket::kPolicy)->maximum_payload_bytes);
+  const auto packet =
+      multiplayer::platform::wire::decode_packet<multiplayer::jak2::wire::PlayerStatePacket>(
+          *encoded);
+  ASSERT_TRUE(packet);
+  multiplayer::jak2::core::PlayerState decoded = {};
+  multiplayer::jak2::wire::from_packet(*packet, decoded);
+  EXPECT_EQ(decoded.anchor_id, state.anchor_id);
+  EXPECT_EQ(decoded.anchor_offset, state.anchor_offset);
+  EXPECT_EQ(decoded.position, state.position);
 }
 
 TEST(Jak2Protocol, QuantizationRejectsNonFiniteAndOutOfRangeValues) {
@@ -428,8 +449,7 @@ TEST(Jak2Protocol, StripCoordinatesRoundTripAccurately) {
   packet.position = {11098202.0f, 469663.34f, 371692.34f};
   const auto encoded = multiplayer::platform::wire::encode_packet(packet);
   ASSERT_TRUE(encoded.has_value());
-  ASSERT_EQ(encoded->size(),
-            (&multiplayer::jak2::wire::PlayerStatePacket::kPolicy)->maximum_payload_bytes);
+  ASSERT_EQ(encoded->size(), 50u);
 
   const auto decoded =
       multiplayer::platform::wire::decode_packet<multiplayer::jak2::wire::PlayerStatePacket>(

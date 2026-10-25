@@ -74,7 +74,7 @@ TEST(Jak2Protocol, RacingVelocitiesRoundTripInPlayerAndVehicleSnapshots) {
     ASSERT_TRUE(player_bytes);
     ASSERT_TRUE(vehicle_bytes);
     ASSERT_TRUE(traffic_bytes);
-    EXPECT_EQ(player_bytes->size(), jak2::wire::PlayerStatePacket::kPolicy.maximum_payload_bytes);
+    EXPECT_EQ(player_bytes->size(), 50u);
     EXPECT_EQ(vehicle_bytes->size(), jak2::wire::kPlayerVehicleStatePacketWireSize);
     EXPECT_EQ(traffic_bytes->size(), jak2::wire::kVehicleStateBatchPacketPrefixWireSize +
                                          (jak2::wire::kVehicleStateRecordWireBits + 7) / 8);

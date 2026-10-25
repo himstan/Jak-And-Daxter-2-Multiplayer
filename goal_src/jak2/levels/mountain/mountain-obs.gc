@@ -9,7 +9,7 @@
   :bitfield #t
   :type uint16
   (mtpflags-0)
-  (mtpflags-1)
+  (rider)
   (mtpflags-2)
   (mtpflags-3)
   )
@@ -2445,6 +2445,7 @@
 
 (deftype mtn-plat-return (base-plat)
   ((ride-timer  time-frame)
+   (start-delay time-frame)
    (flags       mtn-plat-flags)
    (path-pos    float)
    (dest-pos    float)
@@ -2491,12 +2492,8 @@
     (if (not (logtest? (-> self flags) (mtn-plat-flags mtpflags-0)))
         (set-time! (-> self ride-timer))
         )
-    (let ((v1-10 (and (time-elapsed? (-> self ride-timer) (seconds 0.5))
+    (let ((v1-10 (and (time-elapsed? (-> self ride-timer) (-> self start-delay))
                       (logtest? (-> self flags) (mtn-plat-flags mtpflags-0))
-                      (if (logtest? (-> self flags) (mtn-plat-flags mtpflags-1))
-                          (and *target* (process-grab? *target* #f))
-                          #t
-                          )
                       )
                  )
           )
@@ -2626,6 +2623,7 @@
     )
   (stop-bouncing! this)
   (set! (-> this flags) (mtn-plat-flags))
+  (set! (-> this start-delay) (seconds 0.5))
   (set! (-> this path-pos) 0.0)
   (set! (-> this path) (new 'process 'curve-control this 'path -1000000000.0))
   (if (logtest? (-> this path flags) (path-control-flag not-found))
@@ -3128,6 +3126,43 @@
     )
   )
 
+(defbehavior trans-plat-dock-height trans-plat ()
+  (let ((start (new 'stack-no-clear 'vector))
+        (end (new 'stack-no-clear 'vector))
+        )
+    (get-point-at-percent-along-path! (-> self path) start 0.0 'interp)
+    (get-point-at-percent-along-path! (-> self path) end 1.0 'interp)
+    (fmin (-> start y) (-> end y))
+    )
+  )
+
+(defbehavior target-riding? trans-plat ()
+  (let ((riders (-> self root riders)))
+    (countdown (i (-> self root num-riders))
+      (if (= (handle->process (-> riders i rider-handle)) *target*)
+          (return #t)
+          )
+      )
+    )
+  #f
+  )
+
+(defbehavior check-dropped-rider trans-plat ()
+  (let ((target *target*))
+    (when (and (logtest? (-> self flags) (mtn-plat-flags rider))
+               (nonnull? target)
+               (logtest? (-> target control status) (collide-status on-surface))
+               (-> *setting-control* user-current endlessfall)
+               )
+      (logclear! (-> self flags) (mtn-plat-flags rider))
+      (if (< (-> target control trans y) (- (trans-plat-dock-height) (meters 4)))
+          (send-event target 'attack-invinc #f (static-attack-info ((id (new-attack-id)) (mode 'endlessfall))))
+          )
+      )
+    )
+  (none)
+  )
+
 
 (defstate rising (trans-plat)
   :virtual #t
@@ -3199,6 +3234,7 @@
         0
         )
       )
+    (check-dropped-rider)
     (let ((t9-2 (-> (the-as state (find-parent-state)) trans)))
       (if t9-2
           (t9-2)
@@ -3209,15 +3245,28 @@
 
 (defstate running (trans-plat)
   :virtual #t
-  :exit (behavior ()
-    (let ((t9-0 (-> (method-of-type mtn-plat-return running) exit)))
+  :trans (behavior ()
+    (let ((t9-0 (-> (method-of-type mtn-plat-return running) trans)))
       (if t9-0
           (t9-0)
           )
       )
-    (if (logtest? (-> self flags) (mtn-plat-flags mtpflags-0))
-        (process-release? *target*)
+    (when (and *target* (target-riding?))
+      (set-time! (-> self ride-timer))
+      (logior! (-> self flags) (mtn-plat-flags rider))
+      )
+    (cond
+      ((time-elapsed? (-> self ride-timer) (seconds 1))
+       (remove-setting! 'endlessfall)
+       (check-dropped-rider)
+       )
+      (else
+        (set-setting! 'endlessfall #f 0.0 0)
         )
+      )
+    )
+  :exit (behavior ()
+    (remove-setting! 'endlessfall)
     )
   )
 
@@ -3225,6 +3274,7 @@
   :virtual #t
   :trans (behavior ()
     (plat-trans)
+    (check-dropped-rider)
     (if (time-elapsed? (-> self ride-timer) (seconds 1))
         (go-virtual waiting)
         )
@@ -3241,7 +3291,13 @@
 (defmethod init-plat! ((this trans-plat))
   "Does any necessary initial platform setup.
    For example for an elevator pre-compute the distance between the first and last points (both ways) and clear the sound."
-  (logior! (-> this flags) (mtn-plat-flags mtpflags-1))
+  (set! (-> this start-delay) (seconds 3))
+  (let ((scale 1.5))
+    (set! (-> this root scale x) scale)
+    (set! (-> this root scale z) scale)
+    (set! (-> this root root-prim local-sphere w) (* scale (-> this root root-prim local-sphere w)))
+    (set! (-> this draw bounds w) (* scale (-> this draw bounds w)))
+    )
   (let ((a0-2 (the-as target (as-type *target* process-focusable))))
     (when a0-2
       (let ((s4-0 (get-trans a0-2 0))

@@ -117,10 +117,12 @@
 (deftype mp-player-transform-state (structure)
   ((position           vector :inline)
    (velocity           vector :inline)
+   (anchor-offset      vector :inline)
    (angle              float)
    (levels             mp-player-level-slot MP_PLAYER_LEVEL_SLOT_COUNT :inline)
-   (primary-level-slot uint8))
-  :size-assert 49)
+   (primary-level-slot uint8)
+   (anchor-id          uint32))
+  :size-assert 72)
 
 (deftype mp-player-action-state (structure)
   ((target-state-id          uint32)
@@ -204,9 +206,9 @@
    (input      mp-player-input-state :inline)
    (vehicle    mp-player-vehicle-state :inline)
    (runtime    mp-player-runtime-state :inline))
-  :size-assert 752)
+  :size-assert 768)
 
-(defconstant MP_PLAYER_CONTROLLER_SIZE (+ (* 752 MP_MAX_PLAYERS) 2))
+(defconstant MP_PLAYER_CONTROLLER_SIZE (+ (* 768 MP_MAX_PLAYERS) 2))
 
 (deftype mp-player-controller (structure)
   ((records           mp-player-record MP_MAX_PLAYERS :inline)
@@ -217,6 +219,10 @@
 (define-perm *mp-player-controller* mp-player-controller (new 'static 'mp-player-controller))
 
 (define-extern mp-player-primary-level-id (function mp-player-record uint))
+(defconstant RIDE_ANCHOR_MAX_DRIFT (meters 10.0))
+
+(define-extern ride-anchor-root (function uint trsqv))
+(define-extern ride-anchor-position! (function vector uint vector symbol))
 (define-extern mp-enemy-player-eligible? (function mp-player-record uint symbol))
 (define-extern mp-pack-local-level-state! (function mp-player-record none))
 (define-extern player-replica-apply-weapon-state! (function target target-record none))

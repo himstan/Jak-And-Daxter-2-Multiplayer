@@ -17,7 +17,7 @@ struct PlayerStatePacket : platform::wire::Packet<PlayerStatePacket, PacketType:
       .priority = platform::MessagePriority::CRITICAL,
       .cadence = platform::CadenceMode::PERIODIC,
       .interval_ms = 33,
-      .maximum_payload_bytes = 50};
+      .maximum_payload_bytes = 62};
 
   uint32_t sample_time_ms = 0;
   core::PlayerActivity activity = core::PlayerActivity::UNAVAILABLE;
@@ -42,6 +42,8 @@ struct PlayerStatePacket : platform::wire::Packet<PlayerStatePacket, PacketType:
   uint8_t mission_flags = 0;
   uint8_t visual_secrets = 0;
   uint8_t selected_traffic_authority = kWireInvalidPlayerSlot;
+  uint32_t anchor_id = 0;
+  std::array<float, 3> anchor_offset = {};
 };
 
 template <typename Stream, typename PacketT>
@@ -79,11 +81,16 @@ bool serialize_fields(Stream& stream, PacketT&& packet) {
       !platform::wire::serialize_uint_bits(stream, packet.riding_along_player_slot, 4) ||
       !platform::wire::serialize_uint_bits(stream, packet.mission_flags, 2) ||
       !platform::wire::serialize_uint_bits(stream, packet.visual_secrets, 3) ||
-      !platform::wire::serialize_uint_bits(stream, packet.selected_traffic_authority, 4) ||
-      !platform::wire::serialize_byte_align(stream)) {
+      !platform::wire::serialize_uint_bits(stream, packet.selected_traffic_authority, 4)) {
     return false;
   }
-  return true;
+  bool anchored = packet.anchor_id != 0;
+  if (!platform::wire::serialize_uint_bits(stream, anchored, 1) ||
+      (anchored && (!platform::wire::serialize_u32(stream, packet.anchor_id) ||
+                    !platform::wire::serialize_position_array(stream, packet.anchor_offset)))) {
+    return false;
+  }
+  return platform::wire::serialize_byte_align(stream);
 }
 
 bool validate_packet(const PlayerStatePacket& packet);

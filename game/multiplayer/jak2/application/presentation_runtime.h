@@ -34,6 +34,9 @@ class PresentationRuntime {
   PresentationTarget prepare_player(core::PlayerSlot player_slot,
                                     const core::PlayerState& player,
                                     uint64_t now_ms);
+  PresentationTarget prepare_player_anchor(core::PlayerSlot player_slot,
+                                           const core::PlayerState& player,
+                                           uint64_t now_ms);
   PresentationTarget prepare_player_vehicle(core::PlayerSlot player_slot,
                                             const core::PlayerVehicleState& state,
                                             const core::PlayerState& player,
@@ -44,6 +47,7 @@ class PresentationRuntime {
   void update_packet_generations(const core::ReplicationState& state);
 
   std::array<TimelineState, core::kMaxPlayers> player_histories_ = {};
+  std::array<TimelineState, core::kMaxPlayers> player_anchor_histories_ = {};
   std::array<TimelineState, core::kMaxPlayers> player_vehicle_histories_ = {};
   std::unordered_map<core::EntityId, TimelineState> enemy_histories_;
   std::unordered_map<core::EntityId, TimelineState> pedestrian_histories_;

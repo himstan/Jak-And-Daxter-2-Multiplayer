@@ -54,6 +54,7 @@ struct RemoteReplicationFrame {
   std::array<core::PlayerVehicleState, core::kMaxPlayers> player_vehicles = {};
   std::array<core::TurretState, core::kMaxPlayers> turrets = {};
   std::array<PresentationTarget, core::kMaxPlayers> player_targets = {};
+  std::array<PresentationTarget, core::kMaxPlayers> player_anchor_targets = {};
   std::array<PresentationTarget, core::kMaxPlayers> player_vehicle_targets = {};
   core::WorldState world = {};
   core::GungameState gungame = {};

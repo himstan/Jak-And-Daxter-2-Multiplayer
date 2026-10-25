@@ -79,6 +79,7 @@ void advance_presentation(RemoteReplicationFrame& frame, const uint64_t now_ms) 
       target.position[axis] += target.velocity[axis] * seconds;
   };
   std::ranges::for_each(frame.player_targets, advance);
+  std::ranges::for_each(frame.player_anchor_targets, advance);
   std::ranges::for_each(frame.player_vehicle_targets, advance);
   std::ranges::for_each(frame.enemy_targets, advance);
   std::ranges::for_each(frame.pedestrian_targets, advance);
@@ -88,6 +89,7 @@ void advance_presentation(RemoteReplicationFrame& frame, const uint64_t now_ms) 
 
 void PresentationRuntime::reset() {
   player_histories_ = {};
+  player_anchor_histories_ = {};
   player_vehicle_histories_ = {};
   enemy_histories_.clear();
   pedestrian_histories_.clear();
@@ -105,6 +107,7 @@ void PresentationRuntime::reset_player(const core::PlayerSlot player_slot) {
   if (player_slot >= core::kMaxPlayers)
     return;
   player_histories_[player_slot] = {};
+  player_anchor_histories_[player_slot] = {};
   player_vehicle_histories_[player_slot] = {};
 }
 
@@ -136,6 +139,29 @@ PresentationTarget PresentationRuntime::prepare_player(const core::PlayerSlot pl
     ++history.generation;
   }
   return make_target(player_slot, present_timeline(history.timeline, now_ms, kCriticalProfile),
+                     history.generation);
+}
+
+PresentationTarget PresentationRuntime::prepare_player_anchor(const core::PlayerSlot player_slot,
+                                                              const core::PlayerState& player,
+                                                              const uint64_t now_ms) {
+  auto& history = player_anchor_histories_[player_slot];
+  if (!player.state_ready || player.last_sequence == 0 || player.anchor_id == 0) {
+    history = {};
+    return {};
+  }
+  if (history.identity != player.anchor_id) {
+    history = {};
+    history.identity = player.anchor_id;
+  }
+  if (history.sequence != player.last_sequence) {
+    history.timeline.push({.sample_time_ms = player.sample_time_ms, .position = player.anchor_offset},
+                          player.received_time_ms, 20.0f * kGoalUnitsPerMeter);
+    history.sequence = player.last_sequence;
+    ++history.generation;
+  }
+  return make_target(player.anchor_id,
+                     present_timeline(history.timeline, now_ms, kCriticalProfile),
                      history.generation);
 }
 
@@ -315,6 +341,8 @@ void PresentationRuntime::prepare(RemoteReplicationFrame& frame,
   for (core::PlayerSlot player_slot = 0; player_slot < core::kMaxPlayers; ++player_slot) {
     frame.player_targets[player_slot] =
         prepare_player(player_slot, frame.players[player_slot], now_ms);
+    frame.player_anchor_targets[player_slot] =
+        prepare_player_anchor(player_slot, frame.players[player_slot], now_ms);
     frame.player_vehicle_targets[player_slot] = prepare_player_vehicle(
         player_slot, frame.player_vehicles[player_slot], frame.players[player_slot], now_ms);
   }

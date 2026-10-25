@@ -189,6 +189,8 @@ struct PlayerState {
   uint32_t action_state_id = 0;
   uint32_t vehicle_id = 0;
   uint8_t vehicle_seat = 0;
+  uint32_t anchor_id = 0;
+  std::array<float, 3> anchor_offset = {};
   PlayerSlot riding_along_player_slot = kInvalidPlayerSlot;
   PlayerSlot selected_traffic_authority = kInvalidPlayerSlot;
   uint8_t mission_flags = 0;

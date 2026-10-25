@@ -1,6 +1,45 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(defun draw-player-anchor-debug ((record mp-player-record) (position vector))
+  (let ((anchor-id (-> record transform anchor-id))
+        (label-pos (vector-copy! (new 'stack-no-clear 'vector) position)))
+    (+! (-> label-pos y) (meters 3.0))
+    (if (zero? anchor-id)
+      (add-debug-text-3d #t (bucket-id debug-no-zbuf1) "WORLD" label-pos (font-color orange) (the-as vector2h #f))
+      (let ((root (ride-anchor-root anchor-id))
+            (offset (-> record transform anchor-offset))
+            (anchored (new 'stack-no-clear 'vector)))
+        (cond
+          ((and (nonnull? root) (ride-anchor-position! anchored anchor-id offset))
+           (add-debug-cross #t (bucket-id debug-no-zbuf1) (-> root trans) (meters 1.0))
+           (add-debug-line #t
+                           (bucket-id debug-no-zbuf1)
+                           (-> root trans)
+                           anchored
+                           (static-rgba 255 0 255 255)
+                           #f
+                           (the-as rgba 0))
+           (let ((drift (vector-vector-distance anchored position)))
+             (cond
+               ((< (meters 0.01) drift)
+                (add-debug-line #t
+                                (bucket-id debug-no-zbuf1)
+                                anchored
+                                position
+                                (static-rgba 255 0 0 255)
+                                #f
+                                (the-as rgba 0))
+                (format *temp-string* "ANCHOR ~D REJECTED DRIFT ~,,2m" anchor-id drift)
+                (add-debug-text-3d #t (bucket-id debug-no-zbuf1) *temp-string* label-pos (font-color red) (the-as vector2h #f)))
+               (else
+                (format *temp-string* "ANCHOR ~D OFS ~,,2m ~,,2m ~,,2m" anchor-id (-> offset x) (-> offset y) (-> offset z))
+                (add-debug-text-3d #t (bucket-id debug-no-zbuf1) *temp-string* label-pos (font-color pink) (the-as vector2h #f))))))
+          (else
+           (format *temp-string* "ANCHOR ~D NOT LOADED" anchor-id)
+           (add-debug-text-3d #t (bucket-id debug-no-zbuf1) *temp-string* label-pos (font-color red) (the-as vector2h #f)))))))
+  (none))
+
 (defun draw-player-replica-debug ((record mp-player-record))
   (when (and record (nonzero? record))
     (let ((proc (mp-player-record-target record))
@@ -12,6 +51,7 @@
                           (-> target-record trans)
                           (meters 0.5)
                           (static-rgba 255 255 0 128))
+        (draw-player-anchor-debug record (-> target-record trans))
         (vector-copy! draw-pos (-> target-record trans))
         (+! (-> draw-pos y) (meters 2.0))
         (let ((state-sym (mp-target-get-state-from-id (-> target-record state-id))))
