@@ -639,7 +639,8 @@
   )
 
 (defbehavior wall-hide? target ()
-  (when (and (< 0.7 (-> self control pad-magnitude))
+  (when (and (not (focus-test? self indax))
+             (< 0.7 (-> self control pad-magnitude))
              (< 0.7 (-> self control blocked-factor))
              (and (< (-> self control ctrl-xz-vel) 8192.0)
                   (logtest? (-> self control status) (collide-status touch-wall))
