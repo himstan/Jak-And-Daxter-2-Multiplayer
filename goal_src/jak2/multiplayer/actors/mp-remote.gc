@@ -90,7 +90,7 @@
             (player-replica-deactivate! record 'level-inactive))
           (return #f)))))
   (let ((distance (get-player-replica-distance-from-focus record))
-        (cull-suppressed? (mp-culling-suppressed-for-player? record)))
+        (cull-suppressed? (or (mp-culling-suppressed-for-player? record) (traffic-local-root-follower? record))))
     (cond
       ((and (not cull-suppressed?) (> distance (meters 250.0)))
        (when (player-replica-valid? (mp-player-record-target record))

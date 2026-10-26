@@ -185,29 +185,12 @@
         (set! (-> civilian-proc vehicle) (the-as handle #f)))))
   (none))
 
-(defun pedestrian-spawn-city-shuttle-replica ((params traffic-object-spawn-params))
-  (let ((proc (the-as citizen #f)))
-    (when (and params (nonzero? params) *traffic-manager* (nonzero? *traffic-manager*))
-      (let ((spawned-proc (citizen-spawn (the-as process *traffic-manager*) citizen-rebel params)))
-        (when (and spawned-proc (nonzero? spawned-proc) (type? spawned-proc citizen))
-          (set! proc (the-as citizen spawned-proc))
-          (send-event *traffic-manager* 'add-object (-> params object-type) proc)
-          (log 'debug
-               "[MP-ShuttleSpawn] nid=~D spawned=1 pos=(~f,~f,~f)~%"
-               (-> params net-id)
-               (-> params position x)
-               (-> params position y)
-               (-> params position z)))))
-    proc))
-
 (defun mp-pedestrian-spawn-proc ((params traffic-object-spawn-params))
   (let ((proc (the-as citizen #f)))
     (when (and params (nonzero? params) *traffic-manager* (nonzero? *traffic-manager*))
-      (if (= (-> params object-type) (traffic-type tt5))
-        (set! proc (pedestrian-spawn-city-shuttle-replica params))
-        (let ((spawned-proc (traffic-object-spawn (the-as process *traffic-manager*) params)))
-          (when (and spawned-proc (nonzero? spawned-proc) (type? spawned-proc citizen))
-            (set! proc (the-as citizen spawned-proc))))))
+      (let ((spawned-proc (traffic-object-spawn (the-as process *traffic-manager*) params)))
+        (when (and spawned-proc (nonzero? spawned-proc) (type? spawned-proc citizen))
+          (set! proc (the-as citizen spawned-proc)))))
     proc))
 
 (defun pedestrian-spawn-transport-guard-replica ((slot mp-pedestrian-state))
@@ -250,7 +233,7 @@
     spawned?))
 
 (defun pedestrian-despawn-replica! ((proc citizen))
-  (when (and proc (nonzero? proc) (nonzero? (-> proc net-id)))
+  (when (and proc (nonzero? proc) (nonzero? (-> proc net-id)) (not (passenger-net-id? (-> proc net-id))))
     (let ((old-net-id (-> proc net-id)))
       (log 'debug
            "[MP-PedCleanup] Retiring ~A nid=~D pid=~D inactive=~A status=~A~%"

@@ -616,7 +616,6 @@
   "mp-airlock-state-mapper.o" ;; added
   "mp-airlock-sync.o" ;; added
   "mp-teleport-utils.o" ;; added
-  "mp-left-behind.o" ;; added
   "mp-enemy-h.o" ;; added
   "mp-aid-permanence.o" ;; added
   "mp-gem-permanence.o" ;; added
@@ -650,6 +649,8 @@
   "mp-traffic-sync.o" ;; added
   "mp-traffic-authority.o" ;; added
   "mp-traffic-debug.o" ;; added
+  "passenger-mission.o" ;; added
+  "mp-left-behind.o" ;; added
   "mp-enemy-debug.o" ;; added  
   "mp-debug.o" ;; added
   "mp-task-debug.o" ;; added

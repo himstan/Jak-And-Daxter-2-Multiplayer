@@ -748,13 +748,14 @@
   (mp-vehicle-guard-refresh-pursuit-target! this)
   (cond
     ((handle->process (-> this pursuit-target))
+     (when (mp-vehicle-guard-ensure-target-status! this (handle->process (-> this pursuit-target)))
      (let ((v1-3 (new 'stack-no-clear 'vehicle-control-point)))
        (set! (-> v1-3 local-pos quad) (-> this root trans quad))
        (let ((v1-4 (traffic-engine-method-49
                      (-> this controller traffic)
                      (-> v1-3 local-pos)
                      (-> this traffic-priority-id)
-                     (the-as traffic-target-status (&-> this traffic-target-status))
+                     (-> this traffic-target-status)
                      )
                    )
              )
@@ -771,6 +772,7 @@
            )
          (set! (-> this target-flags) (-> v1-4 flags))
          )
+       )
        )
      (when (not (logtest? (rigid-body-object-flag in-pursuit) (-> this flags)))
        (if (logtest? (rigid-body-object-flag target-in-sight) (-> this flags))

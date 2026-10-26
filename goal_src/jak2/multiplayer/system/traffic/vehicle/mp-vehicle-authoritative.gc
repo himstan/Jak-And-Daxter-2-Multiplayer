@@ -66,7 +66,7 @@
                (set! (-> slot rider-player-slots i) player-slot)
                (if (zero? i) (set! (-> slot target-player-slot) (the-as uint8 player-slot))))
              (set! (-> slot rider-player-slots i) MP_INVALID_PLAYER_SLOT))))
-        ((and rider-proc (nonzero? rider-proc) (type? rider-proc vehicle-rider))
+        ((and rider-proc (nonzero? rider-proc) (or (type? rider-proc vehicle-rider) (type? rider-proc citizen)))
          (set! (-> slot rider-player-slots i) MP_VEHICLE_RIDER_CIVILIAN_ID))
         (else (set! (-> slot rider-player-slots i) MP_INVALID_PLAYER_SLOT)))))
   (none))

@@ -200,6 +200,15 @@
           (return previous-source)))))
   MP_INVALID_PLAYER_SLOT)
 
+(defun traffic-local-root-follower? ((record mp-player-record))
+  (let ((local-player-slot (mp-local-player-slot)))
+    (the-as symbol
+            (and (nonnull? record)
+                 (< local-player-slot (the uint MP_MAX_PLAYERS))
+                 (!= (-> record identity player-slot) local-player-slot)
+                 (= (mp-traffic-authority-for-player *mp-traffic-authority-assignments* (-> record identity player-slot))
+                    local-player-slot)))))
+
 (defun mp-traffic-race-host-pinned? ()
   (let ((manager (process-by-type-exact 'race-manager *active-pool*)))
     (and (nonnull? manager (-> manager state)) (= (-> manager state name) 'active))))

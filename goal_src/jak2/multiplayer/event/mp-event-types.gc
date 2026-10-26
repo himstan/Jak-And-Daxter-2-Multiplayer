@@ -152,7 +152,7 @@
                                                                    mp-stadium-board1-event-data
                                                                    (mp-event-handle-mission! evt))
                   (MP_EVENT_MISSION_KREW_COLLECTION_PICKUP 51 uint8 (mp-event-handle-mission! evt))
-                  (MP_EVENT_MISSION_CITY_SHUTTLE_STATE 52 mp-shuttle-event-data (mp-event-handle-mission! evt))
+                  (MP_EVENT_MISSION_PASSENGER_STATE 52 passenger-event-data (passenger-state-receive! (the-as passenger-event evt)))
                   (MP_EVENT_MISSION_CITY_POWER_TURRET_STATE 53 mp-city-power-event-data (mp-event-handle-mission! evt))
                   (MP_EVENT_MISSION_TOMB_BOULDER_COMPLETE 54 none (mp-event-handle-mission! evt))
                   (MP_EVENT_MISSION_TOMB_DAXTER_WAIT_START 55 none (mp-event-handle-mission! evt))

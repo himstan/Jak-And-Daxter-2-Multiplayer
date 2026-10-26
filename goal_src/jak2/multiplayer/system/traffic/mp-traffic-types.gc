@@ -6,6 +6,7 @@
 (define-perm *mp-traffic-local-authoritative?* symbol #t)
 (define-perm *mp-traffic-local-root-has-followers?* symbol #f)
 (define-perm *mp-traffic-selected-authority-id* uint (the uint #xff))
+(define-perm *traffic-keep-task-objects?* symbol #f)
 (define-perm *mp-traffic-death-spectate-active?* symbol #f)
 (define-perm *mp-traffic-death-root-hold?* symbol #f)
 (define-perm *mp-traffic-authority-released?* symbol #f)
@@ -21,9 +22,13 @@
 (defconstant MP_TRAFFIC_PEDESTRIAN_NET_ID_BASE (the uint #x10000000))
 (defconstant MP_TRAFFIC_VEHICLE_NET_ID_BASE (the uint #x20000000))
 (defconstant MP_CLIENT_VEHICLE_NET_ID_BASE (the uint #x40000000))
+(defconstant PASSENGER_NET_ID_BASE (the uint #x71000000))
 
 (define-perm *mp-client-vehicle-net-id-counter* uint MP_CLIENT_VEHICLE_NET_ID_BASE)
 (define-perm *mp-last-local-state-id* uint (the uint 0))
+
+(defun passenger-net-id? ((net-id uint))
+  (= (logand net-id (the uint #xff000000)) PASSENGER_NET_ID_BASE))
 
 (defun mp-traffic-build-net-id ((class-base uint) (player-slot uint) (sequence uint))
   (if (and (< player-slot (the uint MP_MAX_PLAYERS))

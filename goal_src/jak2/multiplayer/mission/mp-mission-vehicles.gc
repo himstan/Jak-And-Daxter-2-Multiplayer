@@ -6,6 +6,7 @@
 (defconstant MP_MISSION_VEHICLE_KEIRA_DELIVERY (the uint #x70000002))
 (defconstant MP_MISSION_VEHICLE_KREW_COLLECTION (the uint #x70000003))
 (defconstant MP_MISSION_VEHICLE_CITY_SHUTTLE (the uint #x70000004))
+(defconstant MP_MISSION_VEHICLE_LURKER_WAGON_BASE (the uint #x70000010))
 (defconstant MP_RACE_VEHICLE_ID_BASE (the uint #x70010000))
 (defconstant MP_MAX_RACE_VEHICLES 10)
 
@@ -14,6 +15,16 @@
 
 (defun mp-race-vehicle-id? ((net-id uint))
   (>= net-id MP_RACE_VEHICLE_ID_BASE))
+
+(defun task-owned-vehicle-id? ((net-id uint))
+  (and (mp-mission-vehicle-id? net-id) (!= net-id MP_MISSION_VEHICLE_CITY_SHUTTLE) (not (mp-race-vehicle-id? net-id))))
+
+(defun traffic-keep-task-object? ((proc process))
+  (the-as symbol
+          (and *traffic-keep-task-objects?*
+               (nonnull? proc)
+               (or (and (type? proc vehicle) (task-owned-vehicle-id? (-> (the-as vehicle proc) net-id)))
+                   (and (type? proc enemy) (passenger-net-id? (-> (the-as enemy proc) net-id)))))))
 
 (defun mp-mission-vehicle-matches-net-id? ((proc process) (net-id uint))
   (and proc (nonzero? proc) (type? proc vehicle) (= (-> (the-as vehicle proc) net-id) net-id)))

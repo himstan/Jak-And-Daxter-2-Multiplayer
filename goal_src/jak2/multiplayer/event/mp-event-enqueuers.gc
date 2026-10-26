@@ -64,22 +64,14 @@
     (mp-event-enqueue! (mp-event-build-krew-pickup! event bag-index)))
   (none))
 
-(defun mp-event-enqueue-shuttle! ((task-node uint)
-                                  (sub-state uint)
-                                  (started? uint)
-                                  (time-limit time-frame)
-                                  (remaining-time time-frame)
-                                  (counter int)
-                                  (sequence uint))
-  (let ((event (new 'stack-no-clear 'mp-shuttle-event)))
-    (mp-event-enqueue! (mp-event-build-shuttle! event
-                                                task-node
-                                                sub-state
-                                                started?
-                                                time-limit
-                                                remaining-time
-                                                counter
-                                                sequence)))
+(defun mp-event-enqueue-passenger-state! ((task-node uint)
+                                          (progress uint)
+                                          (started? uint)
+                                          (carried uint)
+                                          (time-limit time-frame)
+                                          (remaining-time time-frame))
+  (let ((event (new 'stack-no-clear 'passenger-event)))
+    (mp-event-enqueue! (mp-event-build-passenger-state! event task-node progress started? carried time-limit remaining-time)))
   (none))
 
 (defun mp-event-enqueue-city-power! ((turret-id uint) (state uint) (source-pos vector))

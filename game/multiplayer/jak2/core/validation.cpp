@@ -121,9 +121,6 @@ uint32_t traffic_net_id_sequence(const uint32_t net_id) {
 
 bool valid_traffic_pedestrian_net_id(const uint32_t net_id, const PlayerSlot source_player_slot) {
   const uint32_t entity_class = traffic_net_id_class(net_id);
-  if (entity_class == kFixedTrafficNetIdClass) {
-    return (net_id & kFixedTrafficNetIdNamespaceMask) == kShuttlePedestrianNetIdNamespace;
-  }
   return entity_class == kTrafficPedestrianNetIdClass && valid_traffic_origin(source_player_slot) &&
          traffic_net_id_origin(net_id) == source_player_slot &&
          valid_ambient_sequence(traffic_net_id_sequence(net_id), 1u);

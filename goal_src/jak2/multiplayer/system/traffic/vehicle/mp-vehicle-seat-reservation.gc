@@ -75,8 +75,20 @@
       #t
       #f)))
 
+(defun mp-remote-driver-civilian-seat? ((veh vehicle) (seat-index int))
+  (let ((driver-record (mp-player-driver-record-by-vehicle-id (-> veh net-id))))
+    (the-as symbol
+            (and (nonnull? driver-record)
+                 (is-record-remote-player? driver-record)
+                 (= (-> driver-record vehicle vehicle-id) (-> veh net-id))
+                 (> seat-index 0)
+                 (< seat-index 4)
+                 (= (-> driver-record vehicle state rider-player-slots seat-index) MP_VEHICLE_RIDER_CIVILIAN_ID)))))
+
 (defun mp-vehicle-seat-reserved-by-remote? ((veh vehicle) (seat-index int))
-  (mp-remote-seat-claim-wins? veh seat-index))
+  (the-as symbol
+          (and (nonnull? veh)
+               (or (mp-remote-seat-claim-wins? veh seat-index) (mp-remote-driver-civilian-seat? veh seat-index)))))
 
 (defun mp-resolve-local-vehicle-seat-conflict! ()
   (when (and *target*

@@ -1782,6 +1782,22 @@
     )
   )
 
+(defun civilian-ride-vehicle! ((this civilian) (veh vehicle))
+  (let ((old-vehicle (handle->process (-> this vehicle))))
+    (if (and old-vehicle (!= old-vehicle veh))
+        (remove-rider (the-as vehicle old-vehicle) this))
+    (cond
+      ((not (and (-> this state) (= (-> this state name) 'ride)))
+       (set! (-> this vehicle) (process->handle veh))
+       (go-process this (method-of-object this ride)))
+      (else
+       (let ((seat (get-best-seat-for-vehicle veh (-> this root trans) (the-as int (-> this info seat-flag)) 1)))
+         (when (!= seat -1)
+           (set! (-> this vehicle) (process->handle veh))
+           (set! (-> this seat) seat)
+           (put-rider-in-seat veh seat this))))))
+  (none))
+
 (defstate ride (civilian)
   :virtual #t
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
@@ -1824,6 +1840,11 @@
   :exit (behavior ()
     (logclear! (-> self flags) (citizen-flag persistent))
     (logclear! (-> self focus-status) (focus-status pilot-riding pilot))
+    (let ((vehicle-proc (handle->process (-> self vehicle))))
+      (if vehicle-proc
+          (remove-rider (the-as vehicle vehicle-proc) self)
+          )
+      )
     (let ((v1-4 self))
       (set! (-> v1-4 enemy-flags) (the-as enemy-flag (logclear (-> v1-4 enemy-flags) (enemy-flag enemy-flag36))))
       (set! (-> v1-4 nav callback-info) *nav-enemy-null-callback-info*)
@@ -1861,7 +1882,12 @@
   :virtual #t
   :event enemy-event-handler
   :enter (behavior ()
-    (change-to (find-nearest-nav-mesh (-> self root trans) (the-as float #x7f800000)) self)
+    (let ((mesh (find-nearest-nav-mesh (-> self root trans) (the-as float #x7f800000))))
+      (if (not mesh)
+          (go-inactive self)
+          )
+      (change-to mesh self)
+      )
     (if (not (-> self nav))
         (go-inactive self)
         )

@@ -49,7 +49,6 @@ inline constexpr uint32_t kPlayerVehicleNetIdClass = 0x40000000u;
 inline constexpr uint32_t kFixedTrafficNetIdClass = 0x70000000u;
 inline constexpr uint32_t kFixedTrafficNetIdNamespaceMask = 0xff000000u;
 inline constexpr uint32_t kMissionVehicleNetIdNamespace = 0x70000000u;
-inline constexpr uint32_t kShuttlePedestrianNetIdNamespace = 0x71000000u;
 inline constexpr uint32_t kTrafficVehicleCivilianRiderId = 0xfffffffeu;
 
 using platform::PlayerCharacter;

@@ -1,0 +1,233 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defconstant PASSENGER_MAX 8)
+(defconstant TASK_ICON_KEY_BASE (the int #x50415300))
+
+(define-perm *passenger-task-node* uint (the uint 0))
+(define-perm *passenger-local-carried* uint (the uint 0))
+(define-perm *passenger-hidden* uint (the uint 0))
+(define-perm *passenger-sent-progress* int -1)
+(define-perm *passenger-sent-started* int -1)
+(define-perm *passenger-sent-carried* int -1)
+(define-perm *passenger-send-time* time-frame 0)
+(define *passenger-carriers* (new 'static 'array uint8 PASSENGER_MAX))
+
+(defun passenger-net-id ((task-node uint) (index uint))
+  (+ PASSENGER_NET_ID_BASE (* task-node (the uint 16)) index))
+
+(defun passenger-index ((net-id uint))
+  (let ((base (passenger-net-id *passenger-task-node* (the uint 0))))
+    (if (and (>= net-id base) (< net-id (+ base (the uint PASSENGER_MAX))))
+        (the int (- net-id base))
+        -1)))
+
+(defun passenger-mission-reset! ((task-node uint))
+  (set! *passenger-task-node* task-node)
+  (set! *passenger-local-carried* (the uint 0))
+  (set! *passenger-hidden* (the uint 0))
+  (set! *passenger-sent-progress* -1)
+  (set! *passenger-sent-started* -1)
+  (set! *passenger-sent-carried* -1)
+  (set! *passenger-send-time* (the-as time-frame 0))
+  (dotimes (index PASSENGER_MAX)
+    (set! (-> *passenger-carriers* index) (the uint8 MP_INVALID_PLAYER_SLOT)))
+  (none))
+
+(defun target-driven-vehicle ((tgt target))
+  (if (and (nonnull? tgt (-> tgt pilot)) (focus-test? tgt pilot) (zero? (-> tgt pilot seat-index)))
+      (the-as vehicle (handle->process-safe (-> tgt pilot vehicle)))
+      (the-as vehicle #f)))
+
+(defun passenger-local-carried-mask ()
+  (let ((veh (target-driven-vehicle *target*))
+        (mask (the uint 0)))
+    (when (nonnull? veh (-> veh info))
+      (dotimes (seat (-> veh info seat-count))
+        (let ((rider (get-rider-in-seat veh seat)))
+          (when (and (nonnull? rider) (type? rider citizen))
+            (let ((index (passenger-index (-> (the-as citizen rider) net-id))))
+              (when (>= index 0)
+                (logior! mask (ash 1 index))))))))
+    mask))
+
+(defun passenger-mission-mark-sent! ((progress uint) (started? uint))
+  (set! *passenger-sent-progress* (the int progress))
+  (set! *passenger-sent-started* (the int started?))
+  (set! *passenger-send-time* (current-time))
+  (none))
+
+(defun passenger-mission-send-state! ((task-node uint)
+                                      (progress uint)
+                                      (started? uint)
+                                      (time-limit time-frame)
+                                      (remaining-time time-frame)
+                                      (force? symbol))
+  (let ((carried (passenger-local-carried-mask)))
+    (set! *passenger-local-carried* carried)
+    (when (and (mp-session-in-game?)
+               (not *mp-processing-remote-event*)
+               (or force?
+                   (!= *passenger-sent-progress* (the int progress))
+                   (!= *passenger-sent-started* (the int started?))
+                   (!= *passenger-sent-carried* (the int carried))
+                   (time-elapsed? *passenger-send-time* (seconds 2))))
+      (mp-event-enqueue-passenger-state! task-node progress started? carried time-limit remaining-time)
+      (set! *passenger-sent-carried* (the int carried))
+      (passenger-mission-mark-sent! progress started?)))
+  (none))
+
+(defun passenger-claim-wins? ((index int) (source uint))
+  (let ((current (the uint (-> *passenger-carriers* index))))
+    (and (or (>= current (the uint MP_MAX_PLAYERS)) (<= source current))
+         (or (not (logtest? *passenger-local-carried* (ash 1 index))) (< source (mp-local-player-slot))))))
+
+(defun passenger-merge-carriers! ((source uint) (carried uint))
+  (dotimes (index PASSENGER_MAX)
+    (cond
+      ((not (logtest? carried (ash 1 index)))
+       (when (= (the uint (-> *passenger-carriers* index)) source)
+         (set! (-> *passenger-carriers* index) (the uint8 MP_INVALID_PLAYER_SLOT))))
+      ((passenger-claim-wins? index source)
+       (set! (-> *passenger-carriers* index) (the uint8 source)))))
+  (none))
+
+(defun passenger-state-receive! ((evt passenger-event))
+  (when (nonnull? evt *task-manager-engine*)
+    (when (= (the uint (-> evt payload task-node)) *passenger-task-node*)
+      (passenger-merge-carriers! (the uint (-> evt source-player-slot)) (the uint (-> evt payload carried))))
+    (let ((task-link (the-as connection (-> *task-manager-engine* alive-list next0))))
+      (while (!= task-link (-> *task-manager-engine* alive-list-end))
+        (let ((task-proc (the-as process (-> task-link param1))))
+          (when (nonnull? task-proc)
+            (send-event task-proc 'passenger-state (-> evt payload))))
+        (set! task-link (the-as connection (-> task-link next0))))))
+  (none))
+
+(defun passenger-remote-carrier ((index int))
+  (let* ((slot (the uint (-> *passenger-carriers* index)))
+         (record (if (< slot (the uint MP_MAX_PLAYERS)) (mp-player-record-by-slot slot) (the-as mp-player-record #f))))
+    (if (and (nonnull? record) (is-record-remote-player? record))
+        record
+        (the-as mp-player-record #f))))
+
+(defun record-driven-vehicle ((record mp-player-record))
+  (if (and (nonnull? record) (nonzero? (-> record vehicle state net-id)) (zero? (-> record vehicle seat-index)))
+      (the-as vehicle (handle->process-safe (-> record runtime vehicle-handle)))
+      (the-as vehicle #f)))
+
+(defun passenger-seated-vehicle ((proc civilian))
+  (if (mp-pedestrian-attached-to-vehicle? proc)
+      (the-as vehicle (handle->process-safe (-> proc vehicle)))
+      (the-as vehicle #f)))
+
+(defun passenger-can-fail-mission? ()
+  (not (mp-session-client?)))
+
+(defun passenger-set-hidden! ((proc civilian) (index int) (hidden? symbol))
+  (let ((bit (ash 1 index)))
+    (cond
+      ((and hidden? (not (logtest? *passenger-hidden* bit)))
+       (logior! (-> proc draw status) (draw-control-status no-draw))
+       (logior! *passenger-hidden* bit))
+      ((and (not hidden?) (logtest? *passenger-hidden* bit))
+       (logclear! (-> proc draw status) (draw-control-status no-draw))
+       (logclear! *passenger-hidden* bit))))
+  (none))
+
+(defun passenger-can-walk-to? ((proc civilian) (veh vehicle))
+  (the-as symbol
+          (and (< (vector-vector-distance (-> proc root trans) (-> veh root trans)) (meters 40))
+               (or (mp-pedestrian-current-or-next-state? proc 'wait-for-ride)
+                   (mp-pedestrian-current-or-next-state? proc 'move-to-vehicle)
+                   (mp-pedestrian-current-or-next-state? proc 'board-vehicle)))))
+
+(defun passenger-board-carrier! ((task task-manager) (proc civilian) (veh vehicle))
+  (if (!= (ppointer->process (-> proc parent)) task)
+      (change-parent proc task))
+  (cond
+    ((not (passenger-can-walk-to? proc veh))
+     (civilian-ride-vehicle! proc veh))
+    ((!= (handle->process (-> proc vehicle)) veh)
+     (send-event proc 'board-vehicle veh)))
+  (none))
+
+(defun passenger-follow-carrier! ((task task-manager) (proc civilian) (index int))
+  (let ((carrier (passenger-remote-carrier index))
+        (seated-vehicle (passenger-seated-vehicle proc)))
+    (cond
+      ((focus-test? proc inactive) #f)
+      ((nonnull? carrier)
+       (let ((carrier-vehicle (record-driven-vehicle carrier)))
+         (passenger-set-hidden! proc index (not (mp-player-record-target carrier)))
+         (when (and (nonnull? carrier-vehicle) (!= seated-vehicle carrier-vehicle))
+           (passenger-board-carrier! task proc carrier-vehicle)))
+       #t)
+      ((and (nonnull? seated-vehicle)
+            (nonnull? (mp-player-driver-record-by-vehicle-id (-> seated-vehicle net-id)))
+            (!= seated-vehicle (target-driven-vehicle *target*)))
+       (passenger-set-hidden! proc index #f)
+       (send-event proc 'exit-vehicle (-> proc root trans))
+       #f)
+      (else
+       (passenger-set-hidden! proc index #f)
+       #f))))
+
+(defun passenger-carried-locally? ((proc civilian))
+  (let ((seated-vehicle (passenger-seated-vehicle proc)))
+    (the-as symbol (and (nonnull? seated-vehicle) (= seated-vehicle (target-driven-vehicle *target*))))))
+
+(defun passenger-vehicle-near-and-slow? ((veh vehicle) (pos vector))
+  (the-as symbol
+          (and (nonnull? veh pos)
+               (< (vector-length-squared (-> veh root transv)) (square 32768.0))
+               (< (vector-vector-distance-squared (-> veh root trans) pos) (square 65536.0)))))
+
+(defun passenger-boardable-vehicle ((pos vector))
+  (let ((local-vehicle (target-driven-vehicle *target*)))
+    (if (passenger-vehicle-near-and-slow? local-vehicle pos)
+        local-vehicle
+        (the-as vehicle #f))))
+
+(defun task-show-destination! ((task task-manager) (pos vector))
+  (let ((arrow (handle->process (-> task arrow))))
+    (cond
+      ((and pos arrow)
+       (send-event arrow 'set-position pos))
+      (pos
+       (let ((params (new 'stack-no-clear 'task-arrow-params)))
+         (set! (-> params pos quad) (-> pos quad))
+         (quaternion-identity! (-> params quat))
+         (set! (-> params flags) (task-arrow-flags))
+         (set! (-> params map-icon) (the-as uint 15))
+         (set! (-> task arrow) (process->handle (task-arrow-spawn params task)))))
+      (arrow
+       (send-event arrow 'die)
+       (set! (-> task arrow) (the-as handle #f)))))
+  (none))
+
+(defun task-icon-key ((task task-manager) (slot int))
+  (+ TASK_ICON_KEY_BASE (* 8 (the int (-> task node-info task))) slot))
+
+(defun task-icon-owned? ((conn connection-minimap) (key int))
+  (the-as symbol
+          (and (nonnull? conn)
+               (= (the-as int (-> conn key)) key)
+               (logtest? (-> conn flags) (minimap-flag active))
+               (not (logtest? (-> conn flags) (minimap-flag fade-out))))))
+
+(defun task-update-icon! ((task task-manager) (slot int) (wanted? symbol) (owner process) (icon-class uint) (pos vector))
+  (let ((conn (-> task minimap slot))
+        (key (task-icon-key task slot)))
+    (cond
+      ((and wanted?
+            owner
+            (not (and (task-icon-owned? conn key)
+                      (= (handle->process (-> conn handle)) owner)
+                      (or (not pos) (= (-> conn position) pos)))))
+       (set! (-> task minimap slot) (add-icon! *minimap* owner icon-class key pos 0)))
+      ((and (not (and wanted? owner)) conn)
+       (if (task-icon-owned? conn key)
+           (logior! (-> conn flags) (minimap-flag fade-out)))
+       (set! (-> task minimap slot) #f))))
+  (none))

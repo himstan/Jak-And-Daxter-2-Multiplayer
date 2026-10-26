@@ -320,17 +320,16 @@
   ((payload uint8 :overlay-at (-> data 0)))
   :size-assert 80)
 
-(deftype mp-shuttle-event-data (structure)
+(deftype passenger-event-data (structure)
   ((time-limit     time-frame)
    (remaining-time time-frame)
-   (counter        int32)
-   (sequence       uint32)
    (task-node      uint16)
-   (sub-state      uint8)
-   (started?       uint8)))
+   (progress       uint16)
+   (started?       uint8)
+   (carried        uint8)))
 
-(deftype mp-shuttle-event (mp-event)
-  ((payload mp-shuttle-event-data :inline :overlay-at (-> data 0)))
+(deftype passenger-event (mp-event)
+  ((payload passenger-event-data :inline :overlay-at (-> data 0)))
   :size-assert 80)
 
 (deftype mp-city-power-event-data (structure)

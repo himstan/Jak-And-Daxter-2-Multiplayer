@@ -484,8 +484,8 @@
    Process is recycled and moved to reserved, if it deactivates."
   (when (and (nonnull? this) (>= arg0 0) (< arg0 (the int (-> this active-object-count))))
     (let ((proc (handle->process-safe (-> this active-object-list arg0))))
-      (when (and (nonnull? proc) (type? proc vehicle)
-                 (mp-vehicle-refuse-traffic-off? (the-as vehicle proc)))
+      (when (or (and (nonnull? proc) (type? proc vehicle) (mp-vehicle-refuse-traffic-off? (the-as vehicle proc)))
+                (traffic-keep-task-object? proc))
         (return (the-as none 0)))))
   (with-pp
     (let* ((s3-0 (-> this active-object-type-list arg0))
@@ -2438,6 +2438,7 @@
                  (((traffic-type crimson-guard-1))
                   (let ((guard (handle->process (-> this vehicle-tracker-array active-object-list guard-count))))
                     (when (and guard
+                               (< guard-idx 16)
                                (not (focus-test? (the-as process-focusable guard) dead inactive))
                                (= (-> (the-as crimson-guard guard) traffic-target-status handle) (-> target-status handle))
                                )
@@ -2452,9 +2453,11 @@
                   )
                  )
                )
-             (let ((a0-35 #t))
-               (while a0-35
+             (let ((a0-35 #t)
+                   (sort-passes 0))
+               (while (and a0-35 (< sort-passes guard-idx))
                  (set! a0-35 #f)
+                 (+! sort-passes 1)
                  (dotimes (v1-77 (+ guard-idx -1))
                    (when (< (-> guard-target-dists (+ v1-77 1)) (-> guard-target-dists v1-77))
                      (let ((a0-38 (-> guards v1-77))

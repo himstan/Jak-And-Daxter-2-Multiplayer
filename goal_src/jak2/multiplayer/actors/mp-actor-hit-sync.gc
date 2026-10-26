@@ -324,7 +324,10 @@
   #f)
 
 (defun mp-actor-hit-authoritative? ((e-proc enemy))
-  (and (nonnull? e-proc) (if (type? e-proc citizen) *mp-traffic-local-authoritative?* (mp-enemy-authoritative? e-proc))))
+  (and (nonnull? e-proc)
+       (if (type? e-proc citizen)
+         (or *mp-traffic-local-authoritative?* (passenger-net-id? (-> e-proc net-id)))
+         (mp-enemy-authoritative? e-proc))))
 
 (defun mp-actor-in-hit-reaction? ((e-proc enemy))
   (when (nonnull? e-proc (-> e-proc state))
@@ -343,7 +346,10 @@
        (or (and *mp-traffic-suppressed* (zero? (-> e-proc net-id)))
            (logtest? (-> e-proc focus-status) (focus-status dead))
            (and (not remote-replay?) (nonnull? info) (= (-> info id) (-> e-proc incoming attack-id)))
-           (and (not remote-replay?) (not local-attacker?) (not *mp-traffic-local-authoritative?*)))))
+           (and (not remote-replay?)
+                (not local-attacker?)
+                (not *mp-traffic-local-authoritative?*)
+                (not (passenger-net-id? (-> e-proc net-id)))))))
 
 (defun mp-actor-send-local-hit-request! ((e-proc enemy) (attacker process) (arg3 event-message-block))
   (when (nonnull? e-proc attacker arg3)

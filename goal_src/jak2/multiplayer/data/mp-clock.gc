@@ -5,6 +5,16 @@
   (if (mp-session-host?) (set! (-> *mp-world-state* clock) (-> *display* shared-clock frame-counter)))
   (none))
 
+(defun shift-task-timers! ((delta time-frame))
+  (when (nonnull? *task-manager-engine*)
+    (let ((task-link (the-as connection (-> *task-manager-engine* alive-list next0))))
+      (while (!= task-link (-> *task-manager-engine* alive-list-end))
+        (let ((task (the-as task-manager (-> task-link param1))))
+          (when (and (nonnull? task) (nonzero? (-> task start-time)) (= (-> task clock) (-> *display* shared-clock)))
+            (+! (-> task start-time) delta)))
+        (set! task-link (the-as connection (-> task-link next0))))))
+  (none))
+
 (defun mp-sync-clock-client ()
   (with-pp
     (if (and (mp-session-client?)
@@ -22,6 +32,7 @@
       (let* ((host-clock (-> *mp-world-state* clock))
              (diff (- host-clock (-> *display* shared-clock frame-counter))))
         (when (and (nonzero? host-clock) (or (> diff 0) (< diff -60)))
+          (shift-task-timers! diff)
           (set! (-> *display* shared-clock frame-counter) host-clock)
           (set! (-> *display* shared-clock old-frame-counter) (+ host-clock -1))))))
   (none))

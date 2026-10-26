@@ -184,6 +184,7 @@
     (dotimes (seat-index (get-seat-count veh))
       (let ((rider-proc (get-rider-in-seat veh seat-index)))
         (when (and (nonnull? rider-proc)
+                   (not (and (type? rider-proc citizen) (passenger-net-id? (-> (the-as citizen rider-proc) net-id))))
                    (or (type? rider-proc vehicle-rider)
                        (and *mp-traffic-local-authoritative?* (type? rider-proc citizen))))
           (cond
