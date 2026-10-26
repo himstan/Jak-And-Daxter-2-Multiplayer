@@ -32,6 +32,7 @@
 (define-extern mp-enemy-animation-post (function none :behavior enemy))
 (define-extern mp-enemy-handle-go-state-event! (function enemy event-message-block symbol))
 (define-extern mp-enemy-broadcast-death (function enemy none))
+(define-extern enemy-forward-cue! (function enemy symbol none))
 (define-extern gem-seed-enemy-rng! (function gem none))
 (define-extern mp-await-authority (state enemy))
 
@@ -1852,6 +1853,7 @@
          )
      )
     ((= arg2 'cue-chase)
+     (enemy-forward-cue! this arg2)
      (when (and (> (-> this hit-points) 0)
                 (zero? (-> this fated-time))
                 (not (logtest? (-> this focus-status) (focus-status grabbed)))
@@ -1882,6 +1884,7 @@
        )
      )
     ((= arg2 'cue-wake)
+     (enemy-forward-cue! this arg2)
      (when (and (> (-> this hit-points) 0)
                 (zero? (-> this fated-time))
                 (not (logtest? (-> this focus-status) (focus-status grabbed)))

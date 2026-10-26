@@ -177,4 +177,10 @@
                                                                                             evt)))
                   (MP_EVENT_GUARD_VEHICLE_SHOT 63
                                                mp-aid-event-data
-                                               (receive-guard-vehicle-shot! (the-as mp-aid-event evt) source-record)))
+                                               (receive-guard-vehicle-shot! (the-as mp-aid-event evt) source-record))
+                  (MP_EVENT_ENEMY_CUE_WAKE 64
+                                           mp-aid-event-data
+                                           (enemy-note-cue! (-> (the-as mp-aid-event evt) payload aid) (-> evt etype)))
+                  (MP_EVENT_ENEMY_CUE_CHASE 65
+                                            mp-aid-event-data
+                                            (enemy-note-cue! (-> (the-as mp-aid-event evt) payload aid) (-> evt etype))))

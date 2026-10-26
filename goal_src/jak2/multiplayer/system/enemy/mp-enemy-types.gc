@@ -166,7 +166,8 @@
    (reaction-distance-squared   float)
    (reaction-facing-angle       float)
    (reaction-flags              uint8)
-   (reaction-variant            uint8)))
+   (reaction-variant            uint8)
+   (pending-cue                 uint8)))
 
 (deftype mp-enemy-auth-table (structure)
   ((records mp-enemy-auth-record MP_MAX_ENEMY_AUTH_RECORDS :inline)))

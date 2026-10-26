@@ -203,6 +203,7 @@
         (set! (-> rec just-taken-authority) #f)
         (set! (-> rec last-applied-remote-state) (the-as mp-enemy-state-id 0))
         (set! (-> rec last-remote-state-bump-time) 0)
+        (set! (-> rec pending-cue) (the uint8 0))
         (mp-enemy-reset-remote-motion-sample! rec)
         (return rec))))
   (the-as mp-enemy-auth-record #f))
