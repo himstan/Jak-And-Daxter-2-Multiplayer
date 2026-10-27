@@ -1,0 +1,68 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defconstant LEFT_BEHIND_DISTANCE (meters 150.0))
+
+(defconstant LEFT_BEHIND_ESCORT_RANGE (meters 15.0))
+
+(defun left-behind-draw-countdown! ((elapsed time-frame))
+  (let ((font-ctx (new 'stack 'font-context *font-default-matrix* 32 320 0.0 (font-color default) (font-flags shadow kerning))))
+    (set-width! font-ctx 350)
+    (set-height! font-ctx 80)
+    (set-scale! font-ctx 0.5)
+    (set! (-> font-ctx flags) (font-flags shadow kerning large))
+    (clear *temp-string*)
+    (format *temp-string* (lookup-text! *common-text* (text-id left-behind-teleport-countdown) #f) (- 3 (/ (the int elapsed) 300)))
+    (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress)))
+  (none))
+
+(defun left-behind-escort ((subject process-focusable))
+  (when (and (mp-session-in-game?)
+             (not (or (movie?) *scene-player*))
+             (nonnull? subject (-> subject root))
+             (< LEFT_BEHIND_DISTANCE (vector-vector-distance (target-pos 0) (-> subject root trans))))
+    (mp-for-each-player-record (player-slot record)
+      (when (and (is-record-remote-player? record)
+                 (< (vector-vector-distance (-> record transform position) (-> subject root trans)) LEFT_BEHIND_ESCORT_RANGE))
+        (return record))))
+  (the-as mp-player-record #f))
+
+(defbehavior left-behind-update! left-behind-manager ()
+  (let ((escort (left-behind-escort (the-as process-focusable (ppointer->process (-> self parent))))))
+    (cond
+      ((and (nonnull? escort *target* (-> *target* control)) (not (focus-test? *target* dead teleporting)))
+       (if (zero? (-> self start-time))
+           (set! (-> self start-time) (current-time)))
+       (let ((elapsed (- (current-time) (-> self start-time))))
+         (cond
+           ((>= elapsed (seconds 3))
+            (set! (-> self start-time) (the-as time-frame 0))
+            (mp-teleport-local-target-to-player! escort #f))
+           (else
+            (left-behind-draw-countdown! elapsed)))))
+      (else
+       (set! (-> self start-time) (the-as time-frame 0)))))
+  (none))
+
+(defstate left-behind-active (left-behind-manager)
+  :virtual #t
+  :exit
+    (behavior ()
+      (mp-culling-clear-override! (mp-culling-override-flags escort)))
+  :code
+    (behavior ()
+      (until #f
+        (left-behind-update!)
+        (suspend))
+      #f))
+
+(defbehavior left-behind-manager-init left-behind-manager ()
+  (set! (-> self mask) (logand (-> self mask) (process-mask freeze pause menu)))
+  (set! (-> self start-time) (the-as time-frame 0))
+  (mp-culling-set-override! (mp-culling-override-flags escort) #t)
+  (go-virtual left-behind-active)
+  (none))
+
+(defun spawn-left-behind-manager! ((subject process-focusable))
+  (process-spawn left-behind-manager :init left-behind-manager-init :to subject)
+  (none))

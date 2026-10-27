@@ -109,6 +109,23 @@
     (if (focus-test? player indax) (go-process player target-indax-start (the handle #f)) (go-process player target-stance)))
   (none))
 
+(define *teleport-edge-grab-info* (new 'static 'pilot-edge-grab-info))
+
+(defun teleport-edge-grab-vehicle! ((player target) (veh vehicle))
+  (cond
+    ((and (nonnull? (-> veh info)) (> (-> veh info grab-rail-count) 0))
+     (let ((rail (-> veh info grab-rail-array 0))
+           (grab *teleport-edge-grab-info*))
+       (vector-lerp! (-> grab local-pos) (-> rail local-pos 0) (-> rail local-pos 1) 0.5)
+       (vector-! (-> grab local-dir) (-> rail local-pos 1) (-> rail local-pos 0))
+       (vector-normalize! (-> grab local-dir) 1.0)
+       (set! (-> grab handle) (process->handle veh))
+       (if (not (send-event player 'pilot-edge-grab grab))
+           (mp-teleport-reset-local-base-state! player))))
+    (else
+     (mp-teleport-reset-local-base-state! player)))
+  (none))
+
 (defun place-local-player-at-record! ((record mp-player-record) (ride-along? symbol))
   (when (and (nonnull? *target* record) (mp-teleport-target-ready-for-record? *target* record))
     (when (focus-test? *target* pilot)
@@ -130,8 +147,8 @@
                    (log 'debug "[MP-Teleport] Teleporting player into vehicle seat ~D~%" best-seat)
                    (mp-teleport-board-vehicle-seat! *target* veh best-seat))
                   (else
-                   (log 'debug "[MP-Teleport] Vehicle full. Teleporting next to vehicle.~%")
-                   (mp-teleport-reset-local-base-state! *target*)))))
+                   (log 'debug "[MP-Teleport] Vehicle full. Grabbing the vehicle edge.~%")
+                   (teleport-edge-grab-vehicle! *target* veh)))))
              (else
               (log 'debug "[MP-Teleport] Vehicle ~D not found. Teleporting to remote player coords.~%" riding-veh-id)
               (mp-teleport-player-to-record-coords! *target* record 4096.0)

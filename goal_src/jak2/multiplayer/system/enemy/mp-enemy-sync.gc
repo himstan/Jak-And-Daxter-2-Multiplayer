@@ -280,12 +280,36 @@
           (set! (-> e-proc focus handle) (process->handle focus-proc))))))
   (none))
 
+(define *crocadog-seat-pos* (new 'static 'vector :y 819.2 :z -1638.4 :w 1.0))
+
+(defun bot-copy-seat-pose! ((e-proc enemy) (slot mp-enemy-state))
+  (when (type? e-proc bot)
+    (let ((riding? (or (= (-> slot state) (the-as uint (mp-enemy-state-id board-vehicle)))
+                       (= (-> slot state) (the-as uint (mp-enemy-state-id ride-vehicle)))))
+          (veh (the-as vehicle (handle->process (-> (the-as bot e-proc) vehicle-handle))))
+          (seat (-> (the-as bot e-proc) vehicle-seat-index)))
+      (if riding?
+          (logior! (-> e-proc focus-status) (focus-status pilot))
+          (logclear! (-> e-proc focus-status) (focus-status pilot)))
+      (when (and riding? (nonnull? veh (-> veh info) (-> veh node-list)) (>= seat 0) (< seat (-> veh info seat-count)))
+        (cond
+          ((= (-> e-proc type symbol) 'crocadog-escort)
+           (vector-matrix*! (-> e-proc root trans) *crocadog-seat-pos* (-> veh node-list data 0 bone transform))
+           (quaternion-copy! (-> e-proc root quat) (-> veh root quat)))
+          (else
+           (compute-seat-position veh (-> e-proc root trans) seat)
+           (quaternion-rotate-local-y! (-> e-proc root quat) (-> veh root quat) (the float (-> veh info seat-array seat angle)))))
+        (vector-copy! (-> e-proc root transv) (-> veh root transv))
+        (return #t))))
+  #f)
+
 (defun mp-enemy-apply-remote-transform-from-slot! ((e-proc enemy) (slot mp-enemy-state))
   (when (mp-enemy-remote-transform-ready? e-proc slot)
     (let ((rec (mp-get-enemy-auth (mp-get-enemy-aid e-proc))))
       (when (and rec (nonzero? rec))
         (mp-enemy-copy-remote-presentation! rec slot)
-        (mp-enemy-apply-remote-presentation! e-proc rec)
+        (if (not (bot-copy-seat-pose! e-proc slot))
+            (mp-enemy-apply-remote-presentation! e-proc rec))
         (mp-enemy-apply-remote-focus! e-proc rec))))
   (none))
 

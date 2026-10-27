@@ -581,11 +581,12 @@
 (defmethod local-player-can-report-airlock-ready? ((this com-airlock))
   (let* ((target-pos (target-pos 0))
          (cross-dist (check-crossing-distance this target-pos #t))
+         (latch-open? (>= (-> this latch-open-time) (current-time)))
          )
     (the-as
       symbol
-      (and (target-in-airlock-active-range? this target-pos #f)
-           (target-in-airlock-height? this target-pos #f)
+      (and (target-in-airlock-active-range? this target-pos latch-open?)
+           (target-in-airlock-height? this target-pos latch-open?)
            (airlock-has-valid-notice-destination? this)
            (mark-airlock-behind-if-needed! this cross-dist)
            (begin
@@ -593,8 +594,11 @@
                   (or (not (and *target* (nonzero? *target*) (focus-test? *target* pilot teleporting)))
                       (< cross-dist -409.6)
                       )
-                  (local-player-in-airlock-sync-distance? this cross-dist)
-                  (target-can-open-airlock? this cross-dist)
+                  (or latch-open?
+                      (and (local-player-in-airlock-sync-distance? this cross-dist)
+                           (target-can-open-airlock? this cross-dist)
+                           )
+                      )
                   )
              )
            )

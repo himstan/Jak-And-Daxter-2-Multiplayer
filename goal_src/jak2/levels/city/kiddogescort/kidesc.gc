@@ -185,7 +185,7 @@
    @TODO - unsure if there is a pattern for the events and this should have a more specific name"
   (case arg2
     (('arrest)
-     (if (not (mp-session-host?)) (return #f))
+     (if (mp-session-client?) (return #f))
      (let ((v1-4 (the-as process (as-type (handle->process (-> this arrestor-handle)) process-focusable))))
        (when (or (not v1-4) (= v1-4 arg0) (and (!= v1-4 arg0) (time-elapsed? (-> this arrest-attempt-time) (seconds 0.1))))
          (set! (-> this arrestor-handle) (process->handle arg0))
@@ -198,6 +198,7 @@
      #t
      )
     (('instant-arrest)
+     (if (mp-session-client?) (return #f))
      (logior! (-> this bot-flags) (bot-flags bf19))
      (let ((s5-1 (the-as crimson-guard (-> arg3 param 0))))
        (set! (-> this arrestor-handle) (process->handle s5-1))
@@ -475,6 +476,7 @@
     )
   0
   (set! (-> this my-simple-focus) (process-spawn simple-focus :to this))
+  (spawn-left-behind-manager! this)
   (set! (-> this draw light-index) (the-as uint 10))
   0
   (none)
@@ -665,7 +667,7 @@
 
 (defmethod check-vehicle-exit ((this kid-escort))
   (local-vars (v1-25 enemy-flag))
-  (when (focus-test? this pilot)
+  (when (and (focus-test? this pilot) (not (mp-session-client?)))
     (let ((s5-0 (handle->process (-> this vehicle-handle))))
       (when (or (not s5-0) (logtest? (-> (the-as vehicle s5-0) flags) (rigid-body-object-flag dead)))
         (logior! (-> this bot-flags) (bot-flags bf17))
@@ -690,7 +692,11 @@
               )
           )
         (set! (-> this enemy-flags) v1-25)
-        (let ((s4-2 (vector-! (new 'stack-no-clear 'vector) (-> this root trans) (-> (the-as vehicle s5-0) root trans))))
+        (let ((s4-2 (new 'stack-no-clear 'vector)))
+          (if s5-0
+              (vector-! s4-2 (-> this root trans) (-> (the-as vehicle s5-0) root trans))
+              (vector-z-quaternion! s4-2 (-> this root quat))
+              )
           (vector-normalize! s4-2 57344.0)
           (send-event
             this

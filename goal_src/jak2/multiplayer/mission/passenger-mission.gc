@@ -34,11 +34,6 @@
     (set! (-> *passenger-carriers* index) (the uint8 MP_INVALID_PLAYER_SLOT)))
   (none))
 
-(defun target-driven-vehicle ((tgt target))
-  (if (and (nonnull? tgt (-> tgt pilot)) (focus-test? tgt pilot) (zero? (-> tgt pilot seat-index)))
-      (the-as vehicle (handle->process-safe (-> tgt pilot vehicle)))
-      (the-as vehicle #f)))
-
 (defun passenger-local-carried-mask ()
   (let ((veh (target-driven-vehicle *target*))
         (mask (the uint 0)))
@@ -110,11 +105,6 @@
     (if (and (nonnull? record) (is-record-remote-player? record))
         record
         (the-as mp-player-record #f))))
-
-(defun record-driven-vehicle ((record mp-player-record))
-  (if (and (nonnull? record) (nonzero? (-> record vehicle state net-id)) (zero? (-> record vehicle seat-index)))
-      (the-as vehicle (handle->process-safe (-> record runtime vehicle-handle)))
-      (the-as vehicle #f)))
 
 (defun passenger-seated-vehicle ((proc civilian))
   (if (mp-pedestrian-attached-to-vehicle? proc)

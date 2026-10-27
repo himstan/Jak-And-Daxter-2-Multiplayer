@@ -6,6 +6,7 @@
 (defconstant MP_MISSION_VEHICLE_KEIRA_DELIVERY (the uint #x70000002))
 (defconstant MP_MISSION_VEHICLE_KREW_COLLECTION (the uint #x70000003))
 (defconstant MP_MISSION_VEHICLE_CITY_SHUTTLE (the uint #x70000004))
+(defconstant MP_MISSION_VEHICLE_ESCORT_KID (the uint #x70000005))
 (defconstant MP_MISSION_VEHICLE_LURKER_WAGON_BASE (the uint #x70000010))
 (defconstant MP_RACE_VEHICLE_ID_BASE (the uint #x70010000))
 (defconstant MP_MAX_RACE_VEHICLES 10)
@@ -67,6 +68,36 @@
               (set! found-proc (mp-mission-vehicle-find-in-task-manager task-proc net-id))))
           (set! task-link (the-as connection (-> task-link next0))))))
     found-proc))
+
+(defun target-driven-vehicle ((tgt target))
+  (if (and (nonnull? tgt (-> tgt pilot)) (focus-test? tgt pilot) (zero? (-> tgt pilot seat-index)))
+      (the-as vehicle (handle->process-safe (-> tgt pilot vehicle)))
+      (the-as vehicle #f)))
+
+(defun record-driven-vehicle ((record mp-player-record))
+  (if (and (nonnull? record) (nonzero? (-> record vehicle state net-id)) (zero? (-> record vehicle seat-index)))
+      (the-as vehicle (handle->process-safe (-> record runtime vehicle-handle)))
+      (the-as vehicle #f)))
+
+(defun vehicle-has-driver? ((veh vehicle))
+  (when (nonnull? veh)
+    (when (= (target-driven-vehicle *target*) veh)
+      (return #t))
+    (mp-for-each-player-record (player-slot record)
+      (when (and (is-record-remote-player? record) (= (record-driven-vehicle record) veh))
+        (return #t))))
+  #f)
+
+(defun mission-vehicle-find-or-spawn! ((spawn-params traffic-object-spawn-params) (net-id uint))
+  (let ((vehicle-proc (mp-mission-vehicle-find-by-net-id net-id)))
+    (cond
+      ((nonnull? vehicle-proc)
+       (set! (-> spawn-params proc) vehicle-proc))
+      (else
+       (set! (-> spawn-params net-id) net-id)
+       (send-event *traffic-manager* 'spawn-object spawn-params))))
+  (mp-mission-vehicle-assign-net-id! (-> spawn-params proc) net-id)
+  (-> spawn-params proc))
 
 (defun mp-race-vehicle-net-id ((race-index int) (racer-index int))
   (+ MP_RACE_VEHICLE_ID_BASE (* race-index MP_MAX_RACE_VEHICLES) (+ racer-index 1)))

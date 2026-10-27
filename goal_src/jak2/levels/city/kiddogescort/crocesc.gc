@@ -469,7 +469,7 @@
 
 (defmethod check-vehicle-exit ((this crocadog-escort))
   (local-vars (v1-22 enemy-flag))
-  (when (focus-test? this pilot)
+  (when (and (focus-test? this pilot) (not (mp-session-client?)))
     (let ((v1-4 (handle->process (-> this vehicle-handle))))
       (when (or (not v1-4) (logtest? (-> (the-as vehicle v1-4) flags) (rigid-body-object-flag dead)))
         (logior! (-> this bot-flags) (bot-flags bf17))

@@ -650,7 +650,8 @@
   "mp-traffic-authority.o" ;; added
   "mp-traffic-debug.o" ;; added
   "passenger-mission.o" ;; added
-  "mp-left-behind.o" ;; added
+  "left-behind-h.o" ;; added
+  "left-behind.o" ;; added
   "mp-enemy-debug.o" ;; added  
   "mp-debug.o" ;; added
   "mp-task-debug.o" ;; added

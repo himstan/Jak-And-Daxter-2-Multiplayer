@@ -750,8 +750,12 @@
               (v1-43
                 (logior! (-> this bot-flags) (bot-flags bf16))
                 (when (and (>= (the-as int s5-1) 0) (!= s5-1 (-> this nav-mesh-index)))
-                  (change-to (nav-mesh-from-res-tag (-> this entity) 'nav-mesh-actor (the-as int s5-1)) this)
-                  (set! (-> this nav-mesh-index) (the-as int s5-1))
+                  (let ((mesh (nav-mesh-from-res-tag (-> this entity) 'nav-mesh-actor (the-as int s5-1))))
+                    (when mesh
+                      (change-to mesh this)
+                      (set! (-> this nav-mesh-index) (the-as int s5-1))
+                      )
+                    )
                   )
                 )
               (else
@@ -1298,8 +1302,12 @@
           (mp-on-local-waypoint-bump this id skipped?)
           (let ((mesh-idx (-> waypoint nav-mesh-index)))
             (when (and (>= mesh-idx 0) (!= (-> this nav-mesh-index) mesh-idx))
-              (change-to (nav-mesh-from-res-tag (-> this entity) 'nav-mesh-actor mesh-idx) this)
-              (set! (-> this nav-mesh-index) mesh-idx)
+              (let ((mesh (nav-mesh-from-res-tag (-> this entity) 'nav-mesh-actor mesh-idx)))
+                (when mesh
+                  (change-to mesh this)
+                  (set! (-> this nav-mesh-index) mesh-idx)
+                  )
+                )
               )
             )
           (when skipped?
@@ -1678,6 +1686,7 @@
 
 ;; WARN: Return type mismatch bot-flags vs none.
 (defmethod fail-mission! ((this bot))
+  (if (mp-session-client?) (return (the-as none 0)))
   (logclear! (-> this enemy-flags) (enemy-flag vulnerable vulnerable-backup))
   (logclear! (-> this mask) (process-mask collectable))
   (logclear! (-> this enemy-flags) (enemy-flag attackable-backup))

@@ -1,0 +1,7 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(deftype left-behind-manager (process)
+  ((start-time time-frame))
+  (:state-methods
+   left-behind-active))
