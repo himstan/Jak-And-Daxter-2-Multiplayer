@@ -1,0 +1,8 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(deftype task-timer-heartbeat (process)
+  ((source    handle)
+   (task-node uint16))
+  (:state-methods
+    run))

@@ -183,4 +183,7 @@
                                            (enemy-note-cue! (-> (the-as mp-aid-event evt) payload aid) (-> evt etype)))
                   (MP_EVENT_ENEMY_CUE_CHASE 65
                                             mp-aid-event-data
-                                            (enemy-note-cue! (-> (the-as mp-aid-event evt) payload aid) (-> evt etype))))
+                                            (enemy-note-cue! (-> (the-as mp-aid-event evt) payload aid) (-> evt etype)))
+                  (MP_EVENT_TASK_TIMER_STATE 66
+                                            task-timer-state-data
+                                            (receive-task-timer-state! (the-as task-timer-state-event evt))))

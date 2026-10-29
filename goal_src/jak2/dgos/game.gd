@@ -672,6 +672,9 @@
   "mp-scene-coordinator.o" ;; added
   "mp-mountain-collection.o" ;; added
   "dig-clasp-sync.o"
+  "task-timer-sync-h.o"
+  "task-timer-sync.o"
+  "port-run-sync.o"
   "mp-sync-state.o" ;; added
   "mp-scene-transition.o" ;; added
   "mp-waypoint-sync.o" ;; added

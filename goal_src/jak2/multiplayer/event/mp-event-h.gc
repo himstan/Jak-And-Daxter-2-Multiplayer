@@ -305,6 +305,15 @@
   ((payload mp-scene-event-data :inline :overlay-at (-> data 0)))
   :size-assert 80)
 
+(deftype task-timer-state-data (structure)
+  ((time-limit     time-frame)
+   (remaining-time time-frame)
+   (task-node      uint16)))
+
+(deftype task-timer-state-event (mp-event)
+  ((payload task-timer-state-data :inline :overlay-at (-> data 0)))
+  :size-assert 80)
+
 (deftype mp-mountain-resolution-event (mp-event)
   ((payload uint8 :overlay-at (-> data 0)))
   :size-assert 80)
