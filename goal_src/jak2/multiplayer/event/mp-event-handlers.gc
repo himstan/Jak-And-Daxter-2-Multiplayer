@@ -147,6 +147,8 @@
   (none))
 
 (defun mp-event-handler-break ((aid uint))
+  (when (dispatch-actor-sync! aid 'break)
+    (return (the-as none 0)))
   (let ((ent (entity-by-aid aid)))
     (when (and ent (nonzero? ent))
       (log 'debug "[MP-Event-Handlers] Received MP_EVENT_BREAK for aid=~D Entity: ~A~%" aid ent)

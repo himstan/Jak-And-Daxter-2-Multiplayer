@@ -8,6 +8,17 @@
 (define *mp-aid-perm-list-full-logged?* #f)
 (define *mp-orb-aid-cache-full-logged?* #f)
 
+(define *actor-sync-handlers* '())
+
+(defun dispatch-actor-sync! ((aid uint) (message symbol))
+  (let ((handlers *actor-sync-handlers*))
+    (while (and (not (null? handlers)) (pair? handlers))
+      (let ((handler (the-as (function uint symbol symbol) (car handlers))))
+        (when (handler aid message)
+          (return #t)))
+      (set! handlers (cdr handlers))))
+  #f)
+
 (defun mp-record-aid-dead-in-perm-list! ((aid uint))
   (when (zero? aid)
     (return #f))

@@ -671,6 +671,7 @@
   "mp-scene-sync-hooks.o" ;; added
   "mp-scene-coordinator.o" ;; added
   "mp-mountain-collection.o" ;; added
+  "dig-clasp-sync.o"
   "mp-sync-state.o" ;; added
   "mp-scene-transition.o" ;; added
   "mp-waypoint-sync.o" ;; added

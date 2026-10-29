@@ -1,0 +1,27 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(declare-type dig-clasp process-drawable)
+
+(defun dig-clasp-entity? ((ent entity))
+  (and (nonnull? ent)
+       (type? ent entity-actor)
+       (nonnull? (-> (the-as entity-actor ent) etype))
+       (type-type? (-> (the-as entity-actor ent) etype) dig-clasp)))
+
+(defun sync-dig-clasp! ((aid uint) (message symbol))
+  (when (nonnull? *level*)
+    (let ((ent (entity-by-aid aid)))
+      (when (and (dig-clasp-entity? ent) (nonnull? ent (-> ent extra) (-> ent extra perm)))
+        (let ((perm (-> ent extra perm))
+              (proc (-> ent extra process)))
+          (when (= message 'synchronized?)
+            (return (logtest? (-> perm status) (entity-perm-status subtask-complete))))
+          (when (not (logtest? (-> perm status) (entity-perm-status subtask-complete)))
+            (logior! (-> perm status) (entity-perm-status subtask-complete))
+            (when (nonnull? proc)
+              (send-event proc message)))
+          (return #t)))))
+  #f)
+
+(set! *actor-sync-handlers* (cons sync-dig-clasp! *actor-sync-handlers*))
