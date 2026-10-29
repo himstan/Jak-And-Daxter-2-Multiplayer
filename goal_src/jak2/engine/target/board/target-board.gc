@@ -764,7 +764,7 @@
   (target-exit)
   (target-board-setup #t)
   (when (mp-target-daxter? self)
-    (logior! (-> self draw status) (draw-control-status no-draw no-draw-bounds2))
+    (logior! (-> self draw status) (draw-control-status no-draw-bounds2))
     )
   (set! (-> self board latch?) #f)
   (if (zero? (-> self board main))

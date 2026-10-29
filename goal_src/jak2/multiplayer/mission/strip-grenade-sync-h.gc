@@ -1,0 +1,7 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(deftype strip-grenade-controller (task-manager)
+  ((completed-points uint8))
+  (:state-methods
+    track-grenades))

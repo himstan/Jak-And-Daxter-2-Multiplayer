@@ -674,6 +674,8 @@
   "dig-clasp-sync.o"
   "task-timer-sync-h.o"
   "task-timer-sync.o"
+  "strip-grenade-sync-h.o"
+  "strip-grenade-sync.o"
   "port-run-sync.o"
   "mp-sync-state.o" ;; added
   "mp-scene-transition.o" ;; added

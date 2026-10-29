@@ -314,6 +314,10 @@
   ((payload task-timer-state-data :inline :overlay-at (-> data 0)))
   :size-assert 80)
 
+(deftype strip-grenade-control-event (mp-event)
+  ((payload uint8 :overlay-at (-> data 0)))
+  :size-assert 80)
+
 (deftype mp-mountain-resolution-event (mp-event)
   ((payload uint8 :overlay-at (-> data 0)))
   :size-assert 80)

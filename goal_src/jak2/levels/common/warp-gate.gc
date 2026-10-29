@@ -10,15 +10,16 @@
 ;; DECOMP BEGINS
 
 (defun hide-model ((this target))
-  (set! *visibility-overriden?* #t)
   (when (= this *target*)
+    (set! *visibility-overriden?* #t)
     (logior! (-> this draw status) (draw-control-status no-draw no-draw-bounds no-draw-bounds2))
   )
   (none)
 )
 
 (defun show-model ((this target))
-  (set! *visibility-overriden?* #f)
+  (when (= this *target*)
+    (set! *visibility-overriden?* #f))
   (when (and (= this *target*) (mp-target-jak? this))
     (logclear! (-> this draw status) (draw-control-status no-draw no-draw-bounds no-draw-bounds2))
   )

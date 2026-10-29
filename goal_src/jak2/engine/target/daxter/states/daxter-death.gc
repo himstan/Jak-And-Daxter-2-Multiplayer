@@ -97,6 +97,10 @@
               (suspend)
               (ja :num! (seek!))))))
         (else
+         (when (and (= arg0 'big-explosion) (nonnull? self (-> self control)))
+           (sound-play "jak-explode")
+           (part-tracker-spawn :to *entity-pool* :group group-explode-death :mat-joint (-> self control trans))
+           (set-vector! (-> self control transv) 0.0 65502.96 0.0 1.0))
          (set! (-> self control mod-surface) *neutral-mods*)
          (ja-channel-push! 1 (seconds 0.1))
          (ja-no-eval :group! daxter-indax-death-kill-ja :num! (seek!) :frame-num 0.0)
