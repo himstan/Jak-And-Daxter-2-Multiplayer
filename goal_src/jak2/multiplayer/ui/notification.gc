@@ -1,6 +1,22 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(defmethod relocate ((this notification-manager) (offset int))
+  (when (nonnull? this)
+    (when (nonnull? (-> this input-display))
+      (&+! (-> this input-display) offset))
+    (when (nonnull? (-> this name-buffer))
+      (&+! (-> this name-buffer) offset))
+    (when (nonnull? (-> this text-buffer))
+      (&+! (-> this text-buffer) offset))
+    (dotimes (index NOTIFICATION_VISIBLE_COUNT)
+      (let ((entry (-> this entries index)))
+        (when (nonnull? entry (-> entry name))
+          (&+! (-> entry name) offset))
+        (when (nonnull? entry (-> entry text))
+          (&+! (-> entry text) offset))))
+    (the-as notification-manager (call-parent-method this offset))))
+
 (defun notification-entry-at ((manager notification-manager) (row int))
   (when (and (nonnull? manager) (>= row 0) (< row (-> manager count)))
     (return (-> manager entries (mod (+ (the int (-> manager head)) row) NOTIFICATION_VISIBLE_COUNT))))

@@ -1,0 +1,80 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defconstant DRILL_SHIP_FLAG_HIDDEN #x1)
+(defconstant DRILL_SHIP_FLAG_SHOOTING #x2)
+
+(define *drill-rail-respawn-points*
+  (new 'static 'boxed-array :type vector
+    (new 'static 'vector :x (meters 54.0) :y (meters 12.0) :z (meters -22.0) :w 1.0)
+    (new 'static 'vector :x (meters 219.53) :y (meters 12.0) :z (meters -157.2) :w 1.0)
+    (new 'static 'vector :x (meters -183.0) :y (meters 24.346) :z (meters -186.0) :w 1.0)))
+(define *drill-host-state* (new 'static 'drill-ship-state-data :battle-remaining #xff))
+(define *drill-host-state-serial* (the-as uint 0))
+
+(defun drill-ship-process ()
+  (process-by-name "drill-barons-ship-3" *active-pool*))
+
+(defun send-drill-ship-hit! ((turret-index int))
+  (let ((event (new 'stack-no-clear 'drill-ship-hit-event)))
+    (when (and (nonnull? event) (mp-event-prepare! event MP_EVENT_DRILL_SHIP_HIT))
+      (set! (-> event payload) (the uint8 turret-index))
+      (mp-event-enqueue! event)))
+  (none))
+
+(defun receive-drill-ship-state! ((event drill-ship-state-event))
+  (when (and (mp-session-client?) (nonnull? event) (= (-> event source-player-slot) (mp-host-player-slot)))
+    (mem-copy! (the-as pointer *drill-host-state*) (the-as pointer (-> event payload)) (size-of drill-ship-state-data))
+    (+! *drill-host-state-serial* 1))
+  (none))
+
+(defun receive-drill-ship-hit! ((event drill-ship-hit-event))
+  (when (and (mp-session-host?) (nonnull? event))
+    (let ((ship (drill-ship-process)))
+      (when (nonnull? ship)
+        (send-event ship 'mp-hit (-> event payload)))))
+  (none))
+
+(defun drill-level? ((name symbol))
+  (case name
+    (('drill 'drillmid 'drillmtn 'drillb) #t)
+    (else #f)))
+
+(defun drill-ship-host-present? ()
+  (when (not (mp-session-client?))
+    (return #t))
+  (let ((record (mp-host-player-record)))
+    (when (nonnull? record)
+      (dotimes (index MP_PLAYER_LEVEL_SLOT_COUNT)
+        (if (= (mp-level-id->symbol (the uint (-> record transform levels index level-id))) 'drill)
+            (return #t)))))
+  #f)
+
+(defun drill-ship-warp-blocked? ((gate-level symbol) (destination continue-point))
+  (the symbol (and (mp-session-in-game?)
+                   (task-node-open? (game-task-node drill-ship-resolution))
+                   (drill-level? gate-level)
+                   (nonnull? destination)
+                   (not (drill-level? (-> destination level))))))
+
+(defun drill-gate-shut? ((name string))
+  (let ((ent (entity-by-name name)))
+    (the symbol (and (nonnull? ent (-> ent extra) (-> ent extra perm))
+                     (logtest? (-> ent extra perm status) (entity-perm-status subtask-complete))))))
+
+(defun drill-rail-stage ()
+  (cond
+    ((drill-gate-shut? "drill-elec-gate-6") 2)
+    ((drill-gate-shut? "drill-elec-gate-7") 1)
+    (else 0)))
+
+(set-subtask-hook!
+  *game-info*
+  (game-task-node drill-ship-resolution)
+  TASK_MANAGER_EVENT_HOOK
+  (lambda ((sender process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('mission-respawn-origin)
+       (if (or (mp-session-in-game?) (mp-bootstrap-in-progress?))
+           (the-as object (-> *drill-rail-respawn-points* (drill-rail-stage)))
+           #f)))))

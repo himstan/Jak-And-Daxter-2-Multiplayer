@@ -7,7 +7,7 @@
 
 namespace multiplayer::jak2::wire {
 
-inline constexpr size_t kTurretStatePacketWireSize = 8;
+inline constexpr size_t kTurretStatePacketWireSize = 10;
 
 struct TurretStatePacket : platform::wire::Packet<TurretStatePacket, PacketType::TURRET_STATE> {
   static constexpr platform::GameMessagePolicy kPolicy = {
@@ -16,11 +16,12 @@ struct TurretStatePacket : platform::wire::Packet<TurretStatePacket, PacketType:
       .priority = platform::MessagePriority::CRITICAL,
       .cadence = platform::CadenceMode::PERIODIC,
       .interval_ms = 33,
-      .maximum_payload_bytes = 8};
+      .maximum_payload_bytes = 10};
 
   uint32_t turret_aid = 0;
   float rotation_y = 0.0f;
   float rotation_x = 0.0f;
+  uint16_t path_progress = 0;
 };
 
 template <typename Stream, typename PacketT>
@@ -32,6 +33,7 @@ bool serialize_fields(Stream& stream, PacketT&& packet) {
   if (!platform::wire::serialize_u32(stream, packet.turret_aid) ||
       !platform::wire::serialize_angle(stream, packet.rotation_y) ||
       !platform::wire::serialize_angle(stream, packet.rotation_x) ||
+      !platform::wire::serialize_u16(stream, packet.path_progress) ||
       !platform::wire::serialize_byte_align(stream)) {
     return false;
   }

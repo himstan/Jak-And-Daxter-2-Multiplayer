@@ -298,14 +298,29 @@
   (none)
   )
 
+(define *turret-shot-fire-time* (the-as time-frame 0))
+
+(defun turret-shot-local? ((this turret-shot))
+  (or (not (mp-session-in-game?)) (= (handle->process-safe (-> this owner-handle)) *target*))
+  )
+
 (defmethod play-impact-sound ((this turret-shot) (proj-options projectile-options))
   (let ((options proj-options))
     (cond
-      ((zero? options)
-       (sound-play "drl-turret-fire")
+      ((and (zero? options) (time-elapsed? *turret-shot-fire-time* (seconds 0.08)))
+       (set! *turret-shot-fire-time* (current-time))
+       (sound-play-by-spec
+         (static-sound-spec "drl-turret-fire" :volume 90.0 :fo-min 10 :fo-max 80 :fo-curve 2)
+         (new-sound-id)
+         (-> this root trans)
+         )
        )
       ((= options (projectile-options lose-altitude))
-       (sound-play "drl-turret-hit")
+       (sound-play-by-spec
+         (static-sound-spec "drl-turret-hit" :volume 90.0 :fo-min 10 :fo-max 80 :fo-curve 2)
+         (new-sound-id)
+         (-> this root trans)
+         )
        )
       )
     )
@@ -317,7 +332,9 @@
 (defmethod init-proj-settings! ((this turret-shot))
   "Init relevant settings for the [[projectile]] such as gravity, speed, timeout, etc"
   (set! (-> this tail-pos quad) (-> this root trans quad))
-  (cpad-set-buzz! (-> *cpad-list* cpads 0) 1 204 (seconds 0.1))
+  (if (turret-shot-local? this)
+      (cpad-set-buzz! (-> *cpad-list* cpads 0) 1 204 (seconds 0.1))
+      )
   (set! (-> this attack-mode) 'turret)
   (set! (-> this max-speed) 1228800.0)
   (set! (-> this move) guard-shot-move)

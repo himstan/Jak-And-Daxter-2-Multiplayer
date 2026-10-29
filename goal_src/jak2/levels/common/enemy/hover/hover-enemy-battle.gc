@@ -7,6 +7,9 @@
 
 (declare-type base-turret process-focusable)
 (declare-type turret base-turret)
+(declare-type hover-enemy-manager process)
+(define-extern mp-hover-enemy-resend-spawns! (function hover-enemy-manager none))
+(define-extern mp-hover-enemy-apply-spawn! (function hover-enemy-manager uint uint none))
 
 ;; DECOMP BEGINS
 
@@ -29,6 +32,9 @@
    (num-spawned        int32)
    (alive-count        int32)
    (formation-timer    time-frame)
+   (sync-time          time-frame)
+   (dead-index         int32)
+   (dead-aids          uint32  8)
    )
   (:state-methods
     idle
@@ -102,7 +108,17 @@
     (('total-to-spawn?)
      (-> self total-to-spawn)
      )
+    (('mp-spawn)
+     (mp-hover-enemy-apply-spawn! self (the-as uint (-> arg3 param 0)) (the-as uint (-> arg3 param 1)))
+     )
+    (('mp-battle-state)
+     (set! (-> self num-spawned) (- (+ (-> self total-to-spawn) (-> self alive-count)) (the-as int (-> arg3 param 0))))
+     )
     (('hover-die)
+     (when (type? arg0 enemy)
+       (set! (-> self dead-aids (-> self dead-index)) (mp-get-enemy-aid (the-as enemy arg0)))
+       (set! (-> self dead-index) (logand (+ (-> self dead-index) 1) 7))
+       )
      (set! v0-0 (max 0 (+ (-> self alive-count) -1)))
      (set! (-> self alive-count) (the-as int v0-0))
      v0-0
@@ -132,6 +148,10 @@
   (if (not (logtest? (-> self path flags) (path-control-flag not-found)))
       (debug-draw (-> self path))
       )
+  (when (and (mp-session-in-game?) (mp-session-host?) (time-elapsed? (-> self sync-time) (seconds 2)))
+    (set-time! (-> self sync-time))
+    (mp-hover-enemy-resend-spawns! self)
+    )
   (none)
   )
 
@@ -205,35 +225,6 @@
     )
   )
 
-(define *mp-hover-enemy-manager-search-aid* (the-as uint 0))
-(define *mp-hover-enemy-manager-search-result* (the-as hover-enemy-manager #f))
-
-(defun mp-hover-enemy-manager-search-callback ((node process-tree))
-  (let ((proc (the-as process node)))
-    (when (and proc
-               (nonzero? proc)
-               (type? proc hover-enemy-manager))
-      (let* ((manager (the-as hover-enemy-manager proc))
-             (ent (-> manager entity)))
-        (when (and ent
-                   (nonzero? ent)
-                   (= (-> ent aid) *mp-hover-enemy-manager-search-aid*))
-          (set! *mp-hover-enemy-manager-search-result* manager)
-          (return #f)
-          )
-        )
-      )
-    )
-  #t
-  )
-
-(defun mp-hover-enemy-manager-by-aid ((manager-aid uint))
-  (set! *mp-hover-enemy-manager-search-aid* manager-aid)
-  (set! *mp-hover-enemy-manager-search-result* (the-as hover-enemy-manager #f))
-  (iterate-process-tree *active-pool* mp-hover-enemy-manager-search-callback *kernel-context*)
-  *mp-hover-enemy-manager-search-result*
-  )
-
 (defun mp-hover-enemy-spawn-from-entity! ((manager hover-enemy-manager)
                                           (spawn-entity entity-actor)
                                           (enemy-aid uint)
@@ -271,24 +262,42 @@
   (the-as enemy #f)
   )
 
-(defun mp-hover-enemy-apply-spawn! ((evt mp-hover-enemy-spawn-event))
-  (when (nonnull? evt)
-    (let ((enemy-aid (the-as uint (-> evt payload enemy-aid))))
-      (when (not (find-enemy-by-aid enemy-aid))
-        (let ((manager (mp-hover-enemy-manager-by-aid (the-as uint (-> evt payload manager-aid))))
-              (spawn-ent (entity-by-aid (the-as uint (-> evt payload source-aid)))))
-          (when (and manager
-                     (nonzero? manager)
-                     spawn-ent
-                     (nonzero? spawn-ent)
-                     (type? spawn-ent entity-actor))
-            (mp-hover-enemy-spawn-from-entity!
-              manager
-              (the-as entity-actor spawn-ent)
-              enemy-aid
-              #t)
+(defun mp-hover-enemy-seen-dead? ((manager hover-enemy-manager) (enemy-aid uint))
+  (dotimes (index 8)
+    (if (= (-> manager dead-aids index) enemy-aid)
+        (return #t)
+        )
+    )
+  #f
+  )
+
+(defun mp-hover-enemy-resend-spawns! ((manager hover-enemy-manager))
+  (when (nonnull? (-> manager entity))
+    (let ((child (-> manager child)))
+      (while child
+        (let ((proc (ppointer->process child)))
+          (when (and (type? proc enemy)
+                     (nonnull? (-> (the-as enemy proc) entity))
+                     (> (-> (the-as enemy proc) hit-points) 0)
+                     (nonzero? (mp-get-enemy-aid (the-as enemy proc))))
+            (mp-event-enqueue-hover-enemy-spawn!
+              (-> manager entity aid)
+              (-> (the-as enemy proc) entity aid)
+              (mp-get-enemy-aid (the-as enemy proc)))
             )
+          (set! child (-> proc brother))
           )
+        )
+      )
+    )
+  (none)
+  )
+
+(defun mp-hover-enemy-apply-spawn! ((manager hover-enemy-manager) (source-aid uint) (enemy-aid uint))
+  (when (and (not (find-enemy-by-aid enemy-aid)) (not (mp-hover-enemy-seen-dead? manager enemy-aid)))
+    (let ((spawn-ent (entity-by-aid source-aid)))
+      (when (and (nonnull? spawn-ent) (type? spawn-ent entity-actor))
+        (mp-hover-enemy-spawn-from-entity! manager (the-as entity-actor spawn-ent) enemy-aid #t)
         )
       )
     )
@@ -377,6 +386,11 @@
     )
   (set! (-> this formation) #f)
   (set-time! (-> this formation-timer))
+  (set-time! (-> this sync-time))
+  (set! (-> this dead-index) 0)
+  (dotimes (index 8)
+    (set! (-> this dead-aids index) (the-as uint 0))
+    )
   (set! (-> this alive-count) 0)
   0
   (none)

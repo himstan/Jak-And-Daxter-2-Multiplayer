@@ -2,6 +2,7 @@
 (in-package goal)
 
 (define-extern mp-warp-gate-queue-event! (function process-drawable uint symbol vector vector none))
+(define-extern drill-ship-warp-blocked? (function symbol continue-point symbol))
 
 ;; name: warp-gate.gc
 ;; name in dgo: warp-gate
@@ -520,6 +521,9 @@
         )
       )
     )
+  (if (drill-ship-warp-blocked? (-> this level name) (-> this continue))
+      (set! (-> this continue) #f)
+      )
   (-> this continue)
   )
 

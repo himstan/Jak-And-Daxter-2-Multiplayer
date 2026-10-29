@@ -189,4 +189,10 @@
                                             (receive-task-timer-state! (the-as task-timer-state-event evt)))
                   (MP_EVENT_STRIP_GRENADE_CONTROL 67
                                                 uint8
-                                                (receive-strip-grenade-control! (the-as strip-grenade-control-event evt))))
+                                                (receive-strip-grenade-control! (the-as strip-grenade-control-event evt)))
+                  (MP_EVENT_DRILL_SHIP_STATE 68
+                                             drill-ship-state-data
+                                             (receive-drill-ship-state! (the-as drill-ship-state-event evt)))
+                  (MP_EVENT_DRILL_SHIP_HIT 69
+                                           uint8
+                                           (receive-drill-ship-hit! (the-as drill-ship-hit-event evt))))

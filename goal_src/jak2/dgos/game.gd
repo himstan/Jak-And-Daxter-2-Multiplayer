@@ -676,6 +676,7 @@
   "task-timer-sync.o"
   "strip-grenade-sync-h.o"
   "strip-grenade-sync.o"
+  "drill-ship-sync.o"
   "port-run-sync.o"
   "mp-sync-state.o" ;; added
   "mp-scene-transition.o" ;; added

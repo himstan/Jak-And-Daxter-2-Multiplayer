@@ -312,7 +312,9 @@
         (set! (-> (mp-local-player-record) vehicle seat-index) (the uint8 0))
         (set! (-> (mp-local-player-record) vehicle turret-active?) (the uint8 1))
         (set! (-> (mp-local-player-record) vehicle turret-roty) (-> turret-proc roty))
-        (set! (-> (mp-local-player-record) vehicle turret-rotx) (-> turret-proc rotx)))))
+        (set! (-> (mp-local-player-record) vehicle turret-rotx) (-> turret-proc rotx))
+        (set! (-> (mp-local-player-record) vehicle turret-progress)
+              (the uint (* 65535.0 (fmax 0.0 (fmin 1.0 (-> turret-proc path-u)))))))))
   (none))
 
 (defun mp-pack-local-player-mode-snapshot! ()
@@ -324,6 +326,7 @@
     (set! (-> (mp-local-player-record) vehicle turret-active?) (the uint8 0))
     (set! (-> (mp-local-player-record) vehicle turret-roty) 0.0)
     (set! (-> (mp-local-player-record) vehicle turret-rotx) 0.0)
+    (set! (-> (mp-local-player-record) vehicle turret-progress) (the uint16 0))
     (mp-vehicle-pack-local-player-snapshot!)
     (mp-pack-local-turret-snapshot!)
     (pack-local-mech-snapshot!)

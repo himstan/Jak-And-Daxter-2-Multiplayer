@@ -350,7 +350,8 @@ bool capture_local(MPReplicationStateGOAL& state, application::ReplicationMailbo
     frame->turret = core::TurretState{.player_slot = state.local_player_slot,
                                       .turret_aid = player.vehicle.vehicle_id,
                                       .rotation_y = player.vehicle.turret_roty,
-                                      .rotation_x = player.vehicle.turret_rotx};
+                                      .rotation_x = player.vehicle.turret_rotx,
+                                      .path_progress = player.vehicle.turret_progress};
   }
   frame->world = read_world(state.local.world);
   if (!read_gungame(state.local.gungame, frame->gungame.emplace()))
@@ -485,6 +486,7 @@ void write_player(const core::PlayerState& source,
   if (turret.player_slot == source.player_slot) {
     destination.vehicle.turret_roty = turret.rotation_y;
     destination.vehicle.turret_rotx = turret.rotation_x;
+    destination.vehicle.turret_progress = turret.path_progress;
   }
   std::ranges::copy(target.position.begin(), target.position.end(),
                     std::begin(destination.presentation_position));

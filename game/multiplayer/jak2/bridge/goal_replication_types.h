@@ -29,9 +29,10 @@ struct MPReplicationPlayerVehicleGOAL {
   float turret_rotx;
   uint8_t seat_index;
   uint8_t turret_active;
+  uint16_t turret_progress;
 };
 #pragma pack(pop)
-static_assert(sizeof(MPReplicationPlayerVehicleGOAL) == 94);
+static_assert(sizeof(MPReplicationPlayerVehicleGOAL) == 96);
 
 struct alignas(16) MPReplicationPlayerGOAL {
   alignas(16) float presentation_position[4];

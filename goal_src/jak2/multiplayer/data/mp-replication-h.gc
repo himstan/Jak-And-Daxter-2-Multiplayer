@@ -52,8 +52,9 @@
    (turret-roty   float)
    (turret-rotx   float)
    (seat-index    uint8)
-   (turret-active uint8))
-  :size-assert 94)
+   (turret-active uint8)
+   (turret-progress uint16))
+  :size-assert 96)
 
 (deftype mp-replication-player (structure)
   ((presentation-position   vector :inline)

@@ -10,7 +10,8 @@ bool validate_packet(const TurretStatePacket& packet) {
 TurretStatePacket to_packet(const core::TurretState& state) {
   return {.turret_aid = state.turret_aid,
           .rotation_y = platform::wire::canonical_angle(state.rotation_y),
-          .rotation_x = platform::wire::canonical_angle(state.rotation_x)};
+          .rotation_x = platform::wire::canonical_angle(state.rotation_x),
+          .path_progress = state.path_progress};
 }
 
 void from_packet(const TurretStatePacket& packet, core::TurretState& state) {
@@ -18,6 +19,7 @@ void from_packet(const TurretStatePacket& packet, core::TurretState& state) {
   state.turret_aid = packet.turret_aid;
   state.rotation_y = packet.rotation_y;
   state.rotation_x = packet.rotation_x;
+  state.path_progress = packet.path_progress;
 }
 
 }  // namespace multiplayer::jak2::wire

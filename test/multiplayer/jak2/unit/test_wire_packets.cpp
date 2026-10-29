@@ -34,10 +34,10 @@ TEST(Jak2Protocol, GameplayBodyAndHostReencodeAreCanonical) {
 }
 
 TEST(Jak2Protocol, EventEnvelopesPreserveEveryPayloadByte) {
-  constexpr std::array<uint8_t, 67> sizes = {
+  constexpr std::array<uint8_t, 69> sizes = {
       12,   12, 4,    64,   4,  64, 64, 64, 17, 5,  64, 0,  0, 62, 62, 0,  0,  32, 39, 39, 39,
       4,    55, 9,    62,   13, 20, 37, 46, 1,  53, 17, 37, 9, 17, 1,  32, 32, 0,  0,  52, 0xff,
-      0xff, 8,  0xff, 0xff, 4,  4,  4,  4,  1,  22, 18, 0,  0, 0,  31, 0,  12, 4,  1, 9, 4, 4, 4, 18, 1};
+      0xff, 8,  0xff, 0xff, 4,  4,  4,  4,  1,  22, 18, 0,  0, 0,  31, 0,  12, 4,  1, 9, 4, 4, 4, 18, 1, 17, 1};
   for (uint8_t id = 1; id <= sizes.size(); ++id) {
     SCOPED_TRACE(id);
     if (sizes[id - 1] == 0xff) {
@@ -233,13 +233,14 @@ TEST(Jak2Protocol, PlayerVehicleWireFormatPreservesCivilianAndVacantRiders) {
   EXPECT_FALSE(mp_test::decode_player_vehicle(malformed, {.authenticated_player_slot = 2}));
 }
 
-TEST(Jak2Protocol, TurretWireFormatKeepsYawBeforePitch) {
-  const std::vector<uint8_t> bytes = {0x29, 0, 0, 0x40, 0, 0x40, 0, 0x40};
+TEST(Jak2Protocol, TurretWireFormatKeepsYawBeforePitchBeforePathProgress) {
+  const std::vector<uint8_t> bytes = {0x29, 0, 0, 0x40, 0, 0x40, 0, 0x40, 0x34, 0x12};
   multiplayer::jak2::core::TurretState state = {};
   state.player_slot = 2;
   state.turret_aid = 0x40000029;
   state.rotation_y = -0.5f;
   state.rotation_x = 0.25f;
+  state.path_progress = 0x1234;
   expect_exact_packet(state, bytes);
   const auto decoded = mp_test::decode_turret(bytes, {.authenticated_player_slot = 2});
   ASSERT_TRUE(decoded);
@@ -248,6 +249,7 @@ TEST(Jak2Protocol, TurretWireFormatKeepsYawBeforePitch) {
   EXPECT_EQ(actual.turret_aid, 0x40000029u);
   EXPECT_NEAR(actual.rotation_y, -0.5f, multiplayer::platform::wire::kAngleResolution / 2.0f);
   EXPECT_NEAR(actual.rotation_x, 0.25f, multiplayer::platform::wire::kAngleResolution / 2.0f);
+  EXPECT_EQ(actual.path_progress, 0x1234u);
 }
 
 TEST(Jak2Protocol, AuthorityWireFormatKeepsRevisionSeparateFromPacketSequence) {

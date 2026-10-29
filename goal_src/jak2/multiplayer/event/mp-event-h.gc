@@ -318,6 +318,23 @@
   ((payload uint8 :overlay-at (-> data 0)))
   :size-assert 80)
 
+(deftype drill-ship-state-data (structure)
+  ((alive-mask       uint32)
+   (rail-front       uint16 3)
+   (rail-released    uint8 3)
+   (pass             uint8)
+   (shot-index       uint8)
+   (flags            uint8)
+   (battle-remaining uint8)))
+
+(deftype drill-ship-state-event (mp-event)
+  ((payload drill-ship-state-data :inline :overlay-at (-> data 0)))
+  :size-assert 80)
+
+(deftype drill-ship-hit-event (mp-event)
+  ((payload uint8 :overlay-at (-> data 0)))
+  :size-assert 80)
+
 (deftype mp-mountain-resolution-event (mp-event)
   ((payload uint8 :overlay-at (-> data 0)))
   :size-assert 80)

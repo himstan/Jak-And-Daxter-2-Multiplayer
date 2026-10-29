@@ -246,6 +246,7 @@ struct TurretState {
   uint32_t turret_aid = 0;
   float rotation_y = 0.0f;
   float rotation_x = 0.0f;
+  uint16_t path_progress = 0;
 };
 
 struct PedestrianState {

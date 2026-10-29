@@ -3,7 +3,6 @@
 
 (define-extern mp-tomb-scene-transport-suppressed? (function string symbol))
 (define-extern mp-fort-missile-target-replay! (function uint none))
-(define-extern mp-hover-enemy-apply-spawn! (function mp-hover-enemy-spawn-event none))
 
 (define-perm *mp-mission-failed-pending-choice* uint (the uint 0))
 
@@ -826,6 +825,24 @@
     (mp-battle-receive-event! evt name-str))
   (none))
 
+(define *hover-manager-search-aid* (the-as uint 0))
+(define *hover-manager-search-result* (the-as process #f))
+
+(defun hover-manager-search-callback ((node process-tree))
+  (let ((proc (the-as process node)))
+    (when (and (nonnull? proc (-> proc entity))
+               (= (-> proc type symbol) 'hover-enemy-manager)
+               (= (-> proc entity aid) *hover-manager-search-aid*))
+      (set! *hover-manager-search-result* proc)
+      (return #f)))
+  #t)
+
+(defun hover-manager-by-aid ((manager-aid uint))
+  (set! *hover-manager-search-aid* manager-aid)
+  (set! *hover-manager-search-result* (the-as process #f))
+  (iterate-process-tree *active-pool* hover-manager-search-callback *kernel-context*)
+  *hover-manager-search-result*)
+
 (defun mp-event-handler-hover-enemy-spawn ((evt mp-hover-enemy-spawn-event))
   (when (and (nonnull? evt)
              (mp-session-client?)
@@ -834,7 +851,10 @@
              (nonzero? (-> evt payload source-aid))
              (>= (-> evt payload enemy-aid) #x60000000)
              (< (-> evt payload enemy-aid) #x70000000))
-    (mp-hover-enemy-apply-spawn! evt))
+    (send-event (hover-manager-by-aid (-> evt payload manager-aid))
+                'mp-spawn
+                (-> evt payload source-aid)
+                (-> evt payload enemy-aid)))
   (none))
 
 (defun mp-receive-player-gun-shot-event ((evt mp-player-gun-shot-event))

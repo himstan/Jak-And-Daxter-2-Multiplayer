@@ -26,6 +26,8 @@
   "drill-obs2.o"
   "drill-spool.o"
   "drill-baron.o"
+  "drill-rail-train.o" ;; added
+  "drill-barons-ship-sync.o" ;; added
   "drill-scenes.o"
   "centurion.o"
   "ginsu.o"

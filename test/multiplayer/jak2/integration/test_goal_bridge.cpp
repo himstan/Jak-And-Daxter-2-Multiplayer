@@ -519,7 +519,7 @@ TEST(Jak2GoalBridge, PlayerDataLayoutAndCosmeticFlagsMatchGoal) {
 
 TEST(Jak2GoalBridge, DirectionalAggregateHasCanonicalCompactAbi) {
   EXPECT_EQ(sizeof(MPReplicationPlayerIdentityGOAL), 295u);
-  EXPECT_EQ(sizeof(MPReplicationPlayerVehicleGOAL), 94u);
+  EXPECT_EQ(sizeof(MPReplicationPlayerVehicleGOAL), 96u);
   EXPECT_EQ(sizeof(MPReplicationPlayerGOAL), 576u);
   EXPECT_EQ(sizeof(MPReplicationEnemySetGOAL), 57360u);
   EXPECT_EQ(sizeof(MPReplicationPedestrianStateGOAL), 60u);

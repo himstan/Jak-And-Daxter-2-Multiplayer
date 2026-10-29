@@ -99,3 +99,32 @@
                                                                      1
                                                                      #t)
                                           (static-actor-volume 'visvol (96.0 17.0 106.0) (110.0 32.5 120.0))))
+
+(defmacro defdrill-rail-turret-clones (source source-aid first-aid extra-id rotoffset vis-dist trans visvol-min visvol-max &key (shared-battle? #f))
+  `(begin
+    ,@(apply (lambda (slot)
+               `(defstatic-actor ,(string->symbol-format "drill-{}-{}-definition" source slot)
+                                 :level 'drill
+                                 :name ,(fmt #f "{}-{}" source slot)
+                                 :etype 'turret
+                                 :aid ,(+ first-aid slot)
+                                 :trans ,trans
+                                 :task (game-task drill-ship)
+                                 :kill-mask (task-mask task0 task2 done)
+                                 :vis-dist ,vis-dist
+                                 :required-art-groups (static-actor-art-groups "skel-turret" "skel-turret-explode")
+                                 :properties
+                                 (static-actor-properties
+                                   (static-actor-raw-property 'path-actor uint32 (new 'static 'array uint32 1 ,source-aid) 1 #t)
+                                   ,@(if shared-battle?
+                                         `((static-actor-raw-property 'shared-battle-aid uint32 (new 'static 'array uint32 1 ,source-aid) 1 #t))
+                                         '())
+                                   (static-actor-raw-property 'extra-id int32 (new 'static 'array int32 1 ,extra-id) 1 #t)
+                                   (static-actor-raw-property 'rotoffset float (new 'static 'array float 1 ,rotoffset) 1 #t)
+                                   (static-actor-volume 'visvol ,visvol-min ,visvol-max))))
+             '(1 2 3 4 5 6 7))))
+
+(defdrill-rail-turret-clones turret-13 19283 60010 3 16384.0 200.0 (60.0 12.0 -22.0) (53.0 5.0 -124.5) (210.0 20.5 -15.0)
+                             :shared-battle? #t)
+(defdrill-rail-turret-clones turret-14 19284 60020 4 -24576.0 400.0 (215.673 12.0 -161.794) (-168.93 5.0 -214.79) (222.67 20.5 -154.79))
+(defdrill-rail-turret-clones turret-15 19285 60030 5 16384.0 400.0 (-177.0 24.346 -186.0) (-184.0 17.35 -206.5) (177.6 32.85 -173.7))
