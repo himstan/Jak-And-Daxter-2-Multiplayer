@@ -900,6 +900,8 @@
     (t9-0 this)
     )
   (set-vector! (-> this root scale) 0.0 0.0 0.0 1.0)
+  (when (and (nonnull? this) (not (logtest? (-> this enemy-flags) (enemy-flag battle-spawned))))
+    (logior! (-> this enemy-flags) (enemy-flag host-owned)))
   (none)
   )
 
@@ -934,18 +936,16 @@
       )
     (set-vector! (-> self root scale) 1.0 1.0 1.0 1.0)
     )
-  :trans (behavior ()
-    (let ((t9-0 (-> (method-of-type grunt jump) trans)))
-      (if t9-0
-          (t9-0)
+  :post (behavior ()
+    (when (nonnull? self (-> self root))
+      (let ((scale (seek (-> self root scale x) 1.0 (* 1.5 (seconds-per-frame)))))
+        (set-vector! (-> self root scale) scale scale scale 1.0)))
+    (let ((parent-post (the-as (function none :behavior grunt) (-> (method-of-type grunt jump) post))))
+      (if parent-post
+          (parent-post)
           )
       )
-    (let* ((f0-0 (-> self root scale x))
-           (f0-3 (seek f0-0 1.0 (* 1.5 (seconds-per-frame))))
-           )
-      (set-vector! (-> self root scale) f0-3 f0-3 f0-3 1.0)
-      )
-    0
+    (none)
     )
   )
 
@@ -998,6 +998,8 @@
     (t9-0 this)
     )
   (set-vector! (-> this root scale) 0.0 0.0 0.0 1.0)
+  (when (and (nonnull? this) (not (logtest? (-> this enemy-flags) (enemy-flag battle-spawned))))
+    (logior! (-> this enemy-flags) (enemy-flag host-owned)))
   (none)
   )
 
@@ -1032,18 +1034,16 @@
       )
     (set-vector! (-> self root scale) 1.0 1.0 1.0 1.0)
     )
-  :trans (behavior ()
-    (let ((t9-0 (-> (method-of-type juicer jump) trans)))
-      (if t9-0
-          (t9-0)
+  :post (behavior ()
+    (when (nonnull? self (-> self root))
+      (let ((scale (seek (-> self root scale x) 1.0 (* 1.15 (seconds-per-frame)))))
+        (set-vector! (-> self root scale) scale scale scale 1.0)))
+    (let ((parent-post (the-as (function none :behavior juicer) (-> (method-of-type juicer jump) post))))
+      (if parent-post
+          (parent-post)
           )
       )
-    (let* ((f0-0 (-> self root scale x))
-           (f0-3 (seek f0-0 1.0 (* 1.15 (seconds-per-frame))))
-           )
-      (set-vector! (-> self root scale) f0-3 f0-3 f0-3 1.0)
-      )
-    0
+    (none)
     )
   )
 

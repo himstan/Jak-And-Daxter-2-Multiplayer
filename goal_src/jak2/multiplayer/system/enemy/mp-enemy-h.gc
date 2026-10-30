@@ -4,7 +4,8 @@
 (declare-type hover-enemy enemy)
 
 (defun mp-enemy-host-only? ((e-proc enemy))
-  (and e-proc (nonzero? e-proc) (logtest? (-> e-proc enemy-flags) (enemy-flag boss-spawned))))
+  (and (nonnull? e-proc)
+       (logtest? (-> e-proc enemy-flags) (enemy-flag boss-spawned host-owned))))
 
 (defun mp-get-enemy-aid ((e-proc enemy))
   (let ((e-aid (the-as uint 0)))
