@@ -195,4 +195,7 @@
                                              (receive-drill-ship-state! (the-as drill-ship-state-event evt)))
                   (MP_EVENT_DRILL_SHIP_HIT 69
                                            uint8
-                                           (receive-drill-ship-hit! (the-as drill-ship-hit-event evt))))
+                                           (receive-drill-ship-hit! (the-as drill-ship-hit-event evt)))
+                  (MP_EVENT_SEWER_WATER_STATE 70
+                                              sewer-water-state-data
+                                              (receive-sewer-water-state! (the-as sewer-water-state-event evt))))

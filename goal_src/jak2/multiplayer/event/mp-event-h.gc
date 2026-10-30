@@ -335,6 +335,15 @@
   ((payload uint8 :overlay-at (-> data 0)))
   :size-assert 80)
 
+(deftype sewer-water-state-data (structure)
+  ((water-height float)
+   (spin-rate    float)
+   (stage        uint8)))
+
+(deftype sewer-water-state-event (mp-event)
+  ((payload sewer-water-state-data :inline :overlay-at (-> data 0)))
+  :size-assert 80)
+
 (deftype mp-mountain-resolution-event (mp-event)
   ((payload uint8 :overlay-at (-> data 0)))
   :size-assert 80)

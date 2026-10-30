@@ -1,0 +1,10 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(deftype sewer-water-controller (process)
+  ((water-height float)
+   (spin-rate    float)
+   (last-send    time-frame)
+   (stage        uint8))
+  (:state-methods
+    drain))
