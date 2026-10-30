@@ -185,23 +185,22 @@
          "[MP-Event-Handlers] Received MP_EVENT_ATTACK_ENEMY for nid=~D attack-id=~D~%"
          net-id
          (-> evt payload attack-id))
+    (when (<= (-> evt payload new-hp) 0)
+      (mp-mark-aid-dead-perm! net-id))
     (let ((proc (find-enemy-by-aid net-id)))
-      (if (and proc (nonzero? proc))
-        (let ((attacker (mp-player-target-by-slot (-> evt source-player-slot)))
-              (e-proc (the-as enemy proc))
-              (rec (mp-get-enemy-auth net-id)))
-          (when (and attacker (nonzero? attacker))
-            (log 'debug
-                 "[MP-Event-Handlers] Applying Authoritative hit to ~A from remote attacker ~A nid=~D~%"
-                 proc
-                 attacker
-                 net-id)
-            (mp-actor-apply-authoritative-remote-damage! e-proc attacker evt 'enemy)
-            (if (and attacker (nonzero? attacker) (-> e-proc focus) (nonzero? (-> e-proc focus)))
-              (set! (-> e-proc focus handle) (process->handle attacker)))))
+      (if (nonnull? proc)
+        (let ((attacker (mp-player-target-by-slot (-> evt source-player-slot))))
+          (cond
+            ((nonnull? attacker)
+             (mp-actor-apply-authoritative-remote-damage! proc attacker evt 'enemy)
+             (when (nonnull? (-> proc focus))
+               (set! (-> proc focus handle) (process->handle attacker))))
+            (else
+             (set! (-> proc hit-points) (max 0 (-> evt payload new-hp)))
+             (when (zero? (-> proc hit-points))
+               (set! (-> proc incoming attacker-handle) (the-as handle #f))
+               (send-event proc 'die-fast)))))
         (begin
-          (when (<= (-> evt payload new-hp) 0)
-            (mp-mark-aid-dead-perm! net-id))
           (when (mp-battle-enemy-id? net-id)
             (mp-battle-request-rosters!))
           (log 'debug "[MP-Event-Handlers] Could not find enemy process for nid=~D.~%" net-id)))))

@@ -1646,7 +1646,7 @@
           (dotimes (s4-1 (the-as int (-> *predator-graph* node-count)))
             (let ((s3-1 (-> *predator-graph* node s4-1)))
               (when (logtest? (-> s3-1 flags) (predator-node-flag spawnable))
-                (let ((s2-1 (new 'stack-no-clear 'enemy-init-by-other-params)))
+                (let ((s2-1 (new 'stack 'enemy-init-by-other-params)))
                   (new 'stack-no-clear 'vector)
                   (let ((s0-0 (new 'stack-no-clear 'vector))
                         (s1-0 (new 'stack-no-clear 'vector))

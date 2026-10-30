@@ -271,6 +271,8 @@
   (if (zero? net-id) (return #f))
   (when (not (nonnull? e-proc info event-block))
     (return #f))
+  (when (and (= event-type MP_EVENT_ATTACK_ENEMY) (nonzero? (-> e-proc fated-time)))
+    (set! new-hp 0))
   (let* ((damage (damage-amount-from-attack e-proc attacker event-block))
          (penetrate (mp-actor-resolve-event-penetrate e-proc attacker event-block info))
          (knocked-type (mp-actor-resolve-event-knocked-type e-proc info penetrate))
