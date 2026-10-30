@@ -59,14 +59,10 @@
 (defun mp-mission-vehicle-find-by-net-id ((net-id uint))
   (let ((found-proc (the-as vehicle #f)))
     (set! found-proc (mp-mission-vehicle-find-in-traffic-manager net-id))
-    (when (and *task-manager-engine* (nonzero? *task-manager-engine*) (not found-proc) (mp-mission-vehicle-id? net-id))
-      (let ((task-link (the-as connection (-> *task-manager-engine* alive-list next0))))
-        *task-manager-engine*
-        (while (and (not found-proc) (!= task-link (-> *task-manager-engine* alive-list-end)))
-          (let ((task-proc (the-as task-manager (-> task-link param1))))
-            (when (and task-proc (nonzero? task-proc))
-              (set! found-proc (mp-mission-vehicle-find-in-task-manager task-proc net-id))))
-          (set! task-link (the-as connection (-> task-link next0))))))
+    (when (and (not found-proc) (mp-mission-vehicle-id? net-id))
+      (do-task-managers (task-proc)
+        (when (not found-proc)
+          (set! found-proc (mp-mission-vehicle-find-in-task-manager task-proc net-id)))))
     found-proc))
 
 (defun target-driven-vehicle ((tgt target))

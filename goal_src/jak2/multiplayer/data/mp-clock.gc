@@ -6,13 +6,9 @@
   (none))
 
 (defun shift-task-timers! ((delta time-frame))
-  (when (nonnull? *task-manager-engine*)
-    (let ((task-link (the-as connection (-> *task-manager-engine* alive-list next0))))
-      (while (!= task-link (-> *task-manager-engine* alive-list-end))
-        (let ((task (the-as task-manager (-> task-link param1))))
-          (when (and (nonnull? task) (nonzero? (-> task start-time)) (= (-> task clock) (-> *display* shared-clock)))
-            (+! (-> task start-time) delta)))
-        (set! task-link (the-as connection (-> task-link next0))))))
+  (do-task-managers (task)
+    (when (and (nonzero? (-> task start-time)) (= (-> task clock) (-> *display* shared-clock)))
+      (+! (-> task start-time) delta)))
   (none))
 
 (defun mp-sync-clock-client ()

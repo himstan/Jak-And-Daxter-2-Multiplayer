@@ -197,6 +197,7 @@
   "progress-h-pc.o" ;; added
   "text-input.o" ;; added
   "notification-h.o"
+  "player-score-hud-h.o"
   "progress-generic-h-pc.o" ;; added
   "mp-player-list-h.o" ;; added
   "rpc-h.o"
@@ -667,6 +668,7 @@
   "mp-environment.o" ;; added
   "mp-tomb-boulder.o" ;; added
   "mp-tomb-daxter-wait.o" ;; added
+  "onin-game-sync.o"
   "mp-task-sync-hooks.o" ;; added
   "mp-scene-sync-hooks.o" ;; added
   "mp-scene-coordinator.o" ;; added
@@ -691,6 +693,7 @@
   "mp-remote.o" ;; added
   "mp-overlay-layout.o" ;; added
   "notification.o" ;; added
+  "player-score-hud.o"
   "mp-player-list.o" ;; added
   "mp-spectate.o" ;; added
   "mp-death-spectate.o" ;; added

@@ -198,4 +198,7 @@
                                            (receive-drill-ship-hit! (the-as drill-ship-hit-event evt)))
                   (MP_EVENT_SEWER_WATER_STATE 70
                                               sewer-water-state-data
-                                              (receive-sewer-water-state! (the-as sewer-water-state-event evt))))
+                                              (receive-sewer-water-state! (the-as sewer-water-state-event evt)))
+                  (MP_EVENT_ONIN_GAME_SCORE 71
+                                            uint16
+                                            (receive-onin-game-score! (the-as onin-game-score-event evt))))

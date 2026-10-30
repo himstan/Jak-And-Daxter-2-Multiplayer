@@ -911,6 +911,15 @@
   )
 
 
+(defmacro do-task-managers (bindings &rest body)
+  `(when (nonnull? *task-manager-engine*)
+     (let ((task-manager-link (the-as connection (-> *task-manager-engine* alive-list next0))))
+       (while (!= task-manager-link (-> *task-manager-engine* alive-list-end))
+         (let ((,(car bindings) (the-as task-manager (-> task-manager-link param1))))
+           (set! task-manager-link (the-as connection (-> task-manager-link next0)))
+           (when (and (nonnull? ,(car bindings)) (type? ,(car bindings) task-manager))
+             ,@body))))))
+
 (deftype ambient-control (structure)
   ((last-ambient-time  time-frame)
    (last-ambient       string)

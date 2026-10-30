@@ -51,7 +51,7 @@
       )
     (if (or (movie?)
             *scene-player*
-            (logtest? (-> v1-0 draw status) (draw-control-status no-draw-temp no-draw-bounds))
+            (logtest? (-> v1-0 draw status) (draw-control-status no-draw no-draw-temp no-draw-bounds))
             (zero? (-> v1-0 skel active-channels))
             )
         (logior! (-> self draw status) (draw-control-status no-draw))

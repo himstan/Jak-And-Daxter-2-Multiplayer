@@ -293,6 +293,18 @@
 (defmethod deactivate ((this talker))
   "Make a process dead, clean it up, remove it from the active pool, and return to dead pool."
   (send-event (handle->process (-> this voicebox)) 'die)
+  (if (nonzero? (-> this voice-id))
+      (set-action!
+        *gui-control*
+        (gui-action stop)
+        (-> this voice-id)
+        (gui-channel none)
+        (gui-action none)
+        (the-as string #f)
+        (the-as (function gui-connection symbol) #f)
+        (the-as process #f)
+        )
+      )
   (call-parent-method this)
   (none)
   )
