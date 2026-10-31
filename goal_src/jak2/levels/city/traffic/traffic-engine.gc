@@ -837,6 +837,9 @@
              (s3-0 (handle->process sv-16))
              )
         (when s3-0
+          (if (and (type? s3-0 vehicle) (task-owned-vehicle-id? (-> (the-as vehicle s3-0) net-id)))
+              (set! (-> arg0 net-id) (-> (the-as vehicle s3-0) net-id))
+              )
           (cond
             ((and (type? s3-0 vehicle) (mp-vehicle-refuse-traffic-off? (the-as vehicle s3-0)))
              (add-active-process this gp-0 sv-16))

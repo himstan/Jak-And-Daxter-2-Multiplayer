@@ -1,0 +1,44 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defconstant HELLDOG_COUNT 5)
+
+(defun helldog-net-id ((index int))
+  (+ MP_MISSION_VEHICLE_HELLDOG_BASE (the uint index)))
+
+(defun helldog-net-id? ((net-id uint))
+  (and (>= net-id MP_MISSION_VEHICLE_HELLDOG_BASE) (< net-id (helldog-net-id HELLDOG_COUNT))))
+
+(defun helldog-destroyed? ((net-id uint))
+  (and (mp-session-in-game?) (mp-aid-dead-in-perm-list? net-id)))
+
+(defun report-helldog-destroyed! ((veh vehicle))
+  (when (nonnull? veh)
+    (let ((net-id (-> veh net-id)))
+      (when (and (mp-session-in-game?) (helldog-net-id? net-id) (not (mp-aid-dead-in-perm-list? net-id)))
+        (mp-record-aid-dead-in-perm-list! net-id)
+        (mp-event-enqueue-aid! MP_EVENT_BREAK net-id))))
+  (none))
+
+(defun destroy-helldog! ((veh vehicle))
+  (cond
+    ((focus-test? veh inactive) (deactivate veh))
+    ((not (focus-test? veh dead)) (send-event veh 'remote-destroy)))
+  (none))
+
+(defbehavior reconcile-helldogs! task-manager ()
+  (dotimes (index HELLDOG_COUNT)
+    (let ((veh (the-as vehicle (handle->process-safe (-> self slave index)))))
+      (when (and (nonnull? veh) (helldog-destroyed? (-> veh net-id)))
+        (destroy-helldog! veh))))
+  (none))
+
+(defun sync-helldog! ((aid uint) (message symbol))
+  (when (helldog-net-id? aid)
+    (when (= message 'synchronized?)
+      (return (mp-aid-dead-in-perm-list? aid)))
+    (mp-record-aid-dead-in-perm-list! aid)
+    (return #t))
+  #f)
+
+(set! *actor-sync-handlers* (cons sync-helldog! *actor-sync-handlers*))

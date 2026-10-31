@@ -54,7 +54,9 @@
                   (local-driven-id (if (and (mp-local-player-record) (nonzero? (mp-local-player-record)))
                                      (-> (mp-local-player-record) vehicle state net-id)
                                      (the uint 0))))
-              (when (and (nonzero? vehicle-net-id) (!= vehicle-net-id local-driven-id))
+              (when (and (nonzero? vehicle-net-id)
+                         (!= vehicle-net-id local-driven-id)
+                         (not (traffic-buffer-has-vehicle? vehicle-net-id)))
                 (mp-sync-traffic-update-callback slave-proc))))))))
   (none))
 

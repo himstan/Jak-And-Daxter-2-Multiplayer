@@ -9,7 +9,6 @@
   "(anon-function 5 helldog)"
   ((params traffic-object-spawn-params :inline)
    (vec vector :inline)
-   (something-else int64)
    )
   )
 
@@ -375,6 +374,7 @@
   )
 
 (defmethod mark-vehicle-dead! helldog ((obj helldog))
+  (report-helldog-destroyed! obj)
   (when (-> obj minimap)
     (logior! (-> obj minimap flags) (minimap-flag fade-out))
     (set! (-> obj minimap) #f)
@@ -395,6 +395,18 @@
   (go (method-of-object obj hostile))
   0
   (none)
+  )
+
+(defmethod rigid-body-object-method-46 helldog ((obj helldog) (arg0 process-drawable) (arg1 int) (arg2 symbol) (arg3 event-message-block))
+  (cond
+    ((= arg2 'remote-destroy)
+     (set! (-> obj hit-points) 0.0)
+     (go (method-of-object obj crash))
+     )
+    (else
+      ((method-of-type hellcat rigid-body-object-method-46) obj arg0 arg1 arg2 arg3)
+      )
+    )
   )
 
 (defmethod begin-vehicle-pursuit! helldog ((obj helldog))
@@ -468,7 +480,6 @@
       (set-vector! (-> self data-vector 3) 2101248.0 73728.0 -114688.0 27852.8)
       (set-vector! (-> self data-vector 4) 1687552.0 73728.0 -819200.0 2366.578)
       (let ((gp-1 (new 'stack-no-clear 'mystery-traffic-object-spawn-params-2)))
-        (set! (-> gp-1 something-else) 0)
         (set! (-> gp-1 params object-type) (traffic-type tt17))
         (set! (-> gp-1 params behavior) (the-as uint 1))
         (set! (-> gp-1 params id) (the-as uint 0))
@@ -482,47 +493,38 @@
         (vector-reset! (-> gp-1 params velocity))
         (vector-reset! (-> gp-1 params position))
         (vector-reset! (-> gp-1 params velocity))
-        (countdown (s5-0 (-> self count))
-          (set! (-> gp-1 params id) (the-as uint (+ (-> gp-1 something-else) 122)))
-          (set! (-> gp-1 params position quad) (-> self data-vector (-> gp-1 something-else) quad))
-          (let ((f30-0 (-> gp-1 params position w)))
-            (set-vector! (-> gp-1 vec) (sin f30-0) 0.0 (cos f30-0) 1.0)
-            )
-          (set! (-> gp-1 params position w) 1.0)
-          (forward-up-nopitch->quaternion (-> gp-1 params rotation) (-> gp-1 vec) (new 'static 'vector :y 1.0 :w 1.0))
-          (let ((s4-1 (the-as helldog (vehicle-spawn self helldog (-> gp-1 params)))))
-            (when s4-1
-              (let ((v1-32 (-> gp-1 something-else)))
+        (dotimes (index (-> self max-count))
+          (when (not (helldog-destroyed? (helldog-net-id index)))
+            (set! (-> gp-1 params id) (the-as uint (+ index 122)))
+            (set! (-> gp-1 params net-id) (helldog-net-id index))
+            (set! (-> gp-1 params position quad) (-> self data-vector index quad))
+            (let ((f30-0 (-> gp-1 params position w)))
+              (set-vector! (-> gp-1 vec) (sin f30-0) 0.0 (cos f30-0) 1.0)
+              )
+            (set! (-> gp-1 params position w) 1.0)
+            (forward-up-nopitch->quaternion (-> gp-1 params rotation) (-> gp-1 vec) (new 'static 'vector :y 1.0 :w 1.0))
+            (let ((s4-1 (the-as helldog (vehicle-spawn self helldog (-> gp-1 params)))))
+              (when s4-1
                 (set! (-> s4-1 current-level) (the-as level (cond
-                                                              ((zero? v1-32)
+                                                              ((< index 2)
                                                                'ctyindb
                                                                )
-                                                              ((= v1-32 1)
-                                                               'ctyindb
-                                                               )
-                                                              ((= v1-32 2)
+                                                              ((= index 2)
                                                                'ctysluma
                                                                )
-                                                              ((= v1-32 3)
-                                                               'ctyslumb
-                                                               )
-                                                              ((= v1-32 4)
-                                                               'ctyslumb
-                                                               )
                                                               (else
-                                                                #f
+                                                                'ctyslumb
                                                                 )
                                                               )
                                                       )
                       )
+                (set! (-> self slave index) (process->handle s4-1))
+                (send-event *traffic-manager* 'add-object (-> gp-1 params object-type) s4-1)
                 )
-              (set! (-> self slave (-> gp-1 something-else)) (process->handle s4-1))
-              (send-event *traffic-manager* 'add-object (-> gp-1 params object-type) s4-1)
-              (+! (-> gp-1 something-else) 1)
+              (if (not s4-1)
+                  (format 0 "failed to spawn helldog~%")
+                  )
               )
-            (if (not s4-1)
-                (format 0 "failed to spawn helldog~%")
-                )
             )
           )
         (send-event *traffic-manager* 'set-object-target-count (-> gp-1 params object-type) 0)
@@ -549,6 +551,7 @@
     (function object)
     (lambda :behavior task-manager
       ()
+      (reconcile-helldogs!)
       (let ((gp-0 0))
         (dotimes (s5-0 (-> self max-count))
           (let ((s4-0 (handle->process (-> self slave s5-0))))

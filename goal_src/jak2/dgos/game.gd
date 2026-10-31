@@ -681,6 +681,7 @@
   "strip-grenade-sync.o"
   "drill-ship-sync.o"
   "port-run-sync.o"
+  "helldog-sync.o"
   "sewer-water-sync-h.o"
   "sewer-water-sync.o"
   "mp-sync-state.o" ;; added
