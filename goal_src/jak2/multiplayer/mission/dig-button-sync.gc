@@ -1,0 +1,47 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defconstant DIG_BUTTON_FIRST_AID (the uint 32931))
+(defconstant DIG_BUTTON_COUNT 5)
+
+(defun dig-button-perm ((aid uint) (create? symbol))
+  (let ((ent (if (nonnull? *level*) (entity-by-aid aid) (the-as entity #f))))
+    (cond
+      ((nonnull? ent (-> ent extra)) (-> ent extra perm))
+      (create? (perm-list-entry! aid))
+      ((nonnull? *game-info*) (actor-perm *game-info* (the-as actor-id aid)))
+      (else (the-as entity-perm #f)))))
+
+(defun dig-button-pressed? ((aid uint))
+  (let ((perm (dig-button-perm aid #f)))
+    (the symbol (and (nonnull? perm) (logtest? (-> perm status) (entity-perm-status subtask-complete))))))
+
+(defun dig-buttons-pressed? ()
+  (dotimes (index DIG_BUTTON_COUNT)
+    (unless (dig-button-pressed? (+ DIG_BUTTON_FIRST_AID index))
+      (return #f)))
+  #t)
+
+(defun press-dig-button! ((aid uint))
+  (let ((perm (dig-button-perm aid #t)))
+    (when (nonnull? perm)
+      (set! (-> perm task) (game-task complete))
+      (logior! (-> perm status) (entity-perm-status subtask-complete))))
+  (let ((ent (if (nonnull? *level*) (entity-by-aid aid) (the-as entity #f))))
+    (when (nonnull? ent (-> ent extra) (-> ent extra process))
+      (send-event (-> ent extra process) 'remote-press)))
+  (send-event (process-by-ename "dig-log-1") 'remote-hit)
+  (when (dig-buttons-pressed?)
+    (task-node-close! (game-task-node dig-find-totem-raise-log)))
+  (none))
+
+(defun sync-dig-button! ((aid uint) (message symbol))
+  (when (or (< aid DIG_BUTTON_FIRST_AID) (>= aid (+ DIG_BUTTON_FIRST_AID DIG_BUTTON_COUNT)))
+    (return #f))
+  (when (= message 'synchronized?)
+    (return (dig-button-pressed? aid)))
+  (unless (dig-button-pressed? aid)
+    (press-dig-button! aid))
+  #t)
+
+(set! *actor-sync-handlers* (cons sync-dig-button! *actor-sync-handlers*))

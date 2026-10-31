@@ -465,6 +465,7 @@
   (:state-methods
     idle
     moving
+    rising
     )
   (:methods
     (dig-log-method-22 (_type_ symbol) symbol)
@@ -478,22 +479,64 @@
               :origin-joint-index 3
               )
 
+(defun dig-log-target-y ((this dig-log))
+  (+ (-> (&-> *dig-log-heights* 0 data (- (-> this total-buttons) (-> this pressed-count))) 0) (-> this base-y))
+  )
+
+(defbehavior dig-log-press! dig-log ()
+  (set! (-> self pressed-count) (min (+ (-> self pressed-count) 1) (-> self total-buttons)))
+  (set! (-> *game-info* counter) (the float (- (-> self total-buttons) (-> self pressed-count))))
+  (cond
+    ((= (-> self pressed-count) (-> self total-buttons))
+     (dig-log-method-22 self #f)
+     (task-node-close! (game-task-node dig-find-totem-raise-log))
+     )
+    (else
+      (dig-log-method-22 self #t)
+      )
+    )
+  (none)
+  )
+
+(defbehavior dig-log-raise! dig-log ((smush? symbol))
+  (let ((next-smush (current-time)))
+    (until (>= (-> self root trans y) (dig-log-target-y self))
+      (set! (-> self root trans y)
+            (seek-with-smooth (-> self root trans y) (dig-log-target-y self) (* 4096.0 (seconds-per-frame)) 0.25 40.96)
+            )
+      (when (and smush? (>= (current-time) next-smush))
+        (activate!
+          *camera-smush-control*
+          (rand-vu-float-range 614.4 1433.6)
+          45
+          75
+          1.0
+          0.95
+          (-> *display* camera-clock)
+          )
+        (set! next-smush (+ (current-time) (rand-vu-int-range (seconds 0.05) (seconds 0.15))))
+        )
+      (let ((part-pos (new 'stack-no-clear 'vector)))
+        (set! (-> part-pos quad) (-> self root trans quad))
+        (set! (-> part-pos y) (+ 59592.703 (-> self base-y)))
+        (spawn (-> self part) part-pos)
+        )
+      (suspend)
+      )
+    )
+  (none)
+  )
+
 (defbehavior dig-log-event-handler dig-log ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   (case arg2
     (('hit)
      (set! (-> self last-button-id) (the-as int (/ (the-as int (-> arg3 param 0)) 8)))
-     (set! (-> self pressed-count) (min (+ (-> self pressed-count) 1) (-> self total-buttons)))
-     (set! (-> *game-info* counter) (the float (- (-> self total-buttons) (-> self pressed-count))))
-     (cond
-       ((= (-> self pressed-count) (-> self total-buttons))
-        (dig-log-method-22 self #f)
-        (task-node-close! (game-task-node dig-find-totem-raise-log))
-        )
-       (else
-         (dig-log-method-22 self #t)
-         )
-       )
+     (dig-log-press!)
      (go-virtual moving)
+     )
+    (('remote-hit)
+     (dig-log-press!)
+     (go-virtual rising)
      )
     (('hud-dig-button)
      (dig-log-method-22 self (the-as symbol (-> arg3 param 0)))
@@ -539,6 +582,11 @@
 
 (defstate moving (dig-log)
   :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (if (= message 'remote-hit)
+        (dig-log-press!)
+        )
+    )
   :enter (behavior ()
     (set-setting! 'ignore-target #t 0.0 0)
     )
@@ -586,35 +634,7 @@
       (until (time-elapsed? (-> self state-time) (seconds 0.5))
         (suspend)
         )
-      (let ((f30-0
-              (+ (-> (&-> *dig-log-heights* 0 data (- (-> self total-buttons) (-> self pressed-count))) 0) (-> self base-y))
-              )
-            (s5-1 (current-time))
-            )
-        (until (>= (-> self root trans y) f30-0)
-          (set! (-> self root trans y)
-                (seek-with-smooth (-> self root trans y) f30-0 (* 4096.0 (seconds-per-frame)) 0.25 40.96)
-                )
-          (when (>= (current-time) s5-1)
-            (activate!
-              *camera-smush-control*
-              (rand-vu-float-range 614.4 1433.6)
-              45
-              75
-              1.0
-              0.95
-              (-> *display* camera-clock)
-              )
-            (set! s5-1 (+ (current-time) (rand-vu-int-range (seconds 0.05) (seconds 0.15))))
-            )
-          (let ((a1-10 (new 'stack-no-clear 'vector)))
-            (set! (-> a1-10 quad) (-> self root trans quad))
-            (set! (-> a1-10 y) (+ 59592.703 (-> self base-y)))
-            (spawn (-> self part) a1-10)
-            )
-          (suspend)
-          )
-        )
+      (dig-log-raise! #t)
       (set-time! (-> self state-time))
       (until (time-elapsed? (-> self state-time) (seconds 1))
         (suspend)
@@ -643,6 +663,16 @@
     (until (time-elapsed? (-> self state-time) (seconds 4))
       (suspend)
       )
+    (go-virtual rising)
+    )
+  :post transform-post
+  )
+
+(defstate rising (dig-log)
+  :virtual #t
+  :event dig-log-event-handler
+  :code (behavior ()
+    (dig-log-raise! #f)
     (go-virtual idle)
     )
   :post transform-post
@@ -706,9 +736,7 @@
   (if (task-node-closed? (game-task-node dig-find-totem-raise-log))
       (set! (-> this pressed-count) (-> this total-buttons))
       )
-  (set! (-> this root trans y)
-        (+ (-> (&-> *dig-log-heights* 0 data (- (-> this total-buttons) (-> this pressed-count))) 0) (-> this base-y))
-        )
+  (set! (-> this root trans y) (dig-log-target-y this))
   (transform-post)
   (when (!= (-> this pressed-count) (-> this total-buttons))
     (set! (-> *game-info* counter) (the float (- (-> this total-buttons) (-> this pressed-count))))
@@ -727,7 +755,7 @@
    )
   (:state-methods
     idle-up
-    going-down
+    (going-down symbol)
     idle-down
     )
   )
@@ -748,10 +776,17 @@
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
     (case message
       (('attack)
-       (when (logtest? (-> (the-as attack-info (-> block param 1)) penetrate-using) (penetrate flop))
-         (go-virtual going-down)
-         #f
+       (let ((attack (the-as attack-info (-> block param 1))))
+         (when (and (logtest? (-> attack penetrate-using) (penetrate flop))
+                    (or (not (mp-session-in-game?)) (= (find-offending-process-focusable proc attack) *target*))
+                    )
+           (go-virtual going-down #t)
+           #f
+           )
          )
+       )
+      (('remote-press)
+       (go-virtual going-down #f)
        )
       )
     )
@@ -765,7 +800,11 @@
 
 (defstate going-down (dig-button)
   :virtual #t
-  :code (behavior ()
+  :code (behavior ((local? symbol))
+    (process-entity-status! self (entity-perm-status subtask-complete) #t)
+    (if (and local? (mp-session-in-game?))
+        (mp-event-enqueue-aid! MP_EVENT_BREAK (-> self entity aid))
+        )
     (sound-play "dig-button")
     (until (= (-> self root trans y) (-> self down-y))
       (seek! (-> self root trans y) (-> self down-y) (* 16384.0 (seconds-per-frame)))
@@ -774,8 +813,7 @@
       (logclear! (-> self skel status) (joint-control-status sync-math))
       (suspend)
       )
-    (process-entity-status! self (entity-perm-status subtask-complete) #t)
-    (let ((gp-1 (res-lump-struct (-> self entity) 'on-activate structure)))
+    (let ((gp-1 (and local? (res-lump-struct (-> self entity) 'on-activate structure))))
       (if gp-1
           (script-eval (the-as pair gp-1))
           )

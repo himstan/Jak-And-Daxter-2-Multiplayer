@@ -674,6 +674,7 @@
   "mp-scene-coordinator.o" ;; added
   "mp-mountain-collection.o" ;; added
   "dig-clasp-sync.o"
+  "dig-button-sync.o"
   "task-timer-sync-h.o"
   "task-timer-sync.o"
   "strip-grenade-sync-h.o"

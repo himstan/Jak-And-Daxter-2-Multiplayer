@@ -184,6 +184,12 @@
       (set! (-> *mp-bootstrap-state* synchronized-aids count) (the-as uint aid))
       (+ count 1))))
 
+(defun perm-list-synchronized? ((perm entity-perm))
+  (the symbol (and (nonnull? perm)
+                   (or (logtest? (-> perm status) (entity-perm-status dead))
+                       (and (logtest? (-> perm status) (entity-perm-status subtask-complete))
+                            (dispatch-actor-sync! (the uint (-> perm aid)) 'synchronized?))))))
+
 (defun mp-pack-local-dead-perm-aids! ((count int))
   (when (not (nonnull? *game-info*))
     (return count))
@@ -192,7 +198,7 @@
       (dotimes (i (-> perm-array length))
         (when (< count MP_MAX_BOOTSTRAP_AIDS)
           (let ((perm (-> perm-array data i)))
-            (when (and (nonnull? perm) (logtest? (-> perm status) (entity-perm-status dead)))
+            (when (perm-list-synchronized? perm)
               (set! count (mp-pack-local-sync-aid! (the-as uint (-> perm aid)) count))))))))
   count)
 
@@ -207,7 +213,7 @@
                      (< count MP_MAX_BOOTSTRAP_AIDS)
                      (logtest? (-> entry perm status) (entity-perm-status subtask-complete))
                      (dispatch-actor-sync! (the uint (-> entry aid)) 'synchronized?)
-                     (not (mp-aid-dead-in-perm-list? (the uint (-> entry aid)))))
+                     (not (perm-list-synchronized? (actor-perm *game-info* (the-as actor-id (-> entry aid))))))
             (set! count (mp-pack-local-sync-aid! (the uint (-> entry aid)) count)))))))
   count)
 
