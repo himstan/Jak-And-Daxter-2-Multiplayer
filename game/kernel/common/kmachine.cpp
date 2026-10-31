@@ -1236,6 +1236,11 @@ u64 pc_text_input_shortcut(const u32 enabled) {
   return bool_to_symbol(input && input->text_input_shortcut(symbol_to_bool(enabled)));
 }
 
+s64 pc_history_scroll(const u32 enabled) {
+  const auto input = main_input_manager();
+  return input ? input->history_scroll(symbol_to_bool(enabled)) : 0;
+}
+
 std::string encode_literal_text(const std::string& text) {
   const auto* font = get_font_bank_from_game_version(g_game_version);
   std::string result;
@@ -1292,16 +1297,19 @@ u64 pc_text_input_text(const u32 token) {
   return g_pc_port_funcs.make_string_from_c(text.c_str());
 }
 
-void pc_text_input_display(const u32 token, const u32 destination) {
+void pc_text_input_display(const u32 token,
+                           const u32 destination,
+                           const u32 before_count,
+                           const u32 after_count) {
   const auto input = main_input_manager();
   if (!input)
     return;
   const auto state = input->text_input_snapshot(token);
   size_t start = state.cursor;
-  for (int count = 0; count < 20 && start > 0; ++count)
+  for (u32 count = 0; count < before_count && start > 0; ++count)
     start = unicode::previous_utf8_boundary(state.text, start);
   size_t end = state.cursor;
-  for (int count = 0; count < 8 && end < state.text.size(); ++count)
+  for (u32 count = 0; count < after_count && end < state.text.size(); ++count)
     end = unicode::next_utf8_boundary(state.text, end);
   const auto before = (start != 0 ? std::string("...") : std::string()) +
                       encode_literal_text(state.text.substr(start, state.cursor - start));
@@ -1551,6 +1559,7 @@ void init_common_pc_port_functions(
 
   // debugging tools
   make_func_symbol_func("pc-text-input-shortcut", (void*)pc_text_input_shortcut);
+  make_func_symbol_func("pc-history-scroll", (void*)pc_history_scroll);
   make_func_symbol_func("pc-text-input-display", (void*)pc_text_input_display);
   make_func_symbol_func("pc-encode-utf8-literal", (void*)pc_encode_utf8_literal);
   make_func_symbol_func("pc-text-input-begin", (void*)pc_text_input_begin);

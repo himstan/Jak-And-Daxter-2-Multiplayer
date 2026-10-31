@@ -249,6 +249,11 @@ void InputManager::process_sdl_event(const SDL_Event& event) {
       return;
     }
   }
+  if (event.type == SDL_EVENT_KEY_DOWN && m_history_scroll_enabled && !m_waiting_for_bind &&
+      (event.key.scancode == SDL_SCANCODE_PAGEUP || event.key.scancode == SDL_SCANCODE_PAGEDOWN)) {
+    m_history_scroll_pages += event.key.scancode == SDL_SCANCODE_PAGEUP ? 1 : -1;
+    return;
+  }
   if (m_text_editor.handle_event(event)) {
     return;
   }
@@ -475,6 +480,12 @@ bool InputManager::text_input_shortcut(const bool enabled) {
   m_text_input_shortcut_enabled = enabled;
   const bool requested = m_text_input_requested.exchange(false);
   return enabled && requested && !m_text_editor.active();
+}
+
+int InputManager::history_scroll(const bool enabled) {
+  m_history_scroll_enabled = enabled;
+  const int pages = m_history_scroll_pages.exchange(0);
+  return enabled ? pages : 0;
 }
 
 uint32_t InputManager::begin_text_input(const std::string_view initial_text,

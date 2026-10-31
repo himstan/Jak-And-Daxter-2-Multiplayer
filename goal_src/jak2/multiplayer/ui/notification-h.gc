@@ -1,13 +1,14 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(defconstant NOTIFICATION_VISIBLE_COUNT 5)
+(defconstant NOTIFICATION_VISIBLE_COUNT 10)
+(defconstant NOTIFICATION_HISTORY_COUNT (* 5 NOTIFICATION_VISIBLE_COUNT))
 (defconstant NOTIFICATION_ROW_HEIGHT 14.0)
-(defconstant NOTIFICATION_TEXT_SCALE 0.27)
+(defconstant NOTIFICATION_TEXT_SCALE 0.3)
 (defconstant NOTIFICATION_SLIDE_TIME (seconds 0.35))
-(defconstant NOTIFICATION_HOLD_TIME (seconds 12))
+(defconstant NOTIFICATION_HOLD_TIME (seconds 30))
 (defconstant NOTIFICATION_WIDTH 400.0)
-(defconstant NOTIFICATION_AREA_HEIGHT 84.0)
+(defconstant NOTIFICATION_AREA_HEIGHT 80.0)
 
 (deftype notification-entry (structure)
   ((started time-frame)
@@ -18,14 +19,17 @@
    (system? uint8)))
 
 (deftype notification-manager (process)
-  ((entries       notification-entry NOTIFICATION_VISIBLE_COUNT :inline)
+  ((entries       notification-entry NOTIFICATION_HISTORY_COUNT :inline)
    (editor        pc-text-input-session :inline)
    (input-display string)
    (name-buffer   string)
    (text-buffer   string)
    (last-serial   uint32)
+   (scrolled      time-frame)
+   (browsing?     symbol)
    (head          uint8)
-   (count         uint8))
+   (count         uint8)
+   (scroll        uint8))
   (:state-methods
    notification-active))
 

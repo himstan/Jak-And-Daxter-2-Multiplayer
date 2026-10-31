@@ -72,6 +72,7 @@ class InputManager {
   void register_command(const CommandBinding::Source source, const CommandBinding bind);
 
   bool text_input_shortcut(bool enabled);
+  int history_scroll(bool enabled);
   uint32_t begin_text_input(std::string_view initial_text, TextInputEditor::Policy policy);
   TextInputEditor::Snapshot text_input_snapshot(uint32_t token = 0) const;
   bool submit_text_input(uint32_t token);
@@ -196,6 +197,8 @@ class InputManager {
   bool m_text_input_keyboard_captured = false;
   std::atomic<bool> m_text_input_shortcut_enabled = false;
   std::atomic<bool> m_text_input_requested = false;
+  std::atomic<bool> m_history_scroll_enabled = false;
+  std::atomic<int> m_history_scroll_pages = 0;
   int m_skip_polling_for_n_frames = 0;
   bool m_auto_hide_mouse = true;
   bool m_mouse_currently_hidden = false;

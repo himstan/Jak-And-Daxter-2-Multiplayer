@@ -145,6 +145,12 @@
 (defun next-char-offset ((text string) (offset int))
   (let ((next (+ offset 1))) (while (= (logand (-> text data next) #xc0) #x80) (+! next 1)) next))
 
+(defun previous-char-offset ((text string) (offset int))
+  (let ((previous (- offset 1)))
+    (while (and (> previous 0) (= (logand (-> text data previous) #xc0) #x80))
+      (-! previous 1))
+    previous))
+
 (defun text-suffix-width ((text string) (offset int) (font-ctx font-context))
   (string<-charp *overlay-fit-text* (&-> text data offset))
   (pc-encode-utf8-literal *overlay-fit-text* *pc-encoded-temp-string*)

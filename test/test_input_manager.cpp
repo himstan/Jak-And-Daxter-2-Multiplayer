@@ -183,6 +183,31 @@ TEST_F(InputManagerControllers, NoticeWithoutSteamDoesNotCaptureSettingsShortcut
   EXPECT_FALSE(input.controller_layout_notice(false));
 }
 
+TEST_F(InputManagerControllers, HistoryScrollCapturesPageKeysOnlyWhileEnabled) {
+  InputManager input(window);
+  int presses = 0;
+  input.register_command(CommandBinding::Source::KEYBOARD,
+                         CommandBinding(SDLK_PAGEUP, [&]() { ++presses; }));
+  const auto key = [&](const SDL_Keycode keycode, const SDL_Scancode scancode) {
+    SDL_Event event = {};
+    event.type = SDL_EVENT_KEY_DOWN;
+    event.key.key = keycode;
+    event.key.scancode = scancode;
+    input.process_sdl_event(event);
+  };
+  key(SDLK_PAGEUP, SDL_SCANCODE_PAGEUP);
+  EXPECT_EQ(presses, 1);
+  EXPECT_EQ(input.history_scroll(true), 0);
+  key(SDLK_PAGEUP, SDL_SCANCODE_PAGEUP);
+  key(SDLK_PAGEUP, SDL_SCANCODE_PAGEUP);
+  key(SDLK_PAGEDOWN, SDL_SCANCODE_PAGEDOWN);
+  EXPECT_EQ(presses, 1);
+  EXPECT_EQ(input.history_scroll(true), 1);
+  key(SDLK_PAGEDOWN, SDL_SCANCODE_PAGEDOWN);
+  EXPECT_EQ(input.history_scroll(false), 0);
+  EXPECT_EQ(input.history_scroll(false), 0);
+}
+
 TEST_F(InputManagerControllers, HotplugPreservesAssignmentsAndHeldButtons) {
   InputManager one(window);
   InputManager two(window);
