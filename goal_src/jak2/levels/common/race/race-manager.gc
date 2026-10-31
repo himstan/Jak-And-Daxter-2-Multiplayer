@@ -429,9 +429,6 @@
                           (-> curve-points vector 2)
                           (-> curve-points vector 1)
                           (-> curve-points trans)))
-  (let ((hatch-name (-> this info hatch-actor-name)))
-    (when (and hatch-name (not (race-local-spectator?)))
-      (let ((hatch (process-by-name hatch-name *active-pool*))) (send-event hatch 'open))))
   (set! (-> this countdown-start-time) (-> this current-time))
   (none))
 
@@ -496,9 +493,6 @@
        (when player-vehicle
          (cubic-curve-method-10 (-> this player-intro-curve) (-> player-vehicle root trans) 1.0)
          (vector-reset! (-> (the-as process-focusable player-vehicle) root transv))))
-     (let ((hatch-name (-> this info hatch-actor-name)))
-       (when hatch-name
-         (let ((hatch (process-by-name hatch-name *active-pool*))) (send-event hatch 'close))))
      (set! (-> this countdown-start-time) (-> this current-time))
      (set! (-> this state)
            (if (-> this info countdown-scene) (race-state-enum countdown-scene-start) (race-state-enum countdown-start))))
