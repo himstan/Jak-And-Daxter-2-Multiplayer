@@ -196,12 +196,14 @@
              )
          )
         (('attack 'attack-or-shove 'attack-invinc)
-         (target-attacked
-           arg2
-           (the-as attack-info (-> arg3 param 1))
-           arg0
-           (the-as touching-shapes-entry (-> arg3 param 0))
-           (get-player-pilot-hit-state self arg0 (the-as attack-info (-> arg3 param 1)))
+         (if (not (hellcat-gunner-shielded? self arg0 (the-as attack-info (-> arg3 param 1))))
+           (target-attacked
+             arg2
+             (the-as attack-info (-> arg3 param 1))
+             arg0
+             (the-as touching-shapes-entry (-> arg3 param 0))
+             (get-player-pilot-hit-state self arg0 (the-as attack-info (-> arg3 param 1)))
+             )
            )
          )
         (('vehicle-hit)

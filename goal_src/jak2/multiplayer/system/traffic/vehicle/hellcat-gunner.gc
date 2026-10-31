@@ -7,6 +7,7 @@
 (defconstant HELLCAT_GUNNER_CAMERA_HEIGHT (meters 1.5))
 (defconstant HELLCAT_TURRET_PIVOT_Z -11754.068)
 (defconstant HELLCAT_GUNNER_LEG_SCALE 0.01)
+(defconstant HELLCAT_PLAYER_DAMAGE_SCALE 0.5)
 
 (defun hellcat-local-gunner? ((veh hellcat))
   (let ((pilot-info (mp-vehicle-local-pilot veh)))
@@ -185,6 +186,22 @@
         (quaternion-rotate-local-y! (-> self control quat) (-> self control quat) (-> hellcat rear-turret aim-rot-y))))
     (hellcat-gunner-tuck-legs! (the-as symbol (and gunner? (not (-> self pilot as-daxter?)) (not (mp-target-daxter? self))))))
   (none))
+
+(defun hellcat-gunner-shielded? ((player target) (attacker process) (attack attack-info))
+  (when (and (nonnull? (-> player pilot)) (= (-> player pilot seat-index) HELLCAT_GUNNER_SEAT))
+    (let ((veh (handle->process-safe (-> player pilot vehicle))))
+      (and (nonnull? veh)
+           (type? veh hellcat)
+           (not (and (= attacker veh) (nonnull? attack) (= (-> attack mode) 'explode)))))))
+
+(defstate player-control (hellcat)
+  :virtual #t
+  :enter (behavior ()
+    (call-parent-state-handler enter)
+    (set! (-> self damage-factor) (* HELLCAT_PLAYER_DAMAGE_SCALE (-> self damage-factor))))
+  :exit (behavior ()
+    (call-parent-state-handler exit)
+    (set! (-> self damage-factor) (/ (-> self damage-factor) HELLCAT_PLAYER_DAMAGE_SCALE))))
 
 (defmethod vehicle-method-120 ((this hellcat))
   (hellcat-gunner-update! this)
