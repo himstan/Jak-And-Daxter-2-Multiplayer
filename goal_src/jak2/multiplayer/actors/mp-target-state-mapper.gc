@@ -148,6 +148,10 @@
     (((mp-target-state-id board-hit-ground)) 'target-board-hit-ground)
     (((mp-target-state-id board-turn-to)) 'target-board-turn-to)
     (((mp-target-state-id board-grenade)) 'target-board-grenade)
+    (((mp-target-state-id warp-in)) 'target-warp-in)
+    (((mp-target-state-id warp-out)) 'target-warp-out)
+    (((mp-target-state-id indax-warp-in)) 'target-indax-warp-in)
+    (((mp-target-state-id indax-warp-out)) 'target-indax-warp-out)
     (else #f)))
 
 (defun mp-target-get-id-from-state ((state symbol) (state-param symbol))
@@ -295,5 +299,9 @@
     (('target-pole-flip-up-jump) (the uint (mp-target-state-id pole-flip-up-jump)))
     (('target-pole-flip-forward) (the uint (mp-target-state-id pole-flip-forward)))
     (('target-pole-flip-forward-jump) (the uint (mp-target-state-id pole-flip-forward-jump)))
+    (('target-warp-in) (the uint (mp-target-state-id warp-in)))
+    (('target-warp-out) (the uint (mp-target-state-id warp-out)))
+    (('target-indax-warp-in) (the uint (mp-target-state-id indax-warp-in)))
+    (('target-indax-warp-out) (the uint (mp-target-state-id indax-warp-out)))
     (else
      (if (player-mech-state? state) (the uint (mp-target-state-id mech-stance)) (the uint (mp-target-state-id none))))))

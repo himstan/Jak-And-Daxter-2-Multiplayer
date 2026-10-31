@@ -39,21 +39,36 @@
       (send-event-function actor msg)))
   (none))
 
-(defun warp-gate-play-replica! ((gate-proc warp-gate) (phase uint) (as-indax? symbol) (evt mp-warp-gate-event))
-  (unless (nonnull? evt)
-    (return (the-as none 0)))
-  (let ((replica (mp-player-target-by-slot (-> evt source-player-slot)))
-        (target-state (mp-warp-gate-target-state phase as-indax?)))
-    (when (and replica (nonzero? replica) target-state)
-      (let ((start-pos (new 'stack-no-clear 'vector))
-            (end-pos (new 'stack-no-clear 'vector))
-            (gate-handle (if (and gate-proc (nonzero? gate-proc)) (process->handle gate-proc) (the-as handle #f))))
-        (mp-warp-gate-build-vector! start-pos
-                                    (-> evt payload start-x)
-                                    (-> evt payload start-y)
-                                    (-> evt payload start-z))
-        (mp-warp-gate-build-vector! end-pos (-> evt payload end-x) (-> evt payload end-y) (-> evt payload end-z))
-        (mp-warp-gate-send-change-state! replica target-state start-pos end-pos gate-handle))))
+(defun warp-gate-play-replica! ((replica target)
+                                (phase uint)
+                                (as-indax? symbol)
+                                (start-pos vector)
+                                (end-pos vector)
+                                (gate-handle handle))
+  (when (player-replica-valid? replica)
+    (mp-warp-gate-send-change-state! replica (mp-warp-gate-target-state phase as-indax?) start-pos end-pos gate-handle))
+  (none))
+
+(defun remote-warp-arrival-for ((player-slot uint))
+  (-> *remote-warp-arrivals* players player-slot))
+
+(defun remote-warp-arrival-time ((replica target))
+  (-> (remote-warp-arrival-for (-> replica player-slot)) time))
+
+(defun remote-warp-arrival-pending? ((record mp-player-record))
+  (let ((arrival (remote-warp-arrival-for (-> record identity player-slot))))
+    (and (-> arrival pending?) (not (time-elapsed? (-> arrival time) (seconds 2))))))
+
+(defun play-pending-warp-arrival! ((record mp-player-record) (replica target))
+  (let ((arrival (remote-warp-arrival-for (-> record identity player-slot))))
+    (when (remote-warp-arrival-pending? record)
+      (warp-gate-play-replica! replica
+                               MP_WARP_GATE_PHASE_ARRIVE
+                               (-> arrival indax?)
+                               (-> arrival start)
+                               (-> arrival end)
+                               (the-as handle #f)))
+    (set! (-> arrival pending?) #f))
   (none))
 
 (defun mp-warp-gate-find-proc ((aid uint))
@@ -62,32 +77,29 @@
       (the-as warp-gate (-> ent extra process))
       (the-as warp-gate #f))))
 
-(defun mp-warp-gate-queue-event! ((gate process-drawable)
+(defun mp-warp-gate-queue-event! ((gate-aid uint)
+                                  (continue continue-point)
                                   (phase uint)
                                   (as-indax? symbol)
                                   (start-pos vector)
                                   (end-pos vector))
-  (when (and gate
-             (nonzero? gate)
-             start-pos
-             (nonzero? start-pos)
-             end-pos
-             (nonzero? end-pos)
-             (-> gate entity)
-             (nonzero? (-> gate entity)))
-    (let ((continue-name (the-as string #f)))
-      (let ((warp-gate (the-as warp-gate gate)))
-        (when (and (-> warp-gate continue)
-                   (nonzero? (-> warp-gate continue))
-                   (-> warp-gate continue name)
-                   (nonzero? (-> warp-gate continue name)))
-          (set! continue-name (-> warp-gate continue name))))
-      (mp-event-enqueue-warp-gate! (-> gate entity aid)
-                                   (the-as uint phase)
-                                   (the-as uint (if as-indax? MP_WARP_GATE_FLAG_INDAX 0))
-                                   continue-name
-                                   start-pos
-                                   end-pos)))
+  (when (and (nonzero? gate-aid) (nonnull? start-pos end-pos))
+    (mp-event-enqueue-warp-gate! gate-aid
+                                 phase
+                                 (the-as uint (if as-indax? MP_WARP_GATE_FLAG_INDAX 0))
+                                 (if (nonnull? continue (-> continue name)) (-> continue name) (the-as string #f))
+                                 start-pos
+                                 end-pos))
+  (none))
+
+(defun update-remote-warp-hold! ((record mp-player-record))
+  (when (mp-player-runtime-flag? record (mp-player-runtime-flags warping))
+    (let ((state (mp-target-get-state-from-id (-> record action target-state-id))))
+      (cond
+        ((replica-warp-state? state)
+         (mp-player-runtime-set-flag! record (mp-player-runtime-flags warp-observed)))
+        ((and state (mp-player-runtime-flag? record (mp-player-runtime-flags warp-observed)))
+         (mp-player-runtime-clear-flag! record (mp-player-runtime-flags warping warp-observed))))))
   (none))
 
 (defun mp-warp-gate-apply-remote-event! ((evt mp-warp-gate-event))
@@ -95,17 +107,36 @@
     (return (the-as none 0)))
   (let ((gate-proc (mp-warp-gate-find-proc (-> evt payload gate-aid)))
         (phase (the-as uint (-> evt payload phase)))
-        (as-indax? (mp-warp-gate-indax? evt)))
-    (when (= phase MP_WARP_GATE_PHASE_ARRIVE)
-      (let ((record (mp-player-record-by-slot (-> evt source-player-slot))))
-        (when (and record (nonzero? record))
-          (mp-player-runtime-clear-flag! record (mp-player-runtime-flags warping)))))
+        (as-indax? (mp-warp-gate-indax? evt))
+        (record (mp-player-record-by-slot (-> evt source-player-slot)))
+        (start-pos (new 'stack-no-clear 'vector))
+        (end-pos (new 'stack-no-clear 'vector)))
+    (mp-warp-gate-build-vector! start-pos (-> evt payload start-x) (-> evt payload start-y) (-> evt payload start-z))
+    (mp-warp-gate-build-vector! end-pos (-> evt payload end-x) (-> evt payload end-y) (-> evt payload end-z))
+    (when (nonnull? record)
+      (let ((arrival (remote-warp-arrival-for (-> evt source-player-slot))))
+        (case phase
+          ((MP_WARP_GATE_PHASE_BEGIN)
+           (mp-player-runtime-set-flag! record (mp-player-runtime-flags warping))
+           (set! (-> arrival pending?) #f)
+           (warp-gate-play-replica! (mp-player-record-target record)
+                                    phase
+                                    as-indax?
+                                    start-pos
+                                    end-pos
+                                    (if (nonnull? gate-proc) (process->handle gate-proc) (the-as handle #f))))
+          ((MP_WARP_GATE_PHASE_ARRIVE)
+           (mp-player-runtime-clear-flag! record (mp-player-runtime-flags warping warp-observed))
+           (vector-copy! (-> arrival start) start-pos)
+           (vector-copy! (-> arrival end) end-pos)
+           (set! (-> arrival time) (current-time))
+           (set! (-> arrival indax?) as-indax?)
+           (set! (-> arrival pending?) #t)))))
     (when (and (mp-session-client?)
                (mp-target-ride-along? *target*)
                (= phase MP_WARP_GATE_PHASE_BEGIN)
                gate-proc
                (nonzero? gate-proc))
       (log 'debug "[MP-WarpGate] Following remote gate locally for ride-along.~%")
-      (send-event gate-proc 'mp-use))
-    (warp-gate-play-replica! gate-proc phase as-indax? evt))
+      (send-event gate-proc 'mp-use)))
   (none))

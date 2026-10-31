@@ -686,6 +686,7 @@
   "mp-sync-state.o" ;; added
   "mp-scene-transition.o" ;; added
   "mp-waypoint-sync.o" ;; added
+  "warp-gate-sync-h.o"
   "mp-warp-gate-sync.o" ;; added
   "mp-event-handlers.o" ;; added
   "mp-events.o" ;; added

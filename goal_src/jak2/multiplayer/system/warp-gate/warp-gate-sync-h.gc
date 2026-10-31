@@ -1,0 +1,14 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(deftype remote-warp-arrival (structure)
+  ((start    vector :inline)
+   (end      vector :inline)
+   (time     time-frame)
+   (pending? symbol)
+   (indax?   symbol)))
+
+(deftype remote-warp-arrival-table (structure)
+  ((players remote-warp-arrival MP_MAX_PLAYERS :inline)))
+
+(define *remote-warp-arrivals* (new 'static 'remote-warp-arrival-table))

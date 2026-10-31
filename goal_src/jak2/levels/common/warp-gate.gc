@@ -1,8 +1,9 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(define-extern mp-warp-gate-queue-event! (function process-drawable uint symbol vector vector none))
+(define-extern mp-warp-gate-queue-event! (function uint continue-point uint symbol vector vector none))
 (define-extern drill-ship-warp-blocked? (function symbol continue-point symbol))
+(define-extern remote-warp-arrival-time (function target time-frame))
 
 ;; name: warp-gate.gc
 ;; name in dgo: warp-gate
@@ -610,29 +611,16 @@
              (nonzero? start-pos)
              end-pos
              (nonzero? end-pos))
-    (let ((gate-proc (warp-gate-find-arrival-proc-safe end-pos)))
-      (when (and gate-proc (nonzero? gate-proc))
-        (mp-warp-gate-queue-event! gate-proc
-                                 MP_WARP_GATE_PHASE_ARRIVE
-                                 as-indax?
-                                 start-pos
-                                 end-pos)
+    (let ((gate-entity (find-nearest-entity end-pos warp-gate)))
+      (when (nonnull? gate-entity)
+        (mp-warp-gate-queue-event! (-> gate-entity aid)
+                                   (the-as continue-point #f)
+                                   MP_WARP_GATE_PHASE_ARRIVE
+                                   as-indax?
+                                   start-pos
+                                   end-pos)
         )
       )
-    )
-  (none)
-  )
-
-(defun warp-gate-enter-arrival-state! ((actor target)
-                                       (start-pos vector)
-                                       (end-pos vector)
-                                       (gate-arg target))
-  ((-> target-warp-out enter) start-pos end-pos gate-arg)
-  (when (and actor (nonzero? actor)
-             (-> actor control)
-             (nonzero? (-> actor control)))
-    (set! (-> actor control unknown-handle02)
-          (warp-gate-find-arrival-handle-safe end-pos))
     )
   (none)
   )
@@ -815,7 +803,8 @@
         )
       )
     (when (warp-gate-should-broadcast? *target*)
-      (mp-warp-gate-queue-event! self
+      (mp-warp-gate-queue-event! (-> self entity aid)
+                               (-> self continue)
                                MP_WARP_GATE_PHASE_BEGIN
                                (focus-test? *target* indax)
                                (-> self center)
@@ -1127,7 +1116,7 @@
         (go target-indax-warp-in arg0 arg1 arg2)
         )
     (set! (-> self control did-move-to-pole-or-max-jump-height) (the-as float arg2))
-    (warp-gate-enter-arrival-state! self arg0 arg1 arg2)
+    ((-> target-warp-out enter) arg0 arg1 arg2)
     )
   :exit (-> target-warp-out exit)
   :trans (behavior ()
@@ -1182,11 +1171,14 @@
       )
     0
     (ja-channel-set! 0)
+    (hide-model self)
     (vector-reset! (-> self control transv))
     (move-to-point! (-> self control) (-> self control unknown-vector37))
-    (let ((s5-1 (current-time)))
+    (warp-gate-broadcast-arrive-safe! self arg0 arg1 (focus-test? self indax))
+    (let ((s5-1 (if (warp-gate-replica? self) (remote-warp-arrival-time self) (current-time))))
       (while (or (not (time-elapsed? s5-1 (seconds 1)))
-                 (< 81920.0 (vector-vector-distance (camera-pos) (-> self control trans)))
+                 (and (not (warp-gate-replica? self))
+                      (< 81920.0 (vector-vector-distance (camera-pos) (-> self control trans))))
                  )
         (suspend)
         )
@@ -1196,10 +1188,9 @@
     (set-time! (-> self state-time))
     (set! (-> self post-hook) target-no-stick-post)
     (ja-channel-set! 1)
-    (warp-gate-send-effect-safe! (-> self control unknown-handle02))
+    (warp-gate-send-effect-safe! (warp-gate-find-arrival-handle-safe arg1))
     (show-model self)
     (sound-play "warpgate-tele")
-    (warp-gate-broadcast-arrive-safe! self arg0 arg1 (focus-test? self indax))
     (ja-no-eval :group! jakb-duck-high-jump-ja :num! (seek! (ja-aframe 42.0 0)) :frame-num (ja-aframe 40.0 0))
     (until (ja-done? 0)
       (let ((v1-59 (new-stack-vector0)))
@@ -1253,7 +1244,7 @@
         (go target-warp-in arg0 arg1 arg2)
         )
     (set! (-> self control did-move-to-pole-or-max-jump-height) (the-as float arg2))
-    (warp-gate-enter-arrival-state! self arg0 arg1 arg2)
+    ((-> target-warp-out enter) arg0 arg1 arg2)
     (target-indax-init #f #f)
     (target-indax-align!)
     (hide-model self)
@@ -1316,9 +1307,11 @@
     (ja-channel-set! 0)
     (vector-reset! (-> self control transv))
     (move-to-point! (-> self control) (-> self control unknown-vector37))
-    (let ((s5-1 (current-time)))
+    (warp-gate-broadcast-arrive-safe! self arg0 arg1 #t)
+    (let ((s5-1 (if (warp-gate-replica? self) (remote-warp-arrival-time self) (current-time))))
       (while (or (not (time-elapsed? s5-1 (seconds 1)))
-                 (< 81920.0 (vector-vector-distance (camera-pos) (-> self control trans)))
+                 (and (not (warp-gate-replica? self))
+                      (< 81920.0 (vector-vector-distance (camera-pos) (-> self control trans))))
                  )
         (suspend)
         )
@@ -1330,10 +1323,9 @@
     (ja-channel-set! 1)
     (target-indax-align!)
     (ja :group! daxter-indax-jump-ja :num! (seek! (ja-aframe 10.0 0)) :frame-num (ja-aframe 5.0 0))
-    (warp-gate-send-effect-safe! (-> self control unknown-handle02))
+    (warp-gate-send-effect-safe! (warp-gate-find-arrival-handle-safe arg1))
     (show-model self)
     (sound-play "warpgate-tele")
-    (warp-gate-broadcast-arrive-safe! self arg0 arg1 #t)
     (ja-no-eval :group! daxter-indax-jump-ja :num! (seek! (ja-aframe 10.0 0)) :frame-num (ja-aframe 5.0 0))
     (until (ja-done? 0)
       (let ((v1-59 (new-stack-vector0)))
