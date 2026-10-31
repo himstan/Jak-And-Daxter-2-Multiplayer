@@ -76,5 +76,4 @@
     (case message
       (('mission-respawn-origin)
        (if (or (mp-session-in-game?) (mp-bootstrap-in-progress?))
-           (the-as object (-> *drill-rail-respawn-points* (drill-rail-stage)))
-           #f)))))
+           (vector-copy! (the-as vector (-> block param 0)) (-> *drill-rail-respawn-points* (drill-rail-stage))))))))
