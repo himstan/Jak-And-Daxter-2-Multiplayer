@@ -93,3 +93,17 @@
             (when (and player-pos (nonzero? player-pos) (mp-point-near-pos-xz? player-pos pos radius))
               (set! near? #t))))))
     near?))
+
+(defun any-player-position? ((test (function vector vector symbol)) (arg vector))
+  (when (not (mp-session-in-game?))
+    (return (the symbol
+                 (and (nonnull? *target* (-> *target* control))
+                      (mp-combat-valid-player-target? *target* #t)
+                      (test (-> *target* control trans) arg)))))
+  (let ((level-id (mp-player-primary-level-id (mp-local-player-record))))
+    (mp-for-each-player-record (player-slot record)
+      (when (mp-enemy-player-eligible? record level-id)
+        (let ((pos (mp-player-record-position record)))
+          (when (and (nonnull? pos) (test pos arg))
+            (return #t))))))
+  #f)

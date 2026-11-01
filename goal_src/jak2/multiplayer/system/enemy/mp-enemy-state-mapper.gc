@@ -100,6 +100,9 @@
       (('pegasus-tired) (the-as uint32 (mp-enemy-state-id pegasus-tired)))
       (('board-vehicle) (the-as uint32 (mp-enemy-state-id board-vehicle)))
       (('ride-vehicle) (the-as uint32 (mp-enemy-state-id ride-vehicle)))
+      (('plant-bomb) (the-as uint32 (mp-enemy-state-id plant-bomb)))
+      (('hostile-sentry) (the-as uint32 (mp-enemy-state-id hostile-sentry)))
+      (('ambush-land) (the-as uint32 (mp-enemy-state-id ambush-land)))
       (else (the-as uint32 0)))))
 
 (defun mp-enemy-get-state-from-id ((id uint))
@@ -204,4 +207,7 @@
     (((mp-enemy-state-id mech-dismount)) 'mech-dismount)
     (((mp-enemy-state-id pegasus-tired)) 'pegasus-tired)
     (((mp-enemy-state-id board-vehicle) (mp-enemy-state-id ride-vehicle)) #f)
+    (((mp-enemy-state-id plant-bomb)) 'plant-bomb)
+    (((mp-enemy-state-id hostile-sentry)) 'hostile-sentry)
+    (((mp-enemy-state-id ambush-land)) 'ambush-land)
     (else 'active)))

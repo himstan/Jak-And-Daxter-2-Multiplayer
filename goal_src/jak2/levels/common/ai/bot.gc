@@ -680,8 +680,10 @@
     (('request)
      (case (-> arg3 param 0)
        (('waypoint)
-        (set! (-> this waypoint-request) (the-as int (-> arg3 param 1)))
-        (mp-on-local-waypoint-request this (the-as int (-> arg3 param 1)))
+        (when (!= (-> this waypoint-request) (the-as int (-> arg3 param 1)))
+          (set! (-> this waypoint-request) (the-as int (-> arg3 param 1)))
+          (mp-on-local-waypoint-request this (the-as int (-> arg3 param 1)))
+          )
         #t
         )
        (('health-meter)

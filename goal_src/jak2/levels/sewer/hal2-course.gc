@@ -77,107 +77,16 @@
     )
   )
 
-(defun hal2-default-check-too-far ((arg0 hal-sewer))
-  (let ((s5-0 (-> *target* control trans))
-        (f30-0 40960000.0)
-        )
-    (countdown (s4-0 3)
-      (let ((v1-6 (handle->process (-> arg0 slave-handle s4-0))))
-        (when v1-6
-          (let ((f0-0 (vector-vector-xz-distance s5-0 (-> (the-as process-drawable v1-6) root trans))))
-            (if (< f0-0 f30-0)
-                (set! f30-0 f0-0)
-                )
-            )
-          )
-        )
-      )
-    (let ((v0-1 0))
-      (let ((f0-1 (-> arg0 too-far-warn-dist)))
-        (when (>= f30-0 f0-1)
-          (let* ((v1-15 (-> arg0 actor-group 0 data 1 actor))
-                 (a0-9 (if v1-15
-                           (-> v1-15 extra process)
-                           )
-                       )
-                 )
-            (cond
-              ((and a0-9 (logtest? (bot-flags bf19) (-> (the-as hal a0-9) bot-flags)))
-               (set! v0-1 2)
-               )
-              ((>= (- f30-0 f0-1) (-> arg0 too-far-fail-dist-delta))
-               (set! v0-1 2)
-               )
-              (else
-                (set! v0-1 1)
-                )
-              )
-            )
-          )
-        )
-      v0-1
-      )
-    )
+(defun hal2-past-plane? ((pos vector) (plane vector))
+  (>= (+ (vector-dot pos plane) (-> plane w)) 0.0)
   )
 
-(defun hal2-near-start-check-too-far ((arg0 hal-sewer))
-  (let ((gp-0 0))
-    (let ((v1-0 (target-pos 0)))
-      (cond
-        ((>= (-> v1-0 z) 2399957.0)
-         (set! gp-0 2)
-         )
-        ((>= (-> v1-0 z) 2221453.2)
-         (set! gp-0 1)
-         )
-        ((and (>= (-> v1-0 y) -159744.0) (>= (-> (get-trans *target* 1) y) -159744.0))
-         (set! gp-0 2)
-         )
-        )
-      )
-    gp-0
-    )
-  )
-
-(defun hal2-below-elevator-a-check-too-far ((arg0 hal-sewer))
-  (let ((gp-0 0))
-    (if (and (>= (-> (target-pos 0) y) -212402.17) (>= (-> (get-trans *target* 1) y) -212402.17))
-        (set! gp-0 2)
-        )
-    gp-0
-    )
-  )
-
-(defun hal2-force-fail-check-too-far ((arg0 hal-sewer))
-  (let ((gp-0 0))
-    (if (and (not (channel-active? arg0 (gui-channel none))) (logtest? (bot-flags bf24) (-> arg0 bot-flags)))
-        (set! gp-0 2)
-        )
-    gp-0
-    )
-  )
-
-(defun hal2-onslaught-check-too-far ((arg0 hal-sewer))
-  (let ((gp-0 (hal2-default-check-too-far arg0)))
-    (if (>= 1884160.0 (-> (target-pos 0) z))
-        (set! gp-0 2)
-        )
-    gp-0
-    )
+(defun hal2-in-hosehead-room? ((pos vector) (arg vector))
+  (and (>= 5632000.0 (-> pos x)) (>= (-> pos x) 5529600.0) (>= 2068480.0 (-> pos z)) (>= (-> pos z) 1921024.0))
   )
 
 (defmethod hal-sewer-method-229 ((this hal-sewer))
-  (let ((a0-1 *target*))
-    (when a0-1
-      (let ((v1-1 (get-trans a0-1 0)))
-        (and (>= 5632000.0 (-> v1-1 x))
-             (>= (-> v1-1 x) 5529600.0)
-             (>= 2068480.0 (-> v1-1 z))
-             (>= (-> v1-1 z) 1921024.0)
-             )
-        )
-      )
-    )
+  (any-player-position? hal2-in-hosehead-room? (the-as vector #f))
   )
 
 (defmethod hal-sewer-method-231 ((this hal-sewer) (arg0 int))
@@ -495,7 +404,7 @@
                              )
                         (if (or (not a0-1)
                                 (or (not (logtest? (-> a0-1 entity extra perm status) (entity-perm-status subtask-complete)))
-                                    (< -176128.0 (-> (target-pos 0) y))
+                                    (not (any-player-position? hal2-past-plane? (new 'static 'vector :y -1.0 :w -176128.0)))
                                     )
                                 )
                             (set-time! (-> arg1 waypoint-time0))
@@ -582,7 +491,10 @@
                            (ai-task-control-method-10 (-> arg1 ai-ctrl) arg1)
                            #t
                            )
-                          ((and (>= (- (-> (target-pos 0) x) (-> arg1 root trans x)) -65536.0)
+                          ((and (any-player-position?
+                                  hal2-past-plane?
+                                  (set-vector! (new 'stack-no-clear 'vector) 1.0 0.0 0.0 (- 65536.0 (-> arg1 root trans x)))
+                                  )
                                 (or (not s3-0) (>= (the-as int (send-event s3-0 'query 'waypoint)) 3))
                                 (or (not s4-0) (>= (the-as int (send-event s4-0 'query 'waypoint)) 3))
                                 (or (not s5-0) (>= (the-as int (send-event s5-0 'query 'waypoint)) 3))
@@ -728,7 +640,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-near-start-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 9
@@ -922,7 +834,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-near-start-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 11
@@ -1026,7 +938,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-below-elevator-a-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 16
@@ -1160,7 +1072,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-below-elevator-a-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 17
@@ -1258,7 +1170,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-below-elevator-a-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 20
@@ -1384,7 +1296,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-below-elevator-a-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 21
@@ -1964,7 +1876,7 @@
                                                                                                          )
                                                                                      )
                                         )
-                                  (>= (vector4-dot (math-camera-pos) (the-as vector (-> arg1 test-plane))) 0.0)
+                                  (any-player-position? hal2-past-plane? (the-as vector (-> arg1 test-plane)))
                                   )
                           (ai-task-control-method-12 (-> arg1 ai-ctrl) arg1)
                           (go-to-waypoint! arg1 27 #f)
@@ -1980,7 +1892,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-default-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 27
@@ -2122,7 +2034,7 @@
                                    )
                                  )
                                 ((and (time-elapsed? (-> arg1 waypoint-time0) (seconds 4))
-                                      (>= (vector4-dot (math-camera-pos) (the-as vector (-> arg1 test-plane))) 0.0)
+                                      (any-player-position? hal2-past-plane? (the-as vector (-> arg1 test-plane)))
                                       )
                                  (ai-task-control-method-12 (-> arg1 ai-ctrl) arg1)
                                  (go-to-waypoint! arg1 28 #f)
@@ -2142,7 +2054,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-default-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 28
@@ -2292,7 +2204,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-default-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 29
@@ -2427,7 +2339,7 @@
             )
           (none)
           )
-        :check-too-far 'hal2-default-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 35
@@ -2634,7 +2546,7 @@
                           (play-speech arg1 47)
                           (play-speech arg1 48)
                           )
-                        (when (or (>= (-> (target-pos 0) x) 5207572.5)
+                        (when (or (any-player-position? hal2-past-plane? (new 'static 'vector :x 1.0 :w -5207572.5))
                                   (>= (-> (the-as process-focusable s3-0) root trans x) 5120000.0)
                                   (>= (-> (the-as process-focusable s4-0) root trans x) 5120000.0)
                                   (>= (-> (the-as process-focusable s5-0) root trans x) 5120000.0)
@@ -2653,7 +2565,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-default-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 41
@@ -2821,7 +2733,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-default-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 42
@@ -2919,7 +2831,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-default-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 43
@@ -3018,7 +2930,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-force-fail-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 44
@@ -3143,7 +3055,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-default-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 47
@@ -3240,7 +3152,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-force-fail-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 48
@@ -3532,7 +3444,7 @@
           (logior! (-> arg0 waypoint-bits) (waypoint-bits wabits-0))
           (none)
           )
-        :check-too-far 'hal2-default-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 54
@@ -3569,7 +3481,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-default-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 55
@@ -3637,7 +3549,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-default-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 56
@@ -3699,7 +3611,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-force-fail-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 57
@@ -3843,7 +3755,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-onslaught-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 59
@@ -3934,17 +3846,13 @@
                                            (>= (vector4-dot (-> (the-as process-focusable s4-0) root trans) (the-as vector (-> arg1 test-plane))) 0.0)
                                            (>= (vector4-dot (-> (the-as process-focusable s5-0) root trans) (the-as vector (-> arg1 test-plane))) 0.0)
                                            )
-                                  (let ((a0-18 *target*))
-                                    (when (and a0-18
-                                               (and (>= (vector4-dot (get-trans a0-18 0) (the-as vector (-> arg1 test-plane))) 0.0)
-                                                    (scene-play arg1 "sewer-blow-up-statue-res" #f)
-                                                    )
-                                               )
-                                      (ai-task-control-method-12 (-> arg1 ai-ctrl) arg1)
-                                      (go-to-waypoint! arg1 67 #f)
-                                      (ai-task-control-method-10 (-> arg1 ai-ctrl) arg1)
-                                      #t
-                                      )
+                                  (when (and (any-player-position? hal2-past-plane? (the-as vector (-> arg1 test-plane)))
+                                             (scene-play arg1 "sewer-blow-up-statue-res" #f)
+                                             )
+                                    (ai-task-control-method-12 (-> arg1 ai-ctrl) arg1)
+                                    (go-to-waypoint! arg1 67 #f)
+                                    (ai-task-control-method-10 (-> arg1 ai-ctrl) arg1)
+                                    #t
                                     )
                                   )
                                 )
@@ -3961,7 +3869,7 @@
           )
         :on-update #f
         :on-skipping-here #f
-        :check-too-far 'hal2-default-check-too-far
+        :check-too-far #f
         )
       (new 'static 'bot-waypoint
         :waypoint-id 67
