@@ -1,0 +1,49 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defconstant BOMBBOT_ID_BASE (the uint #x76000000))
+(defconstant BOMBBOT_COUNT 3)
+
+(defun bombbot-destroyed? ((index int))
+  (and (mp-session-in-game?) (mp-aid-dead-in-perm-list? (+ BOMBBOT_ID_BASE index))))
+
+(defun bombbots-ready? ()
+  (cond
+    ((mp-session-client?)
+     (dotimes (index BOMBBOT_COUNT)
+       (when (or (bombbot-destroyed? index)
+                 (and (nonnull? *mp-enemy-buffer*)
+                      (mp-enemy-remote-slot-valid? (mp-enemy-find-remote-slot (+ BOMBBOT_ID_BASE index)))))
+         (return #t)))
+     #f)
+    (else
+     (let ((level (if (nonnull? *level*) (level-get-target-inside *level*) (the-as level #f))))
+       (and (nonnull? level) (= (-> level name) 'ctysluma))))))
+
+(defun report-bombbot-destroyed! ((bot enemy))
+  (when (and (mp-session-in-game?) (nonnull? bot))
+    (let ((aid (the uint (-> bot net-id))))
+      (when (and (>= aid BOMBBOT_ID_BASE) (< aid (+ BOMBBOT_ID_BASE BOMBBOT_COUNT))
+                 (not (mp-aid-dead-in-perm-list? aid)))
+        (mp-record-aid-dead-in-perm-list! aid)
+        (mp-event-enqueue-aid! MP_EVENT_BREAK aid))))
+  (none))
+
+(defbehavior reconcile-bombbots! task-manager ()
+  (when (nonnull? self)
+    (dotimes (index BOMBBOT_COUNT)
+      (when (bombbot-destroyed? index)
+        (let ((bot (the-as enemy (handle->process-safe (-> self slave index)))))
+          (when (nonnull? bot)
+            (send-event bot 'remote-destroy))))))
+  (none))
+
+(defun sync-bombbot! ((aid uint) (message symbol))
+  (when (and (>= aid BOMBBOT_ID_BASE) (< aid (+ BOMBBOT_ID_BASE BOMBBOT_COUNT)))
+    (when (= message 'synchronized?)
+      (return (mp-aid-dead-in-perm-list? aid)))
+    (mp-record-aid-dead-in-perm-list! aid)
+    (return #t))
+  #f)
+
+(set! *actor-sync-handlers* (cons sync-bombbot! *actor-sync-handlers*))

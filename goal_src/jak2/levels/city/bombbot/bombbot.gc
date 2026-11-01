@@ -1123,6 +1123,7 @@
         (the-as (function object float none) (method-of-object this bombbot-method-183))
         )
   (bombbot-method-184 this)
+  (mp-enemy-apply-remote-transform! this)
   (let ((sv-16 (the-as sparticle-launcher #f))
         (sv-20 (the-as sparticle-launcher #f))
         )
@@ -1223,6 +1224,14 @@
   "Handles various events for the enemy
    @TODO - unsure if there is a pattern for the events and this should have a more specific name"
   (case arg2
+    (('remote-destroy)
+     (when (and (nonnull? this)
+                (not (mp-enemy-state-current-or-pending? this 'die))
+                (not (mp-enemy-state-current-or-pending? this 'explode)))
+       (set! (-> this hit-points) 0)
+       (go (method-of-object this die))
+       )
+     )
     (('nav-mesh-kill)
      (change-to *default-nav-mesh* this)
      #t
@@ -1939,6 +1948,7 @@
 (defstate die (bombbot)
   :virtual #t
   :enter (behavior ()
+    (report-bombbot-destroyed! self)
     (when (-> self minimap)
       (logior! (-> self minimap flags) (minimap-flag fade-out))
       (set! (-> self minimap) #f)
@@ -2838,6 +2848,17 @@
   (none)
   )
 
+(defbehavior spawn-mission-bombbot! task-manager ((params bombbot-spawn-params) (path bombbot-path) (index int))
+  (when (and (nonnull? self params path) (not (bombbot-destroyed? index)))
+    (set! (-> params path) path)
+    (set! (-> self slave index) (ppointer->handle (process-spawn bombbot params :to self)))
+    (let ((bot (the-as bombbot (handle->process-safe (-> self slave index)))))
+      (when (and (mp-session-in-game?) (nonnull? bot))
+        (set! (-> bot net-id) (the uint32 (+ BOMBBOT_ID_BASE index)))
+        (logclear! (-> bot mask) (process-mask guard))
+        (logior! (-> bot enemy-flags) (enemy-flag host-owned)))))
+  (none))
+
 (set-subtask-hook!
   *game-info*
   (game-task-node city-stop-bomb-bots-destroy)
@@ -2865,12 +2886,13 @@
   TASK_MANAGER_UPDATE_HOOK
   (lambda :behavior task-manager
     ()
+    (reconcile-bombbots!)
     (when (nonzero? (-> self data-int32 0))
       (let ((gp-0 0))
         (let ((s5-0 10000))
           (dotimes (s4-0 3)
-            (let ((s3-0 (as-type (-> self slave s4-0 process 0) bombbot)))
-              (when s3-0
+            (let ((s3-0 (the-as bombbot (handle->process-safe (-> self slave s4-0)))))
+              (when (nonnull? s3-0)
                 (+! gp-0 1)
                 (let ((v1-14 (the int (* 0.000030517578 (vector-vector-xz-distance
                                                           (-> s3-0 root trans)
@@ -2925,7 +2947,7 @@
   TASK_MANAGER_CODE_HOOK
   (lambda :behavior task-manager
     ()
-    (while (!= (-> (level-get-target-inside *level*) name) 'ctysluma)
+    (until (bombbots-ready?)
       (suspend)
       )
     (set! (-> self data-int32 0) 1)
@@ -2941,12 +2963,9 @@
             (-> (new 'static 'quaternion :x 4387619.0 :y 37262.54 :z 230567.11 :w 1.0) quad)
             )
       (quaternion-copy! (-> gp-2 quat) (new 'static 'quaternion :x 0.0006 :y -0.8345 :z -0.0013 :w -0.5509))
-      (set! (-> gp-2 path) *bombbot-path-1*)
-      (set! (-> self slave 0) (ppointer->handle (process-spawn bombbot gp-2 :to self)))
-      (set! (-> gp-2 path) *bombbot-path-2*)
-      (set! (-> self slave 1) (ppointer->handle (process-spawn bombbot gp-2 :to self)))
-      (set! (-> gp-2 path) *bombbot-path-3*)
-      (set! (-> self slave 2) (ppointer->handle (process-spawn bombbot gp-2 :to self)))
+      (spawn-mission-bombbot! gp-2 *bombbot-path-1* 0)
+      (spawn-mission-bombbot! gp-2 *bombbot-path-2* 1)
+      (spawn-mission-bombbot! gp-2 *bombbot-path-3* 2)
       )
     (none)
     )
@@ -2985,8 +3004,8 @@
            )
          (add-process *gui-control* self (gui-channel sig) (gui-action play) "bbotxplo" -99.0 0)
          (dotimes (gp-1 3)
-           (let ((a0-7 (the-as process (as-type (-> self slave gp-1 process 0) bombbot))))
-             (if a0-7
+           (let ((a0-7 (handle->process-safe (-> self slave gp-1))))
+             (if (nonnull? a0-7)
                  (send-event a0-7 'explode)
                  )
              )

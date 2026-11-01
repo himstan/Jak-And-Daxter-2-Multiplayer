@@ -682,6 +682,7 @@
   "drill-ship-sync.o"
   "port-run-sync.o"
   "helldog-sync.o"
+  "bombbot-sync.o"
   "sewer-water-sync-h.o"
   "sewer-water-sync.o"
   "tomb-sync.o"
