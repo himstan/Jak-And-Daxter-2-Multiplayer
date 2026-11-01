@@ -1698,6 +1698,7 @@ int InitHeapAndSymbol() {
       make_function_from_c((void*)alloc_heap_object, true);
 
   make_function_symbol_from_c("string->symbol", (void*)intern);
+  make_function_symbol_from_c("intern-type", (void*)intern_type);
   make_function_symbol_from_c("print", (void*)sprint);
   make_function_symbol_from_c("inspect", (void*)inspect_object);
   make_function_symbol_from_c("load", (void*)load);

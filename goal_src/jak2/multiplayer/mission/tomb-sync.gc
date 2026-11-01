@@ -1,0 +1,145 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defconstant TOMB_TASK_ID_BASE (the uint #x75000000))
+(defconstant TOMB_DONE_ID_BASE (the uint #x75100000))
+(defconstant TOMB_ROUND_ID_BASE (the uint #x75200000))
+(defconstant TOMB_PATTERN_ID_BASE (the uint #x75300000))
+(defconstant TOMB_PRESS_ID_BASE (the uint #x75400000))
+(defconstant TOMB_PUNCH_ID_BASE (the uint #x75500000))
+(defconstant TOMB_RESET_ID_BASE (the uint #x75600000))
+(defconstant TOMB_FAIL_ID_BASE (the uint #x75700000))
+(defconstant TOMB_ID_END (the uint #x75800000))
+
+(define *tomb-task-relay-time* (the-as time-frame 0))
+
+(defun tomb-sync-id ((kind uint) (aid uint) (value int))
+  (+ kind (* aid 8) (the uint value)))
+
+(defun tomb-marked? ((kind uint) (aid uint) (value int))
+  (mp-aid-dead-in-perm-list? (tomb-sync-id kind aid value)))
+
+(defun tomb-send! ((kind uint) (aid uint) (value int))
+  (when (mp-session-in-game?)
+    (mp-event-enqueue-aid! MP_EVENT_BREAK (tomb-sync-id kind aid value)))
+  (none))
+
+(defun tomb-mark! ((kind uint) (aid uint) (value int))
+  (when (and (mp-session-in-game?) (not (tomb-marked? kind aid value)))
+    (mp-record-aid-dead-in-perm-list! (tomb-sync-id kind aid value))
+    (tomb-send! kind aid value))
+  (none))
+
+(defun tomb-unmark! ((kind uint) (aid uint) (value int))
+  (when (nonnull? *game-info*)
+    (let ((perm (actor-perm *game-info* (the-as actor-id (tomb-sync-id kind aid value)))))
+      (when (nonnull? perm)
+        (logclear! (-> perm status) (entity-perm-status dead)))))
+  (none))
+
+(defun tomb-done? ((aid uint))
+  (tomb-marked? TOMB_DONE_ID_BASE aid 0))
+
+(defun tomb-mark-done! ((aid uint))
+  (tomb-mark! TOMB_DONE_ID_BASE aid 0))
+
+(defun tomb-entity-aid ((ent entity))
+  (if (nonnull? ent) (-> ent aid) (the uint 0)))
+
+(defun tomb-local-sender? ((proc process))
+  (or (not (mp-session-in-game?)) (mp-is-local-attacker? proc)))
+
+(defun tomb-vibe-pattern ((leader uint))
+  (dotimes (pattern 8)
+    (when (tomb-marked? TOMB_PATTERN_ID_BASE leader pattern)
+      (return pattern)))
+  -1)
+
+(defun tomb-set-vibe-pattern! ((leader uint) (pattern int))
+  (dotimes (other 8)
+    (tomb-unmark! TOMB_PATTERN_ID_BASE leader other))
+  (mp-record-aid-dead-in-perm-list! (tomb-sync-id TOMB_PATTERN_ID_BASE leader pattern))
+  (none))
+
+(defun tomb-claim-vibe-pattern ((leader uint) (pattern int))
+  (let ((synced (tomb-vibe-pattern leader)))
+    (cond
+      ((>= synced 0) synced)
+      ((mp-session-in-game?)
+       (tomb-set-vibe-pattern! leader pattern)
+       (tomb-send! TOMB_PATTERN_ID_BASE leader pattern)
+       pattern)
+      (else pattern))))
+
+(defun tomb-receive-vibe-pattern! ((leader uint) (pattern int) (proc process))
+  (let ((current (tomb-vibe-pattern leader)))
+    (cond
+      ((= current pattern) #f)
+      ((and (mp-session-host?) (>= current 0)) (tomb-send! TOMB_PATTERN_ID_BASE leader current))
+      (else
+       (tomb-set-vibe-pattern! leader pattern)
+       (send-event proc 'mp-pattern pattern))))
+  (none))
+
+(defun tomb-relayed-task? ((node game-task-node))
+  (case node
+    (((game-task-node tomb-poles-block)
+      (game-task-node tomb-poles-resolution)
+      (game-task-node tomb-water-vibe)
+      (game-task-node tomb-water-resolution)
+      (game-task-node tomb-boss-torches)
+      (game-task-node tomb-boss-door))
+     #t)
+    (else #f)))
+
+(defun tomb-close-relayed-task! ((node game-task-node))
+  (when (and (tomb-relayed-task? node) (nonnull? *game-info*) (not (task-node-closed? node)))
+    (task-node-close! node)
+    (mp-task-sync-after-remote-close! node))
+  (none))
+
+(defun tomb-relay-tasks! ()
+  (when (and (mp-session-client?)
+             (mp-session-in-game?)
+             (nonnull? *game-info* *mp-world-state*)
+             (time-elapsed? *tomb-task-relay-time* (seconds 1)))
+    (set! *tomb-task-relay-time* (current-time))
+    (dotimes (offset 9)
+      (let ((node (the-as game-task-node (+ (the-as int (game-task-node tomb-poles-block)) offset))))
+        (when (and (tomb-relayed-task? node)
+                   (task-node-closed? node)
+                   (not (mp-tomb-boulder-snapshot-task-closed? node)))
+          (tomb-send! TOMB_TASK_ID_BASE (the-as uint node) 0)))))
+  (none))
+
+(defun tomb-sync-message ((kind uint))
+  (case kind
+    ((TOMB_DONE_ID_BASE) 'mp-done)
+    ((TOMB_ROUND_ID_BASE) 'mp-round)
+    ((TOMB_PRESS_ID_BASE) 'mp-press)
+    ((TOMB_PUNCH_ID_BASE) 'mp-punch)
+    ((TOMB_FAIL_ID_BASE) 'mp-fail)
+    (else 'mp-reset)))
+
+(defun tomb-sync-process ((aid uint))
+  (let ((ent (if (nonnull? *level*) (entity-by-aid aid) (the-as entity #f))))
+    (if (nonnull? ent (-> ent extra)) (-> ent extra process) (the-as process #f))))
+
+(defun sync-tomb! ((id uint) (message symbol))
+  (when (or (< id TOMB_TASK_ID_BASE) (>= id TOMB_ID_END))
+    (return #f))
+  (when (= message 'synchronized?)
+    (return (mp-aid-dead-in-perm-list? id)))
+  (let ((kind (logand id #xfff00000))
+        (aid (/ (logand id #xfffff) 8))
+        (value (the int (logand id 7))))
+    (case kind
+      ((TOMB_TASK_ID_BASE) (tomb-close-relayed-task! (the-as game-task-node aid)))
+      ((TOMB_PATTERN_ID_BASE) (tomb-receive-vibe-pattern! aid value (tomb-sync-process aid)))
+      (else
+       (when (or (= kind TOMB_DONE_ID_BASE) (= kind TOMB_ROUND_ID_BASE))
+         (mp-record-aid-dead-in-perm-list! id))
+       (send-event (tomb-sync-process aid) (tomb-sync-message kind) value))))
+  #t)
+
+(set! *actor-sync-handlers* (cons sync-tomb! *actor-sync-handlers*))

@@ -379,6 +379,7 @@
 (define-extern rpc-busy? (function int uint))
 (define-extern rpc-call (function int uint uint uint int uint int uint))
 (define-extern string->symbol (function string symbol))
+(define-extern intern-type (function string int type))
 (define-extern pc-get-unix-timestamp (function int))
 
 (define-extern link-begin (function pointer (pointer uint8) int kheap link-flag int))

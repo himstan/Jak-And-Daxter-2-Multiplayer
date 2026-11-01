@@ -2177,6 +2177,15 @@ into 7 sections, which might explain the weird sizes in the center.
   )
 
 
+(defun continue-boot-level ((cont continue-point))
+  (let ((first-want (-> cont want 0 name)))
+    (if first-want
+        first-want
+        (-> cont level)
+        )
+    )
+  )
+
 (defun play ((arg0 symbol) (arg1 symbol))
   "Set up the game engine for playing."
   (kmemopen global "level-boot")
@@ -2198,7 +2207,7 @@ into 7 sections, which might explain the weird sizes in the center.
                      (if (get-snapshot-continue-name (the-as string *kernel-boot-snapshot*) cont-name)
                          (let ((cont (get-continue-by-name *game-info* cont-name)))
                            (if cont
-                               (-> cont level)
+                               (continue-boot-level cont)
                                'prison
                                )
                            )
@@ -2209,7 +2218,7 @@ into 7 sections, which might explain the weird sizes in the center.
                  (*kernel-boot-continue*
                    (let ((cont (get-continue-by-name *game-info* (the-as string *kernel-boot-continue*))))
                      (if cont
-                         (-> cont level)
+                         (continue-boot-level cont)
                          'prison
                          )
                      )

@@ -267,6 +267,7 @@
 
 (defun mp-tomb-daxter-wait-inside-zone? ()
   (and (mp-tomb-daxter-wait-local-ready?)
+       (not (task-node-closed? (game-task-node tomb-boss-resolution)))
        (logtest? (-> *target* control status) (collide-status on-ground))
        *mp-tomb-daxter-wait-zone*
        (nonzero? *mp-tomb-daxter-wait-zone*)

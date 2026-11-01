@@ -34,6 +34,7 @@
 
 (define-extern register-static-actor! (function static-actor-definition symbol))
 (define-extern static-actor-augment-bsp! (function bsp-header none))
+(define-extern static-actor-birth-ready? (function entity-actor symbol))
 
 (defmacro static-actor-art-groups (&rest names)
   `(new 'static 'boxed-array :type string ,@names))

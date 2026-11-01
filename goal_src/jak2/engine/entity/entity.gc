@@ -1616,6 +1616,9 @@
   )
 
 (defmethod birth! ((this entity-actor))
+  (if (not (static-actor-birth-ready? this))
+      (return this)
+      )
   (let* ((s5-0 (-> this etype))
          (v1-0 (entity-info-lookup s5-0))
          (s4-0 (get-process *default-dead-pool* s5-0 (if v1-0

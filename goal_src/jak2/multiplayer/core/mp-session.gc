@@ -380,6 +380,7 @@
   (when (not (or (movie?) *scene-player*))
     (mp-sync-enemies-update))
   (mp-tomb-daxter-wait-update!)
+  (tomb-relay-tasks!)
   (mp-update-traffic-authority)
   (mp-sync-traffic-update)
   (mp-for-each-player-target (player-slot record player-target)

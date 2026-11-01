@@ -157,15 +157,27 @@
     (return (if (tomb-poles-boulder-closed-and-boss-door-not-closed?) "tombboss-spider-end" "tomb-boulder")))
   (the-as string #f))
 
+(defun tomb-boulder-jak-continue-name ((host-continue string))
+  (when (and (nonnull? *mp-world-state*)
+             (mp-local-player-jak?)
+             (mp-tomb-boulder-bootstrap-isolated?)
+             (mp-tomb-boulder-chase-continue? host-continue))
+    (return (if (mp-tomb-boulder-snapshot-task-closed? (game-task-node tomb-poles-resolution))
+              "tomb-start-bottom"
+              "tomb-boulder-end")))
+  (the-as string #f))
+
 (defun mp-tomb-boulder-prepare-bootstrap-continue! ((continue-name string) (name-length int))
   (set! *mp-tomb-boulder-bootstrap-local-placement?* #f)
-  (let ((daxter-continue (get-tomb-boulder-daxter-continue-name)))
-    (if (and *mp-tomb-boulder-reconnect-restart?* (nonnull? continue-name daxter-continue))
+  (let ((local-continue (the-as string
+                                (or (get-tomb-boulder-daxter-continue-name) (tomb-boulder-jak-continue-name continue-name)))))
+    (if (and *mp-tomb-boulder-reconnect-restart?* (nonnull? continue-name local-continue))
       (begin
         (set! *mp-tomb-boulder-bootstrap-local-placement?* #t)
-        (mp-tomb-boulder-set-respawn-policy! #t)
-        (log 'debug "[MP-TombBoulder] Bootstrap local placement selected; blocking remote placement.~%")
-        (copy-string<-string continue-name daxter-continue)
+        (when (mp-local-player-daxter?)
+          (mp-tomb-boulder-set-respawn-policy! #t))
+        (log 'debug "[MP-TombBoulder] Bootstrap local placement selected: ~S.~%" local-continue)
+        (copy-string<-string continue-name local-continue)
         (length continue-name))
       name-length)))
 
@@ -180,10 +192,7 @@
   #f)
 
 (defun mp-tomb-boulder-skip-bootstrap-host-teleport? ()
-  (the symbol
-       (and *mp-tomb-boulder-bootstrap-local-placement?*
-            (mp-local-player-daxter?)
-            (mp-tomb-boulder-bootstrap-isolated?))))
+  (the symbol (and *mp-tomb-boulder-bootstrap-local-placement?* (mp-tomb-boulder-bootstrap-isolated?))))
 
 (defun mp-tomb-boulder-restore-local-bootstrap-camera! ()
   (when (and *target* (nonzero? *target*))
@@ -213,9 +222,9 @@
                 (= (get-player-character-count (mp-player-character jak)) 1)))))
 
 (defun mp-tomb-boulder-bootstrap-complete! ()
+  (set! *mp-tomb-boulder-bootstrap-local-placement?* #f)
   (when (mp-local-player-daxter?)
     (set! *mp-tomb-boulder-reconnect-restart?* #f)
-    (set! *mp-tomb-boulder-bootstrap-local-placement?* #f)
     (mp-tomb-boulder-set-respawn-policy! (should-player-block-remote-respawn?)))
   (none))
 
