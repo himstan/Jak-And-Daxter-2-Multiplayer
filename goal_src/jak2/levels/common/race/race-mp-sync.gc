@@ -129,6 +129,7 @@
             ((MP_RACE_ACTION_DECISION) 'decision)
             ((MP_RACE_ACTION_CONFIG_REQUEST) 'config-request)
             ((MP_RACE_ACTION_FINISH_DEADLINE) 'finish-deadline)
+            ((MP_RACE_ACTION_WRECK) 'wreck)
             (else 'unknown))
           source-player-slot
           (-> details player-slot)
@@ -1334,6 +1335,31 @@
         (set! (-> *mp-race-sync-state* results-ready?) (the uint 1)))))
   (none))
 
+(defun race-wreck-explosion! ((vehicle vehicle))
+  (when (nonnull? vehicle (-> vehicle root) (-> vehicle info))
+    (let ((pos (-> vehicle root trans)))
+      (sound-play "vehicle-explode" :position pos)
+      (sound-play "vehicle-explo-b" :position pos)
+      (part-tracker-spawn :to *entity-pool* :group (-> *part-group-id-table* (-> vehicle info explosion-part)) :mat-joint pos)))
+  (none))
+
+(defun race-wreck-explode! ((vehicle vehicle))
+  (let ((player-slot (mp-local-player-slot)))
+    (race-wreck-explosion! vehicle)
+    (mp-race-enqueue-event! MP_RACE_ACTION_WRECK
+                            (the-as uint (mp-race-bound-racer-index player-slot))
+                            player-slot
+                            0
+                            0
+                            (mp-race-current-clock)))
+  (none))
+
+(defun race-wreck-receive! ((event mp-race-event))
+  (let ((racer-index (the-as int (-> event payload racer-index))))
+    (when (and (nonnull? *race-state*) (< racer-index (-> *race-state* racer-count)))
+      (race-wreck-explosion! (the-as vehicle (handle->process-safe (-> *race-state* racer-array racer-index racer))))))
+  (none))
+
 (defun mp-race-receive-event! ((event mp-race-event))
   (when (or (not (nonnull? event)) (zero? event))
     (return #f))
@@ -1352,6 +1378,9 @@
         (mp-race-host-accept-dnf! event))
        ((and (not (mp-session-host?)) (mp-race-event-from-host? event) (mp-race-event-current-generation? event))
         (mp-race-receive-dnf! event))))
+    ((MP_RACE_ACTION_WRECK)
+     (when (mp-race-event-current-generation? event)
+       (race-wreck-receive! event)))
     (else
      (when (and (not (mp-session-host?)) (mp-race-event-from-host? event) (mp-race-event-current-generation? event))
        (case (-> event payload action)

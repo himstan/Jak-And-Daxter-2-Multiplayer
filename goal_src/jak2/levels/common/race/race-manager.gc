@@ -1122,7 +1122,7 @@
                                        #f
                                        (static-attack-info ((id (new-attack-id)) (mode 'instant-death))))
                        (log 'debug "[Race] Racer is off the track, failing the race.~%")
-                       (if (mp-session-in-game?) (mp-race-request-local-dnf! state) (go-virtual fail))))))))))
+                       (if (not (mp-session-in-game?)) (go-virtual fail))))))))))
         (when (and (not spectator?)
                    (or (logtest? (-> player-racer flags) (racer-flags dead)) (not *target*) (focus-test? *target* dead)))
           (log 'debug "[Race] Racer is dead, failing the race.~%")

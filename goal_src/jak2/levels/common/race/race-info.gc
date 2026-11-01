@@ -151,7 +151,7 @@
             (new 'static 'vector :z 1.0 :w 1.0)
             :player-intro-pos
             (new 'static 'vector :x -347750.4 :y 46284.8 :z -2706227.2 :w 1.0)
-            :flags (race-info-flags pidax borrow)
+            :flags (race-info-flags borrow)
             :score #xc
             :lap-count 5
             :racer-count 8
@@ -212,7 +212,7 @@
                       :vehicle #x4
                       :flags (racer-info-flags player-or-ai)
                       :seek-offset -1)
-                 (new 'static 'race-racer-info :rider #x1 :vehicle #x3 :flags (racer-info-flags player-or-ai))
+                 (new 'static 'race-racer-info :vehicle #x3 :flags (racer-info-flags player-or-ai))
                  (new 'static
                       'race-racer-info
                       :rider #x8

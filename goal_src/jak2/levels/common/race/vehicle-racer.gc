@@ -345,6 +345,8 @@
                           (logtest? (-> this flags) (rigid-body-object-flag dead))
                           (logtest? (-> this focus-status) (focus-status dead)))))
       (when (and would-die? (mp-vehicle-local-target-driving? this))
+        (if (vehicle-racer-request-respawn! this)
+          (race-wreck-explode! this))
         (vehicle-racer-fake-respawn! this))
       (when (<= (-> this hit-points) 0.0)
         (set! (-> this hit-points) 1.0))

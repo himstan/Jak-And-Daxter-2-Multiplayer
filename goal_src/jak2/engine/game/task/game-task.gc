@@ -526,7 +526,7 @@
             :kiosk-play-node (game-task-node stadium-race-class2-race)
             :pre-play-continue "garage-start-class3"
             :play-node (game-task-node stadium-race-class2-race)
-            :play-continue "stadiumc-race-retry-pidax"
+            :play-continue "stadiumc-race-fail"
             :kiosk-play-continue #f
             )
           (new 'static 'game-task-info
@@ -7156,8 +7156,8 @@
               :intro-scene #f
               :resolution-scene "city-class-2-race-res"
               :resolution-scene-continue "garage-class3-movie"
-              :retry-continue "stadiumc-race-retry-pidax"
-              :fail-continue "garage-start-class3"
+              :retry-continue "stadiumc-race-retry"
+              :fail-continue "stadiumc-race-fail"
               :init-hook #f
               :cleanup-hook #f
               :update-hook #f
