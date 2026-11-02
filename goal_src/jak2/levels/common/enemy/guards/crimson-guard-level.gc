@@ -4195,12 +4195,14 @@
    (transport-side  uint32)
    (weapon          int32)
    (proc            process)
+   (aid             uint32)
    )
   )
 
 
 ;; WARN: Return type mismatch object vs none.
 (defbehavior crimson-guard-level-init-by-other crimson-guard-level ((arg0 crimson-guard-level-params))
+  (set! (-> self net-id) (-> arg0 aid))
   (init-enemy-collision! self)
   (set! (-> self root trans quad) (-> arg0 pos quad))
   (quaternion-copy! (-> self root quat) (-> arg0 quat))
