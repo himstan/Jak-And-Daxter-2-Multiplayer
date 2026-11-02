@@ -328,6 +328,10 @@ TEST(PlatformSteam, LobbyMetadataRoundTripsAndRejectsUnjoinableLobbies) {
   const auto without_details = decode();
   ASSERT_TRUE(without_details);
   EXPECT_TRUE(without_details->details.empty());
+  fields["identity"] = "other-build";
+  ASSERT_TRUE(decode());
+  fields.erase("identity");
+  ASSERT_TRUE(decode());
 }
 
 TEST(PlatformSteam, UnavailableSteamRejectsLobbyOperationsWithoutSideEffects) {

@@ -1869,6 +1869,7 @@ TEST(GnsTransportIntegration, SessionReportsTypedGateRejections) {
         },
         [&] { return client.snapshot().state.status == SessionStatus::FAILED; }));
     EXPECT_EQ(client.snapshot().rejection, test_case.reason);
+    EXPECT_EQ(host.snapshot().players.size(), 1u);
   }
 }
 
@@ -2202,6 +2203,78 @@ TEST(GnsTransportIntegration, PendingGateTimesOutWithTypedRejection) {
       }));
   EXPECT_FALSE(rejection.accepted);
   EXPECT_EQ(rejection.rejection, RejectionReason::GATE_TIMEOUT);
+}
+
+TEST(GnsTransportIntegration, UnadmittedTrafficCannotDisruptAnActiveSession) {
+  RecordingAdapter host_adapter;
+  RecordingAdapter client_adapter;
+  SessionController host(host_adapter);
+  SessionController client(client_adapter);
+  ASSERT_TRUE(host.host(host_config(available_udp_port(), 3)));
+  ASSERT_TRUE(client.connect(client_config(host.local_port())));
+  const auto pump_session = [&] {
+    const auto now = now_ms();
+    host.pump(now);
+    client.pump(now);
+  };
+  ASSERT_TRUE(pump_until(pump_session, [&] {
+    return host.snapshot().players.size() == 2 && client.snapshot().players.size() == 2;
+  }));
+  host.enter_game();
+  client.enter_game();
+  const auto gameplay = encode_message_frame(
+      FrameKind::GAMEPLAY, 2, encode_gameplay_envelope(0, 1, std::array<uint8_t, 1>{0xff}));
+  const std::vector<std::vector<uint8_t>> unexpected_messages = {
+      {0xff},
+      {'J', 'M', 'P', 'G', 1, 0xff, 0xff},
+      gameplay,
+      encode_server_gate(
+          {.accepted = true, .player_slot = 1, .host_player_slot = 0, .player_capacity = 3})};
+  for (size_t index = 0; index < unexpected_messages.size(); ++index) {
+    SCOPED_TRACE(index);
+    SessionPlatform stranger;
+    ASSERT_TRUE(stranger.connect({.endpoint = "127.0.0.1", .port = host.local_port()}));
+    const auto pump = [&] {
+      pump_session();
+      stranger.pump();
+    };
+    ConnectionId connection = 0;
+    ASSERT_TRUE(pump_until(pump, [&] {
+      TransportEvent event;
+      while (stranger.poll_event(event)) {
+        if (event.kind == TransportEventKind::CONNECTED)
+          connection = event.connection_id;
+      }
+      return connection != 0;
+    }));
+    ASSERT_TRUE(stranger.send(connection, unexpected_messages[index], Delivery::RELIABLE_ORDERED));
+    ASSERT_TRUE(stranger.send(connection, gameplay, Delivery::RELIABLE_ORDERED));
+    ServerGate rejection;
+    ASSERT_TRUE(pump_until(pump, [&] {
+      TransportEvent event;
+      while (stranger.poll_event(event)) {
+        if (event.kind == TransportEventKind::MESSAGE &&
+            decode_server_gate(event.payload, rejection))
+          return true;
+      }
+      return false;
+    }));
+    EXPECT_FALSE(rejection.accepted);
+    EXPECT_EQ(rejection.rejection, RejectionReason::MALFORMED_GATE);
+    ASSERT_TRUE(pump_until(pump, [&] { return stranger.connection_snapshots().empty(); }));
+    EXPECT_EQ(host.snapshot().state.status, SessionStatus::IN_GAME);
+    EXPECT_EQ(client.snapshot().state.status, SessionStatus::IN_GAME);
+    EXPECT_EQ(host.snapshot().players.size(), 2u);
+    EXPECT_EQ(host_adapter.received.size(), index);
+    EXPECT_TRUE(host_adapter.departures.empty());
+    const std::array<uint8_t, 1> marker = {static_cast<uint8_t>(index)};
+    ASSERT_TRUE(client.send_gameplay(0, Audience::everyone(), marker));
+    ASSERT_TRUE(
+        pump_until(pump_session, [&] { return host_adapter.received.size() == index + 1; }));
+    EXPECT_EQ(host_adapter.received.back().origin, client.snapshot().state.local_player_slot);
+    EXPECT_EQ(host_adapter.received.back().payload,
+              std::vector<uint8_t>(marker.begin(), marker.end()));
+  }
 }
 
 TEST(GnsTransportIntegration, MalformedGatesAndRepeatedRejectionsAreThrottled) {

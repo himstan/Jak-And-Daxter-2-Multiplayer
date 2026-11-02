@@ -28,6 +28,7 @@
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+#include <atomic>
 #include <condition_variable>
 #include <mutex>
 #endif
@@ -343,11 +344,14 @@ void win_print_last_error(const std::string& msg) {
 int cont_status = -1;  // hack? -1 = ignore; 0 = waiting for cont; 1 = cont'd, will resume
 std::mutex m;
 std::condition_variable cv;
+std::atomic_bool break_requested = false;
 
 bool attach_and_break(const ThreadID& tid) {
   cont_status = -1;
 
+  break_requested = true;
   if (!DebugActiveProcess(tid.pid)) {
+    break_requested = false;
     win_print_last_error(fmt::format("DebugActiveProcess w/ TID {}", tid.to_string()));
     return false;
   }
@@ -372,11 +376,13 @@ void allow_debugging() {}
 bool break_now(const ThreadID& tid) {
   HANDLE hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, tid.pid);
 
+  break_requested = true;
   auto result = DebugBreakProcess(hProc);
 
   CloseHandle(hProc);
 
   if (!result) {
+    break_requested = false;
     win_print_last_error("DebugBreakProcess");
     return false;
   }
@@ -514,9 +520,13 @@ bool check_stopped(const ThreadID& tid, SignalInfo* out) {
       {
         auto exc = debugEvent.u.Exception.ExceptionRecord.ExceptionCode;
         if (is_other) {
-          if (exc == EXCEPTION_BREAKPOINT) {
+          if (exc == EXCEPTION_BREAKPOINT && break_requested.exchange(false)) {
             out->kind = SignalInfo::BREAK;
           } else {
+            if (exc == EXCEPTION_BREAKPOINT) {
+              printf("[Debugger] Ignored a breakpoint raised by native thread %lu.\n",
+                     debugEvent.dwThreadId);
+            }
             // ignore exceptions outside goal thread
             ignore_debug_event();
           }

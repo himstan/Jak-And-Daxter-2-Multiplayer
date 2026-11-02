@@ -259,8 +259,12 @@ TEST(PlatformSession, AdmissionGateCodecsAreTypedAndRejectTruncation) {
   ASSERT_TRUE(multiplayer::platform::decode_client_gate(request_bytes, decoded_request));
   EXPECT_EQ(decoded_request.game_id, "jak3");
   EXPECT_EQ(decoded_request.compatibility_identity, "v1.2.3");
-  EXPECT_FALSE(multiplayer::platform::decode_client_gate(
-      std::span(request_bytes).first(request_bytes.size() - 1), decoded_request));
+  EXPECT_EQ(request_bytes.size(), 5u + 6u + request.game_id.size() +
+                                      request.compatibility_identity.size() +
+                                      request.room_code.size());
+  for (size_t size = 0; size < request_bytes.size(); ++size)
+    EXPECT_FALSE(multiplayer::platform::decode_client_gate(std::span(request_bytes).first(size),
+                                                           decoded_request));
   auto trailing_request = request_bytes;
   trailing_request.push_back(0);
   EXPECT_FALSE(multiplayer::platform::decode_client_gate(trailing_request, decoded_request));
@@ -276,8 +280,9 @@ TEST(PlatformSession, AdmissionGateCodecsAreTypedAndRejectTruncation) {
   ASSERT_TRUE(multiplayer::platform::decode_server_gate(accepted_bytes, decoded_response));
   EXPECT_TRUE(decoded_response.accepted);
   EXPECT_EQ(decoded_response.player_slot, 3);
-  EXPECT_FALSE(multiplayer::platform::decode_server_gate(
-      std::span(accepted_bytes).first(accepted_bytes.size() - 1), decoded_response));
+  for (size_t size = 0; size < accepted_bytes.size(); ++size)
+    EXPECT_FALSE(multiplayer::platform::decode_server_gate(std::span(accepted_bytes).first(size),
+                                                           decoded_response));
   auto trailing_response = accepted_bytes;
   trailing_response.push_back(2);
   EXPECT_FALSE(multiplayer::platform::decode_server_gate(trailing_response, decoded_response));

@@ -44,6 +44,7 @@ bool valid_lane(const int lane) {
 
 constexpr size_t kDirectBackend = 0;
 constexpr size_t kSteamBackend = 1;
+constexpr int kSteamVirtualPort = 26210;
 
 std::mutex g_init_mutex;
 size_t g_init_references = 0;
@@ -448,7 +449,7 @@ bool SessionPlatform::host(const TransportHostConfig& config) const {
   direct.listen_socket = direct.sockets->CreateListenSocketIP(address, 1, &direct_option);
   if (config.steam && direct.listen_socket != k_HSteamListenSocket_Invalid) {
     auto steam_option = Impl::callback_option(kSteamBackend);
-    steam.listen_socket = steam.sockets->CreateListenSocketP2P(0, 1, &steam_option);
+    steam.listen_socket = steam.sockets->CreateListenSocketP2P(kSteamVirtualPort, 1, &steam_option);
   }
   if (direct.listen_socket == k_HSteamListenSocket_Invalid ||
       (config.steam && steam.listen_socket == k_HSteamListenSocket_Invalid)) {
@@ -495,7 +496,7 @@ bool SessionPlatform::connect(const TransportClientConfig& config) const {
   if (steam) {
     SteamNetworkingIdentity identity;
     identity.SetSteamID64(config.steam_host);
-    handle = backend.sockets->ConnectP2P(identity, 0, 1, &option);
+    handle = backend.sockets->ConnectP2P(identity, kSteamVirtualPort, 1, &option);
   } else {
     handle = backend.sockets->ConnectByIPAddress(address, 1, &option);
   }
