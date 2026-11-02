@@ -369,6 +369,10 @@
    (update-race-physics-lod! (_type_) none)
    (update-race-finished! (_type_) none)))
 
+(deftype race-respawn-loading (structure)
+  ((wants level-buffer-state LEVEL_MAX :inline)
+   (vis   symbol)))
+
 (define-extern *race-state* race-state)
 
 (defconstant MP_RACE_POST_FINISH_TIMEOUT (seconds 20))

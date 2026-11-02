@@ -1107,7 +1107,9 @@
             (let ((race-time (the-as int (- timer-end (-> state race-start-time)))))
               (if (not (logtest? (-> state flags) (race-flags begun))) (set! race-time 0))
               (set! (-> game-info race-timer) (the-as uint race-time)))))
-        (when (and (not spectator?) (logtest? (-> player-racer flags) (racer-flags in-race)))
+        (when (and (not spectator?)
+                   (logtest? (-> player-racer flags) (racer-flags in-race))
+                   (not (logtest? (-> player-racer flags) (racer-flags finished))))
           (cond
             ((or (logtest? (-> player-racer flags) (racer-flags on-track))
                  (logtest? (-> self race-state info flags) (race-info-flags destination-race)))
@@ -1157,6 +1159,10 @@
   (let ((hud (handle->process-safe hud-handle))) (when (and hud (nonzero? hud)) (send-event hud 'force-hide)))
   (none))
 
+(defun race-win-optionally-retryable? ((info race-info))
+  (or (logtest? (-> info flags) (race-info-flags optionally-retryable))
+      (and (mp-session-in-game?) (logtest? (-> info flags) (race-info-flags complete-immediately)))))
+
 (defstate win (race-manager)
   :virtual #t
   :event race-manager-event-handler
@@ -1172,12 +1178,10 @@
       (process-spawn hud-race-final-stats :init hud-init-by-other :to self)
       (set-time! (-> self state-time))
       (clear-task-manager-hud-timer-if-present self)
-      (when (logtest? (-> self race-state info flags) (race-info-flags complete-immediately))
-        (when (or (not (mp-session-in-game?)) (mp-session-host?))
-          (when (mp-session-in-game?)
-            (mp-race-host-set-decision! MP_RACE_DECISION_COMPLETE))
-          (send-event (ppointer->process (-> self parent)) 'complete)
-          (sleep-code)))
+      (when (and (not (mp-session-in-game?))
+                 (logtest? (-> self race-state info flags) (race-info-flags complete-immediately)))
+        (send-event (ppointer->process (-> self parent)) 'complete)
+        (sleep-code))
       ;; og:preserve-this auto-save when a race is won
       (#when PC_PORT
         (when (not (mp-session-in-game?))
@@ -1193,7 +1197,7 @@
             ((MP_RACE_DECISION_FAIL) (send-event (ppointer->process (-> self parent)) 'fail-immediately) (go-virtual die))))
         (cond
           ((or (logtest? (-> self race-state info flags) (race-info-flags retryable))
-               (logtest? (-> self race-state info flags) (race-info-flags optionally-retryable)))
+               (race-win-optionally-retryable? (-> self race-state info)))
            (draw-message-retry self)
            (when (time-elapsed? (-> self state-time) (seconds 0.5))
              (cond
@@ -1205,7 +1209,7 @@
                 (go-virtual die))
                ((and (or (not (mp-session-in-game?)) (mp-session-host?)) (cpad-pressed? 0 triangle))
                 (stop-speech self)
-                (if (logtest? (-> self race-state info flags) (race-info-flags optionally-retryable))
+                (if (race-win-optionally-retryable? (-> self race-state info))
                   (begin
                     (when (mp-session-in-game?)
                       (mp-race-host-set-decision! MP_RACE_DECISION_COMPLETE))
@@ -1316,10 +1320,12 @@
       '()))
 
 (defun want-race-sound! ((info race-info))
-  (when (and info (nonzero? info) *load-state* (nonzero? *load-state*))
+  (when (nonnull? info *load-state*)
     (let ((want-sound (-> info want-sound)))
-      (when (and want-sound (nonzero? want-sound))
-        (set! (-> *load-state* want-sound 1) want-sound))))
+      (when (nonnull? want-sound)
+        (set! (-> *load-state* want-sound 0) 'ctywide1)
+        (set! (-> *load-state* want-sound 1) 'ctywide2)
+        (set! (-> *load-state* want-sound 2) want-sound))))
   (none))
 
 (defmethod deactivate ((this race-manager))
