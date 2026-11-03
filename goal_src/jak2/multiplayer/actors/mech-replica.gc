@@ -21,13 +21,21 @@
           (return #t)))))
   #f)
 
+(defun mech-pilot ()
+  (when (and (nonnull? *target*) (focus-test? *target* mech) (not (focus-test? *target* dead)))
+    (return *target*))
+  (mp-for-each-player-target (player-slot record pilot)
+    (when (and (focus-test? pilot mech) (not (focus-test? pilot dead)))
+      (return pilot)))
+  (the-as target #f))
+
 (defun mech-reserved-by-remote? ((suit process-drawable))
   (when (nonnull? suit (-> suit entity))
     (let ((aid (-> (the-as entity-actor (-> suit entity)) aid)))
       (mp-for-each-player-record (player-slot record)
         (when (and (nonnull? record)
                    (is-record-remote-player? record)
-                   (mp-player-seat-reservation-levels-match? record)
+                   (= (-> record connection activity) (mp-player-activity in-game))
                    (= (-> record vehicle vehicle-id) aid)
                    (!= (-> record action target-state-id) (the uint (mp-target-state-id mech-death)))
                    (player-mech-state? (mp-target-get-state-from-id (-> record action target-state-id))))
@@ -35,7 +43,7 @@
   #f)
 
 (defun reconcile-player-mech! ((replica target) (record mp-player-record) (cur-state symbol))
-  (when (and (nonnull? replica record) (player-replica? replica) (mp-player-seat-reservation-levels-match? record))
+  (when (and (nonnull? replica record) (player-replica? replica))
     (let ((state (mp-target-get-state-from-id (-> record action target-state-id))))
       (cond
         ((or (= cur-state 'target-mech-get-on) (= cur-state 'target-mech-get-off)) (return #t))

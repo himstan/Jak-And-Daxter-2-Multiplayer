@@ -5,6 +5,8 @@
 ;; name in dgo: drill-obs
 ;; dgos: DMI
 
+(declare-type drill-switch basebutton)
+
 ;; DECOMP BEGINS
 
 (defmethod draw ((this hud-gruntegg))
@@ -526,10 +528,31 @@
     )
   )
 
+(defstate waiting (drill-mech-elevator)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (cond
+      ((and (= message 'trigger) (type? proc drill-switch))
+       (set! (-> self move-pos 0) (-> self move-pos 1))
+       (set! (-> self move-pos 1)
+             (if (= (-> self move-pos 0) (-> self bottom-top 0))
+                 (-> self bottom-top 1)
+                 (-> self bottom-top 0)
+                 )
+             )
+       (go-virtual running)
+       )
+      (else
+        ((-> (method-of-type drill-elevator waiting) event) proc argc message block)
+        )
+      )
+    )
+  )
+
 (defmethod commited-to-ride? ((this drill-mech-elevator))
   "@returns if the target is considered within the elevator area enough to begin descending/ascending"
   (when (= (-> this move-pos 1) (-> this bottom-top 0))
-    (let ((a0-2 (the-as target (as-type *target* process-focusable))))
+    (let ((a0-2 (mech-pilot)))
       (when (and a0-2 (focus-test? a0-2 mech) (not (logtest? (-> a0-2 focus-status) (focus-status dead ignore))))
         (let* ((v1-5 (get-trans a0-2 0))
                (s5-2 (vector-! (new 'stack-no-clear 'vector) v1-5 (-> this root trans)))
@@ -546,7 +569,7 @@
   "If the [[*target*]] is in a valid state and there is a point to transition to in the elevator's path
    do so.
    @see [[elevator::47]]"
-  (let ((a0-1 *target*))
+  (let ((a0-1 (the-as target (or (mech-pilot) *target*))))
     (when (and a0-1
                (not (logtest? (focus-status dead inactive in-air grabbed edge-grab pole pilot-riding pilot teleporting)
                               (-> a0-1 focus-status)
@@ -1044,6 +1067,20 @@
     (case message
       (('track)
        #t
+       )
+      (('attack)
+       (when (not (mp-is-remote-attacker? proc))
+         (case (-> (the-as attack-info (-> block param 1)) mode)
+           (('flop 'spin 'punch 'eco-yellow 'eco-red 'eco-blue 'eco-dark)
+            (report-drill-actor-broken! self)
+            )
+           )
+         ((-> (method-of-type basebutton up-idle) event) proc argc message block)
+         )
+       )
+      (('remote-break)
+       (send-event! self (-> self event-going-down))
+       (go-virtual going-down)
        )
       (else
         ((-> (method-of-type basebutton up-idle) event) proc argc message block)

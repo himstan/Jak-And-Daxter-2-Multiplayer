@@ -38,6 +38,14 @@
       (set! *mp-aid-perm-list-full-logged?* #t)))
   (the-as entity-perm #f))
 
+(defun aid-perm ((aid uint) (create? symbol))
+  (let ((ent (if (nonnull? *level*) (entity-by-aid aid) (the-as entity #f))))
+    (cond
+      ((nonnull? ent (-> ent extra)) (-> ent extra perm))
+      (create? (perm-list-entry! aid))
+      ((nonnull? *game-info*) (actor-perm *game-info* (the-as actor-id aid)))
+      (else (the-as entity-perm #f)))))
+
 (defun mp-record-aid-dead-in-perm-list! ((aid uint))
   (let ((perm (perm-list-entry! aid)))
     (when (nonnull? perm)

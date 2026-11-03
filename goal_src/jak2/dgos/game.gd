@@ -680,6 +680,7 @@
   "strip-grenade-sync-h.o"
   "strip-grenade-sync.o"
   "drill-ship-sync.o"
+  "drill-mech-sync.o"
   "port-run-sync.o"
   "helldog-sync.o"
   "bombbot-sync.o"

@@ -4,16 +4,8 @@
 (defconstant DIG_BUTTON_FIRST_AID (the uint 32931))
 (defconstant DIG_BUTTON_COUNT 5)
 
-(defun dig-button-perm ((aid uint) (create? symbol))
-  (let ((ent (if (nonnull? *level*) (entity-by-aid aid) (the-as entity #f))))
-    (cond
-      ((nonnull? ent (-> ent extra)) (-> ent extra perm))
-      (create? (perm-list-entry! aid))
-      ((nonnull? *game-info*) (actor-perm *game-info* (the-as actor-id aid)))
-      (else (the-as entity-perm #f)))))
-
 (defun dig-button-pressed? ((aid uint))
-  (let ((perm (dig-button-perm aid #f)))
+  (let ((perm (aid-perm aid #f)))
     (the symbol (and (nonnull? perm) (logtest? (-> perm status) (entity-perm-status subtask-complete))))))
 
 (defun dig-buttons-pressed? ()
@@ -23,7 +15,7 @@
   #t)
 
 (defun press-dig-button! ((aid uint))
-  (let ((perm (dig-button-perm aid #t)))
+  (let ((perm (aid-perm aid #t)))
     (when (nonnull? perm)
       (set! (-> perm task) (game-task complete))
       (logior! (-> perm status) (entity-perm-status subtask-complete))))

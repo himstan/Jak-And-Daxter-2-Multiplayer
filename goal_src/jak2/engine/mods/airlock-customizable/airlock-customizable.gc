@@ -1118,6 +1118,8 @@
         (transform-post)
         )
       (label cfg-42)
+      (when (mp-is-local-state-id? (-> self entity aid) (mp-airlock-state-id commit))
+        (suspend-for (seconds 0.3)))
       (when (< 0.0 (check-crossing-distance self (target-pos 0) #f))
           ((lambda :behavior com-airlock
              ()
