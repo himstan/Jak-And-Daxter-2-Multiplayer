@@ -376,6 +376,7 @@
 (defun mp-target-upward-action-state? ((state symbol))
   (case state
     (('target-jump
+      'target-swim-jump
       'target-double-jump
       'target-high-jump
       'target-duck-high-jump
@@ -467,7 +468,21 @@
   (none))
 
 (defun player-replica-go-authoritative-action! ((proc target) (action-state symbol))
+  (unless (nonnull? proc)
+    (return (the-as none 0)))
   (case action-state
+    (('target-wade-stance) (go-process proc target-wade-stance))
+    (('target-wade-walk) (go-process proc target-wade-walk))
+    (('target-swim-stance) (go-process proc target-swim-stance))
+    (('target-swim-walk) (go-process proc target-swim-walk))
+    (('target-swim-down) (go-process proc target-swim-down))
+    (('target-swim-up) (go-process proc target-swim-up))
+    (('target-swim-jump)
+     (when (nonnull? *TARGET-bank*)
+       (go-process proc
+                   target-swim-jump
+                   (-> *TARGET-bank* swim-jump-height-min)
+                   (-> *TARGET-bank* swim-jump-height-max))))
     (('target-jump)
      (go-process proc
                  target-jump
@@ -631,6 +646,11 @@
     (else #f))
   (none))
 
+(defun player-replica-swim-state? ((state symbol))
+  (case state
+    (('target-swim-stance 'target-swim-walk 'target-swim-down 'target-swim-up) #t)
+    (else #f)))
+
 (defun player-replica-apply-authoritative-action! ((proc target) (target-record target-record) (cur-state symbol))
   (let ((record (mp-player-controller-target-record *mp-player-controller* proc)))
     (when (and record
@@ -647,7 +667,9 @@
                (!= cur-state 'dead-state))
       (let ((action-seq (-> record action authoritative-sequence))
             (action-state (mp-target-get-state-from-id (-> record action action-state-id))))
-        (when (and (nonnull? action-state) (!= action-seq (-> record runtime last-action-sequence)))
+        (when (and (nonnull? action-state)
+                   (or (!= action-seq (-> record runtime last-action-sequence))
+                       (and (free-swimming? proc) (player-replica-swim-state? action-state) (!= cur-state action-state))))
           (cond
             ((player-replica-authoritative-action-observed? proc cur-state action-state)
              (player-replica-ack-authoritative-action! record action-seq))

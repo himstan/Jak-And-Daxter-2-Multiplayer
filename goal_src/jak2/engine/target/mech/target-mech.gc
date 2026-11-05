@@ -1226,6 +1226,7 @@
   (when (and (nonnull? self (-> self mech)) (not-player-replica? self))
     (set! (-> self mech hud 0) (ppointer->handle (process-spawn hud-heatmeter :init hud-init-by-other :to self))))
   (remove-exit)
+  (send-event (ppointer->process (-> self manipy)) 'draw #t)
   (if arg2
       (go target-mech-stance)
       (go target-mech-get-on arg0)

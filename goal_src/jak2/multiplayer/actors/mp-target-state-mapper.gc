@@ -158,7 +158,7 @@
   (case state
     (('target-stance) (the uint (mp-target-state-id stance)))
     (('target-walk) (the uint (mp-target-state-id walk)))
-    (('target-jump) (the uint (mp-target-state-id jump)))
+    (('target-jump 'target-swim-jump-jump) (the uint (mp-target-state-id jump)))
     (('target-falling) (the uint (mp-target-state-id falling)))
     (('target-double-jump) (the uint (mp-target-state-id double-jump)))
     (('target-attack) (the uint (mp-target-state-id attack)))

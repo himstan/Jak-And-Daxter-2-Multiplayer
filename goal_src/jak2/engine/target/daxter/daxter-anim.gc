@@ -2,6 +2,7 @@
 (in-package goal)
 
 (define-extern get-daxter-seat-offset (function target vector))
+(define-extern free-swimming? (function process symbol))
 
 (defun get-daxter-pose-owner ((tgt target))
   (if (nonnull? tgt (-> tgt sidekick))
@@ -157,12 +158,32 @@
           (quaternion*! (-> modifier gun-aim-reference) inverse orientation)))))
   (none))
 
+(defun daxter-blend-gun-joint! ((frame joint-anim-frame) (index int) (joint-count int) (blend float))
+  (when (and (>= index 3) (< index (+ joint-count 1)))
+    (let ((base (-> frame data (- index 3)))
+          (top (-> (the-as joint-anim-frame *gsf-buffer*) data (- index 3))))
+      (vector-lerp! (-> base trans) (-> base trans) (-> top trans) blend)
+      (quaternion-slerp! (-> base quat) (-> base quat) (-> top quat) blend)))
+  0)
+
+(defun daxter-straighten-swim-gun-pose! ((frame joint-anim-frame) (joint-count int) (self sidekick) (skel joint-control) (tgt target))
+  (when (and (nonnull? frame self (-> self draw) (-> self draw art-group) skel (-> skel root-channel)
+                       tgt (-> tgt control) *gsf-buffer*)
+             (gun-upper-body-overlay? skel)
+             (free-swimming? tgt)
+             (= (-> skel root-channel 0 frame-group) daxter-swim-down-ja))
+    (let ((blend (- 1.0 (-> tgt control override-quat-alpha))))
+      (daxter-blend-gun-joint! frame (cspace-index-by-name self "main") joint-count blend)
+      (daxter-blend-gun-joint! frame (cspace-index-by-name self "hips") joint-count blend)))
+  0)
+
 (defun daxter-prepare-render-frame! ((frame joint-anim-frame) (joint-count int) (skel joint-control))
   (let* ((owner (as-type PP sidekick))
          (tgt (if (nonnull? owner (-> owner parent))
                 (as-type (ppointer->process (-> owner parent)) target) (the-as target #f))))
     (daxter-soften-jump-scale! frame joint-count owner skel)
     (daxter-prepare-pilot-frame! frame joint-count owner)
+    (daxter-straighten-swim-gun-pose! frame joint-count owner skel tgt)
     (cond
       ((daxter-stadium-bike? tgt) (none))
       ((rider-gun-pose? tgt)

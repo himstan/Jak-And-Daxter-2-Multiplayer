@@ -1,6 +1,9 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern apply-free-swim-motion! (function none :behavior target))
+(define-extern limit-under-swim-height! (function target none))
+
 ;; name: logic-target.gc
 ;; name in dgo: logic-target
 ;; dgos: ENGINE, GAME
@@ -2710,6 +2713,7 @@
         (+! gp-1 -1)
         (set! (-> self control remaining-ctrl-iterations) gp-1)
         (flag-setup)
+        (apply-free-swim-motion!)
         (build-conversions (-> self control transv))
         (do-rotations1)
         (let ((s5-0 (new-stack-vector0)))
@@ -2752,6 +2756,7 @@
             )
           (set! (-> a2-0 action-mask) (collide-action solid))
           (fill-cache-integrate-and-collide (-> self control) (-> self control transv) a2-0 (meters 1))
+          (limit-under-swim-height! self)
           )
           (if (and (not-player-replica? self)
                (logtest? (-> self control root-prim prim-core action) (collide-action check-edge))

@@ -1,6 +1,9 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern deep-swim? (function symbol))
+(define-extern free-swimming? (function process symbol))
+
 ;; name: target-swim.gc
 ;; name in dgo: target-swim
 ;; dgos: ENGINE, GAME
@@ -412,14 +415,15 @@
   )
 
 (defbehavior target-swim-surface-tilt target ()
-  (if (focus-test? self indax)
+  (if (and (focus-test? self indax)
+           (not (and (free-swimming? self) (nonnull? self (-> self gun)) (using-gun? self))))
       (target-swim-tilt 0.0 2.0 -1.0 1.0)
       (target-swim-tilt 0.0 2.0 0.0 1.0)
       )
   )
 
 (defbehavior target-swim-walk-target-speed target ()
-  (if (focus-test? self indax)
+  (if (or (free-swimming? self) (focus-test? self indax))
       28672.0
       (* (-> self align delta trans z) (-> self control current-surface alignv) (-> self clock frames-per-second))
       )
@@ -432,17 +436,87 @@
       )
   )
 
+(defbehavior update-deep-swim-surface! target ((last-motion-time time-frame))
+  (when (nonnull? self (-> self control) (-> self control cpad) (-> self water) *cpad-list*)
+    (let ((control (-> self control)))
+      (cond
+        ((!= (-> *cpad-list* cpads (-> control cpad number) stick0-speed) 0.0)
+         (set! (-> control mod-surface) *deep-swim-mods*)
+         (set! last-motion-time (current-time)))
+        ((!= (-> control mod-surface) *deep-tread-mods*)
+         (if (>= (-> control ctrl-xz-vel) 4096.0)
+             (set! last-motion-time (current-time))
+             (when (time-elapsed? last-motion-time (seconds 0.15))
+               (set! (-> control mod-surface) *deep-tread-mods*)))))))
+  last-motion-time)
+
+(defbehavior deep-swim-vertical-speed target ((speed float))
+  (let ((desired-speed 0.0))
+    (when (nonnull? self (-> self control) (-> self control dynam) (-> self control cpad))
+      (cond
+        ((cpad-hold? (-> self control cpad number) x) (set! desired-speed 12288.0))
+        ((cpad-hold? (-> self control cpad number) circle square) (set! desired-speed -12288.0)))
+      (set! speed (+ (seek speed desired-speed (* 49152.0 (seconds-per-frame)))
+                    (* (vector-dot (-> self control dynam gravity) (-> self control dynam gravity-normal))
+                       (seconds-per-frame)))))
+    speed))
+
+(defbehavior apply-free-swim-motion! target ()
+  (when (and (free-swimming? self)
+             (nonnull? self (-> self control) (-> self control dynam)))
+    (let* ((control (-> self control))
+           (normal (-> control dynam gravity-normal))
+           (speed (vector-dot normal (-> control transv))))
+      (vector+float*! (-> control transv) (-> control transv) normal (- (deep-swim-vertical-speed speed) speed))))
+  (none))
+
+(defbehavior prepare-free-swim! target ()
+  (when (and (free-swimming? self) (nonnull? self (-> self control) (-> self water)))
+    (logclear! (-> self water flags) (water-flags swim-ground))
+    (set! (-> self control mod-surface) *deep-swim-mods*)
+    (set! (-> self control unknown-word04) (the-as uint (current-time))))
+  (none))
+
+(defbehavior free-swim-trans target ((moving? symbol))
+  (when (and (deep-swim?) (nonnull? self (-> self control) (-> self control cpad) (-> self water) *cpad-list*))
+    (cond
+      ((free-swimming? self)
+       (logclear! (-> self water flags) (water-flags swim-ground))
+       (set! (-> self control unknown-word04)
+             (the-as uint (update-deep-swim-surface! (the-as time-frame (-> self control unknown-word04)))))
+       (when (not-player-replica? self)
+         (cond
+           ((and (not moving?) (!= (-> *cpad-list* cpads (-> self control cpad number) stick0-speed) 0.0))
+            (go target-swim-walk))
+           ((and moving? (= (-> self control mod-surface) *deep-tread-mods*))
+            (go target-swim-stance))))
+       (target-swim-surface-tilt)
+       (sound-play "swim-bubbles" :id (-> self control board-jump-and-swim-sound))
+       (return #t))
+      (else
+        (logior! (-> self water flags) (water-flags swim-ground))
+        (set! (-> self control mod-surface) *swim-mods*))))
+  #f)
+
+(defbehavior swim-event-handler target ((proc process) (argc int) (message symbol) (block event-message-block))
+  (if (and (deep-swim?) (nonnull? self) (focus-test? self indax)
+           (or (= message 'attack) (= message 'attack-invinc) (= message 'attack-or-shove)))
+      (target-indax-handler proc argc message block)
+      (target-standard-event-handler proc argc message block)))
+
 (defstate target-swim-stance (target)
-  :event target-standard-event-handler
+  :event swim-event-handler
   :enter (behavior ()
     (set-time! (-> self state-time))
     (set! (-> self control mod-surface) *swim-mods*)
     (logior! (-> self water flags) (water-flags swim-ground))
     (logior! (-> self state-flags) (state-flags lleg-no-ik rleg-no-ik))
+    (prepare-free-swim!)
     )
   :exit (behavior ()
     (target-state-hook-exit)
-    (set! (-> self control mod-surface target-speed) 28672.0)
+    (when (and (nonnull? self (-> self control)) (= (-> self control mod-surface) *swim-mods*))
+      (set! (-> self control mod-surface target-speed) 28672.0))
     (target-exit)
     (when (not (and (-> self next-state) (let ((v1-6 (-> self next-state name)))
                                            (or (= v1-6 'target-swim-stance)
@@ -474,6 +548,7 @@
     )
   :trans (behavior ()
     ((-> self state-hook))
+    (when (free-swim-trans #f) (return (the-as none 0)))
     (if (and (logtest? (-> self control status) (collide-status on-surface))
              (not (logtest? (-> self control status) (collide-status on-water)))
              )
@@ -577,7 +652,7 @@
   )
 
 (defstate target-swim-walk (target)
-  :event target-standard-event-handler
+  :event swim-event-handler
   :enter (behavior ()
     ((-> target-swim-stance enter))
     (die-on-next-update! (-> self water bob))
@@ -587,6 +662,7 @@
   :exit (-> target-swim-stance exit)
   :trans (behavior ()
     ((-> self state-hook))
+    (when (free-swim-trans #t) (return (the-as none 0)))
     (if (and (logtest? (-> self control status) (collide-status on-surface))
              (not (logtest? (-> self control status) (collide-status on-water)))
              )
@@ -673,6 +749,9 @@
 
 (defstate target-swim-down (target)
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (when (and (deep-swim?) (nonnull? self) (focus-test? self indax)
+               (or (= message 'attack) (= message 'attack-invinc) (= message 'attack-or-shove)))
+      (return (target-indax-handler proc argc message block)))
     (local-vars (t0-7 symbol))
     (case message
       (('attack 'attack-invinc 'attack-or-shove)
@@ -760,6 +839,8 @@
     (set! (-> self neck flex-blend) 1.0)
     )
   :trans (behavior ()
+    (when (and (free-swimming? self) (not-player-replica? self))
+      (go target-swim-stance))
     (if (time-elapsed? (-> self water swim-time) (seconds 0.5))
         (go target-stance)
         )
@@ -875,7 +956,7 @@
             (vector+!
               (-> self control transv)
               (vector-float*! (-> self control transv) (-> self control dynam gravity-normal) f24-0)
-              (vector-float*! s4-3 s4-3 (/ f28-0 f26-0))
+              (vector-float*! s4-3 s4-3 (if (deep-swim?) 1.0 (/ f28-0 f26-0)))
               )
             )
           )
@@ -895,6 +976,8 @@
     )
   :exit (-> target-swim-down exit)
   :trans (behavior ()
+    (when (and (free-swimming? self) (not-player-replica? self))
+      (go target-swim-stance))
     (if (and (cpad-pressed? (-> self control cpad number) x)
              (not (logtest? (-> self state-flags) (state-flags prevent-jump)))
              (not (logtest? (water-flags head-under-water bouncing) (-> self water flags)))
@@ -906,7 +989,7 @@
           (the-as surface #f)
           )
         )
-    (if (and (time-elapsed? (-> self state-time) (seconds 10))
+    (if (and (not (deep-swim?)) (time-elapsed? (-> self state-time) (seconds 10))
              (< (target-move-dist (-> *TARGET-bank* stuck-time)) (-> *TARGET-bank* stuck-distance))
              )
         (send-event self 'attack #f (static-attack-info ((id (new-attack-id)) (mode 'drown-death))))

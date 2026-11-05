@@ -1,6 +1,9 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern under-swimmer? (function process symbol))
+(define-extern free-swimming? (function process symbol))
+
 ;; name: water.gc
 ;; name in dgo: water
 ;; dgos: ENGINE, GAME
@@ -1416,7 +1419,9 @@
                  )
                 ((= v1-39 'mech)
                  (let ((a0-39 (the-as process-drawable (as-type (-> arg2 process) process-focusable))))
-                   (when (and a0-39 (not (logtest? (focus-status mech) (-> (the-as process-focusable a0-39) focus-status))))
+                   (when (and (nonnull? a0-39)
+                              (not (logtest? (focus-status mech) (-> (the-as process-focusable a0-39) focus-status)))
+                              (not (under-swimmer? a0-39)))
                      (set! (-> arg0 flags) (water-flags))
                      0
                      )
@@ -1517,5 +1522,12 @@
       )
     )
   (label cfg-27)
+  (when (and (nonnull? this arg0 (-> this process))
+             (logtest? (-> arg0 flags) (water-flags active))
+             (under-swimmer? (-> this process)))
+    (logior! (-> arg0 flags) (water-flags can-swim))
+    (if (free-swimming? (-> this process))
+        (logclear! (-> arg0 flags) (water-flags can-ground))
+        (logior! (-> arg0 flags) (water-flags can-ground))))
   arg0
   )

@@ -748,6 +748,7 @@
                (return #t)))))
        (log 'debug "[MP-Events] mission choice unavailable, falling back to initialize!~%")
        (set! *mp-mission-failed-pending-choice* (the uint 0))
+       (reset-under-mech-actors!)
        (initialize! *game-info*
                     (if (= choice MP_EVENT_MISSION_FAILED_RETRY_YES) 'try 'life)
                     (the-as game-save #f)

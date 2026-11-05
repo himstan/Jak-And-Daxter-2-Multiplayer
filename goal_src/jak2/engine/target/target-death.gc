@@ -1848,8 +1848,11 @@
          (label cfg-149)
          ((lambda :behavior target
             ()
-            (logior! (-> self state-flags) (state-flags sf14))
-            (set! (-> self alt-cam-pos y) (+ -8192.0 (-> self water height)))
+            (if (deep-swim?)
+                (logclear! (-> self state-flags) (state-flags sf14))
+                (begin
+                  (logior! (-> self state-flags) (state-flags sf14))
+                  (set! (-> self alt-cam-pos y) (+ -8192.0 (-> self water height)))))
             (sound-play "death-drown")
             (logclear! (-> self water flags) (water-flags swim-ground))
             (set! (-> self control mod-surface) *dive-mods*)

@@ -842,6 +842,21 @@ on impact, during touch, on exit, etc."
                              )
         )
 
+(let ((surface (copy *dive-mods* 'global)))
+  (when (nonnull? surface)
+    (set! (-> surface target-speed) 28672.0)
+    (set! (-> surface transv-max) 28672.0)
+    (set! (-> surface seek0) 0.3)
+    (set! (-> surface seek90) 0.15)
+    (set! (-> surface seek180) 0.15))
+  (define *deep-swim-mods* surface))
+
+(let ((surface (copy *deep-swim-mods* 'global)))
+  (when (nonnull? surface)
+    (set! (-> surface flags) (surface-flag xz-local))
+    (set! (-> surface target-speed) 4096.0))
+  (define *deep-tread-mods* surface))
+
 (let ((v1-30 (copy *walk-mods* 'global)))
   (set! (-> v1-30 name) 'pole)
   (set! (-> v1-30 flags) (surface-flag gun-hide gun-fast-exit))

@@ -248,7 +248,7 @@
       (return #f)))
   #t)
 
-(defun format-airlock-waiting-text! ((destination string) (airlock-aid uint))
+(defun format-waiting-players-text! ((destination string) (pending? (function mp-player-record object symbol)) (context object))
   (when (not (nonnull? destination
                        *common-text*
                        *mp-player-controller*
@@ -258,11 +258,7 @@
   (clear destination)
   (let ((name-count 0))
     (mp-for-each-player-record (player-slot record)
-      (when (and (mp-remote-gameplay-player-connected? record)
-                 (not (mp-player-record-dead-or-dying? record))
-                 (not (mp-is-remote-state-id-for-player? airlock-aid
-                                                         (the-as uint player-slot)
-                                                         (mp-airlock-state-id commit))))
+      (when (pending? record context)
         (when (< name-count 2)
           (mp-player-copy-name! *mp-player-name-scratch* (the-as uint player-slot))
           (pc-encode-utf8-string *mp-player-name-scratch* *pc-encoded-temp-string*)
@@ -283,6 +279,17 @@
                (- name-count 2)))
       (else (format destination (lookup-text! *common-text* (text-id airlock-waiting-end) #f)))))
   destination)
+
+(defun airlock-player-pending? ((record mp-player-record) (airlock-aid object))
+  (the symbol
+    (and (mp-remote-gameplay-player-connected? record)
+         (not (mp-player-record-dead-or-dying? record))
+         (not (mp-is-remote-state-id-for-player? (the-as uint airlock-aid)
+                                                 (the-as uint (-> record identity player-slot))
+                                                 (mp-airlock-state-id commit))))))
+
+(defun format-airlock-waiting-text! ((destination string) (airlock-aid uint))
+  (format-waiting-players-text! destination airlock-player-pending? (the-as object airlock-aid)))
 
 (defun mp-any-remote-airlock-level-differs? ((airlock-aid uint) (local-level-id int))
   (when (and (nonnull? *mp-player-controller*) (nonnull? *mp-remote-airlock-state*))

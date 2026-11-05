@@ -4,6 +4,7 @@
 (define *underb-airlock-data* (new 'static 'boxed-array :type airlock-data
               (static-airlock-data 
                 :airlock-name "com-airlock-inner-41"
+                :mp-sync? #f
                 :on-notice '(when (send-event "under-locking-2" 'test #t) '(under underb))
                 :on-activate #f
                 :on-enter '(want-display 'under 'display)
@@ -15,6 +16,7 @@
                 )
               (static-airlock-data 
                 :airlock-name "com-airlock-inner-42"
+                :mp-sync? #f
                 :on-notice '(when (send-event "under-locking-2" 'test #f) '(under))
                 :on-activate #f
                 :on-enter #f

@@ -3,6 +3,7 @@
 
 (define-extern scene-player-for-scene (function object scene-player))
 (define-extern task-manager-has-race-finisher? (function task-manager symbol))
+(define-extern reset-under-mech-actors! (function none))
 
 ;; name: task-control.gc
 ;; name in dgo: task-control
@@ -1855,6 +1856,7 @@
                )
            )
          (mp-fail-mission-arm-bootstrap-fallback! self #t)
+         (reset-under-mech-actors!)
          (initialize! *game-info* 'life (the-as game-save #f) (the-as string #f))
        )
       (((fail-mission-message fammsg-1))
@@ -1866,11 +1868,13 @@
                 )
             )
           (mp-fail-mission-arm-bootstrap-fallback! self #t)
+          (reset-under-mech-actors!)
           (initialize! *game-info* 'try (the-as game-save #f) (the-as string #f))
           )
          ((begin (set! a1-10 (-> self fail-continue)) a1-10)
           (set-continue! *game-info* a1-10 #t)
           (mp-fail-mission-arm-bootstrap-fallback! self #t)
+          (reset-under-mech-actors!)
           (initialize! *game-info* 'life (the-as game-save #f) (the-as string #f))
           )
          (else

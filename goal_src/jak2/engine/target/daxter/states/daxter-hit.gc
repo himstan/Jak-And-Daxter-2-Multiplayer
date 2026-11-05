@@ -71,7 +71,7 @@
                   (else
                    (pickup-collectable! (-> self fact) (pickup-type health) -1000.0 (the-as handle #f))
                    (go target-indax-death (-> gp-0 mode)))))
-               (('dark-eco-pool 'instant-death 'smush 'tomb-spider 'bot 'big-explosion)
+               (('dark-eco-pool 'instant-death 'smush 'tomb-spider 'bot 'big-explosion 'drown-death)
                 (pickup-collectable! (-> self fact) (pickup-type health) -1000.0 (the-as handle #f))
                 (when (and (nonnull? self (-> self game) gp-0) (= (-> self game mode) 'play))
                   (go (if (= (-> gp-0 mode) 'dark-eco-pool) target-death target-indax-death)

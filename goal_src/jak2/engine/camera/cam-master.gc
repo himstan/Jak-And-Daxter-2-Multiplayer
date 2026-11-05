@@ -1,6 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern free-swimming? (function process symbol))
+
 ;; name: cam-master.gc
 ;; name in dgo: cam-master
 ;; dgos: ENGINE, GAME
@@ -286,6 +288,7 @@
               )
           (when (and (focus-test? (the-as target gp-0) on-water under-water)
                      (not (logtest? (focus-status mech) (-> (the-as target gp-0) focus-status)))
+                     (not (free-swimming? gp-0))
                      )
             (let ((f0-41 (- (get-water-height (the-as target gp-0)) (-> self settings target-height))))
               (if (< (-> self tpos-curr-adj y) f0-41)

@@ -232,7 +232,7 @@
   (set! (-> self pilot art-group-backup) (-> self draw art-group))
   (set! (-> self draw art-group) (-> self sidekick 0 draw art-group))
   (logior! (-> self draw status) (draw-control-status no-draw-bounds2))
-  (send-event (ppointer->process (-> self sidekick)) 'matrix 'indax)
+  (sidekick-use-indax-root! (the-as sidekick (ppointer->process (-> self sidekick))))
   )
 
 (defbehavior target-pilot-pidax-exit target ()

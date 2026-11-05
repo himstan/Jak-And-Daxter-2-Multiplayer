@@ -204,6 +204,14 @@
     (set! (-> self indax art-group-backup) (-> self draw art-group)))
   (none))
 
+(defun sidekick-use-indax-root! ((owner sidekick))
+  (when (nonnull? owner (-> owner node-list))
+    (let ((root (-> owner node-list data 0)))
+      (set! (-> root param0) (the-as (function cspace transformq none) cspace<-transformq+trans!))
+      (set! (-> root param1) (the-as basic (-> owner parent 0 control trans)))
+      (set! (-> root param2) (the-as basic (-> owner parent 0 control cspace-offset)))))
+  (none))
+
 (defbehavior target-indax-init target ((reset-velocity? symbol) (refill-health? symbol))
   (let ((surf (-> self control current-surface)))
     (if (and surf
@@ -240,7 +248,7 @@
   (daxter-bind-pose! self)
   (ja-channel-set! 1)
   (if (and (-> self sidekick) (!= (the-as uint (-> self sidekick)) 0))
-    (send-event (ppointer->process (-> self sidekick)) 'matrix 'indax))
+    (sidekick-use-indax-root! (the-as sidekick (ppointer->process (-> self sidekick)))))
   (logclear! (-> self draw status) (draw-control-status no-draw))
   (when reset-velocity?
     (remove-exit)
@@ -257,7 +265,7 @@
               (when (and sidekick-draw (nonzero? sidekick-draw))
                 (set! (-> self draw art-group) (-> sidekick-draw art-group))
                 (set! success? #t)))
-            (send-event sidekick-proc 'matrix 'indax)))))
+            (sidekick-use-indax-root! sidekick-proc)))))
     (daxter-bind-pose! self)
     success?))
 
@@ -521,5 +529,10 @@
 (defbehavior target-ride-along-handler target ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   (case arg2
     (('attack 'attack-or-shove 'attack-invinc 'shove 'touched 'bonk)
-     (if (not (mp-any-live-remote-player?)) (target-indax-handler arg0 arg1 arg2 arg3) (the-as object #t)))
+     (if (or (not (mp-any-live-remote-player?))
+             (and (deep-swim?) (= arg2 'attack) (nonnull? arg3)
+                  (let ((attack (the-as attack-info (-> arg3 param 1))))
+                    (and (nonnull? attack) (or (= (-> attack mode) 'air) (= (-> attack mode) 'drown-death))))))
+         (target-indax-handler arg0 arg1 arg2 arg3)
+         (the-as object #t)))
     (else (target-indax-handler arg0 arg1 arg2 arg3))))

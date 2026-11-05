@@ -1,6 +1,8 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern free-swimming? (function process symbol))
+
 ;; name: target-util.gc
 ;; name in dgo: target-util
 ;; dgos: ENGINE, GAME
@@ -1889,6 +1891,8 @@
       ((= arg0 1)
        (let ((a1-2 (-> this water flags)))
          (cond
+           ((and (nonnull? this v1-0) (free-swimming? this))
+            (-> v1-0 trans))
            ((and (logtest? (water-flags touch-water) a1-2)
                  (logtest? (water-flags under-water swimming) a1-2)
                  (not (logtest? (focus-status mech) (-> this focus-status)))
