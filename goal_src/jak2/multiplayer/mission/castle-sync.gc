@@ -16,6 +16,12 @@
        (when (nonnull? ent (-> ent extra))
          (send-event (-> ent extra process) 'mp-press)))
      #t)
+    ((and (mp-battle-enemy-id? aid) (!= message 'synchronized?))
+     (let ((clone (find-enemy-by-aid aid)))
+       (when (and (nonnull? clone) (= (-> clone type symbol) 'krew-boss-clone))
+         (send-event clone 'mp-kamikaze)
+         (return #t)))
+     #f)
     (else #f)))
 
 (set! *actor-sync-handlers* (cons sync-castle-actor! *actor-sync-handlers*))

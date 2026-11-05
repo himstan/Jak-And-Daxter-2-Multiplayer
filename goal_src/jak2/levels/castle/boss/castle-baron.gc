@@ -773,11 +773,51 @@
   (none)
   )
 
+(defbehavior krew-boss-clone-burst! krew-boss-clone ((notify? symbol))
+  (if (and notify? (mp-session-in-game?))
+      (mp-event-enqueue-aid! MP_EVENT_BREAK (mp-get-enemy-aid self))
+      )
+  (set! (-> self hit-points) 0)
+  (ja-channel-push! 1 (seconds 0.1))
+  (let ((a0-15 (-> self skel root-channel 0)))
+    (set! (-> a0-15 frame-group)
+          (the-as art-joint-anim (-> self draw art-group data (-> self enemy-info die-anim)))
+          )
+    (set! (-> a0-15 param 0) 0.0)
+    (set! (-> a0-15 param 1) (* 2.0 (-> self clock time-adjust-ratio)))
+    (set! (-> a0-15 frame-num)
+          (the float
+               (+ (-> (the-as art-joint-anim (-> self draw art-group data (-> self enemy-info die-anim))) frames num-frames)
+                  -1
+                  )
+               )
+          )
+    (joint-control-channel-group!
+      a0-15
+      (the-as art-joint-anim (-> self draw art-group data (-> self enemy-info die-anim)))
+      num-func-seek!
+      )
+    )
+  (kill-prefer-falling self)
+  )
+
+(defun krew-boss-chase-pos ((this process-focusable))
+  (let ((player (mp-combat-nearest-player-target this (the-as process-focusable #f) #f)))
+    (if (nonnull? player)
+        (get-trans player 0)
+        (target-pos 0)
+        )
+    )
+  )
+
 (defmethod general-event-handler ((this krew-boss-clone) (arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   "Handles various events for the enemy
    @TODO - unsure if there is a pattern for the events and this should have a more specific name"
   (with-pp
     (case arg2
+      (('mp-kamikaze)
+       (krew-boss-clone-burst! (mp-session-host?))
+       )
       (('touch 'bonk 'attack)
        (when (and (-> this next-state) (= (-> this next-state name) 'hostile))
          (send-event
@@ -793,27 +833,7 @@
             ((method-of-type nav-enemy general-event-handler) this arg0 arg1 arg2 arg3)
             )
            (else
-             (ja-channel-push! 1 (seconds 0.1))
-             (let ((a0-15 (-> this skel root-channel 0)))
-               (set! (-> a0-15 frame-group)
-                     (the-as art-joint-anim (-> this draw art-group data (-> this enemy-info die-anim)))
-                     )
-               (set! (-> a0-15 param 0) 0.0)
-               (set! (-> a0-15 param 1) (* 2.0 (-> pp clock time-adjust-ratio)))
-               (set! (-> a0-15 frame-num)
-                     (the float
-                          (+ (-> (the-as art-joint-anim (-> this draw art-group data (-> this enemy-info die-anim))) frames num-frames)
-                             -1
-                             )
-                          )
-                     )
-               (joint-control-channel-group!
-                 a0-15
-                 (the-as art-joint-anim (-> this draw art-group data (-> this enemy-info die-anim)))
-                 num-func-seek!
-                 )
-               )
-             (kill-prefer-falling this)
+             (krew-boss-clone-burst! #t)
              )
            )
          )
@@ -848,7 +868,7 @@
     (set! (-> self id) (sound-play "krew-travel"))
     )
   :trans (behavior ()
-    (let ((gp-1 (vector-! (new 'stack-no-clear 'vector) (target-pos 0) (-> self root trans)))
+    (let ((gp-1 (vector-! (new 'stack-no-clear 'vector) (krew-boss-chase-pos self) (-> self root trans)))
           (s5-0 (quaternion->matrix (new-stack-matrix0) (-> self root quat)))
           )
       (vector-normalize! gp-1 1.0)
@@ -1101,7 +1121,7 @@
     #f
     )
   :post (behavior ()
-    (krew-boss-clone-method-179 self (target-pos 0))
+    (krew-boss-clone-method-179 self (krew-boss-chase-pos self))
     (nav-enemy-method-176 self)
     )
   )
@@ -1813,6 +1833,69 @@
     )
   )
 
+(defun krew-boss-spawn-clone! ((this krew-boss) (slot int) (pos vector) (aid uint))
+  (let ((params (new 'stack-no-clear 'enemy-init-by-other-params)))
+    (set! (-> params trans quad) (-> pos quad))
+    (quaternion-copy! (-> params quat) (-> this root quat))
+    (set! (-> params entity) #f)
+    (set! (-> params directed?) #f)
+    (set! (-> params no-initial-move-to-ground?) #f)
+    (set! (-> params battle-enemy?) #f)
+    (set! (-> params aid-override) aid)
+    (set! (-> this clones slot)
+          (ppointer->handle (process-spawn krew-boss-clone :init enemy-init-by-other this params :to this))
+          )
+    )
+  (let ((clone (the-as enemy (handle->process (-> this clones slot)))))
+    (if (nonnull? clone)
+        (logior! (-> clone enemy-flags) (enemy-flag host-owned))
+        )
+    clone
+    )
+  )
+
+(defun krew-boss-clone-spawn-code ((pos vector))
+  (dotimes (index (length *krew-boss-clone-spawn-points*))
+    (when (vector= pos (-> *krew-boss-clone-spawn-points* index))
+      (return (the uint (+ index 1)))
+      )
+    )
+  (the uint #xff)
+  )
+
+(defun krew-boss-apply-clone-spawn! ((this krew-boss) (code uint) (aid uint))
+  (when (not (find-enemy-by-aid aid))
+    (dotimes (slot 8)
+      (when (not (handle->process (-> this clones slot)))
+        (let ((clone (krew-boss-spawn-clone!
+                       this
+                       slot
+                       (cond
+                         ((and (> code 0) (<= code (the uint (length *krew-boss-clone-spawn-points*))))
+                          (-> *krew-boss-clone-spawn-points* (+ code -1))
+                          )
+                         ((nonnull? (mp-get-enemy-auth (-> this entity aid)))
+                          (-> (mp-get-enemy-auth (-> this entity aid)) trans)
+                          )
+                         (else
+                           (-> this root trans)
+                           )
+                         )
+                       aid
+                       )
+                     )
+              )
+          (if (nonnull? clone)
+              (mp-enemy-note-remote-battle-spawn! clone)
+              )
+          )
+        (return #f)
+        )
+      )
+    )
+  #f
+  )
+
 (defmethod init-enemy! ((this krew-boss))
   "Common method called to initialize the enemy, typically sets up default field values and calls ancillary helper methods"
   (initialize-skeleton
@@ -1860,6 +1943,7 @@
     (set! (-> this clones v1-24) (the-as handle #f))
     )
   (set! (-> this enemy-flags) (the-as enemy-flag (logclear (-> this enemy-flags) (enemy-flag enemy-flag36))))
+  (logior! (-> this enemy-flags) (enemy-flag host-owned))
   (set! (-> this nav callback-info) *nav-enemy-null-callback-info*)
   0
   0
@@ -1880,12 +1964,31 @@
   (none)
   )
 
+(defbehavior krew-boss-reveal! krew-boss ()
+  (logclear! (-> self draw status) (draw-control-status no-draw))
+  (logclear! (-> self focus-status) (focus-status disable))
+  (let ((v1-5 (-> self root root-prim)))
+    (set! (-> v1-5 prim-core collide-as) (-> self root backup-collide-as))
+    (set! (-> v1-5 prim-core collide-with) (-> self root backup-collide-with))
+    )
+  (none)
+  )
+
 (defstate hidden (krew-boss)
   :virtual #t
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
     (case message
       (('trigger)
        (go-virtual play-intro)
+       )
+      (('go-state)
+       (when (task-node-closed? (game-task-node castle-boss-introduction))
+         (krew-boss-reveal!)
+         (enemy-event-handler proc argc message block)
+         )
+       )
+      (('mp-spawn)
+       (enemy-event-handler proc argc message block)
        )
       )
     )
@@ -1908,14 +2011,7 @@
 
 (defstate play-intro (krew-boss)
   :virtual #t
-  :exit (behavior ()
-    (logclear! (-> self draw status) (draw-control-status no-draw))
-    (logclear! (-> self focus-status) (focus-status disable))
-    (let ((v1-5 (-> self root root-prim)))
-      (set! (-> v1-5 prim-core collide-as) (-> self root backup-collide-as))
-      (set! (-> v1-5 prim-core collide-with) (-> self root backup-collide-with))
-      )
-    )
+  :exit krew-boss-reveal!
   :code (behavior ()
     (when (not (task-node-closed? (game-task-node castle-boss-introduction)))
       (while (not (process-grab? *target* #f))
@@ -1961,6 +2057,9 @@
           )
         )
        )
+     )
+    (('mp-spawn)
+     (krew-boss-apply-clone-spawn! this (the-as uint (-> arg3 param 0)) (the-as uint (-> arg3 param 1)))
      )
     (else
       ((method-of-type nav-enemy general-event-handler) this arg0 arg1 arg2 arg3)
@@ -2179,6 +2278,10 @@
 (defstate idle (krew-boss)
   :virtual #t
   :enter (behavior ()
+    (when (handle->process (-> self hud-handle))
+      (send-event (-> self hud-handle process 0) 'hide-and-die)
+      (set! (-> self hud-handle) (the-as handle #f))
+      )
     (let ((v1-0 (-> self nav)))
       (set! (-> v1-0 target-speed) 122880.0)
       )
@@ -2316,7 +2419,7 @@
           (set! (-> *krew-boss-clone-nav-enemy-info* run-travel-speed) 28672.0)
           )
         )
-      (when (< 0.0 (-> self root trans y))
+      (when (and (< 0.0 (-> self root trans y)) (not (enemy-replica? self)))
         (let ((gp-2 -1))
           (let ((v1-51 0))
             (dotimes (a0-34 8)
@@ -2500,17 +2603,16 @@
                   (set! sv-768 (+ sv-768 -1))
                   )
               (when (<= sv-768 0)
-                (let ((s4-2 (new 'stack-no-clear 'enemy-init-by-other-params)))
-                  (set! (-> s4-2 trans quad) (-> s5-1 quad))
-                  (quaternion-copy! (-> s4-2 quat) (-> self root quat))
-                  (set! (-> s4-2 entity) #f)
-                  (set! (-> s4-2 directed?) #f)
-                  (set! (-> s4-2 no-initial-move-to-ground?) #f)
-                  (set! (-> s4-2 battle-enemy?) #f)
+                (let ((aid (if (mp-session-in-game?)
+                               (mp-generate-battle-enemy-aid)
+                               (the uint 0)
+                               )
+                           )
+                      )
                   (+! (-> self num-clones-to-spawn) -1)
-                  (set! (-> self clones gp-2)
-                        (ppointer->handle (process-spawn krew-boss-clone :init enemy-init-by-other self s4-2 :to self))
-                        )
+                  (when (and (nonnull? (krew-boss-spawn-clone! self gp-2 s5-1 aid)) (nonzero? aid))
+                    (mp-event-enqueue-hover-enemy-spawn! (-> self entity aid) (krew-boss-clone-spawn-code s5-1) aid)
+                    )
                   )
                 )
               )
@@ -2617,6 +2719,60 @@
     )
   )
 
+(defbehavior krew-boss-hostile-trans krew-boss ()
+  (local-vars (v1-25 enemy-flag))
+  (let ((a0-1 (handle->process (-> self focus handle))))
+    (if a0-1
+        (set! (-> self focus-pos quad) (-> (get-trans (the-as process-focusable a0-1) 0) quad))
+        )
+    )
+  (if (or (!= (-> self focus aware) 3) (not (get-enemy-target self)))
+      (set-time! (-> self starting-time))
+      )
+  (when (= (-> self next-shooting-frame) 200)
+    (cond
+      ((< (vector-length (vector-! (new 'stack-no-clear 'vector) (-> self focus-pos) (-> self root trans))) 122880.0)
+       (set! (-> self next-shooting-frame) 0)
+       (ja :chan 1 :num-func num-func-identity :frame-num 0.0)
+       (let ((v1-24 (-> self enemy-flags)))
+         (if (logtest? v1-24 (enemy-flag vulnerable-backup))
+             (set! v1-25 (logior v1-24 (enemy-flag vulnerable)))
+             (set! v1-25 (logclear v1-24 (enemy-flag vulnerable)))
+             )
+         )
+       (set! (-> self enemy-flags) v1-25)
+       (cond
+         ((= (-> self gameplay-pass) 1)
+          (let ((v1-28 (-> self nav)))
+            (set! (-> v1-28 target-speed) 24576.0)
+            )
+          0
+          (set! (-> *krew-boss-nav-enemy-info* run-travel-speed) 24576.0)
+          )
+         ((= (-> self gameplay-pass) 2)
+          (let ((v1-34 (-> self nav)))
+            (set! (-> v1-34 target-speed) 28672.0)
+            )
+          0
+          (set! (-> *krew-boss-nav-enemy-info* run-travel-speed) 28672.0)
+          )
+         ((= (-> self gameplay-pass) 3)
+          (let ((v1-39 (-> self nav)))
+            (set! (-> v1-39 target-speed) 36864.0)
+            )
+          0
+          (set! (-> *krew-boss-nav-enemy-info* run-travel-speed) 36864.0)
+          )
+         )
+       )
+      (else
+        (set-time! (-> self state-time))
+        )
+      )
+    )
+  (none)
+  )
+
 (defstate hostile (krew-boss)
   :virtual #t
   :event enemy-event-handler
@@ -2629,6 +2785,14 @@
                 )
           )
       (cond
+        ((enemy-replica? self)
+         (set! (-> self gameplay-pass) (cond
+                                         ((< 70 gp-0) 1)
+                                         ((< 40 gp-0) 2)
+                                         (else 3)
+                                         )
+               )
+         )
         ((= (-> self gameplay-pass) 1)
          (when (>= 70 gp-0)
            (if (< gp-0 70)
@@ -2716,58 +2880,7 @@
         (logclear! (-> self nav flags) (nav-control-flag update-heading-from-facing))
         )
     )
-  :trans (behavior ()
-    (local-vars (v1-25 enemy-flag))
-    (let ((a0-1 (handle->process (-> self focus handle))))
-      (if a0-1
-          (set! (-> self focus-pos quad) (-> (get-trans (the-as process-focusable a0-1) 0) quad))
-          )
-      )
-    (if (or (!= (-> self focus aware) 3) (not (get-enemy-target self)))
-        (set-time! (-> self starting-time))
-        )
-    (when (= (-> self next-shooting-frame) 200)
-      (cond
-        ((< (vector-length (vector-! (new 'stack-no-clear 'vector) (-> self focus-pos) (-> self root trans))) 122880.0)
-         (set! (-> self next-shooting-frame) 0)
-         (ja :chan 1 :num-func num-func-identity :frame-num 0.0)
-         (let ((v1-24 (-> self enemy-flags)))
-           (if (logtest? v1-24 (enemy-flag vulnerable-backup))
-               (set! v1-25 (logior v1-24 (enemy-flag vulnerable)))
-               (set! v1-25 (logclear v1-24 (enemy-flag vulnerable)))
-               )
-           )
-         (set! (-> self enemy-flags) v1-25)
-         (cond
-           ((= (-> self gameplay-pass) 1)
-            (let ((v1-28 (-> self nav)))
-              (set! (-> v1-28 target-speed) 24576.0)
-              )
-            0
-            (set! (-> *krew-boss-nav-enemy-info* run-travel-speed) 24576.0)
-            )
-           ((= (-> self gameplay-pass) 2)
-            (let ((v1-34 (-> self nav)))
-              (set! (-> v1-34 target-speed) 28672.0)
-              )
-            0
-            (set! (-> *krew-boss-nav-enemy-info* run-travel-speed) 28672.0)
-            )
-           ((= (-> self gameplay-pass) 3)
-            (let ((v1-39 (-> self nav)))
-              (set! (-> v1-39 target-speed) 36864.0)
-              )
-            0
-            (set! (-> *krew-boss-nav-enemy-info* run-travel-speed) 36864.0)
-            )
-           )
-         )
-        (else
-          (set-time! (-> self state-time))
-          )
-        )
-      )
-    )
+  :trans krew-boss-hostile-trans
   :code (behavior ()
     (ja-channel-push! 2 (seconds 0.1))
     (ja :group! (-> self draw art-group data (-> self enemy-info idle-anim)) :num! min)
@@ -2792,6 +2905,9 @@
     #f
     )
   :post (behavior ()
+    (if (enemy-replica? self)
+        (krew-boss-hostile-trans)
+        )
     (let ((a0-0 self))
       (when (logtest? (enemy-flag enemy-flag36) (-> a0-0 enemy-flags))
         (let ((s5-0 (new 'stack-no-clear 'vector)))
@@ -3040,15 +3156,17 @@
     (while (nonzero? (get-status *gui-control* (-> self id)))
       (suspend)
       )
-    (set! (-> self movie-handle) (ppointer->handle (process-spawn
-                                                     scene-player
-                                                     :init scene-player-init
-                                                     '("castle-krew-boss-fight-res" "city-ashelin-drop-off")
-                                                     #t
-                                                     #f
-                                                     )
-                                                   )
-          )
+    (if (not (mp-session-client?))
+        (set! (-> self movie-handle) (ppointer->handle (process-spawn
+                                                         scene-player
+                                                         :init scene-player-init
+                                                         '("castle-krew-boss-fight-res" "city-ashelin-drop-off")
+                                                         #t
+                                                         #f
+                                                         )
+                                                       )
+              )
+        )
     (send-event self 'death-end)
     (while (-> self child)
       (suspend)

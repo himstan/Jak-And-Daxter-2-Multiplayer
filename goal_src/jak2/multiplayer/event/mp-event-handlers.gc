@@ -472,6 +472,11 @@
                  entity-name))))))
   (none))
 
+(defun remote-scene-chain ((scene-name string))
+  (if (string= scene-name "castle-krew-boss-fight-res")
+      '("castle-krew-boss-fight-res" "city-ashelin-drop-off")
+      scene-name))
+
 (defun mp-finish-pending-scene-sync! ((source-record mp-player-record))
   (let ((scene-name *mp-pending-scene-sync-name*))
     (when (and scene-name (nonzero? scene-name) (nonzero? (length scene-name)) source-record (nonzero? source-record))
@@ -494,7 +499,7 @@
                    load-pt)
               (let ((old-remote-context *mp-processing-remote-event*))
                 (set! *mp-processing-remote-event* #t)
-                (process-spawn scene-player :init scene-player-init scene-name #t load-pt)
+                (process-spawn scene-player :init scene-player-init (remote-scene-chain scene-name) #t load-pt)
                 (set! *mp-processing-remote-event* old-remote-context))))
           (mp-scene-sync-force-npc-step! scene-obj scene-name)))))
   (set! *mp-pending-scene-sync?* #f)
