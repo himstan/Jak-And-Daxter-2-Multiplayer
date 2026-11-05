@@ -46,6 +46,19 @@
       ((nonnull? *game-info*) (actor-perm *game-info* (the-as actor-id aid)))
       (else (the-as entity-perm #f)))))
 
+(defun mark-aid-complete! ((aid uint) (status entity-perm-status))
+  (let ((perm (if (nonzero? aid) (aid-perm aid #t) (the-as entity-perm #f))))
+    (when (nonnull? perm)
+      (set! (-> perm task) (game-task complete))
+      (logior! (-> perm status) status)))
+  (none))
+
+(defun aid-listed? ((aid uint) (aids (array uint32)))
+  (dotimes (index (-> aids length))
+    (when (= aid (-> aids index))
+      (return #t)))
+  #f)
+
 (defun mp-record-aid-dead-in-perm-list! ((aid uint))
   (let ((perm (perm-list-entry! aid)))
     (when (nonnull? perm)

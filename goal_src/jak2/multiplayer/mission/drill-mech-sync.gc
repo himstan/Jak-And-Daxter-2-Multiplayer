@@ -6,12 +6,6 @@
 
 (define *drill-obstacle-aids* (new 'static 'boxed-array :type uint32 19448 19449 19472 19471 29648 29649))
 
-(defun aid-listed? ((aid uint) (aids (array uint32)))
-  (dotimes (index (-> aids length))
-    (when (= aid (-> aids index))
-      (return #t)))
-  #f)
-
 (defun drill-mech-actor? ((aid uint))
   (or (aid-listed? aid *drill-panel-aids*) (aid-listed? aid *drill-obstacle-aids*)))
 
@@ -32,16 +26,9 @@
         (+! remaining 1)))
     remaining))
 
-(defun mark-drill-actor-broken! ((aid uint))
-  (let ((perm (if (nonzero? aid) (aid-perm aid #t) (the-as entity-perm #f))))
-    (when (nonnull? perm)
-      (set! (-> perm task) (game-task complete))
-      (logior! (-> perm status) (entity-perm-status subtask-complete bit-12))))
-  (none))
-
 (defun report-drill-actor-broken! ((proc process-drawable))
   (when (and (mp-session-in-game?) (nonnull? proc (-> proc entity)) (drill-mech-actor? (-> proc entity aid)))
-    (mark-drill-actor-broken! (-> proc entity aid))
+    (mark-aid-complete! (-> proc entity aid) (entity-perm-status subtask-complete bit-12))
     (mp-event-enqueue-aid! MP_EVENT_BREAK (-> proc entity aid)))
   (none))
 
@@ -51,8 +38,8 @@
   (when (= message 'synchronized?)
     (return (drill-actor-broken? aid)))
   (unless (drill-actor-broken? aid)
-    (mark-drill-actor-broken! aid)
-    (mark-drill-actor-broken! (drill-switch-step-aid aid))
+    (mark-aid-complete! aid (entity-perm-status subtask-complete bit-12))
+    (mark-aid-complete! (drill-switch-step-aid aid) (entity-perm-status subtask-complete bit-12))
     (let ((ent (if (nonnull? *level*) (entity-by-aid aid) (the-as entity #f))))
       (when (nonnull? ent (-> ent extra) (-> ent extra process))
         (send-event (-> ent extra process) 'remote-break))))

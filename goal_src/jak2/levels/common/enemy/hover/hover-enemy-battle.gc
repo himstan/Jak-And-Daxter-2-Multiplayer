@@ -8,7 +8,6 @@
 (declare-type base-turret process-focusable)
 (declare-type turret base-turret)
 (declare-type hover-enemy-manager process)
-(define-extern mp-hover-enemy-resend-spawns! (function hover-enemy-manager none))
 (define-extern mp-hover-enemy-apply-spawn! (function hover-enemy-manager uint uint none))
 
 ;; DECOMP BEGINS
@@ -148,10 +147,7 @@
   (if (not (logtest? (-> self path flags) (path-control-flag not-found)))
       (debug-draw (-> self path))
       )
-  (when (and (mp-session-in-game?) (mp-session-host?) (time-elapsed? (-> self sync-time) (seconds 2)))
-    (set-time! (-> self sync-time))
-    (mp-hover-enemy-resend-spawns! self)
-    )
+  (resend-child-enemy-spawns! self (&-> self sync-time))
   (none)
   )
 
@@ -269,28 +265,6 @@
         )
     )
   #f
-  )
-
-(defun mp-hover-enemy-resend-spawns! ((manager hover-enemy-manager))
-  (when (nonnull? (-> manager entity))
-    (let ((child (-> manager child)))
-      (while child
-        (let ((proc (ppointer->process child)))
-          (when (and (type? proc enemy)
-                     (nonnull? (-> (the-as enemy proc) entity))
-                     (> (-> (the-as enemy proc) hit-points) 0)
-                     (nonzero? (mp-get-enemy-aid (the-as enemy proc))))
-            (mp-event-enqueue-hover-enemy-spawn!
-              (-> manager entity aid)
-              (-> (the-as enemy proc) entity aid)
-              (mp-get-enemy-aid (the-as enemy proc)))
-            )
-          (set! child (-> proc brother))
-          )
-        )
-      )
-    )
-  (none)
   )
 
 (defun mp-hover-enemy-apply-spawn! ((manager hover-enemy-manager) (source-aid uint) (enemy-aid uint))

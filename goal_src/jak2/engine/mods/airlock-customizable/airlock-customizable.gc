@@ -784,12 +784,7 @@
   )
 
 (defmethod dont-have-elevator-or-is-standing-on-it ((this com-airlock))
-    (when (and this (nonzero? this) (!= #f (-> this airlock-elevator)))
-      (let ((el (the-as elevator (process-by-ename (-> this airlock-elevator)))))
-          (return (is-standing-on-elevator? el *target*))
-        )
-      )
-  #t
+  (the-as symbol (or (not (-> this airlock-elevator)) (has-elevator-and-is-standing-on-it? this)))
   )
 
 (defmethod destination-loaded? ((this com-airlock) (display? symbol))

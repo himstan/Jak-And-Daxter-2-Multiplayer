@@ -1,0 +1,21 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(define *castle-robot-door-aids* (new 'static 'boxed-array :type uint32 31023 31024 31025 31026 31027))
+
+(define *castle-switch-aids* (new 'static 'boxed-array :type uint32 27576 29207 29208 29209 29210 29359))
+
+(defun sync-castle-actor! ((aid uint) (message symbol))
+  (cond
+    ((aid-listed? aid *castle-robot-door-aids*)
+     (when (!= message 'synchronized?)
+       (mark-aid-complete! aid (entity-perm-status subtask-complete)))
+     #t)
+    ((and (aid-listed? aid *castle-switch-aids*) (!= message 'synchronized?))
+     (let ((ent (if (nonnull? *level*) (entity-by-aid aid) (the-as entity #f))))
+       (when (nonnull? ent (-> ent extra))
+         (send-event (-> ent extra process) 'mp-press)))
+     #t)
+    (else #f)))
+
+(set! *actor-sync-handlers* (cons sync-castle-actor! *actor-sync-handlers*))
