@@ -1994,6 +1994,7 @@
      (set-time! (-> this score-time))
      )
     )
+  (minigame-send-score! (the int (-> this score)))
   (let ((s5-1 (handle->process (-> this cabinet))))
     (when s5-1
       (spawn-with-matrix
@@ -2022,6 +2023,15 @@
   (none)
   )
 
+(defun whack-mission-open? ()
+  (minigame-mission-open? (game-task-node city-whack-resolution)))
+
+(defun whack-a-metal-miss! ((this whack-a-metal) (misses int))
+  (if (whack-mission-open?)
+    (set! (-> this score) (minigame-penalize (-> this score) misses))
+    (+! (-> this miss-count) misses))
+  (none))
+
 (defstate hide (whack-a-metal)
   :virtual #t
   :code (behavior ()
@@ -2047,10 +2057,7 @@
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
     (case message
       (('done)
-       (let ((v0-0 (+ (-> self miss-count) 1)))
-         (set! (-> self miss-count) v0-0)
-         v0-0
-         )
+       (whack-a-metal-miss! self 1)
        )
       )
     )
@@ -2081,6 +2088,14 @@
       (if (not (task-node-closed? (game-task-node city-whack-resolution)))
           (set! (-> self hud-goal) (ppointer->handle (process-spawn hud-goal :init hud-init-by-other :to self)))
           )
+      (if (whack-mission-open?)
+          (set! (-> self hud-score)
+                (ppointer->handle (process-spawn player-score-hud :init player-score-hud-init minigame-remote-score :to self))
+                )
+          )
+      (apply-character-skin! (-> self draw) (mp-player-character daxter))
+      (hide-model *target*)
+      (set! *remote-players-hidden?* #t)
       )
     )
   :exit (behavior ()
@@ -2102,6 +2117,10 @@
           (process-release? *target*)
           )
       (send-event *target* 'draw #t)
+      (if *target*
+          (show-model *target*)
+          )
+      (set! *remote-players-hidden?* #f)
       (let ((v1-32 (-> self bopper)))
         (if v1-32
             (deactivate (-> v1-32 0))
@@ -2115,7 +2134,10 @@
     )
   :trans (behavior ()
     (cond
-      ((or (and *cheat-mode* (cpad-pressed? 0 l1)) (>= (-> self miss-count) 20))
+      ((or (and *cheat-mode* (cpad-pressed? 0 l1))
+           (>= (-> self miss-count) 20)
+           (and (whack-mission-open?) (minigame-remote-reached? 1500.0))
+           )
        (go-virtual lose)
        )
       ((or (and *cheat-mode* (cpad-pressed? 0 r1))
@@ -2305,7 +2327,7 @@
                 (set! (-> self slot-buffer v1-15) -1)
                 )
               (set! (-> self dizzy?) #t)
-              (+! (-> self miss-count) 2)
+              (whack-a-metal-miss! self 2)
               (let ((v1-22 (whack-a-metal-method-29 self 2 12)))
                 (cond
                   ((zero? v1-22)
@@ -2378,7 +2400,7 @@
                  )
                (process-spawn part-tracker :init part-tracker-init group-whack-hit 0 #f #f #f gp-0 :to *entity-pool*)
                (+! (-> self score) 10.0)
-               (if (>= (-> self score) 300.0)
+               (if (and (>= (-> self score) 300.0) (not (whack-mission-open?)))
                    (send-event (handle->process (-> self hud-goal)) 'hide-and-die)
                    )
                )
@@ -2460,11 +2482,19 @@
                   )
            )
       (cond
-        ((handle->process v1-34)
+        ((and (handle->process v1-34) (not (minigame-remote-reached? 1500.0)))
          (send-event (handle->process v1-34) 'fail)
          (sleep-code)
          )
         (else
+          (set-time! (-> self state-time))
+          (while (and (minigame-remote-reached? 1500.0)
+                      (not *scene-player*)
+                      (not (time-elapsed? (-> self state-time) (seconds 15)))
+                      )
+            (suspend)
+            (ja :num! (loop!))
+            )
           (ja-channel-set! 0)
           (ja-post)
           (set-blackout-frames (seconds 0.2))

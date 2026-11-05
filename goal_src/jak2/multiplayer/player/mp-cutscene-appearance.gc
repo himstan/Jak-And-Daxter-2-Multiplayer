@@ -33,6 +33,13 @@
           (return record)))))
   (the-as mp-player-record #f))
 
+(defun apply-character-skin! ((draw-control draw-control) (character mp-player-character))
+  (let ((owner (mp-cutscene-appearance-owner character)))
+    (if (nonnull? owner)
+      (mp-apply-render-skin! draw-control (-> owner identity skin))
+      (mp-clear-render-skin! draw-control))
+    owner))
+
 (defun cutscene-apply-visual-secrets! ((actor-process manipy)
                                        (character mp-player-character)
                                        (visual-secrets mp-player-visual-secrets))
@@ -61,17 +68,13 @@
     (let ((character (mp-cutscene-actor-character actor))
           (drawable (the-as process-drawable actor-process)))
       (when (and (mp-player-character-valid? character) (nonnull? drawable (-> drawable draw)))
-        (let ((draw-control (-> drawable draw))
-              (owner (mp-cutscene-appearance-owner character))
+        (let ((owner (apply-character-skin! (-> drawable draw) character))
               (visual-secrets (if (= character (mp-player-character jak)) (mp-local-player-visual-secrets) (the-as mp-player-visual-secrets 0))))
-          (if (nonnull? owner)
-            (begin
-              (mp-apply-render-skin! draw-control (-> owner identity skin))
-              (set! visual-secrets
-                    (if (= (-> owner identity player-slot) (mp-local-player-slot))
-                      (mp-local-player-visual-secrets)
-                      (-> owner action visual-secrets))))
-            (mp-clear-render-skin! draw-control))
+          (when (nonnull? owner)
+            (set! visual-secrets
+                  (if (= (-> owner identity player-slot) (mp-local-player-slot))
+                    (mp-local-player-visual-secrets)
+                    (-> owner action visual-secrets))))
           (when (type? actor-process manipy)
             (cutscene-apply-visual-secrets! (the-as manipy actor-process) character visual-secrets))))))
   (none))

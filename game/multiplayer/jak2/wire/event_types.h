@@ -78,7 +78,7 @@ inline constexpr std::array<EventDescriptor, 67> kEvents = {{
     {68, "DRILL_SHIP_STATE", 17},
     {69, "DRILL_SHIP_HIT", 1},
     {70, "SEWER_WATER_STATE", 9},
-    {71, "ONIN_GAME_SCORE", 2},
+    {71, "MINIGAME_SCORE", 2},
 }};
 
 inline const EventDescriptor* event_descriptor(uint8_t id) {

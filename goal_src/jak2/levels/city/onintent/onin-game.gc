@@ -2191,6 +2191,14 @@
   (none)
   )
 
+(defun onin-game-mission-open? ()
+  (minigame-mission-open? (game-task-node city-play-onin-game-resolution)))
+
+(defun onin-game-penalize ((score float))
+  (if (onin-game-mission-open?)
+    (minigame-penalize score 1)
+    score))
+
 (defmethod onin-game-method-26 ((this onin-game))
   (cond
     ((>= (-> *game-info* score) (-> this score))
@@ -2203,7 +2211,7 @@
      )
     )
   (set! (-> *game-info* miss) (the float (-> this miss-count)))
-  (onin-game-send-score! (the int (-> this score)))
+  (minigame-send-score! (the int (-> this score)))
   0
   (none)
   )
@@ -2356,7 +2364,7 @@
       (set! (-> self hud-score) (ppointer->handle (process-spawn hud-big-score :init hud-init-by-other :to self)))
       (set! (-> self hud-goal) (ppointer->handle (process-spawn hud-goal :init hud-init-by-other :to self)))
       (if (onin-game-mission-open?)
-          (process-spawn player-score-hud :init player-score-hud-init onin-game-remote-score :to self)
+          (process-spawn player-score-hud :init player-score-hud-init minigame-remote-score :to self)
           (set! (-> self hud-miss) (ppointer->handle (process-spawn hud-miss :init hud-init-by-other :to self)))
           )
       (set-time! (-> self game-start-time))
@@ -2470,7 +2478,7 @@
            )
        (go-virtual win)
        )
-      ((onin-game-remote-won? (-> self point-win))
+      ((and (onin-game-mission-open?) (minigame-remote-reached? (-> self point-win)))
        (go-virtual lose #f)
        )
       ((or (and *cheat-mode* (cpad-pressed? 0 l1))
@@ -2577,7 +2585,7 @@
           )
         )
       (cond
-        ((onin-game-remote-won? (-> self point-win))
+        ((minigame-remote-reached? (-> self point-win))
          (set-time! (-> self state-time))
          (until (or (nonnull? *scene-player*) (time-elapsed? (-> self state-time) (seconds 15)))
            (suspend)

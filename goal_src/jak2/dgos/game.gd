@@ -668,7 +668,7 @@
   "mp-environment.o" ;; added
   "mp-tomb-boulder.o" ;; added
   "mp-tomb-daxter-wait.o" ;; added
-  "onin-game-sync.o"
+  "minigame-score-sync.o"
   "mp-task-sync-hooks.o" ;; added
   "mp-scene-sync-hooks.o" ;; added
   "mp-scene-coordinator.o" ;; added

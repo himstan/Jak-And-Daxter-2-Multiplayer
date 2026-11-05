@@ -345,7 +345,7 @@
   ((payload sewer-water-state-data :inline :overlay-at (-> data 0)))
   :size-assert 80)
 
-(deftype onin-game-score-event (mp-event)
+(deftype minigame-score-event (mp-event)
   ((payload uint16 :overlay-at (-> data 0)))
   :size-assert 80)
 

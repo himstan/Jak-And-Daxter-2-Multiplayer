@@ -1,0 +1,63 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(define *minigame-scores* (new 'static 'array int32 MP_MAX_PLAYERS))
+
+(defun minigame-reset-scores! ()
+  (dotimes (player-slot MP_MAX_PLAYERS)
+    (set! (-> *minigame-scores* player-slot) -1))
+  (none))
+
+(minigame-reset-scores!)
+
+(defun minigame-remote-score ((player-slot uint))
+  (if (= player-slot (mp-local-player-slot))
+    -1
+    (the int (-> *minigame-scores* player-slot))))
+
+(defun minigame-send-score! ((score int))
+  (let ((player-slot (mp-local-player-slot))
+        (event (new 'stack-no-clear 'minigame-score-event)))
+    (when (and (mp-session-in-game?)
+               (mp-player-slot-valid? player-slot)
+               (!= score (-> *minigame-scores* player-slot))
+               (mp-event-prepare! event MP_EVENT_MINIGAME_SCORE))
+      (set! (-> *minigame-scores* player-slot) score)
+      (set! (-> event payload) (the uint16 (min score #xffff)))
+      (mp-event-enqueue! event)))
+  (none))
+
+(defun minigame-mission-open? ((node game-task-node))
+  (and (mp-session-in-game?) (not (task-node-closed? node))))
+
+(defun minigame-penalize ((score float) (misses int))
+  (fmax 0.0 (- score (* 25.0 (the float misses)))))
+
+(defun minigame-remote-reached? ((goal float))
+  (dotimes (player-slot MP_MAX_PLAYERS)
+    (when (>= (the float (minigame-remote-score (the uint player-slot))) goal)
+      (return #t)))
+  #f)
+
+(defun receive-minigame-score! ((event minigame-score-event))
+  (when (and (nonnull? event) (mp-player-slot-valid? (-> event source-player-slot)))
+    (set! (-> *minigame-scores* (-> event source-player-slot)) (the int (-> event payload))))
+  (none))
+
+(defun minigame-leader ()
+  (let ((leader (the uint MP_INVALID_PLAYER_SLOT))
+        (best-score -1))
+    (dotimes (player-slot MP_MAX_PLAYERS)
+      (when (> (-> *minigame-scores* player-slot) best-score)
+        (set! best-score (the int (-> *minigame-scores* player-slot)))
+        (set! leader (the uint player-slot))))
+    leader))
+
+(defun minigame-after-scene-end! ((scene-name string))
+  (when (and (nonnull? scene-name)
+             (or (string= scene-name "city-play-onin-game-res") (string= scene-name "city-whack-a-metal-res")))
+    (let ((leader (minigame-leader)))
+      (when (mp-player-slot-valid? leader)
+        (notify-player! leader (text-id stadium-player-won))))
+    (minigame-reset-scores!))
+  (none))
