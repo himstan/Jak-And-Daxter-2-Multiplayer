@@ -83,6 +83,7 @@
     (dotimes (i list-length)
       (when (string= (-> this name) (-> data i airlock-name))
         (set! (-> this mp-sync?) (-> data i mp-sync?))
+        (set! (-> this sync-distance) (-> data i sync-distance))
         (set! (-> this other-side-levels) (-> data i other-side-levels))
         (set! (-> this airlock-elevator) (-> data i airlock-elevator))
         (set! (-> this on-notice) (-> data i on-notice))
@@ -442,6 +443,7 @@
   (set! (-> this reconcile-next-time) (the-as time-frame 0))
   (set! (-> this blocked-script-ran?) #f)
   (set! (-> this mp-sync?) #t)
+  (set! (-> this sync-distance) 0.0)
   (init-airlock-data-array! this) ;; added
   (init-airlock-pair-data! this) ;; added
   this
@@ -531,7 +533,7 @@
 
 (defmethod local-player-in-airlock-sync-distance? ((this com-airlock) (cross-dist float))
   (the-as symbol
-          (< (fabs cross-dist) (-> this open-distance))
+          (< (fabs cross-dist) (fmax (-> this open-distance) (-> this sync-distance)))
           )
   )
 

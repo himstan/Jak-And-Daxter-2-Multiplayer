@@ -4,6 +4,8 @@
 (define *consiteb-airlock-data* (new 'static 'boxed-array :type airlock-data
               (static-airlock-data 
                 :airlock-name "vin-door-ctyinda-5"
+                :sync-distance (meters 30)
+                :other-side-levels '(consite)
                 :on-notice '(when #t '(ctyinda ctywide))
                 :on-activate #f
                 :on-enter '(begin (want-display 'ctyinda 'display) (want-display 'ctywide 'display))
@@ -15,6 +17,8 @@
                 )
               (static-airlock-data 
                 :airlock-name "com-airlock-inner-40"
+                :sync-distance (meters 30)
+                :other-side-levels '(ctywide)
                 :on-notice '(when #t '(consite))
                 :on-activate #f
                 :on-enter '(begin (want-display 'consite 'display) (want-vis 'consite) (send-event self 'sound 'exit))

@@ -198,7 +198,12 @@
           (mp-airlock-clear-table-aid! *mp-local-airlock-state* airlock-aid))
         (mp-airlock-upsert-table-state! *mp-local-airlock-state* airlock-aid state-id))
       (mp-airlock-clear-table-aid! *mp-local-airlock-state* airlock-aid))
-    (mp-airlock-stamp-local-state! #t))
+    (mp-airlock-stamp-local-state! #t)
+    (let ((airlock (get-airlock-by-aid airlock-aid)))
+      (when (nonnull? airlock)
+        (if (mp-is-local-state-id? airlock-aid (mp-airlock-state-id commit))
+          (logior! (-> airlock mask) (process-mask no-kill))
+          (logclear! (-> airlock mask) (process-mask no-kill))))))
   (none))
 
 (defun mp-get-local-airlock-state ((airlock-aid uint))
