@@ -6,7 +6,8 @@ namespace multiplayer::jak2::wire {
 
 bool validate_packet(const BootstrapStatePacket& packet) {
   return (!packet.player_data || core::valid_player_data(*packet.player_data)) &&
-         packet.player_collision <= 1 && packet.friendly_fire <= 1 && std::isfinite(packet.money) &&
+         packet.player_collision <= 1 && packet.friendly_fire <= 1 && packet.hero_mode <= 1 &&
+         std::isfinite(packet.money) &&
          std::isfinite(packet.gems) && std::isfinite(packet.skill) &&
          platform::wire::valid_position_array(packet.host_spawn_position) &&
          packet.synchronized_aid_count <= core::kMaxBootstrapAids &&
@@ -44,6 +45,7 @@ BootstrapStatePacket to_packet(const core::BootstrapState& state) {
   packet.respawn_delay_seconds = state.world.respawn_delay_seconds;
   packet.player_collision = state.world.player_collision;
   packet.friendly_fire = state.world.friendly_fire;
+  packet.hero_mode = state.world.hero_mode;
   packet.host_camera_angle_y = platform::wire::canonical_angle(state.host_camera_angle_y);
   return packet;
 }
@@ -71,6 +73,7 @@ void from_packet(const BootstrapStatePacket& packet, core::BootstrapState& state
   state.world.respawn_delay_seconds = packet.respawn_delay_seconds;
   state.world.player_collision = packet.player_collision != 0;
   state.world.friendly_fire = packet.friendly_fire != 0;
+  state.world.hero_mode = packet.hero_mode != 0;
   state.host_camera_angle_y = packet.host_camera_angle_y;
 }
 

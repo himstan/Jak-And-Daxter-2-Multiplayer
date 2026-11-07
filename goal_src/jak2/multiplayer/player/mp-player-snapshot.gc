@@ -88,10 +88,13 @@
   (none))
 
 (defun mp-extract-local-stats ()
-  (when (and (mp-local-player-record) (nonzero? (mp-local-player-record)) *game-info* (nonzero? *game-info*))
+  (when (nonnull? (mp-local-player-record) *game-info* *mp-world-state*)
     (set! (-> *mp-world-state* money) (-> *game-info* money))
     (set! (-> *mp-world-state* gems) (-> *game-info* gem))
-    (set! (-> *mp-world-state* skill) (-> *game-info* skill)))
+    (set! (-> *mp-world-state* skill) (-> *game-info* skill))
+    (when (mp-session-host?)
+      (set! (-> *mp-world-state* hero-mode)
+            (if (logtest? (-> *game-info* secrets) (game-secrets hero-mode)) (the uint8 1) (the uint8 0)))))
   (none))
 
 (defun capture-player-data! ()

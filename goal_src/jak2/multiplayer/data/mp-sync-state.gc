@@ -565,8 +565,26 @@
   (set! *task-manager-spawn-suppressed?* #f)
   (none))
 
+(defun apply-host-game-mode! ()
+  (when (not (and (mp-session-client?)
+                  (nonnull? *game-info* *mp-world-state* *mp-replication-state*)
+                  (nonzero? (-> *mp-replication-state* remote world-valid?))))
+    (return #f))
+  (let* ((hero? (nonzero? (-> *mp-world-state* hero-mode)))
+         (changed? (or (!= hero? (logtest? (-> *game-info* secrets) (game-secrets hero-mode)))
+                       (!= hero? (logtest? (-> *game-info* purchase-secrets) (game-secrets hero-mode))))))
+    (if hero?
+      (begin
+        (logior! (-> *game-info* secrets) (game-secrets hero-mode))
+        (logior! (-> *game-info* purchase-secrets) (game-secrets hero-mode)))
+      (begin
+        (logclear! (-> *game-info* secrets) (game-secrets hero-mode))
+        (logclear! (-> *game-info* purchase-secrets) (game-secrets hero-mode))))
+    changed?))
+
 (defun mp-apply-remote-world-state ()
-  (local-vars (completion-changed? symbol))
+  (local-vars (completion-changed? symbol) (mode-changed? symbol))
+  (set! mode-changed? (apply-host-game-mode!))
   (set! completion-changed? (apply-remote-task-completion!))
   (when (mp-session-client?)
     (let ((mask (-> *mp-world-state* task-mask))
@@ -600,6 +618,6 @@
                           (task-node-open! (the-as game-task-node i))
                           (mp-task-sync-after-remote-open! (the-as game-task-node i))
                           (set! *mp-processing-remote-event* saved-context)))))))))))))
-  (when (or (apply-remote-task-completion!) completion-changed?)
+  (when (or (apply-remote-task-completion!) completion-changed? mode-changed?)
     (update-task-masks 'mp-bootstrap-snapshot))
   (none))

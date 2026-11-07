@@ -365,6 +365,8 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
             offsetof(MPWorldSyncStateGOAL, player_collision));
   EXPECT_EQ(types.lookup_field_info("mp-world-sync-state", "friendly-fire").field.offset(),
             offsetof(MPWorldSyncStateGOAL, friendly_fire));
+  EXPECT_EQ(types.lookup_field_info("mp-world-sync-state", "hero-mode").field.offset(),
+            offsetof(MPWorldSyncStateGOAL, hero_mode));
   EXPECT_EQ(types.lookup_field_info("mp-world-sync-state", "task-mask").field.offset(),
             offsetof(MPWorldSyncStateGOAL, task_mask));
   EXPECT_EQ(types.lookup_field_info("mp-world-sync-state", "completed-task-mask").field.offset(),
@@ -1670,6 +1672,7 @@ TEST(Jak2GoalBridge, PlayerRulesAndTaskCompletionCrossTheWorldBridge) {
   state.local.world.respawn_delay_seconds = 0;
   state.local.world.player_collision = 1;
   state.local.world.friendly_fire = 1;
+  state.local.world.hero_mode = 1;
   state.local.world.completed_task_mask[0] = 0x02;
   state.local.world.completed_task_mask[13] = 0x20;
   multiplayer::jak2::application::ReplicationMailbox mailbox;
@@ -1679,18 +1682,21 @@ TEST(Jak2GoalBridge, PlayerRulesAndTaskCompletionCrossTheWorldBridge) {
   EXPECT_EQ(local->world.respawn_delay_seconds, 0);
   EXPECT_TRUE(local->world.player_collision);
   EXPECT_TRUE(local->world.friendly_fire);
+  EXPECT_TRUE(local->world.hero_mode);
   EXPECT_EQ(local->world.completed_task_mask.front(), 0x02);
   EXPECT_EQ(local->world.completed_task_mask.back(), 0x20);
   auto remote = std::make_unique<multiplayer::jak2::application::RemoteReplicationFrame>();
   remote->world = local->world;
   remote->world.respawn_delay_seconds = 65535;
   remote->world.friendly_fire = false;
+  remote->world.hero_mode = false;
   remote->world.completed_task_mask.front() = 0;
   mailbox.publish_remote_frame(std::move(remote));
   ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
   EXPECT_EQ(state.remote.world.respawn_delay_seconds, 65535);
   EXPECT_EQ(state.remote.world.player_collision, 1);
   EXPECT_EQ(state.remote.world.friendly_fire, 0);
+  EXPECT_EQ(state.remote.world.hero_mode, 0);
   EXPECT_EQ(state.remote.world.completed_task_mask[0], 0);
   EXPECT_EQ(state.remote.world.completed_task_mask[13], 0x20);
 }

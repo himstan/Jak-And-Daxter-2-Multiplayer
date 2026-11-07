@@ -18,10 +18,11 @@
    (respawn-delay-seconds uint16)
    (player-collision      uint8)
    (friendly-fire         uint8)
+   (hero-mode             uint8)
    (task-mask             uint8 64)
    (active-task-mask      uint8 64)
    (completed-task-mask   uint8 GAME_TASK_COMPLETION_MASK_SIZE))
-  :size-assert 194)
+  :size-assert 195)
 
 (deftype mp-bootstrap-sync-state (structure)
   ((phase                  uint32)

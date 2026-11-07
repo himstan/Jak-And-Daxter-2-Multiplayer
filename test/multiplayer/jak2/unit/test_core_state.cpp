@@ -72,6 +72,26 @@ TEST(Jak2Replication, WorldAndBootstrapPreserveAuthoritativeInventory) {
   EXPECT_FALSE(state.world().apply(world, {.sequence = 2, .source = {.from_host = true}}));
 }
 
+TEST(Jak2Replication, HeroModeFollowsBootstrapAndNewerWorldSnapshots) {
+  WorldReplicationState state;
+  BootstrapState bootstrap;
+  bootstrap.world.hero_mode = true;
+  ASSERT_TRUE(state.apply_bootstrap(bootstrap, 1));
+  EXPECT_TRUE(state.world().hero_mode);
+  WorldState normal;
+  ASSERT_TRUE(state.apply(normal, {.sequence = 3, .source = {.from_host = true}}));
+  EXPECT_FALSE(state.world().hero_mode);
+  ASSERT_TRUE(state.apply_bootstrap(bootstrap, 2));
+  EXPECT_FALSE(state.world().hero_mode);
+  EXPECT_FALSE(state.apply(bootstrap.world, {.sequence = 2, .source = {.from_host = true}}));
+  ASSERT_TRUE(state.apply(bootstrap.world, {.sequence = 4, .source = {.from_host = true}}));
+  EXPECT_TRUE(state.world().hero_mode);
+  ASSERT_TRUE(state.apply_bootstrap(BootstrapState{}, 5));
+  EXPECT_FALSE(state.world().hero_mode);
+  state.reset();
+  EXPECT_FALSE(state.world().hero_mode);
+}
+
 TEST(Jak2Replication, InvalidBootstrapDoesNotPartiallyMutateWorld) {
   ReplicationState state;
   BootstrapState bootstrap = {};

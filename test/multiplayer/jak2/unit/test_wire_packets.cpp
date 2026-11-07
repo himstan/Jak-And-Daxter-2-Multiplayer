@@ -620,7 +620,7 @@ TEST(Jak2Protocol, PlayerRulesRoundTripOnlyInBootstrap) {
         bootstrap.world = world;
         bytes = platform::wire::encode_packet(jak2::wire::to_packet(bootstrap));
         ASSERT_TRUE(bytes);
-        EXPECT_EQ(bytes->size(), 227u);
+        EXPECT_EQ(bytes->size(), 228u);
         auto initial = platform::wire::decode_packet<jak2::wire::BootstrapStatePacket>(*bytes);
         ASSERT_TRUE(initial);
         jak2::core::BootstrapState restored;
@@ -633,6 +633,36 @@ TEST(Jak2Protocol, PlayerRulesRoundTripOnlyInBootstrap) {
       }
     }
   }
+}
+
+TEST(Jak2Protocol, HeroModeRoundTripsInWorldAndBootstrapAndRejectsInvalidFlags) {
+  using namespace multiplayer;
+  for (const bool hero_mode : {false, true}) {
+    jak2::core::BootstrapState input;
+    input.world.hero_mode = hero_mode;
+    const auto world_bytes = platform::wire::encode_packet(jak2::wire::to_packet(input.world));
+    ASSERT_TRUE(world_bytes);
+    const auto world = platform::wire::decode_packet<jak2::wire::WorldStatePacket>(*world_bytes);
+    ASSERT_TRUE(world);
+    jak2::core::WorldState restored_world;
+    jak2::wire::from_packet(*world, restored_world);
+    EXPECT_EQ(restored_world.hero_mode, hero_mode);
+
+    const auto bootstrap_bytes = platform::wire::encode_packet(jak2::wire::to_packet(input));
+    ASSERT_TRUE(bootstrap_bytes);
+    const auto bootstrap =
+        platform::wire::decode_packet<jak2::wire::BootstrapStatePacket>(*bootstrap_bytes);
+    ASSERT_TRUE(bootstrap);
+    jak2::core::BootstrapState restored_bootstrap;
+    jak2::wire::from_packet(*bootstrap, restored_bootstrap);
+    EXPECT_EQ(restored_bootstrap.world.hero_mode, hero_mode);
+  }
+  jak2::wire::WorldStatePacket world;
+  world.hero_mode = 2;
+  EXPECT_FALSE(platform::wire::encode_packet(world));
+  jak2::wire::BootstrapStatePacket bootstrap;
+  bootstrap.hero_mode = 2;
+  EXPECT_FALSE(platform::wire::encode_packet(bootstrap));
 }
 
 TEST(Jak2Protocol, PlayerRulesPacketIsCompactAndRejectsMalformedFlags) {

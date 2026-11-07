@@ -12,6 +12,7 @@
 (define-extern task-resolution-close! (function game-task symbol))
 (define-extern enemy-restore-actor-tombstone! (function entity-actor none))
 (define-extern mp-bootstrap-in-progress? (function symbol))
+(define-extern apply-host-game-mode! (function symbol))
 (define-extern *lightning-darkjak-pill* lightning-spec)
 (define-extern lightning-probe-callback (function lightning-tracker none))
 (define-extern process-drawable-shock-effect (function process-drawable lightning-spec (function lightning-tracker none) sparticle-launcher int int float object)) ;; guess
@@ -419,6 +420,7 @@
      (set! (-> this debug-features) (game-feature))
      (set! (-> this secrets) (game-secrets))
      (set! (-> this purchase-secrets) (game-secrets))
+     (apply-host-game-mode!)
      (set-continue!
        this
        (cond

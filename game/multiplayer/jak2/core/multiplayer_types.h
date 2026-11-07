@@ -387,6 +387,7 @@ struct WorldState {
   uint16_t respawn_delay_seconds = kDefaultRespawnDelaySeconds;
   bool player_collision = false;
   bool friendly_fire = false;
+  bool hero_mode = false;
   std::array<uint8_t, 64> task_mask = {};
   std::array<uint8_t, 64> active_task_mask = {};
   std::array<uint8_t, kGameTaskCompletionBytes> completed_task_mask = {};

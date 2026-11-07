@@ -998,6 +998,11 @@ This gives us more freedom to write code how we want.
         :next-state 'mp-select-save-title
         )
       (new 'static 'menu-sub-menu-option
+        :name (text-id progress-main-secrets-hero-mode)
+        :scale #t
+        :next-state 'mp-select-save-title-hero
+        )
+      (new 'static 'menu-sub-menu-option
         :name (text-id progress-load-game)
         :scale #t
         :next-state 'mp-select-load

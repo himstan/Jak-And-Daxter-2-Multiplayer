@@ -9,7 +9,7 @@
 
 namespace multiplayer::jak2::wire {
 
-inline constexpr size_t kWorldStatePacketWireSize = 148 + core::kGameTaskCompletionBytes;
+inline constexpr size_t kWorldStatePacketWireSize = 149 + core::kGameTaskCompletionBytes;
 
 struct WorldStatePacket : platform::wire::Packet<WorldStatePacket, PacketType::WORLD_STATE> {
   static constexpr platform::GameMessagePolicy kPolicy = {
@@ -26,6 +26,7 @@ struct WorldStatePacket : platform::wire::Packet<WorldStatePacket, PacketType::W
   float weather_cloud = 0.0f;
   float weather_fog = 0.0f;
   float weather_rain = 0.0f;
+  uint8_t hero_mode = 0;
   std::array<uint8_t, 64> task_mask = {};
   std::array<uint8_t, 64> active_task_mask = {};
   std::array<uint8_t, core::kGameTaskCompletionBytes> completed_task_mask = {};
@@ -43,6 +44,7 @@ bool serialize_fields(Stream& stream, PacketT&& packet) {
       !platform::wire::serialize_unit(stream, packet.weather_cloud) ||
       !platform::wire::serialize_unit(stream, packet.weather_fog) ||
       !platform::wire::serialize_unit(stream, packet.weather_rain) ||
+      !platform::wire::serialize_u8(stream, packet.hero_mode) ||
       !platform::wire::serialization::serialize_raw_bytes(stream, packet.task_mask.data(),
                                                           packet.task_mask.size()) ||
       !platform::wire::serialization::serialize_raw_bytes(stream, packet.active_task_mask.data(),

@@ -32,6 +32,7 @@ struct BootstrapStatePacket : platform::wire::Packet<BootstrapStatePacket, Packe
   uint16_t respawn_delay_seconds = core::kDefaultRespawnDelaySeconds;
   uint8_t player_collision = 0;
   uint8_t friendly_fire = 0;
+  uint8_t hero_mode = 0;
   float host_camera_angle_y = 0.0f;
   std::optional<core::PlayerData> player_data;
 };
@@ -85,6 +86,7 @@ bool serialize_fields(Stream& stream, PacketT&& packet) {
          platform::wire::serialize_u16(stream, packet.respawn_delay_seconds) &&
          platform::wire::serialize_u8(stream, packet.player_collision) &&
          platform::wire::serialize_u8(stream, packet.friendly_fire) &&
+         platform::wire::serialize_u8(stream, packet.hero_mode) &&
          platform::wire::serialize_angle(stream, packet.host_camera_angle_y) &&
          serialize_optional_player_data(stream, packet.player_data) &&
          platform::wire::serialize_byte_align(stream);

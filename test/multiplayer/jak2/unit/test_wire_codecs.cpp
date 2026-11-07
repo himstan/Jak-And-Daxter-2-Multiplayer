@@ -254,6 +254,7 @@ TEST(Jak2Protocol, WorldStateRoundTripsExactPacketSize) {
   input.time_of_day_frame = 5678;
   input.time_of_day_ratio = 0.25f;
   input.weather_cloud = 0.5f;
+  input.hero_mode = true;
   input.task_mask[4] = 1;
   input.active_task_mask[9] = 1;
   input.completed_task_mask.front() = 0x02;
@@ -267,6 +268,7 @@ TEST(Jak2Protocol, WorldStateRoundTripsExactPacketSize) {
   multiplayer::jak2::core::WorldState output = {};
   ASSERT_TRUE(decode_core<multiplayer::jak2::wire::WorldStatePacket>(bytes, output));
   EXPECT_EQ(output.clock, input.clock);
+  EXPECT_TRUE(output.hero_mode);
   EXPECT_EQ(output.task_mask, input.task_mask);
   EXPECT_EQ(output.active_task_mask, input.active_task_mask);
   EXPECT_EQ(output.completed_task_mask, input.completed_task_mask);
@@ -393,7 +395,7 @@ TEST(Jak2Protocol, BootstrapAndAirlockKeepFixedWireSizes) {
   std::vector<uint8_t> bytes;
   ASSERT_TRUE(multiplayer::platform::wire::encode_packet(
       multiplayer::jak2::wire::to_packet(bootstrap), bytes));
-  ASSERT_EQ(bytes.size(), 231u);
+  ASSERT_EQ(bytes.size(), 232u);
   const auto bootstrap_packet =
       multiplayer::platform::wire::decode_packet<multiplayer::jak2::wire::BootstrapStatePacket>(
           bytes);
