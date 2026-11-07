@@ -284,37 +284,26 @@ core::GameEvent read_event(const MPEventGOAL& source) {
   return result;
 }
 
-core::BossState read_squid(const MPReplicationPalaceSquidStateGOAL& source) {
-  core::BossState result = {};
-  result.active = source.active;
-  result.state_id = source.state_id;
-  result.stage = source.stage;
-  result.hit_points = source.hit_points;
-  result.shield_hit_points = source.shield_hit_points;
-  result.target_player_slot = source.target_player_slot < kMPMaxPlayers
-                                  ? static_cast<core::PlayerSlot>(source.target_player_slot)
-                                  : core::kInvalidPlayerSlot;
-  result.draw_force_fade = source.draw_force_fade;
-  result.action_sequence = source.action_seq;
-  result.position = {source.x, source.y, source.z};
-  result.quaternion = {source.quat_x, source.quat_y, source.quat_z, source.quat_w};
-  result.root_position = {source.root_x, source.root_y, source.root_z};
-  result.root_quaternion = {source.root_quat_x, source.root_quat_y, source.root_quat_z,
-                            source.root_quat_w};
-  result.trajectory_source = {source.traj_src_x, source.traj_src_y, source.traj_src_z};
-  result.trajectory_destination = {source.traj_dest_x, source.traj_dest_y, source.traj_dest_z};
-  result.trajectory_duration = source.traj_duration;
-  result.trajectory_age = source.traj_age;
-  return result;
-}
-
-core::BossState read_widow(const MPReplicationWidowStateGOAL& source) {
-  core::BossState result = {};
-  result.kind = core::BossState::Kind::WIDOW;
-  result.active = source.active;
-  result.state_id = source.state_id;
-  result.position = {source.x, source.y, source.z};
-  result.quaternion = {source.quat_x, source.quat_y, source.quat_z, source.quat_w};
+core::BossState read_boss(const MPReplicationBossStateGOAL& source) {
+  core::BossState result = {
+      .kind = static_cast<core::BossState::Kind>(source.kind),
+      .state_id = source.state_id,
+      .stage = source.stage,
+      .target_player_slot = source.target_player_slot < kMPMaxPlayers
+                                ? static_cast<core::PlayerSlot>(source.target_player_slot)
+                                : core::kInvalidPlayerSlot,
+      .draw_force_fade = source.draw_force_fade,
+      .health = source.health,
+      .shield = source.shield,
+      .state_entry = source.state_entry,
+      .trajectory_duration = source.trajectory_duration,
+      .trajectory_age = source.trajectory_age};
+  std::ranges::copy(source.position, result.position.begin());
+  std::ranges::copy(source.quaternion, result.quaternion.begin());
+  std::ranges::copy(source.anchor_position, result.anchor_position.begin());
+  std::ranges::copy(source.anchor_quaternion, result.anchor_quaternion.begin());
+  std::ranges::copy(source.trajectory_source, result.trajectory_source.begin());
+  std::ranges::copy(source.trajectory_destination, result.trajectory_destination.begin());
   return result;
 }
 
@@ -367,8 +356,7 @@ bool capture_local(MPReplicationStateGOAL& state, application::ReplicationMailbo
         read_pedestrian(state.local.traffic.pedestrians[i].value));
   for (uint8_t i = 0; i < state.local.traffic.vehicle_count; ++i)
     frame->vehicles.vehicles.push_back(read_vehicle(state.local.traffic.vehicles[i]));
-  frame->bosses[0] = read_squid(state.local.bosses.squid);
-  frame->bosses[1] = read_widow(state.local.bosses.widow);
+  frame->boss = read_boss(state.local.boss);
   frame->airlocks.sequence = state.local.airlocks.sequence;
   frame->airlocks.source_player_slot = state.local_player_slot;
   for (uint8_t i = 0; i < state.local.airlocks.count; ++i) {
@@ -596,59 +584,25 @@ void write_pedestrian(const core::PedestrianState& source,
   std::ranges::copy(quaternion.begin(), quaternion.end(), std::begin(destination.quaternion));
 }
 
-void write_squid(const core::BossState& source,
-                 const application::PresentationTarget& target,
-                 MPReplicationPalaceSquidStateGOAL& destination) {
-  destination = {};
-  destination.active = source.active;
-  destination.state_id = source.state_id;
-  destination.stage = source.stage;
-  destination.hit_points = source.hit_points;
-  destination.shield_hit_points = source.shield_hit_points;
-  destination.target_player_slot = source.target_player_slot;
-  destination.draw_force_fade = source.draw_force_fade;
-  destination.action_seq = source.action_sequence;
-  destination.x = source.position[0];
-  destination.y = source.position[1];
-  destination.z = source.position[2];
-  destination.quat_x = source.quaternion[0];
-  destination.quat_y = source.quaternion[1];
-  destination.quat_z = source.quaternion[2];
-  destination.quat_w = source.quaternion[3];
-  const auto& root_position = target.valid ? target.position : source.root_position;
-  const auto& root_quaternion = target.valid ? target.quaternion : source.root_quaternion;
-  destination.root_x = root_position[0];
-  destination.root_y = root_position[1];
-  destination.root_z = root_position[2];
-  destination.root_quat_x = root_quaternion[0];
-  destination.root_quat_y = root_quaternion[1];
-  destination.root_quat_z = root_quaternion[2];
-  destination.root_quat_w = root_quaternion[3];
-  destination.traj_src_x = source.trajectory_source[0];
-  destination.traj_src_y = source.trajectory_source[1];
-  destination.traj_src_z = source.trajectory_source[2];
-  destination.traj_dest_x = source.trajectory_destination[0];
-  destination.traj_dest_y = source.trajectory_destination[1];
-  destination.traj_dest_z = source.trajectory_destination[2];
-  destination.traj_duration = source.trajectory_duration;
-  destination.traj_age = source.trajectory_age;
-}
-
-void write_widow(const core::BossState& source,
-                 const application::PresentationTarget& target,
-                 MPReplicationWidowStateGOAL& destination) {
-  destination = {};
-  destination.active = source.active;
-  destination.state_id = source.state_id;
-  const auto& position = target.valid ? target.position : source.position;
-  const auto& quaternion = target.valid ? target.quaternion : source.quaternion;
-  destination.x = position[0];
-  destination.y = position[1];
-  destination.z = position[2];
-  destination.quat_x = quaternion[0];
-  destination.quat_y = quaternion[1];
-  destination.quat_z = quaternion[2];
-  destination.quat_w = quaternion[3];
+void write_boss(const core::BossState& source,
+                const application::PresentationTarget& target,
+                MPReplicationBossStateGOAL& destination) {
+  destination = {.trajectory_duration = source.trajectory_duration,
+                 .trajectory_age = source.trajectory_age,
+                 .state_entry = source.state_entry,
+                 .health = source.health,
+                 .shield = source.shield,
+                 .kind = static_cast<uint8_t>(source.kind),
+                 .state_id = source.state_id,
+                 .stage = source.stage,
+                 .target_player_slot = source.target_player_slot,
+                 .draw_force_fade = source.draw_force_fade};
+  std::ranges::copy(target.valid ? target.position : source.position, destination.position);
+  std::ranges::copy(target.valid ? target.quaternion : source.quaternion, destination.quaternion);
+  std::ranges::copy(source.anchor_position, destination.anchor_position);
+  std::ranges::copy(source.anchor_quaternion, destination.anchor_quaternion);
+  std::ranges::copy(source.trajectory_source, destination.trajectory_source);
+  std::ranges::copy(source.trajectory_destination, destination.trajectory_destination);
 }
 
 void write_event(const core::GameEvent& source, MPEventGOAL& destination) {
@@ -738,11 +692,7 @@ bool publish_remote(MPReplicationStateGOAL& state, application::ReplicationMailb
       }
       write_vehicle(vehicle, state.remote.traffic.vehicles[i]);
     }
-    state.remote.bosses.generation = frame->generation;
-    state.remote.bosses.squid_valid = frame->bosses[0].sequence != 0;
-    state.remote.bosses.widow_valid = frame->bosses[1].sequence != 0;
-    write_squid(frame->bosses[0], frame->boss_targets[0], state.remote.bosses.squid);
-    write_widow(frame->bosses[1], frame->boss_targets[1], state.remote.bosses.widow);
+    write_boss(frame->boss, frame->boss_target, state.remote.boss);
     state.remote.airlocks.valid = 0;
     state.remote.airlocks.generation = frame->generation;
     state.remote.airlocks.sequence = 0;

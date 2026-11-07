@@ -109,7 +109,7 @@ class EntityReplicationState {
   const EnemySnapshot& enemy_snapshot(PlayerSlot source_player_slot) const {
     return enemy_snapshots_[source_player_slot];
   }
-  const BossState& boss(BossState::Kind kind) const { return bosses_[static_cast<size_t>(kind)]; }
+  const BossState& boss() const { return boss_; }
   const std::array<AirlockSnapshot, kMaxPlayers>& airlocks() const { return airlock_snapshots_; }
 
  private:
@@ -117,7 +117,7 @@ class EntityReplicationState {
 
   EnemySnapshot enemies_ = {};
   std::array<EnemySnapshot, kMaxPlayers> enemy_snapshots_ = {};
-  std::array<BossState, 2> bosses_ = {};
+  BossState boss_ = {};
   std::array<AirlockSnapshot, kMaxPlayers> airlock_snapshots_ = {};
   std::array<Sequence, kMaxPlayers> airlock_sequences_ = {};
 };

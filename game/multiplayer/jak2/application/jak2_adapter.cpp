@@ -222,8 +222,7 @@ void Jak2Adapter::publish_remote_frame(const platform::SessionState& session,
       frame->enemies.enemies.push_back(enemy);
   }
   frame->selected_traffic = state_.traffic().selected_snapshot();
-  frame->bosses[0] = state_.entities().boss(core::BossState::Kind::PALACE_SQUID);
-  frame->bosses[1] = state_.entities().boss(core::BossState::Kind::WIDOW);
+  frame->boss = state_.entities().boss();
   frame->airlocks = state_.entities().airlocks();
   frame->traffic_authority = state_.traffic().authority();
   frame->selected_traffic_authority = state_.traffic().selected_authority();

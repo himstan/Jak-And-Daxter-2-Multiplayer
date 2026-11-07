@@ -43,7 +43,7 @@ class PresentationRuntime {
                                             uint64_t now_ms);
   void prepare_enemies(RemoteReplicationFrame& frame, uint64_t now_ms);
   void prepare_traffic(RemoteReplicationFrame& frame, uint64_t now_ms);
-  void prepare_bosses(RemoteReplicationFrame& frame, uint64_t now_ms);
+  void prepare_boss(RemoteReplicationFrame& frame, uint64_t now_ms);
   void update_packet_generations(const core::ReplicationState& state);
 
   std::array<TimelineState, core::kMaxPlayers> player_histories_ = {};
@@ -52,7 +52,7 @@ class PresentationRuntime {
   std::unordered_map<core::EntityId, TimelineState> enemy_histories_;
   std::unordered_map<core::EntityId, TimelineState> pedestrian_histories_;
   std::unordered_map<core::EntityId, TimelineState> ambient_vehicle_histories_;
-  std::array<TimelineState, 2> boss_histories_ = {};
+  TimelineState boss_history_ = {};
   uint32_t enemy_generation_ = 0;
   uint32_t traffic_generation_ = 0;
   std::array<core::Sequence, core::kMaxPlayers> enemy_source_sequences_ = {};

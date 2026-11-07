@@ -22,16 +22,15 @@ enum class PacketType : uint8_t {
   PEDESTRIAN_STATE_BATCH = 3,
   VEHICLE_STATE_BATCH = 4,
   TURRET_STATE = 5,
-  PALACE_SQUID_STATE = 6,
+  BOSS_STATE = 6,
   AIRLOCK_STATE_BATCH = 7,
-  WIDOW_STATE = 8,
+  PLAYER_DATA = 8,
   WORLD_STATE = 9,
   TRAFFIC_AUTHORITY_STATE = 10,
   PLAYER_VEHICLE_STATE = 11,
   GUNGAME_STATE = 12,
   PLAYER_RULES = 13,
-  PLAYER_DATA = 14,
-  COUNT = 15
+  COUNT = 14
 };
 
 inline constexpr uint8_t kMPPlayerStateFlagSpectatorOnly = 1u << 0;

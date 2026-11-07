@@ -185,18 +185,19 @@ TEST(Jak2Protocol, QuantizedFieldsStayWithinTheirDeclaredHalfStep) {
   EXPECT_NEAR(decoded_world->weather_rain, world.weather_rain,
               multiplayer::platform::wire::kUnitResolution / 2.0f);
 
-  multiplayer::jak2::wire::PalaceSquidStatePacket palace = {};
-  palace.shield_hit_points = 0.371f;
-  palace.trajectory_duration = 123.456f;
-  const auto palace_bytes = multiplayer::platform::wire::encode_packet(palace);
-  ASSERT_TRUE(palace_bytes.has_value());
-  const auto decoded_palace =
-      multiplayer::platform::wire::decode_packet<multiplayer::jak2::wire::PalaceSquidStatePacket>(
-          *palace_bytes);
-  ASSERT_TRUE(decoded_palace.has_value());
-  EXPECT_NEAR(decoded_palace->shield_hit_points, palace.shield_hit_points,
+  multiplayer::jak2::wire::BossStatePacket boss = {};
+  boss.kind = static_cast<uint8_t>(multiplayer::jak2::core::BossState::Kind::PALACE_SQUID);
+  boss.shield = 0.371f;
+  boss.trajectory_duration = 123.456f;
+  const auto boss_bytes = multiplayer::platform::wire::encode_packet(boss);
+  ASSERT_TRUE(boss_bytes.has_value());
+  const auto decoded_boss =
+      multiplayer::platform::wire::decode_packet<multiplayer::jak2::wire::BossStatePacket>(
+          *boss_bytes);
+  ASSERT_TRUE(decoded_boss.has_value());
+  EXPECT_NEAR(decoded_boss->shield, boss.shield,
               multiplayer::platform::wire::kUnitResolution / 2.0f);
-  EXPECT_NEAR(decoded_palace->trajectory_duration, palace.trajectory_duration,
+  EXPECT_NEAR(decoded_boss->trajectory_duration, boss.trajectory_duration,
               multiplayer::platform::wire::kTrajectoryDurationResolution / 2.0f);
 }
 
@@ -211,11 +212,12 @@ TEST(Jak2Protocol, QuantizedOutboundValuesRejectNonFiniteAndOutOfRangeInputs) {
   world.weather_fog = -0.01f;
   EXPECT_FALSE(multiplayer::platform::wire::encode_packet(world).has_value());
 
-  multiplayer::jak2::wire::PalaceSquidStatePacket palace = {};
-  palace.trajectory_duration = std::numeric_limits<float>::quiet_NaN();
-  EXPECT_FALSE(multiplayer::platform::wire::encode_packet(palace).has_value());
-  palace.trajectory_duration = multiplayer::platform::wire::kTrajectoryDurationMax + 1.0f;
-  EXPECT_FALSE(multiplayer::platform::wire::encode_packet(palace).has_value());
+  multiplayer::jak2::wire::BossStatePacket boss = {};
+  boss.kind = static_cast<uint8_t>(multiplayer::jak2::core::BossState::Kind::WIDOW);
+  boss.trajectory_duration = std::numeric_limits<float>::quiet_NaN();
+  EXPECT_FALSE(multiplayer::platform::wire::encode_packet(boss).has_value());
+  boss.trajectory_duration = multiplayer::platform::wire::kTrajectoryDurationMax + 1.0f;
+  EXPECT_FALSE(multiplayer::platform::wire::encode_packet(boss).has_value());
 }
 
 TEST(Jak2Protocol, GameEventRejectsTrailingBytesAndPreservesPayload) {
@@ -343,58 +345,36 @@ TEST(Jak2Protocol, GenericCodecCanonicalizesCoreSourceContext) {
   EXPECT_EQ(batch.events[0].source_player_slot, 2);
 }
 
-TEST(Jak2Protocol, BossCodecsPreserveSenderTimeAndRejectWrongSizes) {
-  for (const auto [kind, expected_size] :
-       {std::pair{multiplayer::jak2::core::BossState::Kind::PALACE_SQUID, size_t{69}},
-        std::pair{multiplayer::jak2::core::BossState::Kind::WIDOW, size_t{19}}}) {
-    multiplayer::jak2::core::BossState input = {};
-    input.kind = kind;
-    input.active = 1;
-    input.state_id = 4;
-    input.sample_time_ms = UINT32_MAX - 3;
-    input.target_player_slot = multiplayer::jak2::core::kInvalidPlayerSlot;
-    input.position = {1.0f, 2.0f, 3.0f};
-    input.quaternion = {0.0f, 0.0f, 0.0f, 1.0f};
-    input.root_position = {4.0f, 5.0f, 6.0f};
-    input.root_quaternion = {0.0f, 0.0f, 0.0f, 1.0f};
+TEST(Jak2Protocol, BossCodecPreservesStateAndRejectsWrongSizes) {
+  multiplayer::jak2::core::BossState input = {};
+  input.kind = multiplayer::jak2::core::BossState::Kind::METALKOR;
+  input.state_id = 4;
+  input.stage = 3;
+  input.health = 0.5f;
+  input.sample_time_ms = UINT32_MAX - 3;
+  input.target_player_slot = 2;
+  input.position = {1.0f, 2.0f, 3.0f};
+  input.anchor_position = {4.0f, 5.0f, 6.0f};
 
-    std::vector<uint8_t> bytes;
-    if (kind == multiplayer::jak2::core::BossState::Kind::PALACE_SQUID) {
-      ASSERT_TRUE(multiplayer::platform::wire::encode_packet(
-          multiplayer::jak2::wire::to_palace_squid_state_packet(input), bytes));
-      ASSERT_EQ(bytes.size(), expected_size);
-      const auto packet = multiplayer::platform::wire::decode_packet<
-          multiplayer::jak2::wire::PalaceSquidStatePacket>(bytes);
-      ASSERT_TRUE(packet.has_value());
-      multiplayer::jak2::core::BossState output = {};
-      multiplayer::jak2::wire::from_packet(*packet, output);
-      EXPECT_EQ(output.kind, kind);
-      EXPECT_EQ(output.state_id, 4u);
-      EXPECT_EQ(output.sample_time_ms, input.sample_time_ms);
-      bytes.pop_back();
-      EXPECT_FALSE(multiplayer::platform::wire::decode_packet<
-                       multiplayer::jak2::wire::PalaceSquidStatePacket>(bytes)
-                       .has_value());
-    } else {
-      ASSERT_TRUE(multiplayer::platform::wire::encode_packet(
-          multiplayer::jak2::wire::to_widow_state_packet(input), bytes));
-      ASSERT_EQ(bytes.size(), expected_size);
-      const auto packet =
-          multiplayer::platform::wire::decode_packet<multiplayer::jak2::wire::WidowStatePacket>(
-              bytes);
-      ASSERT_TRUE(packet.has_value());
-      multiplayer::jak2::core::BossState output = {};
-      multiplayer::jak2::wire::from_packet(*packet, output);
-      EXPECT_EQ(output.kind, kind);
-      EXPECT_EQ(output.state_id, 4u);
-      EXPECT_EQ(output.sample_time_ms, input.sample_time_ms);
-      bytes.pop_back();
-      EXPECT_FALSE(
-          multiplayer::platform::wire::decode_packet<multiplayer::jak2::wire::WidowStatePacket>(
-              bytes)
-              .has_value());
-    }
-  }
+  std::vector<uint8_t> bytes;
+  ASSERT_TRUE(multiplayer::platform::wire::encode_packet(
+      multiplayer::jak2::wire::to_boss_state_packet(input), bytes));
+  ASSERT_EQ(bytes.size(), multiplayer::jak2::wire::BossStatePacket::kPolicy.maximum_payload_bytes);
+  const auto packet =
+      multiplayer::platform::wire::decode_packet<multiplayer::jak2::wire::BossStatePacket>(bytes);
+  ASSERT_TRUE(packet.has_value());
+  multiplayer::jak2::core::BossState output = {};
+  multiplayer::jak2::wire::from_packet(*packet, output);
+  EXPECT_EQ(output.kind, input.kind);
+  EXPECT_EQ(output.state_id, 4u);
+  EXPECT_EQ(output.stage, 3u);
+  EXPECT_EQ(output.target_player_slot, 2u);
+  EXPECT_NEAR(output.health, 0.5f, multiplayer::platform::wire::kUnitResolution);
+  EXPECT_EQ(output.sample_time_ms, input.sample_time_ms);
+  bytes.pop_back();
+  EXPECT_FALSE(
+      multiplayer::platform::wire::decode_packet<multiplayer::jak2::wire::BossStatePacket>(bytes)
+          .has_value());
 }
 
 TEST(Jak2Protocol, BootstrapAndAirlockKeepFixedWireSizes) {

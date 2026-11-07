@@ -9,7 +9,7 @@ namespace multiplayer::jak2::core {
 void EntityReplicationState::reset() {
   enemies_ = {};
   enemy_snapshots_ = {};
-  bosses_ = {};
+  boss_ = {};
   airlock_snapshots_ = {};
   airlock_sequences_ = {};
 }
@@ -23,10 +23,8 @@ void EntityReplicationState::expire(const uint64_t now_ms) {
   }
   if (enemies_changed)
     rebuild_enemies();
-  for (auto& boss : bosses_) {
-    if (boss.active != 0 && now_ms - boss.received_time_ms > 2000)
-      boss.active = 0;
-  }
+  if (boss_.kind != BossState::Kind::NONE && now_ms - boss_.received_time_ms > 2000)
+    boss_.kind = BossState::Kind::NONE;
   for (auto& snapshot : airlock_snapshots_) {
     if (snapshot.source_player_slot != kInvalidPlayerSlot &&
         now_ms - snapshot.received_time_ms > 2000)
@@ -72,14 +70,11 @@ bool EntityReplicationState::apply(const EnemySnapshot& incoming, const ApplyCon
 }
 
 bool EntityReplicationState::apply(const BossState& state, const ApplyContext& context) {
-  if (static_cast<size_t>(state.kind) >= bosses_.size() || !valid_boss_state(state))
+  if (!valid_boss_state(state) || !platform::sequence_is_newer(context.sequence, boss_.sequence))
     return false;
-  auto& current = bosses_[static_cast<size_t>(state.kind)];
-  if (!platform::sequence_is_newer(context.sequence, current.sequence))
-    return false;
-  current = state;
-  current.sequence = context.sequence;
-  current.received_time_ms = context.received_at_ms;
+  boss_ = state;
+  boss_.sequence = context.sequence;
+  boss_.received_time_ms = context.received_at_ms;
   return true;
 }
 

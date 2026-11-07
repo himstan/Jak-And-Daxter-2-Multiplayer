@@ -1369,28 +1369,19 @@ TEST(Jak2AdapterIntegration, PresentationRuntimeKeepsAuthoritativeSnapshotsUnmod
                                               .sample_time_ms = 100,
                                               .last_sequence = 1,
                                               .received_time_ms = 150});
-  frame->bosses[0] = {.kind = jak2::core::BossState::Kind::PALACE_SQUID,
-                      .active = 1,
-                      .stage = 2,
-                      .root_position = {19.0f, 20.0f, 21.0f},
-                      .root_quaternion = {0.0f, 0.0f, 0.0f, 1.0f},
-                      .sample_time_ms = 100,
-                      .received_time_ms = 150,
-                      .sequence = 1};
-  frame->bosses[1] = {.kind = jak2::core::BossState::Kind::WIDOW,
-                      .active = 1,
-                      .position = {22.0f, 23.0f, 24.0f},
-                      .quaternion = {0.0f, 0.0f, 0.0f, 1.0f},
-                      .sample_time_ms = 100,
-                      .received_time_ms = 150,
-                      .sequence = 1};
+  frame->boss = {.kind = jak2::core::BossState::Kind::PALACE_SQUID,
+                 .stage = 2,
+                 .position = {19.0f, 20.0f, 21.0f},
+                 .anchor_position = {22.0f, 23.0f, 24.0f},
+                 .sample_time_ms = 100,
+                 .received_time_ms = 150,
+                 .sequence = 1};
 
   const auto original_player_position = frame->players[0].position;
   const auto original_vehicle = frame->player_vehicles[0].vehicle;
   const auto original_enemies = frame->enemies;
   const auto original_traffic = frame->selected_traffic;
-  const auto original_squid_root = frame->bosses[0].root_position;
-  const auto original_widow_position = frame->bosses[1].position;
+  const auto original_boss_position = frame->boss.position;
 
   jak2::core::ReplicationState core;
   jak2::application::PresentationRuntime presentation;
@@ -1400,8 +1391,7 @@ TEST(Jak2AdapterIntegration, PresentationRuntimeKeepsAuthoritativeSnapshotsUnmod
   EXPECT_EQ(frame->player_vehicles[0].vehicle, original_vehicle);
   EXPECT_EQ(frame->enemies, original_enemies);
   EXPECT_EQ(frame->selected_traffic, original_traffic);
-  EXPECT_EQ(frame->bosses[0].root_position, original_squid_root);
-  EXPECT_EQ(frame->bosses[1].position, original_widow_position);
+  EXPECT_EQ(frame->boss.position, original_boss_position);
   EXPECT_TRUE(frame->player_targets[0].valid);
   EXPECT_TRUE(frame->player_vehicle_targets[0].valid);
   ASSERT_EQ(frame->enemy_targets.size(), 1u);
@@ -1410,13 +1400,11 @@ TEST(Jak2AdapterIntegration, PresentationRuntimeKeepsAuthoritativeSnapshotsUnmod
   EXPECT_TRUE(frame->enemy_targets[0].valid);
   EXPECT_TRUE(frame->pedestrian_targets[0].valid);
   EXPECT_TRUE(frame->ambient_vehicle_targets[0].valid);
-  EXPECT_TRUE(frame->boss_targets[0].valid);
-  EXPECT_TRUE(frame->boss_targets[1].valid);
+  EXPECT_TRUE(frame->boss_target.valid);
   EXPECT_EQ(frame->enemy_targets[0].entity_id, 21u);
   EXPECT_EQ(frame->pedestrian_targets[0].entity_id, 31u);
   EXPECT_EQ(frame->ambient_vehicle_targets[0].entity_id, 41u);
-  EXPECT_EQ(frame->boss_targets[0].position, original_squid_root);
-  EXPECT_EQ(frame->boss_targets[1].position, original_widow_position);
+  EXPECT_EQ(frame->boss_target.position, original_boss_position);
 
   const auto player_generation = frame->player_targets[0].generation;
   const auto player_x = frame->player_targets[0].position[0];

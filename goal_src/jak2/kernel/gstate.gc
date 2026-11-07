@@ -52,6 +52,7 @@ It type checks the arguments for the entry function.
 ;; DECOMP BEGINS
 
 (define-extern mp-process-allow-local-state-transition? (function process symbol symbol))
+(define-extern boss-note-state-entry! (function process none))
 (define-extern pedestrian-state-entry-allowed? (function process symbol symbol))
 (define-extern mp-handle-engine-event! (function process-tree event-message-block none))
 
@@ -436,6 +437,7 @@ It type checks the arguments for the entry function.
                    (the-as function #f)))
 
 
+         (boss-note-state-entry! pp)
          ;; start up the new state. First run the enter function
          (let ((enter-func (-> new-state enter)))
            (if enter-func

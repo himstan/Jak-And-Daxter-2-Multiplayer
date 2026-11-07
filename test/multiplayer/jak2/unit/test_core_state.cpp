@@ -176,13 +176,12 @@ TEST(Jak2Replication, PlayerExpiryUsesFullLocalClock) {
 
 TEST(Jak2Replication, BossAndAirlockValidationPrecedesMutation) {
   ReplicationState state;
-  BossState boss = {.active = 1};
-  boss.quaternion[3] = 1.0f;
-  boss.root_quaternion[3] = 1.0f;
+  BossState boss = {.kind = BossState::Kind::WIDOW, .state_id = 3};
+  EXPECT_FALSE(state.entities().apply(BossState{}, from(1, 1, 1000)));
   ASSERT_TRUE(state.entities().apply(boss, from(1, 1, 1000)));
   boss.position[0] = std::numeric_limits<float>::quiet_NaN();
   EXPECT_FALSE(state.entities().apply(boss, from(1, 2, 1500)));
-  EXPECT_EQ(state.entities().boss(BossState::Kind::PALACE_SQUID).active, 1u);
+  EXPECT_EQ(state.entities().boss().state_id, 3u);
 
   AirlockSnapshot airlocks = {.source_player_slot = 1,
                               .states = {{.airlock_aid = 17, .state_id = 2}}};

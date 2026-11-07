@@ -31,7 +31,7 @@ struct LocalReplicationFrame {
   core::EnemySnapshot enemies = {};
   core::TrafficSnapshot pedestrians = {};
   core::TrafficSnapshot vehicles = {};
-  std::array<core::BossState, 2> bosses = {};
+  core::BossState boss = {};
   core::AirlockSnapshot airlocks = {};
   core::TrafficAuthority traffic_authority = {};
   core::PlayerSlot selected_traffic_authority = core::kInvalidPlayerSlot;
@@ -64,8 +64,8 @@ struct RemoteReplicationFrame {
   std::vector<PresentationTarget> enemy_targets;
   std::vector<PresentationTarget> pedestrian_targets;
   std::vector<PresentationTarget> ambient_vehicle_targets;
-  std::array<core::BossState, 2> bosses = {};
-  std::array<PresentationTarget, 2> boss_targets = {};
+  core::BossState boss = {};
+  PresentationTarget boss_target = {};
   std::array<core::AirlockSnapshot, core::kMaxPlayers> airlocks = {};
   core::TrafficAuthority traffic_authority = {};
   core::PlayerSlot selected_traffic_authority = core::kInvalidPlayerSlot;

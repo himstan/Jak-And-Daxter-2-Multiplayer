@@ -2,50 +2,25 @@
 
 #include <cstdint>
 
-struct MPReplicationPalaceSquidStateGOAL {
-  uint32_t active;
-  uint32_t state_id;
-  int32_t stage;
-  int32_t hit_points;
-  float shield_hit_points;
+#pragma pack(push, 1)
+struct MPReplicationBossStateGOAL {
+  float position[3];
+  float quaternion[4];
+  float anchor_position[3];
+  float anchor_quaternion[4];
+  float trajectory_source[3];
+  float trajectory_destination[3];
+  float trajectory_duration;
+  int32_t trajectory_age;
+  uint32_t state_entry;
+  float health;
+  float shield;
+  uint8_t kind;
+  uint8_t state_id;
+  uint8_t stage;
   uint8_t target_player_slot;
   uint8_t draw_force_fade;
-  uint32_t action_seq;
-  float x;
-  float y;
-  float z;
-  float quat_x;
-  float quat_y;
-  float quat_z;
-  float quat_w;
-  float root_x;
-  float root_y;
-  float root_z;
-  float root_quat_x;
-  float root_quat_y;
-  float root_quat_z;
-  float root_quat_w;
-  float traj_src_x;
-  float traj_src_y;
-  float traj_src_z;
-  float traj_dest_x;
-  float traj_dest_y;
-  float traj_dest_z;
-  float traj_duration;
-  int32_t traj_age;
 };
+#pragma pack(pop)
 
-struct MPReplicationWidowStateGOAL {
-  uint32_t active;
-  uint32_t state_id;
-  float x;
-  float y;
-  float z;
-  float quat_x;
-  float quat_y;
-  float quat_z;
-  float quat_w;
-};
-
-static_assert(sizeof(MPReplicationPalaceSquidStateGOAL) == 116);
-static_assert(sizeof(MPReplicationWidowStateGOAL) == 36);
+static_assert(sizeof(MPReplicationBossStateGOAL) == 105);

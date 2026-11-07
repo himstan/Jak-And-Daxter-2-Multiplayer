@@ -159,6 +159,17 @@ TEST(Jak2GoalBridge, PedestrianAppearanceLayoutMatchesGoal) {
       types.lookup_field_info("mp-replication-pedestrian-state", "travel-speed").field.offset(),
       offsetof(MPReplicationPedestrianStateGOAL, travel_speed));
   EXPECT_EQ(types.lookup_field_info("mp-pedestrian-state", "travel-speed").field.offset(), 59);
+  load("multiplayer/system/boss/mp-boss-types.gc", "boss-kind");
+  load("multiplayer/data/mp-replication-h.gc", "mp-replication-boss-state");
+  EXPECT_EQ(types.lookup_type("mp-replication-boss-state")->get_size_in_memory(),
+            sizeof(MPReplicationBossStateGOAL));
+  EXPECT_EQ(types.lookup_field_info("mp-replication-boss-state", "trajectory-age").field.offset(),
+            offsetof(MPReplicationBossStateGOAL, trajectory_age));
+  EXPECT_EQ(types.lookup_field_info("mp-replication-boss-state", "kind").field.offset(),
+            offsetof(MPReplicationBossStateGOAL, kind));
+  EXPECT_EQ(
+      types.lookup_field_info("mp-replication-boss-state", "draw-force-fade").field.offset(),
+      offsetof(MPReplicationBossStateGOAL, draw_force_fade));
   const auto source =
       reader.read_from_file({std::string(MP_SOURCE_ROOT) +
                              "/goal_src/jak2/multiplayer/system/traffic/mp-traffic-types.gc"});
@@ -525,12 +536,12 @@ TEST(Jak2GoalBridge, DirectionalAggregateHasCanonicalCompactAbi) {
   EXPECT_EQ(sizeof(MPReplicationPedestrianStateGOAL), 60u);
   EXPECT_EQ(sizeof(MPReplicationTrafficSetGOAL), 13328u);
   EXPECT_EQ(sizeof(MPReplicationBootstrapStateGOAL), 16487u);
-  EXPECT_EQ(sizeof(MPReplicationFrameGOAL), 92816u);
-  EXPECT_EQ(sizeof(MPReplicationStateGOAL), 195968u);
+  EXPECT_EQ(sizeof(MPReplicationFrameGOAL), 92736u);
+  EXPECT_EQ(sizeof(MPReplicationStateGOAL), 195776u);
   EXPECT_EQ(offsetof(MPReplicationStateGOAL, local), 64u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, remote), 92880u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, outbound_events), 185712u);
-  EXPECT_EQ(offsetof(MPReplicationStateGOAL, inbound_events), 190848u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, remote), 92800u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, outbound_events), 185536u);
+  EXPECT_EQ(offsetof(MPReplicationStateGOAL, inbound_events), 190656u);
 }
 
 TEST(Jak2GoalBridge, PlayerActionLayoutMatchesGoal) {

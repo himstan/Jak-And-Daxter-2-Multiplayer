@@ -392,6 +392,7 @@
   (set! (-> this last-gun-hit-stage) 0)
   (set! (-> this gun-hits) 0)
   (set! (-> this last-attack-id) (the-as uint 0))
+  (track-boss-entries! this)
   (if (task-node-closed? (game-task-node tomb-boss-resolution))
       (go (method-of-object this beaten))
       (go (method-of-object this hidden))

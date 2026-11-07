@@ -7,7 +7,6 @@
 (defconstant METALKOR_HIT_ID_BASE (the uint #x77000000))
 (defconstant METALKOR_HIT_DARK_BOMB (the uint #x10000))
 (defconstant METALKOR_HIT_ID_END (the uint #x77020000))
-(defconstant METALKOR_STATE_ID (the uint #x77100000))
 
 (defun nest-switch-pressed? ()
   (let ((perm (aid-perm NEST_SWITCH_AID #f)))

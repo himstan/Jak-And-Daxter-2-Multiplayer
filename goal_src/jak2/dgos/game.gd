@@ -630,7 +630,7 @@
   "mp-enemy-animation.o" ;; added
   "mp-enemy-authority.o" ;; added
   "mp-battle-sync.o" ;; added
-  "mp-widow-state-mapper.o" ;; added
+  "boss-sync.o"
   "mp-tomb-widow-sync.o" ;; added
   "mp-widow-bomb-sync.o" ;; added
   "mp-traffic-h.o" ;; added

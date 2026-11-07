@@ -322,27 +322,31 @@ struct EnemySnapshot {
 
 struct BossState {
   enum class Kind : uint8_t {
+    NONE,
     PALACE_SQUID,
     WIDOW,
+    METALKOR,
   };
+  static constexpr uint8_t kMaxStateId = 31;
+  static constexpr uint8_t kMaxStage = 7;
+  static constexpr uint8_t kMaxDrawForceFade = 128;
 
-  Kind kind = Kind::PALACE_SQUID;
-  uint32_t active = 0;
-  uint32_t state_id = 0;
-  int32_t stage = 0;
-  int32_t hit_points = 0;
-  float shield_hit_points = 0.0f;
+  Kind kind = Kind::NONE;
+  uint8_t state_id = 0;
+  uint8_t stage = 0;
   PlayerSlot target_player_slot = kInvalidPlayerSlot;
-  uint32_t draw_force_fade = 0;
+  uint8_t draw_force_fade = 0;
+  float health = 0.0f;
+  float shield = 0.0f;
+  uint32_t state_entry = 0;
   std::array<float, 3> position = {};
-  std::array<float, 4> quaternion = {};
-  std::array<float, 3> root_position = {};
-  std::array<float, 4> root_quaternion = {};
+  std::array<float, 4> quaternion = {0.0f, 0.0f, 0.0f, 1.0f};
+  std::array<float, 3> anchor_position = {};
+  std::array<float, 4> anchor_quaternion = {0.0f, 0.0f, 0.0f, 1.0f};
   std::array<float, 3> trajectory_source = {};
   std::array<float, 3> trajectory_destination = {};
   float trajectory_duration = 0.0f;
   int32_t trajectory_age = 0;
-  uint32_t action_sequence = 0;
   uint32_t sample_time_ms = 0;
   uint64_t received_time_ms = 0;
   Sequence sequence = 0;

@@ -87,11 +87,14 @@ bool valid_enemy_state(const EnemyState& enemy) {
 }
 
 bool valid_boss_state(const BossState& boss) {
-  return boss.active <= 1 &&
-         boss.state_id <= (boss.kind == BossState::Kind::PALACE_SQUID ? 15u : 25u) &&
-         finite(boss.shield_hit_points) && finite_vector(boss.position) &&
-         finite_quaternion(boss.quaternion) && finite_vector(boss.root_position) &&
-         finite_quaternion(boss.root_quaternion) && finite_vector(boss.trajectory_source) &&
+  return boss.kind != BossState::Kind::NONE && boss.kind <= BossState::Kind::METALKOR &&
+         boss.state_id <= BossState::kMaxStateId && boss.stage <= BossState::kMaxStage &&
+         boss.draw_force_fade <= BossState::kMaxDrawForceFade &&
+         (boss.target_player_slot == kInvalidPlayerSlot ||
+          valid_index(boss.target_player_slot, kMaxPlayers)) &&
+         finite(boss.health) && finite(boss.shield) && finite_vector(boss.position) &&
+         finite_quaternion(boss.quaternion) && finite_vector(boss.anchor_position) &&
+         finite_quaternion(boss.anchor_quaternion) && finite_vector(boss.trajectory_source) &&
          finite_vector(boss.trajectory_destination) && finite(boss.trajectory_duration);
 }
 

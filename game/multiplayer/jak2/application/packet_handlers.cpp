@@ -128,27 +128,14 @@ std::vector<std::unique_ptr<platform::PacketHandler>> Jak2Adapter::make_packet_h
   add_world_handlers(handlers);
   add_entity_handlers(handlers);
   add_traffic_handlers(handlers);
-  add_packet_handler<wire::PalaceSquidStatePacket>(
-      handlers, wire::to_palace_squid_state_packet, state_.entities(),
-      wire::canonicalize_host_state,
+  add_packet_handler<wire::BossStatePacket>(
+      handlers, wire::to_boss_state_packet, state_.entities(), wire::canonicalize_host_state,
       [this](auto& handler, auto& endpoint, uint64_t now_ms) {
-        for (auto boss : local_frame_->bosses) {
-          if (boss.kind != core::BossState::Kind::PALACE_SQUID)
-            continue;
-          boss.sample_time_ms = local_frame_->sample_time_ms;
-          handler.send(boss, endpoint, now_ms);
-        }
-      },
-      frame_ready(local_frame_));
-  add_packet_handler<wire::WidowStatePacket>(
-      handlers, wire::to_widow_state_packet, state_.entities(), wire::canonicalize_host_state,
-      [this](auto& handler, auto& endpoint, uint64_t now_ms) {
-        for (auto boss : local_frame_->bosses) {
-          if (boss.kind != core::BossState::Kind::WIDOW)
-            continue;
-          boss.sample_time_ms = local_frame_->sample_time_ms;
-          handler.send(boss, endpoint, now_ms);
-        }
+        if (local_frame_->boss.kind == core::BossState::Kind::NONE)
+          return;
+        auto boss = local_frame_->boss;
+        boss.sample_time_ms = local_frame_->sample_time_ms;
+        handler.send(boss, endpoint, now_ms);
       },
       frame_ready(local_frame_));
   add_packet_handler<wire::AirlockStateBatchPacket>(

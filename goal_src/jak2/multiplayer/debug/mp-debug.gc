@@ -19,236 +19,37 @@
     ((mp-player-daxter? record) "DAXTER")
     (else "UNKNOWN")))
 
-(defun mp-find-squid-process ()
-  (let ((found-proc (the-as process #f)))
-    (iterate-process-tree *active-pool*
-                          (lambda ((p process-tree))
-                            (let ((proc (the-as process p)))
-                              (when (and proc (nonzero? proc) (= (-> proc type symbol) 'squid))
-                                (set! found-proc proc)))
-                            #t)
-                          *kernel-context*)
-    found-proc))
-
-(defun mp-find-widow-process ()
-  (let ((found-proc (the-as process #f)))
-    (let ((widow-entity (entity-by-type widow)))
-      (when (and widow-entity (nonzero? widow-entity))
-        (let ((widow-proc (-> widow-entity extra process)))
-          (when (and widow-proc (nonzero? widow-proc) (type? widow-proc widow))
-            (set! found-proc widow-proc)))))
-    found-proc))
-
-(defun mp-widow-debug-valid-position? ((slot mp-widow-state))
-  (and slot
-       (nonzero? slot)
-       (= (-> slot x) (-> slot x))
-       (= (-> slot y) (-> slot y))
-       (= (-> slot z) (-> slot z))
-       (< (fabs (-> slot x)) (meters 100000.0))
-       (< (fabs (-> slot y)) (meters 100000.0))
-       (< (fabs (-> slot z)) (meters 100000.0))))
-
-(defun mp-widow-debug-slot-active? ((slot mp-widow-state))
-  (and slot (nonzero? slot) (nonzero? (-> slot active)) (mp-widow-debug-valid-position? slot)))
-
-(defun widow-debug-draw-record ((proc widow) (slot mp-widow-state))
-  (when (and proc (nonzero? proc) (-> proc root) (nonzero? (-> proc root)) (mp-widow-debug-slot-active? slot))
-    (let ((widow-pos (-> proc root trans))
-          (record-pos (new 'stack-no-clear 'vector)))
-      (set-vector! record-pos (-> slot x) (-> slot y) (-> slot z) 1.0)
-      (add-debug-sphere #t (bucket-id debug-no-zbuf1) record-pos (meters 1.0) (static-rgba 0 255 255 180))
-      (when (> (vector-vector-distance widow-pos record-pos) (meters 0.1))
-        (add-debug-line #t
-                        (bucket-id debug-no-zbuf1)
-                        widow-pos
-                        record-pos
-                        (static-rgba 0 255 255 180)
-                        #f
-                        (the-as rgba 0)))))
-  (none))
-
-(defun mp-draw-widow-boss-debug ()
-  (let ((proc (mp-find-widow-process)))
-    (when (and proc (nonzero? proc))
-      (format *stdcon* "WIDOW: current=~S next=~S~%" (debug-state-name proc) (debug-next-state-name proc))
-      (when (and *mp-widow-buffer* (nonzero? (the-as uint *mp-widow-buffer*)))
-        (let ((local-state (-> *mp-widow-buffer* local-state))
-              (remote-state (-> *mp-widow-buffer* remote-state)))
-          (if (mp-widow-debug-slot-active? local-state)
-            (begin
-              (format *stdcon*
-                      "  LOCAL: id=~D state=~S pos=(~F,~F,~F)~%"
-                      (-> local-state state-id)
-                      (mp-widow-state-id->name (-> local-state state-id))
-                      (-> local-state x)
-                      (-> local-state y)
-                      (-> local-state z))
-              (format *stdcon*
-                      "  LOCAL ROT: (~F,~F,~F,~F)~%"
-                      (-> local-state quat-x)
-                      (-> local-state quat-y)
-                      (-> local-state quat-z)
-                      (-> local-state quat-w)))
-            (format *stdcon* "  LOCAL: unavailable~%"))
-          (if (mp-widow-debug-slot-active? remote-state)
-            (begin
-              (format *stdcon*
-                      "  REMOTE: id=~D state=~S pos=(~F,~F,~F)~%"
-                      (-> remote-state state-id)
-                      (mp-widow-state-id->name (-> remote-state state-id))
-                      (-> remote-state x)
-                      (-> remote-state y)
-                      (-> remote-state z))
-              (format *stdcon*
-                      "  REMOTE ROT: (~F,~F,~F,~F)~%"
-                      (-> remote-state quat-x)
-                      (-> remote-state quat-y)
-                      (-> remote-state quat-z)
-                      (-> remote-state quat-w)))
-            (format *stdcon* "  REMOTE: unavailable~%"))
-          (when (and (mp-widow-debug-slot-active? local-state) (mp-widow-debug-slot-active? remote-state))
-            (let ((local-pos (new 'stack-no-clear 'vector))
-                  (remote-pos (new 'stack-no-clear 'vector)))
-              (set-vector! local-pos (-> local-state x) (-> local-state y) (-> local-state z) 1.0)
-              (set-vector! remote-pos (-> remote-state x) (-> remote-state y) (-> remote-state z) 1.0)
-              (format *stdcon* "  SNAPSHOT DELTA: ~F~%" (vector-vector-distance local-pos remote-pos))))))))
-  (none))
-
-(defun mp-draw-widow-boss-overlay ()
-  (let ((proc (the-as widow (mp-find-widow-process))))
-    (when (and proc (nonzero? proc) (-> proc root) (nonzero? (-> proc root)))
-      (let ((draw-pos (new 'stack-no-clear 'vector)))
-        (vector-copy! draw-pos (-> proc root trans))
-        (+! (-> draw-pos y) (meters 8.0))
-        (if (and *mp-widow-buffer* (nonzero? (the-as uint *mp-widow-buffer*)))
-          (let ((snapshot-state (if (mp-session-host?) (-> *mp-widow-buffer* local-state) (-> *mp-widow-buffer* remote-state))))
-            (if (mp-widow-debug-slot-active? snapshot-state)
-              (let ((record-pos (new 'stack-no-clear 'vector)))
-                (set-vector! record-pos (-> snapshot-state x) (-> snapshot-state y) (-> snapshot-state z) 1.0)
-                (add-debug-text-3d #t
-                                   (bucket-id debug-no-zbuf1)
-                                   (the-as string
-                                           (format #f
-                                                   "WIDOW~%STATE:~S~%RECORD:~S~%DELTA:~F"
-                                                   (debug-state-name proc)
-                                                   (mp-widow-state-id->name (-> snapshot-state state-id))
-                                                   (vector-vector-distance (-> proc root trans) record-pos)))
-                                   draw-pos
-                                   (font-color cyan)
-                                   (the-as vector2h #f))
-                (widow-debug-draw-record proc snapshot-state))
-              (add-debug-text-3d #t
-                                 (bucket-id debug-no-zbuf1)
-                                 (the-as string
-                                         (format #f "WIDOW~%STATE:~S~%RECORD: unavailable" (debug-state-name proc)))
-                                 draw-pos
-                                 (font-color orange)
-                                 (the-as vector2h #f))))
-          (add-debug-text-3d #t
-                             (bucket-id debug-no-zbuf1)
-                             (the-as string (format #f "WIDOW~%STATE:~S~%BUFFER: unavailable" (debug-state-name proc)))
-                             draw-pos
-                             (font-color orange)
-                             (the-as vector2h #f))))))
+(defun draw-boss-state-debug ((label string) (slot mp-replication-boss-state))
+  (format *stdcon*
+          "~S: kind:~D state:~S stage:~D~%"
+          label
+          (-> slot kind)
+          (boss-state-name (boss-kind-states (-> slot kind)) (-> slot state-id))
+          (-> slot stage))
+  (format *stdcon*
+          "  health:~,,2f shield:~,,2f target:~D entry:~D~%"
+          (-> slot health)
+          (-> slot shield)
+          (-> slot target-player-slot)
+          (-> slot state-entry))
   (none))
 
 (defun mp-draw-boss-debug ()
   (when *mp-debug-boss*
-    (format *stdcon* "~0k--- MP BOSS DEBUG ---~%")
-    (format *stdcon*
-            "ROLE: ~S CHARACTER: ~S~%"
-            (mp-debug-session-role-name)
-            (mp-debug-player-character-name (mp-local-player-record)))
-    (let ((squid-ready? (and *mp-palace-squid-buffer* (nonzero? (the-as uint *mp-palace-squid-buffer*)))))
-      (format *stdcon* "READY?: ~A~%" (if squid-ready? "YES" "NO")))
-    (let ((proc (process-by-type-exact 'squid *active-pool*)))
-      (when (and proc (nonzero? proc))
-        (format *stdcon* "PROC HANDLE: ~A (addr: ~D)~%" (if (and proc (nonzero? proc)) "VALID" "NULL") proc)))
-    (let ((tree-proc (mp-find-squid-process)))
-      (if (and tree-proc (nonzero? tree-proc))
-        (begin
-          (format *stdcon* "TREE SQUID: FOUND (addr: ~D)~%" tree-proc)
-          (format *stdcon* "STATE: ~S~%" (if (-> tree-proc state) (-> tree-proc state name) "NONE"))
-          (format *stdcon* "NEXT-STATE: ~S~%" (if (-> tree-proc next-state) (-> tree-proc next-state name) "NONE")))
-        (format *stdcon* "TREE SQUID: NOT FOUND~%")))
-    (when (and *mp-palace-squid-buffer* (nonzero? (the-as uint *mp-palace-squid-buffer*)))
-      (let ((local-state (-> *mp-palace-squid-buffer* local-state))
-            (remote-state (-> *mp-palace-squid-buffer* remote-state)))
-        (when (and local-state (nonzero? local-state))
-          (format *stdcon*
-                  "LOCAL BUFFER: Active: ~D, Stage: ~D, HP: ~D, ShieldHP: ~f, Seq: ~D~%"
-                  (-> local-state active)
-                  (-> local-state stage)
-                  (-> local-state hit-points)
-                  (-> local-state shield-hit-points)
-                  (-> local-state action-seq)))
-        (when (and remote-state (nonzero? remote-state))
-          (format *stdcon*
-                  "REMOTE BUFFER: Active: ~D, Stage: ~D, HP: ~D, ShieldHP: ~f, Seq: ~D~%"
-                  (-> remote-state active)
-                  (-> remote-state stage)
-                  (-> remote-state hit-points)
-                  (-> remote-state shield-hit-points)
-                  (-> remote-state action-seq)))
-        (when (nonnull? *mp-replication-state*)
-          (format *stdcon* "REMOTE GENERATION: ~D~%" (-> *mp-replication-state* remote bosses generation)))))
-    (format *stdcon* "-------------------------~%~%")
-    (mp-draw-widow-boss-debug))
+    (format *stdcon* "~0k--- MP BOSS DEBUG (~S) ---~%" (mp-debug-session-role-name))
+    (draw-boss-state-debug "LOCAL" (local-boss-state))
+    (draw-boss-state-debug "REMOTE" (-> *mp-replication-state* remote boss)))
   (none))
 
 (defun mp-draw-boss-debug-overlay ()
   (when *mp-debug-boss*
-    (mp-draw-widow-boss-overlay)
-    (let ((proc (the-as squid (process-by-type-exact 'squid *active-pool*))))
-      (when (and proc (nonzero? proc) (-> proc root) (nonzero? (-> proc root)))
-        (let ((draw-pos (new 'stack-no-clear 'vector)))
-          (vector-copy! draw-pos (-> proc root trans))
-          (+! (-> draw-pos y) (meters 8.0))
-          (let ((is-jak? (mp-local-player-jak?)))
-            (let ((color (if is-jak? (font-color green) (font-color yellow)))
-                  (role-str (if is-jak? "JAK(AUTH)" "DAX(REPLICA)")))
-              (if (and *mp-palace-squid-buffer* (nonzero? (the-as uint *mp-palace-squid-buffer*)))
-                (let ((local-state (-> *mp-palace-squid-buffer* local-state))
-                      (remote-state (-> *mp-palace-squid-buffer* remote-state)))
-                  (when (and local-state (nonzero? local-state) remote-state (nonzero? remote-state))
-                    (let ((local-state-name (if (-> proc state) (-> proc state name) 'none)))
-                      (add-debug-text-3d #t
-                                         (bucket-id debug-no-zbuf1)
-                                         (the-as string
-                                                 (format #f
-                                                         "BOSS (~S)~%LC state:~S HP:~D~%   stg:~D trg:~D sq:~D"
-                                                         role-str
-                                                         local-state-name
-                                                         (-> local-state hit-points)
-                                                         (-> local-state stage)
-                                                         (-> local-state target-player-slot)
-                                                         (-> local-state action-seq)))
-                                         draw-pos
-                                         color
-                                         (the-as vector2h #f))
-                      (let ((remote-pos (new 'stack-no-clear 'vector)))
-                        (vector-copy! remote-pos draw-pos)
-                        (+! (-> remote-pos y) (meters -2.5))
-                        (add-debug-text-3d #t
-                                           (bucket-id debug-no-zbuf1)
-                                           (the-as string
-                                                   (format #f
-                                                           "RM id:~D HP:~D~%   stg:~D trg:~D sq:~D"
-                                                           (-> remote-state state-id)
-                                                           (-> remote-state hit-points)
-                                                           (-> remote-state stage)
-                                                           (-> remote-state target-player-slot)
-                                                           (-> remote-state action-seq)))
-                                           remote-pos
-                                           (font-color cyan)
-                                           (the-as vector2h #f))))))
-                (add-debug-text-3d #t
-                                   (bucket-id debug-no-zbuf1)
-                                   (the-as string (format #f "BOSS (~S)~%BUFFER: NOT READY" role-str))
-                                   draw-pos
-                                   (font-color orange)
-                                   (the-as vector2h #f)))))))))
+    (let ((slot (if (mp-session-host?) (local-boss-state) (-> *mp-replication-state* remote boss))))
+      (when (!= (-> slot kind) (boss-kind none))
+        (add-debug-sphere #t
+                          (bucket-id debug-no-zbuf1)
+                          (boss-state-trans! (-> slot position) (new 'stack-no-clear 'vector))
+                          (meters 1.0)
+                          (static-rgba 0 255 255 180)))))
   (none))
 
 (defun mp-debug-append-draw-flag ((flags-text string) (flag-name string) (enabled? symbol))

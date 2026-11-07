@@ -1,0 +1,144 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defconstant BOSS_PREDICTION_GRACE (seconds 0.5))
+
+(define *boss-last-host-state* (the uint 0))
+
+(define *boss-random-generator* (new 'global 'random-generator))
+
+(define *boss-entry-pid* -1)
+
+(define *boss-entry-count* (the uint 0))
+
+(define *boss-mismatch-time* (the-as time-frame 0))
+
+(defun boss-kind-states ((kind boss-kind))
+  (case kind
+    (((boss-kind palace-squid)) *palace-squid-boss-states*)
+    (((boss-kind widow)) *widow-boss-states*)
+    (((boss-kind metalkor)) *metalkor-boss-states*)
+    (else '())))
+
+(defun boss-state-id ((states pair) (name symbol))
+  (let ((id 1))
+    (while (not (null? states))
+      (when (= (car states) name)
+        (return (the uint id)))
+      (+! id 1)
+      (set! states (cdr states))))
+  (the uint 0))
+
+(defun boss-state-name ((states pair) (id uint))
+  (let ((index 1))
+    (while (not (null? states))
+      (when (= index (the int id))
+        (return (the-as symbol (car states))))
+      (+! index 1)
+      (set! states (cdr states))))
+  (the-as symbol #f))
+
+(defun boss-current-state-name ((proc process))
+  (let ((current (if (nonnull? (-> proc next-state)) (-> proc next-state) (-> proc state))))
+    (if (nonnull? current) (-> current name) (the-as symbol #f))))
+
+(defun go-boss-state! ((proc process) (name symbol))
+  (let ((target (if name (process-state-by-name proc name) (the-as state #f))))
+    (when (nonnull? target)
+      (go (the-as (state process) target))))
+  (none))
+
+(defun boss-host-state-changed? ((slot mp-replication-boss-state))
+  (when (!= (-> slot state-id) *boss-last-host-state*)
+    (set! *boss-last-host-state* (-> slot state-id))
+    (return #t))
+  #f)
+
+(defun track-boss-entries! ((proc process))
+  (set! *boss-entry-pid* (-> proc pid))
+  (set! *boss-entry-count* (the uint 0))
+  (set! *boss-mismatch-time* 0)
+  (none))
+
+(defun boss-entry-seed ((entry uint))
+  (let ((x (logand #xffffffff (* entry #x9e3779b1))))
+    (set! x (logand #xffffffff (* (logxor x (shr x 16)) #x7feb352d)))
+    (set! x (logand #xffffffff (* (logxor x (shr x 15)) #x846ca68b)))
+    (the uint (logior 1 (logand #x7fffffff (logxor x (shr x 16)))))))
+
+(defun boss-note-state-entry! ((proc process))
+  (when (= (-> proc pid) *boss-entry-pid*)
+    (+! *boss-entry-count* 1)
+    (set! (-> *boss-random-generator* seed) (boss-entry-seed *boss-entry-count*)))
+  (none))
+
+(defun local-boss-state ()
+  (-> *mp-replication-state* local boss))
+
+(defun remote-boss-state ((kind boss-kind))
+  (let ((slot (-> *mp-replication-state* remote boss)))
+    (if (= (-> slot kind) kind) slot (the-as mp-replication-boss-state #f))))
+
+(defun store-boss-transform! ((position (pointer float)) (quaternion (pointer float)) (trans vector) (quat quaternion))
+  (mem-copy! (the-as pointer position) (the-as pointer trans) 12)
+  (mem-copy! (the-as pointer quaternion) (the-as pointer quat) 16)
+  (none))
+
+(defun boss-state-trans! ((position (pointer float)) (out vector))
+  (set-vector! out (-> position 0) (-> position 1) (-> position 2) 1.0))
+
+(defun boss-state-quat! ((quaternion (pointer float)) (out quaternion))
+  (quaternion-set! out (-> quaternion 0) (-> quaternion 1) (-> quaternion 2) (-> quaternion 3)))
+
+(defun publish-boss-state! ((kind boss-kind) (proc process-drawable))
+  (let ((slot (local-boss-state)))
+    (set! (-> slot kind) kind)
+    (set! (-> slot state-id) (the uint8 (boss-state-id (boss-kind-states kind) (boss-current-state-name proc))))
+    (set! (-> slot state-entry) *boss-entry-count*)
+    (store-boss-transform! (-> slot position) (-> slot quaternion) (-> proc root trans) (-> proc root quat))
+    slot))
+
+(defun apply-boss-presentation! ((proc process-drawable) (slot mp-replication-boss-state))
+  (let ((trans (new 'stack-no-clear 'vector))
+        (quat (new 'stack-no-clear 'quaternion)))
+    (mp-actor-apply-presentation! (the-as collide-shape (-> proc root))
+                                  (boss-state-trans! (-> slot position) trans)
+                                  (boss-state-quat! (-> slot quaternion) quat)
+                                  (-> proc root transv)))
+  (none))
+
+(defun boss-target ((proc process-drawable) (kind boss-kind))
+  (cond
+    ((not (mp-session-in-game?)) (the-as process-focusable *target*))
+    ((mp-session-host?)
+     (let* ((slot (local-boss-state))
+            (target (mp-combat-nearest-player-target (the-as process-focusable proc)
+                                                     (mp-player-target-by-slot (-> slot target-player-slot))
+                                                     #f)))
+       (set! (-> slot target-player-slot)
+             (the uint8 (if (nonnull? target) (mp-player-slot-from-process target) MP_INVALID_PLAYER_SLOT)))
+       target))
+    (else
+     (let ((slot (remote-boss-state kind)))
+       (the-as process-focusable (if slot (mp-player-target-by-slot (-> slot target-player-slot)) #f))))))
+
+(defun snap-boss-to-host! ((proc process) (name symbol) (entry uint))
+  (log 'debug "[Boss] snap ~S #~D -> ~S #~D~%" (boss-current-state-name proc) *boss-entry-count* name entry)
+  (set! *boss-entry-count* (- entry 1))
+  (set! *boss-mismatch-time* 0)
+  (go-boss-state! proc name)
+  (none))
+
+(defun follow-boss-host-state! ((proc process) (slot mp-replication-boss-state))
+  (let ((name (boss-state-name (boss-kind-states (-> slot kind)) (-> slot state-id)))
+        (entry (-> slot state-entry)))
+    (cond
+      ((or (not name) (zero? entry) (and (= entry *boss-entry-count*) (= name (boss-current-state-name proc))))
+       (set! *boss-mismatch-time* 0))
+      ((<= *boss-entry-count* entry)
+       (snap-boss-to-host! proc name entry))
+      ((zero? *boss-mismatch-time*)
+       (set! *boss-mismatch-time* (current-time)))
+      ((time-elapsed? *boss-mismatch-time* BOSS_PREDICTION_GRACE)
+       (snap-boss-to-host! proc name entry))))
+  (none))

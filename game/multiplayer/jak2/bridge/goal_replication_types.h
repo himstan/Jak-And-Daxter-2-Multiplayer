@@ -19,7 +19,7 @@ inline constexpr size_t kMPReplicationVehicleCapacity = 64;
 inline constexpr size_t kMPReplicationAirlockCapacity =
     multiplayer::jak2::core::kMaxPlayers * multiplayer::jak2::core::kMaxAirlockStatesPerSnapshot;
 inline constexpr size_t kMPReplicationEventCapacity = 64;
-inline constexpr uint32_t kMPReplicationStateSize = 195968;
+inline constexpr uint32_t kMPReplicationStateSize = 195776;
 
 #pragma pack(push, 1)
 struct MPReplicationPlayerVehicleGOAL {
@@ -95,17 +95,6 @@ static_assert(sizeof(MPReplicationTrafficSetGOAL) == 13328);
 static_assert(offsetof(MPReplicationTrafficSetGOAL, pedestrians) == 16);
 static_assert(offsetof(MPReplicationTrafficSetGOAL, vehicles) == 8208);
 
-struct alignas(16) MPReplicationBossSetGOAL {
-  uint32_t generation;
-  uint8_t squid_valid;
-  uint8_t widow_valid;
-  alignas(16) MPReplicationPalaceSquidStateGOAL squid;
-  alignas(16) MPReplicationWidowStateGOAL widow;
-};
-static_assert(sizeof(MPReplicationBossSetGOAL) == 192);
-static_assert(offsetof(MPReplicationBossSetGOAL, squid) == 16);
-static_assert(offsetof(MPReplicationBossSetGOAL, widow) == 144);
-
 struct alignas(16) MPReplicationAirlockSetGOAL {
   uint32_t generation;
   uint32_t sequence;
@@ -159,7 +148,7 @@ struct alignas(16) MPReplicationFrameGOAL {
   alignas(16) MPReplicationBootstrapStateGOAL bootstrap;
   alignas(16) MPReplicationEnemySetGOAL enemies;
   alignas(16) MPReplicationTrafficSetGOAL traffic;
-  alignas(16) MPReplicationBossSetGOAL bosses;
+  alignas(16) MPReplicationBossStateGOAL boss;
   alignas(16) MPReplicationAirlockSetGOAL airlocks;
   alignas(16) GungameStateGOAL gungame;
   alignas(16) MPReplicationAuthorityGOAL authority;
@@ -168,38 +157,33 @@ struct alignas(16) MPReplicationFrameGOAL {
   uint8_t world_valid;
   uint8_t bootstrap_valid;
   uint32_t identity_generation;
-  uint32_t enemy_clear_generation;
-  uint32_t traffic_clear_generation;
-  uint32_t boss_clear_generation;
 };
-static_assert(sizeof(MPReplicationFrameGOAL) == 92816);
+static_assert(sizeof(MPReplicationFrameGOAL) == 92736);
 static_assert(offsetof(MPReplicationFrameGOAL, players) == 16);
 static_assert(offsetof(MPReplicationFrameGOAL, world) == 4624);
 static_assert(offsetof(MPReplicationFrameGOAL, bootstrap) == 4832);
 static_assert(offsetof(MPReplicationFrameGOAL, enemies) == 21328);
 static_assert(offsetof(MPReplicationFrameGOAL, traffic) == 78688);
-static_assert(offsetof(MPReplicationFrameGOAL, bosses) == 92016);
-static_assert(offsetof(MPReplicationFrameGOAL, airlocks) == 92208);
-static_assert(offsetof(MPReplicationFrameGOAL, authority) == 92768);
+static_assert(offsetof(MPReplicationFrameGOAL, boss) == 92016);
+static_assert(offsetof(MPReplicationFrameGOAL, airlocks) == 92128);
+static_assert(offsetof(MPReplicationFrameGOAL, authority) == 92688);
 
 struct alignas(16) MPReplicationStateGOAL {
   uint32_t abi_size;
   uint8_t local_player_slot;
   uint8_t host_player_slot;
+  uint8_t outbound_event_count;
+  uint8_t inbound_event_count;
   alignas(16) PlayerDataGOAL player_data;
   uint8_t player_data_valid;
   alignas(16) MPReplicationFrameGOAL local;
   alignas(16) MPReplicationFrameGOAL remote;
-  uint8_t outbound_event_count;
   alignas(16) MPEventGOAL outbound_events[kMPReplicationEventCapacity];
-  uint8_t inbound_event_count;
   alignas(16) MPEventGOAL inbound_events[kMPReplicationEventCapacity];
 };
 
 static_assert(sizeof(MPReplicationStateGOAL) == kMPReplicationStateSize);
 static_assert(offsetof(MPReplicationStateGOAL, local) == 64);
-static_assert(offsetof(MPReplicationStateGOAL, remote) == 92880);
-static_assert(offsetof(MPReplicationStateGOAL, outbound_event_count) == 185696);
-static_assert(offsetof(MPReplicationStateGOAL, outbound_events) == 185712);
-static_assert(offsetof(MPReplicationStateGOAL, inbound_event_count) == 190832);
-static_assert(offsetof(MPReplicationStateGOAL, inbound_events) == 190848);
+static_assert(offsetof(MPReplicationStateGOAL, remote) == 92800);
+static_assert(offsetof(MPReplicationStateGOAL, outbound_events) == 185536);
+static_assert(offsetof(MPReplicationStateGOAL, inbound_events) == 190656);

@@ -84,7 +84,7 @@ void advance_presentation(RemoteReplicationFrame& frame, const uint64_t now_ms) 
   std::ranges::for_each(frame.enemy_targets, advance);
   std::ranges::for_each(frame.pedestrian_targets, advance);
   std::ranges::for_each(frame.ambient_vehicle_targets, advance);
-  std::ranges::for_each(frame.boss_targets, advance);
+  advance(frame.boss_target);
 }
 
 void PresentationRuntime::reset() {
@@ -94,7 +94,7 @@ void PresentationRuntime::reset() {
   enemy_histories_.clear();
   pedestrian_histories_.clear();
   ambient_vehicle_histories_.clear();
-  boss_histories_ = {};
+  boss_history_ = {};
   enemy_generation_ = 0;
   traffic_generation_ = 0;
   enemy_source_sequences_ = {};
@@ -276,33 +276,31 @@ void PresentationRuntime::prepare_traffic(RemoteReplicationFrame& frame, const u
           frame.ambient_vehicle_targets, true, 1.0f);
 }
 
-void PresentationRuntime::prepare_bosses(RemoteReplicationFrame& frame, const uint64_t now_ms) {
-  for (size_t index = 0; index < frame.bosses.size(); ++index) {
-    const auto& boss = frame.bosses[index];
-    auto& history = boss_histories_[index];
-    if (boss.active == 0 || boss.sequence == 0) {
-      history = {};
-      frame.boss_targets[index] = {};
-      continue;
-    }
-    const uint32_t context = boss.active ^ (static_cast<uint32_t>(boss.stage) * 16777619u);
-    const bool reset = history.sequence != 0 && history.context != context;
-    if (reset)
-      history.timeline.reset();
-    if (reset || history.sequence != boss.sequence) {
-      const bool squid = boss.kind == core::BossState::Kind::PALACE_SQUID;
-      history.timeline.push({.sample_time_ms = boss.sample_time_ms,
-                             .position = squid ? boss.root_position : boss.position,
-                             .quaternion = squid ? boss.root_quaternion : boss.quaternion},
-                            boss.received_time_ms, 20.0f * kGoalUnitsPerMeter);
-      history.sequence = boss.sequence;
-      history.context = context;
-      ++history.generation;
-    }
-    frame.boss_targets[index] =
-        make_target(static_cast<uint32_t>(index + 1),
-                    present_timeline(history.timeline, now_ms, kBossProfile), history.generation);
+void PresentationRuntime::prepare_boss(RemoteReplicationFrame& frame, const uint64_t now_ms) {
+  const auto& boss = frame.boss;
+  auto& history = boss_history_;
+  if (boss.kind == core::BossState::Kind::NONE || boss.sequence == 0) {
+    history = {};
+    frame.boss_target = {};
+    return;
   }
+  const uint32_t context =
+      static_cast<uint32_t>(boss.kind) ^ (static_cast<uint32_t>(boss.stage) * 16777619u);
+  const bool reset = history.sequence != 0 && history.context != context;
+  if (reset)
+    history.timeline.reset();
+  if (reset || history.sequence != boss.sequence) {
+    history.timeline.push({.sample_time_ms = boss.sample_time_ms,
+                           .position = boss.position,
+                           .quaternion = boss.quaternion},
+                          boss.received_time_ms, 20.0f * kGoalUnitsPerMeter);
+    history.sequence = boss.sequence;
+    history.context = context;
+    ++history.generation;
+  }
+  frame.boss_target = make_target(static_cast<uint32_t>(boss.kind),
+                                  present_timeline(history.timeline, now_ms, kBossProfile),
+                                  history.generation);
 }
 
 void PresentationRuntime::update_packet_generations(const core::ReplicationState& state) {
@@ -348,7 +346,7 @@ void PresentationRuntime::prepare(RemoteReplicationFrame& frame,
   }
   prepare_enemies(frame, now_ms);
   prepare_traffic(frame, now_ms);
-  prepare_bosses(frame, now_ms);
+  prepare_boss(frame, now_ms);
   frame.enemy_generation = enemy_generation_;
   frame.traffic_generation = traffic_generation_;
   frame.presented_ms = now_ms;
