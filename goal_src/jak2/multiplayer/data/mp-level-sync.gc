@@ -253,7 +253,7 @@
     ((not display) (the uint 0))
     ((= display 'display) (the uint 1))
     ((= display 'special) (the uint 2))
-    ((= display 'display-no-wait) (the uint 3))
+    ((= display 'actor) (the uint 3))
     (else (the uint 0))))
 
 (defun mp-level-mode->display ((flags uint))
@@ -261,7 +261,7 @@
     (cond
       ((= mode 1) 'display)
       ((= mode 2) 'special)
-      ((= mode 3) 'display-no-wait)
+      ((= mode 3) 'actor)
       (else #f))))
 
 (defun mp-level-flags-borrow-owner-index ((flags uint))

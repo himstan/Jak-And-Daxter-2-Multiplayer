@@ -365,6 +365,17 @@
   ((payload uint8 :overlay-at (-> data 0)))
   :size-assert 80)
 
+(deftype defend-stadium-state-data (structure)
+  ((trans  float   3)
+   (quat   int16   4)
+   (samos  int16   6)
+   (health uint8   2)
+   (stage  uint8)))
+
+(deftype defend-stadium-state-event (mp-event)
+  ((payload defend-stadium-state-data :inline :overlay-at (-> data 0)))
+  :size-assert 80)
+
 (deftype mp-mountain-resolution-event (mp-event)
   ((payload uint8 :overlay-at (-> data 0)))
   :size-assert 80)

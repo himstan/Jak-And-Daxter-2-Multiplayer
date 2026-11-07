@@ -683,6 +683,7 @@
   "drill-mech-sync.o"
   "under-mech-sync.o"
   "under-sig-sync.o"
+  "defend-stadium-sync.o"
   "castle-sync.o"
   "port-run-sync.o"
   "helldog-sync.o"

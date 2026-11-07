@@ -75,7 +75,7 @@ enum class PlayerLevelDisplayMode : uint8_t {
   NONE = 0,
   DISPLAY = 1,
   SPECIAL = 2,
-  DISPLAY_NO_WAIT = 3,
+  ACTOR = 3,
 };
 
 inline constexpr size_t kPlayerLevelSlotCount = 6;

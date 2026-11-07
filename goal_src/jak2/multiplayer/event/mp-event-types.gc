@@ -207,4 +207,7 @@
                                         (receive-under-block! (the-as under-block-event evt)))
                   (MP_EVENT_UNDER_SIG_TASK 73
                                            uint8
-                                           (receive-under-sig-task! (the-as under-sig-task-event evt))))
+                                           (receive-under-sig-task! (the-as under-sig-task-event evt)))
+                  (MP_EVENT_DEFEND_STADIUM_STATE 74
+                                                 defend-stadium-state-data
+                                                 (receive-defend-stadium-state! (the-as defend-stadium-state-event evt))))
