@@ -473,9 +473,10 @@
   (none))
 
 (defun remote-scene-chain ((scene-name string))
-  (if (string= scene-name "castle-krew-boss-fight-res")
-      '("castle-krew-boss-fight-res" "city-ashelin-drop-off")
-      scene-name))
+  (cond
+    ((string= scene-name "castle-krew-boss-fight-res") '("castle-krew-boss-fight-res" "city-ashelin-drop-off"))
+    ((string= scene-name "outro-nest") '("outro-nest" "outro-palace" "outro-hiphog" "outro-port"))
+    (else scene-name)))
 
 (defun mp-finish-pending-scene-sync! ((source-record mp-player-record))
   (let ((scene-name *mp-pending-scene-sync-name*))

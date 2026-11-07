@@ -801,15 +801,6 @@
   (kill-prefer-falling self)
   )
 
-(defun krew-boss-chase-pos ((this process-focusable))
-  (let ((player (mp-combat-nearest-player-target this (the-as process-focusable #f) #f)))
-    (if (nonnull? player)
-        (get-trans player 0)
-        (target-pos 0)
-        )
-    )
-  )
-
 (defmethod general-event-handler ((this krew-boss-clone) (arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
   "Handles various events for the enemy
    @TODO - unsure if there is a pattern for the events and this should have a more specific name"
@@ -868,7 +859,7 @@
     (set! (-> self id) (sound-play "krew-travel"))
     )
   :trans (behavior ()
-    (let ((gp-1 (vector-! (new 'stack-no-clear 'vector) (krew-boss-chase-pos self) (-> self root trans)))
+    (let ((gp-1 (vector-! (new 'stack-no-clear 'vector) (nearest-player-trans self) (-> self root trans)))
           (s5-0 (quaternion->matrix (new-stack-matrix0) (-> self root quat)))
           )
       (vector-normalize! gp-1 1.0)
@@ -1121,7 +1112,7 @@
     #f
     )
   :post (behavior ()
-    (krew-boss-clone-method-179 self (krew-boss-chase-pos self))
+    (krew-boss-clone-method-179 self (nearest-player-trans self))
     (nav-enemy-method-176 self)
     )
   )

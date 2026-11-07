@@ -384,6 +384,7 @@
   ((last-hit-normal  vector  :inline)
    (sticky-time      time-frame)
    (flitter-slot     int8)
+   (flitter-aid      uint32)
    )
   (:state-methods
     egg-pop
@@ -903,7 +904,7 @@
   )
 
 ;; WARN: Return type mismatch object vs none.
-(defbehavior metalkor-egg-init-by-other metalkor-egg ((arg0 vector) (arg1 vector) (arg2 int))
+(defbehavior metalkor-egg-init-by-other metalkor-egg ((arg0 vector) (arg1 vector) (arg2 int) (aid uint))
   (let ((s3-0 (new 'process 'collide-shape-moving self (collide-list-enum usually-hit-by-player))))
     (set! (-> s3-0 dynam) (copy *standard-dynamics* 'process))
     (set! (-> s3-0 reaction) metalkor-egg-reaction)
@@ -951,6 +952,7 @@
   (set-vector! (-> self last-hit-normal) 0.0 1.0 0.0 1.0)
   (set! (-> self sticky-time) 0)
   (set! (-> self flitter-slot) arg2)
+  (set! (-> self flitter-aid) aid)
   (go-virtual fall)
   (none)
   )

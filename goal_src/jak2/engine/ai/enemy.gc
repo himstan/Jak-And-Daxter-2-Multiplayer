@@ -3517,6 +3517,14 @@
   :post enemy-falling-post
   )
 
+(defun tag-enemy-gem! ((this enemy) (gem-ptr (pointer process)))
+  (let ((gem-proc (if (nonnull? gem-ptr) (the-as gem (ppointer->process gem-ptr)) (the-as gem #f))))
+    (when (and (nonnull? gem-proc) (type? gem-proc gem))
+      (set! (-> gem-proc enemy-gem-source-id) (the-as uint32 (mp-get-enemy-aid this)))
+      (set! (-> gem-proc enemy-gem-index) (the-as uint32 0))
+      (gem-seed-enemy-rng! gem-proc))
+    gem-proc))
+
 (defmethod dying ((this enemy))
   "Cleans-up the enemy and any associated resources. Potentially spawns skull gems"
   (log 'debug "[Enemy] Method dying got called for nid=~D~%" (-> this net-id))
@@ -3546,13 +3554,7 @@
               )
             (source-aid (the-as uint (mp-get-enemy-aid this))))
         (when (not (mp-enemy-gem-collected? source-aid (the uint 0)))
-          (let ((gem-ptr (birth-pickup-at-point a0-18 (pickup-type gem) 1.0 #t *entity-pool* (-> this fact))))
-            (when (nonnull? gem-ptr)
-              (let ((gem-proc (the-as gem (ppointer->process gem-ptr))))
-                (when (and (nonnull? gem-proc) (type? gem-proc gem))
-                  (set! (-> gem-proc enemy-gem-source-id) (the-as uint32 source-aid))
-                  (set! (-> gem-proc enemy-gem-index) (the-as uint32 0))
-                  (gem-seed-enemy-rng! gem-proc)))))))
+          (tag-enemy-gem! this (birth-pickup-at-point a0-18 (pickup-type gem) 1.0 #t *entity-pool* (-> this fact)))))
       )
     (logclear! (-> this enemy-flags) (enemy-flag vulnerable vulnerable-backup))
     (logclear! (-> this focus-status) (focus-status dangerous))

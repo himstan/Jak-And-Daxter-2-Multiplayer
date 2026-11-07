@@ -40,13 +40,9 @@
 (defun mp-scene-current-local-name-matches? ((scene-name string))
   (when (and scene-name (nonzero? scene-name) *scene-player* (nonzero? *scene-player*))
     (let ((scene-proc (the-as scene-player (ppointer->process *scene-player*))))
-      (when (and scene-proc
-                 (nonzero? scene-proc)
-                 (-> scene-proc scene)
-                 (nonzero? (-> scene-proc scene))
-                 (-> scene-proc scene name)
-                 (nonzero? (-> scene-proc scene name)))
-        (return (string= scene-name (-> scene-proc scene name))))))
+      (when (nonnull? scene-proc (-> scene-proc scene))
+        (let ((chain-name (scene-player-chain-name scene-proc)))
+          (return (the-as symbol (and (nonnull? chain-name) (string= scene-name chain-name))))))))
   #f)
 
 (defun mp-scene-player-record-joined? ((record mp-player-record))

@@ -67,6 +67,10 @@
             (set! best-distance candidate-distance)))))
     best-target))
 
+(defun nearest-player-trans ((source process-focusable))
+  (let ((player (mp-combat-nearest-player-target source (the-as process-focusable #f) #f)))
+    (if (nonnull? player) (get-trans player 0) (target-pos 0))))
+
 (defun mp-target-death-state? ((state-name symbol))
   (or (= state-name 'target-death)
       (= state-name 'target-indax-death)

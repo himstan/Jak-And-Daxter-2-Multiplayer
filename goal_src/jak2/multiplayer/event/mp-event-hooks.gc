@@ -53,6 +53,7 @@
              (nonzero? arg0)
              (-> arg0 entity)
              (nonzero? (-> arg0 entity))
+             (= arg0 (-> arg0 entity extra process))
              (not (movie?))
              (not (mp-should-block-break-sync? arg0)))
     (log 'debug "[MP-Events] Sending BREAK for process ~A aid=~D~%" arg0 (-> arg0 entity aid))

@@ -745,6 +745,7 @@
   (when (and manager (nonzero? manager))
     (set! (-> manager level-request-owned?) #f)
     (when (and (not (mp-bootstrap-in-progress?))
+               (not (nonnull? *scene-player*))
                (= (-> manager phase) (mp-spectate-phase active))
                (mp-spectate-record-eligible-for-manager? manager record)
                *load-state*

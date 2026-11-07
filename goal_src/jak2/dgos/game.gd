@@ -685,6 +685,7 @@
   "under-sig-sync.o"
   "defend-stadium-sync.o"
   "castle-sync.o"
+  "nest-sync.o"
   "port-run-sync.o"
   "helldog-sync.o"
   "bombbot-sync.o"

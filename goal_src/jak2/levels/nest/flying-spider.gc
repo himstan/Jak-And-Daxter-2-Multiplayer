@@ -186,6 +186,9 @@
     (set! (-> self path-du) (rnd-float-range self 0.2 0.5))
     (set-vector! (-> self root scale) 0.0 0.0 0.0 0.0)
     )
+  :exit (behavior ()
+    (set-vector! (-> self root scale) 1.0 1.0 1.0 0.0)
+    )
   :trans (behavior ()
     (if (= (-> self path-u) 1.0)
         (go-virtual ambush-falling)
@@ -282,6 +285,33 @@
     )
   )
 
+(defbehavior flying-spider-update-focus-dir flying-spider ()
+  (let ((focus (handle->process (-> self focus handle))))
+    (when focus
+      (let ((side (vector-x-quaternion! (new 'stack-no-clear 'vector) (-> self root quat)))
+            (forward (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> self root quat)))
+            (to-focus
+              (vector-! (new 'stack-no-clear 'vector) (get-trans (the-as process-focusable focus) 0) (-> self root trans))
+              )
+            )
+        (set! (-> side y) 0.0)
+        (set! (-> forward y) 0.0)
+        (set! (-> to-focus y) 0.0)
+        (vector-normalize! side 1.0)
+        (vector-normalize! forward 1.0)
+        (vector-normalize! to-focus 1.0)
+        (set! (-> self focus-dir) (cond
+                                    ((< (cos 910.2222) (vector-dot to-focus forward)) (the-as uint 0))
+                                    ((< 0.0 (vector-dot to-focus side)) (the-as uint 1))
+                                    (else (the-as uint 2))
+                                    )
+              )
+        )
+      )
+    (the-as symbol focus)
+    )
+  )
+
 (defstate turn-to-focus (flying-spider)
   :virtual #t
   :event enemy-event-handler
@@ -297,43 +327,9 @@
     0
     )
   :trans (behavior ()
-    (if (>= 2 (the-as int (-> self focus aware)))
+    (if (or (>= 2 (the-as int (-> self focus aware))) (not (flying-spider-update-focus-dir)))
         (go-stare self)
         )
-    (let ((s3-0 (handle->process (-> self focus handle))))
-      (cond
-        (s3-0
-          (let ((gp-0 (vector-x-quaternion! (new 'stack-no-clear 'vector) (-> self root quat)))
-                (s4-0 (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> self root quat)))
-                (s5-1
-                  (vector-! (new 'stack-no-clear 'vector) (get-trans (the-as process-focusable s3-0) 0) (-> self root trans))
-                  )
-                )
-            (set! (-> gp-0 y) 0.0)
-            (set! (-> s4-0 y) 0.0)
-            (set! (-> s5-1 y) 0.0)
-            (vector-normalize! gp-0 1.0)
-            (vector-normalize! s4-0 1.0)
-            (vector-normalize! s5-1 1.0)
-            (cond
-              ((< (cos 910.2222) (vector-dot s5-1 s4-0))
-               (set! (-> self focus-dir) (the-as uint 0))
-               0
-               )
-              ((< 0.0 (vector-dot s5-1 gp-0))
-               (set! (-> self focus-dir) (the-as uint 1))
-               )
-              (else
-                (set! (-> self focus-dir) (the-as uint 2))
-                )
-              )
-            )
-          )
-        (else
-          (go-stare self)
-          )
-        )
-      )
     )
   :code (behavior ()
     (until #f
@@ -368,6 +364,9 @@
     #f
     )
   :post (behavior ()
+    (if (enemy-replica? self)
+        (flying-spider-update-focus-dir)
+        )
     (flying-spider-method-182 self (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> self root quat)))
     (nav-enemy-face-focus-post)
     )

@@ -1,0 +1,57 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defconstant NEST_SWITCH_AID (the uint 33006))
+(defconstant NEST_PISTON_AID (the uint 33005))
+(defconstant METALKOR_AID (the uint 29556))
+(defconstant METALKOR_HIT_ID_BASE (the uint #x77000000))
+(defconstant METALKOR_HIT_DARK_BOMB (the uint #x10000))
+(defconstant METALKOR_HIT_ID_END (the uint #x77020000))
+(defconstant METALKOR_STATE_ID (the uint #x77100000))
+
+(defun nest-switch-pressed? ()
+  (let ((perm (aid-perm NEST_SWITCH_AID #f)))
+    (the symbol (and (nonnull? perm) (logtest? (-> perm status) (entity-perm-status subtask-complete))))))
+
+(defun record-nest-switch-press! ()
+  (mark-aid-complete! NEST_SWITCH_AID (entity-perm-status subtask-complete))
+  (mark-aid-complete! NEST_PISTON_AID (entity-perm-status subtask-complete))
+  (none))
+
+(defun broadcast-nest-switch-press! ()
+  (when (mp-session-in-game?)
+    (record-nest-switch-press!)
+    (mp-event-enqueue-aid! MP_EVENT_BREAK NEST_SWITCH_AID))
+  (none))
+
+(defun send-to-entity-process ((aid uint) (message symbol) (param uint))
+  (let ((ent (if (nonnull? *level*) (entity-by-aid aid) (the-as entity #f))))
+    (when (nonnull? ent (-> ent extra))
+      (send-event (-> ent extra process) message param)))
+  (none))
+
+(defun request-metalkor-hit! ((damage float) (dark-bomb? symbol))
+  (let ((amount (the uint (max 1 (min #xffff (the int (* 10000.0 damage)))))))
+    (mp-event-enqueue-aid! MP_EVENT_BREAK
+                           (+ METALKOR_HIT_ID_BASE (if dark-bomb? METALKOR_HIT_DARK_BOMB (the uint 0)) amount)))
+  (none))
+
+(defun sync-nest-actor! ((aid uint) (message symbol))
+  (cond
+    ((= aid NEST_SWITCH_AID)
+     (if (= message 'synchronized?)
+       (nest-switch-pressed?)
+       (begin
+         (record-nest-switch-press!)
+         (send-to-entity-process aid 'mp-press (the uint 0))
+         #t)))
+    ((and (>= aid METALKOR_HIT_ID_BASE) (< aid METALKOR_HIT_ID_END))
+     (when (and (!= message 'synchronized?) (mp-session-host?))
+       (send-to-entity-process METALKOR_AID 'mp-hit (- aid METALKOR_HIT_ID_BASE)))
+     #t)
+    ((and (mp-battle-enemy-id? aid) (!= message 'synchronized?))
+     (send-to-entity-process METALKOR_AID 'mp-pop-egg aid)
+     #f)
+    (else #f)))
+
+(set! *actor-sync-handlers* (cons sync-nest-actor! *actor-sync-handlers*))

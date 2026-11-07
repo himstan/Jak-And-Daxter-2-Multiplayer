@@ -12,10 +12,13 @@
     (('track)
      #f
      )
-    (('bonk)
+    (('bonk 'attack)
+     (if (and (mp-session-in-game?) (nonzero? (-> self flitter-aid)) (mp-is-local-attacker? arg0))
+         (mp-event-enqueue-aid! MP_EVENT_BREAK (-> self flitter-aid))
+         )
      (go-virtual egg-pop)
      )
-    (('attack)
+    (('mp-pop)
      (go-virtual egg-pop)
      )
     )
@@ -57,6 +60,7 @@
       (set! (-> s5-0 directed?) #f)
       (set! (-> s5-0 no-initial-move-to-ground?) #f)
       (set! (-> s5-0 battle-enemy?) #f)
+      (set! (-> s5-0 aid-override) (-> self flitter-aid))
       (let ((gp-0 (new 'stack-no-clear 'event-message-block)))
         (set! (-> gp-0 from) (process->ppointer self))
         (set! (-> gp-0 num-params) 2)
@@ -1432,18 +1436,18 @@
           (the-as int (-> this enemy-info gem-no-seg))
           (the-as int (-> this enemy-info gem-seg))
           )
-        (let ((v1-30
-                (ppointer->process
-                  (birth-pickup-at-point
-                    (vector<-cspace! (new 'stack-no-clear 'vector) (-> this node-list data (-> this enemy-info gem-joint)))
-                    (pickup-type gem)
-                    1.0
-                    #t
-                    (ppointer->process (-> this parent))
-                    (-> this fact)
-                    )
-                  )
-                )
+        (let ((v1-30 (tag-enemy-gem!
+                       this
+                       (birth-pickup-at-point
+                         (vector<-cspace! (new 'stack-no-clear 'vector) (-> this node-list data (-> this enemy-info gem-joint)))
+                         (pickup-type gem)
+                         1.0
+                         #t
+                         (ppointer->process (-> this parent))
+                         (-> this fact)
+                         )
+                       )
+                     )
               )
           (send-event (ppointer->process (-> this parent)) 'flitter-change-gem this v1-30)
           )
@@ -1477,18 +1481,18 @@
           (the-as int (-> this enemy-info gem-no-seg))
           (the-as int (-> this enemy-info gem-seg))
           )
-        (let ((v1-28
-                (ppointer->process
-                  (birth-pickup-at-point
-                    (vector<-cspace! (new 'stack-no-clear 'vector) (-> this node-list data (-> this enemy-info gem-joint)))
-                    (pickup-type gem)
-                    1.0
-                    #t
-                    *entity-pool*
-                    (-> this fact)
-                    )
-                  )
-                )
+        (let ((v1-28 (tag-enemy-gem!
+                       this
+                       (birth-pickup-at-point
+                         (vector<-cspace! (new 'stack-no-clear 'vector) (-> this node-list data (-> this enemy-info gem-joint)))
+                         (pickup-type gem)
+                         1.0
+                         #t
+                         *entity-pool*
+                         (-> this fact)
+                         )
+                       )
+                     )
               )
           (send-event (ppointer->process (-> this parent)) 'wasp-change-gem this v1-28)
           )
