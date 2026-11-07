@@ -125,7 +125,9 @@
           (notification (the-as text-id (-> event param 1))))
       (when (mp-player-slot-valid? player-slot)
         (mp-player-copy-name! (-> self name-buffer) player-slot)
-        (format (clear (-> self text-buffer)) (lookup-text! *common-text* notification #f) "")
+        (if (> num-params 2)
+          (format (clear (-> self text-buffer)) (lookup-text! *common-text* notification #f) "" (-> event param 2))
+          (format (clear (-> self text-buffer)) (lookup-text! *common-text* notification #f) ""))
         (notification-enqueue! self player-slot notification))))
   (none))
 

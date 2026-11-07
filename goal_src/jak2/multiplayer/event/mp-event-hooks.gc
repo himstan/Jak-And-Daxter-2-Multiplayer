@@ -2,6 +2,7 @@
 (in-package goal)
 
 (define-extern mp-scene-coordinator-note-start-broadcast! (function string none))
+(define-extern mountain-collection-notify! (function uint string none))
 (declare-type squid-grenade projectile)
 (declare-type metalhead-shot projectile)
 (declare-type parking-spot process-drawable)
@@ -146,6 +147,8 @@
 
 (defun mp-event-hook-scene! ((state mp-scene-state) (name string))
   (when (and (mp-session-in-game?) (not (mp-tomb-scene-transport-suppressed? name)))
+    (when (= state (mp-scene-state started))
+      (mountain-collection-notify! (mp-local-player-slot) name))
     (let ((event-type (cond
                         ((= (the-as uint state) (the-as uint (mp-scene-state started))) MP_EVENT_SCENE_START)
                         ((= (the-as uint state) (the-as uint (mp-scene-state request-skip))) MP_EVENT_SCENE_REQUEST_SKIP)

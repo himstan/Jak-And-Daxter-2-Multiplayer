@@ -5,6 +5,7 @@
 (define-extern mp-tomb-scene-transport-suppressed? (function string symbol))
 
 (defun mp-reset-event-state! ()
+  (set! *mountain-collection-notified-mask* (the uint 0))
   (set! *mp-processing-remote-event* #f)
   (set! *mp-current-event-source-player-slot* MP_INVALID_PLAYER_SLOT)
   (mp-event-queue-reset!)

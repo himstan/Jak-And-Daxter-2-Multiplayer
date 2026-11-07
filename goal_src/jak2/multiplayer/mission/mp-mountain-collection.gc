@@ -10,6 +10,7 @@
 (defconstant MP_MOUNTAIN_PATH_SHARD (the-as uint8 3))
 
 (define *mp-mountain-path* (the-as uint8 MP_MOUNTAIN_PATH_UNKNOWN))
+(define *mountain-collection-notified-mask* (the uint 0))
 
 (defun mp-mountain-path-set! ((path uint))
   (when (and (not (mp-spectate-active?))
@@ -64,6 +65,32 @@
     ((string= scene-name "mountain-shard-res") MP_MOUNTAIN_PATH_SHARD)
     (#t MP_MOUNTAIN_PATH_UNKNOWN)))
 
+(defun mountain-collection-count ()
+  (+ (if (or (logtest? *mountain-collection-notified-mask* 2)
+             (task-node-closed? (game-task-node mountain-lens-resolution))) 1 0)
+     (if (or (logtest? *mountain-collection-notified-mask* 4)
+             (task-node-closed? (game-task-node mountain-gear-resolution))) 1 0)
+     (if (or (logtest? *mountain-collection-notified-mask* 8)
+             (task-node-closed? (game-task-node mountain-shard-resolution))) 1 0)))
+
+(defun mountain-collection-notify! ((player-slot uint) (scene-name string))
+  (when (and (mp-session-in-game?)
+             (mp-player-slot-valid? player-slot)
+             (nonnull? scene-name *game-info* (-> *game-info* sub-task-list) *active-pool*))
+    (let* ((path (mp-mountain-resolution-path scene-name))
+           (item-bit (ash 1 path))
+           (notification (case path
+                           ((MP_MOUNTAIN_PATH_LENS) (text-id notification-collected-lens))
+                           ((MP_MOUNTAIN_PATH_GEAR) (text-id notification-collected-gear))
+                           ((MP_MOUNTAIN_PATH_SHARD) (text-id notification-collected-shard))
+                           (else (text-id null)))))
+      (when (and (!= notification (text-id null)) (not (logtest? *mountain-collection-notified-mask* item-bit)))
+        (logior! *mountain-collection-notified-mask* item-bit)
+        (let ((manager (process-by-type-exact 'notification-manager *active-pool*)))
+          (when (nonnull? manager)
+            (send-event manager 'notify-player player-slot (the-as uint notification) (mountain-collection-count)))))))
+  (none))
+
 (defun mp-mountain-resolution-scene-matches-local-path? ((scene-name string))
   (let ((path (mp-mountain-resolution-path scene-name)))
     (and (!= path MP_MOUNTAIN_PATH_UNKNOWN) (= *mp-mountain-path* path))))
@@ -85,6 +112,8 @@
          (mp-mountain-resolution-scene-matches-local-path? scene-name))))
 
 (defun mp-mountain-resolution-handle-scene-start! ((scene-name string) (evt mp-scene-event))
+  (when (nonnull? evt)
+    (mountain-collection-notify! (-> evt source-player-slot) scene-name))
   (when (and (mp-mountain-resolution-scene? scene-name)
              evt
              (nonzero? evt)
