@@ -171,7 +171,7 @@
   )
 
 (defun under-warp-follows-water? ()
-  (and (deep-swim?) (nonnull? *target* (-> *target* control)) (not (focus-test? *target* mech))))
+  (and (mp-session-in-game?) (nonnull? *target* (-> *target* control)) (not (focus-test? *target* mech))))
 
 (defbehavior set-under-warp! underb-master ((enabled symbol))
   (cond
@@ -425,7 +425,7 @@
       )
     )
   (set! (-> *game-info* air-supply) (fmin 1.0 (-> self air-supply)))
-  (if (or (and (not (mp-session-in-game?))
+  (if (or (and (not (deep-swim?))
                (nonnull? *target*) (not (focus-test? *target* mech)))
           (and (>= (-> self air-supply) 1.0) (time-elapsed? (-> self underwater-time) (seconds 3)))
           )
@@ -662,7 +662,7 @@
        (<= (vector-vector-xz-distance (get-trans player 0) (-> lock root trans)) distance)))
 
 (defbehavior under-lock-personal? under-locking ()
-  (and (mp-session-in-game?) (nonnull? self) (= (-> self id) 2)))
+  (and (deep-swim?) (nonnull? self) (= (-> self id) 2)))
 
 (defbehavior under-lock-player-on-side? under-locking ((index int) (inside? symbol))
   (let ((door (the-as com-airlock (under-lock-actor self index))))

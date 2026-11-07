@@ -201,4 +201,10 @@
                                               (receive-sewer-water-state! (the-as sewer-water-state-event evt)))
                   (MP_EVENT_MINIGAME_SCORE 71
                                            uint16
-                                           (receive-minigame-score! (the-as minigame-score-event evt))))
+                                           (receive-minigame-score! (the-as minigame-score-event evt)))
+                  (MP_EVENT_UNDER_BLOCK 72
+                                        under-block-event-data
+                                        (receive-under-block! (the-as under-block-event evt)))
+                  (MP_EVENT_UNDER_SIG_TASK 73
+                                           uint8
+                                           (receive-under-sig-task! (the-as under-sig-task-event evt))))

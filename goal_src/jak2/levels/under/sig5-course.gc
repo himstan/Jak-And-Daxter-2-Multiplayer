@@ -34,6 +34,24 @@
   )
 
 
+(define-extern *sig5-course* sig5-course)
+
+(defun sig5-player-within? ((pos vector) (sphere vector))
+  (>= (square (-> sphere w)) (vector-vector-xz-distance-squared pos sphere)))
+
+(defun sig5-any-player-within? ((center vector) (radius float))
+  (let ((sphere (new 'stack-no-clear 'vector)))
+    (set! (-> sphere quad) (-> center quad))
+    (set! (-> sphere w) radius)
+    (any-player-position? sig5-player-within? sphere)))
+
+(defun sig5-player-past-plane? ((pos vector) (plane vector))
+  (>= (+ (* (-> plane x) (-> pos x)) (* (-> plane z) (-> pos z)) (-> plane w)) 0.0))
+
+(defun sig5-player-at-centipede-three? ((pos vector) (plane vector))
+  (and (sig5-player-past-plane? pos plane)
+       (>= (square 81920.0) (vector-vector-xz-distance-squared pos (-> *sig5-course* spots 24 center)))))
+
 ;; WARN: Return type mismatch time-frame vs none.
 (defmethod sig-under-method-263 ((this sig-under))
   (let ((s5-0 (current-time)))
@@ -106,6 +124,9 @@
   (with-pp
     (case arg2
       (('set-task)
+       (when (and (mp-session-in-game?) (not *mp-processing-remote-event*))
+         (send-under-sig-task! (/ (the-as int (-> arg3 param 0)) 8))
+         )
        (let* ((s1-1 (logtest? (-> this bot-task-bits) (bot-task-bits botbits-4)))
               (t9-0 (method-of-type sig general-event-handler))
               (s5-1 (t9-0 this arg0 arg1 arg2 arg3))
@@ -158,7 +179,7 @@
 ;; WARN: disable def twice: 39. This may happen when a cond (no else) is nested inside of another conditional, but it should be rare.
 (defmethod sig-under-method-262 ((this sig-under) (arg0 symbol))
   (when (or (logtest? (-> this bot-task-bits) (bot-task-bits botbits-1))
-            (and arg0 (>= (square 81920.0) (vector-vector-xz-distance-squared (target-pos 0) (-> this root trans))))
+            (and arg0 (sig5-any-player-within? (-> this root trans) 81920.0))
             )
     (cond
       ((speech-playing? this 7)
@@ -438,6 +459,8 @@
 
 ;; WARN: Return type mismatch int vs symbol.
 (defun sig5-default-check-too-far ((arg0 sig-under))
+  (when (mp-session-in-game?)
+    (return (the-as symbol 0)))
   (let ((v0-0 (bot-simple-check-too-far arg0)))
     (if (logtest? (-> arg0 bot-task-bits) (bot-task-bits botbits-2))
         (set! v0-0 2)
@@ -829,17 +852,13 @@
                     (function sigt-wait-spot sig symbol)
                     (lambda ((arg0 object) (arg1 sig-under))
                       (sig-under-method-263 arg1)
-                      (let ((s5-0 (new 'stack-no-clear 'vector)))
-                        (set! (-> s5-0 quad) (-> (target-pos 0) quad))
-                        (set! (-> s5-0 y) 0.0)
-                        (when (and (>= (vector4-dot (the-as vector (-> arg1 test-plane)) s5-0) 0.0)
-                                   (scene-play arg1 "under-centipede-two" #f)
-                                   )
-                          (ai-task-control-method-12 (-> arg1 ai-ctrl) arg1)
-                          (go-to-waypoint! arg1 11 #f)
-                          (ai-task-control-method-10 (-> arg1 ai-ctrl) arg1)
-                          #t
-                          )
+                      (when (and (any-player-position? sig5-player-past-plane? (the-as vector (-> arg1 test-plane)))
+                                 (scene-play arg1 "under-centipede-two" #f)
+                                 )
+                        (ai-task-control-method-12 (-> arg1 ai-ctrl) arg1)
+                        (go-to-waypoint! arg1 11 #f)
+                        (ai-task-control-method-10 (-> arg1 ai-ctrl) arg1)
+                        #t
                         )
                       )
                     )
@@ -1378,12 +1397,7 @@
                           (set! v1-14
                                 (and (time-elapsed? (-> arg1 waypoint-time0) (seconds 0.25))
                                      (begin
-                                       (set! (-> s5-0 quad) (-> (target-pos 0) quad))
-                                       (set! (-> s5-0 y) 0.0)
-                                       (set! (-> s5-0 w) 1.0)
-                                       (when (and (>= (vector4-dot (the-as vector (-> arg1 test-plane)) s5-0) 0.0)
-                                                  (>= (square 81920.0) (vector-vector-xz-distance-squared (target-pos 0) (-> arg1 sig5-course spots 24 center)))
-                                                  )
+                                       (when (any-player-position? sig5-player-at-centipede-three? (the-as vector (-> arg1 test-plane)))
                                          (set! v1-14 #t)
                                          (goto cfg-21)
                                          )
@@ -1502,7 +1516,7 @@
                       (sig-under-method-263 arg1)
                       (when (and (time-elapsed? (-> arg1 waypoint-time0) (seconds 4))
                                  (sig-method-257 arg1)
-                                 (>= (square 61440.0) (vector-vector-xz-distance-squared (target-pos 0) (-> arg1 root trans)))
+                                 (sig5-any-player-within? (-> arg1 root trans) 61440.0)
                                  )
                         (set! (-> arg1 enemy-flags)
                               (the-as enemy-flag (logclear (-> arg1 enemy-flags) (enemy-flag jump-check-blocked)))

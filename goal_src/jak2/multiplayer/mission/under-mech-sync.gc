@@ -1,7 +1,10 @@
 (in-package goal)
 
 (defun deep-swim? ()
-  (the symbol (and (mp-session-in-game?) (nonnull? *level*) (= (level-status *level* 'underb) 'active))))
+  (the symbol (and (mp-session-in-game?)
+                   (task-node-open? (game-task-node under-mech-resolution))
+                   (nonnull? *level*)
+                   (= (level-status *level* 'underb) 'active))))
 
 (defun in-under-depths? ((player target))
   (and (nonnull? player (-> player control)) (< (-> player control trans y) (meters -30))))
@@ -101,7 +104,7 @@
   (let ((player (under-breath-target)))
     (the symbol (and (nonnull? player (-> player water))
                      (or (not (mp-session-in-game?))
-                         (and (in-under-depths? player) (not (player-scene-placement-active? player))))
+                         (and (deep-swim?) (in-under-depths? player) (not (player-scene-placement-active? player))))
                      (logtest? (-> player water flags) (water-flags under-water))))))
 
 (define *under-mech-aids*

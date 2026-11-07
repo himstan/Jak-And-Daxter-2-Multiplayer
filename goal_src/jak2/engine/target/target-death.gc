@@ -22,6 +22,7 @@
 
 (define *mp-death-respawn-event-pending?* #f)
 (define *mp-death-party-wipe-pending?* #f)
+(define-extern reset-under-mech-actors! (function none))
 
 ;; DECOMP BEGINS
 
@@ -1455,6 +1456,7 @@
   (when (or (mp-spectate-active?) (mp-spectate-requested?))
     (mp-death-spectate-abort!))
   (mp-reset-battle-sync-state!)
+  (reset-under-mech-actors!)
   (initialize!
     (-> self game)
     (if (= arg0 'bot)

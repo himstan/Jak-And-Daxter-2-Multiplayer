@@ -349,6 +349,22 @@
   ((payload uint16 :overlay-at (-> data 0)))
   :size-assert 80)
 
+(deftype under-block-event-data (structure)
+  ((aid     uint32)
+   (spawner int8)
+   (col     int8)
+   (row     int8)
+   (dir-x   int8)
+   (dir-z   int8)))
+
+(deftype under-block-event (mp-event)
+  ((payload under-block-event-data :inline :overlay-at (-> data 0)))
+  :size-assert 80)
+
+(deftype under-sig-task-event (mp-event)
+  ((payload uint8 :overlay-at (-> data 0)))
+  :size-assert 80)
+
 (deftype mp-mountain-resolution-event (mp-event)
   ((payload uint8 :overlay-at (-> data 0)))
   :size-assert 80)
