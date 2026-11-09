@@ -47,7 +47,7 @@
 
 (defmethod commited-to-ride? ((this sew-elevator))
   "@returns if the target is considered within the elevator area enough to begin descending/ascending"
-  (if (name= (-> this name) "sew-elevator-15")
+  (if (or (name= (-> this name) "sew-elevator-15") (name= (-> this name) "sew-elevator-25"))
       (if (is-at-top? this)
           (level-wanted? (-> this level-on-bottom))
           (level-wanted? (-> this level-on-top))
@@ -144,14 +144,21 @@
   (let ((func (method-of-type elevator init-defaults!)))
     (func this)
     )
-  (if (name= (-> this name) "sew-elevator-15")
-      (begin
-          (set! (-> this params xz-threshold) 348160.0)
-          (set! (-> this level-on-top) 'ctywide)
-          (set! (-> this level-on-bottom) 'sewer)
-        )
+  (cond
+    ((name= (-> this name) "sew-elevator-15")
+     (set! (-> this params xz-threshold) 348160.0)
+     (set! (-> this level-on-top) 'ctywide)
+     (set! (-> this level-on-bottom) 'sewer)
+     )
+    ((name= (-> this name) "sew-elevator-25")
+     (set! (-> this params xz-threshold) 184320.0)
+     (set! (-> this level-on-top) 'ctywide)
+     (set! (-> this level-on-bottom) 'sewesc)
+     )
+    (else
       (set! (-> this params xz-threshold) 184320.0)
       )
+    )
   (when (and (logtest? (elevator-flags elevator-flags-17) (-> this params flags))
              (and (task-node-closed? (game-task-node sewer-escort-introduction))
                   (not (task-node-closed? (game-task-node sewer-escort-resolution)))
