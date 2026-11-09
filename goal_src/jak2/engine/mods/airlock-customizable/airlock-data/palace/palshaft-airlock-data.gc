@@ -4,8 +4,8 @@
 (define *palshaft-airlock-data* (new 'static 'boxed-array :type airlock-data
               (static-airlock-data 
                 :airlock-name "com-airlock-inner-26"
-                :airlock-elevator "com-elevator-2"
-                :other-side-levels '(palcab palroof palboss)
+                :airlock-elevators '("com-elevator-2" "com-elevator-3")
+                :other-side-levels '(palcab palroof palboss palent throne)
                 :on-notice '(when #t '(ctypal ctywide))
                 :on-activate #f
                 :on-enter '(begin (want-display 'ctywide 'display) (want-display 'ctypal 'display))
@@ -27,7 +27,7 @@
                 )
               (static-airlock-data 
                 :airlock-name "com-airlock-inner-25"
-                :airlock-elevator "com-elevator-2"
+                :airlock-elevators '("com-elevator-2")
                 :other-side-levels '(ctywide)
                 :on-notice '(when #t '(palcab palroof))
                 :on-activate #f
@@ -40,7 +40,7 @@
                 )
               (static-airlock-data 
                 :airlock-name "com-airlock-inner-23"
-                :airlock-elevator "com-elevator-1"
+                :airlock-elevators '("com-elevator-1")
                 :other-side-levels '(ctywide)
                 :on-notice '(when #t '(palcab palroof))
                 :on-activate #f
@@ -53,6 +53,8 @@
                 )
               (static-airlock-data 
                 :airlock-name "com-airlock-inner-36"
+                :airlock-elevators '("com-elevator-3")
+                :other-side-levels '(ctywide)
                 :on-notice '(unless (task-closed? "palace-sneak-in-meeting") '(palent))
                 :on-activate #f
                 :on-enter '(begin (want-display 'palent 'display))
@@ -64,6 +66,8 @@
                 )
               (static-airlock-data 
                 :airlock-name "com-airlock-inner-37"
+                :airlock-elevators '("com-elevator-3")
+                :other-side-levels '(ctywide)
                 :on-notice '(when (or (not (send-event self 'front)) (< (send-event self 'distance) 8192)) '(palent palout))
                 :on-activate #f
                 :on-enter '(begin (want-display 'palent 'display))
@@ -75,7 +79,7 @@
                 )
               (static-airlock-data 
                 :airlock-name "com-airlock-inner-22"
-                :airlock-elevator "com-elevator-1"
+                :airlock-elevators '("com-elevator-1")
                 :other-side-levels '(palcab palroof palboss)
                 :on-notice '(when #t '(ctygenb ctywide))
                 :on-activate #f

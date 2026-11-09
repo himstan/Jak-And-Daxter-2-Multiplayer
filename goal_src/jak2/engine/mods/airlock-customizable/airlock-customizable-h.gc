@@ -23,7 +23,7 @@
    (mp-sync?       symbol) ;; whether this airlock participates in multiplayer sync
    (sync-distance  meters) ;; minimum crossing distance that keeps multiplayer ready/commit state
    (other-side-levels pair) ;; levels that prove the remote player is already on the other side of this airlock
-   (airlock-elevator string)
+   (airlock-elevators pair) ;; elevator entity names serving this airlock; the first spawned one is used
    (on-notice      pair)   ;; evaluated on initialization to determine which levels must be loaded to open the airlock (can include task conditions)
    (on-blocked     pair)   ;; actions executed once when a player approaches while on-notice has no valid destination
    (on-activate    pair)   ;; actions executed when activating the airlock (e.g. load levels with 'want-load', load sound banks with 'want-sound')
@@ -40,7 +40,7 @@
                                  &key (mp-sync? #t)
                                  &key (sync-distance 0.0)
                                  &key (other-side-levels #f)
-                                 &key (airlock-elevator #f)
+                                 &key (airlock-elevators #f)
                                  &key (on-notice #f)
                                  &key (on-blocked #f)
                                  &key (on-activate #f)
@@ -54,7 +54,7 @@
      :airlock-name ,airlock-name
      :mp-sync? ,mp-sync?
      :sync-distance ,sync-distance
-     :airlock-elevator ,airlock-elevator
+     :airlock-elevators ,airlock-elevators
      :other-side-levels ,other-side-levels
      :on-notice ,on-notice
      :on-blocked ,on-blocked
@@ -110,7 +110,7 @@
    (mp-sync?               symbol) ;; whether this airlock participates in multiplayer sync
    (sync-distance          meters) ;; added
    (other-side-levels      pair) ;; added
-   (airlock-elevator       string) ;; added
+   (airlock-elevators      pair) ;; added
    (on-notice              pair) ;; added
    (on-blocked             pair) ;; added
    (blocked-script-ran?    symbol) ;; added
@@ -182,7 +182,7 @@
               (static-airlock-data
                 :airlock-name #f
                 :other-side-levels #f
-                :airlock-elevator #f
+                :airlock-elevators #f
                 :on-notice #f
                 :on-activate #f
                 :on-enter #f

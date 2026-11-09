@@ -4,7 +4,7 @@
 (define *sewescb-airlock-data* (new 'static 'boxed-array :type airlock-data
               (static-airlock-data 
                 :airlock-name "com-airlock-inner-15"
-                :airlock-elevator "sew-elevator-25"
+                :airlock-elevators '("sew-elevator-25")
                 :other-side-levels '(ctywide)
                 :on-notice '(when #t '(sewesc sewescb))
                 :on-activate #f
@@ -28,7 +28,7 @@
                 )
               (static-airlock-data 
                 :airlock-name "com-airlock-inner-16"
-                :airlock-elevator "sew-elevator-25"
+                :airlock-elevators '("sew-elevator-25")
                 :other-side-levels '(sewesc)
                 :on-notice '(when #t '(ctyindb ctywide))
                 :on-activate #f
