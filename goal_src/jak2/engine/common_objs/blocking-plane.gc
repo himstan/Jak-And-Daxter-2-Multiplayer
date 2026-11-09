@@ -161,6 +161,10 @@
    - collision information
    - loading the skeleton group / bones
    - sounds"
+  (when (and (mp-session-in-game?)
+             (nonnull? arg0 (-> arg0 extra) (-> arg0 extra level))
+             (= (-> arg0 extra level name) 'sewer))
+    (go (method-of-object this idle)))
   (let ((s5-0 (new 'process 'path-control this 'path 0.0 (the-as entity #f) #f))
         (f30-0 (res-lump-float (-> this entity) 'height :default 122880.0))
         )
