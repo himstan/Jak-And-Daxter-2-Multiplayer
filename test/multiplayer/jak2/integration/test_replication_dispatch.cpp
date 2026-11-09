@@ -81,8 +81,10 @@ TEST(Jak2AdapterIntegration, LivePlayerRulesAreHostOwnedAndSurviveWorldAndDelaye
   BootstrapState initial;
   initial.world.money = 12;
   ASSERT_TRUE(state.apply_bootstrap(initial, 1));
-  const PlayerRulesState rules = {
-      .respawn_delay_seconds = 0, .player_collision = true, .friendly_fire = true};
+  const PlayerRulesState rules = {.respawn_delay_seconds = 0,
+                                  .player_collision = true,
+                                  .friendly_fire = true,
+                                  .debug_permissions = kDebugPermissionMask};
   EXPECT_FALSE(state.apply(rules, from(1, 2)));
   ASSERT_TRUE(state.apply(rules, from(0, 2, true)));
   EXPECT_FALSE(state.apply(PlayerRulesState{}, from(0, 2, true)));
@@ -90,11 +92,14 @@ TEST(Jak2AdapterIntegration, LivePlayerRulesAreHostOwnedAndSurviveWorldAndDelaye
   EXPECT_EQ(state.world().respawn_delay_seconds, 0);
   EXPECT_TRUE(state.world().player_collision);
   EXPECT_TRUE(state.world().friendly_fire);
+  EXPECT_EQ(player_rules(state.world()), rules);
   EXPECT_FLOAT_EQ(state.world().money, 12);
   ASSERT_TRUE(state.apply_bootstrap(initial, 4));
   EXPECT_EQ(state.bootstrap().world.respawn_delay_seconds, 0);
   EXPECT_TRUE(state.bootstrap().world.player_collision);
   EXPECT_TRUE(state.world().friendly_fire);
+  EXPECT_EQ(player_rules(state.bootstrap().world), rules);
+  EXPECT_EQ(player_rules(state.world()), rules);
   state.reset();
   ASSERT_TRUE(state.apply_bootstrap(initial, 1));
   EXPECT_EQ(state.world().respawn_delay_seconds, kDefaultRespawnDelaySeconds);

@@ -600,6 +600,7 @@ TEST(Jak2Protocol, PlayerRulesRoundTripOnlyInBootstrap) {
         world.respawn_delay_seconds = delay;
         world.player_collision = collision;
         world.friendly_fire = friendly;
+        world.debug_permissions = jak2::core::kDebugPermissionMask;
         auto bytes = platform::wire::encode_packet(jak2::wire::to_packet(world));
         ASSERT_TRUE(bytes);
         EXPECT_EQ(bytes->size(), jak2::wire::kWorldStatePacketWireSize);
@@ -614,13 +615,14 @@ TEST(Jak2Protocol, PlayerRulesRoundTripOnlyInBootstrap) {
         without_rules.respawn_delay_seconds = jak2::core::kDefaultRespawnDelaySeconds;
         without_rules.player_collision = false;
         without_rules.friendly_fire = false;
+        without_rules.debug_permissions = 0;
         EXPECT_EQ(platform::wire::encode_packet(jak2::wire::to_packet(without_rules)), bytes);
 
         jak2::core::BootstrapState bootstrap = {};
         bootstrap.world = world;
         bytes = platform::wire::encode_packet(jak2::wire::to_packet(bootstrap));
         ASSERT_TRUE(bytes);
-        EXPECT_EQ(bytes->size(), 228u);
+        EXPECT_EQ(bytes->size(), 229u);
         auto initial = platform::wire::decode_packet<jak2::wire::BootstrapStatePacket>(*bytes);
         ASSERT_TRUE(initial);
         jak2::core::BootstrapState restored;
@@ -628,8 +630,13 @@ TEST(Jak2Protocol, PlayerRulesRoundTripOnlyInBootstrap) {
         EXPECT_EQ(restored.world.respawn_delay_seconds, delay);
         EXPECT_EQ(restored.world.player_collision, collision);
         EXPECT_EQ(restored.world.friendly_fire, friendly);
-        initial->friendly_fire = 2;
-        EXPECT_FALSE(platform::wire::encode_packet(*initial));
+        EXPECT_EQ(restored.world.debug_permissions, jak2::core::kDebugPermissionMask);
+        auto invalid = *initial;
+        invalid.friendly_fire = 2;
+        EXPECT_FALSE(platform::wire::encode_packet(invalid));
+        invalid = *initial;
+        invalid.debug_permissions = jak2::core::kDebugPermissionMask + 1;
+        EXPECT_FALSE(platform::wire::encode_packet(invalid));
       }
     }
   }
@@ -668,11 +675,13 @@ TEST(Jak2Protocol, HeroModeRoundTripsInWorldAndBootstrapAndRejectsInvalidFlags) 
 TEST(Jak2Protocol, PlayerRulesPacketIsCompactAndRejectsMalformedFlags) {
   using namespace multiplayer;
   for (const uint16_t delay : {uint16_t{0}, uint16_t{65535}}) {
-    const jak2::core::PlayerRulesState rules = {
-        .respawn_delay_seconds = delay, .player_collision = true, .friendly_fire = false};
+    const jak2::core::PlayerRulesState rules = {.respawn_delay_seconds = delay,
+                                                .player_collision = true,
+                                                .friendly_fire = false,
+                                                .debug_permissions = 0x05};
     const auto bytes = platform::wire::encode_packet(jak2::wire::to_packet(rules));
     ASSERT_TRUE(bytes);
-    ASSERT_EQ(bytes->size(), 4u);
+    ASSERT_EQ(bytes->size(), 5u);
     const auto decoded = platform::wire::decode_packet<jak2::wire::PlayerRulesPacket>(*bytes);
     ASSERT_TRUE(decoded);
     jak2::core::PlayerRulesState restored;
@@ -689,6 +698,9 @@ TEST(Jak2Protocol, PlayerRulesPacketIsCompactAndRejectsMalformedFlags) {
     EXPECT_FALSE(platform::wire::decode_packet<jak2::wire::PlayerRulesPacket>(malformed));
     malformed = *bytes;
     malformed[3] = 2;
+    EXPECT_FALSE(platform::wire::decode_packet<jak2::wire::PlayerRulesPacket>(malformed));
+    malformed = *bytes;
+    malformed[4] = jak2::core::kDebugPermissionMask + 1;
     EXPECT_FALSE(platform::wire::decode_packet<jak2::wire::PlayerRulesPacket>(malformed));
   }
 }

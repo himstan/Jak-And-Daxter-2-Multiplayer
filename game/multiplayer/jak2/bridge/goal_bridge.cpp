@@ -208,6 +208,7 @@ core::WorldState read_world(const MPWorldSyncStateGOAL& source) {
   result.player_collision = source.player_collision != 0;
   result.friendly_fire = source.friendly_fire != 0;
   result.hero_mode = source.hero_mode != 0;
+  result.debug_permissions = source.debug_permissions & core::kDebugPermissionMask;
   std::ranges::copy(source.task_mask, result.task_mask.begin());
   std::ranges::copy(std::begin(source.active_task_mask), std::end(source.active_task_mask),
                     result.active_task_mask.begin());
@@ -506,6 +507,7 @@ void write_world(const core::WorldState& source, MPWorldSyncStateGOAL& destinati
   destination.player_collision = source.player_collision;
   destination.friendly_fire = source.friendly_fire;
   destination.hero_mode = source.hero_mode;
+  destination.debug_permissions = source.debug_permissions;
   std::ranges::copy(source.task_mask.begin(), source.task_mask.end(),
                     std::begin(destination.task_mask));
   std::ranges::copy(source.active_task_mask.begin(), source.active_task_mask.end(),

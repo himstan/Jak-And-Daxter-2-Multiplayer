@@ -218,6 +218,7 @@
   (set! *mp-death-party-wipe-pending?* #f)
   (mp-reset-respawn-policy!)
   (mp-tomb-boulder-reset-state!)
+  (set! (-> *mp-world-state* debug-permissions) (debug-permission))
   (none))
 
 (defun mp-enter-host-left-terminal-state! ()

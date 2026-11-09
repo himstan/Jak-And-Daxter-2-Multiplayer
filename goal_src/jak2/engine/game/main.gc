@@ -245,7 +245,7 @@
      (set-master-mode
        (cond
          ;; game -> debug menu when pressing select/start with L3.
-         ((and (cpad-pressed? 0 select start) (cpad-hold? 0 l3) *debug-segment*)
+         ((and (cpad-pressed? 0 select start) (cpad-hold? 0 l3) (debug-menu-allowed?))
           'menu
           )
          ((cpad-hold? 0 start) ;; open progress
@@ -282,7 +282,7 @@
      (set! *pause-lock* (and *cheat-mode* (cpad-hold? 0 r2)))
      )
     (('freeze)
-     (set-master-mode (if (and (cpad-pressed? 0 select start) (cpad-hold? 0 l3) *debug-segment*)
+     (set-master-mode (if (and (cpad-pressed? 0 select start) (cpad-hold? 0 l3) (debug-menu-allowed?))
                           'menu
                           *master-mode*
                           )

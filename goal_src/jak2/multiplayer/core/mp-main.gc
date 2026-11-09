@@ -11,6 +11,7 @@
   (when (nonnull? this)
     (ensure-player-notifications! this))
   (mp-session-tick)
+  (enforce-debug-permissions!)
   (let ((status (pc-multi-get-session-status)))
     (mp-update-synchronized-gameplay-state!)
     (when (= status (mp-connection-status in-game))

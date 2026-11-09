@@ -73,8 +73,7 @@ bool bootstrap_equal(const core::BootstrapState& left, const core::BootstrapStat
   const auto& a = left.world;
   const auto& b = right.world;
   return a.money == b.money && a.gems == b.gems && a.skill == b.skill &&
-         a.respawn_delay_seconds == b.respawn_delay_seconds &&
-         a.player_collision == b.player_collision && a.friendly_fire == b.friendly_fire &&
+         core::player_rules(a) == core::player_rules(b) &&
          a.task_mask == b.task_mask && a.active_task_mask == b.active_task_mask &&
          a.completed_task_mask == b.completed_task_mask && left.host_task == right.host_task &&
          left.host_continue == right.host_continue &&
@@ -265,20 +264,14 @@ void Jak2Adapter::add_world_handlers(Handlers& handlers) {
   add_packet_handler<wire::PlayerRulesPacket>(
       handlers, wire::to_packet, state_.world(), wire::canonicalize_player_rules,
       [this](auto& handler, auto& endpoint, uint64_t now_ms) {
-        const auto& world = local_frame_->world;
-        const core::PlayerRulesState rules = {.respawn_delay_seconds = world.respawn_delay_seconds,
-                                              .player_collision = world.player_collision,
-                                              .friendly_fire = world.friendly_fire};
+        const auto rules = core::player_rules(local_frame_->world);
         if (handler.send(rules, endpoint, now_ms))
           last_player_rules_ = rules;
       },
       [this]() -> std::optional<bool> {
         if (!local_frame_ || local_frame_->local_player_slot >= core::kMaxPlayers)
           return std::nullopt;
-        const auto& world = local_frame_->world;
-        const core::PlayerRulesState rules = {.respawn_delay_seconds = world.respawn_delay_seconds,
-                                              .player_collision = world.player_collision,
-                                              .friendly_fire = world.friendly_fire};
+        const auto rules = core::player_rules(local_frame_->world);
         if (!last_player_rules_) {
           last_player_rules_ = rules;
           return false;

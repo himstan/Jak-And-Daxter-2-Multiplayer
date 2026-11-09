@@ -656,6 +656,7 @@
   "mp-enemy-debug.o" ;; added  
   "mp-debug.o" ;; added
   "mp-task-debug.o" ;; added
+  "debug-permissions.o" ;; added
   "mp-oracle-darkjak.o" ;; added
   "rumble-utils.o" ;; added
   "mp-target-state-mapper.o" ;; added

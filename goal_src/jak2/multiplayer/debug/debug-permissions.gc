@@ -1,0 +1,118 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(define *debug-allow-cheats?* #f)
+(define *debug-allow-continues?* #f)
+(define *debug-cheats-suppressed?* #f)
+
+(define *client-debug-menu-rules*
+  '((allow "Game" "Settings")
+    (allow "Game" "Stop Watch Start")
+    (allow "Game" "Stop Watch Stop")
+    (allow "Game" "Suicide")
+    (continues "Game" "Continue")
+    (continues "Game" "Continue Start")
+    (cheats "Game" "Give Ammo and Collectables")
+    (cheats "Game" "Unlock Everything")
+    (cheats "Game" "Secrets")
+    (cheats "Game" "OpenGOAL Cheats")
+    (cheats "Game" "Features")
+    (never "Game")
+    (never "Play")
+    (never "Task")
+    (never "Racing")
+    (allow "Scene" "Scene Info")
+    (never "Scene")
+    (never "Artist" "Target Start")
+    (never "Artist" "Target Stop")
+    (never "Artist" "Mike F")
+    (never "Artist" "Editor")
+    (never "Actor" "Spawn Actors")
+    (never "Actor" "Reset Actors")
+    (never "Actor" "Traffic Start")
+    (never "Actor" "Traffic Kill")
+    (cheats "Actor" "Unkillable")
+    (never "Target" "Target")
+    (continues "Target" "Save Continue")
+    (cheats "Target" "Mode")
+    (cheats "Target" "Pilot Mode")
+    (cheats "Target" "Darkjak")
+    (cheats "Target" "Gun")
+    (cheats "Target" "Invulnerable")
+    (cheats "Target" "Endless Ammo")
+    (cheats "Target" "Full Stuff")
+    (cheats "Target" "Trick Mode")
+    (cheats "Target" "Reset Trans")
+    (cheats "Target" "Zero Trans")
+    (never "Multiplayer" "Debug Permissions")))
+
+(defun local-debug-permissions ()
+  (let ((permissions (debug-permission)))
+    (when *debug-segment*
+      (logior! permissions (debug-permission host-debug))
+      (if *debug-allow-cheats?*
+          (logior! permissions (debug-permission cheats)))
+      (if *debug-allow-continues?*
+          (logior! permissions (debug-permission continues))))
+    permissions))
+
+(defun debug-restricted-client? ()
+  (and (mp-session-active?) (not (mp-session-host?))))
+
+(defun debug-permitted? ((permission debug-permission))
+  (cond
+    ((not (mp-session-active?)) #t)
+    ((and (mp-session-host?) (!= permission (debug-permission cheats))) #t)
+    ((not (nonnull? *mp-world-state*)) #f)
+    (else (logtest? (-> *mp-world-state* debug-permissions) permission))))
+
+(defun debug-menu-allowed? ()
+  (the-as symbol (and *debug-segment* (debug-permitted? (debug-permission host-debug)))))
+
+(defun enforce-debug-cheats! ()
+  (cond
+    ((debug-permitted? (debug-permission cheats))
+     (when *debug-cheats-suppressed?*
+       (set! *debug-cheats-suppressed?* #f)
+       (set! *cheat-mode* 'debug)))
+    ((= *cheat-mode* 'debug)
+     (set! *debug-cheats-suppressed?* #t)
+     (set! *cheat-mode* #f)))
+  (none))
+
+(defun enforce-debug-permissions! ()
+  (enforce-debug-cheats!)
+  (when (and (= *master-mode* 'menu) (not (debug-menu-allowed?)))
+    (set-master-mode 'game))
+  (none))
+
+(defun debug-menu-node-within? ((node debug-menu-node) (ancestor debug-menu-node))
+  (let ((current node))
+    (while (and (nonnull? current) (!= current ancestor))
+      (set! current (-> current parent)))
+    (nonnull? current)))
+
+(defun debug-menu-rule-permitted? ((permission symbol))
+  (case permission
+    (('allow) #t)
+    (('cheats) (debug-permitted? (debug-permission cheats)))
+    (('continues) (debug-permitted? (debug-permission continues)))
+    (else #f)))
+
+(defun client-debug-menu-rule ((item debug-menu-item))
+  (dolist (rules *client-debug-menu-rules*)
+    (let* ((rule (the-as pair (car rules)))
+           (node (debug-menu-find-from-template *debug-menu-context* (the-as pair (cdr rule)))))
+      (if (and node (debug-menu-node-within? item node))
+          (return rule))))
+  (the-as pair #f))
+
+(defun debug-menu-item-permitted? ((item debug-menu-item))
+  (cond
+    ((not (debug-restricted-client?)) #t)
+    ((not (nonnull? item (-> item parent))) #f)
+    ((type? item debug-menu-item-submenu) #t)
+    ((!= (-> item parent context) *debug-menu-context*) #f)
+    (else
+      (let ((rule (client-debug-menu-rule item)))
+        (or (not rule) (debug-menu-rule-permitted? (the-as symbol (car rule))))))))

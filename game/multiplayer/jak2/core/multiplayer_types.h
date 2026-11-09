@@ -29,6 +29,7 @@ inline constexpr size_t kMaxBootstrapAids = 4096;
 inline constexpr size_t kGameTaskCount = 110;
 inline constexpr size_t kGameTaskCompletionBytes = (kGameTaskCount + 7) / 8;
 inline constexpr uint16_t kDefaultRespawnDelaySeconds = 20;
+inline constexpr uint8_t kDebugPermissionMask = 0x07;
 inline constexpr size_t kMaxPedestrians = 128;
 inline constexpr size_t kMaxVehicles = 64;
 inline constexpr PlayerSlot kInvalidPlayerSlot = platform::kInvalidPlayerSlot;
@@ -370,6 +371,7 @@ struct PlayerRulesState {
   uint16_t respawn_delay_seconds = kDefaultRespawnDelaySeconds;
   bool player_collision = false;
   bool friendly_fire = false;
+  uint8_t debug_permissions = 0;
   bool operator==(const PlayerRulesState&) const = default;
 };
 
@@ -388,10 +390,25 @@ struct WorldState {
   bool player_collision = false;
   bool friendly_fire = false;
   bool hero_mode = false;
+  uint8_t debug_permissions = 0;
   std::array<uint8_t, 64> task_mask = {};
   std::array<uint8_t, 64> active_task_mask = {};
   std::array<uint8_t, kGameTaskCompletionBytes> completed_task_mask = {};
 };
+
+inline PlayerRulesState player_rules(const WorldState& world) {
+  return {.respawn_delay_seconds = world.respawn_delay_seconds,
+          .player_collision = world.player_collision,
+          .friendly_fire = world.friendly_fire,
+          .debug_permissions = world.debug_permissions};
+}
+
+inline void apply_player_rules(WorldState& world, const PlayerRulesState& rules) {
+  world.respawn_delay_seconds = rules.respawn_delay_seconds;
+  world.player_collision = rules.player_collision;
+  world.friendly_fire = rules.friendly_fire;
+  world.debug_permissions = rules.debug_permissions;
+}
 
 enum class GungamePhase : uint8_t { INACTIVE, RED_INTRO, YELLOW_INTRO, COURSE, FINISHED };
 enum class GungameTargetState : uint8_t { NOT_SPAWNED, SPAWNED, BROKEN };

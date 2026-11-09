@@ -4143,6 +4143,11 @@
              (flag "Respawn Policy Debug Draw" *mp-respawn-policy-debug?* dm-boolean-toggle-pick-func)
             )
            (menu
+             "Debug Permissions"
+             (flag "Allow Cheats (Flight, Heal etc...)" *debug-allow-cheats?* dm-boolean-toggle-pick-func)
+             (flag "Allow Client Continues" *debug-allow-continues?* dm-boolean-toggle-pick-func)
+            )
+           (menu
              "Levels"
              (flag "Debug View" *mp-level-debug?* dm-boolean-toggle-pick-func)
             )

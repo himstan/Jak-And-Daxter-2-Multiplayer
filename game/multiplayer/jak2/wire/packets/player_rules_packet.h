@@ -14,11 +14,12 @@ struct PlayerRulesPacket : platform::wire::Packet<PlayerRulesPacket, PacketType:
       .direction = platform::MessageDirection::HOST_TO_CLIENT,
       .delivery = platform::Delivery::RELIABLE_ORDERED,
       .cadence = platform::CadenceMode::DIRTY,
-      .maximum_payload_bytes = 4};
+      .maximum_payload_bytes = 5};
 
   uint16_t respawn_delay_seconds = core::kDefaultRespawnDelaySeconds;
   uint8_t player_collision = 0;
   uint8_t friendly_fire = 0;
+  uint8_t debug_permissions = 0;
 };
 
 template <typename Stream, typename PacketT>
@@ -26,11 +27,13 @@ template <typename Stream, typename PacketT>
 bool serialize_fields(Stream& stream, PacketT&& packet) {
   return platform::wire::serialize_u16(stream, packet.respawn_delay_seconds) &&
          platform::wire::serialize_u8(stream, packet.player_collision) &&
-         platform::wire::serialize_u8(stream, packet.friendly_fire);
+         platform::wire::serialize_u8(stream, packet.friendly_fire) &&
+         platform::wire::serialize_u8(stream, packet.debug_permissions);
 }
 
 inline bool validate_packet(const PlayerRulesPacket& packet) {
-  return packet.player_collision <= 1 && packet.friendly_fire <= 1;
+  return packet.player_collision <= 1 && packet.friendly_fire <= 1 &&
+         (packet.debug_permissions & ~core::kDebugPermissionMask) == 0;
 }
 
 inline PlayerRulesPacket to_packet(const core::PlayerRulesState& state) {
@@ -38,13 +41,15 @@ inline PlayerRulesPacket to_packet(const core::PlayerRulesState& state) {
   packet.respawn_delay_seconds = state.respawn_delay_seconds;
   packet.player_collision = state.player_collision;
   packet.friendly_fire = state.friendly_fire;
+  packet.debug_permissions = state.debug_permissions;
   return packet;
 }
 
 inline void from_packet(const PlayerRulesPacket& packet, core::PlayerRulesState& state) {
   state = {.respawn_delay_seconds = packet.respawn_delay_seconds,
            .player_collision = packet.player_collision != 0,
-           .friendly_fire = packet.friendly_fire != 0};
+           .friendly_fire = packet.friendly_fire != 0,
+           .debug_permissions = packet.debug_permissions};
 }
 
 inline void canonicalize_player_rules(core::PlayerRulesState&, const platform::MessageOrigin&) {}

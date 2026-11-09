@@ -356,6 +356,7 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
   ASSERT_NE(types.try_enum_lookup("game-task"), nullptr);
   EXPECT_EQ(types.try_enum_lookup("game-task")->entries().at("max"),
             multiplayer::jak2::core::kGameTaskCount);
+  load_types("multiplayer/data/mp-world-h.gc", "debug-permission");
   load_types("multiplayer/data/mp-world-h.gc", "mp-world-sync-state");
   EXPECT_EQ(types.lookup_type("mp-world-sync-state")->get_size_in_memory(),
             sizeof(MPWorldSyncStateGOAL));
@@ -367,6 +368,11 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
             offsetof(MPWorldSyncStateGOAL, friendly_fire));
   EXPECT_EQ(types.lookup_field_info("mp-world-sync-state", "hero-mode").field.offset(),
             offsetof(MPWorldSyncStateGOAL, hero_mode));
+  EXPECT_EQ(types.lookup_field_info("mp-world-sync-state", "debug-permissions").field.offset(),
+            offsetof(MPWorldSyncStateGOAL, debug_permissions));
+  const auto& permissions = types.try_enum_lookup("debug-permission")->entries();
+  EXPECT_EQ((1u << permissions.size()) - 1u,
+            static_cast<unsigned>(multiplayer::jak2::core::kDebugPermissionMask));
   EXPECT_EQ(types.lookup_field_info("mp-world-sync-state", "task-mask").field.offset(),
             offsetof(MPWorldSyncStateGOAL, task_mask));
   EXPECT_EQ(types.lookup_field_info("mp-world-sync-state", "completed-task-mask").field.offset(),
@@ -1673,6 +1679,7 @@ TEST(Jak2GoalBridge, PlayerRulesAndTaskCompletionCrossTheWorldBridge) {
   state.local.world.player_collision = 1;
   state.local.world.friendly_fire = 1;
   state.local.world.hero_mode = 1;
+  state.local.world.debug_permissions = 0xff;
   state.local.world.completed_task_mask[0] = 0x02;
   state.local.world.completed_task_mask[13] = 0x20;
   multiplayer::jak2::application::ReplicationMailbox mailbox;
@@ -1683,6 +1690,7 @@ TEST(Jak2GoalBridge, PlayerRulesAndTaskCompletionCrossTheWorldBridge) {
   EXPECT_TRUE(local->world.player_collision);
   EXPECT_TRUE(local->world.friendly_fire);
   EXPECT_TRUE(local->world.hero_mode);
+  EXPECT_EQ(local->world.debug_permissions, multiplayer::jak2::core::kDebugPermissionMask);
   EXPECT_EQ(local->world.completed_task_mask.front(), 0x02);
   EXPECT_EQ(local->world.completed_task_mask.back(), 0x20);
   auto remote = std::make_unique<multiplayer::jak2::application::RemoteReplicationFrame>();
@@ -1690,6 +1698,7 @@ TEST(Jak2GoalBridge, PlayerRulesAndTaskCompletionCrossTheWorldBridge) {
   remote->world.respawn_delay_seconds = 65535;
   remote->world.friendly_fire = false;
   remote->world.hero_mode = false;
+  remote->world.debug_permissions = 0x02;
   remote->world.completed_task_mask.front() = 0;
   mailbox.publish_remote_frame(std::move(remote));
   ASSERT_TRUE(multiplayer::jak2::bridge::exchange_state(0x12000, mailbox));
@@ -1697,6 +1706,7 @@ TEST(Jak2GoalBridge, PlayerRulesAndTaskCompletionCrossTheWorldBridge) {
   EXPECT_EQ(state.remote.world.player_collision, 1);
   EXPECT_EQ(state.remote.world.friendly_fire, 0);
   EXPECT_EQ(state.remote.world.hero_mode, 0);
+  EXPECT_EQ(state.remote.world.debug_permissions, 0x02);
   EXPECT_EQ(state.remote.world.completed_task_mask[0], 0);
   EXPECT_EQ(state.remote.world.completed_task_mask[13], 0x20);
 }

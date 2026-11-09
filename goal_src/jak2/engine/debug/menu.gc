@@ -1406,9 +1406,13 @@
   arg0
   )
 
+(define-extern debug-menu-item-permitted? (function debug-menu-item symbol))
+
 (defun debug-menu-context-activate-selection ((arg0 debug-menu-context))
   (let ((a0-1 (-> arg0 sel-menu (+ (-> arg0 sel-length) -1) selected-item)))
-    (debug-menu-item-send-msg a0-1 (debug-menu-msg press))
+    (if (debug-menu-item-permitted? a0-1)
+        (debug-menu-item-send-msg a0-1 (debug-menu-msg press))
+        )
     )
   arg0
   )
