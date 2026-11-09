@@ -48,19 +48,6 @@
         (return #t))))
   #f)
 
-(defun draw-under-lift-waiting-text! ((lift process-drawable))
-  (when (nonnull? *temp-string*)
-    (let ((font-ctx (new 'stack 'font-context *font-default-matrix* 32 320 0.0 (font-color default) (font-flags shadow kerning))))
-      (set-width! font-ctx 420)
-      (set-height! font-ctx 80)
-      (set-scale! font-ctx 0.5)
-      (set! (-> font-ctx flags) (font-flags shadow kerning large))
-      (format-waiting-players-text! *temp-string*
-                                    (the-as (function mp-player-record object symbol) under-lift-player-pending?)
-                                    lift)
-      (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))))
-  (none))
-
 (defun under-replica-may-swim? ((player target))
   (or (not (player-replica? player))
       (let ((record (mp-player-controller-target-record *mp-player-controller* player)))

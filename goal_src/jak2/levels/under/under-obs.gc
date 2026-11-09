@@ -1459,7 +1459,7 @@
     (when (and a0-2 (under-lift-contains? this (get-trans a0-2 0)))
       (let ((awaiting? (under-lift-awaiting-players? this)))
         (when awaiting?
-          (draw-under-lift-waiting-text! this))
+          (draw-waiting-players-text! (the-as (function mp-player-record object symbol) under-lift-player-pending?) this))
         (not awaiting?))
       )
     )

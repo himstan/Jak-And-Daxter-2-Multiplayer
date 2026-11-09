@@ -285,6 +285,17 @@
       (else (format destination (lookup-text! *common-text* (text-id airlock-waiting-end) #f)))))
   destination)
 
+(defun draw-waiting-players-text! ((pending? (function mp-player-record object symbol)) (context object))
+  (when (nonnull? *temp-string*)
+    (let ((font-ctx (new 'stack 'font-context *font-default-matrix* 32 320 0.0 (font-color default) (font-flags shadow kerning))))
+      (set-width! font-ctx 420)
+      (set-height! font-ctx 80)
+      (set-scale! font-ctx 0.5)
+      (set! (-> font-ctx flags) (font-flags shadow kerning large))
+      (format-waiting-players-text! *temp-string* pending? context)
+      (print-game-text *temp-string* font-ctx #f 44 (bucket-id progress))))
+  (none))
+
 (defun airlock-player-pending? ((record mp-player-record) (airlock-aid object))
   (the symbol
     (and (mp-remote-gameplay-player-connected? record)
@@ -292,9 +303,6 @@
          (not (mp-is-remote-state-id-for-player? (the-as uint airlock-aid)
                                                  (the-as uint (-> record identity player-slot))
                                                  (mp-airlock-state-id commit))))))
-
-(defun format-airlock-waiting-text! ((destination string) (airlock-aid uint))
-  (format-waiting-players-text! destination airlock-player-pending? (the-as object airlock-aid)))
 
 (defun mp-any-remote-airlock-level-differs? ((airlock-aid uint) (local-level-id int))
   (when (and (nonnull? *mp-player-controller*) (nonnull? *mp-remote-airlock-state*))

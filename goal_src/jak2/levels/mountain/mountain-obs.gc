@@ -3163,6 +3163,56 @@
   (none)
   )
 
+(defun trans-plat-carrying? ((plat trans-plat) (pos vector))
+  (let ((offset (vector-! (new 'stack-no-clear 'vector) pos (-> plat root trans))))
+    (and (< (vector-xz-length offset) (-> plat root root-prim local-sphere w))
+         (< (meters -1) (-> offset y))
+         (< (-> offset y) (meters 4)))))
+
+(defun trans-plat-record-wants? ((record mp-player-record) (level-names pair))
+  (dolist (remaining level-names)
+    (when (mp-traffic-record-advertises-level? record (mp-level-symbol->id (the-as symbol (car remaining))))
+      (return #t)))
+  #f)
+
+(defun trans-plat-departure-side? ((plat trans-plat) (record mp-player-record))
+  (let ((forest? (trans-plat-record-wants? record '(forest forestb))))
+    (if (= (-> plat path-pos) 0.0)
+        (and (not forest?) (trans-plat-record-wants? record '(mountain mtnext mincan)))
+        forest?)))
+
+(defun trans-plat-player-pending? ((record mp-player-record) (plat trans-plat))
+  (the symbol
+    (and (mp-remote-gameplay-player-connected? record)
+         (= (-> record connection activity) (mp-player-activity in-game))
+         (not (mp-player-record-dead-or-dying? record))
+         (not (trans-plat-carrying? plat (-> record transform position)))
+         (trans-plat-departure-side? plat record))))
+
+(defbehavior trans-plat-awaiting-players? trans-plat ()
+  (mp-for-each-player-record (player-slot record)
+    (when (trans-plat-player-pending? record self)
+      (return #t)))
+  #f)
+
+(defbehavior trans-plat-hold-for-players! trans-plat ()
+  (when (mp-session-in-game?)
+    (cond
+      ((not (target-riding?))
+       (set-time! (-> self ride-timer)))
+      ((trans-plat-awaiting-players?)
+       (set-time! (-> self ride-timer))
+       (draw-waiting-players-text! (the-as (function mp-player-record object symbol) trans-plat-player-pending?) self))))
+  (none))
+
+(defbehavior trans-plat-follow-departure! trans-plat ()
+  (mp-for-each-player-record (player-slot record)
+    (when (and (mp-remote-gameplay-player-connected? record)
+               (trans-plat-carrying? self (-> record transform position)))
+      (set! (-> self dest-pos) (if (= (-> self path-pos) 0.0) 1.0 0.0))
+      (go-virtual running)))
+  (none))
+
 
 (defstate rising (trans-plat)
   :virtual #t
@@ -3186,6 +3236,17 @@
 
 (defstate waiting (trans-plat)
   :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('mp-depart)
+       (trans-plat-follow-departure!)
+       #f
+       )
+      (else
+        ((-> (method-of-type mtn-plat-return waiting) event) proc argc message block)
+        )
+      )
+    )
   :enter (behavior ()
     (when (not (or (not (task-node-closed? (game-task-node forest-scouts-introduction)))
                    (task-node-closed? (game-task-node forest-scouts-pegasus))
@@ -3235,6 +3296,7 @@
         )
       )
     (check-dropped-rider)
+    (trans-plat-hold-for-players!)
     (let ((t9-2 (-> (the-as state (find-parent-state)) trans)))
       (if t9-2
           (t9-2)
@@ -3245,6 +3307,11 @@
 
 (defstate running (trans-plat)
   :virtual #t
+  :enter (behavior ()
+    (when (and (mp-session-in-game?) (target-riding?))
+      (mp-event-enqueue-aid! MP_EVENT_TRANS_PLAT_DEPART (-> self entity aid))
+      )
+    )
   :trans (behavior ()
     (let ((t9-0 (-> (method-of-type mtn-plat-return running) trans)))
       (if t9-0
@@ -3291,7 +3358,6 @@
 (defmethod init-plat! ((this trans-plat))
   "Does any necessary initial platform setup.
    For example for an elevator pre-compute the distance between the first and last points (both ways) and clear the sound."
-  (set! (-> this start-delay) (seconds 3))
   (let ((scale 1.5))
     (set! (-> this root scale x) scale)
     (set! (-> this root scale z) scale)

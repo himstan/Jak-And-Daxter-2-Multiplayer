@@ -191,3 +191,9 @@
                (not (task-node-closed? (game-task-node mountain-collection-resolution))))
       (task-node-close! (game-task-node mountain-collection-resolution))))
   (none))
+
+(defun receive-trans-plat-depart! ((aid uint))
+  (let ((ent (if (nonnull? *level*) (entity-by-aid aid) (the-as entity #f))))
+    (when (nonnull? ent (-> ent extra) (-> ent extra process))
+      (send-event (-> ent extra process) 'mp-depart)))
+  (none))

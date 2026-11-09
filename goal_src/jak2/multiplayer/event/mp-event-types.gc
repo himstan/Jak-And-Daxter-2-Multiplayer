@@ -210,4 +210,7 @@
                                            (receive-under-sig-task! (the-as under-sig-task-event evt)))
                   (MP_EVENT_DEFEND_STADIUM_STATE 74
                                                  defend-stadium-state-data
-                                                 (receive-defend-stadium-state! (the-as defend-stadium-state-event evt))))
+                                                 (receive-defend-stadium-state! (the-as defend-stadium-state-event evt)))
+                  (MP_EVENT_TRANS_PLAT_DEPART 75
+                                              mp-aid-event-data
+                                              (receive-trans-plat-depart! (-> (the-as mp-aid-event evt) payload aid))))
