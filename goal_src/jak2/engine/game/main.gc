@@ -106,7 +106,6 @@
                   (and (= *master-mode* 'progress) *progress-process*
                        (or (= (-> *progress-process* 0 current) 'reconnect)
                            (= (-> *progress-process* 0 current) 'host-left)
-                           (= (-> *progress-process* 0 current) 'demo-end)
                            (= (-> *progress-process* 0 current) 'demo-disclaimer)
                            (= (-> *progress-process* 0 current) 'title)
                            )
@@ -194,7 +193,6 @@
              (begin
               (when (or (= (-> *progress-process* 0 current) 'reconnect)
                          (= (-> *progress-process* 0 current) 'host-left)
-                         (= (-> *progress-process* 0 current) 'demo-end)
                          (= (-> *progress-process* 0 current) 'demo-disclaimer)
                          (-> *progress-process* 0 main-menu)
                          )

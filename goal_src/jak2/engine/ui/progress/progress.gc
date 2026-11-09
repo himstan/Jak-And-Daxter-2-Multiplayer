@@ -490,7 +490,6 @@
 
 (defun progress-copied-background? ((state symbol))
   (or (= state 'title)
-      (= state 'demo-end)
       (= state 'demo-disclaimer)
       )
   )

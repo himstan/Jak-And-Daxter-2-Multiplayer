@@ -4,8 +4,6 @@
 (define-extern mp-death-respawn-event-on-spawn! (function none))
 (define-extern *dproc* process)
 (define-extern activate-progress (function process symbol none))
-(define-extern mp-demo-guard-tick (function none))
-(define-extern mp-demo-guard-on-local-spawn! (function none))
 (define-extern mp-reset-orb-permanence-state! (function none))
 (define-extern mp-reset-gem-permanence-state! (function none))
 
@@ -202,8 +200,7 @@
       (mp-bootstrap-controller-start!)
       (mp-bootstrap-note-local-spawn! status)
       (mp-death-respawn-event-on-spawn!)
-      (mp-arm-spawn-sync-state! status))
-    (mp-demo-guard-on-local-spawn!))
+      (mp-arm-spawn-sync-state! status)))
   (start-tutorial-manager!)
   (none))
 
@@ -407,7 +404,6 @@
     (mp-update-reconnect-ui! status)
     (mp-update-host-left-ui! status)
     (mp-update-version-mismatch-ui! status))
-  (mp-demo-guard-tick)
   (none))
 
 (defun mp-reset-gameplay-state ()
