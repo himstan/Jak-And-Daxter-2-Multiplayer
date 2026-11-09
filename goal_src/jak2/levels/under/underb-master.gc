@@ -826,6 +826,7 @@
             (or (= mode (under-locking-mode airlock-wait)) (= mode (under-locking-mode want-drain)))))))
   :trans (behavior ()
     (when (nonnull? self)
+      (finish-under-mech-close!)
       (advance-under-lock!)
       (when (and (mp-session-in-game?) (= (-> self id) 1))
         (cond

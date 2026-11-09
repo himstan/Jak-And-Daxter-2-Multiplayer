@@ -346,6 +346,7 @@
              (logtest? (-> this mask) (process-mask sleep-code))
              (local-player-can-report-airlock-ready? this)
              (not (airlock-commit-in-progress? this))
+             (not (has-elevator-and-is-standing-on-it? this))
              (airlock-reconcile-script this 0)
              (airlock-reconcile-script this 1)
              (>= (current-time) (-> this reconcile-next-time)))

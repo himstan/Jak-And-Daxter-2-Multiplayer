@@ -4,6 +4,7 @@
 (define-extern scene-player-for-scene (function object scene-player))
 (define-extern task-manager-has-race-finisher? (function task-manager symbol))
 (define-extern reset-under-mech-actors! (function none))
+(define-extern under-mech-close-deferred? (function string symbol))
 
 ;; name: task-control.gc
 ;; name in dgo: task-control
@@ -616,6 +617,8 @@
   )
 
 (defun task-close! ((arg0 string))
+  (when (under-mech-close-deferred? arg0)
+    (return #f))
   (let ((game-nodes (-> *game-info* sub-task-list)))
     (dotimes (i (-> game-nodes length))
       (when (nonzero? i)
