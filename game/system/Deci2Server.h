@@ -31,7 +31,10 @@ class Deci2Server : public XSocketServer {
   void accept_thread_func();
 
  private:
+  static constexpr size_t kMaxPendingSendBytes = 8 * 1024 * 1024;
+
   bool read_bytes(char* destination, int size);
+  void send_thread_func();
   bool want_shutdown = false;
   bool protocols_ready = false;
   std::condition_variable cv;
@@ -44,6 +47,12 @@ class Deci2Server : public XSocketServer {
 
   std::thread accept_thread;
   std::mutex server_mutex;
+
+  std::thread send_thread;
+  std::mutex send_mutex;
+  std::condition_variable send_cv;
+  std::vector<char> pending_send;
+  bool stop_sending = false;
 
   std::atomic_bool client_connected = false;
 };

@@ -173,6 +173,38 @@ TEST(SnapshotTimeline, HandlesWrapInferenceAndTeleportReset) {
   EXPECT_FLOAT_EQ(snapped.velocity[0], 0.0f);
 }
 
+TEST(SnapshotTimeline, KeepsDelayAfterSenderStall) {
+  using multiplayer::platform::replication::SnapshotTimeline;
+  SnapshotTimeline timeline;
+  constexpr uint32_t kLatencyMs = 50;
+  const auto push = [&](const uint32_t sample_time_ms, const uint64_t arrival_time_ms) {
+    ASSERT_TRUE(timeline.push({.sample_time_ms = sample_time_ms,
+                               .position = {static_cast<float>(sample_time_ms), 0.0f, 0.0f},
+                               .velocity = {1000.0f, 0.0f, 0.0f},
+                               .velocity_valid = true},
+                              arrival_time_ms, 100000.0f));
+  };
+  uint32_t next_sample_ms = 0;
+  const auto run = [&](const uint32_t from_ms, const uint32_t to_ms) {
+    float lag_ms = 0.0f;
+    for (uint32_t now_ms = from_ms; now_ms < to_ms; now_ms += 16) {
+      for (; next_sample_ms + kLatencyMs <= now_ms; next_sample_ms += 66)
+        push(next_sample_ms, next_sample_ms + kLatencyMs);
+      lag_ms = static_cast<float>(now_ms) - timeline.present(now_ms, 66, 66, 400, 400).position[0];
+    }
+    return lag_ms;
+  };
+
+  const float lag_before_ms = run(0, 3000);
+  const uint32_t captured_before_stall_ms = next_sample_ms;
+  next_sample_ms = 5600;
+  run(3000, 5600);
+  push(captured_before_stall_ms, 5600);
+  const float lag_after_ms = run(5600, 6000);
+
+  EXPECT_NEAR(lag_after_ms, lag_before_ms, 5.0f);
+}
+
 TEST(SnapshotTimeline, NeverRewindsWhenAdaptiveDelayIncreases) {
   using multiplayer::platform::replication::SnapshotTimeline;
   using multiplayer::platform::replication::TransformSample;

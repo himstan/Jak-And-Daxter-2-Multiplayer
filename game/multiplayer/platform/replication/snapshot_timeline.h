@@ -28,6 +28,7 @@ struct PresentedTransform {
 class SnapshotTimeline {
  public:
   static constexpr size_t kOffsetWindowSize = 32;
+  static constexpr uint64_t kStallIntervalMs = 1000;
 
   bool push(TransformSample sample, const uint64_t arrival_time_ms, const float snap_distance) {
     if (!samples_.empty() && !newer(sample.sample_time_ms, samples_.back().sample.sample_time_ms))
@@ -40,14 +41,16 @@ class SnapshotTimeline {
       const auto& [prev_sample, prev_arrival_time_ms] = samples_.back();
       const uint32_t sender_interval = sample.sample_time_ms - prev_sample.sample_time_ms;
       const uint64_t arrival_interval = arrival_time_ms - prev_arrival_time_ms;
-      const uint64_t variation = sender_interval > arrival_interval
-                                     ? sender_interval - arrival_interval
-                                     : arrival_interval - sender_interval;
-      sender_interval_ms_ = sender_interval_ms_ == 0
-                                ? sender_interval
-                                : (sender_interval_ms_ * 7 + sender_interval) / 8;
-      jitter_ms_ = static_cast<uint32_t>(std::min<uint64_t>(
-          jitter_ms_ == 0 ? variation : (jitter_ms_ * 7ull + variation) / 8, UINT32_MAX));
+      if (sender_interval <= kStallIntervalMs && arrival_interval <= kStallIntervalMs) {
+        const uint64_t variation = sender_interval > arrival_interval
+                                       ? sender_interval - arrival_interval
+                                       : arrival_interval - sender_interval;
+        sender_interval_ms_ = sender_interval_ms_ == 0
+                                  ? sender_interval
+                                  : (sender_interval_ms_ * 7 + sender_interval) / 8;
+        jitter_ms_ = static_cast<uint32_t>(std::min<uint64_t>(
+            jitter_ms_ == 0 ? variation : (jitter_ms_ * 7ull + variation) / 8, UINT32_MAX));
+      }
       if (!sample.velocity_valid && sender_interval != 0) {
         estimate_velocity(sample, prev_sample, sample, sender_interval);
       }

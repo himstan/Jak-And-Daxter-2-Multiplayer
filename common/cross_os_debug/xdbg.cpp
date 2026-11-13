@@ -511,7 +511,7 @@ bool check_stopped(const ThreadID& tid, SignalInfo* out) {
     }
   }
 
-  if (WaitForDebugEvent(&debugEvent, INFINITE)) {
+  while (cont_status == -1 && WaitForDebugEvent(&debugEvent, INFINITE)) {
     bool is_other = tid.pid != debugEvent.dwProcessId || tid.tid != debugEvent.dwThreadId;
 
     cont_status = 0;
@@ -577,7 +577,8 @@ bool check_stopped(const ThreadID& tid, SignalInfo* out) {
         out->kind = SignalInfo::UNKNOWN;
         break;
     }
-  } else if (GetLastError() != 0x79) {  // semaphore timeout error, irrelevant.
+  }
+  if (cont_status == -1 && GetLastError() != 0x79) {  // semaphore timeout error, irrelevant.
     win_print_last_error("WaitForDebugEvent");
   }
 

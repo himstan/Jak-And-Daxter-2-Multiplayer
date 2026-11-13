@@ -38,6 +38,15 @@ Deci2Server::~Deci2Server() {
     accept_thread_running = false;
   }
 
+  {
+    std::lock_guard guard(send_mutex);
+    stop_sending = true;
+  }
+  send_cv.notify_all();
+  if (send_thread.joinable()) {
+    send_thread.join();
+  }
+
   close_socket(accepted_socket);
 }
 
@@ -46,6 +55,7 @@ void Deci2Server::post_init() {
   accept_thread_running = true;
   kill_accept_thread = false;
   accept_thread = std::thread(&Deci2Server::accept_thread_func, this);
+  send_thread = std::thread(&Deci2Server::send_thread_func, this);
 }
 
 void Deci2Server::accept_thread_func() {
@@ -179,25 +189,46 @@ void Deci2Server::read_data() {
 }
 
 void Deci2Server::send_data(void* buf, u16 len) {
-  lock();
-  if (!client_connected) {
+  std::unique_lock lk(send_mutex);
+  send_cv.wait(lk, [&] {
+    return pending_send.size() < kMaxPendingSendBytes || !client_connected || stop_sending;
+  });
+  if (!client_connected || stop_sending) {
     printf("[DECI2] send while not connected, not sending!\n");
-  } else {
-    u32 prog = 0;
-    while (prog < len) {
-      int wrote = write_to_socket(accepted_socket, (char*)(buf) + prog, len - prog);
+    return;
+  }
+  const auto* bytes = static_cast<const char*>(buf);
+  pending_send.insert(pending_send.end(), bytes, bytes + len);
+  send_cv.notify_all();
+}
+
+void Deci2Server::send_thread_func() {
+  std::vector<char> sending;
+  std::unique_lock lk(send_mutex);
+  while (true) {
+    send_cv.wait(lk, [&] { return stop_sending || !pending_send.empty(); });
+    if (pending_send.empty()) {
+      return;
+    }
+    sending.swap(pending_send);
+    send_cv.notify_all();
+    lk.unlock();
+    size_t sent = 0;
+    while (sent < sending.size() && client_connected && !want_exit_callback()) {
+      const int wrote =
+          write_to_socket(accepted_socket, sending.data() + sent, int(sending.size() - sent));
       if (wrote <= 0) {
         client_connected = false;
-        break;
-      }
-      prog += wrote;
-      if (!client_connected || want_exit_callback()) {
-        unlock();
-        return;
+      } else {
+        sent += wrote;
       }
     }
+    sending.clear();
+    lk.lock();
+    if (!client_connected) {
+      send_cv.notify_all();
+    }
   }
-  unlock();
 }
 
 void Deci2Server::lock() {

@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cstring>
+#include <future>
 #include <limits>
 
 #include "game/kernel/common/kdsnetm.h"
@@ -194,6 +195,29 @@ TEST_F(DeciFraming, DispatchesCompleteFramesInBoundedChunksToMatchingProtocol) {
   EXPECT_EQ(captures[0].completed, 1);
   EXPECT_TRUE(captures[1].bytes.empty());
   EXPECT_EQ(captures[1].completed, 0);
+}
+
+TEST_F(DeciFraming, QueuesOutputWhileCompilerIsNotReading) {
+  constexpr u16 kChunkSize = 64000;
+  std::vector<char> expected;
+  for (int chunk = 0; chunk < 96; ++chunk) {
+    expected.insert(expected.end(), kChunkSize, char('a' + chunk % 26));
+  }
+  auto sending = std::async(std::launch::async, [&] {
+    for (size_t offset = 0; offset < expected.size(); offset += kChunkSize) {
+      server.send_data(expected.data() + offset, kChunkSize);
+    }
+  });
+  const bool returned = sending.wait_for(std::chrono::seconds(2)) == std::future_status::ready;
+  std::vector<char> received(expected.size());
+  size_t count = 0;
+  wait_for([&] {
+    const int read = read_from_socket(client, received.data() + count, received.size() - count);
+    count += std::max(read, 0);
+    return count == received.size();
+  });
+  EXPECT_TRUE(returned);
+  EXPECT_EQ(received, expected);
 }
 
 TEST_F(ListenerBuffer, RejectsInvalidHeadersWithoutWritingToMemory) {
