@@ -1606,7 +1606,7 @@
           )
         )
       (cond
-        ((zero? (-> self data-int32 20))
+        ((or (zero? (-> self data-int32 20)) (mp-session-in-game?))
          (cond
            ((= (level-status *level* 'ctyport) 'active)
             (let ((gp-4 (get-nav-mesh (the-as actor-id #x65e1))))
