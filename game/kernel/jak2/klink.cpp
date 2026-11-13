@@ -5,6 +5,7 @@
 #include "common/symbols.h"
 
 #include "game/kernel/common/fileio.h"
+#include "game/kernel/common/kcrash.h"
 #include "game/kernel/common/klink.h"
 #include "game/kernel/common/kmachine.h"
 #include "game/kernel/common/kprint.h"
@@ -269,6 +270,8 @@ uint32_t link_control::jak2_work_v3() {
         printf("UNHANDLED SEG ID IN WORK V3 STATE 1\n");
       }
     }
+
+    kcrash::note_object_loaded(m_object_name, ofh->code_infos);
 
     m_state = 1;
     m_segment_process = 0;

@@ -132,4 +132,8 @@ bool write_goal_value(T& value,
 
 bool check_stopped(const ThreadID& tid, SignalInfo* out);
 
+#ifdef _WIN32
+const char* win32_exception_code_to_charp(DWORD exc);
+#endif
+
 }  // namespace xdbg

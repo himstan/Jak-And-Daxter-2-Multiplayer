@@ -18,6 +18,7 @@
 #include "game/kernel/common/klink.h"
 #include "game/kernel/common/kmemcard.h"
 #include "game/kernel/common/kprint.h"
+#include "game/kernel/jak2/kcrash.h"
 #include "game/kernel/jak2/kdgo.h"
 #include "game/kernel/jak2/klink.h"
 #include "game/kernel/jak2/klisten.h"
@@ -1497,6 +1498,7 @@ int InitHeapAndSymbol() {
 
   // inform compiler of s7
   reset_output();
+  install_crash_describers();
 
   // empty pair (this is extra confusing).
   *Ptr<u32>(s7.offset + FIX_SYM_EMPTY_CAR - 1) = s7.offset + S7_OFF_FIX_SYM_EMPTY_PAIR;

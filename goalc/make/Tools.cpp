@@ -25,6 +25,12 @@ bool CompilerTool::needs_run(const ToolInput& task, const PathMap& path_map) {
   if (!m_compiler->knows_object_file(fs::path(task.input.at(0)).stem().string())) {
     return true;
   }
+  
+  for (const auto& out : task.output) {
+    if (!fs::exists(fs::path(file_util::get_file_path({out})).replace_extension(".map"))) {
+      return true;
+    }
+  }
   return Tool::needs_run(task, path_map);
 }
 

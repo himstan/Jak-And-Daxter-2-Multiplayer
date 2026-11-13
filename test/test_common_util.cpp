@@ -3,6 +3,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "common/goal_debug/CodeMap.h"
 #include "common/util/Assert.h"
 #include "common/util/BitUtils.h"
 #include "common/util/CopyOnWrite.h"
@@ -22,6 +23,77 @@
 
 TEST(CommonUtil, CpuInfo) {
   setup_cpu_info();
+}
+
+namespace {
+goal_debug::CodeMap make_test_code_map() {
+  goal_debug::CodeMap map;
+  map.segment_sizes[MAIN_SEGMENT] = 0x400;
+  map.segment_sizes[DEBUG_SEGMENT] = 0x80;
+  map.segment_sizes[TOP_LEVEL_SEGMENT] = 0x40;
+  map.files = {"goal_src/jak2/engine/a file.gc", "goal_src/goal-lib.gc"};
+
+  goal_debug::CodeMapFunction method;
+  method.seg = MAIN_SEGMENT;
+  method.offset = 0x14;
+  method.length = 0x60;
+  method.stack_usage = 40;
+  method.name = "(method 23 crate)";
+  method.lines = {{4, 0, 412}, {0x20, 1, 9}, {0x30, 0, 413}};
+  map.functions.push_back(method);
+
+  goal_debug::CodeMapFunction asm_function;
+  asm_function.seg = TOP_LEVEL_SEGMENT;
+  asm_function.offset = 4;
+  asm_function.length = 0x10;
+  asm_function.name = "top-level";
+  map.functions.push_back(asm_function);
+  return map;
+}
+}  // namespace
+
+TEST(CodeMap, TextRoundTrip) {
+  auto map = make_test_code_map();
+  auto parsed = goal_debug::CodeMap::from_text(map.to_text());
+  ASSERT_TRUE(parsed);
+  EXPECT_EQ(parsed->to_text(), map.to_text());
+  ASSERT_EQ(parsed->functions.size(), 2u);
+  EXPECT_EQ(parsed->functions[0].name, "(method 23 crate)");
+  EXPECT_EQ(parsed->functions[0].stack_usage, 40);
+  EXPECT_FALSE(parsed->functions[1].stack_usage);
+  ASSERT_EQ(parsed->functions[0].lines.size(), 3u);
+  EXPECT_EQ(parsed->files.at(parsed->functions[0].lines[0].file), "goal_src/jak2/engine/a file.gc");
+  EXPECT_EQ(parsed->files.at(parsed->functions[0].lines[1].file), "goal_src/goal-lib.gc");
+  EXPECT_EQ(parsed->functions[0].lines[2].line, 413);
+}
+
+TEST(CodeMap, Lookup) {
+  auto map = make_test_code_map();
+  EXPECT_EQ(map.function_at(MAIN_SEGMENT, 0x13), nullptr);
+  EXPECT_EQ(map.function_at(MAIN_SEGMENT, 0x74), nullptr);
+  EXPECT_EQ(map.function_at(DEBUG_SEGMENT, 0x20), nullptr);
+  const auto* function = map.function_at(MAIN_SEGMENT, 0x14 + 0x25);
+  ASSERT_NE(function, nullptr);
+  EXPECT_EQ(function->name, "(method 23 crate)");
+  EXPECT_EQ(function->line_at(0), nullptr);
+  EXPECT_EQ(function->line_at(4)->line, 412);
+  EXPECT_EQ(function->line_at(0x25)->line, 9);
+  EXPECT_EQ(function->line_at(0x5f)->line, 413);
+}
+
+TEST(CodeMap, StaleAndInvalid) {
+  auto map = make_test_code_map();
+  const u32 same[N_SEG] = {0x400, 0x80, 0x40};
+  const u32 no_debug_segment[N_SEG] = {0x400, 0, 0x40};
+  const u32 recompiled[N_SEG] = {0x410, 0x80, 0x40};
+  EXPECT_TRUE(map.matches_loaded_sizes(same));
+  EXPECT_TRUE(map.matches_loaded_sizes(no_debug_segment));
+  EXPECT_FALSE(map.matches_loaded_sizes(recompiled));
+
+  EXPECT_FALSE(goal_debug::CodeMap::from_text(""));
+  EXPECT_FALSE(goal_debug::CodeMap::from_text("sizes 1 2 3\nln 4 5\n"));
+  EXPECT_FALSE(goal_debug::CodeMap::from_text("sizes 1 2 3\nbogus 1\n"));
+  EXPECT_FALSE(goal_debug::CodeMap::from_text("sizes 1 2\n"));
 }
 
 TEST(CommonUtil, get_file_path) {

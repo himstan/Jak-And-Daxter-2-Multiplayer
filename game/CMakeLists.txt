@@ -104,6 +104,7 @@ set(RUNTIME_SOURCE
         ${OG_ASM_FUNCS_FILE}
         kernel/common/fileio.cpp
         kernel/common/kboot.cpp
+        kernel/common/kcrash.cpp
         kernel/common/kdgo.cpp
         kernel/common/kdsnetm.cpp
         kernel/common/klink.cpp
@@ -127,6 +128,7 @@ set(RUNTIME_SOURCE
         kernel/jak1/ksound.cpp
         kernel/jak2/fileio.cpp
         kernel/jak2/kboot.cpp
+        kernel/jak2/kcrash.cpp
         kernel/jak2/kdgo.cpp
         kernel/jak2/klink.cpp
         kernel/jak2/klisten.cpp

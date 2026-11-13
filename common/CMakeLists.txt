@@ -45,6 +45,7 @@ add_library(common
         formatter/rules/formatting_rules.cpp
         formatter/rules/rule_config.cpp
         global_profiler/GlobalProfiler.cpp
+        goal_debug/CodeMap.cpp
         goos/Interpreter.cpp
         goos/Object.cpp
         goos/ParseHelpers.cpp

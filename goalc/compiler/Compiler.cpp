@@ -1,6 +1,7 @@
 #include "Compiler.h"
 
 #include <chrono>
+#include <cstring>
 #include <thread>
 
 #include "CompilerException.h"
@@ -19,6 +20,26 @@
 #include "fmt/format.h"
 
 using namespace goos;
+
+namespace {
+void write_code_map(const fs::path& obj_path,
+                    const DebugInfo& debug_info,
+                    const goos::Reader& reader,
+                    const std::vector<u8>& obj_data) {
+  constexpr size_t kCodeSegmentTable = 4 + 3 * sizeof(u32) + N_SEG * 2 * sizeof(u32);
+  if (obj_data.size() < kCodeSegmentTable + N_SEG * 2 * sizeof(u32)) {
+    return;
+  }
+  auto map = debug_info.code_map(reader);
+  for (int seg = 0; seg < N_SEG; seg++) {
+    memcpy(&map.segment_sizes[seg],
+           obj_data.data() + kCodeSegmentTable + (seg * 2 + 1) * sizeof(u32), sizeof(u32));
+  }
+  auto map_path = obj_path;
+  map_path.replace_extension(".map");
+  file_util::write_text_file(map_path, map.to_text());
+}
+}  // namespace
 
 Compiler::Compiler(GameVersion version,
                    emitter::InstructionSet instr_set,
@@ -535,6 +556,8 @@ void Compiler::asm_file(const CompilationOptions& options) {
                   "obj" / (obj_file_name + ".o");
       file_util::create_dir_if_needed_for_file(path);
       file_util::write_binary_file(path, (void*)data.data(), data.size());
+      write_code_map(path, m_debugger.get_debug_info_for_object(obj_file_name), m_goos.reader,
+                     data);
     }
   } else {
     if (options.load) {

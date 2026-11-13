@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "common/common_types.h"
+#include "common/goal_debug/CodeMap.h"
 #include "common/type_system/TypeSpec.h"
 #include "common/util/Assert.h"
 
@@ -18,6 +19,7 @@ class FunctionEnv;
 namespace goos {
 class Object;
 class HeapObject;
+class Reader;
 }  // namespace goos
 
 // location of a variable over a range of IR instructions.
@@ -104,6 +106,8 @@ class DebugInfo {
   }
 
   void clear() { m_functions.clear(); }
+  
+  goal_debug::CodeMap code_map(const goos::Reader& reader) const;
 
   std::string disassemble_all_functions(bool* had_failure,
                                         const goos::Reader* reader,
