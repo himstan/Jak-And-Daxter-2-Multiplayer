@@ -11,10 +11,8 @@ The intentional experience is tailored around 2 players where one plays as Jak, 
 
 ## Current State
 
-This is a very early MVP multiplayer build, so expect a ton of bugs, unstability and crashes. Currently the story is only playable until the Palace Baron fight, the game will lock further progress after you've completed that mission.<br>
-The goal is to make the full Jak II campaign playable together.<br>
-Currently, this mod primarily serves as a Co-op mod, when the full Story is in a finished state, more game modes are planned to be supported as well.<br>
-If at least the Host is in debug mode then a lot of constraints I've put in to block progression can be bypassed.
+This is a very early MVP multiplayer build, so expect a ton of bugs, unstability and crashes.<br>
+Currently, this mod primarily serves as a Co-op mod, more game modes are planned to be supported as well.<br>
 
 ## Disclaimers
 - To speed up development, LLMs have been used for research, debugging and implementation while making this mod, not in an autonomous way, all generated code is being reviewed, and manually modified where needed
@@ -37,6 +35,7 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
 
 - Make sure to align with what each version of the mod all players have installed. You cannot join a session that is running on a different version of the mod. You can see the mod version in-game in the bottom right corner.
 - The mod was mainly tested with the NTSC-U (`SCUS-97265`) version of the game on Windows. If you notice bugs please record what platform you're on and what version you were using.
+- The mod supports Steamworks, it's disabled by default, you enable it via the **Network** settings in **Multiplayer Options**
 - When you Host you'll get a prompt to allow `gk` through the firewall, if you want to Host Online, you'll need to give it access.
 - The mod has **UPnP (Universal Plug and Play)** support, which means that if your router supports it, and you're not behind a CGNAT for example, then the game will attempt to do an automatic port mapping on your router, so you don't have to manually port forward. This is temporary, and after your host session ends, the mapping is removed. This feature can be turned off in the **Multiplayer Options** in game.
 - UPnP is not expected to work for everyone especially nowadays, so if you can't port-forward I'd suggest to use some VLAN solution like Hamachi, Radmin etc...
@@ -109,34 +108,41 @@ If at least the Host is in debug mode then a lot of constraints I've put in to b
 
    <img src="docs/img/mp/main-menu-join-game.png" alt="Join Game menu options" width="400">
 
-### Select one of the three joining methods:
+### Lobby browser:
 
-### Option 1: **Join with Invite**
+   <img src="docs/img/mp/join-lobby-browser.png" alt="Join Game menu options" width="400">
+
+### Option 1: LAN
+
+- Use this option when playing on the same local network (LAN), through a VLAN solution like Radmin or Hamachi or just want to play split-screen
+- LAN lobbies are automatically discovered and will be shown in the list. 
+
+### Option 2: Steamworks (Spacewar)
+
+- Use this option for a setup-free experience
+- Must have Steam Integration enabled in the **Network** tab of **Multiplayer Options**
+
+### Option 3: **Manual**
 
 - Use this option when joining a friend over the internet using a copied host **Invite**
 
-1. Copy the **Invite** sent by the host to your clipboard
-2. Choose **Join with Invite**.
-3. Select **Paste Invite**. The invite is going to be validated, and if its valid then the **Connect** button will light up
-4. Select **Connect**.
+1. Press <img src="docs/img/common/dpad-square.png" alt="PS2 Square button" width="16"> in the lobby browser
+2. Copy the **Invite** sent by the host to your clipboard
+3. Choose **Join with Invite**.
+4. Select **Paste Invite**. The invite is going to be validated, and if its valid then the **Connect** button will light up
+5. Select **Connect**.
 
    <img src="docs/img/mp/join-game-join-with-invite.png" alt="Join game with Invite" width="400">
    <img src="docs/img/mp/join-with-invite-paste-invite.png" alt="Paste invite before clipboard detection" width="400">
 
-### Option 2: Scan LAN
-
-- Use this option when playing on the same local network (LAN), through a VLAN solution like Radmin or Hamachi or just want to play split-screen
-
-1. Choose **Scan LAN**.
-2. The game will search for active hosts on your private network and connect automatically.
-
-### Option 3: Direct Connect
+### Option 4: **Direct Connect**
 
 - Use this option if you manually want to specify the host details. (CTRL+V pasting works in the fields, just make sure to enter them first)
 
-1. Choose **Direct Connect**.
-2. Verify or update the target **Address**, **Port** (default `26210`), and optional **Room Code**.
-3. Select **Connect**.
+1. Press <img src="docs/img/common/dpad-square.png" alt="PS2 Square button" width="16"> in the lobby browser
+2. Choose **Direct Connect**.
+3. Verify or update the target **Address**, **Port** (default `26210`), and optional **Room Code**.
+4. Select **Connect**.
 
 ### Inside the **Lobby** as a **Client**
 
@@ -178,10 +184,8 @@ If the Host has **NAT: Strict/LAN** or **NAT: Failed** then the Host might be un
 
 - Random crashes are sadly still not unexpected, thankfully as the Host the game should be a bit more stable, as a Client it's pretty unproblematic to reconnect unless you're in a mission that has an NPC/Bot in it like Sig, since there's no catchup logic implemented for those type of missions (yet).
 - The remote player replicas can miss their animation triggers, so when they jump they might be "falling" until their legs hit the floor.
-- The Traffic Sync is very much so host owned, if the client player exits the host's traffic radius the handover is pretty invasive, it's going to remove all traffic on the client's side until he gets far enough from the Host. When he does the Client is going to start spawning peds and vehicles locally.
 - Reconnecting is currently the main recovery path for client-side issues and soft-locks.
-- Some situations may still behave better when the host leads the interaction.
-- Testing has not been very thorough, so please feel free to report any issues or game-breaking bugs you find!
+- Testing has not been very thorough past Act I, so please feel free to report any issues or game-breaking bugs you find!
 
 ## Credits
 
