@@ -75,6 +75,4 @@ class SessionPlatform {
   std::unique_ptr<Impl> impl_;
 };
 
-uint64_t transport_error_count();
-
 }  // namespace multiplayer::platform

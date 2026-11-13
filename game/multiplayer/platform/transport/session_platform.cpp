@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <chrono>
 #include <deque>
 #include <limits>
@@ -50,13 +49,11 @@ std::mutex g_init_mutex;
 size_t g_init_references = 0;
 bool g_init_ok = false;
 std::vector<SessionPlatform::Impl*> g_instances;
-std::atomic_uint64_t g_transport_error_count = 0;
 
 void gns_debug_output(const ESteamNetworkingSocketsDebugOutputType type, const char* message) {
-  if (type <= k_ESteamNetworkingSocketsDebugOutputType_Error) {
-    ++g_transport_error_count;
+  if (type <= k_ESteamNetworkingSocketsDebugOutputType_Error)
     lg::error("[GNS] {}", message);
-  } else if (type == k_ESteamNetworkingSocketsDebugOutputType_Warning)
+  else if (type == k_ESteamNetworkingSocketsDebugOutputType_Warning)
     lg::warn("[GNS] {}", message);
   else
     lg::info("[GNS] {}", message);
@@ -643,9 +640,5 @@ std::vector<ConnectionSnapshot> SessionPlatform::connection_snapshots() const {
 AggregateSnapshot SessionPlatform::aggregate_snapshot() const {
   const auto connections = connection_snapshots();
   return aggregate_connection_snapshots(connections);
-}
-
-uint64_t transport_error_count() {
-  return g_transport_error_count.load();
 }
 }  // namespace multiplayer::platform

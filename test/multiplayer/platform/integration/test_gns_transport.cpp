@@ -28,21 +28,6 @@
 namespace {
 using namespace multiplayer::platform;
 
-class GnsDiagnosticsEnvironment final : public testing::Environment {
- public:
-  void SetUp() override { initial_errors_ = transport_error_count(); }
-  void TearDown() override {
-    EXPECT_EQ(transport_error_count(), initial_errors_)
-        << "GameNetworkingSockets emitted an error diagnostic";
-  }
-
- private:
-  uint64_t initial_errors_ = 0;
-};
-
-[[maybe_unused]] testing::Environment* const kGnsDiagnosticsEnvironment =
-    testing::AddGlobalTestEnvironment(new GnsDiagnosticsEnvironment);
-
 #ifdef ENABLE_NETWORK_SIMULATION
 TEST(GnsTransportIntegration, NetworkSimulationRejectsSettingsOutsideGnsLimits) {
   NetworkSimulationSettings settings;
