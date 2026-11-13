@@ -791,16 +791,26 @@
     )
   )
 
+(defun cas-elevator-contains? ((lift elevator) (point vector))
+  (< (vector-vector-xz-distance point (-> lift root trans)) 28672.0))
+
+(defun cas-elevator-player-pending? ((record mp-player-record) (lift elevator))
+  (let ((pos (elevator-boarding-position record lift '(atoll atollext caspad))))
+    (the symbol (and pos (not (cas-elevator-contains? lift pos))))))
+
+(defun cas-elevator-return-ride? ((lift elevator))
+  (and (mp-session-in-game?)
+       (nonnull? (-> lift entity))
+       (= (-> lift entity aid) 29177)
+       (is-at-bottom? lift)))
+
 (defmethod commited-to-ride? ((this cas-elevator))
   "@returns if the target is considered within the elevator area enough to begin descending/ascending"
   (let ((a0-2 (the-as target (as-type *target* process-focusable))))
-    (when a0-2
-      (let* ((a0-3 (get-trans a0-2 0))
-             (v1-2 (vector-! (new 'stack-no-clear 'vector) a0-3 (-> this root trans)))
-             )
-        (< (sqrtf (+ (* (-> v1-2 x) (-> v1-2 x)) (* (-> v1-2 z) (-> v1-2 z)))) 28672.0)
-        )
-      )
+    (the symbol (and a0-2
+                     (cas-elevator-contains? this (get-trans a0-2 0))
+                     (not (cas-elevator-return-ride? this))
+                     (not (elevator-holding-for-players? this cas-elevator-player-pending?))))
     )
   )
 

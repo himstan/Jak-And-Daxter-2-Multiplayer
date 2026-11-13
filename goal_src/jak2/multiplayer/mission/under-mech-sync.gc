@@ -26,34 +26,12 @@
     (vector-inv-orient-by-quat! offset offset (-> lift root quat))
     (and (< (fabs (-> offset x)) 20480.0) (< 0.0 (-> offset z)) (< (-> offset z) 40960.0))))
 
-(defun under-lift-boarding-side? ((lift elevator) (point vector))
-  (let ((mid-y (* 0.5 (+ (-> (get-point-in-path! (-> lift path) (new 'stack-no-clear 'vector) (-> lift bottom-top 0) 'interp) y)
-                         (-> (get-point-in-path! (-> lift path) (new 'stack-no-clear 'vector) (-> lift bottom-top 1) 'interp) y)))))
-    (if (is-at-top? lift)
-        (> (-> point y) mid-y)
-        (< (-> point y) mid-y))))
-
-(defun live-remote-position ((record mp-player-record))
-  (let ((target-record (get-player-target-record record)))
-    (if (and (mp-remote-gameplay-player-connected? record)
-             (= (-> record connection activity) (mp-player-activity in-game))
-             (not (mp-player-record-dead-or-dying? record))
-             (nonnull? target-record)
-             (-> target-record active?))
-        (-> target-record trans)
-        (the-as vector #f))))
-
 (defun under-lift-player-pending? ((record mp-player-record) (lift elevator))
   (let ((pos (live-remote-position record)))
-    (the symbol (and pos (under-lift-boarding-side? lift pos) (not (under-lift-contains? lift pos))))))
-
-(defun under-lift-awaiting-players? ((lift elevator))
-  (when (and (mp-session-in-game?)
-             (not (nonnull? (mech-pilot))))
-    (mp-for-each-player-record (player-slot record)
-      (when (under-lift-player-pending? record lift)
-        (return #t))))
-  #f)
+    (the symbol (and pos
+                     (not (nonnull? (mech-pilot)))
+                     (elevator-boarding-side? lift pos)
+                     (not (under-lift-contains? lift pos))))))
 
 (define *under-lock-waters*
   (new 'static 'boxed-array :type uint32 31497 31052 31053 31498 31262 31264))

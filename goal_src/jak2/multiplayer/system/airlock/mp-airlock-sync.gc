@@ -304,6 +304,42 @@
                                                  (the-as uint (-> record identity player-slot))
                                                  (mp-airlock-state-id commit))))))
 
+(defun live-remote-position ((record mp-player-record))
+  (let ((target-record (get-player-target-record record)))
+    (if (and (mp-remote-gameplay-player-connected? record)
+             (= (-> record connection activity) (mp-player-activity in-game))
+             (not (mp-player-record-dead-or-dying? record))
+             (nonnull? target-record)
+             (-> target-record active?))
+        (-> target-record trans)
+        (the-as vector #f))))
+
+(defun elevator-boarding-side? ((lift elevator) (point vector))
+  (let ((mid-y (* 0.5 (+ (-> (get-point-in-path! (-> lift path) (new 'stack-no-clear 'vector) (-> lift bottom-top 0) 'interp) y)
+                         (-> (get-point-in-path! (-> lift path) (new 'stack-no-clear 'vector) (-> lift bottom-top 1) 'interp) y)))))
+    (if (is-at-top? lift)
+        (> (-> point y) mid-y)
+        (< (-> point y) mid-y))))
+
+(defun elevator-boarding-position ((record mp-player-record) (lift elevator) (behind-levels pair))
+  (let ((pos (live-remote-position record))
+        (level-name (mp-level-id->symbol (mp-player-primary-level-id record))))
+    (if (and pos
+             (nonnull? (-> lift level))
+             (or (member level-name behind-levels)
+                 (and (= level-name (-> lift level name)) (elevator-boarding-side? lift pos))))
+        pos
+        (the-as vector #f))))
+
+(defun elevator-holding-for-players? ((lift elevator) (pending? (function mp-player-record elevator symbol)))
+  (when (mp-session-in-game?)
+    (mp-for-each-player-record (player-slot record)
+      (when (pending? record lift)
+        (if (not (mp-airlock-has-local-commit?))
+            (draw-waiting-players-text! (the-as (function mp-player-record object symbol) pending?) lift))
+        (return #t))))
+  #f)
+
 (defun mp-any-remote-airlock-level-differs? ((airlock-aid uint) (local-level-id int))
   (when (and (nonnull? *mp-player-controller*) (nonnull? *mp-remote-airlock-state*))
     (dotimes (player-slot MP_MAX_PLAYERS)

@@ -134,17 +134,21 @@
     )
   )
 
+(defun cboss-elevator-contains? ((lift elevator) (point vector))
+  (let ((offset (vector-! (new 'stack-no-clear 'vector) point (-> lift root trans))))
+    (vector-inv-orient-by-quat! offset offset (-> lift root quat))
+    (and (< (fabs (-> offset x)) 40960.0) (< (fabs (-> offset z)) 40960.0))))
+
+(defun cboss-elevator-player-pending? ((record mp-player-record) (lift elevator))
+  (let ((pos (elevator-boarding-position record lift '(atoll atollext caspad castle))))
+    (the symbol (and pos (not (cboss-elevator-contains? lift pos))))))
+
 (defmethod commited-to-ride? ((this cboss-elevator))
   "@returns if the target is considered within the elevator area enough to begin descending/ascending"
   (let ((a0-2 (the-as target (as-type *target* process-focusable))))
-    (when a0-2
-      (let* ((v1-1 (get-trans a0-2 0))
-             (gp-2 (vector-! (new 'stack-no-clear 'vector) v1-1 (-> this root trans)))
-             )
-        (vector-inv-orient-by-quat! gp-2 gp-2 (-> this root quat))
-        (and (< (fabs (-> gp-2 x)) 40960.0) (< (fabs (-> gp-2 z)) 40960.0))
-        )
-      )
+    (the symbol (and a0-2
+                     (cboss-elevator-contains? this (get-trans a0-2 0))
+                     (not (elevator-holding-for-players? this cboss-elevator-player-pending?))))
     )
   )
 
