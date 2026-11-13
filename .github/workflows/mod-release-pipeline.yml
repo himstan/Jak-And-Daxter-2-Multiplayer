@@ -17,11 +17,6 @@ on:
         required: false
         default: "patch"
         type: "string"
-      releaseBranches:
-        description: "Comma separated list of branches (JavaScript regular expression accepted) that will generate the release tags. You probably want your default branch in this list."
-        required: false
-        default: "master,main"
-        type: "string"
       buildBinaries:
         description: "Whether to build binaries from source. Defaults to `false`, pulling binaries from `toolingRepo` instead."
         required: false
@@ -59,7 +54,7 @@ on:
     outputs:
       taggedVersion:
         description: "The version that was tagged and pushed for the mod"
-        value: ${{ jobs.create_release.outputs.bundleTagName }}
+        value: ${{ jobs.prepare_release.outputs.bundleTagName }}
 
 permissions:
   contents: write
@@ -86,33 +81,37 @@ jobs:
           npm install -g ajv-cli
           ajv validate -s ./.github/schemas/mods/v2/mod-schema.v2.json -d /tmp/metadata.json
 
-  create_release:
-    name: "Create Release"
+  prepare_release:
+    name: "Prepare Release Version"
     needs: 
       - validate_metadata
     runs-on: ubuntu-latest
     outputs:
-      bundleTagName: ${{ steps.tag_version.outputs.new_tag }}
+      bundleTagName: v${{ steps.next_version.outputs.version }}
     steps:
-      - name: Bump Version and Push Tag
-        id: tag_version
-        uses: mathieudutour/github-tag-action@v6.2
-        with:
-          github_token: ${{ secrets.token }}
-          tag_prefix: v
-          default_bump: ${{ inputs.semverBump }}
-          release_branches: ${{ inputs.releaseBranches }}
-
-      - name: Create Release
+      - name: Compute Next Version
+        id: next_version
         env:
-          GITHUB_TOKEN: ${{ secrets.token }}
-        run: gh release create ${{ steps.tag_version.outputs.new_tag }} --generate-notes --draft --repo ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.token }}
+          BUMP: ${{ inputs.semverBump }}
+        run: |
+          LATEST=$(gh api --paginate "repos/${{ github.repository }}/tags" --jq '.[].name' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+          IFS=. read -r MAJOR MINOR PATCH <<< "${LATEST:-v0.0.0}"
+          MAJOR=${MAJOR#v}
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+            *) echo "Unknown semver bump '$BUMP'" >&2; exit 1 ;;
+          esac
+          echo "version=$MAJOR.$MINOR.$PATCH" >> "$GITHUB_OUTPUT"
 
   # if `buildBinaries`, run the workflow to build and generate artifacts
 
   build_windows_clang:
     name: "Windows Build"
-    needs: create_release
+    needs: prepare_release
     if: ${{ !inputs.skipWindows && inputs.buildBinaries }}
     # assumes that this file is defined in your mod repo
     uses: ./.github/workflows/windows-build-clang.yaml
@@ -120,20 +119,17 @@ jobs:
       cmakePreset: "Release-windows-clang-static"
       cachePrefix: "static"
       uploadArtifacts: true
+      releaseTag: ${{ needs.prepare_release.outputs.bundleTagName }}
     secrets: inherit
 
   bundle_windows_build:
     name: "Bundle Windows Build"
     needs: 
-      - create_release
+      - prepare_release
       - build_windows_clang
     if: ${{ !inputs.skipWindows && inputs.buildBinaries }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.create_release.outputs.bundleTagName }}
-
       - name: "Checkout Repository"
         uses: actions/checkout@v4
 
@@ -150,15 +146,15 @@ jobs:
 
       - name: Prepare Windows Build Assets
         env:
-          versionName: ${{ needs.create_release.outputs.bundleTagName }}
+          versionName: ${{ needs.prepare_release.outputs.bundleTagName }}
         run: |
           mkdir -p ./ci-artifacts/windows
           mkdir -p ${{ inputs.outputDir }}/dist
-          versionName=${{ needs.create_release.outputs.bundleTagName }}
+          versionName=${{ needs.prepare_release.outputs.bundleTagName }}
           chmod +x ./.github/scripts/releases/extract_mod_build_windows.sh
           ./.github/scripts/releases/extract_mod_build_windows.sh ./ci-artifacts/windows ./ci-artifacts/opengoal-windows-static ./
           bash ./.github/scripts/releases/download_steam_redist.sh ./ci-artifacts/windows steam_api64.dll
-          TAG_VAL=${{ needs.create_release.outputs.bundleTagName }}
+          TAG_VAL=${{ needs.prepare_release.outputs.bundleTagName }}
           7z a -tzip ${{ inputs.outputDir }}/dist/windows-${TAG_VAL}.zip ./ci-artifacts/windows/*
 
       - name: Upload Bundle
@@ -170,7 +166,7 @@ jobs:
 
   build_linux_clang:
     name: "Linux Build"
-    needs: create_release
+    needs: prepare_release
     if: ${{ !inputs.skipLinux && inputs.buildBinaries }}
     # assumes that this file is defined in your mod repo
     uses: ./.github/workflows/linux-build-clang.yaml
@@ -178,20 +174,17 @@ jobs:
       cmakePreset: "Release-linux-clang-static"
       cachePrefix: "static"
       uploadArtifacts: true
+      releaseTag: ${{ needs.prepare_release.outputs.bundleTagName }}
     secrets: inherit
   
   bundle_linux_build:
     name: "Bundle Linux Build"
     needs:
-      - create_release
+      - prepare_release
       - build_linux_clang
     if: ${{ !inputs.skipLinux && inputs.buildBinaries }}
     runs-on: ubuntu-latest
     steps:      
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.create_release.outputs.bundleTagName }}
-
       - name: "Checkout Repository"
         uses: actions/checkout@v4
 
@@ -208,16 +201,16 @@ jobs:
 
       - name: Prepare Linux Build Assets
         env:
-          versionName: ${{ needs.create_release.outputs.bundleTagName }}
+          versionName: ${{ needs.prepare_release.outputs.bundleTagName }}
         run: |
           mkdir -p ./ci-artifacts/linux
           mkdir -p ${{ inputs.outputDir }}/dist
-          versionName=${{ needs.create_release.outputs.bundleTagName }}
+          versionName=${{ needs.prepare_release.outputs.bundleTagName }}
           chmod +x ./.github/scripts/releases/extract_mod_build_unix.sh
           ./.github/scripts/releases/extract_mod_build_unix.sh ./ci-artifacts/linux ./ci-artifacts/opengoal-linux-static ./
           bash ./.github/scripts/releases/download_steam_redist.sh ./ci-artifacts/linux libsteam_api.so
           pushd ci-artifacts/linux
-          TAG_VAL=${{ needs.create_release.outputs.bundleTagName }}
+          TAG_VAL=${{ needs.prepare_release.outputs.bundleTagName }}
           tar czf ../../${{ inputs.outputDir }}/dist/linux-${TAG_VAL}.tar.gz .
           popd
 
@@ -230,7 +223,7 @@ jobs:
 
   build_macos_intel:
     name: "MacOS Build"
-    needs: create_release
+    needs: prepare_release
     if: ${{ !inputs.skipMacOS && inputs.buildBinaries }}
     # assumes that this file is defined in your mod repo
     uses: ./.github/workflows/macos-build.yaml
@@ -238,20 +231,17 @@ jobs:
       cmakePreset: "Release-macos-x86_64-clang-static"
       cachePrefix: "static"
       uploadArtifacts: true
+      releaseTag: ${{ needs.prepare_release.outputs.bundleTagName }}
     secrets: inherit
 
   bundle_macos_build:
     name: "Bundle MacOS Build"
     needs: 
-      - create_release
+      - prepare_release
       - build_macos_intel
     if: ${{ !inputs.skipMacOS && inputs.buildBinaries }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.create_release.outputs.bundleTagName }}
-
       - name: "Checkout Repository"
         uses: actions/checkout@v4
         
@@ -268,16 +258,16 @@ jobs:
 
       - name: Prepare MacOS Build Assets
         env:
-          versionName: ${{ needs.create_release.outputs.bundleTagName }}
+          versionName: ${{ needs.prepare_release.outputs.bundleTagName }}
         run: |
           mkdir -p ./ci-artifacts/macos-intel
           mkdir -p ${{ inputs.outputDir }}/dist
-          versionName=${{ needs.create_release.outputs.bundleTagName }}
+          versionName=${{ needs.prepare_release.outputs.bundleTagName }}
           chmod +x ./.github/scripts/releases/extract_mod_build_unix.sh
           ./.github/scripts/releases/extract_mod_build_unix.sh ./ci-artifacts/macos-intel ./ci-artifacts/opengoal-macos-static ./
           bash ./.github/scripts/releases/download_steam_redist.sh ./ci-artifacts/macos-intel libsteam_api.dylib
           pushd ci-artifacts/macos-intel
-          TAG_VAL=${{ needs.create_release.outputs.bundleTagName }}
+          TAG_VAL=${{ needs.prepare_release.outputs.bundleTagName }}
           tar czf ../../${{ inputs.outputDir }}/dist/macos-intel-${TAG_VAL}.tar.gz .
           popd
 
@@ -292,7 +282,7 @@ jobs:
 
   bundle_windows_no_build:
     name: "Bundle Windows (no build)"
-    needs: create_release
+    needs: prepare_release
     if: ${{ !inputs.skipWindows && !inputs.buildBinaries }}
     runs-on: ubuntu-latest
     steps:
@@ -302,7 +292,7 @@ jobs:
       - name: "Create Windows Release"
         env:
           outputDir: ${{ inputs.outputDir }}
-          versionName: ${{ needs.create_release.outputs.bundleTagName }}
+          versionName: ${{ needs.prepare_release.outputs.bundleTagName }}
           toolingRepo: ${{ inputs.toolingRepo }}
           toolingVersion: ${{ inputs.toolingVersion }}
         run: python ./.github/scripts/create-mod-release/bundle-windows.py
@@ -316,7 +306,7 @@ jobs:
 
   bundle_linux_no_build:
     name: "Bundle Linux (no build)"
-    needs: create_release
+    needs: prepare_release
     if: ${{ !inputs.skipLinux && !inputs.buildBinaries }}
     runs-on: ubuntu-latest
     steps:
@@ -326,7 +316,7 @@ jobs:
       - name: "Create Linux Release"
         env:
           outputDir: ${{ inputs.outputDir }}
-          versionName: ${{ needs.create_release.outputs.bundleTagName }}
+          versionName: ${{ needs.prepare_release.outputs.bundleTagName }}
           toolingRepo: ${{ inputs.toolingRepo }}
           toolingVersion: ${{ inputs.toolingVersion }}
         run: python ./.github/scripts/create-mod-release/bundle-linux.py
@@ -340,7 +330,7 @@ jobs:
 
   bundle_macos_no_build:
     name: "Bundle macOS Intel (no build)"
-    needs: create_release
+    needs: prepare_release
     if: ${{ !inputs.skipMacOS && !inputs.buildBinaries }}
     runs-on: ubuntu-latest
     steps:
@@ -350,7 +340,7 @@ jobs:
       - name: "Create MacOS Intel Release"
         env:
           outputDir: ${{ inputs.outputDir }}
-          versionName: ${{ needs.create_release.outputs.bundleTagName }}
+          versionName: ${{ needs.prepare_release.outputs.bundleTagName }}
           toolingRepo: ${{ inputs.toolingRepo }}
           toolingVersion: ${{ inputs.toolingVersion }}
         run: python ./.github/scripts/create-mod-release/bundle-macos.py
@@ -365,7 +355,7 @@ jobs:
   finalize_release:
     name: "Finalize Release"
     needs: 
-      - create_release
+      - prepare_release
       - bundle_windows_build
       - bundle_linux_build
       - bundle_macos_build
@@ -374,7 +364,7 @@ jobs:
       - bundle_macos_no_build
     if: |
       always() &&
-      needs.create_release.result == 'success' &&
+      needs.prepare_release.result == 'success' &&
       (needs.bundle_windows_build.result == 'skipped' || needs.bundle_windows_build.result == 'success') &&
       (needs.bundle_linux_build.result == 'skipped' || needs.bundle_linux_build.result == 'success') &&
       (needs.bundle_macos_build.result == 'skipped' || needs.bundle_macos_build.result == 'success') &&
@@ -412,7 +402,7 @@ jobs:
       - name: Prepare Release Metadata
         env:
           SCHEMA_VERSION: "0.1.0"
-          VERSION: ${{ needs.create_release.outputs.bundleTagName }}
+          VERSION: ${{ needs.prepare_release.outputs.bundleTagName }}
           SUPPORTED_GAMES: ${{ inputs.metadataSupportedGames }}
           OUT_DIR: "${{ inputs.outputDir }}/dist"
         run: python ./.github/scripts/create-mod-release/emit-metadata.py
@@ -422,18 +412,11 @@ jobs:
           npm install -g ajv-cli
           ajv validate -s ./.github/schemas/mods/v2/mod-schema.v2.json -d ${{ inputs.outputDir }}/dist/metadata.json
 
-      - name: Upload Assets
-        env:
-          GITHUB_TOKEN: ${{ secrets.token }}
-        run: |
-          TAG_VAL=${{ needs.create_release.outputs.bundleTagName }}
-          echo $TAG_VAL
-          gh release upload "${TAG_VAL}" ${{ github.WORKSPACE }}/${{ inputs.outputDir }}/dist/* --repo ${{ github.repository }} --clobber
-
+      # a draft release has no git tag; publishing it creates the tag at the built commit
       - name: Publish Release
         env:
           GITHUB_TOKEN: ${{ secrets.token }}
+          TAG_VAL: ${{ needs.prepare_release.outputs.bundleTagName }}
         run: |
-          TAG_VAL=${{ needs.create_release.outputs.bundleTagName }}
-          echo $TAG_VAL
-          gh release edit ${TAG_VAL} --draft=false --repo ${{ github.repository }}
+          gh release create "$TAG_VAL" ${{ github.workspace }}/${{ inputs.outputDir }}/dist/* --target ${{ github.sha }} --generate-notes --draft --repo ${{ github.repository }}
+          gh release edit "$TAG_VAL" --draft=false --repo ${{ github.repository }}

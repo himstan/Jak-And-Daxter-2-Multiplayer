@@ -13,6 +13,10 @@ on:
         required: false
         type: boolean
         default: false
+      releaseTag:
+        required: false
+        type: string
+        default: ''
 
 jobs:
   build:
@@ -36,6 +40,11 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+
+      # local-only tag so the binaries report the release version; the real tag is created when the release publishes
+      - name: Tag Release Build
+        if: ${{ inputs.releaseTag != '' }}
+        run: git tag "${{ inputs.releaseTag }}"
 
       - name: Install Package Dependencies
         env:
