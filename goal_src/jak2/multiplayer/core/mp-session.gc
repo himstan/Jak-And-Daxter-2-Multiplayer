@@ -433,3 +433,11 @@
   (mp-reset-gameplay-state)
   (log 'debug "[MP] State has been fully reset.~%")
   (none))
+
+(defun quit-to-title! ()
+  (mp-reset-state)
+  (sound-volume-off)
+  (set! (-> *game-info* mode) 'play)
+  (set! (-> *game-info* demo-state) (the-as uint TITLE_DEMO_STATE_MENU))
+  (initialize! *game-info* 'game (the-as game-save #f) "title-start")
+  (none))

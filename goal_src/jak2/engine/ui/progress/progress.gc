@@ -69,6 +69,7 @@
 (define-extern mp-reconnect-reset-gameplay-if-needed! (function none))
 (define-extern *mp-reconnect-menu-active?* symbol)
 (define-extern mp-reconnect-terminal-status? (function mp-connection-status symbol))
+(define-extern quit-to-title! (function none))
 
 (kmemopen global "mc-slot-info")
 
@@ -1961,7 +1962,7 @@
            ((and (-> v1-1 0) (= (-> this name) (text-id progress-quit)))
             (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons confirm))
             (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons confirm))
-            (initialize! *game-info* 'game (the-as game-save #f) "title-restart")
+            (quit-to-title!)
             )
            )
          )
@@ -2920,11 +2921,7 @@
     (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons confirm))
     
     (pc-multi-disconnect)
-    (mp-reset-state)
-
-    (sound-volume-off)
-    (set! (-> *game-info* mode) 'play)
-    (initialize! *game-info* 'game (the-as game-save #f) "title-restart")
+    (quit-to-title!)
     )
   0
   )
@@ -2948,14 +2945,14 @@
        (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons confirm))
        (cond
          ((-> *progress-state* yes-no-choice)
-          (sound-volume-off)
-          (set! (-> *game-info* mode) 'play)
           (case *kernel-boot-message*
             (('demo-shared 'demo)
+             (sound-volume-off)
+             (set! (-> *game-info* mode) 'play)
              (initialize! *game-info* 'game (the-as game-save #f) "demo-start")
              )
             (else
-              (initialize! *game-info* 'game (the-as game-save #f) "title-restart")
+              (quit-to-title!)
               )
             )
           )
@@ -3939,9 +3936,7 @@
              :on-success (lambda ((task async-task) (owner process))
                            (when (nonnull? owner)
                              (log 'debug "[Progress] Disconnected successfully!")
-                             (set! (-> *game-info* mode) 'play)
-                             (initialize! *game-info* 'game (the-as game-save #f) "title-restart")
-                             (mp-reset-state)
+                             (quit-to-title!)
                              )
                            )
              :on-fail (lambda ((task async-task) (owner process) (reason symbol))
@@ -4111,13 +4106,8 @@
     (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons confirm))
     (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons confirm))
     (log 'debug "[Progress] Host left. Returning to main menu.~%")
-    
     (pc-multi-disconnect)
-    (mp-reset-state)
-
-    (sound-volume-off)
-    (set! (-> *game-info* mode) 'play)
-    (initialize! *game-info* 'game (the-as game-save #f) "title-restart")
+    (quit-to-title!)
     )
   0
   )

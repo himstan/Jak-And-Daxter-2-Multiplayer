@@ -75,11 +75,25 @@
       (kill-by-name task-name *mid-pool*)))
   (none))
 
+(define *async-task-cancel-survivor* (the-as process #f))
+
+(defun async-task-cancelable? ((proc process))
+  (and (= (-> proc type) async-task) (!= proc *async-task-cancel-survivor*)))
+
+(defun cancel-async-tasks-in! ((tree process-tree))
+  (when (nonnull? tree)
+    (let ((task (search-process-tree tree async-task-cancelable?)))
+      (while task
+        (deactivate task)
+        (set! task (search-process-tree tree async-task-cancelable?)))))
+  (none))
+
 (defun cancel-all-async-tasks! ()
-  (when (and *active-pool* (nonzero? *active-pool*))
-    (kill-by-type async-task *active-pool*))
-  (when (and *mid-pool* (nonzero? *mid-pool*))
-    (kill-by-type async-task *mid-pool*))
+  (with-pp
+    (set! *async-task-cancel-survivor* pp)
+    (cancel-async-tasks-in! *active-pool*)
+    (cancel-async-tasks-in! *mid-pool*)
+    (set! *async-task-cancel-survivor* #f))
   (none))
 
 (defun async-task-active? ((tag symbol))
