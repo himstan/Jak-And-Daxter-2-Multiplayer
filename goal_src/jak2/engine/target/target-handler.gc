@@ -1021,7 +1021,7 @@
                                         )
                                     )
                               )
-                         (if (and a2-4 (focus-test? self indax))
+                         (if (or (mp-target-daxter? self) (and a2-4 (focus-test? self indax)))
                              (go target-indax-pilot-start (process->handle s5-1) (the-as symbol (-> arg3 param 3)) #t)
                              (go target-pilot-start (process->handle s5-1) (the-as symbol (-> arg3 param 3)) a2-4)
                              )
@@ -1150,7 +1150,7 @@
         (b! (!= v1-0 'pilot-edge-grab) cfg-242 :delay (nop!))
         (b! (focus-test? self dead hit grabbed) cfg-241 :delay (set! v0-0 #f))
         (set! v0-0
-              (if (focus-test? self indax)
+              (if (or (focus-test? self indax) (mp-target-daxter? self))
                   (go target-indax-pilot-edge-grab (the-as pilot-edge-grab-info (-> arg3 param 0)))
                   (go target-pilot-edge-grab (the-as pilot-edge-grab-info (-> arg3 param 0)))
                   )

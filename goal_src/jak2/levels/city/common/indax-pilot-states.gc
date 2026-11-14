@@ -12,7 +12,15 @@
     )
   )
 
+(defbehavior target-daxter-restore-indax! target ()
+  (when (and (mp-target-daxter? self) (not (focus-test? self indax)))
+    (target-indax-init #f #f)
+    )
+  (none)
+  )
+
 (defbehavior target-indax-pilot-edge-grab-enter target ((arg0 pilot-edge-grab-info))
+  (target-daxter-restore-indax!)
   (ja-channel-set! 0)
   (set-time! (-> self state-time))
   (set! (-> self control unknown-handle000) (the-as handle #f))
@@ -196,6 +204,7 @@
   :event target-pilot-handler
   :exit target-pilot-exit
   :code (behavior ((arg0 handle) (arg1 symbol) (arg2 symbol))
+    (target-daxter-restore-indax!)
     (ja-channel-set! 0)
     (target-pilot-init arg0 #t)
     (suspend)

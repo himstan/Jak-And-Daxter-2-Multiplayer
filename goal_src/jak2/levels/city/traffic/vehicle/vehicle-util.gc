@@ -482,9 +482,7 @@
                                        (cpad-pressed? pad-idx triangle))
                               (cond
                                 (can-board-seat?
-                                  (let ((mode (if (focus-test? tgt indax) 'pilot-daxter 'pilot)))
-                                    (send-event tgt 'change-mode mode this boarding-seat #f)
-                                    )
+                                  (send-event tgt 'change-mode 'pilot this boarding-seat #f)
                                   )
                                 (else
                                   (set! (-> boarding-work handles 0) (process->handle this))

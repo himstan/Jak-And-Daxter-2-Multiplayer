@@ -280,9 +280,6 @@
     (if (and (nonnull? (-> self pilot)) (-> self pilot as-daxter?) (not (focus-test? self indax)))
         (target-pilot-pidax-exit)
         )
-    (when (and (mp-target-daxter? self) (not (focus-test? self indax)))
-      (logclear! (-> self draw status) (draw-control-status no-draw-bounds2))
-      )
     (hellcat-gunner-tuck-legs! #f)
     (let ((v1-11 (-> self pilot)))
       (when (nonzero? v1-11)
@@ -333,8 +330,7 @@
     (set! (-> s5-0 gun?) #t)
     (set! (-> s5-0 enable-cam-side-shift) #f)
     (set! (-> s5-0 as-daxter?)
-          (if (or arg1
-                  (and (mp-target-daxter? self) (focus-test? self indax)))
+          (if (or arg1 (mp-target-daxter? self))
               #t
               #f))
     (set! (-> s5-0 entity) #f)
@@ -343,9 +339,6 @@
     (if (and (-> self pilot as-daxter?) (not (focus-test? self indax)))
         (target-pilot-pidax-enter)
         )
-    (when (and (mp-target-daxter? self) (not (focus-test? self indax)))
-      (logior! (-> self draw status) (draw-control-status no-draw-bounds2))
-      )
     (cond
       ((handle->process arg0)
        (set! (-> s5-0 vehicle) arg0)

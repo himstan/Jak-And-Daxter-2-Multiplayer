@@ -104,7 +104,7 @@
 (defun mp-teleport-board-vehicle-seat! ((player target) (veh vehicle) (seat-idx int))
   (when (and (mp-teleport-target-ready? player) veh (nonzero? veh) (!= seat-idx -1))
     (set! *mp-shuttle-override-seat-index* seat-idx)
-    (if (focus-test? player indax)
+    (if (or (focus-test? player indax) (mp-target-daxter? player))
       (go-process player target-indax-pilot-start (process->handle veh) #t #t)
       (go-process player target-pilot-start (process->handle veh) #t #f)))
   (none))

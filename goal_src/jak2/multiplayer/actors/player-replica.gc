@@ -851,10 +851,6 @@
 (defun player-replica-in-pole-state? ((proc target) (cur-state symbol))
   (or (focus-test? proc pole) (mp-target-pole-state? cur-state)))
 
-(defun get-player-replica-pilot-entry-mode ((proc target))
-  (let ((record (mp-player-controller-target-record *mp-player-controller* proc)))
-    (if (mp-player-daxter? record) 'pilot-daxter 'pilot)))
-
 (defun player-replica-synced-to-vehicle-seat? ((proc target) (v-proc vehicle) (seat-index int))
   (and proc
        (nonzero? proc)
@@ -942,7 +938,7 @@
     (vehicle-eject-civilian-riders! v-proc)
     (mp-vehicle-clear-seat-occupant! v-proc seat-index proc)
     (remove-rider v-proc proc)
-    (send-event proc 'change-mode (get-player-replica-pilot-entry-mode proc) v-proc seat-index #f))
+    (send-event proc 'change-mode 'pilot v-proc seat-index #f))
   (none))
 
 (defun player-replica-repair-vehicle-seat-claim! ((proc target) (v-proc vehicle) (seat-index int))
