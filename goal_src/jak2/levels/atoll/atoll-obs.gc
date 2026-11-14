@@ -232,6 +232,17 @@
               :bounds (static-spherem 0 -10 0 14)
               )
 
+(defbehavior turbine-rotate! turbine ()
+  (when (nonnull? (-> self entity))
+    (quaternion-rotate-y!
+      (-> self root quat)
+      (-> self entity quat)
+      (/ (the float (mod (* (current-time) (the int (-> self rotspeed))) (* 65536 300))) 300.0)
+      )
+    )
+  (none)
+  )
+
 (defstate idle (turbine)
   :virtual #t
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
@@ -249,7 +260,7 @@
     )
   :code sleep-code
   :post (behavior ()
-    (quaternion-rotate-y! (-> self root quat) (-> self root quat) (* (-> self rotspeed) (seconds-per-frame)))
+    (turbine-rotate!)
     (let ((f1-2 (- (-> self dest-height) (-> self root trans y))))
       (if (< 0.0 f1-2)
           (+! (-> self root trans y) (* (fmax 6144.0 (/ f1-2 2)) (seconds-per-frame)))
@@ -268,7 +279,7 @@
   :trans rider-trans
   :code sleep-code
   :post (behavior ()
-    (quaternion-rotate-y! (-> self root quat) (-> self root quat) (* (-> self rotspeed) (seconds-per-frame)))
+    (turbine-rotate!)
     (let ((f1-2 (- (-> self dest-height) (-> self root trans y))))
       (if (< 0.0 f1-2)
           (+! (-> self root trans y) (* (fmax 6144.0 (/ f1-2 2)) (seconds-per-frame)))
