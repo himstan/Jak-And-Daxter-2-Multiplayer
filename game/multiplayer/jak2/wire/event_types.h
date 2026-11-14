@@ -11,7 +11,7 @@ struct EventDescriptor {
   uint8_t payload_size;
 };
 
-inline constexpr std::array<EventDescriptor, 71> kEvents = {{
+inline constexpr std::array<EventDescriptor, 72> kEvents = {{
     {1, "ORB", 12},
     {2, "GEM", 12},
     {3, "BREAK", 4},
@@ -83,6 +83,7 @@ inline constexpr std::array<EventDescriptor, 71> kEvents = {{
     {73, "UNDER_SIG_TASK", 1},
     {74, "DEFEND_STADIUM_STATE", 35},
     {75, "TRANS_PLAT_DEPART", 4},
+    {76, "VEHICLE_HONK", 4},
 }};
 
 inline const EventDescriptor* event_descriptor(uint8_t id) {

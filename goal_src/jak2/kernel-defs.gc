@@ -265,7 +265,7 @@
 
 ;;main music start
 (define-extern play-sound-file (function string int symbol))
-(define-extern pc-register-custom-spatial-audio (function string string symbol))
+(define-extern pc-register-custom-spatial-audio (function string string uint symbol))
 (define-extern pc-custom-spatial-audio-status (function string int int))
 (define-extern pc-custom-spatial-audio-position (function int int))
 (define-extern play-main-music (function string int none))

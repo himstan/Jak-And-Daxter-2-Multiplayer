@@ -5,6 +5,7 @@
   ((key         string)
    (path        string)
    (probability int32)
+   (group       sound-group)
    (available?  symbol)))
 
 (defun custom-spatial-audio-pool-total ((pool (array custom-spatial-audio-entry)))
@@ -23,15 +24,17 @@
             (return -1)))))
     total))
 
+(defun register-custom-spatial-audio! ((entry custom-spatial-audio-entry))
+  (when (nonnull? entry)
+    (let ((key (-> entry key))
+          (path (-> entry path)))
+      (set! (-> entry available?) (and (nonzero? key) (nonzero? path) (pc-register-custom-spatial-audio key path (the-as uint (-> entry group))))))))
+
 (defun register-custom-spatial-audio-pool! ((pool (array custom-spatial-audio-entry)))
   (when (< (custom-spatial-audio-pool-total pool) 0)
     (return #f))
   (dotimes (idx (-> pool length))
-    (let ((entry (-> pool idx)))
-      (when (nonzero? entry)
-        (let ((key (-> entry key))
-              (path (-> entry path)))
-          (set! (-> entry available?) (and (nonzero? key) (nonzero? path) (pc-register-custom-spatial-audio key path)))))))
+    (register-custom-spatial-audio! (-> pool idx)))
   #t)
 
 (defun choose-custom-spatial-audio ((pool (array custom-spatial-audio-entry)))
@@ -46,3 +49,9 @@
           (when (<= roll cumulative)
             (if (and (-> entry available?) (nonzero? (-> entry key))) (return (-> entry key)) (return (the-as string #f))))))))
   (the-as string #f))
+
+(defun play-custom-spatial-audio ((entry custom-spatial-audio-entry) (source process-drawable) (channel gui-channel) (fo-min int) (fo-max int))
+  (when (and (nonnull? entry source) (-> entry available?))
+    (let ((id (add-process *gui-control* source channel (gui-action play) (-> entry key) -99.0 0)))
+      (set-falloff! *gui-control* id #t fo-min fo-max 2)))
+  (none))

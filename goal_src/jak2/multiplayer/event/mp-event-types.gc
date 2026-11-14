@@ -213,4 +213,8 @@
                                                  (receive-defend-stadium-state! (the-as defend-stadium-state-event evt)))
                   (MP_EVENT_TRANS_PLAT_DEPART 75
                                               mp-aid-event-data
-                                              (receive-trans-plat-depart! (-> (the-as mp-aid-event evt) payload aid))))
+                                              (receive-trans-plat-depart! (-> (the-as mp-aid-event evt) payload aid)))
+                  (MP_EVENT_VEHICLE_HONK 76
+                                         mp-aid-event-data
+                                         (receive-vehicle-honk! (-> (the-as mp-aid-event evt) payload aid)
+                                                                (-> evt source-player-slot))))

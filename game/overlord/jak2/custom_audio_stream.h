@@ -14,7 +14,7 @@ enum class CustomAudioStreamStatus : s32 {
   FINISHED = 4,
 };
 
-bool RegisterCustomAudioStream(const char* key, const char* relative_path);
+bool RegisterCustomAudioStream(const char* key, const char* relative_path, u32 volume_group);
 CustomAudioStreamStatus GetCustomAudioStreamStatus(const char* key, s32 id);
 s32 GetCustomAudioStreamPosition(s32 id);
 

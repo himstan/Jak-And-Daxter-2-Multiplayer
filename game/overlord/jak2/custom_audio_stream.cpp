@@ -19,12 +19,14 @@ namespace {
 
 struct RegisteredStream {
   std::string full_path;
+  u32 volume_group = 0;
 };
 
 struct StreamInstance {
   std::string key;
   std::unique_ptr<custom_audio::Source> source;
   SoundParams params{};
+  u32 volume_group = 0;
   CustomAudioStreamStatus status = CustomAudioStreamStatus::READY;
   CustomAudioStreamStatus last_reported_status = CustomAudioStreamStatus::NOT_CUSTOM;
   u32 start_request_count = 0;
@@ -50,11 +52,14 @@ bool is_safe_relative_path(const fs::path& path) {
   return true;
 }
 
-StreamInstance& prepare_instance(const s32 id, const std::string& key) {
+StreamInstance& prepare_instance(const s32 id,
+                                 const std::string& key,
+                                 const RegisteredStream& registration) {
   auto& instance = g_stream_instances[id];
   if (instance.key != key) {
     instance = {};
     instance.key = key;
+    instance.volume_group = registration.volume_group;
     instance.params.volume = 0x400;
     instance.params.fo_min = 5;
     instance.params.fo_max = 30;
@@ -77,7 +82,7 @@ void apply_spatial_volume(StreamInstance& instance) {
     return;
   }
 
-  const s32 base_volume = (instance.params.volume * MasterVolume[2]) >> 10;
+  const s32 base_volume = (instance.params.volume * MasterVolume[instance.volume_group]) >> 10;
   const auto [left, right] =
       CalculateSpatializedVolume(&instance.params.trans, base_volume, instance.params.fo_curve,
                                  instance.params.fo_min, instance.params.fo_max);
@@ -108,8 +113,9 @@ void apply_params(StreamInstance& instance, const SoundParams& params) {
 
 }  // namespace
 
-bool RegisterCustomAudioStream(const char* key, const char* relative_path) {
-  if (!key || !relative_path || !key[0] || !relative_path[0] || std::strlen(key) >= 48) {
+bool RegisterCustomAudioStream(const char* key, const char* relative_path, const u32 volume_group) {
+  if (!key || !relative_path || !key[0] || !relative_path[0] || std::strlen(key) >= 48 ||
+      volume_group >= std::size(MasterVolume)) {
     return false;
   }
 
@@ -127,7 +133,7 @@ bool RegisterCustomAudioStream(const char* key, const char* relative_path) {
   }
 
   std::lock_guard lock(g_stream_mutex);
-  g_registered_streams[std::string(key)] = {full_path.string()};
+  g_registered_streams[std::string(key)] = {full_path.string(), volume_group};
   lg::info("[CUSTOM_SPATIAL_AUDIO] registered key='{}' path='{}'", key, full_path.string());
   return true;
 }
@@ -197,7 +203,8 @@ u32 UpdateCustomAudioStreamQueue(const char* const* keys, const u32* ids, const 
         custom_slot_mask |= 1u << slot;
       }
       selected_ids.insert(id);
-      if (auto& instance = prepare_instance(id, registration->first); !instance.queued) {
+      if (auto& instance = prepare_instance(id, registration->first, registration->second);
+          !instance.queued) {
         instance.queued = true;
       }
     }

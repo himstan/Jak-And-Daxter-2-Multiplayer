@@ -1,0 +1,91 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(define *bike-horn* (new 'static 'custom-spatial-audio-entry
+                       :key "bike-horn"
+                       :path "jad2mp/bike-horn.wav"
+                       :group (sound-group sfx)))
+
+(define *car-horn* (new 'static 'custom-spatial-audio-entry
+                      :key "car-horn"
+                      :path "jad2mp/car-horn.wav"
+                      :group (sound-group sfx)))
+
+(define *hellcat-horn* (new 'static 'custom-spatial-audio-entry
+                          :key "big-car-horn"
+                          :path "jad2mp/big-car-horn.wav"
+                          :group (sound-group sfx)))
+
+(register-custom-spatial-audio! *bike-horn*)
+
+(register-custom-spatial-audio! *car-horn*)
+
+(register-custom-spatial-audio! *hellcat-horn*)
+
+(defun horn-channel ((player-slot uint))
+  (the-as gui-channel
+          (+ (the-as uint (gui-channel horn)) (if (mp-player-slot-valid? player-slot) player-slot (the-as uint 0)))))
+
+(dotimes (player-slot MP_MAX_PLAYERS)
+  (set! (-> *gui-control* cmd (horn-channel (the-as uint player-slot))) '((64 . wait))))
+
+(defun vehicle-horn ((veh vehicle))
+  (cond
+    ((type? veh hellcat) *hellcat-horn*)
+    ((or (type? veh bike-base) (type? veh guard-bike)) *bike-horn*)
+    ((type? veh car-base) *car-horn*)
+    (else (the-as custom-spatial-audio-entry #f))))
+
+(defun stop-horn! ((channel gui-channel))
+  (let ((sounding (lookup-gui-connection *gui-control* (the-as process #f) channel (the-as string #f) (new 'static 'sound-id))))
+    (when (nonnull? sounding)
+      (stop-str *gui-control* sounding)
+      (move-to-dead sounding)))
+  (none))
+
+(defun note-horn-press! ((veh vehicle))
+  (let ((driver (the-as target (get-rider-in-seat veh 0))))
+    (when (and (nonnull? driver) (type? driver target) (nonnull? (-> driver pilot)))
+      (set! (-> driver pilot horn-time) (-> *display* game-clock frame-counter))))
+  (none))
+
+(defun honk-vehicle-horn! ((veh vehicle) (player-slot uint))
+  (let ((horn (vehicle-horn veh))
+        (channel (horn-channel player-slot)))
+    (when horn
+      (stop-horn! channel)
+      (play-custom-spatial-audio horn veh channel 10 80)
+      (note-horn-press! veh))
+    horn))
+
+(defconstant HORN_PRESS_PULLBACK (meters 0.05))
+
+(defun horn-press-amount ((pilot pilot-info))
+  (let ((elapsed (the float (- (-> *display* game-clock frame-counter) (-> pilot horn-time)))))
+    (fmin (lerp-scale 0.0 1.0 elapsed 0.0 (the float (seconds 0.05)))
+          (lerp-scale 1.0 0.0 elapsed (the float (seconds 0.2)) (the float (seconds 0.3))))))
+
+(defun press-horn-with-free-hand! ((driver target) (veh vehicle) (hands matrix))
+  (when (and (nonnull? driver (-> driver pilot) veh (-> veh node-list) hands)
+             (or (type? veh car-base) (type? veh hellcat)))
+    (let ((amount (horn-press-amount (-> driver pilot))))
+      (when (> amount 0.0)
+        (let ((free-hand (-> hands vector (if (focus-test? driver indax) 1 0)))
+              (centre (new 'stack-no-clear 'vector))
+              (pullback (new 'stack-no-clear 'vector)))
+          (vector-lerp! centre (-> hands vector 0) (-> hands vector 1) 0.5)
+          (vector-normalize-copy! pullback (-> veh node-list data 0 bone transform vector 2) HORN_PRESS_PULLBACK)
+          (vector-! centre centre pullback)
+          (vector-lerp! free-hand free-hand centre amount)))))
+  (none))
+
+(defun honk-local-vehicle-horn! ((veh vehicle))
+  (when (and (nonnull? veh) (honk-vehicle-horn! veh (mp-local-player-slot)))
+    (mp-event-enqueue-aid! MP_EVENT_VEHICLE_HONK (-> veh net-id)))
+  (none))
+
+(defun receive-vehicle-honk! ((net-id uint) (player-slot uint))
+  (let ((veh (mp-vehicle-find-by-net-id net-id)))
+    (when (nonnull? veh)
+      (honk-vehicle-horn! veh player-slot)))
+  (none))

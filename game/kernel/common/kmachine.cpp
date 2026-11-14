@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <algorithm>
+#include <bit>
 #include <cerrno>
 #include <cstdlib>
 #include <iomanip>
@@ -515,8 +516,10 @@ const char* checked_goal_string(const u32 string_ptr, const u32 max_length) {
 }
 }  // namespace
 
-static u64 pc_register_custom_spatial_audio(const u32 key_ptr, const u32 path_ptr) {
-  if (g_game_version != GameVersion::Jak2) {
+static u64 pc_register_custom_spatial_audio(const u32 key_ptr,
+                                            const u32 path_ptr,
+                                            const u32 sound_group) {
+  if (g_game_version != GameVersion::Jak2 || !std::has_single_bit(sound_group)) {
     return bool_to_symbol(false);
   }
 
@@ -525,7 +528,8 @@ static u64 pc_register_custom_spatial_audio(const u32 key_ptr, const u32 path_pt
   if (!key || !path) {
     return bool_to_symbol(false);
   }
-  return bool_to_symbol(jak2::RegisterCustomAudioStream(key, path));
+  return bool_to_symbol(
+      jak2::RegisterCustomAudioStream(key, path, std::countr_zero(sound_group)));
 }
 
 static s64 pc_custom_spatial_audio_status(const u32 key_ptr, const s32 id) {
