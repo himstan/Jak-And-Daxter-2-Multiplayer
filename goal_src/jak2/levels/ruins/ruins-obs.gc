@@ -678,7 +678,17 @@
   (none)
   )
 
+(defun entity-clear-dormant! ((name string))
+  (let ((ent (entity-by-name name)))
+    (when (nonnull? ent)
+      (let ((options (res-lump-data ent 'enemy-options (pointer enemy-option))))
+        (when (nonnull? options)
+          (logclear! (-> options 0) (enemy-option dormant))))))
+  (none))
+
 (defun ruins-activate ()
+  (entity-clear-dormant! "grenadier-2")
+  (entity-clear-dormant! "grenadier-3")
   (setup-user-array (-> *part-id-table* 1309) "grenadier-grenade-part")
   (setup-user-array (-> *part-id-table* 638) "grenadier-grenade-part")
   (setup-user-array (-> *part-id-table* 639) "grenadier-grenade-part")
