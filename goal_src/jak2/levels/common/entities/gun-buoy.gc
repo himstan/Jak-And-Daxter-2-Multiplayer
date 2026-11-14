@@ -52,9 +52,9 @@
             )
         (set! (-> s4-0 quad) (-> s5-0 transv quad))
         (let ((f30-0 (vector-length s4-0))
-              (a0-2 (the-as target (as-type *target* process-focusable)))
+              (a0-2 (the-as process-focusable (handle->process (-> arg0 last-target))))
               )
-          (when a0-2
+          (when (nonnull? a0-2)
             (let ((s1-1 (new 'stack-no-clear 'vector)))
               (set! (-> s1-1 quad) (-> (get-trans a0-2 0) quad))
               (+! (-> s1-1 y) 8192.0)
@@ -105,6 +105,12 @@
       )
     0
     (none)
+    )
+  )
+
+(defmethod deal-damage! ((this gun-buoy-shot) (hit-proc process) (event event-message-block))
+  (when (or (!= hit-proc *target*) (= (handle->process (-> this last-target)) *target*))
+    (call-parent-method this hit-proc event)
     )
   )
 
@@ -317,6 +323,16 @@
 
 (define *gun-buoy-victory-index* 0)
 
+(defun gun-buoy-target ((this gun-buoy))
+  (the-as target (as-type (handle->process (-> this focus handle)) target))
+  )
+
+(defun gun-buoy-speak! ((this gun-buoy) (speech string))
+  (if (not (player-replica? (handle->process (-> this focus handle))))
+      (set! (-> this voice-id) (add-process *gui-control* this (gui-channel guard) (gui-action play) speech -99.0 0))
+      )
+  )
+
 (defbehavior gun-buoy-chase-post gun-buoy ()
   (let ((gp-0 (handle->process (-> self focus handle))))
     (when gp-0
@@ -400,6 +416,7 @@
     )
   :enter (behavior ()
     (set! (-> self root trans quad) (-> self start-pos quad))
+    (logclear! (-> self enemy-flags) (enemy-flag lock-focus))
     (logclear! (-> self flags) (gun-buoy-flags gubflags-1))
     (logclear! (-> self flags) (gun-buoy-flags gubflags-2))
     )
@@ -432,9 +449,10 @@
       )
     0
     (nav-enemy-method-166 self)
+    (logior! (-> self enemy-flags) (enemy-flag lock-focus))
     (logior! (-> self flags) (gun-buoy-flags gubflags-0))
     (logior! (-> self water flags) (water-flags touch-water))
-    (let ((s3-0 (the-as target (as-type *target* process-focusable))))
+    (let ((s3-0 (gun-buoy-target self)))
       (cond
         (s3-0
           (let ((s4-0 (new 'stack-no-clear 'vector)))
@@ -485,9 +503,7 @@
       (set! (-> self y-offset) 0.0)
       (when (not (logtest? (-> self flags) (gun-buoy-flags gubflags-2)))
         (set! *gun-buoy-warning-index* (rand-vu-int-range 0 (+ (-> *gun-buoy-warning-speech* length) -1)))
-        (let ((t0-0 (-> *gun-buoy-warning-speech* *gun-buoy-warning-index*)))
-          (set! (-> self voice-id) (add-process *gui-control* self (gui-channel guard) (gui-action play) t0-0 -99.0 0))
-          )
+        (gun-buoy-speak! self (-> *gun-buoy-warning-speech* *gun-buoy-warning-index*))
         )
       (go-virtual open-guns)
       )
@@ -564,9 +580,11 @@
     (if (not (-> *setting-control* user-current gun-buoy))
         (go-virtual exit-ambush)
         )
-    (if (and *target* (< 102400.0 (vector-length (get-transv *target*))))
-        (go-virtual attack)
-        )
+    (let ((player (gun-buoy-target self)))
+      (if (and player (< 102400.0 (vector-length (get-transv player))))
+          (go-virtual attack)
+          )
+      )
     )
   :code (behavior ()
     (ja-channel-push! 1 (seconds 0.075))
@@ -663,9 +681,7 @@
              (set! (-> self warning-interval) (seconds 0.5))
              )
             (else
-              (set! (-> self voice-id)
-                    (add-process *gui-control* self (gui-channel guard) (gui-action play) "cityv052" -99.0 0)
-                    )
+              (gun-buoy-speak! self "cityv052")
               (set! (-> self warning-interval) (seconds 4))
               )
             )
@@ -753,7 +769,7 @@
            )
           )
         )
-      (if (the-as target (as-type *target* process-focusable))
+      (if (gun-buoy-target self)
           (go-virtual attack)
           )
       )
@@ -783,9 +799,9 @@
     )
   :code (behavior ()
     (dotimes (gp-0 4)
-      (let ((a1-1 (the-as target (as-type *target* process-focusable))))
-        (if a1-1
-            (gun-buoy-method-183 self a1-1)
+      (let ((player (gun-buoy-target self)))
+        (if player
+            (gun-buoy-method-183 self player)
             )
         )
       (suspend-for (seconds 0.75)
@@ -807,9 +823,7 @@
     )
   :code (behavior ()
     (set! *gun-buoy-victory-index* (rand-vu-int-range 0 (+ (-> *gun-buoy-victory-speech* length) -1)))
-    (let ((t0-0 (-> *gun-buoy-victory-speech* *gun-buoy-victory-index*)))
-      (set! (-> self voice-id) (add-process *gui-control* self (gui-channel guard) (gui-action play) t0-0 -99.0 0))
-      )
+    (gun-buoy-speak! self (-> *gun-buoy-victory-speech* *gun-buoy-victory-index*))
     (ja-no-eval :group! gun-buoy-close-ja :num! (seek!) :frame-num 0.0)
     (until (ja-done? 0)
       (suspend)
@@ -848,7 +862,7 @@
    - looks at the target and handles attacking
    @TODO Not extremely well understood yet"
   (-> this root)
-  (let ((s5-0 (the-as target (as-type *target* process-focusable))))
+  (let ((s5-0 (gun-buoy-target this)))
     (cond
       (s5-0
         (let* ((s2-1 (vector-normalize-copy!
@@ -981,6 +995,28 @@
     )
   )
 
+(defmethod enemy-method-97 ((this gun-buoy))
+  (let ((player (the-as process-focusable (as-type *target* process-focusable))))
+    (when (enemy-method-53 this player)
+      (let ((aware (enemy-method-61 this (the-as int (update-target-awareness! this player (the-as enemy-best-focus #f))))))
+        (when (>= aware (the-as int (enemy-aware enemy-aware-3)))
+          (enemy-method-63 this player (the-as enemy-aware aware))
+          (return player)
+          )
+        )
+      )
+    )
+  (call-parent-method this)
+  )
+
+(defun gun-buoy-fire-shot! ((this gun-buoy) (params projectile-init-by-other-params) (aim-target process-focusable))
+  (let ((shot (the-as gun-buoy-shot (ppointer->process (spawn-projectile gun-buoy-shot params this *default-dead-pool*)))))
+    (if (nonnull? shot)
+        (set! (-> shot last-target) (process->handle aim-target))
+        )
+    )
+  )
+
 ;; WARN: Return type mismatch (pointer process) vs none.
 (defmethod gun-buoy-method-183 ((this gun-buoy) (arg0 process-focusable))
   (let ((s2-0 (vector<-cspace! (new 'stack-no-clear 'vector) (-> this node-list data 8)))
@@ -1006,12 +1042,12 @@
       (set! (-> s4-0 pos quad) (-> s2-0 quad))
       (vector-! (-> s4-0 vel) s5-0 (-> s4-0 pos))
       (vector-normalize! (-> s4-0 vel) 737280.0)
-      (spawn-projectile gun-buoy-shot s4-0 this *default-dead-pool*)
+      (gun-buoy-fire-shot! this s4-0 arg0)
       (set! (-> s4-0 pos quad) (-> s3-0 quad))
       (vector-! (-> s4-0 vel) s5-0 (-> s4-0 pos))
       )
     (vector-normalize! (-> s4-0 vel) 737280.0)
-    (spawn-projectile gun-buoy-shot s4-0 this *default-dead-pool*)
+    (gun-buoy-fire-shot! this s4-0 arg0)
     )
   (none)
   )
@@ -1155,6 +1191,7 @@
     )
   (init-enemy-behaviour-and-stats! this *gun-buoy-nav-enemy-info*)
   (logclear! (-> this mask) (process-mask actor-pause))
+  (logior! (-> this enemy-flags) (enemy-flag local-only multi-focus))
   (process-entity-status! this (entity-perm-status no-kill) #t)
   (set! (-> this start-pos quad) (-> this root trans quad))
   (set! (-> this flags) (gun-buoy-flags))

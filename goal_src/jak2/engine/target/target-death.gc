@@ -1390,6 +1390,9 @@
   )
 
 (defbehavior target-death-reset target ((arg0 symbol) (arg1 symbol))
+  (when (and (mp-session-in-game?) (not-player-replica? self))
+    (mp-event-enqueue-aid! MP_EVENT_PLAYER_DIED (the-as uint 0))
+    )
   (let ((v1-1 (-> *task-manager-engine* alive-list next0)))
     *task-manager-engine*
     (let ((s4-0 (-> v1-1 next0)))
@@ -1444,7 +1447,6 @@
     (when (not-player-replica? self)
       (when (not use-local-respawn?)
         (mp-traffic-begin-local-death-spectate!))
-      (mp-event-enqueue-aid! MP_EVENT_PLAYER_DIED (the-as uint 0))
       (when (not use-local-respawn?)
         (log 'debug "[Target-Death] You've died of ~A. Spectating and waiting...~%" arg0))
       (when (or use-local-respawn? (mp-run-local-death-spectate! self))

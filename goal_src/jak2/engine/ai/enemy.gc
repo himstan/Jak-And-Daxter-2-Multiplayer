@@ -57,6 +57,7 @@
 
 (defun enemy-refresh-player-focus! ((this enemy))
   (when (and (nonnull? this (-> this focus) (-> this root))
+             (not (logtest? (-> this enemy-flags) (enemy-flag local-only)))
              (mp-enemy-authoritative? this))
     (let ((current-target (the-as process-focusable (handle->process-safe (-> this focus handle)))))
       (when (and (nonnull? current-target)
