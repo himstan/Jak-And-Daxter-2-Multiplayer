@@ -16,10 +16,13 @@
     (log 'debug "[MP-TaskSync] Cleared atoll battle settings after remote task close.~%"))
   (none))
 
+(define-extern play-remote-bush-win! (function game-task-node none))
+
 (defun mp-task-sync-after-remote-close! ((node game-task-node))
   (case node
     (((game-task-node atoll-sig-resolution)) (mp-task-hook-atoll-sig-resolution-close!))
-    (((game-task-node atoll-battle-battle)) (mp-task-hook-atoll-battle-battle-close!)))
+    (((game-task-node atoll-battle-battle)) (mp-task-hook-atoll-battle-battle-close!))
+    (else (play-remote-bush-win! node)))
   (none))
 
 (defun mp-task-sync-after-remote-open! ((node game-task-node))

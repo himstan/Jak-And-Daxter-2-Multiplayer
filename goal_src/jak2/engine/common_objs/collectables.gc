@@ -1464,7 +1464,9 @@
       (log 'debug "[Collectables] Money pickup: type ~D, entity ~A, handle-proc ~A~%" p-type (-> self entity) (handle->process arg1))
       (if (handle->process arg1)
           (cond
-            ((and (= p-type (pickup-type skill)) (nonnull? self (-> self entity) *game-info*))
+            ((and (= p-type (pickup-type skill))
+                  (nonnull? self (-> self entity) *game-info*)
+                  (not (type? (ppointer->process (-> self parent)) task-manager)))
              (let ((orb-aid (the-as uint (-> self entity aid))))
                (mp-orb-record-collected-aid! orb-aid)
                (collectable-enqueue-pickup! MP_EVENT_ORB orb-aid (-> *game-info* skill) (-> *game-info* skill-total))))

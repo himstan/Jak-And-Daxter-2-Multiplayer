@@ -694,6 +694,7 @@
   "sewer-water-sync-h.o"
   "sewer-water-sync.o"
   "tomb-sync.o"
+  "burning-bush-sync.o"
   "mp-sync-state.o" ;; added
   "mp-scene-transition.o" ;; added
   "mp-waypoint-sync.o" ;; added

@@ -724,6 +724,21 @@
   (-> *game-info* sub-task-list (game-task-node stadium-race-class1-race))
   )
 
+(dotimes (index 6)
+  (set-subtask-hook!
+    *game-info*
+    (the game-task-node (+ (the int (game-task-node stadium-burning-bush-race-class3-resolution)) (* 2 index)))
+    TASK_MANAGER_FAIL_HOOK
+    (lambda :behavior task-manager
+      ()
+      (if (-> self fail-now)
+          (open! (-> *game-info* sub-task-list (-> self node-info parent-node 0)) 'event)
+          )
+      (none)
+      )
+    )
+  )
+
 (set-subtask-hook!
   *game-info*
   (game-task-node stadium-race-class1-resolution)

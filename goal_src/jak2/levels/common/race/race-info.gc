@@ -417,60 +417,6 @@
             :start-camera #f)
        (new 'static
             'race-info
-            :id 5
-            :race-mesh-name #f
-            :path-group-name #f
-            :task-node (game-task-node city-keira-delivery-delivery)
-            :want-sound 'stadium1
-            :on-player-ready '(want-sound 'ctywide1 'ctywide2 'stadium1)
-            :ai-min-speed-factor 0.75
-            :ai-max-speed-factor 1.0
-            :ai-spread-factor 0.007
-            :start-sphere
-            (new 'static 'sphere :x -217960.0 :y 45056.0 :z 5517732.0 :r 122880.0)
-            :start-dir
-            (new 'static 'vector :x 0.8 :z -0.45 :w 1.0)
-            :finish-sphere
-            (new 'static 'sphere :x 579584.0 :y 49152.0 :z -1985331.2 :r 49152.0)
-            :finish-dir
-            (new 'static 'vector :z 1.0 :w 1.0)
-            :player-intro-pos
-            (new 'static 'vector :x -245760.0 :y 45056.0 :z 5468160.0 :w 1.0)
-            :flags (race-info-flags city-race optionally-retryable destination-race)
-            :score 0
-            :lap-count 1
-            :racer-count 8
-            :turbo-pad-count 0
-            :map-index 0
-            :decision-point-count 0
-            :safe-paths 0
-            :turbo-pad-array #f
-            :racer-array
-            (new 'static
-                 'inline-array
-                 race-racer-info
-                 8
-                 (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 1)
-                 (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 2)
-                 (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 3)
-                 (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 4)
-                 (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset -1)
-                 (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset -2)
-                 (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset -3)
-                 (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset -4))
-            :decision-point-array #f
-            :level 'ctyport
-            :borrow-level #f
-            :borrow
-            '((hiphog 0 #f #f) (ctyport 0 lracelit special))
-            :manager-handle-init-hack #f
-            :hatch-actor-name #f
-            :countdown-scene #f
-            :complete-continue #f
-            :start-camera #f
-            :go-speech 0)
-       (new 'static
-            'race-info
             :id 6
             :race-mesh-name "race-mesh-1"
             :path-group-name "kierac"
@@ -488,7 +434,7 @@
             (new 'static 'vector :x 242892.8 :y 46284.8 :z -2453913.5 :w 1.0)
             :flags (race-info-flags retryable borrow bbush)
             :score #xd
-            :lap-count 5
+            :lap-count 1
             :racer-count 8
             :turbo-pad-count 12
             :decision-point-count 6
@@ -1294,7 +1240,61 @@
             :hatch-actor-name "stdmb-race-hatch-1"
             :countdown-scene #f
             :complete-continue "stadiumd-race-fail"
-            :start-camera "camera-268")))
+            :start-camera "camera-268")
+       (new 'static
+            'race-info
+            :id 5
+            :race-mesh-name #f
+            :path-group-name #f
+            :task-node (game-task-node city-keira-delivery-delivery)
+            :want-sound 'stadium1
+            :on-player-ready '(want-sound 'ctywide1 'ctywide2 'stadium1)
+            :ai-min-speed-factor 0.75
+            :ai-max-speed-factor 1.0
+            :ai-spread-factor 0.007
+            :start-sphere
+            (new 'static 'sphere :x -217960.0 :y 45056.0 :z 5517732.0 :r 122880.0)
+            :start-dir
+            (new 'static 'vector :x 0.8 :z -0.45 :w 1.0)
+            :finish-sphere
+            (new 'static 'sphere :x 579584.0 :y 49152.0 :z -1985331.2 :r 49152.0)
+            :finish-dir
+            (new 'static 'vector :z 1.0 :w 1.0)
+            :player-intro-pos
+            (new 'static 'vector :x -245760.0 :y 45056.0 :z 5468160.0 :w 1.0)
+            :flags (race-info-flags city-race optionally-retryable destination-race)
+            :score 0
+            :lap-count 1
+            :racer-count 8
+            :turbo-pad-count 0
+            :map-index 0
+            :decision-point-count 0
+            :safe-paths 0
+            :turbo-pad-array #f
+            :racer-array
+            (new 'static
+                 'inline-array
+                 race-racer-info
+                 8
+                 (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 1)
+                 (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 2)
+                 (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 3)
+                 (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset 4)
+                 (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset -1)
+                 (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset -2)
+                 (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset -3)
+                 (new 'static 'race-racer-info :flags (racer-info-flags player-only) :seek-offset -4))
+            :decision-point-array #f
+            :level 'ctyport
+            :borrow-level #f
+            :borrow
+            '((hiphog 0 #f #f) (ctyport 0 lracelit special))
+            :manager-handle-init-hack #f
+            :hatch-actor-name #f
+            :countdown-scene #f
+            :complete-continue #f
+            :start-camera #f
+            :go-speech 0)))
 
 (defun find-race-info-by-task-node ((task-node game-task-node))
   (when (or (not *race-info-array*) (zero? *race-info-array*))

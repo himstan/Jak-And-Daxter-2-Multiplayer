@@ -1119,12 +1119,18 @@
                (let ((player-vehicle (handle->process (-> player-racer racer))))
                  (when player-vehicle
                    (when (logtest? (-> (the-as vehicle-racer player-vehicle) flags) (rigid-body-object-flag on-ground))
-                     (when (send-event *target*
-                                       'attack-invinc
-                                       #f
-                                       (static-attack-info ((id (new-attack-id)) (mode 'instant-death))))
-                       (log 'debug "[Race] Racer is off the track, failing the race.~%")
-                       (if (not (mp-session-in-game?)) (go-virtual fail))))))))))
+                     (cond
+                       ((mp-session-in-game?)
+                        (if (vehicle-racer-request-respawn! (the-as vehicle-racer player-vehicle))
+                          (race-wreck-explode! (the-as vehicle player-vehicle)))
+                        (vehicle-racer-fake-respawn! (the-as vehicle-racer player-vehicle))
+                        (set-time! (-> self player-on-track-time)))
+                       ((send-event *target*
+                                    'attack-invinc
+                                    #f
+                                    (static-attack-info ((id (new-attack-id)) (mode 'instant-death))))
+                        (log 'debug "[Race] Racer is off the track, failing the race.~%")
+                        (go-virtual fail))))))))))
         (when (and (not spectator?)
                    (or (logtest? (-> player-racer flags) (racer-flags dead)) (not *target*) (focus-test? *target* dead)))
           (log 'debug "[Race] Racer is dead, failing the race.~%")
@@ -1264,7 +1270,7 @@
       (set-time! (-> self state-time))
       (when (and (nonnull? *mp-race-sync-state*)
                  (mp-session-in-game?)
-                 (stadium-race? (the-as int (-> *mp-race-sync-state* race-id)))
+                 (finish-countdown-race? (the-as int (-> *mp-race-sync-state* race-id)))
                  (nonzero? (-> *mp-race-sync-state* finish-deadline)))
         (clear-task-manager-hud-timer-if-present self))
       (until #f
@@ -1332,7 +1338,7 @@
   "Make a process dead, clean it up, remove it from the active pool, and return to dead pool."
   (when (and (nonnull? this *mp-race-sync-state*)
              (mp-session-in-game?)
-             (stadium-race? (the-as int (-> *mp-race-sync-state* race-id)))
+             (finish-countdown-race? (the-as int (-> *mp-race-sync-state* race-id)))
              (nonzero? (-> *mp-race-sync-state* finish-deadline)))
     (clear-task-manager-hud-timer-if-present this))
   (when (nonnull? this (-> this race-state) (-> this race-state info))

@@ -1441,6 +1441,8 @@
     (set! (-> self sub-state) (the-as uint 0))
     (set! (-> self count) 0)
     (set! (-> self max-count) (-> *bb-ring-info* (-> self info index) rings length))
+    (set! (-> self data-int32 0) 0)
+    (set! (-> self data-int32 1) 0)
     (none)
     )
   )
@@ -1458,41 +1460,74 @@
   TASK_MANAGER_UPDATE_HOOK
   (lambda :behavior task-manager
     ()
-    (check-time self)
     (cond
-      ((and (handle->process (-> self slave 0))
-            (-> self slave 0 process 0 next-state)
-            (= (-> self slave 0 process 0 next-state name) 'idle)
-            )
+      ((nonzero? (-> self data-int32 0))
+       (if (bush-ring-all-failed?)
+           (go-virtual fail)
+           )
+       )
+      ((bush-ring-timed-out?)
+       (bush-ring-fail-local!)
        )
       (else
-        (let ((v1-15 (-> self sub-state)))
-          (cond
-            ((< v1-15 (the-as uint (-> self max-count)))
-             (let* ((a1-2 (-> *bb-ring-info* (-> self info index) rings v1-15))
-                    (a0-14 (race-ring-spawn self a1-2))
-                    )
-               (when a0-14
-                 (set! (-> self slave 0) (process->handle a0-14))
-                 (set! (-> self time-limit) (the-as time-frame (if (zero? (-> self sub-state))
-                                                                   4500
-                                                                   (the-as int (-> *bb-ring-info* (-> self info index) time))
-                                                                   )
-                                                    )
-                       )
-                 (set-time! (-> self start-time))
-                 (+! (-> self sub-state) 1)
+        (check-time self)
+        (cond
+          ((and (handle->process (-> self slave 0))
+                (-> self slave 0 process 0 next-state)
+                (= (-> self slave 0 process 0 next-state name) 'idle)
+                )
+           )
+          (else
+            (let ((v1-15 (-> self sub-state)))
+              (cond
+                ((< v1-15 (the-as uint (-> self max-count)))
+                 (let* ((a1-2 (-> *bb-ring-info* (-> self info index) rings v1-15))
+                        (a0-14 (race-ring-spawn self a1-2))
+                        )
+                   (when a0-14
+                     (set! (-> self slave 0) (process->handle a0-14))
+                     (set! (-> self time-limit) (the-as time-frame (if (zero? (-> self sub-state))
+                                                                       4500
+                                                                       (the-as int (-> *bb-ring-info* (-> self info index) time))
+                                                                       )
+                                                        )
+                           )
+                     (set-time! (-> self start-time))
+                     (+! (-> self sub-state) 1)
+                     )
+                   )
                  )
-               )
-             )
-            (else
-              (go-virtual complete)
+                ((mp-session-client?)
+                 (bush-ring-report-finish!)
+                 )
+                (else
+                  (go-virtual complete)
+                  )
+                )
               )
             )
           )
         )
       )
     (none)
+    )
+  )
+
+(set-subtask-hook!
+  *game-info*
+  (game-task-node city-burning-bush-ring-1-resolution)
+  TASK_MANAGER_EVENT_HOOK
+  (lambda :behavior task-manager
+    ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
+    (case arg2
+      (('bush-goal)
+       (go-virtual complete)
+       )
+      (('bush-ring-fail)
+       (logior! (-> self data-int32 1) (ash 1 (the int (-> arg3 param 0))))
+       )
+      )
+    #f
     )
   )
 
@@ -2616,13 +2651,19 @@
   TASK_MANAGER_UPDATE_HOOK
   (lambda :behavior task-manager
     ()
-    (check-time self)
+    (ensure-task-timer-sync! self (the uint (-> self info final-node)))
+    (if (not (mp-session-client?))
+        (check-time self)
+        )
     (let ((a0-2 (-> *bb-collection-info* (-> self info index)))
           (v1-6 0)
           )
       (dotimes (a1-0 (-> a0-2 colls length))
         (cond
-          ((and (nonzero? (-> a0-2 colls a1-0 handle)) (handle->process (-> a0-2 colls a1-0 handle)))
+          ((sync-bush-collectible!
+             (bush-collect-aid (-> self info index) a1-0)
+             (handle->process-safe (-> a0-2 colls a1-0 handle))
+             )
            (+! v1-6 1)
            )
           (else
@@ -2634,7 +2675,7 @@
           )
         )
       (set! (-> *game-info* counter) (the float v1-6))
-      (if (zero? v1-6)
+      (if (and (zero? v1-6) (not (mp-session-client?)))
           (go-virtual complete)
           )
       )
@@ -2794,6 +2835,7 @@
     ()
     (set-setting! 'airlock #f 0.0 0)
     (set-setting! 'exclusive-task #f 0.0 (-> self node-info task))
+    (set! (-> self data-int32 0) 0)
     (none)
     )
   )
@@ -2912,7 +2954,13 @@
       (suspend)
       )
     (until #f
-      (check-time self)
+      (ensure-task-timer-sync! self (the uint (-> self info final-node)))
+      (if (not (mp-session-client?))
+          (check-time self)
+          )
+      (if (nonzero? (-> self data-int32 0))
+          (kill-all-children self)
+          )
       (suspend)
       )
     #f
@@ -2929,12 +2977,27 @@
       (('notify)
        (case (-> arg3 param 0)
          (('pickup)
-          (go-virtual complete)
+          (cond
+            ((mp-session-client?)
+             (set! (-> self data-int32 0) 1)
+             (report-bush-goal! (-> self info final-node))
+             )
+            (else
+              (share-bush-orbs!)
+              (go-virtual complete)
+              )
+            )
           )
          (('die)
-          (go-virtual fail)
+          (if (not (mp-session-client?))
+              (go-virtual fail)
+              )
           )
          )
+       )
+      (('bush-goal)
+       (award-bush-orbs!)
+       (go-virtual complete)
        )
       )
     (none)

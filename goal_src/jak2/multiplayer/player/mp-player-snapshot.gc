@@ -419,7 +419,11 @@
 
 (defun mp-pack-local-input-snapshot! ()
   (when (and (mp-local-player-record) (nonzero? (mp-local-player-record)))
-    (if (or (= *master-mode* 'menu) (= *master-mode* 'progress) (= *master-mode* 'pause) (= *master-mode* 'freeze))
+    (if (or (= *master-mode* 'menu)
+            (= *master-mode* 'progress)
+            (= *master-mode* 'pause)
+            (= *master-mode* 'freeze)
+            (and (nonnull? *target*) (focus-test? *target* grabbed)))
       (mp-pack-local-neutral-input!)
       (if (and *cpad-list* (nonzero? *cpad-list*))
         (mp-pack-local-active-input! (-> *cpad-list* cpads 0))

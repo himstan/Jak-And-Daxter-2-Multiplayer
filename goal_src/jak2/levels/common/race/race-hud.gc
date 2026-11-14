@@ -142,7 +142,7 @@
   (set! (-> this gui-id)
         (add-process *gui-control* this
                      (if (and (mp-session-in-game?) (nonnull? *mp-race-sync-state*)
-                              (stadium-race? (the-as int (-> *mp-race-sync-state* race-id))))
+                              (finish-countdown-race? (the-as int (-> *mp-race-sync-state* race-id))))
                        (gui-channel hud-upper-center-2)
                        (gui-channel hud-upper-center))
                      (gui-action hidden) (-> this name) 81920.0 0))

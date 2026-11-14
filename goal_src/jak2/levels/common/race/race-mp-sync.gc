@@ -1,6 +1,9 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
+(define-extern share-bush-orbs! (function none))
+(define-extern mp-race-vehicle-id? (function uint symbol))
+
 (defconstant MP_RACE_MAX_RACERS 10)
 (defconstant MP_RACE_INVALID_INDEX (the uint8 #xff))
 (defconstant MP_RACE_COUNTDOWN_FRAMES (the-as time-frame 900))
@@ -186,15 +189,15 @@
       (mp-event-enqueue-race! details)))
   (none))
 
-(defun stadium-race? ((race-id int))
+(defun finish-countdown-race? ((race-id int))
   (case race-id
-    ((1 2 3 6 7 8 11 12 13) #t)
+    ((1 2 3 6 7 8 10 11 12 13) #t)
     (else #f)))
 
 (defun stadium-race-finish-timer-active? ()
   (and (mp-session-in-game?)
        (nonnull? *mp-race-sync-state*)
-       (stadium-race? (the-as int (-> *mp-race-sync-state* race-id)))
+       (finish-countdown-race? (the-as int (-> *mp-race-sync-state* race-id)))
        (nonzero? (-> *mp-race-sync-state* finish-deadline))
        (zero? (-> *mp-race-sync-state* results-ready?))))
 
@@ -202,7 +205,7 @@
   (let ((sync *mp-race-sync-state*))
     (when (and (mp-session-host?)
                (nonnull? sync)
-               (stadium-race? (the-as int (-> sync race-id)))
+               (finish-countdown-race? (the-as int (-> sync race-id)))
                (zero? (-> sync finish-deadline)))
       (set! (-> sync finish-deadline)
             (+ (mp-race-current-clock) (* (seconds 1) (max 1 (min 600 *stadium-race-finish-seconds*)))))
@@ -329,6 +332,21 @@
         (if (logtest? (-> racer-info flags) (racer-info-flags player-only)) (-! racer-count 1) (return racer-count))))
     racer-count))
 
+(define *mp-race-stale-vehicle-players* (the uint 0))
+
+(defun mp-race-record-on-race-vehicle? ((record mp-player-record))
+  (or (mp-race-vehicle-id? (-> record vehicle vehicle-id)) (mp-race-vehicle-id? (-> record vehicle state net-id))))
+
+(defun mp-race-update-stale-vehicle-players! ((mark? symbol))
+  (mp-for-each-player-record (player-slot record)
+    (let ((player-bit (mp-race-player-bit (the-as uint player-slot))))
+      (cond
+        ((not (mp-race-record-on-race-vehicle? record))
+         (logclear! *mp-race-stale-vehicle-players* player-bit))
+        (mark?
+         (logior! *mp-race-stale-vehicle-players* player-bit)))))
+  (none))
+
 (defun mp-race-host-build-config! ((info race-info))
   (when (or (not info) (zero? info))
     (return #f))
@@ -340,6 +358,7 @@
       (return #f))
     (+! *mp-race-generation-counter* 1)
     (mp-race-reset-runtime!)
+    (mp-race-update-stale-vehicle-players! #t)
     (set! (-> *mp-race-sync-state* generation) *mp-race-generation-counter*)
     (set! (-> *mp-race-sync-state* race-id) (the-as uint (-> info id)))
     (set! (-> *mp-race-sync-state* player-mask) player-mask)
@@ -552,7 +571,11 @@
            (vehicle (the-as vehicle (handle->process-safe (-> racer racer)))))
       (when (and vehicle (nonzero? vehicle))
         (let ((record (mp-player-record-by-vehicle-id (-> vehicle net-id))))
-          (when (and record (nonzero? record) (zero? (-> record vehicle seat-index)))
+          (when (and record
+                     (nonzero? record)
+                     (zero? (-> record vehicle seat-index))
+                     (not (logtest? *mp-race-stale-vehicle-players*
+                                    (mp-race-player-bit (the-as uint (-> record identity player-slot))))))
             (return record))))))
   (the-as mp-player-record #f))
 
@@ -782,7 +805,7 @@
 (defun mp-race-sync-post-finish-timer! ((manager race-manager))
   (unless (and (nonnull? manager *mp-race-sync-state*) (mp-session-in-game?))
     (return (the-as none 0)))
-  (when (stadium-race? (the-as int (-> *mp-race-sync-state* race-id)))
+  (when (finish-countdown-race? (the-as int (-> *mp-race-sync-state* race-id)))
     (stadium-race-sync-task-timer! manager)
     (return (the-as none 0)))
   (let ((state (-> manager race-state)))
@@ -821,6 +844,7 @@
   (when (or (not (mp-session-host?)) (not (mp-race-world-ready?)) (not state) (zero? state))
     (return #f))
   (mp-race-host-update-disconnects! state)
+  (mp-race-update-stale-vehicle-players! #f)
   (dotimes (racer-index (-> state racer-count))
     (mp-race-host-bind-racer! state racer-index))
   (mp-race-apply-bindings! state)
@@ -998,6 +1022,23 @@
         (return #t))))
   #f)
 
+(defun mp-race-host-save-best-score! ((state race-state))
+  (when (logtest? (-> state info flags) (race-info-flags destination-race))
+    (return #f))
+  (let ((best (the-as time-frame 0)))
+    (dotimes (player-index MP_MAX_PLAYERS)
+      (let ((finish-time (-> *mp-race-sync-state* result-finish-time player-index)))
+        (when (and (logtest? (-> *mp-race-sync-state* player-mask) (mp-race-player-bit (the-as uint player-index)))
+                   (= (the-as uint (-> *mp-race-sync-state* player-status player-index)) MP_RACE_STATUS_FINISHED)
+                   (nonzero? finish-time)
+                   (or (zero? best) (< finish-time best)))
+          (set! best finish-time))))
+    (let ((manager (the-as race-manager (handle->process-safe (-> state info manager)))))
+      (when (and (nonzero? best) (nonnull? manager))
+        (save-score manager (* 0.0033333334 (the float (- best (the-as time-frame (-> state race-start-time))))))
+        (share-bush-orbs!))))
+  #t)
+
 (defun mp-race-host-finalize-results! ((state race-state))
   (when (or (not (mp-session-host?))
             (nonzero? (-> *mp-race-sync-state* results-ready?))
@@ -1020,6 +1061,7 @@
                                     (the-as int (-> *mp-race-sync-state* result-place player-index))
                                     finish-time)
             (set! (-> *mp-race-sync-state* result-finish-time player-index) finish-time)))))
+    (mp-race-host-save-best-score! state)
     (set! (-> *mp-race-sync-state* results-ready?) (the uint 1))
     (mp-race-enqueue-event! MP_RACE_ACTION_RESULTS
                             (the uint MP_RACE_INVALID_INDEX)
@@ -1165,7 +1207,7 @@
       (when (and (nonnull? parent-proc)
                  (type? parent-proc task-manager)
                  (nonzero? (-> parent-proc start-time))
-                 (if (stadium-race? (the-as int (-> *mp-race-sync-state* race-id)))
+                 (if (finish-countdown-race? (the-as int (-> *mp-race-sync-state* race-id)))
                    (and (nonnull? (-> parent-proc clock))
                         (<= (- (-> parent-proc time-limit)
                                (- (-> parent-proc clock frame-counter) (-> parent-proc start-time))) 0))
@@ -1339,7 +1381,7 @@
       (mp-race-reconcile-progress! *race-state* racer-index (-> event payload value0) (-> event payload value1) (-> event payload event-time))
       (let ((player-slot (mp-race-bound-player-slot racer-index)))
         (when (and (< player-slot (the uint MP_MAX_PLAYERS))
-                   (stadium-race? (the-as int (-> *mp-race-sync-state* race-id)))
+                   (finish-countdown-race? (the-as int (-> *mp-race-sync-state* race-id)))
                    (= (-> event payload value0) (-> *race-state* info lap-count))
                    (!= (-> *mp-race-sync-state* player-status player-slot) MP_RACE_STATUS_DNF))
           (set! (-> *mp-race-sync-state* player-status player-slot) (the-as uint8 MP_RACE_STATUS_FINISHED))
@@ -1431,7 +1473,7 @@
          ((MP_RACE_ACTION_START) (mp-race-receive-start! event))
          ((MP_RACE_ACTION_PROGRESS_COMMIT) (mp-race-receive-progress-commit! event))
          ((MP_RACE_ACTION_FINISH_DEADLINE)
-          (when (and (stadium-race? (the-as int (-> *mp-race-sync-state* race-id)))
+          (when (and (finish-countdown-race? (the-as int (-> *mp-race-sync-state* race-id)))
                      (nonzero? (-> event payload event-time)))
             (set! (-> *mp-race-sync-state* finish-deadline) (-> event payload event-time))))
          ((MP_RACE_ACTION_RESULTS) (mp-race-receive-results! event))
