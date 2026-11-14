@@ -3136,6 +3136,11 @@
     )
   )
 
+(defbehavior trans-plat-near-dock? trans-plat ((pos vector))
+  (let ((dock (new 'stack-no-clear 'vector)))
+    (or (< (vector-vector-xz-distance pos (get-point-at-percent-along-path! (-> self path) dock 0.0 'interp)) (meters 24))
+        (< (vector-vector-xz-distance pos (get-point-at-percent-along-path! (-> self path) dock 1.0 'interp)) (meters 24)))))
+
 (defbehavior target-riding? trans-plat ()
   (let ((riders (-> self root riders)))
     (countdown (i (-> self root num-riders))
@@ -3155,7 +3160,8 @@
                (-> *setting-control* user-current endlessfall)
                )
       (logclear! (-> self flags) (mtn-plat-flags rider))
-      (if (< (-> target control trans y) (- (trans-plat-dock-height) (meters 4)))
+      (if (or (< (-> target control trans y) (- (trans-plat-dock-height) (meters 4)))
+              (not (trans-plat-near-dock? (-> target control trans))))
           (send-event target 'attack-invinc #f (static-attack-info ((id (new-attack-id)) (mode 'endlessfall))))
           )
       )
@@ -3169,16 +3175,14 @@
          (< (meters -1) (-> offset y))
          (< (-> offset y) (meters 4)))))
 
-(defun trans-plat-record-wants? ((record mp-player-record) (level-names pair))
-  (dolist (remaining level-names)
-    (when (mp-traffic-record-advertises-level? record (mp-level-symbol->id (the-as symbol (car remaining))))
-      (return #t)))
-  #f)
+(defun trans-plat-in-forest? ((record mp-player-record))
+  (or (player-record-wants-level? record (mp-level-symbol->id 'forest))
+      (player-record-wants-level? record (mp-level-symbol->id 'forestb))))
 
 (defun trans-plat-departure-side? ((plat trans-plat) (record mp-player-record))
-  (let ((forest? (trans-plat-record-wants? record '(forest forestb))))
+  (let ((forest? (trans-plat-in-forest? record)))
     (if (= (-> plat path-pos) 0.0)
-        (and (not forest?) (trans-plat-record-wants? record '(mountain mtnext mincan)))
+        (not forest?)
         forest?)))
 
 (defun trans-plat-player-pending? ((record mp-player-record) (plat trans-plat))

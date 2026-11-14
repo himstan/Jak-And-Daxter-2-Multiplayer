@@ -248,6 +248,13 @@
     (the-as uint (-> record transform levels (-> record transform primary-level-slot) level-id))
     (the uint 0)))
 
+(defun player-record-wants-level? ((record mp-player-record) (level-id uint))
+  (when (and (nonnull? record) (nonzero? level-id))
+    (dotimes (level-slot MP_PLAYER_LEVEL_SLOT_COUNT)
+      (when (= (the-as uint (-> record transform levels level-slot level-id)) level-id)
+        (return #t))))
+  #f)
+
 (defun mp-level-display->mode ((display symbol))
   (cond
     ((not display) (the uint 0))

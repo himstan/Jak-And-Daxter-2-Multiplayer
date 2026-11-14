@@ -112,15 +112,6 @@
                    position
                    (nonzero? position))))))
 
-(defun mp-traffic-record-advertises-level? ((record mp-player-record) (level-id uint))
-  (if (or (not record) (zero? record) (= level-id (the uint 0)))
-    #f
-    (let ((advertised? #f))
-      (dotimes (level-slot MP_PLAYER_LEVEL_SLOT_COUNT)
-        (when (= (the-as uint (-> record transform levels level-slot level-id)) level-id)
-          (set! advertised? #t)))
-      advertised?)))
-
 (defun mp-traffic-records-share-level-context? ((record mp-player-record) (root-record mp-player-record))
   (if (or (not record) (zero? record) (not root-record) (zero? root-record))
     #f
@@ -129,8 +120,8 @@
       (and (nonzero? record-level)
            (nonzero? root-level)
            (or (= record-level root-level)
-               (mp-traffic-record-advertises-level? record root-level)
-               (mp-traffic-record-advertises-level? root-record record-level))))))
+               (player-record-wants-level? record root-level)
+               (player-record-wants-level? root-record record-level))))))
 
 (defun mp-traffic-update-death-spectator-state! ()
   (when (and *mp-traffic-death-spectate-active?*
