@@ -1,26 +1,32 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(define *bike-horn* (new 'static 'custom-spatial-audio-entry
-                       :key "bike-horn"
-                       :path "jad2mp/bike-horn.wav"
-                       :group (sound-group sfx)))
+(defconstant VEHICLE_HORN_BIKE 0)
 
-(define *car-horn* (new 'static 'custom-spatial-audio-entry
-                      :key "car-horn"
-                      :path "jad2mp/car-horn.wav"
-                      :group (sound-group sfx)))
+(defconstant VEHICLE_HORN_CAR 1)
 
-(define *hellcat-horn* (new 'static 'custom-spatial-audio-entry
-                          :key "big-car-horn"
-                          :path "jad2mp/big-car-horn.wav"
-                          :group (sound-group sfx)))
+(defconstant VEHICLE_HORN_HELLCAT 2)
 
-(register-custom-spatial-audio! *bike-horn*)
+(defconstant VEHICLE_HORN_FUNNY 3)
 
-(register-custom-spatial-audio! *car-horn*)
+(defconstant VEHICLE_HORN_FUNNY_COUNT 2)
 
-(register-custom-spatial-audio! *hellcat-horn*)
+(defconstant VEHICLE_HORN_FUNNY_PERCENT 1)
+
+(define *vehicle-horns*
+  (new 'static 'boxed-array :type custom-spatial-audio-entry
+    (new 'static 'custom-spatial-audio-entry :key "bike-horn" :path "jad2mp/bike-horn.wav" :group (sound-group sfx))
+    (new 'static 'custom-spatial-audio-entry :key "car-horn" :path "jad2mp/car-horn.wav" :group (sound-group sfx))
+    (new 'static 'custom-spatial-audio-entry :key "big-car-horn" :path "jad2mp/big-car-horn.wav" :group (sound-group sfx))
+    (new 'static 'custom-spatial-audio-entry :key "duck-car-horn" :path "jad2mp/duck-car-horn.wav" :group (sound-group sfx))
+    (new 'static 'custom-spatial-audio-entry :key "goofy-car-horn" :path "jad2mp/goofy-car-horn.wav" :group (sound-group sfx))))
+
+(dotimes (horn (-> *vehicle-horns* length))
+  (register-custom-spatial-audio! (-> *vehicle-horns* horn)))
+
+(define *funny-horn-second* -1)
+
+(define *funny-horn* -1)
 
 (defun horn-channel ((player-slot uint))
   (the-as gui-channel
@@ -29,12 +35,25 @@
 (dotimes (player-slot MP_MAX_PLAYERS)
   (set! (-> *gui-control* cmd (horn-channel (the-as uint player-slot))) '((64 . wait))))
 
+(defun roll-funny-horn ()
+  (let ((second (the int (/ (-> *display* game-clock frame-counter) (seconds 1)))))
+    (when (!= second *funny-horn-second*)
+      (set! *funny-horn-second* second)
+      (set! *funny-horn* (if (< (rand-vu-int-count 100) VEHICLE_HORN_FUNNY_PERCENT)
+                             (+ VEHICLE_HORN_FUNNY (rand-vu-int-count VEHICLE_HORN_FUNNY_COUNT))
+                             -1))))
+  *funny-horn*)
+
 (defun vehicle-horn ((veh vehicle))
   (cond
-    ((type? veh hellcat) *hellcat-horn*)
-    ((or (type? veh bike-base) (type? veh guard-bike)) *bike-horn*)
-    ((type? veh car-base) *car-horn*)
-    (else (the-as custom-spatial-audio-entry #f))))
+    ((type? veh hellcat) VEHICLE_HORN_HELLCAT)
+    ((or (type? veh bike-base) (type? veh guard-bike)) VEHICLE_HORN_BIKE)
+    ((type? veh car-base) VEHICLE_HORN_CAR)
+    (else -1)))
+
+(defun local-vehicle-horn ((veh vehicle))
+  (let ((horn (vehicle-horn veh)))
+    (if (and (>= horn 0) (>= (roll-funny-horn) 0)) *funny-horn* horn)))
 
 (defun stop-horn! ((channel gui-channel))
   (let ((sounding (lookup-gui-connection *gui-control* (the-as process #f) channel (the-as string #f) (new 'static 'sound-id))))
@@ -49,14 +68,12 @@
       (set! (-> driver pilot horn-time) (-> *display* game-clock frame-counter))))
   (none))
 
-(defun honk-vehicle-horn! ((veh vehicle) (player-slot uint))
-  (let ((horn (vehicle-horn veh))
-        (channel (horn-channel player-slot)))
-    (when horn
-      (stop-horn! channel)
-      (play-custom-spatial-audio horn veh channel 10 80)
-      (note-horn-press! veh))
-    horn))
+(defun honk-vehicle-horn! ((veh vehicle) (player-slot uint) (horn int))
+  (let ((channel (horn-channel player-slot)))
+    (stop-horn! channel)
+    (play-custom-spatial-audio (-> *vehicle-horns* horn) veh channel 10 80)
+    (note-horn-press! veh))
+  (none))
 
 (defconstant HORN_PRESS_PULLBACK (meters 0.05))
 
@@ -79,13 +96,24 @@
           (vector-lerp! free-hand free-hand centre amount)))))
   (none))
 
-(defun honk-local-vehicle-horn! ((veh vehicle))
-  (when (and (nonnull? veh) (honk-vehicle-horn! veh (mp-local-player-slot)))
-    (mp-event-enqueue-aid! MP_EVENT_VEHICLE_HONK (-> veh net-id)))
+(defun send-vehicle-honk! ((net-id uint) (horn int))
+  (let ((event (new 'stack-no-clear 'vehicle-honk-event)))
+    (when (mp-event-prepare! event MP_EVENT_VEHICLE_HONK)
+      (set! (-> event payload aid) net-id)
+      (set! (-> event payload horn) horn)
+      (mp-event-enqueue! event)))
   (none))
 
-(defun receive-vehicle-honk! ((net-id uint) (player-slot uint))
-  (let ((veh (mp-vehicle-find-by-net-id net-id)))
-    (when (nonnull? veh)
-      (honk-vehicle-horn! veh player-slot)))
+(defun honk-local-vehicle-horn! ((veh vehicle))
+  (let ((horn (if (nonnull? veh) (local-vehicle-horn veh) -1)))
+    (when (>= horn 0)
+      (honk-vehicle-horn! veh (mp-local-player-slot) horn)
+      (send-vehicle-honk! (-> veh net-id) horn)))
+  (none))
+
+(defun receive-vehicle-honk! ((evt vehicle-honk-event) (player-slot uint))
+  (when (and (nonnull? evt) (< (-> evt payload horn) (the-as uint (-> *vehicle-horns* length))))
+    (let ((veh (mp-vehicle-find-by-net-id (-> evt payload aid))))
+      (when (nonnull? veh)
+        (honk-vehicle-horn! veh player-slot (the-as int (-> evt payload horn))))))
   (none))

@@ -349,6 +349,13 @@
   ((payload uint16 :overlay-at (-> data 0)))
   :size-assert 80)
 
+(deftype vehicle-honk-event-data (mp-aid-event-data)
+  ((horn uint8)))
+
+(deftype vehicle-honk-event (mp-aid-event)
+  ((payload vehicle-honk-event-data :inline :override :overlay-at payload))
+  :size-assert 80)
+
 (deftype under-block-event-data (structure)
   ((aid     uint32)
    (spawner int8)
