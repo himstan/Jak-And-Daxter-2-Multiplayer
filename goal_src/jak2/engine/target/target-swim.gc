@@ -499,7 +499,7 @@
   #f)
 
 (defbehavior swim-event-handler target ((proc process) (argc int) (message symbol) (block event-message-block))
-  (if (and (deep-swim?) (nonnull? self) (focus-test? self indax)
+  (if (and (nonnull? self) (focus-test? self indax)
            (or (= message 'attack) (= message 'attack-invinc) (= message 'attack-or-shove)))
       (target-indax-handler proc argc message block)
       (target-standard-event-handler proc argc message block)))
@@ -749,7 +749,7 @@
 
 (defstate target-swim-down (target)
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
-    (when (and (deep-swim?) (nonnull? self) (focus-test? self indax)
+    (when (and (nonnull? self) (focus-test? self indax)
                (or (= message 'attack) (= message 'attack-invinc) (= message 'attack-or-shove)))
       (return (target-indax-handler proc argc message block)))
     (local-vars (t0-7 symbol))
