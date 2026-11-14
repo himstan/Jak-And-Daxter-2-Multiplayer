@@ -255,6 +255,11 @@
     (go target-indax-stance))
   (none))
 
+(defbehavior target-daxter-restore-indax! target ()
+  (when (and (mp-target-daxter? self) (not (focus-test? self indax)))
+    (target-indax-init #f #f))
+  (none))
+
 (defbehavior target-indax-align! target ()
   (let ((success? #f))
     (let ((sidekick-ptr (-> self sidekick)))

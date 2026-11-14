@@ -12,13 +12,6 @@
     )
   )
 
-(defbehavior target-daxter-restore-indax! target ()
-  (when (and (mp-target-daxter? self) (not (focus-test? self indax)))
-    (target-indax-init #f #f)
-    )
-  (none)
-  )
-
 (defbehavior target-indax-pilot-edge-grab-enter target ((arg0 pilot-edge-grab-info))
   (target-daxter-restore-indax!)
   (ja-channel-set! 0)

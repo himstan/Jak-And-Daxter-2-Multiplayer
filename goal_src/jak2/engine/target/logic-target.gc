@@ -1722,7 +1722,7 @@
          )
        (set! (-> self control surf) *standard-ground-surface*)
        )
-      ((focus-test? self indax)
+      ((or (focus-test? self indax) (mp-target-daxter? self))
         (go target-indax-float)
         )
       (else

@@ -140,11 +140,17 @@
       (if (logtest? (-> self control status) (collide-status on-surface)) (set! (-> self control transv quad) (the-as uint128 0)))
       (target-indax-post)))
 
+(defbehavior target-indax-float-handler target ((proc process) (argc int) (message symbol) (block event-message-block))
+  (if (and (= message 'query) (= (-> block param 0) 'mode))
+    'indax
+    (target-generic-event-handler proc argc message block)))
+
 (defstate target-indax-float (target)
-  :event target-indax-handler
+  :event target-indax-float-handler
   :enter
-    (-> target-float
-        enter)
+    (behavior ()
+      (target-daxter-restore-indax!)
+      ((-> target-float enter)))
   :exit
     (behavior ()
       ((-> target-float exit))
