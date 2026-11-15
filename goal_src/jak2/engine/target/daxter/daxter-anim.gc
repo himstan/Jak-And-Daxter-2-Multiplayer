@@ -10,7 +10,8 @@
     (the-as sidekick #f)))
 
 (defun daxter-copy-pose-channels! ((dst joint-control) (src joint-control))
-  (when (nonnull? dst src)
+  (when (and (nonnull? dst src)
+             (<= (+ (-> src active-channels) (-> src float-channels)) (-> dst allocated-length)))
     (joint-control-copy! dst src)
     (set! (-> dst float-channels) (-> src float-channels))
     (mem-copy! (the-as pointer (-> dst channel (-> src active-channels)))
