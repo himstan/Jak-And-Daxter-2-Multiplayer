@@ -1553,9 +1553,9 @@
     (when (and (= arg0 'endlessfall) (mp-should-suppress-local-endlessfall?))
       ;; This is a hack guard againts some weird behavior, which is that we can die during cutscenes, never really tried finding the actual reason
       (set! (-> self control transv quad) (the-as uint128 0))
-      (if (mp-target-daxter? self)
-        (go target-stance)
+      (if (focus-test? self indax)
         (go target-indax-stance)
+        (go target-stance)
         )
       )
     (target-daxter-death-voice! arg0)
