@@ -583,6 +583,9 @@
     (set! (-> self control anim-handle) (the-as handle #f))
     )
   :trans (behavior ()
+    (when (not (handle->process (-> self control anim-handle)))
+      (go target-falling #f)
+      )
     ;; og:preserve-this - High FPS Fix - https://github.com/open-goal/jak-project/pull/3178
     (when (and (recently-pressed? x)
                (not (logtest? (-> self state-flags) (state-flags prevent-jump)))

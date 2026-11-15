@@ -2225,6 +2225,9 @@
   )
 
 (defbehavior target-compute-pole target ()
+  (when (not (handle->process (-> self control anim-handle)))
+    (return (the-as none 0))
+    )
   (let* ((s2-0 (handle->process (-> self control anim-handle)))
          (gp-0 (-> (the-as swingpole s2-0) dir))
          )

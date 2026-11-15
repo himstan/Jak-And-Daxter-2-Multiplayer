@@ -2,6 +2,8 @@
 (in-package goal)
 
 (defbehavior target-indax-compute-pole target ()
+  (when (not (handle->process (-> self control anim-handle)))
+    (return (the-as none 0)))
   (let* ((s2-0 (handle->process (-> self control anim-handle)))
          (gp-0 (-> (the-as swingpole s2-0) dir)))
     (set! (-> self control edge-grab-edge-dir quad) (-> gp-0 quad))
@@ -67,6 +69,8 @@
       (set! (-> self control anim-handle) (the-as handle #f)))
   :trans
     (behavior ()
+      (when (not (handle->process (-> self control anim-handle)))
+        (go target-indax-falling #f))
       (if (and (recently-pressed? x)
                (not (logtest? (-> self state-flags) (state-flags prevent-jump)))
                (time-elapsed? (-> self state-time) (seconds 0.4)))
