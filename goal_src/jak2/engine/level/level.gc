@@ -388,6 +388,8 @@ into 7 sections, which might explain the weird sizes in the center.
   ;; other setup from level-info
   (set! (-> s5-1 mood-func) (the-as (function mood-context float int none) (-> s5-1 info mood-func value)))
   (set! (-> s5-1 mood-init) (the-as (function mood-context none) (-> s5-1 info mood-init value)))
+  (log 'debug "[MP-MoodInit] slot ~A gets ~A (requested ~A) mood-init ~A = #x~X~%"
+       s5-1 (-> s5-1 name) arg0 (-> s5-1 info mood-init) (the-as uint (-> s5-1 mood-init)))
 
   ;; clear old stuff in level
   (dotimes (v1-20 10)
@@ -1392,9 +1394,16 @@ into 7 sections, which might explain the weird sizes in the center.
 
   ;; mood setup
   (clear-mood-context (-> lev mood-context))
-  (if (-> lev mood-init)
-      ((-> lev mood-init) (-> lev mood-context))
-      )
+  (let ((init (-> lev mood-init)))
+    (when (and init (not (type? init function)))
+      (log 'error "[MP-MoodInit] ~A status ~A mood-init #x~X is not a function. info ~A symbol ~A value #x~X~%"
+           (-> lev name) (-> lev status) (the-as uint init) (-> lev info)
+           (-> lev info mood-init) (the-as uint (-> lev info mood-init value)))
+      (set! init (the-as (function mood-context none) (-> lev info mood-init value))))
+    (if (and init (type? init function))
+        (init (-> lev mood-context))
+        )
+    )
 
   ;; if somebody will borrow from us, set aside some memory for them on the top of our heap
   (dotimes (v1-211 2)
