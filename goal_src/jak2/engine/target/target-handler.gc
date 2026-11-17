@@ -1071,6 +1071,9 @@
                    )
                   ((= v1-45 'darkjak)
                    (cond
+                     ((mp-target-daxter? self)
+                      #f
+                      )
                      ((not (and (focus-test? self dark) (nonzero? (-> self darkjak))))
                       (go target-darkjak-get-on (the-as darkjak-stage (-> arg3 param 2)))
                       )

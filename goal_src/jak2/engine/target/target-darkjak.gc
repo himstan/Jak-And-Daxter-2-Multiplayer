@@ -32,6 +32,7 @@
        (not *pause-lock*)
        (-> *setting-control* user-current darkjak)
        (logtest? (-> self game features) (game-feature darkjak))
+       (not (mp-target-daxter? self))
        (not (focus-test?
               self
               dead
