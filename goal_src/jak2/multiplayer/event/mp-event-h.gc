@@ -372,6 +372,10 @@
   ((payload uint8 :overlay-at (-> data 0)))
   :size-assert 80)
 
+(deftype oracle-training-complete-event (mp-event)
+  ((payload uint8 :overlay-at (-> data 0)))
+  :size-assert 80)
+
 (deftype defend-stadium-state-data (structure)
   ((trans  float   3)
    (quat   int16   4)

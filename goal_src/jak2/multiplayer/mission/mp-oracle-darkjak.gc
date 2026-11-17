@@ -3,12 +3,50 @@
 
 (define-perm *mp-darkjak-last-giant-step-feedback-time* time-frame 0)
 
+(define *oracle-training-nodes*
+  (new 'static 'boxed-array :type uint16
+    (game-task-node city-oracle-level0-training)
+    (game-task-node city-oracle-level1-training)
+    (game-task-node city-oracle-level2-training)
+    (game-task-node city-oracle-level3-training)))
+
 (defun mp-oracle-darkjak-training-allowed? ()
   (or (not (mp-session-in-game?)) (mp-local-player-jak?)))
+
+(defun oracle-training-skip? ()
+  (unless (and (mp-session-in-game?) (mp-local-player-daxter?))
+    (return #f))
+  (mp-for-each-player-record (player-slot record)
+    (when (and (mp-remote-gameplay-player-connected? record) (mp-player-jak? record))
+      (return #f)))
+  #t)
+
+(defun receive-oracle-training-complete! ((event oracle-training-complete-event) (source-record mp-player-record))
+  (when (and (mp-session-host?)
+             (nonnull? event *game-info* (-> *game-info* sub-task-list))
+             (mp-remote-gameplay-player-connected? source-record)
+             (or (mp-player-jak? source-record) (oracle-training-skip?)))
+    (let ((step (-> event payload)))
+      (when (< step (-> *oracle-training-nodes* length))
+        (let ((node (the-as game-task-node (-> *oracle-training-nodes* step))))
+          (when (task-node-open? node)
+            (task-node-close! node))))))
+  (none))
+
+(defun send-oracle-training-complete! ((node game-task-node))
+  (dotimes (step (-> *oracle-training-nodes* length))
+    (when (= node (the-as game-task-node (-> *oracle-training-nodes* step)))
+      (let ((event (new 'stack-no-clear 'oracle-training-complete-event)))
+        (when (and (nonnull? event) (mp-event-prepare! event MP_EVENT_ORACLE_TRAINING_COMPLETE))
+          (set! (-> event payload) (the uint8 step))
+          (mp-event-enqueue! event)))))
+  (none))
 
 (defbehavior oracle-training-start-darkjak! task-manager ()
   (set! (-> self data-int32 0) (if (mp-oracle-darkjak-training-allowed?) 1 0))
   (set! (-> self data-int32 1) 0)
+  (set! (-> self data-int8 0) 0)
+  (set! (-> self beep-time) (the-as time-frame 0))
   (set! (-> self sound-id 0) (the-as sound-id 0))
   (when (nonzero? (-> self data-int32 0))
     (set! (-> self sound-id 0)
@@ -19,12 +57,28 @@
     (send-event *target* 'get-notify self))
   (none))
 
+(defbehavior oracle-training-complete! task-manager ()
+  (if (and (mp-session-in-game?) (mp-session-client?))
+      (when (nonnull? self)
+        (set! (-> self data-int8 0) 1))
+      (go-virtual complete))
+  (none))
+
 (defbehavior oracle-training-hold-darkjak! task-manager ((complete-on-exit? symbol))
-  (when (and (nonzero? (-> self data-int32 0)) (nonnull? *target*))
+  (when (nonnull? self)
     (cond
-      ((focus-test? *target* dark) (set! (-> self data-int32 1) 1))
-      ((and complete-on-exit? (nonzero? (-> self data-int32 1))) (go-virtual complete))
-      (else (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim)))))
+      ((nonzero? (-> self data-int8 0))
+       (when (and (nonnull? (-> self info))
+                  (or (zero? (-> self beep-time)) (time-elapsed? (-> self beep-time) (seconds 1))))
+         (set-time! (-> self beep-time))
+         (send-oracle-training-complete! (-> self info final-node))))
+      ((zero? (-> self data-int32 0))
+       (when (oracle-training-skip?) (oracle-training-complete!)))
+      ((nonnull? *target*)
+       (cond
+         ((focus-test? *target* dark) (set! (-> self data-int32 1) 1))
+         ((and complete-on-exit? (nonzero? (-> self data-int32 1))) (oracle-training-complete!))
+         (else (send-event *target* 'change-mode 'darkjak #f (darkjak-stage force-on no-anim)))))))
   (none))
 
 (defbehavior oracle-training-stop-darkjak! task-manager ()

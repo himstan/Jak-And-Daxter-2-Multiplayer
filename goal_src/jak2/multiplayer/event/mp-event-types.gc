@@ -217,4 +217,8 @@
                   (MP_EVENT_VEHICLE_HONK 76
                                          vehicle-honk-event-data
                                          (receive-vehicle-honk! (the-as vehicle-honk-event evt)
-                                                                (-> evt source-player-slot))))
+                                                                (-> evt source-player-slot)))
+                  (MP_EVENT_ORACLE_TRAINING_COMPLETE 77
+                                                     uint8
+                                                     (receive-oracle-training-complete! (the-as oracle-training-complete-event evt)
+                                                                                        source-record)))
