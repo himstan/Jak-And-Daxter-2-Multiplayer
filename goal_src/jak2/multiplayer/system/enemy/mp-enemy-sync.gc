@@ -410,7 +410,9 @@
 (defun enemy-awaiting-cue? ((proc enemy))
   (or (logtest? (-> proc enemy-flags) (enemy-flag directed use-trigger))
       (and (nonnull? (-> proc state))
-           (or (= (-> proc state name) 'dormant) (= (-> proc state name) 'dormant-aware)))))
+           (case (-> proc state name)
+             (('dormant 'dormant-aware 'waiting) #t)
+             (else #f)))))
 
 (defun enemy-apply-pending-cue! ((proc enemy) (rec mp-enemy-auth-record))
   (when (nonzero? (-> rec pending-cue))

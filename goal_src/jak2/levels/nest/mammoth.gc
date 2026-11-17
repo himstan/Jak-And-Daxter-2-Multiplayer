@@ -366,8 +366,12 @@
   :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
     (case message
       (('cue-chase)
+       (enemy-forward-cue! self message)
        (go-virtual wait-to-walk)
        )
+      (else
+        (enemy-event-handler proc argc message block)
+        )
       )
     )
   :enter (behavior ()
