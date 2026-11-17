@@ -3349,6 +3349,7 @@
 ;; WARN: Return type mismatch object vs none.
 (defbehavior target-init target ((arg0 continue-point))
   (init-target self arg0 #f)
+  (revoke-debug-cheat-effects! self #t)
   (mp-apply-player-render-skin! self)
   (set! (-> self event-hook) (-> target-continue event))
   (logior! (-> self focus-status) (focus-status teleporting))

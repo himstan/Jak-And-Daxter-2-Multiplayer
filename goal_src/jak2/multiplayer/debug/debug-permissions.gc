@@ -2,6 +2,7 @@
 (in-package goal)
 
 (define *debug-cheats-suppressed?* #f)
+(define *debug-cheats-granted?* #t)
 
 (define *client-debug-menu-rules*
   '((allow "Game" "Settings")
@@ -60,20 +61,36 @@
     ((not (mp-session-active?)) #t)
     ((and (mp-session-host?) (!= permission (debug-permission cheats))) #t)
     ((not (nonnull? *mp-world-state*)) #f)
-    (else (logtest? (-> *mp-world-state* debug-permissions) permission))))
+    (else
+      (let ((granted (-> *mp-world-state* debug-permissions)))
+        (and (logtest? granted (debug-permission host-debug)) (logtest? granted permission))))))
 
 (defun debug-menu-allowed? ()
   (the-as symbol (and *debug-segment* (debug-permitted? (debug-permission host-debug)))))
 
+(defun revoke-debug-cheat-effects! ((player target) (spawning? symbol))
+  (when (not (debug-permitted? (debug-permission cheats)))
+    (set! *debug-unkillable* #f)
+    (when (nonnull? player)
+      (logclear! (-> player state-flags) (state-flags sf16))
+      (if (or spawning? (not (focus-test? player grabbed)))
+          (logclear! (-> player state-flags) (state-flags sf2)))))
+  (none))
+
 (defun enforce-debug-cheats! ()
-  (cond
-    ((debug-permitted? (debug-permission cheats))
-     (when *debug-cheats-suppressed?*
-       (set! *debug-cheats-suppressed?* #f)
-       (set! *cheat-mode* 'debug)))
-    ((= *cheat-mode* 'debug)
-     (set! *debug-cheats-suppressed?* #t)
-     (set! *cheat-mode* #f)))
+  (let ((granted? (debug-permitted? (debug-permission cheats))))
+    (cond
+      (granted?
+       (when *debug-cheats-suppressed?*
+         (set! *debug-cheats-suppressed?* #f)
+         (set! *cheat-mode* 'debug)))
+      (else
+       (when (= *cheat-mode* 'debug)
+         (set! *debug-cheats-suppressed?* #t)
+         (set! *cheat-mode* #f))
+       (if *debug-cheats-granted?*
+           (revoke-debug-cheat-effects! *target* #f))))
+    (set! *debug-cheats-granted?* granted?))
   (none))
 
 (defun enforce-debug-permissions! ()
