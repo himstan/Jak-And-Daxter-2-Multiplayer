@@ -39,17 +39,20 @@ inline constexpr uint8_t kMPPlayerStateFlagTurretActive = 1u << 2;
 inline constexpr uint8_t kMPPlayerStateFlagRespawnShift = 3;
 inline constexpr uint8_t kMPPlayerStateFlagRespawnMask = 0x07u << kMPPlayerStateFlagRespawnShift;
 inline constexpr uint8_t kMPPlayerStateFlagHitInvulnerable = 1u << 6;
+inline constexpr uint8_t kMPPlayerStateFlagTyping = 1u << 7;
 
 inline uint8_t pack_player_state_flags(const bool spectator_only,
                                        const bool scene_active,
                                        const bool turret_active,
                                        const uint8_t respawn_flags,
-                                       const bool hit_invulnerable) {
+                                       const bool hit_invulnerable,
+                                       const bool typing) {
   return (spectator_only ? kMPPlayerStateFlagSpectatorOnly : 0) |
          (scene_active ? kMPPlayerStateFlagSceneActive : 0) |
          (turret_active ? kMPPlayerStateFlagTurretActive : 0) |
          static_cast<uint8_t>((respawn_flags & 0x07u) << kMPPlayerStateFlagRespawnShift) |
-         (hit_invulnerable ? kMPPlayerStateFlagHitInvulnerable : 0);
+         (hit_invulnerable ? kMPPlayerStateFlagHitInvulnerable : 0) |
+         (typing ? kMPPlayerStateFlagTyping : 0);
 }
 
 inline bool is_player_state_flag_spectator(const uint8_t flags) {
@@ -66,6 +69,10 @@ inline bool is_player_state_flag_turret_active(const uint8_t flags) {
 
 inline bool is_player_state_flag_hit_invulnerable(const uint8_t flags) {
   return (flags & kMPPlayerStateFlagHitInvulnerable) != 0;
+}
+
+inline bool is_player_state_flag_typing(const uint8_t flags) {
+  return (flags & kMPPlayerStateFlagTyping) != 0;
 }
 
 inline uint8_t has_player_state_flag_respawn_flags(const uint8_t flags) {

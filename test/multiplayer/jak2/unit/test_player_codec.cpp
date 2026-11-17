@@ -99,7 +99,7 @@ TEST(Jak2Protocol, TrafficInterestFitsPlayerPacketAndRejectsInvalidSources) {
     EXPECT_FALSE(platform::wire::encode_packet(invalid));
     auto bytes = platform::wire::encode_packet(jak2::wire::PlayerStatePacket{});
     ASSERT_TRUE(bytes);
-    (*bytes)[49] = static_cast<uint8_t>(((*bytes)[49] & 0xe1) | (source << 1));
+    (*bytes)[49] = static_cast<uint8_t>(((*bytes)[49] & 0xc3) | (source << 2));
     EXPECT_FALSE(platform::wire::decode_packet<jak2::wire::PlayerStatePacket>(*bytes));
   }
 }

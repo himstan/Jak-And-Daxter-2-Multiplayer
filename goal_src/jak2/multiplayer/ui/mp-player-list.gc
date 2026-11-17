@@ -257,8 +257,25 @@
       (*! (-> projection vector 0 x) (-> *video-params* relative-x-scale-reciprical))))
   (none))
 
-(defun draw-player-nametag! ((record mp-player-record) (buffer dma-buffer))
-  (unless (nonnull? record buffer *math-camera* *font-work* *video-params* *nametag-string*)
+(defun draw-nametag-line! ((buffer dma-buffer) (projection matrix) (color font-color) (measured string) (lines float))
+  (let ((context (new 'stack 'font-context projection 0 0 0.0 color (font-flags shadow kerning large))))
+    (when (nonnull? context)
+      (let ((width (-> (get-string-length measured context) length)))
+        (set! (-> context origin x) (* -0.5 width))
+        (set! (-> context origin y) (- (- (* (+ lines 1.0) (-> *font-work* size3-large y))) 40.0))
+        (set! (-> context origin z) 0.0)
+        (set! (-> context width) (+ width (-> *font-work* size1-large x)))
+        (set! (-> context height) (-> *font-work* size3-large y))
+        (set! (-> context projection) (-> *math-camera* inv-hmge-scale w))
+        (pc-encode-utf8-string *nametag-string* *nametag-string*)
+        (draw-string *nametag-string* buffer context))))
+  (none))
+
+(defun nametag-typing-dot-count ()
+  (mod (/ (-> *display* real-clock frame-counter) PLAYER_TYPING_DOT_TIME) 4))
+
+(defun draw-player-nametag! ((record mp-player-record) (buffer dma-buffer) (name? symbol))
+  (unless (nonnull? record buffer *math-camera* *font-work* *video-params* *display* *nametag-string*)
     (return #f))
   (let ((anchor (new 'stack-no-clear 'vector))
         (clipped-position (new 'stack-no-clear 'vector))
@@ -268,26 +285,14 @@
                  (transform-point-vector! clipped-position anchor))
       (return #f))
     (set-player-nametag-matrix! projection anchor)
-    (let* ((player-slot (the uint (-> record identity player-slot)))
-           (context (new 'stack
-                         'font-context
-                         projection
-                         0
-                         0
-                         0.0
-                         (mp-player-font-color-by-slot (the int player-slot))
-                         (font-flags shadow kerning large))))
-      (when (nonnull? context)
+    (when name?
+      (let ((player-slot (the uint (-> record identity player-slot))))
         (mp-player-copy-name! *nametag-string* player-slot)
-        (let ((width (-> (get-string-length *nametag-string* context) length)))
-          (set! (-> context origin x) (* -0.5 width))
-          (set! (-> context origin y) (- (- (-> *font-work* size3-large y)) 40.0))
-          (set! (-> context origin z) 0.0)
-          (set! (-> context width) (+ width (-> *font-work* size1-large x)))
-          (set! (-> context height) (-> *font-work* size3-large y))
-          (set! (-> context projection) (-> *math-camera* inv-hmge-scale w))
-          (pc-encode-utf8-string *nametag-string* *nametag-string*)
-          (draw-string *nametag-string* buffer context)))))
+        (draw-nametag-line! buffer projection (mp-player-font-color-by-slot (the int player-slot)) *nametag-string* 0.0)))
+    (when (nonzero? (-> record action typing?))
+      (copy-string<-string *nametag-string* "...")
+      (set! (-> *nametag-string* data (nametag-typing-dot-count)) 0)
+      (draw-nametag-line! buffer projection (font-color default) "..." (if name? PLAYER_TYPING_NAME_SPACING 0.0))))
   #t)
 
 (defun requested-hud-nametags-visible? ()
@@ -312,7 +317,6 @@
 
 (defun draw-player-nametags! ()
   (when (and (mp-session-in-game?)
-             (player-nametags-visible?)
              (nonnull? *display*
                        *math-camera*
                        *font-work*
@@ -324,10 +328,13 @@
       (dma-buffer-add-gs-set buffer
                              (zbuf-1 (new 'static 'gs-zbuf :zbp #x130 :psm (gs-psm ct24) :zmsk #x1))
                              (test-1 (new 'static 'gs-test :zte #x1 :ztst (gs-ztest always))))
-      (dotimes (i MP_MAX_PLAYERS)
-        (let ((record (mp-player-record-by-slot (the uint i))))
-          (when (and (nonnull? record) (is-record-remote-player? record))
-            (draw-player-nametag! record buffer))))
+      (let ((names? (player-nametags-visible?)))
+        (dotimes (i MP_MAX_PLAYERS)
+          (let ((record (mp-player-record-by-slot (the uint i))))
+            (when (and (nonnull? record)
+                       (is-record-remote-player? record)
+                       (or names? (nonzero? (-> record action typing?))))
+              (draw-player-nametag! record buffer names?)))))
       (dma-buffer-add-gs-set buffer
                              (zbuf-1 (new 'static 'gs-zbuf :zbp #x130 :psm (gs-psm ct24)))
                              (test-1 (new 'static 'gs-test :zte #x1 :ztst (gs-ztest greater-equal))))))

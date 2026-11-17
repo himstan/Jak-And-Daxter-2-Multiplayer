@@ -138,6 +138,12 @@
         (send-event manager 'notify-player player-slot (the-as uint notification)))))
   (none))
 
+(defun chat-typing? ()
+  (let ((manager (if (nonnull? *active-pool*)
+                   (the-as notification-manager (process-by-type-exact 'notification-manager *active-pool*))
+                   (the-as notification-manager #f))))
+    (if (and (nonnull? manager) (= (-> manager editor status) (pc-text-edit-state editing))) #t #f)))
+
 (defun text-span-width ((text string) (start int) (end int) (font-ctx font-context))
   (string<-charp *overlay-fit-text* (&-> text data start))
   (set! (-> *overlay-fit-text* data (- end start)) 0)

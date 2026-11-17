@@ -106,6 +106,7 @@ core::PlayerState read_player(const MPReplicationPlayerGOAL& source) {
   result.scene_active = source.action.scene_state != 0;
   result.turret_active = source.vehicle.turret_active != 0;
   result.hit_invulnerable = source.action.hit_invulnerable != 0;
+  result.typing = source.action.typing != 0;
   for (size_t i = 0; i < core::kPlayerLevelSlotCount; ++i) {
     result.levels[i].level_id = source.transform.levels[i].level_id;
     result.levels[i].flags = source.transform.levels[i].flags;
@@ -463,6 +464,7 @@ void write_player(const core::PlayerState& source,
   destination.action.riding_along_player_slot = source.riding_along_player_slot;
   destination.action.visual_secrets = source.visual_secrets;
   destination.action.hit_invulnerable = source.hit_invulnerable;
+  destination.action.typing = source.typing;
   destination.input.buttons = source.buttons;
   destination.input.leftx = source.leftx;
   destination.input.lefty = source.lefty;

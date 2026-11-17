@@ -61,6 +61,7 @@ struct MPReplicationPlayerActionGOAL {
   uint8_t riding_along_player_slot;
   uint8_t visual_secrets;
   uint8_t hit_invulnerable;
+  uint8_t typing;
 };
 
 struct MPReplicationPlayerInputGOAL {
@@ -75,5 +76,5 @@ struct MPReplicationPlayerInputGOAL {
 static_assert(sizeof(MPReplicationPlayerIdentityGOAL) == 295);
 static_assert(sizeof(MPPlayerLevelSlotGOAL) == 2);
 static_assert(sizeof(MPReplicationPlayerTransformGOAL) == 48);
-static_assert(sizeof(MPReplicationPlayerActionGOAL) == 18);
+static_assert(sizeof(MPReplicationPlayerActionGOAL) == 19);
 static_assert(sizeof(MPReplicationPlayerInputGOAL) == 9);

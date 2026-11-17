@@ -172,6 +172,7 @@ struct PlayerState {
   bool scene_active = false;
   bool turret_active = false;
   bool hit_invulnerable = false;
+  bool typing = false;
   PlayerLevelState levels{};
   uint8_t primary_level_slot = 0;
   std::array<float, 3> position = {};

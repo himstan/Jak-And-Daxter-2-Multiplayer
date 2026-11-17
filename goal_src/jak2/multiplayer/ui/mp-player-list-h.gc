@@ -15,6 +15,8 @@
 (defconstant PLAYER_NAMETAG_JAK_CLEARANCE (meters 0.4))
 (defconstant PLAYER_NAMETAG_DAXTER_CLEARANCE (meters 1.2))
 (defconstant PLAYER_NAMETAG_DAXTER_RIDING_CLEARANCE (meters 0.2))
+(defconstant PLAYER_TYPING_DOT_TIME (seconds 0.4))
+(defconstant PLAYER_TYPING_NAME_SPACING 1.5)
 
 (define-extern draw-player-nametags! (function none))
 (define-extern update-player-list-input! (function none))

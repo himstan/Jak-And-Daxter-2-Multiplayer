@@ -35,8 +35,9 @@
    (respawn-flags            uint8)
    (riding-along-player-slot uint8)
    (visual-secrets           uint8)
-   (hit-invulnerable?        uint8))
-  :size-assert 18)
+   (hit-invulnerable?        uint8)
+   (typing?                  uint8))
+  :size-assert 19)
 
 (deftype mp-replication-player-input (structure)
   ((camera-angle-y  float)
