@@ -295,9 +295,9 @@
         (set! (-> dst data -4) (the-as uint len)))))
   (none))
 
-(defun copy-scene-event-name! ((dst string) (src (pointer uint8)))
+(defun copy-scene-event-name! ((dst string) (src (pointer uint8)) (max-len int))
   (let ((len 0))
-    (while (and (< len 32) (nonzero? (-> src len)))
+    (while (and (< len max-len) (nonzero? (-> src len)))
       (set! (-> dst data len) (-> src len))
       (+! len 1))
     (set! (-> dst data len) (the uint 0)))
@@ -305,7 +305,7 @@
 
 (defun mp-copy-scene-sync-event-continue! ((dst string) (evt mp-scene-event))
   (when (nonnull? dst evt)
-    (copy-scene-event-name! dst (-> evt payload load-continue)))
+    (copy-scene-event-name! dst (-> evt payload load-continue) 28))
   (none))
 
 (defun mp-log-pending-scene-sync-wait! ((reason string))
@@ -1238,7 +1238,7 @@
   (unless (nonnull? evt)
     (return (the-as none 0)))
   (let ((event-type (-> evt etype)))
-    (copy-scene-event-name! *mp-scene-name-scratch* (-> evt payload scene-name))
+    (copy-scene-event-name! *mp-scene-name-scratch* (-> evt payload scene-name) 36)
     (log 'debug "[MP-Event] Scene event=~D name=~S.~%" event-type *mp-scene-name-scratch*)
     (case event-type
       ((MP_EVENT_SCENE_START) (mp-event-handler-scene-start evt))

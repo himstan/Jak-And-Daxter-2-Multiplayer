@@ -299,8 +299,8 @@
   :size-assert 80)
 
 (deftype mp-scene-event-data (structure)
-  ((scene-name    uint8 32)
-   (load-continue uint8 32)))
+  ((scene-name    uint8 36)
+   (load-continue uint8 28)))
 
 (deftype mp-scene-event (mp-event)
   ((payload mp-scene-event-data :inline :overlay-at (-> data 0)))
