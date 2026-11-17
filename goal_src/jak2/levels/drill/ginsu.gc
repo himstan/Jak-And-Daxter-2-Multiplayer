@@ -563,6 +563,18 @@
     )
   )
 
+(defbehavior ginsu-locomotion-code ginsu ()
+  (when (zero? (-> self skel active-channels))
+    (ja-channel-push! 1 0)
+    (ja :group! ginsu-idle-ja :num! min)
+    )
+  (until #f
+    (ginsu-method-182 self)
+    (suspend)
+    )
+  #f
+  )
+
 (defstate circling (ginsu)
   :virtual #t
   :enter (behavior ()
@@ -581,9 +593,8 @@
           (t9-0)
           )
       )
-    (ginsu-method-182 self)
     )
-  :code sleep-code
+  :code ginsu-locomotion-code
   )
 
 (defstate hostile (ginsu)
@@ -619,9 +630,8 @@
     (if (logtest? (enemy-flag enemy-flag41) (-> self enemy-flags))
         (set! (-> self enemy-flags) (the-as enemy-flag (logxor (shl 256 32) (the-as int (-> self enemy-flags)))))
         )
-    (ginsu-method-182 self)
     )
-  :code sleep-code
+  :code ginsu-locomotion-code
   :post (behavior ()
     (let ((s5-0 (ginsu-method-181 self (new 'stack-no-clear 'vector)))
           (gp-0 (new-stack-vector0))
@@ -696,9 +706,14 @@
     (if (time-elapsed? (-> self state-time) (seconds 0.75))
         (go-virtual attack)
         )
-    (ja :num! (loop!))
     )
-  :code sleep-code
+  :code (behavior ()
+    (until #f
+      (ja :num! (loop!))
+      (suspend)
+      )
+    #f
+    )
   :post (behavior ()
     (let ((gp-0 (ginsu-method-181 self (new 'stack-no-clear 'vector))))
       (set! (-> gp-0 y) 0.0)
@@ -764,12 +779,17 @@
     (if (logtest? (-> self enemy-flags) (enemy-flag victory))
         (go-virtual circling)
         )
-    (ja :num! (seek!))
     (if (ja-done? 0)
         (go-virtual circling)
         )
     )
-  :code sleep-code
+  :code (behavior ()
+    (until #f
+      (ja :num! (seek!))
+      (suspend)
+      )
+    #f
+    )
   :post nav-enemy-chase-post
   )
 
