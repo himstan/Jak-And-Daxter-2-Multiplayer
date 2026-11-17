@@ -779,6 +779,7 @@ bool read_preferences(const uint32_t address, MultiplayerPreferences& preference
       source->friendly_fire > 1 || source->player_map_marker > 1 || source->steam_integration > 1 ||
       source->nametag_visibility > static_cast<uint8_t>(PlayerNametagVisibility::OFF) ||
       source->host_visibility > static_cast<uint8_t>(HostVisibility::LAN_ONLY) ||
+      (source->debug_permissions & ~core::kDebugPermissionMask) != 0 ||
       !read_string(source->player_name, parsed.player_name) ||
       !read_string(source->room_code, parsed.room_code)) {
     return false;
@@ -795,6 +796,7 @@ bool read_preferences(const uint32_t address, MultiplayerPreferences& preference
   parsed.player_map_marker = source->player_map_marker != 0;
   parsed.host_visibility = static_cast<HostVisibility>(source->host_visibility);
   parsed.steam_integration = source->steam_integration != 0;
+  parsed.debug_permissions = source->debug_permissions;
   preferences = std::move(parsed);
   return true;
 }
@@ -825,6 +827,7 @@ bool write_preferences(const uint32_t address, const MultiplayerPreferences& pre
   destination->player_map_marker = preferences.player_map_marker;
   destination->host_visibility = static_cast<uint8_t>(preferences.host_visibility);
   destination->steam_integration = preferences.steam_integration;
+  destination->debug_permissions = preferences.debug_permissions;
   return true;
 }
 

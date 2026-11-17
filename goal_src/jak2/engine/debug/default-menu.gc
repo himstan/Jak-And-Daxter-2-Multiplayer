@@ -838,6 +838,14 @@
   (= *log-level* arg0)
   )
 
+(defun dm-debug-permission-pick-func ((arg0 symbol) (arg1 debug-menu-msg))
+  (let ((permission (if (= arg0 'cheats) (debug-permission cheats) (debug-permission continues))))
+    (when (nonnull? *multiplayer-preferences*)
+      (when (= arg1 (debug-menu-msg press))
+        (logxor! (-> *multiplayer-preferences* debug-permissions) permission)
+        (save-multiplayer-preferences!))
+      (logtest? (-> *multiplayer-preferences* debug-permissions) permission))))
+
 (defun dm-game-feature-toggle-pick-func ((arg0 int) (arg1 debug-menu-msg))
   (when (= arg1 (debug-menu-msg press))
     (logxor! (-> *game-info* features) (the-as uint (/ arg0 8)))
@@ -4144,8 +4152,8 @@
             )
            (menu
              "Debug Permissions"
-             (flag "Allow Cheats (Flight, Heal etc...)" *debug-allow-cheats?* dm-boolean-toggle-pick-func)
-             (flag "Allow Client Continues" *debug-allow-continues?* dm-boolean-toggle-pick-func)
+             (flag "Allow Cheats (Flight, Heal etc...)" cheats dm-debug-permission-pick-func)
+             (flag "Allow Client Continues" continues dm-debug-permission-pick-func)
             )
            (menu
              "Levels"

@@ -348,7 +348,8 @@ TEST(Jak2GoalBridge, NativeEventDefinitionsMatchEveryGoalIdAndPayloadSize) {
            {"nametag-visibility", offsetof(MultiplayerPreferencesGOAL, nametag_visibility)},
            {"player-map-marker", offsetof(MultiplayerPreferencesGOAL, player_map_marker)},
            {"host-visibility", offsetof(MultiplayerPreferencesGOAL, host_visibility)},
-           {"steam-integration", offsetof(MultiplayerPreferencesGOAL, steam_integration)}}) {
+           {"steam-integration", offsetof(MultiplayerPreferencesGOAL, steam_integration)},
+           {"debug-permissions", offsetof(MultiplayerPreferencesGOAL, debug_permissions)}}) {
     EXPECT_EQ(types.lookup_field_info("multiplayer-preferences", field).field.offset(), offset);
   }
   load_types("multiplayer/event/mp-event-h.gc");
@@ -1603,9 +1604,11 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   preferences.host_visibility = HostVisibility::LAN_ONLY;
   preferences.steam_integration = true;
   preferences.player_map_marker = false;
+  preferences.debug_permissions = 0x06;
   preferences.player_skin = get_default_player_skin(0x123456);
   std::memset(memory.at<String>(state.player_name).data(), 'x', 16);
   ASSERT_TRUE(multiplayer::jak2::bridge::write_preferences(0x11000, preferences));
+  EXPECT_EQ(state.debug_permissions, 0x06);
   EXPECT_EQ(state.respawn_delay_seconds, 65535);
   EXPECT_EQ(state.session_player_limit, kMPMaxPlayers);
   EXPECT_EQ(state.preferred_character, static_cast<uint8_t>(PlayerCharacter::DAXTER));
@@ -1641,11 +1644,20 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRoundTripsAndPersistsTogether) {
   EXPECT_FALSE(restored.player_map_marker);
   EXPECT_EQ(restored.host_visibility, HostVisibility::LAN_ONLY);
   EXPECT_TRUE(restored.steam_integration);
+  EXPECT_EQ(restored.debug_permissions, 0x06);
   EXPECT_EQ(restored.player_skin.colors, preferences.player_skin.colors);
   EXPECT_EQ(restored.player_skin.strengths, preferences.player_skin.strengths);
   const auto root =
       parse_commented_json(file_util::read_text_file(preferences_root.path()), "preferences.json");
   EXPECT_FALSE(root.contains("preferred_character"));
+  EXPECT_EQ(root.at("debug_permissions"), 0x06);
+  for (const auto invalid : {"8", "-1", "true", "\"6\""}) {
+    EXPECT_EQ(parse_multiplayer_preferences("{\"debug_permissions\":" + std::string(invalid) + "}")
+                  .debug_permissions,
+              0);
+  }
+  restored.debug_permissions = 0x08;
+  EXPECT_FALSE(set_multiplayer_preferences(restored));
 }
 
 TEST(Jak2GoalBridge, PreferencesSnapshotRejectsInvalidBuffersAndFlags) {
@@ -1665,6 +1677,9 @@ TEST(Jak2GoalBridge, PreferencesSnapshotRejectsInvalidBuffersAndFlags) {
   state.nametag_visibility = 3;
   EXPECT_FALSE(multiplayer::jak2::bridge::read_preferences(0x11000, values));
   state.nametag_visibility = static_cast<uint8_t>(PlayerNametagVisibility::HOLD);
+  state.debug_permissions = 0x08;
+  EXPECT_FALSE(multiplayer::jak2::bridge::read_preferences(0x11000, values));
+  state.debug_permissions = 0;
   EXPECT_FALSE(multiplayer::jak2::bridge::read_preferences(0, values));
   EXPECT_FALSE(multiplayer::jak2::bridge::write_preferences(EE_MAIN_MEM_SIZE - 1, values));
   memory.at<String>(state.room_code).len = 2;

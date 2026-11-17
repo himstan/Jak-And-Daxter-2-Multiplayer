@@ -1,8 +1,6 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-(define *debug-allow-cheats?* #f)
-(define *debug-allow-continues?* #f)
 (define *debug-cheats-suppressed?* #f)
 
 (define *client-debug-menu-rules*
@@ -50,10 +48,8 @@
   (let ((permissions (debug-permission)))
     (when *debug-segment*
       (logior! permissions (debug-permission host-debug))
-      (if *debug-allow-cheats?*
-          (logior! permissions (debug-permission cheats)))
-      (if *debug-allow-continues?*
-          (logior! permissions (debug-permission continues))))
+      (if (nonnull? *multiplayer-preferences*)
+          (logior! permissions (-> *multiplayer-preferences* debug-permissions))))
     permissions))
 
 (defun debug-restricted-client? ()

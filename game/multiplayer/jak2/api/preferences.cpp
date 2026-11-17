@@ -288,6 +288,10 @@ void parse_preferences_root(const json& root, MultiplayerPreferences& parsed, bo
         parsed.session_player_limit = static_cast<uint8_t>(limit);
       }
     }
+    if (root.contains("debug_permissions") && root.at("debug_permissions").is_number_unsigned() &&
+        root.at("debug_permissions") <= multiplayer::jak2::core::kDebugPermissionMask) {
+      parsed.debug_permissions = root.at("debug_permissions").get<uint8_t>();
+    }
   } catch (const std::exception& error) {
     lg::warn("[Multiplayer] Ignoring invalid multiplayer settings: {}", error.what());
   }
@@ -397,6 +401,7 @@ void save_multiplayer_preferences() {
   root["session_player_limit"] = g_preferences.session_player_limit;
   root["host_visibility"] = static_cast<uint8_t>(g_preferences.host_visibility);
   root["tutorials_seen"] = g_preferences.tutorials_seen;
+  root["debug_permissions"] = g_preferences.debug_permissions;
   const auto path = settings_path();
   file_util::create_dir_if_needed_for_file(path);
   file_util::write_text_file(path, root.dump(2));
@@ -511,6 +516,7 @@ bool set_multiplayer_preferences(MultiplayerPreferences preferences) {
       preferences.nametag_visibility > PlayerNametagVisibility::OFF ||
       preferences.host_visibility > HostVisibility::LAN_ONLY ||
       preferences.session_player_limit < 2 || preferences.session_player_limit > kMPMaxPlayers ||
+      (preferences.debug_permissions & ~multiplayer::jak2::core::kDebugPermissionMask) != 0 ||
       (preferences.preferred_character != PlayerCharacter::JAK &&
        preferences.preferred_character != PlayerCharacter::DAXTER)) {
     return false;

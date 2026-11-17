@@ -34,6 +34,7 @@ struct MultiplayerPreferences {
   PlayerCharacter preferred_character = PlayerCharacter::JAK;
   HostVisibility host_visibility = HostVisibility::PUBLIC;
   uint8_t tutorials_seen = 0;
+  uint8_t debug_permissions = 0;
 };
 
 multiplayer::platform::LobbyPrivacy lobby_privacy(HostVisibility visibility);
