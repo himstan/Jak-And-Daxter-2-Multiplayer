@@ -2028,7 +2028,7 @@
 
 (defun whack-a-metal-miss! ((this whack-a-metal) (misses int))
   (if (whack-mission-open?)
-    (set! (-> this score) (minigame-penalize (-> this score) misses))
+    (set! (-> this score) (minigame-penalize (-> this score) (* 25.0 (the float misses))))
     (+! (-> this miss-count) misses))
   (none))
 

@@ -2196,7 +2196,7 @@
 
 (defun onin-game-penalize ((score float))
   (if (onin-game-mission-open?)
-    (minigame-penalize score 1)
+    (minigame-penalize score 10.0)
     score))
 
 (defmethod onin-game-method-26 ((this onin-game))

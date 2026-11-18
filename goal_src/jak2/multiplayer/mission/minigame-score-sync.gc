@@ -30,8 +30,8 @@
 (defun minigame-mission-open? ((node game-task-node))
   (and (mp-session-in-game?) (not (task-node-closed? node))))
 
-(defun minigame-penalize ((score float) (misses int))
-  (fmax 0.0 (- score (* 25.0 (the float misses)))))
+(defun minigame-penalize ((score float) (penalty float))
+  (fmax 0.0 (- score penalty)))
 
 (defun minigame-remote-reached? ((goal float))
   (dotimes (player-slot MP_MAX_PLAYERS)
