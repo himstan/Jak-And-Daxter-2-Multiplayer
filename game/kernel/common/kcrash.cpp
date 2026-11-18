@@ -2,7 +2,6 @@
 
 #include <atomic>
 #include <chrono>
-#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <optional>
@@ -15,8 +14,8 @@
 #include "common/goal_constants.h"
 #include "common/goal_debug/CodeMap.h"
 #include "common/link_types.h"
+#include "common/log/log.h"
 #include "common/util/FileUtil.h"
-#include "common/util/string_util.h"
 #include "common/versions/versions.h"
 
 #include "game/kernel/common/klink.h"
@@ -66,7 +65,6 @@ struct State {
   std::binary_semaphore done{0};
   std::atomic<bool> claimed{false};
   Fault fault;
-  std::string report_path;
   fs::path map_dir;
 };
   
@@ -317,14 +315,7 @@ std::string build_report(const Fault& fault) {
 
 void reporter_thread() {
   g_state->wake.acquire();
-  std::string report = build_report(g_state->fault);
-  if (FILE* file = fopen(g_state->report_path.c_str(), "w")) {
-    fputs(report.c_str(), file);
-    fclose(file);
-  }
-  fprintf(stderr, "\n%s\nCrash report written to %s\n", report.c_str(),
-          g_state->report_path.c_str());
-  fflush(stderr);
+  lg::error("{}", build_report(g_state->fault));
   g_state->done.release();
 }
   
@@ -386,10 +377,6 @@ LONG CALLBACK on_exception(EXCEPTION_POINTERS* info) {
 void install_platform_handler() {
   g_goal_thread_id = GetCurrentThreadId();
   AddVectoredExceptionHandler(1, on_exception);
-}
-
-u64 current_process_id() {
-  return GetCurrentProcessId();
 }
 
 #elif defined(__linux__) && defined(__x86_64__)
@@ -455,17 +442,9 @@ void install_platform_handler() {
   }
 }
 
-u64 current_process_id() {
-  return getpid();
-}
-
 #else
 
 void install_platform_handler() {}
-
-u64 current_process_id() {
-  return 0;
-}
 
 #endif
 
@@ -476,12 +455,8 @@ void install() {
     return;
   }
   g_state = new State;
-  const char* game = game_version_names[g_game_version];
-  g_state->report_path = file_util::get_file_path(
-      {"log", fmt::format("{}-crash.{}.{}.txt", game, str_util::current_local_timestamp_no_colons(),
-                          current_process_id())});
-  file_util::create_dir_if_needed_for_file(g_state->report_path);
-  g_state->map_dir = file_util::get_jak_project_dir() / "out" / game / "obj";
+  g_state->map_dir =
+      file_util::get_jak_project_dir() / "out" / game_version_names[g_game_version] / "obj";
   std::thread(reporter_thread).detach();
   install_platform_handler();
 }
