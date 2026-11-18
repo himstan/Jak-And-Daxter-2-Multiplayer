@@ -2586,10 +2586,7 @@
         )
       (cond
         ((minigame-remote-reached? (-> self point-win))
-         (set-time! (-> self state-time))
-         (until (or (nonnull? *scene-player*) (time-elapsed? (-> self state-time) (seconds 15)))
-           (suspend)
-           )
+         (send-event (handle->process gp-1) 'complete)
          )
         ((not (onin-game-mission-open?))
          (send-event (handle->process gp-1) 'fail)
