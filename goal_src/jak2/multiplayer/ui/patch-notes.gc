@@ -1,0 +1,252 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(define *patch-notes-path* "custom_assets/jak2/patch-notes.md")
+(define *patch-notes-text* (new 'global 'string 32768 (the-as string #f)))
+(define *patch-note-line* (new 'global 'string (+ PATCH_NOTES_LINE_MAX 1) (the-as string #f)))
+(define *patch-note-segment* (new 'global 'string (+ PATCH_NOTES_LINE_MAX 1) (the-as string #f)))
+(define *patch-note-display* (new 'global 'string 2048 (the-as string #f)))
+(define *patch-note-styles*
+  (new 'static
+       'boxed-array
+       :type patch-note-style
+       (new 'static 'patch-note-style :prefix "-# " :scale 0.21 :color (font-color progress-option-off) :bullet? #f)
+       (new 'static 'patch-note-style :prefix "### " :scale 0.27 :color (font-color progress-force-selected) :gap-before 3.0 :bullet? #f)
+       (new 'static 'patch-note-style :prefix "## " :scale 0.3 :color (font-color progress-force-selected) :gap-before 4.0 :bullet? #f)
+       (new 'static 'patch-note-style :prefix "# " :scale 0.37 :color (font-color progress-force-selected) :gap-before 6.0 :bullet? #f)
+       (new 'static 'patch-note-style :prefix "- " :scale 0.24 :color (font-color progress) :bullet? #t)
+       (new 'static 'patch-note-style :prefix "* " :scale 0.24 :color (font-color progress) :bullet? #t)
+       (new 'static 'patch-note-style :prefix "" :scale 0.24 :color (font-color progress) :bullet? #f)))
+(define *patch-notes-options-pc*
+  (new 'static
+       'menu-option-list
+       :y-center #xc6
+       :y-space 30
+       :scale 0.82
+       :options
+       (new 'static
+            'boxed-array
+            :type menu-option
+            (new 'static 'menu-patch-notes-option :name (text-id progress-patch-notes)))))
+
+(defun patch-notes-page ()
+  (the-as menu-patch-notes-option (-> *patch-notes-options-pc* options 0)))
+
+(defun load-patch-notes! ()
+  (clear *patch-notes-text*)
+  (let ((file (new 'stack 'file-stream *patch-notes-path* 'read)))
+    (when (file-stream-valid? file)
+      (let ((size (min (file-stream-length file) (+ (-> *patch-notes-text* allocated-length) -1))))
+        (file-stream-read file (-> *patch-notes-text* data) size)
+        (set! (-> *patch-notes-text* data size) 0))
+      (file-stream-close file)))
+  (none))
+
+(defun open-patch-notes! ((p progress))
+  (load-patch-notes!)
+  (set! (-> (patch-notes-page) first-line) 0)
+  (set! (-> p current-options) *patch-notes-options-pc*)
+  (none))
+
+(defun patch-note-line-end ((offset int))
+  (while (not (or (zero? (-> *patch-notes-text* data offset)) (= (-> *patch-notes-text* data offset) #x0a)))
+    (+! offset 1))
+  offset)
+
+(defun next-patch-note-line ((offset int))
+  (let ((end (patch-note-line-end offset)))
+    (if (zero? (-> *patch-notes-text* data end)) end (+ end 1))))
+
+(defun patch-note-line-offset ((line-index int))
+  (let ((offset 0))
+    (dotimes (line line-index)
+      (set! offset (next-patch-note-line offset)))
+    offset))
+
+(defun copy-patch-note-line! ((offset int))
+  (let ((end (patch-note-line-end offset))
+        (count 0))
+    (while (and (< offset end) (< count PATCH_NOTES_LINE_MAX))
+      (when (!= (-> *patch-notes-text* data offset) #x0d)
+        (set! (-> *patch-note-line* data count) (-> *patch-notes-text* data offset))
+        (+! count 1))
+      (+! offset 1))
+    (set! (-> *patch-note-line* data count) 0))
+  *patch-note-line*)
+
+(defun leading-space-count ((text string))
+  (let ((count 0))
+    (while (= (-> text data count) #x20)
+      (+! count 1))
+    count))
+
+(defun find-patch-note-style ((text string) (offset int))
+  (let ((found (the-as patch-note-style #f)))
+    (dotimes (index (-> *patch-note-styles* length))
+      (let ((style (-> *patch-note-styles* index)))
+        (when (and (not found) (charp-prefix= (-> style prefix data) (&-> text data offset)))
+          (set! found style))))
+    found))
+
+(defun bold-marker-index ((text string) (start int))
+  (let ((index start))
+    (while (not (or (zero? (-> text data index))
+                    (and (= (-> text data index) #x2a) (= (-> text data (+ index 1)) #x2a))))
+      (+! index 1))
+    (if (zero? (-> text data index)) -1 index)))
+
+(defun format-patch-note-text ((text string) (start int) (color font-color))
+  (clear *patch-note-display*)
+  (let ((bold? #f)
+        (marker 0))
+    (while (>= marker 0)
+      (set! marker (bold-marker-index text start))
+      (when (>= marker 0)
+        (set! (-> text data marker) 0))
+      (string<-charp *patch-note-segment* (&-> text data start))
+      (pc-encode-utf8-literal *patch-note-segment* *pc-encoded-temp-string*)
+      (format *patch-note-display* "~S" *pc-encoded-temp-string*)
+      (when (>= marker 0)
+        (set! bold? (not bold?))
+        (format *patch-note-display* "~~~DL" (if bold? (font-color progress-force-selected) color))
+        (set! start (+ marker 2)))))
+  *patch-note-display*)
+
+(defun print-patch-note-text ((font-ctx font-context) (text string) (x float) (y float) (width float) (draw? symbol))
+  (set! (-> font-ctx origin x) x)
+  (set! (-> font-ctx origin y) y)
+  (set-width! font-ctx (the int width))
+  (print-game-text text font-ctx (not draw?) 44 (bucket-id progress)))
+
+(defun patch-note-bullet-width ((font-ctx font-context) (style patch-note-style))
+  (if (-> style bullet?)
+    (+ PATCH_NOTES_BULLET_GAP (-> (get-string-length "-" font-ctx) length))
+    0.0))
+
+(defun draw-styled-patch-note ((font-ctx font-context)
+                               (line string)
+                               (spaces int)
+                               (style patch-note-style)
+                               (right float)
+                               (indent float)
+                               (y float)
+                               (bottom float))
+  (set-scale! font-ctx (-> style scale))
+  (set-color! font-ctx (-> style color))
+  (let* ((text (format-patch-note-text line (+ spaces (length (-> style prefix))) (-> style color)))
+         (top (+ y (-> style gap-before)))
+         (x (+ indent (patch-note-bullet-width font-ctx style)))
+         (height (print-patch-note-text font-ctx text x top (- right x) #f)))
+    (cond
+      ((< bottom (+ top height)) -1.0)
+      (else
+        (when (-> style bullet?)
+          (print-patch-note-text font-ctx "-" indent top (- right indent) #t))
+        (print-patch-note-text font-ctx text x top (- right x) #t)
+        (+ top height PATCH_NOTES_LINE_GAP)))))
+
+(defun draw-patch-note-line ((font-ctx font-context) (line string) (left float) (width float) (y float) (bottom float))
+  (let ((spaces (leading-space-count line)))
+    (if (zero? (-> line data spaces))
+      (+ y PATCH_NOTES_BLANK_GAP)
+      (draw-styled-patch-note font-ctx
+                              line
+                              spaces
+                              (find-patch-note-style line spaces)
+                              (+ left width)
+                              (+ left (* PATCH_NOTES_SPACE_INDENT (the float spaces)))
+                              y
+                              bottom))))
+
+(defun patch-notes-page-top ()
+  (+ PATCH_NOTES_MARGIN (if (= (get-aspect-ratio) 'aspect16x9) 86.0 112.0)))
+
+(defun patch-notes-page-bottom ()
+  (- (if (= (get-aspect-ratio) 'aspect16x9) 341.0 312.0) PATCH_NOTES_MARGIN))
+
+(defun draw-patch-note-lines ((page menu-patch-notes-option) (font-ctx font-context))
+  (let ((offset (patch-note-line-offset (-> page first-line)))
+        (left (+ PATCH_NOTES_MARGIN (the float (generic-page-x))))
+        (width (- (the float (generic-page-width)) (* 2.0 PATCH_NOTES_MARGIN)))
+        (y (patch-notes-page-top))
+        (bottom (patch-notes-page-bottom)))
+    (set! (-> page more-below?) #f)
+    (set-flags! font-ctx (font-flags kerning large))
+    (set-height! font-ctx (the int (- bottom y)))
+    (while (and (nonzero? (-> *patch-notes-text* data offset)) (not (-> page more-below?)))
+      (let ((next-y (draw-patch-note-line font-ctx (copy-patch-note-line! offset) left width y bottom)))
+        (if (< next-y 0.0)
+          (set! (-> page more-below?) #t)
+          (set! y next-y)))
+      (set! offset (next-patch-note-line offset))))
+  (none))
+
+(defun draw-patch-notes-missing ((font-ctx font-context))
+  (set-scale! font-ctx 0.45)
+  (set-color! font-ctx (font-color progress-option-off))
+  (set-flags! font-ctx (font-flags kerning middle large))
+  (print-patch-note-text font-ctx
+                         (lookup-text! *common-text* (text-id progress-patch-notes-missing) #f)
+                         (the float (generic-page-x))
+                         200.0
+                         (the float (generic-page-width))
+                         #t)
+  (none))
+
+(defun patch-notes-scroll-step ((page menu-patch-notes-option))
+  (let ((now (lobby-browser-now))
+        (direction (cond
+                     ((cpad-hold? 0 up l-analog-up) -1)
+                     ((cpad-hold? 0 down l-analog-down) 1)
+                     (else 0))))
+    (cond
+      ((cpad-pressed? 0 up l-analog-up down l-analog-down)
+       (set! (-> page repeat-at) (+ now PATCH_NOTES_REPEAT_DELAY))
+       direction)
+      ((and (nonzero? direction) (>= now (-> page repeat-at)))
+       (set! (-> page repeat-at) (+ now PATCH_NOTES_REPEAT_STEP))
+       direction)
+      (else 0))))
+
+(defmethod respond-progress ((this menu-patch-notes-option) (p progress) (selected? symbol))
+  (when (nonnull? p)
+    (set! (-> p selected-option) #f)
+    (let ((step (patch-notes-scroll-step this)))
+      (when (or (and (< step 0) (> (-> this first-line) 0)) (and (> step 0) (-> this more-below?)))
+        (+! (-> this first-line) step)))
+    (cpad-clear! 0 up l-analog-up down l-analog-down))
+  0)
+
+(defmethod draw-option ((this menu-patch-notes-option)
+                        (p progress)
+                        (font-ctx font-context)
+                        (option-index int)
+                        (selected? symbol))
+  (when (nonnull? p font-ctx)
+    (let ((alpha (fmax 0.0 (* 2.0 (- 0.5 (-> p menu-transition))))))
+      (set! (-> font-ctx alpha) alpha)
+      (set-color! font-ctx (font-color progress))
+      (draw-page-header font-ctx (-> this name))
+      (draw-page-border (-> this box 0) alpha)
+      (draw-page-background alpha)
+      (if (zero? (-> *patch-notes-text* data 0))
+        (draw-patch-notes-missing font-ctx)
+        (draw-patch-note-lines this font-ctx))
+      (draw-scrolling-page-up-down-arrows font-ctx (> (-> this first-line) 0) (-> this more-below?))))
+  (none))
+
+(defun draw-title-patch-notes-prompt ((alpha float))
+  (let ((font-ctx (new 'stack 'font-context *font-default-matrix* 7 399 0.0 (font-color progress) (font-flags shadow kerning large))))
+    (set! (-> font-ctx alpha) alpha)
+    (set-scale! font-ctx 0.35)
+    (print-game-text (lookup-text! *common-text* (text-id progress-patch-notes-prompt) #f) font-ctx #f 44 (bucket-id progress)))
+  (none))
+
+(defun title-patch-notes-tick! ((p progress))
+  (when (nonnull? p)
+    (draw-title-patch-notes-prompt (fmax 0.0 (* 2.0 (- 0.5 (-> p menu-transition)))))
+    (when (and (= (-> p menu-transition) 0.0) (not (-> p selected-option)) (cpad-pressed? 0 square))
+      (cpad-clear! 0 square)
+      (sound-play "generic-beep")
+      (push-and-set-state p 'patch-notes)))
+  (none))

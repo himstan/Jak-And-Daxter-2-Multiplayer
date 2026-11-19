@@ -1,0 +1,27 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+(defconstant PATCH_NOTES_MARGIN 10.0)
+(defconstant PATCH_NOTES_SPACE_INDENT 6.0)
+(defconstant PATCH_NOTES_LINE_GAP 2.0)
+(defconstant PATCH_NOTES_BLANK_GAP 6.0)
+(defconstant PATCH_NOTES_BULLET_GAP 4.0)
+(defconstant PATCH_NOTES_LINE_MAX 511)
+(defconstant PATCH_NOTES_REPEAT_DELAY (seconds 0.4))
+(defconstant PATCH_NOTES_REPEAT_STEP (seconds 0.05))
+
+(deftype patch-note-style (structure)
+  ((prefix     string)
+   (scale      float)
+   (color      font-color)
+   (gap-before float)
+   (bullet?    symbol)))
+
+(deftype menu-patch-notes-option (menu-option)
+  ((first-line  int32)
+   (more-below? symbol)
+   (repeat-at   time-frame)))
+
+(define-extern *patch-notes-options-pc* menu-option-list)
+(define-extern open-patch-notes! (function progress none))
+(define-extern title-patch-notes-tick! (function progress none))

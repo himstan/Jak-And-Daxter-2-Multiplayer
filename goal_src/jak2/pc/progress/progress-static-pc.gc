@@ -248,7 +248,10 @@ This gives us more freedom to write code how we want.
         :scale #f
         )
       )
-    :on-tick (lambda ((the-progress progress)) (accept-steam-invite! the-progress) (none))
+    :on-tick (lambda ((the-progress progress))
+               (accept-steam-invite! the-progress)
+               (title-patch-notes-tick! the-progress)
+               (none))
     )
   )
 

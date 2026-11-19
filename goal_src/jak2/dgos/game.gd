@@ -199,6 +199,7 @@
   "notification-h.o"
   "player-score-hud-h.o"
   "progress-generic-h-pc.o" ;; added
+  "patch-notes-h.o" ;; added
   "mp-player-list-h.o" ;; added
   "rpc-h.o"
   "path-h.o"
@@ -422,6 +423,7 @@
   "progress-draw.o"
   "progress-draw-pc.o" ;; added
   "progress-generic-draw-pc.o" ;; added
+  "patch-notes.o" ;; added
   "ocean.o"
   "ocean-vu0.o"
   "ocean-texture.o"
